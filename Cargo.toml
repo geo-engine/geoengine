@@ -1,0 +1,13 @@
+[package]
+name = "geoengine-datatypes"
+version = "0.1.0"
+authors = [
+    "Christian Beilschmidt <beilschmidt@mathematik.uni-marburg.de>",
+    "Johannes Drönner <droenner@mathematik.uni-marburg.de>",
+    "Michael Mattig <mattig@mathematik.uni-marburg.de>"
+]
+edition = "2018"
+
+[dependencies]
+failure = "0.1"
+serde = { versoin = "1.0", features = ["derive"] }
