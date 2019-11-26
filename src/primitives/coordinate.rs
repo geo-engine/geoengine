@@ -37,6 +37,7 @@ mod test {
     use super::*;
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn constructor() {
         let c = Coordinate::new(1.0, 0.0);
 
@@ -45,6 +46,7 @@ mod test {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn from_tuple() {
         let c = Coordinate::from((5.0, 4.2));
 
@@ -58,6 +60,7 @@ mod test {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn to_tuple() {
         let c = Coordinate::new(-1.9, 0.04);
 
@@ -68,6 +71,7 @@ mod test {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn from_array() {
         let c = Coordinate::from([5.0, 4.2]);
 

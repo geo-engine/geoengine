@@ -1,3 +1,5 @@
-mod pointcollection;
+mod feature_collection;
+mod point_collection;
 
-pub use pointcollection::PointCollection;
+pub use feature_collection::FeatureCollection;
+pub use point_collection::PointCollection;
