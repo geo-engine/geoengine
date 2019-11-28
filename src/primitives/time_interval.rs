@@ -1,7 +1,9 @@
-use failure::_core::cmp::Ordering;
-use failure::_core::fmt::{Error, Formatter};
+use crate::util::Result;
 use serde::{Deserialize, Serialize};
-use std::fmt::Debug;
+use snafu::Snafu;
+use std::cmp::Ordering;
+use std::fmt::{Debug, Display};
+use std::fmt::{Error, Formatter};
 
 /// Stores time intervals in ms in close-open semantic [start, end)
 #[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
@@ -10,13 +12,26 @@ pub struct TimeInterval {
     end: i64,
 }
 
+#[derive(Debug, Snafu)]
+enum TimeIntervalError {
+    #[snafu(display("Start `{}` must be before end `{}`", start, end))]
+    EndBeforeStart { start: i64, end: i64 },
+
+    #[snafu(display(
+        "{} cannot be unioned with {} since the intervals are neither intersecting nor contiguous",
+        i1,
+        i2
+    ))]
+    UnmatchedIntervals { i1: TimeInterval, i2: TimeInterval },
+}
+
 impl TimeInterval {
     /// Create a new time interval and check bounds
-    pub fn new(start: i64, end: i64) -> Result<Self, ()> {
+    pub fn new(start: i64, end: i64) -> Result<Self> {
         if start <= end {
             Ok(Self { start, end })
         } else {
-            Err(()) // TODO: error type
+            Err(TimeIntervalError::EndBeforeStart { start, end }.into())
         }
     }
 
@@ -35,14 +50,18 @@ impl TimeInterval {
         self.start < other.end && self.end > other.start
     }
 
-    pub fn union(&self, other: &Self) -> Result<Self, ()> {
+    pub fn union(&self, other: &Self) -> Result<Self> {
         if self.intersects(other) || self.start == other.end || self.end == other.start {
             Ok(Self {
                 start: i64::min(self.start, other.start),
                 end: i64::max(self.end, other.end),
             })
         } else {
-            Err(()) // TODO: error type
+            Err(TimeIntervalError::UnmatchedIntervals {
+                i1: *self,
+                i2: *other,
+            }
+            .into())
         }
     }
 }
@@ -50,6 +69,12 @@ impl TimeInterval {
 impl Debug for TimeInterval {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         write!(f, "TimeInterval [{}, {})", self.start, self.end)
+    }
+}
+
+impl Display for TimeInterval {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        write!(f, "[{}, {})", self.start, self.end)
     }
 }
 
@@ -85,23 +110,31 @@ mod test {
 
     #[test]
     fn ord() {
-        assert_eq!(TimeInterval::new(0, 1), TimeInterval::new(0, 1));
-        assert_ne!(TimeInterval::new(0, 1), TimeInterval::new(1, 2));
+        assert_eq!(
+            TimeInterval::new(0, 1).unwrap(),
+            TimeInterval::new(0, 1).unwrap()
+        );
+        assert_ne!(
+            TimeInterval::new(0, 1).unwrap(),
+            TimeInterval::new(1, 2).unwrap()
+        );
 
-        assert!(TimeInterval::new(0, 1) <= TimeInterval::new(0, 1));
-        assert!(TimeInterval::new(0, 1) <= TimeInterval::new(1, 2));
-        assert!(TimeInterval::new(0, 1) < TimeInterval::new(1, 2));
+        assert!(TimeInterval::new(0, 1).unwrap() <= TimeInterval::new(0, 1).unwrap());
+        assert!(TimeInterval::new(0, 1).unwrap() <= TimeInterval::new(1, 2).unwrap());
+        assert!(TimeInterval::new(0, 1).unwrap() < TimeInterval::new(1, 2).unwrap());
 
-        assert!(TimeInterval::new(0, 1) >= TimeInterval::new(0, 1));
-        assert!(TimeInterval::new(1, 2) >= TimeInterval::new(0, 1));
-        assert!(TimeInterval::new(1, 2) > TimeInterval::new(0, 1));
+        assert!(TimeInterval::new(0, 1).unwrap() >= TimeInterval::new(0, 1).unwrap());
+        assert!(TimeInterval::new(1, 2).unwrap() >= TimeInterval::new(0, 1).unwrap());
+        assert!(TimeInterval::new(1, 2).unwrap() > TimeInterval::new(0, 1).unwrap());
 
         assert!(TimeInterval::new(0, 2)
-            .partial_cmp(&TimeInterval::new(1, 3))
+            .unwrap()
+            .partial_cmp(&TimeInterval::new(1, 3).unwrap())
             .is_none());
 
         assert!(TimeInterval::new(0, 1)
-            .partial_cmp(&TimeInterval::new(0, 2))
+            .unwrap()
+            .partial_cmp(&TimeInterval::new(0, 2).unwrap())
             .is_none());
     }
 
