@@ -36,6 +36,21 @@ impl PointCollection {
     }
 
     /// Create a collection from data and perform checks
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use geoengine_datatypes::collections::PointCollection;
+    ///
+    /// PointCollection::from_data(vec![0, 1, 2], vec![(0., 0.).into(), (1., 1.).into()]).unwrap();
+    /// ```
+    ///
+    /// ```
+    /// use geoengine_datatypes::collections::PointCollection;
+    ///
+    /// PointCollection::from_data(Vec::new(), Vec::new()).unwrap_err();
+    /// ```
+    ///
     pub fn from_data(feature_indices: Vec<usize>, coordinates: Vec<Coordinate>) -> Result<Self> {
         let instance = Self {
             feature_indices,
@@ -50,6 +65,25 @@ impl PointCollection {
     }
 
     /// Create a collection from data without checking its validity
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use geoengine_datatypes::collections::PointCollection;
+    ///
+    /// let pc = unsafe { PointCollection::from_data_unchecked(vec![0, 1, 2], vec![(0., 0.).into(), (1., 1.).into()]) };
+    ///
+    /// assert!(pc.is_valid());
+    /// ```
+    ///
+    /// ```
+    /// use geoengine_datatypes::collections::PointCollection;
+    ///
+    /// let pc = unsafe { PointCollection::from_data_unchecked(Vec::new(), Vec::new()) };
+    ///
+    /// assert!(!pc.is_valid());
+    /// ```
+    ///
     pub unsafe fn from_data_unchecked(
         feature_indices: Vec<usize>,
         coordinates: Vec<Coordinate>,
@@ -68,9 +102,15 @@ impl PointCollection {
     /// use geoengine_datatypes::collections::{PointCollection, FeatureCollection};
     ///
     /// let mut pc = PointCollection::new();
-    /// pc.add_point((0.0, 0.0).into());
+    /// pc.add_point((0., 0.).into());
     ///
     /// assert_eq!(pc.len(), 1);
+    /// assert_eq!(pc.coordinates().len(), 1);
+    ///
+    /// pc.add_point((1., 1.).into());
+    ///
+    /// assert_eq!(pc.len(), 2);
+    /// assert_eq!(pc.coordinates().len(), 2);
     /// ```
     pub fn add_point(&mut self, coordinate: Coordinate) {
         self.coordinates.push(coordinate);
@@ -85,9 +125,10 @@ impl PointCollection {
     /// use geoengine_datatypes::collections::{PointCollection, FeatureCollection};
     ///
     /// let mut pc = PointCollection::new();
-    /// pc.add_multipoint(&[(0.0, 0.0).into(), (1.0, 1.0).into()]);
+    /// pc.add_multipoint(&[(0., 0.).into(), (1., 1.).into()]);
     ///
     /// assert_eq!(pc.len(), 1);
+    /// assert_eq!(pc.coordinates().len(), 2);
     /// ```
     pub fn add_multipoint(&mut self, coordinates: &[Coordinate]) {
         if !coordinates.is_empty() {
@@ -97,7 +138,7 @@ impl PointCollection {
     }
 
     /// Checks whether this collection is valid
-    fn is_valid(&self) -> bool {
+    pub fn is_valid(&self) -> bool {
         // vector must not be empty
         let last_feature_index = if let Some(&i) = self.feature_indices.last() {
             i
@@ -132,12 +173,12 @@ impl PointCollection {
     /// use geoengine_datatypes::collections::{PointCollection, FeatureCollection};
     ///
     /// let mut pc = PointCollection::new();
-    /// pc.add_point((0.0, 0.0).into());
-    /// pc.add_point((1.0, 1.0).into());
+    /// pc.add_point((0., 0.).into());
+    /// pc.add_point((1., 1.).into());
     ///
     /// let mut geo_points = pc.geo_points_iter();
-    /// assert_eq!(geo_points.next().unwrap(), geo::Point::new(0.0, 0.0));
-    /// assert_eq!(geo_points.next().unwrap(), geo::Point::new(1.0, 1.0));
+    /// assert_eq!(geo_points.next().unwrap(), geo::Point::new(0., 0.));
+    /// assert_eq!(geo_points.next().unwrap(), geo::Point::new(1., 1.));
     ///
     /// assert_eq!(pc.len(), 2);
     /// ```
@@ -155,14 +196,14 @@ impl PointCollection {
     /// use geoengine_datatypes::collections::{PointCollection, FeatureCollection};
     ///
     /// let mut pc = PointCollection::new();
-    /// pc.add_point((0.0, 0.0).into());
-    /// pc.add_multipoint(&[(1.0, 1.0).into(), (2.0, 2.0).into()]);
+    /// pc.add_point((0., 0.).into());
+    /// pc.add_multipoint(&[(1., 1.).into(), (2., 2.).into()]);
     ///
     /// let mut geo_points = pc.geo_multi_points_iter();
-    /// assert_eq!(geo_points.next().unwrap(), vec![(0.0, 0.0)].into());
+    /// assert_eq!(geo_points.next().unwrap(), vec![(0., 0.)].into());
     /// assert_eq!(
     ///     geo_points.next().unwrap(),
-    ///     vec![(1.0, 1.0), (2.0, 2.0)].into()
+    ///     vec![(1., 1.), (2., 2.)].into()
     /// );
     ///
     /// assert_eq!(pc.len(), 2);
@@ -177,17 +218,127 @@ impl PointCollection {
                 .collect()
         })
     }
+
+    /// Access the feature indices
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use geoengine_datatypes::collections::PointCollection;
+    ///
+    /// let mut pc = PointCollection::new();
+    /// pc.add_point((0., 0.).into());
+    /// pc.add_point((1., 1.).into());
+    ///
+    /// assert_eq!(pc.feature_indices(), &[0, 1, 2]);
+    ///
+    /// pc.add_multipoint(&[(2., 2.).into(), (3., 3.).into()]);
+    ///
+    /// assert_eq!(pc.feature_indices(), &[0, 1, 2, 4]);
+    /// ```
+    ///
+    pub fn feature_indices(&self) -> &[usize] {
+        &self.feature_indices
+    }
+
+    /// Access the feature indices
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use geoengine_datatypes::collections::PointCollection;
+    ///
+    /// let mut pc = PointCollection::new();
+    /// pc.add_point((0., 0.).into());
+    /// pc.add_point((1., 1.).into());
+    ///
+    /// assert_eq!(pc.coordinates(), &[(0., 0.).into(), (1., 1.).into()]);
+    ///
+    /// pc.add_multipoint(&[(2., 2.).into(), (3., 3.).into()]);
+    ///
+    /// assert_eq!(pc.coordinates(), &[(0., 0.).into(), (1., 1.).into(), (2., 2.).into(), (3., 3.).into()]);
+    /// ```
+    ///
+    pub fn coordinates(&self) -> &[Coordinate] {
+        &self.coordinates
+    }
 }
 
 impl FeatureCollection for PointCollection {
+    /// # Examples
+    ///
+    /// ```
+    /// use geoengine_datatypes::collections::{PointCollection, FeatureCollection};
+    /// let mut pc = PointCollection::new();
+    ///
+    /// assert_eq!(pc.len(), 0);
+    /// assert!(pc.is_empty());
+    ///
+    /// pc.add_point((0.1, 2.3).into());
+    ///
+    /// assert_eq!(pc.len(), 1);
+    /// assert!(!pc.is_empty());
+    /// ```
+    ///
     fn len(&self) -> usize {
         self.feature_indices.len() - 1
     }
 
+    /// # Examples
+    ///
+    /// ```
+    /// use geoengine_datatypes::collections::{PointCollection, FeatureCollection};
+    ///
+    /// assert!(PointCollection::new().is_simple());
+    ///
+    /// let mut pc = PointCollection::new();
+    /// pc.add_point((0., 0.).into());
+    /// pc.add_point((1., 1.).into());
+    /// pc.add_point((2., 2.).into());
+    ///
+    /// assert!(pc.is_simple());
+    ///
+    /// pc.add_multipoint(&[(3., 3.).into()]);
+    ///
+    /// assert!(pc.is_simple());
+    ///
+    /// pc.add_multipoint(&[(4., 4.).into(), (5., 5.).into()]);
+    ///
+    /// assert!(!pc.is_simple());
+    /// ```
+    ///
     fn is_simple(&self) -> bool {
         (self.feature_indices.len() - 1) == self.coordinates.len()
     }
 
+    /// # Examples
+    ///
+    /// ```
+    /// use geoengine_datatypes::collections::{PointCollection, FeatureCollection};
+    ///
+    /// let mut pc = PointCollection::new();
+    /// pc.add_point((0., 0.).into());
+    /// pc.add_point((1., 1.).into());
+    ///
+    /// assert_eq!(pc.len(), 2);
+    ///
+    /// pc.remove_last_feature().unwrap();
+    ///
+    /// assert_eq!(pc.len(), 1);
+    ///
+    /// pc.remove_last_feature().unwrap();
+    ///
+    /// assert!(pc.is_empty());
+    ///
+    /// pc.add_multipoint(&[(4., 4.).into(), (5., 5.).into()]);
+    ///
+    /// assert_eq!(pc.len(), 1);
+    ///
+    /// pc.remove_last_feature().unwrap();
+    ///
+    /// assert!(pc.is_empty());
+    /// ```
+    ///
     fn remove_last_feature(&mut self) -> Result<()> {
         if self.feature_indices.len() <= 1 {
             return Err(FeatureCollectionError::DeleteFromEmpty.into());
@@ -203,6 +354,25 @@ impl FeatureCollection for PointCollection {
 }
 
 impl Filterable for PointCollection {
+    /// # Examples
+    ///
+    /// ```
+    /// use geoengine_datatypes::collections::{PointCollection, FeatureCollection};
+    /// use geoengine_datatypes::operations::Filterable;
+    ///
+    /// let mut pc = PointCollection::new();
+    /// pc.add_point((0., 0.).into());
+    /// pc.add_point((1., 1.).into());
+    /// pc.add_point((2., 2.).into());
+    ///
+    /// assert_eq!(pc.len(), 3);
+    ///
+    /// let filtered = pc.filter(&[true, false, true]).unwrap();
+    ///
+    /// assert_eq!(filtered.len(), 2);
+    /// assert_eq!(filtered.coordinates(), &[(0., 0.).into(), (2., 2.).into()]);
+    /// ```
+    ///
     fn filter(&self, mask: &[bool]) -> Result<Self> {
         if mask.len() != self.feature_indices.len() - 1 {
             return Err(FilterableError::MaskDoesNotMatchFeatures.into());
@@ -231,6 +401,25 @@ impl Filterable for PointCollection {
         })
     }
 
+    /// # Examples
+    ///
+    /// ```
+    /// use geoengine_datatypes::collections::{PointCollection, FeatureCollection};
+    /// use geoengine_datatypes::operations::Filterable;
+    ///
+    /// let mut pc = PointCollection::new();
+    /// pc.add_point((0., 0.).into());
+    /// pc.add_point((1., 1.).into());
+    /// pc.add_point((2., 2.).into());
+    ///
+    /// assert_eq!(pc.len(), 3);
+    ///
+    /// let filtered = pc.filter_with_predicate(|points| points[0] != (1., 1.).into());
+    ///
+    /// assert_eq!(filtered.len(), 2);
+    /// assert_eq!(filtered.coordinates(), &[(0., 0.).into(), (2., 2.).into()]);
+    /// ```
+    ///
     fn filter_with_predicate<P>(&self, mut predicate: P) -> Self
     where
         P: FnMut(&[Coordinate]) -> bool,
@@ -258,6 +447,24 @@ impl Filterable for PointCollection {
         }
     }
 
+    /// # Examples
+    ///
+    /// ```
+    /// use geoengine_datatypes::collections::{PointCollection, FeatureCollection};
+    /// use geoengine_datatypes::operations::Filterable;
+    ///
+    /// let mut pc = PointCollection::new();
+    /// pc.add_point((0., 0.).into());
+    /// pc.add_point((1., 1.).into());
+    /// pc.add_point((2., 2.).into());
+    /// assert_eq!(pc.len(), 3);
+    ///
+    /// pc.filter_inplace(&[true, false, true]).unwrap();
+    ///
+    /// assert_eq!(pc.len(), 2);
+    /// assert_eq!(pc.coordinates(), &[(0., 0.).into(), (2., 2.).into()]);
+    /// ```
+    ///
     fn filter_inplace(&mut self, mask: &[bool]) -> Result<()> {
         if mask.len() != self.feature_indices.len() - 1 {
             return Err(FilterableError::MaskDoesNotMatchFeatures.into());
@@ -288,6 +495,25 @@ impl Filterable for PointCollection {
         Ok(())
     }
 
+    /// # Examples
+    ///
+    /// ```
+    /// use geoengine_datatypes::collections::{PointCollection, FeatureCollection};
+    /// use geoengine_datatypes::operations::Filterable;
+    ///
+    /// let mut pc = PointCollection::new();
+    /// pc.add_point((0., 0.).into());
+    /// pc.add_point((1., 1.).into());
+    /// pc.add_point((2., 2.).into());
+    ///
+    /// assert_eq!(pc.len(), 3);
+    ///
+    /// pc.filter_inplace_with_predicate(|points| points[0] != (1., 1.).into());
+    ///
+    /// assert_eq!(pc.len(), 2);
+    /// assert_eq!(pc.coordinates(), &[(0., 0.).into(), (2., 2.).into()]);
+    /// ```
+    ///
     fn filter_inplace_with_predicate<P>(&mut self, mut predicate: P)
     where
         P: FnMut(&[Coordinate]) -> bool,
@@ -322,171 +548,11 @@ mod test {
     use super::*;
 
     #[test]
-    fn default() {
+    fn new_equals_default() {
         let new = PointCollection::new();
         let default = PointCollection::default();
 
         assert_eq!(new.feature_indices, default.feature_indices);
         assert_eq!(new.coordinates, default.coordinates);
-    }
-
-    #[test]
-    fn from_data() {
-        let features = vec![0, 1, 2];
-        let coordinates = vec![(0.0, 0.0).into(), (1.0, 1.0).into()];
-
-        let pc1 = PointCollection::from_data(features.clone(), coordinates.clone()).unwrap();
-        let pc2 =
-            unsafe { PointCollection::from_data_unchecked(features.clone(), coordinates.clone()) };
-
-        assert_eq!(pc1.feature_indices, pc2.feature_indices);
-        assert_eq!(pc1.coordinates, pc2.coordinates);
-
-        PointCollection::from_data(Vec::new(), Vec::new()).unwrap_err();
-
-        let invalid_pc = unsafe { PointCollection::from_data_unchecked(Vec::new(), Vec::new()) };
-
-        assert!(!invalid_pc.is_valid());
-    }
-
-    #[test]
-    fn filter() {
-        let mut pc = PointCollection::new();
-        pc.add_point((0.0, 0.0).into());
-        pc.add_point((1.0, 1.0).into());
-        pc.add_point((2.0, 2.0).into());
-
-        assert_eq!(pc.len(), 3);
-
-        let filtered = pc.filter(&[true, false, true]).unwrap();
-
-        assert_eq!(filtered.len(), 2);
-        assert_eq!(
-            filtered.coordinates,
-            vec![(0.0, 0.0).into(), (2.0, 2.0).into()]
-        );
-    }
-
-    #[test]
-    fn filter_with_predicate() {
-        let mut pc = PointCollection::new();
-        pc.add_point((0.0, 0.0).into());
-        pc.add_point((1.0, 1.0).into());
-        pc.add_point((2.0, 2.0).into());
-
-        assert_eq!(pc.len(), 3);
-
-        let filtered = pc.filter_with_predicate(|points| points[0] != (1.0, 1.0).into());
-
-        assert_eq!(filtered.len(), 2);
-        assert_eq!(
-            filtered.coordinates,
-            vec![(0.0, 0.0).into(), (2.0, 2.0).into()]
-        );
-    }
-
-    #[test]
-    fn filter_inplace() {
-        let mut pc = PointCollection::new();
-        pc.add_point((0.0, 0.0).into());
-        pc.add_point((1.0, 1.0).into());
-        pc.add_point((2.0, 2.0).into());
-        assert_eq!(pc.len(), 3);
-
-        pc.filter_inplace(&[true, false, true]).unwrap();
-
-        assert_eq!(pc.len(), 2);
-        assert_eq!(pc.coordinates, vec![(0.0, 0.0).into(), (2.0, 2.0).into()]);
-    }
-
-    #[test]
-    fn filter_inplace_with_predicate() {
-        let mut pc = PointCollection::new();
-        pc.add_point((0.0, 0.0).into());
-        pc.add_point((1.0, 1.0).into());
-        pc.add_point((2.0, 2.0).into());
-
-        assert_eq!(pc.len(), 3);
-
-        pc.filter_inplace_with_predicate(|points| points[0] != (1.0, 1.0).into());
-
-        assert_eq!(pc.len(), 2);
-        assert_eq!(pc.coordinates, vec![(0.0, 0.0).into(), (2.0, 2.0).into()]);
-    }
-
-    #[test]
-    fn add_point() {
-        let mut pc = PointCollection::new();
-
-        pc.add_point((0.0, 0.0).into());
-
-        assert_eq!(pc.len(), 1);
-        assert_eq!(pc.coordinates, vec![(0.0, 0.0).into()]);
-        assert_eq!(pc.feature_indices, vec![0, 1]);
-
-        pc.add_multipoint(&[(1.0, 1.0).into(), (2.0, 2.0).into()]);
-
-        assert_eq!(pc.len(), 2);
-        assert_eq!(
-            pc.coordinates,
-            vec![(0.0, 0.0).into(), (1.0, 1.0).into(), (2.0, 2.0).into()]
-        );
-        assert_eq!(pc.feature_indices, vec![0, 1, 3]);
-    }
-
-    #[test]
-    fn empty() {
-        let mut pc = PointCollection::new();
-
-        assert!(pc.is_empty());
-
-        pc.add_point((0.1, 2.3).into());
-
-        assert!(!pc.is_empty());
-    }
-
-    #[test]
-    fn is_simple() {
-        assert!(PointCollection::new().is_simple());
-
-        let mut pc = PointCollection::new();
-        pc.add_point((0.0, 0.0).into());
-        pc.add_point((1.0, 1.0).into());
-        pc.add_point((2.0, 2.0).into());
-
-        assert!(pc.is_simple());
-
-        pc.add_multipoint(&[(3.0, 3.0).into()]);
-
-        assert!(pc.is_simple());
-
-        pc.add_multipoint(&[(4.0, 4.0).into(), (5.0, 5.0).into()]);
-
-        assert!(!pc.is_simple());
-    }
-
-    #[test]
-    fn delete() {
-        let mut pc = PointCollection::new();
-        pc.add_point((0.0, 0.0).into());
-        pc.add_point((1.0, 1.0).into());
-
-        assert_eq!(pc.len(), 2);
-
-        pc.remove_last_feature().unwrap();
-
-        assert_eq!(pc.len(), 1);
-
-        pc.remove_last_feature().unwrap();
-
-        assert!(pc.is_empty());
-
-        pc.add_multipoint(&[(4.0, 4.0).into(), (5.0, 5.0).into()]);
-
-        assert_eq!(pc.len(), 1);
-
-        pc.remove_last_feature().unwrap();
-
-        assert!(pc.is_empty());
     }
 }
