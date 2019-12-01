@@ -1,4 +1,9 @@
+# Compile output
 /target
 **/*.rs.bk
+
+# Rust artifacts
 Cargo.lock
+
+# IDE files
 /.idea
