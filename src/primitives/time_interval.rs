@@ -7,6 +7,7 @@ use std::fmt::{Error, Formatter};
 
 /// Stores time intervals in ms in close-open semantic [start, end)
 #[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[repr(C)]
 pub struct TimeInterval {
     start: i64,
     end: i64,
