@@ -1,15 +1,14 @@
 use arrow::array::{
-    Array, ArrayData, Date64Array, Date64Builder, FixedSizeBinaryBuilder, FixedSizeListBuilder,
-    Float64Array, Float64Builder, Int32Array, Int32Builder, ListBuilder, StringArray,
-    StringBuilder, StructBuilder, UInt64Array, UInt64Builder,
+    Array, ArrayData, Date64Array, Date64Builder, FixedSizeBinaryBuilder, FixedSizeListArray,
+    FixedSizeListBuilder, Float64Array, Float64Builder, Int32Array, Int32Builder, ListArray,
+    ListBuilder, StringArray, StringBuilder, StructBuilder, UInt64Array, UInt64Builder,
 };
 use arrow::buffer::{Buffer, MutableBuffer};
 use arrow::compute::kernels::filter::filter;
 use arrow::datatypes::{DataType, DateUnit, Field, Schema, ToByteSlice};
-use geoengine_datatypes::primitives::TimeInterval;
+use geoengine_datatypes::primitives::{Coordinate, TimeInterval};
 use ocl::ProQue;
-use std::mem;
-use std::slice;
+use std::{mem, slice};
 
 #[test]
 fn simple() {
@@ -436,4 +435,136 @@ fn table() {
             .value_slice(0, array.len()),
         &[0, 10, 20, 30, 40]
     );
+}
+
+#[test]
+fn nested_lists() {
+    let array = {
+        let mut builder = ListBuilder::new(ListBuilder::new(Int32Builder::new(0)));
+
+        // [[[10, 11, 12], [20, 21]], [[30]]
+        builder
+            .values()
+            .values()
+            .append_slice(&[10, 11, 12])
+            .unwrap();
+        builder.values().append(true).unwrap();
+        builder.values().values().append_slice(&[20, 21]).unwrap();
+        builder.values().append(true).unwrap();
+        builder.append(true).unwrap();
+
+        builder.values().values().append_slice(&[30]).unwrap();
+        builder.values().append(true).unwrap();
+        builder.append(true).unwrap();
+
+        builder.finish()
+    };
+
+    assert_eq!(array.len(), 2);
+    assert_eq!(array.value_length(0), 2);
+    assert_eq!(array.value_length(1), 1);
+    assert_eq!(
+        array
+            .value(0)
+            .as_any()
+            .downcast_ref::<ListArray>()
+            .unwrap()
+            .value_length(0),
+        3
+    );
+    assert_eq!(
+        array
+            .value(0)
+            .as_any()
+            .downcast_ref::<ListArray>()
+            .unwrap()
+            .value_length(1),
+        2
+    );
+    assert_eq!(
+        array
+            .value(1)
+            .as_any()
+            .downcast_ref::<ListArray>()
+            .unwrap()
+            .value_length(0),
+        1
+    );
+
+    assert_eq!(array.data().buffers().len(), 1);
+    assert_eq!(
+        array.data().buffers()[0].typed_data::<i32>(),
+        &[0, 2, 3], // indices of first level arrays in second level structure
+    );
+
+    assert_eq!(array.data().child_data().len(), 1);
+    assert_eq!(array.data().child_data()[0].buffers().len(), 1);
+    assert_eq!(
+        array.data().child_data()[0].buffers()[0].typed_data::<i32>(),
+        &[0, 3, 5, 6], // indices of second level arrays in actual data
+    );
+
+    assert_eq!(array.data().child_data()[0].child_data().len(), 1);
+    assert_eq!(
+        array.data().child_data()[0].child_data()[0].buffers().len(),
+        1,
+    );
+    assert_eq!(
+        array.data().child_data()[0].child_data()[0].buffers()[0].typed_data::<i32>(),
+        &[10, 11, 12, 20, 21, 30], // data
+    );
+}
+
+#[test]
+fn multipoints() {
+    let array = {
+        let data = ArrayData::builder(DataType::List(
+            DataType::FixedSizeList((DataType::Float64.into(), 2)).into(),
+        ))
+        .len(2) // number of multipoints
+        .add_buffer(Buffer::from(&[0_i32, 2, 5].to_byte_slice()))
+        .add_child_data(
+            ArrayData::builder(DataType::FixedSizeList((DataType::Float64.into(), 2)))
+                .len(5) // number of coordinates
+                .add_child_data(
+                    ArrayData::builder(DataType::Float64)
+                        .len(10) // number of floats
+                        .add_buffer(Buffer::from(
+                            &[
+                                1_f64, 2., 11., 12., 21., 22., 31., 32., 41., 42., 51., 52., 61.,
+                                62., 71., 72., 81., 82., 91., 92.,
+                            ]
+                            .to_byte_slice(),
+                        ))
+                        .build(),
+                )
+                .build(),
+        )
+        .build();
+
+        ListArray::from(data)
+    };
+
+    //    eprintln!("{:?}", array);
+
+    assert_eq!(array.len(), 2);
+    assert_eq!(array.value_length(0), 2);
+    assert_eq!(array.value_length(1), 3);
+
+    let values = array.values();
+    let subarray = values
+        .as_any()
+        .downcast_ref::<FixedSizeListArray>()
+        .unwrap()
+        .values();
+    let floats = subarray
+        .as_any()
+        .downcast_ref::<Float64Array>()
+        .unwrap()
+        .value_slice(0, 10);
+    assert_eq!(floats.len(), 10);
+    let coordinates: &[Coordinate] =
+        unsafe { slice::from_raw_parts(floats.as_ptr() as *const Coordinate, floats.len()) };
+
+    assert_eq!(coordinates[4], Coordinate::new(41., 42.));
 }

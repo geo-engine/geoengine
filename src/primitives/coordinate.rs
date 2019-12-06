@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, PartialOrd, Serialize)]
+#[repr(C)]
 pub struct Coordinate {
     pub x: f64,
     pub y: f64,
