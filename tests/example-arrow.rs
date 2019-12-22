@@ -46,22 +46,23 @@ fn null_values() {
     assert_eq!(primitive_array.len(), 5);
     assert_eq!(primitive_array.null_count(), 1);
 
-    eprintln!("{:?}", primitive_array);
+    //    eprintln!("{:?}", primitive_array);
 
     let buffer = primitive_array.values();
 
     let underlying_data = buffer.data();
     assert_eq!(underlying_data.len(), 5 * 4);
 
-    eprintln!("{:?}", underlying_data);
+    //    eprintln!("{:?}", underlying_data);
 
     let casted_data = buffer.typed_data::<i32>();
 
     assert_eq!(casted_data.len(), 5);
 
-    eprintln!("{:?}", casted_data);
+    //    eprintln!("{:?}", casted_data);
 
-    assert_eq!(casted_data, &[1, 0, 3, 4, 5]);
+    assert_eq!(&casted_data[0..1], &[1]);
+    assert_eq!(&casted_data[2..5], &[3, 4, 5]);
 }
 
 #[test]

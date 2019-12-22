@@ -90,3 +90,21 @@ impl Into<(f64, f64)> for Coordinate {
         (self.x, self.y)
     }
 }
+
+impl Into<[f64; 2]> for Coordinate {
+    fn into(self) -> [f64; 2] {
+        [self.x, self.y]
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use std::mem;
+
+    #[test]
+    fn byte_size() {
+        assert_eq!(mem::size_of::<Coordinate>(), 2 * mem::size_of::<f64>());
+        assert_eq!(mem::size_of::<Coordinate>(), 2 * 8);
+    }
+}

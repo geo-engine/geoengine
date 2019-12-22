@@ -1,3 +1,3 @@
 mod filterable;
 
-pub use filterable::{Filterable, FilterableError};
+pub use filterable::Filterable;

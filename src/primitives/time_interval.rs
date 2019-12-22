@@ -1,9 +1,9 @@
+use crate::error;
 use crate::util::Result;
 use serde::{Deserialize, Serialize};
-use snafu::Snafu;
+use snafu::ensure;
 use std::cmp::Ordering;
 use std::fmt::{Debug, Display};
-use std::fmt::{Error, Formatter};
 
 /// Stores time intervals in ms in close-open semantic [start, end)
 #[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
@@ -11,19 +11,6 @@ use std::fmt::{Error, Formatter};
 pub struct TimeInterval {
     start: i64,
     end: i64,
-}
-
-#[derive(Debug, Snafu)]
-enum TimeIntervalError {
-    #[snafu(display("Start `{}` must be before end `{}`", start, end))]
-    EndBeforeStart { start: i64, end: i64 },
-
-    #[snafu(display(
-        "{} cannot be unioned with {} since the intervals are neither intersecting nor contiguous",
-        i1,
-        i2
-    ))]
-    UnmatchedIntervals { i1: TimeInterval, i2: TimeInterval },
 }
 
 impl TimeInterval {
@@ -41,11 +28,11 @@ impl TimeInterval {
     /// ```
     ///
     pub fn new(start: i64, end: i64) -> Result<Self> {
-        if start <= end {
-            Ok(Self { start, end })
-        } else {
-            Err(TimeIntervalError::EndBeforeStart { start, end }.into())
-        }
+        ensure!(
+            start <= end,
+            error::TimeIntervalEndBeforeStart { start, end }
+        );
+        Ok(Self { start, end })
     }
 
     /// Create a new time interval without bound checks
@@ -55,12 +42,12 @@ impl TimeInterval {
     /// ```
     /// use geoengine_datatypes::primitives::TimeInterval;
     ///
-    /// let t_unsafe = unsafe { TimeInterval::new_unchecked(0, 1) };
+    /// let time_unchecked = TimeInterval::new_unchecked(0, 1);
     ///
-    /// assert_eq!(t_unsafe, TimeInterval::new(0, 1).unwrap());
+    /// assert_eq!(time_unchecked, TimeInterval::new(0, 1).unwrap());
     /// ```
     ///
-    pub unsafe fn new_unchecked(start: i64, end: i64) -> Self {
+    pub fn new_unchecked(start: i64, end: i64) -> Self {
         Self { start, end }
     }
 
@@ -158,23 +145,30 @@ impl TimeInterval {
     /// ```
     ///
     pub fn union(&self, other: &Self) -> Result<Self> {
-        if self.intersects(other) || self.start == other.end || self.end == other.start {
-            Ok(Self {
-                start: i64::min(self.start, other.start),
-                end: i64::max(self.end, other.end),
-            })
-        } else {
-            Err(TimeIntervalError::UnmatchedIntervals {
+        ensure!(
+            self.intersects(other) || self.start == other.end || self.end == other.start,
+            error::TimeIntervalUnmatchedIntervals {
                 i1: *self,
                 i2: *other,
             }
-            .into())
-        }
+        );
+        Ok(Self {
+            start: i64::min(self.start, other.start),
+            end: i64::max(self.end, other.end),
+        })
+    }
+
+    pub fn start(&self) -> i64 {
+        self.start
+    }
+
+    pub fn end(&self) -> i64 {
+        self.end
     }
 }
 
 impl Debug for TimeInterval {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         write!(f, "TimeInterval [{}, {})", self.start, self.end)
     }
 }
@@ -190,7 +184,7 @@ impl Display for TimeInterval {
     /// assert_eq!(format!("{}", TimeInterval::new(0, 1).unwrap()), "[0, 1)");
     /// ```
     ///
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         write!(f, "[{}, {})", self.start, self.end)
     }
 }

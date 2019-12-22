@@ -1,7 +1,7 @@
 use crate::util::Result;
 use snafu::Snafu;
 
-/// This trait defines common features of all featurecollections
+/// This trait defines common features of all feature collections
 pub trait FeatureCollection {
     /// Returns the number of features
     fn len(&self) -> usize;
@@ -16,6 +16,17 @@ pub trait FeatureCollection {
 
     /// Removes the last feature from the collection
     fn remove_last_feature(&mut self) -> Result<()>;
+
+    /// Reserved name for feature column
+    const FEATURE_FIELD: &'static str = "__features";
+
+    /// Reserved name for time column
+    const TIME_FIELD: &'static str = "__time";
+
+    /// Checks for name conflicts with reserved names
+    fn is_reserved_name(name: &str) -> bool {
+        name == Self::FEATURE_FIELD || name == Self::TIME_FIELD
+    }
 }
 
 #[derive(Debug, Snafu)]
@@ -48,5 +59,11 @@ mod test {
     fn is_empty() {
         assert!(Dummy(Vec::new()).is_empty());
         assert!(!Dummy(vec![1, 2, 3]).is_empty());
+    }
+
+    #[test]
+    fn is_reserved_name() {
+        assert!(Dummy::is_reserved_name("__features"));
+        assert!(!Dummy::is_reserved_name("foobar"));
     }
 }
