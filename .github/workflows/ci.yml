@@ -18,6 +18,8 @@ jobs:
           profile: minimal
           toolchain: nightly
           override: true
+      - name: Install OpenCL
+        run: sudo apt-get install ocl-icd-opencl-dev pocl-opencl-icd
       - name: Build
         run: cargo build --verbose
       - name: Run tests
