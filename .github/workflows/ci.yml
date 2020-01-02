@@ -9,11 +9,15 @@ jobs:
     strategy:
       matrix:
         os:
-          - ubuntu-latest
           - ubuntu-18.04
 
     steps:
       - uses: actions/checkout@v1
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly
+          override: true
       - name: Build
         run: cargo build --verbose
       - name: Run tests
