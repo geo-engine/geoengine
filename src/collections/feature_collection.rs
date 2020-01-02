@@ -14,9 +14,6 @@ pub trait FeatureCollection {
     /// Returns whether this feature collection is simple, i.e., contains no multi-types
     fn is_simple(&self) -> bool;
 
-    /// Removes the last feature from the collection
-    fn remove_last_feature(&mut self) -> Result<()>;
-
     /// Reserved name for feature column
     const FEATURE_FIELD: &'static str = "__features";
 
