@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::slice;
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, PartialOrd, Serialize)]
 #[repr(C)]
@@ -94,6 +95,12 @@ impl Into<(f64, f64)> for Coordinate {
 impl Into<[f64; 2]> for Coordinate {
     fn into(self) -> [f64; 2] {
         [self.x, self.y]
+    }
+}
+
+impl<'c> Into<&'c [f64]> for &'c Coordinate {
+    fn into(self) -> &'c [f64] {
+        unsafe { slice::from_raw_parts(self as *const Coordinate as *const f64, 2) }
     }
 }
 

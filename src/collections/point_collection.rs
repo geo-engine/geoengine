@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use arrow::array::{
     Array, ArrayBuilder, ArrayData, ArrayRef, BooleanArray, Date64Array, Date64Builder,
-    FixedSizeListArray, FixedSizeListBuilder, Float64Array, Float64Builder, ListArray, ListBuilder,
-    StructArray, StructBuilder,
+    FixedSizeListArray, FixedSizeListBuilder, Float64Array, Float64Builder, Int64Builder,
+    ListArray, ListBuilder, StringBuilder, StructArray, StructBuilder, UInt8Builder,
 };
 use arrow::compute::kernels::filter::filter;
 use arrow::datatypes::DataType::Struct;
@@ -15,6 +15,7 @@ use crate::error;
 use crate::operations::Filterable;
 use crate::primitives::{Coordinate, FeatureData, TimeInterval};
 use crate::util::Result;
+use std::mem;
 use std::slice;
 use std::sync::Arc;
 
@@ -37,6 +38,7 @@ impl Clone for PointCollection {
     /// assert_eq!(pc.len(), 0);
     /// assert_eq!(cloned.len(), 0);
     /// ```
+    ///
     fn clone(&self) -> Self {
         Self {
             data: StructArray::from(self.data.data()),
@@ -47,15 +49,14 @@ impl Clone for PointCollection {
 impl PointCollection {
     /// Retrieve the composite arrow data type for multi points
     #[inline]
-    fn multi_points_data_type() -> DataType {
-        // TODO: use fixed size list with two floats instead of binary for representing `Coordinate`
+    pub(self) fn multi_points_data_type() -> DataType {
         DataType::List(DataType::FixedSizeList((DataType::Float64.into(), 2)).into())
         // DataType::List(DataType::FixedSizeBinary(mem::size_of::<Coordinate>() as i32).into())
     }
 
     /// Retrieve the composite arrow data type for multi points
     #[inline]
-    fn time_data_type() -> DataType {
+    pub(self) fn time_data_type() -> DataType {
         DataType::FixedSizeList((DataType::Date64(DateUnit::Millisecond).into(), 2))
     }
 
@@ -168,6 +169,8 @@ impl PointCollection {
         }
 
         // TODO: performance improvements by creating the buffers directly and not using so many loops
+
+        // TODO: wrap error for unequal number of rows in custom error
 
         Ok(Self {
             data: struct_builder.finish(),
@@ -398,4 +401,473 @@ fn time_interval_filter(
     }
 
     Ok(new_time_intervals.finish())
+}
+
+/// A row-by-row builder for a point collection
+pub struct PointCollectionBuilder {
+    coordinates_builder: ListBuilder<FixedSizeListBuilder<Float64Builder>>,
+    time_intervals_builder: FixedSizeListBuilder<Date64Builder>,
+    builders: HashMap<String, Box<dyn ArrayBuilder>>,
+    types: HashMap<String, FeatureData>,
+    rows: usize,
+}
+
+impl Default for PointCollectionBuilder {
+    /// Creates a builder for a point collection
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use geoengine_datatypes::collections::PointCollectionBuilder;
+    ///
+    /// let builder = PointCollectionBuilder::default();
+    /// ```
+    ///
+    fn default() -> Self {
+        Self {
+            coordinates_builder: ListBuilder::new(FixedSizeListBuilder::new(
+                Float64Builder::new(0),
+                2,
+            )),
+            time_intervals_builder: FixedSizeListBuilder::new(Date64Builder::new(0), 2),
+            builders: Default::default(),
+            types: Default::default(),
+            rows: 0,
+        }
+    }
+}
+
+impl PointCollectionBuilder {
+    /// Creates a builder for a point collection
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use geoengine_datatypes::collections::PointCollectionBuilder;
+    /// use geoengine_datatypes::primitives::FeatureData;
+    ///
+    /// let mut builder = PointCollectionBuilder::default();
+    ///
+    /// builder.add_field("foobar", FeatureData::Number(vec![])).unwrap();
+    /// builder.add_field("__features", FeatureData::Number(vec![])).unwrap_err();
+    /// ```
+    ///
+    pub fn add_field(&mut self, name: &str, data_type: FeatureData) -> Result<()> {
+        ensure!(
+            self.rows == 0,
+            error::FeatureCollectionBuilderException {
+                details: "It is not allowed to add further fields after data was inserted",
+            }
+        );
+        ensure!(
+            !PointCollection::is_reserved_name(name) && !self.types.contains_key(name),
+            error::FieldNameConflict {
+                name: name.to_string()
+            }
+        );
+
+        self.builders
+            .insert(name.into(), data_type.arrow_builder()?);
+        self.types.insert(name.into(), data_type);
+
+        Ok(())
+    }
+
+    /// Finishes a row and checks for completion
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use geoengine_datatypes::collections::PointCollectionBuilder;
+    /// use geoengine_datatypes::primitives::{FeatureData, TimeInterval};
+    ///
+    /// let mut builder = PointCollectionBuilder::default();
+    ///
+    /// builder.append_coordinate((0.0, 0.0).into());
+    /// builder.append_time_interval(TimeInterval::new_unchecked(0, 1));
+    ///
+    /// builder.finish_row().unwrap();
+    ///
+    /// builder.append_coordinate((0.0, 0.0).into());
+    ///
+    /// builder.finish_row().unwrap_err();
+    /// ```
+    ///
+    pub fn finish_row(&mut self) -> Result<()> {
+        let rows = self.rows + 1;
+
+        ensure!(
+            self.coordinates_builder.len() == rows
+                && self.time_intervals_builder.len() == rows
+                && self.builders.values().all(|builder| builder.len() == rows),
+            error::FeatureCollectionBuilderException {
+                details: "Cannot finish row when child data is missing",
+            }
+        );
+
+        self.rows = rows;
+
+        Ok(())
+    }
+
+    /// Adds a coordinate to the builder
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use geoengine_datatypes::collections::PointCollectionBuilder;
+    /// use geoengine_datatypes::primitives::{FeatureData, TimeInterval};
+    ///
+    /// let mut builder = PointCollectionBuilder::default();
+    ///
+    /// builder.append_coordinate((0.0, 0.0).into()).unwrap();
+    /// builder.append_coordinate((1.0, 1.0).into()).unwrap_err();
+    /// ```
+    ///
+    pub fn append_coordinate(&mut self, coordinate: Coordinate) -> Result<()> {
+        ensure!(
+            self.coordinates_builder.len() <= self.rows,
+            error::FeatureCollectionBuilderException {
+                details: "Cannot add another coordinate until row is finished",
+            }
+        );
+
+        Self::append_single_coordinate_to_builder(self.coordinates_builder.values(), coordinate)?;
+
+        self.coordinates_builder.append(true)?;
+
+        Ok(())
+    }
+
+    /// Adds a multi coordinate to the builder
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use geoengine_datatypes::collections::PointCollectionBuilder;
+    /// use geoengine_datatypes::primitives::{FeatureData, TimeInterval};
+    ///
+    /// let mut builder = PointCollectionBuilder::default();
+    ///
+    /// builder.append_multi_coordinate(vec![(0.0, 0.1).into(), (1.0, 1.1).into()]).unwrap();
+    /// builder.append_multi_coordinate(vec![(2.0, 2.1).into()]).unwrap_err();
+    /// ```
+    ///
+    pub fn append_multi_coordinate(&mut self, coordinates: Vec<Coordinate>) -> Result<()> {
+        ensure!(
+            self.coordinates_builder.len() <= self.rows,
+            error::FeatureCollectionBuilderException {
+                details: "Cannot add another coordinate until row is finished",
+            }
+        );
+
+        let coordinate_builder = self.coordinates_builder.values();
+        for coordinate in coordinates {
+            Self::append_single_coordinate_to_builder(coordinate_builder, coordinate)?;
+        }
+
+        self.coordinates_builder.append(true)?;
+
+        Ok(())
+    }
+
+    fn append_single_coordinate_to_builder(
+        coordinate_builder: &mut FixedSizeListBuilder<Float64Builder>,
+        coordinate: Coordinate,
+    ) -> Result<()> {
+        let float_builder = coordinate_builder.values();
+        float_builder.append_value(coordinate.x)?;
+        float_builder.append_value(coordinate.y)?;
+
+        coordinate_builder.append(true)?;
+
+        Ok(())
+    }
+
+    /// Adds a time interval to the builder
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use geoengine_datatypes::collections::PointCollectionBuilder;
+    /// use geoengine_datatypes::primitives::{FeatureData, TimeInterval};
+    ///
+    /// let mut builder = PointCollectionBuilder::default();
+    ///
+    /// builder.append_time_interval(TimeInterval::new_unchecked(0, 1)).unwrap();
+    /// builder.append_time_interval(TimeInterval::new_unchecked(1, 2)).unwrap_err();
+    /// ```
+    ///
+    pub fn append_time_interval(&mut self, time_interval: TimeInterval) -> Result<()> {
+        ensure!(
+            self.time_intervals_builder.len() <= self.rows,
+            error::FeatureCollectionBuilderException {
+                details: "Cannot add another time interval until row is finished",
+            }
+        );
+
+        let date_builder = self.time_intervals_builder.values();
+        date_builder.append_value(time_interval.start())?;
+        date_builder.append_value(time_interval.end())?;
+
+        self.time_intervals_builder.append(true)?;
+
+        Ok(())
+    }
+
+    /// Adds a time interval to the builder
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use geoengine_datatypes::collections::PointCollectionBuilder;
+    /// use geoengine_datatypes::primitives::{FeatureData, TimeInterval};
+    ///
+    /// let mut builder = PointCollectionBuilder::default();
+    /// builder.add_field("foobar", FeatureData::Number(vec![]));
+    ///
+    /// builder.append_data("foobar", FeatureData::Number(vec![0.])).unwrap();
+    /// builder.append_data("foobar", FeatureData::Number(vec![1.])).unwrap_err();
+    /// ```
+    ///
+    pub fn append_data(&mut self, field: &str, data: FeatureData) -> Result<()> {
+        ensure!(
+            self.types.contains_key(field),
+            error::FeatureCollectionBuilderException {
+                details: format!("Field {} does not exist", field),
+            }
+        );
+
+        let data_builder = self.builders.get_mut(field).unwrap();
+
+        ensure!(
+            data_builder.len() <= self.rows,
+            error::FeatureCollectionBuilderException {
+                details: "Cannot add another data item until row is finished",
+            }
+        );
+
+        let data_type = self.types.get(field).unwrap();
+
+        // TODO: introduce fields with single values?
+
+        ensure!(
+            mem::discriminant(&data) == mem::discriminant(&data_type), // same enum variant
+            error::FeatureCollectionBuilderException {
+                details: "Data type is wrong for the field",
+            }
+        );
+
+        match data {
+            FeatureData::Number(values) => {
+                ensure!(
+                    values.len() == 1,
+                    error::FeatureCollectionBuilderException {
+                        details: "It is only allowed to add one value at a time",
+                    }
+                );
+
+                let number_builder: &mut Float64Builder =
+                    data_builder.as_any_mut().downcast_mut().unwrap();
+                number_builder.append_value(values[0])?;
+            }
+            FeatureData::NullableNumber(values) => {
+                ensure!(
+                    values.len() == 1,
+                    error::FeatureCollectionBuilderException {
+                        details: "It is only allowed to add one value at a time",
+                    }
+                );
+
+                let number_builder: &mut Float64Builder =
+                    data_builder.as_any_mut().downcast_mut().unwrap();
+                number_builder.append_option(values[0])?;
+            }
+            FeatureData::Text(values) => {
+                ensure!(
+                    values.len() == 1,
+                    error::FeatureCollectionBuilderException {
+                        details: "It is only allowed to add one value at a time",
+                    }
+                );
+
+                let string_builder: &mut StringBuilder =
+                    data_builder.as_any_mut().downcast_mut().unwrap();
+                string_builder.append_value(&values[0])?;
+            }
+            FeatureData::NullableText(values) => {
+                ensure!(
+                    values.len() == 1,
+                    error::FeatureCollectionBuilderException {
+                        details: "It is only allowed to add one value at a time",
+                    }
+                );
+
+                let string_builder: &mut StringBuilder =
+                    data_builder.as_any_mut().downcast_mut().unwrap();
+                if let Some(v) = &values[0] {
+                    string_builder.append_value(&v)?;
+                } else {
+                    string_builder.append_null()?;
+                }
+            }
+            FeatureData::Decimal(values) => {
+                ensure!(
+                    values.len() == 1,
+                    error::FeatureCollectionBuilderException {
+                        details: "It is only allowed to add one value at a time",
+                    }
+                );
+
+                let decimal_builder: &mut Int64Builder =
+                    data_builder.as_any_mut().downcast_mut().unwrap();
+                decimal_builder.append_value(values[0])?;
+            }
+            FeatureData::NullableDecimal(values) => {
+                ensure!(
+                    values.len() == 1,
+                    error::FeatureCollectionBuilderException {
+                        details: "It is only allowed to add one value at a time",
+                    }
+                );
+
+                let decimal_builder: &mut Int64Builder =
+                    data_builder.as_any_mut().downcast_mut().unwrap();
+                decimal_builder.append_option(values[0])?;
+            }
+            FeatureData::Categorical(values) => {
+                ensure!(
+                    values.len() == 1,
+                    error::FeatureCollectionBuilderException {
+                        details: "It is only allowed to add one value at a time",
+                    }
+                );
+
+                let categorical_builder: &mut UInt8Builder =
+                    data_builder.as_any_mut().downcast_mut().unwrap();
+                categorical_builder.append_value(values[0])?;
+            }
+            FeatureData::NullableCategorical(values) => {
+                ensure!(
+                    values.len() == 1,
+                    error::FeatureCollectionBuilderException {
+                        details: "It is only allowed to add one value at a time",
+                    }
+                );
+
+                let categorical_builder: &mut UInt8Builder =
+                    data_builder.as_any_mut().downcast_mut().unwrap();
+                categorical_builder.append_option(values[0])?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Builds the point collection
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use geoengine_datatypes::collections::{PointCollectionBuilder, FeatureCollection};
+    /// use geoengine_datatypes::primitives::{FeatureData, TimeInterval};
+    ///
+    /// let mut builder = PointCollectionBuilder::default();
+    /// builder.add_field("foobar", FeatureData::Number(vec![])).unwrap();
+    ///
+    /// builder.append_coordinate((0.0, 0.1).into()).unwrap();
+    /// builder.append_time_interval(TimeInterval::new_unchecked(0, 1)).unwrap();
+    /// builder.append_data("foobar", FeatureData::Number(vec![0.]));
+    ///
+    /// builder.finish_row().unwrap();
+    ///
+    /// builder.append_coordinate((1.0, 1.1).into()).unwrap();
+    /// builder.append_time_interval(TimeInterval::new_unchecked(1, 2)).unwrap();
+    /// builder.append_data("foobar", FeatureData::Number(vec![1.]));
+    ///
+    /// builder.finish_row().unwrap();
+    ///
+    /// let point_collection = builder.build().unwrap();
+    ///
+    /// assert_eq!(point_collection.len(), 2);
+    /// assert_eq!(point_collection.coordinates(), &[(0.0, 0.1).into(), (1.0, 1.1).into()]);
+    /// ```
+    ///
+    pub fn build(mut self) -> Result<PointCollection> {
+        ensure!(
+            self.coordinates_builder.len() == self.rows
+                && self.time_intervals_builder.len() == self.rows
+                && self
+                    .builders
+                    .values()
+                    .all(|builder| builder.len() == self.rows),
+            error::FeatureCollectionBuilderException {
+                details: "Cannot build a point collection out of unfinished rows",
+            }
+        );
+
+        let mut fields = Vec::with_capacity(self.types.len() + 2);
+        let mut builders: Vec<Box<dyn ArrayBuilder>> = Vec::with_capacity(self.types.len() + 2);
+
+        fields.push(Field::new(
+            PointCollection::FEATURE_FIELD,
+            PointCollection::multi_points_data_type(),
+            false,
+        ));
+        builders.push(Box::new(self.coordinates_builder));
+
+        fields.push(Field::new(
+            PointCollection::TIME_FIELD,
+            PointCollection::time_data_type(),
+            false,
+        ));
+        builders.push(Box::new(self.time_intervals_builder));
+
+        for (field_name, builder) in self.builders.drain() {
+            let field_type = self.types.get(&field_name).unwrap();
+            fields.push(Field::new(
+                &field_name,
+                field_type.arrow_data_type(),
+                field_type.nullable(),
+            ));
+            builders.push(builder);
+        }
+
+        let mut struct_builder = StructBuilder::new(fields, builders);
+
+        for _ in 0..self.rows {
+            struct_builder.append(true)?;
+        }
+
+        Ok(PointCollection {
+            data: struct_builder.finish(),
+        })
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn clone() {
+        let pc = PointCollection::from_data(
+            vec![vec![(0., 0.).into()], vec![(1., 1.).into()]],
+            vec![
+                TimeInterval::new_unchecked(0, 1),
+                TimeInterval::new_unchecked(0, 1),
+            ],
+            {
+                let mut map = HashMap::new();
+                map.insert("number".into(), FeatureData::Number(vec![0., 1.]));
+                map
+            },
+        )
+        .unwrap();
+
+        let cloned = pc.clone();
+
+        assert_eq!(pc.len(), cloned.len());
+        assert_eq!(pc.coordinates(), cloned.coordinates());
+    }
 }

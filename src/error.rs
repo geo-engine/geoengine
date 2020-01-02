@@ -36,6 +36,9 @@ pub enum Error {
         mask_length: usize,
         collection_length: usize,
     },
+
+    #[snafu(display("FeatureCollectionBuilder exception: {}", details))]
+    FeatureCollectionBuilderException { details: String },
 }
 
 impl From<arrow::error::ArrowError> for Error {

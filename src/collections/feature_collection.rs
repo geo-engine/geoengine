@@ -1,5 +1,3 @@
-use snafu::Snafu;
-
 /// This trait defines common features of all feature collections
 pub trait FeatureCollection {
     /// Returns the number of features
@@ -23,14 +21,6 @@ pub trait FeatureCollection {
     fn is_reserved_name(name: &str) -> bool {
         name == Self::FEATURE_FIELD || name == Self::TIME_FIELD
     }
-}
-
-#[derive(Debug, Snafu)]
-pub enum FeatureCollectionError {
-    #[snafu(display("Feature indices do not match"))]
-    UnmatchedFeatureIndices,
-    #[snafu(display("Unable to delete features from empty collection"))]
-    DeleteFromEmpty,
 }
 
 #[cfg(test)]
