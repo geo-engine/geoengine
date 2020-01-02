@@ -1,4 +1,3 @@
-use crate::util::Result;
 use snafu::Snafu;
 
 /// This trait defines common features of all feature collections
@@ -45,9 +44,6 @@ mod test {
             self.0.len()
         }
         fn is_simple(&self) -> bool {
-            unimplemented!()
-        }
-        fn remove_last_feature(&mut self) -> Result<()> {
             unimplemented!()
         }
     }
