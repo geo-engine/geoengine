@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use arrow::array::{
     Array, ArrayBuilder, ArrayData, ArrayRef, BooleanArray, Date64Array, Date64Builder,
     FixedSizeListArray, FixedSizeListBuilder, Float64Array, Float64Builder, Int64Builder,
-    ListArray, ListBuilder, StringBuilder, StructArray, StructBuilder, UInt8Builder,
+    ListArray, ListBuilder, StringArray, StringBuilder, StructArray, StructBuilder, UInt8Builder,
 };
 use arrow::compute::kernels::filter::filter;
 use arrow::datatypes::DataType::Struct;
@@ -13,7 +13,10 @@ use snafu::ensure;
 use crate::collections::FeatureCollection;
 use crate::error;
 use crate::operations::Filterable;
-use crate::primitives::{Coordinate, FeatureData, TimeInterval};
+use crate::primitives::{
+    Coordinate, FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue,
+    NullableNumberDataRef, NumberDataRef, TimeInterval,
+};
 use crate::util::Result;
 use std::mem;
 use std::slice;
@@ -22,6 +25,7 @@ use std::sync::Arc;
 #[derive(Debug)]
 pub struct PointCollection {
     data: StructArray,
+    types: HashMap<String, FeatureDataType>,
 }
 
 impl Clone for PointCollection {
@@ -42,6 +46,7 @@ impl Clone for PointCollection {
     fn clone(&self) -> Self {
         Self {
             data: StructArray::from(self.data.data()),
+            types: self.types.clone(),
         }
     }
 }
@@ -81,7 +86,13 @@ impl PointCollection {
 
                 StructArray::from(ArrayData::builder(DataType::Struct(fields)).len(0).build())
             },
+            types: Default::default(),
         }
+    }
+
+    /// Use a builder for creating the point collection
+    pub fn builder() -> PointCollectionBuilder {
+        Default::default()
     }
 
     /// Create a point collection from data
@@ -147,6 +158,8 @@ impl PointCollection {
             }),
         ];
 
+        let mut data_types = HashMap::with_capacity(data.len());
+
         for (name, feature_data) in data {
             ensure!(
                 !Self::is_reserved_name(&name),
@@ -161,6 +174,8 @@ impl PointCollection {
 
             fields.push(field);
             builders.push(feature_data.arrow_builder()?);
+
+            data_types.insert(name, FeatureDataType::from(&feature_data));
         }
 
         let mut struct_builder = StructBuilder::new(fields, builders);
@@ -174,6 +189,7 @@ impl PointCollection {
 
         Ok(Self {
             data: struct_builder.finish(),
+            types: data_types,
         })
     }
 
@@ -279,6 +295,80 @@ impl FeatureCollection for PointCollection {
     fn is_simple(&self) -> bool {
         self.len() == self.coordinates().len()
     }
+
+    /// Retrieves a data field of this point collection
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use geoengine_datatypes::collections::{PointCollection, FeatureCollection};
+    /// use geoengine_datatypes::primitives::{Coordinate, TimeInterval, FeatureData, FeatureDataRef, DataRef, NullableDataRef};
+    /// use std::collections::HashMap;
+    ///
+    /// let pc = PointCollection::from_data(
+    ///     vec![vec![(0., 0.).into()], vec![(1., 1.).into()], vec![(2., 2.).into()]],
+    ///     vec![TimeInterval::new_unchecked(0, 1), TimeInterval::new_unchecked(1, 2), TimeInterval::new_unchecked(2, 3)],
+    ///     {
+    ///         let mut map = HashMap::new();
+    ///         map.insert("numbers".into(), FeatureData::Number(vec![0., 1., 2.]));
+    ///         map.insert("number_nulls".into(), FeatureData::NullableNumber(vec![Some(0.), None, Some(2.)]));
+    ///         map
+    ///     },
+    /// ).unwrap();
+    ///
+    /// assert_eq!(pc.len(), 3);
+    ///
+    /// if let FeatureDataRef::Number(numbers) = pc.data("numbers").unwrap() {
+    ///     assert_eq!(numbers.data(), &[0., 1., 2.]);
+    /// } else {
+    ///     unreachable!();
+    /// }
+    ///
+    /// if let FeatureDataRef::NullableNumber(numbers) = pc.data("number_nulls").unwrap() {
+    ///     assert_eq!(numbers.data()[0], 0.);
+    ///     assert_eq!(numbers.data()[2], 2.);
+    ///     assert_eq!(numbers.nulls(), vec![false, true, false]);
+    /// } else {
+    ///     unreachable!();
+    /// }
+    /// ```
+    ///
+    fn data(&self, field: &str) -> Result<FeatureDataRef> {
+        ensure!(
+            !Self::is_reserved_name(field),
+            error::FeatureCollection {
+                details: "Cannot access reserved fields via `data()` method"
+            }
+        );
+
+        let column = self.data.column_by_name(field);
+
+        ensure!(
+            column.is_some(),
+            error::FeatureCollection {
+                details: format!("The field {} does not exist in the point collection", field)
+            }
+        );
+
+        let column = column.unwrap();
+
+        Ok(match self.types.get(field).unwrap() {
+            FeatureDataType::Number => {
+                let array: &Float64Array = column.as_any().downcast_ref().unwrap();
+                NumberDataRef::new(array.values()).into()
+            }
+            FeatureDataType::NullableNumber => {
+                let array: &Float64Array = column.as_any().downcast_ref().unwrap();
+                NullableNumberDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
+            }
+            FeatureDataType::Text => {
+                let _array: &StringArray = column.as_any().downcast_ref().unwrap();
+                //                FeatureDataRef::Text(array.value_data().typed_data())
+                todo!("Implement text refs")
+            }
+            _ => todo!("Implement the rest"),
+        })
+    }
 }
 
 impl Filterable for PointCollection {
@@ -345,6 +435,7 @@ impl Filterable for PointCollection {
 
         Ok(Self {
             data: filtered_data.into(),
+            types: self.types.clone(),
         })
     }
 }
@@ -408,7 +499,7 @@ pub struct PointCollectionBuilder {
     coordinates_builder: ListBuilder<FixedSizeListBuilder<Float64Builder>>,
     time_intervals_builder: FixedSizeListBuilder<Date64Builder>,
     builders: HashMap<String, Box<dyn ArrayBuilder>>,
-    types: HashMap<String, FeatureData>,
+    types: HashMap<String, FeatureDataType>,
     rows: usize,
 }
 
@@ -444,15 +535,15 @@ impl PointCollectionBuilder {
     ///
     /// ```rust
     /// use geoengine_datatypes::collections::PointCollectionBuilder;
-    /// use geoengine_datatypes::primitives::FeatureData;
+    /// use geoengine_datatypes::primitives::FeatureDataType;
     ///
     /// let mut builder = PointCollectionBuilder::default();
     ///
-    /// builder.add_field("foobar", FeatureData::Number(vec![])).unwrap();
-    /// builder.add_field("__features", FeatureData::Number(vec![])).unwrap_err();
+    /// builder.add_field("foobar", FeatureDataType::Number).unwrap();
+    /// builder.add_field("__features", FeatureDataType::Number).unwrap_err();
     /// ```
     ///
-    pub fn add_field(&mut self, name: &str, data_type: FeatureData) -> Result<()> {
+    pub fn add_field(&mut self, name: &str, data_type: FeatureDataType) -> Result<()> {
         ensure!(
             self.rows == 0,
             error::FeatureCollectionBuilderException {
@@ -467,7 +558,7 @@ impl PointCollectionBuilder {
         );
 
         self.builders
-            .insert(name.into(), data_type.arrow_builder()?);
+            .insert(name.into(), data_type.arrow_builder(0));
         self.types.insert(name.into(), data_type);
 
         Ok(())
@@ -621,16 +712,16 @@ impl PointCollectionBuilder {
     ///
     /// ```rust
     /// use geoengine_datatypes::collections::PointCollectionBuilder;
-    /// use geoengine_datatypes::primitives::{FeatureData, TimeInterval};
+    /// use geoengine_datatypes::primitives::{FeatureDataValue, FeatureDataType, TimeInterval};
     ///
     /// let mut builder = PointCollectionBuilder::default();
-    /// builder.add_field("foobar", FeatureData::Number(vec![]));
+    /// builder.add_field("foobar", FeatureDataType::Number);
     ///
-    /// builder.append_data("foobar", FeatureData::Number(vec![0.])).unwrap();
-    /// builder.append_data("foobar", FeatureData::Number(vec![1.])).unwrap_err();
+    /// builder.append_data("foobar", FeatureDataValue::Number(0.)).unwrap();
+    /// builder.append_data("foobar", FeatureDataValue::Number(1.)).unwrap_err();
     /// ```
     ///
-    pub fn append_data(&mut self, field: &str, data: FeatureData) -> Result<()> {
+    pub fn append_data(&mut self, field: &str, data: FeatureDataValue) -> Result<()> {
         ensure!(
             self.types.contains_key(field),
             error::FeatureCollectionBuilderException {
@@ -649,115 +740,57 @@ impl PointCollectionBuilder {
 
         let data_type = self.types.get(field).unwrap();
 
-        // TODO: introduce fields with single values?
-
         ensure!(
-            mem::discriminant(&data) == mem::discriminant(&data_type), // same enum variant
+            mem::discriminant(&FeatureDataType::from(&data)) == mem::discriminant(&data_type), // same enum variant
             error::FeatureCollectionBuilderException {
                 details: "Data type is wrong for the field",
             }
         );
 
         match data {
-            FeatureData::Number(values) => {
-                ensure!(
-                    values.len() == 1,
-                    error::FeatureCollectionBuilderException {
-                        details: "It is only allowed to add one value at a time",
-                    }
-                );
-
+            FeatureDataValue::Number(value) => {
                 let number_builder: &mut Float64Builder =
                     data_builder.as_any_mut().downcast_mut().unwrap();
-                number_builder.append_value(values[0])?;
+                number_builder.append_value(value)?;
             }
-            FeatureData::NullableNumber(values) => {
-                ensure!(
-                    values.len() == 1,
-                    error::FeatureCollectionBuilderException {
-                        details: "It is only allowed to add one value at a time",
-                    }
-                );
-
+            FeatureDataValue::NullableNumber(value) => {
                 let number_builder: &mut Float64Builder =
                     data_builder.as_any_mut().downcast_mut().unwrap();
-                number_builder.append_option(values[0])?;
+                number_builder.append_option(value)?;
             }
-            FeatureData::Text(values) => {
-                ensure!(
-                    values.len() == 1,
-                    error::FeatureCollectionBuilderException {
-                        details: "It is only allowed to add one value at a time",
-                    }
-                );
-
+            FeatureDataValue::Text(value) => {
                 let string_builder: &mut StringBuilder =
                     data_builder.as_any_mut().downcast_mut().unwrap();
-                string_builder.append_value(&values[0])?;
+                string_builder.append_value(&value)?;
             }
-            FeatureData::NullableText(values) => {
-                ensure!(
-                    values.len() == 1,
-                    error::FeatureCollectionBuilderException {
-                        details: "It is only allowed to add one value at a time",
-                    }
-                );
-
+            FeatureDataValue::NullableText(value) => {
                 let string_builder: &mut StringBuilder =
                     data_builder.as_any_mut().downcast_mut().unwrap();
-                if let Some(v) = &values[0] {
+                if let Some(v) = &value {
                     string_builder.append_value(&v)?;
                 } else {
                     string_builder.append_null()?;
                 }
             }
-            FeatureData::Decimal(values) => {
-                ensure!(
-                    values.len() == 1,
-                    error::FeatureCollectionBuilderException {
-                        details: "It is only allowed to add one value at a time",
-                    }
-                );
-
+            FeatureDataValue::Decimal(value) => {
                 let decimal_builder: &mut Int64Builder =
                     data_builder.as_any_mut().downcast_mut().unwrap();
-                decimal_builder.append_value(values[0])?;
+                decimal_builder.append_value(value)?;
             }
-            FeatureData::NullableDecimal(values) => {
-                ensure!(
-                    values.len() == 1,
-                    error::FeatureCollectionBuilderException {
-                        details: "It is only allowed to add one value at a time",
-                    }
-                );
-
+            FeatureDataValue::NullableDecimal(value) => {
                 let decimal_builder: &mut Int64Builder =
                     data_builder.as_any_mut().downcast_mut().unwrap();
-                decimal_builder.append_option(values[0])?;
+                decimal_builder.append_option(value)?;
             }
-            FeatureData::Categorical(values) => {
-                ensure!(
-                    values.len() == 1,
-                    error::FeatureCollectionBuilderException {
-                        details: "It is only allowed to add one value at a time",
-                    }
-                );
-
+            FeatureDataValue::Categorical(value) => {
                 let categorical_builder: &mut UInt8Builder =
                     data_builder.as_any_mut().downcast_mut().unwrap();
-                categorical_builder.append_value(values[0])?;
+                categorical_builder.append_value(value)?;
             }
-            FeatureData::NullableCategorical(values) => {
-                ensure!(
-                    values.len() == 1,
-                    error::FeatureCollectionBuilderException {
-                        details: "It is only allowed to add one value at a time",
-                    }
-                );
-
+            FeatureDataValue::NullableCategorical(value) => {
                 let categorical_builder: &mut UInt8Builder =
                     data_builder.as_any_mut().downcast_mut().unwrap();
-                categorical_builder.append_option(values[0])?;
+                categorical_builder.append_option(value)?;
             }
         }
 
@@ -770,20 +803,20 @@ impl PointCollectionBuilder {
     ///
     /// ```rust
     /// use geoengine_datatypes::collections::{PointCollectionBuilder, FeatureCollection};
-    /// use geoengine_datatypes::primitives::{FeatureData, TimeInterval};
+    /// use geoengine_datatypes::primitives::{TimeInterval, FeatureDataType, FeatureDataValue};
     ///
     /// let mut builder = PointCollectionBuilder::default();
-    /// builder.add_field("foobar", FeatureData::Number(vec![])).unwrap();
+    /// builder.add_field("foobar", FeatureDataType::Number).unwrap();
     ///
     /// builder.append_coordinate((0.0, 0.1).into()).unwrap();
     /// builder.append_time_interval(TimeInterval::new_unchecked(0, 1)).unwrap();
-    /// builder.append_data("foobar", FeatureData::Number(vec![0.]));
+    /// builder.append_data("foobar", FeatureDataValue::Number(0.));
     ///
     /// builder.finish_row().unwrap();
     ///
     /// builder.append_coordinate((1.0, 1.1).into()).unwrap();
     /// builder.append_time_interval(TimeInterval::new_unchecked(1, 2)).unwrap();
-    /// builder.append_data("foobar", FeatureData::Number(vec![1.]));
+    /// builder.append_data("foobar", FeatureDataValue::Number(1.));
     ///
     /// builder.finish_row().unwrap();
     ///
@@ -841,6 +874,7 @@ impl PointCollectionBuilder {
 
         Ok(PointCollection {
             data: struct_builder.finish(),
+            types: self.types,
         })
     }
 }

@@ -1,3 +1,6 @@
+use crate::primitives::FeatureDataRef;
+use crate::util::Result;
+
 /// This trait defines common features of all feature collections
 pub trait FeatureCollection {
     /// Returns the number of features
@@ -21,6 +24,8 @@ pub trait FeatureCollection {
     fn is_reserved_name(name: &str) -> bool {
         name == Self::FEATURE_FIELD || name == Self::TIME_FIELD
     }
+
+    fn data(&self, field: &str) -> Result<FeatureDataRef>;
 }
 
 #[cfg(test)]
@@ -34,6 +39,9 @@ mod test {
             self.0.len()
         }
         fn is_simple(&self) -> bool {
+            unimplemented!()
+        }
+        fn data(&self, _field: &str) -> Result<FeatureDataRef> {
             unimplemented!()
         }
     }

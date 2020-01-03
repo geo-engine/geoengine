@@ -37,6 +37,9 @@ pub enum Error {
         collection_length: usize,
     },
 
+    #[snafu(display("FeatureCollection exception: {}", details))]
+    FeatureCollection { details: String },
+
     #[snafu(display("FeatureCollectionBuilder exception: {}", details))]
     FeatureCollectionBuilderException { details: String },
 }
