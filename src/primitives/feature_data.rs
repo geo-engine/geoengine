@@ -25,7 +25,7 @@ pub enum FeatureData {
     NullableNumber(Vec<Option<f64>>),
     Decimal(Vec<i64>),
     NullableDecimal(Vec<Option<i64>>),
-    Categorical(Vec<u8>),
+    Categorical(Vec<u8>), // TODO: add names to categories
     NullableCategorical(Vec<Option<u8>>),
 }
 
@@ -292,6 +292,40 @@ impl NullableTextDataRef {
         };
 
         Ok(Some(text))
+    }
+}
+
+impl NullableDataRef for NullableTextDataRef {
+    /// A null vector for text data
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use geoengine_datatypes::primitives::{NullableTextDataRef, DataRef, NullableDataRef};
+    /// use arrow::array::{StringBuilder, Array};
+    ///
+    /// let string_array = {
+    ///     let mut builder = StringBuilder::new(3);
+    ///     builder.append_value("foobar");
+    ///     builder.append_null();
+    ///     builder.append_value("bar");
+    ///     builder.finish()
+    /// };
+    ///
+    /// assert_eq!(string_array.len(), 3);
+    ///
+    /// let text_data_ref = NullableTextDataRef::new(string_array.value_data(), string_array.value_offsets());
+    ///
+    /// assert_eq!(text_data_ref.nulls(), vec![false, true, false]);
+    /// ```
+    ///
+    fn nulls(&self) -> Vec<bool> {
+        let mut nulls = Vec::with_capacity(self.offsets().len() - 1);
+        for window in self.offsets().windows(2) {
+            let (start, end) = (window[0], window[1]);
+            nulls.push(start == end);
+        }
+        nulls
     }
 }
 
