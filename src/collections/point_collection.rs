@@ -2,8 +2,9 @@ use std::collections::HashMap;
 
 use arrow::array::{
     Array, ArrayBuilder, ArrayData, ArrayRef, BooleanArray, Date64Array, Date64Builder,
-    FixedSizeListArray, FixedSizeListBuilder, Float64Array, Float64Builder, Int64Builder,
-    ListArray, ListBuilder, StringArray, StringBuilder, StructArray, StructBuilder, UInt8Builder,
+    FixedSizeListArray, FixedSizeListBuilder, Float64Array, Float64Builder, Int64Array,
+    Int64Builder, ListArray, ListBuilder, StringArray, StringBuilder, StructArray, StructBuilder,
+    UInt8Array, UInt8Builder,
 };
 use arrow::compute::kernels::filter::filter;
 use arrow::datatypes::DataType::Struct;
@@ -14,8 +15,9 @@ use crate::collections::FeatureCollection;
 use crate::error;
 use crate::operations::Filterable;
 use crate::primitives::{
-    Coordinate, FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue,
-    NullableNumberDataRef, NullableTextDataRef, NumberDataRef, TextDataRef, TimeInterval,
+    CategoricalDataRef, Coordinate, DecimalDataRef, FeatureData, FeatureDataRef, FeatureDataType,
+    FeatureDataValue, NullableCategoricalDataRef, NullableDecimalDataRef, NullableNumberDataRef,
+    NullableTextDataRef, NumberDataRef, TextDataRef, TimeInterval,
 };
 use crate::util::Result;
 use std::mem;
@@ -369,7 +371,23 @@ impl FeatureCollection for PointCollection {
                 let array: &StringArray = column.as_any().downcast_ref().unwrap();
                 NullableTextDataRef::new(array.value_data(), array.value_offsets()).into()
             }
-            _ => todo!("Implement the rest"),
+            FeatureDataType::Decimal => {
+                let array: &Int64Array = column.as_any().downcast_ref().unwrap();
+                DecimalDataRef::new(array.values()).into()
+            }
+            FeatureDataType::NullableDecimal => {
+                let array: &Int64Array = column.as_any().downcast_ref().unwrap();
+                NullableDecimalDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
+            }
+            FeatureDataType::Categorical => {
+                let array: &UInt8Array = column.as_any().downcast_ref().unwrap();
+                CategoricalDataRef::new(array.values()).into()
+            }
+            FeatureDataType::NullableCategorical => {
+                let array: &UInt8Array = column.as_any().downcast_ref().unwrap();
+                NullableCategoricalDataRef::new(array.values(), array.data_ref().null_bitmap())
+                    .into()
+            }
         })
     }
 }

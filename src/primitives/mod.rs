@@ -4,7 +4,8 @@ mod time_interval;
 
 pub use coordinate::Coordinate;
 pub use feature_data::{
-    DataRef, FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue, NullableDataRef,
+    CategoricalDataRef, DataRef, DecimalDataRef, FeatureData, FeatureDataRef, FeatureDataType,
+    FeatureDataValue, NullableCategoricalDataRef, NullableDataRef, NullableDecimalDataRef,
     NullableNumberDataRef, NullableTextDataRef, NumberDataRef, TextDataRef,
 };
 pub use time_interval::TimeInterval;

@@ -1,6 +1,7 @@
 use crate::error;
 use crate::util::Result;
 use arrow;
+use arrow::bitmap::Bitmap;
 use snafu::ensure;
 use std::slice;
 use std::str;
@@ -47,10 +48,10 @@ pub enum FeatureDataRef<'f> {
     NullableText(NullableTextDataRef),
     Number(NumberDataRef),
     NullableNumber(NullableNumberDataRef<'f>),
-    Decimal(&'f [i64]),
-    NullableDecimal(&'f [Option<i64>]),
-    Categorical(&'f [u8]),
-    NullableCategorical(&'f [Option<u8>]),
+    Decimal(DecimalDataRef),
+    NullableDecimal(NullableDecimalDataRef<'f>),
+    Categorical(CategoricalDataRef),
+    NullableCategorical(NullableCategoricalDataRef<'f>),
 }
 
 pub trait DataRef<T> {
@@ -98,11 +99,7 @@ impl DataRef<f64> for NullableNumberDataRef<'_> {
 
 impl<'f> NullableDataRef for NullableNumberDataRef<'f> {
     fn nulls(&self) -> Vec<bool> {
-        if let Some(nulls) = self.null_bitmap {
-            (0..self.data().len()).map(|i| !nulls.is_set(i)).collect()
-        } else {
-            vec![false; self.data().len()]
-        }
+        null_bitmap_to_bools(self.data(), self.null_bitmap)
     }
 }
 
@@ -113,6 +110,132 @@ impl<'f> From<NullableNumberDataRef<'f>> for FeatureDataRef<'f> {
 }
 
 impl<'f> NullableNumberDataRef<'f> {
+    pub fn new(
+        buffer: arrow::buffer::Buffer,
+        null_bitmap: &'f Option<arrow::bitmap::Bitmap>,
+    ) -> Self {
+        Self {
+            buffer,
+            null_bitmap,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct DecimalDataRef {
+    buffer: arrow::buffer::Buffer,
+}
+
+impl DataRef<i64> for DecimalDataRef {
+    fn data(&self) -> &[i64] {
+        self.buffer.typed_data()
+    }
+}
+
+impl From<DecimalDataRef> for FeatureDataRef<'_> {
+    fn from(data_ref: DecimalDataRef) -> Self {
+        Self::Decimal(data_ref)
+    }
+}
+
+impl DecimalDataRef {
+    pub fn new(buffer: arrow::buffer::Buffer) -> Self {
+        Self { buffer }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct NullableDecimalDataRef<'f> {
+    buffer: arrow::buffer::Buffer,
+    null_bitmap: &'f Option<arrow::bitmap::Bitmap>,
+}
+
+impl DataRef<i64> for NullableDecimalDataRef<'_> {
+    fn data(&self) -> &[i64] {
+        self.buffer.typed_data()
+    }
+}
+
+impl<'f> NullableDataRef for NullableDecimalDataRef<'f> {
+    fn nulls(&self) -> Vec<bool> {
+        null_bitmap_to_bools(self.data(), self.null_bitmap)
+    }
+}
+
+fn null_bitmap_to_bools<T>(data: &[T], null_bitmap: &Option<Bitmap>) -> Vec<bool> {
+    if let Some(nulls) = null_bitmap {
+        (0..data.len()).map(|i| !nulls.is_set(i)).collect()
+    } else {
+        vec![false; data.len()]
+    }
+}
+
+impl<'f> From<NullableDecimalDataRef<'f>> for FeatureDataRef<'f> {
+    fn from(data_ref: NullableDecimalDataRef<'f>) -> Self {
+        Self::NullableDecimal(data_ref)
+    }
+}
+
+impl<'f> NullableDecimalDataRef<'f> {
+    pub fn new(
+        buffer: arrow::buffer::Buffer,
+        null_bitmap: &'f Option<arrow::bitmap::Bitmap>,
+    ) -> Self {
+        Self {
+            buffer,
+            null_bitmap,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct CategoricalDataRef {
+    buffer: arrow::buffer::Buffer,
+}
+
+impl DataRef<u8> for CategoricalDataRef {
+    fn data(&self) -> &[u8] {
+        self.buffer.typed_data()
+    }
+}
+
+impl From<CategoricalDataRef> for FeatureDataRef<'_> {
+    fn from(data_ref: CategoricalDataRef) -> Self {
+        Self::Categorical(data_ref)
+    }
+}
+
+impl CategoricalDataRef {
+    pub fn new(buffer: arrow::buffer::Buffer) -> Self {
+        Self { buffer }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct NullableCategoricalDataRef<'f> {
+    buffer: arrow::buffer::Buffer,
+    null_bitmap: &'f Option<arrow::bitmap::Bitmap>,
+}
+
+impl DataRef<u8> for NullableCategoricalDataRef<'_> {
+    fn data(&self) -> &[u8] {
+        self.buffer.typed_data()
+    }
+}
+
+impl<'f> NullableDataRef for NullableCategoricalDataRef<'f> {
+    fn nulls(&self) -> Vec<bool> {
+        null_bitmap_to_bools(self.data(), self.null_bitmap)
+    }
+}
+
+impl<'f> From<NullableCategoricalDataRef<'f>> for FeatureDataRef<'f> {
+    fn from(data_ref: NullableCategoricalDataRef<'f>) -> Self {
+        Self::NullableCategorical(data_ref)
+    }
+}
+
+impl<'f> NullableCategoricalDataRef<'f> {
     pub fn new(
         buffer: arrow::buffer::Buffer,
         null_bitmap: &'f Option<arrow::bitmap::Bitmap>,
