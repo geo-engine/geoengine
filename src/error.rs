@@ -3,7 +3,7 @@ use snafu::Snafu;
 
 use crate::primitives::TimeInterval;
 
-#[derive(Debug, Snafu)]
+#[derive(Debug, PartialEq, Snafu)]
 #[snafu(visibility = "pub(crate)")]
 pub enum Error {
     // #[snafu(display("Arrow internal error: {:?}", source))]
@@ -39,6 +39,9 @@ pub enum Error {
 
     #[snafu(display("FeatureCollection exception: {}", details))]
     FeatureCollection { details: String },
+
+    #[snafu(display("FeatureData exception: {}", details))]
+    FeatureData { details: String },
 
     #[snafu(display("FeatureCollectionBuilder exception: {}", details))]
     FeatureCollectionBuilderException { details: String },

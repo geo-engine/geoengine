@@ -15,7 +15,7 @@ use crate::error;
 use crate::operations::Filterable;
 use crate::primitives::{
     Coordinate, FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue,
-    NullableNumberDataRef, NumberDataRef, TimeInterval,
+    NullableNumberDataRef, NullableTextDataRef, NumberDataRef, TextDataRef, TimeInterval,
 };
 use crate::util::Result;
 use std::mem;
@@ -362,9 +362,12 @@ impl FeatureCollection for PointCollection {
                 NullableNumberDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
             }
             FeatureDataType::Text => {
-                let _array: &StringArray = column.as_any().downcast_ref().unwrap();
-                //                FeatureDataRef::Text(array.value_data().typed_data())
-                todo!("Implement text refs")
+                let array: &StringArray = column.as_any().downcast_ref().unwrap();
+                TextDataRef::new(array.value_data(), array.value_offsets()).into()
+            }
+            FeatureDataType::NullableText => {
+                let array: &StringArray = column.as_any().downcast_ref().unwrap();
+                NullableTextDataRef::new(array.value_data(), array.value_offsets()).into()
             }
             _ => todo!("Implement the rest"),
         })

@@ -1,5 +1,9 @@
+use crate::error;
 use crate::util::Result;
 use arrow;
+use snafu::ensure;
+use std::slice;
+use std::str;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FeatureDataType {
@@ -39,8 +43,8 @@ pub enum FeatureDataValue {
 
 #[derive(Clone, Debug)]
 pub enum FeatureDataRef<'f> {
-    Text(&'f [&'f str]),
-    NullableText(&'f [Option<&'f str>]),
+    Text(TextDataRef),
+    NullableText(NullableTextDataRef),
     Number(NumberDataRef),
     NullableNumber(NullableNumberDataRef<'f>),
     Decimal(&'f [i64]),
@@ -117,6 +121,177 @@ impl<'f> NullableNumberDataRef<'f> {
             buffer,
             null_bitmap,
         }
+    }
+}
+
+/// A reference to text data
+///
+/// # Examples
+///
+/// ```rust
+/// use geoengine_datatypes::primitives::{TextDataRef, DataRef};
+/// use arrow::array::{StringBuilder, Array};
+///
+/// let string_array = {
+///     let mut builder = StringBuilder::new(3);
+///     builder.append_value("foobar");
+///     builder.append_value("foo");
+///     builder.append_value("bar");
+///     builder.finish()
+/// };
+///
+/// assert_eq!(string_array.len(), 3);
+///
+/// let text_data_ref = TextDataRef::new(string_array.value_data(), string_array.value_offsets());
+///
+/// assert_eq!(text_data_ref.data().len(), 12);
+/// assert_eq!(text_data_ref.offsets().len(), 4);
+///
+/// assert_eq!(text_data_ref.text_at(0), Ok("foobar"));
+/// assert_eq!(text_data_ref.text_at(1), Ok("foo"));
+/// assert_eq!(text_data_ref.text_at(2), Ok("bar"));
+/// assert!(text_data_ref.text_at(3).is_err());
+/// ```
+///
+#[derive(Clone, Debug)]
+pub struct TextDataRef {
+    data_buffer: arrow::buffer::Buffer,
+    offsets_buffer: arrow::buffer::Buffer,
+}
+
+impl DataRef<u8> for TextDataRef {
+    fn data(&self) -> &[u8] {
+        self.data_buffer.data()
+    }
+}
+
+impl From<TextDataRef> for FeatureDataRef<'_> {
+    fn from(data_ref: TextDataRef) -> Self {
+        Self::Text(data_ref)
+    }
+}
+
+impl TextDataRef {
+    pub fn new(data_buffer: arrow::buffer::Buffer, offsets_buffer: arrow::buffer::Buffer) -> Self {
+        Self {
+            data_buffer,
+            offsets_buffer,
+        }
+    }
+
+    pub fn offsets(&self) -> &[i32] {
+        self.offsets_buffer.typed_data()
+    }
+
+    pub fn text_at(&self, pos: usize) -> Result<&str> {
+        ensure!(
+            pos < (self.offsets().len() - 1),
+            error::FeatureData {
+                details: "Position must be in data range"
+            }
+        );
+
+        let start = self.offsets()[pos];
+        let end = self.offsets()[pos + 1];
+
+        let text = unsafe {
+            byte_ptr_to_str(
+                self.data_buffer.slice(start as usize).raw_data(),
+                (end - start) as usize,
+            )
+        };
+
+        Ok(text)
+    }
+}
+
+unsafe fn byte_ptr_to_str<'d>(bytes: *const u8, length: usize) -> &'d str {
+    let text_ref = slice::from_raw_parts(bytes, length);
+    str::from_utf8_unchecked(text_ref)
+}
+
+/// A reference to nullable text data
+///
+/// # Examples
+///
+/// ```rust
+/// use geoengine_datatypes::primitives::{NullableTextDataRef, DataRef};
+/// use arrow::array::{StringBuilder, Array};
+///
+/// let string_array = {
+///     let mut builder = StringBuilder::new(3);
+///     builder.append_value("foobar");
+///     builder.append_null();
+///     builder.append_value("bar");
+///     builder.finish()
+/// };
+///
+/// assert_eq!(string_array.len(), 3);
+///
+/// let text_data_ref = NullableTextDataRef::new(string_array.value_data(), string_array.value_offsets());
+///
+/// assert_eq!(text_data_ref.data().len(), 9);
+/// assert_eq!(text_data_ref.offsets().len(), 4);
+///
+/// assert_eq!(text_data_ref.text_at(0), Ok(Some("foobar")));
+/// assert_eq!(text_data_ref.text_at(1), Ok(None));
+/// assert_eq!(text_data_ref.text_at(2), Ok(Some("bar")));
+/// assert!(text_data_ref.text_at(3).is_err());
+/// ```
+///
+#[derive(Clone, Debug)]
+pub struct NullableTextDataRef {
+    data_buffer: arrow::buffer::Buffer,
+    offsets_buffer: arrow::buffer::Buffer,
+}
+
+impl DataRef<u8> for NullableTextDataRef {
+    fn data(&self) -> &[u8] {
+        self.data_buffer.data()
+    }
+}
+
+impl From<NullableTextDataRef> for FeatureDataRef<'_> {
+    fn from(data_ref: NullableTextDataRef) -> Self {
+        Self::NullableText(data_ref)
+    }
+}
+
+impl NullableTextDataRef {
+    pub fn new(data_buffer: arrow::buffer::Buffer, offsets_buffer: arrow::buffer::Buffer) -> Self {
+        Self {
+            data_buffer,
+            offsets_buffer,
+        }
+    }
+
+    pub fn offsets(&self) -> &[i32] {
+        self.offsets_buffer.typed_data()
+    }
+
+    pub fn text_at(&self, pos: usize) -> Result<Option<&str>> {
+        ensure!(
+            pos < (self.offsets().len() - 1),
+            error::FeatureData {
+                details: "Position must be in data range"
+            }
+        );
+
+        let start = self.offsets()[pos];
+        let end = self.offsets()[pos + 1];
+
+        if start == end {
+            return Ok(None);
+        }
+
+        let text = unsafe {
+            byte_ptr_to_str(
+                self.data_buffer.slice(start as usize).raw_data(),
+                (end - start) as usize,
+            )
+        };
+
+        Ok(Some(text))
     }
 }
 
