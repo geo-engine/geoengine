@@ -520,12 +520,12 @@ fn nested_lists() {
 fn multipoints() {
     let array = {
         let data = ArrayData::builder(DataType::List(
-            DataType::FixedSizeList((DataType::Float64.into(), 2)).into(),
+            DataType::FixedSizeList(DataType::Float64.into(), 2).into(),
         ))
         .len(2) // number of multipoints
         .add_buffer(Buffer::from(&[0_i32, 2, 5].to_byte_slice()))
         .add_child_data(
-            ArrayData::builder(DataType::FixedSizeList((DataType::Float64.into(), 2)))
+            ArrayData::builder(DataType::FixedSizeList(DataType::Float64.into(), 2))
                 .len(5) // number of coordinates
                 .add_child_data(
                     ArrayData::builder(DataType::Float64)
