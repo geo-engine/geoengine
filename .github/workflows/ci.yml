@@ -25,6 +25,7 @@ jobs:
           args: --all-features
       - name: Install OpenCL
         run: |
+          sudo apt-get update
           sudo apt-get install ocl-icd-opencl-dev pocl-opencl-icd
           sudo ln -s /usr/lib/llvm-6.0/lib/clang/6.0.1 /usr/lib/llvm-6.0/lib/clang/6.0.0
       - name: Build
