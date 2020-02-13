@@ -9,7 +9,7 @@ authors = [
 edition = "2018"
 
 [dependencies]
-arrow = { git = "https://github.com/apache/arrow" } #version = "0.15" } # simd compiles with nightly only
+arrow = "0.16.0"
 float-cmp = "0.6"
 geo = "0.12"
 ocl = "0.19"
