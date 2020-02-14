@@ -1,0 +1,13 @@
+[package]
+name = "geoengine-services"
+version = "0.1.0"
+authors = [
+    "Christian Beilschmidt <beilschmidt@mathematik.uni-marburg.de>",
+    "Johannes Drönner <droenner@mathematik.uni-marburg.de>",
+    "Michael Mattig <mattig@mathematik.uni-marburg.de>"
+]
+edition = "2018"
+
+[dependencies]
+geoengine-datatypes = { git = "https://github.com/geo-engine/datatypes" } # TODO: Use version when available
+geoengine-operators = { git = "https://github.com/geo-engine/operators" } # TODO: Use version when available
