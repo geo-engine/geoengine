@@ -7,8 +7,6 @@ use geoengine_operators::Operator;
 
 #[tokio::main]
 async fn main() {
-    pretty_env_logger::init();
-
     let workflow_registry = Arc::new(Mutex::new(HashMap::<usize, Operator>::new()));
     let workflow_registry = warp::any().map(move || Arc::clone(&workflow_registry));
 
