@@ -6,6 +6,7 @@ use float_cmp::*;
 use ndarray::{stack, Array, Array1, Axis};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
+use std::cmp;
 use std::collections::HashMap;
 use std::iter::FromIterator;
 use vega_lite_3::{
@@ -189,7 +190,7 @@ impl Histogram {
         let fraction = (value - self.min) / (self.max - self.min);
         let bucket = (fraction * (self.counts.len() as f64)) as usize;
 
-        bucket.min(self.counts.len() - 1)
+        cmp::min(bucket, self.counts.len() - 1)
     }
 }
 
