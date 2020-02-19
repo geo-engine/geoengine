@@ -2,21 +2,23 @@ POST http://localhost:3030/workflow/register
 Content-Type: application/json
 
 {
-  "type": "projection",
-  "params": {
-    "src_crs": "EPSG:4326",
-    "dest_crs": "EPSG:3857"
-  },
-  "sources": {
-    "rasters": [
-      {
-        "type": "gdal_source",
-        "params": {
-          "source_name": "test",
-          "channel": 0
+  "operator": {
+    "type": "projection",
+    "params": {
+      "src_crs": "EPSG:4326",
+      "dest_crs": "EPSG:3857"
+    },
+    "sources": {
+      "rasters": [
+        {
+          "type": "gdal_source",
+          "params": {
+            "source_name": "test",
+            "channel": 0
+          }
         }
-      }
-    ]
+      ]
+    }
   }
 }
 
