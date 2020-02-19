@@ -490,4 +490,25 @@ mod tests {
         assert_eq!(histogram.counts[0], 3);
         assert_eq!(histogram.counts[1], 2);
     }
+
+    #[test]
+    fn values_less_than_min() {
+        let mut histogram = Histogram::builder(2, 0., 1., Measurement::Unitless)
+            .build()
+            .unwrap();
+
+        let data = {
+            let mut builder = Int64Builder::new(6);
+            builder.append_slice(&[-1, -1, -1, 0, 1, 1]).unwrap();
+            builder.finish()
+        };
+
+        histogram
+            .add_feature_data(FeatureDataRef::Decimal(DecimalDataRef::new(data.values())))
+            .unwrap();
+
+        assert_eq!(histogram.nodata_count, 3);
+        assert_eq!(histogram.counts[0], 1);
+        assert_eq!(histogram.counts[1], 2);
+    }
 }
