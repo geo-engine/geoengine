@@ -25,23 +25,12 @@ pub struct Histogram {
 }
 
 impl Histogram {
-    /// Creates a new empty histogram
-    ///
-    /// # Examples
-    /// ```rust
-    /// use geoengine_datatypes::plots::Histogram;
-    /// use geoengine_datatypes::primitives::Measurement;
-    /// use std::f64;
-    ///
-    /// Histogram::new(2, 0., 1., Measurement::Unitless).unwrap();
-    ///
-    /// Histogram::new(0, f64::NAN, f64::INFINITY, Measurement::Unitless).unwrap_err();
-    /// ```
-    pub fn new(
+    fn new(
         number_of_buckets: usize,
         min: f64,
         max: f64,
         measurement: Measurement,
+        labels: Option<Vec<String>>,
     ) -> Result<Self> {
         ensure!(
             number_of_buckets > 0,
@@ -61,10 +50,18 @@ impl Histogram {
                 details: "Histograms max value must be larger than its min value"
             }
         );
+        if let Some(labels) = &labels {
+            ensure!(
+                labels.len() == number_of_buckets,
+                error::PlotError {
+                    details: "Histogram must have as many labels as buckets"
+                }
+            );
+        }
 
         Ok(Self {
             counts: vec![0; number_of_buckets],
-            labels: None,
+            labels,
             nodata_count: 0,
             min,
             max,
@@ -80,51 +77,36 @@ impl Histogram {
     /// use geoengine_datatypes::primitives::Measurement;
     /// use std::f64;
     ///
-    /// Histogram::new_with_labels(2, 0., 1., Measurement::Unitless, vec!["foo".into(), "bar".into()]).unwrap();
+    /// Histogram::builder(2, 0., 1., Measurement::Unitless).build().unwrap();
     ///
-    /// Histogram::new_with_labels(0, f64::NAN, f64::INFINITY, Measurement::Unitless, vec!["foo".into(), "bar".into()]).unwrap_err();
-    /// Histogram::new_with_labels(2, 0., 1., Measurement::Unitless, vec!["foo".into()]).unwrap_err();
+    /// Histogram::builder(0, f64::NAN, f64::INFINITY, Measurement::Unitless).build().unwrap_err();
     /// ```
-    pub fn new_with_labels(
+    ///
+    /// ```rust
+    /// use geoengine_datatypes::plots::Histogram;
+    /// use geoengine_datatypes::primitives::Measurement;
+    /// use std::f64;
+    ///
+    /// Histogram::builder(2, 0., 1., Measurement::Unitless).labels(vec!["foo".into(), "bar".into()])
+    ///     .build()
+    ///     .unwrap();
+    ///
+    /// Histogram::builder(0, f64::NAN, f64::INFINITY, Measurement::Unitless)
+    ///     .labels(vec!["foo".into(), "bar".into()])
+    ///     .build()
+    ///     .unwrap_err();
+    /// Histogram::builder(2, 0., 1., Measurement::Unitless)
+    ///     .labels(vec!["foo".into()])
+    ///     .build()
+    ///     .unwrap_err();
+    /// ```
+    pub fn builder(
         number_of_buckets: usize,
         min: f64,
         max: f64,
         measurement: Measurement,
-        labels: Vec<String>,
-    ) -> Result<Self> {
-        ensure!(
-            number_of_buckets > 0,
-            error::PlotError {
-                details: "Histograms must have at least one bucket"
-            }
-        );
-        ensure!(
-            min.is_finite() && max.is_finite(),
-            error::PlotError {
-                details: "Histograms must have finite min/max values"
-            }
-        );
-        ensure!(
-            min < max || (approx_eq!(f64, min, max) && number_of_buckets == 1),
-            error::PlotError {
-                details: "Histograms max value must be larger than its min value"
-            }
-        );
-        ensure!(
-            labels.len() == number_of_buckets,
-            error::PlotError {
-                details: "Histogram must have as many labels as buckets"
-            }
-        );
-
-        Ok(Self {
-            counts: vec![0; number_of_buckets],
-            labels: Some(labels),
-            nodata_count: 0,
-            min,
-            max,
-            measurement,
-        })
+    ) -> HistogramBuilder {
+        HistogramBuilder::new(number_of_buckets, min, max, measurement)
     }
 
     pub fn add_feature_data(&mut self, data: FeatureDataRef) -> Result<()> {
@@ -227,7 +209,7 @@ impl Plot for Histogram {
     /// use geoengine_datatypes::primitives::{Measurement, FeatureDataRef, NumberDataRef};
     /// use arrow::array::Float64Builder;
     ///
-    /// let mut histogram = Histogram::new(2, 0., 1., Measurement::Unitless).unwrap();
+    /// let mut histogram = Histogram::builder(2, 0., 1., Measurement::Unitless).build().unwrap();
     ///
     /// let data = {
     ///     let mut builder = Float64Builder::new(4);
@@ -339,6 +321,66 @@ impl Plot for Histogram {
     }
 }
 
+pub struct HistogramBuilder {
+    number_of_buckets: usize,
+    min: f64,
+    max: f64,
+    measurement: Measurement,
+    labels: Option<Vec<String>>,
+}
+
+impl HistogramBuilder {
+    /// Builder with required values
+    fn new(number_of_buckets: usize, min: f64, max: f64, measurement: Measurement) -> Self {
+        Self {
+            number_of_buckets,
+            min,
+            max,
+            measurement,
+            labels: None,
+        }
+    }
+
+    /// Adds labels to the histogram
+    ///
+    /// # Examples
+    /// ```rust
+    /// use geoengine_datatypes::plots::Histogram;
+    /// use geoengine_datatypes::primitives::Measurement;
+    /// use std::f64;
+    ///
+    /// Histogram::builder(2, 0., 1., Measurement::Unitless).labels(vec!["foo".into(), "bar".into()])
+    ///     .build()
+    ///     .unwrap();
+    /// ```
+    pub fn labels(mut self, labels: Vec<String>) -> Self {
+        self.labels = Some(labels);
+        self
+    }
+
+    /// Builds a histogram out of the collected parameters
+    ///
+    /// # Examples
+    /// ```rust
+    /// use geoengine_datatypes::plots::Histogram;
+    /// use geoengine_datatypes::primitives::Measurement;
+    /// use std::f64;
+    ///
+    /// Histogram::builder(2, 0., 1., Measurement::Unitless).build().unwrap();
+    ///
+    /// Histogram::builder(0, f64::NAN, f64::INFINITY, Measurement::Unitless).build().unwrap_err();
+    /// ```
+    pub fn build(self) -> Result<Histogram> {
+        Histogram::new(
+            self.number_of_buckets,
+            self.min,
+            self.max,
+            self.measurement,
+            self.labels,
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -349,7 +391,9 @@ mod tests {
 
     #[test]
     fn bucket_for_value() {
-        let histogram = Histogram::new(2, 0., 1., Measurement::Unitless).unwrap();
+        let histogram = Histogram::builder(2, 0., 1., Measurement::Unitless)
+            .build()
+            .unwrap();
 
         assert_eq!(histogram.bucket_for_value(0.), 0);
         assert_eq!(histogram.bucket_for_value(1.), 1);
@@ -359,7 +403,9 @@ mod tests {
 
     #[test]
     fn add_feature_data_number() {
-        let mut histogram = Histogram::new(2, 0., 1., Measurement::Unitless).unwrap();
+        let mut histogram = Histogram::builder(2, 0., 1., Measurement::Unitless)
+            .build()
+            .unwrap();
 
         let data = {
             let mut builder = Float64Builder::new(4);
@@ -377,7 +423,9 @@ mod tests {
 
     #[test]
     fn add_feature_data_nullable_number() {
-        let mut histogram = Histogram::new(2, 0., 1., Measurement::Unitless).unwrap();
+        let mut histogram = Histogram::builder(2, 0., 1., Measurement::Unitless)
+            .build()
+            .unwrap();
 
         let data = {
             let mut builder = Float64Builder::new(4);
@@ -402,7 +450,9 @@ mod tests {
 
     #[test]
     fn add_feature_data_decimal() {
-        let mut histogram = Histogram::new(2, 0., 3., Measurement::Unitless).unwrap();
+        let mut histogram = Histogram::builder(2, 0., 3., Measurement::Unitless)
+            .build()
+            .unwrap();
 
         let data = {
             let mut builder = Int64Builder::new(4);
@@ -420,7 +470,9 @@ mod tests {
 
     #[test]
     fn add_feature_data_categorical() {
-        let mut histogram = Histogram::new(2, 0., 1., Measurement::Unitless).unwrap();
+        let mut histogram = Histogram::builder(2, 0., 1., Measurement::Unitless)
+            .build()
+            .unwrap();
 
         let data = {
             let mut builder = UInt8Builder::new(4);
