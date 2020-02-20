@@ -223,16 +223,16 @@ impl PointCollection {
             .data
             .column_by_name(Self::FEATURE_FIELD)
             .expect("There must exist a feature field");
-        let features: &ListArray = features_ref.as_any().downcast_ref().unwrap();
+        let features: &ListArray = features_ref.as_any().downcast_ref().unwrap(); // must obey type
 
         let feature_coordinates_ref = features.values();
         let feature_coordinates: &FixedSizeListArray =
-            feature_coordinates_ref.as_any().downcast_ref().unwrap();
+            feature_coordinates_ref.as_any().downcast_ref().unwrap(); // must obey type
 
         let number_of_coordinates = feature_coordinates.data().len();
 
         let floats_ref = feature_coordinates.values();
-        let floats: &Float64Array = floats_ref.as_any().downcast_ref().unwrap();
+        let floats: &Float64Array = floats_ref.as_any().downcast_ref().unwrap(); // must obey type
 
         unsafe {
             slice::from_raw_parts(
@@ -273,12 +273,12 @@ impl PointCollection {
             .data
             .column_by_name(Self::TIME_FIELD)
             .expect("There must exist a time interval field");
-        let features: &FixedSizeListArray = features_ref.as_any().downcast_ref().unwrap();
+        let features: &FixedSizeListArray = features_ref.as_any().downcast_ref().unwrap(); // must obey type
 
         let number_of_time_intervals = self.len();
 
         let timestamps_ref = features.values();
-        let timestamps: &Date64Array = timestamps_ref.as_any().downcast_ref().unwrap();
+        let timestamps: &Date64Array = timestamps_ref.as_any().downcast_ref().unwrap(); // must obey type
 
         unsafe {
             slice::from_raw_parts(
@@ -352,39 +352,40 @@ impl FeatureCollection for PointCollection {
             }
         );
 
-        let column = column.unwrap();
+        let column = column.unwrap(); // previously checked
 
         Ok(match self.types.get(field).unwrap() {
+            // previously checked
             FeatureDataType::Number => {
-                let array: &Float64Array = column.as_any().downcast_ref().unwrap();
+                let array: &Float64Array = column.as_any().downcast_ref().unwrap(); // must obey type
                 NumberDataRef::new(array.values()).into()
             }
             FeatureDataType::NullableNumber => {
-                let array: &Float64Array = column.as_any().downcast_ref().unwrap();
+                let array: &Float64Array = column.as_any().downcast_ref().unwrap(); // must obey type
                 NullableNumberDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
             }
             FeatureDataType::Text => {
-                let array: &StringArray = column.as_any().downcast_ref().unwrap();
+                let array: &StringArray = column.as_any().downcast_ref().unwrap(); // must obey type
                 TextDataRef::new(array.value_data(), array.value_offsets()).into()
             }
             FeatureDataType::NullableText => {
-                let array: &StringArray = column.as_any().downcast_ref().unwrap();
+                let array: &StringArray = column.as_any().downcast_ref().unwrap(); // must obey type
                 NullableTextDataRef::new(array.value_data(), array.value_offsets()).into()
             }
             FeatureDataType::Decimal => {
-                let array: &Int64Array = column.as_any().downcast_ref().unwrap();
+                let array: &Int64Array = column.as_any().downcast_ref().unwrap(); // must obey type
                 DecimalDataRef::new(array.values()).into()
             }
             FeatureDataType::NullableDecimal => {
-                let array: &Int64Array = column.as_any().downcast_ref().unwrap();
+                let array: &Int64Array = column.as_any().downcast_ref().unwrap(); // must obey type
                 NullableDecimalDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
             }
             FeatureDataType::Categorical => {
-                let array: &UInt8Array = column.as_any().downcast_ref().unwrap();
+                let array: &UInt8Array = column.as_any().downcast_ref().unwrap(); // must obey type
                 CategoricalDataRef::new(array.values()).into()
             }
             FeatureDataType::NullableCategorical => {
-                let array: &UInt8Array = column.as_any().downcast_ref().unwrap();
+                let array: &UInt8Array = column.as_any().downcast_ref().unwrap(); // must obey type
                 NullableCategoricalDataRef::new(array.values(), array.data_ref().null_bitmap())
                     .into()
             }
@@ -434,14 +435,14 @@ impl Filterable for PointCollection {
                         Self::FEATURE_FIELD => filtered_data.push((
                             field.clone(),
                             Arc::new(coordinates_filter(
-                                array.as_any().downcast_ref().unwrap(),
+                                array.as_any().downcast_ref().unwrap(), // must obey type
                                 &filter_array,
                             )?),
                         )),
                         Self::TIME_FIELD => filtered_data.push((
                             field.clone(),
                             Arc::new(time_interval_filter(
-                                array.as_any().downcast_ref().unwrap(),
+                                array.as_any().downcast_ref().unwrap(), // must obey type
                                 &filter_array,
                             )?),
                         )),
@@ -474,10 +475,10 @@ fn coordinates_filter(features: &ListArray, filter_array: &BooleanArray) -> Resu
                 let old_floats_array = old_coordinates
                     .as_any()
                     .downcast_ref::<FixedSizeListArray>()
-                    .unwrap()
+                    .unwrap() // must obey type
                     .value(coordinate_index as usize);
 
-                let old_floats: &Float64Array = old_floats_array.as_any().downcast_ref().unwrap();
+                let old_floats: &Float64Array = old_floats_array.as_any().downcast_ref().unwrap(); // must obey type
 
                 let float_builder = coordinate_builder.values();
                 float_builder.append_slice(old_floats.value_slice(0, 2))?;
@@ -504,7 +505,7 @@ fn time_interval_filter(
         }
 
         let old_timestamps_ref = time_intervals.value(feature_index);
-        let old_timestamps: &Date64Array = old_timestamps_ref.as_any().downcast_ref().unwrap();
+        let old_timestamps: &Date64Array = old_timestamps_ref.as_any().downcast_ref().unwrap(); // must obey type
 
         let date_builder = new_time_intervals.values();
         date_builder.append_slice(old_timestamps.value_slice(0, 2))?;
@@ -750,7 +751,7 @@ impl PointCollectionBuilder {
             }
         );
 
-        let data_builder = self.builders.get_mut(field).unwrap();
+        let data_builder = self.builders.get_mut(field).unwrap(); // previously checked
 
         ensure!(
             data_builder.len() <= self.rows,
@@ -759,7 +760,7 @@ impl PointCollectionBuilder {
             }
         );
 
-        let data_type = self.types.get(field).unwrap();
+        let data_type = self.types.get(field).unwrap(); // previously checked
 
         ensure!(
             mem::discriminant(&FeatureDataType::from(&data)) == mem::discriminant(&data_type), // same enum variant
@@ -771,22 +772,22 @@ impl PointCollectionBuilder {
         match data {
             FeatureDataValue::Number(value) => {
                 let number_builder: &mut Float64Builder =
-                    data_builder.as_any_mut().downcast_mut().unwrap();
+                    data_builder.as_any_mut().downcast_mut().unwrap(); // must obey type
                 number_builder.append_value(value)?;
             }
             FeatureDataValue::NullableNumber(value) => {
                 let number_builder: &mut Float64Builder =
-                    data_builder.as_any_mut().downcast_mut().unwrap();
+                    data_builder.as_any_mut().downcast_mut().unwrap(); // must obey type
                 number_builder.append_option(value)?;
             }
             FeatureDataValue::Text(value) => {
                 let string_builder: &mut StringBuilder =
-                    data_builder.as_any_mut().downcast_mut().unwrap();
+                    data_builder.as_any_mut().downcast_mut().unwrap(); // must obey type
                 string_builder.append_value(&value)?;
             }
             FeatureDataValue::NullableText(value) => {
                 let string_builder: &mut StringBuilder =
-                    data_builder.as_any_mut().downcast_mut().unwrap();
+                    data_builder.as_any_mut().downcast_mut().unwrap(); // must obey type
                 if let Some(v) = &value {
                     string_builder.append_value(&v)?;
                 } else {
@@ -795,22 +796,22 @@ impl PointCollectionBuilder {
             }
             FeatureDataValue::Decimal(value) => {
                 let decimal_builder: &mut Int64Builder =
-                    data_builder.as_any_mut().downcast_mut().unwrap();
+                    data_builder.as_any_mut().downcast_mut().unwrap(); // must obey type
                 decimal_builder.append_value(value)?;
             }
             FeatureDataValue::NullableDecimal(value) => {
                 let decimal_builder: &mut Int64Builder =
-                    data_builder.as_any_mut().downcast_mut().unwrap();
+                    data_builder.as_any_mut().downcast_mut().unwrap(); // must obey type
                 decimal_builder.append_option(value)?;
             }
             FeatureDataValue::Categorical(value) => {
                 let categorical_builder: &mut UInt8Builder =
-                    data_builder.as_any_mut().downcast_mut().unwrap();
+                    data_builder.as_any_mut().downcast_mut().unwrap(); // must obey type
                 categorical_builder.append_value(value)?;
             }
             FeatureDataValue::NullableCategorical(value) => {
                 let categorical_builder: &mut UInt8Builder =
-                    data_builder.as_any_mut().downcast_mut().unwrap();
+                    data_builder.as_any_mut().downcast_mut().unwrap(); // must obey type
                 categorical_builder.append_option(value)?;
             }
         }
@@ -878,7 +879,7 @@ impl PointCollectionBuilder {
         builders.push(Box::new(self.time_intervals_builder));
 
         for (field_name, builder) in self.builders.drain() {
-            let field_type = self.types.get(&field_name).unwrap();
+            let field_type = self.types.get(&field_name).unwrap(); // field must exist
             fields.push(Field::new(
                 &field_name,
                 field_type.arrow_data_type(),
