@@ -5,7 +5,7 @@ use geoengine_operators::Operator;
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub struct Workflow {
-    operator: Operator
+    pub operator: Operator
 }
 
 // TODO: derive if/when operator is Clone
