@@ -1,4 +1,4 @@
-use crate::primitives::{FeatureDataRef, TimeInterval};
+use crate::primitives::{FeatureData, FeatureDataRef, TimeInterval};
 use crate::util::Result;
 
 /// This trait defines common features of all feature collections
@@ -30,6 +30,16 @@ pub trait FeatureCollection {
 
     /// Retrieve time intervals
     fn time_intervals(&self) -> &[TimeInterval];
+
+    /// Extend the collection by an additional column
+    fn extend(&self, new_column: &str, data: FeatureData) -> Result<Self>
+    where
+        Self: Sized;
+
+    /// Removes a column and returns an updated collection
+    fn remove_column(&self, column: &str) -> Result<Self>
+    where
+        Self: Sized;
 }
 
 #[cfg(test)]
@@ -49,6 +59,12 @@ mod test {
             unimplemented!()
         }
         fn time_intervals(&self) -> &[TimeInterval] {
+            unimplemented!()
+        }
+        fn extend(&self, _new_column: &str, _data: FeatureData) -> Result<Self> {
+            unimplemented!()
+        }
+        fn remove_column(&self, _column: &str) -> Result<Self> {
             unimplemented!()
         }
     }

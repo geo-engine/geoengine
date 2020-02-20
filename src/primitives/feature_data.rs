@@ -493,6 +493,23 @@ impl FeatureData {
         FeatureDataType::from(self).nullable()
     }
 
+    pub fn len(&self) -> usize {
+        match self {
+            FeatureData::Text(v) => v.len(),
+            FeatureData::NullableText(v) => v.len(),
+            FeatureData::Number(v) => v.len(),
+            FeatureData::NullableNumber(v) => v.len(),
+            FeatureData::Decimal(v) => v.len(),
+            FeatureData::NullableDecimal(v) => v.len(),
+            FeatureData::Categorical(v) => v.len(),
+            FeatureData::NullableCategorical(v) => v.len(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     pub fn arrow_builder(&self) -> Result<Box<dyn arrow::array::ArrayBuilder>> {
         Ok(match self {
             Self::Text(v) => {

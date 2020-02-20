@@ -241,6 +241,16 @@ impl PointCollection {
             )
         }
     }
+
+    fn array_refs_of_reserved_fields(&self) -> Vec<ArrayRef> {
+        vec![
+            self.data
+                .column_by_name(Self::FEATURE_COLUMN)
+                .unwrap()
+                .clone(),
+            self.data.column_by_name(Self::TIME_COLUMN).unwrap().clone(),
+        ]
+    }
 }
 
 impl FeatureCollection for PointCollection {
@@ -393,6 +403,170 @@ impl FeatureCollection for PointCollection {
                 number_of_time_intervals,
             )
         }
+    }
+
+    /// Extend the collection by an additional column
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use geoengine_datatypes::collections::{PointCollection, FeatureCollection};
+    /// use geoengine_datatypes::primitives::{FeatureData, FeatureDataType, TimeInterval, FeatureDataValue, FeatureDataRef, DataRef};
+    ///
+    /// let collection = {
+    ///     let mut builder = PointCollection::builder();
+    ///     builder.add_column("foo", FeatureDataType::Number);
+    ///
+    ///     builder.append_coordinate((0., 0.).into());
+    ///     builder.append_time_interval(TimeInterval::new_unchecked(0, 1));
+    ///     builder.append_data("foo", FeatureDataValue::Number(0.));
+    ///     builder.finish_row();
+    ///
+    ///     builder.append_coordinate((1., 1.).into());
+    ///     builder.append_time_interval(TimeInterval::new_unchecked(0, 1));
+    ///     builder.append_data("foo", FeatureDataValue::Number(1.));
+    ///     builder.finish_row();
+    ///
+    ///     builder.build().unwrap()
+    /// };
+    ///
+    /// assert_eq!(collection.len(), 2);
+    ///
+    /// let extended_collection = collection.extend("bar", FeatureData::Number(vec![2., 4.])).unwrap();
+    ///
+    /// assert_eq!(extended_collection.len(), 2);
+    /// if let FeatureDataRef::Number(numbers) = extended_collection.data("foo").unwrap() {
+    ///     assert_eq!(numbers.data(), &[0., 1.]);
+    /// } else {
+    ///     unreachable!();
+    /// }
+    /// if let FeatureDataRef::Number(numbers) = extended_collection.data("bar").unwrap() {
+    ///     assert_eq!(numbers.data(), &[2., 4.]);
+    /// } else {
+    ///     unreachable!();
+    /// }
+    /// ```
+    fn extend(&self, new_column: &str, data: FeatureData) -> Result<Self> {
+        ensure!(
+            !Self::is_reserved_name(new_column) && self.data.column_by_name(new_column).is_none(),
+            error::FeatureCollection {
+                details: "Cannot extend collection with name that is reserved or already in use"
+            }
+        );
+
+        ensure!(
+            data.len() == self.data.len(),
+            error::FeatureCollection {
+                details: "Length of new feature data column must match length of collection"
+            }
+        );
+
+        let mut columns = vec![
+            Field::new(Self::FEATURE_COLUMN, Self::multi_points_data_type(), false),
+            Field::new(Self::TIME_COLUMN, Self::time_data_type(), false),
+        ];
+        let mut column_values: Vec<ArrayRef> = self.array_refs_of_reserved_fields();
+
+        for (column_name, column_type) in &self.types {
+            columns.push(Field::new(
+                &column_name,
+                column_type.arrow_data_type(),
+                column_type.nullable(),
+            ));
+            column_values.push(self.data.column_by_name(&column_name).unwrap().clone());
+        }
+
+        columns.push(Field::new(
+            new_column,
+            data.arrow_data_type(),
+            data.nullable(),
+        ));
+        column_values.push(data.arrow_builder().map(|mut builder| builder.finish())?);
+
+        let mut types = self.types.clone();
+        types.insert(new_column.to_string(), FeatureDataType::from(&data));
+
+        Ok(Self {
+            data: struct_array_from_data(columns, column_values, self.data.len()),
+            types,
+        })
+    }
+
+    /// Removes a column and returns an updated collection
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use geoengine_datatypes::collections::{PointCollection, FeatureCollection};
+    /// use geoengine_datatypes::primitives::{FeatureData, FeatureDataType, TimeInterval, FeatureDataValue, FeatureDataRef, DataRef};
+    ///
+    /// let collection = {
+    ///     let mut builder = PointCollection::builder();
+    ///     builder.add_column("foo", FeatureDataType::Number);
+    ///
+    ///     builder.append_coordinate((0., 0.).into());
+    ///     builder.append_time_interval(TimeInterval::new_unchecked(0, 1));
+    ///     builder.append_data("foo", FeatureDataValue::Number(0.));
+    ///     builder.finish_row();
+    ///
+    ///     builder.append_coordinate((1., 1.).into());
+    ///     builder.append_time_interval(TimeInterval::new_unchecked(0, 1));
+    ///     builder.append_data("foo", FeatureDataValue::Number(1.));
+    ///     builder.finish_row();
+    ///
+    ///     builder.build().unwrap()
+    /// };
+    ///
+    /// assert_eq!(collection.len(), 2);
+    /// assert!(collection.data("foo").is_ok());
+    ///
+    /// let reduced_collection = collection.remove_column("foo").unwrap();
+    ///
+    /// assert_eq!(reduced_collection.len(), 2);
+    /// assert!(reduced_collection.data("foo").is_err());
+    ///
+    /// assert!(reduced_collection.remove_column("foo").is_err());
+    /// ```
+    fn remove_column(&self, column: &str) -> Result<Self> {
+        ensure!(
+            !Self::is_reserved_name(column) && self.data.column_by_name(column).is_some(),
+            error::FeatureCollection {
+                details: "Must not remove a non-existing or mandatory column"
+            }
+        );
+
+        let mut columns = vec![
+            Field::new(Self::FEATURE_COLUMN, Self::multi_points_data_type(), false),
+            Field::new(Self::TIME_COLUMN, Self::time_data_type(), false),
+        ];
+        let mut column_values: Vec<ArrayRef> = vec![
+            self.data
+                .column_by_name(Self::FEATURE_COLUMN)
+                .unwrap()
+                .clone(),
+            self.data.column_by_name(Self::TIME_COLUMN).unwrap().clone(),
+        ];
+
+        for (column_name, column_type) in &self.types {
+            if column_name == column {
+                continue;
+            }
+
+            columns.push(Field::new(
+                &column_name,
+                column_type.arrow_data_type(),
+                column_type.nullable(),
+            ));
+            column_values.push(self.data.column_by_name(&column_name).unwrap().clone());
+        }
+
+        let mut types = self.types.clone();
+        types.remove(column);
+
+        Ok(Self {
+            data: struct_array_from_data(columns, column_values, self.data.len()),
+            types,
+        })
     }
 }
 
@@ -903,6 +1077,19 @@ impl PointCollectionBuilder {
             types: self.types,
         })
     }
+}
+
+fn struct_array_from_data(
+    columns: Vec<Field>,
+    column_values: Vec<ArrayRef>,
+    number_of_features: usize,
+) -> StructArray {
+    StructArray::from(
+        ArrayData::builder(DataType::Struct(columns))
+            .child_data(column_values.into_iter().map(|a| a.data()).collect())
+            .len(number_of_features)
+            .build(),
+    )
 }
 
 #[cfg(test)]
