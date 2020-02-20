@@ -15,7 +15,7 @@ use crate::collections::FeatureCollection;
 use crate::error;
 use crate::operations::Filterable;
 use crate::primitives::{
-    CategoricalDataRef, Coordinate, DecimalDataRef, FeatureData, FeatureDataRef, FeatureDataType,
+    CategoricalDataRef, Coordinate2D, DecimalDataRef, FeatureData, FeatureDataRef, FeatureDataType,
     FeatureDataValue, NullableCategoricalDataRef, NullableDecimalDataRef, NullableNumberDataRef,
     NullableTextDataRef, NumberDataRef, TextDataRef, TimeInterval,
 };
@@ -103,7 +103,7 @@ impl PointCollection {
     ///
     /// ```rust
     /// use geoengine_datatypes::collections::{PointCollection, FeatureCollection};
-    /// use geoengine_datatypes::primitives::{Coordinate, TimeInterval, FeatureData};
+    /// use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval, FeatureData};
     /// use std::collections::HashMap;
     ///
     /// let pc = PointCollection::from_data(
@@ -119,7 +119,7 @@ impl PointCollection {
     /// assert_eq!(pc.len(), 2);
     /// ```
     pub fn from_data(
-        coordinates: Vec<Vec<Coordinate>>,
+        coordinates: Vec<Vec<Coordinate2D>>,
         time_intervals: Vec<TimeInterval>,
         data: HashMap<String, FeatureData>,
     ) -> Result<Self> {
@@ -201,7 +201,7 @@ impl PointCollection {
     ///
     /// ```rust
     /// use geoengine_datatypes::collections::{PointCollection, FeatureCollection};
-    /// use geoengine_datatypes::primitives::{Coordinate, TimeInterval, FeatureData};
+    /// use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval, FeatureData};
     /// use std::collections::HashMap;
     ///
     /// let pc = PointCollection::from_data(
@@ -218,7 +218,7 @@ impl PointCollection {
     /// assert_eq!(coords, &[(0., 0.).into(), (1., 1.).into(), (2., 2.).into()]);
     /// ```
     ///
-    pub fn coordinates(&self) -> &[Coordinate] {
+    pub fn coordinates(&self) -> &[Coordinate2D] {
         let features_ref = self
             .data
             .column_by_name(Self::FEATURE_FIELD)
@@ -236,7 +236,7 @@ impl PointCollection {
 
         unsafe {
             slice::from_raw_parts(
-                floats.raw_values() as *const Coordinate,
+                floats.raw_values() as *const Coordinate2D,
                 number_of_coordinates,
             )
         }
@@ -248,7 +248,7 @@ impl PointCollection {
     ///
     /// ```rust
     /// use geoengine_datatypes::collections::{PointCollection, FeatureCollection};
-    /// use geoengine_datatypes::primitives::{Coordinate, TimeInterval, FeatureData};
+    /// use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval, FeatureData};
     /// use std::collections::HashMap;
     ///
     /// let pc = PointCollection::from_data(
@@ -304,7 +304,7 @@ impl FeatureCollection for PointCollection {
     ///
     /// ```rust
     /// use geoengine_datatypes::collections::{PointCollection, FeatureCollection};
-    /// use geoengine_datatypes::primitives::{Coordinate, TimeInterval, FeatureData, FeatureDataRef, DataRef, NullableDataRef};
+    /// use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval, FeatureData, FeatureDataRef, DataRef, NullableDataRef};
     /// use std::collections::HashMap;
     ///
     /// let pc = PointCollection::from_data(
@@ -397,7 +397,7 @@ impl Filterable for PointCollection {
     ///
     /// ```rust
     /// use geoengine_datatypes::collections::{PointCollection, FeatureCollection};
-    /// use geoengine_datatypes::primitives::{Coordinate, TimeInterval, FeatureData};
+    /// use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval, FeatureData};
     /// use geoengine_datatypes::operations::Filterable;
     /// use std::collections::HashMap;
     ///
@@ -636,7 +636,7 @@ impl PointCollectionBuilder {
     /// builder.append_coordinate((1.0, 1.0).into()).unwrap_err();
     /// ```
     ///
-    pub fn append_coordinate(&mut self, coordinate: Coordinate) -> Result<()> {
+    pub fn append_coordinate(&mut self, coordinate: Coordinate2D) -> Result<()> {
         ensure!(
             self.coordinates_builder.len() <= self.rows,
             error::FeatureCollectionBuilderException {
@@ -665,7 +665,7 @@ impl PointCollectionBuilder {
     /// builder.append_multi_coordinate(vec![(2.0, 2.1).into()]).unwrap_err();
     /// ```
     ///
-    pub fn append_multi_coordinate(&mut self, coordinates: Vec<Coordinate>) -> Result<()> {
+    pub fn append_multi_coordinate(&mut self, coordinates: Vec<Coordinate2D>) -> Result<()> {
         ensure!(
             self.coordinates_builder.len() <= self.rows,
             error::FeatureCollectionBuilderException {
@@ -685,7 +685,7 @@ impl PointCollectionBuilder {
 
     fn append_single_coordinate_to_builder(
         coordinate_builder: &mut FixedSizeListBuilder<Float64Builder>,
-        coordinate: Coordinate,
+        coordinate: Coordinate2D,
     ) -> Result<()> {
         let float_builder = coordinate_builder.values();
         float_builder.append_value(coordinate.x)?;

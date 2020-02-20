@@ -6,7 +6,7 @@ use arrow::array::{
 use arrow::buffer::{Buffer, MutableBuffer};
 use arrow::compute::kernels::filter::filter;
 use arrow::datatypes::{DataType, DateUnit, Field, Schema, ToByteSlice};
-use geoengine_datatypes::primitives::{Coordinate, TimeInterval};
+use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval};
 use ocl::ProQue;
 use std::{mem, slice};
 
@@ -564,8 +564,8 @@ fn multipoints() {
         .unwrap()
         .value_slice(0, 10);
     assert_eq!(floats.len(), 10);
-    let coordinates: &[Coordinate] =
-        unsafe { slice::from_raw_parts(floats.as_ptr() as *const Coordinate, floats.len()) };
+    let coordinates: &[Coordinate2D] =
+        unsafe { slice::from_raw_parts(floats.as_ptr() as *const Coordinate2D, floats.len()) };
 
-    assert_eq!(coordinates[4], Coordinate::new(41., 42.));
+    assert_eq!(coordinates[4], Coordinate2D::new(41., 42.));
 }

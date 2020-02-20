@@ -3,20 +3,20 @@ use std::slice;
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, PartialOrd, Serialize)]
 #[repr(C)]
-pub struct Coordinate {
+pub struct Coordinate2D {
     pub x: f64,
     pub y: f64,
 }
 
-impl Coordinate {
+impl Coordinate2D {
     /// Creates a new coordinate
     ///
     /// # Examples
     ///
     /// ```
-    /// use geoengine_datatypes::primitives::Coordinate;
+    /// use geoengine_datatypes::primitives::Coordinate2D;
     ///
-    /// let c = Coordinate::new(1.0, 0.0);
+    /// let c = Coordinate2D::new(1.0, 0.0);
     ///
     /// assert_eq!(c.x, 1.0);
     /// assert_eq!(c.y, 0.0);
@@ -27,18 +27,18 @@ impl Coordinate {
     }
 }
 
-impl From<(f64, f64)> for Coordinate {
+impl From<(f64, f64)> for Coordinate2D {
     /// # Examples
     ///
     /// ```
-    /// use geoengine_datatypes::primitives::Coordinate;
+    /// use geoengine_datatypes::primitives::Coordinate2D;
     ///
-    /// let c = Coordinate::from((5.0, 4.2));
+    /// let c = Coordinate2D::from((5.0, 4.2));
     ///
     /// assert_eq!(c.x, 5.0);
     /// assert_eq!(c.y, 4.2);
     ///
-    /// let c: Coordinate = (5.1, -3.0).into();
+    /// let c: Coordinate2D = (5.1, -3.0).into();
     ///
     /// assert_eq!(c.x, 5.1);
     /// assert_eq!(c.y, -3.0);
@@ -50,18 +50,18 @@ impl From<(f64, f64)> for Coordinate {
     }
 }
 
-impl From<[f64; 2]> for Coordinate {
+impl From<[f64; 2]> for Coordinate2D {
     /// # Examples
     ///
     /// ```
-    /// use geoengine_datatypes::primitives::Coordinate;
+    /// use geoengine_datatypes::primitives::Coordinate2D;
     ///
-    /// let c = Coordinate::from([5.0, 4.2]);
+    /// let c = Coordinate2D::from([5.0, 4.2]);
     ///
     /// assert_eq!(c.x, 5.0);
     /// assert_eq!(c.y, 4.2);
     ///
-    /// let c: Coordinate = [5.1, -3.0].into();
+    /// let c: Coordinate2D = [5.1, -3.0].into();
     ///
     /// assert_eq!(c.x, 5.1);
     /// assert_eq!(c.y, -3.0);
@@ -73,13 +73,13 @@ impl From<[f64; 2]> for Coordinate {
     }
 }
 
-impl Into<(f64, f64)> for Coordinate {
+impl Into<(f64, f64)> for Coordinate2D {
     /// # Examples
     ///
     /// ```
-    /// use geoengine_datatypes::primitives::Coordinate;
+    /// use geoengine_datatypes::primitives::Coordinate2D;
     ///
-    /// let c = Coordinate::new(-1.9, 0.04);
+    /// let c = Coordinate2D::new(-1.9, 0.04);
     ///
     /// let (x, y) = c.into();
     ///
@@ -92,15 +92,15 @@ impl Into<(f64, f64)> for Coordinate {
     }
 }
 
-impl Into<[f64; 2]> for Coordinate {
+impl Into<[f64; 2]> for Coordinate2D {
     fn into(self) -> [f64; 2] {
         [self.x, self.y]
     }
 }
 
-impl<'c> Into<&'c [f64]> for &'c Coordinate {
+impl<'c> Into<&'c [f64]> for &'c Coordinate2D {
     fn into(self) -> &'c [f64] {
-        unsafe { slice::from_raw_parts(self as *const Coordinate as *const f64, 2) }
+        unsafe { slice::from_raw_parts(self as *const Coordinate2D as *const f64, 2) }
     }
 }
 
@@ -111,7 +111,7 @@ mod test {
 
     #[test]
     fn byte_size() {
-        assert_eq!(mem::size_of::<Coordinate>(), 2 * mem::size_of::<f64>());
-        assert_eq!(mem::size_of::<Coordinate>(), 2 * 8);
+        assert_eq!(mem::size_of::<Coordinate2D>(), 2 * mem::size_of::<f64>());
+        assert_eq!(mem::size_of::<Coordinate2D>(), 2 * 8);
     }
 }
