@@ -15,7 +15,7 @@ pub enum Error {
     },
 
     #[snafu(display("Field is reserved or already in use: {}", name))]
-    FieldNameConflict { name: String },
+    ColumnNameConflict { name: String },
 
     #[snafu(display("Start `{}` must be before end `{}`", start, end))]
     TimeIntervalEndBeforeStart { start: i64, end: i64 },

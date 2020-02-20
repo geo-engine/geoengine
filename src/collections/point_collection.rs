@@ -81,12 +81,12 @@ impl PointCollection {
     pub fn empty() -> Self {
         Self {
             data: {
-                let fields = vec![
-                    Field::new(Self::FEATURE_FIELD, Self::multi_points_data_type(), false),
-                    Field::new(Self::TIME_FIELD, Self::time_data_type(), false),
+                let columns = vec![
+                    Field::new(Self::FEATURE_COLUMN, Self::multi_points_data_type(), false),
+                    Field::new(Self::TIME_COLUMN, Self::time_data_type(), false),
                 ];
 
-                StructArray::from(ArrayData::builder(DataType::Struct(fields)).len(0).build())
+                StructArray::from(ArrayData::builder(DataType::Struct(columns)).len(0).build())
             },
             types: Default::default(),
         }
@@ -125,9 +125,9 @@ impl PointCollection {
     ) -> Result<Self> {
         let capacity = coordinates.len();
 
-        let mut fields = vec![
-            Field::new(Self::FEATURE_FIELD, Self::multi_points_data_type(), false),
-            Field::new(Self::TIME_FIELD, Self::time_data_type(), false),
+        let mut columns = vec![
+            Field::new(Self::FEATURE_COLUMN, Self::multi_points_data_type(), false),
+            Field::new(Self::TIME_COLUMN, Self::time_data_type(), false),
         ];
 
         let mut builders: Vec<Box<dyn ArrayBuilder>> = vec![
@@ -165,22 +165,22 @@ impl PointCollection {
         for (name, feature_data) in data {
             ensure!(
                 !Self::is_reserved_name(&name),
-                error::FieldNameConflict { name }
+                error::ColumnNameConflict { name }
             );
 
-            let field = Field::new(
+            let column = Field::new(
                 &name,
                 feature_data.arrow_data_type(),
                 feature_data.nullable(),
             );
 
-            fields.push(field);
+            columns.push(column);
             builders.push(feature_data.arrow_builder()?);
 
             data_types.insert(name, FeatureDataType::from(&feature_data));
         }
 
-        let mut struct_builder = StructBuilder::new(fields, builders);
+        let mut struct_builder = StructBuilder::new(columns, builders);
         for _ in 0..capacity {
             struct_builder.append(true)?;
         }
@@ -221,8 +221,8 @@ impl PointCollection {
     pub fn coordinates(&self) -> &[Coordinate2D] {
         let features_ref = self
             .data
-            .column_by_name(Self::FEATURE_FIELD)
-            .expect("There must exist a feature field");
+            .column_by_name(Self::FEATURE_COLUMN)
+            .expect("There must exist a feature column");
         let features: &ListArray = features_ref.as_any().downcast_ref().unwrap(); // must obey type
 
         let feature_coordinates_ref = features.values();
@@ -241,52 +241,6 @@ impl PointCollection {
             )
         }
     }
-
-    /// Retrieves the time intervals of this point collection
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use geoengine_datatypes::collections::{PointCollection, FeatureCollection};
-    /// use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval, FeatureData};
-    /// use std::collections::HashMap;
-    ///
-    /// let pc = PointCollection::from_data(
-    ///     vec![vec![(0., 0.).into()], vec![(1., 1.).into()], vec![(2., 2.).into()]],
-    ///     vec![TimeInterval::new_unchecked(0, 1), TimeInterval::new_unchecked(1, 2), TimeInterval::new_unchecked(2, 3)],
-    ///     HashMap::new(),
-    /// ).unwrap();
-    ///
-    /// assert_eq!(pc.len(), 3);
-    ///
-    /// let time_intervals = pc.time_intervals();
-    ///
-    /// assert_eq!(time_intervals.len(), 3);
-    /// assert_eq!(
-    ///     time_intervals,
-    ///     &[TimeInterval::new_unchecked(0, 1), TimeInterval::new_unchecked(1, 2), TimeInterval::new_unchecked(2, 3)]
-    /// );
-    /// ```
-    ///
-    pub fn time_intervals(&self) -> &[TimeInterval] {
-        let features_ref = self
-            .data
-            .column_by_name(Self::TIME_FIELD)
-            .expect("There must exist a time interval field");
-        let features: &FixedSizeListArray = features_ref.as_any().downcast_ref().unwrap(); // must obey type
-
-        let number_of_time_intervals = self.len();
-
-        let timestamps_ref = features.values();
-        let timestamps: &Date64Array = timestamps_ref.as_any().downcast_ref().unwrap(); // must obey type
-
-        unsafe {
-            slice::from_raw_parts(
-                timestamps.raw_values() as *const TimeInterval,
-                number_of_time_intervals,
-            )
-        }
-    }
 }
 
 impl FeatureCollection for PointCollection {
@@ -298,7 +252,7 @@ impl FeatureCollection for PointCollection {
         self.len() == self.coordinates().len()
     }
 
-    /// Retrieves a data field of this point collection
+    /// Retrieves a data column of this point collection
     ///
     /// # Examples
     ///
@@ -335,26 +289,29 @@ impl FeatureCollection for PointCollection {
     /// }
     /// ```
     ///
-    fn data(&self, field: &str) -> Result<FeatureDataRef> {
+    fn data(&self, column_name: &str) -> Result<FeatureDataRef> {
         ensure!(
-            !Self::is_reserved_name(field),
+            !Self::is_reserved_name(column_name),
             error::FeatureCollection {
-                details: "Cannot access reserved fields via `data()` method"
+                details: "Cannot access reserved columns via `data()` method"
             }
         );
 
-        let column = self.data.column_by_name(field);
+        let column = self.data.column_by_name(column_name);
 
         ensure!(
             column.is_some(),
             error::FeatureCollection {
-                details: format!("The field {} does not exist in the point collection", field)
+                details: format!(
+                    "The column {} does not exist in the point collection",
+                    column_name
+                )
             }
         );
 
         let column = column.unwrap(); // previously checked
 
-        Ok(match self.types.get(field).unwrap() {
+        Ok(match self.types.get(column_name).unwrap() {
             // previously checked
             FeatureDataType::Number => {
                 let array: &Float64Array = column.as_any().downcast_ref().unwrap(); // must obey type
@@ -390,6 +347,52 @@ impl FeatureCollection for PointCollection {
                     .into()
             }
         })
+    }
+
+    /// Retrieves the time intervals of this point collection
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use geoengine_datatypes::collections::{PointCollection, FeatureCollection};
+    /// use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval, FeatureData};
+    /// use std::collections::HashMap;
+    ///
+    /// let pc = PointCollection::from_data(
+    ///     vec![vec![(0., 0.).into()], vec![(1., 1.).into()], vec![(2., 2.).into()]],
+    ///     vec![TimeInterval::new_unchecked(0, 1), TimeInterval::new_unchecked(1, 2), TimeInterval::new_unchecked(2, 3)],
+    ///     HashMap::new(),
+    /// ).unwrap();
+    ///
+    /// assert_eq!(pc.len(), 3);
+    ///
+    /// let time_intervals = pc.time_intervals();
+    ///
+    /// assert_eq!(time_intervals.len(), 3);
+    /// assert_eq!(
+    ///     time_intervals,
+    ///     &[TimeInterval::new_unchecked(0, 1), TimeInterval::new_unchecked(1, 2), TimeInterval::new_unchecked(2, 3)]
+    /// );
+    /// ```
+    ///
+    fn time_intervals(&self) -> &[TimeInterval] {
+        let features_ref = self
+            .data
+            .column_by_name(Self::TIME_COLUMN)
+            .expect("There must exist a time interval column");
+        let features: &FixedSizeListArray = features_ref.as_any().downcast_ref().unwrap(); // must obey type
+
+        let number_of_time_intervals = self.len();
+
+        let timestamps_ref = features.values();
+        let timestamps: &Date64Array = timestamps_ref.as_any().downcast_ref().unwrap(); // must obey type
+
+        unsafe {
+            slice::from_raw_parts(
+                timestamps.raw_values() as *const TimeInterval,
+                number_of_time_intervals,
+            )
+        }
     }
 }
 
@@ -428,31 +431,31 @@ impl Filterable for PointCollection {
         // TODO: use filter directly on struct array when it is implemented
 
         let filtered_data: Vec<(Field, ArrayRef)> =
-            if let Struct(fields) = self.data.data().data_type() {
-                let mut filtered_data: Vec<(Field, ArrayRef)> = Vec::with_capacity(fields.len());
-                for (field, array) in fields.iter().zip(self.data.columns()) {
-                    match field.name().as_str() {
-                        Self::FEATURE_FIELD => filtered_data.push((
-                            field.clone(),
+            if let Struct(columns) = self.data.data().data_type() {
+                let mut filtered_data: Vec<(Field, ArrayRef)> = Vec::with_capacity(columns.len());
+                for (column, array) in columns.iter().zip(self.data.columns()) {
+                    match column.name().as_str() {
+                        Self::FEATURE_COLUMN => filtered_data.push((
+                            column.clone(),
                             Arc::new(coordinates_filter(
                                 array.as_any().downcast_ref().unwrap(), // must obey type
                                 &filter_array,
                             )?),
                         )),
-                        Self::TIME_FIELD => filtered_data.push((
-                            field.clone(),
+                        Self::TIME_COLUMN => filtered_data.push((
+                            column.clone(),
                             Arc::new(time_interval_filter(
                                 array.as_any().downcast_ref().unwrap(), // must obey type
                                 &filter_array,
                             )?),
                         )),
                         _ => filtered_data
-                            .push((field.clone(), filter(array.as_ref(), &filter_array)?)),
+                            .push((column.clone(), filter(array.as_ref(), &filter_array)?)),
                     }
                 }
                 filtered_data
             } else {
-                unreachable!("data field must be a struct")
+                unreachable!("data column must be a struct")
             };
 
         Ok(Self {
@@ -551,7 +554,8 @@ impl Default for PointCollectionBuilder {
 }
 
 impl PointCollectionBuilder {
-    /// Creates a builder for a point collection
+    /// Adds a column to the collection.
+    /// Must happen before data insertions.
     ///
     /// # Examples
     ///
@@ -561,20 +565,20 @@ impl PointCollectionBuilder {
     ///
     /// let mut builder = PointCollectionBuilder::default();
     ///
-    /// builder.add_field("foobar", FeatureDataType::Number).unwrap();
-    /// builder.add_field("__features", FeatureDataType::Number).unwrap_err();
+    /// builder.add_column("foobar", FeatureDataType::Number).unwrap();
+    /// builder.add_column("__features", FeatureDataType::Number).unwrap_err();
     /// ```
     ///
-    pub fn add_field(&mut self, name: &str, data_type: FeatureDataType) -> Result<()> {
+    pub fn add_column(&mut self, name: &str, data_type: FeatureDataType) -> Result<()> {
         ensure!(
             self.rows == 0,
             error::FeatureCollectionBuilderException {
-                details: "It is not allowed to add further fields after data was inserted",
+                details: "It is not allowed to add further columns after data was inserted",
             }
         );
         ensure!(
             !PointCollection::is_reserved_name(name) && !self.types.contains_key(name),
-            error::FieldNameConflict {
+            error::ColumnNameConflict {
                 name: name.to_string()
             }
         );
@@ -728,7 +732,7 @@ impl PointCollectionBuilder {
         Ok(())
     }
 
-    /// Adds a time interval to the builder
+    /// Adds a data item to the current row
     ///
     /// # Examples
     ///
@@ -737,21 +741,21 @@ impl PointCollectionBuilder {
     /// use geoengine_datatypes::primitives::{FeatureDataValue, FeatureDataType, TimeInterval};
     ///
     /// let mut builder = PointCollectionBuilder::default();
-    /// builder.add_field("foobar", FeatureDataType::Number);
+    /// builder.add_column("foobar", FeatureDataType::Number);
     ///
     /// builder.append_data("foobar", FeatureDataValue::Number(0.)).unwrap();
     /// builder.append_data("foobar", FeatureDataValue::Number(1.)).unwrap_err();
     /// ```
     ///
-    pub fn append_data(&mut self, field: &str, data: FeatureDataValue) -> Result<()> {
+    pub fn append_data(&mut self, column: &str, data: FeatureDataValue) -> Result<()> {
         ensure!(
-            self.types.contains_key(field),
+            self.types.contains_key(column),
             error::FeatureCollectionBuilderException {
-                details: format!("Field {} does not exist", field),
+                details: format!("Column {} does not exist", column),
             }
         );
 
-        let data_builder = self.builders.get_mut(field).unwrap(); // previously checked
+        let data_builder = self.builders.get_mut(column).unwrap(); // previously checked
 
         ensure!(
             data_builder.len() <= self.rows,
@@ -760,12 +764,12 @@ impl PointCollectionBuilder {
             }
         );
 
-        let data_type = self.types.get(field).unwrap(); // previously checked
+        let data_type = self.types.get(column).unwrap(); // previously checked
 
         ensure!(
             mem::discriminant(&FeatureDataType::from(&data)) == mem::discriminant(&data_type), // same enum variant
             error::FeatureCollectionBuilderException {
-                details: "Data type is wrong for the field",
+                details: "Data type is wrong for the column",
             }
         );
 
@@ -828,7 +832,7 @@ impl PointCollectionBuilder {
     /// use geoengine_datatypes::primitives::{TimeInterval, FeatureDataType, FeatureDataValue};
     ///
     /// let mut builder = PointCollectionBuilder::default();
-    /// builder.add_field("foobar", FeatureDataType::Number).unwrap();
+    /// builder.add_column("foobar", FeatureDataType::Number).unwrap();
     ///
     /// builder.append_coordinate((0.0, 0.1).into()).unwrap();
     /// builder.append_time_interval(TimeInterval::new_unchecked(0, 1)).unwrap();
@@ -861,34 +865,34 @@ impl PointCollectionBuilder {
             }
         );
 
-        let mut fields = Vec::with_capacity(self.types.len() + 2);
+        let mut columns = Vec::with_capacity(self.types.len() + 2);
         let mut builders: Vec<Box<dyn ArrayBuilder>> = Vec::with_capacity(self.types.len() + 2);
 
-        fields.push(Field::new(
-            PointCollection::FEATURE_FIELD,
+        columns.push(Field::new(
+            PointCollection::FEATURE_COLUMN,
             PointCollection::multi_points_data_type(),
             false,
         ));
         builders.push(Box::new(self.coordinates_builder));
 
-        fields.push(Field::new(
-            PointCollection::TIME_FIELD,
+        columns.push(Field::new(
+            PointCollection::TIME_COLUMN,
             PointCollection::time_data_type(),
             false,
         ));
         builders.push(Box::new(self.time_intervals_builder));
 
-        for (field_name, builder) in self.builders.drain() {
-            let field_type = self.types.get(&field_name).unwrap(); // field must exist
-            fields.push(Field::new(
-                &field_name,
-                field_type.arrow_data_type(),
-                field_type.nullable(),
+        for (column_name, builder) in self.builders.drain() {
+            let column_type = self.types.get(&column_name).unwrap(); // column must exist
+            columns.push(Field::new(
+                &column_name,
+                column_type.arrow_data_type(),
+                column_type.nullable(),
             ));
             builders.push(builder);
         }
 
-        let mut struct_builder = StructBuilder::new(fields, builders);
+        let mut struct_builder = StructBuilder::new(columns, builders);
 
         for _ in 0..self.rows {
             struct_builder.append(true)?;
