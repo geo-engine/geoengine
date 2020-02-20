@@ -1,11 +1,10 @@
-mod handlers;
-mod workflows;
-
 use warp::Filter;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use workflows::registry::HashMapRegistry;
+use geoengine_services::workflows::registry::HashMapRegistry;
+use geoengine_services::handlers;
+
 
 #[tokio::main]
 async fn main() {
