@@ -4,7 +4,7 @@ use super::Workflow;
 
 type WorkflowIdentifier = usize;
 
-pub trait WorkflowRegistry {
+pub trait WorkflowRegistry: Send + Sync {
     fn register(&mut self, workflow: Workflow) -> WorkflowIdentifier;
     fn load(&self, id: &WorkflowIdentifier) -> Option<Workflow>;
 }
