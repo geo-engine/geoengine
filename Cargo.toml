@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "datatypes",
+    "operators",
+    "services",
+]
