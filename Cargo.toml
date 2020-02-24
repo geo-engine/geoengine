@@ -9,7 +9,7 @@ authors = [
 edition = "2018"
 
 [dependencies]
-arrow = { git = "https://github.com/apache/arrow" } #version = "0.15" } # simd compiles with nightly only
+arrow = "0.16.0"
 float-cmp = "0.6"
 geo = "0.12"
 ndarray = "0.13"
@@ -19,4 +19,9 @@ snafu = "0.6"
 vega_lite_3 = { version = "0.2.4", features = ["ndarray", "show_vega"]} # upgrade to 4 if published
 
 [dev-dependencies]
+criterion = "0.3"
 serde_json = "1.0"
+
+[[bench]]
+name = "point_collection"
+harness = false
