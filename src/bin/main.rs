@@ -8,7 +8,7 @@ use geoengine_services::handlers;
 
 #[tokio::main]
 async fn main() {
-    let workflow_registry = Arc::new(RwLock::new(HashMapRegistry::new()));
+    let workflow_registry = Arc::new(RwLock::new(HashMapRegistry::default()));
 
     warp::serve(
         handlers::workflows::register_workflow_handler(Arc::clone(&workflow_registry))

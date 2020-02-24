@@ -24,7 +24,7 @@ Content-Type: application/json
 
 ###
 
-GET http://localhost:3030/workflow/0
+GET http://localhost:3030/workflow/d8086293-1d7f-46c7-9e38-4965b3799fe1
 Accept: application/json
 
 ###
