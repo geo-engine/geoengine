@@ -17,10 +17,10 @@ pub trait Plot {
 }
 
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
-pub struct PlotData<T>
+pub struct PlotData<M>
 where
-    T: Serialize,
+    M: Debug + PartialEq + Serialize,
 {
     pub vega_string: String,
-    pub metadata: T,
+    pub metadata: M,
 }
