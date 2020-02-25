@@ -9,6 +9,7 @@ use crate::workflows::Workflow;
 
 type WR<T> = Arc<RwLock<T>>;
 
+// TODO: require authorized access
 pub fn register_workflow_handler<T: WorkflowRegistry>(workflow_registry: WR<T>) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone  {
     warp::post()
         .and(warp::path!("workflow" / "register"))
