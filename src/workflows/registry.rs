@@ -42,7 +42,7 @@ pub struct HashMapRegistry {
 
 impl WorkflowRegistry for HashMapRegistry {
     fn register(&mut self, workflow: Workflow) -> WorkflowIdentifier {
-        let id = WorkflowIdentifier::from_uuid(Uuid::new_v4());
+        let id = WorkflowIdentifier::from_hash(&workflow);
         self.map.insert(id.clone(), workflow);
         id
     }
