@@ -115,17 +115,17 @@ impl Histogram {
         match data {
             FeatureDataRef::Number(number_ref) => {
                 for &value in number_ref.data() {
-                    self.handle_data_item(value);
+                    self.handle_data_item(value, false);
                 }
             }
             FeatureDataRef::NullableNumber(number_ref) => {
                 for (&value, is_null) in number_ref.data().iter().zip(number_ref.nulls()) {
-                    self.handle_nullable_data_item(value, is_null);
+                    self.handle_data_item(value, is_null);
                 }
             }
             FeatureDataRef::Decimal(decimal_ref) => {
                 for value in decimal_ref.data().iter().map(|&v| v as f64) {
-                    self.handle_data_item(value);
+                    self.handle_data_item(value, false);
                 }
             }
             FeatureDataRef::NullableDecimal(decimal_ref) => {
@@ -135,12 +135,12 @@ impl Histogram {
                     .map(|&v| v as f64)
                     .zip(decimal_ref.nulls())
                 {
-                    self.handle_nullable_data_item(value, is_null);
+                    self.handle_data_item(value, is_null);
                 }
             }
             FeatureDataRef::Categorical(categorical_ref) => {
                 for value in categorical_ref.data().iter().map(|&v| v as f64) {
-                    self.handle_data_item(value);
+                    self.handle_data_item(value, false);
                 }
             }
             FeatureDataRef::NullableCategorical(categorical_ref) => {
@@ -150,7 +150,7 @@ impl Histogram {
                     .map(|&v| v as f64)
                     .zip(categorical_ref.nulls())
                 {
-                    self.handle_nullable_data_item(value, is_null);
+                    self.handle_data_item(value, is_null);
                 }
             }
             _ => {
@@ -164,22 +164,14 @@ impl Histogram {
         Ok(())
     }
 
-    fn handle_data_item(&mut self, value: f64) {
-        if value < self.min || value > self.max {
+    fn handle_data_item(&mut self, value: f64, is_null: bool) {
+        if is_null || !value.is_finite() {
             self.nodata_count += 1;
-        } else {
+        } else if self.min <= value && value <= self.max {
             let bucket = self.bucket_for_value(value);
             self.counts[bucket] += 1;
         }
-    }
-
-    fn handle_nullable_data_item(&mut self, value: f64, is_null: bool) {
-        if is_null || value < self.min || value > self.max {
-            self.nodata_count += 1;
-        } else {
-            let bucket = self.bucket_for_value(value);
-            self.counts[bucket] += 1;
-        }
+        // ignore out-of-range values
     }
 
     fn bucket_for_value(&self, value: f64) -> usize {
@@ -507,7 +499,7 @@ mod tests {
             .add_feature_data(FeatureDataRef::Decimal(DecimalDataRef::new(data.values())))
             .unwrap();
 
-        assert_eq!(histogram.nodata_count, 3);
+        assert_eq!(histogram.nodata_count, 0);
         assert_eq!(histogram.counts[0], 1);
         assert_eq!(histogram.counts[1], 2);
     }
