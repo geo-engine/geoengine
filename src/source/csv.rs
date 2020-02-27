@@ -1,7 +1,8 @@
 use crate::error;
+use crate::error::Error;
 use crate::util::Result;
 use csv::{Position, Reader};
-use futures::stream::{self, Stream, StreamExt};
+use futures::stream::{self, StreamExt, TryStream};
 use geoengine_datatypes::collections::PointCollection;
 use geoengine_datatypes::primitives::TimeInterval;
 use serde::{Deserialize, Serialize};
@@ -100,11 +101,13 @@ impl CsvSource {
     ///
     /// # Examples
     /// ```rust
-    /// use futures::executor::block_on_stream;
+    /// use futures::executor::{block_on_stream, block_on};
     /// use geoengine_datatypes::collections::FeatureCollection;
     /// use std::io::{Seek, SeekFrom, Write};
     /// use geoengine_operators::source::{CsvSource, CsvSourceParameters};
     /// use geoengine_operators::source::csv::{CsvGeometrySpecification, CsvTimeSpecification};
+    /// use futures::TryStreamExt;
+    /// use futures;
     ///
     /// let mut fake_file = tempfile::NamedTempFile::new().unwrap();
     /// write!(
@@ -113,6 +116,7 @@ impl CsvSource {
     /// x,y
     /// 0,1
     /// 2,3
+    /// 4,5
     /// "
     ///     )
     ///     .unwrap();
@@ -129,17 +133,18 @@ impl CsvSource {
     /// })
     /// .unwrap();
     ///
-    /// let mut stream = block_on_stream(csv_source.read_points(1));
+    /// let mut stream = block_on_stream(csv_source.read_points(2));
     ///
-    /// assert_eq!(stream.next().unwrap().len(), 1);
-    /// assert_eq!(stream.next().unwrap().len(), 1);
+    /// assert_eq!(stream.next().unwrap().unwrap().len(), 2);
+    /// assert_eq!(stream.next().unwrap().unwrap().len(), 1);
     /// assert!(stream.next().is_none());
     ///
     /// ```
     pub fn read_points(
         &mut self,
         items_per_chunk: usize,
-    ) -> impl Stream<Item = PointCollection> + '_ {
+    ) -> impl TryStream<Ok = PointCollection, Error = Error, Item = Result<PointCollection, Error>> + '_
+    {
         self.csv_reader.seek(Position::new()).unwrap(); // start at beginning
 
         let has_header = self.csv_reader.has_headers();
@@ -166,7 +171,7 @@ impl CsvSource {
 
         csv_stream.chunks(items_per_chunk).map(move |chunk| {
             if chunk.is_empty() {
-                return PointCollection::empty();
+                return Ok(PointCollection::empty());
             }
 
             let mut builder = PointCollection::builder();
@@ -184,51 +189,11 @@ impl CsvSource {
                     // TODO: handle errors
                 }
             }
-            builder.build().unwrap() // TODO: handle error
+            Ok(builder.build().unwrap()) // TODO: handle error
         })
     }
 }
 
 fn unlimited_time_interval() -> TimeInterval {
     TimeInterval::new_unchecked(i64::min_value(), i64::max_value())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use futures::executor::block_on_stream;
-    use geoengine_datatypes::collections::FeatureCollection;
-    use std::io::{Seek, SeekFrom, Write};
-
-    #[test]
-    fn points_test() {
-        let mut fake_file = tempfile::NamedTempFile::new().unwrap();
-        write!(
-            fake_file,
-            "\
-x,y
-0,1
-2,3
-"
-        )
-        .unwrap();
-        fake_file.seek(SeekFrom::Start(0)).unwrap();
-
-        let mut csv_source = CsvSource::new(CsvSourceParameters {
-            file_path: fake_file.path().into(),
-            field_separator: ',',
-            geometry: CsvGeometrySpecification::XY {
-                x: "x".into(),
-                y: "y".into(),
-            },
-            time: CsvTimeSpecification::None,
-        })
-        .unwrap();
-
-        let mut stream = block_on_stream(csv_source.read_points(1));
-
-        assert_eq!(stream.next().unwrap().len(), 1);
-        assert_eq!(stream.next().unwrap().len(), 1);
-        assert!(stream.next().is_none());
-    }
 }
