@@ -1,3 +1,4 @@
+use crate::source::CsvSourceParameters;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -9,6 +10,11 @@ pub enum Operator {
     },
     GdalSource {
         params: GdalSourceParameters,
+        #[serde(default)]
+        sources: NoSources,
+    },
+    CsvSource {
+        params: CsvSourceParameters,
         #[serde(default)]
         sources: NoSources,
     },
