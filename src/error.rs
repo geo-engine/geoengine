@@ -4,7 +4,19 @@ use snafu::Snafu;
 #[snafu(visibility = "pub(crate)")]
 pub enum Error {
     #[snafu(display("CsvSource Error: {}", source))]
-    CsvSourceReaderError { source: csv::Error },
+    CsvSourceReader { source: csv::Error },
     #[snafu(display("CsvSource Error: {}", details))]
-    CsvSourceError { details: String },
+    CsvSource { details: String },
+    #[snafu(display("DataTypeError: {}", source))]
+    DataType {
+        source: geoengine_datatypes::error::Error,
+    },
+}
+
+impl From<geoengine_datatypes::error::Error> for Error {
+    fn from(datatype_error: geoengine_datatypes::error::Error) -> Self {
+        Self::DataType {
+            source: datatype_error,
+        }
+    }
 }
