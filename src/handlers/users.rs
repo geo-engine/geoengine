@@ -3,8 +3,10 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use warp::reply::Reply;
 use std::str::FromStr;
-use crate::users::user::{UserDB, UserRegistration, UserCredentials, SessionToken, Session, UserInput};
 use crate::error::Result;
+use crate::users::userdb::UserDB;
+use crate::users::session::{Session, SessionToken};
+use crate::users::user::{UserRegistration, UserCredentials, UserInput};
 
 type DB<T> = Arc<RwLock<T>>;
 

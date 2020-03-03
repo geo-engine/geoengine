@@ -1,7 +1,9 @@
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use geoengine_services::users::user::{UserRegistration, UserIdentification, UserCredentials, Session, HashMapUserDB};
 use geoengine_services::handlers::users::{register_user_handler, login_handler, logout_handler};
+use geoengine_services::users::userdb::HashMapUserDB;
+use geoengine_services::users::user::{UserIdentification, UserCredentials, UserRegistration};
+use geoengine_services::users::session::Session;
 
 #[cfg(test)]
 mod tests {
