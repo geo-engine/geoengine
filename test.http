@@ -38,8 +38,8 @@ POST http://localhost:3030/user/register
 Content-Type: application/json
 
 {
-  "email": "foo@bar.de",
-  "password": "secret123",
+  "email": "foo@qbar.de",
+  "password": "secret",
   "real_name": "Foo Bar"
 }
 
