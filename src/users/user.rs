@@ -27,8 +27,9 @@ pub struct UserRegistration {
 
 impl UserInput for UserRegistration {
     fn validate(&self) -> Result<(), Error> {
+        // TODO: more sophisticated input validation
         ensure!(
-            self.email.contains("@"),
+            self.email.contains('@'),
             error::RegistrationFailed{reason: "Invalid e-mail address"}
         );
 
@@ -38,7 +39,7 @@ impl UserInput for UserRegistration {
         );
 
         ensure!(
-            self.real_name.len() > 0,
+            !self.real_name.is_empty(),
             error::RegistrationFailed{reason: "Real name must not be empty"}
         );
 
