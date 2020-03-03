@@ -73,8 +73,8 @@ pub struct User {
     pub active: bool,
 }
 
-impl User {
-    pub fn from_user_registration(user_registration: &UserRegistration) -> Self {
+impl From<UserRegistration> for User {
+    fn from(user_registration: UserRegistration) -> Self {
         Self {
             id: UserIdentification::new(),
             email: user_registration.email.clone(),

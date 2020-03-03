@@ -47,7 +47,7 @@ impl UserDB for HashMapUserDB {
             error::RegistrationFailed { reason: "E-mail already exists "}
         );
 
-        let user = User::from_user_registration(&user_registration);
+        let user = User::from(user_registration.clone());
         let id = user.id.clone();
         self.users.insert(user_registration.email, user);
         Ok(id)
