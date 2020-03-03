@@ -11,7 +11,7 @@ use std::fs::File;
 use std::i64;
 use std::path::PathBuf;
 
-/// Parameters for the GDAL Source Operator
+/// Parameters for the CSV Source Operator
 ///
 /// # Examples
 ///
