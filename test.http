@@ -39,7 +39,7 @@ Content-Type: application/json
 
 {
   "email": "foo@bar.de",
-  "password": "secret",
+  "password": "secret123",
   "real_name": "Foo Bar"
 }
 
@@ -50,7 +50,7 @@ Content-Type: application/json
 
 {
   "email": "foo@bar.de",
-  "password": "secret"
+  "password": "secret123"
 }
 
 ###

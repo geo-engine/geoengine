@@ -13,7 +13,7 @@ mod tests {
 
         let user = UserRegistration {
             email: "foo@bar.de".to_string(),
-            password: "secret".to_string(),
+            password: "secret123".to_string(),
             real_name: " Foo Bar".to_string(),
         };
 
@@ -51,7 +51,7 @@ mod tests {
         // successful login
         let credentials = UserCredentials {
             email: "foo@bar.de".to_string(),
-            password: "secret".to_string(),
+            password: "secret123".to_string(),
         };
 
         let res = warp::test::request()

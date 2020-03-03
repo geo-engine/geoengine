@@ -4,16 +4,49 @@ use pwhash::bcrypt;
 use uuid::Uuid;
 use serde::{Serialize, Deserialize};
 
-use crate::error::Result;
+use crate::error::{Result, Error};
 use crate::error;
 use core::fmt;
 use std::str::FromStr;
+
+pub trait UserInput {
+    fn validate(&self) -> Result<()>;
+
+    fn validated(self) -> Result<Validated<Self>> where Self : Sized {
+        self.validate().map(|_| Validated { user_input: self })
+    }
+}
+
+pub struct Validated<T: UserInput> {
+    user_input: T
+}
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
 pub struct UserRegistration {
     pub email: String,
     pub password: String,
-    pub real_name :String,
+    pub real_name: String,
+}
+
+impl UserInput for UserRegistration {
+    fn validate(&self) -> Result<(), Error> {
+        ensure!(
+            self.email.contains("@"),
+            error::RegistrationFailed{reason: "Invalid e-mail address"}
+        );
+
+        ensure!(
+            self.password.len() >= 8,
+            error::RegistrationFailed{reason: "Password must have at least 8 characters"}
+        );
+
+        ensure!(
+            self.real_name.len() > 0,
+            error::RegistrationFailed{reason: "Real name must not be empty"}
+        );
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
@@ -49,7 +82,7 @@ impl User {
             email: user_registration.email.clone(),
             password_hash: bcrypt::hash(&user_registration.password).unwrap(),
             real_name: user_registration.real_name.clone(),
-            active: true
+            active: true,
         }
     }
 }
@@ -63,13 +96,13 @@ impl FromStr for SessionToken {
     type Err = error::Error;
 
     fn from_str(token: &str) -> Result<Self> {
-        Uuid::parse_str(token).map(|id| Self { token : id }).map_err(|_| error::Error::InvalidSessionToken)
+        Uuid::parse_str(token).map(|id| Self { token: id }).map_err(|_| error::Error::InvalidSessionToken)
     }
 }
 
 impl Default for SessionToken {
     fn default() -> Self {
-        Self { token : Uuid::new_v4() }
+        Self { token: Uuid::new_v4() }
     }
 }
 
@@ -91,10 +124,10 @@ impl Session {
     }
 }
 
-pub trait UserDB : Send + Sync {
-    fn register(&mut self, user: UserRegistration) -> Result<UserIdentification>;
+pub trait UserDB: Send + Sync {
+    fn register(&mut self, user: Validated<UserRegistration>) -> Result<UserIdentification>;
     fn login(&mut self, user: UserCredentials) -> Result<Session>;
-    fn logout(&mut self, session: SessionToken) -> Result <()>;
+    fn logout(&mut self, session: SessionToken) -> Result<()>;
     fn session(&self, token: SessionToken) -> Result<Session>;
 }
 
@@ -105,10 +138,11 @@ pub struct HashMapUserDB {
 }
 
 impl UserDB for HashMapUserDB {
-    fn register(&mut self, user_registration: UserRegistration) -> Result<UserIdentification> {
+    fn register(&mut self, user_registration: Validated<UserRegistration>) -> Result<UserIdentification> {
+        let user_registration = user_registration.user_input;
         ensure!(
             !self.users.contains_key(&user_registration.email),
-            error::RegistrationFailed
+            error::RegistrationFailed { reason: "E-mail already exists "}
         );
 
         let user = User::from_user_registration(&user_registration);
@@ -127,12 +161,12 @@ impl UserDB for HashMapUserDB {
                 } else {
                     Err(error::Error::LoginFailed)
                 }
-            },
+            }
             None => Err(error::Error::LoginFailed)
         }
     }
 
-    fn logout(&mut self, token: SessionToken) -> Result <()> {
+    fn logout(&mut self, token: SessionToken) -> Result<()> {
         match self.sessions.remove(&token) {
             Some(_) => Ok(()),
             None => Err(error::Error::LogoutFailed)

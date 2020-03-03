@@ -3,7 +3,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use warp::reply::Reply;
 use std::str::FromStr;
-use crate::users::user::{UserDB, UserRegistration, UserCredentials, SessionToken, Session};
+use crate::users::user::{UserDB, UserRegistration, UserCredentials, SessionToken, Session, UserInput};
 use crate::error::Result;
 
 type DB<T> = Arc<RwLock<T>>;
@@ -31,6 +31,7 @@ pub fn register_user_handler<T: UserDB>(user_db: DB<T>) -> impl Filter<Extract =
 
 // TODO: move into handler once async closures are available?
 async fn register_user<T: UserDB>(user: UserRegistration, user_db: DB<T>) -> Result<impl warp::Reply, warp::Rejection> {
+    let user = user.validated().map_err(|e|warp::reject::custom(e))?;
     let mut db = user_db.write().await;
     match db.register(user) {
         Ok(id) => Ok(warp::reply::json(&id).into_response()),
