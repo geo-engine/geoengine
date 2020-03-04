@@ -80,16 +80,12 @@ impl UserDB for HashMapUserDB {
     /// ```
     fn login(&mut self, user_credentials: UserCredentials) -> Result<Session> {
         match self.users.get(&user_credentials.email) {
-            Some(user) => {
-                if bcrypt::verify(user_credentials.password, &user.password_hash) {
-                    let session = Session::new(user);
-                    self.sessions.insert(session.token.clone(), session.clone());
-                    Ok(session)
-                } else {
-                    Err(error::Error::LoginFailed)
-                }
-            }
-            None => Err(error::Error::LoginFailed)
+            Some(user) if bcrypt::verify(user_credentials.password, &user.password_hash) => {
+                let session = Session::new(user);
+                self.sessions.insert(session.token.clone(), session.clone());
+                Ok(session)
+            },
+            _ => Err(error::Error::LoginFailed)
         }
     }
 
