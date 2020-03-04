@@ -34,11 +34,8 @@ pub fn register_user_handler<T: UserDB>(user_db: DB<T>) -> impl Filter<Extract=i
 // TODO: move into handler once async closures are available?
 async fn register_user<T: UserDB>(user: UserRegistration, user_db: DB<T>) -> Result<impl warp::Reply, warp::Rejection> {
     let user = user.validated().map_err(warp::reject::custom)?;
-    let mut db = user_db.write().await;
-    match db.register(user) {
-        Ok(id) => Ok(warp::reply::json(&id).into_response()),
-        Err(_) => Ok(warp::http::StatusCode::BAD_REQUEST.into_response())
-    }
+    let id = user_db.write().await.register(user).map_err(warp::reject::custom)?;
+    Ok(warp::reply::json(&id))
 }
 
 pub fn login_handler<T: UserDB>(user_db: DB<T>) -> impl Filter<Extract=impl warp::Reply, Error=warp::Rejection> + Clone {
