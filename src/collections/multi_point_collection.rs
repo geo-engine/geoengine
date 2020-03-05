@@ -78,8 +78,12 @@ impl MultiPointCollection {
         Self {
             data: {
                 let columns = vec![
-                    Field::new(Self::FEATURE_COLUMN, Self::multi_points_data_type(), false),
-                    Field::new(Self::TIME_COLUMN, Self::time_data_type(), false),
+                    Field::new(
+                        Self::FEATURE_COLUMN_NAME,
+                        Self::multi_points_data_type(),
+                        false,
+                    ),
+                    Field::new(Self::TIME_COLUMN_NAME, Self::time_data_type(), false),
                 ];
 
                 StructArray::from(ArrayData::builder(DataType::Struct(columns)).len(0).build())
@@ -122,8 +126,12 @@ impl MultiPointCollection {
         let capacity = coordinates.len();
 
         let mut columns = vec![
-            Field::new(Self::FEATURE_COLUMN, Self::multi_points_data_type(), false),
-            Field::new(Self::TIME_COLUMN, Self::time_data_type(), false),
+            Field::new(
+                Self::FEATURE_COLUMN_NAME,
+                Self::multi_points_data_type(),
+                false,
+            ),
+            Field::new(Self::TIME_COLUMN_NAME, Self::time_data_type(), false),
         ];
 
         let mut builders: Vec<Box<dyn ArrayBuilder>> = vec![
@@ -217,7 +225,7 @@ impl MultiPointCollection {
     pub fn coordinates(&self) -> &[Coordinate2D] {
         let features_ref = self
             .data
-            .column_by_name(Self::FEATURE_COLUMN)
+            .column_by_name(Self::FEATURE_COLUMN_NAME)
             .expect("There must exist a feature column");
         let features: &ListArray = features_ref.as_any().downcast_ref().unwrap(); // must obey type
 
@@ -241,10 +249,13 @@ impl MultiPointCollection {
     fn array_refs_of_reserved_fields(&self) -> Vec<ArrayRef> {
         vec![
             self.data
-                .column_by_name(Self::FEATURE_COLUMN)
+                .column_by_name(Self::FEATURE_COLUMN_NAME)
                 .unwrap()
                 .clone(),
-            self.data.column_by_name(Self::TIME_COLUMN).unwrap().clone(),
+            self.data
+                .column_by_name(Self::TIME_COLUMN_NAME)
+                .unwrap()
+                .clone(),
         ]
     }
 }
@@ -384,7 +395,7 @@ impl FeatureCollection for MultiPointCollection {
     fn time_intervals(&self) -> &[TimeInterval] {
         let features_ref = self
             .data
-            .column_by_name(Self::TIME_COLUMN)
+            .column_by_name(Self::TIME_COLUMN_NAME)
             .expect("There must exist a time interval column");
         let features: &FixedSizeListArray = features_ref.as_any().downcast_ref().unwrap(); // must obey type
 
@@ -458,8 +469,12 @@ impl FeatureCollection for MultiPointCollection {
         );
 
         let mut columns = vec![
-            Field::new(Self::FEATURE_COLUMN, Self::multi_points_data_type(), false),
-            Field::new(Self::TIME_COLUMN, Self::time_data_type(), false),
+            Field::new(
+                Self::FEATURE_COLUMN_NAME,
+                Self::multi_points_data_type(),
+                false,
+            ),
+            Field::new(Self::TIME_COLUMN_NAME, Self::time_data_type(), false),
         ];
         let mut column_values: Vec<ArrayRef> = self.array_refs_of_reserved_fields();
 
@@ -532,15 +547,22 @@ impl FeatureCollection for MultiPointCollection {
         );
 
         let mut columns = vec![
-            Field::new(Self::FEATURE_COLUMN, Self::multi_points_data_type(), false),
-            Field::new(Self::TIME_COLUMN, Self::time_data_type(), false),
+            Field::new(
+                Self::FEATURE_COLUMN_NAME,
+                Self::multi_points_data_type(),
+                false,
+            ),
+            Field::new(Self::TIME_COLUMN_NAME, Self::time_data_type(), false),
         ];
         let mut column_values: Vec<ArrayRef> = vec![
             self.data
-                .column_by_name(Self::FEATURE_COLUMN)
+                .column_by_name(Self::FEATURE_COLUMN_NAME)
                 .unwrap()
                 .clone(),
-            self.data.column_by_name(Self::TIME_COLUMN).unwrap().clone(),
+            self.data
+                .column_by_name(Self::TIME_COLUMN_NAME)
+                .unwrap()
+                .clone(),
         ];
 
         for (column_name, column_type) in &self.types {
@@ -605,14 +627,14 @@ impl Filterable for MultiPointCollection {
                 let mut filtered_data: Vec<(Field, ArrayRef)> = Vec::with_capacity(columns.len());
                 for (column, array) in columns.iter().zip(self.data.columns()) {
                     match column.name().as_str() {
-                        Self::FEATURE_COLUMN => filtered_data.push((
+                        Self::FEATURE_COLUMN_NAME => filtered_data.push((
                             column.clone(),
                             Arc::new(coordinates_filter(
                                 array.as_any().downcast_ref().unwrap(), // must obey type
                                 &filter_array,
                             )?),
                         )),
-                        Self::TIME_COLUMN => filtered_data.push((
+                        Self::TIME_COLUMN_NAME => filtered_data.push((
                             column.clone(),
                             Arc::new(time_interval_filter(
                                 array.as_any().downcast_ref().unwrap(), // must obey type
@@ -1039,14 +1061,14 @@ impl MultiPointCollectionBuilder {
         let mut builders: Vec<Box<dyn ArrayBuilder>> = Vec::with_capacity(self.types.len() + 2);
 
         columns.push(Field::new(
-            MultiPointCollection::FEATURE_COLUMN,
+            MultiPointCollection::FEATURE_COLUMN_NAME,
             MultiPointCollection::multi_points_data_type(),
             false,
         ));
         builders.push(Box::new(self.coordinates_builder));
 
         columns.push(Field::new(
-            MultiPointCollection::TIME_COLUMN,
+            MultiPointCollection::TIME_COLUMN_NAME,
             MultiPointCollection::time_data_type(),
             false,
         ));

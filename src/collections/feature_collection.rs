@@ -15,14 +15,14 @@ pub trait FeatureCollection {
     fn is_simple(&self) -> bool;
 
     /// Reserved name for feature column
-    const FEATURE_COLUMN: &'static str = "__features";
+    const FEATURE_COLUMN_NAME: &'static str = "__features";
 
     /// Reserved name for time column
-    const TIME_COLUMN: &'static str = "__time";
+    const TIME_COLUMN_NAME: &'static str = "__time";
 
     /// Checks for name conflicts with reserved names
     fn is_reserved_name(name: &str) -> bool {
-        name == Self::FEATURE_COLUMN || name == Self::TIME_COLUMN
+        name == Self::FEATURE_COLUMN_NAME || name == Self::TIME_COLUMN_NAME
     }
 
     /// Retrieve column data
