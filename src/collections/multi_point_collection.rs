@@ -275,7 +275,7 @@ impl FeatureCollection for MultiPointCollection {
     ///
     /// ```rust
     /// use geoengine_datatypes::collections::{MultiPointCollection, FeatureCollection};
-    /// use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval, FeatureData, FeatureDataRef, DataRef, NullableDataRef};
+    /// use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval, FeatureData, FeatureDataRef, NullableDataRef};
     /// use std::collections::HashMap;
     ///
     /// let pc = MultiPointCollection::from_data(
@@ -292,14 +292,14 @@ impl FeatureCollection for MultiPointCollection {
     /// assert_eq!(pc.len(), 3);
     ///
     /// if let FeatureDataRef::Number(numbers) = pc.data("numbers").unwrap() {
-    ///     assert_eq!(numbers.data(), &[0., 1., 2.]);
+    ///     assert_eq!(numbers.as_ref(), &[0., 1., 2.]);
     /// } else {
     ///     unreachable!();
     /// }
     ///
     /// if let FeatureDataRef::NullableNumber(numbers) = pc.data("number_nulls").unwrap() {
-    ///     assert_eq!(numbers.data()[0], 0.);
-    ///     assert_eq!(numbers.data()[2], 2.);
+    ///     assert_eq!(numbers.as_ref()[0], 0.);
+    ///     assert_eq!(numbers.as_ref()[2], 2.);
     ///     assert_eq!(numbers.nulls(), vec![false, true, false]);
     /// } else {
     ///     unreachable!();
@@ -418,7 +418,7 @@ impl FeatureCollection for MultiPointCollection {
     ///
     /// ```rust
     /// use geoengine_datatypes::collections::{MultiPointCollection, FeatureCollection};
-    /// use geoengine_datatypes::primitives::{FeatureData, FeatureDataType, TimeInterval, FeatureDataValue, FeatureDataRef, DataRef};
+    /// use geoengine_datatypes::primitives::{FeatureData, FeatureDataType, TimeInterval, FeatureDataValue, FeatureDataRef};
     ///
     /// let collection = {
     ///     let mut builder = MultiPointCollection::builder();
@@ -443,12 +443,12 @@ impl FeatureCollection for MultiPointCollection {
     ///
     /// assert_eq!(extended_collection.len(), 2);
     /// if let FeatureDataRef::Number(numbers) = extended_collection.data("foo").unwrap() {
-    ///     assert_eq!(numbers.data(), &[0., 1.]);
+    ///     assert_eq!(numbers.as_ref(), &[0., 1.]);
     /// } else {
     ///     unreachable!();
     /// }
     /// if let FeatureDataRef::Number(numbers) = extended_collection.data("bar").unwrap() {
-    ///     assert_eq!(numbers.data(), &[2., 4.]);
+    ///     assert_eq!(numbers.as_ref(), &[2., 4.]);
     /// } else {
     ///     unreachable!();
     /// }
@@ -509,7 +509,7 @@ impl FeatureCollection for MultiPointCollection {
     ///
     /// ```rust
     /// use geoengine_datatypes::collections::{MultiPointCollection, FeatureCollection};
-    /// use geoengine_datatypes::primitives::{FeatureData, FeatureDataType, TimeInterval, FeatureDataValue, FeatureDataRef, DataRef};
+    /// use geoengine_datatypes::primitives::{FeatureData, FeatureDataType, TimeInterval, FeatureDataValue, FeatureDataRef};
     ///
     /// let collection = {
     ///     let mut builder = MultiPointCollection::builder();

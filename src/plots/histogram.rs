@@ -1,6 +1,6 @@
 use crate::error;
 use crate::plots::{Plot, PlotData};
-use crate::primitives::{DataRef, FeatureDataRef, Measurement, NullableDataRef};
+use crate::primitives::{FeatureDataRef, Measurement, NullableDataRef};
 use crate::util::Result;
 use float_cmp::*;
 use ndarray::{stack, Array, Array1, Axis};
@@ -114,23 +114,23 @@ impl Histogram {
         // TODO: implement efficiently OpenCL version
         match data {
             FeatureDataRef::Number(number_ref) => {
-                for &value in number_ref.data() {
+                for &value in number_ref.as_ref() {
                     self.handle_data_item(value, false);
                 }
             }
             FeatureDataRef::NullableNumber(number_ref) => {
-                for (&value, is_null) in number_ref.data().iter().zip(number_ref.nulls()) {
+                for (&value, is_null) in number_ref.as_ref().iter().zip(number_ref.nulls()) {
                     self.handle_data_item(value, is_null);
                 }
             }
             FeatureDataRef::Decimal(decimal_ref) => {
-                for value in decimal_ref.data().iter().map(|&v| v as f64) {
+                for value in decimal_ref.as_ref().iter().map(|&v| v as f64) {
                     self.handle_data_item(value, false);
                 }
             }
             FeatureDataRef::NullableDecimal(decimal_ref) => {
                 for (value, is_null) in decimal_ref
-                    .data()
+                    .as_ref()
                     .iter()
                     .map(|&v| v as f64)
                     .zip(decimal_ref.nulls())
@@ -139,13 +139,13 @@ impl Histogram {
                 }
             }
             FeatureDataRef::Categorical(categorical_ref) => {
-                for value in categorical_ref.data().iter().map(|&v| v as f64) {
+                for value in categorical_ref.as_ref().iter().map(|&v| v as f64) {
                     self.handle_data_item(value, false);
                 }
             }
             FeatureDataRef::NullableCategorical(categorical_ref) => {
                 for (value, is_null) in categorical_ref
-                    .data()
+                    .as_ref()
                     .iter()
                     .map(|&v| v as f64)
                     .zip(categorical_ref.nulls())

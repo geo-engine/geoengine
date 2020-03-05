@@ -53,10 +53,6 @@ pub enum FeatureDataRef<'f> {
     NullableCategorical(NullableCategoricalDataRef<'f>),
 }
 
-pub trait DataRef<T> {
-    fn data(&self) -> &[T];
-}
-
 pub trait NullableDataRef {
     fn nulls(&self) -> Vec<bool>; // TODO: return bitmap directly or IndexedSlice trait?...
 }
@@ -66,8 +62,8 @@ pub struct NumberDataRef {
     buffer: arrow::buffer::Buffer,
 }
 
-impl DataRef<f64> for NumberDataRef {
-    fn data(&self) -> &[f64] {
+impl AsRef<[f64]> for NumberDataRef {
+    fn as_ref(&self) -> &[f64] {
         self.buffer.typed_data()
     }
 }
@@ -90,15 +86,15 @@ pub struct NullableNumberDataRef<'f> {
     null_bitmap: &'f Option<arrow::bitmap::Bitmap>,
 }
 
-impl DataRef<f64> for NullableNumberDataRef<'_> {
-    fn data(&self) -> &[f64] {
+impl AsRef<[f64]> for NullableNumberDataRef<'_> {
+    fn as_ref(&self) -> &[f64] {
         self.buffer.typed_data()
     }
 }
 
 impl<'f> NullableDataRef for NullableNumberDataRef<'f> {
     fn nulls(&self) -> Vec<bool> {
-        null_bitmap_to_bools(self.data(), self.null_bitmap)
+        null_bitmap_to_bools(self.as_ref(), self.null_bitmap)
     }
 }
 
@@ -125,8 +121,8 @@ pub struct DecimalDataRef {
     buffer: arrow::buffer::Buffer,
 }
 
-impl DataRef<i64> for DecimalDataRef {
-    fn data(&self) -> &[i64] {
+impl AsRef<[i64]> for DecimalDataRef {
+    fn as_ref(&self) -> &[i64] {
         self.buffer.typed_data()
     }
 }
@@ -149,15 +145,15 @@ pub struct NullableDecimalDataRef<'f> {
     null_bitmap: &'f Option<arrow::bitmap::Bitmap>,
 }
 
-impl DataRef<i64> for NullableDecimalDataRef<'_> {
-    fn data(&self) -> &[i64] {
+impl AsRef<[i64]> for NullableDecimalDataRef<'_> {
+    fn as_ref(&self) -> &[i64] {
         self.buffer.typed_data()
     }
 }
 
 impl<'f> NullableDataRef for NullableDecimalDataRef<'f> {
     fn nulls(&self) -> Vec<bool> {
-        null_bitmap_to_bools(self.data(), self.null_bitmap)
+        null_bitmap_to_bools(self.as_ref(), self.null_bitmap)
     }
 }
 
@@ -192,8 +188,8 @@ pub struct CategoricalDataRef {
     buffer: arrow::buffer::Buffer,
 }
 
-impl DataRef<u8> for CategoricalDataRef {
-    fn data(&self) -> &[u8] {
+impl AsRef<[u8]> for CategoricalDataRef {
+    fn as_ref(&self) -> &[u8] {
         self.buffer.typed_data()
     }
 }
@@ -216,15 +212,15 @@ pub struct NullableCategoricalDataRef<'f> {
     null_bitmap: &'f Option<arrow::bitmap::Bitmap>,
 }
 
-impl DataRef<u8> for NullableCategoricalDataRef<'_> {
-    fn data(&self) -> &[u8] {
+impl AsRef<[u8]> for NullableCategoricalDataRef<'_> {
+    fn as_ref(&self) -> &[u8] {
         self.buffer.typed_data()
     }
 }
 
 impl<'f> NullableDataRef for NullableCategoricalDataRef<'f> {
     fn nulls(&self) -> Vec<bool> {
-        null_bitmap_to_bools(self.data(), self.null_bitmap)
+        null_bitmap_to_bools(self.as_ref(), self.null_bitmap)
     }
 }
 
@@ -251,7 +247,7 @@ impl<'f> NullableCategoricalDataRef<'f> {
 /// # Examples
 ///
 /// ```rust
-/// use geoengine_datatypes::primitives::{TextDataRef, DataRef};
+/// use geoengine_datatypes::primitives::{TextDataRef};
 /// use arrow::array::{StringBuilder, Array};
 ///
 /// let string_array = {
@@ -266,7 +262,7 @@ impl<'f> NullableCategoricalDataRef<'f> {
 ///
 /// let text_data_ref = TextDataRef::new(string_array.value_data(), string_array.value_offsets());
 ///
-/// assert_eq!(text_data_ref.data().len(), 12);
+/// assert_eq!(text_data_ref.as_ref().len(), 12);
 /// assert_eq!(text_data_ref.offsets().len(), 4);
 ///
 /// assert_eq!(text_data_ref.text_at(0), Ok("foobar"));
@@ -281,8 +277,8 @@ pub struct TextDataRef {
     offsets_buffer: arrow::buffer::Buffer,
 }
 
-impl DataRef<u8> for TextDataRef {
-    fn data(&self) -> &[u8] {
+impl AsRef<[u8]> for TextDataRef {
+    fn as_ref(&self) -> &[u8] {
         self.data_buffer.data()
     }
 }
@@ -337,7 +333,7 @@ unsafe fn byte_ptr_to_str<'d>(bytes: *const u8, length: usize) -> &'d str {
 /// # Examples
 ///
 /// ```rust
-/// use geoengine_datatypes::primitives::{NullableTextDataRef, DataRef};
+/// use geoengine_datatypes::primitives::{NullableTextDataRef};
 /// use arrow::array::{StringBuilder, Array};
 ///
 /// let string_array = {
@@ -352,7 +348,7 @@ unsafe fn byte_ptr_to_str<'d>(bytes: *const u8, length: usize) -> &'d str {
 ///
 /// let text_data_ref = NullableTextDataRef::new(string_array.value_data(), string_array.value_offsets());
 ///
-/// assert_eq!(text_data_ref.data().len(), 9);
+/// assert_eq!(text_data_ref.as_ref().len(), 9);
 /// assert_eq!(text_data_ref.offsets().len(), 4);
 ///
 /// assert_eq!(text_data_ref.text_at(0), Ok(Some("foobar")));
@@ -367,8 +363,8 @@ pub struct NullableTextDataRef {
     offsets_buffer: arrow::buffer::Buffer,
 }
 
-impl DataRef<u8> for NullableTextDataRef {
-    fn data(&self) -> &[u8] {
+impl AsRef<[u8]> for NullableTextDataRef {
+    fn as_ref(&self) -> &[u8] {
         self.data_buffer.data()
     }
 }
@@ -423,7 +419,7 @@ impl NullableDataRef for NullableTextDataRef {
     /// # Examples
     ///
     /// ```rust
-    /// use geoengine_datatypes::primitives::{NullableTextDataRef, DataRef, NullableDataRef};
+    /// use geoengine_datatypes::primitives::{NullableTextDataRef, NullableDataRef};
     /// use arrow::array::{StringBuilder, Array};
     ///
     /// let string_array = {
