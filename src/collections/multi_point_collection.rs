@@ -25,20 +25,20 @@ use std::slice;
 use std::sync::Arc;
 
 #[derive(Debug)]
-pub struct PointCollection {
+pub struct MultiPointCollection {
     data: StructArray,
     types: HashMap<String, FeatureDataType>,
 }
 
-impl Clone for PointCollection {
-    /// Clone the PointCollection
+impl Clone for MultiPointCollection {
+    /// Clone the MultiPointCollection
     ///
     /// # Examples
     ///
     /// ```rust
-    /// use geoengine_datatypes::collections::{PointCollection, FeatureCollection};
+    /// use geoengine_datatypes::collections::{MultiPointCollection, FeatureCollection};
     ///
-    /// let pc = PointCollection::empty();
+    /// let pc = MultiPointCollection::empty();
     /// let cloned = pc.clone();
     ///
     /// assert_eq!(pc.len(), 0);
@@ -53,7 +53,7 @@ impl Clone for PointCollection {
     }
 }
 
-impl PointCollection {
+impl MultiPointCollection {
     /// Retrieve the composite arrow data type for multi points
     pub(self) fn multi_points_data_type() -> DataType {
         DataType::List(DataType::FixedSizeList(DataType::Float64.into(), 2).into())
@@ -64,14 +64,14 @@ impl PointCollection {
         DataType::FixedSizeList(DataType::Date64(DateUnit::Millisecond).into(), 2)
     }
 
-    /// Create an empty PointCollection.
+    /// Create an empty MultiPointCollection.
     ///
     /// # Examples
     ///
     /// ```rust
-    /// use geoengine_datatypes::collections::{PointCollection, FeatureCollection};
+    /// use geoengine_datatypes::collections::{MultiPointCollection, FeatureCollection};
     ///
-    /// let pc = PointCollection::empty();
+    /// let pc = MultiPointCollection::empty();
     ///
     /// assert_eq!(pc.len(), 0);
     /// ```
@@ -90,7 +90,7 @@ impl PointCollection {
     }
 
     /// Use a builder for creating the point collection
-    pub fn builder() -> PointCollectionBuilder {
+    pub fn builder() -> MultiPointCollectionBuilder {
         Default::default()
     }
 
@@ -99,11 +99,11 @@ impl PointCollection {
     /// # Examples
     ///
     /// ```rust
-    /// use geoengine_datatypes::collections::{PointCollection, FeatureCollection};
+    /// use geoengine_datatypes::collections::{MultiPointCollection, FeatureCollection};
     /// use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval, FeatureData};
     /// use std::collections::HashMap;
     ///
-    /// let pc = PointCollection::from_data(
+    /// let pc = MultiPointCollection::from_data(
     ///     vec![vec![(0., 0.).into()], vec![(1., 1.).into()]],
     ///     vec![TimeInterval::new_unchecked(0, 1), TimeInterval::new_unchecked(0, 1)],
     ///     {
@@ -197,11 +197,11 @@ impl PointCollection {
     /// # Examples
     ///
     /// ```rust
-    /// use geoengine_datatypes::collections::{PointCollection, FeatureCollection};
+    /// use geoengine_datatypes::collections::{MultiPointCollection, FeatureCollection};
     /// use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval, FeatureData};
     /// use std::collections::HashMap;
     ///
-    /// let pc = PointCollection::from_data(
+    /// let pc = MultiPointCollection::from_data(
     ///     vec![vec![(0., 0.).into()], vec![(1., 1.).into()], vec![(2., 2.).into()]],
     ///     vec![TimeInterval::new_unchecked(0, 1), TimeInterval::new_unchecked(1, 2), TimeInterval::new_unchecked(2, 3)],
     ///     HashMap::new(),
@@ -250,7 +250,7 @@ impl PointCollection {
     }
 }
 
-impl FeatureCollection for PointCollection {
+impl FeatureCollection for MultiPointCollection {
     fn len(&self) -> usize {
         self.data.len()
     }
@@ -264,11 +264,11 @@ impl FeatureCollection for PointCollection {
     /// # Examples
     ///
     /// ```rust
-    /// use geoengine_datatypes::collections::{PointCollection, FeatureCollection};
+    /// use geoengine_datatypes::collections::{MultiPointCollection, FeatureCollection};
     /// use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval, FeatureData, FeatureDataRef, DataRef, NullableDataRef};
     /// use std::collections::HashMap;
     ///
-    /// let pc = PointCollection::from_data(
+    /// let pc = MultiPointCollection::from_data(
     ///     vec![vec![(0., 0.).into()], vec![(1., 1.).into()], vec![(2., 2.).into()]],
     ///     vec![TimeInterval::new_unchecked(0, 1), TimeInterval::new_unchecked(1, 2), TimeInterval::new_unchecked(2, 3)],
     ///     {
@@ -361,11 +361,11 @@ impl FeatureCollection for PointCollection {
     /// # Examples
     ///
     /// ```rust
-    /// use geoengine_datatypes::collections::{PointCollection, FeatureCollection};
+    /// use geoengine_datatypes::collections::{MultiPointCollection, FeatureCollection};
     /// use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval, FeatureData};
     /// use std::collections::HashMap;
     ///
-    /// let pc = PointCollection::from_data(
+    /// let pc = MultiPointCollection::from_data(
     ///     vec![vec![(0., 0.).into()], vec![(1., 1.).into()], vec![(2., 2.).into()]],
     ///     vec![TimeInterval::new_unchecked(0, 1), TimeInterval::new_unchecked(1, 2), TimeInterval::new_unchecked(2, 3)],
     ///     HashMap::new(),
@@ -407,11 +407,11 @@ impl FeatureCollection for PointCollection {
     /// # Examples
     ///
     /// ```rust
-    /// use geoengine_datatypes::collections::{PointCollection, FeatureCollection};
+    /// use geoengine_datatypes::collections::{MultiPointCollection, FeatureCollection};
     /// use geoengine_datatypes::primitives::{FeatureData, FeatureDataType, TimeInterval, FeatureDataValue, FeatureDataRef, DataRef};
     ///
     /// let collection = {
-    ///     let mut builder = PointCollection::builder();
+    ///     let mut builder = MultiPointCollection::builder();
     ///     builder.add_column("foo", FeatureDataType::Number);
     ///
     ///     builder.append_coordinate((0., 0.).into());
@@ -494,11 +494,11 @@ impl FeatureCollection for PointCollection {
     /// # Examples
     ///
     /// ```rust
-    /// use geoengine_datatypes::collections::{PointCollection, FeatureCollection};
+    /// use geoengine_datatypes::collections::{MultiPointCollection, FeatureCollection};
     /// use geoengine_datatypes::primitives::{FeatureData, FeatureDataType, TimeInterval, FeatureDataValue, FeatureDataRef, DataRef};
     ///
     /// let collection = {
-    ///     let mut builder = PointCollection::builder();
+    ///     let mut builder = MultiPointCollection::builder();
     ///     builder.add_column("foo", FeatureDataType::Number);
     ///
     ///     builder.append_coordinate((0., 0.).into());
@@ -567,16 +567,16 @@ impl FeatureCollection for PointCollection {
     }
 }
 
-impl Filterable for PointCollection {
+impl Filterable for MultiPointCollection {
     /// # Examples
     ///
     /// ```rust
-    /// use geoengine_datatypes::collections::{PointCollection, FeatureCollection};
+    /// use geoengine_datatypes::collections::{MultiPointCollection, FeatureCollection};
     /// use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval, FeatureData};
     /// use geoengine_datatypes::operations::Filterable;
     /// use std::collections::HashMap;
     ///
-    /// let pc = PointCollection::from_data(
+    /// let pc = MultiPointCollection::from_data(
     ///     vec![vec![(0., 0.).into()], vec![(1., 1.).into()], vec![(2., 2.).into()]],
     ///     vec![TimeInterval::new_unchecked(0, 1), TimeInterval::new_unchecked(1, 2), TimeInterval::new_unchecked(2, 3)],
     ///     HashMap::new(),
@@ -691,7 +691,7 @@ fn time_interval_filter(
 }
 
 /// A row-by-row builder for a point collection
-pub struct PointCollectionBuilder {
+pub struct MultiPointCollectionBuilder {
     coordinates_builder: ListBuilder<FixedSizeListBuilder<Float64Builder>>,
     time_intervals_builder: FixedSizeListBuilder<Date64Builder>,
     builders: HashMap<String, Box<dyn ArrayBuilder>>,
@@ -699,15 +699,15 @@ pub struct PointCollectionBuilder {
     rows: usize,
 }
 
-impl Default for PointCollectionBuilder {
+impl Default for MultiPointCollectionBuilder {
     /// Creates a builder for a point collection
     ///
     /// # Examples
     ///
     /// ```rust
-    /// use geoengine_datatypes::collections::PointCollectionBuilder;
+    /// use geoengine_datatypes::collections::MultiPointCollectionBuilder;
     ///
-    /// let builder = PointCollectionBuilder::default();
+    /// let builder = MultiPointCollectionBuilder::default();
     /// ```
     ///
     fn default() -> Self {
@@ -724,17 +724,17 @@ impl Default for PointCollectionBuilder {
     }
 }
 
-impl PointCollectionBuilder {
+impl MultiPointCollectionBuilder {
     /// Adds a column to the collection.
     /// Must happen before data insertions.
     ///
     /// # Examples
     ///
     /// ```rust
-    /// use geoengine_datatypes::collections::PointCollectionBuilder;
+    /// use geoengine_datatypes::collections::MultiPointCollectionBuilder;
     /// use geoengine_datatypes::primitives::FeatureDataType;
     ///
-    /// let mut builder = PointCollectionBuilder::default();
+    /// let mut builder = MultiPointCollectionBuilder::default();
     ///
     /// builder.add_column("foobar", FeatureDataType::Number).unwrap();
     /// builder.add_column("__features", FeatureDataType::Number).unwrap_err();
@@ -748,7 +748,7 @@ impl PointCollectionBuilder {
             }
         );
         ensure!(
-            !PointCollection::is_reserved_name(name) && !self.types.contains_key(name),
+            !MultiPointCollection::is_reserved_name(name) && !self.types.contains_key(name),
             error::ColumnNameConflict {
                 name: name.to_string()
             }
@@ -766,10 +766,10 @@ impl PointCollectionBuilder {
     /// # Examples
     ///
     /// ```rust
-    /// use geoengine_datatypes::collections::PointCollectionBuilder;
+    /// use geoengine_datatypes::collections::MultiPointCollectionBuilder;
     /// use geoengine_datatypes::primitives::{FeatureData, TimeInterval};
     ///
-    /// let mut builder = PointCollectionBuilder::default();
+    /// let mut builder = MultiPointCollectionBuilder::default();
     ///
     /// builder.append_coordinate((0.0, 0.0).into());
     /// builder.append_time_interval(TimeInterval::new_unchecked(0, 1));
@@ -803,10 +803,10 @@ impl PointCollectionBuilder {
     /// # Examples
     ///
     /// ```rust
-    /// use geoengine_datatypes::collections::PointCollectionBuilder;
+    /// use geoengine_datatypes::collections::MultiPointCollectionBuilder;
     /// use geoengine_datatypes::primitives::{FeatureData, TimeInterval};
     ///
-    /// let mut builder = PointCollectionBuilder::default();
+    /// let mut builder = MultiPointCollectionBuilder::default();
     ///
     /// builder.append_coordinate((0.0, 0.0).into()).unwrap();
     /// builder.append_coordinate((1.0, 1.0).into()).unwrap_err();
@@ -832,10 +832,10 @@ impl PointCollectionBuilder {
     /// # Examples
     ///
     /// ```rust
-    /// use geoengine_datatypes::collections::PointCollectionBuilder;
+    /// use geoengine_datatypes::collections::MultiPointCollectionBuilder;
     /// use geoengine_datatypes::primitives::{FeatureData, TimeInterval};
     ///
-    /// let mut builder = PointCollectionBuilder::default();
+    /// let mut builder = MultiPointCollectionBuilder::default();
     ///
     /// builder.append_multi_coordinate(vec![(0.0, 0.1).into(), (1.0, 1.1).into()]).unwrap();
     /// builder.append_multi_coordinate(vec![(2.0, 2.1).into()]).unwrap_err();
@@ -877,10 +877,10 @@ impl PointCollectionBuilder {
     /// # Examples
     ///
     /// ```rust
-    /// use geoengine_datatypes::collections::PointCollectionBuilder;
+    /// use geoengine_datatypes::collections::MultiPointCollectionBuilder;
     /// use geoengine_datatypes::primitives::{FeatureData, TimeInterval};
     ///
-    /// let mut builder = PointCollectionBuilder::default();
+    /// let mut builder = MultiPointCollectionBuilder::default();
     ///
     /// builder.append_time_interval(TimeInterval::new_unchecked(0, 1)).unwrap();
     /// builder.append_time_interval(TimeInterval::new_unchecked(1, 2)).unwrap_err();
@@ -908,10 +908,10 @@ impl PointCollectionBuilder {
     /// # Examples
     ///
     /// ```rust
-    /// use geoengine_datatypes::collections::PointCollectionBuilder;
+    /// use geoengine_datatypes::collections::MultiPointCollectionBuilder;
     /// use geoengine_datatypes::primitives::{FeatureDataValue, FeatureDataType, TimeInterval};
     ///
-    /// let mut builder = PointCollectionBuilder::default();
+    /// let mut builder = MultiPointCollectionBuilder::default();
     /// builder.add_column("foobar", FeatureDataType::Number);
     ///
     /// builder.append_data("foobar", FeatureDataValue::Number(0.)).unwrap();
@@ -935,10 +935,10 @@ impl PointCollectionBuilder {
             }
         );
 
-        let data_type = self.types.get(column).unwrap(); // previously checked
+        let _data_type = self.types.get(column).unwrap(); // previously checked
 
         ensure!(
-            mem::discriminant(&FeatureDataType::from(&data)) == mem::discriminant(&data_type), // same enum variant
+            mem::discriminant(&FeatureDataType::from(&data)) == mem::discriminant(_data_type), // same enum variant
             error::FeatureCollectionBuilderException {
                 details: "Data type is wrong for the column",
             }
@@ -999,10 +999,10 @@ impl PointCollectionBuilder {
     /// # Examples
     ///
     /// ```rust
-    /// use geoengine_datatypes::collections::{PointCollectionBuilder, FeatureCollection};
+    /// use geoengine_datatypes::collections::{MultiPointCollectionBuilder, FeatureCollection};
     /// use geoengine_datatypes::primitives::{TimeInterval, FeatureDataType, FeatureDataValue};
     ///
-    /// let mut builder = PointCollectionBuilder::default();
+    /// let mut builder = MultiPointCollectionBuilder::default();
     /// builder.add_column("foobar", FeatureDataType::Number).unwrap();
     ///
     /// builder.append_coordinate((0.0, 0.1).into()).unwrap();
@@ -1023,7 +1023,7 @@ impl PointCollectionBuilder {
     /// assert_eq!(point_collection.coordinates(), &[(0.0, 0.1).into(), (1.0, 1.1).into()]);
     /// ```
     ///
-    pub fn build(mut self) -> Result<PointCollection> {
+    pub fn build(mut self) -> Result<MultiPointCollection> {
         ensure!(
             self.coordinates_builder.len() == self.rows
                 && self.time_intervals_builder.len() == self.rows
@@ -1040,15 +1040,15 @@ impl PointCollectionBuilder {
         let mut builders: Vec<Box<dyn ArrayBuilder>> = Vec::with_capacity(self.types.len() + 2);
 
         columns.push(Field::new(
-            PointCollection::FEATURE_COLUMN,
-            PointCollection::multi_points_data_type(),
+            MultiPointCollection::FEATURE_COLUMN,
+            MultiPointCollection::multi_points_data_type(),
             false,
         ));
         builders.push(Box::new(self.coordinates_builder));
 
         columns.push(Field::new(
-            PointCollection::TIME_COLUMN,
-            PointCollection::time_data_type(),
+            MultiPointCollection::TIME_COLUMN,
+            MultiPointCollection::time_data_type(),
             false,
         ));
         builders.push(Box::new(self.time_intervals_builder));
@@ -1069,7 +1069,7 @@ impl PointCollectionBuilder {
             struct_builder.append(true)?;
         }
 
-        Ok(PointCollection {
+        Ok(MultiPointCollection {
             data: struct_builder.finish(),
             types: self.types,
         })
@@ -1095,7 +1095,7 @@ mod test {
 
     #[test]
     fn clone() {
-        let pc = PointCollection::from_data(
+        let pc = MultiPointCollection::from_data(
             vec![vec![(0., 0.).into()], vec![(1., 1.).into()]],
             vec![
                 TimeInterval::new_unchecked(0, 1),
