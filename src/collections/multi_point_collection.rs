@@ -439,7 +439,7 @@ impl FeatureCollection for MultiPointCollection {
     ///
     /// assert_eq!(collection.len(), 2);
     ///
-    /// let extended_collection = collection.extend("bar", FeatureData::Number(vec![2., 4.])).unwrap();
+    /// let extended_collection = collection.add_column("bar", FeatureData::Number(vec![2., 4.])).unwrap();
     ///
     /// assert_eq!(extended_collection.len(), 2);
     /// if let FeatureDataRef::Number(numbers) = extended_collection.data("foo").unwrap() {
@@ -453,7 +453,7 @@ impl FeatureCollection for MultiPointCollection {
     ///     unreachable!();
     /// }
     /// ```
-    fn extend(&self, new_column: &str, data: FeatureData) -> Result<Self> {
+    fn add_column(&self, new_column: &str, data: FeatureData) -> Result<Self> {
         ensure!(
             !Self::is_reserved_name(new_column) && self.data.column_by_name(new_column).is_none(),
             error::FeatureCollection {

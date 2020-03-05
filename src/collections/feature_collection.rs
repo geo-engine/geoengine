@@ -31,8 +31,8 @@ pub trait FeatureCollection {
     /// Retrieve time intervals
     fn time_intervals(&self) -> &[TimeInterval];
 
-    /// Extend the collection by an additional column
-    fn extend(&self, new_column: &str, data: FeatureData) -> Result<Self>
+    /// Creates a copy of the collection with an additional column
+    fn add_column(&self, new_column: &str, data: FeatureData) -> Result<Self>
     where
         Self: Sized;
 
@@ -61,7 +61,7 @@ mod test {
         fn time_intervals(&self) -> &[TimeInterval] {
             unimplemented!()
         }
-        fn extend(&self, _new_column: &str, _data: FeatureData) -> Result<Self> {
+        fn add_column(&self, _new_column: &str, _data: FeatureData) -> Result<Self> {
             unimplemented!()
         }
         fn remove_column(&self, _column: &str) -> Result<Self> {

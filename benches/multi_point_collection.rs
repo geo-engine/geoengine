@@ -46,5 +46,5 @@ fn multi_point_collection_benchmarks(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, point_collection_benchmarks);
+criterion_group!(benches, multi_point_collection_benchmarks);
 criterion_main!(benches);
