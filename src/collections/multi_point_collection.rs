@@ -7,7 +7,6 @@ use arrow::array::{
     UInt8Array, UInt8Builder,
 };
 use arrow::compute::kernels::filter::filter;
-use arrow::datatypes::DataType::Struct;
 use arrow::datatypes::{DataType, DateUnit, Field};
 use snafu::ensure;
 
@@ -602,7 +601,7 @@ impl Filterable for MultiPointCollection {
         // TODO: use filter directly on struct array when it is implemented
 
         let filtered_data: Vec<(Field, ArrayRef)> =
-            if let Struct(columns) = self.data.data().data_type() {
+            if let DataType::Struct(columns) = self.data.data().data_type() {
                 let mut filtered_data: Vec<(Field, ArrayRef)> = Vec::with_capacity(columns.len());
                 for (column, array) in columns.iter().zip(self.data.columns()) {
                     match column.name().as_str() {

@@ -25,7 +25,7 @@ fn point_collection_benchmarks(c: &mut Criterion) {
         b.iter(|| {
             let mut builder = MultiPointCollection::builder();
             builder
-                .add_field("number", FeatureDataType::Number)
+                .add_column("number", FeatureDataType::Number)
                 .unwrap();
             for i in 0..100 {
                 builder
