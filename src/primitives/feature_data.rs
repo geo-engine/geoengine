@@ -1,6 +1,5 @@
 use crate::error;
 use crate::util::Result;
-use arrow;
 use arrow::bitmap::Bitmap;
 use snafu::ensure;
 use std::slice;

@@ -55,14 +55,11 @@ impl Clone for PointCollection {
 
 impl PointCollection {
     /// Retrieve the composite arrow data type for multi points
-    #[inline]
     pub(self) fn multi_points_data_type() -> DataType {
         DataType::List(DataType::FixedSizeList(DataType::Float64.into(), 2).into())
-        // DataType::List(DataType::FixedSizeBinary(mem::size_of::<Coordinate>() as i32).into())
     }
 
     /// Retrieve the composite arrow data type for multi points
-    #[inline]
     pub(self) fn time_data_type() -> DataType {
         DataType::FixedSizeList(DataType::Date64(DateUnit::Millisecond).into(), 2)
     }
