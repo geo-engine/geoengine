@@ -13,6 +13,26 @@ pub struct TimeInterval {
     end: i64,
 }
 
+impl Default for TimeInterval {
+    /// The default time interval is always valid.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use geoengine_datatypes::primitives::TimeInterval;
+    ///
+    /// assert!(TimeInterval::default().contains(&TimeInterval::new_unchecked(0, 0)));
+    /// assert!(TimeInterval::default().intersects(&TimeInterval::default()));
+    /// assert_eq!(TimeInterval::default().union(&TimeInterval::default()).unwrap(), TimeInterval::default());
+    /// ```
+    fn default() -> Self {
+        Self {
+            start: std::i64::MIN,
+            end: std::i64::MAX,
+        }
+    }
+}
+
 impl TimeInterval {
     /// Create a new time interval and check bounds
     ///
