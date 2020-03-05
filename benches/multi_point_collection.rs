@@ -2,8 +2,8 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use geoengine_datatypes::collections::MultiPointCollection;
 use geoengine_datatypes::primitives::{FeatureDataType, FeatureDataValue, TimeInterval};
 
-fn point_collection_benchmarks(c: &mut Criterion) {
-    let mut group = c.benchmark_group("PointCollection");
+fn multi_point_collection_benchmarks(c: &mut Criterion) {
+    let mut group = c.benchmark_group("MultiPointCollection");
 
     group.bench_function("Builder Plain 100", |b| {
         b.iter(|| {

@@ -23,5 +23,5 @@ criterion = "0.3"
 serde_json = "1.0"
 
 [[bench]]
-name = "point_collection"
+name = "multi_point_collection"
 harness = false
