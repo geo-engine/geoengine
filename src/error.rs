@@ -45,6 +45,9 @@ pub enum Error {
 
     #[snafu(display("FeatureCollectionBuilder exception: {}", details))]
     FeatureCollectionBuilderException { details: String },
+
+    #[snafu(display("Plot exception: {}", details))]
+    PlotError { details: String },
 }
 
 impl From<arrow::error::ArrowError> for Error {
