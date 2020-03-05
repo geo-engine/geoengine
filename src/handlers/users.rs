@@ -1,27 +1,11 @@
 use warp::Filter;
 use std::sync::Arc;
-use tokio::sync::RwLock;
 use warp::reply::Reply;
-use std::str::FromStr;
 use crate::error::Result;
 use crate::users::userdb::UserDB;
-use crate::users::session::{Session, SessionToken};
+use crate::users::session::Session;
 use crate::users::user::{UserRegistration, UserCredentials, UserInput};
-
-type DB<T> = Arc<RwLock<T>>;
-
-pub fn authenticate<T: UserDB>(user_db: DB<T>) -> impl warp::Filter<Extract=(Session, ), Error=warp::Rejection> + Clone {
-    async fn do_authenticate<T: UserDB>(user_db: DB<T>, token: String) -> Result<Session, warp::Rejection> {
-        let token = SessionToken::from_str(&token).map_err(|_| warp::reject())?;
-        let db = user_db.read().await;
-        db.session(token).map_err(|_| warp::reject())
-    }
-
-    warp::any()
-        .and(warp::any().map(move || Arc::clone(&user_db)))
-        .and(warp::header::<String>("authorization"))
-        .and_then(do_authenticate)
-}
+use crate::handlers::{DB, authenticate};
 
 pub fn register_user_handler<T: UserDB>(user_db: DB<T>) -> impl Filter<Extract=impl warp::Reply, Error=warp::Rejection> + Clone {
     warp::post()
@@ -78,6 +62,7 @@ mod tests {
     use crate::users::userdb::{UserDB, HashMapUserDB};
     use crate::users::user::{UserIdentification, Validated};
     use crate::handlers::handle_rejection;
+    use tokio::sync::RwLock;
 
     #[tokio::test]
     async fn register() {

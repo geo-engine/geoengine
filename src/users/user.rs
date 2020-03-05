@@ -6,7 +6,8 @@ use uuid::Uuid;
 use crate::error::{Error, Result};
 use crate::error;
 
-pub trait UserInput {
+// TODO: move elsewhere
+pub trait UserInput: Clone {
     fn validate(&self) -> Result<()>;
 
     fn validated(self) -> Result<Validated<Self>> where Self : Sized {
@@ -14,7 +15,8 @@ pub trait UserInput {
     }
 }
 
-pub struct Validated<T: UserInput> {
+#[derive(Debug, Clone)]
+pub struct Validated<T: UserInput + Clone> {
     pub user_input: T
 }
 
@@ -53,13 +55,13 @@ pub struct UserCredentials {
     pub password: String,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Copy, Hash)]
 pub struct UserIdentification {
     id: Uuid,
 }
 
 impl UserIdentification {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self { id: Uuid::new_v4() }
     }
 }
