@@ -77,9 +77,9 @@ impl From<UserRegistration> for User {
     fn from(user_registration: UserRegistration) -> Self {
         Self {
             id: UserIdentification::new(),
-            email: user_registration.email.clone(),
+            email: user_registration.email,
             password_hash: bcrypt::hash(&user_registration.password).unwrap(),
-            real_name: user_registration.real_name.clone(),
+            real_name: user_registration.real_name,
             active: true,
         }
     }
