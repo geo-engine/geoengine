@@ -35,7 +35,7 @@ impl fmt::Display for SessionToken {
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
 pub struct Session {
-    user: UserIdentification,
+    pub user: UserIdentification,
     pub token: SessionToken,
 }
 

@@ -1,16 +1,15 @@
 use warp::Filter;
 use std::sync::Arc;
-use tokio::sync::RwLock;
 use warp::reply::Reply;
 use uuid::Uuid;
 
 use crate::workflows::registry::{WorkflowRegistry, WorkflowIdentifier};
 use crate::workflows::Workflow;
+use crate::handlers::DB;
 
-type WR<T> = Arc<RwLock<T>>;
 
 // TODO: require authorized access
-pub fn register_workflow_handler<T: WorkflowRegistry>(workflow_registry: WR<T>) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone  {
+pub fn register_workflow_handler<T: WorkflowRegistry>(workflow_registry: DB<T>) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone  {
     warp::post()
         .and(warp::path!("workflow" / "register"))
         .and(warp::body::json())
@@ -18,7 +17,7 @@ pub fn register_workflow_handler<T: WorkflowRegistry>(workflow_registry: WR<T>) 
         .and_then(register_workflow)
 }
 
-pub fn load_workflow_handler<T: WorkflowRegistry>(workflow_registry: WR<T>) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone  {
+pub fn load_workflow_handler<T: WorkflowRegistry>(workflow_registry: DB<T>) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone  {
     warp::get()
         .and(warp::path!("workflow" / Uuid))
         .and(warp::any().map(move || Arc::clone(&workflow_registry)))
@@ -27,13 +26,13 @@ pub fn load_workflow_handler<T: WorkflowRegistry>(workflow_registry: WR<T>) -> i
 
 
 // TODO: move into handler once async closures are available?
-async fn register_workflow<T: WorkflowRegistry>(workflow: Workflow, workflow_registry: WR<T>) -> Result<impl warp::Reply, warp::Rejection> {
+async fn register_workflow<T: WorkflowRegistry>(workflow: Workflow, workflow_registry: DB<T>) -> Result<impl warp::Reply, warp::Rejection> {
     let mut wr = workflow_registry.write().await;
     let id = wr.register(workflow);
     Ok(warp::reply::json(&id))
 }
 
-async fn load_workflow<T: WorkflowRegistry>(id: Uuid, workflow_registry: WR<T>) -> Result<impl warp::Reply, warp::Rejection> {
+async fn load_workflow<T: WorkflowRegistry>(id: Uuid, workflow_registry: DB<T>) -> Result<impl warp::Reply, warp::Rejection> {
     let wr = workflow_registry.read().await;
     match wr.load(&WorkflowIdentifier::from_uuid(id)) {
         Some(w) => Ok(warp::reply::json(&w).into_response()),
@@ -47,6 +46,7 @@ mod tests {
     use crate::workflows::registry::{WorkflowRegistry, HashMapRegistry};
     use geoengine_operators::Operator;
     use geoengine_operators::operators::{ProjectionParameters, RasterSources, GdalSourceParameters, NoSources};
+    use tokio::sync::RwLock;
 
     #[tokio::test]
     async fn register() {
@@ -108,7 +108,7 @@ mod tests {
         };
 
         let id = workflow_registry.write().await.register(workflow.clone());
-        
+
         let res = warp::test::request()
             .method("GET")
             .path(&format!("/workflow/{}", id.to_string()))
