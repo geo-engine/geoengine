@@ -1,4 +1,4 @@
-use crate::primitives::FeatureDataRef;
+use crate::primitives::{FeatureData, FeatureDataRef, TimeInterval};
 use crate::util::Result;
 
 /// This trait defines common features of all feature collections
@@ -15,17 +15,31 @@ pub trait FeatureCollection {
     fn is_simple(&self) -> bool;
 
     /// Reserved name for feature column
-    const FEATURE_FIELD: &'static str = "__features";
+    const FEATURE_COLUMN_NAME: &'static str = "__features";
 
     /// Reserved name for time column
-    const TIME_FIELD: &'static str = "__time";
+    const TIME_COLUMN_NAME: &'static str = "__time";
 
     /// Checks for name conflicts with reserved names
     fn is_reserved_name(name: &str) -> bool {
-        name == Self::FEATURE_FIELD || name == Self::TIME_FIELD
+        name == Self::FEATURE_COLUMN_NAME || name == Self::TIME_COLUMN_NAME
     }
 
-    fn data(&self, field: &str) -> Result<FeatureDataRef>;
+    /// Retrieve column data
+    fn data(&self, column: &str) -> Result<FeatureDataRef>;
+
+    /// Retrieve time intervals
+    fn time_intervals(&self) -> &[TimeInterval];
+
+    /// Creates a copy of the collection with an additional column
+    fn add_column(&self, new_column: &str, data: FeatureData) -> Result<Self>
+    where
+        Self: Sized;
+
+    /// Removes a column and returns an updated collection
+    fn remove_column(&self, column: &str) -> Result<Self>
+    where
+        Self: Sized;
 }
 
 #[cfg(test)]
@@ -41,7 +55,16 @@ mod test {
         fn is_simple(&self) -> bool {
             unimplemented!()
         }
-        fn data(&self, _field: &str) -> Result<FeatureDataRef> {
+        fn data(&self, _column: &str) -> Result<FeatureDataRef> {
+            unimplemented!()
+        }
+        fn time_intervals(&self) -> &[TimeInterval] {
+            unimplemented!()
+        }
+        fn add_column(&self, _new_column: &str, _data: FeatureData) -> Result<Self> {
+            unimplemented!()
+        }
+        fn remove_column(&self, _column: &str) -> Result<Self> {
             unimplemented!()
         }
     }

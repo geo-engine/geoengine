@@ -1,13 +1,13 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use geoengine_datatypes::collections::PointCollection;
+use geoengine_datatypes::collections::MultiPointCollection;
 use geoengine_datatypes::primitives::{FeatureDataType, FeatureDataValue, TimeInterval};
 
-fn point_collection_benchmarks(c: &mut Criterion) {
-    let mut group = c.benchmark_group("PointCollection");
+fn multi_point_collection_benchmarks(c: &mut Criterion) {
+    let mut group = c.benchmark_group("MultiPointCollection");
 
     group.bench_function("Builder Plain 100", |b| {
         b.iter(|| {
-            let mut builder = PointCollection::builder();
+            let mut builder = MultiPointCollection::builder();
             for i in 0..100 {
                 builder
                     .append_coordinate((i as f64, i as f64).into())
@@ -23,9 +23,9 @@ fn point_collection_benchmarks(c: &mut Criterion) {
 
     group.bench_function("Builder with Number 100", |b| {
         b.iter(|| {
-            let mut builder = PointCollection::builder();
+            let mut builder = MultiPointCollection::builder();
             builder
-                .add_field("number", FeatureDataType::Number)
+                .add_column("number", FeatureDataType::Number)
                 .unwrap();
             for i in 0..100 {
                 builder
@@ -46,5 +46,5 @@ fn point_collection_benchmarks(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, point_collection_benchmarks);
+criterion_group!(benches, multi_point_collection_benchmarks);
 criterion_main!(benches);
