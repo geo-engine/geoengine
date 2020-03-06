@@ -1,0 +1,78 @@
+POST http://localhost:3030/workflow/register
+Content-Type: application/json
+
+{
+  "operator": {
+    "type": "projection",
+    "params": {
+      "src_crs": "EPSG:4326",
+      "dest_crs": "EPSG:3857"
+    },
+    "sources": {
+      "rasters": [
+        {
+          "type": "gdal_source",
+          "params": {
+            "source_name": "test",
+            "channel": 0
+          }
+        }
+      ]
+    }
+  }
+}
+
+###
+
+GET http://localhost:3030/workflow/9d120587-d7ac-5725-b38c-bda953411c3a
+Accept: application/json
+
+###
+
+GET http://localhost:3030/workflow/1
+Accept: application/json
+
+###
+
+POST http://localhost:3030/user/register
+Content-Type: application/json
+
+{
+  "email": "foo@qbar.de",
+  "password": "secret",
+  "real_name": "Foo Bar"
+}
+
+###
+
+POST http://localhost:3030/user/login
+Content-Type: application/json
+
+{
+  "email": "foo@bar.de",
+  "password": "secret123"
+}
+
+###
+
+POST http://localhost:3030/user/login
+Content-Type: application/json
+
+{
+  "email": "foo@bar.de",
+  "password": "wrong"
+}
+
+###
+
+POST http://localhost:3030/user/logout
+Content-Type: application/json
+
+
+###
+
+POST http://localhost:3030/user/logout
+Authorization: 7e855f3c-b0cd-46d1-b5b3-19e6e3f9ea5
+Content-Type: application/json
+
+###
