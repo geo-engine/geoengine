@@ -10,7 +10,7 @@ edition = "2018"
 
 [dependencies]
 csv = "1.1"
-geoengine-datatypes = { git = "https://github.com/geo-engine/datatypes" } # TODO: Use version when available
+geoengine-datatypes = { path = "../datatypes" }
 float-cmp = "0.6"
 futures = "0.3"
 geo = "0.12"

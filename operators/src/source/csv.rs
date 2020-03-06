@@ -3,12 +3,11 @@ use crate::util::Result;
 use csv::{Position, Reader};
 use futures::future;
 use futures::stream::{self, BoxStream, StreamExt};
-use geoengine_datatypes::collections::PointCollection;
-use geoengine_datatypes::primitives::{Coordinate, TimeInterval};
+use geoengine_datatypes::collections::MultiPointCollection;
+use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval};
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, OptionExt, ResultExt};
 use std::fs::File;
-use std::i64;
 use std::path::PathBuf;
 
 /// Parameters for the CSV Source Operator
@@ -143,7 +142,7 @@ impl CsvSource {
     pub fn read_points(
         &mut self,
         items_per_chunk: usize,
-    ) -> BoxStream<Result<PointCollection, Error>> {
+    ) -> BoxStream<Result<MultiPointCollection, Error>> {
         let header = match self.setup_read() {
             Ok(header) => header,
             Err(error) => return stream::once(future::ready(Err(error))).boxed(),
@@ -185,7 +184,7 @@ impl CsvSource {
 
                     Ok(ParsedRow {
                         coordinate: (x, y).into(),
-                        time_interval: unlimited_time_interval(),
+                        time_interval: TimeInterval::default(),
                     })
                 };
                 result().ok()
@@ -196,10 +195,10 @@ impl CsvSource {
             .chunks(items_per_chunk)
             .map(move |chunk| {
                 if chunk.is_empty() {
-                    return Ok(PointCollection::empty());
+                    return Ok(MultiPointCollection::empty());
                 }
 
-                let mut builder = PointCollection::builder();
+                let mut builder = MultiPointCollection::builder();
                 for result in chunk {
                     builder.append_coordinate(result.coordinate)?;
                     builder.append_time_interval(result.time_interval)?;
@@ -253,13 +252,9 @@ struct ParsedHeader {
 }
 
 struct ParsedRow {
-    pub coordinate: Coordinate,
+    pub coordinate: Coordinate2D,
     pub time_interval: TimeInterval,
     // TODO: fields
-}
-
-fn unlimited_time_interval() -> TimeInterval {
-    TimeInterval::new_unchecked(i64::min_value(), i64::max_value())
 }
 
 #[cfg(test)]
