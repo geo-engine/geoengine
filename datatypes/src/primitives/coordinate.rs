@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::slice;
+use std::{fmt, slice};
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, PartialOrd, Serialize)]
 #[repr(C)]
@@ -24,6 +24,12 @@ impl Coordinate2D {
     ///
     pub fn new(x: f64, y: f64) -> Self {
         Self { x, y }
+    }
+}
+
+impl fmt::Display for Coordinate2D {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "(x: {}, y: {})", self.x, self.y)
     }
 }
 
