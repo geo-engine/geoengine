@@ -3,11 +3,11 @@ use std::collections::HashMap;
 use arrow::array::{
     Array, ArrayBuilder, ArrayData, ArrayRef, BooleanArray, Date64Array, Date64Builder,
     FixedSizeListArray, FixedSizeListBuilder, Float64Array, Float64Builder, Int64Array,
-    Int64Builder, ListArray, ListBuilder, StringArray, StringBuilder, StructArray, StructBuilder,
-    UInt8Array, UInt8Builder,
+    Int64Builder, ListArray, ListBuilder, PrimitiveArray, StringArray, StringBuilder, StructArray,
+    StructBuilder, UInt8Array, UInt8Builder,
 };
 use arrow::compute::kernels::filter::filter;
-use arrow::datatypes::{DataType, DateUnit, Field};
+use arrow::datatypes::{ArrowNumericType, DataType, DateUnit, Field};
 use snafu::ensure;
 
 use crate::collections::FeatureCollection;
@@ -258,6 +258,134 @@ impl MultiPointCollection {
                 .unwrap()
                 .clone(),
         ]
+    }
+
+    /// Helper function to create json values from the collection's multi points
+    fn coordinates_to_geo_json_geometries(&self) -> impl Iterator<Item = geojson::Geometry> + '_ {
+        let geometry_column: &ListArray = downcast_array(
+            &self
+                .data
+                .column_by_name(Self::FEATURE_COLUMN_NAME)
+                .expect("Column must exist, since it is in the metadata"),
+        );
+
+        (0..self.len()).map(move |i| {
+            let multi_point_array_ref = geometry_column.value(i);
+            let multi_point_array: &FixedSizeListArray = downcast_array(&multi_point_array_ref);
+            geojson::Geometry::new(match multi_point_array.len() {
+                1 => {
+                    // TODO: not quite sure why we have to put the offset here
+                    let floats_ref = multi_point_array.value(multi_point_array.offset());
+                    let floats: &Float64Array = downcast_array(&floats_ref);
+                    geojson::Value::Point(floats.value_slice(0, 2).to_vec())
+                }
+                n => {
+                    let mut points = Vec::with_capacity(n);
+                    for j in 0..n {
+                        // TODO: not quite sure why we have to put the offset here
+                        let floats_ref = multi_point_array.value(multi_point_array.offset() + j);
+                        let floats: &Float64Array = downcast_array(&floats_ref);
+                        points.push(floats.value_slice(0, 2).to_vec());
+                    }
+                    geojson::Value::MultiPoint(points)
+                }
+            })
+        })
+    }
+
+    /// Helper function to create json values from the collection's time intervals
+    fn time_intervals_to_geo_json_map(
+        &self,
+    ) -> impl Iterator<Item = serde_json::Map<String, serde_json::Value>> + '_ {
+        self.time_intervals().iter().map(|time_interval| {
+            let mut map = serde_json::Map::with_capacity(1);
+
+            let _start_date: DateTime<Utc> = Utc.timestamp_millis(time_interval.start());
+            let _end_date: DateTime<Utc> = Utc.timestamp_millis(time_interval.end());
+
+            // according to GeoJSON event extension (https://github.com/sgillies/geojson-events)
+            map.insert(
+                "when".to_string(),
+                serde_json::json!(
+                    {
+                        "start": _start_date.to_rfc3339(),
+                        "end": _end_date.to_rfc3339(),
+                        "type": "Interval"
+                    }
+                ),
+            );
+
+            map
+        })
+    }
+
+    /// Helper function to append all column values to a json map
+    fn append_feature_column_to_geo_json_map(
+        &self,
+        maps: &mut [serde_json::Map<String, serde_json::Value>],
+        column_name: &str,
+        column_type: FeatureDataType,
+    ) {
+        assert_eq!(self.len(), maps.len());
+
+        let column = self
+            .data
+            .column_by_name(column_name)
+            .expect("Column must exist since it is in the metadata");
+
+        match column_type {
+            FeatureDataType::Text => {
+                let text_column: &StringArray = downcast_array(&column);
+                for (i, map) in maps.iter_mut().enumerate() {
+                    map.insert(column_name.into(), text_column.value(i).into());
+                }
+            }
+            FeatureDataType::NullableText => {
+                let text_column: &StringArray = downcast_array(&column);
+                for (i, map) in maps.iter_mut().enumerate() {
+                    map.insert(
+                        column_name.into(),
+                        if text_column.is_null(i) {
+                            serde_json::Value::Null
+                        } else {
+                            text_column.value(i).into()
+                        },
+                    );
+                }
+            }
+            FeatureDataType::Number => insert_geo_json_values_in_maps(
+                downcast_array::<Float64Array>(&column),
+                maps,
+                column_name,
+            ),
+            FeatureDataType::NullableNumber => insert_nullable_geo_json_values_in_maps(
+                downcast_array::<Float64Array>(&column),
+                maps,
+                column_name,
+            ),
+            FeatureDataType::Decimal => insert_geo_json_values_in_maps(
+                downcast_array::<Int64Array>(&column),
+                maps,
+                column_name,
+            ),
+            FeatureDataType::NullableDecimal => insert_nullable_geo_json_values_in_maps(
+                downcast_array::<Int64Array>(&column),
+                maps,
+                column_name,
+            ),
+            FeatureDataType::Categorical => insert_geo_json_values_in_maps(
+                // TODO: use category names
+                downcast_array::<UInt8Array>(&column),
+                maps,
+                column_name,
+            ),
+            FeatureDataType::NullableCategorical => insert_nullable_geo_json_values_in_maps(
+                // TODO: use category names
+                downcast_array::<UInt8Array>(&column),
+                maps,
+                column_name,
+            ),
+        }
     }
 }
 
@@ -627,125 +755,38 @@ impl FeatureCollection for MultiPointCollection {
     /// ```
     ///
     fn to_geo_json(&self) -> String {
-        let mut feature_collection = geojson::FeatureCollection {
+        let mut property_maps = (0..self.len())
+            .map(|_| serde_json::Map::with_capacity(self.types.len()))
+            .collect::<Vec<_>>();
+
+        for (column_name, &column_type) in &self.types {
+            self.append_feature_column_to_geo_json_map(
+                &mut property_maps,
+                column_name,
+                column_type,
+            );
+        }
+
+        let features = self
+            .coordinates_to_geo_json_geometries()
+            .zip(self.time_intervals_to_geo_json_map())
+            .zip(property_maps)
+            .map(
+                |((geometry, foreign_members), properties)| geojson::Feature {
+                    bbox: None,
+                    geometry: Some(geometry),
+                    id: None,
+                    properties: Some(properties),
+                    foreign_members: Some(foreign_members),
+                },
+            )
+            .collect();
+
+        let feature_collection = geojson::FeatureCollection {
             bbox: None,
-            features: vec![],
+            features,
             foreign_members: None,
         };
-
-        let geometry_column: &ListArray =
-            downcast_array(&self.data.column_by_name(Self::FEATURE_COLUMN_NAME).unwrap()); // column must exist
-        let time_column: &FixedSizeListArray =
-            downcast_array(&self.data.column_by_name(Self::TIME_COLUMN_NAME).unwrap()); // column must exist
-
-        for i in 0..self.len() {
-            let multi_point_array_ref = geometry_column.value(i);
-            let multi_point_array: &FixedSizeListArray = downcast_array(&multi_point_array_ref);
-            let geometry = geojson::Geometry::new(match multi_point_array.len() {
-                1 => {
-                    // TODO: not quite sure why we have to put the offset here
-                    let floats_ref = multi_point_array.value(multi_point_array.offset());
-                    let floats: &Float64Array = downcast_array(&floats_ref);
-                    geojson::Value::Point(floats.value_slice(0, 2).to_vec())
-                }
-                n => {
-                    let mut points = Vec::with_capacity(n);
-                    for j in 0..n {
-                        // TODO: not quite sure why we have to put the offset here
-                        let floats_ref = multi_point_array.value(multi_point_array.offset() + j);
-                        let floats: &Float64Array = downcast_array(&floats_ref);
-                        points.push(floats.value_slice(0, 2).to_vec());
-                    }
-                    geojson::Value::MultiPoint(points)
-                }
-            });
-
-            let date_array_ref = time_column.value(i);
-            let date_array: &Date64Array = downcast_array(&date_array_ref);
-            let time_start = date_array.value(0);
-            let time_end = date_array.value(1);
-            let _start_date: DateTime<Utc> = Utc.timestamp_millis(time_start);
-            let _end_date: DateTime<Utc> = Utc.timestamp_millis(time_end);
-            let mut foreign_members = serde_json::Map::with_capacity(1);
-            foreign_members.insert(
-                "when".into(),
-                serde_json::json!(
-                    {
-                        "start": _start_date.to_rfc3339(),
-                        "end": _end_date.to_rfc3339(),
-                        "type": "Interval"
-                    }
-                ),
-            ); // according to GeoJSON event extension (https://github.com/sgillies/geojson-events)
-
-            let mut properties = serde_json::Map::with_capacity(self.types.len());
-            for (column_name, data_type) in &self.types {
-                let column = self.data.column_by_name(column_name).unwrap(); // column must exist
-                properties.insert(
-                    column_name.clone(),
-                    match data_type {
-                        FeatureDataType::Text => {
-                            let number_column: &StringArray = downcast_array(&column);
-                            number_column.value(i).into()
-                        }
-                        FeatureDataType::NullableText => {
-                            let number_column: &StringArray = downcast_array(&column);
-                            if number_column.is_null(i) {
-                                serde_json::Value::Null
-                            } else {
-                                number_column.value(i).into()
-                            }
-                        }
-                        FeatureDataType::Number => {
-                            let number_column: &Float64Array = downcast_array(&column);
-                            number_column.value(i).into()
-                        }
-                        FeatureDataType::NullableNumber => {
-                            let number_column: &Float64Array = downcast_array(&column);
-                            if number_column.is_null(i) {
-                                serde_json::Value::Null
-                            } else {
-                                number_column.value(i).into()
-                            }
-                        }
-                        FeatureDataType::Decimal => {
-                            let number_column: &Int64Array = downcast_array(&column);
-                            number_column.value(i).into()
-                        }
-                        FeatureDataType::NullableDecimal => {
-                            let number_column: &Int64Array = downcast_array(&column);
-                            if number_column.is_null(i) {
-                                serde_json::Value::Null
-                            } else {
-                                number_column.value(i).into()
-                            }
-                        }
-                        FeatureDataType::Categorical => {
-                            let number_column: &UInt8Array = downcast_array(&column);
-                            // TODO: use category names
-                            number_column.value(i).into()
-                        }
-                        FeatureDataType::NullableCategorical => {
-                            let number_column: &UInt8Array = downcast_array(&column);
-                            // TODO: use category names
-                            if number_column.is_null(i) {
-                                serde_json::Value::Null
-                            } else {
-                                number_column.value(i).into()
-                            }
-                        }
-                    },
-                );
-            }
-
-            feature_collection.features.push(geojson::Feature {
-                bbox: None,
-                geometry: Some(geometry),
-                id: None,
-                properties: Some(properties),
-                foreign_members: Some(foreign_members),
-            });
-        }
 
         feature_collection.to_string()
     }
@@ -1256,6 +1297,46 @@ fn struct_array_from_data(
             .len(number_of_features)
             .build(),
     )
+}
+
+/// Helper function for inserting a primitive arrow array into a serde json map
+fn insert_geo_json_values_in_maps<ArrayType>(
+    array: &PrimitiveArray<ArrayType>,
+    maps: &mut [serde_json::Map<String, serde_json::Value>],
+    column_name: &str,
+) where
+    ArrayType: ArrowNumericType,
+    ArrayType::Native: std::convert::Into<serde_json::Value>,
+{
+    for (&number, map) in array.value_slice(0, maps.len()).iter().zip(maps) {
+        map.insert(column_name.into(), number.into());
+    }
+}
+
+/// Helper function for inserting a nullable primitive arrow array into a serde json map
+fn insert_nullable_geo_json_values_in_maps<ArrayType>(
+    array: &PrimitiveArray<ArrayType>,
+    maps: &mut [serde_json::Map<String, serde_json::Value>],
+    column_name: &str,
+) where
+    ArrayType: ArrowNumericType,
+    ArrayType::Native: std::convert::Into<serde_json::Value>,
+{
+    for (i, (&number, map)) in array
+        .value_slice(0, maps.len())
+        .iter()
+        .zip(maps)
+        .enumerate()
+    {
+        map.insert(
+            column_name.into(),
+            if array.is_null(i) {
+                serde_json::Value::Null
+            } else {
+                number.into()
+            },
+        );
+    }
 }
 
 #[cfg(test)]
