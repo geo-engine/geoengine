@@ -40,6 +40,9 @@ pub trait FeatureCollection {
     fn remove_column(&self, column: &str) -> Result<Self>
     where
         Self: Sized;
+
+    /// Serialize the feature collection to a geo json string
+    fn to_geo_json(&self) -> String;
 }
 
 #[cfg(test)]
@@ -65,6 +68,9 @@ mod test {
             unimplemented!()
         }
         fn remove_column(&self, _column: &str) -> Result<Self> {
+            unimplemented!()
+        }
+        fn to_geo_json(&self) -> String {
             unimplemented!()
         }
     }

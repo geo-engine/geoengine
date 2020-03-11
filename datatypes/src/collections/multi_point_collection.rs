@@ -20,6 +20,7 @@ use crate::primitives::{
 };
 use crate::util::arrow::{downcast_array, downcast_mut_array};
 use crate::util::Result;
+use chrono::{DateTime, TimeZone, Utc};
 use std::mem;
 use std::slice;
 use std::sync::Arc;
@@ -585,6 +586,168 @@ impl FeatureCollection for MultiPointCollection {
             data: struct_array_from_data(columns, column_values, self.data.len()),
             types,
         })
+    }
+
+    /// # Examples
+    ///
+    /// ```rust
+    /// use geoengine_datatypes::collections::{MultiPointCollection, FeatureCollection};
+    /// use geoengine_datatypes::primitives::{FeatureDataType, FeatureDataValue, TimeInterval};
+    ///
+    /// let collection = {
+    ///     let mut builder = MultiPointCollection::builder();
+    ///     builder.add_column("foo", FeatureDataType::Number);
+    ///     builder.add_column("bar", FeatureDataType::NullableText);
+    ///
+    ///     builder.append_coordinate((0., 0.).into());
+    ///     builder.append_time_interval(TimeInterval::new_unchecked(0, 1));
+    ///     builder.append_data("foo", FeatureDataValue::Number(0.));
+    ///     builder.append_data("bar", FeatureDataValue::NullableText(Some("one".to_string())));
+    ///     builder.finish_row();
+    ///
+    ///     builder.append_multi_coordinate(vec![(1., 1.).into(), (2., 2.).into()]);
+    ///     builder.append_time_interval(TimeInterval::new_unchecked(1, 2));
+    ///     builder.append_data("foo", FeatureDataValue::Number(1.));
+    ///     builder.append_data("bar", FeatureDataValue::NullableText(None));
+    ///     builder.finish_row();
+    ///
+    ///     builder.append_coordinate((3., 3.).into());
+    ///     builder.append_time_interval(TimeInterval::new_unchecked(3, 4));
+    ///     builder.append_data("foo", FeatureDataValue::Number(2.));
+    ///     builder.append_data("bar", FeatureDataValue::NullableText(Some("three".to_string())));
+    ///     builder.finish_row();
+    ///
+    ///     builder.build().unwrap()
+    /// };
+    ///
+    /// assert_eq!(
+    ///     collection.to_geo_json(),
+    ///     r#"{"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Point","coordinates":[0.0,0.0]},"properties":{"bar":"one","foo":0.0},"when":{"start":"1970-01-01T00:00:00+00:00","end":"1970-01-01T00:00:00.001+00:00","type":"Interval"}},{"type":"Feature","geometry":{"type":"MultiPoint","coordinates":[[1.0,1.0],[2.0,2.0]]},"properties":{"bar":null,"foo":1.0},"when":{"start":"1970-01-01T00:00:00.001+00:00","end":"1970-01-01T00:00:00.002+00:00","type":"Interval"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[3.0,3.0]},"properties":{"bar":"three","foo":2.0},"when":{"start":"1970-01-01T00:00:00.003+00:00","end":"1970-01-01T00:00:00.004+00:00","type":"Interval"}}]}"#
+    /// );
+    /// ```
+    ///
+    fn to_geo_json(&self) -> String {
+        let mut feature_collection = geojson::FeatureCollection {
+            bbox: None,
+            features: vec![],
+            foreign_members: None,
+        };
+
+        let geometry_column: &ListArray =
+            downcast_array(&self.data.column_by_name(Self::FEATURE_COLUMN_NAME).unwrap()); // column must exist
+        let time_column: &FixedSizeListArray =
+            downcast_array(&self.data.column_by_name(Self::TIME_COLUMN_NAME).unwrap()); // column must exist
+
+        for i in 0..self.len() {
+            let multi_point_array_ref = geometry_column.value(i);
+            let multi_point_array: &FixedSizeListArray = downcast_array(&multi_point_array_ref);
+            let geometry = geojson::Geometry::new(match multi_point_array.len() {
+                1 => {
+                    // TODO: not quite sure why we have to put the offset here
+                    let floats_ref = multi_point_array.value(multi_point_array.offset());
+                    let floats: &Float64Array = downcast_array(&floats_ref);
+                    geojson::Value::Point(floats.value_slice(0, 2).to_vec())
+                }
+                n => {
+                    let mut points = Vec::with_capacity(n);
+                    for j in 0..n {
+                        // TODO: not quite sure why we have to put the offset here
+                        let floats_ref = multi_point_array.value(multi_point_array.offset() + j);
+                        let floats: &Float64Array = downcast_array(&floats_ref);
+                        points.push(floats.value_slice(0, 2).to_vec());
+                    }
+                    geojson::Value::MultiPoint(points)
+                }
+            });
+
+            let date_array_ref = time_column.value(i);
+            let date_array: &Date64Array = downcast_array(&date_array_ref);
+            let time_start = date_array.value(0);
+            let time_end = date_array.value(1);
+            let _start_date: DateTime<Utc> = Utc.timestamp_millis(time_start);
+            let _end_date: DateTime<Utc> = Utc.timestamp_millis(time_end);
+            let mut foreign_members = serde_json::Map::with_capacity(1);
+            foreign_members.insert(
+                "when".into(),
+                serde_json::json!(
+                    {
+                        "start": _start_date.to_rfc3339(),
+                        "end": _end_date.to_rfc3339(),
+                        "type": "Interval"
+                    }
+                ),
+            ); // according to GeoJSON event extension (https://github.com/sgillies/geojson-events)
+
+            let mut properties = serde_json::Map::with_capacity(self.types.len());
+            for (column_name, data_type) in &self.types {
+                let column = self.data.column_by_name(column_name).unwrap(); // column must exist
+                properties.insert(
+                    column_name.clone(),
+                    match data_type {
+                        FeatureDataType::Text => {
+                            let number_column: &StringArray = downcast_array(&column);
+                            number_column.value(i).into()
+                        }
+                        FeatureDataType::NullableText => {
+                            let number_column: &StringArray = downcast_array(&column);
+                            if number_column.is_null(i) {
+                                serde_json::Value::Null
+                            } else {
+                                number_column.value(i).into()
+                            }
+                        }
+                        FeatureDataType::Number => {
+                            let number_column: &Float64Array = downcast_array(&column);
+                            number_column.value(i).into()
+                        }
+                        FeatureDataType::NullableNumber => {
+                            let number_column: &Float64Array = downcast_array(&column);
+                            if number_column.is_null(i) {
+                                serde_json::Value::Null
+                            } else {
+                                number_column.value(i).into()
+                            }
+                        }
+                        FeatureDataType::Decimal => {
+                            let number_column: &Int64Array = downcast_array(&column);
+                            number_column.value(i).into()
+                        }
+                        FeatureDataType::NullableDecimal => {
+                            let number_column: &Int64Array = downcast_array(&column);
+                            if number_column.is_null(i) {
+                                serde_json::Value::Null
+                            } else {
+                                number_column.value(i).into()
+                            }
+                        }
+                        FeatureDataType::Categorical => {
+                            let number_column: &UInt8Array = downcast_array(&column);
+                            // TODO: use category names
+                            number_column.value(i).into()
+                        }
+                        FeatureDataType::NullableCategorical => {
+                            let number_column: &UInt8Array = downcast_array(&column);
+                            // TODO: use category names
+                            if number_column.is_null(i) {
+                                serde_json::Value::Null
+                            } else {
+                                number_column.value(i).into()
+                            }
+                        }
+                    },
+                );
+            }
+
+            feature_collection.features.push(geojson::Feature {
+                bbox: None,
+                geometry: Some(geometry),
+                id: None,
+                properties: Some(properties),
+                foreign_members: Some(foreign_members),
+            });
+        }
+
+        feature_collection.to_string()
     }
 }
 
