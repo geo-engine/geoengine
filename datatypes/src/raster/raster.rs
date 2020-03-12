@@ -52,7 +52,7 @@ where
         geo_transform: GeoTransform,
     ) -> Result<Self> {
         ensure!(
-            grid_dimension.capacity() != data_container.capacity(),
+            grid_dimension.capacity() == data_container.capacity(),
             error::DimnsionCapacityDoesNotMatchDataCapacity {
                 dimension_cap: grid_dimension.capacity(),
                 data_cap: data_container.capacity()
@@ -71,7 +71,7 @@ where
 
 impl<D, T, C> TemporalBounded for BaseRaster<D, T, C> {
     fn temporal_bounds(&self) -> TimeInterval {
-        self.temporal_bounds.clone()
+        self.temporal_bounds
     }
 }
 
@@ -85,7 +85,7 @@ where
             self.grid_dimension.size_of_y_axis(),
             self.grid_dimension.size_of_x_axis(),
         ));
-        BoundingBox2D::new_ul_lr_unchecked(top_left_coord, lower_right_coord)
+        BoundingBox2D::new_upper_left_lower_right_unchecked(top_left_coord, lower_right_coord)
     }
 }
 
@@ -223,8 +223,7 @@ mod tests {
             geo_transform.into(),
         )
         .unwrap();
-        let value = raster2d.pixel_value_at_grid_index(&tuple_index).unwrap();
-        assert!(value == 4);
+        assert_eq!(raster2d.pixel_value_at_grid_index(&tuple_index).unwrap(), 4);
     }
 
     #[test]

@@ -5,9 +5,11 @@ use snafu::ensure;
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 #[repr(C)]
+/// The bounding box of a geometry.
+/// Note: may degenerate to a point!
 pub struct BoundingBox2D {
-    pub lower_left_coordinate: Coordinate2D,
-    pub upper_right_coordinate: Coordinate2D,
+    lower_left_coordinate: Coordinate2D,
+    upper_right_coordinate: Coordinate2D,
 }
 
 impl BoundingBox2D {
@@ -73,10 +75,10 @@ impl BoundingBox2D {
     ///
     /// let ul = Coordinate2D::new(1.0, 2.0);
     /// let lr = Coordinate2D::new(2.0, 1.0);
-    /// let bbox = BoundingBox2D::new_ul_lr(ul, lr).unwrap();
+    /// let bbox = BoundingBox2D::new_upper_left_lower_right(ul, lr).unwrap();
     /// ```
     ///
-    pub fn new_ul_lr(
+    pub fn new_upper_left_lower_right(
         upper_left_coordinate: Coordinate2D,
         lower_right_coordinate: Coordinate2D,
     ) -> Result<Self> {
@@ -95,10 +97,10 @@ impl BoundingBox2D {
     ///
     /// let ul = Coordinate2D::new(1.0, 2.0);
     /// let lr = Coordinate2D::new(2.0, 1.0);
-    /// let bbox = BoundingBox2D::new_ul_lr_unchecked(ul, lr);
+    /// let bbox = BoundingBox2D::new_upper_left_lower_right_unchecked(ul, lr);
     /// ```
     ///
-    pub fn new_ul_lr_unchecked(
+    pub fn new_upper_left_lower_right_unchecked(
         upper_left_coordinate: Coordinate2D,
         lower_right_coordinate: Coordinate2D,
     ) -> Self {
@@ -303,7 +305,7 @@ mod tests {
     fn bounding_box_new_ul_lr() {
         let ul = Coordinate2D::new(1.0, 2.0);
         let lr = Coordinate2D::new(2.0, 1.0);
-        let bbox = BoundingBox2D::new_ul_lr(ul, lr).unwrap();
+        let bbox = BoundingBox2D::new_upper_left_lower_right(ul, lr).unwrap();
         assert_eq!(bbox.lower_left_coordinate.x, 1.0);
         assert_eq!(bbox.lower_left_coordinate.y, 1.0);
         assert_eq!(bbox.upper_right_coordinate.x, 2.0);
@@ -314,7 +316,7 @@ mod tests {
     fn bounding_box_new_ul_lr_unchecked() {
         let ul = Coordinate2D::new(1.0, 2.0);
         let lr = Coordinate2D::new(2.0, 1.0);
-        let bbox = BoundingBox2D::new_ul_lr_unchecked(ul, lr);
+        let bbox = BoundingBox2D::new_upper_left_lower_right_unchecked(ul, lr);
 
         assert_eq!(bbox.lower_left_coordinate.x, 1.0);
         assert_eq!(bbox.lower_left_coordinate.y, 1.0);
@@ -381,6 +383,32 @@ mod tests {
     }
 
     #[test]
+    fn bounding_box_contains_bbox_overlap() {
+        let ll = Coordinate2D::new(1.0, 1.0);
+        let ur = Coordinate2D::new(4.0, 4.0);
+        let bbox = BoundingBox2D::new(ll, ur).unwrap();
+
+        let ll_in = Coordinate2D::new(2.0, 2.0);
+        let ur_in = Coordinate2D::new(5.0, 5.0);
+        let bbox_in = BoundingBox2D::new(ll_in, ur_in).unwrap();
+
+        assert!(!bbox.contains_bbox(&bbox_in));
+    }
+
+    #[test]
+    fn bounding_box_contains_bbox_seperate() {
+        let ll = Coordinate2D::new(1.0, 1.0);
+        let ur = Coordinate2D::new(2.0, 2.0);
+        let bbox = BoundingBox2D::new(ll, ur).unwrap();
+
+        let ll_in = Coordinate2D::new(3.0, 3.0);
+        let ur_in = Coordinate2D::new(5.0, 5.0);
+        let bbox_in = BoundingBox2D::new(ll_in, ur_in).unwrap();
+
+        assert!(!bbox.contains_bbox(&bbox_in));
+    }
+
+    #[test]
     fn bounding_box_overlaps_bbox() {
         let ll = Coordinate2D::new(1.0, 1.0);
         let ur = Coordinate2D::new(4.0, 4.0);
@@ -390,11 +418,30 @@ mod tests {
         let ur_inside = Coordinate2D::new(3.0, 3.0);
         let bbox_inside = BoundingBox2D::new(ll_inside, ur_inside).unwrap();
         assert!(bbox.overlaps_bbox(&bbox_inside));
+    }
+
+    #[test]
+    fn bounding_box_overlaps_bbox_intersect() {
+        let ll = Coordinate2D::new(1.0, 1.0);
+        let ur = Coordinate2D::new(4.0, 4.0);
+        let bbox = BoundingBox2D::new(ll, ur).unwrap();
 
         let ll_intersect = Coordinate2D::new(2.0, 2.0);
         let ur_intersect = Coordinate2D::new(3.0, 3.0);
         let bbox_intersect = BoundingBox2D::new(ll_intersect, ur_intersect).unwrap();
         assert!(bbox.overlaps_bbox(&bbox_intersect));
+    }
+
+    #[test]
+    fn bounding_box_overlaps_bbox_seperate() {
+        let ll = Coordinate2D::new(1.0, 1.0);
+        let ur = Coordinate2D::new(2.0, 2.0);
+        let bbox = BoundingBox2D::new(ll, ur).unwrap();
+
+        let ll_seperate = Coordinate2D::new(3.0, 3.0);
+        let ur_seperate = Coordinate2D::new(4.0, 4.0);
+        let bbox_seperate = BoundingBox2D::new(ll_seperate, ur_seperate).unwrap();
+        assert!(!bbox.overlaps_bbox(&bbox_seperate));
     }
 
     #[test]
@@ -407,10 +454,29 @@ mod tests {
         let ur_intersect = Coordinate2D::new(5.0, 5.0);
         let bbox_intersect = BoundingBox2D::new(ll_intersect, ur_intersect).unwrap();
         assert!(bbox.intersects_bbox(&bbox_intersect));
+    }
+
+    #[test]
+    fn bounding_box_intersects_bbox_inside() {
+        let ll = Coordinate2D::new(1.0, 1.0);
+        let ur = Coordinate2D::new(4.0, 4.0);
+        let bbox = BoundingBox2D::new(ll, ur).unwrap();
 
         let ll_inside = Coordinate2D::new(2.0, 2.0);
         let ur_inside = Coordinate2D::new(3.0, 3.0);
         let bbox_inside = BoundingBox2D::new(ll_inside, ur_inside).unwrap();
         assert!(!bbox.intersects_bbox(&bbox_inside));
+    }
+
+    #[test]
+    fn bounding_box_intersects_bbox_separate() {
+        let ll = Coordinate2D::new(1.0, 1.0);
+        let ur = Coordinate2D::new(2.0, 2.0);
+        let bbox = BoundingBox2D::new(ll, ur).unwrap();
+
+        let ll_separate = Coordinate2D::new(3.0, 3.0);
+        let ur_separate = Coordinate2D::new(5.0, 5.0);
+        let bbox_separate = BoundingBox2D::new(ll_separate, ur_separate).unwrap();
+        assert!(!bbox.intersects_bbox(&bbox_separate));
     }
 }

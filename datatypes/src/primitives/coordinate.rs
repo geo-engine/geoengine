@@ -29,7 +29,7 @@ impl Coordinate2D {
 
 impl fmt::Display for Coordinate2D {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "(x: {}, y: {})", self.x, self.y)
+        write!(f, "({}, {})", self.x, self.y)
     }
 }
 

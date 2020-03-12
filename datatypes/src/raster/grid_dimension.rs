@@ -26,9 +26,7 @@ pub trait GridDimension:
     const NDIM: usize;
     fn number_of_dimensions(&self) -> usize;
     fn as_pattern(&self) -> Self::IndexPattern;
-    fn number_of_elements(&self) -> usize {
-        self.capacity()
-    }
+    fn number_of_elements(&self) -> usize;
     fn strides(&self) -> Self;
     fn slice(&self) -> &[Ix];
     fn stride_offset(index: &Self, strides: &Self) -> usize;
@@ -73,7 +71,7 @@ impl GridIndex<Dim<[Ix; 1]>> for Ix1 {
         Dim::<[Ix; 1]>::stride_offset(&Dim::from(*self), &dim.strides())
     }
     fn grid_index_to_1d_index(&self, dim: &Dim<[Ix; 1]>) -> Result<usize> {
-        Dim::<[Ix; 1]>::from(*self).grid_index_to_1d_index(dim.into())
+        Dim::<[Ix; 1]>::from(*self).grid_index_to_1d_index(dim)
     }
 }
 
@@ -82,7 +80,7 @@ impl GridIndex<Dim<[Ix; 2]>> for Ix2 {
         Dim::<[Ix; 2]>::stride_offset(&Dim::from(*self), &dim.strides())
     }
     fn grid_index_to_1d_index(&self, dim: &Dim<[Ix; 2]>) -> Result<usize> {
-        Dim::<[Ix; 2]>::from(*self).grid_index_to_1d_index(dim.into())
+        Dim::<[Ix; 2]>::from(*self).grid_index_to_1d_index(dim)
     }
 }
 
@@ -112,12 +110,10 @@ impl<I> Dim<I> {
     }
 }
 
-impl<I> Capacity for Dim<I>
-where
-    I: Capacity,
+impl <D> Capacity for D where D: GridDimension
 {
     fn capacity(&self) -> usize {
-        self.dimension_size.capacity()
+        self.number_of_elements()
     }
 }
 
@@ -209,7 +205,7 @@ impl GridDimension for Dim<[Ix; 2]> {
         (self.dimension_size()[1], self.dimension_size()[0])
     }
     fn strides(&self) -> Self {
-        Dim::new([self.dimension_size()[1] * 1, 1])
+        Dim::new([self.dimension_size()[1], 1])
     }
     fn slice(&self) -> &[Ix] {
         &self.dimension_size
