@@ -3,4 +3,5 @@ pub mod error;
 pub mod operations;
 pub mod plots;
 pub mod primitives;
+pub mod raster;
 pub mod util;
