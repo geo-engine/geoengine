@@ -1,4 +1,4 @@
-use crate::raster::{Capacity, Dim, GeoTransform, GridDimension, GridIndex};
+use crate::raster::{Raster, GridPixelAccess, GridPixelAccessMut, Capacity, Dim, GeoTransform, GridDimension, GridIndex};
 use crate::util::Result;
 use crate::{
     error,
@@ -6,13 +6,6 @@ use crate::{
 };
 use snafu::ensure;
 use std::convert::AsRef;
-
-pub trait Raster<D: GridDimension, T: Copy, C: Capacity>: SpatialBounded + TemporalBounded {
-    fn dimension(&self) -> &D;
-    fn no_data_value(&self) -> Option<T>;
-    fn data_container(&self) -> &C;
-    fn geo_transform(&self) -> &GeoTransform;
-}
 
 #[derive(Clone, Debug)]
 pub struct BaseRaster<D, T, C> {
@@ -33,9 +26,9 @@ where
     /// # Examples
     ///
     /// ```
-    /// use geoengine_datatypes::raster::{Raster, Dim, SimpleRaster2d, TimeInterval};
+    /// use geoengine_datatypes::raster::{Raster, Dim, Raster2D, TimeInterval};
     ///
-    /// let mut raster2d = SimpleRaster2d::new(
+    /// let mut raster2d = Raster2D::new(
     ///    [3, 2].into(),
     ///    vec![1,2,3,4,5,6],
     ///    None,
@@ -109,54 +102,6 @@ where
     }
 }
 
-pub trait GridPixelAccess<T, I> {
-    /// Gets the value at a pixels location
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use geoengine_datatypes::raster::{Raster, Dim, SimpleRaster2d, TimeInterval, GridPixelAccess};
-    ///
-    /// let mut raster2d = SimpleRaster2d::new(
-    ///    [3, 2].into(),
-    ///    vec![1,2,3,4,5,6],
-    ///    None,
-    ///    TimeInterval::default(),
-    ///    [1.0, 1.0, 0.0, 1.0, 0.0, 1.0].into(),
-    /// ).unwrap();
-    /// let value = raster2d.pixel_value_at_grid_index(&(1, 1)).unwrap();
-    /// assert_eq!(value, 4);
-    /// ```
-    ///
-    fn pixel_value_at_grid_index(&self, grid_index: &I) -> Result<T>;
-}
-
-pub trait GridPixelAccessMut<T, I> {
-    /// Sets the value at a pixels location
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use geoengine_datatypes::raster::{Raster, Dim, SimpleRaster2d, TimeInterval, GridPixelAccessMut};
-    ///
-    /// let mut raster2d = SimpleRaster2d::new(
-    ///    [3, 2].into(),
-    ///    vec![1,2,3,4,5,6],
-    ///    None,
-    ///    TimeInterval::default(),
-    ///    [1.0, 1.0, 0.0, 1.0, 0.0, 1.0].into(),
-    /// ).unwrap();
-    /// raster2d.set_pixel_value_at_grid_index(&(1, 1), 9).unwrap();
-    /// assert_eq!(raster2d.data_container(), &[1,2,3,9,5,6]);
-    /// ```
-    ///
-    fn set_pixel_value_at_grid_index(&mut self, grid_index: &I, value: T) -> Result<()>;
-}
-
-pub trait CoordinatePixelAccess<T> {
-    fn pixel_value_at_coord(&self, coordinate: (f64, f64)) -> T;
-}
-
 impl<D, T, C, I> GridPixelAccess<T, I> for BaseRaster<D, T, C>
 where
     D: GridDimension,
@@ -184,12 +129,12 @@ where
     }
 }
 
-pub type SimpleRaster2d<T> = BaseRaster<Dim<[usize; 2]>, T, Vec<T>>;
-pub type SimpleRaster3d<T> = BaseRaster<Dim<[usize; 3]>, T, Vec<T>>;
+pub type Raster2D<T> = BaseRaster<Dim<[usize; 2]>, T, Vec<T>>;
+pub type Raster3D<T> = BaseRaster<Dim<[usize; 3]>, T, Vec<T>>;
 
 #[cfg(test)]
 mod tests {
-    use super::{Dim, GridPixelAccess, GridPixelAccessMut, SimpleRaster2d, TimeInterval};
+    use super::{Dim, GridPixelAccess, GridPixelAccessMut, Raster2D, TimeInterval};
 
     #[test]
     fn simple_raster_2d() {
@@ -197,7 +142,7 @@ mod tests {
         let data = vec![1, 2, 3, 4, 5, 6];
         let geo_transform = [1.0, 1.0, 0.0, 1.0, 0.0, 1.0];
         let temporal_bounds: TimeInterval = TimeInterval::default();
-        SimpleRaster2d::new(
+        Raster2D::new(
             dim.into(),
             data,
             None,
@@ -215,7 +160,7 @@ mod tests {
         let data = vec![1, 2, 3, 4, 5, 6];
         let geo_transform = [1.0, 1.0, 0.0, 1.0, 0.0, 1.0];
         let temporal_bounds: TimeInterval = TimeInterval::default();
-        let raster2d = SimpleRaster2d::new(
+        let raster2d = Raster2D::new(
             dim.into(),
             data,
             None,
@@ -234,7 +179,7 @@ mod tests {
         let data = vec![1, 2, 3, 4, 5, 6];
         let geo_transform = [1.0, 1.0, 0.0, 1.0, 0.0, 1.0];
         let temporal_bounds: TimeInterval = TimeInterval::default();
-        let raster2d = SimpleRaster2d::new(
+        let raster2d = Raster2D::new(
             dim.into(),
             data,
             None,
@@ -254,7 +199,7 @@ mod tests {
         let data = vec![1, 2, 3, 4, 5, 6];
         let geo_transform = [1.0, 1.0, 0.0, 1.0, 0.0, 1.0];
         let temporal_bounds: TimeInterval = TimeInterval::default();
-        let mut raster2d = SimpleRaster2d::new(
+        let mut raster2d = Raster2D::new(
             dim.into(),
             data,
             None,

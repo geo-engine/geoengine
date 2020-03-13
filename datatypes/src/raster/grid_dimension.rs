@@ -89,7 +89,7 @@ impl GridIndex<Dim<[Ix; 3]>> for Ix3 {
         Dim::<[Ix; 3]>::stride_offset(&Dim::from(*self), &dim.strides())
     }
     fn grid_index_to_1d_index(&self, dim: &Dim<[Ix; 3]>) -> Result<usize> {
-        Dim::<[Ix; 3]>::from(*self).grid_index_to_1d_index(dim.into())
+        Dim::<[Ix; 3]>::from(*self).grid_index_to_1d_index(dim)
     }
 }
 
