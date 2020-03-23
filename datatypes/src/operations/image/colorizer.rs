@@ -162,6 +162,30 @@ impl Colorizer {
         }
     }
 
+    /// Returns the no data color of this colorizer
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
+    ///
+    /// let colorizer = Colorizer::linear_gradient(
+    ///     vec![(1.0.into(), RgbaColor::black()), (10.0.into(), RgbaColor::white())],
+    ///     RgbaColor::transparent(),
+    ///     RgbaColor::pink(),
+    /// ).unwrap();
+    ///
+    /// assert_eq!(colorizer.no_data_color(), RgbaColor::transparent());
+    /// ```
+    pub fn no_data_color(&self) -> RgbaColor {
+        match self {
+            Colorizer::LinearGradient { no_data_color, .. }
+            | Colorizer::LogarithmicGradient { no_data_color, .. }
+            | Colorizer::Palette { no_data_color, .. } => *no_data_color,
+            Colorizer::Rgba => RgbaColor::transparent(),
+        }
+    }
+
     /// Creates a function for mapping raster values to colors
     ///
     /// # Examples
@@ -308,7 +332,10 @@ pub enum ColorMapper<'c> {
 // TODO: use Fn-trait once it is stable
 impl<'c> ColorMapper<'c> {
     /// Map a raster value to a color from the colorizer
-    pub fn call(&self, value: f64) -> RgbaColor {
+    pub fn call<T>(&self, value: T) -> RgbaColor
+    where
+        T: Into<f64> + RgbaTransmutable,
+    {
         match self {
             ColorMapper::ColorTable {
                 color_table,
@@ -317,6 +344,7 @@ impl<'c> ColorMapper<'c> {
                 no_data_color,
                 default_color,
             } => {
+                let value = value.into();
                 if f64::is_nan(value) {
                     *no_data_color
                 } else if value < *min_value || value > *max_value {
@@ -333,6 +361,7 @@ impl<'c> ColorMapper<'c> {
                 color_map,
                 no_data_color,
             } => {
+                let value = value.into();
                 if value.is_nan() {
                     *no_data_color
                 } else {

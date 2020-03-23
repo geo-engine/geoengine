@@ -1,7 +1,6 @@
 use crate::operations::image::{Colorizer, RgbaTransmutable};
 use crate::raster::{GridPixelAccess, Raster, Raster2D};
 use image::{DynamicImage, ImageFormat, RgbaImage};
-use std::mem;
 
 pub trait ToPng {
     /// Outputs png bytes of an image of size width x height
@@ -25,18 +24,14 @@ where
             let cell_x = (((f64::from(x) + 0.5) * scale_x) - 0.5).round() as u32;
             let cell_y = (((f64::from(y) + 0.5) * scale_y) - 0.5).round() as u32;
 
-            let pixel_value: f64 = self
-                .pixel_value_at_grid_index(&(cell_x as usize, cell_y as usize))
-                .map(|v| {
-                    if mem::discriminant(&Colorizer::Rgba) == mem::discriminant(colorizer) {
-                        v.transmute_to_f64()
-                    } else {
-                        v.into()
-                    }
-                })
-                .unwrap_or(f64::NAN);
-
-            color_mapper.call(pixel_value).into()
+            if let Ok(pixel_value) =
+                self.pixel_value_at_grid_index(&(cell_x as usize, cell_y as usize))
+            {
+                color_mapper.call(pixel_value)
+            } else {
+                colorizer.no_data_color()
+            }
+            .into()
         });
 
         let mut buffer = Vec::new();
