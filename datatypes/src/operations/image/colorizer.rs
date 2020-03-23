@@ -1,11 +1,13 @@
 use crate::error;
+use crate::operations::image::RgbaTransmutable;
 use crate::util::Result;
 use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::collections::HashMap;
-use std::ops::{Add, Mul};
 
+/// A colorizer specifies a mapping between raster values and an output image
+/// There are different variants that perform different kinds of mapping.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum Colorizer {
     LinearGradient {
@@ -26,6 +28,7 @@ pub enum Colorizer {
 }
 
 impl Colorizer {
+    /// A linear gradient linearly interpolates values within breakpoints of a color table
     pub fn linear_gradient(
         breakpoints: Breakpoints,
         no_data_color: RgbaColor,
@@ -54,6 +57,8 @@ impl Colorizer {
         Ok(colorizer)
     }
 
+    /// A logarithmic gradient logarithmically interpolates values within breakpoints of a color table
+    /// and allows only positive values
     pub fn logarithmic_gradient(
         breakpoints: Breakpoints,
         no_data_color: RgbaColor,
@@ -88,11 +93,13 @@ impl Colorizer {
         Ok(colorizer)
     }
 
+    /// A palette maps values as classes to a certain color.
+    /// Unmapped values results in the NO DATA color
     pub fn palette(colors: Palette, no_data_color: RgbaColor) -> Result<Self> {
         ensure!(
-            colors.len() > 0,
+            !colors.is_empty() && colors.len() <= 256,
             error::Colorizer {
-                details: "A palette colorizer must have a least one color"
+                details: "A palette colorizer must have a least one color and at most 256 colors"
             }
         );
 
@@ -102,10 +109,26 @@ impl Colorizer {
         })
     }
 
+    /// Rgba colorization means treating the values as red, green, blue and alpha bytes
     pub fn rgba() -> Self {
         Self::Rgba
     }
 
+    /// Returns the minimum value that is covered by this colorizer
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
+    ///
+    /// let colorizer = Colorizer::linear_gradient(
+    ///     vec![(0.0.into(), RgbaColor::transparent()), (1.0.into(), RgbaColor::transparent())],
+    ///     RgbaColor::transparent(),
+    ///     RgbaColor::transparent(),
+    /// ).unwrap();
+    ///
+    /// assert_eq!(colorizer.min_value(), 0.);
+    /// ```
     pub fn min_value(&self) -> f64 {
         match self {
             Self::LinearGradient { breakpoints, .. }
@@ -114,6 +137,21 @@ impl Colorizer {
         }
     }
 
+    /// Returns the maxium value that is covered by this colorizer
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
+    ///
+    /// let colorizer = Colorizer::logarithmic_gradient(
+    ///     vec![(1.0.into(), RgbaColor::transparent()), (10.0.into(), RgbaColor::transparent())],
+    ///     RgbaColor::transparent(),
+    ///     RgbaColor::transparent(),
+    /// ).unwrap();
+    ///
+    /// assert_eq!(colorizer.max_value(), 10.);
+    /// ```
     pub fn max_value(&self) -> f64 {
         match self {
             Self::LinearGradient { breakpoints, .. }
@@ -124,6 +162,31 @@ impl Colorizer {
         }
     }
 
+    /// Creates a function for mapping raster values to colors
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
+    ///
+    /// let linear_colorizer = Colorizer::linear_gradient(
+    ///     vec![(0.0.into(), RgbaColor::black()), (1.0.into(), RgbaColor::white())],
+    ///     RgbaColor::transparent(),
+    ///     RgbaColor::transparent(),
+    /// ).unwrap();
+    /// let linear_color_mapper = linear_colorizer.create_color_mapper();
+    ///
+    /// assert_eq!(linear_color_mapper.call(0.5), RgbaColor::new(128, 128, 128, 255));
+    ///
+    /// let logarithmic_colorizer = Colorizer::logarithmic_gradient(
+    ///     vec![(1.0.into(), RgbaColor::black()), (10.0.into(), RgbaColor::white())],
+    ///     RgbaColor::transparent(),
+    ///     RgbaColor::transparent(),
+    /// ).unwrap();
+    /// let logarithmic_color_mapper = logarithmic_colorizer.create_color_mapper();
+    ///
+    /// assert_eq!(logarithmic_color_mapper.call(5.5), RgbaColor::new(189, 189, 189, 255));
+    /// ```
     pub fn create_color_mapper(&self) -> ColorMapper {
         const COLOR_TABLE_SIZE: usize = 254; // use 256 colors with no data and default colors
 
@@ -162,6 +225,7 @@ impl Colorizer {
     }
 
     /// Creates a color table of `number_of_colors` colors
+    /// This must only be called for colorizers that use breakpoints
     fn color_table(&self, number_of_colors: usize, min: f64, max: f64) -> Vec<RgbaColor> {
         let breakpoints = match self {
             Self::LinearGradient { breakpoints, .. }
@@ -214,7 +278,7 @@ impl Colorizer {
                         _ => unreachable!(), // cf. first match in function
                     };
 
-                    prev_color * (1. - fraction) + next_color * fraction
+                    prev_color.factor_add(next_color, fraction)
                 }
             })
             .collect();
@@ -225,6 +289,7 @@ impl Colorizer {
     }
 }
 
+/// A ColorMapper is a function for mapping raster values to colors
 pub enum ColorMapper<'c> {
     ColorTable {
         color_table: Vec<RgbaColor>,
@@ -240,9 +305,9 @@ pub enum ColorMapper<'c> {
     Rgba,
 }
 
+// TODO: use Fn-trait once it is stable
 impl<'c> ColorMapper<'c> {
     /// Map a raster value to a color from the colorizer
-    /// TODO: use Fn-trait once it is stable
     pub fn call(&self, value: f64) -> RgbaColor {
         match self {
             ColorMapper::ColorTable {
@@ -275,21 +340,39 @@ impl<'c> ColorMapper<'c> {
                     *color_map.get(&value).unwrap_or(no_data_color)
                 }
             }
-            ColorMapper::Rgba => {
-                let bytes: [u8; 4] = (value.to_bits() as u32).to_le_bytes(); // TODO: to util function (?)
-                RgbaColor([bytes[0], bytes[1], bytes[2], bytes[3]])
-            }
+            ColorMapper::Rgba => value.transmute_to_rgba(),
         }
     }
 }
 
+/// A breakpoint is a list of (value, color) tuples.
+///
+/// It is assumed to be ordered ascending and has at least two entries,
+/// although we only check the first and last value for performance reasons.
 pub type Breakpoints = Vec<(NotNan<f64>, RgbaColor)>;
+
+/// A map from value to color
+///
+/// It is assumed that is has at least one and at most 256 entries.
 pub type Palette = HashMap<NotNan<f64>, RgbaColor>;
 
-#[derive(Copy, Clone, Debug, Deserialize, Serialize)]
+/// RgbaColor defines a 32 bit RGB color with alpha value
+#[derive(Copy, Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct RgbaColor([u8; 4]);
 
 impl RgbaColor {
+    /// Creates a new color from red, green, blue and alpha values
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use geoengine_datatypes::operations::image::RgbaColor;
+    ///
+    /// assert_eq!(RgbaColor::new(0, 0, 0, 255), RgbaColor::black());
+    /// assert_eq!(RgbaColor::new(255, 255, 255, 255), RgbaColor::white());
+    /// assert_eq!(RgbaColor::new(0, 0, 0, 0), RgbaColor::transparent());
+    /// assert_eq!(RgbaColor::new(255, 0, 255, 255), RgbaColor::pink());
+    /// ```
     pub fn new(red: u8, green: u8, blue: u8, alpha: u8) -> Self {
         RgbaColor([red, green, blue, alpha])
     }
@@ -298,43 +381,123 @@ impl RgbaColor {
         RgbaColor::new(0, 0, 0, 0)
     }
 
+    pub fn black() -> Self {
+        RgbaColor::new(0, 0, 0, 255)
+    }
+
+    pub fn white() -> Self {
+        RgbaColor::new(255, 255, 255, 255)
+    }
+
     pub fn pink() -> Self {
         RgbaColor::new(255, 0, 255, 255)
     }
-}
 
-impl Mul<f64> for RgbaColor {
-    type Output = RgbaColor;
+    /// Adds another color with a factor in [0, 1] to this color.
+    /// The current color remains in (1 - factor)
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use geoengine_datatypes::operations::image::RgbaColor;
+    ///
+    /// assert_eq!(RgbaColor::black().factor_add(RgbaColor::white(), 0.5), RgbaColor::new(128, 128, 128, 255));
+    /// ```
+    #[allow(unstable_name_collisions)]
+    pub fn factor_add(self, other: Self, factor: f64) -> Self {
+        debug_assert!(factor >= 0. && factor <= 1.0);
 
-    fn mul(self, rhs: f64) -> Self::Output {
-        let array = self.0;
+        let [r, g, b, a] = self.0;
+        let [r2, g2, b2, a2] = other.0;
+
         RgbaColor([
-            (f64::from(array[0]) * rhs) as u8,
-            (f64::from(array[1]) * rhs) as u8,
-            (f64::from(array[2]) * rhs) as u8,
-            (f64::from(array[3]) * rhs) as u8,
+            f64::round((1. - factor) * f64::from(r) + factor * f64::from(r2)).clamp(0., 255.) as u8,
+            f64::round((1. - factor) * f64::from(g) + factor * f64::from(g2)).clamp(0., 255.) as u8,
+            f64::round((1. - factor) * f64::from(b) + factor * f64::from(b2)).clamp(0., 255.) as u8,
+            f64::round((1. - factor) * f64::from(a) + factor * f64::from(a2)).clamp(0., 255.) as u8,
         ])
     }
 }
 
-impl Add for RgbaColor {
-    type Output = RgbaColor;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        let array_a = self.0;
-        let array_b = rhs.0;
-        RgbaColor([
-            array_a[0] + array_b[0],
-            array_a[1] + array_b[1],
-            array_a[2] + array_b[2],
-            array_a[3] + array_b[3],
-        ])
+// TODO: use float's clamp function once it is stable
+trait Clamp: Sized + PartialOrd {
+    /// Restrict a value to a certain interval unless it is NaN.
+    /// taken from std-lib nightly
+    fn clamp(self, min: Self, max: Self) -> Self {
+        assert!(min <= max);
+        let mut x = self;
+        if x < min {
+            x = min;
+        }
+        if x > max {
+            x = max;
+        }
+        x
     }
 }
+
+impl Clamp for f64 {}
 
 impl Into<image::Rgba<u8>> for RgbaColor {
+    /// Transform an RgbaColor to its counterpart from the image crate
     fn into(self) -> image::Rgba<u8> {
         let array = self.0;
         image::Rgba([array[0], array[1], array[2], array[3]])
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn logarithmic_color_table() {
+        let colorizer = Colorizer::logarithmic_gradient(
+            vec![
+                (1.0.into(), RgbaColor::black()),
+                (10.0.into(), RgbaColor::white()),
+            ],
+            RgbaColor::transparent(),
+            RgbaColor::transparent(),
+        )
+        .unwrap();
+
+        let color_table = colorizer.color_table(3, 1., 10.);
+
+        assert_eq!(color_table.len(), 3);
+
+        assert_eq!(color_table[0], RgbaColor::black());
+        assert_eq!(color_table[1], RgbaColor::new(189, 189, 189, 255)); // at 5.5
+        assert_eq!(color_table[2], RgbaColor::white());
+    }
+
+    #[test]
+    fn logarithmic_color_table_2() {
+        let colorizer = Colorizer::logarithmic_gradient(
+            vec![
+                (1.0.into(), RgbaColor::black()),
+                (51.0.into(), RgbaColor::new(100, 100, 100, 255)),
+                (101.0.into(), RgbaColor::white()),
+            ],
+            RgbaColor::transparent(),
+            RgbaColor::transparent(),
+        )
+        .unwrap();
+
+        let color_table = colorizer.color_table(5, 1., 101.);
+
+        assert_eq!(color_table.len(), 5);
+
+        assert_eq!(color_table[0], RgbaColor::black());
+
+        let v1 = f64::round(0.8286472601695658 * 100.) as u8;
+        assert_eq!(color_table[1], RgbaColor::new(v1, v1, v1, 255)); // at 26
+
+        assert_eq!(color_table[2], RgbaColor::new(100, 100, 100, 255));
+
+        let v2 = f64::round(0.5838002256925127 * 255. + (1. - 0.5838002256925127) * 100.) as u8;
+        assert_eq!(color_table[3], RgbaColor::new(v2, v2, v2, 255)); // at 76
+
+        assert_eq!(color_table[4], RgbaColor::white());
     }
 }

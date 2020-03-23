@@ -1,4 +1,4 @@
-use crate::operations::image::Colorizer;
+use crate::operations::image::{Colorizer, RgbaTransmutable};
 use crate::raster::{GridPixelAccess, Raster, Raster2D};
 use image::{DynamicImage, ImageFormat, RgbaImage};
 use std::mem;
@@ -10,7 +10,7 @@ pub trait ToPng {
 
 impl<T> ToPng for Raster2D<T>
 where
-    T: Into<f64> + Copy + F64Transmutable,
+    T: Into<f64> + Copy + RgbaTransmutable,
 {
     fn to_png(&self, width: u32, height: u32, colorizer: &Colorizer) -> Vec<u8> {
         // TODO: use PNG color palette once it is available
@@ -47,71 +47,11 @@ where
     }
 }
 
-pub trait F64Transmutable {
-    fn transmute_to_f64(self) -> f64;
-}
-
-impl F64Transmutable for u32 {
-    fn transmute_to_f64(self) -> f64 {
-        let [r, g, b, a] = self.to_le_bytes();
-        f64::from_le_bytes([r, g, b, a, 0, 0, 0, 0])
-    }
-}
-
-impl F64Transmutable for i32 {
-    fn transmute_to_f64(self) -> f64 {
-        let [r, g, b, a] = self.to_le_bytes();
-        f64::from_le_bytes([r, g, b, a, 0, 0, 0, 0])
-    }
-}
-
-impl F64Transmutable for f32 {
-    fn transmute_to_f64(self) -> f64 {
-        let [r, g, b, a] = self.to_le_bytes();
-        f64::from_le_bytes([r, g, b, a, 0, 0, 0, 0])
-    }
-}
-
-impl F64Transmutable for u64 {
-    fn transmute_to_f64(self) -> f64 {
-        f64::from_le_bytes(self.to_le_bytes())
-    }
-}
-
-impl F64Transmutable for i64 {
-    fn transmute_to_f64(self) -> f64 {
-        f64::from_le_bytes(self.to_le_bytes())
-    }
-}
-
-impl F64Transmutable for u16 {
-    fn transmute_to_f64(self) -> f64 {
-        let [gray, alpha] = self.to_le_bytes();
-        f64::from_le_bytes([gray, gray, gray, alpha, 0, 0, 0, 0])
-    }
-}
-
-impl F64Transmutable for i16 {
-    fn transmute_to_f64(self) -> f64 {
-        let [gray, alpha] = self.to_le_bytes();
-        f64::from_le_bytes([gray, gray, gray, alpha, 0, 0, 0, 0])
-    }
-}
-
-impl F64Transmutable for i8 {
-    fn transmute_to_f64(self) -> f64 {
-        let [gray] = self.to_le_bytes();
-        f64::from_le_bytes([gray, gray, gray, 255, 0, 0, 0, 0])
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::operations::image::RgbaColor;
     use crate::raster::GridPixelAccessMut;
-    use std::fs::File;
-    use std::io::Write;
 
     #[test]
     fn linear_gradient() {
@@ -137,10 +77,12 @@ mod tests {
         )
         .unwrap();
 
-        File::create("linear_gradient.png")
-            .unwrap()
-            .write_all(&raster.to_png(100, 100, &colorizer))
-            .unwrap();
+        let image_bytes = raster.to_png(100, 100, &colorizer);
+
+        assert_eq!(
+            include_bytes!("../../../test-data/colorizer/linear_gradient.png") as &[u8],
+            image_bytes.as_slice()
+        );
     }
 
     #[test]
@@ -167,10 +109,12 @@ mod tests {
         )
         .unwrap();
 
-        File::create("logarithmic_gradient.png")
-            .unwrap()
-            .write_all(&raster.to_png(100, 100, &colorizer))
-            .unwrap();
+        let image_bytes = raster.to_png(100, 100, &colorizer);
+
+        assert_eq!(
+            include_bytes!("../../../test-data/colorizer/logarithmic_gradient.png") as &[u8],
+            image_bytes.as_slice()
+        );
     }
 
     #[test]
@@ -200,17 +144,19 @@ mod tests {
         )
         .unwrap();
 
-        File::create("palette.png")
-            .unwrap()
-            .write_all(&raster.to_png(100, 100, &colorizer))
-            .unwrap();
+        let image_bytes = raster.to_png(100, 100, &colorizer);
+
+        assert_eq!(
+            include_bytes!("../../../test-data/colorizer/palette.png") as &[u8],
+            image_bytes.as_slice()
+        );
     }
 
     #[test]
     fn rgba() {
         let mut raster = Raster2D::new(
             [2, 2].into(),
-            vec![u32::from_le_bytes([0, 0, 0, 255]); 4],
+            vec![0x000000FF_u32; 4],
             None,
             Default::default(),
             Default::default(),
@@ -218,17 +164,19 @@ mod tests {
         .unwrap();
 
         raster
-            .set_pixel_value_at_grid_index(&(0, 0), u32::from_le_bytes([255, 0, 0, 255]))
+            .set_pixel_value_at_grid_index(&(0, 0), 0xFF0000FF_u32)
             .unwrap();
         raster
-            .set_pixel_value_at_grid_index(&(0, 1), u32::from_le_bytes([0, 255, 0, 255]))
+            .set_pixel_value_at_grid_index(&(0, 1), 0x00FF00FF_u32)
             .unwrap();
 
         let colorizer = Colorizer::rgba();
 
-        File::create("rgba.png")
-            .unwrap()
-            .write_all(&raster.to_png(100, 100, &colorizer))
-            .unwrap();
+        let image_bytes = raster.to_png(100, 100, &colorizer);
+
+        assert_eq!(
+            include_bytes!("../../../test-data/colorizer/rgba.png") as &[u8],
+            image_bytes.as_slice()
+        );
     }
 }
