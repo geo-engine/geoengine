@@ -53,6 +53,25 @@ pub enum FeatureDataRef<'f> {
     NullableCategorical(NullableCategoricalDataRef<'f>),
 }
 
+impl<'f> FeatureDataRef<'f> {
+    pub fn json_values(&self) -> Box<dyn Iterator<Item = serde_json::Value> + '_> {
+        match self {
+            FeatureDataRef::Text(data_ref) => data_ref.json_values(),
+            FeatureDataRef::NullableText(data_ref) => data_ref.json_values(),
+            FeatureDataRef::Number(data_ref) => data_ref.json_values(),
+            FeatureDataRef::NullableNumber(data_ref) => data_ref.json_values(),
+            FeatureDataRef::Decimal(data_ref) => data_ref.json_values(),
+            FeatureDataRef::NullableDecimal(data_ref) => data_ref.json_values(),
+            FeatureDataRef::Categorical(data_ref) => data_ref.json_values(),
+            FeatureDataRef::NullableCategorical(data_ref) => data_ref.json_values(),
+        }
+    }
+}
+
+pub trait DataRef {
+    fn json_values(&self) -> Box<dyn Iterator<Item = serde_json::Value> + '_>;
+}
+
 pub trait NullableDataRef {
     fn nulls(&self) -> Vec<bool>; // TODO: return bitmap directly or IndexedSlice trait?...
 }
@@ -60,6 +79,12 @@ pub trait NullableDataRef {
 #[derive(Clone, Debug)]
 pub struct NumberDataRef {
     buffer: arrow::buffer::Buffer,
+}
+
+impl DataRef for NumberDataRef {
+    fn json_values(&self) -> Box<dyn Iterator<Item = serde_json::Value> + '_> {
+        Box::new(self.as_ref().iter().map(|&v| v.into()))
+    }
 }
 
 impl AsRef<[f64]> for NumberDataRef {
@@ -89,6 +114,22 @@ pub struct NullableNumberDataRef<'f> {
 impl AsRef<[f64]> for NullableNumberDataRef<'_> {
     fn as_ref(&self) -> &[f64] {
         self.buffer.typed_data()
+    }
+}
+
+impl DataRef for NullableNumberDataRef<'_> {
+    fn json_values(&self) -> Box<dyn Iterator<Item = serde_json::Value> + '_> {
+        if let Some(nulls) = self.null_bitmap {
+            Box::new(self.as_ref().iter().enumerate().map(move |(i, &v)| {
+                if nulls.is_set(i) {
+                    serde_json::Value::Null
+                } else {
+                    v.into()
+                }
+            }))
+        } else {
+            Box::new(self.as_ref().iter().map(|&v| v.into()))
+        }
     }
 }
 
@@ -127,6 +168,12 @@ impl AsRef<[i64]> for DecimalDataRef {
     }
 }
 
+impl DataRef for DecimalDataRef {
+    fn json_values(&self) -> Box<dyn Iterator<Item = serde_json::Value> + '_> {
+        Box::new(self.as_ref().iter().map(|&v| v.into()))
+    }
+}
+
 impl From<DecimalDataRef> for FeatureDataRef<'_> {
     fn from(data_ref: DecimalDataRef) -> Self {
         Self::Decimal(data_ref)
@@ -148,6 +195,22 @@ pub struct NullableDecimalDataRef<'f> {
 impl AsRef<[i64]> for NullableDecimalDataRef<'_> {
     fn as_ref(&self) -> &[i64] {
         self.buffer.typed_data()
+    }
+}
+
+impl DataRef for NullableDecimalDataRef<'_> {
+    fn json_values(&self) -> Box<dyn Iterator<Item = serde_json::Value> + '_> {
+        if let Some(nulls) = self.null_bitmap {
+            Box::new(self.as_ref().iter().enumerate().map(move |(i, &v)| {
+                if nulls.is_set(i) {
+                    serde_json::Value::Null
+                } else {
+                    v.into()
+                }
+            }))
+        } else {
+            Box::new(self.as_ref().iter().map(|&v| v.into()))
+        }
     }
 }
 
@@ -194,6 +257,13 @@ impl AsRef<[u8]> for CategoricalDataRef {
     }
 }
 
+impl DataRef for CategoricalDataRef {
+    fn json_values(&self) -> Box<dyn Iterator<Item = serde_json::Value> + '_> {
+        // TODO: use category labels
+        Box::new(self.as_ref().iter().map(|&v| v.into()))
+    }
+}
+
 impl From<CategoricalDataRef> for FeatureDataRef<'_> {
     fn from(data_ref: CategoricalDataRef) -> Self {
         Self::Categorical(data_ref)
@@ -215,6 +285,23 @@ pub struct NullableCategoricalDataRef<'f> {
 impl AsRef<[u8]> for NullableCategoricalDataRef<'_> {
     fn as_ref(&self) -> &[u8] {
         self.buffer.typed_data()
+    }
+}
+
+impl DataRef for NullableCategoricalDataRef<'_> {
+    fn json_values(&self) -> Box<dyn Iterator<Item = serde_json::Value> + '_> {
+        if let Some(nulls) = self.null_bitmap {
+            Box::new(self.as_ref().iter().enumerate().map(move |(i, &v)| {
+                if nulls.is_set(i) {
+                    serde_json::Value::Null
+                } else {
+                    // TODO: use category name
+                    v.into()
+                }
+            }))
+        } else {
+            Box::new(self.as_ref().iter().map(|&v| v.into()))
+        }
     }
 }
 
@@ -280,6 +367,27 @@ pub struct TextDataRef {
 impl AsRef<[u8]> for TextDataRef {
     fn as_ref(&self) -> &[u8] {
         self.data_buffer.data()
+    }
+}
+
+impl DataRef for TextDataRef {
+    fn json_values(&self) -> Box<dyn Iterator<Item = serde_json::Value> + '_> {
+        let offsets = self.offsets();
+        let number_of_values = offsets.len() - 1;
+
+        Box::new((0..number_of_values).map(move |pos| {
+            let start = offsets[pos];
+            let end = offsets[pos + 1];
+
+            let text = unsafe {
+                byte_ptr_to_str(
+                    self.data_buffer.slice(start as usize).raw_data(),
+                    (end - start) as usize,
+                )
+            };
+
+            text.into()
+        }))
     }
 }
 
@@ -366,6 +474,31 @@ pub struct NullableTextDataRef {
 impl AsRef<[u8]> for NullableTextDataRef {
     fn as_ref(&self) -> &[u8] {
         self.data_buffer.data()
+    }
+}
+
+impl DataRef for NullableTextDataRef {
+    fn json_values(&self) -> Box<dyn Iterator<Item = serde_json::Value> + '_> {
+        let offsets = self.offsets();
+        let number_of_values = offsets.len() - 1;
+
+        Box::new((0..number_of_values).map(move |pos| {
+            let start = offsets[pos];
+            let end = offsets[pos + 1];
+
+            if start == end {
+                return serde_json::Value::Null;
+            }
+
+            let text = unsafe {
+                byte_ptr_to_str(
+                    self.data_buffer.slice(start as usize).raw_data(),
+                    (end - start) as usize,
+                )
+            };
+
+            text.into()
+        }))
     }
 }
 
