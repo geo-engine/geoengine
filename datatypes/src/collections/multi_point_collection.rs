@@ -692,56 +692,56 @@ impl FeatureCollection for MultiPointCollection {
     /// assert_eq!(
     ///     from_str::<serde_json::Value>(collection.to_geo_json().as_str()).unwrap(),
     ///     json!({
-    ///     	"type": "FeatureCollection",
-    ///     	"features": [{
-    ///     		"type": "Feature",
-    ///     		"geometry": {
-    ///     			"type": "Point",
-    ///     			"coordinates": [0.0, 0.0]
-    ///     		},
-    ///     		"properties": {
-    ///     			"bar": "one",
-    ///     			"foo": 0.0
-    ///     		},
-    ///     		"when": {
-    ///     			"start": "1970-01-01T00:00:00+00:00",
-    ///     			"end": "1970-01-01T00:00:00.001+00:00",
-    ///     			"type": "Interval"
-    ///     		}
-    ///     	}, {
-    ///     		"type": "Feature",
-    ///     		"geometry": {
-    ///     			"type": "MultiPoint",
-    ///     			"coordinates": [
-    ///     				[1.0, 1.0],
-    ///     				[2.0, 2.0]
-    ///     			]
-    ///     		},
-    ///     		"properties": {
-    ///     			"bar": null,
-    ///     			"foo": 1.0
-    ///     		},
-    ///     		"when": {
-    ///     			"start": "1970-01-01T00:00:00.001+00:00",
-    ///     			"end": "1970-01-01T00:00:00.002+00:00",
-    ///     			"type": "Interval"
-    ///     		}
-    ///     	}, {
-    ///     		"type": "Feature",
-    ///     		"geometry": {
-    ///     			"type": "Point",
-    ///     			"coordinates": [3.0, 3.0]
-    ///     		},
-    ///     		"properties": {
-    ///     			"bar": "three",
-    ///     			"foo": 2.0
-    ///     		},
-    ///     		"when": {
-    ///     			"start": "1970-01-01T00:00:00.003+00:00",
-    ///     			"end": "1970-01-01T00:00:00.004+00:00",
-    ///     			"type": "Interval"
-    ///     		}
-    ///     	}]
+    ///         "type": "FeatureCollection",
+    ///         "features": [{
+    ///             "type": "Feature",
+    ///             "geometry": {
+    ///                 "type": "Point",
+    ///                 "coordinates": [0.0, 0.0]
+    ///             },
+    ///             "properties": {
+    ///                 "bar": "one",
+    ///                 "foo": 0.0
+    ///             },
+    ///             "when": {
+    ///                 "start": "1970-01-01T00:00:00+00:00",
+    ///                 "end": "1970-01-01T00:00:00.001+00:00",
+    ///                 "type": "Interval"
+    ///             }
+    ///         }, {
+    ///             "type": "Feature",
+    ///             "geometry": {
+    ///                 "type": "MultiPoint",
+    ///                 "coordinates": [
+    ///                     [1.0, 1.0],
+    ///                     [2.0, 2.0]
+    ///                 ]
+    ///             },
+    ///             "properties": {
+    ///                 "bar": null,
+    ///                 "foo": 1.0
+    ///             },
+    ///             "when": {
+    ///                 "start": "1970-01-01T00:00:00.001+00:00",
+    ///                 "end": "1970-01-01T00:00:00.002+00:00",
+    ///                 "type": "Interval"
+    ///             }
+    ///         }, {
+    ///             "type": "Feature",
+    ///             "geometry": {
+    ///                 "type": "Point",
+    ///                 "coordinates": [3.0, 3.0]
+    ///             },
+    ///             "properties": {
+    ///                 "bar": "three",
+    ///                 "foo": 2.0
+    ///             },
+    ///             "when": {
+    ///                 "start": "1970-01-01T00:00:00.003+00:00",
+    ///                 "end": "1970-01-01T00:00:00.004+00:00",
+    ///                 "type": "Interval"
+    ///             }
+    ///         }]
     ///     })
     /// );
     /// ```
