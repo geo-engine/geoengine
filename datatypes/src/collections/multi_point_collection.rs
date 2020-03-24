@@ -10,17 +10,16 @@ use arrow::compute::kernels::filter::filter;
 use arrow::datatypes::{ArrowNumericType, DataType, DateUnit, Field};
 use snafu::ensure;
 
-use crate::collections::FeatureCollection;
+use crate::collections::{FeatureCollection, HasGeometryIterator};
 use crate::error;
 use crate::operations::Filterable;
 use crate::primitives::{
     CategoricalDataRef, Coordinate2D, DecimalDataRef, FeatureData, FeatureDataRef, FeatureDataType,
-    FeatureDataValue, NullableCategoricalDataRef, NullableDecimalDataRef, NullableNumberDataRef,
-    NullableTextDataRef, NumberDataRef, TextDataRef, TimeInterval,
+    FeatureDataValue, MultiPoint, NullableCategoricalDataRef, NullableDecimalDataRef,
+    NullableNumberDataRef, NullableTextDataRef, NumberDataRef, TextDataRef, TimeInterval,
 };
 use crate::util::arrow::{downcast_array, downcast_mut_array};
 use crate::util::Result;
-use chrono::{DateTime, TimeZone, Utc};
 use std::mem;
 use std::slice;
 use std::sync::Arc;
@@ -258,65 +257,6 @@ impl MultiPointCollection {
                 .unwrap()
                 .clone(),
         ]
-    }
-
-    /// Helper function to create json values from the collection's multi points
-    fn coordinates_to_geo_json_geometries(&self) -> impl Iterator<Item = geojson::Geometry> + '_ {
-        let geometry_column: &ListArray = downcast_array(
-            &self
-                .data
-                .column_by_name(Self::FEATURE_COLUMN_NAME)
-                .expect("Column must exist, since it is in the metadata"),
-        );
-
-        (0..self.len()).map(move |i| {
-            let multi_point_array_ref = geometry_column.value(i);
-            let multi_point_array: &FixedSizeListArray = downcast_array(&multi_point_array_ref);
-            geojson::Geometry::new(match multi_point_array.len() {
-                1 => {
-                    // TODO: not quite sure why we have to put the offset here
-                    let floats_ref = multi_point_array.value(multi_point_array.offset());
-                    let floats: &Float64Array = downcast_array(&floats_ref);
-                    geojson::Value::Point(floats.value_slice(0, 2).to_vec())
-                }
-                n => {
-                    let mut points = Vec::with_capacity(n);
-                    for j in 0..n {
-                        // TODO: not quite sure why we have to put the offset here
-                        let floats_ref = multi_point_array.value(multi_point_array.offset() + j);
-                        let floats: &Float64Array = downcast_array(&floats_ref);
-                        points.push(floats.value_slice(0, 2).to_vec());
-                    }
-                    geojson::Value::MultiPoint(points)
-                }
-            })
-        })
-    }
-
-    /// Helper function to create json values from the collection's time intervals
-    fn time_intervals_to_geo_json_map(
-        &self,
-    ) -> impl Iterator<Item = serde_json::Map<String, serde_json::Value>> + '_ {
-        self.time_intervals().iter().map(|time_interval| {
-            let mut map = serde_json::Map::with_capacity(1);
-
-            let _start_date: DateTime<Utc> = Utc.timestamp_millis(time_interval.start());
-            let _end_date: DateTime<Utc> = Utc.timestamp_millis(time_interval.end());
-
-            // according to GeoJSON event extension (https://github.com/sgillies/geojson-events)
-            map.insert(
-                "when".to_string(),
-                serde_json::json!(
-                    {
-                        "start": _start_date.to_rfc3339(),
-                        "end": _end_date.to_rfc3339(),
-                        "type": "Interval"
-                    }
-                ),
-            );
-
-            map
-        })
     }
 
     /// Helper function to append all column values to a json map
@@ -721,6 +661,7 @@ impl FeatureCollection for MultiPointCollection {
     /// ```rust
     /// use geoengine_datatypes::collections::{MultiPointCollection, FeatureCollection};
     /// use geoengine_datatypes::primitives::{FeatureDataType, FeatureDataValue, TimeInterval};
+    /// use serde_json::{from_str, json};
     ///
     /// let collection = {
     ///     let mut builder = MultiPointCollection::builder();
@@ -749,8 +690,59 @@ impl FeatureCollection for MultiPointCollection {
     /// };
     ///
     /// assert_eq!(
-    ///     collection.to_geo_json(),
-    ///     r#"{"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Point","coordinates":[0.0,0.0]},"properties":{"bar":"one","foo":0.0},"when":{"start":"1970-01-01T00:00:00+00:00","end":"1970-01-01T00:00:00.001+00:00","type":"Interval"}},{"type":"Feature","geometry":{"type":"MultiPoint","coordinates":[[1.0,1.0],[2.0,2.0]]},"properties":{"bar":null,"foo":1.0},"when":{"start":"1970-01-01T00:00:00.001+00:00","end":"1970-01-01T00:00:00.002+00:00","type":"Interval"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[3.0,3.0]},"properties":{"bar":"three","foo":2.0},"when":{"start":"1970-01-01T00:00:00.003+00:00","end":"1970-01-01T00:00:00.004+00:00","type":"Interval"}}]}"#
+    ///     from_str::<serde_json::Value>(collection.to_geo_json().as_str()).unwrap(),
+    ///     json!({
+    ///     	"type": "FeatureCollection",
+    ///     	"features": [{
+    ///     		"type": "Feature",
+    ///     		"geometry": {
+    ///     			"type": "Point",
+    ///     			"coordinates": [0.0, 0.0]
+    ///     		},
+    ///     		"properties": {
+    ///     			"bar": "one",
+    ///     			"foo": 0.0
+    ///     		},
+    ///     		"when": {
+    ///     			"start": "1970-01-01T00:00:00+00:00",
+    ///     			"end": "1970-01-01T00:00:00.001+00:00",
+    ///     			"type": "Interval"
+    ///     		}
+    ///     	}, {
+    ///     		"type": "Feature",
+    ///     		"geometry": {
+    ///     			"type": "MultiPoint",
+    ///     			"coordinates": [
+    ///     				[1.0, 1.0],
+    ///     				[2.0, 2.0]
+    ///     			]
+    ///     		},
+    ///     		"properties": {
+    ///     			"bar": null,
+    ///     			"foo": 1.0
+    ///     		},
+    ///     		"when": {
+    ///     			"start": "1970-01-01T00:00:00.001+00:00",
+    ///     			"end": "1970-01-01T00:00:00.002+00:00",
+    ///     			"type": "Interval"
+    ///     		}
+    ///     	}, {
+    ///     		"type": "Feature",
+    ///     		"geometry": {
+    ///     			"type": "Point",
+    ///     			"coordinates": [3.0, 3.0]
+    ///     		},
+    ///     		"properties": {
+    ///     			"bar": "three",
+    ///     			"foo": 2.0
+    ///     		},
+    ///     		"when": {
+    ///     			"start": "1970-01-01T00:00:00.003+00:00",
+    ///     			"end": "1970-01-01T00:00:00.004+00:00",
+    ///     			"type": "Interval"
+    ///     		}
+    ///     	}]
+    ///     })
     /// );
     /// ```
     ///
@@ -767,19 +759,26 @@ impl FeatureCollection for MultiPointCollection {
             );
         }
 
+        // creates a foreign member object out of a *when* event value
+        fn foreign_memberize(
+            when_value: serde_json::Value,
+        ) -> serde_json::Map<String, serde_json::Value> {
+            let mut map = serde_json::Map::with_capacity(1);
+            map.insert("when".to_string(), when_value);
+            map
+        };
+
         let features = self
-            .coordinates_to_geo_json_geometries()
-            .zip(self.time_intervals_to_geo_json_map())
+            .geometries()
+            .zip(self.time_intervals())
             .zip(property_maps)
-            .map(
-                |((geometry, foreign_members), properties)| geojson::Feature {
-                    bbox: None,
-                    geometry: Some(geometry),
-                    id: None,
-                    properties: Some(properties),
-                    foreign_members: Some(foreign_members),
-                },
-            )
+            .map(|((geometry, time_interval), properties)| geojson::Feature {
+                bbox: None,
+                geometry: Some(geometry.into()),
+                id: None,
+                properties: Some(properties),
+                foreign_members: Some(foreign_memberize(time_interval.to_geo_json_event())),
+            })
             .collect();
 
         let feature_collection = geojson::FeatureCollection {
@@ -789,6 +788,68 @@ impl FeatureCollection for MultiPointCollection {
         };
 
         feature_collection.to_string()
+    }
+}
+
+impl<'l> HasGeometryIterator for &'l MultiPointCollection {
+    type GeometryIterator = MultiPointIterator<'l>;
+    type GeometryType = MultiPoint<'l>;
+
+    fn geometries(&self) -> Self::GeometryIterator {
+        let geometry_column: &ListArray = downcast_array(
+            &self
+                .data
+                .column_by_name(MultiPointCollection::FEATURE_COLUMN_NAME)
+                .expect("Column must exist since it is in the metadata"),
+        );
+
+        MultiPointIterator {
+            geometry_column,
+            index: 0,
+            length: self.len(),
+        }
+    }
+}
+
+/// A collection iterator for multi points
+pub struct MultiPointIterator<'l> {
+    geometry_column: &'l ListArray,
+    index: usize,
+    length: usize,
+}
+
+impl<'l> Iterator for MultiPointIterator<'l> {
+    type Item = MultiPoint<'l>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index >= self.length {
+            return None;
+        }
+
+        let multi_point_array_ref = self.geometry_column.value(self.index);
+        let multi_point_array: &FixedSizeListArray = downcast_array(&multi_point_array_ref);
+
+        let number_of_points = multi_point_array.len();
+
+        let floats_ref = multi_point_array.value(multi_point_array.offset());
+        let floats: &Float64Array = downcast_array(&floats_ref);
+
+        let multi_point = MultiPoint::new_unchecked(unsafe {
+            slice::from_raw_parts(floats.raw_values() as *const Coordinate2D, number_of_points)
+        });
+
+        self.index += 1; // increment!
+
+        Some(multi_point)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining = self.length - self.index;
+        (remaining, Some(remaining))
+    }
+
+    fn count(self) -> usize {
+        self.length - self.index
     }
 }
 

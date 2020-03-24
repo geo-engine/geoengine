@@ -45,6 +45,14 @@ pub trait FeatureCollection {
     fn to_geo_json(&self) -> String;
 }
 
+pub trait HasGeometryIterator {
+    type GeometryIterator: Iterator<Item = Self::GeometryType>;
+    type GeometryType;
+
+    /// Return an iterator over geometries
+    fn geometries(&self) -> Self::GeometryIterator;
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
