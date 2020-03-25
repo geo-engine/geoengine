@@ -1,7 +1,7 @@
 use arrow::error::ArrowError;
 use snafu::Snafu;
 
-use crate::primitives::TimeInterval;
+use crate::primitives::{Coordinate2D, TimeInterval};
 
 #[derive(Debug, PartialEq, Snafu)]
 #[snafu(visibility = "pub(crate)")]
@@ -26,6 +26,38 @@ pub enum Error {
         i2
     ))]
     TimeIntervalUnmatchedIntervals { i1: TimeInterval, i2: TimeInterval },
+
+    #[snafu(display(
+        "{} is not a valid index in the dimension {} with size {}",
+        index,
+        dimension,
+        dimension_size
+    ))]
+    GridIndexOutOfBounds {
+        index: usize,
+        dimension: usize,
+        dimension_size: usize,
+    },
+
+    #[snafu(display(
+        "Dimension capacity  ≠ data capacity ({} ≠ {})",
+        dimension_cap,
+        data_cap
+    ))]
+    DimnsionCapacityDoesNotMatchDataCapacity {
+        dimension_cap: usize,
+        data_cap: usize,
+    },
+
+    #[snafu(display(
+        "The conditions ll.x <= ur.x && ll.y <= ur.y are not met by ll:{} ur:{}",
+        lower_left_coordinate,
+        upper_right_coordinate
+    ))]
+    InvalidBoundingBox {
+        lower_left_coordinate: Coordinate2D,
+        upper_right_coordinate: Coordinate2D,
+    },
 
     #[snafu(display(
         "Mask length ≠ collection length ({} ≠ {})",
