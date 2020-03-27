@@ -496,8 +496,8 @@ impl Clamp for f64 {}
 impl Into<image::Rgba<u8>> for RgbaColor {
     /// Transform an RgbaColor to its counterpart from the image crate
     fn into(self) -> image::Rgba<u8> {
-        let array = self.0;
-        image::Rgba([array[0], array[1], array[2], array[3]])
+        // [r, g, b, a]
+        image::Rgba(self.0)
     }
 }
 
