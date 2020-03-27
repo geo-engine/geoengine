@@ -11,7 +11,6 @@ use arrow::datatypes::{DataType, DateUnit, Field};
 use snafu::ensure;
 
 use crate::collections::{FeatureCollection, HasGeometryIterator};
-use crate::error;
 use crate::operations::Filterable;
 use crate::primitives::{
     CategoricalDataRef, Coordinate2D, DecimalDataRef, FeatureData, FeatureDataRef, FeatureDataType,
@@ -20,6 +19,7 @@ use crate::primitives::{
 };
 use crate::util::arrow::{downcast_array, downcast_mut_array};
 use crate::util::Result;
+use crate::{error, json_map};
 use std::mem;
 use std::slice;
 use std::sync::Arc;
@@ -693,15 +693,6 @@ impl FeatureCollection for MultiPointCollection {
             }
         }
 
-        // creates a foreign member object out of a *when* event value
-        fn foreign_memberize(
-            when_value: serde_json::Value,
-        ) -> serde_json::Map<String, serde_json::Value> {
-            let mut map = serde_json::Map::with_capacity(1);
-            map.insert("when".to_string(), when_value);
-            map
-        };
-
         let features = self
             .geometries()
             .zip(self.time_intervals())
@@ -711,7 +702,9 @@ impl FeatureCollection for MultiPointCollection {
                 geometry: Some(geometry.into()),
                 id: None,
                 properties: Some(properties),
-                foreign_members: Some(foreign_memberize(time_interval.to_geo_json_event())),
+                foreign_members: Some(
+                    json_map! {"when".to_string() => time_interval.to_geo_json_event()},
+                ),
             })
             .collect();
 
