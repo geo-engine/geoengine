@@ -64,8 +64,8 @@ mod tests {
 
         let colorizer = Colorizer::linear_gradient(
             vec![
-                (0.0.into(), RgbaColor::new(0, 0, 0, 255)),
-                (255.0.into(), RgbaColor::new(255, 255, 255, 255)),
+                (0.0.into(), RgbaColor::new(0, 0, 0, 255)).into(),
+                (255.0.into(), RgbaColor::new(255, 255, 255, 255)).into(),
             ],
             RgbaColor::transparent(),
             RgbaColor::pink(),
@@ -96,8 +96,8 @@ mod tests {
 
         let colorizer = Colorizer::logarithmic_gradient(
             vec![
-                (1.0.into(), RgbaColor::new(0, 0, 0, 255)),
-                (10.0.into(), RgbaColor::new(255, 255, 255, 255)),
+                (1.0.into(), RgbaColor::new(0, 0, 0, 255)).into(),
+                (10.0.into(), RgbaColor::new(255, 255, 255, 255)).into(),
             ],
             RgbaColor::transparent(),
             RgbaColor::pink(),

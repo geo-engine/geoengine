@@ -1,10 +1,11 @@
 use crate::error;
 use crate::operations::image::RgbaTransmutable;
 use crate::util::Result;
-use ordered_float::NotNan;
+use ordered_float::{FloatIsNan, NotNan};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::collections::HashMap;
+use std::convert::TryFrom;
 
 /// A colorizer specifies a mapping between raster values and an output image
 /// There are different variants that perform different kinds of mapping.
@@ -122,7 +123,7 @@ impl Colorizer {
     /// use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
     ///
     /// let colorizer = Colorizer::linear_gradient(
-    ///     vec![(0.0.into(), RgbaColor::transparent()), (1.0.into(), RgbaColor::transparent())],
+    ///     vec![(0.0.into(), RgbaColor::transparent()).into(), (1.0.into(), RgbaColor::transparent()).into()],
     ///     RgbaColor::transparent(),
     ///     RgbaColor::transparent(),
     /// ).unwrap();
@@ -132,7 +133,7 @@ impl Colorizer {
     pub fn min_value(&self) -> f64 {
         match self {
             Self::LinearGradient { breakpoints, .. }
-            | Self::LogarithmicGradient { breakpoints, .. } => *breakpoints[0].0,
+            | Self::LogarithmicGradient { breakpoints, .. } => *breakpoints[0].value,
             Self::Palette { .. } | Self::Rgba { .. } => f64::from(std::u8::MIN),
         }
     }
@@ -145,7 +146,7 @@ impl Colorizer {
     /// use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
     ///
     /// let colorizer = Colorizer::logarithmic_gradient(
-    ///     vec![(1.0.into(), RgbaColor::transparent()), (10.0.into(), RgbaColor::transparent())],
+    ///     vec![(1.0.into(), RgbaColor::transparent()).into(), (10.0.into(), RgbaColor::transparent()).into()],
     ///     RgbaColor::transparent(),
     ///     RgbaColor::transparent(),
     /// ).unwrap();
@@ -156,7 +157,7 @@ impl Colorizer {
         match self {
             Self::LinearGradient { breakpoints, .. }
             | Self::LogarithmicGradient { breakpoints, .. } => {
-                *breakpoints[breakpoints.len() - 1].0
+                *breakpoints[breakpoints.len() - 1].value
             }
             Self::Palette { .. } | Self::Rgba { .. } => f64::from(std::u8::MAX),
         }
@@ -170,7 +171,7 @@ impl Colorizer {
     /// use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
     ///
     /// let colorizer = Colorizer::linear_gradient(
-    ///     vec![(1.0.into(), RgbaColor::black()), (10.0.into(), RgbaColor::white())],
+    ///     vec![(1.0.into(), RgbaColor::black()).into(), (10.0.into(), RgbaColor::white()).into()],
     ///     RgbaColor::transparent(),
     ///     RgbaColor::pink(),
     /// ).unwrap();
@@ -194,7 +195,7 @@ impl Colorizer {
     /// use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
     ///
     /// let linear_colorizer = Colorizer::linear_gradient(
-    ///     vec![(0.0.into(), RgbaColor::black()), (1.0.into(), RgbaColor::white())],
+    ///     vec![(0.0.into(), RgbaColor::black()).into(), (1.0.into(), RgbaColor::white()).into()],
     ///     RgbaColor::transparent(),
     ///     RgbaColor::transparent(),
     /// ).unwrap();
@@ -203,7 +204,7 @@ impl Colorizer {
     /// assert_eq!(linear_color_mapper.call(0.5), RgbaColor::new(128, 128, 128, 255));
     ///
     /// let logarithmic_colorizer = Colorizer::logarithmic_gradient(
-    ///     vec![(1.0.into(), RgbaColor::black()), (10.0.into(), RgbaColor::white())],
+    ///     vec![(1.0.into(), RgbaColor::black()).into(), (10.0.into(), RgbaColor::white()).into()],
     ///     RgbaColor::transparent(),
     ///     RgbaColor::transparent(),
     /// ).unwrap();
@@ -257,11 +258,11 @@ impl Colorizer {
             _ => unimplemented!("Must never call `color_table` for types without breakpoints"),
         };
 
-        let smallest_breakpoint_value = *breakpoints[0].0;
-        let largest_breakpoint_value = *breakpoints[breakpoints.len() - 1].0;
+        let smallest_breakpoint_value = *breakpoints[0].value;
+        let largest_breakpoint_value = *breakpoints[breakpoints.len() - 1].value;
 
-        let first_color = breakpoints[0].1;
-        let last_color = breakpoints[breakpoints.len() - 1].1;
+        let first_color = breakpoints[0].color;
+        let last_color = breakpoints[breakpoints.len() - 1].color;
 
         let step = (max - min) / ((number_of_colors - 1) as f64);
 
@@ -277,18 +278,18 @@ impl Colorizer {
                 } else if value > largest_breakpoint_value {
                     last_color // use these because of potential rounding errors instead of default color
                 } else {
-                    while value > *breakpoint_next.0 {
+                    while value > *breakpoint_next.value {
                         breakpoint_prev = breakpoint_next;
                         breakpoint_next = breakpoint_iter
                             .next()
                             .expect("if-condition must ensure this");
                     }
 
-                    let prev_value = *breakpoint_prev.0;
-                    let next_value = *breakpoint_next.0;
+                    let prev_value = *breakpoint_prev.value;
+                    let next_value = *breakpoint_next.value;
 
-                    let prev_color = breakpoint_prev.1;
-                    let next_color = breakpoint_next.1;
+                    let prev_color = breakpoint_prev.color;
+                    let next_color = breakpoint_next.color;
 
                     let fraction = match self {
                         Self::LinearGradient { .. } => {
@@ -361,12 +362,10 @@ impl<'c> ColorMapper<'c> {
                 color_map,
                 no_data_color,
             } => {
-                let value = value.into();
-                if value.is_nan() {
-                    *no_data_color
-                } else {
-                    let value = unsafe { NotNan::unchecked_new(value) }; // checked by `if` above
+                if let Ok(value) = NotNan::<f64>::new(value.into()) {
                     *color_map.get(&value).unwrap_or(no_data_color)
+                } else {
+                    *no_data_color
                 }
             }
             ColorMapper::Rgba => value.transmute_to_rgba(),
@@ -374,11 +373,38 @@ impl<'c> ColorMapper<'c> {
     }
 }
 
+/// A container type for breakpoints that specify a value to color mapping
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct Breakpoint {
+    pub value: NotNan<f64>,
+    pub color: RgbaColor,
+}
+
+impl From<(NotNan<f64>, RgbaColor)> for Breakpoint {
+    fn from(tuple: (NotNan<f64>, RgbaColor)) -> Self {
+        Self {
+            value: tuple.0,
+            color: tuple.1,
+        }
+    }
+}
+
+impl TryFrom<(f64, RgbaColor)> for Breakpoint {
+    type Error = FloatIsNan;
+
+    fn try_from(tuple: (f64, RgbaColor)) -> Result<Self, Self::Error> {
+        Ok(Self {
+            value: NotNan::new(tuple.0)?,
+            color: tuple.1,
+        })
+    }
+}
+
 /// A breakpoint is a list of (value, color) tuples.
 ///
 /// It is assumed to be ordered ascending and has at least two entries,
 /// although we only check the first and last value for performance reasons.
-pub type Breakpoints = Vec<(NotNan<f64>, RgbaColor)>;
+pub type Breakpoints = Vec<Breakpoint>;
 
 /// A map from value to color
 ///
@@ -483,8 +509,8 @@ mod tests {
     fn logarithmic_color_table() {
         let colorizer = Colorizer::logarithmic_gradient(
             vec![
-                (1.0.into(), RgbaColor::black()),
-                (10.0.into(), RgbaColor::white()),
+                (1.0.into(), RgbaColor::black()).into(),
+                (10.0.into(), RgbaColor::white()).into(),
             ],
             RgbaColor::transparent(),
             RgbaColor::transparent(),
@@ -504,9 +530,9 @@ mod tests {
     fn logarithmic_color_table_2() {
         let colorizer = Colorizer::logarithmic_gradient(
             vec![
-                (1.0.into(), RgbaColor::black()),
-                (51.0.into(), RgbaColor::new(100, 100, 100, 255)),
-                (101.0.into(), RgbaColor::white()),
+                (1.0.into(), RgbaColor::black()).into(),
+                (51.0.into(), RgbaColor::new(100, 100, 100, 255)).into(),
+                (101.0.into(), RgbaColor::white()).into(),
             ],
             RgbaColor::transparent(),
             RgbaColor::transparent(),
