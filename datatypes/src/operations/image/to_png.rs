@@ -1,5 +1,5 @@
 use crate::error;
-use crate::operations::image::{Colorizer, RgbaTransmutable};
+use crate::operations::image::{Colorizer, IntoLossy, RgbaTransmutable};
 use crate::raster::{GridPixelAccess, Raster, Raster2D};
 use crate::util::Result;
 use image::{DynamicImage, ImageFormat, RgbaImage};
@@ -11,7 +11,7 @@ pub trait ToPng {
 
 impl<T> ToPng for Raster2D<T>
 where
-    T: Into<f64> + Copy + RgbaTransmutable,
+    T: Copy + IntoLossy<f64> + RgbaTransmutable,
 {
     fn to_png(&self, width: u32, height: u32, colorizer: &Colorizer) -> Result<Vec<u8>> {
         // TODO: use PNG color palette once it is available
