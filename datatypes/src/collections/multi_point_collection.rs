@@ -10,7 +10,7 @@ use arrow::compute::kernels::filter::filter;
 use arrow::datatypes::{DataType, DateUnit, Field};
 use snafu::ensure;
 
-use crate::collections::{FeatureCollection, HasGeometryIterator};
+use crate::collections::{FeatureCollection, IntoGeometryIterator};
 use crate::operations::Filterable;
 use crate::primitives::{
     CategoricalDataRef, Coordinate2D, DecimalDataRef, FeatureData, FeatureDataRef, FeatureDataType,
@@ -718,7 +718,7 @@ impl FeatureCollection for MultiPointCollection {
     }
 }
 
-impl<'l> HasGeometryIterator for &'l MultiPointCollection {
+impl<'l> IntoGeometryIterator for &'l MultiPointCollection {
     type GeometryIterator = MultiPointIterator<'l>;
     type GeometryType = MultiPoint<'l>;
 

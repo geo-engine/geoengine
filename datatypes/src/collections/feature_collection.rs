@@ -45,7 +45,8 @@ pub trait FeatureCollection {
     fn to_geo_json(&self) -> String;
 }
 
-pub trait HasGeometryIterator {
+/// This trait allows iterating over the geometries of a feature collection
+pub trait IntoGeometryIterator {
     type GeometryIterator: Iterator<Item = Self::GeometryType>;
     type GeometryType;
 
