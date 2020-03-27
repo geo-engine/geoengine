@@ -13,97 +13,71 @@ use crate::operations::image::RgbaColor;
 /// );
 /// ```
 pub trait RgbaTransmutable {
-    fn transmute_to_f64(self) -> f64;
+    fn transmute_to_rgba(self) -> RgbaColor;
+}
 
-    fn transmute_to_rgba(self) -> RgbaColor
-    where
-        Self: Sized,
-    {
-        let [r, g, b, a, ..] = self.transmute_to_f64().to_be_bytes();
-        RgbaColor::new(r, g, b, a)
-    }
+/// Implement `RgbaTransmutable` for types with at least four bytes
+/// that implement the `to_be_bytes` function (which is not backed by a trait)
+macro_rules! rbga_transmutable_impl {
+    ($type:ty) => {
+        impl RgbaTransmutable for $type {
+            fn transmute_to_rgba(self) -> RgbaColor {
+                let [r, g, b, a, ..] = self.to_be_bytes();
+                RgbaColor::new(r, g, b, a)
+            }
+        }
+    };
 }
 
 // floats
 
-impl RgbaTransmutable for f64 {
-    fn transmute_to_f64(self) -> f64 {
-        self
-    }
-}
-
-impl RgbaTransmutable for f32 {
-    fn transmute_to_f64(self) -> f64 {
-        let [r, g, b, a] = self.to_be_bytes();
-        f64::from_be_bytes([r, g, b, a, 0, 0, 0, 0])
-    }
-}
+rbga_transmutable_impl!(f64);
+rbga_transmutable_impl!(f32);
 
 // integers
 
-impl RgbaTransmutable for u32 {
-    fn transmute_to_f64(self) -> f64 {
-        let [r, g, b, a] = self.to_be_bytes();
-        f64::from_be_bytes([r, g, b, a, 0, 0, 0, 0])
-    }
-}
-
-impl RgbaTransmutable for i32 {
-    fn transmute_to_f64(self) -> f64 {
-        let [r, g, b, a] = self.to_be_bytes();
-        f64::from_be_bytes([r, g, b, a, 0, 0, 0, 0])
-    }
-}
-
-impl RgbaTransmutable for u64 {
-    fn transmute_to_f64(self) -> f64 {
-        f64::from_be_bytes(self.to_be_bytes())
-    }
-}
-
-impl RgbaTransmutable for i64 {
-    fn transmute_to_f64(self) -> f64 {
-        f64::from_be_bytes(self.to_be_bytes())
-    }
-}
+rbga_transmutable_impl!(u64);
+rbga_transmutable_impl!(i64);
+rbga_transmutable_impl!(u32);
+rbga_transmutable_impl!(i32);
 
 impl RgbaTransmutable for u16 {
-    fn transmute_to_f64(self) -> f64 {
+    fn transmute_to_rgba(self) -> RgbaColor {
         let [gray, alpha] = self.to_be_bytes();
-        f64::from_be_bytes([gray, gray, gray, alpha, 0, 0, 0, 0])
+        RgbaColor::new(gray, gray, gray, alpha)
     }
 }
 
 impl RgbaTransmutable for i16 {
-    fn transmute_to_f64(self) -> f64 {
+    fn transmute_to_rgba(self) -> RgbaColor {
         let [gray, alpha] = self.to_be_bytes();
-        f64::from_be_bytes([gray, gray, gray, alpha, 0, 0, 0, 0])
+        RgbaColor::new(gray, gray, gray, alpha)
     }
 }
 
 impl RgbaTransmutable for u8 {
-    fn transmute_to_f64(self) -> f64 {
+    fn transmute_to_rgba(self) -> RgbaColor {
         let [gray] = self.to_be_bytes();
-        f64::from_be_bytes([gray, gray, gray, 255, 0, 0, 0, 0])
+        RgbaColor::new(gray, gray, gray, std::u8::MAX)
     }
 }
 
 impl RgbaTransmutable for i8 {
-    fn transmute_to_f64(self) -> f64 {
+    fn transmute_to_rgba(self) -> RgbaColor {
         let [gray] = self.to_be_bytes();
-        f64::from_be_bytes([gray, gray, gray, 255, 0, 0, 0, 0])
+        RgbaColor::new(gray, gray, gray, std::u8::MAX)
     }
 }
 
 // others
 
 impl RgbaTransmutable for bool {
-    fn transmute_to_f64(self) -> f64 {
-        f64::from_be_bytes(if self {
-            [255, 255, 255, 255, 0, 0, 0, 0]
+    fn transmute_to_rgba(self) -> RgbaColor {
+        if self {
+            RgbaColor::white()
         } else {
-            [0, 0, 0, 0, 0, 0, 0, 0]
-        })
+            RgbaColor::black()
+        }
     }
 }
 
