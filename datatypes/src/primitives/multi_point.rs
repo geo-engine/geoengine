@@ -4,11 +4,11 @@ use crate::util::Result;
 use geojson::Geometry;
 use snafu::ensure;
 
-pub struct MultiPoint<'g> {
-    coordinates: &'g [Coordinate2D],
+pub struct MultiPointRef<'g> {
+    point_coordinates: &'g [Coordinate2D],
 }
 
-impl<'g> MultiPoint<'g> {
+impl<'g> MultiPointRef<'g> {
     pub fn new(coordinates: &'g [Coordinate2D]) -> Result<Self> {
         ensure!(
             !coordinates.is_empty(),
@@ -20,20 +20,22 @@ impl<'g> MultiPoint<'g> {
         Ok(Self::new_unchecked(coordinates))
     }
 
-    pub fn new_unchecked(coordinates: &'g [Coordinate2D]) -> Self {
-        Self { coordinates }
+    pub(crate) fn new_unchecked(coordinates: &'g [Coordinate2D]) -> Self {
+        Self {
+            point_coordinates: coordinates,
+        }
     }
 }
 
-impl<'g> Into<geojson::Geometry> for MultiPoint<'g> {
+impl<'g> Into<geojson::Geometry> for MultiPointRef<'g> {
     fn into(self) -> Geometry {
-        geojson::Geometry::new(match self.coordinates.len() {
+        geojson::Geometry::new(match self.point_coordinates.len() {
             1 => {
-                let floats: [f64; 2] = self.coordinates[0].into();
+                let floats: [f64; 2] = self.point_coordinates[0].into();
                 geojson::Value::Point(floats.to_vec())
             }
             _ => geojson::Value::MultiPoint(
-                self.coordinates
+                self.point_coordinates
                     .iter()
                     .map(|&c| {
                         let floats: [f64; 2] = c.into();

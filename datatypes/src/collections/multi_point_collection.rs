@@ -14,7 +14,7 @@ use crate::collections::{FeatureCollection, IntoGeometryIterator};
 use crate::operations::Filterable;
 use crate::primitives::{
     CategoricalDataRef, Coordinate2D, DecimalDataRef, FeatureData, FeatureDataRef, FeatureDataType,
-    FeatureDataValue, MultiPoint, NullableCategoricalDataRef, NullableDecimalDataRef,
+    FeatureDataValue, MultiPointRef, NullableCategoricalDataRef, NullableDecimalDataRef,
     NullableNumberDataRef, NullableTextDataRef, NumberDataRef, TextDataRef, TimeInterval,
 };
 use crate::util::arrow::{downcast_array, downcast_mut_array};
@@ -720,7 +720,7 @@ impl FeatureCollection for MultiPointCollection {
 
 impl<'l> IntoGeometryIterator for &'l MultiPointCollection {
     type GeometryIterator = MultiPointIterator<'l>;
-    type GeometryType = MultiPoint<'l>;
+    type GeometryType = MultiPointRef<'l>;
 
     fn geometries(&self) -> Self::GeometryIterator {
         let geometry_column: &ListArray = downcast_array(
@@ -746,7 +746,7 @@ pub struct MultiPointIterator<'l> {
 }
 
 impl<'l> Iterator for MultiPointIterator<'l> {
-    type Item = MultiPoint<'l>;
+    type Item = MultiPointRef<'l>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.index >= self.length {
@@ -761,7 +761,7 @@ impl<'l> Iterator for MultiPointIterator<'l> {
         let floats_ref = multi_point_array.value(multi_point_array.offset());
         let floats: &Float64Array = downcast_array(&floats_ref);
 
-        let multi_point = MultiPoint::new_unchecked(unsafe {
+        let multi_point = MultiPointRef::new_unchecked(unsafe {
             slice::from_raw_parts(floats.raw_values() as *const Coordinate2D, number_of_points)
         });
 

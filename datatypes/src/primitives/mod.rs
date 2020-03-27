@@ -14,6 +14,6 @@ pub use feature_data::{
     NullableNumberDataRef, NullableTextDataRef, NumberDataRef, TextDataRef,
 };
 pub use measurement::Measurement;
-pub use multi_point::MultiPoint;
+pub use multi_point::MultiPointRef;
 pub use spatio_temporal_bounded::{SpatialBounded, TemporalBounded};
 pub use time_interval::TimeInterval;
