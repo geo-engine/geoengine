@@ -14,8 +14,8 @@ pub trait ProjectDB: Send + Sync {
     fn delete(&mut self, user: UserIdentification, project: ProjectId) -> Result<()>;
 
     fn list_permissions(&mut self, user: UserIdentification, project: ProjectId) -> Result<Vec<UserProjectPermission>>;
-    fn add_permission(&mut self, user: UserIdentification, project: ProjectId, target: UserIdentification, permission: ProjectPermission) -> Result<()>;
-    fn remove_permission(&mut self, user: UserIdentification, project: ProjectId, target: UserIdentification, permission: ProjectPermission) -> Result<()>;
+    fn add_permission(&mut self, user: UserIdentification, permission: UserProjectPermission) -> Result<()>;
+    fn remove_permission(&mut self, user: UserIdentification, permission: UserProjectPermission) -> Result<()>;
 }
 
 #[derive(Default)]
@@ -24,6 +24,7 @@ pub struct HashMapProjectDB {
     permissions: Vec<UserProjectPermission>,
 }
 
+// TODO: versioning?
 impl ProjectDB for HashMapProjectDB {
     /// List projects
     ///
@@ -262,12 +263,15 @@ impl ProjectDB for HashMapProjectDB {
     /// let user2 = UserIdentification::new();
     /// let user3 = UserIdentification::new();
     ///
-    /// project_db.add_permission(user, project, user2, ProjectPermission::Read);
-    /// project_db.add_permission(user, project, user3, ProjectPermission::Write);
+    /// let permission1 = UserProjectPermission { user: user2, project, permission: ProjectPermission::Read};
+    /// let permission2 = UserProjectPermission { user: user3, project, permission: ProjectPermission::Write};
+    ///
+    /// project_db.add_permission(user, permission1.clone());
+    /// project_db.add_permission(user, permission2.clone());
     ///
     /// let permissions = project_db.list_permissions(user, project).unwrap();
-    /// assert!(permissions.contains(&UserProjectPermission { user: user2, project, permission: ProjectPermission::Read}));
-    /// assert!(permissions.contains(&UserProjectPermission { user: user3, project, permission: ProjectPermission::Write}));
+    /// assert!(permissions.contains(&permission1));
+    /// assert!(permissions.contains(&permission2));
     /// ```
     fn list_permissions(&mut self, user: UserIdentification, project: ProjectId) -> Result<Vec<UserProjectPermission>> {
         ensure!(
@@ -304,25 +308,22 @@ impl ProjectDB for HashMapProjectDB {
     /// let user2 = UserIdentification::new();
     /// let user3 = UserIdentification::new();
     ///
-    /// project_db.add_permission(user, project, user2, ProjectPermission::Read);
-    /// project_db.add_permission(user, project, user3, ProjectPermission::Write);
+    /// let permission1 = UserProjectPermission { user: user2, project, permission: ProjectPermission::Read};
+    /// let permission2 = UserProjectPermission { user: user3, project, permission: ProjectPermission::Write};
+    ///
+    /// project_db.add_permission(user, permission1.clone());
+    /// project_db.add_permission(user, permission2.clone());
     ///
     /// let permissions = project_db.list_permissions(user, project).unwrap();
-    /// assert!(permissions.contains(&UserProjectPermission { user: user2, project, permission: ProjectPermission::Read}));
-    /// assert!(permissions.contains(&UserProjectPermission { user: user3, project, permission: ProjectPermission::Write}));
+    /// assert!(permissions.contains(&permission1));
+    /// assert!(permissions.contains(&permission2));
     /// ```
-    fn add_permission(&mut self, user: UserIdentification, project: ProjectId, target: UserIdentification, permission: ProjectPermission) -> Result<()> {
+    fn add_permission(&mut self, user: UserIdentification, permission: UserProjectPermission) -> Result<()> {
         ensure!(
-            self.permissions.iter().any(|p| p.project == project && p.user == user &&
+            self.permissions.iter().any(|p| p.project == permission.project && p.user == user &&
             p.permission == ProjectPermission::Owner),
             error::ProjectUpdateFailed
         );
-
-        let permission = UserProjectPermission {
-            user: target,
-            project,
-            permission,
-        };
 
         if !self.permissions.contains(&permission) {
             self.permissions.push(permission);
@@ -353,27 +354,24 @@ impl ProjectDB for HashMapProjectDB {
     /// let user2 = UserIdentification::new();
     /// let user3 = UserIdentification::new();
     ///
-    /// project_db.add_permission(user, project, user2, ProjectPermission::Read);
-    /// project_db.add_permission(user, project, user3, ProjectPermission::Write);
+    /// let permission1 = UserProjectPermission { user: user2, project, permission: ProjectPermission::Read};
+    /// let permission2 = UserProjectPermission { user: user3, project, permission: ProjectPermission::Write};
     ///
-    /// project_db.remove_permission(user, project, user3, ProjectPermission::Write);
+    /// project_db.add_permission(user, permission1.clone());
+    /// project_db.add_permission(user, permission2.clone());
+    ///
+    /// project_db.remove_permission(user, permission2.clone());
     ///
     /// let permissions = project_db.list_permissions(user, project).unwrap();
-    /// assert!(permissions.contains(&UserProjectPermission { user: user2, project, permission: ProjectPermission::Read}));
-    /// assert!(!permissions.contains(&UserProjectPermission { user: user3, project, permission: ProjectPermission::Write}));
+    /// assert!(permissions.contains(&permission1));
+    /// assert!(!permissions.contains(&permission2));
     /// ```
-    fn remove_permission(&mut self, user: UserIdentification, project: ProjectId, target: UserIdentification, permission: ProjectPermission) -> Result<()> {
+    fn remove_permission(&mut self, user: UserIdentification, permission:UserProjectPermission) -> Result<()> {
         ensure!(
-            self.permissions.iter().any(|p| p.project == project && p.user == user &&
+            self.permissions.iter().any(|p| p.project == permission.project && p.user == user &&
             p.permission == ProjectPermission::Owner),
             error::ProjectUpdateFailed
         );
-
-        let permission = UserProjectPermission {
-            user: target,
-            project,
-            permission,
-        };
 
         if let Some(i) = self.permissions.iter().position(|p| p == &permission) {
             self.permissions.remove(i);
