@@ -22,12 +22,8 @@ where
         let color_mapper = colorizer.create_color_mapper();
 
         let image_buffer: RgbaImage = RgbaImage::from_fn(width, height, |x, y| {
-            // TODO: move these functions to base raster (?)
-            let cell_x = (((f64::from(x) + 0.5) * scale_x) - 0.5).round() as u32;
-            let cell_y = (((f64::from(y) + 0.5) * scale_y) - 0.5).round() as u32;
-
             if let Ok(pixel_value) =
-                self.pixel_value_at_grid_index(&(cell_x as usize, cell_y as usize))
+                self.pixel_value_at_grid_index(&image_pixel_to_raster_pixel(x, y, scale_x, scale_y))
             {
                 color_mapper.call(pixel_value)
             } else {
@@ -46,6 +42,27 @@ where
 
         Ok(buffer)
     }
+}
+
+// TODO: move these functions to base raster (?)
+/// Map an image's (x, y) values to the grid cells of a raster.
+fn image_pixel_to_raster_pixel<ImagePixelType>(
+    x: ImagePixelType,
+    y: ImagePixelType,
+    scale_x: f64,
+    scale_y: f64,
+) -> (usize, usize)
+where
+    ImagePixelType: Into<f64>,
+{
+    debug_assert!(
+        scale_x > 0. && scale_y > 0.,
+        "scale values must be positive"
+    );
+
+    let cell_x = (((x.into() + 0.5) * scale_x) - 0.5).round();
+    let cell_y = (((y.into() + 0.5) * scale_y) - 0.5).round();
+    (cell_x as usize, cell_y as usize)
 }
 
 #[cfg(test)]
