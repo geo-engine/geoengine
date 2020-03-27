@@ -1,17 +1,19 @@
+use crate::error;
 use crate::operations::image::{Colorizer, RgbaTransmutable};
 use crate::raster::{GridPixelAccess, Raster, Raster2D};
+use crate::util::Result;
 use image::{DynamicImage, ImageFormat, RgbaImage};
 
 pub trait ToPng {
     /// Outputs png bytes of an image of size width x height
-    fn to_png(&self, width: u32, height: u32, colorizer: &Colorizer) -> Vec<u8>;
+    fn to_png(&self, width: u32, height: u32, colorizer: &Colorizer) -> Result<Vec<u8>>;
 }
 
 impl<T> ToPng for Raster2D<T>
 where
     T: Into<f64> + Copy + RgbaTransmutable,
 {
-    fn to_png(&self, width: u32, height: u32, colorizer: &Colorizer) -> Vec<u8> {
+    fn to_png(&self, width: u32, height: u32, colorizer: &Colorizer) -> Result<Vec<u8>> {
         // TODO: use PNG color palette once it is available
 
         let scale_x = (self.dimension()[0] as f64) / f64::from(width);
@@ -36,9 +38,13 @@ where
 
         let mut buffer = Vec::new();
 
-        let _ = DynamicImage::ImageRgba8(image_buffer).write_to(&mut buffer, ImageFormat::Png);
+        DynamicImage::ImageRgba8(image_buffer)
+            .write_to(&mut buffer, ImageFormat::Png)
+            .map_err(|_| error::Error::Colorizer {
+                details: "encoding PNG failed".into(),
+            })?;
 
-        buffer
+        Ok(buffer)
     }
 }
 
@@ -72,7 +78,7 @@ mod tests {
         )
         .unwrap();
 
-        let image_bytes = raster.to_png(100, 100, &colorizer);
+        let image_bytes = raster.to_png(100, 100, &colorizer).unwrap();
 
         assert_eq!(
             include_bytes!("../../../test-data/colorizer/linear_gradient.png") as &[u8],
@@ -104,7 +110,7 @@ mod tests {
         )
         .unwrap();
 
-        let image_bytes = raster.to_png(100, 100, &colorizer);
+        let image_bytes = raster.to_png(100, 100, &colorizer).unwrap();
 
         assert_eq!(
             include_bytes!("../../../test-data/colorizer/logarithmic_gradient.png") as &[u8],
@@ -139,7 +145,7 @@ mod tests {
         )
         .unwrap();
 
-        let image_bytes = raster.to_png(100, 100, &colorizer);
+        let image_bytes = raster.to_png(100, 100, &colorizer).unwrap();
 
         assert_eq!(
             include_bytes!("../../../test-data/colorizer/palette.png") as &[u8],
@@ -167,7 +173,7 @@ mod tests {
 
         let colorizer = Colorizer::rgba();
 
-        let image_bytes = raster.to_png(100, 100, &colorizer);
+        let image_bytes = raster.to_png(100, 100, &colorizer).unwrap();
 
         assert_eq!(
             include_bytes!("../../../test-data/colorizer/rgba.png") as &[u8],
