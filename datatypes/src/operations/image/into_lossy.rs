@@ -1,10 +1,11 @@
-/// This trait ensures a conversion into f64 and accepts a loss in precision.
+/// This trait ensures a conversion into a type `T`.
+/// Unlike `Into<T>`, it accepts a loss in precision.
 pub trait IntoLossy<T> {
-    /// Convert into f64 and accept a loss in precision for larger float or integer types
+    /// Convert into `T` and accept a loss in precision for types with larger value ranges
     fn into_lossy(self) -> T;
 }
 
-/// Implement `IntoLossyF64` for types that are Into<f64>
+/// Implement `IntoLossy<T>` for types that are `Into<T>`
 macro_rules! non_lossy_into_lossy_impl {
     ($from:ty, $into:ty) => {
         impl IntoLossy<$into> for $from {
@@ -15,7 +16,7 @@ macro_rules! non_lossy_into_lossy_impl {
     };
 }
 
-/// Implement `IntoLossyF64` for types that are Into<f64>
+/// Implement `IntoLossy<T>` for types that be casted `as T`
 macro_rules! type_cast_into_lossy_impl {
     ($from:ty, $into:ty) => {
         impl IntoLossy<$into> for $from {
@@ -40,6 +41,7 @@ type_cast_into_lossy_impl!(u64, f64);
 type_cast_into_lossy_impl!(i64, f64);
 
 impl IntoLossy<f64> for bool {
+    /// This function allows transforming booleans to 0/1 f64s
     fn into_lossy(self) -> f64 {
         if self {
             1.
