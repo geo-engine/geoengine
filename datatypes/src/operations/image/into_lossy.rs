@@ -61,7 +61,7 @@ mod tests {
         assert_eq!(42.0_f32.into_lossy(), 42.0_f64);
 
         assert_eq!(42_u32.into_lossy(), 42.0_f64);
-        assert_eq!(42_u32.into_lossy(), 42.0_f64);
+        assert_eq!(42_i32.into_lossy(), 42.0_f64);
         assert_eq!(42_u16.into_lossy(), 42.0_f64);
         assert_eq!(42_i16.into_lossy(), 42.0_f64);
         assert_eq!(42_u8.into_lossy(), 42.0_f64);
