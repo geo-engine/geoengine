@@ -8,6 +8,12 @@ use std::fmt::Debug;
 pub trait Plot {
     type PlotDataMetadataType: Debug + PartialEq + Serialize;
 
+    /// Creates a Vega string for embedding it into a Html page
+    ///
+    /// # Errors
+    ///
+    /// This method fails on internal errors of the plot.
+    ///
     fn to_vega_embeddable(
         &self,
         allow_interactions: bool,

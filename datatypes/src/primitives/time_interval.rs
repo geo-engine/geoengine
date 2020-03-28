@@ -27,8 +27,8 @@ impl Default for TimeInterval {
     /// ```
     fn default() -> Self {
         Self {
-            start: std::i64::MIN,
-            end: std::i64::MAX,
+            start: i64::min_value(),
+            end: i64::max_value(),
         }
     }
 }
@@ -46,6 +46,10 @@ impl TimeInterval {
     ///
     /// TimeInterval::new(1, 0).unwrap_err();
     /// ```
+    ///
+    /// # Errors
+    ///
+    /// This constructor fails if `end` is before `start`
     ///
     pub fn new(start: i64, end: i64) -> Result<Self> {
         ensure!(
@@ -71,7 +75,7 @@ impl TimeInterval {
         Self { start, end }
     }
 
-    /// Returns whether the other TimeInterval is contained (smaller or equal) within this interval
+    /// Returns whether the other `TimeInterval` is contained (smaller or equal) within this interval
     ///
     /// # Examples
     ///
@@ -163,6 +167,9 @@ impl TimeInterval {
     /// assert_eq!(i1.union(&i3).unwrap(), TimeInterval::new(0, 4).unwrap());
     /// i1.union(&i4).unwrap_err();
     /// ```
+    ///
+    /// # Errors
+    /// This method fails if the other `TimeInterval` does not intersect or touch the current interval.
     ///
     pub fn union(&self, other: &Self) -> Result<Self> {
         ensure!(

@@ -301,6 +301,12 @@ impl TextDataRef {
         self.offsets_buffer.typed_data()
     }
 
+    /// Returns the text reference at a certain position in the feature collection
+    ///
+    /// # Errors
+    ///
+    /// This method fails if `pos` is out of bounds
+    ///
     pub fn text_at(&self, pos: usize) -> Result<&str> {
         ensure!(
             pos < (self.offsets().len() - 1),
@@ -387,6 +393,12 @@ impl NullableTextDataRef {
         self.offsets_buffer.typed_data()
     }
 
+    /// Returns the text reference at a certain position in the feature collection
+    ///
+    /// # Errors
+    ///
+    /// This method fails if `pos` is out of bounds
+    ///
     pub fn text_at(&self, pos: usize) -> Result<Option<&str>> {
         ensure!(
             pos < (self.offsets().len() - 1),
@@ -505,7 +517,13 @@ impl FeatureData {
         self.len() == 0
     }
 
-    pub fn arrow_builder(&self) -> Result<Box<dyn arrow::array::ArrayBuilder>> {
+    /// Creates an `arrow` array builder.
+    ///
+    /// # Errors
+    ///
+    /// This method fails if an `arrow` internal error occurs
+    ///
+    pub(crate) fn arrow_builder(&self) -> Result<Box<dyn arrow::array::ArrayBuilder>> {
         Ok(match self {
             Self::Text(v) => {
                 let mut builder = arrow::array::StringBuilder::new(v.len());

@@ -3,19 +3,34 @@ use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use uuid::Uuid;
 
-use crate::error::{Error, Result};
 use crate::error;
+use crate::error::{Error, Result};
 
 pub trait UserInput {
+    /// Validates user input and returns itself
+    ///
+    /// # Errors
+    ///
+    /// Fails if the user input is invalid
+    ///
     fn validate(&self) -> Result<()>;
 
-    fn validated(self) -> Result<Validated<Self>> where Self : Sized {
+    /// Validates user input and returns itself
+    ///
+    /// # Errors
+    ///
+    /// Fails if the user input is invalid
+    ///
+    fn validated(self) -> Result<Validated<Self>>
+    where
+        Self: Sized,
+    {
         self.validate().map(|_| Validated { user_input: self })
     }
 }
 
 pub struct Validated<T: UserInput> {
-    pub user_input: T
+    pub user_input: T,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
@@ -30,17 +45,23 @@ impl UserInput for UserRegistration {
         // TODO: more sophisticated input validation
         ensure!(
             self.email.contains('@'),
-            error::RegistrationFailed{reason: "Invalid e-mail address"}
+            error::RegistrationFailed {
+                reason: "Invalid e-mail address"
+            }
         );
 
         ensure!(
             self.password.len() >= 8,
-            error::RegistrationFailed{reason: "Password must have at least 8 characters"}
+            error::RegistrationFailed {
+                reason: "Password must have at least 8 characters"
+            }
         );
 
         ensure!(
             !self.real_name.is_empty(),
-            error::RegistrationFailed{reason: "Real name must not be empty"}
+            error::RegistrationFailed {
+                reason: "Real name must not be empty"
+            }
         );
 
         Ok(())

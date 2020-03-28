@@ -9,9 +9,36 @@ use crate::users::session::{Session, SessionToken};
 use crate::users::user::{User, UserCredentials, UserIdentification, UserRegistration, Validated};
 
 pub trait UserDB: Send + Sync {
+    /// Registers a user by providing `UserRegistration` parameters
+    ///
+    /// # Errors
+    ///
+    /// This call fails if the `UserRegistration` is invalid.
+    ///
     fn register(&mut self, user: Validated<UserRegistration>) -> Result<UserIdentification>;
+
+    /// Creates a `Session` by providing `UserCredentials`
+    ///
+    /// # Errors
+    ///
+    /// This call fails if the `UserCredentials` are invalid.
+    ///
     fn login(&mut self, user: UserCredentials) -> Result<Session>;
+
+    /// Removes a session from the `UserDB`
+    ///
+    /// # Errors
+    ///
+    /// This call fails if the token is invalid.
+    ///
     fn logout(&mut self, session: SessionToken) -> Result<()>;
+
+    /// Creates a new `UserDB` session
+    ///
+    /// # Errors
+    ///
+    /// This call fails if the token is invalid.
+    ///
     fn session(&self, token: SessionToken) -> Result<Session>;
 }
 
@@ -40,11 +67,16 @@ impl UserDB for HashMapUserDB {
     ///
     /// assert!(user_db.register(user_registration).is_ok());
     /// ```
-    fn register(&mut self, user_registration: Validated<UserRegistration>) -> Result<UserIdentification> {
+    fn register(
+        &mut self,
+        user_registration: Validated<UserRegistration>,
+    ) -> Result<UserIdentification> {
         let user_registration = user_registration.user_input;
         ensure!(
             !self.users.contains_key(&user_registration.email),
-            error::RegistrationFailed { reason: "E-mail already exists "}
+            error::RegistrationFailed {
+                reason: "E-mail already exists "
+            }
         );
 
         let user = User::from(user_registration.clone());
@@ -84,8 +116,8 @@ impl UserDB for HashMapUserDB {
                 let session = Session::new(user);
                 self.sessions.insert(session.token.clone(), session.clone());
                 Ok(session)
-            },
-            _ => Err(error::Error::LoginFailed)
+            }
+            _ => Err(error::Error::LoginFailed),
         }
     }
 
@@ -119,7 +151,7 @@ impl UserDB for HashMapUserDB {
     fn logout(&mut self, token: SessionToken) -> Result<()> {
         match self.sessions.remove(&token) {
             Some(_) => Ok(()),
-            None => Err(error::Error::LogoutFailed)
+            None => Err(error::Error::LogoutFailed),
         }
     }
 
@@ -153,7 +185,7 @@ impl UserDB for HashMapUserDB {
     fn session(&self, token: SessionToken) -> Result<Session> {
         match self.sessions.get(&token) {
             Some(session) => Ok(session.clone()),
-            None => Err(error::Error::SessionDoesNotExist)
+            None => Err(error::Error::SessionDoesNotExist),
         }
     }
 }

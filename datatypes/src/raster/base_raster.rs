@@ -1,4 +1,7 @@
-use crate::raster::{Raster, GridPixelAccess, GridPixelAccessMut, Capacity, Dim, GeoTransform, GridDimension, GridIndex};
+use crate::raster::{
+    Capacity, Dim, GeoTransform, GridDimension, GridIndex, GridPixelAccess, GridPixelAccessMut,
+    Raster,
+};
 use crate::util::Result;
 use crate::{
     error,
@@ -36,6 +39,10 @@ where
     ///    [1.0, 1.0, 0.0, 1.0, 0.0, 1.0].into(),
     /// ).unwrap();
     /// ```
+    ///
+    /// # Errors
+    ///
+    /// This constructor fails if the data container's capacity is different from the grid's dimension capacity
     ///
     pub fn new(
         grid_dimension: D,
