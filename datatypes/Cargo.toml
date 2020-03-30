@@ -13,9 +13,11 @@ arrow = "0.16" # simd compiles with nightly only
 chrono = "0.4"
 float-cmp = "0.6"
 geo = "0.12"
+image = "0.23"
 geojson = "0.17"
 ndarray = "0.13"
 ocl = "0.19"
+ordered-float = { version= "1.0", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 snafu = "0.6"
