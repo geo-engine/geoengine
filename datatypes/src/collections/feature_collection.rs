@@ -40,6 +40,18 @@ pub trait FeatureCollection {
     fn remove_column(&self, column: &str) -> Result<Self>
     where
         Self: Sized;
+
+    /// Serialize the feature collection to a geo json string
+    fn to_geo_json(&self) -> String;
+}
+
+/// This trait allows iterating over the geometries of a feature collection
+pub trait IntoGeometryIterator {
+    type GeometryIterator: Iterator<Item = Self::GeometryType>;
+    type GeometryType;
+
+    /// Return an iterator over geometries
+    fn geometries(&self) -> Self::GeometryIterator;
 }
 
 #[cfg(test)]
@@ -65,6 +77,9 @@ mod test {
             unimplemented!()
         }
         fn remove_column(&self, _column: &str) -> Result<Self> {
+            unimplemented!()
+        }
+        fn to_geo_json(&self) -> String {
             unimplemented!()
         }
     }
