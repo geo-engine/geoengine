@@ -88,11 +88,11 @@ mod tests {
     #[test]
     fn conversions() {
         assert_eq!(
-            0x01234567_u32.transmute_to_rgba(),
+            0x0123_4567_u32.transmute_to_rgba(),
             RgbaColor::new(0x01, 0x23, 0x45, 0x67)
         );
         assert_eq!(
-            0x01234567_i32.transmute_to_rgba(),
+            0x0123_4567_i32.transmute_to_rgba(),
             RgbaColor::new(0x01, 0x23, 0x45, 0x67)
         );
 
@@ -115,11 +115,11 @@ mod tests {
         );
 
         assert_eq!(
-            0x0123456700000000_u64.transmute_to_rgba(),
+            0x0123_4567_0000_0000_u64.transmute_to_rgba(),
             RgbaColor::new(0x01, 0x23, 0x45, 0x67)
         );
         assert_eq!(
-            0x0123456700000000_i64.transmute_to_rgba(),
+            0x0123_4567_0000_0000_i64.transmute_to_rgba(),
             RgbaColor::new(0x01, 0x23, 0x45, 0x67)
         );
 

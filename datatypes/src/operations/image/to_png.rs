@@ -1,5 +1,5 @@
 use crate::error;
-use crate::operations::image::{Colorizer, IntoLossy, RgbaTransmutable};
+use crate::operations::image::{Colorizer, LossyInto, RgbaTransmutable};
 use crate::raster::{GridPixelAccess, Raster, Raster2D};
 use crate::util::Result;
 use image::{DynamicImage, ImageFormat, RgbaImage};
@@ -11,7 +11,7 @@ pub trait ToPng {
 
 impl<T> ToPng for Raster2D<T>
 where
-    T: Copy + IntoLossy<f64> + RgbaTransmutable,
+    T: Copy + LossyInto<f64> + RgbaTransmutable,
 {
     fn to_png(&self, width: u32, height: u32, colorizer: &Colorizer) -> Result<Vec<u8>> {
         // TODO: use PNG color palette once it is available
@@ -174,7 +174,7 @@ mod tests {
     fn rgba() {
         let mut raster = Raster2D::new(
             [2, 2].into(),
-            vec![0x000000FF_u32; 4],
+            vec![0x0000_00FF_u32; 4],
             None,
             Default::default(),
             Default::default(),
@@ -182,10 +182,10 @@ mod tests {
         .unwrap();
 
         raster
-            .set_pixel_value_at_grid_index(&(0, 0), 0xFF0000FF_u32)
+            .set_pixel_value_at_grid_index(&(0, 0), 0xFF00_00FF_u32)
             .unwrap();
         raster
-            .set_pixel_value_at_grid_index(&(0, 1), 0x00FF00FF_u32)
+            .set_pixel_value_at_grid_index(&(0, 1), 0x00FF_00FF_u32)
             .unwrap();
 
         let colorizer = Colorizer::rgba();

@@ -1,5 +1,5 @@
 use crate::error;
-use crate::operations::image::{IntoLossy, RgbaTransmutable};
+use crate::operations::image::{LossyInto, RgbaTransmutable};
 use crate::util::Result;
 use ordered_float::{FloatIsNan, NotNan};
 use serde::{Deserialize, Serialize};
@@ -335,7 +335,7 @@ impl<'c> ColorMapper<'c> {
     /// Map a raster value to a color from the colorizer
     pub fn call<T>(&self, value: T) -> RgbaColor
     where
-        T: IntoLossy<f64> + RgbaTransmutable,
+        T: LossyInto<f64> + RgbaTransmutable,
     {
         match self {
             ColorMapper::ColorTable {
@@ -345,7 +345,7 @@ impl<'c> ColorMapper<'c> {
                 no_data_color,
                 default_color,
             } => {
-                let value = value.into_lossy();
+                let value = value.lossy_into();
                 if f64::is_nan(value) {
                     *no_data_color
                 } else if value < *min_value || value > *max_value {
@@ -362,7 +362,7 @@ impl<'c> ColorMapper<'c> {
                 color_map,
                 no_data_color,
             } => {
-                if let Ok(value) = NotNan::<f64>::new(value.into_lossy()) {
+                if let Ok(value) = NotNan::<f64>::new(value.lossy_into()) {
                     *color_map.get(&value).unwrap_or(no_data_color)
                 } else {
                     *no_data_color
@@ -545,12 +545,13 @@ mod tests {
 
         assert_eq!(color_table[0], RgbaColor::black());
 
-        let v1 = f64::round(0.8286472601695658 * 100.) as u8;
+        let v1 = f64::round(0.828_647_260_169_565_8 * 100.) as u8;
         assert_eq!(color_table[1], RgbaColor::new(v1, v1, v1, 255)); // at 26
 
         assert_eq!(color_table[2], RgbaColor::new(100, 100, 100, 255));
 
-        let v2 = f64::round(0.5838002256925127 * 255. + (1. - 0.5838002256925127) * 100.) as u8;
+        let v2 = f64::round(0.583_800_225_692_512_7 * 255. + (1. - 0.583_800_225_692_512_7) * 100.)
+            as u8;
         assert_eq!(color_table[3], RgbaColor::new(v2, v2, v2, 255)); // at 76
 
         assert_eq!(color_table[4], RgbaColor::white());
