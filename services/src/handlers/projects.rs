@@ -10,7 +10,7 @@ use crate::users::user::UserInput;
 pub fn create_project_handler<T: UserDB, R: ProjectDB>(user_db: DB<T>, project_db: DB<R>) -> impl Filter<Extract=impl warp::Reply, Error=warp::Rejection> + Clone {
     warp::post()
         .and(warp::path!("project" / "create"))
-        .and(authenticate(user_db.clone()))
+        .and(authenticate(user_db))
         .and(warp::body::json())
         .and(warp::any().map(move || Arc::clone(&project_db)))
         .and_then(create_project)
@@ -26,7 +26,7 @@ async fn create_project<T: ProjectDB>(session: Session, create: CreateProject, p
 pub fn list_projects_handler<T: UserDB, R: ProjectDB>(user_db: DB<T>, project_db: DB<R>) -> impl Filter<Extract=impl warp::Reply, Error=warp::Rejection> + Clone {
     warp::post()
         .and(warp::path!("project" / "list"))
-        .and(authenticate(user_db.clone()))
+        .and(authenticate(user_db))
         .and(warp::body::json())
         .and(warp::any().map(move || Arc::clone(&project_db)))
         .and_then(list_projects)
@@ -42,7 +42,7 @@ async fn list_projects<T: ProjectDB>(session: Session, options: ProjectListOptio
 pub fn load_project_handler<T: UserDB, R: ProjectDB>(user_db: DB<T>, project_db: DB<R>) -> impl Filter<Extract=impl warp::Reply, Error=warp::Rejection> + Clone {
     warp::post()
         .and(warp::path!("project" / "load"))
-        .and(authenticate(user_db.clone()))
+        .and(authenticate(user_db))
         .and(warp::body::json())
         .and(warp::any().map(move || Arc::clone(&project_db)))
         .and_then(load_project)
@@ -57,7 +57,7 @@ async fn load_project<T: ProjectDB>(session: Session, project: ProjectId, projec
 pub fn update_project_handler<T: UserDB, R: ProjectDB>(user_db: DB<T>, project_db: DB<R>) -> impl Filter<Extract=impl warp::Reply, Error=warp::Rejection> + Clone {
     warp::post()
         .and(warp::path!("project" / "update"))
-        .and(authenticate(user_db.clone()))
+        .and(authenticate(user_db))
         .and(warp::body::json())
         .and(warp::any().map(move || Arc::clone(&project_db)))
         .and_then(update_project)
@@ -73,7 +73,7 @@ async fn update_project<T: ProjectDB>(session: Session, update: UpdateProject, p
 pub fn delete_project_handler<T: UserDB, R: ProjectDB>(user_db: DB<T>, project_db: DB<R>) -> impl Filter<Extract=impl warp::Reply, Error=warp::Rejection> + Clone {
     warp::post()
         .and(warp::path!("project" / "delete"))
-        .and(authenticate(user_db.clone()))
+        .and(authenticate(user_db))
         .and(warp::body::json())
         .and(warp::any().map(move || Arc::clone(&project_db)))
         .and_then(delete_project)
@@ -88,7 +88,7 @@ async fn delete_project<T: ProjectDB>(session: Session, project: ProjectId, proj
 pub fn add_permission_handler<T: UserDB, R: ProjectDB>(user_db: DB<T>, project_db: DB<R>) -> impl Filter<Extract=impl warp::Reply, Error=warp::Rejection> + Clone {
     warp::post()
         .and(warp::path!("project" / "permission" / "add"))
-        .and(authenticate(user_db.clone()))
+        .and(authenticate(user_db))
         .and(warp::body::json())
         .and(warp::any().map(move || Arc::clone(&project_db)))
         .and_then(add_permission)
@@ -103,7 +103,7 @@ async fn add_permission<T: ProjectDB>(session: Session, permission: UserProjectP
 pub fn remove_permission_handler<T: UserDB, R: ProjectDB>(user_db: DB<T>, project_db: DB<R>) -> impl Filter<Extract=impl warp::Reply, Error=warp::Rejection> + Clone {
     warp::post()
         .and(warp::path!("project" / "permission" / "remove"))
-        .and(authenticate(user_db.clone()))
+        .and(authenticate(user_db))
         .and(warp::body::json())
         .and(warp::any().map(move || Arc::clone(&project_db)))
         .and_then(remove_permission)
@@ -118,7 +118,7 @@ async fn remove_permission<T: ProjectDB>(session: Session, permission: UserProje
 pub fn list_permissions_handler<T: UserDB, R: ProjectDB>(user_db: DB<T>, project_db: DB<R>) -> impl Filter<Extract=impl warp::Reply, Error=warp::Rejection> + Clone {
     warp::post()
         .and(warp::path!("project" / "permission" / "list"))
-        .and(authenticate(user_db.clone()))
+        .and(authenticate(user_db))
         .and(warp::body::json())
         .and(warp::any().map(move || Arc::clone(&project_db)))
         .and_then(list_permissions)

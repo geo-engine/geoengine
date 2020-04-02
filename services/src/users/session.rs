@@ -41,6 +41,6 @@ pub struct Session {
 
 impl Session {
     pub fn new(user: &User) -> Session {
-        Self { user: user.id.clone(), token: SessionToken::default() }
+        Self { user: user.id, token: SessionToken::default() }
     }
 }

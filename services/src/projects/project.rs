@@ -13,6 +13,7 @@ pub struct ProjectId {
 }
 
 impl ProjectId {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self {
             id: Uuid::new_v4()

@@ -61,6 +61,7 @@ pub struct UserIdentification {
 }
 
 impl UserIdentification {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self { id: Uuid::new_v4() }
     }

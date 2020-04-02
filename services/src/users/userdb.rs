@@ -48,7 +48,7 @@ impl UserDB for HashMapUserDB {
         );
 
         let user = User::from(user_registration.clone());
-        let id = user.id.clone();
+        let id = user.id;
         self.users.insert(user_registration.email, user);
         Ok(id)
     }

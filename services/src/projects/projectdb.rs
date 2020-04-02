@@ -137,9 +137,9 @@ impl ProjectDB for HashMapProjectDB {
     /// ```
     fn create(&mut self, user: UserIdentification, create: Validated<CreateProject>) -> ProjectId {
         let project: Project = create.user_input.into();
-        let id = project.id.clone();
+        let id = project.id;
         self.projects.insert(id.clone(), project);
-        self.permissions.push(UserProjectPermission { user: user.clone(), project: id.clone(), permission: ProjectPermission::Owner });
+        self.permissions.push(UserProjectPermission { user, project: id, permission: ProjectPermission::Owner });
         id
     }
 
