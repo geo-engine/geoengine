@@ -134,7 +134,7 @@ impl Colorizer {
         match self {
             Self::LinearGradient { breakpoints, .. }
             | Self::LogarithmicGradient { breakpoints, .. } => *breakpoints[0].value,
-            Self::Palette { .. } | Self::Rgba { .. } => f64::from(std::u8::MIN),
+            Self::Palette { .. } | Self::Rgba { .. } => f64::from(u8::min_value()),
         }
     }
 
@@ -159,7 +159,7 @@ impl Colorizer {
             | Self::LogarithmicGradient { breakpoints, .. } => {
                 *breakpoints[breakpoints.len() - 1].value
             }
-            Self::Palette { .. } | Self::Rgba { .. } => f64::from(std::u8::MAX),
+            Self::Palette { .. } | Self::Rgba { .. } => f64::from(u8::max_value()),
         }
     }
 
@@ -314,7 +314,7 @@ impl Colorizer {
     }
 }
 
-/// A ColorMapper is a function for mapping raster values to colors
+/// A `ColorMapper` is a function for mapping raster values to colors
 pub enum ColorMapper<'c> {
     ColorTable {
         color_table: Vec<RgbaColor>,
@@ -411,7 +411,7 @@ pub type Breakpoints = Vec<Breakpoint>;
 /// It is assumed that is has at least one and at most 256 entries.
 pub type Palette = HashMap<NotNan<f64>, RgbaColor>;
 
-/// RgbaColor defines a 32 bit RGB color with alpha value
+/// `RgbaColor` defines a 32 bit RGB color with alpha value
 #[derive(Copy, Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct RgbaColor([u8; 4]);
 
@@ -494,7 +494,7 @@ trait Clamp: Sized + PartialOrd {
 impl Clamp for f64 {}
 
 impl Into<image::Rgba<u8>> for RgbaColor {
-    /// Transform an RgbaColor to its counterpart from the image crate
+    /// Transform an `RgbaColor` to its counterpart from the image crate
     fn into(self) -> image::Rgba<u8> {
         // [r, g, b, a]
         image::Rgba(self.0)

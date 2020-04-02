@@ -25,6 +25,10 @@ impl BoundingBox2D {
     /// let bbox = BoundingBox2D::new(ll, ur).unwrap();
     /// ```
     ///
+    /// # Errors
+    ///
+    /// This constructor fails if the coordinate's values are not in order
+    ///
     pub fn new(
         lower_left_coordinate: Coordinate2D,
         upper_right_coordinate: Coordinate2D,
@@ -65,7 +69,7 @@ impl BoundingBox2D {
         }
     }
 
-    /// Creates a new bounding box with upper_left and lower_right coordinates
+    /// Creates a new bounding box with `upper_left` and `lower_right` coordinates
     /// This is usually used with raster data and matches with the gdal geotransform
     ///
     /// # Examples
@@ -78,6 +82,10 @@ impl BoundingBox2D {
     /// let bbox = BoundingBox2D::new_upper_left_lower_right(ul, lr).unwrap();
     /// ```
     ///
+    /// # Errors
+    ///
+    /// This constructor fails if the order of coordinates is not correct
+    ///
     pub fn new_upper_left_lower_right(
         upper_left_coordinate: Coordinate2D,
         lower_right_coordinate: Coordinate2D,
@@ -87,7 +95,7 @@ impl BoundingBox2D {
         BoundingBox2D::new(lower_left_coordinate, upper_right_coordinate)
     }
 
-    /// Creates a new bounding box with upper_left and lower_right coordinates unchecked
+    /// Creates a new bounding box with `upper_left` and `lower_right` coordinates unchecked
     /// This is usually used with raster data and matches with the gdal geotransform
     ///
     /// # Examples
@@ -109,7 +117,7 @@ impl BoundingBox2D {
         BoundingBox2D::new_unchecked(lower_left_coordinate, upper_right_coordinate)
     }
 
-    /// Returns the Coordnate2D representing the lower left edge of the bounding box
+    /// Returns the `Coordnate2D` representing the lower left edge of the bounding box
     ///
     /// # Examples
     ///
@@ -127,7 +135,7 @@ impl BoundingBox2D {
         self.lower_left_coordinate
     }
 
-    /// Returns the Coordnate2D representing the upper right edge of the bounding box
+    /// Returns the `Coordnate2D` representing the upper right edge of the bounding box
     ///
     /// # Examples
     ///
@@ -145,7 +153,7 @@ impl BoundingBox2D {
         self.upper_right_coordinate
     }
 
-    /// Returns the Coordnate2D representing the upper left edge of the bounding box
+    /// Returns the `Coordnate2D` representing the upper left edge of the bounding box
     ///
     /// # Examples
     ///
@@ -163,7 +171,7 @@ impl BoundingBox2D {
         (self.lower_left_coordinate.x, self.upper_right_coordinate.y).into()
     }
 
-    /// Returns the Coordnate2D representing the upper right edge of the bounding box
+    /// Returns the `Coordnate2D` representing the upper right edge of the bounding box
     ///
     /// # Examples
     ///
@@ -252,7 +260,7 @@ impl BoundingBox2D {
         !no_overlap
     }
 
-    /// Returns the Coordnate2D representing the upper right edge of the bounding box
+    /// Returns the `Coordnate2D` representing the upper right edge of the bounding box
     ///
     /// # Examples
     ///
@@ -279,6 +287,7 @@ impl BoundingBox2D {
 mod tests {
     use crate::primitives::{BoundingBox2D, Coordinate2D};
     #[test]
+    #[allow(clippy::float_cmp)]
     fn bounding_box_new() {
         let ll = Coordinate2D::new(1.0, 1.0);
         let ur = Coordinate2D::new(2.0, 2.0);
@@ -291,6 +300,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn bounding_box_new_unchecked() {
         let ll = Coordinate2D::new(1.0, 1.0);
         let ur = Coordinate2D::new(2.0, 2.0);
@@ -302,6 +312,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn bounding_box_new_ul_lr() {
         let ul = Coordinate2D::new(1.0, 2.0);
         let lr = Coordinate2D::new(2.0, 1.0);
@@ -313,6 +324,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn bounding_box_new_ul_lr_unchecked() {
         let ul = Coordinate2D::new(1.0, 2.0);
         let lr = Coordinate2D::new(2.0, 1.0);
@@ -325,6 +337,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn bounding_box_lower_left() {
         let ll = Coordinate2D::new(1.0, 1.0);
         let ur = Coordinate2D::new(2.0, 2.0);
@@ -334,6 +347,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn bounding_box_lower_right() {
         let ll = Coordinate2D::new(1.0, 1.0);
         let ur = Coordinate2D::new(2.0, 2.0);
@@ -343,6 +357,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn bounding_box_upper_right() {
         let ll = Coordinate2D::new(1.0, 1.0);
         let ur = Coordinate2D::new(2.0, 2.0);
@@ -352,6 +367,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn bounding_box_upper_left() {
         let ll = Coordinate2D::new(1.0, 1.0);
         let ur = Coordinate2D::new(2.0, 2.0);
@@ -361,6 +377,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn bounding_box_contains_coordinate() {
         let ll = Coordinate2D::new(1.0, 1.0);
         let ur = Coordinate2D::new(2.0, 2.0);

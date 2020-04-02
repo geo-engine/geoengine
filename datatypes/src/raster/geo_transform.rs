@@ -1,9 +1,9 @@
 use crate::primitives::Coordinate2D;
 
-/// This is a typedef for the GDAL GeoTransform. It represents an affine transformation matrix.
+/// This is a typedef for the `GDAL GeoTransform`. It represents an affine transformation matrix.
 pub type GdalGeoTransform = [f64; 6];
 
-/// The GeoTransform is a more user friendly representation of the GDAL GeoTransform affine transformation matrix.
+/// The `GeoTransform` is a more user friendly representation of the `GDAL GeoTransform` affine transformation matrix.
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub struct GeoTransform {
     upper_left_coordinate: Coordinate2D,
@@ -12,8 +12,7 @@ pub struct GeoTransform {
 }
 
 impl GeoTransform {
-
-    /// Generates a new GeoTransform
+    /// Generates a new `GeoTransform`
     ///
     /// # Examples
     ///
@@ -23,11 +22,7 @@ impl GeoTransform {
     /// let geo_transform = GeoTransform::new((0.0, 0.0).into(), 1.0, -1.0);
     /// ```
     ///
-    pub fn new(
-        upper_left_coordinate: Coordinate2D,
-        x_pixel_size: f64,
-        y_pixel_size: f64,
-    ) -> Self {
+    pub fn new(upper_left_coordinate: Coordinate2D, x_pixel_size: f64, y_pixel_size: f64) -> Self {
         Self {
             upper_left_coordinate,
             x_pixel_size,
@@ -35,7 +30,7 @@ impl GeoTransform {
         }
     }
 
-    /// Generates a new GeoTransform with explicit x, y values of the upper left edge
+    /// Generates a new `GeoTransform` with explicit x, y values of the upper left edge
     ///
     /// # Examples
     ///
@@ -59,8 +54,8 @@ impl GeoTransform {
     }
 
     /// Transforms a grid coordinate (row, column) ~ (y, x) into a SRS coordinate (x,y)
-    /// See GDAL documentation for more details (including the two ignored parameters): https://gdal.org/user/raster_data_model.html
-    /// 
+    /// See GDAL documentation for more details (including the two ignored parameters): <https://gdal.org/user/raster_data_model.html>
+    ///
     /// # Examples
     ///
     /// ```
@@ -132,10 +127,11 @@ impl Into<GdalGeoTransform> for GeoTransform {
 #[cfg(test)]
 mod tests {
 
-    use crate::raster::{GeoTransform};
+    use crate::raster::GeoTransform;
 
     #[test]
-    fn geo_transform_new(){
+    #[allow(clippy::float_cmp)]
+    fn geo_transform_new() {
         let geo_transform = GeoTransform::new((0.0, 1.0).into(), 2.0, -3.0);
         assert_eq!(geo_transform.upper_left_coordinate.x, 0.0);
         assert_eq!(geo_transform.upper_left_coordinate.y, 1.0);
@@ -144,7 +140,8 @@ mod tests {
     }
 
     #[test]
-    fn geo_transform_new_with_coordinate_x_y(){
+    #[allow(clippy::float_cmp)]
+    fn geo_transform_new_with_coordinate_x_y() {
         let geo_transform = GeoTransform::new_with_coordinate_x_y(0.0, 1.0, 2.0, -3.0);
         assert_eq!(geo_transform.upper_left_coordinate.x, 0.0);
         assert_eq!(geo_transform.x_pixel_size, 1.0);
@@ -153,19 +150,36 @@ mod tests {
     }
 
     #[test]
-    fn geo_transform_grid_2d_to_coordinate_2d(){
+    fn geo_transform_grid_2d_to_coordinate_2d() {
         let geo_transform = GeoTransform::new_with_coordinate_x_y(5.0, 1.0, 5.0, -1.0);
-        assert_eq!(geo_transform.grid_2d_to_coordinate_2d((0, 0)), (5.0, 5.0).into());
-        assert_eq!(geo_transform.grid_2d_to_coordinate_2d((1, 1)), (6.0, 4.0).into());
-        assert_eq!(geo_transform.grid_2d_to_coordinate_2d((2, 2)), (7.0, 3.0).into());
+        assert_eq!(
+            geo_transform.grid_2d_to_coordinate_2d((0, 0)),
+            (5.0, 5.0).into()
+        );
+        assert_eq!(
+            geo_transform.grid_2d_to_coordinate_2d((1, 1)),
+            (6.0, 4.0).into()
+        );
+        assert_eq!(
+            geo_transform.grid_2d_to_coordinate_2d((2, 2)),
+            (7.0, 3.0).into()
+        );
     }
 
     #[test]
-    fn geo_transform_coordinate_2d_to_grid_2d(){
+    fn geo_transform_coordinate_2d_to_grid_2d() {
         let geo_transform = GeoTransform::new_with_coordinate_x_y(5.0, 1.0, 5.0, -1.0);
-        assert_eq!(geo_transform.coordinate_2d_to_grid_2d(&(5.0, 5.0).into()), (0, 0));
-        assert_eq!(geo_transform.coordinate_2d_to_grid_2d(&(6.0, 4.0).into()), (1, 1));
-        assert_eq!(geo_transform.coordinate_2d_to_grid_2d(&(7.0, 3.0).into()), (2, 2));
+        assert_eq!(
+            geo_transform.coordinate_2d_to_grid_2d(&(5.0, 5.0).into()),
+            (0, 0)
+        );
+        assert_eq!(
+            geo_transform.coordinate_2d_to_grid_2d(&(6.0, 4.0).into()),
+            (1, 1)
+        );
+        assert_eq!(
+            geo_transform.coordinate_2d_to_grid_2d(&(7.0, 3.0).into()),
+            (2, 2)
+        );
     }
-
 }

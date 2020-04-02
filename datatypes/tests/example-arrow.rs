@@ -84,7 +84,7 @@ fn null_bytes() {
 
         assert_eq!(
             null_bitmap.clone().to_buffer().data(), // must clone bitmap because there is no way to get a reference to the data
-            &[0b00001001] // right most bit is first element, 1 = valid value, 0 = null or unset
+            &[0b0000_1001] // right most bit is first element, 1 = valid value, 0 = null or unset
         );
     }
 }
@@ -175,10 +175,7 @@ fn strings2() {
     assert_eq!(array.value(3), "other");
     assert_eq!(array.value(4), "side");
 
-    assert_eq!(
-        array.value_data().data(),
-        "hellofromtheotherside".as_bytes()
-    );
+    assert_eq!(array.value_data().data(), b"hellofromtheotherside");
     assert_eq!(
         array.value_offsets().typed_data::<i32>(),
         &[0, 5, 9, 12, 17, 21]
@@ -255,9 +252,10 @@ fn fixed_size_list() {
 }
 
 #[test]
+#[allow(clippy::cast_ptr_alignment, clippy::identity_op)]
 fn binary() {
     let t1 = TimeInterval::new(0, 1).unwrap();
-    let t2_bytes: [u8; 16] = unsafe { mem::transmute(t1.clone()) };
+    let t2_bytes: [u8; 16] = unsafe { mem::transmute(t1) };
     let t2: TimeInterval = unsafe { mem::transmute(t2_bytes) };
     assert_eq!(t1, t2);
 
@@ -296,7 +294,7 @@ fn binary() {
     assert_eq!(
         unsafe {
             slice::from_raw_parts(
-                mem::transmute::<*const u8, *const TimeInterval>(array.value_data().raw_data()),
+                array.value_data().raw_data() as *const TimeInterval,
                 array.len(),
             )
         },
@@ -309,6 +307,7 @@ fn binary() {
 }
 
 #[test]
+#[allow(clippy::cast_ptr_alignment)]
 fn ocl() {
     let array = {
         let mut builder = Int32Builder::new(5);

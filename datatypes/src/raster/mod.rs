@@ -1,16 +1,14 @@
+mod base_raster;
 mod geo_transform;
 mod grid_dimension;
-mod base_raster;
-use crate::util::Result;
+pub use self::base_raster::{BaseRaster, Raster2D, Raster3D};
 pub use self::geo_transform::{GdalGeoTransform, GeoTransform};
 pub use self::grid_dimension::{Dim, GridDimension, GridIndex};
-pub use self::base_raster::{
-    BaseRaster, Raster2D, Raster3D,
-};
 pub use super::primitives::{BoundingBox2D, SpatialBounded, TemporalBounded, TimeInterval};
+use crate::util::Result;
 
 pub trait Raster<D: GridDimension, T: Copy, C: Capacity>: SpatialBounded + TemporalBounded {
-    /// returns the grid dimension object of type D: GridDimension
+    /// returns the grid dimension object of type D: `GridDimension`
     fn dimension(&self) -> &D;
     /// returns the optional  no-data value used for the raster
     fn no_data_value(&self) -> Option<T>;
@@ -19,7 +17,6 @@ pub trait Raster<D: GridDimension, T: Copy, C: Capacity>: SpatialBounded + Tempo
     /// returns a reference to the geo transform describing the origin of the raster and the pixel size
     fn geo_transform(&self) -> &GeoTransform;
 }
-
 
 pub trait GridPixelAccess<T, I> {
     /// Gets the value at a pixels location
@@ -39,6 +36,10 @@ pub trait GridPixelAccess<T, I> {
     /// let value = raster2d.pixel_value_at_grid_index(&(1, 1)).unwrap();
     /// assert_eq!(value, 4);
     /// ```
+    ///
+    /// # Errors
+    ///
+    /// The method fails if the grid index is out of bounds.
     ///
     fn pixel_value_at_grid_index(&self, grid_index: &I) -> Result<T>;
 }
@@ -61,6 +62,10 @@ pub trait GridPixelAccessMut<T, I> {
     /// raster2d.set_pixel_value_at_grid_index(&(1, 1), 9).unwrap();
     /// assert_eq!(raster2d.data_container(), &[1,2,3,9,5,6]);
     /// ```
+    ///
+    /// # Errors
+    ///
+    /// The method fails if the grid index is out of bounds.
     ///
     fn set_pixel_value_at_grid_index(&mut self, grid_index: &I, value: T) -> Result<()>;
 }

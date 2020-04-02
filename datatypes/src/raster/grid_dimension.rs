@@ -37,6 +37,10 @@ pub trait GridDimension:
 
 pub trait GridIndex<D>: Debug {
     fn grid_index_to_1d_index_unchecked(&self, dim: &D) -> usize;
+
+    /// # Errors
+    /// This method fails if the grid index is out of bounds.
+    ///
     fn grid_index_to_1d_index(&self, dim: &D) -> Result<usize>;
 }
 
@@ -110,7 +114,9 @@ impl<I> Dim<I> {
     }
 }
 
-impl <D> Capacity for D where D: GridDimension
+impl<D> Capacity for D
+where
+    D: GridDimension,
 {
     fn capacity(&self) -> usize {
         self.number_of_elements()
@@ -391,6 +397,7 @@ mod tests {
         assert_eq!(dim_3d[2], 3);
     }
     #[test]
+    #[allow(clippy::identity_op)]
     fn dim_3d_stride_offset() {
         let dim_3d = Dim::new(TEST_3D_DIM_ARR);
         let dim_3d_used_as_index = Dim::new([2, 2, 2]);

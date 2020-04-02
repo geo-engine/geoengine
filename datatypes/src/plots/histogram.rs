@@ -35,26 +35,26 @@ impl Histogram {
     ) -> Result<Self> {
         ensure!(
             number_of_buckets > 0,
-            error::PlotError {
+            error::Plot {
                 details: "Histograms must have at least one bucket"
             }
         );
         ensure!(
             min.is_finite() && max.is_finite(),
-            error::PlotError {
+            error::Plot {
                 details: "Histograms must have finite min/max values"
             }
         );
         ensure!(
             min < max || (approx_eq!(f64, min, max) && number_of_buckets == 1),
-            error::PlotError {
+            error::Plot {
                 details: "Histograms max value must be larger than its min value"
             }
         );
         if let Some(labels) = &labels {
             ensure!(
                 labels.len() == number_of_buckets,
-                error::PlotError {
+                error::Plot {
                     details: "Histogram must have as many labels as buckets"
                 }
             );
@@ -110,6 +110,12 @@ impl Histogram {
         HistogramBuilder::new(number_of_buckets, min, max, measurement)
     }
 
+    /// Add feature data to the histogram
+    ///
+    /// # Errors
+    ///
+    /// This method fails if the feature is not numeric.
+    ///
     pub fn add_feature_data(&mut self, data: FeatureDataRef) -> Result<()> {
         // TODO: implement efficiently OpenCL version
         match data {
@@ -139,7 +145,7 @@ impl Histogram {
                 }
             }
             FeatureDataRef::Categorical(categorical_ref) => {
-                for value in categorical_ref.as_ref().iter().map(|&v| v as f64) {
+                for value in categorical_ref.as_ref().iter().map(|&v| f64::from(v)) {
                     self.handle_data_item(value, false);
                 }
             }
@@ -147,14 +153,14 @@ impl Histogram {
                 for (value, is_null) in categorical_ref
                     .as_ref()
                     .iter()
-                    .map(|&v| v as f64)
+                    .map(|&v| f64::from(v))
                     .zip(categorical_ref.nulls())
                 {
                     self.handle_data_item(value, is_null);
                 }
             }
             _ => {
-                return error::PlotError {
+                return error::Plot {
                     details: "Cannot add non-numerical data to the histogram.",
                 }
                 .fail();
@@ -363,6 +369,11 @@ impl HistogramBuilder {
     ///
     /// Histogram::builder(0, f64::NAN, f64::INFINITY, Measurement::Unitless).build().unwrap_err();
     /// ```
+    ///
+    /// # Errors
+    ///
+    /// This method fails if the `Histogram`'s preconditions are not met
+    ///
     pub fn build(self) -> Result<Histogram> {
         Histogram::new(
             self.number_of_buckets,

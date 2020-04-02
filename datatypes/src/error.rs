@@ -8,7 +8,7 @@ use crate::primitives::{Coordinate2D, TimeInterval};
 pub enum Error {
     // #[snafu(display("Arrow internal error: {:?}", source))]
     #[snafu(display("Arrow internal error: {:?}", error))]
-    ArrowInternalError {
+    ArrowInternal {
         // #[snafu(source(false))]
         // source: arrow::error::ArrowError,
         error: arrow::error::ArrowError,
@@ -76,10 +76,10 @@ pub enum Error {
     FeatureData { details: String },
 
     #[snafu(display("FeatureCollectionBuilder exception: {}", details))]
-    FeatureCollectionBuilderException { details: String },
+    FeatureCollectionBuilder { details: String },
 
     #[snafu(display("Plot exception: {}", details))]
-    PlotError { details: String },
+    Plot { details: String },
 
     #[snafu(display("Colorizer exception: {}", details))]
     Colorizer { details: String },
@@ -87,7 +87,7 @@ pub enum Error {
 
 impl From<arrow::error::ArrowError> for Error {
     fn from(arrow_error: ArrowError) -> Self {
-        Error::ArrowInternalError {
+        Error::ArrowInternal {
             // source: arrow_error,
             error: arrow_error,
         }

@@ -31,7 +31,7 @@ pub struct MultiPointCollection {
 }
 
 impl Clone for MultiPointCollection {
-    /// Clone the MultiPointCollection
+    /// Clone the `MultiPointCollection`
     ///
     /// # Examples
     ///
@@ -64,7 +64,7 @@ impl MultiPointCollection {
         DataType::FixedSizeList(DataType::Date64(DateUnit::Millisecond).into(), 2)
     }
 
-    /// Create an empty MultiPointCollection.
+    /// Create an empty `MultiPointCollection`.
     ///
     /// # Examples
     ///
@@ -119,6 +119,11 @@ impl MultiPointCollection {
     ///
     /// assert_eq!(pc.len(), 2);
     /// ```
+    ///
+    /// # Errors
+    ///
+    /// This constructor fails if the data lenghts are different or `data`'s keys use a reserved name
+    ///
     pub fn from_data(
         coordinates: Vec<Vec<Coordinate2D>>,
         time_intervals: Vec<TimeInterval>,
@@ -944,10 +949,14 @@ impl MultiPointCollectionBuilder {
     /// builder.add_column("__features", FeatureDataType::Number).unwrap_err();
     /// ```
     ///
+    /// # Errors
+    ///
+    /// Adding a column fails if there are already rows in the builder or the column name is reserved
+    ///
     pub fn add_column(&mut self, name: &str, data_type: FeatureDataType) -> Result<()> {
         ensure!(
             self.rows == 0,
-            error::FeatureCollectionBuilderException {
+            error::FeatureCollectionBuilder {
                 details: "It is not allowed to add further columns after data was inserted",
             }
         );
@@ -985,6 +994,10 @@ impl MultiPointCollectionBuilder {
     /// builder.finish_row().unwrap_err();
     /// ```
     ///
+    /// # Errors
+    ///
+    /// Finishing the row fails if the column lenghts do not equal
+    ///
     pub fn finish_row(&mut self) -> Result<()> {
         let rows = self.rows + 1;
 
@@ -992,7 +1005,7 @@ impl MultiPointCollectionBuilder {
             self.coordinates_builder.len() == rows
                 && self.time_intervals_builder.len() == rows
                 && self.builders.values().all(|builder| builder.len() == rows),
-            error::FeatureCollectionBuilderException {
+            error::FeatureCollectionBuilder {
                 details: "Cannot finish row when child data is missing",
             }
         );
@@ -1016,10 +1029,14 @@ impl MultiPointCollectionBuilder {
     /// builder.append_coordinate((1.0, 1.0).into()).unwrap_err();
     /// ```
     ///
+    /// # Errors
+    ///
+    /// This append fails if the previous row was unfinished
+    ///
     pub fn append_coordinate(&mut self, coordinate: Coordinate2D) -> Result<()> {
         ensure!(
             self.coordinates_builder.len() <= self.rows,
-            error::FeatureCollectionBuilderException {
+            error::FeatureCollectionBuilder {
                 details: "Cannot add another coordinate until row is finished",
             }
         );
@@ -1045,10 +1062,14 @@ impl MultiPointCollectionBuilder {
     /// builder.append_multi_coordinate(vec![(2.0, 2.1).into()]).unwrap_err();
     /// ```
     ///
+    /// # Errors
+    ///
+    /// This append fails if the previous row was unfinished
+    ///
     pub fn append_multi_coordinate(&mut self, coordinates: Vec<Coordinate2D>) -> Result<()> {
         ensure!(
             self.coordinates_builder.len() <= self.rows,
-            error::FeatureCollectionBuilderException {
+            error::FeatureCollectionBuilder {
                 details: "Cannot add another coordinate until row is finished",
             }
         );
@@ -1090,10 +1111,14 @@ impl MultiPointCollectionBuilder {
     /// builder.append_time_interval(TimeInterval::new_unchecked(1, 2)).unwrap_err();
     /// ```
     ///
+    /// # Errors
+    ///
+    /// This append fails if the previous row was unfinished
+    ///
     pub fn append_time_interval(&mut self, time_interval: TimeInterval) -> Result<()> {
         ensure!(
             self.time_intervals_builder.len() <= self.rows,
-            error::FeatureCollectionBuilderException {
+            error::FeatureCollectionBuilder {
                 details: "Cannot add another time interval until row is finished",
             }
         );
@@ -1122,10 +1147,14 @@ impl MultiPointCollectionBuilder {
     /// builder.append_data("foobar", FeatureDataValue::Number(1.)).unwrap_err();
     /// ```
     ///
+    /// # Errors
+    ///
+    /// The append fails if the column does not exist, it has a wrong type or the previous row was unfinished
+    ///
     pub fn append_data(&mut self, column: &str, data: FeatureDataValue) -> Result<()> {
         ensure!(
             self.types.contains_key(column),
-            error::FeatureCollectionBuilderException {
+            error::FeatureCollectionBuilder {
                 details: format!("Column {} does not exist", column),
             }
         );
@@ -1134,16 +1163,16 @@ impl MultiPointCollectionBuilder {
 
         ensure!(
             data_builder.len() <= self.rows,
-            error::FeatureCollectionBuilderException {
+            error::FeatureCollectionBuilder {
                 details: "Cannot add another data item until row is finished",
             }
         );
 
-        let _data_type = self.types.get(column).unwrap(); // previously checked
+        let data_type = self.types.get(column).unwrap(); // previously checked
 
         ensure!(
-            mem::discriminant(&FeatureDataType::from(&data)) == mem::discriminant(_data_type), // same enum variant
-            error::FeatureCollectionBuilderException {
+            mem::discriminant(&FeatureDataType::from(&data)) == mem::discriminant(data_type), // same enum variant
+            error::FeatureCollectionBuilder {
                 details: "Data type is wrong for the column",
             }
         );
@@ -1221,6 +1250,10 @@ impl MultiPointCollectionBuilder {
     /// assert_eq!(point_collection.coordinates(), &[(0.0, 0.1).into(), (1.0, 1.1).into()]);
     /// ```
     ///
+    /// # Errors
+    ///
+    /// This build fails if there are unfinished rows
+    ///
     pub fn build(mut self) -> Result<MultiPointCollection> {
         ensure!(
             self.coordinates_builder.len() == self.rows
@@ -1229,7 +1262,7 @@ impl MultiPointCollectionBuilder {
                     .builders
                     .values()
                     .all(|builder| builder.len() == self.rows),
-            error::FeatureCollectionBuilderException {
+            error::FeatureCollectionBuilder {
                 details: "Cannot build a point collection out of unfinished rows",
             }
         );
