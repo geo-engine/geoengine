@@ -1,5 +1,6 @@
 use crate::error;
 use crate::util::Result;
+use chrono::{DateTime, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::cmp::Ordering;
@@ -191,6 +192,35 @@ impl TimeInterval {
 
     pub fn end(&self) -> i64 {
         self.end
+    }
+
+    /// Creates a geo json event from a time interval
+    ///
+    /// according to GeoJSON event extension (https://github.com/sgillies/geojson-events)
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use geoengine_datatypes::primitives::TimeInterval;
+    ///
+    /// assert_eq!(
+    ///     TimeInterval::new_unchecked(0, 1585069448 * 1000).to_geo_json_event(),
+    ///     serde_json::json!({
+    ///         "start": "1970-01-01T00:00:00+00:00",
+    ///         "end": "2020-03-24T17:04:08+00:00",
+    ///         "type": "Interval",
+    ///     })
+    /// );
+    /// ```
+    pub fn to_geo_json_event(&self) -> serde_json::Value {
+        let start_date: DateTime<Utc> = Utc.timestamp_millis(self.start());
+        let end_date: DateTime<Utc> = Utc.timestamp_millis(self.end());
+
+        serde_json::json!({
+            "start": start_date.to_rfc3339(),
+            "end": end_date.to_rfc3339(),
+            "type": "Interval"
+        })
     }
 }
 

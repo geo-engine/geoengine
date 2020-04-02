@@ -80,6 +80,9 @@ pub enum Error {
 
     #[snafu(display("Plot exception: {}", details))]
     Plot { details: String },
+
+    #[snafu(display("Colorizer exception: {}", details))]
+    Colorizer { details: String },
 }
 
 impl From<arrow::error::ArrowError> for Error {
