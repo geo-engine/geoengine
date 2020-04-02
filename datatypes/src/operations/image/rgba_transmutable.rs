@@ -58,14 +58,14 @@ impl RgbaTransmutable for i16 {
 impl RgbaTransmutable for u8 {
     fn transmute_to_rgba(self) -> RgbaColor {
         let [gray] = self.to_be_bytes();
-        RgbaColor::new(gray, gray, gray, std::u8::MAX)
+        RgbaColor::new(gray, gray, gray, u8::max_value())
     }
 }
 
 impl RgbaTransmutable for i8 {
     fn transmute_to_rgba(self) -> RgbaColor {
         let [gray] = self.to_be_bytes();
-        RgbaColor::new(gray, gray, gray, std::u8::MAX)
+        RgbaColor::new(gray, gray, gray, u8::max_value())
     }
 }
 

@@ -196,7 +196,7 @@ impl TimeInterval {
 
     /// Creates a geo json event from a time interval
     ///
-    /// according to GeoJSON event extension (https://github.com/sgillies/geojson-events)
+    /// according to `GeoJSON` event extension (<https://github.com/sgillies/geojson-events>)
     ///
     /// # Examples
     ///
