@@ -11,7 +11,6 @@ use arrow::datatypes::{DataType, DateUnit, Field};
 use snafu::ensure;
 
 use crate::collections::{FeatureCollection, IntoGeometryIterator};
-use crate::operations::Filterable;
 use crate::primitives::{
     CategoricalDataRef, Coordinate2D, DecimalDataRef, FeatureData, FeatureDataRef, FeatureDataType,
     FeatureDataValue, MultiPointRef, NullableCategoricalDataRef, NullableDecimalDataRef,
@@ -24,6 +23,7 @@ use std::mem;
 use std::slice;
 use std::sync::Arc;
 
+/// This collection contains temporal multi-points and miscellaneous data.
 #[derive(Debug)]
 pub struct MultiPointCollection {
     data: StructArray,
@@ -80,7 +80,7 @@ impl MultiPointCollection {
             data: {
                 let columns = vec![
                     Field::new(
-                        Self::FEATURE_COLUMN_NAME,
+                        Self::GEOMETRY_COLUMN_NAME,
                         Self::multi_points_data_type(),
                         false,
                     ),
@@ -133,7 +133,7 @@ impl MultiPointCollection {
 
         let mut columns = vec![
             Field::new(
-                Self::FEATURE_COLUMN_NAME,
+                Self::GEOMETRY_COLUMN_NAME,
                 Self::multi_points_data_type(),
                 false,
             ),
@@ -231,7 +231,7 @@ impl MultiPointCollection {
     pub fn coordinates(&self) -> &[Coordinate2D] {
         let features_ref = self
             .data
-            .column_by_name(Self::FEATURE_COLUMN_NAME)
+            .column_by_name(Self::GEOMETRY_COLUMN_NAME)
             .expect("There must exist a feature column");
         let features: &ListArray = downcast_array(features_ref);
 
@@ -254,7 +254,7 @@ impl MultiPointCollection {
     fn array_refs_of_reserved_fields(&self) -> Vec<ArrayRef> {
         vec![
             self.data
-                .column_by_name(Self::FEATURE_COLUMN_NAME)
+                .column_by_name(Self::GEOMETRY_COLUMN_NAME)
                 .unwrap()
                 .clone(),
             self.data
@@ -475,7 +475,7 @@ impl FeatureCollection for MultiPointCollection {
 
         let mut columns = vec![
             Field::new(
-                Self::FEATURE_COLUMN_NAME,
+                Self::GEOMETRY_COLUMN_NAME,
                 Self::multi_points_data_type(),
                 false,
             ),
@@ -553,7 +553,7 @@ impl FeatureCollection for MultiPointCollection {
 
         let mut columns = vec![
             Field::new(
-                Self::FEATURE_COLUMN_NAME,
+                Self::GEOMETRY_COLUMN_NAME,
                 Self::multi_points_data_type(),
                 false,
             ),
@@ -561,7 +561,7 @@ impl FeatureCollection for MultiPointCollection {
         ];
         let mut column_values: Vec<ArrayRef> = vec![
             self.data
-                .column_by_name(Self::FEATURE_COLUMN_NAME)
+                .column_by_name(Self::GEOMETRY_COLUMN_NAME)
                 .unwrap()
                 .clone(),
             self.data
@@ -589,6 +589,66 @@ impl FeatureCollection for MultiPointCollection {
         Ok(Self {
             data: struct_array_from_data(columns, column_values, self.data.len()),
             types,
+        })
+    }
+
+    /// # Examples
+    ///
+    /// ```rust
+    /// use geoengine_datatypes::collections::{MultiPointCollection, FeatureCollection};
+    /// use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval, FeatureData};
+    /// use std::collections::HashMap;
+    ///
+    /// let pc = MultiPointCollection::from_data(
+    ///     vec![vec![(0., 0.).into()], vec![(1., 1.).into()], vec![(2., 2.).into()]],
+    ///     vec![TimeInterval::new_unchecked(0, 1), TimeInterval::new_unchecked(1, 2), TimeInterval::new_unchecked(2, 3)],
+    ///     HashMap::new(),
+    /// ).unwrap();
+    ///
+    /// assert_eq!(pc.len(), 3);
+    ///
+    /// let filtered = pc.filter(vec![false, true, false]).unwrap();
+    ///
+    /// assert_eq!(filtered.len(), 1);
+    /// ```
+    fn filter(&self, mask: Vec<bool>) -> Result<Self> {
+        ensure!(
+            mask.len() == self.data.len(),
+            error::MaskLengthDoesNotMatchCollectionLength {
+                mask_length: mask.len(),
+                collection_length: self.data.len(),
+            }
+        );
+
+        let filter_array: BooleanArray = mask.into();
+
+        // TODO: use filter directly on struct array when it is implemented
+
+        let filtered_data: Vec<(Field, ArrayRef)> =
+            if let DataType::Struct(columns) = self.data.data().data_type() {
+                let mut filtered_data: Vec<(Field, ArrayRef)> = Vec::with_capacity(columns.len());
+                for (column, array) in columns.iter().zip(self.data.columns()) {
+                    match column.name().as_str() {
+                        Self::GEOMETRY_COLUMN_NAME => filtered_data.push((
+                            column.clone(),
+                            Arc::new(coordinates_filter(downcast_array(array), &filter_array)?),
+                        )),
+                        Self::TIME_COLUMN_NAME => filtered_data.push((
+                            column.clone(),
+                            Arc::new(time_interval_filter(downcast_array(array), &filter_array)?),
+                        )),
+                        _ => filtered_data
+                            .push((column.clone(), filter(array.as_ref(), &filter_array)?)),
+                    }
+                }
+                filtered_data
+            } else {
+                unreachable!("data column must be a struct")
+            };
+
+        Ok(Self {
+            data: filtered_data.into(),
+            types: self.types.clone(),
         })
     }
 
@@ -731,7 +791,7 @@ impl<'l> IntoGeometryIterator for &'l MultiPointCollection {
         let geometry_column: &ListArray = downcast_array(
             &self
                 .data
-                .column_by_name(MultiPointCollection::FEATURE_COLUMN_NAME)
+                .column_by_name(MultiPointCollection::GEOMETRY_COLUMN_NAME)
                 .expect("Column must exist since it is in the metadata"),
         );
 
@@ -782,69 +842,6 @@ impl<'l> Iterator for MultiPointIterator<'l> {
 
     fn count(self) -> usize {
         self.length - self.index
-    }
-}
-
-impl Filterable for MultiPointCollection {
-    /// # Examples
-    ///
-    /// ```rust
-    /// use geoengine_datatypes::collections::{MultiPointCollection, FeatureCollection};
-    /// use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval, FeatureData};
-    /// use geoengine_datatypes::operations::Filterable;
-    /// use std::collections::HashMap;
-    ///
-    /// let pc = MultiPointCollection::from_data(
-    ///     vec![vec![(0., 0.).into()], vec![(1., 1.).into()], vec![(2., 2.).into()]],
-    ///     vec![TimeInterval::new_unchecked(0, 1), TimeInterval::new_unchecked(1, 2), TimeInterval::new_unchecked(2, 3)],
-    ///     HashMap::new(),
-    /// ).unwrap();
-    ///
-    /// assert_eq!(pc.len(), 3);
-    ///
-    /// let filtered = pc.filter(vec![false, true, false]).unwrap();
-    ///
-    /// assert_eq!(filtered.len(), 1);
-    /// ```
-    fn filter(&self, mask: Vec<bool>) -> Result<Self> {
-        ensure!(
-            mask.len() == self.data.len(),
-            error::MaskLengthDoesNotMatchCollectionLength {
-                mask_length: mask.len(),
-                collection_length: self.data.len(),
-            }
-        );
-
-        let filter_array: BooleanArray = mask.into();
-
-        // TODO: use filter directly on struct array when it is implemented
-
-        let filtered_data: Vec<(Field, ArrayRef)> =
-            if let DataType::Struct(columns) = self.data.data().data_type() {
-                let mut filtered_data: Vec<(Field, ArrayRef)> = Vec::with_capacity(columns.len());
-                for (column, array) in columns.iter().zip(self.data.columns()) {
-                    match column.name().as_str() {
-                        Self::FEATURE_COLUMN_NAME => filtered_data.push((
-                            column.clone(),
-                            Arc::new(coordinates_filter(downcast_array(array), &filter_array)?),
-                        )),
-                        Self::TIME_COLUMN_NAME => filtered_data.push((
-                            column.clone(),
-                            Arc::new(time_interval_filter(downcast_array(array), &filter_array)?),
-                        )),
-                        _ => filtered_data
-                            .push((column.clone(), filter(array.as_ref(), &filter_array)?)),
-                    }
-                }
-                filtered_data
-            } else {
-                unreachable!("data column must be a struct")
-            };
-
-        Ok(Self {
-            data: filtered_data.into(),
-            types: self.types.clone(),
-        })
     }
 }
 
@@ -946,7 +943,7 @@ impl MultiPointCollectionBuilder {
     /// let mut builder = MultiPointCollectionBuilder::default();
     ///
     /// builder.add_column("foobar", FeatureDataType::Number).unwrap();
-    /// builder.add_column("__features", FeatureDataType::Number).unwrap_err();
+    /// builder.add_column("__geometry", FeatureDataType::Number).unwrap_err();
     /// ```
     ///
     /// # Errors
@@ -1271,7 +1268,7 @@ impl MultiPointCollectionBuilder {
         let mut builders: Vec<Box<dyn ArrayBuilder>> = Vec::with_capacity(self.types.len() + 2);
 
         columns.push(Field::new(
-            MultiPointCollection::FEATURE_COLUMN_NAME,
+            MultiPointCollection::GEOMETRY_COLUMN_NAME,
             MultiPointCollection::multi_points_data_type(),
             false,
         ));
