@@ -12,7 +12,7 @@ impl<'g> MultiPointRef<'g> {
     pub fn new(coordinates: &'g [Coordinate2D]) -> Result<Self> {
         ensure!(
             !coordinates.is_empty(),
-            error::FeatureCollection {
+            error::FeatureCollectionOld {
                 details: "MultiPoint must not be empty"
             }
         );

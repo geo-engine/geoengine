@@ -314,7 +314,7 @@ impl FeatureCollection for MultiPointCollection {
     fn data(&self, column_name: &str) -> Result<FeatureDataRef> {
         ensure!(
             !Self::is_reserved_name(column_name),
-            error::FeatureCollection {
+            error::FeatureCollectionOld {
                 details: "Cannot access reserved columns via `data()` method"
             }
         );
@@ -323,7 +323,7 @@ impl FeatureCollection for MultiPointCollection {
 
         ensure!(
             column.is_some(),
-            error::FeatureCollection {
+            error::FeatureCollectionOld {
                 details: format!(
                     "The column {} does not exist in the point collection",
                     column_name
@@ -461,14 +461,14 @@ impl FeatureCollection for MultiPointCollection {
     fn add_column(&self, new_column: &str, data: FeatureData) -> Result<Self> {
         ensure!(
             !Self::is_reserved_name(new_column) && self.data.column_by_name(new_column).is_none(),
-            error::FeatureCollection {
+            error::FeatureCollectionOld {
                 details: "Cannot extend collection with name that is reserved or already in use"
             }
         );
 
         ensure!(
             data.len() == self.data.len(),
-            error::FeatureCollection {
+            error::FeatureCollectionOld {
                 details: "Length of new feature data column must match length of collection"
             }
         );
@@ -546,7 +546,7 @@ impl FeatureCollection for MultiPointCollection {
     fn remove_column(&self, column: &str) -> Result<Self> {
         ensure!(
             !Self::is_reserved_name(column) && self.data.column_by_name(column).is_some(),
-            error::FeatureCollection {
+            error::FeatureCollectionOld {
                 details: "Must not remove a non-existing or mandatory column"
             }
         );
