@@ -27,22 +27,22 @@ impl FeatureCollectionImplHelpers for DataCollection {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct NoGeometry;
+impl<'i> crate::collections::IntoGeometryOptionsIterator<'i> for DataCollection {
+    type GeometryOptionIterator = std::iter::Take<std::iter::Repeat<Option<Self::GeometryType>>>;
+    type GeometryType = geojson::Geometry; // fulfills the requirement but is not used anyway
 
-impl Into<geojson::Geometry> for NoGeometry {
-    fn into(self) -> geojson::Geometry {
-        unreachable!("This will never be called since the iterator always return `None`")
-    }
-}
-
-impl crate::collections::IntoGeometryOptionsIterator for DataCollection {
-    type GeometryOptionIterator = std::iter::Take<std::iter::Repeat<Option<NoGeometry>>>;
-    type GeometryType = NoGeometry;
-
-    fn geometry_options(&self) -> Self::GeometryOptionIterator {
+    fn geometry_options(&'i self) -> Self::GeometryOptionIterator {
         std::iter::repeat(None).take(self.len())
     }
 }
 
 feature_collection_impl!(DataCollection, false);
+
+// TODO: implement constructors
+
+// TODO: implement builder
+
+#[cfg(test)]
+mod tests {
+    // TODO: implement one test for each method
+}

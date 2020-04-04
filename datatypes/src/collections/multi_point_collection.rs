@@ -1,27 +1,23 @@
 use std::collections::HashMap;
 
 use arrow::array::{
-    Array, ArrayBuilder, ArrayData, ArrayRef, BooleanArray, Date64Array, Date64Builder,
-    FixedSizeListArray, FixedSizeListBuilder, Float64Array, Float64Builder, Int64Array,
-    Int64Builder, ListArray, ListBuilder, StringArray, StringBuilder, StructArray, StructBuilder,
-    UInt8Array, UInt8Builder,
+    Array, ArrayBuilder, ArrayData, BooleanArray, Date64Builder, FixedSizeListArray,
+    FixedSizeListBuilder, Float64Array, Float64Builder, Int64Builder, ListArray, ListBuilder,
+    StringBuilder, StructArray, StructBuilder, UInt8Builder,
 };
-use arrow::compute::kernels::filter::filter;
-use arrow::datatypes::{DataType, DateUnit, Field};
+use arrow::datatypes::{DataType, Field};
 use snafu::ensure;
 
-use crate::collections::{FeatureCollection, IntoGeometryIterator};
+use crate::collections::{FeatureCollection, FeatureCollectionImplHelpers, IntoGeometryIterator};
 use crate::primitives::{
-    CategoricalDataRef, Coordinate2D, DecimalDataRef, FeatureData, FeatureDataRef, FeatureDataType,
-    FeatureDataValue, MultiPointRef, NullableCategoricalDataRef, NullableDecimalDataRef,
-    NullableNumberDataRef, NullableTextDataRef, NumberDataRef, TextDataRef, TimeInterval,
+    Coordinate2D, FeatureData, FeatureDataType, FeatureDataValue, MultiPointRef, TimeInterval,
 };
 use crate::util::arrow::{downcast_array, downcast_mut_array};
+use crate::util::helpers::SomeIter;
 use crate::util::Result;
 use crate::{error, json_map};
 use std::mem;
 use std::slice;
-use std::sync::Arc;
 
 /// This collection contains temporal multi-points and miscellaneous data.
 #[derive(Debug)]
@@ -30,40 +26,61 @@ pub struct MultiPointCollection {
     types: HashMap<String, FeatureDataType>,
 }
 
-impl Clone for MultiPointCollection {
-    /// Clone the `MultiPointCollection`
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use geoengine_datatypes::collections::{MultiPointCollection, FeatureCollection};
-    ///
-    /// let pc = MultiPointCollection::empty();
-    /// let cloned = pc.clone();
-    ///
-    /// assert_eq!(pc.len(), 0);
-    /// assert_eq!(cloned.len(), 0);
-    /// ```
-    ///
-    fn clone(&self) -> Self {
-        Self {
-            data: StructArray::from(self.data.data()),
-            types: self.types.clone(),
-        }
-    }
-}
-
-impl MultiPointCollection {
-    /// Retrieve the composite arrow data type for multi points
-    pub(self) fn multi_points_data_type() -> DataType {
+impl FeatureCollectionImplHelpers for MultiPointCollection {
+    /// `MultiPoint`s
+    fn geometry_arrow_data_type() -> DataType {
         DataType::List(DataType::FixedSizeList(DataType::Float64.into(), 2).into())
     }
 
-    /// Retrieve the composite arrow data type for multi points
-    pub(self) fn time_data_type() -> DataType {
-        DataType::FixedSizeList(DataType::Date64(DateUnit::Millisecond).into(), 2)
+    fn filtered_geometries(
+        features: &ListArray,
+        filter_array: &BooleanArray,
+    ) -> crate::util::Result<ListArray> {
+        let mut new_features =
+            ListBuilder::new(FixedSizeListBuilder::new(Float64Builder::new(2), 2));
+
+        for feature_index in 0..features.len() {
+            if filter_array.value(feature_index) {
+                let coordinate_builder = new_features.values();
+
+                let old_coordinates = features.value(feature_index);
+
+                for coordinate_index in 0..features.value_length(feature_index) {
+                    let old_floats_array = downcast_array::<FixedSizeListArray>(&old_coordinates)
+                        .value(coordinate_index as usize);
+
+                    let old_floats: &Float64Array = downcast_array(&old_floats_array);
+
+                    let float_builder = coordinate_builder.values();
+                    float_builder.append_slice(old_floats.value_slice(0, 2))?;
+
+                    coordinate_builder.append(true)?;
+                }
+
+                new_features.append(true)?;
+            }
+        }
+
+        Ok(new_features.finish())
     }
 
+    fn is_simple(&self) -> bool {
+        self.len() == self.coordinates().len()
+    }
+}
+
+impl<'i> crate::collections::IntoGeometryOptionsIterator<'i> for MultiPointCollection {
+    type GeometryOptionIterator = SomeIter<MultiPointIterator<'i>, Self::GeometryType>;
+    type GeometryType = MultiPointRef<'i>;
+
+    fn geometry_options(&'i self) -> Self::GeometryOptionIterator {
+        SomeIter::new(self.geometries())
+    }
+}
+
+feature_collection_impl!(MultiPointCollection, true);
+
+impl MultiPointCollection {
     /// Create an empty `MultiPointCollection`.
     ///
     /// # Examples
@@ -81,10 +98,10 @@ impl MultiPointCollection {
                 let columns = vec![
                     Field::new(
                         Self::GEOMETRY_COLUMN_NAME,
-                        Self::multi_points_data_type(),
+                        Self::geometry_arrow_data_type(),
                         false,
                     ),
-                    Field::new(Self::TIME_COLUMN_NAME, Self::time_data_type(), false),
+                    Field::new(Self::TIME_COLUMN_NAME, Self::time_arrow_data_type(), false),
                 ];
 
                 StructArray::from(ArrayData::builder(DataType::Struct(columns)).len(0).build())
@@ -134,10 +151,10 @@ impl MultiPointCollection {
         let mut columns = vec![
             Field::new(
                 Self::GEOMETRY_COLUMN_NAME,
-                Self::multi_points_data_type(),
+                Self::geometry_arrow_data_type(),
                 false,
             ),
-            Field::new(Self::TIME_COLUMN_NAME, Self::time_data_type(), false),
+            Field::new(Self::TIME_COLUMN_NAME, Self::time_arrow_data_type(), false),
         ];
 
         let mut builders: Vec<Box<dyn ArrayBuilder>> = vec![
@@ -250,544 +267,13 @@ impl MultiPointCollection {
             )
         }
     }
-
-    fn array_refs_of_reserved_fields(&self) -> Vec<ArrayRef> {
-        vec![
-            self.data
-                .column_by_name(Self::GEOMETRY_COLUMN_NAME)
-                .unwrap()
-                .clone(),
-            self.data
-                .column_by_name(Self::TIME_COLUMN_NAME)
-                .unwrap()
-                .clone(),
-        ]
-    }
 }
 
-impl FeatureCollection for MultiPointCollection {
-    fn len(&self) -> usize {
-        self.data.len()
-    }
-
-    fn is_simple(&self) -> bool {
-        self.len() == self.coordinates().len()
-    }
-
-    /// Retrieves a data column of this point collection
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use geoengine_datatypes::collections::{MultiPointCollection, FeatureCollection};
-    /// use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval, FeatureData, FeatureDataRef, NullableDataRef};
-    /// use std::collections::HashMap;
-    ///
-    /// let pc = MultiPointCollection::from_data(
-    ///     vec![vec![(0., 0.).into()], vec![(1., 1.).into()], vec![(2., 2.).into()]],
-    ///     vec![TimeInterval::new_unchecked(0, 1), TimeInterval::new_unchecked(1, 2), TimeInterval::new_unchecked(2, 3)],
-    ///     {
-    ///         let mut map = HashMap::new();
-    ///         map.insert("numbers".into(), FeatureData::Number(vec![0., 1., 2.]));
-    ///         map.insert("number_nulls".into(), FeatureData::NullableNumber(vec![Some(0.), None, Some(2.)]));
-    ///         map
-    ///     },
-    /// ).unwrap();
-    ///
-    /// assert_eq!(pc.len(), 3);
-    ///
-    /// if let FeatureDataRef::Number(numbers) = pc.data("numbers").unwrap() {
-    ///     assert_eq!(numbers.as_ref(), &[0., 1., 2.]);
-    /// } else {
-    ///     unreachable!();
-    /// }
-    ///
-    /// if let FeatureDataRef::NullableNumber(numbers) = pc.data("number_nulls").unwrap() {
-    ///     assert_eq!(numbers.as_ref()[0], 0.);
-    ///     assert_eq!(numbers.as_ref()[2], 2.);
-    ///     assert_eq!(numbers.nulls(), vec![false, true, false]);
-    /// } else {
-    ///     unreachable!();
-    /// }
-    /// ```
-    ///
-    fn data(&self, column_name: &str) -> Result<FeatureDataRef> {
-        ensure!(
-            !Self::is_reserved_name(column_name),
-            error::FeatureCollectionOld {
-                details: "Cannot access reserved columns via `data()` method"
-            }
-        );
-
-        let column = self.data.column_by_name(column_name);
-
-        ensure!(
-            column.is_some(),
-            error::FeatureCollectionOld {
-                details: format!(
-                    "The column {} does not exist in the point collection",
-                    column_name
-                )
-            }
-        );
-
-        let column = column.unwrap(); // previously checked
-
-        Ok(match self.types.get(column_name).unwrap() {
-            // previously checked
-            FeatureDataType::Number => {
-                let array: &Float64Array = downcast_array(column);
-                NumberDataRef::new(array.values()).into()
-            }
-            FeatureDataType::NullableNumber => {
-                let array: &Float64Array = downcast_array(column);
-                NullableNumberDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
-            }
-            FeatureDataType::Text => {
-                let array: &StringArray = downcast_array(column);
-                TextDataRef::new(array.value_data(), array.value_offsets()).into()
-            }
-            FeatureDataType::NullableText => {
-                let array: &StringArray = downcast_array(column);
-                NullableTextDataRef::new(array.value_data(), array.value_offsets()).into()
-            }
-            FeatureDataType::Decimal => {
-                let array: &Int64Array = downcast_array(column);
-                DecimalDataRef::new(array.values()).into()
-            }
-            FeatureDataType::NullableDecimal => {
-                let array: &Int64Array = downcast_array(column);
-                NullableDecimalDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
-            }
-            FeatureDataType::Categorical => {
-                let array: &UInt8Array = downcast_array(column);
-                CategoricalDataRef::new(array.values()).into()
-            }
-            FeatureDataType::NullableCategorical => {
-                let array: &UInt8Array = downcast_array(column);
-                NullableCategoricalDataRef::new(array.values(), array.data_ref().null_bitmap())
-                    .into()
-            }
-        })
-    }
-
-    /// Retrieves the time intervals of this point collection
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use geoengine_datatypes::collections::{MultiPointCollection, FeatureCollection};
-    /// use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval, FeatureData};
-    /// use std::collections::HashMap;
-    ///
-    /// let pc = MultiPointCollection::from_data(
-    ///     vec![vec![(0., 0.).into()], vec![(1., 1.).into()], vec![(2., 2.).into()]],
-    ///     vec![TimeInterval::new_unchecked(0, 1), TimeInterval::new_unchecked(1, 2), TimeInterval::new_unchecked(2, 3)],
-    ///     HashMap::new(),
-    /// ).unwrap();
-    ///
-    /// assert_eq!(pc.len(), 3);
-    ///
-    /// let time_intervals = pc.time_intervals();
-    ///
-    /// assert_eq!(time_intervals.len(), 3);
-    /// assert_eq!(
-    ///     time_intervals,
-    ///     &[TimeInterval::new_unchecked(0, 1), TimeInterval::new_unchecked(1, 2), TimeInterval::new_unchecked(2, 3)]
-    /// );
-    /// ```
-    ///
-    fn time_intervals(&self) -> &[TimeInterval] {
-        let features_ref = self
-            .data
-            .column_by_name(Self::TIME_COLUMN_NAME)
-            .expect("There must exist a time interval column");
-        let features: &FixedSizeListArray = downcast_array(features_ref);
-
-        let number_of_time_intervals = self.len();
-
-        let timestamps_ref = features.values();
-        let timestamps: &Date64Array = downcast_array(&timestamps_ref);
-
-        unsafe {
-            slice::from_raw_parts(
-                timestamps.raw_values() as *const TimeInterval,
-                number_of_time_intervals,
-            )
-        }
-    }
-
-    /// Extend the collection by an additional column
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use geoengine_datatypes::collections::{MultiPointCollection, FeatureCollection};
-    /// use geoengine_datatypes::primitives::{FeatureData, FeatureDataType, TimeInterval, FeatureDataValue, FeatureDataRef};
-    ///
-    /// let collection = {
-    ///     let mut builder = MultiPointCollection::builder();
-    ///     builder.add_column("foo", FeatureDataType::Number);
-    ///
-    ///     builder.append_coordinate((0., 0.).into());
-    ///     builder.append_time_interval(TimeInterval::new_unchecked(0, 1));
-    ///     builder.append_data("foo", FeatureDataValue::Number(0.));
-    ///     builder.finish_row();
-    ///
-    ///     builder.append_coordinate((1., 1.).into());
-    ///     builder.append_time_interval(TimeInterval::new_unchecked(0, 1));
-    ///     builder.append_data("foo", FeatureDataValue::Number(1.));
-    ///     builder.finish_row();
-    ///
-    ///     builder.build().unwrap()
-    /// };
-    ///
-    /// assert_eq!(collection.len(), 2);
-    ///
-    /// let extended_collection = collection.add_column("bar", FeatureData::Number(vec![2., 4.])).unwrap();
-    ///
-    /// assert_eq!(extended_collection.len(), 2);
-    /// if let FeatureDataRef::Number(numbers) = extended_collection.data("foo").unwrap() {
-    ///     assert_eq!(numbers.as_ref(), &[0., 1.]);
-    /// } else {
-    ///     unreachable!();
-    /// }
-    /// if let FeatureDataRef::Number(numbers) = extended_collection.data("bar").unwrap() {
-    ///     assert_eq!(numbers.as_ref(), &[2., 4.]);
-    /// } else {
-    ///     unreachable!();
-    /// }
-    /// ```
-    fn add_column(&self, new_column: &str, data: FeatureData) -> Result<Self> {
-        ensure!(
-            !Self::is_reserved_name(new_column) && self.data.column_by_name(new_column).is_none(),
-            error::FeatureCollectionOld {
-                details: "Cannot extend collection with name that is reserved or already in use"
-            }
-        );
-
-        ensure!(
-            data.len() == self.data.len(),
-            error::FeatureCollectionOld {
-                details: "Length of new feature data column must match length of collection"
-            }
-        );
-
-        let mut columns = vec![
-            Field::new(
-                Self::GEOMETRY_COLUMN_NAME,
-                Self::multi_points_data_type(),
-                false,
-            ),
-            Field::new(Self::TIME_COLUMN_NAME, Self::time_data_type(), false),
-        ];
-        let mut column_values: Vec<ArrayRef> = self.array_refs_of_reserved_fields();
-
-        for (column_name, column_type) in &self.types {
-            columns.push(Field::new(
-                &column_name,
-                column_type.arrow_data_type(),
-                column_type.nullable(),
-            ));
-            column_values.push(self.data.column_by_name(&column_name).unwrap().clone());
-        }
-
-        columns.push(Field::new(
-            new_column,
-            data.arrow_data_type(),
-            data.nullable(),
-        ));
-        column_values.push(data.arrow_builder().map(|mut builder| builder.finish())?);
-
-        let mut types = self.types.clone();
-        types.insert(new_column.to_string(), FeatureDataType::from(&data));
-
-        Ok(Self {
-            data: struct_array_from_data(columns, column_values, self.data.len()),
-            types,
-        })
-    }
-
-    /// Removes a column and returns an updated collection
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use geoengine_datatypes::collections::{MultiPointCollection, FeatureCollection};
-    /// use geoengine_datatypes::primitives::{FeatureData, FeatureDataType, TimeInterval, FeatureDataValue, FeatureDataRef};
-    ///
-    /// let collection = {
-    ///     let mut builder = MultiPointCollection::builder();
-    ///     builder.add_column("foo", FeatureDataType::Number);
-    ///
-    ///     builder.append_coordinate((0., 0.).into());
-    ///     builder.append_time_interval(TimeInterval::new_unchecked(0, 1));
-    ///     builder.append_data("foo", FeatureDataValue::Number(0.));
-    ///     builder.finish_row();
-    ///
-    ///     builder.append_coordinate((1., 1.).into());
-    ///     builder.append_time_interval(TimeInterval::new_unchecked(0, 1));
-    ///     builder.append_data("foo", FeatureDataValue::Number(1.));
-    ///     builder.finish_row();
-    ///
-    ///     builder.build().unwrap()
-    /// };
-    ///
-    /// assert_eq!(collection.len(), 2);
-    /// assert!(collection.data("foo").is_ok());
-    ///
-    /// let reduced_collection = collection.remove_column("foo").unwrap();
-    ///
-    /// assert_eq!(reduced_collection.len(), 2);
-    /// assert!(reduced_collection.data("foo").is_err());
-    ///
-    /// assert!(reduced_collection.remove_column("foo").is_err());
-    /// ```
-    fn remove_column(&self, column: &str) -> Result<Self> {
-        ensure!(
-            !Self::is_reserved_name(column) && self.data.column_by_name(column).is_some(),
-            error::FeatureCollectionOld {
-                details: "Must not remove a non-existing or mandatory column"
-            }
-        );
-
-        let mut columns = vec![
-            Field::new(
-                Self::GEOMETRY_COLUMN_NAME,
-                Self::multi_points_data_type(),
-                false,
-            ),
-            Field::new(Self::TIME_COLUMN_NAME, Self::time_data_type(), false),
-        ];
-        let mut column_values: Vec<ArrayRef> = vec![
-            self.data
-                .column_by_name(Self::GEOMETRY_COLUMN_NAME)
-                .unwrap()
-                .clone(),
-            self.data
-                .column_by_name(Self::TIME_COLUMN_NAME)
-                .unwrap()
-                .clone(),
-        ];
-
-        for (column_name, column_type) in &self.types {
-            if column_name == column {
-                continue;
-            }
-
-            columns.push(Field::new(
-                &column_name,
-                column_type.arrow_data_type(),
-                column_type.nullable(),
-            ));
-            column_values.push(self.data.column_by_name(&column_name).unwrap().clone());
-        }
-
-        let mut types = self.types.clone();
-        types.remove(column);
-
-        Ok(Self {
-            data: struct_array_from_data(columns, column_values, self.data.len()),
-            types,
-        })
-    }
-
-    /// # Examples
-    ///
-    /// ```rust
-    /// use geoengine_datatypes::collections::{MultiPointCollection, FeatureCollection};
-    /// use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval, FeatureData};
-    /// use std::collections::HashMap;
-    ///
-    /// let pc = MultiPointCollection::from_data(
-    ///     vec![vec![(0., 0.).into()], vec![(1., 1.).into()], vec![(2., 2.).into()]],
-    ///     vec![TimeInterval::new_unchecked(0, 1), TimeInterval::new_unchecked(1, 2), TimeInterval::new_unchecked(2, 3)],
-    ///     HashMap::new(),
-    /// ).unwrap();
-    ///
-    /// assert_eq!(pc.len(), 3);
-    ///
-    /// let filtered = pc.filter(vec![false, true, false]).unwrap();
-    ///
-    /// assert_eq!(filtered.len(), 1);
-    /// ```
-    fn filter(&self, mask: Vec<bool>) -> Result<Self> {
-        ensure!(
-            mask.len() == self.data.len(),
-            error::MaskLengthDoesNotMatchCollectionLength {
-                mask_length: mask.len(),
-                collection_length: self.data.len(),
-            }
-        );
-
-        let filter_array: BooleanArray = mask.into();
-
-        // TODO: use filter directly on struct array when it is implemented
-
-        let filtered_data: Vec<(Field, ArrayRef)> =
-            if let DataType::Struct(columns) = self.data.data().data_type() {
-                let mut filtered_data: Vec<(Field, ArrayRef)> = Vec::with_capacity(columns.len());
-                for (column, array) in columns.iter().zip(self.data.columns()) {
-                    match column.name().as_str() {
-                        Self::GEOMETRY_COLUMN_NAME => filtered_data.push((
-                            column.clone(),
-                            Arc::new(coordinates_filter(downcast_array(array), &filter_array)?),
-                        )),
-                        Self::TIME_COLUMN_NAME => filtered_data.push((
-                            column.clone(),
-                            Arc::new(time_interval_filter(downcast_array(array), &filter_array)?),
-                        )),
-                        _ => filtered_data
-                            .push((column.clone(), filter(array.as_ref(), &filter_array)?)),
-                    }
-                }
-                filtered_data
-            } else {
-                unreachable!("data column must be a struct")
-            };
-
-        Ok(Self {
-            data: filtered_data.into(),
-            types: self.types.clone(),
-        })
-    }
-
-    /// # Examples
-    ///
-    /// ```rust
-    /// use geoengine_datatypes::collections::{MultiPointCollection, FeatureCollection};
-    /// use geoengine_datatypes::primitives::{FeatureDataType, FeatureDataValue, TimeInterval};
-    /// use serde_json::{from_str, json};
-    ///
-    /// let collection = {
-    ///     let mut builder = MultiPointCollection::builder();
-    ///     builder.add_column("foo", FeatureDataType::Number);
-    ///     builder.add_column("bar", FeatureDataType::NullableText);
-    ///
-    ///     builder.append_coordinate((0., 0.).into());
-    ///     builder.append_time_interval(TimeInterval::new_unchecked(0, 1));
-    ///     builder.append_data("foo", FeatureDataValue::Number(0.));
-    ///     builder.append_data("bar", FeatureDataValue::NullableText(Some("one".to_string())));
-    ///     builder.finish_row();
-    ///
-    ///     builder.append_multi_coordinate(vec![(1., 1.).into(), (2., 2.).into()]);
-    ///     builder.append_time_interval(TimeInterval::new_unchecked(1, 2));
-    ///     builder.append_data("foo", FeatureDataValue::Number(1.));
-    ///     builder.append_data("bar", FeatureDataValue::NullableText(None));
-    ///     builder.finish_row();
-    ///
-    ///     builder.append_coordinate((3., 3.).into());
-    ///     builder.append_time_interval(TimeInterval::new_unchecked(3, 4));
-    ///     builder.append_data("foo", FeatureDataValue::Number(2.));
-    ///     builder.append_data("bar", FeatureDataValue::NullableText(Some("three".to_string())));
-    ///     builder.finish_row();
-    ///
-    ///     builder.build().unwrap()
-    /// };
-    ///
-    /// assert_eq!(
-    ///     from_str::<serde_json::Value>(collection.to_geo_json().as_str()).unwrap(),
-    ///     json!({
-    ///         "type": "FeatureCollection",
-    ///         "features": [{
-    ///             "type": "Feature",
-    ///             "geometry": {
-    ///                 "type": "Point",
-    ///                 "coordinates": [0.0, 0.0]
-    ///             },
-    ///             "properties": {
-    ///                 "bar": "one",
-    ///                 "foo": 0.0
-    ///             },
-    ///             "when": {
-    ///                 "start": "1970-01-01T00:00:00+00:00",
-    ///                 "end": "1970-01-01T00:00:00.001+00:00",
-    ///                 "type": "Interval"
-    ///             }
-    ///         }, {
-    ///             "type": "Feature",
-    ///             "geometry": {
-    ///                 "type": "MultiPoint",
-    ///                 "coordinates": [
-    ///                     [1.0, 1.0],
-    ///                     [2.0, 2.0]
-    ///                 ]
-    ///             },
-    ///             "properties": {
-    ///                 "bar": null,
-    ///                 "foo": 1.0
-    ///             },
-    ///             "when": {
-    ///                 "start": "1970-01-01T00:00:00.001+00:00",
-    ///                 "end": "1970-01-01T00:00:00.002+00:00",
-    ///                 "type": "Interval"
-    ///             }
-    ///         }, {
-    ///             "type": "Feature",
-    ///             "geometry": {
-    ///                 "type": "Point",
-    ///                 "coordinates": [3.0, 3.0]
-    ///             },
-    ///             "properties": {
-    ///                 "bar": "three",
-    ///                 "foo": 2.0
-    ///             },
-    ///             "when": {
-    ///                 "start": "1970-01-01T00:00:00.003+00:00",
-    ///                 "end": "1970-01-01T00:00:00.004+00:00",
-    ///                 "type": "Interval"
-    ///             }
-    ///         }]
-    ///     })
-    /// );
-    /// ```
-    ///
-    fn to_geo_json(&self) -> String {
-        let mut property_maps = (0..self.len())
-            .map(|_| serde_json::Map::with_capacity(self.types.len()))
-            .collect::<Vec<_>>();
-
-        for column_name in self.types.keys() {
-            for (json_value, map) in self
-                .data(column_name)
-                .expect("must exist since it's in `types`")
-                .json_values()
-                .zip(property_maps.as_mut_slice())
-            {
-                map.insert(column_name.clone(), json_value);
-            }
-        }
-
-        let features = self
-            .geometries()
-            .zip(self.time_intervals())
-            .zip(property_maps)
-            .map(|((geometry, time_interval), properties)| geojson::Feature {
-                bbox: None,
-                geometry: Some(geometry.into()),
-                id: None,
-                properties: Some(properties),
-                foreign_members: Some(
-                    json_map! {"when".to_string() => time_interval.to_geo_json_event()},
-                ),
-            })
-            .collect();
-
-        let feature_collection = geojson::FeatureCollection {
-            bbox: None,
-            features,
-            foreign_members: None,
-        };
-
-        feature_collection.to_string()
-    }
-}
-
-impl<'l> IntoGeometryIterator for &'l MultiPointCollection {
+impl<'l> IntoGeometryIterator<'l> for MultiPointCollection {
     type GeometryIterator = MultiPointIterator<'l>;
     type GeometryType = MultiPointRef<'l>;
 
-    fn geometries(&self) -> Self::GeometryIterator {
+    fn geometries(&'l self) -> Self::GeometryIterator {
         let geometry_column: &ListArray = downcast_array(
             &self
                 .data
@@ -845,55 +331,318 @@ impl<'l> Iterator for MultiPointIterator<'l> {
     }
 }
 
-fn coordinates_filter(features: &ListArray, filter_array: &BooleanArray) -> Result<ListArray> {
-    let mut new_features = ListBuilder::new(FixedSizeListBuilder::new(Float64Builder::new(2), 2));
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    for feature_index in 0..features.len() {
-        if filter_array.value(feature_index) {
-            let coordinate_builder = new_features.values();
+    use crate::primitives::{FeatureDataRef, NullableDataRef};
+    use serde_json::{from_str, json};
 
-            let old_coordinates = features.value(feature_index);
+    #[test]
+    fn clone() {
+        let pc = MultiPointCollection::empty();
+        let cloned = pc.clone();
 
-            for coordinate_index in 0..features.value_length(feature_index) {
-                let old_floats_array = downcast_array::<FixedSizeListArray>(&old_coordinates)
-                    .value(coordinate_index as usize);
+        assert_eq!(pc.len(), 0);
+        assert_eq!(cloned.len(), 0);
+    }
 
-                let old_floats: &Float64Array = downcast_array(&old_floats_array);
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn data() {
+        let pc = MultiPointCollection::from_data(
+            vec![
+                vec![(0., 0.).into()],
+                vec![(1., 1.).into()],
+                vec![(2., 2.).into()],
+            ],
+            vec![
+                TimeInterval::new_unchecked(0, 1),
+                TimeInterval::new_unchecked(1, 2),
+                TimeInterval::new_unchecked(2, 3),
+            ],
+            {
+                let mut map = HashMap::new();
+                map.insert("numbers".into(), FeatureData::Number(vec![0., 1., 2.]));
+                map.insert(
+                    "number_nulls".into(),
+                    FeatureData::NullableNumber(vec![Some(0.), None, Some(2.)]),
+                );
+                map
+            },
+        )
+        .unwrap();
 
-                let float_builder = coordinate_builder.values();
-                float_builder.append_slice(old_floats.value_slice(0, 2))?;
+        assert_eq!(pc.len(), 3);
 
-                coordinate_builder.append(true)?;
-            }
+        if let FeatureDataRef::Number(numbers) = pc.data("numbers").unwrap() {
+            assert_eq!(numbers.as_ref(), &[0., 1., 2.]);
+        } else {
+            unreachable!();
+        }
 
-            new_features.append(true)?;
+        if let FeatureDataRef::NullableNumber(numbers) = pc.data("number_nulls").unwrap() {
+            assert_eq!(numbers.as_ref()[0], 0.);
+            assert_eq!(numbers.as_ref()[2], 2.);
+            assert_eq!(numbers.nulls(), vec![false, true, false]);
+        } else {
+            unreachable!();
         }
     }
 
-    Ok(new_features.finish())
-}
+    #[test]
+    fn time_intervals() {
+        let pc = MultiPointCollection::from_data(
+            vec![
+                vec![(0., 0.).into()],
+                vec![(1., 1.).into()],
+                vec![(2., 2.).into()],
+            ],
+            vec![
+                TimeInterval::new_unchecked(0, 1),
+                TimeInterval::new_unchecked(1, 2),
+                TimeInterval::new_unchecked(2, 3),
+            ],
+            HashMap::new(),
+        )
+        .unwrap();
 
-fn time_interval_filter(
-    time_intervals: &FixedSizeListArray,
-    filter_array: &BooleanArray,
-) -> Result<FixedSizeListArray> {
-    let mut new_time_intervals = FixedSizeListBuilder::new(Date64Builder::new(2), 2);
+        assert_eq!(pc.len(), 3);
 
-    for feature_index in 0..time_intervals.len() {
-        if !filter_array.value(feature_index) {
-            continue;
-        }
+        let time_intervals = pc.time_intervals();
 
-        let old_timestamps_ref = time_intervals.value(feature_index);
-        let old_timestamps: &Date64Array = downcast_array(&old_timestamps_ref);
-
-        let date_builder = new_time_intervals.values();
-        date_builder.append_slice(old_timestamps.value_slice(0, 2))?;
-
-        new_time_intervals.append(true)?;
+        assert_eq!(time_intervals.len(), 3);
+        assert_eq!(
+            time_intervals,
+            &[
+                TimeInterval::new_unchecked(0, 1),
+                TimeInterval::new_unchecked(1, 2),
+                TimeInterval::new_unchecked(2, 3)
+            ]
+        );
     }
 
-    Ok(new_time_intervals.finish())
+    #[test]
+    fn add_column() {
+        let collection = {
+            let mut builder = MultiPointCollection::builder();
+            builder.add_column("foo", FeatureDataType::Number).unwrap();
+
+            builder.append_coordinate((0., 0.).into()).unwrap();
+            builder
+                .append_time_interval(TimeInterval::new_unchecked(0, 1))
+                .unwrap();
+            builder
+                .append_data("foo", FeatureDataValue::Number(0.))
+                .unwrap();
+            builder.finish_row().unwrap();
+
+            builder.append_coordinate((1., 1.).into()).unwrap();
+            builder
+                .append_time_interval(TimeInterval::new_unchecked(0, 1))
+                .unwrap();
+            builder
+                .append_data("foo", FeatureDataValue::Number(1.))
+                .unwrap();
+            builder.finish_row().unwrap();
+
+            builder.build().unwrap()
+        };
+
+        assert_eq!(collection.len(), 2);
+
+        let extended_collection = collection
+            .add_column("bar", FeatureData::Number(vec![2., 4.]))
+            .unwrap();
+
+        assert_eq!(extended_collection.len(), 2);
+        if let FeatureDataRef::Number(numbers) = extended_collection.data("foo").unwrap() {
+            assert_eq!(numbers.as_ref(), &[0., 1.]);
+        } else {
+            unreachable!();
+        }
+        if let FeatureDataRef::Number(numbers) = extended_collection.data("bar").unwrap() {
+            assert_eq!(numbers.as_ref(), &[2., 4.]);
+        } else {
+            unreachable!();
+        }
+    }
+
+    #[test]
+    fn remove_column() {
+        let collection = {
+            let mut builder = MultiPointCollection::builder();
+            builder.add_column("foo", FeatureDataType::Number).unwrap();
+
+            builder.append_coordinate((0., 0.).into()).unwrap();
+            builder
+                .append_time_interval(TimeInterval::new_unchecked(0, 1))
+                .unwrap();
+            builder
+                .append_data("foo", FeatureDataValue::Number(0.))
+                .unwrap();
+            builder.finish_row().unwrap();
+
+            builder.append_coordinate((1., 1.).into()).unwrap();
+            builder
+                .append_time_interval(TimeInterval::new_unchecked(0, 1))
+                .unwrap();
+            builder
+                .append_data("foo", FeatureDataValue::Number(1.))
+                .unwrap();
+            builder.finish_row().unwrap();
+
+            builder.build().unwrap()
+        };
+
+        assert_eq!(collection.len(), 2);
+        assert!(collection.data("foo").is_ok());
+
+        let reduced_collection = collection.remove_column("foo").unwrap();
+
+        assert_eq!(reduced_collection.len(), 2);
+        assert!(reduced_collection.data("foo").is_err());
+
+        assert!(reduced_collection.remove_column("foo").is_err());
+    }
+
+    #[test]
+    fn filter() {
+        let pc = MultiPointCollection::from_data(
+            vec![
+                vec![(0., 0.).into()],
+                vec![(1., 1.).into()],
+                vec![(2., 2.).into()],
+            ],
+            vec![
+                TimeInterval::new_unchecked(0, 1),
+                TimeInterval::new_unchecked(1, 2),
+                TimeInterval::new_unchecked(2, 3),
+            ],
+            HashMap::new(),
+        )
+        .unwrap();
+
+        assert_eq!(pc.len(), 3);
+
+        let filtered = pc.filter(vec![false, true, false]).unwrap();
+
+        assert_eq!(filtered.len(), 1);
+    }
+
+    #[test]
+    #[allow(clippy::too_many_lines)]
+    fn to_geo_json() {
+        let collection = {
+            let mut builder = MultiPointCollection::builder();
+            builder.add_column("foo", FeatureDataType::Number).unwrap();
+            builder
+                .add_column("bar", FeatureDataType::NullableText)
+                .unwrap();
+
+            builder.append_coordinate((0., 0.).into()).unwrap();
+            builder
+                .append_time_interval(TimeInterval::new_unchecked(0, 1))
+                .unwrap();
+            builder
+                .append_data("foo", FeatureDataValue::Number(0.))
+                .unwrap();
+            builder
+                .append_data(
+                    "bar",
+                    FeatureDataValue::NullableText(Some("one".to_string())),
+                )
+                .unwrap();
+            builder.finish_row().unwrap();
+
+            builder
+                .append_multi_coordinate(vec![(1., 1.).into(), (2., 2.).into()])
+                .unwrap();
+            builder
+                .append_time_interval(TimeInterval::new_unchecked(1, 2))
+                .unwrap();
+            builder
+                .append_data("foo", FeatureDataValue::Number(1.))
+                .unwrap();
+            builder
+                .append_data("bar", FeatureDataValue::NullableText(None))
+                .unwrap();
+            builder.finish_row().unwrap();
+
+            builder.append_coordinate((3., 3.).into()).unwrap();
+            builder
+                .append_time_interval(TimeInterval::new_unchecked(3, 4))
+                .unwrap();
+            builder
+                .append_data("foo", FeatureDataValue::Number(2.))
+                .unwrap();
+            builder
+                .append_data(
+                    "bar",
+                    FeatureDataValue::NullableText(Some("three".to_string())),
+                )
+                .unwrap();
+            builder.finish_row().unwrap();
+
+            builder.build().unwrap()
+        };
+
+        assert_eq!(
+            from_str::<serde_json::Value>(collection.to_geo_json().as_str()).unwrap(),
+            json!({
+                "type": "FeatureCollection",
+                "features": [{
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [0.0, 0.0]
+                    },
+                    "properties": {
+                        "bar": "one",
+                        "foo": 0.0
+                    },
+                    "when": {
+                        "start": "1970-01-01T00:00:00+00:00",
+                        "end": "1970-01-01T00:00:00.001+00:00",
+                        "type": "Interval"
+                    }
+                }, {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "MultiPoint",
+                        "coordinates": [
+                            [1.0, 1.0],
+                            [2.0, 2.0]
+                        ]
+                    },
+                    "properties": {
+                        "bar": null,
+                        "foo": 1.0
+                    },
+                    "when": {
+                        "start": "1970-01-01T00:00:00.001+00:00",
+                        "end": "1970-01-01T00:00:00.002+00:00",
+                        "type": "Interval"
+                    }
+                }, {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [3.0, 3.0]
+                    },
+                    "properties": {
+                        "bar": "three",
+                        "foo": 2.0
+                    },
+                    "when": {
+                        "start": "1970-01-01T00:00:00.003+00:00",
+                        "end": "1970-01-01T00:00:00.004+00:00",
+                        "type": "Interval"
+                    }
+                }]
+            })
+        );
+    }
 }
 
 /// A row-by-row builder for a point collection
@@ -1269,14 +1018,14 @@ impl MultiPointCollectionBuilder {
 
         columns.push(Field::new(
             MultiPointCollection::GEOMETRY_COLUMN_NAME,
-            MultiPointCollection::multi_points_data_type(),
+            MultiPointCollection::geometry_arrow_data_type(),
             false,
         ));
         builders.push(Box::new(self.coordinates_builder));
 
         columns.push(Field::new(
             MultiPointCollection::TIME_COLUMN_NAME,
-            MultiPointCollection::time_data_type(),
+            MultiPointCollection::time_arrow_data_type(),
             false,
         ));
         builders.push(Box::new(self.time_intervals_builder));
@@ -1302,19 +1051,6 @@ impl MultiPointCollectionBuilder {
             types: self.types,
         })
     }
-}
-
-fn struct_array_from_data(
-    columns: Vec<Field>,
-    column_values: Vec<ArrayRef>,
-    number_of_features: usize,
-) -> StructArray {
-    StructArray::from(
-        ArrayData::builder(DataType::Struct(columns))
-            .child_data(column_values.into_iter().map(|a| a.data()).collect())
-            .len(number_of_features)
-            .build(),
-    )
 }
 
 #[cfg(test)]

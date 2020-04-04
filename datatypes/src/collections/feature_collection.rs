@@ -1,3 +1,4 @@
+use crate::collections::IntoGeometryOptionsIterator;
 use crate::primitives::{FeatureData, FeatureDataRef, TimeInterval};
 use crate::util::Result;
 
@@ -70,7 +71,9 @@ where
     // TODO: append(FeatureCollection) - add rows
 
     /// Serialize the feature collection to a geo json string
-    fn to_geo_json(&self) -> String;
+    fn to_geo_json<'i>(&'i self) -> String
+    where
+        Self: IntoGeometryOptionsIterator<'i>;
 }
 
 #[cfg(test)]
@@ -102,7 +105,10 @@ mod test_default_impls {
         fn filter(&self, _mask: Vec<bool>) -> Result<Self> {
             unimplemented!()
         }
-        fn to_geo_json(&self) -> String {
+        fn to_geo_json<'i>(&'i self) -> String
+        where
+            Self: IntoGeometryOptionsIterator<'i>,
+        {
             unimplemented!()
         }
     }
@@ -185,13 +191,12 @@ pub trait FeatureCollectionImplHelpers {
     fn is_simple(&self) -> bool;
 }
 
-/// This macro implements a `FeatureCollection`
+/// This macro implements a `FeatureCollection` (and `Clone`)
 macro_rules! feature_collection_impl {
     ($Collection:ty, $hasGeometry:literal) => {
         impl crate::collections::FeatureCollection for $Collection
         where
-            Self: crate::collections::FeatureCollectionImplHelpers
-                + crate::collections::IntoGeometryOptionsIterator,
+            Self: crate::collections::FeatureCollectionImplHelpers,
         {
             fn len(&self) -> usize {
                 use arrow::array::Array;
@@ -538,7 +543,10 @@ macro_rules! feature_collection_impl {
                 }
             }
 
-            fn to_geo_json(&self) -> String {
+            fn to_geo_json<'i>(&'i self) -> String
+            where
+                Self: crate::collections::IntoGeometryOptionsIterator<'i>,
+            {
                 use crate::collections::IntoGeometryOptionsIterator;
                 use crate::json_map;
 
@@ -626,7 +634,7 @@ mod macro_hygiene_test {
         }
     }
 
-    impl crate::collections::IntoGeometryOptionsIterator for HygienicCollection {
+    impl<'i> crate::collections::IntoGeometryOptionsIterator<'i> for HygienicCollection {
         type GeometryOptionIterator = std::iter::Once<Option<Self::GeometryType>>;
         type GeometryType = geojson::Geometry;
 
