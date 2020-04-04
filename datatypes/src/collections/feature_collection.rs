@@ -4,7 +4,7 @@ use crate::util::Result;
 /// This trait defines common features of all feature collections
 pub trait FeatureCollection
 where
-    Self: Sized,
+    Self: Clone + Sized,
 {
     /// Returns the number of features
     fn len(&self) -> usize;
@@ -77,6 +77,7 @@ where
 mod test_default_impls {
     use super::*;
 
+    #[derive(Clone)]
     struct Dummy(Vec<u16>);
 
     impl FeatureCollection for Dummy {
@@ -580,6 +581,17 @@ macro_rules! feature_collection_impl {
                 };
 
                 feature_collection.to_string()
+            }
+        }
+
+        impl Clone for $Collection {
+            fn clone(&self) -> Self {
+                use arrow::array::{Array, StructArray};
+
+                Self {
+                    data: StructArray::from(self.data.data()),
+                    types: self.types.clone(),
+                }
             }
         }
     };
