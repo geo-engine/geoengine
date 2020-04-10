@@ -332,7 +332,7 @@ macro_rules! feature_collection_impl {
                     }
                 );
 
-                let number_of_old_columns = if $hasGeometry { 2 } else { 1 } + self.types.len();
+                let number_of_old_columns = self.data.num_columns();
                 let number_of_new_columns = 1;
 
                 let mut columns = Vec::<arrow::datatypes::Field>::with_capacity(
@@ -423,7 +423,7 @@ macro_rules! feature_collection_impl {
                     }
                 );
 
-                let number_of_old_columns = if $hasGeometry { 2 } else { 1 } + self.types.len();
+                let number_of_old_columns = self.data.num_columns();
                 let number_of_removed_columns = 1;
 
                 let mut columns = Vec::<arrow::datatypes::Field>::with_capacity(
