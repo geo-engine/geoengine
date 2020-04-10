@@ -1,6 +1,7 @@
 #[macro_use]
 mod feature_collection;
 pub(self) mod error;
+#[macro_use]
 mod geo_feature_collection;
 
 mod data_collection;

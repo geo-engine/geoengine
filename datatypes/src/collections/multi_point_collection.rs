@@ -13,7 +13,6 @@ use crate::primitives::{
     Coordinate2D, FeatureData, FeatureDataType, FeatureDataValue, MultiPointRef, TimeInterval,
 };
 use crate::util::arrow::{downcast_array, downcast_mut_array};
-use crate::util::helpers::SomeIter;
 use crate::util::Result;
 use crate::{error, json_map};
 use std::mem;
@@ -69,14 +68,7 @@ impl FeatureCollectionImplHelpers for MultiPointCollection {
     }
 }
 
-impl<'i> crate::collections::IntoGeometryOptionsIterator<'i> for MultiPointCollection {
-    type GeometryOptionIterator = SomeIter<MultiPointIterator<'i>, Self::GeometryType>;
-    type GeometryType = MultiPointRef<'i>;
-
-    fn geometry_options(&'i self) -> Self::GeometryOptionIterator {
-        SomeIter::new(self.geometries())
-    }
-}
+into_geometry_options_impl!(MultiPointCollection);
 
 feature_collection_impl!(MultiPointCollection, true);
 
