@@ -25,6 +25,10 @@ impl<'g> MultiPointRef<'g> {
             point_coordinates: coordinates,
         }
     }
+
+    pub fn points(&self) -> &[Coordinate2D] {
+        self.point_coordinates
+    }
 }
 
 impl<'g> Into<geojson::Geometry> for MultiPointRef<'g> {

@@ -21,6 +21,11 @@ pub enum FeatureCollectionError {
         name: String,
     },
 
+    UnmatchedSchema {
+        a: Vec<String>,
+        b: Vec<String>,
+    },
+
     UnmatchedLength {
         a: usize,
         b: usize,

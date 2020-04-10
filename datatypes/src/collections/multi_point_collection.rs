@@ -9,6 +9,7 @@ use arrow::datatypes::{DataType, Field};
 use snafu::ensure;
 
 use crate::collections::{FeatureCollection, FeatureCollectionImplHelpers, IntoGeometryIterator};
+use crate::error::Error;
 use crate::primitives::{
     Coordinate2D, FeatureData, FeatureDataType, FeatureDataValue, MultiPointRef, TimeInterval,
 };
@@ -73,6 +74,38 @@ impl FeatureCollectionImplHelpers for MultiPointCollection {
         }
 
         Ok(new_features.finish())
+    }
+
+    fn concat_geometries(
+        geometries_a: &ListArray,
+        geometries_b: &ListArray,
+    ) -> Result<ListArray, Error> {
+        let mut new_multipoints =
+            ListBuilder::new(FixedSizeListBuilder::new(Float64Builder::new(2), 2));
+
+        for old_multipoints in &[geometries_a, geometries_b] {
+            for multipoint_index in 0..old_multipoints.len() {
+                let multipoint_ref =
+                    old_multipoints.value(old_multipoints.offset() + multipoint_index);
+                let multipoint: &FixedSizeListArray = downcast_array(&multipoint_ref);
+
+                let new_points = new_multipoints.values();
+
+                for point_index in 0..multipoint.len() {
+                    let floats_ref = multipoint.value(multipoint.offset() + point_index);
+                    let floats: &Float64Array = downcast_array(&floats_ref);
+
+                    let new_floats = new_points.values();
+                    new_floats.append_slice(floats.value_slice(0, 2))?;
+
+                    new_points.append(true)?;
+                }
+
+                new_multipoints.append(true)?;
+            }
+        }
+
+        Ok(new_multipoints.finish())
     }
 
     fn is_simple(&self) -> bool {
@@ -532,6 +565,93 @@ mod tests {
         let filtered = pc.filter(vec![false, true, false]).unwrap();
 
         assert_eq!(filtered.len(), 1);
+    }
+
+    #[test]
+    fn append() {
+        let collection_a = MultiPointCollection::from_data(
+            vec![
+                vec![(0., 0.).into()],
+                vec![(1., 1.).into()],
+                vec![(2., 2.).into()],
+            ],
+            vec![
+                TimeInterval::new_unchecked(0, 1),
+                TimeInterval::new_unchecked(1, 2),
+                TimeInterval::new_unchecked(2, 3),
+            ],
+            [
+                ("foo".to_string(), FeatureData::Decimal(vec![1, 2, 3])),
+                (
+                    "bar".to_string(),
+                    FeatureData::Text(vec!["a".to_string(), "b".to_string(), "c".to_string()]),
+                ),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+        )
+        .unwrap();
+
+        let collection_b = MultiPointCollection::from_data(
+            vec![vec![(3., 3.).into()], vec![(4., 4.).into()]],
+            vec![
+                TimeInterval::new_unchecked(3, 4),
+                TimeInterval::new_unchecked(4, 5),
+            ],
+            [
+                ("foo".to_string(), FeatureData::Decimal(vec![4, 5])),
+                (
+                    "bar".to_string(),
+                    FeatureData::Text(vec!["d".to_string(), "e".to_string()]),
+                ),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+        )
+        .unwrap();
+
+        let collection_c = collection_a.append(&collection_b).unwrap();
+
+        assert_eq!(collection_a.len(), 3);
+        assert_eq!(collection_b.len(), 2);
+        assert_eq!(collection_c.len(), 5);
+
+        let mut geometry_iter = collection_c.geometries();
+        assert_eq!(geometry_iter.next().unwrap().points(), &[(0., 0.).into()]);
+        assert_eq!(geometry_iter.next().unwrap().points(), &[(1., 1.).into()]);
+        assert_eq!(geometry_iter.next().unwrap().points(), &[(2., 2.).into()]);
+        assert_eq!(geometry_iter.next().unwrap().points(), &[(3., 3.).into()]);
+        assert_eq!(geometry_iter.next().unwrap().points(), &[(4., 4.).into()]);
+        assert!(geometry_iter.next().is_none());
+
+        assert_eq!(
+            collection_c.time_intervals(),
+            &[
+                TimeInterval::new_unchecked(0, 1),
+                TimeInterval::new_unchecked(1, 2),
+                TimeInterval::new_unchecked(2, 3),
+                TimeInterval::new_unchecked(3, 4),
+                TimeInterval::new_unchecked(4, 5),
+            ]
+        );
+
+        if let Ok(FeatureDataRef::Decimal(data_ref)) = collection_c.data("foo") {
+            assert_eq!(data_ref.as_ref(), &[1, 2, 3, 4, 5]);
+        } else {
+            panic!("wrong data type");
+        }
+
+        if let Ok(FeatureDataRef::Text(data_ref)) = collection_c.data("bar") {
+            assert_eq!(data_ref.text_at(0).unwrap(), "a");
+            assert_eq!(data_ref.text_at(1).unwrap(), "b");
+            assert_eq!(data_ref.text_at(2).unwrap(), "c");
+            assert_eq!(data_ref.text_at(3).unwrap(), "d");
+            assert_eq!(data_ref.text_at(4).unwrap(), "e");
+        } else {
+            panic!("wrong data type");
+        }
     }
 
     #[test]

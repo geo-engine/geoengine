@@ -1,4 +1,5 @@
 use crate::collections::{FeatureCollection, FeatureCollectionImplHelpers};
+use crate::error::Error;
 use crate::primitives::FeatureDataType;
 use arrow::array::{BooleanArray, ListArray, StructArray};
 use arrow::datatypes::DataType;
@@ -32,6 +33,13 @@ impl FeatureCollectionImplHelpers for DataCollection {
         _features: &ListArray,
         _filter_array: &BooleanArray,
     ) -> crate::util::Result<ListArray> {
+        unreachable!("This collection has no geometries")
+    }
+
+    fn concat_geometries(
+        _geometries_a: &ListArray,
+        _geometries_b: &ListArray,
+    ) -> Result<ListArray, Error> {
         unreachable!("This collection has no geometries")
     }
 

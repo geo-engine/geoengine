@@ -81,7 +81,13 @@ where
     ///
     fn filter(&self, mask: Vec<bool>) -> Result<Self>;
 
-    // TODO: append(FeatureCollection) - add rows
+    /// Appends a collection to another one
+    ///
+    /// # Errors
+    ///
+    /// This method fails if the columns do not match
+    ///
+    fn append(&self, other: &Self) -> Result<Self>;
 
     /// Serialize the feature collection to a geo json string
     fn to_geo_json<'i>(&'i self) -> String
@@ -122,6 +128,9 @@ mod test_default_impls {
             unimplemented!()
         }
         fn filter(&self, _mask: Vec<bool>) -> Result<Self> {
+            unimplemented!()
+        }
+        fn append(&self, _other: &Self) -> Result<Self> {
             unimplemented!()
         }
         fn to_geo_json<'i>(&'i self) -> String
@@ -193,10 +202,10 @@ pub trait FeatureCollectionImplHelpers {
         time_intervals: &arrow::array::FixedSizeListArray,
         filter_array: &arrow::array::BooleanArray,
     ) -> Result<arrow::array::FixedSizeListArray> {
-        use arrow::array::Array;
+        use crate::util::arrow::downcast_array;
+        use arrow::array::{Array, Date64Array, Date64Builder, FixedSizeListBuilder};
 
-        let mut new_time_intervals =
-            arrow::array::FixedSizeListBuilder::new(arrow::array::Date64Builder::new(2), 2);
+        let mut new_time_intervals = FixedSizeListBuilder::new(Date64Builder::new(2), 2);
 
         for feature_index in 0..time_intervals.len() {
             if !filter_array.value(feature_index) {
@@ -204,8 +213,7 @@ pub trait FeatureCollectionImplHelpers {
             }
 
             let old_timestamps_ref = time_intervals.value(feature_index);
-            let old_timestamps: &arrow::array::Date64Array =
-                crate::util::arrow::downcast_array(&old_timestamps_ref);
+            let old_timestamps: &Date64Array = downcast_array(&old_timestamps_ref);
 
             let date_builder = new_time_intervals.values();
             date_builder.append_slice(old_timestamps.value_slice(0, 2))?;
@@ -214,6 +222,118 @@ pub trait FeatureCollectionImplHelpers {
         }
 
         Ok(new_time_intervals.finish())
+    }
+
+    /// Concatenate two geometry arrays if the collection contains geometries
+    fn concat_geometries(
+        geometries_a: &arrow::array::ListArray,
+        geometries_b: &arrow::array::ListArray,
+    ) -> Result<arrow::array::ListArray>;
+
+    /// Concatenate two time interval arrays
+    fn concat_time_intervals(
+        time_intervals_a: &arrow::array::FixedSizeListArray,
+        time_intervals_b: &arrow::array::FixedSizeListArray,
+    ) -> Result<arrow::array::FixedSizeListArray> {
+        use crate::util::arrow::downcast_array;
+        use arrow::array::{Array, Date64Array, Date64Builder, FixedSizeListBuilder};
+
+        let mut new_time_intervals = FixedSizeListBuilder::new(Date64Builder::new(2), 2);
+
+        {
+            let int_builder = new_time_intervals.values();
+
+            let ints_a_ref = time_intervals_a.values();
+            let ints_b_ref = time_intervals_b.values();
+
+            let ints_a: &Date64Array = downcast_array(&ints_a_ref);
+            let ints_b: &Date64Array = downcast_array(&ints_b_ref);
+
+            int_builder.append_slice(ints_a.value_slice(0, ints_a.len()))?;
+            int_builder.append_slice(ints_b.value_slice(0, ints_b.len()))?;
+        }
+
+        for _ in 0..(time_intervals_a.len() + time_intervals_b.len()) {
+            new_time_intervals.append(true)?;
+        }
+
+        Ok(new_time_intervals.finish())
+    }
+
+    /// Concatenate two primitive arrow arrays
+    // TODO: find a way to make this easier?
+    #[allow(clippy::cognitive_complexity)]
+    fn concat_primitive_array(
+        array_a: &dyn arrow::array::Array,
+        array_b: &dyn arrow::array::Array,
+    ) -> Result<arrow::array::ArrayRef> {
+        use crate::util::arrow::downcast_dyn_array;
+        use arrow::array::{Array, PrimitiveArray, PrimitiveBuilder, StringArray, StringBuilder};
+        use arrow::datatypes::{
+            BooleanType, DataType, Float32Type, Float64Type, Int16Type, Int32Type, Int64Type,
+            Int8Type, UInt16Type, UInt32Type, UInt64Type, UInt8Type,
+        };
+        use std::sync::Arc;
+
+        debug_assert_eq!(array_a.data_type(), array_b.data_type());
+
+        macro_rules! concat_values {
+            ($a:expr, $b:expr, $T:ty) => {{
+                let array_a: &PrimitiveArray<$T> = downcast_dyn_array($a);
+                let array_b: &PrimitiveArray<$T> = downcast_dyn_array($b);
+
+                let mut new_array = PrimitiveBuilder::<$T>::new(array_a.len() + array_b.len());
+
+                for old_array in &[array_a, array_b] {
+                    for i in 0..old_array.len() {
+                        if old_array.is_null(i) {
+                            new_array.append_null()?;
+                        } else {
+                            new_array.append_value(old_array.value(i))?;
+                        }
+                    }
+                }
+
+                Arc::new(new_array.finish())
+            }};
+        }
+
+        // since both types are the same, it is sufficient to just lookup one
+        Ok(match array_a.data_type() {
+            DataType::Boolean => concat_values!(array_a, array_b, BooleanType),
+            DataType::Int8 => concat_values!(array_a, array_b, Int8Type),
+            DataType::Int16 => concat_values!(array_a, array_b, Int16Type),
+            DataType::Int32 => concat_values!(array_a, array_b, Int32Type),
+            DataType::Int64 => concat_values!(array_a, array_b, Int64Type),
+            DataType::UInt8 => concat_values!(array_a, array_b, UInt8Type),
+            DataType::UInt16 => concat_values!(array_a, array_b, UInt16Type),
+            DataType::UInt32 => concat_values!(array_a, array_b, UInt32Type),
+            DataType::UInt64 => concat_values!(array_a, array_b, UInt64Type),
+            DataType::Float32 => concat_values!(array_a, array_b, Float32Type),
+            DataType::Float64 => concat_values!(array_a, array_b, Float64Type),
+            DataType::Utf8 => {
+                let array_a: &StringArray = downcast_dyn_array(array_a);
+                let array_b: &StringArray = downcast_dyn_array(array_b);
+
+                let mut new_array = StringBuilder::new(array_a.len() + array_b.len());
+
+                for old_array in &[array_a, array_b] {
+                    for i in 0..old_array.len() {
+                        if old_array.is_null(i) {
+                            new_array.append_null()?;
+                        } else {
+                            new_array.append_value(old_array.value(i))?;
+                        }
+                    }
+                }
+
+                Arc::new(new_array.finish())
+            }
+            t => unimplemented!(
+                "`concat_primitive_array` not supported for data type {:?}",
+                t
+            ),
+        })
     }
 
     /// Is the feature collection simple or does it contain multi-features?
@@ -595,8 +715,61 @@ macro_rules! feature_collection_impl {
                         self.types().clone(),
                     ))
                 } else {
-                    unreachable!("`data` field must be a struct")
+                    unreachable!("`tables` field must be a struct")
                 }
+            }
+
+            fn append(&self, other: &Self) -> crate::util::Result<Self> {
+                use crate::collections::{error, FeatureCollectionImplHelpers};
+                use crate::util::arrow::downcast_array;
+                use arrow::array::{Array, ArrayRef};
+                use arrow::datatypes::{DataType, Field};
+                use std::sync::Arc;
+
+                snafu::ensure!(
+                    self.types() == other.types(),
+                    error::UnmatchedSchema {
+                        a: self.types().keys().cloned().collect::<Vec<String>>(),
+                        b: self.types().keys().cloned().collect::<Vec<String>>(),
+                    }
+                );
+
+                let table_data = self.table().data();
+                let columns = if let DataType::Struct(columns) = table_data.data_type() {
+                    columns
+                } else {
+                    unreachable!("`tables` field must be a struct")
+                };
+
+                let mut new_data = Vec::<(Field, ArrayRef)>::with_capacity(columns.len());
+
+                // concat data column by column
+                for (column, array_a) in columns.iter().zip(self.table().columns()) {
+                    let array_b = other
+                        .table()
+                        .column_by_name(&column.name())
+                        .expect("column must occur in both collections");
+
+                    new_data.push((
+                        column.clone(),
+                        match column.name().as_str() {
+                            Self::GEOMETRY_COLUMN_NAME => Arc::new(Self::concat_geometries(
+                                downcast_array(array_a),
+                                downcast_array(array_b),
+                            )?),
+                            Self::TIME_COLUMN_NAME => Arc::new(Self::concat_time_intervals(
+                                downcast_array(array_a),
+                                downcast_array(array_b),
+                            )?),
+                            _ => Self::concat_primitive_array(array_a.as_ref(), array_b.as_ref())?,
+                        },
+                    ));
+                }
+
+                Ok(Self::new_from_internals(
+                    new_data.into(),
+                    self.types().clone(),
+                ))
             }
 
             fn to_geo_json<'i>(&'i self) -> String
@@ -700,6 +873,13 @@ mod macro_hygiene_test {
         fn filtered_geometries(
             _features: &arrow::array::ListArray,
             _filter_array: &arrow::array::BooleanArray,
+        ) -> crate::util::Result<arrow::array::ListArray> {
+            unimplemented!()
+        }
+
+        fn concat_geometries(
+            _geometries_a: &arrow::array::ListArray,
+            _geometries_b: &arrow::array::ListArray,
         ) -> crate::util::Result<arrow::array::ListArray> {
             unimplemented!()
         }
