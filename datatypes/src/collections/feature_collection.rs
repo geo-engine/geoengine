@@ -49,7 +49,13 @@ where
     ///
     fn add_column(&self, new_column: &str, data: FeatureData) -> Result<Self>;
 
-    // TODO: add_columns - multi
+    /// Creates a copy of the collection with additional columns
+    ///
+    /// # Errors
+    ///
+    /// Adding columns fails if any column does already exist or the lengths do not match the length of the collection
+    ///
+    fn add_columns(&self, new_columns: &[(&str, FeatureData)]) -> Result<Self>;
 
     /// Removes a column and returns an updated collection
     ///
@@ -98,6 +104,9 @@ mod test_default_impls {
             unimplemented!()
         }
         fn add_column(&self, _new_column: &str, _data: FeatureData) -> Result<Self> {
+            unimplemented!()
+        }
+        fn add_columns(&self, _new_columns: &[(&str, FeatureData)]) -> Result<Self> {
             unimplemented!()
         }
         fn remove_column(&self, _column: &str) -> Result<Self> {
@@ -327,28 +336,36 @@ macro_rules! feature_collection_impl {
                 new_column_name: &str,
                 data: crate::primitives::FeatureData,
             ) -> crate::util::Result<Self> {
-                use crate::collections::error;
-                use crate::collections::FeatureCollectionImplHelpers;
+                self.add_columns(&[(new_column_name, data)])
+            }
+
+            fn add_columns(
+                &self,
+                new_columns: &[(&str, crate::primitives::FeatureData)],
+            ) -> crate::util::Result<Self> {
+                use crate::collections::{error, FeatureCollectionImplHelpers};
                 use arrow::array::Array;
 
-                snafu::ensure!(
-                    !Self::is_reserved_name(new_column_name)
-                        && self.table().column_by_name(new_column_name).is_none(),
-                    error::ColumnAlreadyExists {
-                        name: new_column_name.to_string(),
-                    }
-                );
+                for (new_column_name, data) in new_columns {
+                    snafu::ensure!(
+                        !Self::is_reserved_name(new_column_name)
+                            && self.table().column_by_name(new_column_name).is_none(),
+                        error::ColumnAlreadyExists {
+                            name: new_column_name.to_string(),
+                        }
+                    );
 
-                snafu::ensure!(
-                    data.len() == self.table().len(),
-                    error::UnmatchedLength {
-                        a: self.table().len(),
-                        b: data.len(),
-                    }
-                );
+                    snafu::ensure!(
+                        data.len() == self.table().len(),
+                        error::UnmatchedLength {
+                            a: self.table().len(),
+                            b: data.len(),
+                        }
+                    );
+                }
 
                 let number_of_old_columns = self.table().num_columns();
-                let number_of_new_columns = 1;
+                let number_of_new_columns = new_columns.len();
 
                 let mut columns = Vec::<arrow::datatypes::Field>::with_capacity(
                     number_of_old_columns + number_of_new_columns,
@@ -400,20 +417,23 @@ macro_rules! feature_collection_impl {
                     );
                 }
 
-                // append new column
-                columns.push(arrow::datatypes::Field::new(
-                    new_column_name,
-                    data.arrow_data_type(),
-                    data.nullable(),
-                ));
-                column_values.push(data.arrow_builder().map(|mut builder| builder.finish())?);
-
                 // create new type map
                 let mut types = self.types().clone();
-                types.insert(
-                    new_column_name.to_string(),
-                    crate::primitives::FeatureDataType::from(&data),
-                );
+
+                // append new columns
+                for (new_column_name, data) in new_columns {
+                    columns.push(arrow::datatypes::Field::new(
+                        &new_column_name,
+                        data.arrow_data_type(),
+                        data.nullable(),
+                    ));
+                    column_values.push(data.arrow_builder().map(|mut builder| builder.finish())?);
+
+                    types.insert(
+                        new_column_name.to_string(),
+                        crate::primitives::FeatureDataType::from(data),
+                    );
+                }
 
                 Ok(Self::new_from_internals(
                     Self::struct_array_from_data(columns, column_values, self.table().len()),
