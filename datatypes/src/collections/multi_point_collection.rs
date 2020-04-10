@@ -26,6 +26,18 @@ pub struct MultiPointCollection {
 }
 
 impl FeatureCollectionImplHelpers for MultiPointCollection {
+    fn new_from_internals(data: StructArray, types: HashMap<String, FeatureDataType>) -> Self {
+        Self { data, types }
+    }
+
+    fn table(&self) -> &StructArray {
+        &self.data
+    }
+
+    fn types(&self) -> &HashMap<String, FeatureDataType> {
+        &self.types
+    }
+
     /// `MultiPoint`s
     fn geometry_arrow_data_type() -> DataType {
         DataType::List(DataType::FixedSizeList(DataType::Float64.into(), 2).into())

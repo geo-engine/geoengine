@@ -1,6 +1,7 @@
 use crate::collections::IntoGeometryOptionsIterator;
-use crate::primitives::{FeatureData, FeatureDataRef, TimeInterval};
+use crate::primitives::{FeatureData, FeatureDataRef, FeatureDataType, TimeInterval};
 use crate::util::Result;
+use std::collections::HashMap;
 
 /// This trait defines common features of all feature collections
 pub trait FeatureCollection
@@ -128,6 +129,16 @@ mod test_default_impls {
 
 /// This trait defines required helper methods of the feature collections in order to allow using the macro implementer.
 pub trait FeatureCollectionImplHelpers {
+    /// A constructor from internals for the macro implementer
+    fn new_from_internals(
+        data: arrow::array::StructArray,
+        types: HashMap<String, FeatureDataType>,
+    ) -> Self;
+
+    fn table(&self) -> &arrow::array::StructArray;
+
+    fn types(&self) -> &HashMap<String, FeatureDataType>;
+
     /// Return an `arrow` data type for the geometry
     fn geometry_arrow_data_type() -> arrow::datatypes::DataType;
 
@@ -199,9 +210,10 @@ macro_rules! feature_collection_impl {
             Self: crate::collections::FeatureCollectionImplHelpers,
         {
             fn len(&self) -> usize {
+                use crate::collections::FeatureCollectionImplHelpers;
                 use arrow::array::Array;
 
-                self.data.len()
+                self.table().len()
             }
 
             fn is_simple(&self) -> bool {
@@ -212,7 +224,9 @@ macro_rules! feature_collection_impl {
                 &self,
                 column_name: &str,
             ) -> crate::util::Result<crate::primitives::FeatureDataRef> {
-                use crate::collections::{error, FeatureCollectionError};
+                use crate::collections::{
+                    error, FeatureCollectionError, FeatureCollectionImplHelpers,
+                };
                 use crate::primitives::{
                     CategoricalDataRef, DecimalDataRef, FeatureDataType,
                     NullableCategoricalDataRef, NullableDecimalDataRef, NullableNumberDataRef,
@@ -228,14 +242,14 @@ macro_rules! feature_collection_impl {
                     }
                 );
 
-                let column = self.data.column_by_name(column_name).ok_or_else(|| {
+                let column = self.table().column_by_name(column_name).ok_or_else(|| {
                     FeatureCollectionError::ColumnDoesNotExist {
                         name: column_name.to_string(),
                     }
                 })?;
 
                 Ok(
-                    match self.types.get(column_name).expect("previously checked") {
+                    match self.types().get(column_name).expect("previously checked") {
                         FeatureDataType::Number => {
                             let array: &arrow::array::Float64Array = downcast_array(column);
                             NumberDataRef::new(array.values()).into()
@@ -286,10 +300,11 @@ macro_rules! feature_collection_impl {
             }
 
             fn time_intervals(&self) -> &[crate::primitives::TimeInterval] {
+                use crate::collections::FeatureCollectionImplHelpers;
                 use crate::util::arrow::downcast_array;
 
                 let features_ref = self
-                    .data
+                    .table()
                     .column_by_name(Self::TIME_COLUMN_NAME)
                     .expect("There must exist a time interval column");
                 let features: &arrow::array::FixedSizeListArray = downcast_array(features_ref);
@@ -318,21 +333,21 @@ macro_rules! feature_collection_impl {
 
                 snafu::ensure!(
                     !Self::is_reserved_name(new_column_name)
-                        && self.data.column_by_name(new_column_name).is_none(),
+                        && self.table().column_by_name(new_column_name).is_none(),
                     error::ColumnAlreadyExists {
                         name: new_column_name.to_string(),
                     }
                 );
 
                 snafu::ensure!(
-                    data.len() == self.data.len(),
+                    data.len() == self.table().len(),
                     error::UnmatchedLength {
-                        a: self.data.len(),
+                        a: self.table().len(),
                         b: data.len(),
                     }
                 );
 
-                let number_of_old_columns = self.data.num_columns();
+                let number_of_old_columns = self.table().num_columns();
                 let number_of_new_columns = 1;
 
                 let mut columns = Vec::<arrow::datatypes::Field>::with_capacity(
@@ -350,7 +365,7 @@ macro_rules! feature_collection_impl {
                         false,
                     ));
                     column_values.push(
-                        self.data
+                        self.table()
                             .column_by_name(Self::GEOMETRY_COLUMN_NAME)
                             .expect("The geometry column must exist")
                             .clone(),
@@ -364,21 +379,21 @@ macro_rules! feature_collection_impl {
                     false,
                 ));
                 column_values.push(
-                    self.data
+                    self.table()
                         .column_by_name(Self::TIME_COLUMN_NAME)
                         .expect("The time column must exist")
                         .clone(),
                 );
 
                 // copy attribute data
-                for (column_name, column_type) in &self.types {
+                for (column_name, column_type) in self.types() {
                     columns.push(arrow::datatypes::Field::new(
                         &column_name,
                         column_type.arrow_data_type(),
                         column_type.nullable(),
                     ));
                     column_values.push(
-                        self.data
+                        self.table()
                             .column_by_name(&column_name)
                             .expect("The attribute column must exist")
                             .clone(),
@@ -394,16 +409,16 @@ macro_rules! feature_collection_impl {
                 column_values.push(data.arrow_builder().map(|mut builder| builder.finish())?);
 
                 // create new type map
-                let mut types = self.types.clone();
+                let mut types = self.types().clone();
                 types.insert(
                     new_column_name.to_string(),
                     crate::primitives::FeatureDataType::from(&data),
                 );
 
-                Ok(Self {
-                    data: Self::struct_array_from_data(columns, column_values, self.data.len()),
+                Ok(Self::new_from_internals(
+                    Self::struct_array_from_data(columns, column_values, self.table().len()),
                     types,
-                })
+                ))
             }
 
             fn remove_column(&self, removed_column_name: &str) -> crate::util::Result<Self> {
@@ -417,13 +432,13 @@ macro_rules! feature_collection_impl {
                     }
                 );
                 snafu::ensure!(
-                    self.data.column_by_name(removed_column_name).is_some(),
+                    self.table().column_by_name(removed_column_name).is_some(),
                     error::ColumnDoesNotExist {
                         name: removed_column_name.to_string(),
                     }
                 );
 
-                let number_of_old_columns = self.data.num_columns();
+                let number_of_old_columns = self.table().num_columns();
                 let number_of_removed_columns = 1;
 
                 let mut columns = Vec::<arrow::datatypes::Field>::with_capacity(
@@ -441,7 +456,7 @@ macro_rules! feature_collection_impl {
                         false,
                     ));
                     column_values.push(
-                        self.data
+                        self.table()
                             .column_by_name(Self::GEOMETRY_COLUMN_NAME)
                             .expect("The geometry column must exist")
                             .clone(),
@@ -455,14 +470,14 @@ macro_rules! feature_collection_impl {
                     false,
                 ));
                 column_values.push(
-                    self.data
+                    self.table()
                         .column_by_name(Self::TIME_COLUMN_NAME)
                         .expect("The time column must exist")
                         .clone(),
                 );
 
                 // copy remaining attribute data
-                for (column_name, column_type) in &self.types {
+                for (column_name, column_type) in self.types() {
                     if column_name == removed_column_name {
                         continue;
                     }
@@ -473,7 +488,7 @@ macro_rules! feature_collection_impl {
                         column_type.nullable(),
                     ));
                     column_values.push(
-                        self.data
+                        self.table()
                             .column_by_name(&column_name)
                             .expect("The attribute column must exist")
                             .clone(),
@@ -481,13 +496,13 @@ macro_rules! feature_collection_impl {
                 }
 
                 // create new type map
-                let mut types = self.types.clone();
+                let mut types = self.types().clone();
                 types.remove(removed_column_name);
 
-                Ok(Self {
-                    data: Self::struct_array_from_data(columns, column_values, self.data.len()),
+                Ok(Self::new_from_internals(
+                    Self::struct_array_from_data(columns, column_values, self.table().len()),
                     types,
-                })
+                ))
             }
 
             fn filter(&self, mask: Vec<bool>) -> crate::util::Result<Self> {
@@ -497,10 +512,10 @@ macro_rules! feature_collection_impl {
                 use std::sync::Arc;
 
                 snafu::ensure!(
-                    mask.len() == self.data.len(),
+                    mask.len() == self.table().len(),
                     error::UnmatchedLength {
                         a: mask.len(),
-                        b: self.data.len(),
+                        b: self.table().len(),
                     }
                 );
 
@@ -508,13 +523,14 @@ macro_rules! feature_collection_impl {
 
                 // TODO: use filter directly on struct array when it is implemented
 
-                if let arrow::datatypes::DataType::Struct(columns) = self.data.data().data_type() {
+                if let arrow::datatypes::DataType::Struct(columns) = self.table().data().data_type()
+                {
                     let mut filtered_data =
                         Vec::<(arrow::datatypes::Field, arrow::array::ArrayRef)>::with_capacity(
                             columns.len(),
                         );
 
-                    for (column, array) in columns.iter().zip(self.data.columns()) {
+                    for (column, array) in columns.iter().zip(self.table().columns()) {
                         filtered_data.push((
                             column.clone(),
                             match column.name().as_str() {
@@ -534,10 +550,10 @@ macro_rules! feature_collection_impl {
                         ));
                     }
 
-                    Ok(Self {
-                        data: filtered_data.into(),
-                        types: self.types.clone(),
-                    })
+                    Ok(Self::new_from_internals(
+                        filtered_data.into(),
+                        self.types().clone(),
+                    ))
                 } else {
                     unreachable!("`data` field must be a struct")
                 }
@@ -547,14 +563,16 @@ macro_rules! feature_collection_impl {
             where
                 Self: crate::collections::IntoGeometryOptionsIterator<'i>,
             {
-                use crate::collections::IntoGeometryOptionsIterator;
+                use crate::collections::{
+                    FeatureCollectionImplHelpers, IntoGeometryOptionsIterator,
+                };
                 use crate::json_map;
 
                 let mut property_maps = (0..self.len())
-                    .map(|_| serde_json::Map::with_capacity(self.types.len()))
+                    .map(|_| serde_json::Map::with_capacity(self.types().len()))
                     .collect::<Vec<_>>();
 
-                for column_name in self.types.keys() {
+                for column_name in self.types().keys() {
                     for (json_value, map) in self
                         .data(column_name)
                         .expect("must exist since it's in `types`")
@@ -594,12 +612,13 @@ macro_rules! feature_collection_impl {
 
         impl Clone for $Collection {
             fn clone(&self) -> Self {
+                use crate::collections::FeatureCollectionImplHelpers;
                 use arrow::array::{Array, StructArray};
 
-                Self {
-                    data: StructArray::from(self.data.data()),
-                    types: self.types.clone(),
-                }
+                Self::new_from_internals(
+                    StructArray::from(self.table().data()),
+                    self.types().clone(),
+                )
             }
         }
     };
@@ -611,13 +630,29 @@ macro_rules! feature_collection_impl {
 #[cfg(test)]
 mod macro_hygiene_test {
     struct HygienicCollection {
-        data: arrow::array::StructArray,
-        types: std::collections::HashMap<String, crate::primitives::FeatureDataType>,
+        should_not_use_this_field_directly: arrow::array::StructArray,
+        should_not_use_this_field_either:
+            std::collections::HashMap<String, crate::primitives::FeatureDataType>,
     }
 
     feature_collection_impl!(HygienicCollection, false);
 
     impl crate::collections::FeatureCollectionImplHelpers for HygienicCollection {
+        fn new_from_internals(
+            _data: arrow::array::StructArray,
+            _types: std::collections::HashMap<String, crate::primitives::FeatureDataType>,
+        ) -> Self {
+            unimplemented!()
+        }
+
+        fn table(&self) -> &arrow::array::StructArray {
+            &self.should_not_use_this_field_directly
+        }
+
+        fn types(&self) -> &std::collections::HashMap<String, crate::primitives::FeatureDataType> {
+            &self.should_not_use_this_field_either
+        }
+
         fn geometry_arrow_data_type() -> arrow::datatypes::DataType {
             unimplemented!()
         }

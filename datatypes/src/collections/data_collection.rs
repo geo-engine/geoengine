@@ -1,4 +1,5 @@
 use crate::collections::{FeatureCollection, FeatureCollectionImplHelpers};
+use crate::primitives::FeatureDataType;
 use arrow::array::{BooleanArray, ListArray, StructArray};
 use arrow::datatypes::DataType;
 use std::collections::HashMap;
@@ -6,11 +7,23 @@ use std::collections::HashMap;
 /// This collection contains temporal data but no geographical features.
 #[derive(Debug)]
 pub struct DataCollection {
-    data: StructArray,
+    table: StructArray,
     types: HashMap<String, crate::primitives::FeatureDataType>,
 }
 
 impl FeatureCollectionImplHelpers for DataCollection {
+    fn new_from_internals(table: StructArray, types: HashMap<String, FeatureDataType>) -> Self {
+        Self { table, types }
+    }
+
+    fn table(&self) -> &StructArray {
+        &self.table
+    }
+
+    fn types(&self) -> &HashMap<String, FeatureDataType> {
+        &self.types
+    }
+
     fn geometry_arrow_data_type() -> DataType {
         unreachable!("This collection has no geometries")
     }
