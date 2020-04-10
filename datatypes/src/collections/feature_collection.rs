@@ -65,7 +65,13 @@ where
     ///
     fn remove_column(&self, column: &str) -> Result<Self>;
 
-    // TODO: remove_columns - multi
+    /// Removes columns and returns an updated collection
+    ///
+    /// # Errors
+    ///
+    /// Removing columns fails if any column does not exist (or is reserved, e.g., the geometry column)
+    ///
+    fn remove_columns(&self, columns: &[&str]) -> Result<Self>;
 
     /// Filters the feature collection by copying the data into a new feature collection
     ///
@@ -110,6 +116,9 @@ mod test_default_impls {
             unimplemented!()
         }
         fn remove_column(&self, _column: &str) -> Result<Self> {
+            unimplemented!()
+        }
+        fn remove_columns(&self, _columns: &[&str]) -> Result<Self> {
             unimplemented!()
         }
         fn filter(&self, _mask: Vec<bool>) -> Result<Self> {
@@ -442,21 +451,29 @@ macro_rules! feature_collection_impl {
             }
 
             fn remove_column(&self, removed_column_name: &str) -> crate::util::Result<Self> {
-                use crate::collections::{error, FeatureCollectionImplHelpers};
-                use arrow::array::Array;
+                self.remove_columns(&[removed_column_name])
+            }
 
-                snafu::ensure!(
-                    !Self::is_reserved_name(removed_column_name),
-                    error::CannotAccessReservedColumn {
-                        name: removed_column_name.to_string(),
-                    }
-                );
-                snafu::ensure!(
-                    self.table().column_by_name(removed_column_name).is_some(),
-                    error::ColumnDoesNotExist {
-                        name: removed_column_name.to_string(),
-                    }
-                );
+            fn remove_columns(&self, removed_column_names: &[&str]) -> crate::util::Result<Self> {
+                use crate::collections::{error, FeatureCollectionImplHelpers};
+                use crate::primitives::FeatureDataType;
+                use arrow::array::Array;
+                use std::collections::{HashMap, HashSet};
+
+                for removed_column_name in removed_column_names {
+                    snafu::ensure!(
+                        !Self::is_reserved_name(removed_column_name),
+                        error::CannotAccessReservedColumn {
+                            name: removed_column_name.to_string(),
+                        }
+                    );
+                    snafu::ensure!(
+                        self.table().column_by_name(removed_column_name).is_some(),
+                        error::ColumnDoesNotExist {
+                            name: removed_column_name.to_string(),
+                        }
+                    );
+                }
 
                 let number_of_old_columns = self.table().num_columns();
                 let number_of_removed_columns = 1;
@@ -465,6 +482,9 @@ macro_rules! feature_collection_impl {
                     number_of_old_columns - number_of_removed_columns,
                 );
                 let mut column_values = Vec::<arrow::array::ArrayRef>::with_capacity(
+                    number_of_old_columns - number_of_removed_columns,
+                );
+                let mut types = HashMap::<String, FeatureDataType>::with_capacity(
                     number_of_old_columns - number_of_removed_columns,
                 );
 
@@ -497,8 +517,10 @@ macro_rules! feature_collection_impl {
                 );
 
                 // copy remaining attribute data
+                let removed_name_set: HashSet<&str> =
+                    removed_column_names.iter().cloned().collect();
                 for (column_name, column_type) in self.types() {
-                    if column_name == removed_column_name {
+                    if removed_name_set.contains(column_name.as_str()) {
                         continue;
                     }
 
@@ -513,11 +535,9 @@ macro_rules! feature_collection_impl {
                             .expect("The attribute column must exist")
                             .clone(),
                     );
-                }
 
-                // create new type map
-                let mut types = self.types().clone();
-                types.remove(removed_column_name);
+                    types.insert(column_name.to_string(), self.types()[column_name]);
+                }
 
                 Ok(Self::new_from_internals(
                     Self::struct_array_from_data(columns, column_values, self.table().len()),
