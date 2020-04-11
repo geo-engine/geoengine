@@ -261,56 +261,61 @@ pub trait FeatureCollectionImplHelpers {
     }
 
     /// Concatenate two primitive arrow arrays
-    // TODO: find a way to make this easier?
-    #[allow(clippy::cognitive_complexity)]
     fn concat_primitive_array(
         array_a: &dyn arrow::array::Array,
         array_b: &dyn arrow::array::Array,
     ) -> Result<arrow::array::ArrayRef> {
         use crate::util::arrow::downcast_dyn_array;
-        use arrow::array::{Array, PrimitiveArray, PrimitiveBuilder, StringArray, StringBuilder};
+        use arrow::array::{
+            Array, ArrayRef, PrimitiveArray, PrimitiveArrayOps, PrimitiveBuilder, StringArray,
+            StringBuilder,
+        };
         use arrow::datatypes::{
-            BooleanType, DataType, Float32Type, Float64Type, Int16Type, Int32Type, Int64Type,
-            Int8Type, UInt16Type, UInt32Type, UInt64Type, UInt8Type,
+            ArrowPrimitiveType, BooleanType, DataType, Float32Type, Float64Type, Int16Type,
+            Int32Type, Int64Type, Int8Type, UInt16Type, UInt32Type, UInt64Type, UInt8Type,
         };
         use std::sync::Arc;
 
-        debug_assert_eq!(array_a.data_type(), array_b.data_type());
+        fn concat_values<T>(
+            a: &dyn arrow::array::Array,
+            b: &dyn arrow::array::Array,
+        ) -> Result<ArrayRef>
+        where
+            T: ArrowPrimitiveType,
+        {
+            let array_a: &PrimitiveArray<T> = downcast_dyn_array(a);
+            let array_b: &PrimitiveArray<T> = downcast_dyn_array(b);
 
-        macro_rules! concat_values {
-            ($a:expr, $b:expr, $T:ty) => {{
-                let array_a: &PrimitiveArray<$T> = downcast_dyn_array($a);
-                let array_b: &PrimitiveArray<$T> = downcast_dyn_array($b);
+            let mut new_array = PrimitiveBuilder::<T>::new(array_a.len() + array_b.len());
 
-                let mut new_array = PrimitiveBuilder::<$T>::new(array_a.len() + array_b.len());
-
-                for old_array in &[array_a, array_b] {
-                    for i in 0..old_array.len() {
-                        if old_array.is_null(i) {
-                            new_array.append_null()?;
-                        } else {
-                            new_array.append_value(old_array.value(i))?;
-                        }
+            for old_array in &[array_a, array_b] {
+                for i in 0..old_array.len() {
+                    if old_array.is_null(i) {
+                        new_array.append_null()?;
+                    } else {
+                        new_array.append_value(old_array.value(i))?;
                     }
                 }
+            }
 
-                Arc::new(new_array.finish())
-            }};
+            Ok(Arc::new(new_array.finish()))
         }
+
+        debug_assert_eq!(array_a.data_type(), array_b.data_type());
 
         // since both types are the same, it is sufficient to just lookup one
         Ok(match array_a.data_type() {
-            DataType::Boolean => concat_values!(array_a, array_b, BooleanType),
-            DataType::Int8 => concat_values!(array_a, array_b, Int8Type),
-            DataType::Int16 => concat_values!(array_a, array_b, Int16Type),
-            DataType::Int32 => concat_values!(array_a, array_b, Int32Type),
-            DataType::Int64 => concat_values!(array_a, array_b, Int64Type),
-            DataType::UInt8 => concat_values!(array_a, array_b, UInt8Type),
-            DataType::UInt16 => concat_values!(array_a, array_b, UInt16Type),
-            DataType::UInt32 => concat_values!(array_a, array_b, UInt32Type),
-            DataType::UInt64 => concat_values!(array_a, array_b, UInt64Type),
-            DataType::Float32 => concat_values!(array_a, array_b, Float32Type),
-            DataType::Float64 => concat_values!(array_a, array_b, Float64Type),
+            DataType::Boolean => concat_values::<BooleanType>(array_a, array_b),
+            DataType::Int8 => concat_values::<Int8Type>(array_a, array_b),
+            DataType::Int16 => concat_values::<Int16Type>(array_a, array_b),
+            DataType::Int32 => concat_values::<Int32Type>(array_a, array_b),
+            DataType::Int64 => concat_values::<Int64Type>(array_a, array_b),
+            DataType::UInt8 => concat_values::<UInt8Type>(array_a, array_b),
+            DataType::UInt16 => concat_values::<UInt16Type>(array_a, array_b),
+            DataType::UInt32 => concat_values::<UInt32Type>(array_a, array_b),
+            DataType::UInt64 => concat_values::<UInt64Type>(array_a, array_b),
+            DataType::Float32 => concat_values::<Float32Type>(array_a, array_b),
+            DataType::Float64 => concat_values::<Float64Type>(array_a, array_b),
             DataType::Utf8 => {
                 let array_a: &StringArray = downcast_dyn_array(array_a);
                 let array_b: &StringArray = downcast_dyn_array(array_b);
@@ -327,13 +332,13 @@ pub trait FeatureCollectionImplHelpers {
                     }
                 }
 
-                Arc::new(new_array.finish())
+                Ok(Arc::new(new_array.finish()) as ArrayRef)
             }
             t => unimplemented!(
                 "`concat_primitive_array` not supported for data type {:?}",
                 t
             ),
-        })
+        }?)
     }
 
     /// Is the feature collection simple or does it contain multi-features?
