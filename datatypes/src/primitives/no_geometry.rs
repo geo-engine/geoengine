@@ -18,7 +18,7 @@ impl ArrowTyped for NoGeometry {
     }
 
     fn arrow_builder(_capacity: usize) -> Self::ArrowBuilder {
-        unreachable!("There is no builder since there is no geometry")
+        NoArrowArray
     }
 }
 
