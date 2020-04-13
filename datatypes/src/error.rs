@@ -2,7 +2,7 @@ use arrow::error::ArrowError;
 use snafu::Snafu;
 
 use crate::collections::FeatureCollectionError;
-use crate::primitives::{Coordinate2D, TimeInterval};
+use crate::primitives::{Coordinate2D, PrimitivesError, TimeInterval};
 
 #[derive(Debug, PartialEq, Snafu)]
 #[snafu(visibility = "pub(crate)")]
@@ -105,6 +105,10 @@ pub enum Error {
     #[snafu(display("Colorizer exception: {}", details))]
     Colorizer {
         details: String,
+    },
+
+    Primitives {
+        source: PrimitivesError,
     },
 }
 

@@ -1,4 +1,5 @@
 use crate::error::Error;
+use arrow::error::ArrowError;
 use snafu::Snafu;
 
 #[derive(Debug, PartialEq, Snafu)]
@@ -21,19 +22,27 @@ pub enum FeatureCollectionError {
         name: String,
     },
 
+    UnmatchedLength {
+        a: usize,
+        b: usize,
+    },
+
     UnmatchedSchema {
         a: Vec<String>,
         b: Vec<String>,
     },
 
-    UnmatchedLength {
-        a: usize,
-        b: usize,
-    },
+    WrongDataType,
 }
 
 impl From<FeatureCollectionError> for Error {
     fn from(error: FeatureCollectionError) -> Self {
         Error::FeatureCollection { source: error }
+    }
+}
+
+impl From<ArrowError> for FeatureCollectionError {
+    fn from(source: ArrowError) -> Self {
+        FeatureCollectionError::ArrowInternal { source }
     }
 }

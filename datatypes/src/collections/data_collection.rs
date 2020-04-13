@@ -1,8 +1,12 @@
-use crate::collections::{FeatureCollection, FeatureCollectionImplHelpers};
+use crate::collections::{
+    BuilderProvider, FeatureCollection, FeatureCollectionBuilderImplHelpers,
+    FeatureCollectionImplHelpers, SimpleFeatureCollectionBuilder,
+};
 use crate::error::Error;
 use crate::primitives::FeatureDataType;
-use arrow::array::{BooleanArray, ListArray, StructArray};
+use arrow::array::{ArrayBuilder, ArrayRef, BooleanArray, ListArray, StructArray};
 use arrow::datatypes::DataType;
+use std::any::Any;
 use std::collections::HashMap;
 
 /// This collection contains temporal data but no geographical features.
@@ -61,7 +65,44 @@ feature_collection_impl!(DataCollection, false);
 
 // TODO: implement constructors
 
-// TODO: implement builder
+/// Zero-sized replacement type of an unused arrow `ArrayBuilder`
+pub struct NoGeoBuilder;
+
+impl ArrayBuilder for NoGeoBuilder {
+    fn len(&self) -> usize {
+        unreachable!("This collection has no geometries")
+    }
+
+    fn finish(&mut self) -> ArrayRef {
+        unreachable!("This collection has no geometries")
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        unreachable!("This collection has no geometries")
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        unreachable!("This collection has no geometries")
+    }
+
+    fn into_box_any(self: Box<Self>) -> Box<dyn Any> {
+        unreachable!("This collection has no geometries")
+    }
+}
+
+impl FeatureCollectionBuilderImplHelpers for DataCollection {
+    type GeometriesBuilder = NoGeoBuilder;
+
+    const HAS_GEOMETRIES: bool = false;
+
+    fn geometries_builder() -> Self::GeometriesBuilder {
+        unreachable!("This collection has no geometries")
+    }
+}
+
+impl BuilderProvider for DataCollection {
+    type Builder = SimpleFeatureCollectionBuilder<Self>;
+}
 
 #[cfg(test)]
 mod tests {
