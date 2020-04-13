@@ -1,5 +1,6 @@
 use crate::primitives::error;
 use crate::primitives::{Coordinate2D, Geometry};
+use crate::util::arrow::ArrowTyped;
 use crate::util::Result;
 use snafu::ensure;
 
@@ -34,6 +35,26 @@ impl AsRef<[Coordinate2D]> for MultiPoint {
 impl From<Coordinate2D> for MultiPoint {
     fn from(point: Coordinate2D) -> Self {
         Self::new_unchecked(vec![point])
+    }
+}
+
+impl ArrowTyped for MultiPoint {
+    type ArrowArray = arrow::array::ListArray;
+    type ArrowBuilder =
+        arrow::array::ListBuilder<arrow::array::FixedSizeListBuilder<arrow::array::Float64Builder>>;
+
+    fn arrow_data_type() -> arrow::datatypes::DataType {
+        arrow::datatypes::DataType::List(Box::new(arrow::datatypes::DataType::FixedSizeList(
+            Box::new(arrow::datatypes::DataType::Float64),
+            2,
+        )))
+    }
+
+    fn arrow_builder(capacity: usize) -> Self::ArrowBuilder {
+        arrow::array::ListBuilder::new(arrow::array::FixedSizeListBuilder::new(
+            arrow::array::Float64Builder::new(capacity * 2),
+            2,
+        ))
     }
 }
 

@@ -18,7 +18,7 @@ use crate::error::Error;
 use crate::primitives::{
     Coordinate2D, FeatureData, FeatureDataType, MultiPoint, MultiPointRef, TimeInterval,
 };
-use crate::util::arrow::downcast_array;
+use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::Result;
 use crate::{error, json_map};
 use std::slice;
@@ -368,12 +368,12 @@ impl<'l> Iterator for MultiPointIterator<'l> {
 }
 
 impl FeatureCollectionBuilderImplHelpers for MultiPointCollection {
-    type GeometriesBuilder = ListBuilder<FixedSizeListBuilder<Float64Builder>>;
+    type GeometriesBuilder = <MultiPoint as ArrowTyped>::ArrowBuilder;
 
     const HAS_GEOMETRIES: bool = true;
 
     fn geometries_builder() -> Self::GeometriesBuilder {
-        ListBuilder::new(FixedSizeListBuilder::new(Float64Builder::new(0), 2))
+        MultiPoint::arrow_builder(0)
     }
 }
 

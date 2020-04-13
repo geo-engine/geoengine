@@ -3,10 +3,10 @@ use crate::collections::{
     FeatureCollectionImplHelpers, SimpleFeatureCollectionBuilder,
 };
 use crate::error::Error;
-use crate::primitives::FeatureDataType;
-use arrow::array::{ArrayBuilder, ArrayRef, BooleanArray, ListArray, StructArray};
+use crate::primitives::{FeatureDataType, NoGeometry};
+use crate::util::arrow::ArrowTyped;
+use arrow::array::{BooleanArray, ListArray, StructArray};
 use arrow::datatypes::DataType;
-use std::any::Any;
 use std::collections::HashMap;
 
 /// This collection contains temporal data but no geographical features.
@@ -54,7 +54,7 @@ impl FeatureCollectionImplHelpers for DataCollection {
 
 impl<'i> crate::collections::IntoGeometryOptionsIterator<'i> for DataCollection {
     type GeometryOptionIterator = std::iter::Take<std::iter::Repeat<Option<Self::GeometryType>>>;
-    type GeometryType = geojson::Geometry; // fulfills the requirement but is not used anyway
+    type GeometryType = NoGeometry;
 
     fn geometry_options(&'i self) -> Self::GeometryOptionIterator {
         std::iter::repeat(None).take(self.len())
@@ -65,38 +65,13 @@ feature_collection_impl!(DataCollection, false);
 
 // TODO: implement constructors
 
-/// Zero-sized replacement type of an unused arrow `ArrayBuilder`
-pub struct NoGeoBuilder;
-
-impl ArrayBuilder for NoGeoBuilder {
-    fn len(&self) -> usize {
-        unreachable!("This collection has no geometries")
-    }
-
-    fn finish(&mut self) -> ArrayRef {
-        unreachable!("This collection has no geometries")
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        unreachable!("This collection has no geometries")
-    }
-
-    fn as_any_mut(&mut self) -> &mut dyn Any {
-        unreachable!("This collection has no geometries")
-    }
-
-    fn into_box_any(self: Box<Self>) -> Box<dyn Any> {
-        unreachable!("This collection has no geometries")
-    }
-}
-
 impl FeatureCollectionBuilderImplHelpers for DataCollection {
-    type GeometriesBuilder = NoGeoBuilder;
+    type GeometriesBuilder = <NoGeometry as ArrowTyped>::ArrowBuilder;
 
     const HAS_GEOMETRIES: bool = false;
 
     fn geometries_builder() -> Self::GeometriesBuilder {
-        unreachable!("This collection has no geometries")
+        NoGeometry::arrow_builder(0)
     }
 }
 

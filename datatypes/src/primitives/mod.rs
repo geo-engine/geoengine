@@ -4,6 +4,7 @@ pub(self) mod error;
 mod feature_data;
 mod measurement;
 mod multi_point;
+mod no_geometry;
 mod spatio_temporal_bounded;
 mod time_interval;
 
@@ -17,6 +18,7 @@ pub use feature_data::{
 };
 pub use measurement::Measurement;
 pub use multi_point::{MultiPoint, MultiPointRef};
+pub use no_geometry::NoGeometry;
 pub use spatio_temporal_bounded::{SpatialBounded, TemporalBounded};
 pub use time_interval::TimeInterval;
 
