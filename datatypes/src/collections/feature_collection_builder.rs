@@ -2,11 +2,10 @@ use crate::collections::{
     error, FeatureCollection, FeatureCollectionError, FeatureCollectionImplHelpers,
 };
 use crate::primitives::{FeatureDataType, FeatureDataValue, Geometry, TimeInterval};
-use crate::util::arrow::downcast_mut_array;
+use crate::util::arrow::{downcast_mut_array, ArrowTyped};
 use crate::util::Result;
 use arrow::array::{
-    ArrayBuilder, Date64Builder, FixedSizeListBuilder, Float64Builder, Int64Builder, StringBuilder,
-    StructBuilder, UInt8Builder,
+    ArrayBuilder, Float64Builder, Int64Builder, StringBuilder, StructBuilder, UInt8Builder,
 };
 use arrow::datatypes::Field;
 use snafu::ensure;
@@ -81,7 +80,7 @@ where
     Collection: FeatureCollection + FeatureCollectionBuilderImplHelpers,
 {
     pub(super) geometries_builder: Collection::GeometriesBuilder,
-    time_intervals_builder: FixedSizeListBuilder<Date64Builder>,
+    time_intervals_builder: <TimeInterval as ArrowTyped>::ArrowBuilder,
     builders: HashMap<String, Box<dyn ArrayBuilder>>,
     types: HashMap<String, FeatureDataType>,
     rows: usize,
@@ -131,7 +130,7 @@ where
     fn finish_header(self) -> Self::RowBuilder {
         Self::RowBuilder {
             geometries_builder: Collection::geometries_builder(),
-            time_intervals_builder: FixedSizeListBuilder::new(Date64Builder::new(0), 2),
+            time_intervals_builder: TimeInterval::arrow_builder(0),
             builders: self
                 .types
                 .iter()

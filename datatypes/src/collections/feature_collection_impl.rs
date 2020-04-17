@@ -1,10 +1,10 @@
 use crate::primitives::FeatureDataType;
-use crate::util::arrow::{downcast_array, downcast_dyn_array};
+use crate::raster::TimeInterval;
+use crate::util::arrow::{downcast_array, downcast_dyn_array, ArrowTyped};
 use crate::util::Result;
 use arrow::array::{
-    Array, ArrayData, ArrayRef, BooleanArray, Date64Array, Date64Builder, FixedSizeListArray,
-    FixedSizeListBuilder, ListArray, PrimitiveArray, PrimitiveArrayOps, PrimitiveBuilder,
-    StringArray, StringBuilder, StructArray,
+    Array, ArrayData, ArrayRef, BooleanArray, Date64Array, ListArray, PrimitiveArray,
+    PrimitiveArrayOps, PrimitiveBuilder, StringArray, StringBuilder, StructArray,
 };
 use arrow::datatypes::{
     ArrowPrimitiveType, BooleanType, DataType, Field, Float32Type, Float64Type, Int16Type,
@@ -27,10 +27,7 @@ pub trait FeatureCollectionImplHelpers {
 
     /// Return an `arrow` data type for time
     fn time_arrow_data_type() -> DataType {
-        DataType::FixedSizeList(
-            DataType::Date64(arrow::datatypes::DateUnit::Millisecond).into(),
-            2,
-        )
+        TimeInterval::arrow_data_type()
     }
 
     /// Create an `arrow` struct from column names and data
@@ -52,10 +49,10 @@ pub trait FeatureCollectionImplHelpers {
 
     /// Filter time intervals
     fn filtered_time_intervals(
-        time_intervals: &FixedSizeListArray,
+        time_intervals: &<TimeInterval as ArrowTyped>::ArrowArray,
         filter_array: &BooleanArray,
-    ) -> Result<FixedSizeListArray> {
-        let mut new_time_intervals = FixedSizeListBuilder::new(Date64Builder::new(2), 2);
+    ) -> Result<<TimeInterval as ArrowTyped>::ArrowArray> {
+        let mut new_time_intervals = TimeInterval::arrow_builder(0);
 
         for feature_index in 0..time_intervals.len() {
             if !filter_array.value(feature_index) {
@@ -79,10 +76,11 @@ pub trait FeatureCollectionImplHelpers {
 
     /// Concatenate two time interval arrays
     fn concat_time_intervals(
-        time_intervals_a: &FixedSizeListArray,
-        time_intervals_b: &FixedSizeListArray,
-    ) -> Result<FixedSizeListArray> {
-        let mut new_time_intervals = FixedSizeListBuilder::new(Date64Builder::new(2), 2);
+        time_intervals_a: &<TimeInterval as ArrowTyped>::ArrowArray,
+        time_intervals_b: &<TimeInterval as ArrowTyped>::ArrowArray,
+    ) -> Result<<TimeInterval as ArrowTyped>::ArrowArray> {
+        let mut new_time_intervals =
+            TimeInterval::arrow_builder(time_intervals_a.len() + time_intervals_b.len());
 
         {
             let int_builder = new_time_intervals.values();
@@ -274,13 +272,15 @@ macro_rules! feature_collection_impl {
 
             fn time_intervals(&self) -> &[crate::primitives::TimeInterval] {
                 use crate::collections::FeatureCollectionImplHelpers;
-                use crate::util::arrow::downcast_array;
+                use crate::primitives::TimeInterval;
+                use crate::util::arrow::{downcast_array, ArrowTyped};
 
                 let features_ref = self
                     .table()
                     .column_by_name(Self::TIME_COLUMN_NAME)
                     .expect("There must exist a time interval column");
-                let features: &arrow::array::FixedSizeListArray = downcast_array(features_ref);
+                let features: &<TimeInterval as ArrowTyped>::ArrowArray =
+                    downcast_array(features_ref);
 
                 let number_of_time_intervals = self.len();
 

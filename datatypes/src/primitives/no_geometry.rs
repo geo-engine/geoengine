@@ -5,7 +5,7 @@ use geojson::Geometry;
 use serde_json::Value;
 use std::any::Any;
 
-/// A placeholder struct for situations where a geometry is necessary
+/// A zero-sized placeholder struct for situations where a geometry is necessary
 #[derive(Clone, Debug)]
 pub struct NoGeometry;
 

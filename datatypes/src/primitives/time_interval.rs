@@ -1,4 +1,5 @@
 use crate::error;
+use crate::util::arrow::ArrowTyped;
 use crate::util::Result;
 use chrono::{DateTime, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
@@ -292,5 +293,21 @@ impl PartialOrd for TimeInterval {
         } else {
             None
         }
+    }
+}
+
+impl ArrowTyped for TimeInterval {
+    type ArrowArray = arrow::array::FixedSizeListArray;
+    type ArrowBuilder = arrow::array::FixedSizeListBuilder<arrow::array::Date64Builder>;
+
+    fn arrow_data_type() -> arrow::datatypes::DataType {
+        arrow::datatypes::DataType::FixedSizeList(
+            arrow::datatypes::DataType::Date64(arrow::datatypes::DateUnit::Millisecond).into(),
+            2,
+        )
+    }
+
+    fn arrow_builder(capacity: usize) -> Self::ArrowBuilder {
+        arrow::array::FixedSizeListBuilder::new(arrow::array::Date64Builder::new(2 * capacity), 2)
     }
 }

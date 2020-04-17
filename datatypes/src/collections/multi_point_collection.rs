@@ -45,7 +45,7 @@ impl FeatureCollectionImplHelpers for MultiPointCollection {
 
     /// `MultiPoint`s
     fn geometry_arrow_data_type() -> DataType {
-        DataType::List(DataType::FixedSizeList(DataType::Float64.into(), 2).into())
+        MultiPoint::arrow_data_type()
     }
 
     fn filtered_geometries(
