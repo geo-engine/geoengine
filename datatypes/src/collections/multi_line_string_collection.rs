@@ -233,7 +233,7 @@ mod tests {
     use super::*;
 
     use crate::collections::{FeatureCollectionBuilder, FeatureCollectionRowBuilder};
-    use crate::raster::TimeInterval;
+    use crate::primitives::TimeInterval;
 
     #[test]
     fn single_line() {

@@ -82,8 +82,9 @@ mod tests {
     use super::*;
 
     use crate::collections::{FeatureCollectionBuilder, FeatureCollectionRowBuilder};
-    use crate::primitives::{FeatureData, FeatureDataRef, FeatureDataValue, NullableDataRef};
-    use crate::raster::TimeInterval;
+    use crate::primitives::{
+        FeatureData, FeatureDataRef, FeatureDataValue, NullableDataRef, TimeInterval,
+    };
 
     #[test]
     fn time_intervals() {

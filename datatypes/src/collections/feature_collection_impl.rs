@@ -1,5 +1,4 @@
-use crate::primitives::FeatureDataType;
-use crate::raster::TimeInterval;
+use crate::primitives::{FeatureDataType, TimeInterval};
 use crate::util::arrow::{downcast_array, downcast_dyn_array, ArrowTyped};
 use crate::util::Result;
 use arrow::array::{

@@ -29,7 +29,8 @@ where
     /// # Examples
     ///
     /// ```
-    /// use geoengine_datatypes::raster::{Raster, Dim, Raster2D, TimeInterval};
+    /// use geoengine_datatypes::raster::{Raster, Dim, Raster2D};
+    /// use geoengine_datatypes::primitives::TimeInterval;
     ///
     /// let mut raster2d = Raster2D::new(
     ///    [3, 2].into(),
