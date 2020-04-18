@@ -170,7 +170,7 @@ pub trait FeatureCollectionImplHelpers {
     }
 
     /// Is the feature collection simple or does it contain multi-features?
-    fn is_simple(&self) -> bool;
+    fn _is_simple(&self) -> bool;
 }
 
 /// This macro implements a `FeatureCollection` (and `Clone`)
@@ -188,7 +188,7 @@ macro_rules! feature_collection_impl {
             }
 
             fn is_simple(&self) -> bool {
-                crate::collections::FeatureCollectionImplHelpers::is_simple(self)
+                crate::collections::FeatureCollectionImplHelpers::_is_simple(self)
             }
 
             fn data(
@@ -719,7 +719,7 @@ mod macro_hygiene_test {
             unimplemented!()
         }
 
-        fn is_simple(&self) -> bool {
+        fn _is_simple(&self) -> bool {
             unimplemented!()
         }
     }

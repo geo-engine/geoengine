@@ -47,7 +47,7 @@ impl FeatureCollectionImplHelpers for DataCollection {
         unreachable!("This collection has no geometries")
     }
 
-    fn is_simple(&self) -> bool {
+    fn _is_simple(&self) -> bool {
         true
     }
 }

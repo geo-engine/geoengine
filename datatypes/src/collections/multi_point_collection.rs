@@ -112,7 +112,7 @@ impl FeatureCollectionImplHelpers for MultiPointCollection {
         Ok(new_multipoints.finish())
     }
 
-    fn is_simple(&self) -> bool {
+    fn _is_simple(&self) -> bool {
         self.len() == self.coordinates().len()
     }
 }
