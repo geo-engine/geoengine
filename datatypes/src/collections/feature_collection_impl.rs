@@ -17,8 +17,10 @@ pub trait FeatureCollectionImplHelpers {
     /// A constructor from internals for the macro implementer
     fn new_from_internals(data: StructArray, types: HashMap<String, FeatureDataType>) -> Self;
 
+    /// Return the arrow struct
     fn table(&self) -> &StructArray;
 
+    /// Return the type map
     fn types(&self) -> &HashMap<String, FeatureDataType>;
 
     /// Return an `arrow` data type for the geometry

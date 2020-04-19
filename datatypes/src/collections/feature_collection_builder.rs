@@ -41,12 +41,31 @@ pub trait FeatureCollectionBuilder: Default {
 pub trait FeatureCollectionRowBuilder {
     type Collection: FeatureCollection;
 
+    /// Add a time interval to the collection
+    ///
+    /// # Errors
+    ///
+    /// This call fails on internal errors of the builder
+    ///
     fn push_time_interval(&mut self, time_interval: TimeInterval) -> Result<()>;
 
+    /// Add data to the builder
+    ///
+    /// # Errors
+    ///
+    /// This call fails if the data types of the column and the data item do not match
+    ///
     fn push_data(&mut self, column: &str, data: FeatureDataValue) -> Result<()>;
 
+    /// Indicate a finished row
     fn finish_row(&mut self);
 
+    /// Build the feature collection
+    ///
+    /// # Errors
+    ///
+    /// This call fails if the lenghts of the columns do not match the number of times `finish_row()` was called.
+    ///
     fn build(self) -> Result<Self::Collection>;
 }
 
@@ -54,6 +73,12 @@ pub trait GeoFeatureCollectionRowBuilder<G>
 where
     G: Geometry,
 {
+    /// Push a single geometry feature to the collection.
+    ///
+    /// # Errors
+    ///
+    /// This call fails on internal errors of the builder
+    ///
     fn push_geometry(&mut self, geometry: G) -> Result<()>;
 }
 
@@ -61,11 +86,14 @@ where
 pub trait FeatureCollectionBuilderImplHelpers {
     type GeometriesBuilder: ArrayBuilder;
 
+    /// Does this collection have geometries?
     const HAS_GEOMETRIES: bool;
 
+    /// Provide a builder for creating the geometry column
     fn geometries_builder() -> Self::GeometriesBuilder;
 }
 
+/// A default implementation of a feature collection builder
 #[derive(Debug)]
 pub struct SimpleFeatureCollectionBuilder<Collection>
 where
@@ -75,6 +103,7 @@ where
     _collection: PhantomData<Collection>,
 }
 
+/// A default implementation of a feature collection row builder
 pub struct SimpleFeatureCollectionRowBuilder<Collection>
 where
     Collection: FeatureCollection + FeatureCollectionBuilderImplHelpers,
