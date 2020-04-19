@@ -3,8 +3,9 @@ mod coordinate;
 pub(self) mod error;
 mod feature_data;
 mod measurement;
-mod multi_line;
+mod multi_line_string;
 mod multi_point;
+mod multi_polygon;
 mod no_geometry;
 mod spatio_temporal_bounded;
 mod time_interval;
@@ -18,8 +19,9 @@ pub use feature_data::{
     NullableNumberDataRef, NullableTextDataRef, NumberDataRef, TextDataRef,
 };
 pub use measurement::Measurement;
-pub use multi_line::{MultiLineString, MultiLineStringRef};
+pub use multi_line_string::{MultiLineString, MultiLineStringRef};
 pub use multi_point::{MultiPoint, MultiPointRef};
+pub use multi_polygon::{MultiPolygon, MultiPolygonRef};
 pub use no_geometry::NoGeometry;
 pub use spatio_temporal_bounded::{SpatialBounded, TemporalBounded};
 pub use time_interval::TimeInterval;

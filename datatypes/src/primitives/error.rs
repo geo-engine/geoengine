@@ -5,6 +5,7 @@ use snafu::Snafu;
 #[snafu(visibility = "pub(crate)")]
 pub enum PrimitivesError {
     UnallowedEmpty,
+    UnclosedPolygonRing,
 }
 
 impl From<PrimitivesError> for Error {
