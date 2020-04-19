@@ -496,6 +496,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn add_column() {
         let mut builder = MultiPointCollection::builder();
         builder

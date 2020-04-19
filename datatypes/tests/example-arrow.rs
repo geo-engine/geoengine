@@ -90,6 +90,7 @@ fn null_bytes() {
 }
 
 #[test]
+#[allow(clippy::float_cmp)]
 fn offset() {
     let array = {
         let mut array_builder = Float64Builder::new(5);
@@ -574,6 +575,7 @@ fn multipoints() {
 }
 
 #[test]
+#[allow(clippy::float_cmp)]
 fn multipoint_builder() {
     let float_builder = arrow::array::Float64Builder::new(0);
     let coordinate_builder = arrow::array::FixedSizeListBuilder::new(float_builder, 2);
