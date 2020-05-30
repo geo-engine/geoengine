@@ -13,7 +13,7 @@ fn multi_point_collection_benchmarks(c: &mut Criterion) {
                     .append_coordinate((i as f64, i as f64).into())
                     .unwrap();
                 builder
-                    .append_time_interval(TimeInterval::new_unchecked(i, i + 1))
+                    .append_time_interval(TimeInterval::new_unchecked(i.into(), (i + 1).into()))
                     .unwrap();
                 builder.finish_row().unwrap();
             }
@@ -32,7 +32,7 @@ fn multi_point_collection_benchmarks(c: &mut Criterion) {
                     .append_coordinate((i as f64, i as f64).into())
                     .unwrap();
                 builder
-                    .append_time_interval(TimeInterval::new_unchecked(i, i + 1))
+                    .append_time_interval(TimeInterval::new_unchecked(i.into(), (i + 1).into()))
                     .unwrap();
                 builder
                     .append_data("number", FeatureDataValue::Number(i as f64))

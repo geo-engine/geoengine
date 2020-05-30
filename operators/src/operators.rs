@@ -1,4 +1,5 @@
 use crate::source::CsvSourceParameters;
+pub use crate::source::GdalSourceParameters;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -72,8 +73,10 @@ pub struct AllSources {
 ///                 {
 ///                     "type": "gdal_source",
 ///                     "params": {
-///                         "source_name": "test",
-///                         "channel": 0
+///                          "base_path": "base_path",
+///                          "file_name_with_time_placeholder": "file_name_with_time_placeholder",
+///                          "time_format": "file_name",
+///                          "channel": 1
 ///                     }
 ///                 }
 ///             ]
@@ -90,8 +93,11 @@ pub struct AllSources {
 ///     sources: RasterSources {
 ///         rasters: vec![Operator::GdalSource {
 ///             params: GdalSourceParameters {
-///                 source_name: "test".into(),
-///                 channel: 0,
+///                 base_path: "base_path".into(),
+///                 file_name_with_time_placeholder: "file_name_with_time_placeholder".into(),
+///                 time_format: "file_name".into(),
+///                 tick: None,
+///                 channel: Some(1),
 ///             },
 ///             sources: NoSources {},
 ///         }],
@@ -104,36 +110,3 @@ pub struct ProjectionParameters {
     pub dest_crs: String,
 }
 
-/// Parameters for the GDAL Source Operator
-///
-/// # Examples
-///
-/// ```rust
-/// use serde_json::{Result, Value};
-/// use geoengine_operators::Operator;
-/// use geoengine_operators::operators::{GdalSourceParameters, NoSources, RasterSources};
-///
-/// let json_string = r#"
-///     {
-///         "type": "gdal_source",
-///         "params": {
-///             "source_name": "test",
-///             "channel": 3
-///         }
-///     }"#;
-///
-/// let operator: Operator = serde_json::from_str(json_string).unwrap();
-///
-/// assert_eq!(operator, Operator::GdalSource {
-///     params: GdalSourceParameters {
-///         source_name: "test".into(),
-///         channel: 3,
-///     },
-///     sources: Default::default(),
-/// });
-/// ```
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct GdalSourceParameters {
-    pub source_name: String,
-    pub channel: u8,
-}

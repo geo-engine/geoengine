@@ -109,7 +109,7 @@ impl MultiPointCollection {
     ///
     /// let pc = MultiPointCollection::from_data(
     ///     vec![vec![(0., 0.).into()], vec![(1., 1.).into()]],
-    ///     vec![TimeInterval::new_unchecked(0, 1), TimeInterval::new_unchecked(0, 1)],
+    ///     vec![TimeInterval::new_unchecked(0.into(), 1.into()), TimeInterval::new_unchecked(0.into(), 1.into())],
     ///     {
     ///         let mut map = HashMap::new();
     ///         map.insert("number".into(), FeatureData::Number(vec![0., 1.]));
@@ -161,8 +161,8 @@ impl MultiPointCollection {
                 let mut builder = FixedSizeListBuilder::new(Date64Builder::new(capacity), 2);
                 for time_interval in time_intervals {
                     let date_builder = builder.values();
-                    date_builder.append_value(time_interval.start())?;
-                    date_builder.append_value(time_interval.end())?;
+                    date_builder.append_value(time_interval.start().into())?;
+                    date_builder.append_value(time_interval.end().into())?;
                     builder.append(true)?;
                 }
 
@@ -216,7 +216,7 @@ impl MultiPointCollection {
     ///
     /// let pc = MultiPointCollection::from_data(
     ///     vec![vec![(0., 0.).into()], vec![(1., 1.).into()], vec![(2., 2.).into()]],
-    ///     vec![TimeInterval::new_unchecked(0, 1), TimeInterval::new_unchecked(1, 2), TimeInterval::new_unchecked(2, 3)],
+    ///     vec![TimeInterval::new_unchecked(0.into(), 1.into()), TimeInterval::new_unchecked(1.into(), 2.into()), TimeInterval::new_unchecked(2.into(), 3.into())],
     ///     HashMap::new(),
     /// ).unwrap();
     ///
@@ -285,7 +285,7 @@ impl FeatureCollection for MultiPointCollection {
     ///
     /// let pc = MultiPointCollection::from_data(
     ///     vec![vec![(0., 0.).into()], vec![(1., 1.).into()], vec![(2., 2.).into()]],
-    ///     vec![TimeInterval::new_unchecked(0, 1), TimeInterval::new_unchecked(1, 2), TimeInterval::new_unchecked(2, 3)],
+    ///     vec![TimeInterval::new_unchecked(0.into(), 1.into()), TimeInterval::new_unchecked(1.into(), 2.into()), TimeInterval::new_unchecked(2.into(), 3.into())],
     ///     {
     ///         let mut map = HashMap::new();
     ///         map.insert("numbers".into(), FeatureData::Number(vec![0., 1., 2.]));
@@ -382,7 +382,7 @@ impl FeatureCollection for MultiPointCollection {
     ///
     /// let pc = MultiPointCollection::from_data(
     ///     vec![vec![(0., 0.).into()], vec![(1., 1.).into()], vec![(2., 2.).into()]],
-    ///     vec![TimeInterval::new_unchecked(0, 1), TimeInterval::new_unchecked(1, 2), TimeInterval::new_unchecked(2, 3)],
+    ///     vec![TimeInterval::new_unchecked(0.into(), 1.into()), TimeInterval::new_unchecked(1.into(), 2.into()), TimeInterval::new_unchecked(2.into(), 3.into())],
     ///     HashMap::new(),
     /// ).unwrap();
     ///
@@ -393,7 +393,7 @@ impl FeatureCollection for MultiPointCollection {
     /// assert_eq!(time_intervals.len(), 3);
     /// assert_eq!(
     ///     time_intervals,
-    ///     &[TimeInterval::new_unchecked(0, 1), TimeInterval::new_unchecked(1, 2), TimeInterval::new_unchecked(2, 3)]
+    ///     &[TimeInterval::new_unchecked(0.into(), 1.into()), TimeInterval::new_unchecked(1.into(), 2.into()), TimeInterval::new_unchecked(2.into(), 3.into())]
     /// );
     /// ```
     ///
@@ -430,12 +430,12 @@ impl FeatureCollection for MultiPointCollection {
     ///     builder.add_column("foo", FeatureDataType::Number);
     ///
     ///     builder.append_coordinate((0., 0.).into());
-    ///     builder.append_time_interval(TimeInterval::new_unchecked(0, 1));
+    ///     builder.append_time_interval(TimeInterval::new_unchecked(0.into(), 1.into()));
     ///     builder.append_data("foo", FeatureDataValue::Number(0.));
     ///     builder.finish_row();
     ///
     ///     builder.append_coordinate((1., 1.).into());
-    ///     builder.append_time_interval(TimeInterval::new_unchecked(0, 1));
+    ///     builder.append_time_interval(TimeInterval::new_unchecked(0.into(), 1.into()));
     ///     builder.append_data("foo", FeatureDataValue::Number(1.));
     ///     builder.finish_row();
     ///
@@ -521,12 +521,12 @@ impl FeatureCollection for MultiPointCollection {
     ///     builder.add_column("foo", FeatureDataType::Number);
     ///
     ///     builder.append_coordinate((0., 0.).into());
-    ///     builder.append_time_interval(TimeInterval::new_unchecked(0, 1));
+    ///     builder.append_time_interval(TimeInterval::new_unchecked(0.into(), 1.into()));
     ///     builder.append_data("foo", FeatureDataValue::Number(0.));
     ///     builder.finish_row();
     ///
     ///     builder.append_coordinate((1., 1.).into());
-    ///     builder.append_time_interval(TimeInterval::new_unchecked(0, 1));
+    ///     builder.append_time_interval(TimeInterval::new_unchecked(0.into(), 1.into()));
     ///     builder.append_data("foo", FeatureDataValue::Number(1.));
     ///     builder.finish_row();
     ///
@@ -605,19 +605,19 @@ impl FeatureCollection for MultiPointCollection {
     ///     builder.add_column("bar", FeatureDataType::NullableText);
     ///
     ///     builder.append_coordinate((0., 0.).into());
-    ///     builder.append_time_interval(TimeInterval::new_unchecked(0, 1));
+    ///     builder.append_time_interval(TimeInterval::new_unchecked(0.into(), 1.into()));
     ///     builder.append_data("foo", FeatureDataValue::Number(0.));
     ///     builder.append_data("bar", FeatureDataValue::NullableText(Some("one".to_string())));
     ///     builder.finish_row();
     ///
     ///     builder.append_multi_coordinate(vec![(1., 1.).into(), (2., 2.).into()]);
-    ///     builder.append_time_interval(TimeInterval::new_unchecked(1, 2));
+    ///     builder.append_time_interval(TimeInterval::new_unchecked(1.into(), 2.into()));
     ///     builder.append_data("foo", FeatureDataValue::Number(1.));
     ///     builder.append_data("bar", FeatureDataValue::NullableText(None));
     ///     builder.finish_row();
     ///
     ///     builder.append_coordinate((3., 3.).into());
-    ///     builder.append_time_interval(TimeInterval::new_unchecked(3, 4));
+    ///     builder.append_time_interval(TimeInterval::new_unchecked(3.into(), 4.into()));
     ///     builder.append_data("foo", FeatureDataValue::Number(2.));
     ///     builder.append_data("bar", FeatureDataValue::NullableText(Some("three".to_string())));
     ///     builder.finish_row();
@@ -796,7 +796,7 @@ impl Filterable for MultiPointCollection {
     ///
     /// let pc = MultiPointCollection::from_data(
     ///     vec![vec![(0., 0.).into()], vec![(1., 1.).into()], vec![(2., 2.).into()]],
-    ///     vec![TimeInterval::new_unchecked(0, 1), TimeInterval::new_unchecked(1, 2), TimeInterval::new_unchecked(2, 3)],
+    ///     vec![TimeInterval::new_unchecked(0.into(), 1.into()), TimeInterval::new_unchecked(1.into(), 2.into()), TimeInterval::new_unchecked(2.into(), 3.into())],
     ///     HashMap::new(),
     /// ).unwrap();
     ///
@@ -985,7 +985,7 @@ impl MultiPointCollectionBuilder {
     /// let mut builder = MultiPointCollectionBuilder::default();
     ///
     /// builder.append_coordinate((0.0, 0.0).into());
-    /// builder.append_time_interval(TimeInterval::new_unchecked(0, 1));
+    /// builder.append_time_interval(TimeInterval::new_unchecked(0.into(), 1.into()));
     ///
     /// builder.finish_row().unwrap();
     ///
@@ -1107,8 +1107,8 @@ impl MultiPointCollectionBuilder {
     ///
     /// let mut builder = MultiPointCollectionBuilder::default();
     ///
-    /// builder.append_time_interval(TimeInterval::new_unchecked(0, 1)).unwrap();
-    /// builder.append_time_interval(TimeInterval::new_unchecked(1, 2)).unwrap_err();
+    /// builder.append_time_interval(TimeInterval::new_unchecked(0.into(), 1.into())).unwrap();
+    /// builder.append_time_interval(TimeInterval::new_unchecked(1.into(), 2.into())).unwrap_err();
     /// ```
     ///
     /// # Errors
@@ -1124,8 +1124,8 @@ impl MultiPointCollectionBuilder {
         );
 
         let date_builder = self.time_intervals_builder.values();
-        date_builder.append_value(time_interval.start())?;
-        date_builder.append_value(time_interval.end())?;
+        date_builder.append_value(time_interval.start().into())?;
+        date_builder.append_value(time_interval.end().into())?;
 
         self.time_intervals_builder.append(true)?;
 
@@ -1233,13 +1233,13 @@ impl MultiPointCollectionBuilder {
     /// builder.add_column("foobar", FeatureDataType::Number).unwrap();
     ///
     /// builder.append_coordinate((0.0, 0.1).into()).unwrap();
-    /// builder.append_time_interval(TimeInterval::new_unchecked(0, 1)).unwrap();
+    /// builder.append_time_interval(TimeInterval::new_unchecked(0.into(), 1.into())).unwrap();
     /// builder.append_data("foobar", FeatureDataValue::Number(0.));
     ///
     /// builder.finish_row().unwrap();
     ///
     /// builder.append_coordinate((1.0, 1.1).into()).unwrap();
-    /// builder.append_time_interval(TimeInterval::new_unchecked(1, 2)).unwrap();
+    /// builder.append_time_interval(TimeInterval::new_unchecked(1.into(), 2.into())).unwrap();
     /// builder.append_data("foobar", FeatureDataValue::Number(1.));
     ///
     /// builder.finish_row().unwrap();
@@ -1329,8 +1329,8 @@ mod test {
         let pc = MultiPointCollection::from_data(
             vec![vec![(0., 0.).into()], vec![(1., 1.).into()]],
             vec![
-                TimeInterval::new_unchecked(0, 1),
-                TimeInterval::new_unchecked(0, 1),
+                TimeInterval::new_unchecked(0.into(), 1.into()),
+                TimeInterval::new_unchecked(0.into(), 1.into()),
             ],
             {
                 let mut map = HashMap::new();

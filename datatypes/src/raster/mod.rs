@@ -3,7 +3,7 @@ mod geo_transform;
 mod grid_dimension;
 pub use self::base_raster::{BaseRaster, Raster2D, Raster3D};
 pub use self::geo_transform::{GdalGeoTransform, GeoTransform};
-pub use self::grid_dimension::{Dim, GridDimension, GridIndex};
+pub use self::grid_dimension::{Dim, GridDimension, GridIndex, Ix, Ix1, Ix2, Ix3};
 pub use super::primitives::{BoundingBox2D, SpatialBounded, TemporalBounded, TimeInterval};
 use crate::util::Result;
 

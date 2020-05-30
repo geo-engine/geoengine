@@ -254,7 +254,7 @@ fn fixed_size_list() {
 #[test]
 #[allow(clippy::cast_ptr_alignment, clippy::identity_op)]
 fn binary() {
-    let t1 = TimeInterval::new(0, 1).unwrap();
+    let t1 = TimeInterval::new_into(0, 1).unwrap();
     let t2_bytes: [u8; 16] = unsafe { mem::transmute(t1) };
     let t2: TimeInterval = unsafe { mem::transmute(t2_bytes) };
     assert_eq!(t1, t2);
@@ -263,9 +263,9 @@ fn binary() {
         let mut builder = FixedSizeBinaryBuilder::new(3, mem::size_of::<TimeInterval>() as i32);
 
         for &t in &[
-            TimeInterval::new(0, 1).unwrap(),
-            TimeInterval::new(1, 2).unwrap(),
-            TimeInterval::new(2, 3).unwrap(),
+            TimeInterval::new_into(0, 1).unwrap(),
+            TimeInterval::new_into(1, 2).unwrap(),
+            TimeInterval::new_into(2, 3).unwrap(),
         ] {
             let t_bytes: [u8; 16] = unsafe { mem::transmute(t) };
             builder.append_value(&t_bytes).unwrap();
@@ -288,7 +288,7 @@ fn binary() {
 
     assert_eq!(
         unsafe { &*(array.value(0).as_ptr() as *const TimeInterval) },
-        &TimeInterval::new(0, 1).unwrap(),
+        &TimeInterval::new_into(0, 1).unwrap(),
     );
 
     assert_eq!(
@@ -299,9 +299,9 @@ fn binary() {
             )
         },
         &[
-            TimeInterval::new(0, 1).unwrap(),
-            TimeInterval::new(1, 2).unwrap(),
-            TimeInterval::new(2, 3).unwrap(),
+            TimeInterval::new_into(0, 1).unwrap(),
+            TimeInterval::new_into(1, 2).unwrap(),
+            TimeInterval::new_into(2, 3).unwrap(),
         ]
     );
 }

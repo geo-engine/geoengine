@@ -5,6 +5,7 @@ mod measurement;
 mod multi_point;
 mod spatio_temporal_bounded;
 mod time_interval;
+mod time_instance;
 
 pub use bounding_box::BoundingBox2D;
 pub use coordinate::Coordinate2D;
@@ -16,4 +17,5 @@ pub use feature_data::{
 pub use measurement::Measurement;
 pub use multi_point::MultiPointRef;
 pub use spatio_temporal_bounded::{SpatialBounded, TemporalBounded};
-pub use time_interval::TimeInterval;
+pub use time_interval::{TimeInterval};
+pub use time_instance::{TimeInstance};
