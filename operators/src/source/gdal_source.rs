@@ -85,6 +85,7 @@ pub struct GdalSourceParameters {
     pub channel: Option<u32>,
 }
 
+/// A provider of tile (size) information for a raster/grid
 pub struct GdalSourceTileGridProvider {
     pub global_pixel_size: Dim<[Ix; 2]>,
     pub tile_pixel_size: Dim<[Ix; 2]>,
@@ -92,6 +93,8 @@ pub struct GdalSourceTileGridProvider {
 }
 
 impl GdalSourceTileGridProvider {
+
+    /// generates a vec with TileInformation for each tile
     fn tile_informations(&self) -> Vec<TileInformation> {
         let &[.., y_pixels_global, x_pixels_global] = self.global_pixel_size.dimension_size();
         let &[.., y_pixels_tile, x_pixels_tile] = self.tile_pixel_size.dimension_size();
@@ -112,10 +115,11 @@ impl GdalSourceTileGridProvider {
                 )
             }
         };
-
         tile_information
     }
 }
+
+/// A RasterTile2D is the main type used to iterate over tiles of 2D raster data
 #[derive(Debug)]
 pub struct RasterTile2D<T> {
     time: TimeInterval,
@@ -124,10 +128,12 @@ pub struct RasterTile2D<T> {
 }
 
 impl<T> RasterTile2D<T> {
+    /// create a new RasterTile2D
     pub fn new(time: TimeInterval, tile: TileInformation, data: Raster2D<T>) -> Self { Self { time, tile, data } }
 }
 
 
+/// The TileInformation is used to represent the spatial position of each tile
 #[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct TileInformation {
     global_size_in_tiles: Dim<[Ix; 2]>,
