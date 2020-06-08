@@ -78,6 +78,13 @@ pub struct CsvSource {
 }
 
 impl CsvSource {
+    /// Creates a new `CsvSource`
+    ///
+    /// # Errors
+    ///
+    /// This constructor fails if the delimiter is not an ASCII character.
+    /// Furthermore, there are IO errors from the reader.
+    ///
     pub fn new(parameters: CsvSourceParameters) -> Result<Self> {
         ensure!(
             parameters.field_separator.is_ascii(),

@@ -8,8 +8,20 @@ use crate::error;
 
 // TODO: move elsewhere
 pub trait UserInput: Clone {
+    /// Validates user input and returns itself
+    ///
+    /// # Errors
+    ///
+    /// Fails if the user input is invalid
+    ///
     fn validate(&self) -> Result<()>;
 
+    /// Validates user input and returns itself
+    ///
+    /// # Errors
+    ///
+    /// Fails if the user input is invalid
+    ///
     fn validated(self) -> Result<Validated<Self>> where Self : Sized {
         self.validate().map(|_| Validated { user_input: self })
     }
@@ -32,17 +44,23 @@ impl UserInput for UserRegistration {
         // TODO: more sophisticated input validation
         ensure!(
             self.email.contains('@'),
-            error::RegistrationFailed{reason: "Invalid e-mail address"}
+            error::RegistrationFailed {
+                reason: "Invalid e-mail address"
+            }
         );
 
         ensure!(
             self.password.len() >= 8,
-            error::RegistrationFailed{reason: "Password must have at least 8 characters"}
+            error::RegistrationFailed {
+                reason: "Password must have at least 8 characters"
+            }
         );
 
         ensure!(
             !self.real_name.is_empty(),
-            error::RegistrationFailed{reason: "Real name must not be empty"}
+            error::RegistrationFailed {
+                reason: "Real name must not be empty"
+            }
         );
 
         Ok(())

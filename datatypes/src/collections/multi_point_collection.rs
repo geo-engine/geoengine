@@ -10,16 +10,16 @@ use arrow::compute::kernels::filter::filter;
 use arrow::datatypes::{DataType, DateUnit, Field};
 use snafu::ensure;
 
-use crate::collections::FeatureCollection;
-use crate::error;
+use crate::collections::{FeatureCollection, IntoGeometryIterator};
 use crate::operations::Filterable;
 use crate::primitives::{
     CategoricalDataRef, Coordinate2D, DecimalDataRef, FeatureData, FeatureDataRef, FeatureDataType,
-    FeatureDataValue, NullableCategoricalDataRef, NullableDecimalDataRef, NullableNumberDataRef,
-    NullableTextDataRef, NumberDataRef, TextDataRef, TimeInterval,
+    FeatureDataValue, MultiPointRef, NullableCategoricalDataRef, NullableDecimalDataRef,
+    NullableNumberDataRef, NullableTextDataRef, NumberDataRef, TextDataRef, TimeInterval,
 };
 use crate::util::arrow::{downcast_array, downcast_mut_array};
 use crate::util::Result;
+use crate::{error, json_map};
 use std::mem;
 use std::slice;
 use std::sync::Arc;
@@ -31,7 +31,7 @@ pub struct MultiPointCollection {
 }
 
 impl Clone for MultiPointCollection {
-    /// Clone the MultiPointCollection
+    /// Clone the `MultiPointCollection`
     ///
     /// # Examples
     ///
@@ -64,7 +64,7 @@ impl MultiPointCollection {
         DataType::FixedSizeList(DataType::Date64(DateUnit::Millisecond).into(), 2)
     }
 
-    /// Create an empty MultiPointCollection.
+    /// Create an empty `MultiPointCollection`.
     ///
     /// # Examples
     ///
@@ -119,6 +119,11 @@ impl MultiPointCollection {
     ///
     /// assert_eq!(pc.len(), 2);
     /// ```
+    ///
+    /// # Errors
+    ///
+    /// This constructor fails if the data lenghts are different or `data`'s keys use a reserved name
+    ///
     pub fn from_data(
         coordinates: Vec<Vec<Coordinate2D>>,
         time_intervals: Vec<TimeInterval>,
@@ -586,6 +591,198 @@ impl FeatureCollection for MultiPointCollection {
             types,
         })
     }
+
+    /// # Examples
+    ///
+    /// ```rust
+    /// use geoengine_datatypes::collections::{MultiPointCollection, FeatureCollection};
+    /// use geoengine_datatypes::primitives::{FeatureDataType, FeatureDataValue, TimeInterval};
+    /// use serde_json::{from_str, json};
+    ///
+    /// let collection = {
+    ///     let mut builder = MultiPointCollection::builder();
+    ///     builder.add_column("foo", FeatureDataType::Number);
+    ///     builder.add_column("bar", FeatureDataType::NullableText);
+    ///
+    ///     builder.append_coordinate((0., 0.).into());
+    ///     builder.append_time_interval(TimeInterval::new_unchecked(0, 1));
+    ///     builder.append_data("foo", FeatureDataValue::Number(0.));
+    ///     builder.append_data("bar", FeatureDataValue::NullableText(Some("one".to_string())));
+    ///     builder.finish_row();
+    ///
+    ///     builder.append_multi_coordinate(vec![(1., 1.).into(), (2., 2.).into()]);
+    ///     builder.append_time_interval(TimeInterval::new_unchecked(1, 2));
+    ///     builder.append_data("foo", FeatureDataValue::Number(1.));
+    ///     builder.append_data("bar", FeatureDataValue::NullableText(None));
+    ///     builder.finish_row();
+    ///
+    ///     builder.append_coordinate((3., 3.).into());
+    ///     builder.append_time_interval(TimeInterval::new_unchecked(3, 4));
+    ///     builder.append_data("foo", FeatureDataValue::Number(2.));
+    ///     builder.append_data("bar", FeatureDataValue::NullableText(Some("three".to_string())));
+    ///     builder.finish_row();
+    ///
+    ///     builder.build().unwrap()
+    /// };
+    ///
+    /// assert_eq!(
+    ///     from_str::<serde_json::Value>(collection.to_geo_json().as_str()).unwrap(),
+    ///     json!({
+    ///         "type": "FeatureCollection",
+    ///         "features": [{
+    ///             "type": "Feature",
+    ///             "geometry": {
+    ///                 "type": "Point",
+    ///                 "coordinates": [0.0, 0.0]
+    ///             },
+    ///             "properties": {
+    ///                 "bar": "one",
+    ///                 "foo": 0.0
+    ///             },
+    ///             "when": {
+    ///                 "start": "1970-01-01T00:00:00+00:00",
+    ///                 "end": "1970-01-01T00:00:00.001+00:00",
+    ///                 "type": "Interval"
+    ///             }
+    ///         }, {
+    ///             "type": "Feature",
+    ///             "geometry": {
+    ///                 "type": "MultiPoint",
+    ///                 "coordinates": [
+    ///                     [1.0, 1.0],
+    ///                     [2.0, 2.0]
+    ///                 ]
+    ///             },
+    ///             "properties": {
+    ///                 "bar": null,
+    ///                 "foo": 1.0
+    ///             },
+    ///             "when": {
+    ///                 "start": "1970-01-01T00:00:00.001+00:00",
+    ///                 "end": "1970-01-01T00:00:00.002+00:00",
+    ///                 "type": "Interval"
+    ///             }
+    ///         }, {
+    ///             "type": "Feature",
+    ///             "geometry": {
+    ///                 "type": "Point",
+    ///                 "coordinates": [3.0, 3.0]
+    ///             },
+    ///             "properties": {
+    ///                 "bar": "three",
+    ///                 "foo": 2.0
+    ///             },
+    ///             "when": {
+    ///                 "start": "1970-01-01T00:00:00.003+00:00",
+    ///                 "end": "1970-01-01T00:00:00.004+00:00",
+    ///                 "type": "Interval"
+    ///             }
+    ///         }]
+    ///     })
+    /// );
+    /// ```
+    ///
+    fn to_geo_json(&self) -> String {
+        let mut property_maps = (0..self.len())
+            .map(|_| serde_json::Map::with_capacity(self.types.len()))
+            .collect::<Vec<_>>();
+
+        for column_name in self.types.keys() {
+            for (json_value, map) in self
+                .data(column_name)
+                .expect("must exist since it's in `types`")
+                .json_values()
+                .zip(property_maps.as_mut_slice())
+            {
+                map.insert(column_name.clone(), json_value);
+            }
+        }
+
+        let features = self
+            .geometries()
+            .zip(self.time_intervals())
+            .zip(property_maps)
+            .map(|((geometry, time_interval), properties)| geojson::Feature {
+                bbox: None,
+                geometry: Some(geometry.into()),
+                id: None,
+                properties: Some(properties),
+                foreign_members: Some(
+                    json_map! {"when".to_string() => time_interval.to_geo_json_event()},
+                ),
+            })
+            .collect();
+
+        let feature_collection = geojson::FeatureCollection {
+            bbox: None,
+            features,
+            foreign_members: None,
+        };
+
+        feature_collection.to_string()
+    }
+}
+
+impl<'l> IntoGeometryIterator for &'l MultiPointCollection {
+    type GeometryIterator = MultiPointIterator<'l>;
+    type GeometryType = MultiPointRef<'l>;
+
+    fn geometries(&self) -> Self::GeometryIterator {
+        let geometry_column: &ListArray = downcast_array(
+            &self
+                .data
+                .column_by_name(MultiPointCollection::FEATURE_COLUMN_NAME)
+                .expect("Column must exist since it is in the metadata"),
+        );
+
+        MultiPointIterator {
+            geometry_column,
+            index: 0,
+            length: self.len(),
+        }
+    }
+}
+
+/// A collection iterator for multi points
+pub struct MultiPointIterator<'l> {
+    geometry_column: &'l ListArray,
+    index: usize,
+    length: usize,
+}
+
+impl<'l> Iterator for MultiPointIterator<'l> {
+    type Item = MultiPointRef<'l>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index >= self.length {
+            return None;
+        }
+
+        let multi_point_array_ref = self.geometry_column.value(self.index);
+        let multi_point_array: &FixedSizeListArray = downcast_array(&multi_point_array_ref);
+
+        let number_of_points = multi_point_array.len();
+
+        let floats_ref = multi_point_array.value(multi_point_array.offset());
+        let floats: &Float64Array = downcast_array(&floats_ref);
+
+        let multi_point = MultiPointRef::new_unchecked(unsafe {
+            slice::from_raw_parts(floats.raw_values() as *const Coordinate2D, number_of_points)
+        });
+
+        self.index += 1; // increment!
+
+        Some(multi_point)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining = self.length - self.index;
+        (remaining, Some(remaining))
+    }
+
+    fn count(self) -> usize {
+        self.length - self.index
+    }
 }
 
 impl Filterable for MultiPointCollection {
@@ -752,10 +949,14 @@ impl MultiPointCollectionBuilder {
     /// builder.add_column("__features", FeatureDataType::Number).unwrap_err();
     /// ```
     ///
+    /// # Errors
+    ///
+    /// Adding a column fails if there are already rows in the builder or the column name is reserved
+    ///
     pub fn add_column(&mut self, name: &str, data_type: FeatureDataType) -> Result<()> {
         ensure!(
             self.rows == 0,
-            error::FeatureCollectionBuilderException {
+            error::FeatureCollectionBuilder {
                 details: "It is not allowed to add further columns after data was inserted",
             }
         );
@@ -793,6 +994,10 @@ impl MultiPointCollectionBuilder {
     /// builder.finish_row().unwrap_err();
     /// ```
     ///
+    /// # Errors
+    ///
+    /// Finishing the row fails if the column lenghts do not equal
+    ///
     pub fn finish_row(&mut self) -> Result<()> {
         let rows = self.rows + 1;
 
@@ -800,7 +1005,7 @@ impl MultiPointCollectionBuilder {
             self.coordinates_builder.len() == rows
                 && self.time_intervals_builder.len() == rows
                 && self.builders.values().all(|builder| builder.len() == rows),
-            error::FeatureCollectionBuilderException {
+            error::FeatureCollectionBuilder {
                 details: "Cannot finish row when child data is missing",
             }
         );
@@ -824,10 +1029,14 @@ impl MultiPointCollectionBuilder {
     /// builder.append_coordinate((1.0, 1.0).into()).unwrap_err();
     /// ```
     ///
+    /// # Errors
+    ///
+    /// This append fails if the previous row was unfinished
+    ///
     pub fn append_coordinate(&mut self, coordinate: Coordinate2D) -> Result<()> {
         ensure!(
             self.coordinates_builder.len() <= self.rows,
-            error::FeatureCollectionBuilderException {
+            error::FeatureCollectionBuilder {
                 details: "Cannot add another coordinate until row is finished",
             }
         );
@@ -853,10 +1062,14 @@ impl MultiPointCollectionBuilder {
     /// builder.append_multi_coordinate(vec![(2.0, 2.1).into()]).unwrap_err();
     /// ```
     ///
+    /// # Errors
+    ///
+    /// This append fails if the previous row was unfinished
+    ///
     pub fn append_multi_coordinate(&mut self, coordinates: Vec<Coordinate2D>) -> Result<()> {
         ensure!(
             self.coordinates_builder.len() <= self.rows,
-            error::FeatureCollectionBuilderException {
+            error::FeatureCollectionBuilder {
                 details: "Cannot add another coordinate until row is finished",
             }
         );
@@ -898,10 +1111,14 @@ impl MultiPointCollectionBuilder {
     /// builder.append_time_interval(TimeInterval::new_unchecked(1, 2)).unwrap_err();
     /// ```
     ///
+    /// # Errors
+    ///
+    /// This append fails if the previous row was unfinished
+    ///
     pub fn append_time_interval(&mut self, time_interval: TimeInterval) -> Result<()> {
         ensure!(
             self.time_intervals_builder.len() <= self.rows,
-            error::FeatureCollectionBuilderException {
+            error::FeatureCollectionBuilder {
                 details: "Cannot add another time interval until row is finished",
             }
         );
@@ -930,10 +1147,14 @@ impl MultiPointCollectionBuilder {
     /// builder.append_data("foobar", FeatureDataValue::Number(1.)).unwrap_err();
     /// ```
     ///
+    /// # Errors
+    ///
+    /// The append fails if the column does not exist, it has a wrong type or the previous row was unfinished
+    ///
     pub fn append_data(&mut self, column: &str, data: FeatureDataValue) -> Result<()> {
         ensure!(
             self.types.contains_key(column),
-            error::FeatureCollectionBuilderException {
+            error::FeatureCollectionBuilder {
                 details: format!("Column {} does not exist", column),
             }
         );
@@ -942,16 +1163,16 @@ impl MultiPointCollectionBuilder {
 
         ensure!(
             data_builder.len() <= self.rows,
-            error::FeatureCollectionBuilderException {
+            error::FeatureCollectionBuilder {
                 details: "Cannot add another data item until row is finished",
             }
         );
 
-        let _data_type = self.types.get(column).unwrap(); // previously checked
+        let data_type = self.types.get(column).unwrap(); // previously checked
 
         ensure!(
-            mem::discriminant(&FeatureDataType::from(&data)) == mem::discriminant(_data_type), // same enum variant
-            error::FeatureCollectionBuilderException {
+            mem::discriminant(&FeatureDataType::from(&data)) == mem::discriminant(data_type), // same enum variant
+            error::FeatureCollectionBuilder {
                 details: "Data type is wrong for the column",
             }
         );
@@ -1029,6 +1250,10 @@ impl MultiPointCollectionBuilder {
     /// assert_eq!(point_collection.coordinates(), &[(0.0, 0.1).into(), (1.0, 1.1).into()]);
     /// ```
     ///
+    /// # Errors
+    ///
+    /// This build fails if there are unfinished rows
+    ///
     pub fn build(mut self) -> Result<MultiPointCollection> {
         ensure!(
             self.coordinates_builder.len() == self.rows
@@ -1037,7 +1262,7 @@ impl MultiPointCollectionBuilder {
                     .builders
                     .values()
                     .all(|builder| builder.len() == self.rows),
-            error::FeatureCollectionBuilderException {
+            error::FeatureCollectionBuilder {
                 details: "Cannot build a point collection out of unfinished rows",
             }
         );

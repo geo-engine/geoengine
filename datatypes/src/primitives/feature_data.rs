@@ -53,25 +53,101 @@ pub enum FeatureDataRef<'f> {
     NullableCategorical(NullableCategoricalDataRef<'f>),
 }
 
+impl<'f> FeatureDataRef<'f> {
+    pub fn json_values(&self) -> Box<dyn Iterator<Item = serde_json::Value> + '_> {
+        match self {
+            FeatureDataRef::Text(data_ref) => data_ref.json_values(),
+            FeatureDataRef::NullableText(data_ref) => data_ref.json_values(),
+            FeatureDataRef::Number(data_ref) => data_ref.json_values(),
+            FeatureDataRef::NullableNumber(data_ref) => data_ref.json_values(),
+            FeatureDataRef::Decimal(data_ref) => data_ref.json_values(),
+            FeatureDataRef::NullableDecimal(data_ref) => data_ref.json_values(),
+            FeatureDataRef::Categorical(data_ref) => data_ref.json_values(),
+            FeatureDataRef::NullableCategorical(data_ref) => data_ref.json_values(),
+        }
+    }
+}
+
+pub trait DataRef<'r, T>: AsRef<[T]> + Into<FeatureDataRef<'r>> {
+    fn json_values(&self) -> Box<dyn Iterator<Item = serde_json::Value> + '_>;
+}
+
 pub trait NullableDataRef {
     fn nulls(&self) -> Vec<bool>; // TODO: return bitmap directly or IndexedSlice trait?...
 }
 
+/// This macro creates a DataRef impl for a primitive type
+macro_rules! data_ref_impl {
+    ($DataRef:ident, $l:lifetime, $T:ty, $FeatureDataRefVariant:ident) => {
+        data_ref_into_feature_data_ref_impl!($DataRef, $l, $FeatureDataRefVariant);
+
+        data_ref_as_ref_impl!($DataRef, $l, $T);
+
+        impl DataRef<'_, $T> for $DataRef {
+            fn json_values(&self) -> Box<dyn Iterator<Item = serde_json::Value> + '_> {
+                Box::new(self.as_ref().iter().map(|&v| v.into()))
+            }
+        }
+    };
+}
+
+/// This macro creates a DataRef impl for a primitive nullable type
+macro_rules! nullable_data_ref_impl {
+    ($NullableDataRef:ident, $l:lifetime, $T:ty, $FeatureDataRefVariant:ident) => {
+        data_ref_into_feature_data_ref_impl!($NullableDataRef<$l>, $l, $FeatureDataRefVariant);
+
+        data_ref_as_ref_impl!($NullableDataRef<$l>, $l, $T);
+
+        impl<$l> DataRef<$l, $T> for $NullableDataRef<$l> {
+            fn json_values(&self) -> Box<dyn Iterator<Item = serde_json::Value> + '_> {
+                if let Some(nulls) = self.null_bitmap {
+                    Box::new(self.as_ref().iter().enumerate().map(move |(i, &v)| {
+                        if nulls.is_set(i) {
+                            serde_json::Value::Null
+                        } else {
+                            v.into()
+                        }
+                    }))
+                } else {
+                    Box::new(self.as_ref().iter().map(|&v| v.into()))
+                }
+            }
+        }
+    };
+}
+
+/// This macro creates a DataRef's AsRef implementation
+macro_rules! data_ref_as_ref_impl {
+    ($DataRef:ty, $l:lifetime, $T:ty) => {
+        impl<$l> AsRef<[$T]> for $DataRef {
+            fn as_ref(&self) -> &[$T] {
+                self.buffer.typed_data()
+            }
+        }
+    };
+}
+
+/// This macro creates a Into<FeatureDataRef> implementation
+macro_rules! data_ref_into_feature_data_ref_impl {
+    ($DataRef:ty, $l:lifetime, $FeatureDataRefVariant:ident) => {
+        impl<$l> Into<FeatureDataRef<$l>> for $DataRef {
+            fn into(self) -> FeatureDataRef<$l> {
+                FeatureDataRef::$FeatureDataRefVariant(self)
+            }
+        }
+    };
+}
+
+data_ref_impl!(NumberDataRef, 'r, f64, Number);
+nullable_data_ref_impl!(NullableNumberDataRef, 'r, f64, NullableNumber);
+data_ref_impl!(DecimalDataRef, 'r, i64, Decimal);
+nullable_data_ref_impl!(NullableDecimalDataRef, 'r, i64, NullableDecimal);
+data_ref_impl!(CategoricalDataRef, 'r, u8, Categorical); // TODO: use category labels
+nullable_data_ref_impl!(NullableCategoricalDataRef, 'r, u8, NullableCategorical); // TODO: use category labels
+
 #[derive(Clone, Debug)]
 pub struct NumberDataRef {
     buffer: arrow::buffer::Buffer,
-}
-
-impl AsRef<[f64]> for NumberDataRef {
-    fn as_ref(&self) -> &[f64] {
-        self.buffer.typed_data()
-    }
-}
-
-impl From<NumberDataRef> for FeatureDataRef<'_> {
-    fn from(data_ref: NumberDataRef) -> Self {
-        Self::Number(data_ref)
-    }
 }
 
 impl NumberDataRef {
@@ -86,21 +162,9 @@ pub struct NullableNumberDataRef<'f> {
     null_bitmap: &'f Option<arrow::bitmap::Bitmap>,
 }
 
-impl AsRef<[f64]> for NullableNumberDataRef<'_> {
-    fn as_ref(&self) -> &[f64] {
-        self.buffer.typed_data()
-    }
-}
-
 impl<'f> NullableDataRef for NullableNumberDataRef<'f> {
     fn nulls(&self) -> Vec<bool> {
         null_bitmap_to_bools(self.as_ref(), self.null_bitmap)
-    }
-}
-
-impl<'f> From<NullableNumberDataRef<'f>> for FeatureDataRef<'f> {
-    fn from(data_ref: NullableNumberDataRef<'f>) -> Self {
-        Self::NullableNumber(data_ref)
     }
 }
 
@@ -121,18 +185,6 @@ pub struct DecimalDataRef {
     buffer: arrow::buffer::Buffer,
 }
 
-impl AsRef<[i64]> for DecimalDataRef {
-    fn as_ref(&self) -> &[i64] {
-        self.buffer.typed_data()
-    }
-}
-
-impl From<DecimalDataRef> for FeatureDataRef<'_> {
-    fn from(data_ref: DecimalDataRef) -> Self {
-        Self::Decimal(data_ref)
-    }
-}
-
 impl DecimalDataRef {
     pub fn new(buffer: arrow::buffer::Buffer) -> Self {
         Self { buffer }
@@ -143,12 +195,6 @@ impl DecimalDataRef {
 pub struct NullableDecimalDataRef<'f> {
     buffer: arrow::buffer::Buffer,
     null_bitmap: &'f Option<arrow::bitmap::Bitmap>,
-}
-
-impl AsRef<[i64]> for NullableDecimalDataRef<'_> {
-    fn as_ref(&self) -> &[i64] {
-        self.buffer.typed_data()
-    }
 }
 
 impl<'f> NullableDataRef for NullableDecimalDataRef<'f> {
@@ -162,12 +208,6 @@ fn null_bitmap_to_bools<T>(data: &[T], null_bitmap: &Option<Bitmap>) -> Vec<bool
         (0..data.len()).map(|i| !nulls.is_set(i)).collect()
     } else {
         vec![false; data.len()]
-    }
-}
-
-impl<'f> From<NullableDecimalDataRef<'f>> for FeatureDataRef<'f> {
-    fn from(data_ref: NullableDecimalDataRef<'f>) -> Self {
-        Self::NullableDecimal(data_ref)
     }
 }
 
@@ -188,18 +228,6 @@ pub struct CategoricalDataRef {
     buffer: arrow::buffer::Buffer,
 }
 
-impl AsRef<[u8]> for CategoricalDataRef {
-    fn as_ref(&self) -> &[u8] {
-        self.buffer.typed_data()
-    }
-}
-
-impl From<CategoricalDataRef> for FeatureDataRef<'_> {
-    fn from(data_ref: CategoricalDataRef) -> Self {
-        Self::Categorical(data_ref)
-    }
-}
-
 impl CategoricalDataRef {
     pub fn new(buffer: arrow::buffer::Buffer) -> Self {
         Self { buffer }
@@ -212,21 +240,9 @@ pub struct NullableCategoricalDataRef<'f> {
     null_bitmap: &'f Option<arrow::bitmap::Bitmap>,
 }
 
-impl AsRef<[u8]> for NullableCategoricalDataRef<'_> {
-    fn as_ref(&self) -> &[u8] {
-        self.buffer.typed_data()
-    }
-}
-
 impl<'f> NullableDataRef for NullableCategoricalDataRef<'f> {
     fn nulls(&self) -> Vec<bool> {
         null_bitmap_to_bools(self.as_ref(), self.null_bitmap)
-    }
-}
-
-impl<'f> From<NullableCategoricalDataRef<'f>> for FeatureDataRef<'f> {
-    fn from(data_ref: NullableCategoricalDataRef<'f>) -> Self {
-        Self::NullableCategorical(data_ref)
     }
 }
 
@@ -247,7 +263,7 @@ impl<'f> NullableCategoricalDataRef<'f> {
 /// # Examples
 ///
 /// ```rust
-/// use geoengine_datatypes::primitives::{TextDataRef};
+/// use geoengine_datatypes::primitives::TextDataRef;
 /// use arrow::array::{StringBuilder, Array};
 ///
 /// let string_array = {
@@ -283,6 +299,27 @@ impl AsRef<[u8]> for TextDataRef {
     }
 }
 
+impl DataRef<'_, u8> for TextDataRef {
+    fn json_values(&self) -> Box<dyn Iterator<Item = serde_json::Value> + '_> {
+        let offsets = self.offsets();
+        let number_of_values = offsets.len() - 1;
+
+        Box::new((0..number_of_values).map(move |pos| {
+            let start = offsets[pos];
+            let end = offsets[pos + 1];
+
+            let text = unsafe {
+                byte_ptr_to_str(
+                    self.data_buffer.slice(start as usize).raw_data(),
+                    (end - start) as usize,
+                )
+            };
+
+            text.into()
+        }))
+    }
+}
+
 impl From<TextDataRef> for FeatureDataRef<'_> {
     fn from(data_ref: TextDataRef) -> Self {
         Self::Text(data_ref)
@@ -301,6 +338,12 @@ impl TextDataRef {
         self.offsets_buffer.typed_data()
     }
 
+    /// Returns the text reference at a certain position in the feature collection
+    ///
+    /// # Errors
+    ///
+    /// This method fails if `pos` is out of bounds
+    ///
     pub fn text_at(&self, pos: usize) -> Result<&str> {
         ensure!(
             pos < (self.offsets().len() - 1),
@@ -333,7 +376,7 @@ unsafe fn byte_ptr_to_str<'d>(bytes: *const u8, length: usize) -> &'d str {
 /// # Examples
 ///
 /// ```rust
-/// use geoengine_datatypes::primitives::{NullableTextDataRef};
+/// use geoengine_datatypes::primitives::NullableTextDataRef;
 /// use arrow::array::{StringBuilder, Array};
 ///
 /// let string_array = {
@@ -369,6 +412,31 @@ impl AsRef<[u8]> for NullableTextDataRef {
     }
 }
 
+impl DataRef<'_, u8> for NullableTextDataRef {
+    fn json_values(&self) -> Box<dyn Iterator<Item = serde_json::Value> + '_> {
+        let offsets = self.offsets();
+        let number_of_values = offsets.len() - 1;
+
+        Box::new((0..number_of_values).map(move |pos| {
+            let start = offsets[pos];
+            let end = offsets[pos + 1];
+
+            if start == end {
+                return serde_json::Value::Null;
+            }
+
+            let text = unsafe {
+                byte_ptr_to_str(
+                    self.data_buffer.slice(start as usize).raw_data(),
+                    (end - start) as usize,
+                )
+            };
+
+            text.into()
+        }))
+    }
+}
+
 impl From<NullableTextDataRef> for FeatureDataRef<'_> {
     fn from(data_ref: NullableTextDataRef) -> Self {
         Self::NullableText(data_ref)
@@ -387,6 +455,12 @@ impl NullableTextDataRef {
         self.offsets_buffer.typed_data()
     }
 
+    /// Returns the text reference at a certain position in the feature collection
+    ///
+    /// # Errors
+    ///
+    /// This method fails if `pos` is out of bounds
+    ///
     pub fn text_at(&self, pos: usize) -> Result<Option<&str>> {
         ensure!(
             pos < (self.offsets().len() - 1),
@@ -505,7 +579,13 @@ impl FeatureData {
         self.len() == 0
     }
 
-    pub fn arrow_builder(&self) -> Result<Box<dyn arrow::array::ArrayBuilder>> {
+    /// Creates an `arrow` array builder.
+    ///
+    /// # Errors
+    ///
+    /// This method fails if an `arrow` internal error occurs
+    ///
+    pub(crate) fn arrow_builder(&self) -> Result<Box<dyn arrow::array::ArrayBuilder>> {
         Ok(match self {
             Self::Text(v) => {
                 let mut builder = arrow::array::StringBuilder::new(v.len());

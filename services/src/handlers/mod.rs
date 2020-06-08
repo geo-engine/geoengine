@@ -13,11 +13,20 @@ pub mod workflows;
 
 type DB<T> = Arc<RwLock<T>>;
 
+/// A handler for custom rejections
+///
+/// # Errors
+///
+/// Fails if the rejection is not custom
+///
 pub async fn handle_rejection(error: Rejection) -> Result<impl Reply, Rejection> {
     // TODO: handle/report serde deserialization error when e.g. a json attribute is missing/malformed
     if let Some(err) = error.find::<Error>() {
         let json = warp::reply::json(&err.to_string());
-        Ok(warp::reply::with_status(json, warp::http::StatusCode::BAD_REQUEST))
+        Ok(warp::reply::with_status(
+            json,
+            warp::http::StatusCode::BAD_REQUEST,
+        ))
     } else {
         Err(warp::reject())
     }

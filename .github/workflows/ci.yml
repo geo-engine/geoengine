@@ -1,6 +1,10 @@
 name: Rust
 
-on: [push, pull_request]
+on:
+    push:
+        branches: [ master ]
+    pull_request:
+        branches: [ master ]
 
 jobs:
   build:
@@ -22,7 +26,7 @@ jobs:
       - uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          args: --all-features
+          args: --all-targets --all-features -- -D warnings
       - name: Install OpenCL
         run: |
           sudo apt-get update

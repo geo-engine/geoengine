@@ -26,20 +26,47 @@ pub trait FeatureCollection {
     }
 
     /// Retrieve column data
+    ///
+    /// # Errors
+    ///
+    /// This method fails if there is no `column` with that name
+    ///
     fn data(&self, column: &str) -> Result<FeatureDataRef>;
 
     /// Retrieve time intervals
     fn time_intervals(&self) -> &[TimeInterval];
 
     /// Creates a copy of the collection with an additional column
+    ///
+    /// # Errors
+    ///
+    /// Adding a column fails if the column does already exist or the length does not match the length of the collection
+    ///
     fn add_column(&self, new_column: &str, data: FeatureData) -> Result<Self>
     where
         Self: Sized;
 
     /// Removes a column and returns an updated collection
+    ///
+    /// # Errors
+    ///
+    /// Removing a column fails if the column does not exist (or is reserved, e.g., the geometry column)
+    ///
     fn remove_column(&self, column: &str) -> Result<Self>
     where
         Self: Sized;
+
+    /// Serialize the feature collection to a geo json string
+    fn to_geo_json(&self) -> String;
+}
+
+/// This trait allows iterating over the geometries of a feature collection
+pub trait IntoGeometryIterator {
+    type GeometryIterator: Iterator<Item = Self::GeometryType>;
+    type GeometryType;
+
+    /// Return an iterator over geometries
+    fn geometries(&self) -> Self::GeometryIterator;
 }
 
 #[cfg(test)]
@@ -65,6 +92,9 @@ mod test {
             unimplemented!()
         }
         fn remove_column(&self, _column: &str) -> Result<Self> {
+            unimplemented!()
+        }
+        fn to_geo_json(&self) -> String {
             unimplemented!()
         }
     }
