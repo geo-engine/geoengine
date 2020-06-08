@@ -182,31 +182,29 @@ impl ProjectDB for HashMapProjectDB {
             error::ProjectUpdateFailed
         );
 
-        if let Some(project) = self.projects.get_mut(&update.id) {
-            if let Some(name) = update.name {
-                project.name = name;
-            }
+        let project = self.projects.get_mut(&update.id).ok_or(error::Error::ProjectUpdateFailed)?;
 
-            if let Some(description) = update.description {
-                project.description = description;
-            }
+        if let Some(name) = update.name {
+            project.name = name;
+        }
 
-            if let Some(layers) = update.layers {
-                for (i, layer) in layers.into_iter().enumerate() {
-                    if let Some(layer) = layer {
-                        if i >= project.layers.len() {
-                            project.layers.push(layer);
-                        } else {
-                            project.layers[i] = layer;
-                        }
+        if let Some(description) = update.description {
+            project.description = description;
+        }
+
+        if let Some(layers) = update.layers {
+            for (i, layer) in layers.into_iter().enumerate() {
+                if let Some(layer) = layer {
+                    if i >= project.layers.len() {
+                        project.layers.push(layer);
+                    } else {
+                        project.layers[i] = layer;
                     }
                 }
             }
-
-            Ok(())
-        } else {
-            Err(error::Error::ProjectUpdateFailed)
         }
+
+        Ok(())
     }
 
     /// Delete a project
