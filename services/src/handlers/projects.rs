@@ -136,7 +136,7 @@ mod tests {
     use tokio::sync::RwLock;
     use crate::projects::projectdb::HashMapProjectDB;
     use crate::users::userdb::HashMapUserDB;
-    use crate::projects::project::{ProjectId, ProjectOwner, ProjectFilter, OrderBy, ProjectListing, Project, UpdateProject, ProjectPermission};
+    use crate::projects::project::{ProjectId, ProjectFilter, OrderBy, ProjectListing, Project, UpdateProject, ProjectPermission};
     use crate::users::user::{UserRegistration, UserCredentials};
 
     #[tokio::test]
@@ -200,7 +200,7 @@ mod tests {
         }
 
         let options = ProjectListOptions {
-            owner: ProjectOwner::Any,
+            only_owned: false,
             filter: ProjectFilter::None,
             order: OrderBy::NameDesc,
             offset: 0,

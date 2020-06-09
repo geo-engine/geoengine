@@ -1,4 +1,4 @@
-use crate::projects::project::{OrderBy, ProjectFilter, ProjectListing, ProjectOwner, ProjectId, Project, CreateProject, UpdateProject, UserProjectPermission, ProjectPermission, ProjectListOptions};
+use crate::projects::project::{OrderBy, ProjectFilter, ProjectListing, ProjectId, Project, CreateProject, UpdateProject, UserProjectPermission, ProjectPermission, ProjectListOptions};
 use crate::users::user::{UserIdentification, Validated};
 use std::collections::HashMap;
 use crate::error::Result;
@@ -7,7 +7,7 @@ use snafu::ensure;
 
 pub trait ProjectDB: Send + Sync {
     // TODO: pass session instead of UserIdentification?
-    fn list(&self, user: UserIdentification, options: Validated<ProjectListOptions>) -> Vec<ProjectListing>;
+    fn list(&self, user: UserIdentification, options: Validated<ProjectListOptions>) -> Vec<ProjectListing>;    
     fn load(&self, user: UserIdentification, project: ProjectId) -> Result<Project>;
     fn create(&mut self, user: UserIdentification, project: Validated<CreateProject>) -> ProjectId;
     fn update(&mut self, user: UserIdentification, project: Validated<UpdateProject>) -> Result<()>;
@@ -32,7 +32,7 @@ impl ProjectDB for HashMapProjectDB {
     ///
     /// ```rust
     /// use geoengine_services::users::user::{UserIdentification, UserInput};
-    /// use geoengine_services::projects::project::{CreateProject, ProjectId, ProjectOwner, ProjectFilter, OrderBy, ProjectListOptions};
+    /// use geoengine_services::projects::project::{CreateProject, ProjectId, ProjectFilter, OrderBy, ProjectListOptions};
     /// use geoengine_services::projects::projectdb::{ProjectDB, HashMapProjectDB};
     ///
     /// let mut project_db = HashMapProjectDB::default();
@@ -46,7 +46,7 @@ impl ProjectDB for HashMapProjectDB {
     ///     project_db.create(user, create);
     /// }
     /// let options = ProjectListOptions {
-    ///     owner: ProjectOwner::Any,
+    ///     only_owned: false,
     ///     filter: ProjectFilter::None,
     ///     order: OrderBy::NameDesc,
     ///     offset: 0,
@@ -57,11 +57,11 @@ impl ProjectDB for HashMapProjectDB {
     /// assert_eq!(projects.len(), 2)
     /// ```
     fn list(&self, user: UserIdentification, options: Validated<ProjectListOptions>) -> Vec<ProjectListing> {
-        let ProjectListOptions {  owner, filter, order, offset, limit } = options.user_input;
+        let ProjectListOptions { only_owned, filter, order, offset, limit } = options.user_input;
+        #[allow(clippy::filter_map)]
         let mut projects = self.permissions.iter()
-            .filter(|p| p.user == user && (owner == ProjectOwner::Any || owner == ProjectOwner::User { user }))
-            .map(|p| self.projects.get(&p.project).cloned())
-            .flatten()
+            .filter(|p| p.user == user && (!only_owned || p.permission == ProjectPermission::Owner))
+            .flat_map(|p| self.projects.get(&p.project).cloned())
             .map(ProjectListing::from)
             .filter(|p| match &filter {
                 ProjectFilter::Name { term } => p.name == *term,
@@ -138,7 +138,7 @@ impl ProjectDB for HashMapProjectDB {
     fn create(&mut self, user: UserIdentification, create: Validated<CreateProject>) -> ProjectId {
         let project: Project = create.user_input.into();
         let id = project.id;
-        self.projects.insert(id.clone(), project);
+        self.projects.insert(id, project);
         self.permissions.push(UserProjectPermission { user, project: id, permission: ProjectPermission::Owner });
         id
     }
@@ -377,5 +377,73 @@ impl ProjectDB for HashMapProjectDB {
         } else {
             Err(error::Error::PermissionFailed)
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::users::user::UserInput;
+
+    #[test]
+    fn list_permitted() {
+        let mut project_db = HashMapProjectDB::default();
+        let user = UserIdentification::new();
+        let user2 = UserIdentification::new();
+        let user3 = UserIdentification::new();
+        
+        
+        let create = CreateProject {
+            name: "Own".into(),
+            description: "Text".into()
+        }.validated().unwrap();       
+        
+        let _ = project_db.create(user, create);
+
+        let create = CreateProject {
+            name: "User2's".into(),
+            description: "Text".into()
+        }.validated().unwrap();
+
+        let project2 = project_db.create(user2, create);
+
+        let create = CreateProject {
+            name: "User3's".into(),
+            description: "Text".into()
+        }.validated().unwrap();
+
+        let project3 = project_db.create(user3, create); 
+
+        let permission1 = UserProjectPermission { user, project: project2, permission: ProjectPermission::Read};
+        let permission2 = UserProjectPermission { user, project: project3, permission: ProjectPermission::Write};
+        
+        let _ = project_db.add_permission(user2, permission1).unwrap();
+        let _ = project_db.add_permission(user3, permission2).unwrap();
+
+        let options = ProjectListOptions {
+                only_owned: false,
+                filter: ProjectFilter::None,
+                order: OrderBy::NameDesc,
+                offset: 0,
+                limit: 3,
+            }.validated().unwrap();
+
+        let projects = project_db.list(user, options);
+
+        assert!(projects.iter().any(|p| p.name == "Own"));
+        assert!(projects.iter().any(|p| p.name == "User2's"));
+        assert!(projects.iter().any(|p| p.name == "User3's"));
+
+        let options = ProjectListOptions {
+            only_owned: true,
+            filter: ProjectFilter::None,
+            order: OrderBy::NameDesc,
+            offset: 0,
+            limit: 3,
+        }.validated().unwrap();
+
+        let projects = project_db.list(user, options);
+        assert!(projects[0].name == "Own");
+        assert_eq!(projects.len(), 1);
     }
 }

@@ -40,12 +40,6 @@ pub struct Layer {
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
-pub enum ProjectOwner {
-    User { user: UserIdentification },
-    Any,
-}
-
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
 pub enum OrderBy {
     DateAsc,
     DateDesc,
@@ -159,7 +153,7 @@ pub struct UserProjectPermission {
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
 pub struct ProjectListOptions {
-    pub owner: ProjectOwner,
+    pub only_owned: bool,
     pub filter: ProjectFilter,
     pub order: OrderBy,
     pub offset: usize,
