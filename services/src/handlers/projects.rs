@@ -134,8 +134,8 @@ async fn list_permissions<T: ProjectDB>(session: Session, project: ProjectId, pr
 mod tests {
     use super::*;
     use tokio::sync::RwLock;
-    use crate::projects::projectdb::HashMapProjectDB;
-    use crate::users::userdb::HashMapUserDB;
+    use crate::projects::hashmap_projectdb::HashMapProjectDB;
+    use crate::users::hashmap_userdb::HashMapUserDB;
     use crate::projects::project::{ProjectId, ProjectFilter, OrderBy, ProjectListing, Project, UpdateProject, ProjectPermission, STRectangle};
     use crate::users::user::{UserRegistration, UserCredentials};
 

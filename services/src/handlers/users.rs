@@ -59,7 +59,8 @@ async fn logout<T: UserDB>(session: Session, user_db: DB<T>) -> Result<impl warp
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::users::userdb::{UserDB, HashMapUserDB};
+    use crate::users::userdb::UserDB;
+    use crate::users::hashmap_userdb::HashMapUserDB;
     use crate::users::user::{UserIdentification, Validated};
     use crate::handlers::handle_rejection;
     use tokio::sync::RwLock;

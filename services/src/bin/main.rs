@@ -4,9 +4,9 @@ use tokio::sync::RwLock;
 
 use geoengine_services::workflows::registry::HashMapRegistry;
 use geoengine_services::handlers;
-use geoengine_services::users::userdb::HashMapUserDB;
+use geoengine_services::users::hashmap_userdb::HashMapUserDB;
 use geoengine_services::handlers::handle_rejection;
-use geoengine_services::projects::projectdb::HashMapProjectDB;
+use geoengine_services::projects::hashmap_projectdb::HashMapProjectDB;
 
 #[tokio::main]
 async fn main() {
