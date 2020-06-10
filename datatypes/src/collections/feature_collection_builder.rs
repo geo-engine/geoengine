@@ -82,7 +82,7 @@ where
     fn push_geometry(&mut self, geometry: G) -> Result<()>;
 }
 
-/// Implement this trait allows implementing a builder with no further overhead
+/// Implementing this trait allows implementing a builder with no further overhead
 pub trait FeatureCollectionBuilderImplHelpers {
     type GeometriesBuilder: ArrayBuilder;
 
