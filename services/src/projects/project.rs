@@ -5,7 +5,9 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use crate::error::Error;
 use crate::error;
+use crate::error::Result;
 use snafu::ensure;
+use geoengine_datatypes::primitives::{BoundingBox2D, TimeInterval, Coordinate2D};
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Copy, Hash)]
 pub struct ProjectId {
@@ -21,7 +23,7 @@ impl ProjectId {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct Project {
     pub id: ProjectId,
     pub version: usize,
@@ -29,14 +31,33 @@ pub struct Project {
     pub name: String,
     pub description: String,
     pub layers: Vec<Layer>,
-    //TODO: stref
+    pub view: STRectangle,
+    pub bounds: STRectangle,
+    // TODO: projection/coordinate reference system, must be either stored in the rectangle/bbox or globally for project
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+pub struct STRectangle {
+    pub bounding_box: BoundingBox2D,
+    pub time_interval: TimeInterval,
+}
+
+impl STRectangle {
+    pub fn new(lower_left_x: f64, lower_left_y: f64, upper_left_x: f64, upper_left_y: f64,
+                      time_start: i64, time_stop: i64) -> Result<Self> {
+        Ok (Self {
+            bounding_box: BoundingBox2D::new(Coordinate2D::new(lower_left_x, lower_left_y),
+                                             Coordinate2D::new(upper_left_x, upper_left_y))?,
+            time_interval: TimeInterval::new(time_start, time_stop)?,
+        })
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 pub struct Layer {
     pub workflow: Workflow,
     pub name: String,
-    //TODO: colorizer
+    //TODO: colorizer for raster layers. Maybe differentiate between Raster and Vector layers
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
@@ -75,11 +96,12 @@ pub enum ProjectFilter {
     None,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct CreateProject {
     pub name: String,
     pub description: String,
-    // TODO: stref
+    pub view: STRectangle,
+    pub bounds: STRectangle,
 }
 
 impl UserInput for CreateProject {
@@ -102,17 +124,20 @@ impl From<CreateProject> for Project {
             name: create.name,
             description: create.description,
             layers: vec![],
+            view: create.view,
+            bounds: create.bounds
         }
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct UpdateProject {
     pub id: ProjectId,
     pub name: Option<String>,
     pub description: Option<String>,
     pub layers: Option<Vec<Option<Layer>>>,
-    // TODO: stref
+    pub view: Option<STRectangle>,
+    pub bounds: Option<STRectangle>
 }
 
 impl UserInput for UpdateProject {

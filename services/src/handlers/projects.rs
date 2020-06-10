@@ -136,7 +136,7 @@ mod tests {
     use tokio::sync::RwLock;
     use crate::projects::projectdb::HashMapProjectDB;
     use crate::users::userdb::HashMapUserDB;
-    use crate::projects::project::{ProjectId, ProjectFilter, OrderBy, ProjectListing, Project, UpdateProject, ProjectPermission};
+    use crate::projects::project::{ProjectId, ProjectFilter, OrderBy, ProjectListing, Project, UpdateProject, ProjectPermission, STRectangle};
     use crate::users::user::{UserRegistration, UserCredentials};
 
     #[tokio::test]
@@ -147,7 +147,7 @@ mod tests {
         user_db.write().await.register(UserRegistration {
             email: "foo@bar.de".to_string(),
             password: "secret123".to_string(),
-            real_name: "Foo Bar".to_string()
+            real_name: "Foo Bar".to_string(),
         }.validated().unwrap()).unwrap();
 
         let session = user_db.write().await.login(UserCredentials {
@@ -157,7 +157,9 @@ mod tests {
 
         let create = CreateProject {
             name: "Test".to_string(),
-            description: "Foo".to_string()
+            description: "Foo".to_string(),
+            view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+            bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
         };
 
         let res = warp::test::request()
@@ -183,7 +185,7 @@ mod tests {
         user_db.write().await.register(UserRegistration {
             email: "foo@bar.de".to_string(),
             password: "secret123".to_string(),
-            real_name: "Foo Bar".to_string()
+            real_name: "Foo Bar".to_string(),
         }.validated().unwrap()).unwrap();
 
         let session = user_db.write().await.login(UserCredentials {
@@ -195,6 +197,8 @@ mod tests {
             let create = CreateProject {
                 name: format!("Test{}", i),
                 description: format!("Test{}", 10 - i),
+                view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+                bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
             }.validated().unwrap();
             project_db.write().await.create(session.user, create);
         }
@@ -232,7 +236,7 @@ mod tests {
         user_db.write().await.register(UserRegistration {
             email: "foo@bar.de".to_string(),
             password: "secret123".to_string(),
-            real_name: "Foo Bar".to_string()
+            real_name: "Foo Bar".to_string(),
         }.validated().unwrap()).unwrap();
 
         let session = user_db.write().await.login(UserCredentials {
@@ -243,6 +247,8 @@ mod tests {
         let project = project_db.write().await.create(session.user, CreateProject {
             name: "Test".to_string(),
             description: "Foo".to_string(),
+            view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+            bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
         }.validated().unwrap());
 
         let res = warp::test::request()
@@ -268,7 +274,7 @@ mod tests {
         user_db.write().await.register(UserRegistration {
             email: "foo@bar.de".to_string(),
             password: "secret123".to_string(),
-            real_name: "Foo Bar".to_string()
+            real_name: "Foo Bar".to_string(),
         }.validated().unwrap()).unwrap();
 
         let session = user_db.write().await.login(UserCredentials {
@@ -279,13 +285,17 @@ mod tests {
         let project = project_db.write().await.create(session.user, CreateProject {
             name: "Test".to_string(),
             description: "Foo".to_string(),
+            view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+            bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
         }.validated().unwrap());
 
         let update = UpdateProject {
             id: project,
             name: Some("TestUpdate".to_string()),
             description: None,
-            layers: None
+            layers: None,
+            view: None,
+            bounds: None,
         };
 
         let res = warp::test::request()
@@ -310,7 +320,7 @@ mod tests {
         user_db.write().await.register(UserRegistration {
             email: "foo@bar.de".to_string(),
             password: "secret123".to_string(),
-            real_name: "Foo Bar".to_string()
+            real_name: "Foo Bar".to_string(),
         }.validated().unwrap()).unwrap();
 
         let session = user_db.write().await.login(UserCredentials {
@@ -321,6 +331,8 @@ mod tests {
         let project = project_db.write().await.create(session.user, CreateProject {
             name: "Test".to_string(),
             description: "Foo".to_string(),
+            view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+            bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
         }.validated().unwrap());
 
         let res = warp::test::request()
@@ -356,13 +368,13 @@ mod tests {
         user_db.write().await.register(UserRegistration {
             email: "foo@bar.de".to_string(),
             password: "secret123".to_string(),
-            real_name: "Foo Bar".to_string()
+            real_name: "Foo Bar".to_string(),
         }.validated().unwrap()).unwrap();
 
         let target_user = user_db.write().await.register(UserRegistration {
             email: "foo2@bar.de".to_string(),
             password: "secret1234".to_string(),
-            real_name: "Foo2 Bar".to_string()
+            real_name: "Foo2 Bar".to_string(),
         }.validated().unwrap()).unwrap();
 
         let session = user_db.write().await.login(UserCredentials {
@@ -373,12 +385,14 @@ mod tests {
         let project = project_db.write().await.create(session.user, CreateProject {
             name: "Test".to_string(),
             description: "Foo".to_string(),
+            view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+            bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
         }.validated().unwrap());
 
         let permission = UserProjectPermission {
             user: target_user,
             project,
-            permission: ProjectPermission::Read
+            permission: ProjectPermission::Read,
         };
 
         let res = warp::test::request()
@@ -403,13 +417,13 @@ mod tests {
         user_db.write().await.register(UserRegistration {
             email: "foo@bar.de".to_string(),
             password: "secret123".to_string(),
-            real_name: "Foo Bar".to_string()
+            real_name: "Foo Bar".to_string(),
         }.validated().unwrap()).unwrap();
 
         let target_user = user_db.write().await.register(UserRegistration {
             email: "foo2@bar.de".to_string(),
             password: "secret1234".to_string(),
-            real_name: "Foo2 Bar".to_string()
+            real_name: "Foo2 Bar".to_string(),
         }.validated().unwrap()).unwrap();
 
         let session = user_db.write().await.login(UserCredentials {
@@ -420,12 +434,14 @@ mod tests {
         let project = project_db.write().await.create(session.user, CreateProject {
             name: "Test".to_string(),
             description: "Foo".to_string(),
+            view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+            bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
         }.validated().unwrap());
 
         let permission = UserProjectPermission {
             user: target_user,
             project,
-            permission: ProjectPermission::Read
+            permission: ProjectPermission::Read,
         };
 
         project_db.write().await.add_permission(session.user, permission.clone()).unwrap();
@@ -452,13 +468,13 @@ mod tests {
         user_db.write().await.register(UserRegistration {
             email: "foo@bar.de".to_string(),
             password: "secret123".to_string(),
-            real_name: "Foo Bar".to_string()
+            real_name: "Foo Bar".to_string(),
         }.validated().unwrap()).unwrap();
 
         let target_user = user_db.write().await.register(UserRegistration {
             email: "foo2@bar.de".to_string(),
             password: "secret1234".to_string(),
-            real_name: "Foo2 Bar".to_string()
+            real_name: "Foo2 Bar".to_string(),
         }.validated().unwrap()).unwrap();
 
         let session = user_db.write().await.login(UserCredentials {
@@ -469,12 +485,14 @@ mod tests {
         let project = project_db.write().await.create(session.user, CreateProject {
             name: "Test".to_string(),
             description: "Foo".to_string(),
+            view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+            bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
         }.validated().unwrap());
 
         let permission = UserProjectPermission {
             user: target_user,
             project,
-            permission: ProjectPermission::Read
+            permission: ProjectPermission::Read,
         };
 
         project_db.write().await.add_permission(session.user, permission.clone()).unwrap();

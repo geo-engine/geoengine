@@ -32,7 +32,7 @@ impl ProjectDB for HashMapProjectDB {
     ///
     /// ```rust
     /// use geoengine_services::users::user::{UserIdentification, UserInput};
-    /// use geoengine_services::projects::project::{CreateProject, ProjectId, ProjectFilter, OrderBy, ProjectListOptions};
+    /// use geoengine_services::projects::project::{CreateProject, ProjectId, ProjectFilter, OrderBy, ProjectListOptions, STRectangle};
     /// use geoengine_services::projects::projectdb::{ProjectDB, HashMapProjectDB};
     ///
     /// let mut project_db = HashMapProjectDB::default();
@@ -41,7 +41,9 @@ impl ProjectDB for HashMapProjectDB {
     /// for i in 0..10 {
     ///     let create = CreateProject {
     ///         name: format!("Test{}", i),
-    ///         description: format!("Test{}", 10 - i)
+    ///         description: format!("Test{}", 10 - i),
+    ///         view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+    ///         bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
     ///     }.validated().unwrap();
     ///     project_db.create(user, create);
     /// }
@@ -86,7 +88,7 @@ impl ProjectDB for HashMapProjectDB {
     ///
     /// ```rust
     /// use geoengine_services::users::user::{UserIdentification, UserInput};
-    /// use geoengine_services::projects::project::{CreateProject, ProjectId};
+    /// use geoengine_services::projects::project::{CreateProject, ProjectId, STRectangle};
     /// use geoengine_services::projects::projectdb::{ProjectDB, HashMapProjectDB};
     ///
     /// let mut project_db = HashMapProjectDB::default();
@@ -94,7 +96,9 @@ impl ProjectDB for HashMapProjectDB {
     ///
     /// let create = CreateProject {
     ///     name: "Test".into(),
-    ///     description: "Text".into()
+    ///     description: "Text".into(),
+    ///     view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+    ///     bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
     /// }.validated().unwrap();
     ///
     /// let id = project_db.create(user, create.clone());
@@ -120,7 +124,7 @@ impl ProjectDB for HashMapProjectDB {
     ///
     /// ```rust
     /// use geoengine_services::users::user::{UserIdentification, UserInput};
-    /// use geoengine_services::projects::project::CreateProject;
+    /// use geoengine_services::projects::project::{CreateProject, STRectangle};
     /// use geoengine_services::projects::projectdb::{ProjectDB, HashMapProjectDB};
     ///
     /// let mut project_db = HashMapProjectDB::default();
@@ -128,7 +132,9 @@ impl ProjectDB for HashMapProjectDB {
     ///
     /// let create = CreateProject {
     ///     name: "Test".into(),
-    ///     description: "Text".into()
+    ///     description: "Text".into(),
+    ///     view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+    ///     bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
     /// }.validated().unwrap();
     ///
     /// let id = project_db.create(user, create);
@@ -149,7 +155,7 @@ impl ProjectDB for HashMapProjectDB {
     ///
     /// ```rust
     /// use geoengine_services::users::user::{UserIdentification, UserInput};
-    /// use geoengine_services::projects::project::{CreateProject, UpdateProject};
+    /// use geoengine_services::projects::project::{CreateProject, UpdateProject, STRectangle};
     ///use geoengine_services::projects::projectdb::{ProjectDB, HashMapProjectDB};
     /// 
     /// let mut project_db = HashMapProjectDB::default();
@@ -157,7 +163,9 @@ impl ProjectDB for HashMapProjectDB {
     ///
     /// let create = CreateProject {
     ///     name: "Test".into(),
-    ///     description: "Text".into()
+    ///     description: "Text".into(),
+    ///     view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+    ///     bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
     /// }.validated().unwrap();
     ///
     /// let id = project_db.create(user, create);
@@ -167,6 +175,8 @@ impl ProjectDB for HashMapProjectDB {
     ///    name: Some("Foo".into()),
     ///    description: None,
     ///    layers: None,
+    ///    view: None,
+    ///    bounds:None
     /// }.validated().unwrap();
     ///
     /// project_db.update(user, update).unwrap();
@@ -204,6 +214,14 @@ impl ProjectDB for HashMapProjectDB {
             }
         }
 
+        if let Some(view) = update.view {
+            project.view = view;
+        }
+
+        if let Some(bounds) = update.bounds {
+            project.bounds = bounds;
+        }
+
         Ok(())
     }
 
@@ -213,7 +231,7 @@ impl ProjectDB for HashMapProjectDB {
     ///
     /// ```rust
     /// use geoengine_services::users::user::{UserIdentification, UserInput};
-    /// use geoengine_services::projects::project::{CreateProject, UpdateProject};
+    /// use geoengine_services::projects::project::{CreateProject, UpdateProject, STRectangle};
     /// use geoengine_services::projects::projectdb::{ProjectDB, HashMapProjectDB};
     /// 
     /// let mut project_db = HashMapProjectDB::default();
@@ -221,7 +239,9 @@ impl ProjectDB for HashMapProjectDB {
     ///
     /// let create = CreateProject {
     ///     name: "Test".into(),
-    ///     description: "Text".into()
+    ///     description: "Text".into(),
+    ///     view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+    ///     bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
     /// }.validated().unwrap();
     ///
     /// let id = project_db.create(user, create);
@@ -244,7 +264,7 @@ impl ProjectDB for HashMapProjectDB {
     ///
     /// ```rust
     /// use geoengine_services::users::user::{UserIdentification, UserInput};
-    /// use geoengine_services::projects::project::{CreateProject, UpdateProject, ProjectPermission, UserProjectPermission};
+    /// use geoengine_services::projects::project::{CreateProject, UpdateProject, ProjectPermission, UserProjectPermission, STRectangle};
     /// use geoengine_services::projects::projectdb::{ProjectDB, HashMapProjectDB};
     /// 
     /// let mut project_db = HashMapProjectDB::default();
@@ -253,7 +273,9 @@ impl ProjectDB for HashMapProjectDB {
     ///
     /// let create = CreateProject {
     ///     name: "Test".into(),
-    ///     description: "Text".into()
+    ///     description: "Text".into(),
+    ///     view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+    ///     bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
     /// }.validated().unwrap();
     ///
     /// let project = project_db.create(user, create);
@@ -289,7 +311,7 @@ impl ProjectDB for HashMapProjectDB {
     ///
     /// ```rust
     /// use geoengine_services::users::user::{UserIdentification, UserInput};
-    /// use geoengine_services::projects::project::{CreateProject, UpdateProject, ProjectPermission, UserProjectPermission};
+    /// use geoengine_services::projects::project::{CreateProject, UpdateProject, ProjectPermission, UserProjectPermission, STRectangle};
     /// use geoengine_services::projects::projectdb::{ProjectDB, HashMapProjectDB};
     /// 
     /// let mut project_db = HashMapProjectDB::default();
@@ -298,7 +320,9 @@ impl ProjectDB for HashMapProjectDB {
     ///
     /// let create = CreateProject {
     ///     name: "Test".into(),
-    ///     description: "Text".into()
+    ///     description: "Text".into(),
+    ///     view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+    ///     bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
     /// }.validated().unwrap();
     ///
     /// let project = project_db.create(user, create);
@@ -335,7 +359,7 @@ impl ProjectDB for HashMapProjectDB {
     ///
     /// ```rust
     /// use geoengine_services::users::user::{UserIdentification, UserInput};
-    /// use geoengine_services::projects::project::{CreateProject, UpdateProject, ProjectPermission, UserProjectPermission};
+    /// use geoengine_services::projects::project::{CreateProject, UpdateProject, ProjectPermission, UserProjectPermission, STRectangle};
     /// use geoengine_services::projects::projectdb::{ProjectDB, HashMapProjectDB};
     ///
     /// let mut project_db = HashMapProjectDB::default();
@@ -344,7 +368,9 @@ impl ProjectDB for HashMapProjectDB {
     ///
     /// let create = CreateProject {
     ///     name: "Test".into(),
-    ///     description: "Text".into()
+    ///     description: "Text".into(),
+    ///     view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+    ///     bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
     /// }.validated().unwrap();
     ///
     /// let project = project_db.create(user, create);
@@ -384,6 +410,15 @@ impl ProjectDB for HashMapProjectDB {
 mod test {
     use super::*;
     use crate::users::user::UserInput;
+    use crate::projects::project::STRectangle;
+    use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, TimeInterval};
+
+    fn strect() -> STRectangle {
+        STRectangle {
+            bounding_box: BoundingBox2D::new(Coordinate2D::new(0., 0.), Coordinate2D::new(1., 1.)).unwrap(),
+            time_interval: TimeInterval::new(0, 1).unwrap(),
+        }
+    }
 
     #[test]
     fn list_permitted() {
@@ -395,21 +430,28 @@ mod test {
         
         let create = CreateProject {
             name: "Own".into(),
-            description: "Text".into()
+            description: "Text".into(),
+            view: strect(),
+            bounds: strect(),
+
         }.validated().unwrap();       
         
         let _ = project_db.create(user, create);
 
         let create = CreateProject {
             name: "User2's".into(),
-            description: "Text".into()
+            description: "Text".into(),
+            view: strect(),
+            bounds: strect(),
         }.validated().unwrap();
 
         let project2 = project_db.create(user2, create);
 
         let create = CreateProject {
             name: "User3's".into(),
-            description: "Text".into()
+            description: "Text".into(),
+            view: strect(),
+            bounds: strect(),
         }.validated().unwrap();
 
         let project3 = project_db.create(user3, create); 
