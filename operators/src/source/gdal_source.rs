@@ -1,3 +1,5 @@
+use crate::util::Result;
+
 use std::path::{PathBuf};
 use gdal::raster::dataset::Dataset as GdalDataset;
 use gdal::raster::rasterband::RasterBand as GdalRasterBand;
@@ -7,6 +9,8 @@ use serde::{Serialize, Deserialize};
 use chrono::{NaiveTime, NaiveDate, NaiveDateTime, Datelike, Timelike};
 
 use num::Integer;
+
+use futures::stream::{self, BoxStream, StreamExt};
 
 use geoengine_datatypes::raster::{Dim, Ix, Raster2D, GeoTransform};
 use geoengine_datatypes::primitives::{TimeInterval};
@@ -169,6 +173,10 @@ pub struct GdalSource {
 }
 
 impl GdalSource {
+    ///
+    /// Generates a new GdalSource from the provided parameters
+    /// TODO: move the time interval and grid tile information generation somewhere else...
+    ///
     pub fn from_params(params: GdalSourceParameters, time_interval_provider: Vec<TimeInterval>, grid_tile_provider: GdalSourceTileGridProvider) -> Self {
         GdalSource {
             time_interval_provider,
@@ -177,6 +185,9 @@ impl GdalSource {
         }
     }
 
+    ///
+    /// An iterator which will produce one element per time step and grid tile
+    ///
     pub fn time_tile_iter(&self) -> impl Iterator<Item=(TimeInterval,TileInformation )> + '_ { // )>
         let time_interval_iterator = self.time_interval_provider.clone().into_iter();
         let time_tile_iterator = time_interval_iterator.flat_map(
@@ -189,7 +200,10 @@ impl GdalSource {
         time_tile_iterator
     }
 
-    pub fn load_tile_data(&self, time_interval: &TimeInterval, tile_information: &TileInformation) -> RasterTile2D<f32> {
+    ///
+    /// A method to load single tiles from a GDAL dataset.
+    ///
+    pub fn load_tile_data<T: gdal::raster::types::GdalType + Copy>(&self, time_interval: &TimeInterval, tile_information: &TileInformation) -> Result<RasterTile2D<T>> {
             
         // snap the time interval start instance to the dataset tick configuration
         let time_string = self.gdal_params.tick.map(
@@ -205,29 +219,41 @@ impl GdalSource {
         // open the dataset at path (or 'throw' an error)
         let dataset = GdalDataset::open(&path).expect("cant open dataset");
         // get the geo transform (pixel size ...) of the dataset (or 'throw' an error)
-        let gdal_geo_transform = dataset.geo_transform().expect("cant get geotransform");
+        let gdal_geo_transform = dataset.geo_transform()?;
         let geo_transform = GeoTransform::from(gdal_geo_transform);
         // TODO: clip the geotransform information?
 
         // get the requested raster band of the dataset …
         let rasterband_index = self.gdal_params.channel.unwrap_or(1) as isize; // TODO: investigate if this should be isize in gdal
-        let rasterband: GdalRasterBand = dataset.rasterband(rasterband_index).expect("cant open rasterband 1");
+        let rasterband: GdalRasterBand = dataset.rasterband(rasterband_index)?;
                     
         let &[.., y_pixel_position, x_pixel_position] = tile_information.global_pixel_position().dimension_size();
         let &[.., y_tile_size, x_tile_size] = tile_information.tile_size_in_pixels.dimension_size();
         // read the data from the rasterband
         let pixel_origin = (x_pixel_position as isize, y_pixel_position as isize);
         let pixel_size = (x_tile_size, y_tile_size);
-        let buffer = rasterband.read_as::<f32>(pixel_origin, // pixelspace origin
+        let buffer = rasterband.read_as::<T>(pixel_origin, // pixelspace origin
             pixel_size, // pixelspace size
             pixel_size /* requested raster size */
-        );
+        )?;
         // println!("pixel_origin: {:?}, pixel_size: {:?}, size: {:?}", pixel_origin, pixel_size, pixel_size);
 
         // TODO: get the raster metadata!
 
-        let raster_result = Raster2D::new(tile_information.tile_size_in_pixels, buffer.expect("gdal read failure").data, None, time_interval.clone(), geo_transform.into());
-        RasterTile2D::new(*time_interval, tile_information.clone(), raster_result.expect("raster creation failed"))
+        let raster_result = Raster2D::new(tile_information.tile_size_in_pixels, buffer.data, None, time_interval.clone(), geo_transform.into())?;
+        Ok(RasterTile2D::new(*time_interval, tile_information.clone(), raster_result))
+    }
+
+    ///
+    /// A stream of RasterTile2D
+    ///
+    pub fn tile_stream<T: gdal::raster::types::GdalType + Copy>(&self) -> BoxStream<Result<RasterTile2D<T>>> {
+
+        stream::iter(self.time_tile_iter()).map(
+            move |(time_interval, tile_information)| {
+                self.load_tile_data::<T>(&time_interval, &tile_information)
+            }
+        ).boxed()        
     }
 }
 
@@ -237,6 +263,9 @@ impl GdalSource {
 mod tests {
     use super::*;
     use geoengine_datatypes::raster::GridPixelAccess;
+    use futures::{executor::block_on_stream};
+    use crate::util::Result;
+    use crate::error::Error;
 
     #[test]
     fn tile_informations() {
@@ -338,7 +367,7 @@ mod tests {
         let tile_information = TileInformation::new(global_size_in_tiles.into(), (0, 0).into(), (0, 0).into(), tile_size_in_pixels.into());
         let time_interval = TimeInterval::new_unchecked(0.into(),1.into());
 
-        let x = gdal_source.load_tile_data(&time_interval, &tile_information);
+        let x = gdal_source.load_tile_data::<f32>(&time_interval, &tile_information).unwrap();
         
         assert_eq!(x.tile, tile_information);
         assert_eq!(x.time, time_interval);
@@ -371,11 +400,56 @@ mod tests {
             gdal_params
         };
 
-        let vres: Vec<RasterTile2D<f32>> = gdal_source.time_tile_iter().map( |(time_interval, tile_information)| {gdal_source.load_tile_data(&time_interval, &tile_information)} ).collect();
+        let vres: Vec<Result<RasterTile2D<f32>, Error>> = gdal_source.time_tile_iter().map( |(time_interval, tile_information)| {gdal_source.load_tile_data(&time_interval, &tile_information)} ).collect();
         assert_eq!(vres.len(), 6*6);
-        //vres.iter().enumerate().for_each(|(i, t)| println!("{}: {:?}", i, t.time));
-        //vres.iter().enumerate().for_each(|(i, t)| println!("{}: {:?}", i, t.tile));
-        let upper_left_pixels: Vec<_> = vres.iter().map(|t| t.data.pixel_value_at_grid_index(&(0,0)).expect("no pixel value")).collect();
+        let upper_left_pixels: Vec<_> = vres.into_iter().map(
+            |t| {
+                let raster_tile = t.unwrap();
+                let tile_data = raster_tile.data;
+                let pixel = tile_data.pixel_value_at_grid_index(&(0,0)).unwrap();
+                return pixel;
+            }
+            ).collect();
         assert_eq!(upper_left_pixels, srtm_tile_upper_left_pixel_values);
+    }
+
+    #[test]
+    fn test_tile_stream_len() {
+
+
+        let global_size_in_pixels = (6000, 6000);
+        let tile_size_in_pixels = (1000, 1000);
+        let srtm_tile_upper_left_pixel_values = vec![422.0, 434.0, 312.0, 347.0, 86.0, 231.0, 269.0, 184.0, 236.0, 360.0, 101.0, 199.0, 366.0, 334.0, 298.0, 162.0, 715.0, 799.0, 314.0, 253.0, 369.0, 333.0, 484.0, 619.0, 196.0, 651.0, 645.0, 1072.0, 3003.0, 1720.0, 179.0, 233.0, 1611.0, 2401.0, 1044.0, 1056.0];    
+
+        let grid_tile_provider = GdalSourceTileGridProvider {
+            global_pixel_size: global_size_in_pixels.into(),
+            tile_pixel_size: tile_size_in_pixels.into(),
+        };
+
+        let time_interval_provider = vec![TimeInterval::new_unchecked(1.into(),2.into())];
+        
+        let gdal_params = GdalSourceParameters{
+            base_path: "../operators/test-data/raster/srtm_38_03".into(),
+            file_name_with_time_placeholder: "srtm_38_03.tif".into(),
+            time_format: "".into(),
+            tick: None,
+            channel: None,
+        };
+
+        let gdal_source = GdalSource {
+            time_interval_provider,
+            grid_tile_provider,
+            gdal_params
+        };
+
+
+        let mut stream_data = block_on_stream(gdal_source.tile_stream::<f32>());
+
+        for p in srtm_tile_upper_left_pixel_values  {
+            let tile = stream_data.next().unwrap().unwrap();
+            let lue = tile.data.pixel_value_at_grid_index(&(0,0)).unwrap();
+            assert_eq!(p, lue);
+        }
+        assert!(stream_data.next().is_none()); 
     }
 }
