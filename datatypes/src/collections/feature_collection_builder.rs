@@ -213,7 +213,7 @@ where
                 }
                 .into());
             }
-            _ => (),
+            Some(_) => (),
         }
 
         match data {
