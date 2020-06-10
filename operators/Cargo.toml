@@ -14,6 +14,7 @@ csv = "1.1"
 geoengine-datatypes = { path = "../datatypes" }
 float-cmp = "0.6"
 futures = "0.3"
+failure = "0.1"
 gdal = "0.6"
 geo = "0.12"
 num = "0.2"
