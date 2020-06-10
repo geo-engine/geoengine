@@ -9,7 +9,8 @@ authors = [
 edition = "2018"
 
 [dependencies]
-arrow = "0.16" # simd compiles with nightly only
+# simd compiles with nightly only, allow default features to build with arrow-flight once it is possible
+arrow = {version = "0.17", features = ["simd"], default-features = false }
 chrono = "0.4"
 float-cmp = "0.6"
 geo = "0.12"

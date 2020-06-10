@@ -55,7 +55,7 @@ fn null_values() {
 
     //    eprintln!("{:?}", underlying_data);
 
-    let casted_data = buffer.typed_data::<i32>();
+    let casted_data = unsafe { buffer.typed_data::<i32>() };
 
     assert_eq!(casted_data.len(), 5);
 
@@ -108,7 +108,10 @@ fn offset() {
 
     assert_eq!(subarray.len(), 2);
     assert_eq!(subarray.offset(), 2);
-    assert_eq!(typed_subarray.values().typed_data::<f64>().len(), 5); // does NOT point to sub-slice
+    assert_eq!(
+        unsafe { typed_subarray.values().typed_data::<f64>() }.len(),
+        5
+    ); // does NOT point to sub-slice
 
     assert_eq!(array.value_slice(2, 2), &[20., 9.4]);
 }
@@ -180,7 +183,7 @@ fn strings2() {
 
     assert_eq!(array.value_data().data(), b"hellofromtheotherside");
     assert_eq!(
-        array.value_offsets().typed_data::<i32>(),
+        unsafe { array.value_offsets().typed_data::<i32>() },
         &[0, 5, 9, 12, 17, 21]
     );
 }
@@ -216,7 +219,10 @@ fn list() {
             .value_slice(0, 5),
         &[0, 1, 2, 3, 4],
     );
-    assert_eq!(array.data().buffers()[0].typed_data::<i32>(), &[0, 2, 5]); // its in buffer 0... kind of unstable...
+    assert_eq!(
+        unsafe { array.data().buffers()[0].typed_data::<i32>() },
+        &[0, 2, 5]
+    ); // its in buffer 0... kind of unstable...
 }
 
 #[test]
@@ -496,14 +502,14 @@ fn nested_lists() {
 
     assert_eq!(array.data().buffers().len(), 1);
     assert_eq!(
-        array.data().buffers()[0].typed_data::<i32>(),
+        unsafe { array.data().buffers()[0].typed_data::<i32>() },
         &[0, 2, 3], // indices of first level arrays in second level structure
     );
 
     assert_eq!(array.data().child_data().len(), 1);
     assert_eq!(array.data().child_data()[0].buffers().len(), 1);
     assert_eq!(
-        array.data().child_data()[0].buffers()[0].typed_data::<i32>(),
+        unsafe { array.data().child_data()[0].buffers()[0].typed_data::<i32>() },
         &[0, 3, 5, 6], // indices of second level arrays in actual data
     );
 
@@ -513,7 +519,7 @@ fn nested_lists() {
         1,
     );
     assert_eq!(
-        array.data().child_data()[0].child_data()[0].buffers()[0].typed_data::<i32>(),
+        unsafe { array.data().child_data()[0].child_data()[0].buffers()[0].typed_data::<i32>() },
         &[10, 11, 12, 20, 21, 30], // data
     );
 }
