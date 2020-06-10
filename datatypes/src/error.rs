@@ -78,11 +78,6 @@ pub enum Error {
         collection_length: usize,
     },
 
-    #[snafu(display("FeatureCollection exception: {}", details))]
-    FeatureCollectionOld {
-        details: String,
-    },
-
     FeatureCollection {
         source: FeatureCollectionError,
     },
