@@ -98,7 +98,7 @@ pub struct GdalSourceTileGridProvider {
 
 impl GdalSourceTileGridProvider {
 
-    /// generates a vec with TileInformation for each tile
+    /// generates a vec with `TileInformation` for each tile
     fn tile_informations(&self) -> Vec<TileInformation> {
         let &[.., y_pixels_global, x_pixels_global] = self.global_pixel_size.dimension_size();
         let &[.., y_pixels_tile, x_pixels_tile] = self.tile_pixel_size.dimension_size();
@@ -123,7 +123,7 @@ impl GdalSourceTileGridProvider {
     }
 }
 
-/// A RasterTile2D is the main type used to iterate over tiles of 2D raster data
+/// A `RasterTile2D` is the main type used to iterate over tiles of 2D raster data
 #[derive(Debug)]
 pub struct RasterTile2D<T> {
     time: TimeInterval,
@@ -132,12 +132,12 @@ pub struct RasterTile2D<T> {
 }
 
 impl<T> RasterTile2D<T> {
-    /// create a new RasterTile2D
+    /// create a new `RasterTile2D`
     pub fn new(time: TimeInterval, tile: TileInformation, data: Raster2D<T>) -> Self { Self { time, tile, data } }
 }
 
 
-/// The TileInformation is used to represent the spatial position of each tile
+/// The `TileInformation` is used to represent the spatial position of each tile
 #[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct TileInformation {
     global_size_in_tiles: Dim<[Ix; 2]>,
@@ -174,7 +174,7 @@ pub struct GdalSource {
 
 impl GdalSource {
     ///
-    /// Generates a new GdalSource from the provided parameters
+    /// Generates a new `GdalSource` from the provided parameters
     /// TODO: move the time interval and grid tile information generation somewhere else...
     ///
     pub fn from_params(params: GdalSourceParameters, time_interval_provider: Vec<TimeInterval>, grid_tile_provider: GdalSourceTileGridProvider) -> Self {
@@ -190,14 +190,13 @@ impl GdalSource {
     ///
     pub fn time_tile_iter(&self) -> impl Iterator<Item=(TimeInterval,TileInformation )> + '_ { // )>
         let time_interval_iterator = self.time_interval_provider.clone().into_iter();
-        let time_tile_iterator = time_interval_iterator.flat_map(
+        time_interval_iterator.flat_map(
             move |time| 
-                self.grid_tile_provider.tile_informations().clone().into_iter().map(
+                self.grid_tile_provider.tile_informations().into_iter().map(
                 move |tile| (time, tile)
             )
         
-        );
-        time_tile_iterator
+        )
     }
 
     ///
@@ -212,7 +211,7 @@ impl GdalSource {
             ).format(&self.gdal_params.time_format).to_string()
         );
         
-        let file_name = self.gdal_params.file_name_with_time_placeholder.replace("%%%_START_TIME_%%%", &time_string.unwrap_or("".into()));
+        let file_name = self.gdal_params.file_name_with_time_placeholder.replace("%%%_START_TIME_%%%", &time_string.unwrap_or_else(|| "".into()));
         
         let path = self.gdal_params.base_path.join(&file_name);
 
@@ -240,12 +239,12 @@ impl GdalSource {
 
         // TODO: get the raster metadata!
 
-        let raster_result = Raster2D::new(tile_information.tile_size_in_pixels, buffer.data, None, time_interval.clone(), geo_transform.into())?;
+        let raster_result = Raster2D::new(tile_information.tile_size_in_pixels, buffer.data, None, *time_interval, geo_transform)?;
         Ok(RasterTile2D::new(*time_interval, tile_information.clone(), raster_result))
     }
 
     ///
-    /// A stream of RasterTile2D
+    /// A stream of `RasterTile2D`
     ///
     pub fn tile_stream<T: gdal::raster::types::GdalType + Copy>(&self) -> BoxStream<Result<RasterTile2D<T>>> {
 
@@ -329,7 +328,7 @@ mod tests {
         assert_eq!(vres[34], (TimeInterval::new_unchecked(1.into(),2.into()), TileInformation::new(global_size_in_tiles.into(), (5, 4).into(), (5000, 4000).into(), tile_size_in_pixels.into())));
         assert_eq!(vres[35], (TimeInterval::new_unchecked(1.into(),2.into()), TileInformation::new(global_size_in_tiles.into(), (5, 5).into(), (5000, 5000).into(), tile_size_in_pixels.into())));
 
-        assert_eq!(vres[36+0], (TimeInterval::new_unchecked(2.into(),3.into()), TileInformation::new(global_size_in_tiles.into(), (0, 0).into(), (0, 0).into(), tile_size_in_pixels.into())));
+        assert_eq!(vres[36], (TimeInterval::new_unchecked(2.into(),3.into()), TileInformation::new(global_size_in_tiles.into(), (0, 0).into(), (0, 0).into(), tile_size_in_pixels.into())));
         assert_eq!(vres[36+1], (TimeInterval::new_unchecked(2.into(),3.into()), TileInformation::new(global_size_in_tiles.into(), (0, 1).into(), (0, 1000).into(), tile_size_in_pixels.into())));
         assert_eq!(vres[36+6], (TimeInterval::new_unchecked(2.into(),3.into()), TileInformation::new(global_size_in_tiles.into(), (1, 0).into(), (1000, 0).into(), tile_size_in_pixels.into())));
         assert_eq!(vres[36+7], (TimeInterval::new_unchecked(2.into(),3.into()), TileInformation::new(global_size_in_tiles.into(), (1, 1).into(), (1000, 1000).into(), tile_size_in_pixels.into())));
@@ -406,8 +405,8 @@ mod tests {
             |t| {
                 let raster_tile = t.unwrap();
                 let tile_data = raster_tile.data;
-                let pixel = tile_data.pixel_value_at_grid_index(&(0,0)).unwrap();
-                return pixel;
+                tile_data.pixel_value_at_grid_index(&(0,0)).unwrap() // pixel
+                
             }
             ).collect();
         assert_eq!(upper_left_pixels, srtm_tile_upper_left_pixel_values);
@@ -419,7 +418,7 @@ mod tests {
 
         let global_size_in_pixels = (6000, 6000);
         let tile_size_in_pixels = (1000, 1000);
-        let srtm_tile_upper_left_pixel_values = vec![422.0, 434.0, 312.0, 347.0, 86.0, 231.0, 269.0, 184.0, 236.0, 360.0, 101.0, 199.0, 366.0, 334.0, 298.0, 162.0, 715.0, 799.0, 314.0, 253.0, 369.0, 333.0, 484.0, 619.0, 196.0, 651.0, 645.0, 1072.0, 3003.0, 1720.0, 179.0, 233.0, 1611.0, 2401.0, 1044.0, 1056.0];    
+        let srtm_tile_upper_left_pixel_values: Vec<f32> = vec![422.0, 434.0, 312.0, 347.0, 86.0, 231.0, 269.0, 184.0, 236.0, 360.0, 101.0, 199.0, 366.0, 334.0, 298.0, 162.0, 715.0, 799.0, 314.0, 253.0, 369.0, 333.0, 484.0, 619.0, 196.0, 651.0, 645.0, 1072.0, 3003.0, 1720.0, 179.0, 233.0, 1611.0, 2401.0, 1044.0, 1056.0];    
 
         let grid_tile_provider = GdalSourceTileGridProvider {
             global_pixel_size: global_size_in_pixels.into(),
@@ -448,7 +447,9 @@ mod tests {
         for p in srtm_tile_upper_left_pixel_values  {
             let tile = stream_data.next().unwrap().unwrap();
             let lue = tile.data.pixel_value_at_grid_index(&(0,0)).unwrap();
-            assert_eq!(p, lue);
+
+            assert!((p - lue) < f32::EPSILON);             
+
         }
         assert!(stream_data.next().is_none()); 
     }

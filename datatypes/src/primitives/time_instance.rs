@@ -7,17 +7,17 @@ pub struct TimeInstance(i64);
 
 impl TimeInstance {
 
-    pub fn as_utc_date_time(&self) -> DateTime<Utc> {
+    pub fn as_utc_date_time(self) -> DateTime<Utc> {
         Utc.timestamp_millis(self.0)
     } 
 
-    pub fn as_naive_date_time(&self) -> NaiveDateTime {
+    pub fn as_naive_date_time(self) -> NaiveDateTime {
         self.as_utc_date_time().naive_utc()
     }
 }
 
 impl TimeInstance {
-    pub fn inner(&self) -> i64 {
+    pub fn inner(self) -> i64 {
         self.0
     }
 }
