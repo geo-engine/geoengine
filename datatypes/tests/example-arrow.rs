@@ -90,6 +90,7 @@ fn null_bytes() {
 }
 
 #[test]
+#[allow(clippy::float_cmp)]
 fn offset() {
     let array = {
         let mut array_builder = Float64Builder::new(5);
