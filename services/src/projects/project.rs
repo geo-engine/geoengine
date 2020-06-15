@@ -11,10 +11,11 @@ use crate::util::user_input::UserInput;
 use crate::util::identifiers::Identifier;
 use crate::users::user::UserId;
 use uuid::Uuid;
+use geoengine_datatypes::operations::image::Colorizer;
 
 identifier!(ProjectId);
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Project {
     pub id: ProjectId,
     pub version: ProjectVersion,
@@ -104,11 +105,28 @@ impl TemporalBounded for STRectangle {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Layer {
+    // TODO: check that workflow/operator output type fits to the type of LayerInfo
     pub workflow: Workflow,
     pub name: String,
-    //TODO: colorizer for raster layers. Maybe differentiate between Raster and Vector layers
+    pub info: LayerInfo,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub enum LayerInfo {
+    Raster(RasterInfo),
+    Vector(VectorInfo),
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RasterInfo {
+    pub colorizer: Colorizer,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+pub struct VectorInfo {
+    // TODO add vector layer specific info
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
@@ -166,7 +184,7 @@ impl UserInput for CreateProject {
     }
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct UpdateProject {
     pub id: ProjectId,
     pub name: Option<String>,

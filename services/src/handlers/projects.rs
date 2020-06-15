@@ -47,9 +47,9 @@ pub fn load_project_handler<T: UserDB, R: ProjectDB>(user_db: DB<T>, project_db:
                 warp::path!("project" / "load" / Uuid)
                     .map(|id: Uuid| LoadVersion::from(Some(id)))
             )
-            .or(
-                warp::path!("project" / "load").map(|| LoadVersion::Latest)
-            ).unify()
+                .or(
+                    warp::path!("project" / "load").map(|| LoadVersion::Latest)
+                ).unify()
         )
         .and(authenticate(user_db))
         .and(warp::body::json())
@@ -162,8 +162,12 @@ mod tests {
     use tokio::sync::RwLock;
     use crate::projects::hashmap_projectdb::HashMapProjectDB;
     use crate::users::hashmap_userdb::HashMapUserDB;
-    use crate::projects::project::{ProjectId, ProjectFilter, OrderBy, ProjectListing, Project, UpdateProject, ProjectPermission, STRectangle, ProjectVersion};
+    use crate::projects::project::{ProjectId, ProjectFilter, OrderBy, ProjectListing, Project, UpdateProject, ProjectPermission, STRectangle, ProjectVersion, Layer, RasterInfo, LayerInfo};
     use crate::users::user::{UserRegistration, UserCredentials};
+    use crate::workflows::Workflow;
+    use geoengine_operators::Operator;
+    use geoengine_operators::operators::{GdalSourceParameters, NoSources};
+    use geoengine_datatypes::operations::image::Colorizer;
 
     #[tokio::test]
     async fn create() {
@@ -383,7 +387,22 @@ mod tests {
             id: project,
             name: Some("TestUpdate".to_string()),
             description: None,
-            layers: None,
+            layers: Some(vec![
+                Some(Layer {
+                    workflow: Workflow {
+                        operator: Operator::GdalSource {
+                            params: GdalSourceParameters {
+                                source_name: "test".into(),
+                                channel: 0,
+                            },
+                            sources: NoSources {},
+                        }
+                    },
+                    name: "L1".to_string(),
+                    info: LayerInfo::Raster(RasterInfo {
+                        colorizer: Colorizer::Rgba
+                    }),
+                })]),
             view: None,
             bounds: None,
         };
@@ -399,7 +418,9 @@ mod tests {
 
         assert_eq!(res.status(), 200);
 
-        assert_eq!(project_db.read().await.load_latest(session.user, project).unwrap().name, "TestUpdate");
+        let loaded = project_db.read().await.load_latest(session.user, project).unwrap();
+        assert_eq!(loaded.name, "TestUpdate");
+        assert_eq!(loaded.layers.len(), 1);
     }
 
     #[tokio::test]
