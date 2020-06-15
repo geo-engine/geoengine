@@ -4,8 +4,9 @@ use warp::reply::Reply;
 use crate::error::Result;
 use crate::users::userdb::UserDB;
 use crate::users::session::Session;
-use crate::users::user::{UserRegistration, UserCredentials, UserInput};
+use crate::users::user::{UserRegistration, UserCredentials};
 use crate::handlers::{DB, authenticate};
+use crate::util::user_input::UserInput;
 
 pub fn register_user_handler<T: UserDB>(user_db: DB<T>) -> impl Filter<Extract=impl warp::Reply, Error=warp::Rejection> + Clone {
     warp::post()
@@ -61,9 +62,10 @@ mod tests {
     use super::*;
     use crate::users::userdb::UserDB;
     use crate::users::hashmap_userdb::HashMapUserDB;
-    use crate::users::user::{UserIdentification, Validated};
     use crate::handlers::handle_rejection;
     use tokio::sync::RwLock;
+    use crate::util::user_input::Validated;
+    use crate::users::user::UserId;
 
     #[tokio::test]
     async fn register() {
@@ -87,7 +89,7 @@ mod tests {
         assert_eq!(res.status(), 200);
 
         let body: String = String::from_utf8(res.body().to_vec()).unwrap();
-        assert!(serde_json::from_str::<UserIdentification>(&body).is_ok());
+        assert!(serde_json::from_str::<UserId>(&body).is_ok());
     }
 
     #[tokio::test]

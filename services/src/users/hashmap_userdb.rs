@@ -6,8 +6,9 @@ use snafu::ensure;
 use crate::error;
 use crate::error::Result;
 use crate::users::session::{Session, SessionToken};
-use crate::users::user::{User, UserCredentials, UserIdentification, UserRegistration, Validated};
+use crate::users::user::{User, UserId, UserCredentials, UserRegistration};
 use crate::users::userdb::UserDB;
+use crate::util::user_input::Validated;
 
 #[derive(Default)]
 pub struct HashMapUserDB {
@@ -21,9 +22,11 @@ impl UserDB for HashMapUserDB {
     /// # Examples
     ///
     /// ```rust
-    /// use geoengine_services::users::user::{UserRegistration, UserInput};
+    /// use geoengine_services::users::user::UserRegistration;
     /// use geoengine_services::users::userdb::UserDB;
     /// use geoengine_services::users::hashmap_userdb::HashMapUserDB;
+    /// use geoengine_services::util::user_input::UserInput;
+    /// use geoengine_services::users::user::UserId;
     ///
     /// let mut user_db = HashMapUserDB::default();
     ///
@@ -38,7 +41,7 @@ impl UserDB for HashMapUserDB {
     fn register(
         &mut self,
         user_registration: Validated<UserRegistration>,
-    ) -> Result<UserIdentification> {
+    ) -> Result<UserId> {
         let user_registration = user_registration.user_input;
         ensure!(
             !self.users.contains_key(&user_registration.email),
@@ -58,9 +61,10 @@ impl UserDB for HashMapUserDB {
     /// # Examples
     ///
     /// ```rust
-    /// use geoengine_services::users::user::{UserRegistration, UserInput, UserCredentials};
+    /// use geoengine_services::users::user::{UserRegistration, UserCredentials};
     /// use geoengine_services::users::userdb::UserDB;
     /// use geoengine_services::users::hashmap_userdb::HashMapUserDB;
+    /// use geoengine_services::util::user_input::UserInput;
     ///
     /// let mut user_db = HashMapUserDB::default();
     ///
@@ -95,9 +99,10 @@ impl UserDB for HashMapUserDB {
     /// # Examples
     ///
     /// ```rust
-    /// use geoengine_services::users::user::{UserRegistration, UserInput, UserCredentials};
+    /// use geoengine_services::users::user::{UserRegistration, UserCredentials};
     /// use geoengine_services::users::userdb::UserDB;
     /// use geoengine_services::users::hashmap_userdb::HashMapUserDB;
+    /// use geoengine_services::util::user_input::UserInput;
     ///
     /// let mut user_db = HashMapUserDB::default();
     ///
@@ -130,9 +135,10 @@ impl UserDB for HashMapUserDB {
     /// # Examples
     ///
     /// ```rust
-    /// use geoengine_services::users::user::{UserRegistration, UserInput, UserCredentials};
+    /// use geoengine_services::users::user::{UserRegistration, UserCredentials};
     /// use geoengine_services::users::userdb::UserDB;
     /// use geoengine_services::users::hashmap_userdb::HashMapUserDB;
+    /// use geoengine_services::util::user_input::UserInput;
     ///
     /// let mut user_db = HashMapUserDB::default();
     ///

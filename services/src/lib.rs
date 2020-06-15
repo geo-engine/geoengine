@@ -18,6 +18,8 @@
     clippy::wildcard_imports
 )]
 
+#[macro_use]
+pub mod util;
 pub mod error;
 pub mod handlers;
 pub mod projects;

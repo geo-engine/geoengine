@@ -25,6 +25,7 @@ async fn main() {
             .or(handlers::projects::list_projects_handler(user_db.clone(), project_db.clone()))
             .or(handlers::projects::update_project_handler(user_db.clone(), project_db.clone()))
             .or(handlers::projects::delete_project_handler(user_db.clone(), project_db.clone()))
+            .or(handlers::projects::project_versions_handler(user_db.clone(), project_db.clone()))
             .or(handlers::projects::add_permission_handler(user_db.clone(), project_db.clone()))
             .or(handlers::projects::remove_permission_handler(user_db.clone(), project_db.clone()))
             .or(handlers::projects::list_permissions_handler(user_db.clone(), project_db.clone()))

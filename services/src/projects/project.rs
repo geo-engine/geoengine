@@ -1,6 +1,4 @@
-use uuid::Uuid;
 use crate::workflows::Workflow;
-use crate::users::user::{UserIdentification, UserInput};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use crate::error::Error;
@@ -8,32 +6,73 @@ use crate::error;
 use crate::error::Result;
 use snafu::ensure;
 use geoengine_datatypes::primitives::{BoundingBox2D, TimeInterval, Coordinate2D};
+use std::cmp::Ordering;
+use crate::util::user_input::UserInput;
+use crate::util::identifiers::Identifier;
+use crate::users::user::UserId;
+use uuid::Uuid;
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Copy, Hash)]
-pub struct ProjectId {
-    id: Uuid
-}
-
-impl ProjectId {
-    #[allow(clippy::new_without_default)]
-    pub fn new() -> Self {
-        Self {
-            id: Uuid::new_v4()
-        }
-    }
-}
+identifier!(ProjectId);
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct Project {
     pub id: ProjectId,
-    pub version: usize,
-    pub changed: DateTime<Utc>,
+    pub version: ProjectVersion,
     pub name: String,
     pub description: String,
     pub layers: Vec<Layer>,
     pub view: STRectangle,
     pub bounds: STRectangle,
     // TODO: projection/coordinate reference system, must be either stored in the rectangle/bbox or globally for project
+}
+
+impl Project {
+    pub fn from_create_project(create: CreateProject, user: UserId) -> Self {
+        Self {
+            id: ProjectId::new(),
+            version: ProjectVersion::new(user),
+            name: create.name,
+            description: create.description,
+            layers: vec![],
+            view: create.view,
+            bounds: create.bounds,
+        }
+    }
+
+    pub fn update_project(&self, update: UpdateProject, user: UserId) -> Project {
+        let mut project = self.clone();
+        project.version = ProjectVersion::new(user);
+
+        if let Some(name) = update.name {
+            project.name = name;
+        }
+
+        if let Some(description) = update.description {
+            project.description = description;
+        }
+
+        if let Some(layers) = update.layers {
+            for (i, layer) in layers.into_iter().enumerate() {
+                if let Some(layer) = layer {
+                    if i >= project.layers.len() {
+                        project.layers.push(layer);
+                    } else {
+                        project.layers[i] = layer;
+                    }
+                }
+            }
+        }
+
+        if let Some(view) = update.view {
+            project.view = view;
+        }
+
+        if let Some(bounds) = update.bounds {
+            project.bounds = bounds;
+        }
+
+        project
+    }
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
@@ -77,14 +116,14 @@ pub struct ProjectListing {
     pub changed: DateTime<Utc>
 }
 
-impl From<Project> for ProjectListing {
-    fn from(project: Project) -> Self {
+impl From<&Project> for ProjectListing {
+    fn from(project: &Project) -> Self {
         Self {
             id: project.id,
-            name: project.name,
-            description: project.description,
-            layer_name: project.layers.into_iter().map(|l| l.name).collect(),
-            changed: project.changed
+            name: project.name.clone(),
+            description: project.description.clone(),
+            layer_name: project.layers.iter().map(|l| l.name.clone()).collect(),
+            changed: project.version.changed
         }
     }
 }
@@ -112,21 +151,6 @@ impl UserInput for CreateProject {
         );
 
         Ok(())
-    }
-}
-
-impl From<CreateProject> for Project {
-    fn from(create: CreateProject) -> Self {
-        Self {
-            id: ProjectId::new(),
-            version: 0,
-            changed: Utc::now(),
-            name: create.name,
-            description: create.description,
-            layers: vec![],
-            view: create.view,
-            bounds: create.bounds
-        }
     }
 }
 
@@ -171,7 +195,7 @@ pub enum ProjectPermission {
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
 pub struct UserProjectPermission {
-    pub user: UserIdentification,
+    pub user: UserId,
     pub project: ProjectId,
     pub permission: ProjectPermission,
 }
@@ -193,5 +217,45 @@ impl UserInput for ProjectListOptions {
         );
 
         Ok(())
+    }
+}
+
+identifier!(ProjectVersionId);
+
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, Copy)]
+pub struct ProjectVersion {
+    pub id: ProjectVersionId,
+    pub changed: DateTime<Utc>,
+    pub author: UserId,
+}
+
+impl ProjectVersion {
+    fn new(user: UserId) -> Self {
+        Self {
+            id: ProjectVersionId::new(),
+            changed: chrono::offset::Utc::now(),
+            author: user,
+        }
+    }
+}
+
+impl PartialOrd for ProjectVersion {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.changed.partial_cmp(&other.changed)
+    }
+}
+
+pub enum LoadVersion {
+    VERSION (ProjectVersionId),
+    LATEST
+}
+
+impl From<Option<Uuid>> for LoadVersion {
+    fn from(id: Option<Uuid>) -> Self {
+        if let Some(id) = id {
+            LoadVersion::VERSION(ProjectVersionId::from_uuid(id))
+        } else {
+            LoadVersion::LATEST
+        }
     }
 }

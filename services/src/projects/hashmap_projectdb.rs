@@ -1,31 +1,33 @@
-use crate::projects::project::{OrderBy, ProjectFilter, ProjectListing, ProjectId, Project, CreateProject, UpdateProject, UserProjectPermission, ProjectPermission, ProjectListOptions};
-use crate::users::user::{UserIdentification, Validated};
+use crate::projects::project::{OrderBy, ProjectFilter, ProjectListing, ProjectId, Project, CreateProject, UpdateProject, UserProjectPermission, ProjectPermission, ProjectListOptions, ProjectVersion, LoadVersion};
 use std::collections::HashMap;
 use crate::error::Result;
 use crate::error;
 use snafu::ensure;
 use crate::projects::projectdb::ProjectDB;
+use crate::util::user_input::Validated;
+use crate::users::user::UserId;
 
 #[derive(Default)]
 pub struct HashMapProjectDB {
-    projects: HashMap<ProjectId, Project>,
+    projects: HashMap<ProjectId, Vec<Project>>,
     permissions: Vec<UserProjectPermission>,
 }
 
-// TODO: versioning?
 impl ProjectDB for HashMapProjectDB {
     /// List projects
     ///
     /// # Examples
     ///
     /// ```rust
-    /// use geoengine_services::users::user::{UserIdentification, UserInput};
     /// use geoengine_services::projects::project::{CreateProject, ProjectId, ProjectFilter, OrderBy, ProjectListOptions, STRectangle};
     /// use geoengine_services::projects::projectdb::ProjectDB;
     /// use geoengine_services::projects::hashmap_projectdb::HashMapProjectDB;
+    /// use geoengine_services::util::user_input::UserInput;
+    /// use geoengine_services::util::identifiers::Identifier;
+    /// use geoengine_services::users::user::UserId;
     ///
     /// let mut project_db = HashMapProjectDB::default();
-    /// let user = UserIdentification::new();
+    /// let user = UserId::new();
     ///
     /// for i in 0..10 {
     ///     let create = CreateProject {
@@ -47,12 +49,12 @@ impl ProjectDB for HashMapProjectDB {
     ///
     /// assert_eq!(projects.len(), 2)
     /// ```
-    fn list(&self, user: UserIdentification, options: Validated<ProjectListOptions>) -> Vec<ProjectListing> {
+    fn list(&self, user: UserId, options: Validated<ProjectListOptions>) -> Vec<ProjectListing> {
         let ProjectListOptions { only_owned, filter, order, offset, limit } = options.user_input;
         #[allow(clippy::filter_map)]
             let mut projects = self.permissions.iter()
             .filter(|p| p.user == user && (!only_owned || p.permission == ProjectPermission::Owner))
-            .flat_map(|p| self.projects.get(&p.project).cloned())
+            .flat_map(|p| self.projects.get(&p.project).and_then(|p| p.last()))
             .map(ProjectListing::from)
             .filter(|p| match &filter {
                 ProjectFilter::Name { term } => p.name == *term,
@@ -76,13 +78,15 @@ impl ProjectDB for HashMapProjectDB {
     /// # Examples
     ///
     /// ```rust
-    /// use geoengine_services::users::user::{UserIdentification, UserInput};
-    /// use geoengine_services::projects::project::{CreateProject, ProjectId, STRectangle};
+    /// use geoengine_services::projects::project::{CreateProject, ProjectId, STRectangle, LoadVersion};
     /// use geoengine_services::projects::projectdb::ProjectDB;
     /// use geoengine_services::projects::hashmap_projectdb::HashMapProjectDB;
+    /// use geoengine_services::util::user_input::UserInput;
+    /// use geoengine_services::util::identifiers::Identifier;
+    /// use geoengine_services::users::user::UserId;
     ///
     /// let mut project_db = HashMapProjectDB::default();
-    /// let user = UserIdentification::new();
+    /// let user = UserId::new();
     ///
     /// let create = CreateProject {
     ///     name: "Test".into(),
@@ -92,20 +96,29 @@ impl ProjectDB for HashMapProjectDB {
     /// }.validated().unwrap();
     ///
     /// let id = project_db.create(user, create.clone());
-    /// assert!(project_db.load(user, id).is_ok());
+    /// assert!(project_db.load_latest(user, id).is_ok());
     ///
-    /// let user2 = UserIdentification::new();
+    /// let user2 = UserId::new();
     /// let id = project_db.create(user2, create);
-    /// assert!(project_db.load(user, id).is_err());
+    /// assert!(project_db.load_latest(user, id).is_err());
     ///
-    /// assert!(project_db.load(user, ProjectId::new()).is_err())
+    /// assert!(project_db.load_latest(user, ProjectId::new()).is_err())
     /// ```
-    fn load(&self, user: UserIdentification, project: ProjectId) -> Result<Project> {
+    fn load(&self, user: UserId, project: ProjectId, version: LoadVersion) -> Result<Project> {
         ensure!(
             self.permissions.iter().any(|p| p.project == project && p.user == user),
             error::ProjectLoadFailed
         );
-        self.projects.get(&project).cloned().ok_or(error::Error::ProjectLoadFailed)
+        let project_versions = self.projects.get(&project).ok_or(error::Error::ProjectLoadFailed)?;
+        if let LoadVersion::VERSION(version) = version {
+            Ok(
+                project_versions.iter()
+                    .find(|p| p.version.id == version)
+                    .ok_or(error::Error::ProjectLoadFailed)?.clone()
+            )
+        } else {
+            Ok(project_versions.last().ok_or(error::Error::ProjectLoadFailed)?.clone())
+        }
     }
 
     /// Create a project
@@ -113,13 +126,15 @@ impl ProjectDB for HashMapProjectDB {
     /// # Examples
     ///
     /// ```rust
-    /// use geoengine_services::users::user::{UserIdentification, UserInput};
     /// use geoengine_services::projects::project::{CreateProject, STRectangle};
     /// use geoengine_services::projects::projectdb::ProjectDB;
     /// use geoengine_services::projects::hashmap_projectdb::HashMapProjectDB;
+    /// use geoengine_services::util::user_input::UserInput;
+    /// use geoengine_services::util::identifiers::Identifier;
+    /// use geoengine_services::users::user::UserId;
     ///
     /// let mut project_db = HashMapProjectDB::default();
-    /// let user = UserIdentification::new();
+    /// let user = UserId::new();
     ///
     /// let create = CreateProject {
     ///     name: "Test".into(),
@@ -130,12 +145,12 @@ impl ProjectDB for HashMapProjectDB {
     ///
     /// let id = project_db.create(user, create);
     ///
-    /// assert!(project_db.load(user, id).is_ok())
+    /// assert!(project_db.load_latest(user, id).is_ok())
     /// ```
-    fn create(&mut self, user: UserIdentification, create: Validated<CreateProject>) -> ProjectId {
-        let project: Project = create.user_input.into();
+    fn create(&mut self, user: UserId, create: Validated<CreateProject>) -> ProjectId {
+        let project: Project = Project::from_create_project(create.user_input, user);
         let id = project.id;
-        self.projects.insert(id, project);
+        self.projects.insert(id, vec![project]);
         self.permissions.push(UserProjectPermission { user, project: id, permission: ProjectPermission::Owner });
         id
     }
@@ -145,13 +160,15 @@ impl ProjectDB for HashMapProjectDB {
     /// # Examples
     ///
     /// ```rust
-    /// use geoengine_services::users::user::{UserIdentification, UserInput};
     /// use geoengine_services::projects::project::{CreateProject, UpdateProject, STRectangle};
-    ///use geoengine_services::projects::projectdb::ProjectDB;
+    /// use geoengine_services::projects::projectdb::ProjectDB;
     /// use geoengine_services::projects::hashmap_projectdb::HashMapProjectDB;
+    /// use geoengine_services::util::user_input::UserInput;
+    /// use geoengine_services::util::identifiers::Identifier;
+    /// use geoengine_services::users::user::UserId;
     ///
     /// let mut project_db = HashMapProjectDB::default();
-    /// let user = UserIdentification::new();
+    /// let user = UserId::new();
     ///
     /// let create = CreateProject {
     ///     name: "Test".into(),
@@ -173,9 +190,9 @@ impl ProjectDB for HashMapProjectDB {
     ///
     /// project_db.update(user, update).unwrap();
     ///
-    /// assert_eq!(project_db.load(user, id).unwrap().name, "Foo");
+    /// assert_eq!(project_db.load_latest(user, id).unwrap().name, "Foo");
     /// ```
-    fn update(&mut self, user: UserIdentification, update: Validated<UpdateProject>) -> Result<()> {
+    fn update(&mut self, user: UserId, update: Validated<UpdateProject>) -> Result<()> {
         let update = update.user_input;
 
         ensure!(
@@ -184,35 +201,17 @@ impl ProjectDB for HashMapProjectDB {
             error::ProjectUpdateFailed
         );
 
-        let project = self.projects.get_mut(&update.id).ok_or(error::Error::ProjectUpdateFailed)?;
+        let project_versions = self.projects.get_mut(&update.id).ok_or(error::Error::ProjectUpdateFailed)?;
+        let project = project_versions.last().ok_or(error::Error::ProjectUpdateFailed)?;
 
-        if let Some(name) = update.name {
-            project.name = name;
-        }
+        let project_update = project.update_project(update, user);
 
-        if let Some(description) = update.description {
-            project.description = description;
-        }
+        ensure!(
+            project_update.version > project.version,
+            error::ProjectUpdateFailed
+        );
 
-        if let Some(layers) = update.layers {
-            for (i, layer) in layers.into_iter().enumerate() {
-                if let Some(layer) = layer {
-                    if i >= project.layers.len() {
-                        project.layers.push(layer);
-                    } else {
-                        project.layers[i] = layer;
-                    }
-                }
-            }
-        }
-
-        if let Some(view) = update.view {
-            project.view = view;
-        }
-
-        if let Some(bounds) = update.bounds {
-            project.bounds = bounds;
-        }
+        project_versions.push(project_update);
 
         Ok(())
     }
@@ -222,13 +221,15 @@ impl ProjectDB for HashMapProjectDB {
     /// # Examples
     ///
     /// ```rust
-    /// use geoengine_services::users::user::{UserIdentification, UserInput};
     /// use geoengine_services::projects::project::{CreateProject, UpdateProject, STRectangle};
     /// use geoengine_services::projects::projectdb::ProjectDB;
     /// use geoengine_services::projects::hashmap_projectdb::HashMapProjectDB;
+    /// use geoengine_services::util::user_input::UserInput;
+    /// use geoengine_services::util::identifiers::Identifier;
+    /// use geoengine_services::users::user::UserId;
     ///
     /// let mut project_db = HashMapProjectDB::default();
-    /// let user = UserIdentification::new();
+    /// let user = UserId::new();
     ///
     /// let create = CreateProject {
     ///     name: "Test".into(),
@@ -241,7 +242,7 @@ impl ProjectDB for HashMapProjectDB {
     ///
     /// assert!(project_db.delete(user, id).is_ok());
     /// ```
-    fn delete(&mut self, user: UserIdentification, project: ProjectId) -> Result<()> {
+    fn delete(&mut self, user: UserId, project: ProjectId) -> Result<()> {
         ensure!(
             self.permissions.iter().any(|p| p.project == project && p.user == user &&
             p.permission == ProjectPermission::Owner),
@@ -251,18 +252,74 @@ impl ProjectDB for HashMapProjectDB {
         self.projects.remove(&project).map(|_| ()).ok_or(error::Error::ProjectDeleteFailed)
     }
 
+    /// Get the versions of a project
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use geoengine_services::projects::project::{CreateProject, UpdateProject, STRectangle};
+    /// use geoengine_services::projects::projectdb::ProjectDB;
+    /// use geoengine_services::projects::hashmap_projectdb::HashMapProjectDB;
+    /// use geoengine_services::util::user_input::UserInput;
+    /// use geoengine_services::util::identifiers::Identifier;
+    /// use geoengine_services::users::user::UserId;
+    /// use std::{thread, time};
+    ///
+    /// let mut project_db = HashMapProjectDB::default();
+    /// let user = UserId::new();
+    ///
+    /// let create = CreateProject {
+    ///     name: "Test".into(),
+    ///     description: "Text".into(),
+    ///     view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+    ///     bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+    /// }.validated().unwrap();
+    ///
+    /// let id = project_db.create(user, create);
+    ///
+    /// thread::sleep(time::Duration::from_millis(10));
+    ///
+    /// let update = UpdateProject {
+    ///    id,
+    ///    name: Some("Foo".into()),
+    ///    description: None,
+    ///    layers: None,
+    ///    view: None,
+    ///    bounds:None
+    /// }.validated().unwrap();
+    ///
+    /// project_db.update(user, update).unwrap();
+    ///
+    /// let versions = project_db.versions(user, id).unwrap();
+    ///
+    /// assert_eq!(versions.len(), 2);
+    /// assert!(versions[0].changed < versions[1].changed);
+    /// ```
+    fn versions(&self, user: UserId, project: ProjectId) -> Result<Vec<ProjectVersion>> {
+        // TODO: pagination?
+        ensure!(
+            self.permissions.iter().any(|p| p.project == project && p.user == user),
+            error::ProjectLoadFailed
+        );
+
+        Ok(self.projects.get(&project).ok_or(error::Error::ProjectLoadFailed)?.iter()
+            .map(|p| p.version).collect())
+    }
+
     /// List all permissions on a project
     ///
     /// # Examples
     ///
     /// ```rust
-    /// use geoengine_services::users::user::{UserIdentification, UserInput};
     /// use geoengine_services::projects::project::{CreateProject, UpdateProject, ProjectPermission, UserProjectPermission, STRectangle};
     /// use geoengine_services::projects::projectdb::ProjectDB;
     /// use geoengine_services::projects::hashmap_projectdb::HashMapProjectDB;
+    /// use geoengine_services::util::user_input::UserInput;
+    /// use geoengine_services::util::identifiers::Identifier;
+    /// use geoengine_services::users::user::UserId;
     ///
     /// let mut project_db = HashMapProjectDB::default();
-    /// let user = UserIdentification::new();
+    /// let user = UserId::new();
     ///
     ///
     /// let create = CreateProject {
@@ -274,8 +331,8 @@ impl ProjectDB for HashMapProjectDB {
     ///
     /// let project = project_db.create(user, create);
     ///
-    /// let user2 = UserIdentification::new();
-    /// let user3 = UserIdentification::new();
+    /// let user2 = UserId::new();
+    /// let user3 = UserId::new();
     ///
     /// let permission1 = UserProjectPermission { user: user2, project, permission: ProjectPermission::Read};
     /// let permission2 = UserProjectPermission { user: user3, project, permission: ProjectPermission::Write};
@@ -287,7 +344,7 @@ impl ProjectDB for HashMapProjectDB {
     /// assert!(permissions.contains(&permission1));
     /// assert!(permissions.contains(&permission2));
     /// ```
-    fn list_permissions(&mut self, user: UserIdentification, project: ProjectId) -> Result<Vec<UserProjectPermission>> {
+    fn list_permissions(&mut self, user: UserId, project: ProjectId) -> Result<Vec<UserProjectPermission>> {
         ensure!(
             self.permissions.iter().any(|p| p.project == project && p.user == user),
             error::ProjectLoadFailed
@@ -304,13 +361,15 @@ impl ProjectDB for HashMapProjectDB {
     /// # Examples
     ///
     /// ```rust
-    /// use geoengine_services::users::user::{UserIdentification, UserInput};
     /// use geoengine_services::projects::project::{CreateProject, UpdateProject, ProjectPermission, UserProjectPermission, STRectangle};
     /// use geoengine_services::projects::projectdb::ProjectDB;
     /// use geoengine_services::projects::hashmap_projectdb::HashMapProjectDB;
+    /// use geoengine_services::util::user_input::UserInput;
+    /// use geoengine_services::util::identifiers::Identifier;
+    /// use geoengine_services::users::user::UserId;
     ///
     /// let mut project_db = HashMapProjectDB::default();
-    /// let user = UserIdentification::new();
+    /// let user = UserId::new();
     ///
     ///
     /// let create = CreateProject {
@@ -322,8 +381,8 @@ impl ProjectDB for HashMapProjectDB {
     ///
     /// let project = project_db.create(user, create);
     ///
-    /// let user2 = UserIdentification::new();
-    /// let user3 = UserIdentification::new();
+    /// let user2 = UserId::new();
+    /// let user3 = UserId::new();
     ///
     /// let permission1 = UserProjectPermission { user: user2, project, permission: ProjectPermission::Read};
     /// let permission2 = UserProjectPermission { user: user3, project, permission: ProjectPermission::Write};
@@ -335,7 +394,7 @@ impl ProjectDB for HashMapProjectDB {
     /// assert!(permissions.contains(&permission1));
     /// assert!(permissions.contains(&permission2));
     /// ```
-    fn add_permission(&mut self, user: UserIdentification, permission: UserProjectPermission) -> Result<()> {
+    fn add_permission(&mut self, user: UserId, permission: UserProjectPermission) -> Result<()> {
         ensure!(
             self.permissions.iter().any(|p| p.project == permission.project && p.user == user &&
             p.permission == ProjectPermission::Owner),
@@ -353,13 +412,15 @@ impl ProjectDB for HashMapProjectDB {
     /// # Examples
     ///
     /// ```rust
-    /// use geoengine_services::users::user::{UserIdentification, UserInput};
     /// use geoengine_services::projects::project::{CreateProject, UpdateProject, ProjectPermission, UserProjectPermission, STRectangle};
     /// use geoengine_services::projects::projectdb::ProjectDB;
     /// use geoengine_services::projects::hashmap_projectdb::HashMapProjectDB;
+    /// use geoengine_services::util::user_input::UserInput;
+    /// use geoengine_services::util::identifiers::Identifier;
+    /// use geoengine_services::users::user::UserId;
     ///
     /// let mut project_db = HashMapProjectDB::default();
-    /// let user = UserIdentification::new();
+    /// let user = UserId::new();
     ///
     ///
     /// let create = CreateProject {
@@ -371,8 +432,8 @@ impl ProjectDB for HashMapProjectDB {
     ///
     /// let project = project_db.create(user, create);
     ///
-    /// let user2 = UserIdentification::new();
-    /// let user3 = UserIdentification::new();
+    /// let user2 = UserId::new();
+    /// let user3 = UserId::new();
     ///
     /// let permission1 = UserProjectPermission { user: user2, project, permission: ProjectPermission::Read};
     /// let permission2 = UserProjectPermission { user: user3, project, permission: ProjectPermission::Write};
@@ -386,7 +447,7 @@ impl ProjectDB for HashMapProjectDB {
     /// assert!(permissions.contains(&permission1));
     /// assert!(!permissions.contains(&permission2));
     /// ```
-    fn remove_permission(&mut self, user: UserIdentification, permission:UserProjectPermission) -> Result<()> {
+    fn remove_permission(&mut self, user: UserId, permission: UserProjectPermission) -> Result<()> {
         ensure!(
             self.permissions.iter().any(|p| p.project == permission.project && p.user == user &&
             p.permission == ProjectPermission::Owner),
@@ -405,9 +466,10 @@ impl ProjectDB for HashMapProjectDB {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::users::user::UserInput;
     use crate::projects::project::STRectangle;
     use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, TimeInterval};
+    use crate::util::user_input::UserInput;
+    use crate::util::identifiers::Identifier;
 
     fn strect() -> STRectangle {
         STRectangle {
@@ -419,10 +481,9 @@ mod test {
     #[test]
     fn list_permitted() {
         let mut project_db = HashMapProjectDB::default();
-        let user = UserIdentification::new();
-        let user2 = UserIdentification::new();
-        let user3 = UserIdentification::new();
-
+        let user = UserId::new();
+        let user2 = UserId::new();
+        let user3 = UserId::new();
 
         let create = CreateProject {
             name: "Own".into(),
@@ -452,11 +513,11 @@ mod test {
 
         let project3 = project_db.create(user3, create);
 
-        let permission1 = UserProjectPermission { user, project: project2, permission: ProjectPermission::Read};
-        let permission2 = UserProjectPermission { user, project: project3, permission: ProjectPermission::Write};
+        let permission1 = UserProjectPermission { user, project: project2, permission: ProjectPermission::Read };
+        let permission2 = UserProjectPermission { user, project: project3, permission: ProjectPermission::Write };
 
-        let _ = project_db.add_permission(user2, permission1).unwrap();
-        let _ = project_db.add_permission(user3, permission2).unwrap();
+        project_db.add_permission(user2, permission1).unwrap();
+        project_db.add_permission(user3, permission2).unwrap();
 
         let options = ProjectListOptions {
             only_owned: false,

@@ -1,6 +1,7 @@
 use crate::error::Result;
 use crate::users::session::{Session, SessionToken};
-use crate::users::user::{UserCredentials, UserIdentification, UserRegistration, Validated};
+use crate::users::user::{UserCredentials, UserId, UserRegistration};
+use crate::util::user_input::Validated;
 
 pub trait UserDB: Send + Sync {
     /// Registers a user by providing `UserRegistration` parameters
@@ -9,7 +10,7 @@ pub trait UserDB: Send + Sync {
     ///
     /// This call fails if the `UserRegistration` is invalid.
     ///
-    fn register(&mut self, user: Validated<UserRegistration>) -> Result<UserIdentification>;
+    fn register(&mut self, user: Validated<UserRegistration>) -> Result<UserId>;
 
     /// Creates a `Session` by providing `UserCredentials`
     ///
