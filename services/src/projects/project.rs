@@ -5,7 +5,7 @@ use crate::error::Error;
 use crate::error;
 use crate::error::Result;
 use snafu::ensure;
-use geoengine_datatypes::primitives::{BoundingBox2D, TimeInterval, Coordinate2D};
+use geoengine_datatypes::primitives::{BoundingBox2D, TimeInterval, Coordinate2D, SpatialBounded, TemporalBounded};
 use std::cmp::Ordering;
 use crate::util::user_input::UserInput;
 use crate::util::identifiers::Identifier;
@@ -89,6 +89,18 @@ impl STRectangle {
                                              Coordinate2D::new(upper_left_x, upper_left_y))?,
             time_interval: TimeInterval::new(time_start, time_stop)?,
         })
+    }
+}
+
+impl SpatialBounded for STRectangle {
+    fn spatial_bounds(&self) -> BoundingBox2D {
+        self.bounding_box
+    }
+}
+
+impl TemporalBounded for STRectangle {
+    fn temporal_bounds(&self) -> TimeInterval {
+        self.time_interval
     }
 }
 
