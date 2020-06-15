@@ -110,7 +110,7 @@ impl ProjectDB for HashMapProjectDB {
             error::ProjectLoadFailed
         );
         let project_versions = self.projects.get(&project).ok_or(error::Error::ProjectLoadFailed)?;
-        if let LoadVersion::VERSION(version) = version {
+        if let LoadVersion::Version(version) = version {
             Ok(
                 project_versions.iter()
                     .find(|p| p.version.id == version)

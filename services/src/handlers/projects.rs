@@ -48,7 +48,7 @@ pub fn load_project_handler<T: UserDB, R: ProjectDB>(user_db: DB<T>, project_db:
                     .map(|id: Uuid| LoadVersion::from(Some(id)))
             )
             .or(
-                warp::path!("project" / "load").map(|| LoadVersion::LATEST)
+                warp::path!("project" / "load").map(|| LoadVersion::Latest)
             ).unify()
         )
         .and(authenticate(user_db))

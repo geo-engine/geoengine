@@ -83,8 +83,8 @@ pub struct STRectangle {
 
 impl STRectangle {
     pub fn new(lower_left_x: f64, lower_left_y: f64, upper_left_x: f64, upper_left_y: f64,
-                      time_start: i64, time_stop: i64) -> Result<Self> {
-        Ok (Self {
+               time_start: i64, time_stop: i64) -> Result<Self> {
+        Ok(Self {
             bounding_box: BoundingBox2D::new(Coordinate2D::new(lower_left_x, lower_left_y),
                                              Coordinate2D::new(upper_left_x, upper_left_y))?,
             time_interval: TimeInterval::new(time_start, time_stop)?,
@@ -116,7 +116,7 @@ pub enum OrderBy {
     DateAsc,
     DateDesc,
     NameAsc,
-    NameDesc
+    NameDesc,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
@@ -125,7 +125,7 @@ pub struct ProjectListing {
     pub name: String,
     pub description: String,
     pub layer_name: Vec<String>,
-    pub changed: DateTime<Utc>
+    pub changed: DateTime<Utc>,
 }
 
 impl From<&Project> for ProjectListing {
@@ -135,7 +135,7 @@ impl From<&Project> for ProjectListing {
             name: project.name.clone(),
             description: project.description.clone(),
             layer_name: project.layers.iter().map(|l| l.name.clone()).collect(),
-            changed: project.version.changed
+            changed: project.version.changed,
         }
     }
 }
@@ -173,7 +173,7 @@ pub struct UpdateProject {
     pub description: Option<String>,
     pub layers: Option<Vec<Option<Layer>>>,
     pub view: Option<STRectangle>,
-    pub bounds: Option<STRectangle>
+    pub bounds: Option<STRectangle>,
 }
 
 impl UserInput for UpdateProject {
@@ -258,16 +258,16 @@ impl PartialOrd for ProjectVersion {
 }
 
 pub enum LoadVersion {
-    VERSION (ProjectVersionId),
-    LATEST
+    Version(ProjectVersionId),
+    Latest,
 }
 
 impl From<Option<Uuid>> for LoadVersion {
     fn from(id: Option<Uuid>) -> Self {
         if let Some(id) = id {
-            LoadVersion::VERSION(ProjectVersionId::from_uuid(id))
+            LoadVersion::Version(ProjectVersionId::from_uuid(id))
         } else {
-            LoadVersion::LATEST
+            LoadVersion::Latest
         }
     }
 }

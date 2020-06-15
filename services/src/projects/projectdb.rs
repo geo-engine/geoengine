@@ -15,7 +15,7 @@ pub trait ProjectDB: Send + Sync {
 
     /// Load the the latest version of the `project` for the `user`
     fn load_latest(&self, user: UserId, project: ProjectId) -> Result<Project> {
-        self.load(user, project, LoadVersion::LATEST)
+        self.load(user, project, LoadVersion::Latest)
     }
 
     /// Create a new `project` for the `user`
