@@ -1,0 +1,13 @@
+[package]
+name = "geoengine-common"
+version = "0.1.0"
+authors = [
+    "Christian Beilschmidt <beilschmidt@mathematik.uni-marburg.de>",
+    "Johannes Drönner <droenner@mathematik.uni-marburg.de>",
+    "Michael Mattig <mattig@mathematik.uni-marburg.de>"
+]
+edition = "2018"
+
+[dependencies]
+config = "0.10.1"
+lazy_static = "1.4.0"
