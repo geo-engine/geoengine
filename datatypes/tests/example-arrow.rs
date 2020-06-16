@@ -5,7 +5,7 @@ use arrow::array::{
 };
 use arrow::buffer::{Buffer, MutableBuffer};
 use arrow::compute::kernels::filter::filter;
-use arrow::datatypes::{DataType, DateUnit, Field, Schema, ToByteSlice};
+use arrow::datatypes::{DataType, DateUnit, Field, Schema};
 use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval};
 use ocl::ProQue;
 use std::{mem, slice};
@@ -55,7 +55,7 @@ fn null_values() {
 
     //    eprintln!("{:?}", underlying_data);
 
-    let casted_data = buffer.typed_data::<i32>();
+    let casted_data = unsafe { buffer.typed_data::<i32>() };
 
     assert_eq!(casted_data.len(), 5);
 
@@ -90,6 +90,7 @@ fn null_bytes() {
 }
 
 #[test]
+#[allow(clippy::float_cmp)]
 fn offset() {
     let array = {
         let mut array_builder = Float64Builder::new(5);
@@ -107,13 +108,18 @@ fn offset() {
 
     assert_eq!(subarray.len(), 2);
     assert_eq!(subarray.offset(), 2);
-    assert_eq!(typed_subarray.values().typed_data::<f64>().len(), 5); // does NOT point to sub-slice
+    assert_eq!(
+        unsafe { typed_subarray.values().typed_data::<f64>() }.len(),
+        5
+    ); // does NOT point to sub-slice
 
     assert_eq!(array.value_slice(2, 2), &[20., 9.4]);
 }
 
 #[test]
 fn strings() {
+    use arrow::datatypes::ToByteSlice;
+
     let array = {
         let mut strings = String::new();
         let mut offsets: Vec<i32> = Vec::new();
@@ -177,7 +183,7 @@ fn strings2() {
 
     assert_eq!(array.value_data().data(), b"hellofromtheotherside");
     assert_eq!(
-        array.value_offsets().typed_data::<i32>(),
+        unsafe { array.value_offsets().typed_data::<i32>() },
         &[0, 5, 9, 12, 17, 21]
     );
 }
@@ -213,7 +219,10 @@ fn list() {
             .value_slice(0, 5),
         &[0, 1, 2, 3, 4],
     );
-    assert_eq!(array.data().buffers()[0].typed_data::<i32>(), &[0, 2, 5]); // its in buffer 0... kind of unstable...
+    assert_eq!(
+        unsafe { array.data().buffers()[0].typed_data::<i32>() },
+        &[0, 2, 5]
+    ); // its in buffer 0... kind of unstable...
 }
 
 #[test]
@@ -493,14 +502,14 @@ fn nested_lists() {
 
     assert_eq!(array.data().buffers().len(), 1);
     assert_eq!(
-        array.data().buffers()[0].typed_data::<i32>(),
+        unsafe { array.data().buffers()[0].typed_data::<i32>() },
         &[0, 2, 3], // indices of first level arrays in second level structure
     );
 
     assert_eq!(array.data().child_data().len(), 1);
     assert_eq!(array.data().child_data()[0].buffers().len(), 1);
     assert_eq!(
-        array.data().child_data()[0].buffers()[0].typed_data::<i32>(),
+        unsafe { array.data().child_data()[0].buffers()[0].typed_data::<i32>() },
         &[0, 3, 5, 6], // indices of second level arrays in actual data
     );
 
@@ -510,13 +519,15 @@ fn nested_lists() {
         1,
     );
     assert_eq!(
-        array.data().child_data()[0].child_data()[0].buffers()[0].typed_data::<i32>(),
+        unsafe { array.data().child_data()[0].child_data()[0].buffers()[0].typed_data::<i32>() },
         &[10, 11, 12, 20, 21, 30], // data
     );
 }
 
 #[test]
 fn multipoints() {
+    use arrow::datatypes::ToByteSlice;
+
     let array = {
         let data = ArrayData::builder(DataType::List(
             DataType::FixedSizeList(DataType::Float64.into(), 2).into(),
@@ -567,4 +578,134 @@ fn multipoints() {
         unsafe { slice::from_raw_parts(floats.as_ptr() as *const Coordinate2D, floats.len()) };
 
     assert_eq!(coordinates[4], Coordinate2D::new(41., 42.));
+}
+
+#[test]
+#[allow(clippy::float_cmp)]
+fn multipoint_builder() {
+    let float_builder = arrow::array::Float64Builder::new(0);
+    let coordinate_builder = arrow::array::FixedSizeListBuilder::new(float_builder, 2);
+    let mut multi_point_builder = arrow::array::ListBuilder::new(coordinate_builder);
+
+    multi_point_builder
+        .values()
+        .values()
+        .append_slice(&[0.0, 0.1])
+        .unwrap();
+    multi_point_builder.values().append(true).unwrap();
+    multi_point_builder
+        .values()
+        .values()
+        .append_slice(&[1.0, 1.1])
+        .unwrap();
+    multi_point_builder.values().append(true).unwrap();
+
+    multi_point_builder.append(true).unwrap(); // first multi point
+
+    multi_point_builder
+        .values()
+        .values()
+        .append_slice(&[2.0, 2.1])
+        .unwrap();
+    multi_point_builder.values().append(true).unwrap();
+    multi_point_builder
+        .values()
+        .values()
+        .append_slice(&[3.0, 3.1])
+        .unwrap();
+    multi_point_builder.values().append(true).unwrap();
+    multi_point_builder
+        .values()
+        .values()
+        .append_slice(&[4.0, 4.1])
+        .unwrap();
+    multi_point_builder.values().append(true).unwrap();
+
+    multi_point_builder.append(true).unwrap(); // second multi point
+
+    let multi_point = multi_point_builder.finish();
+
+    let first_multi_point_ref = multi_point.value(0);
+    let first_multi_point: &arrow::array::FixedSizeListArray =
+        first_multi_point_ref.as_any().downcast_ref().unwrap();
+    let coordinates_ref = first_multi_point.values();
+    let coordinates: &Float64Array = coordinates_ref.as_any().downcast_ref().unwrap();
+
+    assert_eq!(coordinates.value_slice(0, 2 * 2), &[0.0, 0.1, 1.0, 1.1]);
+
+    let second_multi_point_ref = multi_point.value(1);
+    let second_multi_point: &arrow::array::FixedSizeListArray =
+        second_multi_point_ref.as_any().downcast_ref().unwrap();
+    let coordinates_ref = second_multi_point.values();
+    let _coordinates: &Float64Array = coordinates_ref.as_any().downcast_ref().unwrap();
+
+    // assert_eq!(
+    //     coordinates.value_slice(0, 2 * 3),
+    //     &[2.0, 2.1, 3.0, 3.1, 4.0, 4.1]
+    // );
+}
+
+#[test]
+#[allow(clippy::cast_ptr_alignment)]
+fn multipoint_builder_bytes() {
+    use arrow::datatypes::ToByteSlice;
+
+    let coordinate_builder =
+        arrow::array::FixedSizeBinaryBuilder::new(0, std::mem::size_of::<[f64; 2]>() as i32);
+    let mut multi_point_builder = arrow::array::ListBuilder::new(coordinate_builder);
+
+    multi_point_builder
+        .values()
+        .append_value(&[0.0, 0.1].to_byte_slice())
+        .unwrap();
+    multi_point_builder
+        .values()
+        .append_value(&[1.0, 1.1].to_byte_slice())
+        .unwrap();
+
+    multi_point_builder.append(true).unwrap(); // first multi point
+
+    multi_point_builder
+        .values()
+        .append_value(&[2.0, 2.1].to_byte_slice())
+        .unwrap();
+    multi_point_builder
+        .values()
+        .append_value(&[3.0, 3.1].to_byte_slice())
+        .unwrap();
+    multi_point_builder
+        .values()
+        .append_value(&[4.0, 4.1].to_byte_slice())
+        .unwrap();
+
+    multi_point_builder.append(true).unwrap(); // second multi point
+
+    let multi_point = multi_point_builder.finish();
+
+    let first_multi_point_ref = multi_point.value(0);
+    let first_multi_point: &arrow::array::FixedSizeBinaryArray =
+        first_multi_point_ref.as_any().downcast_ref().unwrap();
+
+    let floats: &[Coordinate2D] = unsafe {
+        std::slice::from_raw_parts(
+            first_multi_point.value(0)[0] as *const u8 as *const _,
+            first_multi_point.len(),
+        )
+    };
+    assert_eq!(floats, &[(0.0, 0.1).into(), (1.0, 1.1).into()]);
+
+    let second_multi_point_ref = multi_point.value(1);
+    let second_multi_point: &arrow::array::FixedSizeBinaryArray =
+        second_multi_point_ref.as_any().downcast_ref().unwrap();
+
+    let floats: &[Coordinate2D] = unsafe {
+        std::slice::from_raw_parts(
+            second_multi_point.value(0)[0] as *const u8 as *const _,
+            second_multi_point.len(),
+        )
+    };
+    assert_eq!(
+        floats,
+        &[(2.0, 2.1).into(), (3.0, 3.1).into(), (4.0, 4.1).into()]
+    );
 }

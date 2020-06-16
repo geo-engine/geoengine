@@ -1,7 +1,8 @@
 use arrow::error::ArrowError;
 use snafu::Snafu;
 
-use crate::primitives::{Coordinate2D, TimeInterval};
+use crate::collections::FeatureCollectionError;
+use crate::primitives::{Coordinate2D, PrimitivesError, TimeInterval};
 
 #[derive(Debug, PartialEq, Snafu)]
 #[snafu(visibility = "pub(crate)")]
@@ -15,17 +16,25 @@ pub enum Error {
     },
 
     #[snafu(display("Field is reserved or already in use: {}", name))]
-    ColumnNameConflict { name: String },
+    ColumnNameConflict {
+        name: String,
+    },
 
     #[snafu(display("Start `{}` must be before end `{}`", start, end))]
-    TimeIntervalEndBeforeStart { start: i64, end: i64 },
+    TimeIntervalEndBeforeStart {
+        start: i64,
+        end: i64,
+    },
 
     #[snafu(display(
         "{} cannot be unioned with {} since the intervals are neither intersecting nor contiguous",
         i1,
         i2
     ))]
-    TimeIntervalUnmatchedIntervals { i1: TimeInterval, i2: TimeInterval },
+    TimeIntervalUnmatchedIntervals {
+        i1: TimeInterval,
+        i2: TimeInterval,
+    },
 
     #[snafu(display(
         "{} is not a valid index in the dimension {} with size {}",
@@ -69,20 +78,33 @@ pub enum Error {
         collection_length: usize,
     },
 
-    #[snafu(display("FeatureCollection exception: {}", details))]
-    FeatureCollection { details: String },
+    FeatureCollection {
+        source: FeatureCollectionError,
+    },
 
     #[snafu(display("FeatureData exception: {}", details))]
-    FeatureData { details: String },
+    FeatureData {
+        details: String,
+    },
 
     #[snafu(display("FeatureCollectionBuilder exception: {}", details))]
-    FeatureCollectionBuilder { details: String },
+    FeatureCollectionBuilder {
+        details: String,
+    },
 
     #[snafu(display("Plot exception: {}", details))]
-    Plot { details: String },
+    Plot {
+        details: String,
+    },
 
     #[snafu(display("Colorizer exception: {}", details))]
-    Colorizer { details: String },
+    Colorizer {
+        details: String,
+    },
+
+    Primitives {
+        source: PrimitivesError,
+    },
 }
 
 impl From<arrow::error::ArrowError> for Error {

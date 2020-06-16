@@ -34,3 +34,34 @@ macro_rules! json_map {
         }
     };
 }
+
+/// Converts an `Iterator<Item=T>` to an `Iterator<Item=Option<T>>`
+#[derive(Clone, Debug)]
+pub struct SomeIter<I, T>
+where
+    I: Iterator<Item = T>,
+{
+    inner_iterator: I,
+}
+
+impl<I, T> SomeIter<I, T>
+where
+    I: Iterator<Item = T>,
+{
+    pub fn new(iterator: I) -> Self {
+        Self {
+            inner_iterator: iterator,
+        }
+    }
+}
+
+impl<I, T> Iterator for SomeIter<I, T>
+where
+    I: Iterator<Item = T>,
+{
+    type Item = Option<T>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner_iterator.next().map(Into::into)
+    }
+}

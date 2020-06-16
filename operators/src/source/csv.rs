@@ -3,7 +3,10 @@ use crate::util::Result;
 use csv::{Position, Reader};
 use futures::future;
 use futures::stream::{self, BoxStream, StreamExt};
-use geoengine_datatypes::collections::MultiPointCollection;
+use geoengine_datatypes::collections::{
+    BuilderProvider, FeatureCollectionBuilder, FeatureCollectionRowBuilder,
+    GeoFeatureCollectionRowBuilder, MultiPointCollection,
+};
 use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval};
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, OptionExt, ResultExt};
@@ -205,11 +208,11 @@ impl CsvSource {
                     return Ok(MultiPointCollection::empty());
                 }
 
-                let mut builder = MultiPointCollection::builder();
+                let mut builder = MultiPointCollection::builder().finish_header();
                 for result in chunk {
-                    builder.append_coordinate(result.coordinate)?;
-                    builder.append_time_interval(result.time_interval)?;
-                    builder.finish_row()?;
+                    builder.push_geometry(result.coordinate.into())?;
+                    builder.push_time_interval(result.time_interval)?;
+                    builder.finish_row();
                 }
                 Ok(builder.build()?)
             })
