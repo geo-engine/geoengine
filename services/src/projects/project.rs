@@ -1,4 +1,3 @@
-use crate::workflows::Workflow;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use crate::error::Error;
@@ -12,6 +11,7 @@ use crate::util::identifiers::Identifier;
 use crate::users::user::UserId;
 use uuid::Uuid;
 use geoengine_datatypes::operations::image::Colorizer;
+use crate::workflows::workflow::WorkflowId;
 
 identifier!(ProjectId);
 
@@ -108,7 +108,7 @@ impl TemporalBounded for STRectangle {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Layer {
     // TODO: check that workflow/operator output type fits to the type of LayerInfo
-    pub workflow: Workflow,
+    pub workflow: WorkflowId,
     pub name: String,
     pub info: LayerInfo,
 }

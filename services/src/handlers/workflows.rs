@@ -3,8 +3,8 @@ use std::sync::Arc;
 use warp::reply::Reply;
 use uuid::Uuid;
 
-use crate::workflows::registry::{WorkflowRegistry, WorkflowId};
-use crate::workflows::Workflow;
+use crate::workflows::registry::WorkflowRegistry;
+use crate::workflows::workflow::{Workflow, WorkflowId};
 use crate::handlers::DB;
 use crate::util::identifiers::Identifier;
 

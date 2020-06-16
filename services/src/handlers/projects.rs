@@ -164,9 +164,8 @@ mod tests {
     use crate::users::hashmap_userdb::HashMapUserDB;
     use crate::projects::project::{ProjectId, ProjectFilter, OrderBy, ProjectListing, Project, UpdateProject, ProjectPermission, STRectangle, ProjectVersion, Layer, RasterInfo, LayerInfo};
     use crate::users::user::{UserRegistration, UserCredentials};
-    use crate::workflows::Workflow;
-    use geoengine_operators::Operator;
-    use geoengine_operators::operators::{GdalSourceParameters, NoSources};
+    use crate::workflows::workflow::WorkflowId;
+    use crate::util::identifiers::Identifier;
     use geoengine_datatypes::operations::image::Colorizer;
 
     #[tokio::test]
@@ -389,15 +388,7 @@ mod tests {
             description: None,
             layers: Some(vec![
                 Some(Layer {
-                    workflow: Workflow {
-                        operator: Operator::GdalSource {
-                            params: GdalSourceParameters {
-                                source_name: "test".into(),
-                                channel: 0,
-                            },
-                            sources: NoSources {},
-                        }
-                    },
+                    workflow: WorkflowId::new(),
                     name: "L1".to_string(),
                     info: LayerInfo::Raster(RasterInfo {
                         colorizer: Colorizer::Rgba
