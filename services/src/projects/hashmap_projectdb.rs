@@ -47,7 +47,9 @@ impl ProjectDB for HashMapProjectDB {
     /// }.validated().unwrap();
     /// let projects = project_db.list(user, options);
     ///
-    /// assert_eq!(projects.len(), 2)
+    /// assert_eq!(projects.len(), 2);
+    /// assert_eq!(projects[0].name, "Test9");
+    /// assert_eq!(projects[1].name, "Test8");
     /// ```
     fn list(&self, user: UserId, options: Validated<ProjectListOptions>) -> Vec<ProjectListing> {
         let ProjectListOptions { only_owned, filter, order, offset, limit } = options.user_input;

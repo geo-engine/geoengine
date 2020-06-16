@@ -142,7 +142,7 @@ pub struct ProjectListing {
     pub id: ProjectId,
     pub name: String,
     pub description: String,
-    pub layer_name: Vec<String>,
+    pub layer_names: Vec<String>,
     pub changed: DateTime<Utc>,
 }
 
@@ -152,7 +152,7 @@ impl From<&Project> for ProjectListing {
             id: project.id,
             name: project.name.clone(),
             description: project.description.clone(),
-            layer_name: project.layers.iter().map(|l| l.name.clone()).collect(),
+            layer_names: project.layers.iter().map(|l| l.name.clone()).collect(),
             changed: project.version.changed,
         }
     }
