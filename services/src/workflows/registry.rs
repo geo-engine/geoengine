@@ -3,32 +3,32 @@ use uuid::Uuid;
 
 use super::Workflow;
 
-identifier!(WorkflowIdentifier);
+identifier!(WorkflowId);
 
-impl WorkflowIdentifier {
+impl WorkflowId {
     pub fn from_hash(workflow: &Workflow) -> Self {
         Self { id: Uuid::new_v5(&Uuid::NAMESPACE_OID, serde_json::to_string(workflow).unwrap().as_bytes()) }
     }
 }
 
 pub trait WorkflowRegistry: Send + Sync {
-    fn register(&mut self, workflow: Workflow) -> WorkflowIdentifier;
-    fn load(&self, id: &WorkflowIdentifier) -> Option<Workflow>;
+    fn register(&mut self, workflow: Workflow) -> WorkflowId;
+    fn load(&self, id: &WorkflowId) -> Option<Workflow>;
 }
 
 #[derive(Default)]
 pub struct HashMapRegistry {
-    map: HashMap<WorkflowIdentifier, Workflow>
+    map: HashMap<WorkflowId, Workflow>
 }
 
 impl WorkflowRegistry for HashMapRegistry {
-    fn register(&mut self, workflow: Workflow) -> WorkflowIdentifier {
-        let id = WorkflowIdentifier::from_hash(&workflow);
+    fn register(&mut self, workflow: Workflow) -> WorkflowId {
+        let id = WorkflowId::from_hash(&workflow);
         self.map.insert(id, workflow);
         id
     }
 
-    fn load(&self, id: &WorkflowIdentifier) -> Option<Workflow> {
+    fn load(&self, id: &WorkflowId) -> Option<Workflow> {
         self.map.get(&id).cloned()
     }
 }

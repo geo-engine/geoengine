@@ -3,7 +3,7 @@ use std::sync::Arc;
 use warp::reply::Reply;
 use uuid::Uuid;
 
-use crate::workflows::registry::{WorkflowRegistry, WorkflowIdentifier};
+use crate::workflows::registry::{WorkflowRegistry, WorkflowId};
 use crate::workflows::Workflow;
 use crate::handlers::DB;
 use crate::util::identifiers::Identifier;
@@ -35,7 +35,7 @@ async fn register_workflow<T: WorkflowRegistry>(workflow: Workflow, workflow_reg
 
 async fn load_workflow<T: WorkflowRegistry>(id: Uuid, workflow_registry: DB<T>) -> Result<impl warp::Reply, warp::Rejection> {
     let wr = workflow_registry.read().await;
-    match wr.load(&WorkflowIdentifier::from_uuid(id)) {
+    match wr.load(&WorkflowId::from_uuid(id)) {
         Some(w) => Ok(warp::reply::json(&w).into_response()),
         None => Ok(warp::http::StatusCode::NOT_FOUND.into_response())
     }
@@ -83,7 +83,7 @@ mod tests {
         assert_eq!(res.status(), 200);
 
         let body: String = String::from_utf8(res.body().to_vec()).unwrap();
-        let _id: WorkflowIdentifier = serde_json::from_str(&body).unwrap();
+        let _id: WorkflowId = serde_json::from_str(&body).unwrap();
     }
 
     #[tokio::test]
