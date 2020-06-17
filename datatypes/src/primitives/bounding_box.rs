@@ -2,11 +2,13 @@ use super::Coordinate2D;
 use crate::error;
 use crate::util::Result;
 use snafu::ensure;
+use serde::{Deserialize, Serialize};
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 #[repr(C)]
 /// The bounding box of a geometry.
 /// Note: may degenerate to a point!
+#[derive(Deserialize, Serialize)]
 pub struct BoundingBox2D {
     lower_left_coordinate: Coordinate2D,
     upper_right_coordinate: Coordinate2D,

@@ -1,6 +1,7 @@
 use crate::error::Error;
 use warp::{Rejection, Reply};
 
+pub mod wms;
 pub mod users;
 pub mod workflows;
 
