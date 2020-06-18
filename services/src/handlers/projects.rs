@@ -233,7 +233,7 @@ mod tests {
         }
 
         let options = ProjectListOptions {
-            only_owned: false,
+            permissions: vec![ProjectPermission::Owner, ProjectPermission::Write, ProjectPermission::Read],
             filter: ProjectFilter::None,
             order: OrderBy::NameDesc,
             offset: 0,

@@ -19,7 +19,7 @@ impl ProjectDB for HashMapProjectDB {
     /// # Examples
     ///
     /// ```rust
-    /// use geoengine_services::projects::project::{CreateProject, ProjectId, ProjectFilter, OrderBy, ProjectListOptions, STRectangle};
+    /// use geoengine_services::projects::project::{CreateProject, ProjectId, ProjectFilter, OrderBy, ProjectListOptions, STRectangle, ProjectPermission};
     /// use geoengine_services::projects::projectdb::ProjectDB;
     /// use geoengine_services::projects::hashmap_projectdb::HashMapProjectDB;
     /// use geoengine_services::util::user_input::UserInput;
@@ -39,7 +39,7 @@ impl ProjectDB for HashMapProjectDB {
     ///     project_db.create(user, create);
     /// }
     /// let options = ProjectListOptions {
-    ///     only_owned: false,
+    ///     permissions: vec![ProjectPermission::Owner, ProjectPermission::Write, ProjectPermission::Read],
     ///     filter: ProjectFilter::None,
     ///     order: OrderBy::NameDesc,
     ///     offset: 0,
@@ -52,10 +52,10 @@ impl ProjectDB for HashMapProjectDB {
     /// assert_eq!(projects[1].name, "Test8");
     /// ```
     fn list(&self, user: UserId, options: Validated<ProjectListOptions>) -> Vec<ProjectListing> {
-        let ProjectListOptions { only_owned, filter, order, offset, limit } = options.user_input;
+        let ProjectListOptions { permissions, filter, order, offset, limit } = options.user_input;
         #[allow(clippy::filter_map)]
             let mut projects = self.permissions.iter()
-            .filter(|p| p.user == user && (!only_owned || p.permission == ProjectPermission::Owner))
+            .filter(|p| p.user == user && permissions.contains(&p.permission))
             .flat_map(|p| self.projects.get(&p.project).and_then(|p| p.last()))
             .map(ProjectListing::from)
             .filter(|p| match &filter {
@@ -522,7 +522,7 @@ mod test {
         project_db.add_permission(user3, permission2).unwrap();
 
         let options = ProjectListOptions {
-            only_owned: false,
+            permissions: vec![ProjectPermission::Owner, ProjectPermission::Write, ProjectPermission::Read],
             filter: ProjectFilter::None,
             order: OrderBy::NameDesc,
             offset: 0,
@@ -536,7 +536,7 @@ mod test {
         assert!(projects.iter().any(|p| p.name == "User3's"));
 
         let options = ProjectListOptions {
-            only_owned: true,
+            permissions: vec![ProjectPermission::Owner],
             filter: ProjectFilter::None,
             order: OrderBy::NameDesc,
             offset: 0,

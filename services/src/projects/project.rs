@@ -232,7 +232,7 @@ pub struct UserProjectPermission {
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
 pub struct ProjectListOptions {
-    pub only_owned: bool,
+    pub permissions: Vec<ProjectPermission>,
     pub filter: ProjectFilter,
     pub order: OrderBy,
     pub offset: usize,
