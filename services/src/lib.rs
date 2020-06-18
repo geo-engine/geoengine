@@ -23,4 +23,5 @@ pub mod error;
 pub mod handlers;
 pub mod ogc;
 pub mod users;
+pub mod util;
 pub mod workflows;
