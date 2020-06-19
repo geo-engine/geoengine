@@ -1,27 +1,12 @@
 use warp::Filter;
 use std::sync::Arc;
-use tokio::sync::RwLock;
 use warp::reply::Reply;
-use std::str::FromStr;
 use crate::error::Result;
 use crate::users::userdb::UserDB;
-use crate::users::session::{Session, SessionToken};
-use crate::users::user::{UserRegistration, UserCredentials, UserInput};
-
-type DB<T> = Arc<RwLock<T>>;
-
-pub fn authenticate<T: UserDB>(user_db: DB<T>) -> impl warp::Filter<Extract=(Session, ), Error=warp::Rejection> + Clone {
-    async fn do_authenticate<T: UserDB>(user_db: DB<T>, token: String) -> Result<Session, warp::Rejection> {
-        let token = SessionToken::from_str(&token).map_err(|_| warp::reject())?;
-        let db = user_db.read().await;
-        db.session(token).map_err(|_| warp::reject())
-    }
-
-    warp::any()
-        .and(warp::any().map(move || Arc::clone(&user_db)))
-        .and(warp::header::<String>("authorization"))
-        .and_then(do_authenticate)
-}
+use crate::users::session::Session;
+use crate::users::user::{UserRegistration, UserCredentials};
+use crate::handlers::{DB, authenticate};
+use crate::util::user_input::UserInput;
 
 pub fn register_user_handler<T: UserDB>(user_db: DB<T>) -> impl Filter<Extract=impl warp::Reply, Error=warp::Rejection> + Clone {
     warp::post()
@@ -75,9 +60,12 @@ async fn logout<T: UserDB>(session: Session, user_db: DB<T>) -> Result<impl warp
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::users::userdb::{UserDB, HashMapUserDB};
-    use crate::users::user::{UserIdentification, Validated};
+    use crate::users::userdb::UserDB;
+    use crate::users::hashmap_userdb::HashMapUserDB;
     use crate::handlers::handle_rejection;
+    use tokio::sync::RwLock;
+    use crate::util::user_input::Validated;
+    use crate::users::user::UserId;
 
     #[tokio::test]
     async fn register() {
@@ -101,7 +89,7 @@ mod tests {
         assert_eq!(res.status(), 200);
 
         let body: String = String::from_utf8(res.body().to_vec()).unwrap();
-        assert!(serde_json::from_str::<UserIdentification>(&body).is_ok());
+        assert!(serde_json::from_str::<UserId>(&body).is_ok());
     }
 
     #[tokio::test]

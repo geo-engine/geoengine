@@ -1,37 +1,11 @@
 use pwhash::bcrypt;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
-use uuid::Uuid;
 
-use crate::error;
 use crate::error::{Error, Result};
-
-pub trait UserInput {
-    /// Validates user input and returns itself
-    ///
-    /// # Errors
-    ///
-    /// Fails if the user input is invalid
-    ///
-    fn validate(&self) -> Result<()>;
-
-    /// Validates user input and returns itself
-    ///
-    /// # Errors
-    ///
-    /// Fails if the user input is invalid
-    ///
-    fn validated(self) -> Result<Validated<Self>>
-    where
-        Self: Sized,
-    {
-        self.validate().map(|_| Validated { user_input: self })
-    }
-}
-
-pub struct Validated<T: UserInput> {
-    pub user_input: T,
-}
+use crate::error;
+use crate::util::user_input::UserInput;
+use crate::util::identifiers::Identifier;
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
 pub struct UserRegistration {
@@ -74,20 +48,11 @@ pub struct UserCredentials {
     pub password: String,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
-pub struct UserIdentification {
-    id: Uuid,
-}
-
-impl UserIdentification {
-    fn new() -> Self {
-        Self { id: Uuid::new_v4() }
-    }
-}
+identifier!(UserId);
 
 #[derive(Clone)]
 pub struct User {
-    pub id: UserIdentification,
+    pub id: UserId,
     pub email: String,
     pub password_hash: String,
     pub real_name: String,
@@ -97,7 +62,7 @@ pub struct User {
 impl From<UserRegistration> for User {
     fn from(user_registration: UserRegistration) -> Self {
         Self {
-            id: UserIdentification::new(),
+            id: UserId::new(),
             email: user_registration.email,
             password_hash: bcrypt::hash(&user_registration.password).unwrap(),
             real_name: user_registration.real_name,
