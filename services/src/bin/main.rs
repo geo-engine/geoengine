@@ -19,7 +19,7 @@ async fn main() {
             .or(handlers::users::register_user_handler(user_db.clone()))
             .or(handlers::users::login_handler(user_db.clone()))
             .or(handlers::users::logout_handler(user_db.clone()))
-            .or(handlers::wms::wms_handler())
+            .or(handlers::wms::wms_handler(workflow_registry.clone()))
             .recover(handle_rejection)
     ).run(([127, 0, 0, 1], 3030)).await
 }
