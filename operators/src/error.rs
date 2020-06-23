@@ -11,6 +11,7 @@ pub enum Error {
     DataType {
         source: geoengine_datatypes::error::Error,
     },
+    QueryProcessor
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {

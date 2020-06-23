@@ -1,6 +1,6 @@
 use crate::source::CsvSourceParameters;
 use serde::{Deserialize, Serialize};
-
+use geoengine_datatypes::primitives::Coordinate2D;
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Operator {
@@ -18,6 +18,22 @@ pub enum Operator {
         #[serde(default)]
         sources: NoSources,
     },
+    MockPointSource {
+        params: MockPointSourceParameters,
+        sources: NoSources,
+    },
+    MockDelay {
+        params: MockDelayParameters,
+        sources: AllSources,
+    },
+    MockRasterSource {
+        params: MockRasterSourceParameters,
+        sources: NoSources
+    },
+    MockRasterPoints {
+        params: MockRasterPointsParameters,
+        sources: AllSources // TODO: only raster/points
+    }
 }
 
 #[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -136,4 +152,30 @@ pub struct ProjectionParameters {
 pub struct GdalSourceParameters {
     pub source_name: String,
     pub channel: u8,
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct MockPointSourceParameters {
+    pub points: Vec<Coordinate2D>,
+}
+
+impl Eq for MockPointSourceParameters {}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MockDelayParameters {
+    pub seconds: u64,
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct MockRasterSourceParameters {
+    pub data: Vec<f64>,
+    pub dim: [usize; 2],
+    pub geo_transform: [f64; 6]
+}
+
+impl Eq for MockRasterSourceParameters {}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MockRasterPointsParameters {
+    pub coords: [usize; 2]
 }

@@ -1,7 +1,4 @@
-use crate::raster::{
-    Capacity, Dim, GeoTransform, GridDimension, GridIndex, GridPixelAccess, GridPixelAccessMut,
-    Raster,
-};
+use crate::raster::{Capacity, Dim, GeoTransform, GridDimension, GridIndex, GridPixelAccess, GridPixelAccessMut, Raster, GenericRaster};
 use crate::util::Result;
 use crate::{
     error,
@@ -9,6 +6,7 @@ use crate::{
 };
 use snafu::ensure;
 use std::convert::AsRef;
+use std::fmt::Debug;
 
 #[derive(Clone, Debug)]
 pub struct BaseRaster<D, T, C> {
@@ -139,6 +137,12 @@ where
 
 pub type Raster2D<T> = BaseRaster<Dim<[usize; 2]>, T, Vec<T>>;
 pub type Raster3D<T> = BaseRaster<Dim<[usize; 3]>, T, Vec<T>>;
+
+impl <T: Send + Debug> GenericRaster for Raster2D<T> {
+    fn get(&self) {
+        unimplemented!()
+    }
+}
 
 #[cfg(test)]
 mod tests {

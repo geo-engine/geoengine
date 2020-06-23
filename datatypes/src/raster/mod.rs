@@ -6,6 +6,12 @@ pub use self::geo_transform::{GdalGeoTransform, GeoTransform};
 pub use self::grid_dimension::{Dim, GridDimension, GridIndex};
 use super::primitives::{SpatialBounded, TemporalBounded};
 use crate::util::Result;
+use std::fmt::Debug;
+
+pub trait GenericRaster: Send + Debug {
+    // TODO: make data accessible
+    fn get(&self);
+}
 
 pub trait Raster<D: GridDimension, T: Copy, C: Capacity>: SpatialBounded + TemporalBounded {
     /// returns the grid dimension object of type D: `GridDimension`

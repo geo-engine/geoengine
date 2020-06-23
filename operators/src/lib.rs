@@ -1,3 +1,5 @@
+#![feature(async_closure)]
+
 // configure default clippy lints
 #![deny(clippy::correctness)]
 #![warn(clippy::complexity, clippy::style, clippy::perf, clippy::pedantic)]
@@ -18,7 +20,9 @@
     clippy::wildcard_imports
 )]
 
+pub mod engine;
 pub mod error;
+pub mod mock;
 pub mod operators;
 pub mod source;
 pub mod util;
