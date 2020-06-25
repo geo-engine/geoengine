@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::Error;
 use crate::error;
 use crate::error::Result;
-use snafu::ensure;
+use snafu::{ensure, ResultExt};
 use geoengine_datatypes::primitives::{BoundingBox2D, TimeInterval, Coordinate2D, SpatialBounded, TemporalBounded};
 use std::cmp::Ordering;
 use crate::util::user_input::UserInput;
@@ -87,8 +87,9 @@ impl STRectangle {
                time_start: i64, time_stop: i64) -> Result<Self> {
         Ok(Self {
             bounding_box: BoundingBox2D::new(Coordinate2D::new(lower_left_x, lower_left_y),
-                                             Coordinate2D::new(upper_left_x, upper_left_y))?,
-            time_interval: TimeInterval::new(time_start, time_stop)?,
+                                             Coordinate2D::new(upper_left_x, upper_left_y))
+                .context(error::DataType)?,
+            time_interval: TimeInterval::new(time_start, time_stop).context(error::DataType{})?,
         })
     }
 }

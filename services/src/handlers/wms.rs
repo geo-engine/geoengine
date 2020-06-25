@@ -2,12 +2,13 @@ use warp::{Filter, http::Response};
 use warp::reply::Reply;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use snafu::ResultExt;
 
 use crate::ogc::wms::request::{WMSRequest, GetCapabilities, GetMap};
 use geoengine_datatypes::raster::Raster2D;
 use geoengine_datatypes::operations::image::{Colorizer, ToPng};
-use crate::error::Error;
 use crate::workflows::registry::WorkflowRegistry;
+use crate::error;
 
 type WR<T> = Arc<RwLock<T>>;
 
@@ -54,16 +55,16 @@ fn get_map_mock() -> Result<Box<dyn warp::Reply>, warp::Rejection> {
         None,
         Default::default(),
         Default::default(),
-    ).map_err(Error::from).map_err(warp::reject::custom)?;
+    ).context(error::DataType).map_err(warp::reject::custom)?;
 
     let colorizer = Colorizer::rgba();
     let image_bytes = raster.to_png(100, 100, &colorizer)
-        .map_err(Error::from).map_err(warp::reject::custom)?;
+        .context(error::DataType).map_err(warp::reject::custom)?;
 
     Ok(
         Box::new(Response::builder()
             .header("Content-Type", "image/png")
-            .body(image_bytes).map_err(Error::from).map_err(warp::reject::custom)?
+            .body(image_bytes).context(error::HTTP).map_err(warp::reject::custom)?
         )
     )
 }

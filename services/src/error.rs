@@ -29,20 +29,3 @@ pub enum Error {
 }
 
 impl Reject for Error {}
-
-impl From<geoengine_datatypes::error::Error> for Error {
-    fn from(datatypes_error: geoengine_datatypes::error::Error) -> Self {
-        Error::DataType {
-            source: datatypes_error,
-        }
-    }
-}
-
-// TODO: generic way to wrap external errors
-impl From<warp::http::Error> for Error {
-    fn from(http_error: warp::http::Error) -> Self {
-        Error::HTTP {
-            source: http_error,
-        }
-    }
-}
