@@ -7,10 +7,10 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 #[snafu(visibility = "pub(crate)")]
 pub enum Error {
     DataType {
-        error: geoengine_datatypes::error::Error
+        source: geoengine_datatypes::error::Error
     },
     HTTP {
-        error: warp::http::Error
+        source: warp::http::Error
     },
 
     #[snafu(display("Registration failed: {:?}", reason))]
@@ -26,7 +26,7 @@ impl Reject for Error {}
 impl From<geoengine_datatypes::error::Error> for Error {
     fn from(datatypes_error: geoengine_datatypes::error::Error) -> Self {
         Error::DataType {
-            error: datatypes_error,
+            source: datatypes_error,
         }
     }
 }
@@ -35,7 +35,7 @@ impl From<geoengine_datatypes::error::Error> for Error {
 impl From<warp::http::Error> for Error {
     fn from(http_error: warp::http::Error) -> Self {
         Error::HTTP {
-            error: http_error,
+            source: http_error,
         }
     }
 }
