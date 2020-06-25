@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize};
 #[repr(C)]
 /// The bounding box of a geometry.
 /// Note: may degenerate to a point!
-#[derive(Deserialize, Serialize)]
 pub struct BoundingBox2D {
     lower_left_coordinate: Coordinate2D,
     upper_right_coordinate: Coordinate2D,

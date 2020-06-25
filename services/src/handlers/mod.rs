@@ -5,6 +5,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use std::str::FromStr;
 use warp::Filter;
+use crate::error::Error;
 
 pub mod projects;
 pub mod wms;
