@@ -19,6 +19,13 @@ pub enum Error {
     LogoutFailed,
     SessionDoesNotExist,
     InvalidSessionToken,
+
+    ProjectCreateFailed,
+    ProjectListFailed,
+    ProjectLoadFailed,
+    ProjectUpdateFailed,
+    ProjectDeleteFailed,
+    PermissionFailed
 }
 
 impl Reject for Error {}

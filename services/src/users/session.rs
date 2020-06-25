@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::error;
 use crate::error::Result;
-use crate::users::user::{User, UserIdentification};
+use crate::users::user::{User, UserId};
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
 pub struct SessionToken {
@@ -35,12 +35,12 @@ impl fmt::Display for SessionToken {
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
 pub struct Session {
-    user: UserIdentification,
+    pub user: UserId,
     pub token: SessionToken,
 }
 
 impl Session {
     pub fn new(user: &User) -> Session {
-        Self { user: user.id.clone(), token: SessionToken::default() }
+        Self { user: user.id, token: SessionToken::default() }
     }
 }
