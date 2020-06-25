@@ -105,9 +105,9 @@ pub fn parse_bbox<'de, D>(deserializer: D) -> Result<BoundingBox2D, D::Error>
         BoundingBox2D::new(
             Coordinate2D::new(x1, y1),
             Coordinate2D::new(x2, y2))
-            .map_err(|_| D::Error::custom("Not a valid bbox"))
+            .map_err(|_| D::Error::custom("Invalid bbox"))
     } else {
-        Err(D::Error::custom("Not a valid bbox"))
+        Err(D::Error::custom("Invalid bbox"))
     }
 }
 
@@ -129,11 +129,11 @@ pub fn parse_time<'de, D>(deserializer: D) -> Result<Option<TimeInterval>, D::Er
     match *split.as_slice() {
         [Ok(time)] => TimeInterval::new(time.timestamp(), time.timestamp())
             .map(Some)
-            .map_err(|_| D::Error::custom("Not a valid time")),
+            .map_err(|_| D::Error::custom("Invalid time")),
         [Ok(start), Ok(end)]  => TimeInterval::new(start.timestamp(), end.timestamp())
             .map(Some)
-            .map_err(|_| D::Error::custom("Not a valid time")),
-        _ => Err(D::Error::custom("Not a valid time"))
+            .map_err(|_| D::Error::custom("Invalid time")),
+        _ => Err(D::Error::custom("Invalid time"))
     }
 }
 
