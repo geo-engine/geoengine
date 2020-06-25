@@ -111,15 +111,15 @@ pub fn parse_bbox<'de, D>(deserializer: D) -> Result<BoundingBox2D, D::Error>
     }
 }
 
+/// Parse the time string of a WMS request
+/// time is specified in ISO8601, it can either be an instant (single datetime) or an interval
+/// An interval is separated by "/". "Either the start value or the end value can be omitted to
+/// indicate no restriction on time in that direction."
+/// sources: - http://docs.geoserver.org/2.8.x/en/user/services/wms/time.html#wms-time
+///          - http://www.ogcnetwork.net/node/178
 pub fn parse_time<'de, D>(deserializer: D) -> Result<Option<TimeInterval>, D::Error>
     where D: serde::Deserializer<'de>
 {
-    // time is specified in ISO8601, it can either be an instant (single datetime) or an interval
-    // An interval is separated by "/". "Either the start value or the end value can be omitted to
-    // indicate no restriction on time in that direction."
-    // sources: - http://docs.geoserver.org/2.8.x/en/user/services/wms/time.html#wms-time
-    //          - http://www.ogcnetwork.net/node/178
-
     // TODO: support relative time intervals
 
     let s = <&str as serde::Deserialize>::deserialize(deserializer)?;
