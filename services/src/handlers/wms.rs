@@ -41,7 +41,7 @@ fn get_map<T: WorkflowRegistry>(request: &GetMap, _workflow_registry: &WR<T>) ->
     // TODO: validate request?
     // TODO: properly handle request
     if request.layer == "test" {
-        get_map_mock()
+        get_map_mock(request)
     } else {
         // workflow_registry.read().await.load(WorkflowIdentifier::from_uuid(request.layer.clone() as Uuid));
         Ok(Box::new(warp::http::StatusCode::INTERNAL_SERVER_ERROR.into_response()))
@@ -53,7 +53,7 @@ fn get_legend_graphic<T: WorkflowRegistry>(_request: &GetLegendGraphic, _workflo
     Ok(Box::new(warp::http::StatusCode::INTERNAL_SERVER_ERROR.into_response()))
 }
 
-fn get_map_mock() -> Result<Box<dyn warp::Reply>, warp::Rejection> {
+fn get_map_mock(request: &GetMap) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
     let raster = Raster2D::new(
         [2, 2].into(),
         vec![0xFF00_00FF_u32, 0x00FF_00FF_u32, 0x0000_00FF_u32, 0x0000_00FF_u32],
@@ -63,7 +63,7 @@ fn get_map_mock() -> Result<Box<dyn warp::Reply>, warp::Rejection> {
     ).context(error::DataType).map_err(warp::reject::custom)?;
 
     let colorizer = Colorizer::rgba();
-    let image_bytes = raster.to_png(100, 100, &colorizer)
+    let image_bytes = raster.to_png(request.width, request.height, &colorizer)
         .context(error::DataType).map_err(warp::reject::custom)?;
 
     Ok(
@@ -85,7 +85,7 @@ mod tests {
 
         let res = warp::test::request()
             .method("GET")
-            .path("/wms?request=GetMap&service=WMS&version=1.3.0&layer=test&bbox=1,2,3,4&width=2&height=2&crs=foo&styles=ssss&format=image/png")
+            .path("/wms?request=GetMap&service=WMS&version=1.3.0&layer=test&bbox=1,2,3,4&width=100&height=100&crs=foo&styles=ssss&format=image/png")
             .reply(&wms_handler(workflow_registry))
             .await;
         assert_eq!(res.status(), 200);
