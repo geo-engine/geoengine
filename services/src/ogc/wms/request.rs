@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use crate::util::from_str;
+use crate::util::{from_str, from_str_option};
 use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, TimeInterval};
 use serde::de::Error;
 
@@ -44,7 +44,8 @@ pub struct GetMap {
     #[serde(default)]
     #[serde(deserialize_with = "parse_time")]
     pub time: Option<TimeInterval>,
-    // TODO: parse Option<TimeInterval>,
+    #[serde(default)]
+    #[serde(deserialize_with = "from_str_option")]
     pub transparent: Option<bool>,
     pub bgcolor: Option<String>,
     pub sld: Option<String>,
@@ -145,26 +146,26 @@ mod tests {
 
     #[test]
     fn deserialize_get_map() {
-        let query = "request=GetMap&service=WMS&version=1.3.0&layer=test&bbox=1,2,3,4&width=2&height=2&crs=foo&styles=ssss&format=image/png&time=2000-01-01T00:00:00.0Z/2000-01-02T00:00:00.0Z";
+        let query = "request=GetMap&service=WMS&version=1.3.0&layer=test&bbox=1,2,3,4&width=2&height=2&crs=foo&styles=ssss&format=image/png&time=2000-01-01T00:00:00.0Z/2000-01-02T00:00:00.0Z&transparent=true&bgcolor=#000000&sld=sld_spec&sld_body=sld_body&elevation=elevation&exceptions=exceptions";
         let parsed: WMSRequest = serde_urlencoded::from_str(query).unwrap();
 
         let request = WMSRequest::GetMap(GetMap {
             version: "1.3.0".into(),
             width: 2,
             layer: "test".into(),
-            crs: "foo".to_string(),
-            styles: "ssss".to_string(),
+            crs: "foo".into(),
+            styles: "ssss".into(),
             time: Some(TimeInterval::new(946_684_800, 946_771_200).unwrap()),
-            transparent: None,
-            bgcolor: None,
-            sld: None,
-            sld_body: None,
-            elevation: None,
+            transparent: Some(true),
+            bgcolor: Some("#000000".into()),
+            sld: Some("sld_spec".into()),
+            sld_body: Some("sld_body".into()),
+            elevation: Some("elevation".into()),
             bbox: BoundingBox2D::new(Coordinate2D::new(1., 2.),
                                      Coordinate2D::new(3., 4.)).unwrap(),
             height: 2,
             format: GetMapFormat::ImagePng,
-            exceptions: None,
+            exceptions: Some("exceptions".into()),
         });
 
         assert_eq!(parsed, request);
@@ -180,7 +181,7 @@ mod tests {
             width: 2,
             layer: "test".into(),
             crs: "foo".to_string(),
-            styles: "ssss".to_string(),
+            styles: "ssss".into(),
             time: None,
             transparent: None,
             bgcolor: None,
