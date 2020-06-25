@@ -4,7 +4,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use snafu::ResultExt;
 
-use crate::ogc::wms::request::{WMSRequest, GetCapabilities, GetMap};
+use crate::ogc::wms::request::{WMSRequest, GetCapabilities, GetMap, GetLegendGraphic};
 use geoengine_datatypes::raster::Raster2D;
 use geoengine_datatypes::operations::image::{Colorizer, ToPng};
 use crate::workflows::registry::WorkflowRegistry;
@@ -27,14 +27,14 @@ async fn wms<T: WorkflowRegistry>(request: WMSRequest, workflow_registry: WR<T>)
     match request {
         WMSRequest::GetCapabilities(request) => get_capabilities(&request),
         WMSRequest::GetMap(request) => get_map(&request, &workflow_registry),
-        // TODO: support other requests
+        WMSRequest::GetLegendGraphic(request) => get_legend_graphic(&request, &workflow_registry),
         _ => Ok(Box::new(warp::http::StatusCode::NOT_IMPLEMENTED.into_response()))
     }
 }
 
 fn get_capabilities(_request: &GetCapabilities) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
     // TODO: implement
-    Ok(Box::new(warp::http::StatusCode::NOT_IMPLEMENTED.into_response()))
+    Ok(Box::new(warp::http::StatusCode::INTERNAL_SERVER_ERROR.into_response()))
 }
 
 fn get_map<T: WorkflowRegistry>(request: &GetMap, _workflow_registry: &WR<T>) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
@@ -46,6 +46,11 @@ fn get_map<T: WorkflowRegistry>(request: &GetMap, _workflow_registry: &WR<T>) ->
         // workflow_registry.read().await.load(WorkflowIdentifier::from_uuid(request.layer.clone() as Uuid));
         Ok(Box::new(warp::http::StatusCode::INTERNAL_SERVER_ERROR.into_response()))
     }
+}
+
+fn get_legend_graphic<T: WorkflowRegistry>(_request: &GetLegendGraphic, _workflow_registry: &WR<T>) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
+    // TODO: implement
+    Ok(Box::new(warp::http::StatusCode::INTERNAL_SERVER_ERROR.into_response()))
 }
 
 fn get_map_mock() -> Result<Box<dyn warp::Reply>, warp::Rejection> {
