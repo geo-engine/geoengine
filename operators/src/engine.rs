@@ -60,34 +60,34 @@ fn create_sources<T: ?Sized, F: Copy>(sources: &[Operator], type_extractor: F) -
 
 pub fn processor(operator: &Operator) -> Result<QueryProcessorType> {
     // TODO: handle operators that work on multiple types
-    match operator {
+    Ok(match operator {
         Operator::MockRasterSource { params, sources: _ } => {
-            Ok(QueryProcessorType::RasterProcessor(Box::new(MockRasterSourceImpl {
+            QueryProcessorType::RasterProcessor(Box::new(MockRasterSourceImpl {
                 data: params.data.clone(),
                 dim: params.dim,
                 geo_transform: params.geo_transform
-            })))
+            }))
         },
         Operator::MockPointSource { params, sources: _ } => {
-            Ok(QueryProcessorType::PointProcessor(Box::new(MockPointSourceImpl {
+            QueryProcessorType::PointProcessor(Box::new(MockPointSourceImpl {
                 points: params.points.clone()
-            })))
+            }))
         },
         Operator::MockDelay { params, sources } => {
-            Ok(QueryProcessorType::PointProcessor(Box::new(MockDelayImpl {
+            QueryProcessorType::PointProcessor(Box::new(MockDelayImpl {
                 points: create_sources(&sources.points, QueryProcessorType::point_processor)?,
                 seconds: params.seconds
-            })))
+            }))
         },
         Operator::MockRasterPoints { params, sources } => {
-            Ok(QueryProcessorType::PointProcessor(Box::new(MockRasterPointsImpl {
+            QueryProcessorType::PointProcessor(Box::new(MockRasterPointsImpl {
                 points: create_sources(&sources.points, QueryProcessorType::point_processor)?,
                 rasters: create_sources(&sources.rasters, QueryProcessorType::raster_processor)?,
                 coords: params.coords
-            })))
+            }))
         },
-        _ => Err(Error::QueryProcessor)
-    }
+        _ => return Err(Error::QueryProcessor)
+    })
 }
 
 
