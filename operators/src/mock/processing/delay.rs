@@ -1,8 +1,11 @@
-use futures::StreamExt;
-use geoengine_datatypes::collections::MultiPointCollection;
-use crate::engine::{QueryProcessor, Query, QueryContext};
-use futures::stream::BoxStream;
 use std::{thread, time};
+
+use futures::stream::BoxStream;
+use futures::StreamExt;
+
+use geoengine_datatypes::collections::MultiPointCollection;
+
+use crate::engine::{QueryContext, QueryProcessor, QueryRectangle};
 use crate::util::Result;
 
 pub struct MockDelayImpl {
@@ -11,8 +14,9 @@ pub struct MockDelayImpl {
 }
 
 impl QueryProcessor<MultiPointCollection> for MockDelayImpl {
-    fn query(&self, query: Query, ctx: QueryContext) -> BoxStream<Result<Box<MultiPointCollection>>> {
+    fn query(&self, query: QueryRectangle, ctx: QueryContext) -> BoxStream<Result<Box<MultiPointCollection>>> {
         let seconds = self.seconds;
+
         self.points[0].query(query, ctx).map(move |x| {
             thread::sleep(time::Duration::from_secs(seconds));
             x
@@ -20,11 +24,14 @@ impl QueryProcessor<MultiPointCollection> for MockDelayImpl {
     }
 }
 
+
 #[cfg(test)]
 mod test {
-    use super::*;
-    use geoengine_datatypes::primitives::{Coordinate2D, BoundingBox2D, TimeInterval};
+    use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, TimeInterval};
+
     use crate::mock::source::mock_point_source::MockPointSourceImpl;
+
+    use super::*;
 
     #[tokio::test]
     async fn test() {
@@ -42,16 +49,17 @@ mod test {
             seconds: 2,
         };
 
-        let query = Query {
+        let query = QueryRectangle {
             bbox: BoundingBox2D::new_unchecked(Coordinate2D::new(1., 2.), Coordinate2D::new(1., 2.)),
             time_interval: TimeInterval::new_unchecked(0, 1),
         };
+
         let ctx = QueryContext {
             chunk_byte_size: 10 * 8 * 2
         };
 
         let now = time::Instant::now();
-        o.query(query, ctx).for_each(|x| {
+        o.query(query, ctx).for_each(|_x| {
             println!("{}", now.elapsed().as_secs());
             futures::future::ready(())
         }).await;

@@ -1,4 +1,4 @@
-use crate::engine::{QueryProcessor, QueryContext, Query};
+use crate::engine::{QueryProcessor, QueryContext, QueryRectangle};
 use geoengine_datatypes::primitives::{TimeInterval, Coordinate2D};
 use futures::{Stream, StreamExt};
 use geoengine_datatypes::collections::MultiPointCollection;
@@ -8,25 +8,14 @@ use crate::util::Result;
 use std::collections::HashMap;
 use crate::error::Error;
 use futures::stream::BoxStream;
-use geo::Coordinate;
 use std::iter::FromIterator;
 
 pub struct MockPointSourceImpl {
     pub points: Vec<Coordinate2D>,
 }
 
-// impl OperatorImpl<MultiPointCollection> for MockPointSource {}
-
-// impl From<MockPointSourceParameters> for MockPointSourceImpl {
-//     fn from(params: MockPointSourceParameters) -> Self {
-//         Self {
-//             points: params.points
-//         }
-//     }
-// }
-
 impl QueryProcessor<MultiPointCollection> for MockPointSourceImpl {
-    fn query(&self, _query: Query, ctx: QueryContext) -> BoxStream<Result<Box<MultiPointCollection>>> {
+    fn query(&self, _query: QueryRectangle, ctx: QueryContext) -> BoxStream<Result<Box<MultiPointCollection>>> {
         MockPointSourceResultStream {
             points: self.points.clone(),
             chunk_size: ctx.chunk_byte_size / std::mem::size_of::<Coordinate2D>(),
@@ -68,6 +57,7 @@ impl Stream for MockPointSourceResultStream {
 mod test {
     use super::*;
     use geoengine_datatypes::primitives::BoundingBox2D;
+    use crate::engine;
 
     #[tokio::test]
     async fn test() {
@@ -80,7 +70,7 @@ mod test {
             points: coordinates
         };
 
-        let query = Query {
+        let query = QueryRectangle {
             bbox: BoundingBox2D::new_unchecked(Coordinate2D::new(1., 2.), Coordinate2D::new(1., 2.)),
             time_interval: TimeInterval::new_unchecked(0, 1),
         };
@@ -88,7 +78,7 @@ mod test {
             chunk_byte_size: 10 * 8 * 2
         };
 
-        p.query(query, ctx).for_each(|x| {
+        engine::QueryProcessor::query(&p, query, ctx).for_each(|x| {
             println!("{:?}", x);
             futures::future::ready(())
         }).await;

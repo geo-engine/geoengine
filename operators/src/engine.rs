@@ -1,35 +1,19 @@
-use geoengine_datatypes::primitives::{TimeInterval, BoundingBox2D};
-use crate::util::Result;
 use futures::stream::BoxStream;
-use crate::Operator;
+
 use geoengine_datatypes::collections::MultiPointCollection;
-use geoengine_datatypes::raster::{Raster, GenericRaster};
-use crate::mock::source::mock_point_source::MockPointSourceImpl;
+use geoengine_datatypes::primitives::{BoundingBox2D, TimeInterval};
+use geoengine_datatypes::raster::GenericRaster;
+
 use crate::error::Error;
 use crate::mock::processing::delay::MockDelayImpl;
-use crate::mock::source::mock_raster_source::MockRasterSourceImpl;
 use crate::mock::processing::raster_points::MockRasterPointsImpl;
-
-//pub(crate) const NO_SOURCES: &[usize] = &[];
-
-// TODO: opterators returning T don' necessarily have sources of type T
-pub trait OperatorImpl<T>: QueryProcessor<T> + HasSources<T> {}
-
-// pub enum QueryResult {
-//     Points(MultiPointCollection),
-//     Lines(MultiLineCollection),
-//     Polygons(MultiPolygonCollection),
-//     // TODO: raster
-// }
-
-pub trait QueryResult {}
-
-impl QueryResult for MultiPointCollection {}
-// impl QueryResult for Raster<>
-
+use crate::mock::source::mock_point_source::MockPointSourceImpl;
+use crate::mock::source::mock_raster_source::MockRasterSourceImpl;
+use crate::Operator;
+use crate::util::Result;
 
 #[derive(Copy, Clone)]
-pub struct Query {
+pub struct QueryRectangle {
     pub bbox: BoundingBox2D,
     pub time_interval: TimeInterval,
 }
@@ -41,64 +25,79 @@ pub struct QueryContext {
     pub chunk_byte_size: usize
 }
 
-pub trait QueryProcessor<T: ?Sized>: Sync {
-    fn query(&self, query: Query, ctx: QueryContext) -> BoxStream<Result<Box<T>>>;
+pub trait QueryProcessor <T: ?Sized + Send> : Sync {
+    fn query(&self, query: QueryRectangle, ctx: QueryContext) -> BoxStream<Result<Box<T>>>;
 }
 
-pub trait HasSources<T> {
-    fn sources(self) -> Vec<Box<dyn QueryProcessor<T>>>;
+pub enum QueryProcessorType {
+    PointProcessor(Box<dyn QueryProcessor<MultiPointCollection>>),
+    RasterProcessor(Box<dyn QueryProcessor<dyn GenericRaster>>),
 }
 
+impl QueryProcessorType {
+    // TODO: TryInto?
+    fn point_processor(self) -> Result<Box<dyn QueryProcessor<MultiPointCollection>>> {
+        if let QueryProcessorType::PointProcessor(p) = self {
+            Ok(p)
+        } else {
+            Err(crate::error::Error::QueryProcessor)
+        }
+    }
 
-// TODO: single factory method for creating all kind of query processors to avoid redundant code
-fn point_processor(operator: &Operator) -> Result<Box<dyn QueryProcessor<MultiPointCollection>>> {
-    match operator {
-        // Operator::MockPointSource { params, sources } => Box::new(params.into()),
-        Operator::MockPointSource { params, sources: _ } => {
-            Ok(Box::new(MockPointSourceImpl {
-                points: params.points.clone()
-            }))
-        },
-        Operator::MockDelay { params, sources } => {
-            Ok(Box::new(MockDelayImpl {
-                // TODO: generic method (macro?) for creating source operators
-                points: create_sources(&sources.points, point_processor)?,
-                seconds: params.seconds
-            }))
-        },
-        Operator::MockRasterPoints { params, sources } => {
-            Ok(Box::new(MockRasterPointsImpl {
-                points: create_sources(&sources.points, point_processor)?,
-                rasters: vec![],//create_sources(&sources.rasters, raster_processor)?,
-                coords: params.coords
-            }))
-        },
-        _ => Err(Error::QueryProcessor)
+    fn raster_processor(self) -> Result<Box<dyn QueryProcessor<dyn GenericRaster>>> {
+        if let QueryProcessorType::RasterProcessor(p) = self {
+            Ok(p)
+        } else {
+            Err(crate::error::Error::QueryProcessor)
+        }
     }
 }
 
-fn create_sources<T>(sources: &Vec<Operator>, x: fn(&Operator) -> Result<Box<dyn QueryProcessor<T>>, Error>) -> Result<Vec<Box<dyn QueryProcessor<T>>>> {
-    sources.iter().map(|p| Ok(x(p)?)).collect::<Result<Vec<Box<dyn QueryProcessor<T>>>>>()
+fn create_sources<T: ?Sized, F: Copy>(sources: &[Operator], type_extractor: F) -> Result<Vec<Box<dyn QueryProcessor<T>>>>
+    where F: FnOnce(QueryProcessorType) -> Result<Box<dyn QueryProcessor<T>>> {
+    sources.iter().map(|o| processor(o).and_then(type_extractor)).collect()
 }
 
-fn raster_processor<T>(operator: &Operator) -> Result<Box<dyn QueryProcessor<dyn GenericRaster>>> {
+pub fn processor(operator: &Operator) -> Result<QueryProcessorType> {
+    // TODO: handle operators that work on multiple types
     match operator {
         Operator::MockRasterSource { params, sources: _ } => {
-            Ok(Box::new(MockRasterSourceImpl {
+            Ok(QueryProcessorType::RasterProcessor(Box::new(MockRasterSourceImpl {
                 data: params.data.clone(),
                 dim: params.dim,
                 geo_transform: params.geo_transform
-            }))
+            })))
+        },
+        Operator::MockPointSource { params, sources: _ } => {
+            Ok(QueryProcessorType::PointProcessor(Box::new(MockPointSourceImpl {
+                points: params.points.clone()
+            })))
+        },
+        Operator::MockDelay { params, sources } => {
+            Ok(QueryProcessorType::PointProcessor(Box::new(MockDelayImpl {
+                points: create_sources(&sources.points, QueryProcessorType::point_processor)?,
+                seconds: params.seconds
+            })))
+        },
+        Operator::MockRasterPoints { params, sources } => {
+            Ok(QueryProcessorType::PointProcessor(Box::new(MockRasterPointsImpl {
+                points: create_sources(&sources.points, QueryProcessorType::point_processor)?,
+                rasters: create_sources(&sources.rasters, QueryProcessorType::raster_processor)?,
+                coords: params.coords
+            })))
         },
         _ => Err(Error::QueryProcessor)
     }
 }
 
+
 #[cfg(test)]
 mod test {
-    use super::*;
-    use geoengine_datatypes::primitives::Coordinate2D;
     use futures::StreamExt;
+
+    use geoengine_datatypes::primitives::Coordinate2D;
+
+    use super::*;
 
     #[tokio::test]
     async fn test() {
@@ -123,19 +122,21 @@ mod test {
 
         let operator: Operator = serde_json::from_str(json_string).unwrap();
 
-        let op_impl = point_processor(&operator).unwrap();
+        let op_impl = processor(&operator);
 
-        let query = Query {
-            bbox: BoundingBox2D::new_unchecked(Coordinate2D::new(1., 2.), Coordinate2D::new(1., 2.)),
-            time_interval: TimeInterval::new_unchecked(0, 1),
-        };
-        let ctx = QueryContext {
-            chunk_byte_size: 10 * 8 * 2
-        };
+        if let Ok(QueryProcessorType::PointProcessor(op_impl)) = op_impl {
+            let query = QueryRectangle {
+                bbox: BoundingBox2D::new_unchecked(Coordinate2D::new(1., 2.), Coordinate2D::new(1., 2.)),
+                time_interval: TimeInterval::new_unchecked(0, 1),
+            };
+            let ctx = QueryContext {
+                chunk_byte_size: 10 * 8 * 2
+            };
 
-        op_impl.query(query, ctx).for_each(|x| {
-            println!("{:?}", x);
-            futures::future::ready(())
-        }).await;
+            op_impl.query(query, ctx).for_each(|pc| {
+                    println!("{:?}", pc);
+                futures::future::ready(())
+            }).await;
+        }
     }
 }

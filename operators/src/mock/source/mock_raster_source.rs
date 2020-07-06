@@ -1,4 +1,4 @@
-use crate::engine::{QueryProcessor, QueryContext, Query};
+use crate::engine::{QueryProcessor, QueryContext, QueryRectangle};
 use geoengine_datatypes::primitives::TimeInterval;
 use futures::StreamExt;
 use crate::util::Result;
@@ -12,7 +12,7 @@ pub struct MockRasterSourceImpl {
 }
 
 impl QueryProcessor<dyn GenericRaster> for MockRasterSourceImpl {
-    fn query(&self, _query: Query, ctx: QueryContext) -> BoxStream<Result<Box<dyn GenericRaster>>> {
+    fn query(&self, _query: QueryRectangle, ctx: QueryContext) -> BoxStream<Result<Box<dyn GenericRaster>>> {
         let _size = f64::sqrt(ctx.chunk_byte_size as f64 / 8.0);
 
         // TODO: return tiles of the input raster
@@ -43,7 +43,7 @@ mod test {
             geo_transform: [1.0, 1.0, 0.0, 1.0, 0.0, 1.0]
         };
 
-        let query = Query {
+        let query = QueryRectangle {
             bbox: BoundingBox2D::new_unchecked(Coordinate2D::new(1., 2.), Coordinate2D::new(1., 2.)),
             time_interval: TimeInterval::new_unchecked(0, 1),
         };

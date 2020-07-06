@@ -1,10 +1,9 @@
 use geoengine_datatypes::collections::MultiPointCollection;
-use crate::engine::{QueryProcessor, Query, QueryContext};
+use crate::engine::{QueryProcessor, QueryRectangle, QueryContext};
 use geoengine_datatypes::raster::GenericRaster;
 use futures::stream::BoxStream;
 use crate::util::Result;
 use futures::StreamExt;
-use futures::select;
 
 /// Attach raster value at given coords to points
 pub struct MockRasterPointsImpl {
@@ -14,14 +13,14 @@ pub struct MockRasterPointsImpl {
 }
 
 impl QueryProcessor<MultiPointCollection> for MockRasterPointsImpl {
-    fn query(&self, query: Query, ctx: QueryContext) -> BoxStream<Result<Box<MultiPointCollection>>> {
+    fn query(&self, query: QueryRectangle, ctx: QueryContext) -> BoxStream<Result<Box<MultiPointCollection>>> {
         // TODO perform join
 
         self.points[0].query(query, ctx)
             .then(async move |p| {
                 // TODO: use points bbox
                 let mut rs = self.rasters[0].query(query, ctx);
-                while let Some(r) = rs.next().await {
+                while let Some(_r) = rs.next().await {
                     // TODO: extract raster info
                 }
                 p
@@ -38,6 +37,7 @@ mod test {
     use crate::mock::source::mock_raster_source::MockRasterSourceImpl;
 
     #[tokio::test]
+    #[allow(clippy::cast_lossless)]
     async fn test() {
         let mut coordinates = Vec::new();
         for i in 0..100 {
@@ -60,7 +60,7 @@ mod test {
             coords: [0, 0]
         };
 
-        let query = Query {
+        let query = QueryRectangle {
             bbox: BoundingBox2D::new_unchecked(Coordinate2D::new(1., 2.), Coordinate2D::new(1., 2.)),
             time_interval: TimeInterval::new_unchecked(0, 1),
         };
