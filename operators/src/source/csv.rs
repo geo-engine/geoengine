@@ -1,17 +1,21 @@
-use crate::error::{self, Error};
-use crate::util::Result;
-use csv::{Position, Reader};
-use futures::future;
-use futures::stream::{self, BoxStream, StreamExt};
+use std::fs::File;
+use std::path::PathBuf;
+use std::pin::Pin;
+
+use csv::{Position, Reader, StringRecord};
+use futures::task::{Context, Poll};
+use futures::Stream;
+use serde::{Deserialize, Serialize};
+use snafu::{ensure, OptionExt, ResultExt};
+
 use geoengine_datatypes::collections::{
     BuilderProvider, FeatureCollectionBuilder, FeatureCollectionRowBuilder,
     GeoFeatureCollectionRowBuilder, MultiPointCollection,
 };
-use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval};
-use serde::{Deserialize, Serialize};
-use snafu::{ensure, OptionExt, ResultExt};
-use std::fs::File;
-use std::path::PathBuf;
+use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, TimeInterval};
+
+use crate::error::{self};
+use crate::util::Result;
 
 /// Parameters for the CSV Source Operator
 ///
@@ -58,7 +62,7 @@ pub struct CsvSourceParameters {
     pub time: CsvTimeSpecification,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum CsvGeometrySpecification {
     XY { x: String, y: String },
@@ -75,9 +79,51 @@ impl Default for CsvTimeSpecification {
     }
 }
 
+enum ReaderState {
+    Untouched(Reader<File>),
+    OnGoing {
+        header: ParsedHeader,
+        records: csv::StringRecordsIntoIter<File>,
+    },
+    Error,
+}
+
+impl ReaderState {
+    pub fn setup_once(&mut self, geometry_specification: CsvGeometrySpecification) -> Result<()> {
+        if let ReaderState::Untouched(..) = self {
+            // pass
+        } else {
+            return Ok(());
+        }
+
+        let old_state = std::mem::replace(self, ReaderState::Error);
+
+        if let ReaderState::Untouched(mut csv_reader) = old_state {
+            let header = match CsvSource::setup_read(geometry_specification, &mut csv_reader) {
+                Ok(header) => header,
+                Err(error) => return Err(error),
+            };
+
+            let mut records = csv_reader.into_records();
+
+            // consume the first row, which is the header
+            if header.has_header {
+                // TODO: throw error
+                records.next();
+            }
+
+            *self = ReaderState::OnGoing { header, records }
+        }
+
+        Ok(())
+    }
+}
+
 pub struct CsvSource {
     parameters: CsvSourceParameters,
-    csv_reader: Reader<File>,
+    csv_reader: ReaderState,
+    bbox: BoundingBox2D,
+    chunk_size: usize,
 }
 
 impl CsvSource {
@@ -88,7 +134,11 @@ impl CsvSource {
     /// This constructor fails if the delimiter is not an ASCII character.
     /// Furthermore, there are IO errors from the reader.
     ///
-    pub fn new(parameters: CsvSourceParameters) -> Result<Self> {
+    pub fn new(
+        parameters: CsvSourceParameters,
+        bbox: BoundingBox2D,
+        chunk_size: usize,
+    ) -> Result<Self> {
         ensure!(
             parameters.field_separator.is_ascii(),
             error::CsvSource {
@@ -97,143 +147,37 @@ impl CsvSource {
         );
 
         Ok(Self {
-            csv_reader: csv::ReaderBuilder::new()
-                .delimiter(parameters.field_separator as u8)
-                .has_headers(true)
-                .from_path(parameters.file_path.as_path())
-                .context(error::CsvSourceReader {})?,
+            csv_reader: ReaderState::Untouched(
+                csv::ReaderBuilder::new()
+                    .delimiter(parameters.field_separator as u8)
+                    .has_headers(true)
+                    .from_path(parameters.file_path.as_path())
+                    .context(error::CsvSourceReader {})?,
+            ),
             parameters,
+            bbox,
+            chunk_size,
         })
     }
 
-    /// Read points from CSV file
-    ///
-    /// # Examples
-    /// ```rust
-    /// use futures::executor::{block_on_stream, block_on};
-    /// use geoengine_datatypes::collections::FeatureCollection;
-    /// use std::io::{Seek, SeekFrom, Write};
-    /// use geoengine_operators::source::{CsvSource, CsvSourceParameters};
-    /// use geoengine_operators::source::csv::{CsvGeometrySpecification, CsvTimeSpecification};
-    /// use futures::TryStreamExt;
-    /// use futures;
-    ///
-    /// let mut fake_file = tempfile::NamedTempFile::new().unwrap();
-    /// write!(
-    ///     fake_file,
-    ///     "\
-    /// x,y
-    /// 0,1
-    /// 2,3
-    /// 4,5
-    /// "
-    ///     )
-    ///     .unwrap();
-    ///     fake_file.seek(SeekFrom::Start(0)).unwrap();
-    ///
-    /// let mut csv_source = CsvSource::new(CsvSourceParameters {
-    ///     file_path: fake_file.path().into(),
-    ///     field_separator: ',',
-    ///     geometry: CsvGeometrySpecification::XY {
-    ///         x: "x".into(),
-    ///         y: "y".into(),
-    ///     },
-    ///     time: CsvTimeSpecification::None,
-    /// })
-    /// .unwrap();
-    ///
-    /// let mut stream = block_on_stream(csv_source.read_points(2));
-    ///
-    /// assert_eq!(stream.next().unwrap().unwrap().len(), 2);
-    /// assert_eq!(stream.next().unwrap().unwrap().len(), 1);
-    /// assert!(stream.next().is_none());
-    ///
-    /// ```
-    pub fn read_points(
-        &mut self,
-        items_per_chunk: usize,
-    ) -> BoxStream<Result<MultiPointCollection, Error>> {
-        let header = match self.setup_read() {
-            Ok(header) => header,
-            Err(error) => return stream::once(future::ready(Err(error))).boxed(),
-        };
-
-        let csv_stream = stream::iter(
-            self.csv_reader
-                .records()
-                .skip(if header.has_header { 1 } else { 0 }), // skip header if set
-        );
-
-        // filter out values that could not be parsed by the csv parser
-        // TODO: log/notify errors
-        let csv_stream = csv_stream.filter_map(|result| future::ready(result.ok()));
-
-        // try to get all fields out of the row
-        // TODO: log/notify errors
-        let csv_stream = csv_stream.filter_map(move |row| {
-            future::ready({
-                let result = || -> Result<ParsedRow> {
-                    let x: f64 = row
-                        .get(header.x_index)
-                        .context(error::CsvSource {
-                            details: "Cannot find x index key",
-                        })?
-                        .parse()
-                        .map_err(|_| error::Error::CsvSource {
-                            details: "Cannot parse x coordinate".to_string(),
-                        })?;
-                    let y: f64 = row
-                        .get(header.y_index)
-                        .context(error::CsvSource {
-                            details: "Cannot find y index key",
-                        })?
-                        .parse()
-                        .map_err(|_| error::Error::CsvSource {
-                            details: "Cannot parse y coordinate".to_string(),
-                        })?;
-
-                    Ok(ParsedRow {
-                        coordinate: (x, y).into(),
-                        time_interval: TimeInterval::default(),
-                    })
-                };
-                result().ok()
-            })
-        });
-
-        csv_stream
-            .chunks(items_per_chunk)
-            .map(move |chunk| {
-                if chunk.is_empty() {
-                    return Ok(MultiPointCollection::empty());
-                }
-
-                let mut builder = MultiPointCollection::builder().finish_header();
-                for result in chunk {
-                    builder.push_geometry(result.coordinate.into())?;
-                    builder.push_time_interval(result.time_interval)?;
-                    builder.finish_row();
-                }
-                Ok(builder.build()?)
-            })
-            .boxed()
-    }
-
-    fn setup_read(&mut self) -> Result<ParsedHeader> {
-        self.csv_reader
+    fn setup_read(
+        geometry_specification: CsvGeometrySpecification,
+        csv_reader: &mut Reader<File>,
+    ) -> Result<ParsedHeader> {
+        csv_reader
             .seek(Position::new())
             .context(error::CsvSourceReader {})?; // start at beginning
 
         ensure!(
-            self.csv_reader.has_headers(),
+            csv_reader.has_headers(),
             error::CsvSource {
                 details: "CSV file must contain header",
             }
         );
 
-        let header = self.csv_reader.headers().context(error::CsvSourceReader)?;
+        let header = csv_reader.headers().context(error::CsvSourceReader)?;
 
-        let CsvGeometrySpecification::XY { x, y } = &self.parameters.geometry;
+        let CsvGeometrySpecification::XY { x, y } = geometry_specification;
         let x_index = header
             .iter()
             .position(|v| v == x)
@@ -253,8 +197,93 @@ impl CsvSource {
             y_index,
         })
     }
+
+    /// Parse a single CSV row
+    fn parse_row(header: &ParsedHeader, row: &StringRecord) -> Result<ParsedRow> {
+        let x: f64 = row
+            .get(header.x_index)
+            .context(error::CsvSource {
+                details: "Cannot find x index key",
+            })?
+            .parse()
+            .map_err(|_| error::Error::CsvSource {
+                details: "Cannot parse x coordinate".to_string(),
+            })?;
+        let y: f64 = row
+            .get(header.y_index)
+            .context(error::CsvSource {
+                details: "Cannot find y index key",
+            })?
+            .parse()
+            .map_err(|_| error::Error::CsvSource {
+                details: "Cannot parse y coordinate".to_string(),
+            })?;
+
+        Ok(ParsedRow {
+            coordinate: (x, y).into(),
+            time_interval: TimeInterval::default(),
+        })
+    }
 }
 
+impl Stream for CsvSource {
+    type Item = Result<MultiPointCollection>;
+
+    fn poll_next(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        // TODO: do work in separate task -> async
+        let computation_result = || -> Result<Option<MultiPointCollection>> {
+            // TODO: is clone necessary?
+            let geometry_specification = self.parameters.geometry.clone();
+            self.csv_reader.setup_once(geometry_specification)?;
+
+            let bbox = self.bbox;
+            let chunk_size = self.chunk_size;
+
+            let (header, records) = match &mut self.csv_reader {
+                ReaderState::OnGoing { header, records } => (header, records),
+                ReaderState::Error => return Ok(None),
+                _ => unreachable!(),
+            };
+
+            let mut builder = MultiPointCollection::builder().finish_header();
+            let mut number_of_entries = 0; // TODO: add size/len to builder
+
+            while number_of_entries < chunk_size {
+                let record = match records.next() {
+                    Some(r) => r,
+                    None => break,
+                };
+
+                let row = record.with_context(|| error::CsvSourceReader)?;
+                let parsed_row = CsvSource::parse_row(header, &row)?;
+
+                if bbox.contains_coordinate(&parsed_row.coordinate) {
+                    builder.push_geometry(parsed_row.coordinate.into())?;
+                    builder.push_time_interval(parsed_row.time_interval)?;
+                    builder.finish_row();
+
+                    number_of_entries += 1;
+                }
+            }
+
+            // TODO: is this the correct cancellation criterion?
+            if number_of_entries > 0 {
+                let collection = builder.build()?;
+                Ok(Some(collection))
+            } else {
+                Ok(None)
+            }
+        }();
+
+        Poll::Ready(match computation_result {
+            Ok(Some(collection)) => Some(Ok(collection)),
+            Ok(None) => None,
+            Err(e) => Some(Err(e)),
+        })
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
 struct ParsedHeader {
     pub has_header: bool,
     pub x_index: usize,
@@ -269,11 +298,50 @@ struct ParsedRow {
 
 #[cfg(test)]
 mod tests {
+    use std::io::{Seek, SeekFrom, Write};
+
+    use futures::executor::block_on_stream;
+
+    use geoengine_datatypes::collections::FeatureCollection;
 
     use super::*;
-    use futures::executor::block_on_stream;
-    use geoengine_datatypes::collections::FeatureCollection;
-    use std::io::{Seek, SeekFrom, Write};
+
+    #[test]
+    fn read_points() {
+        let mut fake_file = tempfile::NamedTempFile::new().unwrap();
+        write!(
+            fake_file,
+            "\
+x,y
+0,1
+2,3
+4,5
+"
+        )
+        .unwrap();
+        fake_file.seek(SeekFrom::Start(0)).unwrap();
+
+        let csv_source = CsvSource::new(
+            CsvSourceParameters {
+                file_path: fake_file.path().into(),
+                field_separator: ',',
+                geometry: CsvGeometrySpecification::XY {
+                    x: "x".into(),
+                    y: "y".into(),
+                },
+                time: CsvTimeSpecification::None,
+            },
+            BoundingBox2D::new_unchecked((0., 0.).into(), (5., 5.).into()),
+            2,
+        )
+        .unwrap();
+
+        let mut stream = block_on_stream(csv_source);
+
+        assert_eq!(stream.next().unwrap().unwrap().len(), 2);
+        assert_eq!(stream.next().unwrap().unwrap().len(), 1);
+        assert!(stream.next().is_none());
+    }
 
     #[test]
     fn errorneous_point_rows() {
@@ -290,20 +358,25 @@ CORRUPT
         .unwrap();
         fake_file.seek(SeekFrom::Start(0)).unwrap();
 
-        let mut csv_source = CsvSource::new(CsvSourceParameters {
-            file_path: fake_file.path().into(),
-            field_separator: ',',
-            geometry: CsvGeometrySpecification::XY {
-                x: "x".into(),
-                y: "y".into(),
+        let csv_source = CsvSource::new(
+            CsvSourceParameters {
+                file_path: fake_file.path().into(),
+                field_separator: ',',
+                geometry: CsvGeometrySpecification::XY {
+                    x: "x".into(),
+                    y: "y".into(),
+                },
+                time: CsvTimeSpecification::None,
             },
-            time: CsvTimeSpecification::None,
-        })
+            BoundingBox2D::new_unchecked((0., 0.).into(), (5., 5.).into()),
+            1,
+        )
         .unwrap();
 
-        let mut stream = block_on_stream(csv_source.read_points(1));
+        let mut stream = block_on_stream(csv_source);
 
         assert_eq!(stream.next().unwrap().unwrap().len(), 1);
+        assert!(stream.next().unwrap().is_err());
         assert_eq!(stream.next().unwrap().unwrap().len(), 1);
         assert!(stream.next().is_none());
     }
@@ -323,18 +396,22 @@ x,z
         .unwrap();
         fake_file.seek(SeekFrom::Start(0)).unwrap();
 
-        let mut csv_source = CsvSource::new(CsvSourceParameters {
-            file_path: fake_file.path().into(),
-            field_separator: ',',
-            geometry: CsvGeometrySpecification::XY {
-                x: "x".into(),
-                y: "y".into(),
+        let csv_source = CsvSource::new(
+            CsvSourceParameters {
+                file_path: fake_file.path().into(),
+                field_separator: ',',
+                geometry: CsvGeometrySpecification::XY {
+                    x: "x".into(),
+                    y: "y".into(),
+                },
+                time: CsvTimeSpecification::None,
             },
-            time: CsvTimeSpecification::None,
-        })
+            BoundingBox2D::new_unchecked((0., 0.).into(), (5., 5.).into()),
+            1,
+        )
         .unwrap();
 
-        let mut stream = block_on_stream(csv_source.read_points(1));
+        let mut stream = block_on_stream(csv_source);
 
         assert!(stream.next().unwrap().is_err());
         assert!(stream.next().is_none());
