@@ -7,6 +7,10 @@ pub struct TimeInstance(i64);
 
 impl TimeInstance {
 
+    pub fn from_millis(millis: i64) -> Self  {
+        TimeInstance(millis)
+    }
+
     pub fn as_utc_date_time(self) -> DateTime<Utc> {
         Utc.timestamp_millis(self.0)
     } 
@@ -14,9 +18,7 @@ impl TimeInstance {
     pub fn as_naive_date_time(self) -> NaiveDateTime {
         self.as_utc_date_time().naive_utc()
     }
-}
 
-impl TimeInstance {
     pub fn inner(self) -> i64 {
         self.0
     }
@@ -24,13 +26,13 @@ impl TimeInstance {
 
 impl Into<TimeInstance> for i64 {
     fn into(self) -> TimeInstance {
-        TimeInstance(self)
+        TimeInstance::from_millis(self)
     }
 }
 
 impl Into<i64> for TimeInstance {
     fn into(self) -> i64 {
-        self.0
+        self.inner()
     }
 }
 
@@ -43,11 +45,5 @@ impl Into<DateTime<Utc>> for TimeInstance {
 impl Into<NaiveDateTime> for TimeInstance {
     fn into(self) -> NaiveDateTime {
         self.as_naive_date_time()
-    }
-}
-
-impl AsRef<i64> for TimeInstance {
-    fn as_ref(&self) -> &i64 {
-        &self.0
     }
 }

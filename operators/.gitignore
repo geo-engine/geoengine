@@ -8,5 +8,3 @@ Cargo.lock
 # IDE files
 /.idea
 
-# large test data
-/test-data/raster/srtm*

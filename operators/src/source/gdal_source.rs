@@ -302,7 +302,7 @@ mod tests {
             tile_pixel_size: tile_size_in_pixels.into(),
         };
 
-        let time_interval_provider = vec![TimeInterval::new_unchecked(1.into(),2.into()), TimeInterval::new_unchecked(2.into(), 3.into())];
+        let time_interval_provider = vec![TimeInterval::new_unchecked(1,2), TimeInterval::new_unchecked(2, 3)];
         
         let gdal_params = GdalSourceParameters{
             base_path: "".into(),
@@ -321,25 +321,25 @@ mod tests {
 
         let vres: Vec<_> = gdal_source.time_tile_iter().collect();
         
-        assert_eq!(vres[0], (TimeInterval::new_unchecked(1.into(),2.into()), TileInformation::new(global_size_in_tiles.into(), (0, 0).into(), (0, 0).into(), tile_size_in_pixels.into())));
-        assert_eq!(vres[1], (TimeInterval::new_unchecked(1.into(),2.into()), TileInformation::new(global_size_in_tiles.into(), (0, 1).into(), (0, 1000).into(), tile_size_in_pixels.into())));
-        assert_eq!(vres[6], (TimeInterval::new_unchecked(1.into(),2.into()), TileInformation::new(global_size_in_tiles.into(), (1, 0).into(), (1000, 0).into(), tile_size_in_pixels.into())));
-        assert_eq!(vres[7], (TimeInterval::new_unchecked(1.into(),2.into()), TileInformation::new(global_size_in_tiles.into(), (1, 1).into(), (1000, 1000).into(), tile_size_in_pixels.into())));
-        assert_eq!(vres[34], (TimeInterval::new_unchecked(1.into(),2.into()), TileInformation::new(global_size_in_tiles.into(), (5, 4).into(), (5000, 4000).into(), tile_size_in_pixels.into())));
-        assert_eq!(vres[35], (TimeInterval::new_unchecked(1.into(),2.into()), TileInformation::new(global_size_in_tiles.into(), (5, 5).into(), (5000, 5000).into(), tile_size_in_pixels.into())));
+        assert_eq!(vres[0], (TimeInterval::new_unchecked(1,2), TileInformation::new(global_size_in_tiles.into(), (0, 0).into(), (0, 0).into(), tile_size_in_pixels.into())));
+        assert_eq!(vres[1], (TimeInterval::new_unchecked(1,2), TileInformation::new(global_size_in_tiles.into(), (0, 1).into(), (0, 1000).into(), tile_size_in_pixels.into())));
+        assert_eq!(vres[6], (TimeInterval::new_unchecked(1,2), TileInformation::new(global_size_in_tiles.into(), (1, 0).into(), (1000, 0).into(), tile_size_in_pixels.into())));
+        assert_eq!(vres[7], (TimeInterval::new_unchecked(1,2), TileInformation::new(global_size_in_tiles.into(), (1, 1).into(), (1000, 1000).into(), tile_size_in_pixels.into())));
+        assert_eq!(vres[34], (TimeInterval::new_unchecked(1,2), TileInformation::new(global_size_in_tiles.into(), (5, 4).into(), (5000, 4000).into(), tile_size_in_pixels.into())));
+        assert_eq!(vres[35], (TimeInterval::new_unchecked(1,2), TileInformation::new(global_size_in_tiles.into(), (5, 5).into(), (5000, 5000).into(), tile_size_in_pixels.into())));
 
-        assert_eq!(vres[36], (TimeInterval::new_unchecked(2.into(),3.into()), TileInformation::new(global_size_in_tiles.into(), (0, 0).into(), (0, 0).into(), tile_size_in_pixels.into())));
-        assert_eq!(vres[36+1], (TimeInterval::new_unchecked(2.into(),3.into()), TileInformation::new(global_size_in_tiles.into(), (0, 1).into(), (0, 1000).into(), tile_size_in_pixels.into())));
-        assert_eq!(vres[36+6], (TimeInterval::new_unchecked(2.into(),3.into()), TileInformation::new(global_size_in_tiles.into(), (1, 0).into(), (1000, 0).into(), tile_size_in_pixels.into())));
-        assert_eq!(vres[36+7], (TimeInterval::new_unchecked(2.into(),3.into()), TileInformation::new(global_size_in_tiles.into(), (1, 1).into(), (1000, 1000).into(), tile_size_in_pixels.into())));
-        assert_eq!(vres[36+34], (TimeInterval::new_unchecked(2.into(),3.into()), TileInformation::new(global_size_in_tiles.into(), (5, 4).into(), (5000, 4000).into(), tile_size_in_pixels.into())));
-        assert_eq!(vres[36+35], (TimeInterval::new_unchecked(2.into(),3.into()), TileInformation::new(global_size_in_tiles.into(), (5, 5).into(), (5000, 5000).into(), tile_size_in_pixels.into())));
+        assert_eq!(vres[36], (TimeInterval::new_unchecked(2,3), TileInformation::new(global_size_in_tiles.into(), (0, 0).into(), (0, 0).into(), tile_size_in_pixels.into())));
+        assert_eq!(vres[36+1], (TimeInterval::new_unchecked(2,3), TileInformation::new(global_size_in_tiles.into(), (0, 1).into(), (0, 1000).into(), tile_size_in_pixels.into())));
+        assert_eq!(vres[36+6], (TimeInterval::new_unchecked(2,3), TileInformation::new(global_size_in_tiles.into(), (1, 0).into(), (1000, 0).into(), tile_size_in_pixels.into())));
+        assert_eq!(vres[36+7], (TimeInterval::new_unchecked(2,3), TileInformation::new(global_size_in_tiles.into(), (1, 1).into(), (1000, 1000).into(), tile_size_in_pixels.into())));
+        assert_eq!(vres[36+34], (TimeInterval::new_unchecked(2,3), TileInformation::new(global_size_in_tiles.into(), (5, 4).into(), (5000, 4000).into(), tile_size_in_pixels.into())));
+        assert_eq!(vres[36+35], (TimeInterval::new_unchecked(2,3), TileInformation::new(global_size_in_tiles.into(), (5, 5).into(), (5000, 5000).into(), tile_size_in_pixels.into())));
     }
     #[test]
     fn test_load_tile_data() {
-        let global_size_in_pixels = (6000, 6000);
-        let tile_size_in_pixels = (1000, 1000);    
-        let global_size_in_tiles = (6, 6);
+        let global_size_in_pixels = (1800, 3600);
+        let tile_size_in_pixels = (600, 600);    
+        let global_size_in_tiles = (3, 6);
 
 
         let grid_tile_provider = GdalSourceTileGridProvider {
@@ -347,11 +347,11 @@ mod tests {
             tile_pixel_size: tile_size_in_pixels.into(),
         };
 
-        let time_interval_provider = vec![TimeInterval::new_unchecked(0.into(),1.into())];
+        let time_interval_provider = vec![TimeInterval::new_unchecked(0,1)];
         
         let gdal_params = GdalSourceParameters{
-            base_path: "../operators/test-data/raster/srtm_38_03".into(),
-            file_name_with_time_placeholder: "srtm_38_03.tif".into(),
+            base_path: "../operators/test-data/raster/modis_ndvi".into(),
+            file_name_with_time_placeholder: "MOD13A2_M_NDVI_2014-01-01.TIFF".into(),
             time_format: "".into(),
             tick: None,
             channel: None,
@@ -364,7 +364,7 @@ mod tests {
         };
 
         let tile_information = TileInformation::new(global_size_in_tiles.into(), (0, 0).into(), (0, 0).into(), tile_size_in_pixels.into());
-        let time_interval = TimeInterval::new_unchecked(0.into(),1.into());
+        let time_interval = TimeInterval::new_unchecked(0,1);
 
         let x = gdal_source.load_tile_data::<f32>(&time_interval, &tile_information).unwrap();
         
@@ -374,20 +374,20 @@ mod tests {
 
     #[test]
     fn test_iter_and_load_tile_data() {
-        let global_size_in_pixels = (6000, 6000);
-        let tile_size_in_pixels = (1000, 1000);
-        let srtm_tile_upper_left_pixel_values = vec![422.0, 434.0, 312.0, 347.0, 86.0, 231.0, 269.0, 184.0, 236.0, 360.0, 101.0, 199.0, 366.0, 334.0, 298.0, 162.0, 715.0, 799.0, 314.0, 253.0, 369.0, 333.0, 484.0, 619.0, 196.0, 651.0, 645.0, 1072.0, 3003.0, 1720.0, 179.0, 233.0, 1611.0, 2401.0, 1044.0, 1056.0];    
+        let global_size_in_pixels = (1800, 3600);
+        let tile_size_in_pixels = (600, 600);
+        let ndvi_center_pixel_values = vec![19, 255, 255, 43, 76, 17, 255, 255, 255, 145, 255, 255, 255, 255, 255, 255, 255, 255];    
 
         let grid_tile_provider = GdalSourceTileGridProvider {
             global_pixel_size: global_size_in_pixels.into(),
             tile_pixel_size: tile_size_in_pixels.into(),
         };
 
-        let time_interval_provider = vec![TimeInterval::new_unchecked(1.into(),2.into())];
+        let time_interval_provider = vec![TimeInterval::new_unchecked(1,2)];
         
         let gdal_params = GdalSourceParameters{
-            base_path: "../operators/test-data/raster/srtm_38_03".into(),
-            file_name_with_time_placeholder: "srtm_38_03.tif".into(),
+            base_path: "../operators/test-data/raster/modis_ndvi".into(),
+            file_name_with_time_placeholder: "MOD13A2_M_NDVI_2014-01-01.TIFF".into(),
             time_format: "".into(),
             tick: None,
             channel: None,
@@ -399,37 +399,38 @@ mod tests {
             gdal_params
         };
 
-        let vres: Vec<Result<RasterTile2D<f32>, Error>> = gdal_source.time_tile_iter().map( |(time_interval, tile_information)| {gdal_source.load_tile_data(&time_interval, &tile_information)} ).collect();
-        assert_eq!(vres.len(), 6*6);
+        let vres: Vec<Result<RasterTile2D<u8>, Error>> = gdal_source.time_tile_iter().map( |(time_interval, tile_information)| {gdal_source.load_tile_data(&time_interval, &tile_information)} ).collect();
+        assert_eq!(vres.len(), 3*6);
         let upper_left_pixels: Vec<_> = vres.into_iter().map(
             |t| {
                 let raster_tile = t.unwrap();
                 let tile_data = raster_tile.data;
-                tile_data.pixel_value_at_grid_index(&(0,0)).unwrap() // pixel
+                tile_data.pixel_value_at_grid_index(&(tile_size_in_pixels.1/2, tile_size_in_pixels.0/2)).unwrap() // pixel
                 
             }
             ).collect();
-        assert_eq!(upper_left_pixels, srtm_tile_upper_left_pixel_values);
+        assert_eq!(upper_left_pixels, ndvi_center_pixel_values);
     }
 
     #[test]
     fn test_tile_stream_len() {
 
 
-        let global_size_in_pixels = (6000, 6000);
-        let tile_size_in_pixels = (1000, 1000);
-        let srtm_tile_upper_left_pixel_values: Vec<f32> = vec![422.0, 434.0, 312.0, 347.0, 86.0, 231.0, 269.0, 184.0, 236.0, 360.0, 101.0, 199.0, 366.0, 334.0, 298.0, 162.0, 715.0, 799.0, 314.0, 253.0, 369.0, 333.0, 484.0, 619.0, 196.0, 651.0, 645.0, 1072.0, 3003.0, 1720.0, 179.0, 233.0, 1611.0, 2401.0, 1044.0, 1056.0];    
+        let global_size_in_pixels = (1800, 3600);
+        let tile_size_in_pixels = (600, 600);
+        let ndvi_center_pixel_values = vec![19, 255, 255, 43, 76, 17, 255, 255, 255, 145, 255, 255, 255, 255, 255, 255, 255, 255];    
+
 
         let grid_tile_provider = GdalSourceTileGridProvider {
             global_pixel_size: global_size_in_pixels.into(),
             tile_pixel_size: tile_size_in_pixels.into(),
         };
 
-        let time_interval_provider = vec![TimeInterval::new_unchecked(1.into(),2.into())];
+        let time_interval_provider = vec![TimeInterval::new_unchecked(1,2)];
         
         let gdal_params = GdalSourceParameters{
-            base_path: "../operators/test-data/raster/srtm_38_03".into(),
-            file_name_with_time_placeholder: "srtm_38_03.tif".into(),
+            base_path: "../operators/test-data/raster/modis_ndvi".into(),
+            file_name_with_time_placeholder: "MOD13A2_M_NDVI_2014-01-01.TIFF".into(),
             time_format: "".into(),
             tick: None,
             channel: None,
@@ -442,13 +443,13 @@ mod tests {
         };
 
 
-        let mut stream_data = block_on_stream(gdal_source.tile_stream::<f32>());
+        let mut stream_data = block_on_stream(gdal_source.tile_stream::<u8>());
 
-        for p in srtm_tile_upper_left_pixel_values  {
+        for p in ndvi_center_pixel_values  {
             let tile = stream_data.next().unwrap().unwrap();
-            let lue = tile.data.pixel_value_at_grid_index(&(0,0)).unwrap();
+            let cp = tile.data.pixel_value_at_grid_index(&(tile_size_in_pixels.1/2, tile_size_in_pixels.0/2)).unwrap();
 
-            assert!((p - lue) < f32::EPSILON);             
+            assert_eq!(p, cp);             
 
         }
         assert!(stream_data.next().is_none()); 

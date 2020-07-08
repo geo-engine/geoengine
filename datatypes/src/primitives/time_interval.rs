@@ -22,7 +22,7 @@ impl Default for TimeInterval {
     /// ```
     /// use geoengine_datatypes::primitives::{TimeInterval, TimeInstance};
     ///
-    /// assert!(TimeInterval::default().contains(&TimeInterval::new_unchecked(0.into(), 0.into())));
+    /// assert!(TimeInterval::default().contains(&TimeInterval::new_unchecked(0, 0)));
     /// assert!(TimeInterval::default().intersects(&TimeInterval::default()));
     /// assert_eq!(TimeInterval::default().union(&TimeInterval::default()).unwrap(), TimeInterval::default());
     /// ```
@@ -35,47 +35,6 @@ impl Default for TimeInterval {
 }
 
 impl TimeInterval {
-    /// Create a new time interval and check bounds
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use geoengine_datatypes::primitives::{TimeInterval, TimeInstance};
-    ///
-    /// TimeInterval::new(0.into(), 0.into()).unwrap();
-    /// TimeInterval::new(0.into(), 1.into()).unwrap();
-    ///
-    /// TimeInterval::new(1.into(), 0.into()).unwrap_err();
-    /// ```
-    ///
-    /// # Errors
-    ///
-    /// This constructor fails if `end` is before `start`
-    ///
-    pub fn new(start: TimeInstance, end: TimeInstance) -> Result<Self> {
-        ensure!(
-            start <= end,
-            error::TimeIntervalEndBeforeStart { start, end }
-        );
-        Ok(Self { start, end })
-    }
-
-    /// Create a new time interval without bound checks
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use geoengine_datatypes::primitives::{TimeInterval, TimeInstance};
-    ///
-    /// let time_unchecked = TimeInterval::new_unchecked(0.into(), 1.into());
-    ///
-    /// assert_eq!(time_unchecked, TimeInterval::new(0.into(), 1.into()).unwrap());
-    /// ```
-    ///
-    pub fn new_unchecked(start: TimeInstance, end: TimeInstance) -> Self {
-        Self { start, end }
-    }
-
     /// Creates a new time interval from inputs implementing Into<TimeInstance>
     ///
     /// # Examples
@@ -83,18 +42,24 @@ impl TimeInterval {
     /// ```
     /// use geoengine_datatypes::primitives::{TimeInterval, TimeInstance};
     ///
-    /// TimeInterval::new_into(0, 0).unwrap();
-    /// TimeInterval::new_into(0, 1).unwrap();
+    /// TimeInterval::new(0, 0).unwrap();
+    /// TimeInterval::new(0, 1).unwrap();
     ///
-    /// TimeInterval::new_into(1, 0).unwrap_err();
+    /// TimeInterval::new(1, 0).unwrap_err();
     /// ```
     ///
     /// # Errors
     ///
     /// This constructor fails if `end` is before `start`
     ///
-    pub fn new_into<A, B>(start: A, end: B) -> Result<Self> where A: Into<TimeInstance>, B: Into<TimeInstance>  {
-        Self::new( start.into(), end.into() )
+    pub fn new<A, B>(start: A, end: B) -> Result<Self> where A: Into<TimeInstance>, B: Into<TimeInstance>  {
+        let start_instant = start.into();
+        let end_instant = end.into();
+        ensure!(
+            start_instant <= end_instant,
+            error::TimeIntervalEndBeforeStart { start: start_instant, end: end_instant }
+        );
+        Ok(Self { start: start_instant, end: end_instant })
     }
 
     /// Creates a new time interval without bound checks from inputs implementing Into<TimeInstance>
@@ -104,13 +69,13 @@ impl TimeInterval {
     /// ```
     /// use geoengine_datatypes::primitives::{TimeInterval};
     ///
-    /// let time_unchecked = TimeInterval::new_into_unchecked(0, 1);
+    /// let time_unchecked = TimeInterval::new_unchecked(0, 1);
     ///
-    /// assert_eq!(time_unchecked, TimeInterval::new(0.into(), 1.into()).unwrap());
+    /// assert_eq!(time_unchecked, TimeInterval::new(0, 1).unwrap());
     /// ```
     ///
-    pub fn new_into_unchecked<A, B>(start: A, end: B) -> Self where A: Into<TimeInstance>, B: Into<TimeInstance>  {
-        Self::new_unchecked( start.into(), end.into() )
+    pub fn new_unchecked<A, B>(start: A, end: B) -> Self where A: Into<TimeInstance>, B: Into<TimeInstance>  {
+        Self {start: start.into(), end: end.into()}
     }
 
     /// Returns whether the other `TimeInterval` is contained (smaller or equal) within this interval
@@ -128,16 +93,16 @@ impl TimeInterval {
     /// ];
     ///
     /// for ((t1, t2), (t3, t4)) in valid_pairs {
-    ///     let i1 = TimeInterval::new(t1.into(), t2.into()).unwrap();
-    ///     let i2 = TimeInterval::new(t3.into(), t4.into()).unwrap();
+    ///     let i1 = TimeInterval::new(t1, t2).unwrap();
+    ///     let i2 = TimeInterval::new(t3, t4).unwrap();
     ///     assert!(i1.contains(&i2), "{:?} should contain {:?}", i1, i2);
     /// }
     ///
     /// let invalid_pairs = vec![((0, 1), (-1, 2))];
     ///
     /// for ((t1, t2), (t3, t4)) in invalid_pairs {
-    ///     let i1 = TimeInterval::new(t1.into(), t2.into()).unwrap();
-    ///     let i2 = TimeInterval::new(t3.into(), t4.into()).unwrap();
+    ///     let i1 = TimeInterval::new(t1, t2).unwrap();
+    ///     let i2 = TimeInterval::new(t3, t4).unwrap();
     ///     assert!(!i1.contains(&i2), "{:?} should not contain {:?}", i1, i2);
     /// }
     /// ```
@@ -162,8 +127,8 @@ impl TimeInterval {
     /// ];
     ///
     /// for ((t1, t2), (t3, t4)) in valid_pairs {
-    ///     let i1 = TimeInterval::new(t1.into(), t2.into()).unwrap();
-    ///     let i2 = TimeInterval::new(t3.into(), t4.into()).unwrap();
+    ///     let i1 = TimeInterval::new(t1, t2).unwrap();
+    ///     let i2 = TimeInterval::new(t3, t4).unwrap();
     ///     assert!(i1.intersects(&i2), "{:?} should intersect {:?}", i1, i2);
     /// }
     ///
@@ -174,8 +139,8 @@ impl TimeInterval {
     /// ];
     ///
     /// for ((t1, t2), (t3, t4)) in invalid_pairs {
-    ///     let i1 = TimeInterval::new(t1.into(), t2.into()).unwrap();
-    ///     let i2 = TimeInterval::new(t3.into(), t4.into()).unwrap();
+    ///     let i1 = TimeInterval::new(t1, t2).unwrap();
+    ///     let i2 = TimeInterval::new(t3, t4).unwrap();
     ///     assert!(
     ///         !i1.intersects(&i2),
     ///         "{:?} should not intersect {:?}",
@@ -196,13 +161,13 @@ impl TimeInterval {
     /// ```
     /// use geoengine_datatypes::primitives::{TimeInterval, TimeInstance};
     ///
-    /// let i1 = TimeInterval::new(0.into(), 2.into()).unwrap();
-    /// let i2 = TimeInterval::new(1.into(), 3.into()).unwrap();
-    /// let i3 = TimeInterval::new(2.into(), 4.into()).unwrap();
-    /// let i4 = TimeInterval::new(3.into(), 5.into()).unwrap();
+    /// let i1 = TimeInterval::new(0, 2).unwrap();
+    /// let i2 = TimeInterval::new(1, 3).unwrap();
+    /// let i3 = TimeInterval::new(2, 4).unwrap();
+    /// let i4 = TimeInterval::new(3, 5).unwrap();
     ///
-    /// assert_eq!(i1.union(&i2).unwrap(), TimeInterval::new(0.into(), 3.into()).unwrap());
-    /// assert_eq!(i1.union(&i3).unwrap(), TimeInterval::new(0.into(), 4.into()).unwrap());
+    /// assert_eq!(i1.union(&i2).unwrap(), TimeInterval::new(0, 3).unwrap());
+    /// assert_eq!(i1.union(&i3).unwrap(), TimeInterval::new(0, 4).unwrap());
     /// i1.union(&i4).unwrap_err();
     /// ```
     ///
@@ -241,7 +206,7 @@ impl TimeInterval {
     /// use geoengine_datatypes::primitives::{TimeInterval, TimeInstance};
     ///
     /// assert_eq!(
-    ///     TimeInterval::new_into_unchecked(0, 1585069448 * 1000).to_geo_json_event(),
+    ///     TimeInterval::new_unchecked(0, 1585069448 * 1000).to_geo_json_event(),
     ///     serde_json::json!({
     ///         "start": "1970-01-01T00:00:00+00:00",
     ///         "end": "2020-03-24T17:04:08+00:00",
@@ -263,7 +228,7 @@ impl TimeInterval {
 
 impl Debug for TimeInterval {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-        write!(f, "TimeInterval [{}, {})", self.start.as_ref(), self.end.as_ref())
+        write!(f, "TimeInterval [{}, {})", self.start.inner(), &self.end.inner())
     }
 }
 
@@ -275,11 +240,11 @@ impl Display for TimeInterval {
     /// ```
     /// use geoengine_datatypes::primitives::TimeInterval;
     ///
-    /// assert_eq!(format!("{}", TimeInterval::new(0.into(), 1.into()).unwrap()), "[0, 1)");
+    /// assert_eq!(format!("{}", TimeInterval::new(0, 1).unwrap()), "[0, 1)");
     /// ```
     ///
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-        write!(f, "[{}, {})", self.start.as_ref(), self.end.as_ref())
+        write!(f, "[{}, {})", self.start.inner(), self.end.inner())
     }
 }
 
@@ -292,30 +257,30 @@ impl PartialOrd for TimeInterval {
     /// use geoengine_datatypes::primitives::TimeInterval;
     ///
     /// assert_eq!(
-    ///     TimeInterval::new_into(0, 1).unwrap(),
-    ///     TimeInterval::new_into(0, 1).unwrap()
+    ///     TimeInterval::new(0, 1).unwrap(),
+    ///     TimeInterval::new(0, 1).unwrap()
     /// );
     /// assert_ne!(
-    ///     TimeInterval::new_into(0, 1).unwrap(),
-    ///     TimeInterval::new_into(1, 2).unwrap()
+    ///     TimeInterval::new(0, 1).unwrap(),
+    ///     TimeInterval::new(1, 2).unwrap()
     /// );
     ///
-    /// assert!(TimeInterval::new_into(0, 1).unwrap() <= TimeInterval::new_into(0, 1).unwrap());
-    /// assert!(TimeInterval::new_into(0, 1).unwrap() <= TimeInterval::new_into(1, 2).unwrap());
-    /// assert!(TimeInterval::new_into(0, 1).unwrap() < TimeInterval::new_into(1, 2).unwrap());
+    /// assert!(TimeInterval::new(0, 1).unwrap() <= TimeInterval::new(0, 1).unwrap());
+    /// assert!(TimeInterval::new(0, 1).unwrap() <= TimeInterval::new(1, 2).unwrap());
+    /// assert!(TimeInterval::new(0, 1).unwrap() < TimeInterval::new(1, 2).unwrap());
     ///
-    /// assert!(TimeInterval::new_into(0, 1).unwrap() >= TimeInterval::new_into(0, 1).unwrap());
-    /// assert!(TimeInterval::new_into(1, 2).unwrap() >= TimeInterval::new_into(0, 1).unwrap());
-    /// assert!(TimeInterval::new_into(1, 2).unwrap() > TimeInterval::new_into(0, 1).unwrap());
+    /// assert!(TimeInterval::new(0, 1).unwrap() >= TimeInterval::new(0, 1).unwrap());
+    /// assert!(TimeInterval::new(1, 2).unwrap() >= TimeInterval::new(0, 1).unwrap());
+    /// assert!(TimeInterval::new(1, 2).unwrap() > TimeInterval::new(0, 1).unwrap());
     ///
-    /// assert!(TimeInterval::new_into(0, 2)
+    /// assert!(TimeInterval::new(0, 2)
     ///     .unwrap()
-    ///     .partial_cmp(&TimeInterval::new_into(1, 3).unwrap())
+    ///     .partial_cmp(&TimeInterval::new(1, 3).unwrap())
     ///     .is_none());
     ///
-    /// assert!(TimeInterval::new_into(0, 1)
+    /// assert!(TimeInterval::new(0, 1)
     ///     .unwrap()
-    ///     .partial_cmp(&TimeInterval::new_into(0, 2).unwrap())
+    ///     .partial_cmp(&TimeInterval::new(0, 2).unwrap())
     ///     .is_none());
     /// ```
     ///
