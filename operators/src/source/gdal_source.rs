@@ -373,6 +373,7 @@ mod tests {
         );
     }
 
+    #[allow(clippy::too_many_lines)]
     #[test]
     fn test_time_tile_iter() {
         let global_size_in_pixels = (6000, 6000);
