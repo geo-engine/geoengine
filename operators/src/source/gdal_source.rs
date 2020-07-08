@@ -243,7 +243,7 @@ impl GdalSource {
         let path = self.gdal_params.base_path.join(&file_name);
 
         // open the dataset at path (or 'throw' an error)
-        let dataset = GdalDataset::open(&path).expect("cant open dataset");
+        let dataset = GdalDataset::open(&path)?; // TODO: investigate if we need a dataset cache
         // get the geo transform (pixel size ...) of the dataset (or 'throw' an error)
         let gdal_geo_transform = dataset.geo_transform()?;
         let geo_transform = GeoTransform::from(gdal_geo_transform);
