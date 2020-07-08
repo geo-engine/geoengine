@@ -25,5 +25,5 @@ pub mod util;
 
 pub use operators::Operator;
 
-extern crate num;
 extern crate gdal;
+extern crate num;

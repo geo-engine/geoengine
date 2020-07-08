@@ -109,4 +109,3 @@ pub struct ProjectionParameters {
     pub src_crs: String,
     pub dest_crs: String,
 }
-

@@ -1,7 +1,7 @@
 use crate::error;
+use crate::primitives::TimeInstance;
 use crate::util::arrow::ArrowTyped;
 use crate::util::Result;
-use crate::primitives::TimeInstance;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::cmp::Ordering;
@@ -53,14 +53,24 @@ impl TimeInterval {
     ///
     /// This constructor fails if `end` is before `start`
     ///
-    pub fn new<A, B>(start: A, end: B) -> Result<Self> where A: Into<TimeInstance>, B: Into<TimeInstance>  {
+    pub fn new<A, B>(start: A, end: B) -> Result<Self>
+    where
+        A: Into<TimeInstance>,
+        B: Into<TimeInstance>,
+    {
         let start_instant = start.into();
         let end_instant = end.into();
         ensure!(
             start_instant <= end_instant,
-            error::TimeIntervalEndBeforeStart { start: start_instant, end: end_instant }
+            error::TimeIntervalEndBeforeStart {
+                start: start_instant,
+                end: end_instant
+            }
         );
-        Ok(Self { start: start_instant, end: end_instant })
+        Ok(Self {
+            start: start_instant,
+            end: end_instant,
+        })
     }
 
     /// Creates a new time interval without bound checks from inputs implementing Into<TimeInstance>
@@ -75,8 +85,15 @@ impl TimeInterval {
     /// assert_eq!(time_unchecked, TimeInterval::new(0, 1).unwrap());
     /// ```
     ///
-    pub fn new_unchecked<A, B>(start: A, end: B) -> Self where A: Into<TimeInstance>, B: Into<TimeInstance>  {
-        Self {start: start.into(), end: end.into()}
+    pub fn new_unchecked<A, B>(start: A, end: B) -> Self
+    where
+        A: Into<TimeInstance>,
+        B: Into<TimeInstance>,
+    {
+        Self {
+            start: start.into(),
+            end: end.into(),
+        }
     }
 
     /// Returns whether the other `TimeInterval` is contained (smaller or equal) within this interval
@@ -229,7 +246,12 @@ impl TimeInterval {
 
 impl Debug for TimeInterval {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-        write!(f, "TimeInterval [{}, {})", self.start.inner(), &self.end.inner())
+        write!(
+            f,
+            "TimeInterval [{}, {})",
+            self.start.inner(),
+            &self.end.inner()
+        )
     }
 }
 

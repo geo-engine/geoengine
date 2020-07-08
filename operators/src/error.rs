@@ -1,5 +1,5 @@
-use snafu::Snafu;
-use failure::Fail; // TODO: replace failure in gdal and then remove
+use failure::Fail;
+use snafu::Snafu; // TODO: replace failure in gdal and then remove
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility = "pub(crate)")]

@@ -1,8 +1,8 @@
 use super::Capacity;
 use crate::error;
 use crate::util::Result;
+use serde::{Deserialize, Serialize};
 use snafu::ensure;
-use serde::{Serialize, Deserialize};
 
 // Index types for 1,2,3 dimensional grids
 pub type Ix = usize;
