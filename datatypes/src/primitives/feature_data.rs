@@ -121,7 +121,7 @@ macro_rules! data_ref_as_ref_impl {
     ($DataRef:ty, $l:lifetime, $T:ty) => {
         impl<$l> AsRef<[$T]> for $DataRef {
             fn as_ref(&self) -> &[$T] {
-                self.buffer.typed_data()
+                unsafe { self.buffer.typed_data() }
             }
         }
     };
@@ -335,7 +335,7 @@ impl TextDataRef {
     }
 
     pub fn offsets(&self) -> &[i32] {
-        self.offsets_buffer.typed_data()
+        unsafe { self.offsets_buffer.typed_data() }
     }
 
     /// Returns the text reference at a certain position in the feature collection
@@ -452,7 +452,7 @@ impl NullableTextDataRef {
     }
 
     pub fn offsets(&self) -> &[i32] {
-        self.offsets_buffer.typed_data()
+        unsafe { self.offsets_buffer.typed_data() }
     }
 
     /// Returns the text reference at a certain position in the feature collection

@@ -15,10 +15,14 @@
     clippy::similar_names,
     clippy::single_match_else,
     clippy::type_repetition_in_bounds,
+    clippy::used_underscore_binding, // TODO: remove wrt. https://github.com/rust-lang/rust-clippy/issues/5360
     clippy::wildcard_imports
 )]
 
+#[macro_use]
+pub mod util;
 pub mod error;
 pub mod handlers;
+pub mod projects;
 pub mod users;
 pub mod workflows;

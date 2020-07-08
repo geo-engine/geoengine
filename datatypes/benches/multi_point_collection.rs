@@ -1,21 +1,26 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use geoengine_datatypes::collections::MultiPointCollection;
-use geoengine_datatypes::primitives::{FeatureDataType, FeatureDataValue, TimeInterval};
+use geoengine_datatypes::collections::{
+    BuilderProvider, FeatureCollectionBuilder, FeatureCollectionRowBuilder,
+    GeoFeatureCollectionRowBuilder, MultiPointCollection,
+};
+use geoengine_datatypes::primitives::{
+    Coordinate2D, FeatureDataType, FeatureDataValue, TimeInterval,
+};
 
 fn multi_point_collection_benchmarks(c: &mut Criterion) {
     let mut group = c.benchmark_group("MultiPointCollection");
 
     group.bench_function("Builder Plain 100", |b| {
         b.iter(|| {
-            let mut builder = MultiPointCollection::builder();
+            let mut builder = MultiPointCollection::builder().finish_header();
             for i in 0..100 {
                 builder
-                    .append_coordinate((i as f64, i as f64).into())
+                    .push_geometry(Coordinate2D::new(i as f64, i as f64).into())
                     .unwrap();
                 builder
-                    .append_time_interval(TimeInterval::new_unchecked(i, i + 1))
+                    .push_time_interval(TimeInterval::new_unchecked(i, i + 1))
                     .unwrap();
-                builder.finish_row().unwrap();
+                builder.finish_row();
             }
             black_box(builder.build())
         })
@@ -25,19 +30,20 @@ fn multi_point_collection_benchmarks(c: &mut Criterion) {
         b.iter(|| {
             let mut builder = MultiPointCollection::builder();
             builder
-                .add_column("number", FeatureDataType::Number)
+                .add_column("number".into(), FeatureDataType::Number)
                 .unwrap();
+            let mut builder = builder.finish_header();
             for i in 0..100 {
                 builder
-                    .append_coordinate((i as f64, i as f64).into())
+                    .push_geometry(Coordinate2D::new(i as f64, i as f64).into())
                     .unwrap();
                 builder
-                    .append_time_interval(TimeInterval::new_unchecked(i, i + 1))
+                    .push_time_interval(TimeInterval::new_unchecked(i, i + 1))
                     .unwrap();
                 builder
-                    .append_data("number", FeatureDataValue::Number(i as f64))
+                    .push_data("number", FeatureDataValue::Number(i as f64))
                     .unwrap();
-                builder.finish_row().unwrap();
+                builder.finish_row();
             }
             black_box(builder.build())
         })

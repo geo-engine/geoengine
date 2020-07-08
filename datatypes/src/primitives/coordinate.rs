@@ -1,3 +1,5 @@
+use crate::util::arrow::ArrowTyped;
+use arrow::datatypes::DataType;
 use serde::{Deserialize, Serialize};
 use std::{fmt, slice};
 
@@ -107,6 +109,27 @@ impl Into<[f64; 2]> for Coordinate2D {
 impl<'c> Into<&'c [f64]> for &'c Coordinate2D {
     fn into(self) -> &'c [f64] {
         unsafe { slice::from_raw_parts(self as *const Coordinate2D as *const f64, 2) }
+    }
+}
+
+// TODO: use FixedSizeListBuilder of Float64Builder -> cf. https://issues.apache.org/jira/browse/ARROW-8508
+impl ArrowTyped for Coordinate2D {
+    type ArrowArray = arrow::array::FixedSizeBinaryArray;
+    type ArrowBuilder = arrow::array::FixedSizeBinaryBuilder;
+
+    fn arrow_data_type() -> DataType {
+        arrow::datatypes::DataType::FixedSizeBinary(std::mem::size_of::<Self>() as i32)
+    }
+
+    fn arrow_builder(capacity: usize) -> Self::ArrowBuilder {
+        arrow::array::FixedSizeBinaryBuilder::new(capacity, std::mem::size_of::<Self>() as i32)
+    }
+}
+
+impl AsRef<[u8]> for Coordinate2D {
+    fn as_ref(&self) -> &[u8] {
+        let raw_ptr = self as *const Coordinate2D as *const f64 as *const u8;
+        unsafe { std::slice::from_raw_parts(raw_ptr, std::mem::size_of::<Self>()) }
     }
 }
 

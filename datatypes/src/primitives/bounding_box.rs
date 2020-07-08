@@ -2,8 +2,9 @@ use super::Coordinate2D;
 use crate::error;
 use crate::util::Result;
 use snafu::ensure;
+use serde::{Deserialize, Serialize};
 
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, Serialize, Deserialize, PartialEq, Debug)]
 #[repr(C)]
 /// The bounding box of a geometry.
 /// Note: may degenerate to a point!

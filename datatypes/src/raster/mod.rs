@@ -3,8 +3,8 @@ mod geo_transform;
 mod grid_dimension;
 pub use self::base_raster::{BaseRaster, Raster2D, Raster3D};
 pub use self::geo_transform::{GdalGeoTransform, GeoTransform};
-pub use self::grid_dimension::{Dim, GridDimension, GridIndex, Ix, Ix1, Ix2, Ix3};
-pub use super::primitives::{BoundingBox2D, SpatialBounded, TemporalBounded, TimeInterval};
+pub use self::grid_dimension::{Dim, GridDimension, GridIndex};
+use super::primitives::{SpatialBounded, TemporalBounded};
 use crate::util::Result;
 
 pub trait Raster<D: GridDimension, T: Copy, C: Capacity>: SpatialBounded + TemporalBounded {
@@ -24,7 +24,8 @@ pub trait GridPixelAccess<T, I> {
     /// # Examples
     ///
     /// ```
-    /// use geoengine_datatypes::raster::{Raster, Dim, Raster2D, TimeInterval, GridPixelAccess};
+    /// use geoengine_datatypes::raster::{Raster, Dim, Raster2D, GridPixelAccess};
+    /// use geoengine_datatypes::primitives::TimeInterval;
     ///
     /// let mut raster2d = Raster2D::new(
     ///    [3, 2].into(),
@@ -50,7 +51,8 @@ pub trait GridPixelAccessMut<T, I> {
     /// # Examples
     ///
     /// ```
-    /// use geoengine_datatypes::raster::{Raster, Dim, Raster2D, TimeInterval, GridPixelAccessMut};
+    /// use geoengine_datatypes::raster::{Raster, Dim, Raster2D, GridPixelAccessMut};
+    /// use geoengine_datatypes::primitives::TimeInterval;
     ///
     /// let mut raster2d = Raster2D::new(
     ///    [3, 2].into(),
