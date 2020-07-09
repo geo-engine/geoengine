@@ -34,6 +34,7 @@ jobs:
           sudo ln -s /usr/lib/llvm-6.0/lib/clang/6.0.1 /usr/lib/llvm-6.0/lib/clang/6.0.0
       - name: Install GDAL
         run: |
+          sudo add-apt-repository ppa:ubuntugis/ubuntugis-unstable --yes
           sudo apt-get update
           sudo apt-get install libgdal-dev gdal-bin
       - name: Build
