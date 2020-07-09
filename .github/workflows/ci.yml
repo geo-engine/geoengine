@@ -37,6 +37,7 @@ jobs:
           sudo add-apt-repository ppa:ubuntugis/ubuntugis-unstable --yes
           sudo apt-get update
           sudo apt-get install libgdal-dev gdal-bin
+          sudo ln -s /usr/lib/libgdal.so.26.0.4 /usr/lib/libgdal.so
       - name: Build
         run: cargo build --verbose
       - name: Run tests
