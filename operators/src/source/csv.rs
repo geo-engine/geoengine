@@ -1,17 +1,18 @@
 use crate::error::{self, Error};
 use crate::util::Result;
 use csv::{Position, Reader};
-use futures::future;
+use futures::{future, TryFutureExt, Stream};
 use futures::stream::{self, BoxStream, StreamExt};
-use geoengine_datatypes::collections::{
-    BuilderProvider, FeatureCollectionBuilder, FeatureCollectionRowBuilder,
-    GeoFeatureCollectionRowBuilder, MultiPointCollection,
-};
+use geoengine_datatypes::collections::{BuilderProvider, FeatureCollectionBuilder, FeatureCollectionRowBuilder, GeoFeatureCollectionRowBuilder, MultiPointCollection, IntoGeometryIterator};
 use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval};
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, OptionExt, ResultExt};
 use std::fs::File;
 use std::path::PathBuf;
+use crate::engine::{QueryProcessor, QueryContext, QueryRectangle};
+use geoengine_datatypes::collections::FeatureCollection;
+use futures::task::{Context, Poll};
+use tokio::macros::support::Pin;
 
 /// Parameters for the CSV Source Operator
 ///
@@ -49,7 +50,7 @@ use std::path::PathBuf;
 ///     sources: Default::default(),
 /// });
 /// ```
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 pub struct CsvSourceParameters {
     pub file_path: PathBuf,
     pub field_separator: char,
@@ -58,13 +59,13 @@ pub struct CsvSourceParameters {
     pub time: CsvTimeSpecification,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum CsvGeometrySpecification {
     XY { x: String, y: String },
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 pub enum CsvTimeSpecification {
     None,
 }
@@ -269,7 +270,6 @@ struct ParsedRow {
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
     use futures::executor::block_on_stream;
     use geoengine_datatypes::collections::FeatureCollection;
@@ -286,8 +286,7 @@ x,y
 CORRUPT
 4,5
 "
-        )
-        .unwrap();
+        ).unwrap();
         fake_file.seek(SeekFrom::Start(0)).unwrap();
 
         let mut csv_source = CsvSource::new(CsvSourceParameters {
@@ -298,8 +297,7 @@ CORRUPT
                 y: "y".into(),
             },
             time: CsvTimeSpecification::None,
-        })
-        .unwrap();
+        }).unwrap();
 
         let mut stream = block_on_stream(csv_source.read_points(1));
 
@@ -319,8 +317,7 @@ x,z
 2,3
 4,5
 "
-        )
-        .unwrap();
+        ).unwrap();
         fake_file.seek(SeekFrom::Start(0)).unwrap();
 
         let mut csv_source = CsvSource::new(CsvSourceParameters {
@@ -331,8 +328,7 @@ x,z
                 y: "y".into(),
             },
             time: CsvTimeSpecification::None,
-        })
-        .unwrap();
+        }).unwrap();
 
         let mut stream = block_on_stream(csv_source.read_points(1));
 

@@ -11,6 +11,8 @@ use crate::mock::source::mock_point_source::MockPointSourceImpl;
 use crate::mock::source::mock_raster_source::MockRasterSourceImpl;
 use crate::Operator;
 use crate::util::Result;
+use crate::source::CsvSourceParameters;
+use crate::source::CsvSource;
 
 #[derive(Copy, Clone)]
 pub struct QueryRectangle {
@@ -25,7 +27,7 @@ pub struct QueryContext {
     pub chunk_byte_size: usize
 }
 
-pub trait QueryProcessor <T: ?Sized + Send> : Sync {
+pub trait QueryProcessor<T: ?Sized + Send>: Sync {
     fn query(&self, query: QueryRectangle, ctx: QueryContext) -> BoxStream<Result<Box<T>>>;
 }
 
@@ -65,27 +67,30 @@ pub fn processor(operator: &Operator) -> Result<QueryProcessorType> {
             QueryProcessorType::RasterProcessor(Box::new(MockRasterSourceImpl {
                 data: params.data.clone(),
                 dim: params.dim,
-                geo_transform: params.geo_transform
+                geo_transform: params.geo_transform,
             }))
-        },
+        }
         Operator::MockPointSource { params, sources: _ } => {
             QueryProcessorType::PointProcessor(Box::new(MockPointSourceImpl {
                 points: params.points.clone()
             }))
-        },
+        }
         Operator::MockDelay { params, sources } => {
             QueryProcessorType::PointProcessor(Box::new(MockDelayImpl {
                 points: create_sources(&sources.points, QueryProcessorType::point_processor)?,
-                seconds: params.seconds
+                seconds: params.seconds,
             }))
-        },
+        }
         Operator::MockRasterPoints { params, sources } => {
             QueryProcessorType::PointProcessor(Box::new(MockRasterPointsImpl {
                 points: create_sources(&sources.points, QueryProcessorType::point_processor)?,
                 rasters: create_sources(&sources.rasters, QueryProcessorType::raster_processor)?,
-                coords: params.coords
+                coords: params.coords,
             }))
-        },
+        }
+        // Operator::CsvSource { params, .. } => {
+        //     QueryProcessorType::PointProcessor(Box::new(CsvSourceProcessor { params: params.clone() }))
+        // }
         _ => return Err(Error::QueryProcessor)
     })
 }
@@ -134,7 +139,7 @@ mod test {
             };
 
             op_impl.query(query, ctx).for_each(|pc| {
-                    println!("{:?}", pc);
+                println!("{:?}", pc);
                 futures::future::ready(())
             }).await;
         }

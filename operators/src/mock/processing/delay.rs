@@ -2,6 +2,7 @@ use std::{thread, time};
 
 use futures::stream::BoxStream;
 use futures::StreamExt;
+use tokio::prelude::*;
 
 use geoengine_datatypes::collections::MultiPointCollection;
 
@@ -17,8 +18,10 @@ impl QueryProcessor<MultiPointCollection> for MockDelayImpl {
     fn query(&self, query: QueryRectangle, ctx: QueryContext) -> BoxStream<Result<Box<MultiPointCollection>>> {
         let seconds = self.seconds;
 
-        self.points[0].query(query, ctx).map(move |x| {
-            thread::sleep(time::Duration::from_secs(seconds));
+        self.points[0].query(query, ctx).then(async move |x| {
+            let _ = tokio::spawn(async move {
+                thread::sleep(time::Duration::from_secs(seconds));
+            }).await;
             x
         }).boxed()
     }
@@ -63,5 +66,7 @@ mod test {
             println!("{}", now.elapsed().as_secs());
             futures::future::ready(())
         }).await;
+
+        // TODO: 2nd query and select!
     }
 }
