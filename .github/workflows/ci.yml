@@ -38,6 +38,10 @@ jobs:
           gdal-config --version
           gdal-config --libs
           gdal-config --prefix
+      - name: Setup building
+        run: |
+          export CC="clang-9"
+          export CXX="clang++-9"
       - uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
