@@ -23,10 +23,6 @@ jobs:
           toolchain: nightly
           components: clippy, rustfmt
           override: true
-      - uses: actions-rs/clippy-check@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          args: --all-targets --all-features -- -D warnings
       - name: Install OpenCL
         run: |
           sudo apt-get update
@@ -42,6 +38,10 @@ jobs:
           gdal-config --version
           gdal-config --libs
           gdal-config --prefix
+      - uses: actions-rs/clippy-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --all-targets --all-features -- -D warnings
       - name: Build
         run: cargo build --verbose
       - name: Run tests
