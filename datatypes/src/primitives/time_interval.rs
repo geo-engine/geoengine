@@ -213,9 +213,19 @@ impl TimeInterval {
     ///     })
     /// );
     /// ```
+    #[allow(unstable_name_collisions)] // TODO: remove when `clamp` is stable
     pub fn to_geo_json_event(&self) -> serde_json::Value {
-        let start_date: DateTime<Utc> = Utc.timestamp_millis(self.start());
-        let end_date: DateTime<Utc> = Utc.timestamp_millis(self.end());
+        let min_visualizable_value = -8_334_632_851_200_001 + 1; // -262144-01-01T00:00:00+00:00
+        let max_visualizable_value = 8_210_298_412_800_000 - 1; // +262143-12-31T23:59:59.999+00:00
+
+        let start_date: DateTime<Utc> = Utc.timestamp_millis(
+            self.start()
+                .clamp(min_visualizable_value, max_visualizable_value),
+        );
+        let end_date: DateTime<Utc> = Utc.timestamp_millis(
+            self.end()
+                .clamp(min_visualizable_value, max_visualizable_value),
+        );
 
         serde_json::json!({
             "start": start_date.to_rfc3339(),
@@ -309,5 +319,62 @@ impl ArrowTyped for TimeInterval {
 
     fn arrow_builder(capacity: usize) -> Self::ArrowBuilder {
         arrow::array::FixedSizeListBuilder::new(arrow::array::Date64Builder::new(2 * capacity), 2)
+    }
+}
+
+// TODO: use int's clamp function once it is stable
+trait Clamp: Sized + PartialOrd {
+    /// Restrict a value to a certain interval unless it is NaN.
+    /// taken from std-lib nightly
+    fn clamp(self, min: Self, max: Self) -> Self {
+        assert!(min <= max);
+        let mut x = self;
+        if x < min {
+            x = min;
+        }
+        if x > max {
+            x = max;
+        }
+        x
+    }
+}
+
+impl Clamp for i64 {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn to_geo_json_event() {
+        let min_visualizable_value = -8_334_632_851_200_001 + 1;
+        let max_visualizable_value = 8_210_298_412_800_000 - 1;
+
+        assert_eq!(
+            TimeInterval::new_unchecked(min_visualizable_value, max_visualizable_value)
+                .to_geo_json_event(),
+            serde_json::json!({
+                "start": "-262144-01-01T00:00:00+00:00",
+                "end": "+262143-12-31T23:59:59.999+00:00",
+                "type": "Interval",
+            })
+        );
+        assert_eq!(
+            TimeInterval::new_unchecked(min_visualizable_value - 1, max_visualizable_value + 1)
+                .to_geo_json_event(),
+            serde_json::json!({
+                "start": "-262144-01-01T00:00:00+00:00",
+                "end": "+262143-12-31T23:59:59.999+00:00",
+                "type": "Interval",
+            })
+        );
+        assert_eq!(
+            TimeInterval::new_unchecked(i64::MIN, i64::MAX).to_geo_json_event(),
+            serde_json::json!({
+                "start": "-262144-01-01T00:00:00+00:00",
+                "end": "+262143-12-31T23:59:59.999+00:00",
+                "type": "Interval",
+            })
+        );
     }
 }
