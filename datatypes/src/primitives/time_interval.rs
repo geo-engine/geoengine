@@ -1,7 +1,7 @@
 use crate::error;
 use crate::util::arrow::ArrowTyped;
 use crate::util::Result;
-use chrono::{DateTime, TimeZone, Utc};
+use chrono::{TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::cmp::Ordering;
@@ -213,23 +213,24 @@ impl TimeInterval {
     ///     })
     /// );
     /// ```
-    #[allow(unstable_name_collisions)] // TODO: remove when `clamp` is stable
     pub fn to_geo_json_event(&self) -> serde_json::Value {
-        let min_visualizable_value = -8_334_632_851_200_001 + 1; // -262144-01-01T00:00:00+00:00
-        let max_visualizable_value = 8_210_298_412_800_000 - 1; // +262143-12-31T23:59:59.999+00:00
+        // TODO: Use proper time handling, e.g., define a BOT/EOT, …
+        fn to_rfc3339(timestamp: i64) -> String {
+            const MIN_VISUALIZABLE_VALUE: i64 = -8_334_632_851_200_001 + 1;
+            const MAX_VISUALIZABLE_VALUE: i64 = 8_210_298_412_800_000 - 1;
 
-        let start_date: DateTime<Utc> = Utc.timestamp_millis(
-            self.start()
-                .clamp(min_visualizable_value, max_visualizable_value),
-        );
-        let end_date: DateTime<Utc> = Utc.timestamp_millis(
-            self.end()
-                .clamp(min_visualizable_value, max_visualizable_value),
-        );
+            if timestamp < MIN_VISUALIZABLE_VALUE {
+                "-262144-01-01T00:00:00+00:00".into()
+            } else if timestamp > MAX_VISUALIZABLE_VALUE {
+                "+262143-12-31T23:59:59.999+00:00".into()
+            } else {
+                Utc.timestamp_millis(timestamp).to_rfc3339()
+            }
+        }
 
         serde_json::json!({
-            "start": start_date.to_rfc3339(),
-            "end": end_date.to_rfc3339(),
+            "start": to_rfc3339(self.start),
+            "end": to_rfc3339(self.end),
             "type": "Interval"
         })
     }
@@ -321,25 +322,6 @@ impl ArrowTyped for TimeInterval {
         arrow::array::FixedSizeListBuilder::new(arrow::array::Date64Builder::new(2 * capacity), 2)
     }
 }
-
-// TODO: use int's clamp function once it is stable
-trait Clamp: Sized + PartialOrd {
-    /// Restrict a value to a certain interval unless it is NaN.
-    /// taken from std-lib nightly
-    fn clamp(self, min: Self, max: Self) -> Self {
-        assert!(min <= max);
-        let mut x = self;
-        if x < min {
-            x = min;
-        }
-        if x > max {
-            x = max;
-        }
-        x
-    }
-}
-
-impl Clamp for i64 {}
 
 #[cfg(test)]
 mod tests {
