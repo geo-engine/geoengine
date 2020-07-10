@@ -18,6 +18,7 @@ use crate::error::{self};
 use crate::util::Result;
 use crate::engine::{QueryProcessor, QueryContext, QueryRectangle};
 use futures::stream::BoxStream;
+use std::sync::{Mutex, Arc};
 
 /// Parameters for the CSV Source Operator
 ///
@@ -123,9 +124,15 @@ impl ReaderState {
 
 pub struct CsvSource {
     parameters: CsvSourceParameters,
-    csv_reader: ReaderState,
     bbox: BoundingBox2D,
     chunk_size: usize,
+    state: Arc<Mutex<CsvSourceStreamState>>,
+}
+
+pub struct CsvSourceStreamState {
+    csv_reader: ReaderState,
+    #[allow(clippy::option_option)]
+    poll_result: Option<Option<Result<MultiPointCollection>>>,
 }
 
 impl CsvSource {
@@ -150,13 +157,16 @@ impl CsvSource {
         );
 
         Ok(Self {
-            csv_reader: ReaderState::Untouched(
-                csv::ReaderBuilder::new()
-                    .delimiter(parameters.field_separator as u8)
-                    .has_headers(true)
-                    .from_path(parameters.file_path.as_path())
-                    .context(error::CsvSourceReader {})?,
-            ),
+            state: Arc::new(Mutex::new(CsvSourceStreamState {
+                poll_result: None,
+                csv_reader: ReaderState::Untouched(
+                    csv::ReaderBuilder::new()
+                        .delimiter(parameters.field_separator as u8)
+                        .has_headers(true)
+                        .from_path(parameters.file_path.as_path())
+                        .context(error::CsvSourceReader {})?,
+                ),
+            })),
             parameters,
             bbox,
             chunk_size,
@@ -232,58 +242,75 @@ impl CsvSource {
 impl Stream for CsvSource {
     type Item = Result<MultiPointCollection>;
 
-    fn poll_next(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        // TODO: do work in separate task -> async
-        let computation_result = || -> Result<Option<MultiPointCollection>> {
-            // TODO: is clone necessary?
-            let geometry_specification = self.parameters.geometry.clone();
-            self.csv_reader.setup_once(geometry_specification)?;
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let mut state = self.state.lock().unwrap(); // TODO: handle lock poisoning
+        if state.poll_result.is_some() {
+            let x = state.poll_result.replace(None).unwrap();
 
-            let bbox = self.bbox;
-            let chunk_size = self.chunk_size;
+            return Poll::Ready(x);
+        }
+        drop(state);
 
-            let (header, records) = match &mut self.csv_reader {
-                ReaderState::OnGoing { header, records } => (header, records),
-                ReaderState::Error => return Ok(None),
-                _ => unreachable!(),
-            };
+        let state_ref = self.state.clone();
+        let bbox = self.bbox;
+        let chunk_size = self.chunk_size;
+        let parameters = self.parameters.clone();
+        let waker = cx.waker().clone();
+        tokio::spawn(async move {
+            let mut state = state_ref.lock().unwrap(); // TODO
+            let computation_result = || -> Result<Option<MultiPointCollection>> {
+                // TODO: is clone necessary?
+                let geometry_specification = parameters.geometry.clone();
+                state.csv_reader.setup_once(geometry_specification)?;
 
-            let mut builder = MultiPointCollection::builder().finish_header();
-            let mut number_of_entries = 0; // TODO: add size/len to builder
-
-            while number_of_entries < chunk_size {
-                let record = match records.next() {
-                    Some(r) => r,
-                    None => break,
+                let (header, records) = match &mut state.csv_reader {
+                    ReaderState::OnGoing { header, records } => (header, records),
+                    ReaderState::Error => return Ok(None),
+                    _ => unreachable!(),
                 };
 
-                let row = record.with_context(|| error::CsvSourceReader)?;
-                let parsed_row = CsvSource::parse_row(header, &row)?;
+                let mut builder = MultiPointCollection::builder().finish_header();
+                let mut number_of_entries = 0; // TODO: add size/len to builder
 
-                // TODO: filter time
-                if bbox.contains_coordinate(&parsed_row.coordinate) {
-                    builder.push_geometry(parsed_row.coordinate.into())?;
-                    builder.push_time_interval(parsed_row.time_interval)?;
-                    builder.finish_row();
+                while number_of_entries < chunk_size {
+                    let record = match records.next() {
+                        Some(r) => r,
+                        None => break,
+                    };
 
-                    number_of_entries += 1;
+                    let row = record.with_context(|| error::CsvSourceReader)?;
+                    let parsed_row = CsvSource::parse_row(header, &row)?;
+
+                    // TODO: filter time
+                    if bbox.contains_coordinate(&parsed_row.coordinate) {
+                        builder.push_geometry(parsed_row.coordinate.into())?;
+                        builder.push_time_interval(parsed_row.time_interval)?;
+                        builder.finish_row();
+
+                        number_of_entries += 1;
+                    }
                 }
-            }
 
-            // TODO: is this the correct cancellation criterion?
-            if number_of_entries > 0 {
-                let collection = builder.build()?;
-                Ok(Some(collection))
-            } else {
-                Ok(None)
-            }
-        }();
+                // TODO: is this the correct cancellation criterion?
+                if number_of_entries > 0 {
+                    let collection = builder.build()?;
+                    Ok(Some(collection))
+                } else {
+                    Ok(None)
+                }
+            }();
 
-        Poll::Ready(match computation_result {
-            Ok(Some(collection)) => Some(Ok(collection)),
-            Ok(None) => None,
-            Err(e) => Some(Err(e)),
-        })
+            // TODO
+            state.poll_result = Some(match computation_result {
+                Ok(Some(collection)) => Some(Ok(collection)),
+                Ok(None) => None,
+                Err(e) => Some(Err(e)),
+            });
+
+            waker.wake();
+        });
+
+        Poll::Pending
     }
 }
 
