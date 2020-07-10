@@ -40,6 +40,7 @@ jobs:
           export GDAL_LIB_DIR=/usr/lib/
           export GDAL_INCLUDE_DIR=/usr/include/gdal/
           export GDAL_HOME=/usr/
+          sudo ldconfig
       - name: Build
         run: cargo build --verbose
       - name: Run tests
