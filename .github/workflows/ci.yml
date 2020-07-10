@@ -39,8 +39,6 @@ jobs:
           export GDAL_LIB_DIR=/usr/lib
           export GDAL_INCLUDE_DIR=/usr/include/gdal
           export GDAL_HOME=/usr
-          export C_INCLUDE_PATH=/usr/include/gdal:$C_INCLUDE_PATH
-          export CPLUS_INCLUDE_PATH=/usr/include/gdal:$CPLUS_INCLUDE_PATH
           sudo ldconfig
           gdal-config --version
           gdal-config --libs
