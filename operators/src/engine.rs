@@ -11,8 +11,6 @@ use crate::mock::source::mock_point_source::MockPointSourceImpl;
 use crate::mock::source::mock_raster_source::MockRasterSourceImpl;
 use crate::Operator;
 use crate::util::Result;
-use crate::source::CsvSourceParameters;
-use crate::source::CsvSource;
 
 #[derive(Copy, Clone)]
 pub struct QueryRectangle {

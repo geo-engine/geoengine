@@ -2,7 +2,6 @@ use std::{thread, time};
 
 use futures::stream::BoxStream;
 use futures::StreamExt;
-use tokio::prelude::*;
 
 use geoengine_datatypes::collections::MultiPointCollection;
 
