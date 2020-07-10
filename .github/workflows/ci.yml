@@ -34,7 +34,6 @@ jobs:
           sudo ln -s /usr/lib/llvm-6.0/lib/clang/6.0.1 /usr/lib/llvm-6.0/lib/clang/6.0.0
       - name: Install GDAL
         run: |
-          sudo add-apt-repository ppa:ubuntugis/ubuntugis-unstable --yes
           sudo apt-get update
           sudo apt-get install libgdal-dev gdal-bin build-essential
           export GDAL_LIB_DIR=/usr/lib
@@ -43,6 +42,9 @@ jobs:
           export C_INCLUDE_PATH=/usr/include/gdal:$C_INCLUDE_PATH
           export CPLUS_INCLUDE_PATH=/usr/include/gdal:$CPLUS_INCLUDE_PATH
           sudo ldconfig
+          gdal-config --version
+          gdal-config --libs
+          gdal-config --prefix
       - name: Build
         run: cargo build --verbose
       - name: Run tests
