@@ -36,7 +36,7 @@ jobs:
         run: |
           sudo add-apt-repository ppa:ubuntugis/ubuntugis-unstable --yes
           sudo apt-get update
-          sudo apt-get install libgdal-dev gdal-bin
+          sudo apt-get install libgdal-dev gdal-bin build-essential
           export GDAL_LIB_DIR=/usr/lib/
           export GDAL_INCLUDE_DIR=/usr/include/gdal/
           export GDAL_HOME=/usr/
