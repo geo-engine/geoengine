@@ -15,7 +15,7 @@ geoengine-datatypes = { path = "../datatypes" }
 float-cmp = "0.6"
 futures = "0.3"
 failure = "0.1"
-gdal = { version = "0.6", features = ["bindgen"] }
+gdal = { version = "0.6", features = ["gdal_2_2"] }
 geo = "0.12"
 num = "0.2"
 ocl = "0.19"
