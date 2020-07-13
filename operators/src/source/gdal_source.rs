@@ -3,7 +3,7 @@ use crate::util::Result;
 use gdal::raster::dataset::Dataset as GdalDataset;
 use gdal::raster::rasterband::RasterBand as GdalRasterBand;
 use std::path::PathBuf;
-//use gdal::metadata::Metadata;
+//use gdal::metadata::Metadata; // TODO: handle metadata
 
 use chrono::{Datelike, NaiveDate, NaiveDateTime, NaiveTime, Timelike};
 use serde::{Deserialize, Serialize};
@@ -37,6 +37,7 @@ impl Tick {
         }
     }
 
+    // TODO: replace with TimeInstance? Or implement Datelike for TimeInstance
     pub fn snap_date<T: Datelike>(&self, date: &T) -> NaiveDate {
         let y = date.year().div_floor(&self.year) * self.year;
         let m = date.month().div_floor(&self.month) * self.month;
@@ -44,6 +45,7 @@ impl Tick {
         NaiveDate::from_ymd(y, m, d)
     }
 
+    // TODO: replace with TimeInstance? Or implement Timelike for TimeInstance
     pub fn snap_time<T: Timelike>(&self, time: &T) -> NaiveTime {
         let h = time.hour().div_floor(&self.hour) * self.hour;
         let m = time.minute().div_floor(&self.minute) * self.minute;
@@ -235,6 +237,7 @@ impl GdalSource {
                 .to_string()
         });
 
+        // TODO: replace -> parser?
         let file_name = self.gdal_params.file_name_with_time_placeholder.replace(
             "%%%_START_TIME_%%%",
             &time_string.unwrap_or_else(|| "".into()),
@@ -599,9 +602,6 @@ mod tests {
     fn test_iter_and_load_tile_data() {
         let global_size_in_pixels = (1800, 3600);
         let tile_size_in_pixels = (600, 600);
-        let ndvi_center_pixel_values = vec![
-            19, 255, 255, 43, 76, 17, 255, 255, 255, 145, 255, 255, 255, 255, 255, 255, 255, 255,
-        ];
 
         let grid_tile_provider = GdalSourceTileGridProvider {
             global_pixel_size: global_size_in_pixels.into(),
@@ -644,6 +644,11 @@ mod tests {
                     .unwrap() // pixel
             })
             .collect();
+
+        let ndvi_center_pixel_values = vec![
+            19, 255, 255, 43, 76, 17, 255, 255, 255, 145, 255, 255, 255, 255, 255, 255, 255, 255,
+        ];
+
         assert_eq!(upper_left_pixels, ndvi_center_pixel_values);
     }
 
@@ -651,9 +656,6 @@ mod tests {
     fn test_tile_stream_len() {
         let global_size_in_pixels = (1800, 3600);
         let tile_size_in_pixels = (600, 600);
-        let ndvi_center_pixel_values = vec![
-            19, 255, 255, 43, 76, 17, 255, 255, 255, 145, 255, 255, 255, 255, 255, 255, 255, 255,
-        ];
 
         let grid_tile_provider = GdalSourceTileGridProvider {
             global_pixel_size: global_size_in_pixels.into(),
@@ -678,6 +680,10 @@ mod tests {
 
         let mut stream_data = block_on_stream(gdal_source.tile_stream::<u8>());
 
+        let ndvi_center_pixel_values = vec![
+            19, 255, 255, 43, 76, 17, 255, 255, 255, 145, 255, 255, 255, 255, 255, 255, 255, 255,
+        ];
+
         for p in ndvi_center_pixel_values {
             let tile = stream_data.next().unwrap().unwrap();
             let cp = tile
@@ -687,6 +693,7 @@ mod tests {
 
             assert_eq!(p, cp);
         }
+
         assert!(stream_data.next().is_none());
     }
 }

@@ -24,6 +24,3 @@ pub mod source;
 pub mod util;
 
 pub use operators::Operator;
-
-extern crate gdal;
-extern crate num;
