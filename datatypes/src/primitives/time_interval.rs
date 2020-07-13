@@ -2,7 +2,6 @@ use crate::error;
 use crate::primitives::TimeInstance;
 use crate::util::arrow::ArrowTyped;
 use crate::util::Result;
-use chrono::{TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::cmp::Ordering;
@@ -235,22 +234,10 @@ impl TimeInterval {
     /// ```
     pub fn to_geo_json_event(&self) -> serde_json::Value {
         // TODO: Use proper time handling, e.g., define a BOT/EOT, …
-        fn to_rfc3339(timestamp: i64) -> String {
-            const MIN_VISUALIZABLE_VALUE: i64 = -8_334_632_851_200_001 + 1;
-            const MAX_VISUALIZABLE_VALUE: i64 = 8_210_298_412_800_000 - 1;
-
-            if timestamp < MIN_VISUALIZABLE_VALUE {
-                "-262144-01-01T00:00:00+00:00".into()
-            } else if timestamp > MAX_VISUALIZABLE_VALUE {
-                "+262143-12-31T23:59:59.999+00:00".into()
-            } else {
-                Utc.timestamp_millis(timestamp).to_rfc3339()
-            }
-        }
 
         serde_json::json!({
-            "start": to_rfc3339(self.start.inner()),
-            "end": to_rfc3339(self.end.inner()),
+            "start": self.start.as_rfc3339(),
+            "end": self.end.as_rfc3339(),
             "type": "Interval"
         })
     }
