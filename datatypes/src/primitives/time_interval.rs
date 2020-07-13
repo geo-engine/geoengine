@@ -2,6 +2,7 @@ use crate::error;
 use crate::primitives::TimeInstance;
 use crate::util::arrow::ArrowTyped;
 use crate::util::Result;
+use chrono::{TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::cmp::Ordering;
@@ -233,12 +234,23 @@ impl TimeInterval {
     /// );
     /// ```
     pub fn to_geo_json_event(&self) -> serde_json::Value {
-        let start_date = self.start().as_utc_date_time();
-        let end_date = self.end().as_utc_date_time();
+        // TODO: Use proper time handling, e.g., define a BOT/EOT, …
+        fn to_rfc3339(timestamp: i64) -> String {
+            const MIN_VISUALIZABLE_VALUE: i64 = -8_334_632_851_200_001 + 1;
+            const MAX_VISUALIZABLE_VALUE: i64 = 8_210_298_412_800_000 - 1;
+
+            if timestamp < MIN_VISUALIZABLE_VALUE {
+                "-262144-01-01T00:00:00+00:00".into()
+            } else if timestamp > MAX_VISUALIZABLE_VALUE {
+                "+262143-12-31T23:59:59.999+00:00".into()
+            } else {
+                Utc.timestamp_millis(timestamp).to_rfc3339()
+            }
+        }
 
         serde_json::json!({
-            "start": start_date.to_rfc3339(),
-            "end": end_date.to_rfc3339(),
+            "start": to_rfc3339(self.start.inner()),
+            "end": to_rfc3339(self.end.inner()),
             "type": "Interval"
         })
     }
@@ -333,5 +345,43 @@ impl ArrowTyped for TimeInterval {
 
     fn arrow_builder(capacity: usize) -> Self::ArrowBuilder {
         arrow::array::FixedSizeListBuilder::new(arrow::array::Date64Builder::new(2 * capacity), 2)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn to_geo_json_event() {
+        let min_visualizable_value = -8_334_632_851_200_001 + 1;
+        let max_visualizable_value = 8_210_298_412_800_000 - 1;
+
+        assert_eq!(
+            TimeInterval::new_unchecked(min_visualizable_value, max_visualizable_value)
+                .to_geo_json_event(),
+            serde_json::json!({
+                "start": "-262144-01-01T00:00:00+00:00",
+                "end": "+262143-12-31T23:59:59.999+00:00",
+                "type": "Interval",
+            })
+        );
+        assert_eq!(
+            TimeInterval::new_unchecked(min_visualizable_value - 1, max_visualizable_value + 1)
+                .to_geo_json_event(),
+            serde_json::json!({
+                "start": "-262144-01-01T00:00:00+00:00",
+                "end": "+262143-12-31T23:59:59.999+00:00",
+                "type": "Interval",
+            })
+        );
+        assert_eq!(
+            TimeInterval::new_unchecked(i64::MIN, i64::MAX).to_geo_json_event(),
+            serde_json::json!({
+                "start": "-262144-01-01T00:00:00+00:00",
+                "end": "+262143-12-31T23:59:59.999+00:00",
+                "type": "Interval",
+            })
+        );
     }
 }
