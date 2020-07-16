@@ -2,10 +2,10 @@ use pwhash::bcrypt;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
-use crate::error::{Error, Result};
 use crate::error;
-use crate::util::user_input::UserInput;
+use crate::error::{Error, Result};
 use crate::util::identifiers::Identifier;
+use crate::util::user_input::UserInput;
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
 pub struct UserRegistration {

@@ -9,7 +9,7 @@ pub trait WorkflowRegistry: Send + Sync {
 
 #[derive(Default)]
 pub struct HashMapRegistry {
-    map: HashMap<WorkflowId, Workflow>
+    map: HashMap<WorkflowId, Workflow>,
 }
 
 impl WorkflowRegistry for HashMapRegistry {
