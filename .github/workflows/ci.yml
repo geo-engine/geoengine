@@ -42,12 +42,12 @@ jobs:
           sudo ln -s /usr/lib/llvm-6.0/lib/clang/6.0.1 /usr/lib/llvm-6.0/lib/clang/6.0.0
       - name: Build
         uses: actions-rs/cargo@v1
-          with:
-            command: build
-            args: --all-features --verbose
+        with:
+          command: build
+          args: --all-features --verbose
         run: cargo build --verbose
       - name: Run tests
         uses: actions-rs/cargo@v1
-          with:
-            command: test
-            args: --all-features --verbose
+        with:
+          command: test
+          args: --all-features --verbose
