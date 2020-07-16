@@ -45,7 +45,6 @@ jobs:
         with:
           command: build
           args: --all-features --verbose
-        run: cargo build --verbose
       - name: Run tests
         uses: actions-rs/cargo@v1
         with:
