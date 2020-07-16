@@ -20,7 +20,9 @@ macro_rules! identifier {
             }
 
             fn new() -> Self {
-                Self { id: uuid::Uuid::new_v4() }
+                Self {
+                    id: uuid::Uuid::new_v4(),
+                }
             }
         }
 

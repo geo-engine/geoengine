@@ -15,12 +15,15 @@ pub trait UserInput: Clone {
     ///
     /// Fails if the user input is invalid
     ///
-    fn validated(self) -> Result<Validated<Self>> where Self : Sized {
+    fn validated(self) -> Result<Validated<Self>>
+    where
+        Self: Sized,
+    {
         self.validate().map(|_| Validated { user_input: self })
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct Validated<T: UserInput + Clone> {
-    pub user_input: T
+    pub user_input: T,
 }
