@@ -670,6 +670,20 @@ macro_rules! feature_collection_impl {
                 )
             }
         }
+
+        impl PartialEq for $Collection
+        where
+            Self: crate::collections::FeatureCollectionImplHelpers,
+        {
+            fn eq(&self, other: &Self) -> bool {
+                use crate::collections::feature_collection_impl::FeatureCollectionImplHelpers;
+                use arrow::array::ArrayEqual;
+
+                (self.types() == other.types()) && self.table().equals(other.table())
+            }
+        }
+
+        impl Eq for $Collection where Self: crate::collections::FeatureCollectionImplHelpers {}
     };
 }
 

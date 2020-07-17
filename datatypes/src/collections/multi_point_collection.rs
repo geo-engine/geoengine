@@ -860,4 +860,52 @@ mod tests {
         assert_eq!(pc.len(), cloned.len());
         assert_eq!(pc.coordinates(), cloned.coordinates());
     }
+
+    #[test]
+    fn equals_builder_from_data() {
+        let a = MultiPointCollection::from_data(
+            vec![vec![(0., 0.).into()], vec![(1., 1.).into()]],
+            vec![
+                TimeInterval::new_unchecked(0, 1),
+                TimeInterval::new_unchecked(0, 1),
+            ],
+            {
+                let mut map = HashMap::new();
+                map.insert("number".into(), FeatureData::Number(vec![0., 1.]));
+                map
+            },
+        )
+        .unwrap();
+
+        let b = {
+            let mut builder = MultiPointCollection::builder();
+            builder
+                .add_column("number".into(), FeatureDataType::Number)
+                .unwrap();
+            let mut builder = builder.finish_header();
+            builder
+                .push_geometry(Coordinate2D::new(0., 0.).into())
+                .unwrap();
+            builder
+                .push_time_interval(TimeInterval::new_unchecked(0, 1))
+                .unwrap();
+            builder
+                .push_data("number", FeatureDataValue::Number(0.))
+                .unwrap();
+            builder.finish_row();
+            builder
+                .push_geometry(Coordinate2D::new(1., 1.).into())
+                .unwrap();
+            builder
+                .push_time_interval(TimeInterval::new_unchecked(0, 1))
+                .unwrap();
+            builder
+                .push_data("number", FeatureDataValue::Number(1.))
+                .unwrap();
+            builder.finish_row();
+            builder.build().unwrap()
+        };
+
+        assert_eq!(a, b);
+    }
 }

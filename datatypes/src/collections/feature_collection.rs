@@ -5,7 +5,7 @@ use crate::util::Result;
 /// This trait defines common features of all feature collections
 pub trait FeatureCollection
 where
-    Self: Clone + Sized,
+    Self: Clone + Sized + PartialEq + Eq,
 {
     /// Returns the number of features
     fn len(&self) -> usize;
@@ -98,7 +98,7 @@ where
 mod test_default_impls {
     use super::*;
 
-    #[derive(Clone)]
+    #[derive(Clone, PartialEq, Eq)]
     struct Dummy(Vec<u16>);
 
     impl FeatureCollection for Dummy {
