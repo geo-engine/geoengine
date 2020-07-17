@@ -915,4 +915,34 @@ mod tests {
         assert_eq!(a.len(), b.len());
         assert_eq!(a, b);
     }
+
+    #[test]
+    fn nan_not_equals() {
+        let collection = {
+            let mut builder = MultiPointCollection::builder();
+            builder
+                .add_column("number".into(), FeatureDataType::Number)
+                .unwrap();
+            let mut builder = builder.finish_header();
+
+            assert!(builder.is_empty());
+
+            builder
+                .push_geometry(Coordinate2D::new(0., 0.).into())
+                .unwrap();
+            builder
+                .push_time_interval(TimeInterval::new_unchecked(0, 1))
+                .unwrap();
+            builder
+                .push_data("number", FeatureDataValue::Number(f64::NAN))
+                .unwrap();
+            builder.finish_row();
+
+            assert!(!builder.is_empty());
+
+            builder.build().unwrap()
+        };
+
+        assert_ne!(collection, collection);
+    }
 }

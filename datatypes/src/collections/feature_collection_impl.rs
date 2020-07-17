@@ -682,8 +682,6 @@ macro_rules! feature_collection_impl {
                 (self.types() == other.types()) && self.table().equals(other.table())
             }
         }
-
-        impl Eq for $Collection where Self: crate::collections::FeatureCollectionImplHelpers {}
     };
 }
 
