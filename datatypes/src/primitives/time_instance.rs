@@ -6,29 +6,47 @@ use serde::{Deserialize, Serialize};
 pub struct TimeInstance(i64);
 
 impl TimeInstance {
+    const MIN_VISUALIZABLE_VALUE: i64 = -8_334_632_851_200_001 + 1;
+    const MAX_VISUALIZABLE_VALUE: i64 = 8_210_298_412_800_000 - 1;
+
     pub fn from_millis(millis: i64) -> Self {
         TimeInstance(millis)
     }
 
-    pub fn as_utc_date_time(self) -> DateTime<Utc> {
-        Utc.timestamp_millis(self.0)
+    pub fn as_utc_date_time(self) -> Option<DateTime<Utc>> {
+        Utc.timestamp_millis_opt(self.0).single()
     }
 
-    pub fn as_naive_date_time(self) -> NaiveDateTime {
-        self.as_utc_date_time().naive_utc()
+    pub fn as_naive_date_time(self) -> Option<NaiveDateTime> {
+        self.as_utc_date_time().map(|t| t.naive_utc())
     }
 
     pub fn as_rfc3339(self) -> String {
-        const MIN_VISUALIZABLE_VALUE: i64 = -8_334_632_851_200_001 + 1;
-        const MAX_VISUALIZABLE_VALUE: i64 = 8_210_298_412_800_000 - 1;
-
-        if self.inner() < MIN_VISUALIZABLE_VALUE {
+        if self.inner() < TimeInstance::MIN_VISUALIZABLE_VALUE {
             "-262144-01-01T00:00:00+00:00".into()
-        } else if self.inner() > MAX_VISUALIZABLE_VALUE {
+        } else if self.inner() > TimeInstance::MAX_VISUALIZABLE_VALUE {
             "+262143-12-31T23:59:59.999+00:00".into()
         } else {
-            self.as_utc_date_time().to_rfc3339()
+            self.as_utc_date_time().expect(
+                "TimeInstance is not valid"
+            ).to_rfc3339()
         }
+    }
+
+    pub fn min_value() -> Self {
+        TimeInstance::from_millis(TimeInstance::MIN_VISUALIZABLE_VALUE)
+    }
+
+    pub fn max_value() -> Self {
+        TimeInstance::from_millis(TimeInstance::MAX_VISUALIZABLE_VALUE)
+    }
+
+    pub fn min(a: Self, b: Self) -> Self {
+        TimeInstance::from_millis(i64::min(a.inner(), b.inner()))
+    }
+
+    pub fn max(a: Self, b: Self) -> Self {
+        TimeInstance::from_millis(i64::max(a.inner(), b.inner()))
     }
 
     pub fn inner(self) -> i64 {
@@ -45,17 +63,5 @@ impl Into<TimeInstance> for i64 {
 impl Into<i64> for TimeInstance {
     fn into(self) -> i64 {
         self.inner()
-    }
-}
-
-impl Into<DateTime<Utc>> for TimeInstance {
-    fn into(self) -> DateTime<Utc> {
-        self.as_utc_date_time()
-    }
-}
-
-impl Into<NaiveDateTime> for TimeInstance {
-    fn into(self) -> NaiveDateTime {
-        self.as_naive_date_time()
     }
 }

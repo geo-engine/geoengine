@@ -201,8 +201,8 @@ impl TimeInterval {
             }
         );
         Ok(Self {
-            start: i64::min(self.start.inner(), other.start.inner()).into(),
-            end: i64::max(self.end.inner(), other.end.inner()).into(),
+            start: TimeInstance::min(self.start, other.start).into(),
+            end: TimeInstance::max(self.end, other.end).into(),
         })
     }
 

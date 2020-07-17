@@ -8,8 +8,6 @@ use std::path::PathBuf;
 use chrono::{Datelike, NaiveDate, NaiveDateTime, NaiveTime, Timelike};
 use serde::{Deserialize, Serialize};
 
-use num::Integer;
-
 use futures::stream::{self, BoxStream, StreamExt};
 
 use geoengine_datatypes::primitives::TimeInterval;
@@ -39,17 +37,17 @@ impl Tick {
 
     // TODO: replace with TimeInstance? Or implement Datelike for TimeInstance
     pub fn snap_date<T: Datelike>(&self, date: &T) -> NaiveDate {
-        let y = date.year().div_floor(&self.year) * self.year;
-        let m = date.month().div_floor(&self.month) * self.month;
-        let d = date.day().div_floor(&self.day) * self.day;
+        let y = (date.year() / self.year) * self.year;
+        let m = (date.month() / self.month) * self.month;
+        let d = (date.day() / self.day) * self.day;
         NaiveDate::from_ymd(y, m, d)
     }
 
     // TODO: replace with TimeInstance? Or implement Timelike for TimeInstance
     pub fn snap_time<T: Timelike>(&self, time: &T) -> NaiveTime {
-        let h = time.hour().div_floor(&self.hour) * self.hour;
-        let m = time.minute().div_floor(&self.minute) * self.minute;
-        let s = time.second().div_floor(&self.second) * self.second;
+        let h = (time.hour() / self.hour) * self.hour;
+        let m = (time.minute() / self.minute) * self.minute;
+        let s = (time.second() / self.second) * self.second;
         NaiveTime::from_hms(h, m, s)
     }
 
@@ -232,7 +230,7 @@ impl GdalSource {
     ) -> Result<RasterTile2D<T>> {
         // snap the time interval start instance to the dataset tick configuration
         let time_string = self.gdal_params.tick.map(|t| {
-            t.snap_datetime(&time_interval.start().as_naive_date_time())
+            t.snap_datetime(&time_interval.start().as_naive_date_time().unwrap()) // TODO: replace unwrap
                 .format(&self.gdal_params.time_format)
                 .to_string()
         });
