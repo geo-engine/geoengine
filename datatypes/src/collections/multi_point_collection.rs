@@ -883,6 +883,9 @@ mod tests {
                 .add_column("number".into(), FeatureDataType::Number)
                 .unwrap();
             let mut builder = builder.finish_header();
+
+            assert!(builder.is_empty());
+
             builder
                 .push_geometry(Coordinate2D::new(0., 0.).into())
                 .unwrap();
@@ -903,9 +906,13 @@ mod tests {
                 .push_data("number", FeatureDataValue::Number(1.))
                 .unwrap();
             builder.finish_row();
+
+            assert_eq!(builder.len(), 2);
+
             builder.build().unwrap()
         };
 
+        assert_eq!(a.len(), b.len());
         assert_eq!(a, b);
     }
 }
