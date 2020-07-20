@@ -182,7 +182,7 @@ impl GdalSource {
         tile_information: TileInformation,
     ) -> Result<RasterTile2D<T>> {
         tokio::task::spawn_blocking(move || {
-            GdalSource::load_tile_data_impl::<T>(gdal_params, time_interval, tile_information)
+            GdalSource::load_tile_data_impl::<T>(&gdal_params, time_interval, tile_information)
         })
         .await
         .unwrap() // TODO: handle TaskJoinError
@@ -193,15 +193,14 @@ impl GdalSource {
         time_interval: TimeInterval,
         tile_information: TileInformation,
     ) -> Result<RasterTile2D<T>> {
-        GdalSource::load_tile_data_impl(self.gdal_params.clone(), time_interval, tile_information)
-        //TODO: remove the clone!
+        GdalSource::load_tile_data_impl(&self.gdal_params, time_interval, tile_information)
     }
 
     ///
     /// A method to load single tiles from a GDAL dataset.
     ///
     fn load_tile_data_impl<T: gdal::raster::types::GdalType + Copy>(
-        gdal_params: GdalSourceParameters,
+        gdal_params: &GdalSourceParameters,
         time_interval: TimeInterval,
         tile_information: TileInformation,
     ) -> Result<RasterTile2D<T>> {
@@ -255,7 +254,7 @@ impl GdalSource {
         )?;
         Ok(RasterTile2D::new(
             time_interval,
-            tile_information.clone(),
+            tile_information,
             raster_result,
         ))
     }
