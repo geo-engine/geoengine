@@ -5,56 +5,14 @@ use gdal::raster::rasterband::RasterBand as GdalRasterBand;
 use std::path::PathBuf;
 //use gdal::metadata::Metadata; // TODO: handle metadata
 
-use chrono::{Datelike, NaiveDate, NaiveDateTime, NaiveTime, Timelike};
 use serde::{Deserialize, Serialize};
 
 use futures::stream::{self, BoxStream, StreamExt};
 
-use geoengine_datatypes::primitives::TimeInterval;
+use geoengine_datatypes::primitives::{TimeInterval, TimeTick};
 use geoengine_datatypes::raster::{Dim, GeoTransform, Ix, Raster2D};
 
-#[derive(Eq, PartialEq, Debug, Clone, Copy, Serialize, Deserialize)]
-pub struct Tick {
-    pub year: i32,
-    pub month: u32,
-    pub day: u32,
-    pub hour: u32,
-    pub minute: u32,
-    pub second: u32,
-}
 
-impl Tick {
-    pub fn new(year: i32, month: u32, day: u32, hour: u32, minute: u32, second: u32) -> Self {
-        Self {
-            year,
-            month,
-            day,
-            hour,
-            minute,
-            second,
-        }
-    }
-
-    // TODO: replace with TimeInstance? Or implement Datelike for TimeInstance
-    pub fn snap_date<T: Datelike>(&self, date: &T) -> NaiveDate {
-        let y = (date.year() / self.year) * self.year;
-        let m = (date.month() / self.month) * self.month;
-        let d = (date.day() / self.day) * self.day;
-        NaiveDate::from_ymd(y, m, d)
-    }
-
-    // TODO: replace with TimeInstance? Or implement Timelike for TimeInstance
-    pub fn snap_time<T: Timelike>(&self, time: &T) -> NaiveTime {
-        let h = (time.hour() / self.hour) * self.hour;
-        let m = (time.minute() / self.minute) * self.minute;
-        let s = (time.second() / self.second) * self.second;
-        NaiveTime::from_hms(h, m, s)
-    }
-
-    pub fn snap_datetime<T: Datelike + Timelike>(&self, datetime: &T) -> NaiveDateTime {
-        NaiveDateTime::new(self.snap_date(datetime), self.snap_time(datetime))
-    }
-}
 
 /// Parameters for the GDAL Source Operator
 ///
@@ -94,7 +52,7 @@ pub struct GdalSourceParameters {
     pub base_path: PathBuf,
     pub file_name_with_time_placeholder: String,
     pub time_format: String,
-    pub tick: Option<Tick>,
+    pub tick: Option<TimeTick>,
     pub channel: Option<u32>,
 }
 

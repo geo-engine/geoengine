@@ -1,7 +1,7 @@
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Debug)]
 #[repr(C)]
 pub struct TimeInstance(i64);
 
@@ -52,6 +52,18 @@ impl TimeInstance {
     pub fn inner(self) -> i64 {
         self.0
     }
+}
+
+impl From<NaiveDateTime> for TimeInstance {
+    fn from(date_time: NaiveDateTime) -> Self {
+        TimeInstance::from_millis(date_time.timestamp_millis())
+    }    
+}
+
+impl From<DateTime<Utc>> for TimeInstance {
+    fn from(date_time: DateTime<Utc>) -> Self {
+        TimeInstance::from_millis(date_time.timestamp_millis())
+    }    
 }
 
 impl Into<TimeInstance> for i64 {
