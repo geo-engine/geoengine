@@ -7,6 +7,7 @@ use serde::de::Error;
 
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
 #[serde(tag = "request")]
+// TODO: evaluate overhead of large enum variant and maybe refactor it
 #[allow(clippy::pub_enum_variant_names, clippy::large_enum_variant)]
 pub enum WMSRequest {
     GetCapabilities(GetCapabilities),
@@ -25,7 +26,7 @@ pub struct GetCapabilities {
 
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub enum GetCapabilitiesFormat {
-    TextXml //, ...
+    TextXml, // TODO: remaining formats
 }
 
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
@@ -52,18 +53,18 @@ pub struct GetMap {
     pub sld_body: Option<String>,
     pub elevation: Option<String>,
     pub exceptions: Option<String>, // TODO: parse Option<GetMapExceptionFormat>
-    // DIM_<name>
+    // TODO: DIM_<name>
 }
 
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub enum GetMapExceptionFormat {
-    TextXML //, ...
+    TextXML, // TODO: remaining formats
 }
 
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub enum GetMapFormat {
     #[serde(rename = "image/png")]
-    ImagePng //, ...
+    ImagePng, // TODO: remaining formats
 }
 
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
@@ -71,12 +72,12 @@ pub struct GetFeatureInfo {
     pub version: String,
     pub query_layers: String,
     pub info_format: Option<String>, // TODO: parse Option<GetFeatureInfoFormat>,
-    // ...
+    // TODO: remaining fields
 }
 
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub enum GetFeatureInfoFormat {
-    TextXML //, ...
+    TextXML, // TODO: remaining formats
 }
 
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
@@ -89,14 +90,13 @@ pub struct GetStyles {
 pub struct GetLegendGraphic {
     pub version: String,
     pub layer: String,
-    // ...
+    // TODO: remaining fields
 }
 
+/// Parse bbox, format is: "x1,y1,x2,y2"
 pub fn parse_bbox<'de, D>(deserializer: D) -> Result<BoundingBox2D, D::Error>
     where D: serde::Deserializer<'de>
 {
-    // format is : "x1,y1,x2,y2"
-
     let s = <&str as serde::Deserialize>::deserialize(deserializer)?;
 
     let split: Vec<Result<f64, std::num::ParseFloatError>> = s.split(',')
