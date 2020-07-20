@@ -34,7 +34,57 @@ async fn wms<T: WorkflowRegistry>(request: WMSRequest, workflow_registry: WR<T>)
 
 fn get_capabilities(_request: &GetCapabilities) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
     // TODO: implement
-    Ok(Box::new(warp::http::StatusCode::INTERNAL_SERVER_ERROR.into_response()))
+    // TODO: at least inject correct url of the instance and return data for the default layer
+    let mock = r#"<WMS_Capabilities xmlns="http://www.opengis.net/wms" xmlns:sld="http://www.opengis.net/sld" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="1.3.0" xsi:schemaLocation="http://www.opengis.net/wms http://schemas.opengis.net/wms/1.3.0/capabilities_1_3_0.xsd http://www.opengis.net/sld http://schemas.opengis.net/sld/1.1.0/sld_capabilities.xsd">
+    <Service>
+        <Name>WMS</Name>
+        <Title>Geo Engine WMS</Title>
+        <OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="http://localhost"/>
+    </Service>
+    <Capability>
+        <Request>
+            <GetCapabilities>
+                <Format>text/xml</Format>
+                <DCPType>
+                    <HTTP>
+                        <Get>
+                            <OnlineResource xlink:href="http://localhost"/>
+                        </Get>
+                    </HTTP>
+                </DCPType>
+            </GetCapabilities>
+            <GetMap>
+                <Format>image/png</Format>
+                <DCPType>
+                    <HTTP>
+                        <Get>
+                            <OnlineResource xlink:href="http://localhost"/>
+                        </Get>
+                    </HTTP>
+                </DCPType>
+            </GetMap>
+        </Request>
+        <Exception>
+            <Format>XML</Format>
+            <Format>INIMAGE</Format>
+            <Format>BLANK</Format>
+        </Exception>
+        <Layer queryable="1">
+            <Name>Test</Name>
+            <Title>Test</Title>
+            <CRS>EPSG:4326</CRS>
+            <EX_GeographicBoundingBox>
+                <westBoundLongitude>-180</westBoundLongitude>
+                <eastBoundLongitude>180</eastBoundLongitude>
+                <southBoundLatitude>-90</southBoundLatitude>
+                <northBoundLatitude>90</northBoundLatitude>
+            </EX_GeographicBoundingBox>
+            <BoundingBox CRS="EPSG:4326" minx="-90.0" miny="-180.0" maxx="90.0" maxy="180.0"/>
+        </Layer>
+    </Capability>
+</WMS_Capabilities>"#;
+
+    Ok(Box::new(warp::reply::html(mock)))
 }
 
 fn get_map<T: WorkflowRegistry>(request: &GetMap, _workflow_registry: &WR<T>) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
@@ -93,5 +143,19 @@ mod tests {
             include_bytes!("../../../datatypes/test-data/colorizer/rgba.png") as &[u8],
             res.body().to_vec().as_slice()
         );
+    }
+
+    #[tokio::test]
+    async fn get_capabilities() {
+        let workflow_registry = Arc::new(RwLock::new(HashMapRegistry::default()));
+
+        let res = warp::test::request()
+            .method("GET")
+            .path("/wms?request=GetCapabilities&service=WMS")
+            .reply(&wms_handler(workflow_registry))
+            .await;
+        assert_eq!(res.status(), 200);
+
+        // TODO: validate xml?
     }
 }
