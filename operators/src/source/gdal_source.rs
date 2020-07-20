@@ -12,8 +12,6 @@ use futures::stream::{self, BoxStream, StreamExt};
 use geoengine_datatypes::primitives::{TimeInterval, TimeTick};
 use geoengine_datatypes::raster::{Dim, GeoTransform, Ix, Raster2D};
 
-
-
 /// Parameters for the GDAL Source Operator
 ///
 /// # Examples
@@ -203,7 +201,7 @@ impl GdalSource {
 
         // open the dataset at path (or 'throw' an error)
         let dataset = GdalDataset::open(&path)?; // TODO: investigate if we need a dataset cache
-        // get the geo transform (pixel size ...) of the dataset (or 'throw' an error)
+                                                 // get the geo transform (pixel size ...) of the dataset (or 'throw' an error)
         let gdal_geo_transform = dataset.geo_transform()?;
         let geo_transform = GeoTransform::from(gdal_geo_transform);
         // TODO: clip the geotransform information?

@@ -44,9 +44,9 @@ impl TimeTick {
     }
 
     pub fn snap_time_instance(&self, time: TimeInstance) -> Option<TimeInstance> {
-        time.as_naive_date_time().map(
-            |naive_datetime| self.snap_datetime(&naive_datetime)
-        ).map(|snapped_naive_datetime| snapped_naive_datetime.into())
+        time.as_naive_date_time()
+            .map(|naive_datetime| self.snap_datetime(&naive_datetime))
+            .map(|snapped_naive_datetime| snapped_naive_datetime.into())
     }
 }
 
@@ -58,7 +58,7 @@ mod tests {
     fn snap_to_1() {
         // 20. July 2020 07:47:50
         let start = TimeInstance::from_millis(1595231270000);
-        let tick = TimeTick::new(1,1,1,1,1,1);
+        let tick = TimeTick::new(1, 1, 1, 1, 1, 1);
 
         let snapped = tick.snap_time_instance(start);
         assert_eq!(Some(start), snapped);
@@ -68,7 +68,7 @@ mod tests {
     fn snap_to_2() {
         // 20. July 2020 07:47:50
         let start = TimeInstance::from_millis(1595231270000);
-        let tick = TimeTick::new(2,2,2,2,2,2);
+        let tick = TimeTick::new(2, 2, 2, 2, 2, 2);
 
         // 20. June 2020 06:46:50
         let expected = TimeInstance::from_millis(1592635610000);
