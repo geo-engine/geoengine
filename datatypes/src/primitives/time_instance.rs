@@ -27,9 +27,9 @@ impl TimeInstance {
         } else if self.inner() > TimeInstance::MAX_VISUALIZABLE_VALUE {
             "+262143-12-31T23:59:59.999+00:00".into()
         } else {
-            self.as_utc_date_time().expect(
-                "TimeInstance is not valid"
-            ).to_rfc3339()
+            self.as_utc_date_time()
+                .expect("TimeInstance is not valid")
+                .to_rfc3339()
         }
     }
 
@@ -57,13 +57,13 @@ impl TimeInstance {
 impl From<NaiveDateTime> for TimeInstance {
     fn from(date_time: NaiveDateTime) -> Self {
         TimeInstance::from_millis(date_time.timestamp_millis())
-    }    
+    }
 }
 
 impl From<DateTime<Utc>> for TimeInstance {
     fn from(date_time: DateTime<Utc>) -> Self {
         TimeInstance::from_millis(date_time.timestamp_millis())
-    }    
+    }
 }
 
 impl Into<TimeInstance> for i64 {
