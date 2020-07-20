@@ -2,7 +2,7 @@ use crate::util::Result;
 
 use gdal::raster::dataset::Dataset as GdalDataset;
 use gdal::raster::rasterband::RasterBand as GdalRasterBand;
-use std::path::{PathBuf};
+use std::path::PathBuf;
 //use gdal::metadata::Metadata; // TODO: handle metadata
 
 use serde::{Deserialize, Serialize};
@@ -176,17 +176,25 @@ impl GdalSource {
         })
     }
 
-    pub async fn load_tile_data_async<T:gdal::raster::types::GdalType + Copy + Send + 'static> (gdal_params: GdalSourceParameters, time_interval: TimeInterval, tile_information: TileInformation) -> Result<RasterTile2D<T>> {
-        tokio::task::spawn_blocking(move || GdalSource::load_tile_data_impl::<T>(gdal_params, time_interval, tile_information)).await.unwrap() // TODO: handle TaskJoinError
+    pub async fn load_tile_data_async<T: gdal::raster::types::GdalType + Copy + Send + 'static>(
+        gdal_params: GdalSourceParameters,
+        time_interval: TimeInterval,
+        tile_information: TileInformation,
+    ) -> Result<RasterTile2D<T>> {
+        tokio::task::spawn_blocking(move || {
+            GdalSource::load_tile_data_impl::<T>(gdal_params, time_interval, tile_information)
+        })
+        .await
+        .unwrap() // TODO: handle TaskJoinError
     }
-
 
     pub fn load_tile_data<T: gdal::raster::types::GdalType + Copy>(
         &self,
         time_interval: TimeInterval,
         tile_information: TileInformation,
-    ) -> Result<RasterTile2D<T>>{
-        GdalSource::load_tile_data_impl(self.gdal_params.clone(), time_interval, tile_information) //TODO: remove the clone!
+    ) -> Result<RasterTile2D<T>> {
+        GdalSource::load_tile_data_impl(self.gdal_params.clone(), time_interval, tile_information)
+        //TODO: remove the clone!
     }
 
     ///
@@ -260,7 +268,9 @@ impl GdalSource {
     ) -> BoxStream<Result<RasterTile2D<T>>> {
         stream::iter(self.time_tile_iter())
             .map(move |(time, tile)| (self.gdal_params.clone(), time, tile))
-            .then(|(gdal_params, time, tile)| GdalSource::load_tile_data_async::<T>( gdal_params, time, tile))
+            .then(|(gdal_params, time, tile)| {
+                GdalSource::load_tile_data_async::<T>(gdal_params, time, tile)
+            })
             .boxed()
     }
 }
@@ -684,16 +694,17 @@ mod tests {
         );
         let time_interval = TimeInterval::new_unchecked(0, 1);
 
-        let x_r = GdalSource::load_tile_data_async::<u8>(gdal_params, time_interval, tile_information).await;
+        let x_r =
+            GdalSource::load_tile_data_async::<u8>(gdal_params, time_interval, tile_information)
+                .await;
         let x = x_r.expect("GDAL Error");
 
         assert_eq!(x.tile, tile_information);
         assert_eq!(x.time, time_interval);
-        let center_pixel = x.data.pixel_value_at_grid_index(&(
-            tile_size_in_pixels.1 / 2,
-            tile_size_in_pixels.0 / 2,
-        ))
-        .unwrap();
+        let center_pixel = x
+            .data
+            .pixel_value_at_grid_index(&(tile_size_in_pixels.1 / 2, tile_size_in_pixels.0 / 2))
+            .unwrap();
         assert_eq!(center_pixel, 19);
     }
 }
