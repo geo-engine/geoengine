@@ -25,11 +25,6 @@ jobs:
           toolchain: nightly
           components: clippy, rustfmt
           override: true
-      - name: Check with Rustfmt
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --all -- --check
       - name: Install OpenCL
         run: |
           sudo apt-get update
@@ -46,6 +41,11 @@ jobs:
         run: |
           export CC="clang-9"
           export CXX="clang++-9"
+      - name: Check with Rustfmt
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --all -- --check
       - name: Check with Clippy
         uses: actions-rs/clippy-check@v1
         with:
