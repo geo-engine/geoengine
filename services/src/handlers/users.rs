@@ -1,14 +1,16 @@
-use warp::Filter;
+use crate::error::Result;
+use crate::handlers::{authenticate, DB};
+use crate::users::session::Session;
+use crate::users::user::{UserCredentials, UserRegistration};
+use crate::users::userdb::UserDB;
+use crate::util::user_input::UserInput;
 use std::sync::Arc;
 use warp::reply::Reply;
-use crate::error::Result;
-use crate::users::userdb::UserDB;
-use crate::users::session::Session;
-use crate::users::user::{UserRegistration, UserCredentials};
-use crate::handlers::{DB, authenticate};
-use crate::util::user_input::UserInput;
+use warp::Filter;
 
-pub fn register_user_handler<T: UserDB>(user_db: DB<T>) -> impl Filter<Extract=impl warp::Reply, Error=warp::Rejection> + Clone {
+pub fn register_user_handler<T: UserDB>(
+    user_db: DB<T>,
+) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::post()
         .and(warp::path!("user" / "register"))
         .and(warp::body::json())
@@ -17,13 +19,22 @@ pub fn register_user_handler<T: UserDB>(user_db: DB<T>) -> impl Filter<Extract=i
 }
 
 // TODO: move into handler once async closures are available?
-async fn register_user<T: UserDB>(user: UserRegistration, user_db: DB<T>) -> Result<impl warp::Reply, warp::Rejection> {
+async fn register_user<T: UserDB>(
+    user: UserRegistration,
+    user_db: DB<T>,
+) -> Result<impl warp::Reply, warp::Rejection> {
     let user = user.validated().map_err(warp::reject::custom)?;
-    let id = user_db.write().await.register(user).map_err(warp::reject::custom)?;
+    let id = user_db
+        .write()
+        .await
+        .register(user)
+        .map_err(warp::reject::custom)?;
     Ok(warp::reply::json(&id))
 }
 
-pub fn login_handler<T: UserDB>(user_db: DB<T>) -> impl Filter<Extract=impl warp::Reply, Error=warp::Rejection> + Clone {
+pub fn login_handler<T: UserDB>(
+    user_db: DB<T>,
+) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::post()
         .and(warp::path!("user" / "login"))
         .and(warp::body::json())
@@ -32,15 +43,20 @@ pub fn login_handler<T: UserDB>(user_db: DB<T>) -> impl Filter<Extract=impl warp
 }
 
 // TODO: move into handler once async closures are available?
-async fn login<T: UserDB>(user: UserCredentials, user_db: DB<T>) -> Result<impl warp::Reply, warp::Rejection> {
+async fn login<T: UserDB>(
+    user: UserCredentials,
+    user_db: DB<T>,
+) -> Result<impl warp::Reply, warp::Rejection> {
     let mut db = user_db.write().await;
     match db.login(user) {
         Ok(id) => Ok(warp::reply::json(&id).into_response()),
-        Err(_) => Ok(warp::http::StatusCode::UNAUTHORIZED.into_response())
+        Err(_) => Ok(warp::http::StatusCode::UNAUTHORIZED.into_response()),
     }
 }
 
-pub fn logout_handler<T: UserDB>(user_db: DB<T>) -> impl Filter<Extract=impl warp::Reply, Error=warp::Rejection> + Clone {
+pub fn logout_handler<T: UserDB>(
+    user_db: DB<T>,
+) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::post()
         .and(warp::path!("user" / "logout"))
         .and(authenticate(user_db.clone()))
@@ -49,23 +65,26 @@ pub fn logout_handler<T: UserDB>(user_db: DB<T>) -> impl Filter<Extract=impl war
 }
 
 // TODO: move into handler once async closures are available?
-async fn logout<T: UserDB>(session: Session, user_db: DB<T>) -> Result<impl warp::Reply, warp::Rejection> {
+async fn logout<T: UserDB>(
+    session: Session,
+    user_db: DB<T>,
+) -> Result<impl warp::Reply, warp::Rejection> {
     let mut db = user_db.write().await;
     match db.logout(session.token) {
         Ok(_) => Ok(warp::reply().into_response()),
-        Err(_) => Ok(warp::http::StatusCode::UNAUTHORIZED.into_response())
+        Err(_) => Ok(warp::http::StatusCode::UNAUTHORIZED.into_response()),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::users::userdb::UserDB;
-    use crate::users::hashmap_userdb::HashMapUserDB;
     use crate::handlers::handle_rejection;
-    use tokio::sync::RwLock;
-    use crate::util::user_input::Validated;
+    use crate::users::hashmap_userdb::HashMapUserDB;
     use crate::users::user::UserId;
+    use crate::users::userdb::UserDB;
+    use crate::util::user_input::Validated;
+    use tokio::sync::RwLock;
 
     #[tokio::test]
     async fn register() {
@@ -108,8 +127,7 @@ mod tests {
             .path("/user/register")
             .header("Content-Length", "0")
             .json(&user)
-            .reply(&register_user_handler(user_db.clone()).
-                recover(handle_rejection))
+            .reply(&register_user_handler(user_db.clone()).recover(handle_rejection))
             .await;
 
         assert_eq!(res.status(), 400);
@@ -124,7 +142,7 @@ mod tests {
                 email: "foo@bar.de".to_string(),
                 password: "secret123".to_string(),
                 real_name: " Foo Bar".to_string(),
-            }
+            },
         };
 
         user_db.write().await.register(user).unwrap();
@@ -157,7 +175,7 @@ mod tests {
                 email: "foo@bar.de".to_string(),
                 password: "secret123".to_string(),
                 real_name: " Foo Bar".to_string(),
-            }
+            },
         };
 
         user_db.write().await.register(user).unwrap();
@@ -187,7 +205,7 @@ mod tests {
                 email: "foo@bar.de".to_string(),
                 password: "secret123".to_string(),
                 real_name: " Foo Bar".to_string(),
-            }
+            },
         };
 
         user_db.write().await.register(user).unwrap();

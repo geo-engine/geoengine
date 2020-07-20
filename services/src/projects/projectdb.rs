@@ -1,7 +1,10 @@
-use crate::projects::project::{ProjectListing, ProjectId, Project, CreateProject, UpdateProject, UserProjectPermission, ProjectListOptions, ProjectVersion, LoadVersion};
 use crate::error::Result;
-use crate::util::user_input::Validated;
+use crate::projects::project::{
+    CreateProject, LoadVersion, Project, ProjectId, ProjectListOptions, ProjectListing,
+    ProjectVersion, UpdateProject, UserProjectPermission,
+};
 use crate::users::user::UserId;
+use crate::util::user_input::Validated;
 
 /// Storage of user projects
 pub trait ProjectDB: Send + Sync {
@@ -31,7 +34,11 @@ pub trait ProjectDB: Send + Sync {
     fn versions(&self, user: UserId, project: ProjectId) -> Result<Vec<ProjectVersion>>;
 
     /// List all permissions of users for the `project` if the `user` is an owner
-    fn list_permissions(&mut self, user: UserId, project: ProjectId) -> Result<Vec<UserProjectPermission>>;
+    fn list_permissions(
+        &mut self,
+        user: UserId,
+        project: ProjectId,
+    ) -> Result<Vec<UserProjectPermission>>;
 
     /// Add a `permission` if the `user` is owner of the permission's target project
     fn add_permission(&mut self, user: UserId, permission: UserProjectPermission) -> Result<()>;

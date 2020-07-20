@@ -17,13 +17,17 @@ impl FromStr for SessionToken {
     type Err = error::Error;
 
     fn from_str(token: &str) -> Result<Self> {
-        Uuid::parse_str(token).map(|id| Self { token: id }).map_err(|_| error::Error::InvalidSessionToken)
+        Uuid::parse_str(token)
+            .map(|id| Self { token: id })
+            .map_err(|_| error::Error::InvalidSessionToken)
     }
 }
 
 impl Default for SessionToken {
     fn default() -> Self {
-        Self { token: Uuid::new_v4() }
+        Self {
+            token: Uuid::new_v4(),
+        }
     }
 }
 
@@ -41,6 +45,9 @@ pub struct Session {
 
 impl Session {
     pub fn new(user: &User) -> Session {
-        Self { user: user.id, token: SessionToken::default() }
+        Self {
+            user: user.id,
+            token: SessionToken::default(),
+        }
     }
 }
