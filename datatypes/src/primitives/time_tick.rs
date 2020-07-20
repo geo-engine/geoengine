@@ -57,7 +57,7 @@ mod tests {
     #[test]
     fn snap_to_1() {
         // 20. July 2020 07:47:50
-        let start = TimeInstance::from_millis(1595231270000);
+        let start = TimeInstance::from_millis(1_595_231_270_000);
         let tick = TimeTick::new(1, 1, 1, 1, 1, 1);
 
         let snapped = tick.snap_time_instance(start);
@@ -67,11 +67,11 @@ mod tests {
     #[test]
     fn snap_to_2() {
         // 20. July 2020 07:47:50
-        let start = TimeInstance::from_millis(1595231270000);
+        let start = TimeInstance::from_millis(1_595_231_270_000);
         let tick = TimeTick::new(2, 2, 2, 2, 2, 2);
 
         // 20. June 2020 06:46:50
-        let expected = TimeInstance::from_millis(1592635610000);
+        let expected = TimeInstance::from_millis(1_592_635_610_000);
         let snapped = tick.snap_time_instance(start);
         assert_eq!(Some(expected), snapped);
     }
