@@ -25,6 +25,22 @@ jobs:
           toolchain: nightly
           components: clippy, rustfmt
           override: true
+      - name: Install OpenCL
+        run: |
+          sudo apt-get update
+          sudo apt-get install ocl-icd-opencl-dev pocl-opencl-icd
+          sudo ln -s /usr/lib/llvm-6.0/lib/clang/6.0.1 /usr/lib/llvm-6.0/lib/clang/6.0.0
+      - name: Install GDAL
+        run: |
+          sudo apt-get update
+          sudo apt-get install libgdal-dev gdal-bin build-essential
+          export C_INCLUDE_PATH=/usr/include/gdal:$C_INCLUDE_PATH
+          export CPLUS_INCLUDE_PATH=/usr/include/gdal:$CPLUS_INCLUDE_PATH
+          sudo ldconfig
+      - name: Setup building
+        run: |
+          export CC="clang-9"
+          export CXX="clang++-9"
       - name: Check with Rustfmt
         uses: actions-rs/cargo@v1
         with:
@@ -35,11 +51,6 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           args: --all-targets --all-features -- -D warnings
-      - name: Install OpenCL
-        run: |
-          sudo apt-get update
-          sudo apt-get install ocl-icd-opencl-dev pocl-opencl-icd
-          sudo ln -s /usr/lib/llvm-6.0/lib/clang/6.0.1 /usr/lib/llvm-6.0/lib/clang/6.0.0
       - name: Build
         uses: actions-rs/cargo@v1
         with:
