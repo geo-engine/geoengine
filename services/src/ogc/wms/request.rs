@@ -1,7 +1,7 @@
-use serde::{Deserialize, Serialize};
 use crate::util::{from_str, from_str_option};
 use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, TimeInterval};
 use serde::de::Error;
+use serde::{Deserialize, Serialize};
 
 // TODO: ignore case for field names
 
@@ -40,7 +40,7 @@ pub struct GetMap {
     pub bbox: BoundingBox2D,
     pub format: GetMapFormat,
     pub layer: String,
-    pub crs: String,  // TODO: parse CRS
+    pub crs: String, // TODO: parse CRS
     pub styles: String,
     #[serde(default)]
     #[serde(deserialize_with = "parse_time")]
@@ -53,7 +53,7 @@ pub struct GetMap {
     pub sld_body: Option<String>,
     pub elevation: Option<String>,
     pub exceptions: Option<String>, // TODO: parse Option<GetMapExceptionFormat>
-    // TODO: DIM_<name>
+                                    // TODO: DIM_<name>
 }
 
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
@@ -72,7 +72,7 @@ pub struct GetFeatureInfo {
     pub version: String,
     pub query_layers: String,
     pub info_format: Option<String>, // TODO: parse Option<GetFeatureInfoFormat>,
-    // TODO: remaining fields
+                                     // TODO: remaining fields
 }
 
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
@@ -95,17 +95,15 @@ pub struct GetLegendGraphic {
 
 /// Parse bbox, format is: "x1,y1,x2,y2"
 pub fn parse_bbox<'de, D>(deserializer: D) -> Result<BoundingBox2D, D::Error>
-    where D: serde::Deserializer<'de>
+where
+    D: serde::Deserializer<'de>,
 {
     let s = <&str as serde::Deserialize>::deserialize(deserializer)?;
 
-    let split: Vec<Result<f64, std::num::ParseFloatError>> = s.split(',')
-        .map(str::parse).collect();
+    let split: Vec<Result<f64, std::num::ParseFloatError>> = s.split(',').map(str::parse).collect();
 
     if let [Ok(x1), Ok(y1), Ok(x2), Ok(y2)] = *split.as_slice() {
-        BoundingBox2D::new(
-            Coordinate2D::new(x1, y1),
-            Coordinate2D::new(x2, y2))
+        BoundingBox2D::new(Coordinate2D::new(x1, y1), Coordinate2D::new(x2, y2))
             .map_err(|_| D::Error::custom("Invalid bbox"))
     } else {
         Err(D::Error::custom("Invalid bbox"))
@@ -119,25 +117,28 @@ pub fn parse_bbox<'de, D>(deserializer: D) -> Result<BoundingBox2D, D::Error>
 /// sources: - <http://docs.geoserver.org/2.8.x/en/user/services/wms/time.html#wms-time>
 ///          - <http://www.ogcnetwork.net/node/178>
 pub fn parse_time<'de, D>(deserializer: D) -> Result<Option<TimeInterval>, D::Error>
-    where D: serde::Deserializer<'de>
+where
+    D: serde::Deserializer<'de>,
 {
     // TODO: support relative time intervals
 
     let s = <&str as serde::Deserialize>::deserialize(deserializer)?;
 
-    let split: Vec<_> = s.split('/').map(|s| chrono::DateTime::parse_from_rfc3339(s)).collect();
+    let split: Vec<_> = s
+        .split('/')
+        .map(|s| chrono::DateTime::parse_from_rfc3339(s))
+        .collect();
 
     match *split.as_slice() {
         [Ok(time)] => TimeInterval::new(time.timestamp(), time.timestamp())
             .map(Some)
             .map_err(|_| D::Error::custom("Invalid time")),
-        [Ok(start), Ok(end)]  => TimeInterval::new(start.timestamp(), end.timestamp())
+        [Ok(start), Ok(end)] => TimeInterval::new(start.timestamp(), end.timestamp())
             .map(Some)
             .map_err(|_| D::Error::custom("Invalid time")),
-        _ => Err(D::Error::custom("Invalid time"))
+        _ => Err(D::Error::custom("Invalid time")),
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -161,8 +162,7 @@ mod tests {
             sld: Some("sld_spec".into()),
             sld_body: Some("sld_body".into()),
             elevation: Some("elevation".into()),
-            bbox: BoundingBox2D::new(Coordinate2D::new(1., 2.),
-                                     Coordinate2D::new(3., 4.)).unwrap(),
+            bbox: BoundingBox2D::new(Coordinate2D::new(1., 2.), Coordinate2D::new(3., 4.)).unwrap(),
             height: 2,
             format: GetMapFormat::ImagePng,
             exceptions: Some("exceptions".into()),
@@ -188,8 +188,7 @@ mod tests {
             sld: None,
             sld_body: None,
             elevation: None,
-            bbox: BoundingBox2D::new(Coordinate2D::new(1., 2.),
-                                     Coordinate2D::new(3., 4.)).unwrap(),
+            bbox: BoundingBox2D::new(Coordinate2D::new(1., 2.), Coordinate2D::new(3., 4.)).unwrap(),
             height: 2,
             format: GetMapFormat::ImagePng,
             exceptions: None,

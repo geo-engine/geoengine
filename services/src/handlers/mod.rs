@@ -1,15 +1,15 @@
-use warp::{Rejection, Reply};
-use crate::users::userdb::UserDB;
+use crate::error::Error;
 use crate::users::session::{Session, SessionToken};
+use crate::users::userdb::UserDB;
+use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use std::str::FromStr;
 use warp::Filter;
-use crate::error::Error;
+use warp::{Rejection, Reply};
 
 pub mod projects;
-pub mod wms;
 pub mod users;
+pub mod wms;
 pub mod workflows;
 
 type DB<T> = Arc<RwLock<T>>;

@@ -7,14 +7,16 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 #[snafu(visibility = "pub(crate)")]
 pub enum Error {
     DataType {
-        source: geoengine_datatypes::error::Error
+        source: geoengine_datatypes::error::Error,
     },
     HTTP {
-        source: warp::http::Error
+        source: warp::http::Error,
     },
 
     #[snafu(display("Registration failed: {:?}", reason))]
-    RegistrationFailed { reason: String },
+    RegistrationFailed {
+        reason: String,
+    },
     LoginFailed,
     LogoutFailed,
     SessionDoesNotExist,
