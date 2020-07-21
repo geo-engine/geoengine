@@ -11,7 +11,7 @@ use geoengine_datatypes::primitives::{
     BoundingBox2D, Coordinate2D, SpatialBounded, TemporalBounded, TimeInterval,
 };
 use serde::{Deserialize, Serialize};
-use snafu::ensure;
+use snafu::{ensure, ResultExt};
 use std::cmp::Ordering;
 use uuid::Uuid;
 
@@ -97,8 +97,9 @@ impl STRectangle {
             bounding_box: BoundingBox2D::new(
                 Coordinate2D::new(lower_left_x, lower_left_y),
                 Coordinate2D::new(upper_left_x, upper_left_y),
-            )?,
-            time_interval: TimeInterval::new(time_start, time_stop)?,
+            )
+            .context(error::DataType)?,
+            time_interval: TimeInterval::new(time_start, time_stop).context(error::DataType {})?,
         })
     }
 }

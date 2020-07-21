@@ -9,6 +9,7 @@ use warp::{Rejection, Reply};
 
 pub mod projects;
 pub mod users;
+pub mod wms;
 pub mod workflows;
 
 type DB<T> = Arc<RwLock<T>>;
