@@ -33,8 +33,13 @@ pub async fn handle_rejection(error: Rejection) -> Result<impl Reply, Rejection>
     }
 }
 
-pub fn authenticate<T: UserDB>(user_db: DB<T>) -> impl warp::Filter<Extract=(Session, ), Error=warp::Rejection> + Clone {
-    async fn do_authenticate<T: UserDB>(user_db: DB<T>, token: String) -> Result<Session, warp::Rejection> {
+pub fn authenticate<T: UserDB>(
+    user_db: DB<T>,
+) -> impl warp::Filter<Extract = (Session,), Error = warp::Rejection> + Clone {
+    async fn do_authenticate<T: UserDB>(
+        user_db: DB<T>,
+        token: String,
+    ) -> Result<Session, warp::Rejection> {
         let token = SessionToken::from_str(&token).map_err(|_| warp::reject())?;
         let db = user_db.read().await;
         db.session(token).map_err(|_| warp::reject())

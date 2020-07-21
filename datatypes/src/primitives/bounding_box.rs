@@ -1,8 +1,8 @@
 use super::Coordinate2D;
 use crate::error;
 use crate::util::Result;
-use snafu::ensure;
 use serde::{Deserialize, Serialize};
+use snafu::ensure;
 
 #[derive(Copy, Clone, Serialize, Deserialize, PartialEq, Debug)]
 #[repr(C)]

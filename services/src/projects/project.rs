@@ -198,17 +198,11 @@ pub struct UpdateProject {
 impl UserInput for UpdateProject {
     fn validate(&self) -> Result<(), Error> {
         if let Some(name) = &self.name {
-            ensure!(
-                !name.is_empty(),
-                error::ProjectUpdateFailed
-            );
+            ensure!(!name.is_empty(), error::ProjectUpdateFailed);
         }
 
         if let Some(description) = &self.description {
-            ensure!(
-                !description.is_empty(),
-                error::ProjectUpdateFailed
-            );
+            ensure!(!description.is_empty(), error::ProjectUpdateFailed);
         }
 
         // TODO: layers

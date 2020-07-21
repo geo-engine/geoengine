@@ -14,7 +14,7 @@ pub enum Error {
     },
 
     #[snafu(display("Registration failed: {:?}", reason))]
-    RegistrationFailed { reason : String },
+    RegistrationFailed { reason: String },
     LoginFailed,
     LogoutFailed,
     SessionDoesNotExist,
@@ -25,7 +25,7 @@ pub enum Error {
     ProjectLoadFailed,
     ProjectUpdateFailed,
     ProjectDeleteFailed,
-    PermissionFailed
+    PermissionFailed,
 }
 
 impl Reject for Error {}

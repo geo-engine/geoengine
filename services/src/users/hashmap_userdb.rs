@@ -6,7 +6,7 @@ use snafu::ensure;
 use crate::error;
 use crate::error::Result;
 use crate::users::session::{Session, SessionToken};
-use crate::users::user::{User, UserId, UserCredentials, UserRegistration};
+use crate::users::user::{User, UserCredentials, UserId, UserRegistration};
 use crate::users::userdb::UserDB;
 use crate::util::user_input::Validated;
 
@@ -38,10 +38,7 @@ impl UserDB for HashMapUserDB {
     ///
     /// assert!(user_db.register(user_registration).is_ok());
     /// ```
-    fn register(
-        &mut self,
-        user_registration: Validated<UserRegistration>,
-    ) -> Result<UserId> {
+    fn register(&mut self, user_registration: Validated<UserRegistration>) -> Result<UserId> {
         let user_registration = user_registration.user_input;
         ensure!(
             !self.users.contains_key(&user_registration.email),
