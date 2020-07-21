@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 pub struct TimeInstance(i64);
 
 impl TimeInstance {
-    const MIN_VISUALIZABLE_VALUE: i64 = -8_334_632_851_200_001 + 1;
-    const MAX_VISUALIZABLE_VALUE: i64 = 8_210_298_412_800_000 - 1;
+    pub const MIN_VISUALIZABLE_VALUE: i64 = -8_334_632_851_200_001 + 1;
+    pub const MAX_VISUALIZABLE_VALUE: i64 = 8_210_298_412_800_000 - 1;
 
     pub fn from_millis(millis: i64) -> Self {
         TimeInstance(millis)
@@ -31,22 +31,6 @@ impl TimeInstance {
                 .expect("TimeInstance is not valid")
                 .to_rfc3339()
         }
-    }
-
-    pub fn min_value() -> Self {
-        TimeInstance::from_millis(TimeInstance::MIN_VISUALIZABLE_VALUE)
-    }
-
-    pub fn max_value() -> Self {
-        TimeInstance::from_millis(TimeInstance::MAX_VISUALIZABLE_VALUE)
-    }
-
-    pub fn min(a: Self, b: Self) -> Self {
-        TimeInstance::from_millis(i64::min(a.inner(), b.inner()))
-    }
-
-    pub fn max(a: Self, b: Self) -> Self {
-        TimeInstance::from_millis(i64::max(a.inner(), b.inner()))
     }
 
     pub fn inner(self) -> i64 {

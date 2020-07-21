@@ -21,7 +21,7 @@ ocl = "0.19"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 snafu = "0.6"
-tokio = { version = "0.2.21", features = ["blocking", "macros"] }
+tokio = { version = "0.2", features = ["blocking", "macros"] }
 
 [dev-dependencies]
 criterion = "0.3"
