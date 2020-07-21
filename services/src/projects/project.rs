@@ -1,17 +1,19 @@
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
-use crate::error::Error;
 use crate::error;
+use crate::error::Error;
 use crate::error::Result;
-use snafu::ensure;
-use geoengine_datatypes::primitives::{BoundingBox2D, TimeInterval, Coordinate2D, SpatialBounded, TemporalBounded};
-use std::cmp::Ordering;
-use crate::util::user_input::UserInput;
-use crate::util::identifiers::Identifier;
 use crate::users::user::UserId;
-use uuid::Uuid;
-use geoengine_datatypes::operations::image::Colorizer;
+use crate::util::identifiers::Identifier;
+use crate::util::user_input::UserInput;
 use crate::workflows::workflow::WorkflowId;
+use chrono::{DateTime, Utc};
+use geoengine_datatypes::operations::image::Colorizer;
+use geoengine_datatypes::primitives::{
+    BoundingBox2D, Coordinate2D, SpatialBounded, TemporalBounded, TimeInterval,
+};
+use serde::{Deserialize, Serialize};
+use snafu::{ensure, ResultExt};
+use std::cmp::Ordering;
+use uuid::Uuid;
 
 identifier!(ProjectId);
 
@@ -83,12 +85,21 @@ pub struct STRectangle {
 }
 
 impl STRectangle {
-    pub fn new(lower_left_x: f64, lower_left_y: f64, upper_left_x: f64, upper_left_y: f64,
-               time_start: i64, time_stop: i64) -> Result<Self> {
+    pub fn new(
+        lower_left_x: f64,
+        lower_left_y: f64,
+        upper_left_x: f64,
+        upper_left_y: f64,
+        time_start: i64,
+        time_stop: i64,
+    ) -> Result<Self> {
         Ok(Self {
-            bounding_box: BoundingBox2D::new(Coordinate2D::new(lower_left_x, lower_left_y),
-                                             Coordinate2D::new(upper_left_x, upper_left_y))?,
-            time_interval: TimeInterval::new(time_start, time_stop)?,
+            bounding_box: BoundingBox2D::new(
+                Coordinate2D::new(lower_left_x, lower_left_y),
+                Coordinate2D::new(upper_left_x, upper_left_y),
+            )
+            .context(error::DataType)?,
+            time_interval: TimeInterval::new(time_start, time_stop).context(error::DataType {})?,
         })
     }
 }
@@ -197,17 +208,11 @@ pub struct UpdateProject {
 impl UserInput for UpdateProject {
     fn validate(&self) -> Result<(), Error> {
         if let Some(name) = &self.name {
-            ensure!(
-                !name.is_empty(),
-                error::ProjectUpdateFailed
-            );
+            ensure!(!name.is_empty(), error::ProjectUpdateFailed);
         }
 
         if let Some(description) = &self.description {
-            ensure!(
-                !description.is_empty(),
-                error::ProjectUpdateFailed
-            );
+            ensure!(!description.is_empty(), error::ProjectUpdateFailed);
         }
 
         // TODO: layers

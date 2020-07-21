@@ -1,7 +1,7 @@
 use crate::error;
+use crate::primitives::TimeInstance;
 use crate::util::arrow::ArrowTyped;
 use crate::util::Result;
-use chrono::{TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::cmp::Ordering;
@@ -11,8 +11,8 @@ use std::fmt::{Debug, Display};
 #[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[repr(C)]
 pub struct TimeInterval {
-    start: i64,
-    end: i64,
+    start: TimeInstance,
+    end: TimeInstance,
 }
 
 impl Default for TimeInterval {
@@ -21,7 +21,7 @@ impl Default for TimeInterval {
     /// # Examples
     ///
     /// ```
-    /// use geoengine_datatypes::primitives::TimeInterval;
+    /// use geoengine_datatypes::primitives::{TimeInterval, TimeInstance};
     ///
     /// assert!(TimeInterval::default().contains(&TimeInterval::new_unchecked(0, 0)));
     /// assert!(TimeInterval::default().intersects(&TimeInterval::default()));
@@ -29,19 +29,19 @@ impl Default for TimeInterval {
     /// ```
     fn default() -> Self {
         Self {
-            start: i64::min_value(),
-            end: i64::max_value(),
+            start: i64::min_value().into(),
+            end: i64::max_value().into(),
         }
     }
 }
 
 impl TimeInterval {
-    /// Create a new time interval and check bounds
+    /// Creates a new time interval from inputs implementing Into<TimeInstance>
     ///
     /// # Examples
     ///
     /// ```
-    /// use geoengine_datatypes::primitives::TimeInterval;
+    /// use geoengine_datatypes::primitives::{TimeInterval, TimeInstance};
     ///
     /// TimeInterval::new(0, 0).unwrap();
     /// TimeInterval::new(0, 1).unwrap();
@@ -53,28 +53,47 @@ impl TimeInterval {
     ///
     /// This constructor fails if `end` is before `start`
     ///
-    pub fn new(start: i64, end: i64) -> Result<Self> {
+    pub fn new<A, B>(start: A, end: B) -> Result<Self>
+    where
+        A: Into<TimeInstance>,
+        B: Into<TimeInstance>,
+    {
+        let start_instant = start.into();
+        let end_instant = end.into();
         ensure!(
-            start <= end,
-            error::TimeIntervalEndBeforeStart { start, end }
+            start_instant <= end_instant,
+            error::TimeIntervalEndBeforeStart {
+                start: start_instant,
+                end: end_instant
+            }
         );
-        Ok(Self { start, end })
+        Ok(Self {
+            start: start_instant,
+            end: end_instant,
+        })
     }
 
-    /// Create a new time interval without bound checks
+    /// Creates a new time interval without bound checks from inputs implementing Into<TimeInstance>
     ///
     /// # Examples
     ///
     /// ```
-    /// use geoengine_datatypes::primitives::TimeInterval;
+    /// use geoengine_datatypes::primitives::{TimeInterval};
     ///
     /// let time_unchecked = TimeInterval::new_unchecked(0, 1);
     ///
     /// assert_eq!(time_unchecked, TimeInterval::new(0, 1).unwrap());
     /// ```
     ///
-    pub fn new_unchecked(start: i64, end: i64) -> Self {
-        Self { start, end }
+    pub fn new_unchecked<A, B>(start: A, end: B) -> Self
+    where
+        A: Into<TimeInstance>,
+        B: Into<TimeInstance>,
+    {
+        Self {
+            start: start.into(),
+            end: end.into(),
+        }
     }
 
     /// Returns whether the other `TimeInterval` is contained (smaller or equal) within this interval
@@ -82,7 +101,7 @@ impl TimeInterval {
     /// # Examples
     ///
     /// ```
-    /// use geoengine_datatypes::primitives::TimeInterval;
+    /// use geoengine_datatypes::primitives::{TimeInterval, TimeInstance};
     ///
     /// let valid_pairs = vec![
     ///     ((0, 1), (0, 1)),
@@ -115,7 +134,7 @@ impl TimeInterval {
     /// # Examples
     ///
     /// ```
-    /// use geoengine_datatypes::primitives::TimeInterval;
+    /// use geoengine_datatypes::primitives::{TimeInterval, TimeInstance};
     ///
     /// let valid_pairs = vec![
     ///     ((0, 1), (0, 1)),
@@ -158,7 +177,7 @@ impl TimeInterval {
     /// # Examples
     ///
     /// ```
-    /// use geoengine_datatypes::primitives::TimeInterval;
+    /// use geoengine_datatypes::primitives::{TimeInterval, TimeInstance};
     ///
     /// let i1 = TimeInterval::new(0, 2).unwrap();
     /// let i2 = TimeInterval::new(1, 3).unwrap();
@@ -182,16 +201,16 @@ impl TimeInterval {
             }
         );
         Ok(Self {
-            start: i64::min(self.start, other.start),
-            end: i64::max(self.end, other.end),
+            start: TimeInstance::min(self.start, other.start),
+            end: TimeInstance::max(self.end, other.end),
         })
     }
 
-    pub fn start(&self) -> i64 {
+    pub fn start(&self) -> TimeInstance {
         self.start
     }
 
-    pub fn end(&self) -> i64 {
+    pub fn end(&self) -> TimeInstance {
         self.end
     }
 
@@ -202,7 +221,7 @@ impl TimeInterval {
     /// # Examples
     ///
     /// ```
-    /// use geoengine_datatypes::primitives::TimeInterval;
+    /// use geoengine_datatypes::primitives::{TimeInterval, TimeInstance};
     ///
     /// assert_eq!(
     ///     TimeInterval::new_unchecked(0, 1585069448 * 1000).to_geo_json_event(),
@@ -215,22 +234,10 @@ impl TimeInterval {
     /// ```
     pub fn to_geo_json_event(&self) -> serde_json::Value {
         // TODO: Use proper time handling, e.g., define a BOT/EOT, …
-        fn to_rfc3339(timestamp: i64) -> String {
-            const MIN_VISUALIZABLE_VALUE: i64 = -8_334_632_851_200_001 + 1;
-            const MAX_VISUALIZABLE_VALUE: i64 = 8_210_298_412_800_000 - 1;
-
-            if timestamp < MIN_VISUALIZABLE_VALUE {
-                "-262144-01-01T00:00:00+00:00".into()
-            } else if timestamp > MAX_VISUALIZABLE_VALUE {
-                "+262143-12-31T23:59:59.999+00:00".into()
-            } else {
-                Utc.timestamp_millis(timestamp).to_rfc3339()
-            }
-        }
 
         serde_json::json!({
-            "start": to_rfc3339(self.start),
-            "end": to_rfc3339(self.end),
+            "start": self.start.as_rfc3339(),
+            "end": self.end.as_rfc3339(),
             "type": "Interval"
         })
     }
@@ -238,7 +245,12 @@ impl TimeInterval {
 
 impl Debug for TimeInterval {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-        write!(f, "TimeInterval [{}, {})", self.start, self.end)
+        write!(
+            f,
+            "TimeInterval [{}, {})",
+            self.start.inner(),
+            &self.end.inner()
+        )
     }
 }
 
@@ -254,7 +266,7 @@ impl Display for TimeInterval {
     /// ```
     ///
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-        write!(f, "[{}, {})", self.start, self.end)
+        write!(f, "[{}, {})", self.start.inner(), self.end.inner())
     }
 }
 

@@ -214,8 +214,8 @@ impl MultiPointCollection {
                 let mut builder = FixedSizeListBuilder::new(Date64Builder::new(capacity), 2);
                 for time_interval in time_intervals {
                     let date_builder = builder.values();
-                    date_builder.append_value(time_interval.start())?;
-                    date_builder.append_value(time_interval.end())?;
+                    date_builder.append_value(time_interval.start().into())?;
+                    date_builder.append_value(time_interval.end().into())?;
                     builder.append(true)?;
                 }
 

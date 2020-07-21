@@ -1,6 +1,7 @@
 use crate::source::CsvSourceParameters;
-use serde::{Deserialize, Serialize};
+pub use crate::source::GdalSourceParameters;
 use geoengine_datatypes::primitives::Coordinate2D;
+use serde::{Deserialize, Serialize};
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Operator {
@@ -28,12 +29,12 @@ pub enum Operator {
     },
     MockRasterSource {
         params: MockRasterSourceParameters,
-        sources: NoSources
+        sources: NoSources,
     },
     MockRasterPoints {
         params: MockRasterPointsParameters,
-        sources: AllSources // TODO: only raster/points
-    }
+        sources: AllSources, // TODO: only raster/points
+    },
 }
 
 #[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -88,8 +89,10 @@ pub struct AllSources {
 ///                 {
 ///                     "type": "gdal_source",
 ///                     "params": {
-///                         "source_name": "test",
-///                         "channel": 0
+///                          "base_path": "base_path",
+///                          "file_name_with_time_placeholder": "file_name_with_time_placeholder",
+///                          "time_format": "file_name",
+///                          "channel": 1
 ///                     }
 ///                 }
 ///             ]
@@ -106,8 +109,10 @@ pub struct AllSources {
 ///     sources: RasterSources {
 ///         rasters: vec![Operator::GdalSource {
 ///             params: GdalSourceParameters {
-///                 source_name: "test".into(),
-///                 channel: 0,
+///                 base_path: "base_path".into(),
+///                 file_name_with_time_placeholder: "file_name_with_time_placeholder".into(),
+///                 time_format: "file_name".into(),
+///                 channel: Some(1),
 ///             },
 ///             sources: NoSources {},
 ///         }],
@@ -118,40 +123,6 @@ pub struct AllSources {
 pub struct ProjectionParameters {
     pub src_crs: String,
     pub dest_crs: String,
-}
-
-/// Parameters for the GDAL Source Operator
-///
-/// # Examples
-///
-/// ```rust
-/// use serde_json::{Result, Value};
-/// use geoengine_operators::Operator;
-/// use geoengine_operators::operators::{GdalSourceParameters, NoSources, RasterSources};
-///
-/// let json_string = r#"
-///     {
-///         "type": "gdal_source",
-///         "params": {
-///             "source_name": "test",
-///             "channel": 3
-///         }
-///     }"#;
-///
-/// let operator: Operator = serde_json::from_str(json_string).unwrap();
-///
-/// assert_eq!(operator, Operator::GdalSource {
-///     params: GdalSourceParameters {
-///         source_name: "test".into(),
-///         channel: 3,
-///     },
-///     sources: Default::default(),
-/// });
-/// ```
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct GdalSourceParameters {
-    pub source_name: String,
-    pub channel: u8,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
@@ -170,12 +141,12 @@ pub struct MockDelayParameters {
 pub struct MockRasterSourceParameters {
     pub data: Vec<f64>,
     pub dim: [usize; 2],
-    pub geo_transform: [f64; 6]
+    pub geo_transform: [f64; 6],
 }
 
 impl Eq for MockRasterSourceParameters {}
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MockRasterPointsParameters {
-    pub coords: [usize; 2]
+    pub coords: [usize; 2],
 }

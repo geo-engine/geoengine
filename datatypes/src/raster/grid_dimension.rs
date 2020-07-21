@@ -1,6 +1,7 @@
 use super::Capacity;
 use crate::error;
 use crate::util::Result;
+use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
 // Index types for 1,2,3 dimensional grids
@@ -97,19 +98,19 @@ impl GridIndex<Dim<[Ix; 3]>> for Ix3 {
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Default, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Default, Debug, Serialize, Deserialize)]
 pub struct Dim<I> {
     dimension_size: I,
 }
 
 impl<I> Dim<I> {
-    pub(crate) fn new(dimension_size: I) -> Dim<I> {
+    pub fn new(dimension_size: I) -> Dim<I> {
         Dim { dimension_size }
     }
-    pub(crate) fn dimension_size(&self) -> &I {
+    pub fn dimension_size(&self) -> &I {
         &self.dimension_size
     }
-    pub(crate) fn dimension_size_mut(&mut self) -> &mut I {
+    pub fn dimension_size_mut(&mut self) -> &mut I {
         &mut self.dimension_size
     }
 }

@@ -1,11 +1,14 @@
-use crate::projects::project::{OrderBy, ProjectFilter, ProjectListing, ProjectId, Project, CreateProject, UpdateProject, UserProjectPermission, ProjectPermission, ProjectListOptions, ProjectVersion, LoadVersion};
-use std::collections::HashMap;
-use crate::error::Result;
 use crate::error;
-use snafu::ensure;
+use crate::error::Result;
+use crate::projects::project::{
+    CreateProject, LoadVersion, OrderBy, Project, ProjectFilter, ProjectId, ProjectListOptions,
+    ProjectListing, ProjectPermission, ProjectVersion, UpdateProject, UserProjectPermission,
+};
 use crate::projects::projectdb::ProjectDB;
-use crate::util::user_input::Validated;
 use crate::users::user::UserId;
+use crate::util::user_input::Validated;
+use snafu::ensure;
+use std::collections::HashMap;
 
 #[derive(Default)]
 pub struct HashMapProjectDB {
@@ -52,9 +55,17 @@ impl ProjectDB for HashMapProjectDB {
     /// assert_eq!(projects[1].name, "Test8");
     /// ```
     fn list(&self, user: UserId, options: Validated<ProjectListOptions>) -> Vec<ProjectListing> {
-        let ProjectListOptions { permissions, filter, order, offset, limit } = options.user_input;
+        let ProjectListOptions {
+            permissions,
+            filter,
+            order,
+            offset,
+            limit,
+        } = options.user_input;
         #[allow(clippy::filter_map)]
-            let mut projects = self.permissions.iter()
+        let mut projects = self
+            .permissions
+            .iter()
             .filter(|p| p.user == user && permissions.contains(&p.permission))
             .flat_map(|p| self.projects.get(&p.project).and_then(|p| p.last()))
             .map(ProjectListing::from)
@@ -108,18 +119,26 @@ impl ProjectDB for HashMapProjectDB {
     /// ```
     fn load(&self, user: UserId, project: ProjectId, version: LoadVersion) -> Result<Project> {
         ensure!(
-            self.permissions.iter().any(|p| p.project == project && p.user == user),
+            self.permissions
+                .iter()
+                .any(|p| p.project == project && p.user == user),
             error::ProjectLoadFailed
         );
-        let project_versions = self.projects.get(&project).ok_or(error::Error::ProjectLoadFailed)?;
+        let project_versions = self
+            .projects
+            .get(&project)
+            .ok_or(error::Error::ProjectLoadFailed)?;
         if let LoadVersion::Version(version) = version {
-            Ok(
-                project_versions.iter()
-                    .find(|p| p.version.id == version)
-                    .ok_or(error::Error::ProjectLoadFailed)?.clone()
-            )
+            Ok(project_versions
+                .iter()
+                .find(|p| p.version.id == version)
+                .ok_or(error::Error::ProjectLoadFailed)?
+                .clone())
         } else {
-            Ok(project_versions.last().ok_or(error::Error::ProjectLoadFailed)?.clone())
+            Ok(project_versions
+                .last()
+                .ok_or(error::Error::ProjectLoadFailed)?
+                .clone())
         }
     }
 
@@ -153,7 +172,11 @@ impl ProjectDB for HashMapProjectDB {
         let project: Project = Project::from_create_project(create.user_input, user);
         let id = project.id;
         self.projects.insert(id, vec![project]);
-        self.permissions.push(UserProjectPermission { user, project: id, permission: ProjectPermission::Owner });
+        self.permissions.push(UserProjectPermission {
+            user,
+            project: id,
+            permission: ProjectPermission::Owner,
+        });
         id
     }
 
@@ -198,13 +221,20 @@ impl ProjectDB for HashMapProjectDB {
         let update = update.user_input;
 
         ensure!(
-            self.permissions.iter().any(|p| p.project == update.id && p.user == user &&
-            (p.permission == ProjectPermission::Write || p.permission == ProjectPermission::Owner)),
+            self.permissions.iter().any(|p| p.project == update.id
+                && p.user == user
+                && (p.permission == ProjectPermission::Write
+                    || p.permission == ProjectPermission::Owner)),
             error::ProjectUpdateFailed
         );
 
-        let project_versions = self.projects.get_mut(&update.id).ok_or(error::Error::ProjectUpdateFailed)?;
-        let project = project_versions.last().ok_or(error::Error::ProjectUpdateFailed)?;
+        let project_versions = self
+            .projects
+            .get_mut(&update.id)
+            .ok_or(error::Error::ProjectUpdateFailed)?;
+        let project = project_versions
+            .last()
+            .ok_or(error::Error::ProjectUpdateFailed)?;
 
         let project_update = project.update_project(update, user);
 
@@ -246,12 +276,16 @@ impl ProjectDB for HashMapProjectDB {
     /// ```
     fn delete(&mut self, user: UserId, project: ProjectId) -> Result<()> {
         ensure!(
-            self.permissions.iter().any(|p| p.project == project && p.user == user &&
-            p.permission == ProjectPermission::Owner),
+            self.permissions.iter().any(|p| p.project == project
+                && p.user == user
+                && p.permission == ProjectPermission::Owner),
             error::ProjectUpdateFailed
         );
 
-        self.projects.remove(&project).map(|_| ()).ok_or(error::Error::ProjectDeleteFailed)
+        self.projects
+            .remove(&project)
+            .map(|_| ())
+            .ok_or(error::Error::ProjectDeleteFailed)
     }
 
     /// Get the versions of a project
@@ -300,12 +334,19 @@ impl ProjectDB for HashMapProjectDB {
     fn versions(&self, user: UserId, project: ProjectId) -> Result<Vec<ProjectVersion>> {
         // TODO: pagination?
         ensure!(
-            self.permissions.iter().any(|p| p.project == project && p.user == user),
+            self.permissions
+                .iter()
+                .any(|p| p.project == project && p.user == user),
             error::ProjectLoadFailed
         );
 
-        Ok(self.projects.get(&project).ok_or(error::Error::ProjectLoadFailed)?.iter()
-            .map(|p| p.version).collect())
+        Ok(self
+            .projects
+            .get(&project)
+            .ok_or(error::Error::ProjectLoadFailed)?
+            .iter()
+            .map(|p| p.version)
+            .collect())
     }
 
     /// List all permissions on a project
@@ -346,13 +387,21 @@ impl ProjectDB for HashMapProjectDB {
     /// assert!(permissions.contains(&permission1));
     /// assert!(permissions.contains(&permission2));
     /// ```
-    fn list_permissions(&mut self, user: UserId, project: ProjectId) -> Result<Vec<UserProjectPermission>> {
+    fn list_permissions(
+        &mut self,
+        user: UserId,
+        project: ProjectId,
+    ) -> Result<Vec<UserProjectPermission>> {
         ensure!(
-            self.permissions.iter().any(|p| p.project == project && p.user == user),
+            self.permissions
+                .iter()
+                .any(|p| p.project == project && p.user == user),
             error::ProjectLoadFailed
         );
 
-        Ok(self.permissions.iter()
+        Ok(self
+            .permissions
+            .iter()
             .filter(|p| p.project == project)
             .cloned()
             .collect())
@@ -398,8 +447,11 @@ impl ProjectDB for HashMapProjectDB {
     /// ```
     fn add_permission(&mut self, user: UserId, permission: UserProjectPermission) -> Result<()> {
         ensure!(
-            self.permissions.iter().any(|p| p.project == permission.project && p.user == user &&
-            p.permission == ProjectPermission::Owner),
+            self.permissions
+                .iter()
+                .any(|p| p.project == permission.project
+                    && p.user == user
+                    && p.permission == ProjectPermission::Owner),
             error::ProjectUpdateFailed
         );
 
@@ -451,8 +503,11 @@ impl ProjectDB for HashMapProjectDB {
     /// ```
     fn remove_permission(&mut self, user: UserId, permission: UserProjectPermission) -> Result<()> {
         ensure!(
-            self.permissions.iter().any(|p| p.project == permission.project && p.user == user &&
-            p.permission == ProjectPermission::Owner),
+            self.permissions
+                .iter()
+                .any(|p| p.project == permission.project
+                    && p.user == user
+                    && p.permission == ProjectPermission::Owner),
             error::ProjectUpdateFailed
         );
 
@@ -469,13 +524,14 @@ impl ProjectDB for HashMapProjectDB {
 mod test {
     use super::*;
     use crate::projects::project::STRectangle;
-    use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, TimeInterval};
-    use crate::util::user_input::UserInput;
     use crate::util::identifiers::Identifier;
+    use crate::util::user_input::UserInput;
+    use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, TimeInterval};
 
     fn strect() -> STRectangle {
         STRectangle {
-            bounding_box: BoundingBox2D::new(Coordinate2D::new(0., 0.), Coordinate2D::new(1., 1.)).unwrap(),
+            bounding_box: BoundingBox2D::new(Coordinate2D::new(0., 0.), Coordinate2D::new(1., 1.))
+                .unwrap(),
             time_interval: TimeInterval::new(0, 1).unwrap(),
         }
     }
@@ -492,8 +548,9 @@ mod test {
             description: "Text".into(),
             view: strect(),
             bounds: strect(),
-
-        }.validated().unwrap();
+        }
+        .validated()
+        .unwrap();
 
         let _ = project_db.create(user, create);
 
@@ -502,7 +559,9 @@ mod test {
             description: "Text".into(),
             view: strect(),
             bounds: strect(),
-        }.validated().unwrap();
+        }
+        .validated()
+        .unwrap();
 
         let project2 = project_db.create(user2, create);
 
@@ -511,23 +570,39 @@ mod test {
             description: "Text".into(),
             view: strect(),
             bounds: strect(),
-        }.validated().unwrap();
+        }
+        .validated()
+        .unwrap();
 
         let project3 = project_db.create(user3, create);
 
-        let permission1 = UserProjectPermission { user, project: project2, permission: ProjectPermission::Read };
-        let permission2 = UserProjectPermission { user, project: project3, permission: ProjectPermission::Write };
+        let permission1 = UserProjectPermission {
+            user,
+            project: project2,
+            permission: ProjectPermission::Read,
+        };
+        let permission2 = UserProjectPermission {
+            user,
+            project: project3,
+            permission: ProjectPermission::Write,
+        };
 
         project_db.add_permission(user2, permission1).unwrap();
         project_db.add_permission(user3, permission2).unwrap();
 
         let options = ProjectListOptions {
-            permissions: vec![ProjectPermission::Owner, ProjectPermission::Write, ProjectPermission::Read],
+            permissions: vec![
+                ProjectPermission::Owner,
+                ProjectPermission::Write,
+                ProjectPermission::Read,
+            ],
             filter: ProjectFilter::None,
             order: OrderBy::NameDesc,
             offset: 0,
             limit: 3,
-        }.validated().unwrap();
+        }
+        .validated()
+        .unwrap();
 
         let projects = project_db.list(user, options);
 
@@ -541,7 +616,9 @@ mod test {
             order: OrderBy::NameDesc,
             offset: 0,
             limit: 3,
-        }.validated().unwrap();
+        }
+        .validated()
+        .unwrap();
 
         let projects = project_db.list(user, options);
         assert!(projects[0].name == "Own");
