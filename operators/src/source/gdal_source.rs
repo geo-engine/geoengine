@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use futures::stream::{self, BoxStream, StreamExt};
 
-use geoengine_datatypes::primitives::{TimeInterval, TimeTick};
+use geoengine_datatypes::primitives::TimeInterval;
 use geoengine_datatypes::raster::{Dim, GeoTransform, Ix, Raster2D};
 
 /// Parameters for the GDAL Source Operator
@@ -39,7 +39,6 @@ use geoengine_datatypes::raster::{Dim, GeoTransform, Ix, Raster2D};
 ///                     base_path: "base_path".into(),
 ///                     file_name_with_time_placeholder: "file_name_with_time_placeholder".into(),
 ///                     time_format: "file_name".into(),
-///                     tick: None,
 ///                     channel: Some(3),
 ///     },
 ///     sources: Default::default(),
@@ -50,8 +49,8 @@ pub struct GdalSourceParameters {
     pub base_path: PathBuf,
     pub file_name_with_time_placeholder: String,
     pub time_format: String,
-    pub tick: Option<TimeTick>,
     pub channel: Option<u32>,
+    // TODO: add some kind of tick interval
 }
 
 /// A provider of tile (size) information for a raster/grid
@@ -204,12 +203,11 @@ impl GdalSource {
         time_interval: TimeInterval,
         tile_information: TileInformation,
     ) -> Result<RasterTile2D<T>> {
-        // snap the time interval start instance to the dataset tick configuration
-        let time_string = gdal_params.tick.map(|t| {
-            t.snap_datetime(&time_interval.start().as_naive_date_time().unwrap()) // TODO: replace unwrap
-                .format(&gdal_params.time_format)
-                .to_string()
-        });
+        // format the time interval
+        let time_string = time_interval
+            .start()
+            .as_naive_date_time()
+            .map(|t| t.format(&gdal_params.time_format).to_string());
 
         // TODO: replace -> parser?
         let file_name = gdal_params.file_name_with_time_placeholder.replace(
@@ -372,7 +370,6 @@ mod tests {
             base_path: "".into(),
             file_name_with_time_placeholder: "".into(),
             time_format: "".into(),
-            tick: None,
             channel: None,
         };
 
@@ -547,7 +544,6 @@ mod tests {
             base_path: "../operators/test-data/raster/modis_ndvi".into(),
             file_name_with_time_placeholder: "MOD13A2_M_NDVI_2014-01-01.TIFF".into(),
             time_format: "".into(),
-            tick: None,
             channel: None,
         };
 
@@ -589,7 +585,6 @@ mod tests {
             base_path: "../operators/test-data/raster/modis_ndvi".into(),
             file_name_with_time_placeholder: "MOD13A2_M_NDVI_2014-01-01.TIFF".into(),
             time_format: "".into(),
-            tick: None,
             channel: None,
         };
 
@@ -643,7 +638,6 @@ mod tests {
             base_path: "../operators/test-data/raster/modis_ndvi".into(),
             file_name_with_time_placeholder: "MOD13A2_M_NDVI_2014-01-01.TIFF".into(),
             time_format: "".into(),
-            tick: None,
             channel: None,
         };
 
@@ -681,7 +675,6 @@ mod tests {
             base_path: "../operators/test-data/raster/modis_ndvi".into(),
             file_name_with_time_placeholder: "MOD13A2_M_NDVI_2014-01-01.TIFF".into(),
             time_format: "".into(),
-            tick: None,
             channel: None,
         };
 

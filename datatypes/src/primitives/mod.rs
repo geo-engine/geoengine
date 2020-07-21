@@ -10,7 +10,6 @@ mod no_geometry;
 mod spatio_temporal_bounded;
 mod time_instance;
 mod time_interval;
-mod time_tick;
 
 pub use bounding_box::BoundingBox2D;
 pub use coordinate::Coordinate2D;
@@ -28,7 +27,6 @@ pub use no_geometry::NoGeometry;
 pub use spatio_temporal_bounded::{SpatialBounded, TemporalBounded};
 pub use time_instance::TimeInstance;
 pub use time_interval::TimeInterval;
-pub use time_tick::TimeTick;
 
 /// Marker trait for geometry types
 pub trait Geometry {}

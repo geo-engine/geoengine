@@ -96,7 +96,6 @@ pub struct AllSources {
 ///                 base_path: "base_path".into(),
 ///                 file_name_with_time_placeholder: "file_name_with_time_placeholder".into(),
 ///                 time_format: "file_name".into(),
-///                 tick: None,
 ///                 channel: Some(1),
 ///             },
 ///             sources: NoSources {},
