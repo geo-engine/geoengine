@@ -155,6 +155,15 @@ fn get_map_mock(request: &GetMap) -> Result<Box<dyn warp::Reply>, warp::Rejectio
 mod tests {
     use super::*;
     use crate::workflows::registry::HashMapRegistry;
+    use futures::StreamExt;
+    use geoengine_datatypes::primitives::TimeInterval;
+    use geoengine_datatypes::raster::GridDimension;
+    use geoengine_datatypes::raster::Raster;
+    use geoengine_operators::operators::GdalSourceParameters;
+    use geoengine_operators::source::gdal_source::{GdalSourceTileGridProvider, TileInformation};
+    use geoengine_operators::source::GdalSource;
+    use image::{ColorType, DynamicImage, ImageFormat, Rgba, RgbaImage};
+    use std::path::Path;
 
     #[tokio::test]
     async fn test() {
@@ -184,5 +193,63 @@ mod tests {
         assert_eq!(res.status(), 200);
 
         // TODO: validate xml?
+    }
+
+    #[tokio::test]
+    async fn png_from_stream() {
+        let global_size_in_pixels = (1800, 3600);
+        let tile_size_in_pixels = (600, 600);
+
+        let grid_tile_provider = GdalSourceTileGridProvider {
+            global_pixel_size: global_size_in_pixels.into(),
+            tile_pixel_size: tile_size_in_pixels.into(),
+            dataset_geo_transform: Default::default(),
+        };
+
+        let time_interval_provider = vec![TimeInterval::new_unchecked(1, 2)];
+
+        let gdal_params = GdalSourceParameters {
+            base_path: "../operators/test-data/raster/modis_ndvi".into(),
+            file_name_with_time_placeholder: "MOD13A2_M_NDVI_2014-01-01.TIFF".into(),
+            time_format: "".into(),
+            channel: None,
+        };
+
+        let gdal_source = GdalSource {
+            time_interval_provider,
+            grid_tile_provider,
+            gdal_params,
+        };
+
+        let mut img = RgbaImage::new(255, 255);
+
+        // gdal_source.tile_stream::<u8>().for_each(|tile| {
+        //     if let Ok(tile) = tile {
+        //         let width = tile.data.dimension().size_of_x_axis();
+        //         let height = tile.data.dimension().size_of_y_axis();
+        //
+        //         for y in 0..height {
+        //             for x in 0..width {
+        //                 // TODO: calculate x, y in output img
+        //                 // TODO: calculate Rgba color from pixel value at x, y
+        //                 // TODO: img.put_pixel(x, y, Rgb([255, 0, 0]));
+        //                 img.put_pixel(0, 0, Rgba([255, 0, 0, 255]));
+        //             }
+        //         }
+        //     }
+        //     futures::future::ready(())
+        // }).await;
+
+        // gdal_source.tile_stream::<u8>().fold(Raster::new(), |acc, tile| {
+        //     if let Ok(tile) = tile {ll
+
+        // let mut buffer = Vec::new();
+        // DynamicImage::ImageRgba8(img)
+        //     .write_to(&mut buffer, ImageFormat::Png).unwrap();
+
+        // image::save_buffer(&Path::new("image.png"), &buffer, 255, 255, ColorType::Rgba8).unwrap();
+        img.save(&Path::new("image.png")).unwrap()
+
+        // TODO: validate output image
     }
 }

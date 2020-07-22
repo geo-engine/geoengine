@@ -282,6 +282,49 @@ impl BoundingBox2D {
         self.overlaps_bbox(other_bbox)
             && !(self.contains_bbox(other_bbox) || other_bbox.contains_bbox(self))
     }
+
+    /// Returns `Some(intersection)` with `other_bbox` or `None` if they do not intersect
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use geoengine_datatypes::primitives::{Coordinate2D, BoundingBox2D};
+    ///
+    /// let bbox = BoundingBox2D::new((0.0, 0.0).into(), (10.0, 10.0).into()).unwrap();
+    /// let bbox2 = BoundingBox2D::new((5.0, 5.0).into(), (15.0, 15.0).into()).unwrap();
+    ///
+    /// let intersection = BoundingBox2D::new((5.0, 5.0).into(), (10.0, 10.0).into()).unwrap();
+    ///
+    /// assert_eq!(bbox.intersection(&bbox2), Some(intersection));
+    /// ```
+    ///
+    pub fn intersection(&self, other_bbox: &Self) -> Option<Self> {
+        if self.overlaps_bbox(other_bbox) {
+            let ll_x = f64::max(
+                self.lower_left_coordinate.x,
+                other_bbox.lower_left_coordinate.x,
+            );
+            let ll_y = f64::max(
+                self.lower_left_coordinate.y,
+                other_bbox.lower_left_coordinate.y,
+            );
+            let ur_x = f64::min(
+                self.upper_right_coordinate.x,
+                other_bbox.upper_right_coordinate.x,
+            );
+            let ur_y = f64::min(
+                self.upper_right_coordinate.y,
+                other_bbox.upper_right_coordinate.y,
+            );
+
+            Some(BoundingBox2D::new_unchecked(
+                (ll_x, ll_y).into(),
+                (ur_x, ur_y).into(),
+            ))
+        } else {
+            None
+        }
+    }
 }
 
 #[cfg(test)]

@@ -101,9 +101,9 @@ impl GdalSourceTileGridProvider {
 /// A `RasterTile2D` is the main type used to iterate over tiles of 2D raster data
 #[derive(Debug)]
 pub struct RasterTile2D<T> {
-    time: TimeInterval,
-    tile: TileInformation,
-    data: Raster2D<T>,
+    pub time: TimeInterval,
+    pub tile: TileInformation,
+    pub data: Raster2D<T>,
 }
 
 impl<T> RasterTile2D<T> {
@@ -165,9 +165,9 @@ impl SpatialBounded for TileInformation {
 }
 
 pub struct GdalSource {
-    time_interval_provider: Vec<TimeInterval>,
-    grid_tile_provider: GdalSourceTileGridProvider,
-    gdal_params: GdalSourceParameters,
+    pub time_interval_provider: Vec<TimeInterval>,
+    pub grid_tile_provider: GdalSourceTileGridProvider,
+    pub gdal_params: GdalSourceParameters,
 }
 
 impl GdalSource {

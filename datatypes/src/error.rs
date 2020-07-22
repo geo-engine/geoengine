@@ -105,6 +105,10 @@ pub enum Error {
     Primitives {
         source: PrimitivesError,
     },
+
+    Blit {
+        details: String,
+    },
 }
 
 impl From<arrow::error::ArrowError> for Error {
