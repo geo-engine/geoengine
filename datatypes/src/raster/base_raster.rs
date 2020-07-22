@@ -184,20 +184,14 @@ impl<T: Copy> Blit<T> for Raster2D<T> {
             .geo_transform
             .coordinate_2d_to_grid_2d(&intersection.upper_left());
 
-        // TODO: check if dimension of self and source fit
-        // let (stop_source_y, stop_source_x) = self
-        //     .geo_transform
-        //     .coordinate_2d_to_grid_2d(&intersection.lower_right());
-
+        // TODO: check if dimension of self and source fit?
         let width = stop_x - start_x;
 
         for y in 0..stop_y - start_y {
-            let index = self
-                .grid_dimension
-                .grid_index_to_1d_index_unchecked(&(start_y + y, start_x).into());
-            let index_source = source
-                .grid_dimension
-                .grid_index_to_1d_index_unchecked(&(start_source_y + y, start_source_x).into());
+            let index =
+                (start_y + y, start_x).grid_index_to_1d_index_unchecked(&self.grid_dimension);
+            let index_source = (start_source_y + y, start_source_x)
+                .grid_index_to_1d_index_unchecked(&source.grid_dimension);
 
             self.data_container.as_mut_slice()[index..index + width].copy_from_slice(
                 &source.data_container.as_slice()[index_source..index_source + width],
@@ -212,7 +206,7 @@ impl<T: Copy> Blit<T> for Raster2D<T> {
 mod tests {
     use super::{Dim, GridPixelAccess, GridPixelAccessMut, Raster2D, TimeInterval};
     use crate::raster::base_raster::Blit;
-    use crate::raster::{GeoTransform, GridIndex};
+    use crate::raster::GeoTransform;
 
     #[test]
     fn simple_raster_2d() {
@@ -303,7 +297,6 @@ mod tests {
 
         let mut r1 = Raster2D::new(dim.into(), data, None, temporal_bounds, geo_transform).unwrap();
 
-        let dim = [4, 4];
         let data = vec![7; 16];
         let geo_transform = GeoTransform::new((5.0, 15.0).into(), 10.0 / 4.0, -10.0 / 4.0);
 

@@ -1,14 +1,16 @@
-use snafu::ResultExt;
 use std::sync::Arc;
+
+use snafu::ResultExt;
 use tokio::sync::RwLock;
 use warp::reply::Reply;
 use warp::{http::Response, Filter};
 
+use geoengine_datatypes::operations::image::{Colorizer, ToPng};
+use geoengine_datatypes::raster::Raster2D;
+
 use crate::error;
 use crate::ogc::wms::request::{GetCapabilities, GetLegendGraphic, GetMap, WMSRequest};
 use crate::workflows::registry::WorkflowRegistry;
-use geoengine_datatypes::operations::image::{Colorizer, ToPng};
-use geoengine_datatypes::raster::Raster2D;
 
 type WR<T> = Arc<RwLock<T>>;
 
@@ -153,17 +155,9 @@ fn get_map_mock(request: &GetMap) -> Result<Box<dyn warp::Reply>, warp::Rejectio
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::workflows::registry::HashMapRegistry;
-    use futures::StreamExt;
-    use geoengine_datatypes::primitives::TimeInterval;
-    use geoengine_datatypes::raster::GridDimension;
-    use geoengine_datatypes::raster::Raster;
-    use geoengine_operators::operators::GdalSourceParameters;
-    use geoengine_operators::source::gdal_source::{GdalSourceTileGridProvider, TileInformation};
-    use geoengine_operators::source::GdalSource;
-    use image::{ColorType, DynamicImage, ImageFormat, Rgba, RgbaImage};
-    use std::path::Path;
+
+    use super::*;
 
     #[tokio::test]
     async fn test() {
@@ -197,31 +191,31 @@ mod tests {
 
     #[tokio::test]
     async fn png_from_stream() {
-        let global_size_in_pixels = (1800, 3600);
-        let tile_size_in_pixels = (600, 600);
+        // let global_size_in_pixels = (1800, 3600);
+        // let tile_size_in_pixels = (600, 600);
 
-        let grid_tile_provider = GdalSourceTileGridProvider {
-            global_pixel_size: global_size_in_pixels.into(),
-            tile_pixel_size: tile_size_in_pixels.into(),
-            dataset_geo_transform: Default::default(),
-        };
+        // let grid_tile_provider = GdalSourceTileGridProvider {
+        //     global_pixel_size: global_size_in_pixels.into(),
+        //     tile_pixel_size: tile_size_in_pixels.into(),
+        //     dataset_geo_transform: Default::default(),
+        // };
+        //
+        // let time_interval_provider = vec![TimeInterval::new_unchecked(1, 2)];
+        //
+        // let gdal_params = GdalSourceParameters {
+        //     base_path: "../operators/test-data/raster/modis_ndvi".into(),
+        //     file_name_with_time_placeholder: "MOD13A2_M_NDVI_2014-01-01.TIFF".into(),
+        //     time_format: "".into(),
+        //     channel: None,
+        // };
 
-        let time_interval_provider = vec![TimeInterval::new_unchecked(1, 2)];
+        // let gdal_source = GdalSource {
+        //     time_interval_provider,
+        //     grid_tile_provider,
+        //     gdal_params,
+        // };
 
-        let gdal_params = GdalSourceParameters {
-            base_path: "../operators/test-data/raster/modis_ndvi".into(),
-            file_name_with_time_placeholder: "MOD13A2_M_NDVI_2014-01-01.TIFF".into(),
-            time_format: "".into(),
-            channel: None,
-        };
-
-        let gdal_source = GdalSource {
-            time_interval_provider,
-            grid_tile_provider,
-            gdal_params,
-        };
-
-        let mut img = RgbaImage::new(255, 255);
+        // let mut img = RgbaImage::new(255, 255);
 
         // gdal_source.tile_stream::<u8>().for_each(|tile| {
         //     if let Ok(tile) = tile {
@@ -248,7 +242,7 @@ mod tests {
         //     .write_to(&mut buffer, ImageFormat::Png).unwrap();
 
         // image::save_buffer(&Path::new("image.png"), &buffer, 255, 255, ColorType::Rgba8).unwrap();
-        img.save(&Path::new("image.png")).unwrap()
+        // img.save(&Path::new("image.png")).unwrap()
 
         // TODO: validate output image
     }
