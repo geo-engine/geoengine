@@ -190,13 +190,23 @@ impl GdalSource {
     ///
     /// An iterator which will produce one element per time step and grid tile
     ///
-    pub fn time_tile_iter(&self) -> impl Iterator<Item = (TimeInterval, TileInformation)> + '_ {
+    pub fn time_tile_iter(
+        &self,
+        bbox: Option<BoundingBox2D>,
+    ) -> impl Iterator<Item = (TimeInterval, TileInformation)> + '_ {
         let time_interval_iterator = self.time_interval_provider.clone().into_iter();
         time_interval_iterator.flat_map(move |time| {
             self.grid_tile_provider
                 .tile_informations()
                 .into_iter()
                 .map(move |tile| (time, tile))
+                .filter(move |(_, tile)| {
+                    if let Some(filter_bbox) = bbox {
+                        filter_bbox.overlaps_bbox(&tile.spatial_bounds())
+                    } else {
+                        true
+                    }
+                })
         })
     }
 
@@ -287,8 +297,9 @@ impl GdalSource {
     ///
     pub fn tile_stream<T: gdal::raster::types::GdalType + Copy + Send + 'static>(
         &self,
+        bbox: Option<BoundingBox2D>,
     ) -> BoxStream<Result<RasterTile2D<T>>> {
-        stream::iter(self.time_tile_iter())
+        stream::iter(self.time_tile_iter(bbox))
             .map(move |(time, tile)| (self.gdal_params.clone(), time, tile))
             .then(|(gdal_params, time, tile)| {
                 GdalSource::load_tile_data_async::<T>(gdal_params, time, tile)
@@ -301,9 +312,11 @@ impl QueryProcessor<RasterTile2D<f32>> for GdalSource {
     fn query(
         &self,
         query: crate::engine::QueryRectangle,
-        ctx: crate::engine::QueryContext,
+        _ctx: crate::engine::QueryContext,
     ) -> BoxStream<Result<Box<RasterTile2D<f32>>>> {
-        self.tile_stream().map(|r| r.map(Box::new)).boxed() // TODO: handle query, ctx, remove one boxed
+        self.tile_stream(Some(query.bbox))
+            .map(|r| r.map(Box::new))
+            .boxed() // TODO: handle query, ctx, remove one boxed
     }
 }
 
@@ -458,7 +471,7 @@ mod tests {
             gdal_params,
         };
 
-        let vres: Vec<_> = gdal_source.time_tile_iter().collect();
+        let vres: Vec<_> = gdal_source.time_tile_iter(None).collect();
 
         assert_eq!(
             vres[0],
@@ -646,7 +659,7 @@ mod tests {
         };
 
         let vres: Vec<Result<RasterTile2D<u8>, Error>> = gdal_source
-            .time_tile_iter()
+            .time_tile_iter(None)
             .map(|(time_interval, tile_information)| {
                 gdal_source.load_tile_data(time_interval, tile_information)
             })
@@ -669,6 +682,68 @@ mod tests {
         let ndvi_center_pixel_values = vec![
             19, 255, 255, 43, 76, 17, 255, 255, 255, 145, 255, 255, 255, 255, 255, 255, 255, 255,
         ];
+
+        assert_eq!(upper_left_pixels, ndvi_center_pixel_values);
+    }
+
+    #[test]
+    fn test_iter_and_load_tile_data_bbox() {
+        let global_size_in_pixels = (1800, 3600);
+        let tile_size_in_pixels = (600, 600);
+        let dataset_upper_right_coord = (-180.0, 90.0).into();
+        let dataset_x_pixel_size = 0.1;
+        let dataset_y_pixel_size = -0.1;
+        let dataset_geo_transform = GeoTransform::new(
+            dataset_upper_right_coord,
+            dataset_x_pixel_size,
+            dataset_y_pixel_size,
+        );
+
+        let grid_tile_provider = GdalSourceTileGridProvider {
+            global_pixel_size: global_size_in_pixels.into(),
+            tile_pixel_size: tile_size_in_pixels.into(),
+            dataset_geo_transform,
+        };
+
+        let time_interval_provider = vec![TimeInterval::new_unchecked(1, 2)];
+
+        let gdal_params = GdalSourceParameters {
+            base_path: "../operators/test-data/raster/modis_ndvi".into(),
+            file_name_with_time_placeholder: "MOD13A2_M_NDVI_2014-01-01.TIFF".into(),
+            time_format: "".into(),
+            channel: None,
+        };
+
+        let gdal_source = GdalSource {
+            time_interval_provider,
+            grid_tile_provider,
+            gdal_params,
+        };
+
+        let query_bbox = BoundingBox2D::new((30., 0.).into(), (31., 1.).into()).unwrap();
+
+        let vres: Vec<Result<RasterTile2D<u8>, Error>> = gdal_source
+            .time_tile_iter(Some(query_bbox))
+            .map(|(time_interval, tile_information)| {
+                gdal_source.load_tile_data(time_interval, tile_information)
+            })
+            .collect();
+        assert_eq!(vres.len(), 1 * 1);
+        let upper_left_pixels: Vec<_> = vres
+            .into_iter()
+            .map(|t| {
+                let raster_tile = t.unwrap();
+                let tile_data = raster_tile.data;
+                tile_data
+                    .pixel_value_at_grid_index(&(
+                        tile_size_in_pixels.1 / 2,
+                        tile_size_in_pixels.0 / 2,
+                    ))
+                    .unwrap() // pixel
+            })
+            .collect();
+
+        let ndvi_center_pixel_values = vec![145];
 
         assert_eq!(upper_left_pixels, ndvi_center_pixel_values);
     }
@@ -707,7 +782,7 @@ mod tests {
             gdal_params,
         };
 
-        let mut stream_data = block_on_stream(gdal_source.tile_stream::<u8>());
+        let mut stream_data = block_on_stream(gdal_source.tile_stream::<u8>(None));
 
         let ndvi_center_pixel_values = vec![
             19, 255, 255, 43, 76, 17, 255, 255, 255, 145, 255, 255, 255, 255, 255, 255, 255, 255,
