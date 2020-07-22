@@ -4,6 +4,15 @@ use crate::util::arrow::ArrowTyped;
 use crate::util::Result;
 use snafu::ensure;
 
+/// A trait that allows a common access to polygons of `MultiPolygon`s and its references
+pub trait MultiPolygonAccess<R, L>
+where
+    R: AsRef<[L]>,
+    L: AsRef<[Coordinate2D]>,
+{
+    fn polygons(&self) -> &[R];
+}
+
 type Ring = Vec<Coordinate2D>;
 type Polygon = Vec<Ring>;
 
@@ -54,8 +63,10 @@ impl MultiPolygon {
     pub(crate) fn new_unchecked(polygons: Vec<Polygon>) -> Self {
         Self { polygons }
     }
+}
 
-    pub fn polygons(&self) -> &[Polygon] {
+impl MultiPolygonAccess<Polygon, Ring> for MultiPolygon {
+    fn polygons(&self) -> &[Polygon] {
         &self.polygons
     }
 }
@@ -126,8 +137,10 @@ impl<'g> MultiPolygonRef<'g> {
     pub(crate) fn new_unchecked(polygons: Vec<PolygonRef<'g>>) -> Self {
         Self { polygons }
     }
+}
 
-    pub fn polygons(&self) -> &[PolygonRef<'g>] {
+impl<'g> MultiPolygonAccess<PolygonRef<'g>, RingRef<'g>> for MultiPolygonRef<'g> {
+    fn polygons(&self) -> &[PolygonRef<'g>] {
         &self.polygons
     }
 }

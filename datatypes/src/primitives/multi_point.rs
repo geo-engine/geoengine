@@ -4,6 +4,11 @@ use crate::util::arrow::ArrowTyped;
 use crate::util::Result;
 use snafu::ensure;
 
+/// A trait that allows a common access to lines of `MultiPoint`s and its references
+pub trait MultiPointAccess {
+    fn points(&self) -> &[Coordinate2D];
+}
+
 pub struct MultiPoint {
     coordinates: Vec<Coordinate2D>,
 }
@@ -18,8 +23,10 @@ impl MultiPoint {
     pub(crate) fn new_unchecked(coordinates: Vec<Coordinate2D>) -> Self {
         Self { coordinates }
     }
+}
 
-    pub fn points(&self) -> &[Coordinate2D] {
+impl MultiPointAccess for MultiPoint {
+    fn points(&self) -> &[Coordinate2D] {
         &self.coordinates
     }
 }
@@ -74,9 +81,11 @@ impl<'g> MultiPointRef<'g> {
             point_coordinates: coordinates,
         }
     }
+}
 
-    pub fn points(&self) -> &[Coordinate2D] {
-        self.point_coordinates
+impl<'g> MultiPointAccess for MultiPointRef<'g> {
+    fn points(&self) -> &[Coordinate2D] {
+        &self.point_coordinates
     }
 }
 

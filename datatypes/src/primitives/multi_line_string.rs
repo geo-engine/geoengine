@@ -4,6 +4,14 @@ use crate::util::arrow::ArrowTyped;
 use crate::util::Result;
 use snafu::ensure;
 
+/// A trait that allows a common access to lines of `MultiLineString`s and its references
+pub trait MultiLineStringAccess<L>
+where
+    L: AsRef<[Coordinate2D]>,
+{
+    fn lines(&self) -> &[L];
+}
+
 /// A representation of a simple feature multi line string
 #[derive(Debug, PartialEq)]
 pub struct MultiLineString {
@@ -23,8 +31,10 @@ impl MultiLineString {
     pub(crate) fn new_unchecked(coordinates: Vec<Vec<Coordinate2D>>) -> Self {
         Self { coordinates }
     }
+}
 
-    pub fn lines(&self) -> &[Vec<Coordinate2D>] {
+impl MultiLineStringAccess<Vec<Coordinate2D>> for MultiLineString {
+    fn lines(&self) -> &[Vec<Coordinate2D>] {
         &self.coordinates
     }
 }
@@ -74,8 +84,10 @@ impl<'g> MultiLineStringRef<'g> {
             point_coordinates: coordinates,
         }
     }
+}
 
-    pub fn lines(&self) -> &[&[Coordinate2D]] {
+impl<'g> MultiLineStringAccess<&'g [Coordinate2D]> for MultiLineStringRef<'g> {
+    fn lines(&self) -> &[&'g [Coordinate2D]] {
         &self.point_coordinates
     }
 }

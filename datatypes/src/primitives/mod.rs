@@ -20,9 +20,9 @@ pub use feature_data::{
     NullableNumberDataRef, NullableTextDataRef, NumberDataRef, TextDataRef,
 };
 pub use measurement::Measurement;
-pub use multi_line_string::{MultiLineString, MultiLineStringRef};
-pub use multi_point::{MultiPoint, MultiPointRef};
-pub use multi_polygon::{MultiPolygon, MultiPolygonRef};
+pub use multi_line_string::{MultiLineString, MultiLineStringAccess, MultiLineStringRef};
+pub use multi_point::{MultiPoint, MultiPointAccess, MultiPointRef};
+pub use multi_polygon::{MultiPolygon, MultiPolygonAccess, MultiPolygonRef};
 pub use no_geometry::NoGeometry;
 pub use spatio_temporal_bounded::{SpatialBounded, TemporalBounded};
 pub use time_instance::TimeInstance;
