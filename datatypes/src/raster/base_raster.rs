@@ -147,7 +147,7 @@ impl<T: Send + Debug> GenericRaster for Raster2D<T> {
     }
 }
 
-trait Blit<T: Copy> {
+pub trait Blit<T: Copy> {
     fn blit(&mut self, source: Raster2D<T>) -> Result<()>;
 }
 

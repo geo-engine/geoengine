@@ -283,7 +283,7 @@ impl GdalSource {
             buffer.data,
             None,
             time_interval,
-            geo_transform,
+            tile_information.geo_transform,
         )?;
         Ok(RasterTile2D::new(
             time_interval,

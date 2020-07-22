@@ -158,6 +158,14 @@ mod tests {
     use crate::workflows::registry::HashMapRegistry;
 
     use super::*;
+    use futures::StreamExt;
+    use geoengine_datatypes::primitives::{BoundingBox2D, TimeInterval};
+    use geoengine_datatypes::raster::{Blit, GeoTransform};
+    use geoengine_operators::source::gdal_source::GdalSourceTileGridProvider;
+    use geoengine_operators::source::{GdalSource, GdalSourceParameters};
+    use std::fs::File;
+    use std::io::Write;
+    use std::path::Path;
 
     #[tokio::test]
     async fn test() {
@@ -191,48 +199,70 @@ mod tests {
 
     #[tokio::test]
     async fn png_from_stream() {
-        // let global_size_in_pixels = (1800, 3600);
-        // let tile_size_in_pixels = (600, 600);
+        let global_size_in_pixels = (1800, 3600);
+        let tile_size_in_pixels = (600, 600);
+        let global_size_in_tiles = (3, 6);
+        let dataset_upper_right_coord = (-180.0, 90.0).into();
+        let dataset_x_pixel_size = 0.1;
+        let dataset_y_pixel_size = -0.1;
+        let dataset_geo_transform = GeoTransform::new(
+            dataset_upper_right_coord,
+            dataset_x_pixel_size,
+            dataset_y_pixel_size,
+        );
 
-        // let grid_tile_provider = GdalSourceTileGridProvider {
-        //     global_pixel_size: global_size_in_pixels.into(),
-        //     tile_pixel_size: tile_size_in_pixels.into(),
-        //     dataset_geo_transform: Default::default(),
-        // };
-        //
-        // let time_interval_provider = vec![TimeInterval::new_unchecked(1, 2)];
-        //
-        // let gdal_params = GdalSourceParameters {
-        //     base_path: "../operators/test-data/raster/modis_ndvi".into(),
-        //     file_name_with_time_placeholder: "MOD13A2_M_NDVI_2014-01-01.TIFF".into(),
-        //     time_format: "".into(),
-        //     channel: None,
-        // };
+        let grid_tile_provider = GdalSourceTileGridProvider {
+            global_pixel_size: global_size_in_pixels.into(),
+            tile_pixel_size: tile_size_in_pixels.into(),
+            dataset_geo_transform,
+        };
 
-        // let gdal_source = GdalSource {
-        //     time_interval_provider,
-        //     grid_tile_provider,
-        //     gdal_params,
-        // };
+        let time_interval_provider = vec![TimeInterval::new_unchecked(1, 2)];
+
+        let gdal_params = GdalSourceParameters {
+            base_path: "../operators/test-data/raster/modis_ndvi".into(),
+            file_name_with_time_placeholder: "MOD13A2_M_NDVI_2014-01-01.TIFF".into(),
+            time_format: "".into(),
+            channel: None,
+        };
+
+        let gdal_source = GdalSource {
+            time_interval_provider,
+            grid_tile_provider,
+            gdal_params,
+        };
+
+        let query_bbox = BoundingBox2D::new((0., 30.).into(), (60., 90.).into()).unwrap();
 
         // let mut img = RgbaImage::new(255, 255);
 
-        // gdal_source.tile_stream::<u8>().for_each(|tile| {
-        //     if let Ok(tile) = tile {
-        //         let width = tile.data.dimension().size_of_x_axis();
-        //         let height = tile.data.dimension().size_of_y_axis();
-        //
-        //         for y in 0..height {
-        //             for x in 0..width {
-        //                 // TODO: calculate x, y in output img
-        //                 // TODO: calculate Rgba color from pixel value at x, y
-        //                 // TODO: img.put_pixel(x, y, Rgb([255, 0, 0]));
-        //                 img.put_pixel(0, 0, Rgba([255, 0, 0, 255]));
-        //             }
-        //         }
-        //     }
-        //     futures::future::ready(())
-        // }).await;
+        let dim = [600, 600];
+        let data = vec![0; 600 * 600];
+        let query_geo_transform = GeoTransform::new(
+            query_bbox.upper_left(),
+            dataset_x_pixel_size,
+            dataset_y_pixel_size,
+        );
+        let temporal_bounds: TimeInterval = TimeInterval::default();
+        let mut raster2d =
+            Raster2D::new(dim.into(), data, None, temporal_bounds, query_geo_transform).unwrap();
+
+        let raster2d = gdal_source
+            .tile_stream::<u8>(Some(query_bbox))
+            .fold(raster2d, |mut raster2d, tile| {
+                if let Ok(tile) = tile {
+                    // TODO: handle error while accumulating
+                    raster2d.blit(tile.data).unwrap();
+                }
+                futures::future::ready(raster2d)
+            })
+            .await;
+
+        let colorizer = Colorizer::rgba();
+        let image_bytes = raster2d.to_png(600, 600, &colorizer).unwrap();
+
+        let mut file = File::create("image.png").unwrap();
+        file.write_all(&image_bytes.as_slice()).unwrap();
 
         // gdal_source.tile_stream::<u8>().fold(Raster::new(), |acc, tile| {
         //     if let Ok(tile) = tile {ll
