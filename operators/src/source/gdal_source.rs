@@ -720,7 +720,7 @@ mod tests {
             gdal_params,
         };
 
-        let query_bbox = BoundingBox2D::new((30., 0.).into(), (31., 1.).into()).unwrap();
+        let query_bbox = BoundingBox2D::new((-30., 0.).into(), (35., 65.).into()).unwrap();
 
         let vres: Vec<Result<RasterTile2D<u8>, Error>> = gdal_source
             .time_tile_iter(Some(query_bbox))
@@ -728,7 +728,7 @@ mod tests {
                 gdal_source.load_tile_data(time_interval, tile_information)
             })
             .collect();
-        assert_eq!(vres.len(), 1 * 1);
+        assert_eq!(vres.len(), 2 * 2);
         let upper_left_pixels: Vec<_> = vres
             .into_iter()
             .map(|t| {
@@ -743,7 +743,7 @@ mod tests {
             })
             .collect();
 
-        let ndvi_center_pixel_values = vec![145];
+        let ndvi_center_pixel_values = vec![255, 43, 255, 145];
 
         assert_eq!(upper_left_pixels, ndvi_center_pixel_values);
     }
