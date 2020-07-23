@@ -20,3 +20,5 @@ uuid = { version = "0.8", features = ["serde", "v4", "v5"] }
 snafu = "0.6"
 pwhash = "0.3.0"
 serde_urlencoded = "0.6.1"
+futures = "0.3"
+image = "0.23"

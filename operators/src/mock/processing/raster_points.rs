@@ -1,9 +1,9 @@
-use geoengine_datatypes::collections::MultiPointCollection;
-use crate::engine::{QueryProcessor, QueryRectangle, QueryContext};
-use geoengine_datatypes::raster::GenericRaster;
-use futures::stream::BoxStream;
+use crate::engine::{QueryContext, QueryProcessor, QueryRectangle};
 use crate::util::Result;
+use futures::stream::BoxStream;
 use futures::StreamExt;
+use geoengine_datatypes::collections::MultiPointCollection;
+use geoengine_datatypes::raster::GenericRaster;
 
 /// Attach raster value at given coords to points
 pub struct MockRasterPointsImpl {
@@ -13,10 +13,15 @@ pub struct MockRasterPointsImpl {
 }
 
 impl QueryProcessor<MultiPointCollection> for MockRasterPointsImpl {
-    fn query(&self, query: QueryRectangle, ctx: QueryContext) -> BoxStream<Result<Box<MultiPointCollection>>> {
+    fn query(
+        &self,
+        query: QueryRectangle,
+        ctx: QueryContext,
+    ) -> BoxStream<Result<Box<MultiPointCollection>>> {
         // TODO perform join
 
-        self.points[0].query(query, ctx)
+        self.points[0]
+            .query(query, ctx)
             .then(async move |p| {
                 // TODO: use points bbox
                 let mut rs = self.rasters[0].query(query, ctx);
@@ -33,8 +38,8 @@ impl QueryProcessor<MultiPointCollection> for MockRasterPointsImpl {
 mod test {
     use super::*;
     use crate::mock::source::mock_point_source::MockPointSourceImpl;
-    use geoengine_datatypes::primitives::{Coordinate2D, BoundingBox2D, TimeInterval};
     use crate::mock::source::mock_raster_source::MockRasterSourceImpl;
+    use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, TimeInterval};
 
     #[tokio::test]
     #[allow(clippy::cast_lossless)]
@@ -45,32 +50,37 @@ mod test {
         }
 
         let p = MockPointSourceImpl {
-            points: coordinates
+            points: coordinates,
         };
 
         let r = MockRasterSourceImpl {
             data: vec![1., 2., 3., 4.],
             dim: [2, 2],
-            geo_transform: [1.0, 1.0, 0.0, 1.0, 0.0, 1.0]
+            geo_transform: [1.0, 1.0, 0.0, 1.0, 0.0, 1.0],
         };
 
         let o = MockRasterPointsImpl {
             points: vec![Box::new(p)],
             rasters: vec![Box::new(r)],
-            coords: [0, 0]
+            coords: [0, 0],
         };
 
         let query = QueryRectangle {
-            bbox: BoundingBox2D::new_unchecked(Coordinate2D::new(1., 2.), Coordinate2D::new(1., 2.)),
+            bbox: BoundingBox2D::new_unchecked(
+                Coordinate2D::new(1., 2.),
+                Coordinate2D::new(1., 2.),
+            ),
             time_interval: TimeInterval::new_unchecked(0, 1),
         };
         let ctx = QueryContext {
-            chunk_byte_size: 10 * 8 * 2
+            chunk_byte_size: 10 * 8 * 2,
         };
 
-        o.query(query, ctx).for_each(|x| {
-            println!("{:?}", x);
-            futures::future::ready(())
-        }).await;
+        o.query(query, ctx)
+            .for_each(|x| {
+                println!("{:?}", x);
+                futures::future::ready(())
+            })
+            .await;
     }
 }

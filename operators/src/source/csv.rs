@@ -14,11 +14,11 @@ use geoengine_datatypes::collections::{
 };
 use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, TimeInterval};
 
+use crate::engine::{QueryContext, QueryProcessor, QueryRectangle};
 use crate::error::{self};
 use crate::util::Result;
-use crate::engine::{QueryProcessor, QueryContext, QueryRectangle};
 use futures::stream::BoxStream;
-use std::sync::{Mutex, Arc};
+use std::sync::{Arc, Mutex};
 
 /// Parameters for the CSV Source Operator
 ///
@@ -319,7 +319,11 @@ struct CsvSourceProcessor {
 }
 
 impl QueryProcessor<MultiPointCollection> for CsvSourceProcessor {
-    fn query(&self, query: QueryRectangle, _ctx: QueryContext) -> BoxStream<Result<Box<MultiPointCollection>>> {
+    fn query(
+        &self,
+        query: QueryRectangle,
+        _ctx: QueryContext,
+    ) -> BoxStream<Result<Box<MultiPointCollection>>> {
         // TODO: properly propagate error
         // TODO: properly handle chunk_size
         CsvSource::new(self.params.clone(), query.bbox, 10)
@@ -328,7 +332,6 @@ impl QueryProcessor<MultiPointCollection> for CsvSourceProcessor {
             .boxed()
     }
 }
-
 
 #[derive(Clone, Copy, Debug)]
 struct ParsedHeader {
@@ -365,7 +368,7 @@ x,y
 4,5
 "
         )
-            .unwrap();
+        .unwrap();
         fake_file.seek(SeekFrom::Start(0)).unwrap();
 
         let csv_source = CsvSource::new(
@@ -381,7 +384,7 @@ x,y
             BoundingBox2D::new_unchecked((0., 0.).into(), (5., 5.).into()),
             2,
         )
-            .unwrap();
+        .unwrap();
 
         let mut stream = block_on_stream(csv_source);
 
@@ -402,7 +405,7 @@ CORRUPT
 4,5
 "
         )
-            .unwrap();
+        .unwrap();
         fake_file.seek(SeekFrom::Start(0)).unwrap();
 
         let csv_source = CsvSource::new(
@@ -418,7 +421,7 @@ CORRUPT
             BoundingBox2D::new_unchecked((0., 0.).into(), (5., 5.).into()),
             1,
         )
-            .unwrap();
+        .unwrap();
 
         let mut stream = block_on_stream(csv_source);
 
@@ -440,7 +443,7 @@ x,z
 4,5
 "
         )
-            .unwrap();
+        .unwrap();
         fake_file.seek(SeekFrom::Start(0)).unwrap();
 
         let csv_source = CsvSource::new(
@@ -456,7 +459,7 @@ x,z
             BoundingBox2D::new_unchecked((0., 0.).into(), (5., 5.).into()),
             1,
         )
-            .unwrap();
+        .unwrap();
 
         let mut stream = block_on_stream(csv_source);
 
@@ -476,7 +479,7 @@ x,y
 4,5
 "
         )
-            .unwrap();
+        .unwrap();
         fake_file.seek(SeekFrom::Start(0)).unwrap();
 
         let params = CsvSourceParameters {
@@ -489,49 +492,54 @@ x,y
             time: CsvTimeSpecification::None,
         };
 
-        let p = CsvSourceProcessor {
-            params,
-        };
+        let p = CsvSourceProcessor { params };
 
         let query = QueryRectangle {
-            bbox: BoundingBox2D::new_unchecked(Coordinate2D::new(0., 0.), Coordinate2D::new(3., 3.)),
+            bbox: BoundingBox2D::new_unchecked(
+                Coordinate2D::new(0., 0.),
+                Coordinate2D::new(3., 3.),
+            ),
             time_interval: TimeInterval::new_unchecked(0, 1),
         };
         let ctx = QueryContext {
-            chunk_byte_size: 10 * 8 * 2
+            chunk_byte_size: 10 * 8 * 2,
         };
 
         let r: Vec<Result<Box<MultiPointCollection>>> = p.query(query, ctx).collect().await;
 
         assert_eq!(r.len(), 1);
 
-        assert_eq!(r[0].as_ref().unwrap().to_geo_json(), serde_json::json!({
-            "type": "FeatureCollection",
-            "features": [{
-                "type": "Feature",
-                "geometry": {
-                    "type": "Point",
-                    "coordinates": [0.0, 1.0]
-                },
-                "properties": {},
-                "when": {
-                    "start": "-262144-01-01T00:00:00+00:00",
-                    "end": "+262143-12-31T23:59:59.999+00:00",
-                    "type": "Interval"
-                }
-            }, {
-                "type": "Feature",
-                "geometry": {
-                    "type": "Point",
-                    "coordinates": [2.0, 3.0]
-                },
-                "properties": {},
-                "when": {
-                    "start": "-262144-01-01T00:00:00+00:00",
-                    "end": "+262143-12-31T23:59:59.999+00:00",
-                    "type": "Interval"
-                }
-            }]
-        }).to_string());
+        assert_eq!(
+            r[0].as_ref().unwrap().to_geo_json(),
+            serde_json::json!({
+                "type": "FeatureCollection",
+                "features": [{
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [0.0, 1.0]
+                    },
+                    "properties": {},
+                    "when": {
+                        "start": "-262144-01-01T00:00:00+00:00",
+                        "end": "+262143-12-31T23:59:59.999+00:00",
+                        "type": "Interval"
+                    }
+                }, {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [2.0, 3.0]
+                    },
+                    "properties": {},
+                    "when": {
+                        "start": "-262144-01-01T00:00:00+00:00",
+                        "end": "+262143-12-31T23:59:59.999+00:00",
+                        "type": "Interval"
+                    }
+                }]
+            })
+            .to_string()
+        );
     }
 }

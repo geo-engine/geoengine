@@ -1,7 +1,7 @@
 mod base_raster;
 mod geo_transform;
 mod grid_dimension;
-pub use self::base_raster::{BaseRaster, Raster2D, Raster3D};
+pub use self::base_raster::{BaseRaster, Blit, Raster2D, Raster3D};
 pub use self::geo_transform::{GdalGeoTransform, GeoTransform};
 pub use self::grid_dimension::{Dim, GridDimension, GridIndex, Ix};
 use super::primitives::{SpatialBounded, TemporalBounded};

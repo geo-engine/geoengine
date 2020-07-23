@@ -9,8 +9,8 @@ use crate::mock::processing::delay::MockDelayImpl;
 use crate::mock::processing::raster_points::MockRasterPointsImpl;
 use crate::mock::source::mock_point_source::MockPointSourceImpl;
 use crate::mock::source::mock_raster_source::MockRasterSourceImpl;
-use crate::Operator;
 use crate::util::Result;
+use crate::Operator;
 
 #[derive(Copy, Clone)]
 pub struct QueryRectangle {
@@ -22,7 +22,7 @@ pub struct QueryRectangle {
 pub struct QueryContext {
     // TODO: resolution, profiler, user session, ...
     // TODO: determine chunk size globally or dynamically from workload? Or global Engine Manager instance that gives that info
-    pub chunk_byte_size: usize
+    pub chunk_byte_size: usize,
 }
 
 pub trait QueryProcessor<T: ?Sized + Send>: Sync {
@@ -53,9 +53,17 @@ impl QueryProcessorType {
     }
 }
 
-fn create_sources<T: ?Sized, F: Copy>(sources: &[Operator], type_extractor: F) -> Result<Vec<Box<dyn QueryProcessor<T>>>>
-    where F: FnOnce(QueryProcessorType) -> Result<Box<dyn QueryProcessor<T>>> {
-    sources.iter().map(|o| processor(o).and_then(type_extractor)).collect()
+fn create_sources<T: ?Sized, F: Copy>(
+    sources: &[Operator],
+    type_extractor: F,
+) -> Result<Vec<Box<dyn QueryProcessor<T>>>>
+where
+    F: FnOnce(QueryProcessorType) -> Result<Box<dyn QueryProcessor<T>>>,
+{
+    sources
+        .iter()
+        .map(|o| processor(o).and_then(type_extractor))
+        .collect()
 }
 
 pub fn processor(operator: &Operator) -> Result<QueryProcessorType> {
@@ -70,7 +78,7 @@ pub fn processor(operator: &Operator) -> Result<QueryProcessorType> {
         }
         Operator::MockPointSource { params, sources: _ } => {
             QueryProcessorType::PointProcessor(Box::new(MockPointSourceImpl {
-                points: params.points.clone()
+                points: params.points.clone(),
             }))
         }
         Operator::MockDelay { params, sources } => {
@@ -89,10 +97,9 @@ pub fn processor(operator: &Operator) -> Result<QueryProcessorType> {
         // Operator::CsvSource { params, .. } => {
         //     QueryProcessorType::PointProcessor(Box::new(CsvSourceProcessor { params: params.clone() }))
         // }
-        _ => return Err(Error::QueryProcessor)
+        _ => return Err(Error::QueryProcessor),
     })
 }
-
 
 #[cfg(test)]
 mod test {
@@ -129,17 +136,23 @@ mod test {
 
         if let Ok(QueryProcessorType::PointProcessor(op_impl)) = op_impl {
             let query = QueryRectangle {
-                bbox: BoundingBox2D::new_unchecked(Coordinate2D::new(1., 2.), Coordinate2D::new(1., 2.)),
+                bbox: BoundingBox2D::new_unchecked(
+                    Coordinate2D::new(1., 2.),
+                    Coordinate2D::new(1., 2.),
+                ),
                 time_interval: TimeInterval::new_unchecked(0, 1),
             };
             let ctx = QueryContext {
-                chunk_byte_size: 10 * 8 * 2
+                chunk_byte_size: 10 * 8 * 2,
             };
 
-            op_impl.query(query, ctx).for_each(|pc| {
-                println!("{:?}", pc);
-                futures::future::ready(())
-            }).await;
+            op_impl
+                .query(query, ctx)
+                .for_each(|pc| {
+                    println!("{:?}", pc);
+                    futures::future::ready(())
+                })
+                .await;
         }
     }
 }
