@@ -232,7 +232,7 @@ mod tests {
             gdal_params,
         };
 
-        let query_bbox = BoundingBox2D::new((0., 30.).into(), (60., 90.).into()).unwrap();
+        let query_bbox = BoundingBox2D::new((10., 20.).into(), (50., 80.).into()).unwrap();
 
         // let mut img = RgbaImage::new(255, 255);
 

@@ -164,7 +164,7 @@ impl GridDimension for Dim<[Ix; 1]> {
         self.dimension_size()[0]
     }
     fn as_pattern(&self) -> Self::IndexPattern {
-        self.dimension_size.len()
+        self.dimension_size[0]
     }
     fn strides(&self) -> Self {
         Dim::new([1])
@@ -209,7 +209,7 @@ impl GridDimension for Dim<[Ix; 2]> {
         self.dimension_size()[0] * self.dimension_size()[1]
     }
     fn as_pattern(&self) -> Self::IndexPattern {
-        (self.dimension_size()[1], self.dimension_size()[0])
+        (self.dimension_size()[0], self.dimension_size()[1])
     }
     fn strides(&self) -> Self {
         Dim::new([self.dimension_size()[1], 1])

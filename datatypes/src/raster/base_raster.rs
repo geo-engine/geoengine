@@ -173,6 +173,13 @@ impl<T: Copy> Blit<T> for Raster2D<T> {
                 details: "No overlapping region".into(),
             })?;
 
+        println!(
+            "self: {:?}\ntile: {:?}\nintersection: {:?}",
+            self.spatial_bounds(),
+            source.spatial_bounds(),
+            intersection
+        );
+
         let (start_y, start_x) = self
             .geo_transform
             .coordinate_2d_to_grid_2d(&intersection.upper_left());
@@ -180,9 +187,13 @@ impl<T: Copy> Blit<T> for Raster2D<T> {
             .geo_transform
             .coordinate_2d_to_grid_2d(&intersection.lower_right());
 
-        let (start_source_y, start_source_x) = self
+        let (start_source_y, start_source_x) = source
             .geo_transform
             .coordinate_2d_to_grid_2d(&intersection.upper_left());
+
+        println!("start: {:?}", (start_y, start_x));
+        println!("stop: {:?}", (stop_y, stop_x));
+        println!("start_source: {:?}", (start_source_y, start_source_x));
 
         // TODO: check if dimension of self and source fit?
         let width = stop_x - start_x;

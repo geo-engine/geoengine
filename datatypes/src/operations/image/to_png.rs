@@ -23,9 +23,8 @@ where
         let color_mapper = colorizer.create_color_mapper();
 
         let image_buffer: RgbaImage = RgbaImage::from_fn(width, height, |x, y| {
-            if let Ok(pixel_value) =
-                self.pixel_value_at_grid_index(&image_pixel_to_raster_pixel(x, y, scale_x, scale_y))
-            {
+            let (grid_pixel_x, grid_pixel_y) = image_pixel_to_raster_pixel(x, y, scale_x, scale_y);
+            if let Ok(pixel_value) = self.pixel_value_at_grid_index(&(grid_pixel_y, grid_pixel_x)) {
                 color_mapper.call(pixel_value)
             } else {
                 colorizer.no_data_color()
@@ -45,6 +44,7 @@ where
     }
 }
 
+// TODO: raster pixel access is currently modeled similar to numpy/ndarray with ..,z,y,x
 // TODO: move these functions to base raster (?)
 /// Map an image's (x, y) values to the grid cells of a raster.
 fn image_pixel_to_raster_pixel<ImagePixelType>(

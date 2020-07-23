@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use futures::stream::{self, BoxStream, StreamExt};
 
 use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, SpatialBounded, TimeInterval};
-use geoengine_datatypes::raster::{Dim, GeoTransform, Ix, Raster2D};
+use geoengine_datatypes::raster::{Dim, GeoTransform, GridDimension, Ix, Raster2D};
 
 /// Parameters for the GDAL Source Operator
 ///
@@ -156,10 +156,10 @@ impl TileInformation {
 impl SpatialBounded for TileInformation {
     fn spatial_bounds(&self) -> BoundingBox2D {
         let top_left_coord = self.geo_transform.grid_2d_to_coordinate_2d((0, 0));
-        let [.., tile_y_size, tile_x_size] = self.tile_size_in_pixels.dimension_size();
+        let (.., tile_y_size, tile_x_size) = self.tile_size_in_pixels.as_pattern();
         let lower_right_coord = self
             .geo_transform
-            .grid_2d_to_coordinate_2d((*tile_y_size, *tile_x_size));
+            .grid_2d_to_coordinate_2d((tile_y_size, tile_x_size));
         BoundingBox2D::new_upper_left_lower_right_unchecked(top_left_coord, lower_right_coord)
     }
 }
@@ -202,7 +202,10 @@ impl GdalSource {
                 .map(move |tile| (time, tile))
                 .filter(move |(_, tile)| {
                     if let Some(filter_bbox) = bbox {
-                        filter_bbox.overlaps_bbox(&tile.spatial_bounds())
+                        println!("{:?}, {:?}, {:?},", time, tile, tile.spatial_bounds());
+                        println!("{:?}", filter_bbox.intersects_bbox(&tile.spatial_bounds()));
+                        println!("{:?}", tile.spatial_bounds().intersects_bbox(&filter_bbox));
+                        filter_bbox.intersects_bbox(&tile.spatial_bounds())
                     } else {
                         true
                     }
@@ -255,17 +258,16 @@ impl GdalSource {
         // open the dataset at path (or 'throw' an error)
         let dataset = GdalDataset::open(&path)?; // TODO: investigate if we need a dataset cache
                                                  // get the geo transform (pixel size ...) of the dataset (or 'throw' an error)
-        let gdal_geo_transform = dataset.geo_transform()?;
-        let geo_transform = GeoTransform::from(gdal_geo_transform);
-        // TODO: clip the geotransform information?
+                                                 // let gdal_geo_transform = dataset.geo_transform()?;
+                                                 // let geo_transform = GeoTransform::from(gdal_geo_transform); //TODO: clip the geotransform information / is this required at all?
 
         // get the requested raster band of the dataset …
         let rasterband_index = gdal_params.channel.unwrap_or(1) as isize; // TODO: investigate if this should be isize in gdal
         let rasterband: GdalRasterBand = dataset.rasterband(rasterband_index)?;
 
-        let &[.., y_pixel_position, x_pixel_position] =
-            tile_information.global_pixel_position().dimension_size();
-        let &[.., y_tile_size, x_tile_size] = tile_information.tile_size_in_pixels.dimension_size();
+        let (.., y_pixel_position, x_pixel_position) =
+            tile_information.global_pixel_position().as_pattern();
+        let (.., y_tile_size, x_tile_size) = tile_information.tile_size_in_pixels.as_pattern();
         // read the data from the rasterband
         let pixel_origin = (x_pixel_position as isize, y_pixel_position as isize);
         let pixel_size = (x_tile_size, y_tile_size);

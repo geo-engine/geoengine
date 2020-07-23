@@ -36,7 +36,7 @@ impl BoundingBox2D {
     ) -> Result<Self> {
         ensure!(
             lower_left_coordinate.x <= upper_right_coordinate.x
-                && lower_left_coordinate.y <= upper_right_coordinate.x,
+                && lower_left_coordinate.y <= upper_right_coordinate.y,
             error::InvalidBoundingBox {
                 lower_left_coordinate,
                 upper_right_coordinate
@@ -230,10 +230,31 @@ impl BoundingBox2D {
     /// ```
     ///
     pub fn contains_bbox(&self, other_bbox: &Self) -> bool {
-        other_bbox.lower_left_coordinate.x >= self.lower_left_coordinate.x
-            && other_bbox.lower_left_coordinate.y >= self.lower_left_coordinate.y
-            && other_bbox.upper_right_coordinate.x <= self.upper_right_coordinate.x
-            && other_bbox.upper_right_coordinate.y <= self.upper_right_coordinate.y
+        self.contains_x(other_bbox) && self.contains_y(other_bbox)
+    }
+
+    fn contains_x(&self, other_bbox: &Self) -> bool {
+        crate::util::ranges::value_in_range(
+            other_bbox.lower_left().x,
+            self.lower_left().x,
+            self.upper_right().x,
+        ) && crate::util::ranges::value_in_range(
+            other_bbox.upper_right().x,
+            self.lower_left().x,
+            self.upper_right().x,
+        )
+    }
+
+    fn contains_y(&self, other_bbox: &Self) -> bool {
+        crate::util::ranges::value_in_range(
+            other_bbox.lower_left().y,
+            self.lower_left().y,
+            self.upper_right().y,
+        ) && crate::util::ranges::value_in_range(
+            other_bbox.upper_right().y,
+            self.lower_left().y,
+            self.upper_right().y,
+        )
     }
 
     /// Checks if the bounding box contains another bounding box
@@ -254,11 +275,32 @@ impl BoundingBox2D {
     /// ```
     ///
     pub fn overlaps_bbox(&self, other_bbox: &Self) -> bool {
-        let no_overlap = self.lower_left_coordinate.x > other_bbox.upper_right_coordinate.x
-            || other_bbox.lower_left_coordinate.x > self.upper_right_coordinate.x
-            || self.lower_left_coordinate.y > other_bbox.upper_right_coordinate.y
-            || other_bbox.lower_left_coordinate.y > self.upper_right_coordinate.y;
-        !no_overlap
+        (self.overlap_x(other_bbox) && self.overlap_y(other_bbox))
+            && (!self.contains_x(other_bbox) || !self.contains_y(other_bbox))
+    }
+
+    fn overlap_x(&self, other_bbox: &Self) -> bool {
+        crate::util::ranges::value_in_range(
+            self.lower_left().x,
+            other_bbox.lower_left().x,
+            other_bbox.upper_right().x,
+        ) || crate::util::ranges::value_in_range(
+            other_bbox.lower_left().x,
+            self.lower_left().x,
+            self.upper_right().x,
+        )
+    }
+
+    fn overlap_y(&self, other_bbox: &Self) -> bool {
+        crate::util::ranges::value_in_range(
+            self.lower_left().y,
+            other_bbox.lower_left().y,
+            other_bbox.upper_right().y,
+        ) || crate::util::ranges::value_in_range(
+            other_bbox.lower_left().y,
+            self.lower_left().y,
+            self.upper_right().y,
+        )
     }
 
     /// Returns the `Coordnate2D` representing the upper right edge of the bounding box
@@ -279,8 +321,14 @@ impl BoundingBox2D {
     /// ```
     ///
     pub fn intersects_bbox(&self, other_bbox: &Self) -> bool {
-        self.overlaps_bbox(other_bbox)
-            && !(self.contains_bbox(other_bbox) || other_bbox.contains_bbox(self))
+        self == other_bbox || (self.overlap_x(other_bbox) && self.overlap_y(other_bbox))
+
+        // this should be (more or less) equiv
+        //self == other_bbox
+        //    || self.overlaps_bbox(other_bbox)
+        //    || self.contains_bbox(other_bbox)
+        //    || other_bbox.contains_bbox(self)
+        //    || self.touches_bbox(other_bbox)
     }
 
     /// Returns `Some(intersection)` with `other_bbox` or `None` if they do not intersect
@@ -470,19 +518,210 @@ mod tests {
     }
 
     #[test]
-    fn bounding_box_overlaps_bbox() {
-        let ll = Coordinate2D::new(1.0, 1.0);
-        let ur = Coordinate2D::new(4.0, 4.0);
-        let bbox = BoundingBox2D::new(ll, ur).unwrap();
+    fn bounding_box_x_overlap() {
+        let x0_y0 = Coordinate2D::new(0.0, 0.0);
+        let x1_y1 = Coordinate2D::new(1.0, 1.0);
+        let x2_y1 = Coordinate2D::new(2.0, 1.0);
+        // let x3_y1 = Coordinate2D::new(3.0, 1.0);
+        // let x4_y1 = Coordinate2D::new(4.0, 1.0);
+        let x1_y2 = Coordinate2D::new(1.0, 2.0);
+        let x2_y2 = Coordinate2D::new(2.0, 2.0);
+        // let x3_y2 = Coordinate2D::new(3.0, 2.0);
+        // let x4_y2 = Coordinate2D::new(4.0, 2.0);
+        // let x1_y3 = Coordinate2D::new(1.0, 3.0);
+        // let x2_y3 = Coordinate2D::new(2.0, 3.0);
+        let x3_y3 = Coordinate2D::new(3.0, 3.0);
+        let x4_y3 = Coordinate2D::new(4.0, 3.0);
+        // let x1_y4 = Coordinate2D::new(1.0, 4.0);
+        // let x2_y4 = Coordinate2D::new(2.0, 4.0);
+        let x3_y4 = Coordinate2D::new(3.0, 4.0);
+        let x4_y4 = Coordinate2D::new(4.0, 4.0);
 
-        let ll_inside = Coordinate2D::new(2.0, 2.0);
-        let ur_inside = Coordinate2D::new(3.0, 3.0);
-        let bbox_inside = BoundingBox2D::new(ll_inside, ur_inside).unwrap();
-        assert!(bbox.overlaps_bbox(&bbox_inside));
+        let o = BoundingBox2D::new(x0_y0, x1_y1).unwrap();
+        let a = BoundingBox2D::new(x1_y1, x3_y3).unwrap();
+        let b = BoundingBox2D::new(x2_y1, x4_y3).unwrap();
+        let c = BoundingBox2D::new(x1_y2, x3_y4).unwrap();
+        let d = BoundingBox2D::new(x2_y2, x4_y4).unwrap();
+        let m = BoundingBox2D::new(x2_y2, x3_y3).unwrap();
+
+        assert!(o.overlap_x(&a));
+        assert!(!o.overlap_x(&b));
+        assert!(o.overlap_x(&c));
+        assert!(!o.overlap_x(&d));
+        assert!(!o.overlap_x(&m));
+
+        assert!(!m.overlap_x(&o));
+        assert!(m.overlap_x(&a));
+        assert!(m.overlap_x(&b));
+        assert!(m.overlap_x(&c));
+        assert!(m.overlap_x(&d));
+        assert!(m.overlap_x(&m));
+
+        assert!(a.overlap_x(&o));
+        assert!(a.overlap_x(&a));
+        assert!(a.overlap_x(&b));
+        assert!(a.overlap_x(&c));
+        assert!(a.overlap_x(&d));
+        assert!(a.overlap_x(&o));
+
+        assert!(!b.overlap_x(&o));
+        assert!(b.overlap_x(&a));
+        assert!(b.overlap_x(&b));
+        assert!(b.overlap_x(&c));
+        assert!(b.overlap_x(&d));
+        assert!(b.overlap_x(&m));
+
+        assert!(c.overlap_x(&o));
+        assert!(c.overlap_x(&a));
+        assert!(c.overlap_x(&b));
+        assert!(c.overlap_x(&c));
+        assert!(c.overlap_x(&d));
+        assert!(c.overlap_x(&m));
+
+        assert!(!d.overlap_x(&o));
+        assert!(d.overlap_x(&a));
+        assert!(d.overlap_x(&b));
+        assert!(d.overlap_x(&c));
+        assert!(d.overlap_x(&d));
+        assert!(d.overlap_x(&m));
     }
 
     #[test]
-    fn bounding_box_overlaps_bbox_intersect() {
+    fn bounding_box_y_overlap() {
+        let x0_y0 = Coordinate2D::new(0.0, 0.0);
+        let x1_y1 = Coordinate2D::new(1.0, 1.0);
+        let x2_y1 = Coordinate2D::new(2.0, 1.0);
+        // let x3_y1 = Coordinate2D::new(3.0, 1.0);
+        // let x4_y1 = Coordinate2D::new(4.0, 1.0);
+        let x1_y2 = Coordinate2D::new(1.0, 2.0);
+        let x2_y2 = Coordinate2D::new(2.0, 2.0);
+        // let x3_y2 = Coordinate2D::new(3.0, 2.0);
+        // let x4_y2 = Coordinate2D::new(4.0, 2.0);
+        // let x1_y3 = Coordinate2D::new(1.0, 3.0);
+        // let x2_y3 = Coordinate2D::new(2.0, 3.0);
+        let x3_y3 = Coordinate2D::new(3.0, 3.0);
+        let x4_y3 = Coordinate2D::new(4.0, 3.0);
+        // let x1_y4 = Coordinate2D::new(1.0, 4.0);
+        // let x2_y4 = Coordinate2D::new(2.0, 4.0);
+        let x3_y4 = Coordinate2D::new(3.0, 4.0);
+        let x4_y4 = Coordinate2D::new(4.0, 4.0);
+
+        let o = BoundingBox2D::new(x0_y0, x1_y1).unwrap();
+        let a = BoundingBox2D::new(x1_y1, x3_y3).unwrap();
+        let b = BoundingBox2D::new(x2_y1, x4_y3).unwrap();
+        let c = BoundingBox2D::new(x1_y2, x3_y4).unwrap();
+        let d = BoundingBox2D::new(x2_y2, x4_y4).unwrap();
+        let m = BoundingBox2D::new(x2_y2, x3_y3).unwrap();
+
+        assert!(o.overlap_y(&a));
+        assert!(o.overlap_y(&b));
+        assert!(!o.overlap_y(&c));
+        assert!(!o.overlap_y(&d));
+        assert!(!o.overlap_y(&m));
+
+        assert!(m.overlap_y(&a));
+        assert!(m.overlap_y(&b));
+        assert!(m.overlap_y(&c));
+        assert!(m.overlap_y(&d));
+
+        assert!(a.overlap_y(&b));
+        assert!(a.overlap_y(&c));
+        assert!(a.overlap_y(&d));
+
+        assert!(b.overlap_y(&c));
+        assert!(b.overlap_y(&d));
+
+        assert!(c.overlap_y(&d));
+    }
+
+    #[test]
+    fn bounding_box_overlaps() {
+        let x0_y0 = Coordinate2D::new(0.0, 0.0);
+        let x1_y1 = Coordinate2D::new(1.0, 1.0);
+        let x2_y1 = Coordinate2D::new(2.0, 1.0);
+        // let x3_y1 = Coordinate2D::new(3.0, 1.0);
+        // let x4_y1 = Coordinate2D::new(4.0, 1.0);
+        let x1_y2 = Coordinate2D::new(1.0, 2.0);
+        let x2_y2 = Coordinate2D::new(2.0, 2.0);
+        // let x3_y2 = Coordinate2D::new(3.0, 2.0);
+        // let x4_y2 = Coordinate2D::new(4.0, 2.0);
+        // let x1_y3 = Coordinate2D::new(1.0, 3.0);
+        // let x2_y3 = Coordinate2D::new(2.0, 3.0);
+        let x3_y3 = Coordinate2D::new(3.0, 3.0);
+        let x4_y3 = Coordinate2D::new(4.0, 3.0);
+        // let x1_y4 = Coordinate2D::new(1.0, 4.0);
+        // let x2_y4 = Coordinate2D::new(2.0, 4.0);
+        let x3_y4 = Coordinate2D::new(3.0, 4.0);
+        let x4_y4 = Coordinate2D::new(4.0, 4.0);
+
+        let o = BoundingBox2D::new(x0_y0, x1_y1).unwrap();
+        let a = BoundingBox2D::new(x1_y1, x3_y3).unwrap();
+        let b = BoundingBox2D::new(x2_y1, x4_y3).unwrap();
+        let c = BoundingBox2D::new(x1_y2, x3_y4).unwrap();
+        let d = BoundingBox2D::new(x2_y2, x4_y4).unwrap();
+        let m = BoundingBox2D::new(x2_y2, x3_y3).unwrap();
+
+        assert!(o.overlaps_bbox(&a));
+        assert!(!o.overlaps_bbox(&b));
+        assert!(!o.overlaps_bbox(&c));
+        assert!(!o.overlaps_bbox(&d));
+        assert!(!o.overlaps_bbox(&m));
+
+        assert!(m.overlaps_bbox(&a));
+        assert!(m.overlaps_bbox(&b));
+        assert!(m.overlaps_bbox(&c));
+        assert!(m.overlaps_bbox(&d));
+
+        assert!(a.overlaps_bbox(&b));
+        assert!(a.overlaps_bbox(&c));
+        assert!(a.overlaps_bbox(&d));
+
+        assert!(b.overlaps_bbox(&c));
+        assert!(b.overlaps_bbox(&d));
+
+        assert!(c.overlaps_bbox(&d));
+    }
+
+    #[test]
+    fn bounding_box_no_overlaps() {
+        let x0_y0 = Coordinate2D::new(0.0, 0.0);
+        let x1_y1 = Coordinate2D::new(1.0, 1.0);
+
+        let x0_y5 = Coordinate2D::new(0.0, 5.0);
+        let x1_y6 = Coordinate2D::new(1.0, 6.0);
+
+        let x3_y3 = Coordinate2D::new(3.0, 3.0);
+        let x4_y4 = Coordinate2D::new(4.0, 4.0);
+
+        let x5_y0 = Coordinate2D::new(5.0, 0.0);
+        let x6_y1 = Coordinate2D::new(6.0, 1.0);
+
+        let x5_y5 = Coordinate2D::new(5.0, 5.0);
+        let x6_y6 = Coordinate2D::new(6.0, 6.0);
+
+        let a = BoundingBox2D::new(x0_y0, x1_y1).unwrap();
+        let b = BoundingBox2D::new(x0_y5, x1_y6).unwrap();
+        let c = BoundingBox2D::new(x5_y0, x6_y1).unwrap();
+        let d = BoundingBox2D::new(x5_y5, x6_y6).unwrap();
+        let m = BoundingBox2D::new(x3_y3, x4_y4).unwrap();
+
+        assert!(!m.overlaps_bbox(&a));
+        assert!(!m.overlaps_bbox(&b));
+        assert!(!m.overlaps_bbox(&c));
+        assert!(!m.overlaps_bbox(&d));
+
+        assert!(!a.overlaps_bbox(&b));
+        assert!(!a.overlaps_bbox(&c));
+        assert!(!a.overlaps_bbox(&d));
+
+        assert!(!b.overlaps_bbox(&c));
+        assert!(!b.overlaps_bbox(&d));
+
+        assert!(!c.overlaps_bbox(&d));
+    }
+
+    #[test]
+    fn bounding_box_intersect_within() {
         let ll = Coordinate2D::new(1.0, 1.0);
         let ur = Coordinate2D::new(4.0, 4.0);
         let bbox = BoundingBox2D::new(ll, ur).unwrap();
@@ -490,7 +729,7 @@ mod tests {
         let ll_intersect = Coordinate2D::new(2.0, 2.0);
         let ur_intersect = Coordinate2D::new(3.0, 3.0);
         let bbox_intersect = BoundingBox2D::new(ll_intersect, ur_intersect).unwrap();
-        assert!(bbox.overlaps_bbox(&bbox_intersect));
+        assert!(bbox.intersects_bbox(&bbox_intersect));
     }
 
     #[test]
@@ -526,7 +765,7 @@ mod tests {
         let ll_inside = Coordinate2D::new(2.0, 2.0);
         let ur_inside = Coordinate2D::new(3.0, 3.0);
         let bbox_inside = BoundingBox2D::new(ll_inside, ur_inside).unwrap();
-        assert!(!bbox.intersects_bbox(&bbox_inside));
+        assert!(bbox.intersects_bbox(&bbox_inside));
     }
 
     #[test]
@@ -538,6 +777,55 @@ mod tests {
         let ll_separate = Coordinate2D::new(3.0, 3.0);
         let ur_separate = Coordinate2D::new(5.0, 5.0);
         let bbox_separate = BoundingBox2D::new(ll_separate, ur_separate).unwrap();
+
+        assert!(!bbox.contains_bbox(&bbox_separate));
+        assert!(!bbox_separate.contains_bbox(&bbox));
+
+        assert!(!bbox.overlaps_bbox(&bbox_separate));
+        assert!(!bbox_separate.overlaps_bbox(&bbox));
+
         assert!(!bbox.intersects_bbox(&bbox_separate));
+    }
+    #[test]
+    fn bounding_box_intersect_real_tiles() {
+        let query = BoundingBox2D {
+            lower_left_coordinate: Coordinate2D { x: 10.0, y: 20.0 },
+            upper_right_coordinate: Coordinate2D { x: 70.0, y: 80.0 },
+        };
+        let tile_0_0 = BoundingBox2D {
+            lower_left_coordinate: Coordinate2D { x: -180.0, y: 30.0 },
+            upper_right_coordinate: Coordinate2D { x: -120.0, y: 90.0 },
+        };
+        assert!(!query.intersects_bbox(&tile_0_0));
+
+        let tile_0_1 = BoundingBox2D {
+            lower_left_coordinate: Coordinate2D { x: -120.0, y: 30.0 },
+            upper_right_coordinate: Coordinate2D { x: -60.0, y: 90.0 },
+        };
+        assert!(!query.intersects_bbox(&tile_0_1));
+
+        let tile_0_2 = BoundingBox2D {
+            lower_left_coordinate: Coordinate2D { x: -60.0, y: 30.0 },
+            upper_right_coordinate: Coordinate2D { x: 0.0, y: 90.0 },
+        };
+        assert!(!query.intersects_bbox(&tile_0_2));
+
+        let tile_0_3 = BoundingBox2D {
+            lower_left_coordinate: Coordinate2D { x: 0.0, y: 30.0 },
+            upper_right_coordinate: Coordinate2D { x: 60.0, y: 90.0 },
+        };
+        assert!(query.intersects_bbox(&tile_0_3));
+
+        let tile_0_4 = BoundingBox2D {
+            lower_left_coordinate: Coordinate2D { x: 60.0, y: 30.0 },
+            upper_right_coordinate: Coordinate2D { x: 120.0, y: 90.0 },
+        };
+        assert!(query.intersects_bbox(&tile_0_4));
+
+        let tile_0_5 = BoundingBox2D {
+            lower_left_coordinate: Coordinate2D { x: 120.0, y: 30.0 },
+            upper_right_coordinate: Coordinate2D { x: 180.0, y: 90.0 },
+        };
+        assert!(!query.intersects_bbox(&tile_0_5));
     }
 }
