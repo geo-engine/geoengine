@@ -1,6 +1,6 @@
 use crate::error;
 use crate::operations::image::{Colorizer, LossyInto, RgbaTransmutable};
-use crate::raster::{GridPixelAccess, Raster, Raster2D};
+use crate::raster::{GridDimension, GridPixelAccess, Raster, Raster2D};
 use crate::util::Result;
 use image::{DynamicImage, ImageFormat, RgbaImage};
 
@@ -16,8 +16,9 @@ where
     fn to_png(&self, width: u32, height: u32, colorizer: &Colorizer) -> Result<Vec<u8>> {
         // TODO: use PNG color palette once it is available
 
-        let scale_x = (self.dimension()[0] as f64) / f64::from(width);
-        let scale_y = (self.dimension()[1] as f64) / f64::from(height);
+        let (.., raster_y_size, raster_x_size) = self.dimension().as_pattern();
+        let scale_x = (raster_x_size as f64) / f64::from(width);
+        let scale_y = (raster_y_size as f64) / f64::from(height);
 
         let color_mapper = colorizer.create_color_mapper();
 
