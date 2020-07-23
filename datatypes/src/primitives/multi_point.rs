@@ -4,7 +4,7 @@ use crate::util::arrow::ArrowTyped;
 use crate::util::Result;
 use snafu::ensure;
 
-/// A trait that allows a common access to lines of `MultiPoint`s and its references
+/// A trait that allows a common access to points of `MultiPoint`s and its references
 pub trait MultiPointAccess {
     fn points(&self) -> &[Coordinate2D];
 }
