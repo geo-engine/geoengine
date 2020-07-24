@@ -165,7 +165,6 @@ mod tests {
     use geoengine_operators::source::{GdalSource, GdalSourceParameters};
     use std::fs::File;
     use std::io::Write;
-    use std::path::Path;
 
     #[tokio::test]
     async fn test() {
@@ -201,7 +200,6 @@ mod tests {
     async fn png_from_stream() {
         let global_size_in_pixels = (1800, 3600);
         let tile_size_in_pixels = (600, 600);
-        let global_size_in_tiles = (3, 6);
         let dataset_upper_right_coord = (-180.0, 90.0).into();
         let dataset_x_pixel_size = 0.1;
         let dataset_y_pixel_size = -0.1;
@@ -244,7 +242,7 @@ mod tests {
             dataset_y_pixel_size,
         );
         let temporal_bounds: TimeInterval = TimeInterval::default();
-        let mut raster2d =
+        let raster2d =
             Raster2D::new(dim.into(), data, None, temporal_bounds, query_geo_transform).unwrap();
 
         let raster2d = gdal_source

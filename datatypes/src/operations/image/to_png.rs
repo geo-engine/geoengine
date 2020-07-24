@@ -84,7 +84,7 @@ mod tests {
         .unwrap();
 
         raster.set_pixel_value_at_grid_index(&(0, 0), 255).unwrap();
-        raster.set_pixel_value_at_grid_index(&(0, 1), 100).unwrap();
+        raster.set_pixel_value_at_grid_index(&(1, 0), 100).unwrap();
 
         let colorizer = Colorizer::linear_gradient(
             vec![
@@ -116,7 +116,7 @@ mod tests {
         .unwrap();
 
         raster.set_pixel_value_at_grid_index(&(0, 0), 10).unwrap();
-        raster.set_pixel_value_at_grid_index(&(0, 1), 5).unwrap();
+        raster.set_pixel_value_at_grid_index(&(1, 0), 5).unwrap();
 
         let colorizer = Colorizer::logarithmic_gradient(
             vec![
@@ -148,7 +148,7 @@ mod tests {
         .unwrap();
 
         raster.set_pixel_value_at_grid_index(&(0, 0), 2).unwrap();
-        raster.set_pixel_value_at_grid_index(&(0, 1), 1).unwrap();
+        raster.set_pixel_value_at_grid_index(&(1, 0), 1).unwrap();
 
         let colorizer = Colorizer::palette(
             [
@@ -186,7 +186,7 @@ mod tests {
             .set_pixel_value_at_grid_index(&(0, 0), 0xFF00_00FF_u32)
             .unwrap();
         raster
-            .set_pixel_value_at_grid_index(&(0, 1), 0x00FF_00FF_u32)
+            .set_pixel_value_at_grid_index(&(1, 0), 0x00FF_00FF_u32)
             .unwrap();
 
         let colorizer = Colorizer::rgba();
