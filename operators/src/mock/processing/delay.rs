@@ -18,7 +18,7 @@ impl QueryProcessor<MultiPointCollection> for MockDelayImpl {
         &self,
         query: QueryRectangle,
         ctx: QueryContext,
-    ) -> BoxStream<Result<Box<MultiPointCollection>>> {
+    ) -> BoxStream<Result<MultiPointCollection>> {
         let seconds = self.seconds;
 
         self.points[0]

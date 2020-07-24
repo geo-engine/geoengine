@@ -1,9 +1,11 @@
 mod base_raster;
 mod geo_transform;
 mod grid_dimension;
+mod typed_raster;
 pub use self::base_raster::{BaseRaster, Blit, Raster2D, Raster3D};
 pub use self::geo_transform::{GdalGeoTransform, GeoTransform};
 pub use self::grid_dimension::{Dim, GridDimension, GridIndex, Ix};
+pub use self::typed_raster::TypedRaster2D;
 use super::primitives::{SpatialBounded, TemporalBounded};
 use crate::util::Result;
 use std::fmt::Debug;

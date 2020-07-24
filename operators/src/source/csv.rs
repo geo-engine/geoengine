@@ -322,12 +322,11 @@ impl QueryProcessor<MultiPointCollection> for CsvSourceProcessor {
         &self,
         query: QueryRectangle,
         _ctx: QueryContext,
-    ) -> BoxStream<Result<Box<MultiPointCollection>>> {
+    ) -> BoxStream<Result<MultiPointCollection>> {
         // TODO: properly propagate error
         // TODO: properly handle chunk_size
         CsvSource::new(self.params.clone(), query.bbox, 10)
             .expect("could not create csv source")
-            .map(|r| r.map(Box::new))
             .boxed()
     }
 }
@@ -496,7 +495,7 @@ x,y
             chunk_byte_size: 10 * 8 * 2,
         };
 
-        let r: Vec<Result<Box<MultiPointCollection>>> = p.query(query, ctx).collect().await;
+        let r: Vec<Result<MultiPointCollection>> = p.query(query, ctx).collect().await;
 
         assert_eq!(r.len(), 1);
 

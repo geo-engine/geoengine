@@ -2,13 +2,14 @@ use futures::stream::BoxStream;
 
 use geoengine_datatypes::collections::MultiPointCollection;
 use geoengine_datatypes::primitives::{BoundingBox2D, TimeInterval};
-use geoengine_datatypes::raster::GenericRaster;
 
 use crate::error::Error;
 use crate::mock::processing::delay::MockDelayImpl;
 use crate::mock::processing::raster_points::MockRasterPointsImpl;
 use crate::mock::source::mock_point_source::MockPointSourceImpl;
 use crate::mock::source::mock_raster_source::MockRasterSourceImpl;
+use crate::source::gdal_source::RasterTile2D;
+use crate::source::GdalSource;
 use crate::util::Result;
 use crate::Operator;
 
@@ -25,18 +26,18 @@ pub struct QueryContext {
     pub chunk_byte_size: usize,
 }
 
-pub trait QueryProcessor<T: ?Sized + Send>: Sync {
-    fn query(&self, query: QueryRectangle, ctx: QueryContext) -> BoxStream<Result<Box<T>>>;
+pub trait QueryProcessor<T: Send>: Send + Sync {
+    fn query(&self, query: QueryRectangle, ctx: QueryContext) -> BoxStream<Result<T>>;
 }
 
 pub enum QueryProcessorType {
     PointProcessor(Box<dyn QueryProcessor<MultiPointCollection>>),
-    RasterProcessor(Box<dyn QueryProcessor<dyn GenericRaster>>),
+    RasterProcessor(Box<dyn QueryProcessor<RasterTile2D>>),
 }
 
 impl QueryProcessorType {
     // TODO: TryInto?
-    fn point_processor(self) -> Result<Box<dyn QueryProcessor<MultiPointCollection>>> {
+    pub fn point_processor(self) -> Result<Box<dyn QueryProcessor<MultiPointCollection>>> {
         if let QueryProcessorType::PointProcessor(p) = self {
             Ok(p)
         } else {
@@ -44,7 +45,7 @@ impl QueryProcessorType {
         }
     }
 
-    fn raster_processor(self) -> Result<Box<dyn QueryProcessor<dyn GenericRaster>>> {
+    pub fn raster_processor(self) -> Result<Box<dyn QueryProcessor<RasterTile2D>>> {
         if let QueryProcessorType::RasterProcessor(p) = self {
             Ok(p)
         } else {
@@ -93,6 +94,9 @@ pub fn processor(operator: &Operator) -> Result<QueryProcessorType> {
                 rasters: create_sources(&sources.rasters, QueryProcessorType::raster_processor)?,
                 coords: params.coords,
             }))
+        }
+        Operator::GdalSource { params, sources: _ } => {
+            QueryProcessorType::RasterProcessor(Box::new(GdalSource::from_params(params.clone())))
         }
         // Operator::CsvSource { params, .. } => {
         //     QueryProcessorType::PointProcessor(Box::new(CsvSourceProcessor { params: params.clone() }))

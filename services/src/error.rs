@@ -9,8 +9,14 @@ pub enum Error {
     DataType {
         source: geoengine_datatypes::error::Error,
     },
+    Operator {
+        source: geoengine_operators::error::Error,
+    },
     HTTP {
         source: warp::http::Error,
+    },
+    Uuid {
+        source: uuid::Error,
     },
 
     #[snafu(display("Registration failed: {:?}", reason))]

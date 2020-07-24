@@ -190,6 +190,16 @@ impl BoundingBox2D {
         (self.upper_right_coordinate.x, self.lower_left_coordinate.y).into()
     }
 
+    /// Returns the width of the bounding box
+    pub fn size_x(&self) -> f64 {
+        self.upper_right_coordinate.x - self.lower_left_coordinate.x
+    }
+
+    /// Returns the height of the bounding box
+    pub fn size_y(&self) -> f64 {
+        self.upper_right_coordinate.y - self.lower_left_coordinate.y
+    }
+
     /// Checks if a coordinate is located inside the bounding box
     ///
     /// # Examples

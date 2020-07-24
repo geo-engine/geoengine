@@ -1,9 +1,10 @@
 use crate::engine::{QueryContext, QueryProcessor, QueryRectangle};
+use crate::source::gdal_source::{RasterTile2D, TileInformation};
 use crate::util::Result;
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::primitives::TimeInterval;
-use geoengine_datatypes::raster::{GenericRaster, Raster2D};
+use geoengine_datatypes::raster::{Raster2D, TypedRaster2D};
 
 pub struct MockRasterSourceImpl {
     pub data: Vec<f64>,
@@ -11,12 +12,8 @@ pub struct MockRasterSourceImpl {
     pub geo_transform: [f64; 6],
 }
 
-impl QueryProcessor<dyn GenericRaster> for MockRasterSourceImpl {
-    fn query(
-        &self,
-        _query: QueryRectangle,
-        ctx: QueryContext,
-    ) -> BoxStream<Result<Box<dyn GenericRaster>>> {
+impl QueryProcessor<RasterTile2D> for MockRasterSourceImpl {
+    fn query(&self, _query: QueryRectangle, ctx: QueryContext) -> BoxStream<Result<RasterTile2D>> {
         let _size = f64::sqrt(ctx.chunk_byte_size as f64 / 8.0);
 
         // TODO: return tiles of the input raster
@@ -30,7 +27,19 @@ impl QueryProcessor<dyn GenericRaster> for MockRasterSourceImpl {
         )
         .unwrap();
 
-        let v: Vec<Result<Box<dyn GenericRaster>>> = vec![Ok(Box::new(raster))];
+        let tile = RasterTile2D::new(
+            temporal_bounds,
+            TileInformation::new(
+                (1, 1).into(),
+                (0, 0).into(),
+                (0, 0).into(),
+                self.dim.into(),
+                self.geo_transform.into(),
+            ),
+            TypedRaster2D::F64(raster),
+        );
+
+        let v: Vec<Result<RasterTile2D>> = vec![Ok(tile)];
         futures::stream::iter(v.into_iter()).boxed()
     }
 }

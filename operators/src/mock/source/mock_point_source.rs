@@ -19,7 +19,7 @@ impl QueryProcessor<MultiPointCollection> for MockPointSourceImpl {
         &self,
         _query: QueryRectangle,
         ctx: QueryContext,
-    ) -> BoxStream<Result<Box<MultiPointCollection>>> {
+    ) -> BoxStream<Result<MultiPointCollection>> {
         MockPointSourceResultStream {
             points: self.points.clone(),
             chunk_size: ctx.chunk_byte_size / std::mem::size_of::<Coordinate2D>(),
@@ -36,7 +36,7 @@ pub struct MockPointSourceResultStream {
 }
 
 impl Stream for MockPointSourceResultStream {
-    type Item = Result<Box<MultiPointCollection>>;
+    type Item = Result<MultiPointCollection>;
 
     fn poll_next(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let coordinates: Vec<Coordinate2D> = Vec::from_iter(
@@ -58,8 +58,7 @@ impl Stream for MockPointSourceResultStream {
             coordinates.iter().map(|x| vec![*x]).collect(),
             vec![TimeInterval::new_unchecked(0, 1); coordinates.len()],
             HashMap::new(),
-        )
-        .map(Box::new);
+        );
 
         Poll::Ready(Some(pc.map_err(Error::from)))
     }

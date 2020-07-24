@@ -2,15 +2,21 @@ use std::sync::Arc;
 
 use snafu::ResultExt;
 use tokio::sync::RwLock;
+use uuid::Uuid;
 use warp::reply::Reply;
 use warp::{http::Response, Filter};
 
 use geoengine_datatypes::operations::image::{Colorizer, ToPng};
-use geoengine_datatypes::raster::Raster2D;
+use geoengine_datatypes::raster::{Blit, GeoTransform, Raster2D, TypedRaster2D};
+use geoengine_operators::engine;
 
 use crate::error;
 use crate::ogc::wms::request::{GetCapabilities, GetLegendGraphic, GetMap, WMSRequest};
+use crate::util::identifiers::Identifier;
 use crate::workflows::registry::WorkflowRegistry;
+use crate::workflows::workflow::WorkflowId;
+use futures::StreamExt;
+use geoengine_operators::engine::{QueryContext, QueryProcessorType, QueryRectangle};
 
 type WR<T> = Arc<RwLock<T>>;
 
@@ -33,7 +39,7 @@ async fn wms<T: WorkflowRegistry>(
     // TODO: more useful error output than "invalid query string"
     match request {
         WMSRequest::GetCapabilities(request) => get_capabilities(&request),
-        WMSRequest::GetMap(request) => get_map(&request, &workflow_registry),
+        WMSRequest::GetMap(request) => get_map(&request, &workflow_registry).await,
         WMSRequest::GetLegendGraphic(request) => get_legend_graphic(&request, &workflow_registry),
         _ => Ok(Box::new(
             warp::http::StatusCode::NOT_IMPLEMENTED.into_response(),
@@ -96,19 +102,91 @@ fn get_capabilities(_request: &GetCapabilities) -> Result<Box<dyn warp::Reply>, 
     Ok(Box::new(warp::reply::html(mock)))
 }
 
-fn get_map<T: WorkflowRegistry>(
+async fn get_map<T: WorkflowRegistry>(
     request: &GetMap,
-    _workflow_registry: &WR<T>,
+    workflow_registry: &WR<T>,
 ) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
     // TODO: validate request?
     // TODO: properly handle request
     if request.layer == "test" {
         get_map_mock(request)
     } else {
-        // workflow_registry.read().await.load(WorkflowIdentifier::from_uuid(request.layer.clone() as Uuid));
-        Ok(Box::new(
-            warp::http::StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-        ))
+        let workflow = workflow_registry.read().await.load(&WorkflowId::from_uuid(
+            Uuid::parse_str(&request.layer)
+                .context(error::Uuid)
+                .map_err(warp::reject::custom)?,
+        ));
+
+        if let Some(workflow) = workflow {
+            let op = engine::processor(&workflow.operator)
+                .and_then(QueryProcessorType::raster_processor)
+                .context(error::Operator)
+                .map_err(warp::reject::custom)?;
+
+            let query_rect = QueryRectangle {
+                bbox: request.bbox,
+                time_interval: request.time.unwrap_or_default(), // TODO: error if more than one result?
+            };
+            let query_ctx = QueryContext {
+                // TODO: define meaningful query context
+                chunk_byte_size: 1024,
+            };
+
+            let result = op.query(query_rect, query_ctx);
+
+            // build png
+            let dim = [request.height as usize, request.width as usize];
+            let data: Vec<u8> = vec![0; dim[0] * dim[1]]; // TODO: use actual data type
+            let query_geo_transform = GeoTransform::new(
+                query_rect.bbox.upper_left(),
+                query_rect.bbox.size_x() / f64::from(request.width),
+                -query_rect.bbox.size_y() / f64::from(request.height), // TODO: negativ, s.t. geo transform fits...
+            );
+
+            let output_raster = Raster2D::new(
+                dim.into(),
+                data,
+                None,
+                request.time.unwrap_or_default(),
+                query_geo_transform,
+            )
+            .unwrap();
+
+            let output_raster = result
+                .fold(output_raster, |mut raster2d, tile| {
+                    if let Ok(tile) = tile {
+                        // TODO: handle error while accumulating
+                        // TODO: get raster as correct type
+                        if let TypedRaster2D::U8(r) = tile.data {
+                            raster2d.blit(r).unwrap();
+                        } else {
+                            unreachable!();
+                        }
+                    }
+                    futures::future::ready(raster2d)
+                })
+                .await;
+
+            let colorizer = Colorizer::rgba(); // TODO: create colorizer from request
+            let image_bytes = output_raster
+                .to_png(request.width, request.height, &colorizer)
+                .context(error::DataType)
+                .map_err(warp::reject::custom)?;
+
+            Ok(Box::new(
+                Response::builder()
+                    .header("Content-Type", "image/png")
+                    .body(image_bytes)
+                    .context(error::HTTP)
+                    .map_err(warp::reject::custom)?,
+            ))
+        } else {
+            // TODO: output error
+            // TODO: respect GetMapExceptionFormat
+            Ok(Box::new(
+                warp::http::StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+            ))
+        }
     }
 }
 
@@ -155,16 +233,22 @@ fn get_map_mock(request: &GetMap) -> Result<Box<dyn warp::Reply>, warp::Rejectio
 
 #[cfg(test)]
 mod tests {
-    use crate::workflows::registry::HashMapRegistry;
+    use std::fs::File;
+    use std::io::Write;
 
-    use super::*;
     use futures::StreamExt;
+
     use geoengine_datatypes::primitives::{BoundingBox2D, TimeInterval};
     use geoengine_datatypes::raster::{Blit, GeoTransform};
     use geoengine_operators::source::gdal_source::GdalSourceTileGridProvider;
     use geoengine_operators::source::{GdalSource, GdalSourceParameters};
-    use std::fs::File;
-    use std::io::Write;
+
+    use crate::workflows::registry::HashMapRegistry;
+
+    use super::*;
+    use crate::workflows::workflow::Workflow;
+    use geoengine_operators::operators::NoSources;
+    use geoengine_operators::Operator;
 
     #[tokio::test]
     async fn test() {
@@ -230,7 +314,7 @@ mod tests {
             gdal_params,
         };
 
-        let query_bbox = BoundingBox2D::new((10., 20.).into(), (50., 80.).into()).unwrap();
+        let query_bbox = BoundingBox2D::new((-10., 20.).into(), (50., 80.).into()).unwrap();
 
         // let mut img = RgbaImage::new(255, 255);
 
@@ -246,11 +330,15 @@ mod tests {
             Raster2D::new(dim.into(), data, None, temporal_bounds, query_geo_transform).unwrap();
 
         let raster2d = gdal_source
-            .tile_stream::<u8>(Some(query_bbox))
+            .tile_stream(Some(query_bbox))
             .fold(raster2d, |mut raster2d, tile| {
                 if let Ok(tile) = tile {
                     // TODO: handle error while accumulating
-                    raster2d.blit(tile.data).unwrap();
+                    if let TypedRaster2D::U8(r) = tile.data {
+                        raster2d.blit(r).unwrap();
+                    } else {
+                        unreachable!();
+                    }
                 }
                 futures::future::ready(raster2d)
             })
@@ -273,5 +361,35 @@ mod tests {
         // img.save(&Path::new("image.png")).unwrap()
 
         // TODO: validate output image
+    }
+
+    #[tokio::test]
+    async fn get_map() {
+        let workflow_registry = Arc::new(RwLock::new(HashMapRegistry::default()));
+
+        let workflow = Workflow {
+            operator: Operator::GdalSource {
+                params: GdalSourceParameters {
+                    base_path: "../operators/test-data/raster/modis_ndvi".into(),
+                    file_name_with_time_placeholder: "MOD13A2_M_NDVI_2014-01-01.TIFF".into(),
+                    time_format: "".into(),
+                    channel: None,
+                },
+                sources: NoSources {},
+            },
+        };
+
+        let id = workflow_registry.write().await.register(workflow.clone());
+
+        let res = warp::test::request()
+            .method("GET")
+            .path(&format!("/wms?request=GetMap&service=WMS&version=1.3.0&layer={}&bbox=-10,20,50,80&width=600&height=600&crs=foo&styles=ssss&format=image/png", id.to_string()))
+            .reply(&wms_handler(workflow_registry))
+            .await;
+        assert_eq!(res.status(), 200);
+        assert_eq!(
+            include_bytes!("../../../services/test-data/wms/raster.png") as &[u8],
+            res.body().to_vec().as_slice()
+        );
     }
 }

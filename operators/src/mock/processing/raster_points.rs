@@ -1,14 +1,14 @@
 use crate::engine::{QueryContext, QueryProcessor, QueryRectangle};
+use crate::source::gdal_source::RasterTile2D;
 use crate::util::Result;
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::collections::MultiPointCollection;
-use geoengine_datatypes::raster::GenericRaster;
 
 /// Attach raster value at given coords to points
 pub struct MockRasterPointsImpl {
     pub points: Vec<Box<dyn QueryProcessor<MultiPointCollection>>>,
-    pub rasters: Vec<Box<dyn QueryProcessor<dyn GenericRaster>>>,
+    pub rasters: Vec<Box<dyn QueryProcessor<RasterTile2D>>>,
     pub coords: [usize; 2],
 }
 
@@ -17,7 +17,7 @@ impl QueryProcessor<MultiPointCollection> for MockRasterPointsImpl {
         &self,
         query: QueryRectangle,
         ctx: QueryContext,
-    ) -> BoxStream<Result<Box<MultiPointCollection>>> {
+    ) -> BoxStream<Result<MultiPointCollection>> {
         // TODO perform join
 
         self.points[0]
