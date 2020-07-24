@@ -245,8 +245,7 @@ impl Stream for CsvSource {
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let mut state = self.state.lock().unwrap(); // TODO: handle lock poisoning
         if state.poll_result.is_some() {
-            let x = state.poll_result.replace(None).unwrap();
-
+            let x = state.poll_result.take().unwrap();
             return Poll::Ready(x);
         }
         drop(state);
@@ -350,14 +349,12 @@ struct ParsedRow {
 mod tests {
     use std::io::{Seek, SeekFrom, Write};
 
-    use futures::executor::block_on_stream;
-
     use geoengine_datatypes::collections::FeatureCollection;
 
     use super::*;
 
-    #[test]
-    fn read_points() {
+    #[tokio::test]
+    async fn read_points() {
         let mut fake_file = tempfile::NamedTempFile::new().unwrap();
         write!(
             fake_file,
@@ -371,7 +368,7 @@ x,y
         .unwrap();
         fake_file.seek(SeekFrom::Start(0)).unwrap();
 
-        let csv_source = CsvSource::new(
+        let mut csv_source = CsvSource::new(
             CsvSourceParameters {
                 file_path: fake_file.path().into(),
                 field_separator: ',',
@@ -386,15 +383,13 @@ x,y
         )
         .unwrap();
 
-        let mut stream = block_on_stream(csv_source);
-
-        assert_eq!(stream.next().unwrap().unwrap().len(), 2);
-        assert_eq!(stream.next().unwrap().unwrap().len(), 1);
-        assert!(stream.next().is_none());
+        assert_eq!(csv_source.next().await.unwrap().unwrap().len(), 2);
+        assert_eq!(csv_source.next().await.unwrap().unwrap().len(), 1);
+        assert!(csv_source.next().await.is_none());
     }
 
-    #[test]
-    fn errorneous_point_rows() {
+    #[tokio::test]
+    async fn errorneous_point_rows() {
         let mut fake_file = tempfile::NamedTempFile::new().unwrap();
         write!(
             fake_file,
@@ -408,7 +403,7 @@ CORRUPT
         .unwrap();
         fake_file.seek(SeekFrom::Start(0)).unwrap();
 
-        let csv_source = CsvSource::new(
+        let mut csv_source = CsvSource::new(
             CsvSourceParameters {
                 file_path: fake_file.path().into(),
                 field_separator: ',',
@@ -423,16 +418,14 @@ CORRUPT
         )
         .unwrap();
 
-        let mut stream = block_on_stream(csv_source);
-
-        assert_eq!(stream.next().unwrap().unwrap().len(), 1);
-        assert!(stream.next().unwrap().is_err());
-        assert_eq!(stream.next().unwrap().unwrap().len(), 1);
-        assert!(stream.next().is_none());
+        assert_eq!(csv_source.next().await.unwrap().unwrap().len(), 1);
+        assert!(csv_source.next().await.unwrap().is_err());
+        assert_eq!(csv_source.next().await.unwrap().unwrap().len(), 1);
+        assert!(csv_source.next().await.is_none());
     }
 
-    #[test]
-    fn corrupt_point_header() {
+    #[tokio::test]
+    async fn corrupt_point_header() {
         let mut fake_file = tempfile::NamedTempFile::new().unwrap();
         write!(
             fake_file,
@@ -446,7 +439,7 @@ x,z
         .unwrap();
         fake_file.seek(SeekFrom::Start(0)).unwrap();
 
-        let csv_source = CsvSource::new(
+        let mut csv_source = CsvSource::new(
             CsvSourceParameters {
                 file_path: fake_file.path().into(),
                 field_separator: ',',
@@ -461,10 +454,8 @@ x,z
         )
         .unwrap();
 
-        let mut stream = block_on_stream(csv_source);
-
-        assert!(stream.next().unwrap().is_err());
-        assert!(stream.next().is_none());
+        assert!(csv_source.next().await.unwrap().is_err());
+        assert!(csv_source.next().await.is_none());
     }
 
     #[tokio::test]

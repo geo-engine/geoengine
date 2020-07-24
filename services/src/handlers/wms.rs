@@ -127,8 +127,8 @@ fn get_map_mock(request: &GetMap) -> Result<Box<dyn warp::Reply>, warp::Rejectio
         [2, 2].into(),
         vec![
             0xFF00_00FF_u32,
-            0x00FF_00FF_u32,
             0x0000_00FF_u32,
+            0x00FF_00FF_u32,
             0x0000_00FF_u32,
         ],
         None,
