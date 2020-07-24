@@ -269,7 +269,7 @@ impl BoundingBox2D {
     /// let bbox = BoundingBox2D::new(ll, ur).unwrap();
     ///
     /// let ll_inside = Coordinate2D::new(2.0, 2.0);
-    /// let ur_inside = Coordinate2D::new(3.0, 3.0);
+    /// let ur_inside = Coordinate2D::new(5.0, 5.0);
     /// let bbox_inside = BoundingBox2D::new(ll_inside, ur_inside).unwrap();
     /// assert!(bbox.overlaps_bbox(&bbox_inside));
     /// ```

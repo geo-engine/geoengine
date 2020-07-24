@@ -202,9 +202,6 @@ impl GdalSource {
                 .map(move |tile| (time, tile))
                 .filter(move |(_, tile)| {
                     if let Some(filter_bbox) = bbox {
-                        println!("{:?}, {:?}, {:?},", time, tile, tile.spatial_bounds());
-                        println!("{:?}", filter_bbox.intersects_bbox(&tile.spatial_bounds()));
-                        println!("{:?}", tile.spatial_bounds().intersects_bbox(&filter_bbox));
                         filter_bbox.intersects_bbox(&tile.spatial_bounds())
                     } else {
                         true
@@ -276,7 +273,6 @@ impl GdalSource {
             pixel_size,   // pixelspace size
             pixel_size,   /* requested raster size */
         )?;
-        // println!("pixel_origin: {:?}, pixel_size: {:?}, size: {:?}", pixel_origin, pixel_size, pixel_size);
 
         // TODO: get the raster metadata!
 
