@@ -2,7 +2,10 @@ use arrow::error::ArrowError;
 use snafu::Snafu;
 
 use crate::collections::FeatureCollectionError;
-use crate::primitives::{Coordinate2D, PrimitivesError, TimeInterval};
+use crate::{
+    primitives::{Coordinate2D, PrimitivesError, TimeInterval},
+    raster::RasterDataType,
+};
 
 #[derive(Debug, PartialEq, Snafu)]
 #[snafu(visibility = "pub(crate)")]
@@ -108,6 +111,11 @@ pub enum Error {
 
     Blit {
         details: String,
+    },
+    #[snafu(display("NonMatchingRasterTypes: a=\"{:?}\", b=\"{:?}\"", a, b))]
+    NonMatchingRasterTypes {
+        a: RasterDataType,
+        b: RasterDataType,
     },
 }
 

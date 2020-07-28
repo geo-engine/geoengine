@@ -143,25 +143,23 @@ async fn get_map<T: WorkflowRegistry>(
                 -query_rect.bbox.size_y() / f64::from(request.height), // TODO: negativ, s.t. geo transform fits...
             );
 
-            let output_raster = Raster2D::new(
+            let output_raster: TypedRaster2D = Raster2D::new(
                 dim.into(),
                 data,
                 None,
                 request.time.unwrap_or_default(),
                 query_geo_transform,
             )
-            .unwrap();
+            .unwrap()
+            .into();
 
             let output_raster = result
                 .fold(output_raster, |mut raster2d, tile| {
                     if let Ok(tile) = tile {
                         // TODO: handle error while accumulating
                         // TODO: get raster as correct type
-                        if let TypedRaster2D::U8(r) = tile.data {
-                            raster2d.blit(r).unwrap();
-                        } else {
-                            unreachable!();
-                        }
+
+                        raster2d.blit(tile.data).unwrap();
                     }
                     futures::future::ready(raster2d)
                 })
@@ -319,26 +317,25 @@ mod tests {
         // let mut img = RgbaImage::new(255, 255);
 
         let dim = [600, 600];
-        let data = vec![0; 600 * 600];
+        let data: Vec<u8> = vec![0; 600 * 600]; // TODO handle real type
         let query_geo_transform = GeoTransform::new(
             query_bbox.upper_left(),
             dataset_x_pixel_size,
             dataset_y_pixel_size,
         );
         let temporal_bounds: TimeInterval = TimeInterval::default();
-        let raster2d =
-            Raster2D::new(dim.into(), data, None, temporal_bounds, query_geo_transform).unwrap();
+        let raster2d: TypedRaster2D =
+            Raster2D::new(dim.into(), data, None, temporal_bounds, query_geo_transform)
+                .unwrap()
+                .into();
 
         let raster2d = gdal_source
             .tile_stream(Some(query_bbox))
             .fold(raster2d, |mut raster2d, tile| {
                 if let Ok(tile) = tile {
                     // TODO: handle error while accumulating
-                    if let TypedRaster2D::U8(r) = tile.data {
-                        raster2d.blit(r).unwrap();
-                    } else {
-                        unreachable!();
-                    }
+
+                    raster2d.blit(tile.data).unwrap();
                 }
                 futures::future::ready(raster2d)
             })

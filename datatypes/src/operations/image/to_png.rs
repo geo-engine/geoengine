@@ -1,6 +1,6 @@
 use crate::error;
 use crate::operations::image::{Colorizer, LossyInto, RgbaTransmutable};
-use crate::raster::{GridDimension, GridPixelAccess, Raster, Raster2D};
+use crate::raster::{GridDimension, GridPixelAccess, Raster, Raster2D, TypedRaster2D};
 use crate::util::Result;
 use image::{DynamicImage, ImageFormat, RgbaImage};
 
@@ -41,6 +41,23 @@ where
             })?;
 
         Ok(buffer)
+    }
+}
+
+impl ToPng for TypedRaster2D {
+    fn to_png(&self, width: u32, height: u32, colorizer: &Colorizer) -> Result<Vec<u8>> {
+        match self {
+            TypedRaster2D::U8(r) => r.to_png(width, height, colorizer),
+            TypedRaster2D::U16(r) => r.to_png(width, height, colorizer),
+            TypedRaster2D::U32(r) => r.to_png(width, height, colorizer),
+            TypedRaster2D::U64(r) => r.to_png(width, height, colorizer),
+            TypedRaster2D::I8(r) => r.to_png(width, height, colorizer),
+            TypedRaster2D::I16(r) => r.to_png(width, height, colorizer),
+            TypedRaster2D::I32(r) => r.to_png(width, height, colorizer),
+            TypedRaster2D::I64(r) => r.to_png(width, height, colorizer),
+            TypedRaster2D::F32(r) => r.to_png(width, height, colorizer),
+            TypedRaster2D::F64(r) => r.to_png(width, height, colorizer),
+        }
     }
 }
 

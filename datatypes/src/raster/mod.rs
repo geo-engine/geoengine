@@ -1,11 +1,17 @@
 mod base_raster;
+mod data_type;
 mod geo_transform;
 mod grid_dimension;
+mod operations;
 mod typed_raster;
-pub use self::base_raster::{BaseRaster, Blit, Raster2D, Raster3D};
+pub use self::base_raster::{BaseRaster, Raster2D, Raster3D};
+pub use self::data_type::{
+    DynamicRasterDataType, RasterDataType, StaticRasterDataType, TypedValue,
+};
 pub use self::geo_transform::{GdalGeoTransform, GeoTransform};
 pub use self::grid_dimension::{Dim, GridDimension, GridIndex, Ix};
-pub use self::typed_raster::TypedRaster2D;
+pub use self::operations::blit::Blit;
+pub use self::typed_raster::{TypedRaster2D, TypedRaster3D};
 use super::primitives::{SpatialBounded, TemporalBounded};
 use crate::util::Result;
 use std::fmt::Debug;
@@ -15,7 +21,7 @@ pub trait GenericRaster: Send + Debug {
     fn get(&self);
 }
 
-pub trait Raster<D: GridDimension, T: Copy, C: Capacity>: SpatialBounded + TemporalBounded {
+pub trait Raster<D: GridDimension, T: Copy, C>: SpatialBounded + TemporalBounded {
     /// returns the grid dimension object of type D: `GridDimension`
     fn dimension(&self) -> &D;
     /// returns the optional  no-data value used for the raster
