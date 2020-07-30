@@ -238,7 +238,9 @@ mod tests {
 
     use geoengine_datatypes::primitives::{BoundingBox2D, TimeInterval};
     use geoengine_datatypes::raster::{Blit, GeoTransform};
-    use geoengine_operators::source::gdal_source::GdalSourceTileGridProvider;
+    use geoengine_operators::source::gdal_source::{
+        JsonDatasetInformationProvider, TileGridProvider, TimeIntervalProvider,
+    };
     use geoengine_operators::source::{GdalSource, GdalSourceParameters};
 
     use crate::workflows::registry::HashMapRegistry;
@@ -291,24 +293,31 @@ mod tests {
             dataset_y_pixel_size,
         );
 
-        let grid_tile_provider = GdalSourceTileGridProvider {
+        let grid_tile_provider = TileGridProvider {
             global_pixel_size: global_size_in_pixels.into(),
             tile_pixel_size: tile_size_in_pixels.into(),
             dataset_geo_transform,
         };
 
-        let time_interval_provider = vec![TimeInterval::new_unchecked(1, 2)];
+        let time_interval_provider = TimeIntervalProvider {
+            time_intervals: vec![TimeInterval::new_unchecked(1, 2)],
+        };
 
         let gdal_params = GdalSourceParameters {
-            base_path: "../operators/test-data/raster/modis_ndvi".into(),
-            file_name_with_time_placeholder: "MOD13A2_M_NDVI_2014-01-01.TIFF".into(),
-            time_format: "".into(),
+            dataset_id: "test".to_owned(),
             channel: None,
         };
 
+        let dataset_information = JsonDatasetInformationProvider {
+            file_name_with_time_placeholder: "MOD13A2_M_NDVI_2014-01-01.TIFF".into(),
+            time_format: "".into(),
+            time: time_interval_provider,
+            tile: grid_tile_provider,
+            base_path: "../modis_ndvi".into(),
+        };
+
         let gdal_source = GdalSource {
-            time_interval_provider,
-            grid_tile_provider,
+            dataset_information,
             gdal_params,
         };
 
@@ -367,9 +376,7 @@ mod tests {
         let workflow = Workflow {
             operator: Operator::GdalSource {
                 params: GdalSourceParameters {
-                    base_path: "../operators/test-data/raster/modis_ndvi".into(),
-                    file_name_with_time_placeholder: "MOD13A2_M_NDVI_2014-01-01.TIFF".into(),
-                    time_format: "".into(),
+                    dataset_id: "test".to_owned(),
                     channel: None,
                 },
                 sources: NoSources {},

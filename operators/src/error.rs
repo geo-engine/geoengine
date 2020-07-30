@@ -22,6 +22,14 @@ pub enum Error {
         #[snafu(source(from(gdal::errors::Error, failure::Fail::compat)))]
         source: failure::Compat<gdal::errors::Error>,
     },
+    #[snafu(display("IOError: {}", source))]
+    IO {
+        source: std::io::Error,
+    },
+    #[snafu(display("SerdeJsonError: {}", source))]
+    SerdeJsonError {
+        source: serde_json::Error,
+    },
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {
@@ -36,6 +44,20 @@ impl From<gdal::errors::Error> for Error {
     fn from(gdal_error: gdal::errors::Error) -> Self {
         Self::Gdal {
             source: gdal_error.compat(),
+        }
+    }
+}
+
+impl From<std::io::Error> for Error {
+    fn from(io_error: std::io::Error) -> Self {
+        Self::IO { source: io_error }
+    }
+}
+
+impl From<serde_json::Error> for Error {
+    fn from(serde_json_error: serde_json::Error) -> Self {
+        Self::SerdeJsonError {
+            source: serde_json_error,
         }
     }
 }

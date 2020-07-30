@@ -8,7 +8,7 @@ use crate::mock::processing::delay::MockDelayImpl;
 use crate::mock::processing::raster_points::MockRasterPointsImpl;
 use crate::mock::source::mock_point_source::MockPointSourceImpl;
 use crate::mock::source::mock_raster_source::MockRasterSourceImpl;
-use crate::source::gdal_source::RasterTile2D;
+use crate::source::gdal_source::{JsonDatasetInformationProvider, RasterTile2D};
 use crate::source::GdalSource;
 use crate::util::Result;
 use crate::Operator;
@@ -96,7 +96,11 @@ pub fn processor(operator: &Operator) -> Result<QueryProcessorType> {
             }))
         }
         Operator::GdalSource { params, sources: _ } => {
-            QueryProcessorType::RasterProcessor(Box::new(GdalSource::from_params(params.clone())))
+            QueryProcessorType::RasterProcessor(Box::new(GdalSource::<
+                JsonDatasetInformationProvider,
+            >::from_params(
+                params.clone()
+            )?))
         }
         // Operator::CsvSource { params, .. } => {
         //     QueryProcessorType::PointProcessor(Box::new(CsvSourceProcessor { params: params.clone() }))

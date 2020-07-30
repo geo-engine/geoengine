@@ -2,7 +2,10 @@ use crate::{engine::QueryProcessor, util::Result};
 
 use gdal::raster::dataset::Dataset as GdalDataset;
 use gdal::raster::rasterband::RasterBand as GdalRasterBand;
-use std::path::PathBuf;
+use std::{
+    io::{BufReader, BufWriter, Read},
+    path::PathBuf,
+};
 //use gdal::metadata::Metadata; // TODO: handle metadata
 
 use serde::{Deserialize, Serialize};
@@ -25,10 +28,8 @@ use geoengine_datatypes::raster::{Dim, GeoTransform, GridDimension, Ix, Raster2D
 ///     {
 ///         "type": "gdal_source",
 ///         "params": {
-///                     "base_path": "base_path",
-///                     "file_name_with_time_placeholder": "file_name_with_time_placeholder",
-///                     "time_format": "file_name",
-///                     "channel": 3
+///                     "dataset_id": "test",
+///                     "channel": 1
 ///         }
 ///     }"#;
 ///
@@ -36,32 +37,115 @@ use geoengine_datatypes::raster::{Dim, GeoTransform, GridDimension, Ix, Raster2D
 ///
 /// assert_eq!(operator, Operator::GdalSource {
 ///     params: GdalSourceParameters {
-///                     base_path: "base_path".into(),
-///                     file_name_with_time_placeholder: "file_name_with_time_placeholder".into(),
-///                     time_format: "file_name".into(),
-///                     channel: Some(3),
+///         dataset_id: "test".to_owned(),
+///         channel: Some(1),
 ///     },
 ///     sources: Default::default(),
 /// });
 /// ```
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub struct GdalSourceParameters {
-    pub base_path: PathBuf,
-    pub file_name_with_time_placeholder: String,
-    pub time_format: String,
+    pub dataset_id: String,
     pub channel: Option<u32>,
     // TODO: add some kind of tick interval
 }
 
+pub trait GdalDatasetInformation {
+    type CreatedType: Sized;
+    fn with_dataset_id(id: String) -> Result<Self::CreatedType>;
+    fn grid_tile_provider(&self) -> &TileGridProvider;
+    fn time_interval_provider(&self) -> &TimeIntervalProvider;
+    fn file_name_with_time_placeholder(&self) -> &str;
+    fn time_format(&self) -> &str;
+    fn dataset_path(&self) -> PathBuf;
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct JsonDatasetInformationProvider {
+    pub time: TimeIntervalProvider,
+    pub tile: TileGridProvider,
+    pub file_name_with_time_placeholder: String,
+    pub time_format: String,
+    pub base_path: String,
+}
+
+impl JsonDatasetInformationProvider {
+    const ROOT_PATH: &'static str = "../operators/test-data/raster";
+    const DEFINTION_SUBPATH: &'static str = "./dataset_defs/";
+
+    // TODO: provide the base path from config?
+    pub fn root_path() -> &'static str {
+        Self::ROOT_PATH
+    }
+
+    pub fn write_to_file(&self, id: &str) -> Result<()> {
+        let mut dataset_information_path: PathBuf =
+            [Self::root_path(), Self::DEFINTION_SUBPATH, id]
+                .iter()
+                .collect();
+        dataset_information_path.set_extension("json");
+
+        let file = std::fs::File::create(dataset_information_path)?;
+        let buffered_writer = BufWriter::new(file);
+        Ok(serde_json::to_writer(buffered_writer, self)?)
+    }
+}
+
+impl GdalDatasetInformation for JsonDatasetInformationProvider {
+    type CreatedType = Self;
+    fn with_dataset_id(id: String) -> Result<Self> {
+        let mut dataset_information_path: PathBuf =
+            [Self::root_path(), Self::DEFINTION_SUBPATH, &id]
+                .iter()
+                .collect();
+        dataset_information_path.set_extension("json");
+        let file = std::fs::File::open(dataset_information_path)?;
+        let mut buffered_reader = BufReader::new(file);
+        let mut contents = String::new();
+        buffered_reader.read_to_string(&mut contents)?;
+        Ok(serde_json::from_str::<Self>(&contents)?)
+    }
+    fn grid_tile_provider(&self) -> &TileGridProvider {
+        &self.tile
+    }
+    fn time_interval_provider(&self) -> &TimeIntervalProvider {
+        &self.time
+    }
+    fn file_name_with_time_placeholder(&self) -> &str {
+        &self.file_name_with_time_placeholder
+    }
+    fn time_format(&self) -> &str {
+        &self.time_format
+    }
+    fn dataset_path(&self) -> PathBuf {
+        let path: PathBuf = [Self::ROOT_PATH, Self::DEFINTION_SUBPATH, &self.base_path]
+            .iter()
+            .collect();
+        path
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TimeIntervalProvider {
+    pub time_intervals: Vec<TimeInterval>,
+}
+
+impl TimeIntervalProvider {
+    pub fn time_intervals(&self) -> &[TimeInterval] {
+        &self.time_intervals
+    }
+}
+
 /// A provider of tile (size) information for a raster/grid
-pub struct GdalSourceTileGridProvider {
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+pub struct TileGridProvider {
     pub global_pixel_size: Dim<[Ix; 2]>,
     pub tile_pixel_size: Dim<[Ix; 2]>,
     // pub grid_tiles : Vec<Dim<[Ix; 2]>>,
     pub dataset_geo_transform: GeoTransform,
 }
 
-impl GdalSourceTileGridProvider {
+impl TileGridProvider {
     /// generates a vec with `TileInformation` for each tile
     fn tile_informations(&self) -> Vec<TileInformation> {
         let &[.., y_pixels_global, x_pixels_global] = self.global_pixel_size.dimension_size();
@@ -164,43 +248,26 @@ impl SpatialBounded for TileInformation {
     }
 }
 
-pub struct GdalSource {
-    pub time_interval_provider: Vec<TimeInterval>,
-    pub grid_tile_provider: GdalSourceTileGridProvider,
+pub struct GdalSource<P> {
+    pub dataset_information: P,
     pub gdal_params: GdalSourceParameters,
 }
 
-impl GdalSource {
+impl<P> GdalSource<P>
+where
+    P: GdalDatasetInformation<CreatedType = P> + Sync + Send + Clone + 'static,
+{
     ///
     /// Generates a new `GdalSource` from the provided parameters
     /// TODO: move the time interval and grid tile information generation somewhere else...
     ///
-    pub fn from_params(params: GdalSourceParameters) -> Self {
-        // TODO load time and tile info from somewhere
-        let global_size_in_pixels = (1800, 3600);
-        let tile_size_in_pixels = (600, 600);
-        let dataset_upper_right_coord = (-180.0, 90.0).into();
-        let dataset_x_pixel_size = 0.1;
-        let dataset_y_pixel_size = -0.1;
-        let dataset_geo_transform = GeoTransform::new(
-            dataset_upper_right_coord,
-            dataset_x_pixel_size,
-            dataset_y_pixel_size,
-        );
+    pub fn from_params(params: GdalSourceParameters) -> Result<Self> {
+        let dataset_information = P::with_dataset_id(params.dataset_id.clone())?;
 
-        let grid_tile_provider = GdalSourceTileGridProvider {
-            global_pixel_size: global_size_in_pixels.into(),
-            tile_pixel_size: tile_size_in_pixels.into(),
-            dataset_geo_transform,
-        };
-
-        let time_interval_provider = vec![TimeInterval::default()];
-
-        GdalSource {
-            time_interval_provider,
-            grid_tile_provider,
+        Ok(GdalSource {
+            dataset_information,
             gdal_params: params,
-        }
+        })
     }
 
     ///
@@ -210,12 +277,18 @@ impl GdalSource {
         &self,
         bbox: Option<BoundingBox2D>,
     ) -> impl Iterator<Item = (TimeInterval, TileInformation)> + '_ {
-        let time_interval_iterator = self.time_interval_provider.clone().into_iter();
+        let time_interval_iterator = self
+            .dataset_information
+            .time_interval_provider()
+            .time_intervals()
+            .clone()
+            .into_iter();
         time_interval_iterator.flat_map(move |time| {
-            self.grid_tile_provider
+            self.dataset_information
+                .grid_tile_provider()
                 .tile_informations()
                 .into_iter()
-                .map(move |tile| (time, tile))
+                .map(move |tile| (*time, tile))
                 .filter(move |(_, tile)| {
                     if let Some(filter_bbox) = bbox {
                         filter_bbox.intersects_bbox(&tile.spatial_bounds())
@@ -228,11 +301,17 @@ impl GdalSource {
 
     pub async fn load_tile_data_async(
         gdal_params: GdalSourceParameters,
+        gdal_dataset_information: P,
         time_interval: TimeInterval,
         tile_information: TileInformation,
     ) -> Result<RasterTile2D> {
         tokio::task::spawn_blocking(move || {
-            GdalSource::load_tile_data_impl(&gdal_params, time_interval, tile_information)
+            GdalSource::<P>::load_tile_data_impl(
+                &gdal_params,
+                &gdal_dataset_information,
+                time_interval,
+                tile_information,
+            )
         })
         .await
         .unwrap() // TODO: handle TaskJoinError
@@ -243,7 +322,12 @@ impl GdalSource {
         time_interval: TimeInterval,
         tile_information: TileInformation,
     ) -> Result<RasterTile2D> {
-        GdalSource::load_tile_data_impl(&self.gdal_params, time_interval, tile_information)
+        GdalSource::<P>::load_tile_data_impl(
+            &self.gdal_params,
+            &self.dataset_information,
+            time_interval,
+            tile_information,
+        )
     }
 
     ///
@@ -251,28 +335,32 @@ impl GdalSource {
     ///
     fn load_tile_data_impl(
         gdal_params: &GdalSourceParameters,
+        gdal_dataset_information: &P,
         time_interval: TimeInterval,
         tile_information: TileInformation,
     ) -> Result<RasterTile2D> {
         // format the time interval
-        let time_string = time_interval
-            .start()
-            .as_naive_date_time()
-            .map(|t| t.format(&gdal_params.time_format).to_string());
+        let time_string = time_interval.start().as_naive_date_time().map(|t| {
+            t.format(&gdal_dataset_information.time_format())
+                .to_string()
+        });
 
         // TODO: replace -> parser?
-        let file_name = gdal_params.file_name_with_time_placeholder.replace(
-            "%%%_START_TIME_%%%",
-            &time_string.unwrap_or_else(|| "".into()),
-        );
+        let file_name = gdal_dataset_information
+            .file_name_with_time_placeholder()
+            .replace(
+                "%%%_START_TIME_%%%",
+                &time_string.unwrap_or_else(|| "".into()),
+            );
 
-        let path = &gdal_params.base_path.join(&file_name);
+        let path = gdal_dataset_information.dataset_path(); // TODO: add the path of the definition file for relative paths
+        let data_file = path.join(file_name);
 
         // open the dataset at path (or 'throw' an error)
-        let dataset = GdalDataset::open(&path)?; // TODO: investigate if we need a dataset cache
-                                                 // get the geo transform (pixel size ...) of the dataset (or 'throw' an error)
-                                                 // let gdal_geo_transform = dataset.geo_transform()?;
-                                                 // let geo_transform = GeoTransform::from(gdal_geo_transform); //TODO: clip the geotransform information / is this required at all?
+        let dataset = GdalDataset::open(&data_file)?; // TODO: investigate if we need a dataset cache
+                                                      // get the geo transform (pixel size ...) of the dataset (or 'throw' an error)
+                                                      // let gdal_geo_transform = dataset.geo_transform()?;
+                                                      // let geo_transform = GeoTransform::from(gdal_geo_transform); //TODO: clip the geotransform information / is this required at all?
 
         // get the requested raster band of the dataset …
         let rasterband_index = gdal_params.channel.unwrap_or(1) as isize; // TODO: investigate if this should be isize in gdal
@@ -313,15 +401,25 @@ impl GdalSource {
     ///
     pub fn tile_stream(&self, bbox: Option<BoundingBox2D>) -> BoxStream<Result<RasterTile2D>> {
         stream::iter(self.time_tile_iter(bbox))
-            .map(move |(time, tile)| (self.gdal_params.clone(), time, tile))
-            .then(|(gdal_params, time, tile)| {
-                GdalSource::load_tile_data_async(gdal_params, time, tile)
+            .map(move |(time, tile)| {
+                (
+                    self.gdal_params.clone(),
+                    self.dataset_information.clone(),
+                    time,
+                    tile,
+                )
+            })
+            .then(|(gdal_params, dataset_information, time, tile)| {
+                GdalSource::load_tile_data_async(gdal_params, dataset_information, time, tile)
             })
             .boxed()
     }
 }
 
-impl QueryProcessor<RasterTile2D> for GdalSource {
+impl<P> QueryProcessor<RasterTile2D> for GdalSource<P>
+where
+    P: GdalDatasetInformation<CreatedType = P> + Send + Sync + 'static + Clone,
+{
     fn query(
         &self,
         query: crate::engine::QueryRectangle,
@@ -353,7 +451,7 @@ mod tests {
             dataset_y_pixel_size,
         );
 
-        let grid_tile_provider = GdalSourceTileGridProvider {
+        let grid_tile_provider = TileGridProvider {
             global_pixel_size: global_size_in_pixels.into(),
             tile_pixel_size: tile_size_in_pixels.into(),
             dataset_geo_transform,
@@ -458,27 +556,34 @@ mod tests {
             dataset_y_pixel_size,
         );
 
-        let grid_tile_provider = GdalSourceTileGridProvider {
+        let grid_tile_provider = TileGridProvider {
             global_pixel_size: global_size_in_pixels.into(),
             tile_pixel_size: tile_size_in_pixels.into(),
             dataset_geo_transform,
         };
 
-        let time_interval_provider = vec![
-            TimeInterval::new_unchecked(1, 2),
-            TimeInterval::new_unchecked(2, 3),
-        ];
+        let time_interval_provider = TimeIntervalProvider {
+            time_intervals: vec![
+                TimeInterval::new_unchecked(1, 2),
+                TimeInterval::new_unchecked(2, 3),
+            ],
+        };
 
         let gdal_params = GdalSourceParameters {
-            base_path: "".into(),
-            file_name_with_time_placeholder: "".into(),
-            time_format: "".into(),
+            dataset_id: "test".to_owned(),
             channel: None,
         };
 
+        let dataset_information = JsonDatasetInformationProvider {
+            file_name_with_time_placeholder: "MOD13A2_M_NDVI_2014-01-01.TIFF".into(),
+            time_format: "".into(),
+            time: time_interval_provider,
+            tile: grid_tile_provider,
+            base_path: "../modis_ndvi".into(),
+        };
+
         let gdal_source = GdalSource {
-            time_interval_provider,
-            grid_tile_provider,
+            dataset_information,
             gdal_params,
         };
 
@@ -597,24 +702,30 @@ mod tests {
             dataset_y_pixel_size,
         );
 
-        let grid_tile_provider = GdalSourceTileGridProvider {
+        let grid_tile_provider = TileGridProvider {
             global_pixel_size: global_size_in_pixels.into(),
             tile_pixel_size: tile_size_in_pixels.into(),
             dataset_geo_transform,
         };
-
-        let time_interval_provider = vec![TimeInterval::new_unchecked(0, 1)];
+        let time_interval_provider = TimeIntervalProvider {
+            time_intervals: vec![TimeInterval::new_unchecked(0, 1)],
+        };
 
         let gdal_params = GdalSourceParameters {
-            base_path: "../operators/test-data/raster/modis_ndvi".into(),
-            file_name_with_time_placeholder: "MOD13A2_M_NDVI_2014-01-01.TIFF".into(),
-            time_format: "".into(),
+            dataset_id: "test".to_owned(),
             channel: None,
         };
 
+        let dataset_information = JsonDatasetInformationProvider {
+            file_name_with_time_placeholder: "MOD13A2_M_NDVI_2014-01-01.TIFF".into(),
+            time_format: "".into(),
+            time: time_interval_provider,
+            tile: grid_tile_provider,
+            base_path: "../modis_ndvi".into(),
+        };
+
         let gdal_source = GdalSource {
-            time_interval_provider,
-            grid_tile_provider,
+            dataset_information,
             gdal_params,
         };
 
@@ -648,24 +759,31 @@ mod tests {
             dataset_y_pixel_size,
         );
 
-        let grid_tile_provider = GdalSourceTileGridProvider {
+        let grid_tile_provider = TileGridProvider {
             global_pixel_size: global_size_in_pixels.into(),
             tile_pixel_size: tile_size_in_pixels.into(),
             dataset_geo_transform,
         };
 
-        let time_interval_provider = vec![TimeInterval::new_unchecked(1, 2)];
+        let time_interval_provider = TimeIntervalProvider {
+            time_intervals: vec![TimeInterval::new_unchecked(1, 2)],
+        };
 
         let gdal_params = GdalSourceParameters {
-            base_path: "../operators/test-data/raster/modis_ndvi".into(),
-            file_name_with_time_placeholder: "MOD13A2_M_NDVI_2014-01-01.TIFF".into(),
-            time_format: "".into(),
+            dataset_id: "test".to_owned(),
             channel: None,
         };
 
+        let dataset_information = JsonDatasetInformationProvider {
+            file_name_with_time_placeholder: "MOD13A2_M_NDVI_2014-01-01.TIFF".into(),
+            time_format: "".into(),
+            time: time_interval_provider,
+            tile: grid_tile_provider,
+            base_path: "../modis_ndvi".into(),
+        };
+
         let gdal_source = GdalSource {
-            time_interval_provider,
-            grid_tile_provider,
+            dataset_information,
             gdal_params,
         };
 
@@ -713,24 +831,31 @@ mod tests {
             dataset_y_pixel_size,
         );
 
-        let grid_tile_provider = GdalSourceTileGridProvider {
+        let grid_tile_provider = TileGridProvider {
             global_pixel_size: global_size_in_pixels.into(),
             tile_pixel_size: tile_size_in_pixels.into(),
             dataset_geo_transform,
         };
 
-        let time_interval_provider = vec![TimeInterval::new_unchecked(1, 2)];
+        let time_interval_provider = TimeIntervalProvider {
+            time_intervals: vec![TimeInterval::new_unchecked(1, 2)],
+        };
 
         let gdal_params = GdalSourceParameters {
-            base_path: "../operators/test-data/raster/modis_ndvi".into(),
-            file_name_with_time_placeholder: "MOD13A2_M_NDVI_2014-01-01.TIFF".into(),
-            time_format: "".into(),
+            dataset_id: "test".to_owned(),
             channel: None,
         };
 
+        let dataset_information = JsonDatasetInformationProvider {
+            file_name_with_time_placeholder: "MOD13A2_M_NDVI_2014-01-01.TIFF".into(),
+            time_format: "".into(),
+            time: time_interval_provider,
+            tile: grid_tile_provider,
+            base_path: "../modis_ndvi".into(),
+        };
+
         let gdal_source = GdalSource {
-            time_interval_provider,
-            grid_tile_provider,
+            dataset_information,
             gdal_params,
         };
 
@@ -778,24 +903,31 @@ mod tests {
             dataset_y_pixel_size,
         );
 
-        let grid_tile_provider = GdalSourceTileGridProvider {
+        let grid_tile_provider = TileGridProvider {
             global_pixel_size: global_size_in_pixels.into(),
             tile_pixel_size: tile_size_in_pixels.into(),
             dataset_geo_transform,
         };
 
-        let time_interval_provider = vec![TimeInterval::new_unchecked(1, 2)];
+        let time_interval_provider = TimeIntervalProvider {
+            time_intervals: vec![TimeInterval::new_unchecked(1, 2)],
+        };
 
         let gdal_params = GdalSourceParameters {
-            base_path: "../operators/test-data/raster/modis_ndvi".into(),
-            file_name_with_time_placeholder: "MOD13A2_M_NDVI_2014-01-01.TIFF".into(),
-            time_format: "".into(),
+            dataset_id: "test".to_owned(),
             channel: None,
         };
 
+        let dataset_information = JsonDatasetInformationProvider {
+            file_name_with_time_placeholder: "MOD13A2_M_NDVI_2014-01-01.TIFF".into(),
+            time_format: "".into(),
+            time: time_interval_provider,
+            tile: grid_tile_provider,
+            base_path: "../modis_ndvi".into(),
+        };
+
         let gdal_source = GdalSource {
-            time_interval_provider,
-            grid_tile_provider,
+            dataset_information,
             gdal_params,
         };
 
@@ -826,6 +958,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_load_tile_data_async() {
+        let global_size_in_pixels = (1800, 3600);
         let tile_size_in_pixels = (600, 600);
         let global_size_in_tiles = (3, 6);
         let dataset_upper_right_coord = (-180.0, 90.0).into();
@@ -836,13 +969,7 @@ mod tests {
             dataset_x_pixel_size,
             dataset_y_pixel_size,
         );
-
-        let gdal_params = GdalSourceParameters {
-            base_path: "../operators/test-data/raster/modis_ndvi".into(),
-            file_name_with_time_placeholder: "MOD13A2_M_NDVI_2014-01-01.TIFF".into(),
-            time_format: "".into(),
-            channel: None,
-        };
+        let time_interval = TimeInterval::new_unchecked(1, 2);
 
         let tile_information = TileInformation::new(
             global_size_in_tiles.into(),
@@ -851,10 +978,37 @@ mod tests {
             tile_size_in_pixels.into(),
             dataset_geo_transform,
         );
-        let time_interval = TimeInterval::new_unchecked(0, 1);
 
-        let x_r =
-            GdalSource::load_tile_data_async(gdal_params, time_interval, tile_information).await;
+        let grid_tile_provider = TileGridProvider {
+            global_pixel_size: global_size_in_pixels.into(),
+            tile_pixel_size: tile_size_in_pixels.into(),
+            dataset_geo_transform,
+        };
+
+        let time_interval_provider = TimeIntervalProvider {
+            time_intervals: vec![time_interval],
+        };
+
+        let gdal_params = GdalSourceParameters {
+            dataset_id: "test".to_owned(),
+            channel: None,
+        };
+
+        let dataset_information = JsonDatasetInformationProvider {
+            file_name_with_time_placeholder: "MOD13A2_M_NDVI_2014-01-01.TIFF".into(),
+            time_format: "".into(),
+            time: time_interval_provider,
+            tile: grid_tile_provider,
+            base_path: "../modis_ndvi".into(),
+        };
+
+        let x_r = GdalSource::load_tile_data_async(
+            gdal_params,
+            dataset_information,
+            time_interval,
+            tile_information,
+        )
+        .await;
         let x = x_r.expect("GDAL Error");
 
         assert_eq!(x.tile, tile_information);

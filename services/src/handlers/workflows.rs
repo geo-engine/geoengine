@@ -72,10 +72,8 @@ mod tests {
                 sources: RasterSources {
                     rasters: vec![Operator::GdalSource {
                         params: GdalSourceParameters {
-                            base_path: "base_path".into(),
-                            file_name_with_time_placeholder: "dataset_name".into(),
-                            time_format: "file_name".into(),
-                            channel: Some(3),
+                            dataset_id: "test".to_owned(),
+                            channel: Some(1),
                         },
                         sources: NoSources {},
                     }],
@@ -112,10 +110,8 @@ mod tests {
                 sources: RasterSources {
                     rasters: vec![Operator::GdalSource {
                         params: GdalSourceParameters {
-                            base_path: "test".into(),
-                            file_name_with_time_placeholder: "test".into(),
-                            time_format: "".into(),
-                            channel: Some(3),
+                            dataset_id: "test".to_owned(),
+                            channel: Some(1),
                         },
                         sources: NoSources {},
                     }],

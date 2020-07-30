@@ -89,9 +89,7 @@ pub struct AllSources {
 ///                 {
 ///                     "type": "gdal_source",
 ///                     "params": {
-///                          "base_path": "base_path",
-///                          "file_name_with_time_placeholder": "file_name_with_time_placeholder",
-///                          "time_format": "file_name",
+///                          "dataset_id": "test",
 ///                          "channel": 1
 ///                     }
 ///                 }
@@ -109,9 +107,7 @@ pub struct AllSources {
 ///     sources: RasterSources {
 ///         rasters: vec![Operator::GdalSource {
 ///             params: GdalSourceParameters {
-///                 base_path: "base_path".into(),
-///                 file_name_with_time_placeholder: "file_name_with_time_placeholder".into(),
-///                 time_format: "file_name".into(),
+///                 dataset_id: "test".to_owned(),
 ///                 channel: Some(1),
 ///             },
 ///             sources: NoSources {},
