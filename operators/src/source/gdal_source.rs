@@ -253,6 +253,12 @@ pub struct GdalSource<P> {
     pub gdal_params: GdalSourceParameters,
 }
 
+impl GdalSource<JsonDatasetInformationProvider> {
+    pub fn from_params_with_json_provider(params: GdalSourceParameters) -> Result<Self> {
+        GdalSource::from_params(params)
+    }
+}
+
 impl<P> GdalSource<P>
 where
     P: GdalDatasetInformation<CreatedType = P> + Sync + Send + Clone + 'static,
@@ -373,26 +379,122 @@ where
         let pixel_origin = (x_pixel_position as isize, y_pixel_position as isize);
         let pixel_size = (x_tile_size, y_tile_size);
 
-        // TODO: create buffer with type of the raster band
-        let buffer = rasterband.read_as::<u8>(
-            pixel_origin, // pixelspace origin
-            pixel_size,   // pixelspace size
-            pixel_size,   /* requested raster size */
-        )?;
-
         // TODO: get the raster metadata!
 
-        let raster_result = Raster2D::new(
-            tile_information.tile_size_in_pixels,
-            buffer.data,
-            None,
-            time_interval,
-            tile_information.geo_transform,
-        )?;
+        // GDT_Byte = 1, GDT_UInt16 = 2, GDT_Int16 = 3, GDT_UInt32 = 4, GDT_Int32 = 5, GDT_Float32 = 6, GDT_Float64 = 7,
+        let raster_result = match rasterband.band_type() {
+            1 => {
+                let buffer = rasterband.read_as::<u8>(
+                    pixel_origin, // pixelspace origin
+                    pixel_size,   // pixelspace size
+                    pixel_size,   /* requested raster size */
+                )?;
+                let raster_result = Raster2D::new(
+                    tile_information.tile_size_in_pixels,
+                    buffer.data,
+                    None,
+                    time_interval,
+                    tile_information.geo_transform,
+                )?;
+                TypedRaster2D::U8(raster_result)
+            }
+            2 => {
+                let buffer = rasterband.read_as::<u16>(
+                    pixel_origin, // pixelspace origin
+                    pixel_size,   // pixelspace size
+                    pixel_size,   /* requested raster size */
+                )?;
+                let raster_result = Raster2D::new(
+                    tile_information.tile_size_in_pixels,
+                    buffer.data,
+                    None,
+                    time_interval,
+                    tile_information.geo_transform,
+                )?;
+                TypedRaster2D::U16(raster_result)
+            }
+            3 => {
+                let buffer = rasterband.read_as::<i16>(
+                    pixel_origin, // pixelspace origin
+                    pixel_size,   // pixelspace size
+                    pixel_size,   /* requested raster size */
+                )?;
+                let raster_result = Raster2D::new(
+                    tile_information.tile_size_in_pixels,
+                    buffer.data,
+                    None,
+                    time_interval,
+                    tile_information.geo_transform,
+                )?;
+                TypedRaster2D::I16(raster_result)
+            }
+            4 => {
+                let buffer = rasterband.read_as::<u32>(
+                    pixel_origin, // pixelspace origin
+                    pixel_size,   // pixelspace size
+                    pixel_size,   /* requested raster size */
+                )?;
+                let raster_result = Raster2D::new(
+                    tile_information.tile_size_in_pixels,
+                    buffer.data,
+                    None,
+                    time_interval,
+                    tile_information.geo_transform,
+                )?;
+                TypedRaster2D::U32(raster_result)
+            }
+            5 => {
+                let buffer = rasterband.read_as::<i32>(
+                    pixel_origin, // pixelspace origin
+                    pixel_size,   // pixelspace size
+                    pixel_size,   /* requested raster size */
+                )?;
+                let raster_result = Raster2D::new(
+                    tile_information.tile_size_in_pixels,
+                    buffer.data,
+                    None,
+                    time_interval,
+                    tile_information.geo_transform,
+                )?;
+                TypedRaster2D::I32(raster_result)
+            }
+            6 => {
+                let buffer = rasterband.read_as::<f32>(
+                    pixel_origin, // pixelspace origin
+                    pixel_size,   // pixelspace size
+                    pixel_size,   /* requested raster size */
+                )?;
+                let raster_result = Raster2D::new(
+                    tile_information.tile_size_in_pixels,
+                    buffer.data,
+                    None,
+                    time_interval,
+                    tile_information.geo_transform,
+                )?;
+                TypedRaster2D::F32(raster_result)
+            }
+            7 => {
+                let buffer = rasterband.read_as::<f64>(
+                    pixel_origin, // pixelspace origin
+                    pixel_size,   // pixelspace size
+                    pixel_size,   /* requested raster size */
+                )?;
+                let raster_result = Raster2D::new(
+                    tile_information.tile_size_in_pixels,
+                    buffer.data,
+                    None,
+                    time_interval,
+                    tile_information.geo_transform,
+                )?;
+                TypedRaster2D::F64(raster_result)
+            }
+
+            _ => panic!(), // TODO: throw unsupported datatype
+        };
         Ok(RasterTile2D::new(
             time_interval,
             tile_information,
-            TypedRaster2D::U8(raster_result), // TODO: create TypedRaster for type of band
+            raster_result,
         ))
     }
 

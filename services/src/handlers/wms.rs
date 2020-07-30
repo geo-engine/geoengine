@@ -238,9 +238,6 @@ mod tests {
 
     use geoengine_datatypes::primitives::{BoundingBox2D, TimeInterval};
     use geoengine_datatypes::raster::{Blit, GeoTransform};
-    use geoengine_operators::source::gdal_source::{
-        JsonDatasetInformationProvider, TileGridProvider, TimeIntervalProvider,
-    };
     use geoengine_operators::source::{GdalSource, GdalSourceParameters};
 
     use crate::workflows::registry::HashMapRegistry;
@@ -250,7 +247,7 @@ mod tests {
     use geoengine_operators::operators::NoSources;
     use geoengine_operators::Operator;
 
-    #[tokio::test]
+    #[tokio::test] 
     async fn test() {
         let workflow_registry = Arc::new(RwLock::new(HashMapRegistry::default()));
 
@@ -282,44 +279,15 @@ mod tests {
 
     #[tokio::test]
     async fn png_from_stream() {
-        let global_size_in_pixels = (1800, 3600);
-        let tile_size_in_pixels = (600, 600);
-        let dataset_upper_right_coord = (-180.0, 90.0).into();
         let dataset_x_pixel_size = 0.1;
         let dataset_y_pixel_size = -0.1;
-        let dataset_geo_transform = GeoTransform::new(
-            dataset_upper_right_coord,
-            dataset_x_pixel_size,
-            dataset_y_pixel_size,
-        );
-
-        let grid_tile_provider = TileGridProvider {
-            global_pixel_size: global_size_in_pixels.into(),
-            tile_pixel_size: tile_size_in_pixels.into(),
-            dataset_geo_transform,
-        };
-
-        let time_interval_provider = TimeIntervalProvider {
-            time_intervals: vec![TimeInterval::new_unchecked(1, 2)],
-        };
 
         let gdal_params = GdalSourceParameters {
             dataset_id: "test".to_owned(),
             channel: None,
         };
 
-        let dataset_information = JsonDatasetInformationProvider {
-            file_name_with_time_placeholder: "MOD13A2_M_NDVI_2014-01-01.TIFF".into(),
-            time_format: "".into(),
-            time: time_interval_provider,
-            tile: grid_tile_provider,
-            base_path: "../modis_ndvi".into(),
-        };
-
-        let gdal_source = GdalSource {
-            dataset_information,
-            gdal_params,
-        };
+        let gdal_source = GdalSource::from_params_with_json_provider(gdal_params).unwrap();
 
         let query_bbox = BoundingBox2D::new((-10., 20.).into(), (50., 80.).into()).unwrap();
 
