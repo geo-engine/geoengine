@@ -4,7 +4,7 @@ use super::query_processor::{
 };
 use geoengine_datatypes::{collections::MultiPointCollection, raster::RasterDataType};
 
-pub trait Operator {
+pub trait Operator: std::fmt::Debug {
     /// get the sources of the Operator. TODO: extra trait?
     fn raster_sources(&self) -> &[Box<dyn RasterOperator>];
     //fn raster_sources(&self) -> &[&dyn MetaRasterOperator];
@@ -31,6 +31,13 @@ pub trait VectorOperator: Operator {
     fn multi_point_processor(
         &self,
     ) -> Box<dyn VectorQueryProcessor<VectorType = MultiPointCollection>>;
+
+    fn boxed(self) -> Box<dyn VectorOperator>
+    where
+        Self: Sized + 'static,
+    {
+        Box::new(self)
+    }
 }
 
 /// The MetaRasterOperator is a trait for MetaOperators creating RasterOperators for processing Raster data
@@ -67,4 +74,11 @@ pub trait RasterOperator: Operator {
 
     /// get the type the Operator creates.
     fn result_type(&self) -> RasterDataType;
+
+    fn boxed(self) -> Box<dyn RasterOperator>
+    where
+        Self: Sized + 'static,
+    {
+        Box::new(self)
+    }
 }

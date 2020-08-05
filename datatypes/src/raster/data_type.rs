@@ -1,4 +1,6 @@
-#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Hash)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Deserialize, Serialize, Copy, Clone)]
 pub enum RasterDataType {
     U8,
     U16,

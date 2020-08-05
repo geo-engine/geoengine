@@ -7,11 +7,12 @@ use crate::{
     error,
     primitives::{BoundingBox2D, SpatialBounded, TemporalBounded, TimeInterval},
 };
+use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::convert::AsRef;
 use std::fmt::Debug;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct BaseRaster<D, T, C> {
     pub grid_dimension: D,
     pub data_container: C,

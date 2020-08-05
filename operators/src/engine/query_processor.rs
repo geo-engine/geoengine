@@ -7,14 +7,11 @@ use geoengine_datatypes::{collections::MultiPointCollection, raster::Raster2D};
 #[derive(Debug, Clone, Copy)]
 pub struct Query;
 
-/// a the most generic Source
 pub trait QueryProcessor {
     type Output;
     fn query(&self, query: QueryRectangle, ctx: QueryContext) -> BoxStream<Result<Self::Output>>;
-    // fn query(&self, query: Query) -> Self::Output;
 }
 
-/// a RasterSource is similar to a Source but it returns Raster<T>
 pub trait RasterQueryProcessor {
     type RasterType;
     fn raster_query(
@@ -22,10 +19,8 @@ pub trait RasterQueryProcessor {
         query: QueryRectangle,
         ctx: QueryContext,
     ) -> BoxStream<Result<Raster2D<Self::RasterType>>>;
-    //fn raster_query(&self, query: Query) -> Raster<Self::RasterType>;
 }
 
-/// A Source is a RasterSource if it returns Rasters...
 impl<S, T> RasterQueryProcessor for S
 where
     S: QueryProcessor<Output = Raster2D<T>>,
@@ -40,7 +35,6 @@ where
     }
 }
 
-/// A VectorSource Returns some kind of Vector data
 pub trait VectorQueryProcessor {
     type VectorType;
     fn vector_query(
@@ -50,7 +44,6 @@ pub trait VectorQueryProcessor {
     ) -> BoxStream<Result<Self::VectorType>>;
 }
 
-/// A Source is a VectorSource if it returns Vector data...
 impl<S, VD> VectorQueryProcessor for S
 where
     S: QueryProcessor<Output = VD>,
@@ -73,7 +66,6 @@ impl<T> QueryProcessor for Box<dyn QueryProcessor<Output = T>> {
     }
 }
 
-// We need trait objects so allow RasterSource objects be a Source.
 impl<T> QueryProcessor for Box<dyn RasterQueryProcessor<RasterType = T>>
 where
     T: 'static,

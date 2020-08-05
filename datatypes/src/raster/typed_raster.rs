@@ -1,6 +1,4 @@
-use super::{
-    BaseRaster, Dim, DynamicRasterDataType, GridDimension, RasterDataType, StaticRasterDataType,
-};
+use super::{BaseRaster, Dim, DynamicRasterDataType, GridDimension, RasterDataType};
 
 pub type TypedRaster2D = TypedRasterNDim<Dim<[usize; 2]>>;
 pub type TypedRaster3D = TypedRasterNDim<Dim<[usize; 3]>>;
