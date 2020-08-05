@@ -186,15 +186,6 @@ where
     }
 }
 
-impl<D, T, C> StaticRasterDataType for BaseRaster<D, T, C>
-where
-    T: StaticRasterDataType,
-{
-    fn raster_data_type() -> RasterDataType {
-        T::raster_data_type()
-    }
-}
-
 impl<D> DynamicRasterDataType for TypedRasterNDim<D>
 where
     D: GridDimension,

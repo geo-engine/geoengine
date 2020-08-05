@@ -1,4 +1,4 @@
-use crate::engine::{QueryContext, QueryProcessor, QueryRectangle};
+use crate::engine_old::{QueryContext, QueryProcessor, QueryRectangle};
 use crate::error::Error;
 use crate::util::Result;
 use futures::stream::BoxStream;
@@ -67,7 +67,7 @@ impl Stream for MockPointSourceResultStream {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::engine;
+    use crate::engine_old;
     use geoengine_datatypes::primitives::BoundingBox2D;
 
     #[tokio::test]
@@ -92,7 +92,7 @@ mod test {
             chunk_byte_size: 10 * 8 * 2,
         };
 
-        engine::QueryProcessor::query(&p, query, ctx)
+        engine_old::QueryProcessor::query(&p, query, ctx)
             .for_each(|x| {
                 println!("{:?}", x);
                 futures::future::ready(())

@@ -5,7 +5,7 @@ use futures::StreamExt;
 
 use geoengine_datatypes::collections::MultiPointCollection;
 
-use crate::engine::{QueryContext, QueryProcessor, QueryRectangle};
+use crate::engine_old::{QueryContext, QueryProcessor, QueryRectangle};
 use crate::util::Result;
 
 pub struct MockDelayImpl {
@@ -38,7 +38,7 @@ impl QueryProcessor<MultiPointCollection> for MockDelayImpl {
 mod test {
     use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, TimeInterval};
 
-    use crate::mock::source::mock_point_source::MockPointSourceImpl;
+    use crate::mock_old::source::mock_point_source::MockPointSourceImpl;
 
     use super::*;
 

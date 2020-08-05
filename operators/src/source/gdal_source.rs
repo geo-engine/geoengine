@@ -1,4 +1,4 @@
-use crate::{engine::QueryProcessor, util::Result};
+use crate::{engine_old::QueryProcessor, util::Result};
 
 use gdal::raster::dataset::Dataset as GdalDataset;
 use gdal::raster::rasterband::RasterBand as GdalRasterBand;
@@ -524,8 +524,8 @@ where
 {
     fn query(
         &self,
-        query: crate::engine::QueryRectangle,
-        _ctx: crate::engine::QueryContext,
+        query: crate::engine_old::QueryRectangle,
+        _ctx: crate::engine_old::QueryContext,
     ) -> BoxStream<Result<RasterTile2D>> {
         self.tile_stream(Some(query.bbox)).boxed() // TODO: handle query, ctx, remove one boxed
     }

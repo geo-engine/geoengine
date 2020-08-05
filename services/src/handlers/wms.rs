@@ -8,7 +8,7 @@ use warp::{http::Response, Filter};
 
 use geoengine_datatypes::operations::image::{Colorizer, ToPng};
 use geoengine_datatypes::raster::{Blit, GeoTransform, Raster2D, TypedRaster2D};
-use geoengine_operators::engine;
+use geoengine_operators::engine_old;
 
 use crate::error;
 use crate::ogc::wms::request::{GetCapabilities, GetLegendGraphic, GetMap, WMSRequest};
@@ -16,7 +16,7 @@ use crate::util::identifiers::Identifier;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 use futures::StreamExt;
-use geoengine_operators::engine::{QueryContext, QueryProcessorType, QueryRectangle};
+use geoengine_operators::engine_old::{QueryContext, QueryProcessorType, QueryRectangle};
 
 type WR<T> = Arc<RwLock<T>>;
 
@@ -118,7 +118,7 @@ async fn get_map<T: WorkflowRegistry>(
         ));
 
         if let Some(workflow) = workflow {
-            let op = engine::processor(&workflow.operator)
+            let op = engine_old::processor(&workflow.operator)
                 .and_then(QueryProcessorType::raster_processor)
                 .context(error::Operator)
                 .map_err(warp::reject::custom)?;
@@ -247,7 +247,7 @@ mod tests {
     use geoengine_operators::operators::NoSources;
     use geoengine_operators::Operator;
 
-    #[tokio::test] 
+    #[tokio::test]
     async fn test() {
         let workflow_registry = Arc::new(RwLock::new(HashMapRegistry::default()));
 

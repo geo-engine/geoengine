@@ -26,68 +26,48 @@ pub enum TypedValue {
 }
 
 // TODO: use a macro?
-pub trait StaticRasterDataType {
-    fn raster_data_type() -> RasterDataType;
+pub trait StaticRasterDataType: Copy + Default + 'static {
+    const TYPE: RasterDataType;
 }
 
 impl StaticRasterDataType for u8 {
-    fn raster_data_type() -> RasterDataType {
-        RasterDataType::U8
-    }
+    const TYPE: RasterDataType = RasterDataType::U8;
 }
 
 impl StaticRasterDataType for u16 {
-    fn raster_data_type() -> RasterDataType {
-        RasterDataType::U16
-    }
+    const TYPE: RasterDataType = RasterDataType::U16;
 }
 
 impl StaticRasterDataType for u32 {
-    fn raster_data_type() -> RasterDataType {
-        RasterDataType::U32
-    }
+    const TYPE: RasterDataType = RasterDataType::U32;
 }
 
 impl StaticRasterDataType for u64 {
-    fn raster_data_type() -> RasterDataType {
-        RasterDataType::U64
-    }
+    const TYPE: RasterDataType = RasterDataType::U64;
 }
 
 impl StaticRasterDataType for i8 {
-    fn raster_data_type() -> RasterDataType {
-        RasterDataType::I8
-    }
+    const TYPE: RasterDataType = RasterDataType::I8;
 }
 
 impl StaticRasterDataType for i16 {
-    fn raster_data_type() -> RasterDataType {
-        RasterDataType::I16
-    }
+    const TYPE: RasterDataType = RasterDataType::I16;
 }
 
 impl StaticRasterDataType for i32 {
-    fn raster_data_type() -> RasterDataType {
-        RasterDataType::I32
-    }
+    const TYPE: RasterDataType = RasterDataType::I32;
 }
 
 impl StaticRasterDataType for i64 {
-    fn raster_data_type() -> RasterDataType {
-        RasterDataType::I64
-    }
+    const TYPE: RasterDataType = RasterDataType::I64;
 }
 
 impl StaticRasterDataType for f32 {
-    fn raster_data_type() -> RasterDataType {
-        RasterDataType::F32
-    }
+    const TYPE: RasterDataType = RasterDataType::F32;
 }
 
 impl StaticRasterDataType for f64 {
-    fn raster_data_type() -> RasterDataType {
-        RasterDataType::F64
-    }
+    const TYPE: RasterDataType = RasterDataType::F64;
 }
 
 pub trait DynamicRasterDataType {
@@ -99,6 +79,6 @@ where
     R: StaticRasterDataType,
 {
     fn raster_data_type(&self) -> RasterDataType {
-        R::raster_data_type()
+        R::TYPE
     }
 }

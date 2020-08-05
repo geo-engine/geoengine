@@ -1,4 +1,4 @@
-use crate::engine::{QueryContext, QueryProcessor, QueryRectangle};
+use crate::engine_old::{QueryContext, QueryProcessor, QueryRectangle};
 use crate::source::gdal_source::{RasterTile2D, TileInformation};
 use crate::util::Result;
 use futures::stream::BoxStream;

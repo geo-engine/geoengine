@@ -4,10 +4,10 @@ use geoengine_datatypes::collections::MultiPointCollection;
 use geoengine_datatypes::primitives::{BoundingBox2D, TimeInterval};
 
 use crate::error::Error;
-use crate::mock::processing::delay::MockDelayImpl;
-use crate::mock::processing::raster_points::MockRasterPointsImpl;
-use crate::mock::source::mock_point_source::MockPointSourceImpl;
-use crate::mock::source::mock_raster_source::MockRasterSourceImpl;
+use crate::mock_old::processing::delay::MockDelayImpl;
+use crate::mock_old::processing::raster_points::MockRasterPointsImpl;
+use crate::mock_old::source::mock_point_source::MockPointSourceImpl;
+use crate::mock_old::source::mock_raster_source::MockRasterSourceImpl;
 use crate::source::gdal_source::{JsonDatasetInformationProvider, RasterTile2D};
 use crate::source::GdalSource;
 use crate::util::Result;

@@ -14,7 +14,7 @@ use geoengine_datatypes::collections::{
 };
 use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, TimeInterval};
 
-use crate::engine::{QueryContext, QueryProcessor, QueryRectangle};
+use crate::engine_old::{QueryContext, QueryProcessor, QueryRectangle};
 use crate::error::{self};
 use crate::util::Result;
 use futures::stream::BoxStream;

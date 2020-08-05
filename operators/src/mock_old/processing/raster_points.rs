@@ -1,4 +1,4 @@
-use crate::engine::{QueryContext, QueryProcessor, QueryRectangle};
+use crate::engine_old::{QueryContext, QueryProcessor, QueryRectangle};
 use crate::source::gdal_source::RasterTile2D;
 use crate::util::Result;
 use futures::stream::BoxStream;
@@ -37,8 +37,8 @@ impl QueryProcessor<MultiPointCollection> for MockRasterPointsImpl {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::mock::source::mock_point_source::MockPointSourceImpl;
-    use crate::mock::source::mock_raster_source::MockRasterSourceImpl;
+    use crate::mock_old::source::mock_point_source::MockPointSourceImpl;
+    use crate::mock_old::source::mock_raster_source::MockRasterSourceImpl;
     use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, TimeInterval};
 
     #[tokio::test]
