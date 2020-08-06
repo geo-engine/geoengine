@@ -19,6 +19,13 @@ pub trait RasterQueryProcessor {
         query: QueryRectangle,
         ctx: QueryContext,
     ) -> BoxStream<Result<Raster2D<Self::RasterType>>>;
+
+    fn boxed(self) -> Box<dyn RasterQueryProcessor<RasterType = Self::RasterType>>
+    where
+        Self: Sized + 'static,
+    {
+        Box::new(self)
+    }
 }
 
 impl<S, T> RasterQueryProcessor for S
@@ -42,6 +49,13 @@ pub trait VectorQueryProcessor {
         query: QueryRectangle,
         ctx: QueryContext,
     ) -> BoxStream<Result<Self::VectorType>>;
+
+    fn boxed(self) -> Box<dyn VectorQueryProcessor<VectorType = Self::VectorType>>
+    where
+        Self: Sized + 'static,
+    {
+        Box::new(self)
+    }
 }
 
 impl<S, VD> VectorQueryProcessor for S

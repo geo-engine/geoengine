@@ -44,38 +44,24 @@ impl Operator for MockRasterSource {
 
 #[typetag::serde]
 impl RasterOperator for MockRasterSource {
-    fn u8_query_processor(&self) -> Box<dyn RasterQueryProcessor<RasterType = u8>> {
-        Box::new(MockRasterSourceProcessor::new(self.data.clone()))
-    }
-    fn u16_query_processor(&self) -> Box<dyn RasterQueryProcessor<RasterType = u16>> {
-        todo!()
-    }
-    fn u32_query_processor(&self) -> Box<dyn RasterQueryProcessor<RasterType = u32>> {
-        todo!()
-    }
-    fn u64_query_processor(&self) -> Box<dyn RasterQueryProcessor<RasterType = u64>> {
-        todo!()
-    }
-    fn i8_query_processor(&self) -> Box<dyn RasterQueryProcessor<RasterType = i8>> {
-        todo!()
-    }
-    fn i16_query_processor(&self) -> Box<dyn RasterQueryProcessor<RasterType = i16>> {
-        todo!()
-    }
-    fn i32_query_processor(&self) -> Box<dyn RasterQueryProcessor<RasterType = i32>> {
-        todo!()
-    }
-    fn i64_query_processor(&self) -> Box<dyn RasterQueryProcessor<RasterType = i64>> {
-        todo!()
-    }
-    fn f32_query_processor(&self) -> Box<dyn RasterQueryProcessor<RasterType = f32>> {
-        todo!()
-    }
-    fn f64_query_processor(&self) -> Box<dyn RasterQueryProcessor<RasterType = f64>> {
-        todo!()
-    }
     fn result_type(&self) -> RasterDataType {
         self.raster_type
+    }
+    fn create_raster_op(&self) -> crate::engine::TypedRasterQueryProcessor {
+        match self.result_type() {
+            RasterDataType::U8 => crate::engine::TypedRasterQueryProcessor::U8(
+                MockRasterSourceProcessor::new(self.data.clone()).boxed(),
+            ),
+            RasterDataType::U16 => unimplemented!(),
+            RasterDataType::U32 => unimplemented!(),
+            RasterDataType::U64 => unimplemented!(),
+            RasterDataType::I8 => unimplemented!(),
+            RasterDataType::I16 => unimplemented!(),
+            RasterDataType::I32 => unimplemented!(),
+            RasterDataType::I64 => unimplemented!(),
+            RasterDataType::F32 => unimplemented!(),
+            RasterDataType::F64 => unimplemented!(),
+        }
     }
 }
 
