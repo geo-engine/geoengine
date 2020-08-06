@@ -1,4 +1,7 @@
-use super::query_processor::{RasterQueryProcessor, TypedRasterQueryProcessor};
+use super::{
+    query_processor::{RasterQueryProcessor, TypedRasterQueryProcessor},
+    VectorQueryProcessor,
+};
 use std::ops::{Add, AddAssign};
 
 pub trait CreateSourceOperator<P> {
@@ -31,6 +34,30 @@ pub trait CreateBoxedBinaryOperatorInplace<P> {
     where
         T1: Add + AddAssign + Copy + 'static, // + One
         T2: Add + AddAssign + Into<T1> + Copy + 'static; // + One
+}
+
+pub trait CreateBoxedBinaryRasterQueryProcessor<P> {
+    type Output;
+    fn create_binary_boxed<T1, T2>(
+        source_a: Box<dyn RasterQueryProcessor<RasterType = T1>>,
+        source_b: Box<dyn RasterQueryProcessor<RasterType = T2>>,
+        params: P,
+    ) -> Self::Output
+    where
+        T1: Copy + 'static,
+        T2: Copy + 'static;
+}
+
+pub trait CreateBoxedBinaryRasterVectorQueryProcessor<P> {
+    type Output;
+    fn create_binary_boxed<T1, T2>(
+        source_a: Box<dyn RasterQueryProcessor<RasterType = T1>>,
+        source_b: Box<dyn VectorQueryProcessor<VectorType = T2>>,
+        params: P,
+    ) -> Self::Output
+    where
+        T1: Copy + 'static,
+        T2: Copy + 'static;
 }
 
 pub fn create_operator_unary_raster_u8<O>(
