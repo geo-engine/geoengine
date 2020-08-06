@@ -6,7 +6,7 @@ use futures::StreamExt;
 use geoengine_datatypes::{
     collections::{FeatureCollection, MultiPointCollection},
     primitives::FeatureData,
-    raster::{GridPixelAccess, Raster2D},
+    raster::{GridPixelAccess, Raster2D, RasterTile2D},
 };
 use serde::{Deserialize, Serialize};
 
@@ -44,9 +44,9 @@ where
                 let collection = collection?;
                 let mut raster_stream = self.raster_source.raster_query(query, ctx);
                 let raster_future = raster_stream.next().await;
-                let raster: Raster2D<T> =
+                let raster_tile: RasterTile2D<T> =
                     raster_future.ok_or(crate::error::Error::QueryProcessor)??;
-                let pixel = raster.pixel_value_at_grid_index(&(0, 0))?;
+                let pixel = raster_tile.data.pixel_value_at_grid_index(&(0, 0))?;
                 let collection = collection.add_column(
                     &self.feature_name,
                     FeatureData::Number(vec![pixel.into(); collection.len()]),
@@ -123,7 +123,7 @@ mod tests {
     use futures::executor::block_on_stream;
     use geoengine_datatypes::{
         primitives::{BoundingBox2D, Coordinate2D, FeatureDataRef, TimeInterval},
-        raster::RasterDataType,
+        raster::{RasterDataType, TileInformation},
     };
 
     #[test]
@@ -140,8 +140,20 @@ mod tests {
         )
         .unwrap();
 
+        let raster_tile = RasterTile2D {
+            time: TimeInterval::default(),
+            tile: TileInformation {
+                geo_transform: Default::default(),
+                global_pixel_position: [0, 0].into(),
+                global_size_in_tiles: [1, 2].into(),
+                global_tile_position: [0, 0].into(),
+                tile_size_in_pixels: [3, 2].into(),
+            },
+            data: raster,
+        };
+
         let mrs = MockRasterSource {
-            data: vec![raster],
+            data: vec![raster_tile],
             raster_type: RasterDataType::U8,
         }
         .boxed();
@@ -176,8 +188,20 @@ mod tests {
         )
         .unwrap();
 
+        let raster_tile = RasterTile2D {
+            time: TimeInterval::default(),
+            tile: TileInformation {
+                geo_transform: Default::default(),
+                global_pixel_position: [0, 0].into(),
+                global_size_in_tiles: [1, 2].into(),
+                global_tile_position: [0, 0].into(),
+                tile_size_in_pixels: [3, 2].into(),
+            },
+            data: raster,
+        };
+
         let mrs = MockRasterSource {
-            data: vec![raster],
+            data: vec![raster_tile],
             raster_type: RasterDataType::U8,
         }
         .boxed();

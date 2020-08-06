@@ -1,10 +1,9 @@
 use crate::engine_old::{QueryContext, QueryProcessor, QueryRectangle};
-use crate::source::gdal_source::{RasterTile2D, TileInformation};
 use crate::util::Result;
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::primitives::TimeInterval;
-use geoengine_datatypes::raster::{Raster2D, TypedRaster2D};
+use geoengine_datatypes::raster::{Raster2D, RasterTile2D, TileInformation, TypedRaster2D};
 
 pub struct MockRasterSourceImpl {
     pub data: Vec<f64>,

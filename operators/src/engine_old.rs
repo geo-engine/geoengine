@@ -8,7 +8,7 @@ use crate::mock_old::processing::delay::MockDelayImpl;
 use crate::mock_old::processing::raster_points::MockRasterPointsImpl;
 use crate::mock_old::source::mock_point_source::MockPointSourceImpl;
 use crate::mock_old::source::mock_raster_source::MockRasterSourceImpl;
-use crate::source::gdal_source::{JsonDatasetInformationProvider, RasterTile2D};
+use crate::source::gdal_source::JsonDatasetInformationProvider;
 use crate::source::GdalSource;
 use crate::util::Result;
 use crate::Operator;

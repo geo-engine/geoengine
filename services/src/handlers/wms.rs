@@ -238,7 +238,7 @@ mod tests {
 
     use geoengine_datatypes::primitives::{BoundingBox2D, TimeInterval};
     use geoengine_datatypes::raster::{Blit, GeoTransform};
-    use geoengine_operators::source::{GdalSource, GdalSourceParameters};
+    use geoengine_operators::source::{GdalSourceParameters, GdalSourceProcessor};
 
     use crate::workflows::registry::HashMapRegistry;
 
@@ -287,7 +287,7 @@ mod tests {
             channel: None,
         };
 
-        let gdal_source = GdalSource::from_params_with_json_provider(gdal_params).unwrap();
+        let gdal_source = GdalSourceProcessor::from_params_with_json_provider(gdal_params).unwrap();
 
         let query_bbox = BoundingBox2D::new((-10., 20.).into(), (50., 80.).into()).unwrap();
 

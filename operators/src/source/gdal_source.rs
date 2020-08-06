@@ -1,9 +1,16 @@
-use crate::{engine_old::QueryProcessor, util::Result};
+use crate::{
+    engine::{
+        Operator, QueryProcessor, RasterOperator, RasterQueryProcessor, TypedRasterQueryProcessor,
+        VectorOperator,
+    },
+    util::Result,
+};
 
 use gdal::raster::dataset::Dataset as GdalDataset;
 use gdal::raster::rasterband::RasterBand as GdalRasterBand;
 use std::{
     io::{BufReader, BufWriter, Read},
+    marker::PhantomData,
     path::PathBuf,
 };
 //use gdal::metadata::Metadata; // TODO: handle metadata
@@ -13,7 +20,10 @@ use serde::{Deserialize, Serialize};
 use futures::stream::{self, BoxStream, StreamExt};
 
 use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, SpatialBounded, TimeInterval};
-use geoengine_datatypes::raster::{Dim, GeoTransform, GridDimension, Ix, Raster2D, TypedRaster2D};
+use geoengine_datatypes::raster::{
+    Dim, GeoTransform, GridDimension, Ix, Raster2D, RasterDataType, RasterTile2D, TileInformation,
+    TypedRaster2D,
+};
 
 /// Parameters for the GDAL Source Operator
 ///
@@ -52,12 +62,15 @@ pub struct GdalSourceParameters {
 
 pub trait GdalDatasetInformation {
     type CreatedType: Sized;
-    fn with_dataset_id(id: String) -> Result<Self::CreatedType>;
+    fn with_dataset_id(id: &str) -> Result<Self::CreatedType>;
     fn grid_tile_provider(&self) -> &TileGridProvider;
     fn time_interval_provider(&self) -> &TimeIntervalProvider;
     fn file_name_with_time_placeholder(&self) -> &str;
     fn time_format(&self) -> &str;
     fn dataset_path(&self) -> PathBuf;
+    fn data_type(&self) -> RasterDataType {
+        RasterDataType::U8
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -93,7 +106,7 @@ impl JsonDatasetInformationProvider {
 
 impl GdalDatasetInformation for JsonDatasetInformationProvider {
     type CreatedType = Self;
-    fn with_dataset_id(id: String) -> Result<Self> {
+    fn with_dataset_id(id: &str) -> Result<Self> {
         let mut dataset_information_path: PathBuf =
             [Self::root_path(), Self::DEFINTION_SUBPATH, &id]
                 .iter()
@@ -117,6 +130,7 @@ impl GdalDatasetInformation for JsonDatasetInformationProvider {
     fn time_format(&self) -> &str {
         &self.time_format
     }
+
     fn dataset_path(&self) -> PathBuf {
         let path: PathBuf = [Self::ROOT_PATH, Self::DEFINTION_SUBPATH, &self.base_path]
             .iter()
@@ -182,97 +196,37 @@ impl TileGridProvider {
     }
 }
 
-/// A `RasterTile2D` is the main type used to iterate over tiles of 2D raster data
-#[derive(Debug)]
-pub struct RasterTile2D {
-    pub time: TimeInterval,
-    pub tile: TileInformation,
-    pub data: TypedRaster2D,
-}
-
-impl RasterTile2D {
-    /// create a new `RasterTile2D`
-    pub fn new(time: TimeInterval, tile: TileInformation, data: TypedRaster2D) -> Self {
-        Self { time, tile, data }
-    }
-}
-
-/// The `TileInformation` is used to represent the spatial position of each tile
-#[derive(PartialEq, Debug, Copy, Clone, Serialize, Deserialize)]
-pub struct TileInformation {
-    global_size_in_tiles: Dim<[Ix; 2]>,
-    global_tile_position: Dim<[Ix; 2]>,
-    global_pixel_position: Dim<[Ix; 2]>,
-    tile_size_in_pixels: Dim<[Ix; 2]>,
-    geo_transform: GeoTransform,
-}
-
-impl TileInformation {
-    pub fn new(
-        global_size_in_tiles: Dim<[Ix; 2]>,
-        global_tile_position: Dim<[Ix; 2]>,
-        global_pixel_position: Dim<[Ix; 2]>,
-        tile_size_in_pixels: Dim<[Ix; 2]>,
-        geo_transform: GeoTransform,
-    ) -> Self {
-        Self {
-            global_size_in_tiles,
-            global_tile_position,
-            global_pixel_position,
-            tile_size_in_pixels,
-            geo_transform,
-        }
-    }
-    pub fn global_size_in_tiles(&self) -> Dim<[Ix; 2]> {
-        self.global_size_in_tiles
-    }
-    pub fn global_tile_position(&self) -> Dim<[Ix; 2]> {
-        self.global_tile_position
-    }
-    pub fn global_pixel_position(&self) -> Dim<[Ix; 2]> {
-        self.global_pixel_position
-    }
-    pub fn tile_size_in_pixels(&self) -> Dim<[Ix; 2]> {
-        self.tile_size_in_pixels
-    }
-}
-
-impl SpatialBounded for TileInformation {
-    fn spatial_bounds(&self) -> BoundingBox2D {
-        let top_left_coord = self.geo_transform.grid_2d_to_coordinate_2d((0, 0));
-        let (.., tile_y_size, tile_x_size) = self.tile_size_in_pixels.as_pattern();
-        let lower_right_coord = self
-            .geo_transform
-            .grid_2d_to_coordinate_2d((tile_y_size, tile_x_size));
-        BoundingBox2D::new_upper_left_lower_right_unchecked(top_left_coord, lower_right_coord)
-    }
-}
-
-pub struct GdalSource<P> {
+pub struct GdalSourceProcessor<P, T> {
     pub dataset_information: P,
     pub gdal_params: GdalSourceParameters,
+    pub phantom_data: PhantomData<T>,
 }
 
-impl GdalSource<JsonDatasetInformationProvider> {
+impl<T> GdalSourceProcessor<JsonDatasetInformationProvider, T>
+where
+    T: gdal::raster::types::GdalType + Sync + std::marker::Copy + Send + 'static,
+{
     pub fn from_params_with_json_provider(params: GdalSourceParameters) -> Result<Self> {
-        GdalSource::from_params(params)
+        GdalSourceProcessor::from_params(params)
     }
 }
 
-impl<P> GdalSource<P>
+impl<P, T> GdalSourceProcessor<P, T>
 where
     P: GdalDatasetInformation<CreatedType = P> + Sync + Send + Clone + 'static,
+    T: gdal::raster::types::GdalType + Sync + std::marker::Copy + Send + 'static,
 {
     ///
     /// Generates a new `GdalSource` from the provided parameters
     /// TODO: move the time interval and grid tile information generation somewhere else...
     ///
     pub fn from_params(params: GdalSourceParameters) -> Result<Self> {
-        let dataset_information = P::with_dataset_id(params.dataset_id.clone())?;
+        let dataset_information = P::with_dataset_id(&params.dataset_id)?;
 
-        Ok(GdalSource {
+        Ok(GdalSourceProcessor {
             dataset_information,
             gdal_params: params,
+            phantom_data: PhantomData,
         })
     }
 
@@ -310,9 +264,9 @@ where
         gdal_dataset_information: P,
         time_interval: TimeInterval,
         tile_information: TileInformation,
-    ) -> Result<RasterTile2D> {
+    ) -> Result<RasterTile2D<T>> {
         tokio::task::spawn_blocking(move || {
-            GdalSource::<P>::load_tile_data_impl(
+            Self::load_tile_data_impl(
                 &gdal_params,
                 &gdal_dataset_information,
                 time_interval,
@@ -327,8 +281,8 @@ where
         &self,
         time_interval: TimeInterval,
         tile_information: TileInformation,
-    ) -> Result<RasterTile2D> {
-        GdalSource::<P>::load_tile_data_impl(
+    ) -> Result<RasterTile2D<T>> {
+        GdalSourceProcessor::<P, T>::load_tile_data_impl(
             &self.gdal_params,
             &self.dataset_information,
             time_interval,
@@ -344,7 +298,7 @@ where
         gdal_dataset_information: &P,
         time_interval: TimeInterval,
         tile_information: TileInformation,
-    ) -> Result<RasterTile2D> {
+    ) -> Result<RasterTile2D<T>> {
         // format the time interval
         let time_string = time_interval.start().as_naive_date_time().map(|t| {
             t.format(&gdal_dataset_information.time_format())
@@ -379,118 +333,19 @@ where
         let pixel_origin = (x_pixel_position as isize, y_pixel_position as isize);
         let pixel_size = (x_tile_size, y_tile_size);
 
-        // TODO: get the raster metadata!
+        let buffer = rasterband.read_as::<T>(
+            pixel_origin, // pixelspace origin
+            pixel_size,   // pixelspace size
+            pixel_size,   /* requested raster size */
+        )?;
+        let raster_result = Raster2D::new(
+            tile_information.tile_size_in_pixels,
+            buffer.data,
+            None,
+            time_interval,
+            tile_information.geo_transform,
+        )?;
 
-        // GDT_Byte = 1, GDT_UInt16 = 2, GDT_Int16 = 3, GDT_UInt32 = 4, GDT_Int32 = 5, GDT_Float32 = 6, GDT_Float64 = 7,
-        let raster_result = match rasterband.band_type() {
-            1 => {
-                let buffer = rasterband.read_as::<u8>(
-                    pixel_origin, // pixelspace origin
-                    pixel_size,   // pixelspace size
-                    pixel_size,   /* requested raster size */
-                )?;
-                let raster_result = Raster2D::new(
-                    tile_information.tile_size_in_pixels,
-                    buffer.data,
-                    None,
-                    time_interval,
-                    tile_information.geo_transform,
-                )?;
-                TypedRaster2D::U8(raster_result)
-            }
-            2 => {
-                let buffer = rasterband.read_as::<u16>(
-                    pixel_origin, // pixelspace origin
-                    pixel_size,   // pixelspace size
-                    pixel_size,   /* requested raster size */
-                )?;
-                let raster_result = Raster2D::new(
-                    tile_information.tile_size_in_pixels,
-                    buffer.data,
-                    None,
-                    time_interval,
-                    tile_information.geo_transform,
-                )?;
-                TypedRaster2D::U16(raster_result)
-            }
-            3 => {
-                let buffer = rasterband.read_as::<i16>(
-                    pixel_origin, // pixelspace origin
-                    pixel_size,   // pixelspace size
-                    pixel_size,   /* requested raster size */
-                )?;
-                let raster_result = Raster2D::new(
-                    tile_information.tile_size_in_pixels,
-                    buffer.data,
-                    None,
-                    time_interval,
-                    tile_information.geo_transform,
-                )?;
-                TypedRaster2D::I16(raster_result)
-            }
-            4 => {
-                let buffer = rasterband.read_as::<u32>(
-                    pixel_origin, // pixelspace origin
-                    pixel_size,   // pixelspace size
-                    pixel_size,   /* requested raster size */
-                )?;
-                let raster_result = Raster2D::new(
-                    tile_information.tile_size_in_pixels,
-                    buffer.data,
-                    None,
-                    time_interval,
-                    tile_information.geo_transform,
-                )?;
-                TypedRaster2D::U32(raster_result)
-            }
-            5 => {
-                let buffer = rasterband.read_as::<i32>(
-                    pixel_origin, // pixelspace origin
-                    pixel_size,   // pixelspace size
-                    pixel_size,   /* requested raster size */
-                )?;
-                let raster_result = Raster2D::new(
-                    tile_information.tile_size_in_pixels,
-                    buffer.data,
-                    None,
-                    time_interval,
-                    tile_information.geo_transform,
-                )?;
-                TypedRaster2D::I32(raster_result)
-            }
-            6 => {
-                let buffer = rasterband.read_as::<f32>(
-                    pixel_origin, // pixelspace origin
-                    pixel_size,   // pixelspace size
-                    pixel_size,   /* requested raster size */
-                )?;
-                let raster_result = Raster2D::new(
-                    tile_information.tile_size_in_pixels,
-                    buffer.data,
-                    None,
-                    time_interval,
-                    tile_information.geo_transform,
-                )?;
-                TypedRaster2D::F32(raster_result)
-            }
-            7 => {
-                let buffer = rasterband.read_as::<f64>(
-                    pixel_origin, // pixelspace origin
-                    pixel_size,   // pixelspace size
-                    pixel_size,   /* requested raster size */
-                )?;
-                let raster_result = Raster2D::new(
-                    tile_information.tile_size_in_pixels,
-                    buffer.data,
-                    None,
-                    time_interval,
-                    tile_information.geo_transform,
-                )?;
-                TypedRaster2D::F64(raster_result)
-            }
-
-            _ => panic!(), // TODO: throw unsupported datatype
-        };
         Ok(RasterTile2D::new(
             time_interval,
             tile_information,
@@ -501,7 +356,7 @@ where
     ///
     /// A stream of `RasterTile2D`
     ///
-    pub fn tile_stream(&self, bbox: Option<BoundingBox2D>) -> BoxStream<Result<RasterTile2D>> {
+    pub fn tile_stream(&self, bbox: Option<BoundingBox2D>) -> BoxStream<Result<RasterTile2D<T>>> {
         stream::iter(self.time_tile_iter(bbox))
             .map(move |(time, tile)| {
                 (
@@ -512,22 +367,72 @@ where
                 )
             })
             .then(|(gdal_params, dataset_information, time, tile)| {
-                GdalSource::load_tile_data_async(gdal_params, dataset_information, time, tile)
+                Self::load_tile_data_async(gdal_params, dataset_information, time, tile)
             })
             .boxed()
     }
 }
 
-impl<P> QueryProcessor<RasterTile2D> for GdalSource<P>
+impl<T, P> QueryProcessor for GdalSourceProcessor<P, T>
 where
     P: GdalDatasetInformation<CreatedType = P> + Send + Sync + 'static + Clone,
+    T: Copy + Sync + gdal::raster::types::GdalType + Send + 'static,
 {
     fn query(
         &self,
-        query: crate::engine_old::QueryRectangle,
-        _ctx: crate::engine_old::QueryContext,
-    ) -> BoxStream<Result<RasterTile2D>> {
+        query: crate::engine::QueryRectangle,
+        _ctx: crate::engine::QueryContext,
+    ) -> BoxStream<Result<RasterTile2D<T>>> {
         self.tile_stream(Some(query.bbox)).boxed() // TODO: handle query, ctx, remove one boxed
+    }
+    type Output = RasterTile2D<T>;
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+pub struct GdalSource {
+    params: GdalSourceParameters,
+}
+
+impl GdalSource {
+    fn create_processor<T>(&self) -> Box<dyn RasterQueryProcessor<RasterType = T>>
+    where
+        T: Copy + Sync + Send + gdal::raster::types::GdalType + 'static,
+    {
+        GdalSourceProcessor::<_, T>::from_params_with_json_provider(self.params.clone())
+            .unwrap()
+            .boxed()
+    }
+}
+
+impl Operator for GdalSource {
+    fn raster_sources(&self) -> &[Box<dyn RasterOperator>] {
+        &[]
+    }
+    fn vector_sources(&self) -> &[Box<dyn VectorOperator>] {
+        &[]
+    }
+}
+
+#[typetag::serde]
+impl RasterOperator for GdalSource {
+    fn create_raster_op(&self) -> TypedRasterQueryProcessor {
+        match self.result_type() {
+            RasterDataType::U8 => TypedRasterQueryProcessor::U8(self.create_processor()),
+            RasterDataType::U16 => TypedRasterQueryProcessor::U16(self.create_processor()),
+            RasterDataType::U32 => TypedRasterQueryProcessor::U32(self.create_processor()),
+            RasterDataType::U64 => unimplemented!(), // TypedRasterQueryProcessor::U64(self.create_processor()),
+            RasterDataType::I8 => unimplemented!(), // TypedRasterQueryProcessor::I8(self.create_processor()),
+            RasterDataType::I16 => TypedRasterQueryProcessor::I16(self.create_processor()),
+            RasterDataType::I32 => TypedRasterQueryProcessor::I32(self.create_processor()),
+            RasterDataType::I64 => unimplemented!(), //TypedRasterQueryProcessor::I64(self.create_processor()),
+            RasterDataType::F32 => TypedRasterQueryProcessor::F32(self.create_processor()),
+            RasterDataType::F64 => TypedRasterQueryProcessor::F64(self.create_processor()),
+        }
+    }
+    fn result_type(&self) -> geoengine_datatypes::raster::RasterDataType {
+        JsonDatasetInformationProvider::with_dataset_id(&self.params.dataset_id)
+            .unwrap()
+            .data_type()
     }
 }
 
@@ -684,9 +589,10 @@ mod tests {
             base_path: "../modis_ndvi".into(),
         };
 
-        let gdal_source = GdalSource {
+        let gdal_source = GdalSourceProcessor::<_, u8> {
             dataset_information,
             gdal_params,
+            phantom_data: PhantomData,
         };
 
         let vres: Vec<_> = gdal_source.time_tile_iter(None).collect();
@@ -826,9 +732,10 @@ mod tests {
             base_path: "../modis_ndvi".into(),
         };
 
-        let gdal_source = GdalSource {
+        let gdal_source = GdalSourceProcessor::<_, u8> {
             dataset_information,
             gdal_params,
+            phantom_data: PhantomData,
         };
 
         let tile_information = TileInformation::new(
@@ -884,12 +791,13 @@ mod tests {
             base_path: "../modis_ndvi".into(),
         };
 
-        let gdal_source = GdalSource {
+        let gdal_source = GdalSourceProcessor {
             dataset_information,
             gdal_params,
+            phantom_data: PhantomData,
         };
 
-        let vres: Vec<Result<RasterTile2D, Error>> = gdal_source
+        let vres: Vec<Result<RasterTile2D<u8>, Error>> = gdal_source
             .time_tile_iter(None)
             .map(|(time_interval, tile_information)| {
                 gdal_source.load_tile_data(time_interval, tile_information)
@@ -900,16 +808,13 @@ mod tests {
             .into_iter()
             .map(|t| {
                 let raster_tile = t.unwrap();
-                if let TypedRaster2D::U8(tile_data) = raster_tile.data {
-                    tile_data
-                        .pixel_value_at_grid_index(&(
-                            tile_size_in_pixels.1 / 2,
-                            tile_size_in_pixels.0 / 2,
-                        ))
-                        .unwrap() // pixel
-                } else {
-                    unreachable!();
-                }
+                raster_tile
+                    .data
+                    .pixel_value_at_grid_index(&(
+                        tile_size_in_pixels.1 / 2,
+                        tile_size_in_pixels.0 / 2,
+                    ))
+                    .unwrap() // pixel
             })
             .collect();
 
@@ -956,14 +861,15 @@ mod tests {
             base_path: "../modis_ndvi".into(),
         };
 
-        let gdal_source = GdalSource {
+        let gdal_source = GdalSourceProcessor {
             dataset_information,
             gdal_params,
+            phantom_data: PhantomData,
         };
 
         let query_bbox = BoundingBox2D::new((-30., 0.).into(), (35., 65.).into()).unwrap();
 
-        let vres: Vec<Result<RasterTile2D, Error>> = gdal_source
+        let vres: Vec<Result<RasterTile2D<u8>, Error>> = gdal_source
             .time_tile_iter(Some(query_bbox))
             .map(|(time_interval, tile_information)| {
                 gdal_source.load_tile_data(time_interval, tile_information)
@@ -974,16 +880,14 @@ mod tests {
             .into_iter()
             .map(|t| {
                 let raster_tile = t.unwrap();
-                if let TypedRaster2D::U8(tile_data) = raster_tile.data {
-                    tile_data
-                        .pixel_value_at_grid_index(&(
-                            tile_size_in_pixels.1 / 2,
-                            tile_size_in_pixels.0 / 2,
-                        ))
-                        .unwrap() // pixel
-                } else {
-                    unreachable!();
-                }
+
+                raster_tile
+                    .data
+                    .pixel_value_at_grid_index(&(
+                        tile_size_in_pixels.1 / 2,
+                        tile_size_in_pixels.0 / 2,
+                    ))
+                    .unwrap() // pixel
             })
             .collect();
 
@@ -1028,9 +932,10 @@ mod tests {
             base_path: "../modis_ndvi".into(),
         };
 
-        let gdal_source = GdalSource {
+        let gdal_source = GdalSourceProcessor::<_, u8> {
             dataset_information,
             gdal_params,
+            phantom_data: PhantomData,
         };
 
         let mut stream_data = block_on_stream(gdal_source.tile_stream(None));
@@ -1041,18 +946,13 @@ mod tests {
 
         for p in ndvi_center_pixel_values {
             let tile = stream_data.next().unwrap().unwrap();
-            if let TypedRaster2D::U8(tile_data) = tile.data {
-                let cp = tile_data
-                    .pixel_value_at_grid_index(&(
-                        tile_size_in_pixels.1 / 2,
-                        tile_size_in_pixels.0 / 2,
-                    ))
-                    .unwrap();
 
-                assert_eq!(p, cp);
-            } else {
-                unreachable!();
-            }
+            let cp = tile
+                .data
+                .pixel_value_at_grid_index(&(tile_size_in_pixels.1 / 2, tile_size_in_pixels.0 / 2))
+                .unwrap();
+
+            assert_eq!(p, cp);
         }
 
         assert!(stream_data.next().is_none());
@@ -1104,7 +1004,7 @@ mod tests {
             base_path: "../modis_ndvi".into(),
         };
 
-        let x_r = GdalSource::load_tile_data_async(
+        let x_r = GdalSourceProcessor::<_, u8>::load_tile_data_async(
             gdal_params,
             dataset_information,
             time_interval,
@@ -1115,13 +1015,10 @@ mod tests {
 
         assert_eq!(x.tile, tile_information);
         assert_eq!(x.time, time_interval);
-        if let TypedRaster2D::U8(tile_data) = x.data {
-            let center_pixel = tile_data
-                .pixel_value_at_grid_index(&(tile_size_in_pixels.1 / 2, tile_size_in_pixels.0 / 2))
-                .unwrap();
-            assert_eq!(center_pixel, 19);
-        } else {
-            unreachable!();
-        }
+        let center_pixel = x
+            .data
+            .pixel_value_at_grid_index(&(tile_size_in_pixels.1 / 2, tile_size_in_pixels.0 / 2))
+            .unwrap();
+        assert_eq!(center_pixel, 19);
     }
 }

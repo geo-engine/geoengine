@@ -2,22 +2,22 @@ use crate::engine::{
     Operator, QueryProcessor, RasterOperator, RasterQueryProcessor, VectorOperator,
 };
 use futures::{stream, stream::StreamExt};
-use geoengine_datatypes::raster::{Raster2D, RasterDataType};
+use geoengine_datatypes::raster::{RasterDataType, RasterTile2D};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone)]
 pub struct MockRasterSourceProcessor<T> {
-    pub data: Vec<Raster2D<T>>,
+    pub data: Vec<RasterTile2D<T>>,
 }
 
 impl<T> MockRasterSourceProcessor<T> {
-    fn new(data: Vec<Raster2D<T>>) -> Self {
+    fn new(data: Vec<RasterTile2D<T>>) -> Self {
         Self { data }
     }
 }
 
 impl<T: std::marker::Sync + Clone> QueryProcessor for MockRasterSourceProcessor<T> {
-    type Output = Raster2D<T>;
+    type Output = RasterTile2D<T>;
     fn query(
         &self,
         _query: crate::engine::QueryRectangle,
@@ -29,7 +29,7 @@ impl<T: std::marker::Sync + Clone> QueryProcessor for MockRasterSourceProcessor<
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct MockRasterSource {
-    pub data: Vec<Raster2D<u8>>,
+    pub data: Vec<RasterTile2D<u8>>,
     pub raster_type: RasterDataType,
 }
 
@@ -68,6 +68,10 @@ impl RasterOperator for MockRasterSource {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use geoengine_datatypes::{
+        primitives::TimeInterval,
+        raster::{Raster2D, TileInformation},
+    };
 
     #[test]
     fn serde() {
@@ -80,8 +84,20 @@ mod tests {
         )
         .unwrap();
 
+        let raster_tile = RasterTile2D {
+            time: TimeInterval::default(),
+            tile: TileInformation {
+                geo_transform: Default::default(),
+                global_pixel_position: [0, 0].into(),
+                global_size_in_tiles: [1, 2].into(),
+                global_tile_position: [0, 0].into(),
+                tile_size_in_pixels: [3, 2].into(),
+            },
+            data: raster,
+        };
+
         let mrs = MockRasterSource {
-            data: vec![raster],
+            data: vec![raster_tile],
             raster_type: RasterDataType::U8,
         };
 

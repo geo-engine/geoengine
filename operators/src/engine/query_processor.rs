@@ -1,7 +1,7 @@
 use super::query::{QueryContext, QueryRectangle};
 use crate::util::Result;
 use futures::stream::BoxStream;
-use geoengine_datatypes::{collections::MultiPointCollection, raster::Raster2D};
+use geoengine_datatypes::{collections::MultiPointCollection, raster::RasterTile2D};
 
 /// The Query...
 #[derive(Debug, Clone, Copy)]
@@ -18,7 +18,7 @@ pub trait RasterQueryProcessor: Sync {
         &self,
         query: QueryRectangle,
         ctx: QueryContext,
-    ) -> BoxStream<Result<Raster2D<Self::RasterType>>>;
+    ) -> BoxStream<Result<RasterTile2D<Self::RasterType>>>;
 
     fn boxed(self) -> Box<dyn RasterQueryProcessor<RasterType = Self::RasterType>>
     where
@@ -30,14 +30,14 @@ pub trait RasterQueryProcessor: Sync {
 
 impl<S, T> RasterQueryProcessor for S
 where
-    S: QueryProcessor<Output = Raster2D<T>> + Sync,
+    S: QueryProcessor<Output = RasterTile2D<T>> + Sync,
 {
     type RasterType = T;
     fn raster_query(
         &self,
         query: QueryRectangle,
         ctx: QueryContext,
-    ) -> BoxStream<Result<Raster2D<Self::RasterType>>> {
+    ) -> BoxStream<Result<RasterTile2D<Self::RasterType>>> {
         self.query(query, ctx)
     }
 }
@@ -84,7 +84,7 @@ impl<T> QueryProcessor for Box<dyn RasterQueryProcessor<RasterType = T>>
 where
     T: 'static,
 {
-    type Output = Raster2D<T>;
+    type Output = RasterTile2D<T>;
     fn query(&self, query: QueryRectangle, ctx: QueryContext) -> BoxStream<Result<Self::Output>> {
         self.as_ref().raster_query(query, ctx)
     }

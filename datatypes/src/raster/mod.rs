@@ -3,6 +3,7 @@ mod data_type;
 mod geo_transform;
 mod grid_dimension;
 mod operations;
+mod raster_tile;
 mod typed_raster;
 pub use self::base_raster::{BaseRaster, Raster2D, Raster3D};
 pub use self::data_type::{
@@ -14,6 +15,7 @@ pub use self::operations::blit::Blit;
 pub use self::typed_raster::{TypedRaster2D, TypedRaster3D};
 use super::primitives::{SpatialBounded, TemporalBounded};
 use crate::util::Result;
+pub use raster_tile::*;
 use std::fmt::Debug;
 
 pub trait GenericRaster: Send + Debug {
