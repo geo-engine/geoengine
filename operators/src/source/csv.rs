@@ -1,8 +1,10 @@
 use std::fs::File;
 use std::path::PathBuf;
 use std::pin::Pin;
+use std::sync::{Arc, Mutex};
 
 use csv::{Position, Reader, StringRecord};
+use futures::stream::BoxStream;
 use futures::task::{Context, Poll};
 use futures::{Stream, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -14,11 +16,12 @@ use geoengine_datatypes::collections::{
 };
 use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, TimeInterval};
 
-// use crate::engine_old::{QueryContext, QueryProcessor, QueryRectangle};
-use crate::error::{self};
+use crate::engine::{
+    Operator, QueryContext, QueryProcessor, QueryRectangle, TypedVectorQueryProcessor,
+    VectorOperator, VectorQueryProcessor,
+};
+use crate::error;
 use crate::util::Result;
-use futures::stream::BoxStream;
-use std::sync::{Arc, Mutex};
 
 /// Parameters for the CSV Source Operator
 ///
@@ -102,7 +105,8 @@ impl ReaderState {
         let old_state = std::mem::replace(self, ReaderState::Error);
 
         if let ReaderState::Untouched(mut csv_reader) = old_state {
-            let header = match CsvSource::setup_read(geometry_specification, &mut csv_reader) {
+            let header = match CsvSourceStream::setup_read(geometry_specification, &mut csv_reader)
+            {
                 Ok(header) => header,
                 Err(error) => return Err(error),
             };
@@ -122,7 +126,7 @@ impl ReaderState {
     }
 }
 
-pub struct CsvSource {
+pub struct CsvSourceStream {
     parameters: CsvSourceParameters,
     bbox: BoundingBox2D,
     chunk_size: usize,
@@ -135,7 +139,33 @@ pub struct CsvSourceStreamState {
     poll_result: Option<Option<Result<MultiPointCollection>>>,
 }
 
-impl CsvSource {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CsvSource {
+    params: CsvSourceParameters,
+}
+
+impl Operator for CsvSource {
+    fn raster_sources(&self) -> &[Box<dyn crate::engine::RasterOperator>] {
+        &[]
+    }
+    fn vector_sources(&self) -> &[Box<dyn crate::engine::VectorOperator>] {
+        &[]
+    }
+}
+
+#[typetag::serde]
+impl VectorOperator for CsvSource {
+    fn vector_query_processor(&self) -> crate::engine::TypedVectorQueryProcessor {
+        TypedVectorQueryProcessor::MultiPoint(
+            CsvSourceProcessor {
+                params: self.params.clone(),
+            }
+            .boxed(),
+        )
+    }
+}
+
+impl CsvSourceStream {
     /// Creates a new `CsvSource`
     ///
     /// # Errors
@@ -239,7 +269,7 @@ impl CsvSource {
     }
 }
 
-impl Stream for CsvSource {
+impl Stream for CsvSourceStream {
     type Item = Result<MultiPointCollection>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -278,7 +308,7 @@ impl Stream for CsvSource {
                     };
 
                     let row = record.with_context(|| error::CsvSourceReader)?;
-                    let parsed_row = CsvSource::parse_row(header, &row)?;
+                    let parsed_row = CsvSourceStream::parse_row(header, &row)?;
 
                     // TODO: filter time
                     if bbox.contains_coordinate(&parsed_row.coordinate) {
@@ -313,19 +343,22 @@ impl Stream for CsvSource {
     }
 }
 
+#[derive(Debug)]
 struct CsvSourceProcessor {
     params: CsvSourceParameters,
 }
 
-impl QueryProcessor<MultiPointCollection> for CsvSourceProcessor {
+impl QueryProcessor for CsvSourceProcessor {
+    type Output = MultiPointCollection;
+
     fn query(
         &self,
         query: QueryRectangle,
         _ctx: QueryContext,
-    ) -> BoxStream<Result<MultiPointCollection>> {
+    ) -> BoxStream<'_, Result<Self::Output>> {
         // TODO: properly propagate error
         // TODO: properly handle chunk_size
-        CsvSource::new(self.params.clone(), query.bbox, 10)
+        CsvSourceStream::new(self.params.clone(), query.bbox, 10)
             .expect("could not create csv source")
             .boxed()
     }
@@ -367,7 +400,7 @@ x,y
         .unwrap();
         fake_file.seek(SeekFrom::Start(0)).unwrap();
 
-        let mut csv_source = CsvSource::new(
+        let mut csv_source = CsvSourceStream::new(
             CsvSourceParameters {
                 file_path: fake_file.path().into(),
                 field_separator: ',',
@@ -388,7 +421,7 @@ x,y
     }
 
     #[tokio::test]
-    async fn errorneous_point_rows() {
+    async fn erroneous_point_rows() {
         let mut fake_file = tempfile::NamedTempFile::new().unwrap();
         write!(
             fake_file,
@@ -402,7 +435,7 @@ CORRUPT
         .unwrap();
         fake_file.seek(SeekFrom::Start(0)).unwrap();
 
-        let mut csv_source = CsvSource::new(
+        let mut csv_source = CsvSourceStream::new(
             CsvSourceParameters {
                 file_path: fake_file.path().into(),
                 field_separator: ',',
@@ -438,7 +471,7 @@ x,z
         .unwrap();
         fake_file.seek(SeekFrom::Start(0)).unwrap();
 
-        let mut csv_source = CsvSource::new(
+        let mut csv_source = CsvSourceStream::new(
             CsvSourceParameters {
                 file_path: fake_file.path().into(),
                 field_separator: ',',
@@ -531,5 +564,55 @@ x,y
             })
             .to_string()
         );
+    }
+
+    #[test]
+    fn operator() {
+        let mut temp_file = tempfile::NamedTempFile::new().unwrap();
+        write!(
+            temp_file,
+            "\
+x;y
+0;1
+2;3
+4;5
+"
+        )
+        .unwrap();
+        temp_file.seek(SeekFrom::Start(0)).unwrap();
+
+        let params = CsvSourceParameters {
+            file_path: temp_file.path().into(),
+            field_separator: ';',
+            geometry: CsvGeometrySpecification::XY {
+                x: "x".into(),
+                y: "y".into(),
+            },
+            time: CsvTimeSpecification::None,
+        };
+
+        let operator = CsvSource { params }.boxed();
+
+        let operator_json = serde_json::to_string(&operator).unwrap();
+
+        assert_eq!(
+            operator_json,
+            serde_json::json!({
+                "type": "CsvSource",
+                "params": {
+                    "file_path": temp_file.path(),
+                    "field_separator": ";",
+                    "geometry": {
+                        "type": "xy",
+                        "x": "x",
+                        "y": "y"
+                    },
+                    "time": "None"
+                }
+            })
+            .to_string()
+        );
+
+        let _: Box<dyn VectorOperator> = serde_json::from_str(&operator_json).unwrap();
     }
 }

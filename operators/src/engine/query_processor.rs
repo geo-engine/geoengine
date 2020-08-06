@@ -1,6 +1,7 @@
 use super::query::{QueryContext, QueryRectangle};
 use crate::util::Result;
 use futures::stream::BoxStream;
+use geoengine_datatypes::collections::{MultiLineStringCollection, MultiPolygonCollection};
 use geoengine_datatypes::{collections::MultiPointCollection, raster::RasterTile2D};
 
 /// The Query...
@@ -172,6 +173,8 @@ impl TypedRasterQueryProcessor {
 
 pub enum TypedVectorQueryProcessor {
     MultiPoint(Box<dyn VectorQueryProcessor<VectorType = MultiPointCollection>>),
+    MultiLineStrings(Box<dyn VectorQueryProcessor<VectorType = MultiLineStringCollection>>),
+    MultiPolygons(Box<dyn VectorQueryProcessor<VectorType = MultiPolygonCollection>>),
 }
 
 /*
