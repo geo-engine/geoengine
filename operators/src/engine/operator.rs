@@ -4,7 +4,6 @@ use geoengine_datatypes::raster::RasterDataType;
 pub trait Operator: std::fmt::Debug {
     /// get the sources of the Operator. TODO: extra trait?
     fn raster_sources(&self) -> &[Box<dyn RasterOperator>];
-    //fn raster_sources(&self) -> &[&dyn MetaRasterOperator];
 
     /// get the sources of the Operator. TODO: extra trait?
     fn vector_sources(&self) -> &[Box<dyn VectorOperator>] {
@@ -15,7 +14,7 @@ pub trait Operator: std::fmt::Debug {
 #[typetag::serde(tag = "type")]
 pub trait VectorOperator: Operator {
     fn result_type(&self) -> () {
-        ()
+        () // TODO: implement
     }
 
     fn vector_query_processor(&self) -> TypedVectorQueryProcessor;
