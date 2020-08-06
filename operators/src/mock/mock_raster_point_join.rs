@@ -6,7 +6,7 @@ use futures::StreamExt;
 use geoengine_datatypes::{
     collections::{FeatureCollection, MultiPointCollection},
     primitives::FeatureData,
-    raster::{GridPixelAccess, Raster2D, RasterTile2D},
+    raster::{GridPixelAccess, RasterTile2D},
 };
 use serde::{Deserialize, Serialize};
 
@@ -123,7 +123,7 @@ mod tests {
     use futures::executor::block_on_stream;
     use geoengine_datatypes::{
         primitives::{BoundingBox2D, Coordinate2D, FeatureDataRef, TimeInterval},
-        raster::{RasterDataType, TileInformation},
+        raster::{Raster2D, RasterDataType, TileInformation},
     };
 
     #[test]

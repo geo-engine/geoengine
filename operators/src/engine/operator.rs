@@ -1,7 +1,8 @@
 use super::query_processor::{TypedRasterQueryProcessor, TypedVectorQueryProcessor};
 use geoengine_datatypes::raster::RasterDataType;
+use serde::{Deserialize, Serialize};
 
-pub trait Operator: std::fmt::Debug {
+pub trait Operator: std::fmt::Debug + Send + Sync {
     /// get the sources of the Operator. TODO: extra trait?
     fn raster_sources(&self) -> &[Box<dyn RasterOperator>];
 
@@ -41,5 +42,23 @@ pub trait RasterOperator: Operator {
         Self: Sized + 'static,
     {
         Box::new(self)
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum TypedOperator {
+    Vector(Box<dyn VectorOperator>),
+    Raster(Box<dyn RasterOperator>),
+}
+
+impl Into<TypedOperator> for Box<dyn VectorOperator> {
+    fn into(self) -> TypedOperator {
+        TypedOperator::Vector(self)
+    }
+}
+
+impl Into<TypedOperator> for Box<dyn RasterOperator> {
+    fn into(self) -> TypedOperator {
+        TypedOperator::Raster(self)
     }
 }

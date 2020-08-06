@@ -13,7 +13,7 @@ pub trait QueryProcessor {
     fn query(&self, query: QueryRectangle, ctx: QueryContext) -> BoxStream<Result<Self::Output>>;
 }
 
-pub trait RasterQueryProcessor: Sync {
+pub trait RasterQueryProcessor: Sync + Send {
     type RasterType;
     fn raster_query(
         &self,
@@ -31,7 +31,7 @@ pub trait RasterQueryProcessor: Sync {
 
 impl<S, T> RasterQueryProcessor for S
 where
-    S: QueryProcessor<Output = RasterTile2D<T>> + Sync,
+    S: QueryProcessor<Output = RasterTile2D<T>> + Sync + Send,
 {
     type RasterType = T;
     fn raster_query(
@@ -43,7 +43,7 @@ where
     }
 }
 
-pub trait VectorQueryProcessor: Sync {
+pub trait VectorQueryProcessor: Sync + Send {
     type VectorType;
     fn vector_query(
         &self,
@@ -61,7 +61,7 @@ pub trait VectorQueryProcessor: Sync {
 
 impl<S, VD> VectorQueryProcessor for S
 where
-    S: QueryProcessor<Output = VD> + Sync,
+    S: QueryProcessor<Output = VD> + Sync + Send,
 {
     type VectorType = VD;
 

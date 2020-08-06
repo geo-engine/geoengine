@@ -22,7 +22,6 @@ use futures::stream::{self, BoxStream, StreamExt};
 use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, SpatialBounded, TimeInterval};
 use geoengine_datatypes::raster::{
     Dim, GeoTransform, GridDimension, Ix, Raster2D, RasterDataType, RasterTile2D, TileInformation,
-    TypedRaster2D,
 };
 
 /// Parameters for the GDAL Source Operator
@@ -390,7 +389,7 @@ where
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct GdalSource {
-    params: GdalSourceParameters,
+    pub params: GdalSourceParameters,
 }
 
 impl GdalSource {
