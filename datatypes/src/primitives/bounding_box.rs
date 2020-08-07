@@ -547,53 +547,53 @@ mod tests {
         let x3_y4 = Coordinate2D::new(3.0, 4.0);
         let x4_y4 = Coordinate2D::new(4.0, 4.0);
 
-        let o = BoundingBox2D::new(x0_y0, x1_y1).unwrap();
-        let a = BoundingBox2D::new(x1_y1, x3_y3).unwrap();
-        let b = BoundingBox2D::new(x2_y1, x4_y3).unwrap();
-        let c = BoundingBox2D::new(x1_y2, x3_y4).unwrap();
-        let d = BoundingBox2D::new(x2_y2, x4_y4).unwrap();
-        let m = BoundingBox2D::new(x2_y2, x3_y3).unwrap();
+        let outer_box_up_left = BoundingBox2D::new(x0_y0, x1_y1).unwrap();
+        let box_up_left = BoundingBox2D::new(x1_y1, x3_y3).unwrap();
+        let box_up_right = BoundingBox2D::new(x2_y1, x4_y3).unwrap();
+        let box_down_left = BoundingBox2D::new(x1_y2, x3_y4).unwrap();
+        let box_down_right = BoundingBox2D::new(x2_y2, x4_y4).unwrap();
+        let box_center = BoundingBox2D::new(x2_y2, x3_y3).unwrap();
 
-        assert!(o.overlap_x(&a));
-        assert!(!o.overlap_x(&b));
-        assert!(o.overlap_x(&c));
-        assert!(!o.overlap_x(&d));
-        assert!(!o.overlap_x(&m));
+        assert!(outer_box_up_left.overlap_x(&box_up_left));
+        assert!(!outer_box_up_left.overlap_x(&box_up_right));
+        assert!(outer_box_up_left.overlap_x(&box_down_left));
+        assert!(!outer_box_up_left.overlap_x(&box_down_right));
+        assert!(!outer_box_up_left.overlap_x(&box_center));
 
-        assert!(!m.overlap_x(&o));
-        assert!(m.overlap_x(&a));
-        assert!(m.overlap_x(&b));
-        assert!(m.overlap_x(&c));
-        assert!(m.overlap_x(&d));
-        assert!(m.overlap_x(&m));
+        assert!(!box_center.overlap_x(&outer_box_up_left));
+        assert!(box_center.overlap_x(&box_up_left));
+        assert!(box_center.overlap_x(&box_up_right));
+        assert!(box_center.overlap_x(&box_down_left));
+        assert!(box_center.overlap_x(&box_down_right));
+        assert!(box_center.overlap_x(&box_center));
 
-        assert!(a.overlap_x(&o));
-        assert!(a.overlap_x(&a));
-        assert!(a.overlap_x(&b));
-        assert!(a.overlap_x(&c));
-        assert!(a.overlap_x(&d));
-        assert!(a.overlap_x(&o));
+        assert!(box_up_left.overlap_x(&outer_box_up_left));
+        assert!(box_up_left.overlap_x(&box_up_left));
+        assert!(box_up_left.overlap_x(&box_up_right));
+        assert!(box_up_left.overlap_x(&box_down_left));
+        assert!(box_up_left.overlap_x(&box_down_right));
+        assert!(box_up_left.overlap_x(&outer_box_up_left));
 
-        assert!(!b.overlap_x(&o));
-        assert!(b.overlap_x(&a));
-        assert!(b.overlap_x(&b));
-        assert!(b.overlap_x(&c));
-        assert!(b.overlap_x(&d));
-        assert!(b.overlap_x(&m));
+        assert!(!box_up_right.overlap_x(&outer_box_up_left));
+        assert!(box_up_right.overlap_x(&box_up_left));
+        assert!(box_up_right.overlap_x(&box_up_right));
+        assert!(box_up_right.overlap_x(&box_down_left));
+        assert!(box_up_right.overlap_x(&box_down_right));
+        assert!(box_up_right.overlap_x(&box_center));
 
-        assert!(c.overlap_x(&o));
-        assert!(c.overlap_x(&a));
-        assert!(c.overlap_x(&b));
-        assert!(c.overlap_x(&c));
-        assert!(c.overlap_x(&d));
-        assert!(c.overlap_x(&m));
+        assert!(box_down_left.overlap_x(&outer_box_up_left));
+        assert!(box_down_left.overlap_x(&box_up_left));
+        assert!(box_down_left.overlap_x(&box_up_right));
+        assert!(box_down_left.overlap_x(&box_down_left));
+        assert!(box_down_left.overlap_x(&box_down_right));
+        assert!(box_down_left.overlap_x(&box_center));
 
-        assert!(!d.overlap_x(&o));
-        assert!(d.overlap_x(&a));
-        assert!(d.overlap_x(&b));
-        assert!(d.overlap_x(&c));
-        assert!(d.overlap_x(&d));
-        assert!(d.overlap_x(&m));
+        assert!(!box_down_right.overlap_x(&outer_box_up_left));
+        assert!(box_down_right.overlap_x(&box_up_left));
+        assert!(box_down_right.overlap_x(&box_up_right));
+        assert!(box_down_right.overlap_x(&box_down_left));
+        assert!(box_down_right.overlap_x(&box_down_right));
+        assert!(box_down_right.overlap_x(&box_center));
     }
 
     #[test]
@@ -616,32 +616,32 @@ mod tests {
         let x3_y4 = Coordinate2D::new(3.0, 4.0);
         let x4_y4 = Coordinate2D::new(4.0, 4.0);
 
-        let o = BoundingBox2D::new(x0_y0, x1_y1).unwrap();
-        let a = BoundingBox2D::new(x1_y1, x3_y3).unwrap();
-        let b = BoundingBox2D::new(x2_y1, x4_y3).unwrap();
-        let c = BoundingBox2D::new(x1_y2, x3_y4).unwrap();
-        let d = BoundingBox2D::new(x2_y2, x4_y4).unwrap();
-        let m = BoundingBox2D::new(x2_y2, x3_y3).unwrap();
+        let outer_box_up_left = BoundingBox2D::new(x0_y0, x1_y1).unwrap();
+        let box_up_left = BoundingBox2D::new(x1_y1, x3_y3).unwrap();
+        let box_up_right = BoundingBox2D::new(x2_y1, x4_y3).unwrap();
+        let box_down_left = BoundingBox2D::new(x1_y2, x3_y4).unwrap();
+        let box_down_right = BoundingBox2D::new(x2_y2, x4_y4).unwrap();
+        let box_center = BoundingBox2D::new(x2_y2, x3_y3).unwrap();
 
-        assert!(o.overlap_y(&a));
-        assert!(o.overlap_y(&b));
-        assert!(!o.overlap_y(&c));
-        assert!(!o.overlap_y(&d));
-        assert!(!o.overlap_y(&m));
+        assert!(outer_box_up_left.overlap_y(&box_up_left));
+        assert!(outer_box_up_left.overlap_y(&box_up_right));
+        assert!(!outer_box_up_left.overlap_y(&box_down_left));
+        assert!(!outer_box_up_left.overlap_y(&box_down_right));
+        assert!(!outer_box_up_left.overlap_y(&box_center));
 
-        assert!(m.overlap_y(&a));
-        assert!(m.overlap_y(&b));
-        assert!(m.overlap_y(&c));
-        assert!(m.overlap_y(&d));
+        assert!(box_center.overlap_y(&box_up_left));
+        assert!(box_center.overlap_y(&box_up_right));
+        assert!(box_center.overlap_y(&box_down_left));
+        assert!(box_center.overlap_y(&box_down_right));
 
-        assert!(a.overlap_y(&b));
-        assert!(a.overlap_y(&c));
-        assert!(a.overlap_y(&d));
+        assert!(box_up_left.overlap_y(&box_up_right));
+        assert!(box_up_left.overlap_y(&box_down_left));
+        assert!(box_up_left.overlap_y(&box_down_right));
 
-        assert!(b.overlap_y(&c));
-        assert!(b.overlap_y(&d));
+        assert!(box_up_right.overlap_y(&box_down_left));
+        assert!(box_up_right.overlap_y(&box_down_right));
 
-        assert!(c.overlap_y(&d));
+        assert!(box_down_left.overlap_y(&box_down_right));
     }
 
     #[test]
@@ -664,32 +664,32 @@ mod tests {
         let x3_y4 = Coordinate2D::new(3.0, 4.0);
         let x4_y4 = Coordinate2D::new(4.0, 4.0);
 
-        let o = BoundingBox2D::new(x0_y0, x1_y1).unwrap();
-        let a = BoundingBox2D::new(x1_y1, x3_y3).unwrap();
-        let b = BoundingBox2D::new(x2_y1, x4_y3).unwrap();
-        let c = BoundingBox2D::new(x1_y2, x3_y4).unwrap();
-        let d = BoundingBox2D::new(x2_y2, x4_y4).unwrap();
-        let m = BoundingBox2D::new(x2_y2, x3_y3).unwrap();
+        let outer_box_up_left = BoundingBox2D::new(x0_y0, x1_y1).unwrap();
+        let box_up_left = BoundingBox2D::new(x1_y1, x3_y3).unwrap();
+        let box_up_right = BoundingBox2D::new(x2_y1, x4_y3).unwrap();
+        let box_down_left = BoundingBox2D::new(x1_y2, x3_y4).unwrap();
+        let box_down_right = BoundingBox2D::new(x2_y2, x4_y4).unwrap();
+        let box_center = BoundingBox2D::new(x2_y2, x3_y3).unwrap();
 
-        assert!(o.overlaps_bbox(&a));
-        assert!(!o.overlaps_bbox(&b));
-        assert!(!o.overlaps_bbox(&c));
-        assert!(!o.overlaps_bbox(&d));
-        assert!(!o.overlaps_bbox(&m));
+        assert!(outer_box_up_left.overlaps_bbox(&box_up_left));
+        assert!(!outer_box_up_left.overlaps_bbox(&box_up_right));
+        assert!(!outer_box_up_left.overlaps_bbox(&box_down_left));
+        assert!(!outer_box_up_left.overlaps_bbox(&box_down_right));
+        assert!(!outer_box_up_left.overlaps_bbox(&box_center));
 
-        assert!(m.overlaps_bbox(&a));
-        assert!(m.overlaps_bbox(&b));
-        assert!(m.overlaps_bbox(&c));
-        assert!(m.overlaps_bbox(&d));
+        assert!(box_center.overlaps_bbox(&box_up_left));
+        assert!(box_center.overlaps_bbox(&box_up_right));
+        assert!(box_center.overlaps_bbox(&box_down_left));
+        assert!(box_center.overlaps_bbox(&box_down_right));
 
-        assert!(a.overlaps_bbox(&b));
-        assert!(a.overlaps_bbox(&c));
-        assert!(a.overlaps_bbox(&d));
+        assert!(box_up_left.overlaps_bbox(&box_up_right));
+        assert!(box_up_left.overlaps_bbox(&box_down_left));
+        assert!(box_up_left.overlaps_bbox(&box_down_right));
 
-        assert!(b.overlaps_bbox(&c));
-        assert!(b.overlaps_bbox(&d));
+        assert!(box_up_right.overlaps_bbox(&box_down_left));
+        assert!(box_up_right.overlaps_bbox(&box_down_right));
 
-        assert!(c.overlaps_bbox(&d));
+        assert!(box_down_left.overlaps_bbox(&box_down_right));
     }
 
     #[test]
@@ -709,25 +709,25 @@ mod tests {
         let x5_y5 = Coordinate2D::new(5.0, 5.0);
         let x6_y6 = Coordinate2D::new(6.0, 6.0);
 
-        let a = BoundingBox2D::new(x0_y0, x1_y1).unwrap();
-        let b = BoundingBox2D::new(x0_y5, x1_y6).unwrap();
-        let c = BoundingBox2D::new(x5_y0, x6_y1).unwrap();
-        let d = BoundingBox2D::new(x5_y5, x6_y6).unwrap();
-        let m = BoundingBox2D::new(x3_y3, x4_y4).unwrap();
+        let box_up_left = BoundingBox2D::new(x0_y0, x1_y1).unwrap();
+        let box_up_right = BoundingBox2D::new(x0_y5, x1_y6).unwrap();
+        let box_down_left = BoundingBox2D::new(x5_y0, x6_y1).unwrap();
+        let box_down_right = BoundingBox2D::new(x5_y5, x6_y6).unwrap();
+        let box_center = BoundingBox2D::new(x3_y3, x4_y4).unwrap();
 
-        assert!(!m.overlaps_bbox(&a));
-        assert!(!m.overlaps_bbox(&b));
-        assert!(!m.overlaps_bbox(&c));
-        assert!(!m.overlaps_bbox(&d));
+        assert!(!box_center.overlaps_bbox(&box_up_left));
+        assert!(!box_center.overlaps_bbox(&box_up_right));
+        assert!(!box_center.overlaps_bbox(&box_down_left));
+        assert!(!box_center.overlaps_bbox(&box_down_right));
 
-        assert!(!a.overlaps_bbox(&b));
-        assert!(!a.overlaps_bbox(&c));
-        assert!(!a.overlaps_bbox(&d));
+        assert!(!box_up_left.overlaps_bbox(&box_up_right));
+        assert!(!box_up_left.overlaps_bbox(&box_down_left));
+        assert!(!box_up_left.overlaps_bbox(&box_down_right));
 
-        assert!(!b.overlaps_bbox(&c));
-        assert!(!b.overlaps_bbox(&d));
+        assert!(!box_down_right.overlaps_bbox(&box_down_left));
+        assert!(!box_down_right.overlaps_bbox(&box_down_right));
 
-        assert!(!c.overlaps_bbox(&d));
+        assert!(!box_down_left.overlaps_bbox(&box_up_right));
     }
 
     #[test]
