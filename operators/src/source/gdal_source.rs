@@ -30,26 +30,24 @@ use geoengine_datatypes::raster::{
 ///
 /// ```rust
 /// use serde_json::{Result, Value};
-/// use geoengine_operators::Operator;
-/// use geoengine_operators::operators::{GdalSourceParameters, NoSources, RasterSources};
+/// use geoengine_operators::source::{GdalSource, GdalSourceParameters};
 ///
 /// let json_string = r#"
 ///     {
-///         "type": "gdal_source",
+///         "type": "GdalSource",
 ///         "params": {
 ///                     "dataset_id": "test",
 ///                     "channel": 1
 ///         }
 ///     }"#;
 ///
-/// let operator: Operator = serde_json::from_str(json_string).unwrap();
+/// let operator: GdalSource = serde_json::from_str(json_string).unwrap();
 ///
-/// assert_eq!(operator, Operator::GdalSource {
+/// assert_eq!(operator, GdalSource {
 ///     params: GdalSourceParameters {
 ///         dataset_id: "test".to_owned(),
 ///         channel: Some(1),
 ///     },
-///     sources: Default::default(),
 /// });
 /// ```
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
@@ -240,8 +238,7 @@ where
             .dataset_information
             .time_interval_provider()
             .time_intervals()
-            .clone()
-            .into_iter();
+            .iter();
         time_interval_iterator.flat_map(move |time| {
             self.dataset_information
                 .grid_tile_provider()
@@ -377,6 +374,7 @@ where
     P: GdalDatasetInformation<CreatedType = P> + Send + Sync + 'static + Clone,
     T: Copy + Sync + gdal::raster::types::GdalType + Send + 'static,
 {
+    type Output = RasterTile2D<T>;
     fn query(
         &self,
         query: crate::engine::QueryRectangle,
@@ -384,7 +382,6 @@ where
     ) -> BoxStream<Result<RasterTile2D<T>>> {
         self.tile_stream(Some(query.bbox)).boxed() // TODO: handle query, ctx, remove one boxed
     }
-    type Output = RasterTile2D<T>;
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -419,11 +416,11 @@ impl RasterOperator for GdalSource {
             RasterDataType::U8 => TypedRasterQueryProcessor::U8(self.create_processor()),
             RasterDataType::U16 => TypedRasterQueryProcessor::U16(self.create_processor()),
             RasterDataType::U32 => TypedRasterQueryProcessor::U32(self.create_processor()),
-            RasterDataType::U64 => unimplemented!(), // TypedRasterQueryProcessor::U64(self.create_processor()),
-            RasterDataType::I8 => unimplemented!(), // TypedRasterQueryProcessor::I8(self.create_processor()),
+            RasterDataType::U64 => unimplemented!("implement U64 type"), // TypedRasterQueryProcessor::U64(self.create_processor()),
+            RasterDataType::I8 => unimplemented!("I8 type is not supported"),
             RasterDataType::I16 => TypedRasterQueryProcessor::I16(self.create_processor()),
             RasterDataType::I32 => TypedRasterQueryProcessor::I32(self.create_processor()),
-            RasterDataType::I64 => unimplemented!(), //TypedRasterQueryProcessor::I64(self.create_processor()),
+            RasterDataType::I64 => unimplemented!("implement I64 type"), // TypedRasterQueryProcessor::I64(self.create_processor()),
             RasterDataType::F32 => TypedRasterQueryProcessor::F32(self.create_processor()),
             RasterDataType::F64 => TypedRasterQueryProcessor::F64(self.create_processor()),
         }

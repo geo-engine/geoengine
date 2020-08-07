@@ -70,6 +70,27 @@ where
             geo_transform,
         })
     }
+
+    /// Converts the data type of the raster by converting it pixel-wise
+    /// TODO: Is is correct to always return a `Vec`?
+    pub fn convert<To>(self) -> BaseRaster<D, To, Vec<To>>
+    where
+        C: AsRef<[T]>,
+        T: Into<To> + Copy, // TODO: find common type for pixel values
+    {
+        BaseRaster::new(
+            self.grid_dimension,
+            self.data_container
+                .as_ref()
+                .iter()
+                .map(|&pixel| pixel.into())
+                .collect(),
+            self.no_data_value.map(Into::into),
+            self.temporal_bounds,
+            self.geo_transform,
+        )
+        .expect("raster type conversion cannot fail")
+    }
 }
 
 impl<D, T, C> TemporalBounded for BaseRaster<D, T, C> {

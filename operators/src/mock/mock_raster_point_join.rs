@@ -3,6 +3,7 @@ use crate::engine::{
     VectorOperator, VectorQueryProcessor,
 };
 use futures::StreamExt;
+use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::{
     collections::{FeatureCollection, MultiPointCollection},
     primitives::FeatureData,
@@ -96,6 +97,10 @@ impl Operator for MockRasterPointJoinOperator {
 
 #[typetag::serde]
 impl VectorOperator for MockRasterPointJoinOperator {
+    fn result_type(&self) -> VectorDataType {
+        VectorDataType::MultiPoint
+    }
+
     fn vector_query_processor(&self) -> crate::engine::TypedVectorQueryProcessor {
         let raster_source = self.raster_sources[0].create_raster_op();
         let point_source = match self.point_sources[0].vector_query_processor() {
@@ -127,6 +132,7 @@ mod tests {
     };
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn serde() {
         let points = vec![Coordinate2D::new(1., 2.); 3];
         let mps = MockPointSource { points }.boxed();
@@ -170,11 +176,83 @@ mod tests {
 
         let serialized = serde_json::to_string(&op).unwrap();
         dbg!(&serialized);
-        let expected = "{\"type\":\"MockRasterPointJoinOperator\",\"raster_sources\":[{\"type\":\"MockRasterSource\",\"data\":[{\"grid_dimension\":{\"dimension_size\":[3,2]},\"data_container\":[1,2,3,4,5,6],\"no_data_value\":null,\"geo_transform\":{\"upper_left_coordinate\":{\"x\":0.0,\"y\":0.0},\"x_pixel_size\":1.0,\"y_pixel_size\":-1.0},\"temporal_bounds\":{\"start\":-9223372036854775808,\"end\":9223372036854775807}}],\"raster_type\":\"U8\"}],\"point_sources\":[{\"type\":\"MockPointSource\",\"points\":[{\"x\":1.0,\"y\":2.0},{\"x\":1.0,\"y\":2.0},{\"x\":1.0,\"y\":2.0}]}],\"params\":{\"feature_name\":\"raster_values\"}}";
+        let expected = serde_json::json!({
+            "type": "MockRasterPointJoinOperator",
+            "raster_sources": [{
+                "type": "MockRasterSource",
+                "data": [{
+                    "time": {
+                        "start": -9_223_372_036_854_775_808_i64,
+                        "end": 9_223_372_036_854_775_807_i64
+                    },
+                    "tile": {
+                        "global_size_in_tiles": {
+                            "dimension_size": [1, 2]
+                        },
+                        "global_tile_position": {
+                            "dimension_size": [0, 0]
+                        },
+                        "global_pixel_position": {
+                            "dimension_size": [0, 0]
+                        },
+                        "tile_size_in_pixels": {
+                            "dimension_size": [3, 2]
+                        },
+                        "geo_transform": {
+                            "upper_left_coordinate": {
+                                "x": 0.0,
+                                "y": 0.0
+                            },
+                            "x_pixel_size": 1.0,
+                            "y_pixel_size": -1.0
+                        }
+                    },
+                    "data": {
+                        "grid_dimension": {
+                            "dimension_size": [3, 2]
+                        },
+                        "data_container": [1, 2, 3, 4, 5, 6],
+                        "no_data_value": null,
+                        "geo_transform": {
+                            "upper_left_coordinate": {
+                                "x": 0.0,
+                                "y": 0.0
+                            },
+                            "x_pixel_size": 1.0,
+                            "y_pixel_size": -1.0
+                        },
+                        "temporal_bounds": {
+                            "start": -9_223_372_036_854_775_808_i64,
+                            "end": 9_223_372_036_854_775_807_i64
+                        }
+                    }
+                }],
+                "raster_type": "U8"
+            }],
+            "point_sources": [{
+                "type": "MockPointSource",
+                "points": [{
+                    "x": 1.0,
+                    "y": 2.0
+                }, {
+                    "x": 1.0,
+                    "y": 2.0
+                }, {
+                    "x": 1.0,
+                    "y": 2.0
+                }]
+            }],
+            "params": {
+                "feature_name": "raster_values"
+            }
+        })
+        .to_string();
         assert_eq!(serialized, expected);
         let _: Box<dyn VectorOperator> = serde_json::from_str(&serialized).unwrap();
     }
+
     #[test]
+    #[allow(clippy::float_cmp)]
     fn execute() {
         let points = vec![Coordinate2D::new(1., 2.); 3];
         let mps = MockPointSource { points }.boxed();

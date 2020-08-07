@@ -18,6 +18,15 @@ impl<D, T> RasterTile<D, T> {
     pub fn new(time: TimeInterval, tile: TileInformation, data: BaseRaster<D, T, Vec<T>>) -> Self {
         Self { time, tile, data }
     }
+
+    /// Converts the data type of the raster tile by converting its inner raster
+    pub fn convert<To>(self) -> RasterTile<D, To>
+    where
+        D: GridDimension,
+        T: Into<To> + Copy, // TODO: find common type for pixel values,
+    {
+        RasterTile::new(self.time, self.tile, self.data.convert())
+    }
 }
 
 /// The `TileInformation` is used to represent the spatial position of each tile

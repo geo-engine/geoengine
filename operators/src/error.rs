@@ -27,7 +27,7 @@ pub enum Error {
         source: std::io::Error,
     },
     #[snafu(display("SerdeJsonError: {}", source))]
-    SerdeJsonError {
+    SerdeJson {
         source: serde_json::Error,
     },
 }
@@ -56,7 +56,7 @@ impl From<std::io::Error> for Error {
 
 impl From<serde_json::Error> for Error {
     fn from(serde_json_error: serde_json::Error) -> Self {
-        Self::SerdeJsonError {
+        Self::SerdeJson {
             source: serde_json_error,
         }
     }

@@ -12,7 +12,7 @@ use snafu::{ensure, OptionExt, ResultExt};
 
 use geoengine_datatypes::collections::{
     BuilderProvider, FeatureCollectionBuilder, FeatureCollectionRowBuilder,
-    GeoFeatureCollectionRowBuilder, MultiPointCollection,
+    GeoFeatureCollectionRowBuilder, MultiPointCollection, VectorDataType,
 };
 use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, TimeInterval};
 
@@ -29,13 +29,12 @@ use crate::util::Result;
 ///
 /// ```rust
 /// use serde_json::{Result, Value};
-/// use geoengine_operators::Operator;
-/// use geoengine_operators::source::CsvSourceParameters;
+/// use geoengine_operators::source::{CsvSourceParameters, CsvSource};
 /// use geoengine_operators::source::csv::{CsvGeometrySpecification, CsvTimeSpecification};
 ///
 /// let json_string = r#"
 ///     {
-///         "type": "csv_source",
+///         "type": "CsvSource",
 ///         "params": {
 ///             "file_path": "/foo/bar.csv",
 ///             "field_separator": ",",
@@ -47,16 +46,15 @@ use crate::util::Result;
 ///         }
 ///     }"#;
 ///
-/// let operator: Operator = serde_json::from_str(json_string).unwrap();
+/// let operator: CsvSource = serde_json::from_str(json_string).unwrap();
 ///
-/// assert_eq!(operator, Operator::CsvSource {
+/// assert_eq!(operator, CsvSource {
 ///     params: CsvSourceParameters {
 ///         file_path: "/foo/bar.csv".into(),
 ///         field_separator: ',',
 ///         geometry: CsvGeometrySpecification::XY { x: "x".into(), y: "y".into() },
 ///         time: CsvTimeSpecification::None,
 ///     },
-///     sources: Default::default(),
 /// });
 /// ```
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
@@ -139,9 +137,9 @@ pub struct CsvSourceStreamState {
     poll_result: Option<Option<Result<MultiPointCollection>>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CsvSource {
-    params: CsvSourceParameters,
+    pub params: CsvSourceParameters,
 }
 
 impl Operator for CsvSource {
@@ -155,6 +153,10 @@ impl Operator for CsvSource {
 
 #[typetag::serde]
 impl VectorOperator for CsvSource {
+    fn result_type(&self) -> VectorDataType {
+        VectorDataType::MultiPoint
+    }
+
     fn vector_query_processor(&self) -> crate::engine::TypedVectorQueryProcessor {
         TypedVectorQueryProcessor::MultiPoint(
             CsvSourceProcessor {

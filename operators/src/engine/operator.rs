@@ -1,4 +1,5 @@
 use super::query_processor::{TypedRasterQueryProcessor, TypedVectorQueryProcessor};
+use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::raster::RasterDataType;
 use serde::{Deserialize, Serialize};
 
@@ -14,9 +15,7 @@ pub trait Operator: std::fmt::Debug + Send + Sync {
 
 #[typetag::serde(tag = "type")]
 pub trait VectorOperator: Operator {
-    fn result_type(&self) -> () {
-        () // TODO: implement
-    }
+    fn result_type(&self) -> VectorDataType;
 
     fn vector_query_processor(&self) -> TypedVectorQueryProcessor;
 

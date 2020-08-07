@@ -4,6 +4,7 @@ use crate::{
     util::Result,
 };
 use futures::stream::{self, BoxStream, StreamExt};
+use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::{
     collections::MultiPointCollection,
     primitives::{Coordinate2D, TimeInterval},
@@ -50,6 +51,10 @@ impl Operator for MockPointSource {
 
 #[typetag::serde]
 impl VectorOperator for MockPointSource {
+    fn result_type(&self) -> VectorDataType {
+        VectorDataType::MultiPoint
+    }
+
     fn vector_query_processor(&self) -> crate::engine::TypedVectorQueryProcessor {
         TypedVectorQueryProcessor::MultiPoint(
             MockPointSourceProcessor {
