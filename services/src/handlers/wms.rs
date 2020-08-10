@@ -6,17 +6,19 @@ use uuid::Uuid;
 use warp::reply::Reply;
 use warp::{http::Response, Filter};
 
-use geoengine_datatypes::operations::image::{Colorizer, ToPng};
-use geoengine_datatypes::raster::{Blit, GeoTransform, Raster2D};
+use geoengine_datatypes::operations::image::{Colorizer, RgbaTransmutable, ToPng};
+use geoengine_datatypes::raster::{Blit, GeoTransform, Pixel, Raster2D};
 
 use crate::error;
+use crate::error::Result;
 use crate::ogc::wms::request::{GetCapabilities, GetLegendGraphic, GetMap, WMSRequest};
 use crate::util::identifiers::Identifier;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 use futures::StreamExt;
-use geoengine_operators::engine::{QueryContext, QueryRectangle, TypedOperator};
-
+use geoengine_operators::engine::{
+    QueryContext, QueryRectangle, RasterQueryProcessor, TypedOperator, TypedRasterQueryProcessor,
+};
 type WR<T> = Arc<RwLock<T>>;
 
 pub fn wms_handler<T: WorkflowRegistry>(
@@ -145,13 +147,66 @@ async fn get_map<T: WorkflowRegistry>(
         chunk_byte_size: 1024,
     };
 
-    let processor_u8 = processor.get_u8().unwrap();
+    let image_bytes = match processor {
+        TypedRasterQueryProcessor::U8(p) => {
+            raster_stream_to_png_bytes(p, query_rect, query_ctx, request).await
+        }
+        TypedRasterQueryProcessor::U16(p) => {
+            raster_stream_to_png_bytes(p, query_rect, query_ctx, request).await
+        }
+        TypedRasterQueryProcessor::U32(p) => {
+            raster_stream_to_png_bytes(p, query_rect, query_ctx, request).await
+        }
+        TypedRasterQueryProcessor::U64(p) => {
+            raster_stream_to_png_bytes(p, query_rect, query_ctx, request).await
+        }
+        TypedRasterQueryProcessor::I8(p) => {
+            raster_stream_to_png_bytes(p, query_rect, query_ctx, request).await
+        }
+        TypedRasterQueryProcessor::I16(p) => {
+            raster_stream_to_png_bytes(p, query_rect, query_ctx, request).await
+        }
+        TypedRasterQueryProcessor::I32(p) => {
+            raster_stream_to_png_bytes(p, query_rect, query_ctx, request).await
+        }
+        TypedRasterQueryProcessor::I64(p) => {
+            raster_stream_to_png_bytes(p, query_rect, query_ctx, request).await
+        }
+        TypedRasterQueryProcessor::F32(p) => {
+            raster_stream_to_png_bytes(p, query_rect, query_ctx, request).await
+        }
+        TypedRasterQueryProcessor::F64(p) => {
+            raster_stream_to_png_bytes(p, query_rect, query_ctx, request).await
+        }
+    }
+    .map_err(warp::reject::custom)?;
 
-    let tile_stream = processor_u8.raster_query(query_rect, query_ctx);
+    // TODO: .context(error::DataType)
+    //             .map_err(warp::reject::custom)?)
+
+    Ok(Box::new(
+        Response::builder()
+            .header("Content-Type", "image/png")
+            .body(image_bytes)
+            .context(error::HTTP)
+            .map_err(warp::reject::custom)?,
+    ))
+}
+
+async fn raster_stream_to_png_bytes<T>(
+    processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
+    query_rect: QueryRectangle,
+    query_ctx: QueryContext,
+    request: &GetMap,
+) -> Result<Vec<u8>>
+where
+    T: Pixel + RgbaTransmutable,
+{
+    let tile_stream = processor.raster_query(query_rect, query_ctx);
 
     // build png
     let dim = [request.height as usize, request.width as usize];
-    let data: Vec<u8> = vec![0; dim[0] * dim[1]]; // TODO: use actual data type
+    let data: Vec<T> = vec![T::zero(); dim[0] * dim[1]];
     let query_geo_transform = GeoTransform::new(
         query_rect.bbox.upper_left(),
         query_rect.bbox.size_x() / f64::from(request.width),
@@ -180,18 +235,8 @@ async fn get_map<T: WorkflowRegistry>(
         .await;
 
     let colorizer = Colorizer::rgba(); // TODO: create colorizer from request
-    let image_bytes = output_raster
-        .to_png(request.width, request.height, &colorizer)
-        .context(error::DataType)
-        .map_err(warp::reject::custom)?;
 
-    Ok(Box::new(
-        Response::builder()
-            .header("Content-Type", "image/png")
-            .body(image_bytes)
-            .context(error::HTTP)
-            .map_err(warp::reject::custom)?,
-    ))
+    Ok(output_raster.to_png(request.width, request.height, &colorizer)?)
 }
 
 fn get_legend_graphic<T: WorkflowRegistry>(

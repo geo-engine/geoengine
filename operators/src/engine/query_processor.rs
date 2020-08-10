@@ -4,6 +4,7 @@ use futures::stream::BoxStream;
 use geoengine_datatypes::collections::{
     DataCollection, MultiLineStringCollection, MultiPolygonCollection,
 };
+use geoengine_datatypes::raster::Pixel;
 use geoengine_datatypes::{collections::MultiPointCollection, raster::RasterTile2D};
 
 /// The Query...
@@ -16,7 +17,8 @@ pub trait QueryProcessor {
 }
 
 pub trait RasterQueryProcessor: Sync + Send {
-    type RasterType;
+    type RasterType: Pixel;
+
     fn raster_query(
         &self,
         query: QueryRectangle,
@@ -34,6 +36,7 @@ pub trait RasterQueryProcessor: Sync + Send {
 impl<S, T> RasterQueryProcessor for S
 where
     S: QueryProcessor<Output = RasterTile2D<T>> + Sync + Send,
+    T: Pixel,
 {
     type RasterType = T;
     fn raster_query(
@@ -85,9 +88,10 @@ impl<T> QueryProcessor for Box<dyn QueryProcessor<Output = T>> {
 
 impl<T> QueryProcessor for Box<dyn RasterQueryProcessor<RasterType = T>>
 where
-    T: 'static,
+    T: Pixel,
 {
     type Output = RasterTile2D<T>;
+
     fn query(&self, query: QueryRectangle, ctx: QueryContext) -> BoxStream<Result<Self::Output>> {
         self.as_ref().raster_query(query, ctx)
     }

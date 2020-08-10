@@ -3,21 +3,31 @@ use crate::engine::{
     VectorOperator,
 };
 use futures::{stream, stream::StreamExt};
-use geoengine_datatypes::raster::{RasterDataType, RasterTile2D};
+use geoengine_datatypes::raster::{FromPrimitive, Pixel, RasterDataType, RasterTile2D};
+use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone)]
-pub struct MockRasterSourceProcessor<T> {
+pub struct MockRasterSourceProcessor<T>
+where
+    T: Pixel,
+{
     pub data: Vec<RasterTile2D<T>>,
 }
 
-impl<T> MockRasterSourceProcessor<T> {
+impl<T> MockRasterSourceProcessor<T>
+where
+    T: Pixel,
+{
     fn new(data: Vec<RasterTile2D<T>>) -> Self {
         Self { data }
     }
 }
 
-impl<T: std::marker::Sync + Clone> QueryProcessor for MockRasterSourceProcessor<T> {
+impl<T> QueryProcessor for MockRasterSourceProcessor<T>
+where
+    T: Pixel,
+{
     type Output = RasterTile2D<T>;
     fn query(
         &self,
@@ -46,13 +56,14 @@ impl Operator for MockRasterSource {
 #[typetag::serde]
 impl RasterOperator for MockRasterSource {
     fn create_raster_op(&self) -> TypedRasterQueryProcessor {
-        fn converted<T>(
-            raster_tiles: &[RasterTile2D<u8>],
-        ) -> Box<dyn RasterQueryProcessor<RasterType = T>>
+        fn converted<From, To>(
+            raster_tiles: &[RasterTile2D<From>],
+        ) -> Box<dyn RasterQueryProcessor<RasterType = To>>
         where
-            T: 'static + From<u8> + std::marker::Sync + std::marker::Send + Copy,
+            From: Pixel + AsPrimitive<To>,
+            To: Pixel + FromPrimitive<From>,
         {
-            let data: Vec<RasterTile2D<T>> = raster_tiles
+            let data: Vec<RasterTile2D<To>> = raster_tiles
                 .iter()
                 .cloned()
                 .map(RasterTile2D::convert)

@@ -7,7 +7,7 @@ mod raster_tile;
 mod typed_raster;
 pub use self::base_raster::{BaseRaster, Raster2D, Raster3D};
 pub use self::data_type::{
-    DynamicRasterDataType, RasterDataType, StaticRasterDataType, TypedValue,
+    DynamicRasterDataType, FromPrimitive, Pixel, RasterDataType, StaticRasterDataType, TypedValue,
 };
 pub use self::geo_transform::{GdalGeoTransform, GeoTransform};
 pub use self::grid_dimension::{Dim, GridDimension, GridIndex, Ix};
@@ -23,7 +23,7 @@ pub trait GenericRaster: Send + Debug {
     fn get(&self);
 }
 
-pub trait Raster<D: GridDimension, T: Copy, C>: SpatialBounded + TemporalBounded {
+pub trait Raster<D: GridDimension, T: Pixel, C>: SpatialBounded + TemporalBounded {
     /// returns the grid dimension object of type D: `GridDimension`
     fn dimension(&self) -> &D;
     /// returns the optional  no-data value used for the raster
@@ -34,7 +34,10 @@ pub trait Raster<D: GridDimension, T: Copy, C>: SpatialBounded + TemporalBounded
     fn geo_transform(&self) -> &GeoTransform;
 }
 
-pub trait GridPixelAccess<T, I> {
+pub trait GridPixelAccess<T, I>
+where
+    T: Pixel,
+{
     /// Gets the value at a pixels location
     ///
     /// # Examples
@@ -61,7 +64,10 @@ pub trait GridPixelAccess<T, I> {
     fn pixel_value_at_grid_index(&self, grid_index: &I) -> Result<T>;
 }
 
-pub trait GridPixelAccessMut<T, I> {
+pub trait GridPixelAccessMut<T, I>
+where
+    T: Pixel,
+{
     /// Sets the value at a pixels location
     ///
     /// # Examples
@@ -88,7 +94,10 @@ pub trait GridPixelAccessMut<T, I> {
     fn set_pixel_value_at_grid_index(&mut self, grid_index: &I, value: T) -> Result<()>;
 }
 
-pub trait CoordinatePixelAccess<T> {
+pub trait CoordinatePixelAccess<T>
+where
+    T: Pixel,
+{
     fn pixel_value_at_coord(&self, coordinate: (f64, f64)) -> T;
 }
 

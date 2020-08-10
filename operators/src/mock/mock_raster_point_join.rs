@@ -4,6 +4,7 @@ use crate::engine::{
 };
 use futures::StreamExt;
 use geoengine_datatypes::collections::VectorDataType;
+use geoengine_datatypes::raster::Pixel;
 use geoengine_datatypes::{
     collections::{FeatureCollection, MultiPointCollection},
     primitives::FeatureData,
@@ -30,7 +31,7 @@ impl<R, V> MockRasterPointJoinProcessor<R, V> {
 impl<R, V, T> QueryProcessor for MockRasterPointJoinProcessor<R, V>
 where
     R: RasterQueryProcessor<RasterType = T> + Sync,
-    T: std::fmt::Debug + Into<f64> + Sync + Copy,
+    T: Pixel,
     V: VectorQueryProcessor<VectorType = MultiPointCollection> + Sync,
 {
     type Output = MultiPointCollection;
@@ -47,10 +48,11 @@ where
                 let raster_future = raster_stream.next().await;
                 let raster_tile: RasterTile2D<T> =
                     raster_future.ok_or(crate::error::Error::QueryProcessor)??;
-                let pixel = raster_tile.data.pixel_value_at_grid_index(&(0, 0))?;
+                let pixel: T = raster_tile.data.pixel_value_at_grid_index(&(0, 0))?;
+                let pixel: f64 = pixel.as_();
                 let collection = collection.add_column(
                     &self.feature_name,
-                    FeatureData::Number(vec![pixel.into(); collection.len()]),
+                    FeatureData::Number(vec![pixel; collection.len()]),
                 )?;
                 Ok(collection)
             })

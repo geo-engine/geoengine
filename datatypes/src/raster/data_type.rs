@@ -1,4 +1,68 @@
+use num_traits::{AsPrimitive, Num};
 use serde::{Deserialize, Serialize};
+
+/// A collection of required traits for a pixel type
+pub trait Pixel:
+    'static
+    + Copy
+    + std::fmt::Debug
+    + Sync
+    + Send
+    + Num
+    + PartialOrd
+    + AsPrimitive<u8>
+    + AsPrimitive<i8>
+    + AsPrimitive<u16>
+    + AsPrimitive<i16>
+    + AsPrimitive<u32>
+    + AsPrimitive<i32>
+    + AsPrimitive<u64>
+    + AsPrimitive<i64>
+    + AsPrimitive<f32>
+    + AsPrimitive<f64>
+    + AsPrimitive<Self>
+    + FromPrimitive<u8>
+    + FromPrimitive<i8>
+    + FromPrimitive<u16>
+    + FromPrimitive<i16>
+    + FromPrimitive<u32>
+    + FromPrimitive<i32>
+    + FromPrimitive<u64>
+    + FromPrimitive<i64>
+    + FromPrimitive<f32>
+    + FromPrimitive<f64>
+    + FromPrimitive<Self>
+    + StaticRasterDataType
+{
+}
+
+pub trait FromPrimitive<T>
+where
+    T: Pixel,
+{
+    fn from_(value: T) -> Self;
+}
+
+impl<T, V> FromPrimitive<V> for T
+where
+    T: Pixel,
+    V: Pixel + AsPrimitive<T>,
+{
+    fn from_(value: V) -> Self {
+        value.as_()
+    }
+}
+
+impl Pixel for u8 {}
+impl Pixel for i8 {}
+impl Pixel for u16 {}
+impl Pixel for i16 {}
+impl Pixel for u32 {}
+impl Pixel for i32 {}
+impl Pixel for u64 {}
+impl Pixel for i64 {}
+impl Pixel for f32 {}
+impl Pixel for f64 {}
 
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Deserialize, Serialize, Copy, Clone)]
 pub enum RasterDataType {

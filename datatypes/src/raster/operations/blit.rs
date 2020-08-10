@@ -1,4 +1,4 @@
-use crate::raster::{DynamicRasterDataType, GridIndex, Raster, Raster2D, TypedRaster2D};
+use crate::raster::{DynamicRasterDataType, GridIndex, Pixel, Raster, Raster2D, TypedRaster2D};
 use crate::util::Result;
 use crate::{error, primitives::SpatialBounded};
 use snafu::ensure;
@@ -7,7 +7,7 @@ pub trait Blit<R> {
     fn blit(&mut self, source: R) -> Result<()>;
 }
 
-impl<T: Copy> Blit<Raster2D<T>> for Raster2D<T> {
+impl<T: Pixel> Blit<Raster2D<T>> for Raster2D<T> {
     /// Copy `source` raster pixels into this raster, fails if the rasters do not overlap
     #[allow(clippy::float_cmp)]
     fn blit(&mut self, source: Raster2D<T>) -> Result<()> {

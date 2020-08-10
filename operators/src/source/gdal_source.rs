@@ -21,7 +21,8 @@ use futures::stream::{self, BoxStream, StreamExt};
 
 use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, SpatialBounded, TimeInterval};
 use geoengine_datatypes::raster::{
-    Dim, GeoTransform, GridDimension, Ix, Raster2D, RasterDataType, RasterTile2D, TileInformation,
+    Dim, GeoTransform, GridDimension, Ix, Pixel, Raster2D, RasterDataType, RasterTile2D,
+    TileInformation,
 };
 
 /// Parameters for the GDAL Source Operator
@@ -193,7 +194,10 @@ impl TileGridProvider {
     }
 }
 
-pub struct GdalSourceProcessor<P, T> {
+pub struct GdalSourceProcessor<P, T>
+where
+    T: Pixel,
+{
     pub dataset_information: P,
     pub gdal_params: GdalSourceParameters,
     pub phantom_data: PhantomData<T>,
@@ -201,7 +205,7 @@ pub struct GdalSourceProcessor<P, T> {
 
 impl<T> GdalSourceProcessor<JsonDatasetInformationProvider, T>
 where
-    T: gdal::raster::types::GdalType + Sync + std::marker::Copy + Send + 'static,
+    T: gdal::raster::types::GdalType + Pixel,
 {
     pub fn from_params_with_json_provider(params: GdalSourceParameters) -> Result<Self> {
         GdalSourceProcessor::from_params(params)
@@ -211,7 +215,7 @@ where
 impl<P, T> GdalSourceProcessor<P, T>
 where
     P: GdalDatasetInformation<CreatedType = P> + Sync + Send + Clone + 'static,
-    T: gdal::raster::types::GdalType + Sync + std::marker::Copy + Send + 'static,
+    T: gdal::raster::types::GdalType + Pixel,
 {
     ///
     /// Generates a new `GdalSource` from the provided parameters
@@ -372,7 +376,7 @@ where
 impl<T, P> QueryProcessor for GdalSourceProcessor<P, T>
 where
     P: GdalDatasetInformation<CreatedType = P> + Send + Sync + 'static + Clone,
-    T: Copy + Sync + gdal::raster::types::GdalType + Send + 'static,
+    T: Pixel + gdal::raster::types::GdalType,
 {
     type Output = RasterTile2D<T>;
     fn query(
@@ -392,7 +396,7 @@ pub struct GdalSource {
 impl GdalSource {
     fn create_processor<T>(&self) -> Box<dyn RasterQueryProcessor<RasterType = T>>
     where
-        T: Copy + Sync + Send + gdal::raster::types::GdalType + 'static,
+        T: Pixel + gdal::raster::types::GdalType,
     {
         GdalSourceProcessor::<_, T>::from_params_with_json_provider(self.params.clone())
             .unwrap()

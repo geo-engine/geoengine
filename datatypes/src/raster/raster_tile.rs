@@ -1,5 +1,8 @@
 use super::{BaseRaster, Dim, GeoTransform, GridDimension, Ix, Raster};
 use crate::primitives::{BoundingBox2D, SpatialBounded, TemporalBounded, TimeInterval};
+use crate::raster::data_type::FromPrimitive;
+use crate::raster::Pixel;
+use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 
 pub type RasterTile2D<T> = RasterTile<Dim<[Ix; 2]>, T>;
@@ -7,13 +10,19 @@ pub type RasterTile3D<T> = RasterTile<Dim<[Ix; 3]>, T>;
 
 /// A `RasterTile2D` is the main type used to iterate over tiles of 2D raster data
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct RasterTile<D, T> {
+pub struct RasterTile<D, T>
+where
+    T: Pixel,
+{
     pub time: TimeInterval,
     pub tile: TileInformation,
     pub data: BaseRaster<D, T, Vec<T>>,
 }
 
-impl<D, T> RasterTile<D, T> {
+impl<D, T> RasterTile<D, T>
+where
+    T: Pixel,
+{
     /// create a new `RasterTile2D`
     pub fn new(time: TimeInterval, tile: TileInformation, data: BaseRaster<D, T, Vec<T>>) -> Self {
         Self { time, tile, data }
@@ -23,7 +32,8 @@ impl<D, T> RasterTile<D, T> {
     pub fn convert<To>(self) -> RasterTile<D, To>
     where
         D: GridDimension,
-        T: Into<To> + Copy, // TODO: find common type for pixel values,
+        To: Pixel + FromPrimitive<T>,
+        T: AsPrimitive<To>,
     {
         RasterTile::new(self.time, self.tile, self.data.convert())
     }
@@ -80,13 +90,19 @@ impl SpatialBounded for TileInformation {
     }
 }
 
-impl<D, T> TemporalBounded for RasterTile<D, T> {
+impl<D, T> TemporalBounded for RasterTile<D, T>
+where
+    T: Pixel,
+{
     fn temporal_bounds(&self) -> TimeInterval {
         self.time
     }
 }
 
-impl<D, T> SpatialBounded for RasterTile<D, T> {
+impl<D, T> SpatialBounded for RasterTile<D, T>
+where
+    T: Pixel,
+{
     fn spatial_bounds(&self) -> BoundingBox2D {
         self.tile.spatial_bounds()
     }
@@ -95,7 +111,7 @@ impl<D, T> SpatialBounded for RasterTile<D, T> {
 impl<D, T> Raster<D, T, Vec<T>> for RasterTile<D, T>
 where
     D: GridDimension,
-    T: Copy,
+    T: Pixel,
 {
     fn dimension(&self) -> &D {
         self.data.dimension()
