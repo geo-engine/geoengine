@@ -8,6 +8,7 @@ use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::{
     collections::MultiPointCollection,
     primitives::{Coordinate2D, TimeInterval},
+    projection::{Projection, ProjectionOption},
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -47,6 +48,9 @@ impl Operator for MockPointSource {
     fn vector_sources(&self) -> &[Box<dyn crate::engine::VectorOperator>] {
         &[]
     }
+    fn projection(&self) -> ProjectionOption {
+        ProjectionOption::Projection(Projection::wgs84())
+    }
 }
 
 #[typetag::serde]
@@ -55,13 +59,13 @@ impl VectorOperator for MockPointSource {
         VectorDataType::MultiPoint
     }
 
-    fn vector_processor(&self) -> crate::engine::TypedVectorQueryProcessor {
-        TypedVectorQueryProcessor::MultiPoint(
+    fn vector_processor(&self) -> Result<crate::engine::TypedVectorQueryProcessor> {
+        Ok(TypedVectorQueryProcessor::MultiPoint(
             MockPointSourceProcessor {
                 points: self.points.clone(),
             }
             .boxed(),
-        )
+        ))
     }
 }
 
@@ -90,7 +94,7 @@ mod tests {
         let mps = MockPointSource { points }.boxed();
         let typed_processor = mps.vector_processor();
         let point_processor = match typed_processor {
-            TypedVectorQueryProcessor::MultiPoint(processor) => processor,
+            Ok(TypedVectorQueryProcessor::MultiPoint(processor)) => processor,
             _ => panic!(),
         };
 

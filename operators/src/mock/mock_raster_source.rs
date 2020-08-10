@@ -2,8 +2,12 @@ use crate::engine::{
     Operator, QueryProcessor, RasterOperator, RasterQueryProcessor, TypedRasterQueryProcessor,
     VectorOperator,
 };
+use crate::util::Result;
 use futures::{stream, stream::StreamExt};
-use geoengine_datatypes::raster::{FromPrimitive, Pixel, RasterDataType, RasterTile2D};
+use geoengine_datatypes::{
+    projection::{Projection, ProjectionOption},
+    raster::{FromPrimitive, Pixel, RasterDataType, RasterTile2D},
+};
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 
@@ -51,11 +55,14 @@ impl Operator for MockRasterSource {
     fn vector_sources(&self) -> &[Box<dyn VectorOperator>] {
         &[]
     }
+    fn projection(&self) -> ProjectionOption {
+        ProjectionOption::Projection(Projection::wgs84())
+    }
 }
 
 #[typetag::serde]
 impl RasterOperator for MockRasterSource {
-    fn raster_processor(&self) -> TypedRasterQueryProcessor {
+    fn raster_processor(&self) -> Result<TypedRasterQueryProcessor> {
         fn converted<From, To>(
             raster_tiles: &[RasterTile2D<From>],
         ) -> Box<dyn RasterQueryProcessor<RasterType = To>>
@@ -71,7 +78,7 @@ impl RasterOperator for MockRasterSource {
             MockRasterSourceProcessor::new(data).boxed()
         }
 
-        match self.result_type() {
+        Ok(match self.result_type() {
             RasterDataType::U8 => crate::engine::TypedRasterQueryProcessor::U8(
                 MockRasterSourceProcessor::new(self.data.clone()).boxed(),
             ),
@@ -100,7 +107,7 @@ impl RasterOperator for MockRasterSource {
             RasterDataType::F64 => {
                 crate::engine::TypedRasterQueryProcessor::F64(converted(&self.data))
             }
-        }
+        })
     }
     fn result_type(&self) -> RasterDataType {
         self.raster_type
@@ -202,7 +209,7 @@ mod tests {
 
         let deserialized: Box<dyn RasterOperator> = serde_json::from_str(&serialized).unwrap();
 
-        match deserialized.raster_processor() {
+        match deserialized.raster_processor().unwrap() {
             crate::engine::TypedRasterQueryProcessor::U8(..) => {}
             _ => panic!("wrong raster type"),
         }

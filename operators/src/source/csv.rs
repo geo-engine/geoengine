@@ -14,7 +14,10 @@ use geoengine_datatypes::collections::{
     BuilderProvider, FeatureCollectionBuilder, FeatureCollectionRowBuilder,
     GeoFeatureCollectionRowBuilder, MultiPointCollection, VectorDataType,
 };
-use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, TimeInterval};
+use geoengine_datatypes::{
+    primitives::{BoundingBox2D, Coordinate2D, TimeInterval},
+    projection::{Projection, ProjectionOption},
+};
 
 use crate::engine::{
     Operator, QueryContext, QueryProcessor, QueryRectangle, TypedVectorQueryProcessor,
@@ -149,6 +152,9 @@ impl Operator for CsvSource {
     fn vector_sources(&self) -> &[Box<dyn crate::engine::VectorOperator>] {
         &[]
     }
+    fn projection(&self) -> ProjectionOption {
+        ProjectionOption::Projection(Projection::wgs84()) //TODO: support other projections
+    }
 }
 
 #[typetag::serde]
@@ -157,13 +163,13 @@ impl VectorOperator for CsvSource {
         VectorDataType::MultiPoint
     }
 
-    fn vector_processor(&self) -> crate::engine::TypedVectorQueryProcessor {
-        TypedVectorQueryProcessor::MultiPoint(
+    fn vector_processor(&self) -> Result<crate::engine::TypedVectorQueryProcessor> {
+        Ok(TypedVectorQueryProcessor::MultiPoint(
             CsvSourceProcessor {
                 params: self.params.clone(),
             }
             .boxed(),
-        )
+        ))
     }
 }
 

@@ -137,7 +137,10 @@ async fn get_map<T: WorkflowRegistry>(
         ));
     };
 
-    let processor = operator.raster_processor();
+    let processor = operator
+        .raster_processor()
+        .context(error::Operator)
+        .map_err(warp::reject::custom)?;
 
     let query_rect = QueryRectangle {
         bbox: request.bbox,

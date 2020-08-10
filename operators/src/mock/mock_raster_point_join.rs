@@ -2,12 +2,14 @@ use crate::engine::{
     Operator, QueryProcessor, RasterOperator, RasterQueryProcessor, TypedVectorQueryProcessor,
     VectorOperator, VectorQueryProcessor,
 };
+use crate::util::Result;
 use futures::StreamExt;
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::raster::Pixel;
 use geoengine_datatypes::{
     collections::{FeatureCollection, MultiPointCollection},
     primitives::FeatureData,
+    projection::ProjectionOption,
     raster::{GridPixelAccess, RasterTile2D},
 };
 use serde::{Deserialize, Serialize};
@@ -95,6 +97,11 @@ impl Operator for MockRasterPointJoinOperator {
     fn vector_sources(&self) -> &[Box<dyn VectorOperator>] {
         &self.point_sources
     }
+    fn projection(&self) -> ProjectionOption {
+        self.point_sources
+            .get(0)
+            .map_or_else(|| ProjectionOption::None, |o| o.projection())
+    }
 }
 
 #[typetag::serde]
@@ -103,20 +110,22 @@ impl VectorOperator for MockRasterPointJoinOperator {
         VectorDataType::MultiPoint
     }
 
-    fn vector_processor(&self) -> crate::engine::TypedVectorQueryProcessor {
-        let raster_source = self.raster_sources[0].raster_processor();
-        let point_source = match self.point_sources[0].vector_processor() {
+    fn vector_processor(&self) -> Result<crate::engine::TypedVectorQueryProcessor> {
+        self.validate_children(1..2, 1..2)?;
+
+        let raster_source = self.raster_sources[0].raster_processor()?;
+        let point_source = match self.point_sources[0].vector_processor()? {
             TypedVectorQueryProcessor::MultiPoint(v) => v,
             _ => panic!(),
         };
-        TypedVectorQueryProcessor::MultiPoint(match raster_source {
+        Ok(TypedVectorQueryProcessor::MultiPoint(match raster_source {
             crate::engine::TypedRasterQueryProcessor::U8(r) => Box::new(Self::create_binary::<u8>(
                 r,
                 point_source,
                 self.params.clone(),
             )),
             _ => panic!(),
-        })
+        }))
     }
 }
 
@@ -297,7 +306,7 @@ mod tests {
         .boxed();
 
         let point_processor = match op.vector_processor() {
-            TypedVectorQueryProcessor::MultiPoint(processor) => processor,
+            Ok(TypedVectorQueryProcessor::MultiPoint(processor)) => processor,
             _ => panic!(),
         };
 

@@ -1,5 +1,6 @@
 use failure::Fail;
-use snafu::Snafu; // TODO: replace failure in gdal and then remove
+use snafu::Snafu;
+use std::ops::Range; // TODO: replace failure in gdal and then remove
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility = "pub(crate)")]
@@ -17,6 +18,33 @@ pub enum Error {
         source: geoengine_datatypes::error::Error,
     },
     QueryProcessor,
+    #[snafu(display(
+        "InvalidProjectionError: expected \"{}\" found \"{}\"",
+        expected,
+        found
+    ))]
+    InvalidProjection {
+        expected: geoengine_datatypes::projection::ProjectionOption,
+        found: geoengine_datatypes::projection::ProjectionOption,
+    },
+    #[snafu(display(
+        "InvalidNumberOfRasterInputsError: expected \"[{} .. {}]\" found \"{}\"",
+        expected.start, expected.end,
+        found
+    ))]
+    InvalidNumberOfRasterInputs {
+        expected: Range<usize>,
+        found: usize,
+    },
+    #[snafu(display(
+        "InvalidNumberOfVectorInputsError: expected \"[{} .. {}]\" found \"{}\"",
+        expected.start, expected.end,
+        found
+    ))]
+    InvalidNumberOfVectorInputs {
+        expected: Range<usize>,
+        found: usize,
+    },
     #[snafu(display("GdalError: {}", source))]
     Gdal {
         #[snafu(source(from(gdal::errors::Error, failure::Fail::compat)))]

@@ -20,9 +20,12 @@ use serde::{Deserialize, Serialize};
 use futures::stream::{self, BoxStream, StreamExt};
 
 use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, SpatialBounded, TimeInterval};
-use geoengine_datatypes::raster::{
-    Dim, GeoTransform, GridDimension, Ix, Pixel, Raster2D, RasterDataType, RasterTile2D,
-    TileInformation,
+use geoengine_datatypes::{
+    projection::{Projection, ProjectionOption},
+    raster::{
+        Dim, GeoTransform, GridDimension, Ix, Pixel, Raster2D, RasterDataType, RasterTile2D,
+        TileInformation,
+    },
 };
 
 /// Parameters for the GDAL Source Operator
@@ -413,12 +416,15 @@ impl Operator for GdalSource {
     fn vector_sources(&self) -> &[Box<dyn VectorOperator>] {
         &[]
     }
+    fn projection(&self) -> ProjectionOption {
+        ProjectionOption::Projection(Projection::wgs84()) //TODO: support other projections
+    }
 }
 
 #[typetag::serde]
 impl RasterOperator for GdalSource {
-    fn raster_processor(&self) -> TypedRasterQueryProcessor {
-        match self.result_type() {
+    fn raster_processor(&self) -> Result<TypedRasterQueryProcessor> {
+        Ok(match self.result_type() {
             RasterDataType::U8 => TypedRasterQueryProcessor::U8(self.create_processor()),
             RasterDataType::U16 => TypedRasterQueryProcessor::U16(self.create_processor()),
             RasterDataType::U32 => TypedRasterQueryProcessor::U32(self.create_processor()),
@@ -429,7 +435,7 @@ impl RasterOperator for GdalSource {
             RasterDataType::I64 => unimplemented!("implement I64 type"), // TypedRasterQueryProcessor::I64(self.create_processor()),
             RasterDataType::F32 => TypedRasterQueryProcessor::F32(self.create_processor()),
             RasterDataType::F64 => TypedRasterQueryProcessor::F64(self.create_processor()),
-        }
+        })
     }
     fn result_type(&self) -> geoengine_datatypes::raster::RasterDataType {
         JsonDatasetInformationProvider::with_dataset_id(&self.params.dataset_id)
