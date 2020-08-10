@@ -49,16 +49,12 @@ async fn load_workflow<T: WorkflowRegistry>(
     }
 }
 
-// TODO: migrate and fix tests
-/*
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::workflows::registry::{HashMapRegistry, WorkflowRegistry};
-    use geoengine_operators::engine::Operator;
-    use geoengine_operators::operators::{
-        GdalSourceParameters, NoSources, ProjectionParameters, RasterSources,
-    };
+    use geoengine_operators::engine::VectorOperator;
+    use geoengine_operators::mock::MockPointSource;
     use tokio::sync::RwLock;
 
     #[tokio::test]
@@ -66,22 +62,11 @@ mod tests {
         let workflow_registry = Arc::new(RwLock::new(HashMapRegistry::default()));
 
         let workflow = Workflow {
-            operator: Operator::Projection {
-                params: ProjectionParameters {
-                    src_crs: "EPSG:4326".into(),
-                    dest_crs: "EPSG:3857".into(),
-                },
-                sources: RasterSources {
-                    rasters: vec![Operator::GdalSource {
-                        params: GdalSourceParameters {
-                            dataset_id: "test".to_owned(),
-                            channel: Some(1),
-                        },
-                        sources: NoSources {},
-                    }],
-                }
-                .into(),
-            },
+            operator: MockPointSource {
+                points: vec![(0.0, 0.1).into(), (1.0, 1.1).into()],
+            }
+            .boxed()
+            .into(),
         };
 
         // insert workflow
@@ -104,22 +89,11 @@ mod tests {
         let workflow_registry = Arc::new(RwLock::new(HashMapRegistry::default()));
 
         let workflow = Workflow {
-            operator: Operator::Projection {
-                params: ProjectionParameters {
-                    src_crs: "EPSG:4326".into(),
-                    dest_crs: "EPSG:3857".into(),
-                },
-                sources: RasterSources {
-                    rasters: vec![Operator::GdalSource {
-                        params: GdalSourceParameters {
-                            dataset_id: "test".to_owned(),
-                            channel: Some(1),
-                        },
-                        sources: NoSources {},
-                    }],
-                }
-                .into(),
-            },
+            operator: MockPointSource {
+                points: vec![(0.0, 0.1).into(), (1.0, 1.1).into()],
+            }
+            .boxed()
+            .into(),
         };
 
         let id = workflow_registry.write().await.register(workflow.clone());
@@ -147,4 +121,3 @@ mod tests {
         assert_eq!(res.status(), 404);
     }
 }
-*/
