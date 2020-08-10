@@ -66,9 +66,7 @@ pub trait GdalDatasetInformation {
     fn file_name_with_time_placeholder(&self) -> &str;
     fn time_format(&self) -> &str;
     fn dataset_path(&self) -> PathBuf;
-    fn data_type(&self) -> RasterDataType {
-        RasterDataType::U8
-    }
+    fn data_type(&self) -> RasterDataType;
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -78,6 +76,7 @@ pub struct JsonDatasetInformationProvider {
     pub file_name_with_time_placeholder: String,
     pub time_format: String,
     pub base_path: String,
+    pub data_type: RasterDataType,
 }
 
 impl JsonDatasetInformationProvider {
@@ -134,6 +133,9 @@ impl GdalDatasetInformation for JsonDatasetInformationProvider {
             .iter()
             .collect();
         path
+    }
+    fn data_type(&self) -> RasterDataType {
+        self.data_type
     }
 }
 
@@ -587,6 +589,7 @@ mod tests {
             time: time_interval_provider,
             tile: grid_tile_provider,
             base_path: "../modis_ndvi".into(),
+            data_type: RasterDataType::U8,
         };
 
         let gdal_source = GdalSourceProcessor::<_, u8> {
@@ -730,6 +733,7 @@ mod tests {
             time: time_interval_provider,
             tile: grid_tile_provider,
             base_path: "../modis_ndvi".into(),
+            data_type: RasterDataType::U8,
         };
 
         let gdal_source = GdalSourceProcessor::<_, u8> {
@@ -789,7 +793,10 @@ mod tests {
             time: time_interval_provider,
             tile: grid_tile_provider,
             base_path: "../modis_ndvi".into(),
+            data_type: RasterDataType::U8,
         };
+
+        dbg!(&dataset_information);
 
         let gdal_source = GdalSourceProcessor {
             dataset_information,
@@ -859,6 +866,7 @@ mod tests {
             time: time_interval_provider,
             tile: grid_tile_provider,
             base_path: "../modis_ndvi".into(),
+            data_type: RasterDataType::U8,
         };
 
         let gdal_source = GdalSourceProcessor {
@@ -930,6 +938,7 @@ mod tests {
             time: time_interval_provider,
             tile: grid_tile_provider,
             base_path: "../modis_ndvi".into(),
+            data_type: RasterDataType::U8,
         };
 
         let gdal_source = GdalSourceProcessor::<_, u8> {
@@ -1002,6 +1011,7 @@ mod tests {
             time: time_interval_provider,
             tile: grid_tile_provider,
             base_path: "../modis_ndvi".into(),
+            data_type: RasterDataType::U8,
         };
 
         let x_r = GdalSourceProcessor::<_, u8>::load_tile_data_async(

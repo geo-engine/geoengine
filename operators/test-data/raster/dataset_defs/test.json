@@ -31,5 +31,6 @@
     },
     "file_name_with_time_placeholder": "MOD13A2_M_NDVI_2014-01-01.TIFF",
     "time_format": "",
-    "base_path": "../modis_ndvi"
+    "base_path": "../modis_ndvi",
+    "data_type": "U8"
 }
