@@ -19,6 +19,7 @@ use futures::StreamExt;
 use geoengine_operators::engine::{
     QueryContext, QueryRectangle, RasterQueryProcessor, TypedOperator, TypedRasterQueryProcessor,
 };
+
 type WR<T> = Arc<RwLock<T>>;
 
 pub fn wms_handler<T: WorkflowRegistry>(
@@ -140,7 +141,7 @@ async fn get_map<T: WorkflowRegistry>(
 
     let query_rect = QueryRectangle {
         bbox: request.bbox,
-        time_interval: request.time.unwrap_or_default(), // TODO: error if more than one result?
+        time_interval: request.time.unwrap_or_default(), // TODO: choose latest? something cheaper than all timestamps
     };
     let query_ctx = QueryContext {
         // TODO: define meaningful query context
@@ -181,9 +182,6 @@ async fn get_map<T: WorkflowRegistry>(
     }
     .map_err(warp::reject::custom)?;
 
-    // TODO: .context(error::DataType)
-    //             .map_err(warp::reject::custom)?)
-
     Ok(Box::new(
         Response::builder()
             .header("Content-Type", "image/png")
@@ -213,26 +211,32 @@ where
         -query_rect.bbox.size_y() / f64::from(request.height), // TODO: negativ, s.t. geo transform fits...
     );
 
-    let output_raster = Raster2D::new(
+    let output_raster: Result<Raster2D<T>> = Raster2D::new(
         dim.into(),
         data,
         None,
         request.time.unwrap_or_default(),
         query_geo_transform,
     )
-    .unwrap();
+    .context(error::DataType);
 
     let output_raster = tile_stream
-        .fold(output_raster, |mut raster2d, tile| {
-            if let Ok(tile) = tile {
-                // TODO: handle error while accumulating
-                // TODO: get raster as correct type
+        .fold(output_raster, |raster2d, tile| {
+            let result: Result<Raster2D<T>> = match (raster2d, tile) {
+                (Ok(mut raster2d), Ok(tile)) => match raster2d.blit(tile.data) {
+                    Ok(_) => Ok(raster2d),
+                    Err(error) => Err(error.into()),
+                },
+                (Err(error), _) => Err(error),
+                (_, Err(error)) => Err(error.into()),
+            };
 
-                raster2d.blit(tile.data).unwrap();
+            match result {
+                Ok(updated_rasted2d) => futures::future::ok(updated_rasted2d),
+                Err(error) => futures::future::err(error),
             }
-            futures::future::ready(raster2d)
         })
-        .await;
+        .await?;
 
     let colorizer = Colorizer::rgba(); // TODO: create colorizer from request
 
@@ -282,13 +286,7 @@ fn get_map_mock(request: &GetMap) -> Result<Box<dyn warp::Reply>, warp::Rejectio
 
 #[cfg(test)]
 mod tests {
-    use std::fs::File;
-    use std::io::Write;
-
-    use futures::StreamExt;
-
     use geoengine_datatypes::primitives::{BoundingBox2D, TimeInterval};
-    use geoengine_datatypes::raster::{Blit, GeoTransform};
     use geoengine_operators::engine::RasterOperator;
     use geoengine_operators::source::{
         gdal_source::GdalSourceProcessor, GdalSource, GdalSourceParameters,
@@ -297,6 +295,7 @@ mod tests {
     use crate::workflows::registry::HashMapRegistry;
 
     use super::*;
+    use crate::ogc::wms::request::GetMapFormat;
     use crate::workflows::workflow::Workflow;
 
     #[tokio::test]
@@ -331,60 +330,48 @@ mod tests {
 
     #[tokio::test]
     async fn png_from_stream() {
-        let dataset_x_pixel_size = 0.1;
-        let dataset_y_pixel_size = -0.1;
-
         let gdal_params = GdalSourceParameters {
             dataset_id: "test".to_owned(),
             channel: None,
         };
 
-        let gdal_source = GdalSourceProcessor::from_params_with_json_provider(gdal_params).unwrap();
+        let gdal_source =
+            GdalSourceProcessor::<_, u8>::from_params_with_json_provider(gdal_params).unwrap();
 
         let query_bbox = BoundingBox2D::new((-10., 20.).into(), (50., 80.).into()).unwrap();
 
-        // let mut img = RgbaImage::new(255, 255);
+        let image_bytes = raster_stream_to_png_bytes(
+            gdal_source.boxed(),
+            QueryRectangle {
+                bbox: query_bbox,
+                time_interval: TimeInterval::default(),
+            },
+            QueryContext { chunk_byte_size: 0 },
+            &GetMap {
+                version: "".to_string(),
+                width: 600,
+                height: 600,
+                bbox: query_bbox,
+                format: GetMapFormat::ImagePng,
+                layer: "".to_string(),
+                crs: "".to_string(),
+                styles: "".to_string(),
+                time: None,
+                transparent: None,
+                bgcolor: None,
+                sld: None,
+                sld_body: None,
+                elevation: None,
+                exceptions: None,
+            },
+        )
+        .await
+        .unwrap();
 
-        let dim = [600, 600];
-        let data: Vec<u8> = vec![0; 600 * 600]; // TODO handle real type
-        let query_geo_transform = GeoTransform::new(
-            query_bbox.upper_left(),
-            dataset_x_pixel_size,
-            dataset_y_pixel_size,
+        assert_eq!(
+            include_bytes!("../../../services/test-data/wms/raster.png") as &[u8],
+            image_bytes.as_slice()
         );
-        let temporal_bounds: TimeInterval = TimeInterval::default();
-        let raster2d =
-            Raster2D::new(dim.into(), data, None, temporal_bounds, query_geo_transform).unwrap();
-
-        let raster2d = gdal_source
-            .tile_stream(Some(query_bbox))
-            .fold(raster2d, |mut raster2d, tile| {
-                if let Ok(tile) = tile {
-                    // TODO: handle error while accumulating
-
-                    raster2d.blit(tile.data).unwrap();
-                }
-                futures::future::ready(raster2d)
-            })
-            .await;
-
-        let colorizer = Colorizer::rgba();
-        let image_bytes = raster2d.to_png(600, 600, &colorizer).unwrap();
-
-        let mut file = File::create("image.png").unwrap();
-        file.write_all(&image_bytes.as_slice()).unwrap();
-
-        // gdal_source.tile_stream::<u8>().fold(Raster::new(), |acc, tile| {
-        //     if let Ok(tile) = tile {ll
-
-        // let mut buffer = Vec::new();
-        // DynamicImage::ImageRgba8(img)
-        //     .write_to(&mut buffer, ImageFormat::Png).unwrap();
-
-        // image::save_buffer(&Path::new("image.png"), &buffer, 255, 255, ColorType::Rgba8).unwrap();
-        // img.save(&Path::new("image.png")).unwrap()
-
-        // TODO: validate output image
     }
 
     #[tokio::test]

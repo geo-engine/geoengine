@@ -43,3 +43,9 @@ impl From<geoengine_datatypes::error::Error> for Error {
         Self::DataType { source: e }
     }
 }
+
+impl From<geoengine_operators::error::Error> for Error {
+    fn from(e: geoengine_operators::error::Error) -> Self {
+        Self::Operator { source: e }
+    }
+}
