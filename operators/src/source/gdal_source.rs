@@ -415,7 +415,7 @@ impl Operator for GdalSource {
 
 #[typetag::serde]
 impl RasterOperator for GdalSource {
-    fn create_raster_op(&self) -> TypedRasterQueryProcessor {
+    fn raster_processor(&self) -> TypedRasterQueryProcessor {
         match self.result_type() {
             RasterDataType::U8 => TypedRasterQueryProcessor::U8(self.create_processor()),
             RasterDataType::U16 => TypedRasterQueryProcessor::U16(self.create_processor()),

@@ -55,7 +55,7 @@ impl VectorOperator for MockPointSource {
         VectorDataType::MultiPoint
     }
 
-    fn vector_query_processor(&self) -> crate::engine::TypedVectorQueryProcessor {
+    fn vector_processor(&self) -> crate::engine::TypedVectorQueryProcessor {
         TypedVectorQueryProcessor::MultiPoint(
             MockPointSourceProcessor {
                 points: self.points.clone(),
@@ -88,7 +88,7 @@ mod tests {
         let points = vec![Coordinate2D::new(1., 2.); 3];
 
         let mps = MockPointSource { points }.boxed();
-        let typed_processor = mps.vector_query_processor();
+        let typed_processor = mps.vector_processor();
         let point_processor = match typed_processor {
             TypedVectorQueryProcessor::MultiPoint(processor) => processor,
             _ => panic!(),

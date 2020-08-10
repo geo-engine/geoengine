@@ -103,9 +103,9 @@ impl VectorOperator for MockRasterPointJoinOperator {
         VectorDataType::MultiPoint
     }
 
-    fn vector_query_processor(&self) -> crate::engine::TypedVectorQueryProcessor {
-        let raster_source = self.raster_sources[0].create_raster_op();
-        let point_source = match self.point_sources[0].vector_query_processor() {
+    fn vector_processor(&self) -> crate::engine::TypedVectorQueryProcessor {
+        let raster_source = self.raster_sources[0].raster_processor();
+        let point_source = match self.point_sources[0].vector_processor() {
             TypedVectorQueryProcessor::MultiPoint(v) => v,
             _ => panic!(),
         };
@@ -296,7 +296,7 @@ mod tests {
         }
         .boxed();
 
-        let point_processor = match op.vector_query_processor() {
+        let point_processor = match op.vector_processor() {
             TypedVectorQueryProcessor::MultiPoint(processor) => processor,
             _ => panic!(),
         };

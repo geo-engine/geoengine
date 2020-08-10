@@ -157,7 +157,7 @@ impl VectorOperator for CsvSource {
         VectorDataType::MultiPoint
     }
 
-    fn vector_query_processor(&self) -> crate::engine::TypedVectorQueryProcessor {
+    fn vector_processor(&self) -> crate::engine::TypedVectorQueryProcessor {
         TypedVectorQueryProcessor::MultiPoint(
             CsvSourceProcessor {
                 params: self.params.clone(),

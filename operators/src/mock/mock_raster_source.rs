@@ -55,7 +55,7 @@ impl Operator for MockRasterSource {
 
 #[typetag::serde]
 impl RasterOperator for MockRasterSource {
-    fn create_raster_op(&self) -> TypedRasterQueryProcessor {
+    fn raster_processor(&self) -> TypedRasterQueryProcessor {
         fn converted<From, To>(
             raster_tiles: &[RasterTile2D<From>],
         ) -> Box<dyn RasterQueryProcessor<RasterType = To>>
@@ -202,7 +202,7 @@ mod tests {
 
         let deserialized: Box<dyn RasterOperator> = serde_json::from_str(&serialized).unwrap();
 
-        match deserialized.create_raster_op() {
+        match deserialized.raster_processor() {
             crate::engine::TypedRasterQueryProcessor::U8(..) => {}
             _ => panic!("wrong raster type"),
         }

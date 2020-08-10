@@ -137,7 +137,7 @@ async fn get_map<T: WorkflowRegistry>(
         ));
     };
 
-    let processor = operator.create_raster_op();
+    let processor = operator.raster_processor();
 
     let query_rect = QueryRectangle {
         bbox: request.bbox,

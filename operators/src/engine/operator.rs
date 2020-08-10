@@ -17,7 +17,7 @@ pub trait Operator: std::fmt::Debug + Send + Sync {
 pub trait VectorOperator: Operator {
     fn result_type(&self) -> VectorDataType;
 
-    fn vector_query_processor(&self) -> TypedVectorQueryProcessor;
+    fn vector_processor(&self) -> TypedVectorQueryProcessor;
 
     fn boxed(self) -> Box<dyn VectorOperator>
     where
@@ -31,7 +31,7 @@ pub trait VectorOperator: Operator {
 #[typetag::serde(tag = "type")]
 pub trait RasterOperator: Operator {
     /// The magic method to handle the mapping of the create type to a concrete implementation. More work required! TODO: macro?
-    fn create_raster_op(&self) -> TypedRasterQueryProcessor;
+    fn raster_processor(&self) -> TypedRasterQueryProcessor;
 
     /// get the type the Operator creates.
     fn result_type(&self) -> RasterDataType;
