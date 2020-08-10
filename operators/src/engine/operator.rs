@@ -3,22 +3,25 @@ use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::raster::RasterDataType;
 use serde::{Deserialize, Serialize};
 
+/// Common methods for `Operator`s
 pub trait Operator: std::fmt::Debug + Send + Sync {
-    /// get the sources of the Operator. TODO: extra trait?
+    /// Get the sources of the Operator
     fn raster_sources(&self) -> &[Box<dyn RasterOperator>];
 
-    /// get the sources of the Operator. TODO: extra trait?
-    fn vector_sources(&self) -> &[Box<dyn VectorOperator>] {
-        &[]
-    }
+    /// Get the sources of the Operator
+    fn vector_sources(&self) -> &[Box<dyn VectorOperator>];
 }
 
+/// Common methods for `VectorOperator`s
 #[typetag::serde(tag = "type")]
 pub trait VectorOperator: Operator {
+    /// Get the result type of the `Operator`
     fn result_type(&self) -> VectorDataType;
 
+    /// Instantiate a `TypedVectorQueryProcessor` from a `RasterOperator`
     fn vector_processor(&self) -> TypedVectorQueryProcessor;
 
+    /// Wrap a box around a `VectorOperator`
     fn boxed(self) -> Box<dyn VectorOperator>
     where
         Self: Sized + 'static,
@@ -27,15 +30,16 @@ pub trait VectorOperator: Operator {
     }
 }
 
-/// The MetaRasterOperator is a trait for MetaOperators creating RasterOperators for processing Raster data
+/// Common methods for `RasterOperator`s
 #[typetag::serde(tag = "type")]
 pub trait RasterOperator: Operator {
-    /// The magic method to handle the mapping of the create type to a concrete implementation. More work required! TODO: macro?
-    fn raster_processor(&self) -> TypedRasterQueryProcessor;
-
-    /// get the type the Operator creates.
+    /// Get the result type of the `Operator`
     fn result_type(&self) -> RasterDataType;
 
+    /// Instantiate a `TypedRasterQueryProcessor` from a `RasterOperator`
+    fn raster_processor(&self) -> TypedRasterQueryProcessor;
+
+    /// Wrap a box around a `RasterOperator`
     fn boxed(self) -> Box<dyn RasterOperator>
     where
         Self: Sized + 'static,
@@ -44,6 +48,7 @@ pub trait RasterOperator: Operator {
     }
 }
 
+/// An enum to differentiate between `Operator` variants
 #[derive(Debug, Serialize, Deserialize)]
 pub enum TypedOperator {
     Vector(Box<dyn VectorOperator>),
