@@ -117,6 +117,16 @@ pub enum Error {
         a: RasterDataType,
         b: RasterDataType,
     },
+
+    #[snafu(display("InvalidProjectionString: {}", projection_string))]
+    InvalidProjectionString {
+        projection_string: String,
+    },
+
+    #[snafu(display("ParseU32: {}", source))]
+    ParseU32 {
+        source: <u32 as std::str::FromStr>::Err,
+    },
 }
 
 impl From<arrow::error::ArrowError> for Error {
