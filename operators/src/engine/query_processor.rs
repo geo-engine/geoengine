@@ -7,15 +7,13 @@ use geoengine_datatypes::collections::{
 use geoengine_datatypes::raster::Pixel;
 use geoengine_datatypes::{collections::MultiPointCollection, raster::RasterTile2D};
 
-/// The Query...
-#[derive(Debug, Clone, Copy)]
-pub struct Query;
-
+/// An instantiation of an operator that produces a stream of results for a query
 pub trait QueryProcessor {
     type Output;
     fn query(&self, query: QueryRectangle, ctx: QueryContext) -> BoxStream<Result<Self::Output>>;
 }
 
+/// An instantiation of a raster operator that produces a stream of raster results for a query
 pub trait RasterQueryProcessor: Sync + Send {
     type RasterType: Pixel;
 
@@ -48,6 +46,7 @@ where
     }
 }
 
+/// An instantiation of a vector operator that produces a stream of vector results for a query
 pub trait VectorQueryProcessor: Sync + Send {
     type VectorType;
     fn vector_query(
@@ -107,6 +106,7 @@ where
     }
 }
 
+/// An enum to differentiate between outputs of raster processors
 pub enum TypedRasterQueryProcessor {
     U8(Box<dyn RasterQueryProcessor<RasterType = u8>>),
     U16(Box<dyn RasterQueryProcessor<RasterType = u16>>),
@@ -185,63 +185,3 @@ pub enum TypedVectorQueryProcessor {
     MultiLineString(Box<dyn VectorQueryProcessor<VectorType = MultiLineStringCollection>>),
     MultiPolygon(Box<dyn VectorQueryProcessor<VectorType = MultiPolygonCollection>>),
 }
-
-/*
-#[cfg(test)]
-mod tests {
-    use crate::{
-        GdalSource, MyVectorSource, Point, Query, RasterOperatorExt, Source, VectorOperatorExt,
-        VectorSource,
-    };
-    use std::marker::PhantomData;
-
-    #[test]
-    fn complex() {
-        // a gdal source
-        let gdal_source: GdalSource<u16> = GdalSource {
-            dataset: "meh".to_owned(),
-            data: PhantomData,
-        };
-
-        // concrete raster!
-        let r = gdal_source.query(Query);
-        println!("{:?}", r);
-
-        let raster_plus_one = gdal_source.plus_one();
-        let r = raster_plus_one.query(Query);
-        println!("{:?}", r);
-
-        let other_gdal_source: GdalSource<u8> = GdalSource {
-            dataset: "meh".to_owned(),
-            data: PhantomData,
-        };
-
-        let raster_plusone_plus_other = raster_plus_one.plus_raster(other_gdal_source);
-        let r = raster_plusone_plus_other.query(Query);
-        println!("{:?}", r);
-
-        // a vector source
-        let vector_source: MyVectorSource<Point> = MyVectorSource {
-            dataset: "vec".to_owned(),
-            data: PhantomData,
-        };
-
-        // concrete vector!
-        let v = vector_source.query(Query);
-        println!("{:?}", v);
-
-        // take the vector_source, add a noop, combine the result with the raster_source wrapped in a noop
-        let vector_noop_raster_noop_combine = vector_source
-            .noop()
-            .add_raster_values(RasterOperatorExt::noop(raster_plusone_plus_other));
-        // add more noops
-        let vector_noop_raster_noop_combine_noop_noop =
-            vector_noop_raster_noop_combine.noop().noop();
-        // will produce the concrete vector type! (all known at compile time)
-        println!(
-            "{:?}",
-            vector_noop_raster_noop_combine_noop_noop.vector_query(Query)
-        );
-    }
-}
-*/
