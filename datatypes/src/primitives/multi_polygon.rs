@@ -4,6 +4,15 @@ use crate::util::arrow::ArrowTyped;
 use crate::util::Result;
 use snafu::ensure;
 
+/// A trait that allows a common access to polygons of `MultiPolygon`s and its references
+pub trait MultiPolygonAccess<R, L>
+where
+    R: AsRef<[L]>,
+    L: AsRef<[Coordinate2D]>,
+{
+    fn polygons(&self) -> &[R];
+}
+
 type Ring = Vec<Coordinate2D>;
 type Polygon = Vec<Ring>;
 
@@ -54,8 +63,10 @@ impl MultiPolygon {
     pub(crate) fn new_unchecked(polygons: Vec<Polygon>) -> Self {
         Self { polygons }
     }
+}
 
-    pub fn polygons(&self) -> &[Polygon] {
+impl MultiPolygonAccess<Polygon, Ring> for MultiPolygon {
+    fn polygons(&self) -> &[Polygon] {
         &self.polygons
     }
 }
@@ -126,8 +137,10 @@ impl<'g> MultiPolygonRef<'g> {
     pub(crate) fn new_unchecked(polygons: Vec<PolygonRef<'g>>) -> Self {
         Self { polygons }
     }
+}
 
-    pub fn polygons(&self) -> &[PolygonRef<'g>] {
+impl<'g> MultiPolygonAccess<PolygonRef<'g>, RingRef<'g>> for MultiPolygonRef<'g> {
+    fn polygons(&self) -> &[PolygonRef<'g>] {
         &self.polygons
     }
 }
@@ -156,5 +169,61 @@ impl<'g> Into<geojson::Geometry> for MultiPolygonRef<'g> {
                     .collect(),
             ),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn access() {
+        fn aggregate<T: MultiPolygonAccess<R, L>, R: AsRef<[L]>, L: AsRef<[Coordinate2D]>>(
+            multi_line_string: &T,
+        ) -> (usize, usize, usize) {
+            let number_of_polygons = multi_line_string.polygons().len();
+            let number_of_rings = multi_line_string
+                .polygons()
+                .iter()
+                .map(AsRef::as_ref)
+                .map(<[L]>::len)
+                .sum();
+            let number_of_coordinates = multi_line_string
+                .polygons()
+                .iter()
+                .map(AsRef::as_ref)
+                .flat_map(<[L]>::iter)
+                .map(AsRef::as_ref)
+                .map(<[Coordinate2D]>::len)
+                .sum();
+
+            (number_of_polygons, number_of_rings, number_of_coordinates)
+        }
+
+        let coordinates = vec![vec![
+            vec![
+                (0.0, 0.1).into(),
+                (1.0, 1.1).into(),
+                (1.0, 0.1).into(),
+                (0.0, 0.1).into(),
+            ],
+            vec![
+                (3.0, 3.1).into(),
+                (4.0, 4.1).into(),
+                (4.0, 3.1).into(),
+                (3.0, 3.1).into(),
+            ],
+        ]];
+        let multi_polygon = MultiPolygon::new(coordinates.clone()).unwrap();
+        let multi_polygon_ref = MultiPolygonRef::new(
+            coordinates
+                .iter()
+                .map(|r| r.iter().map(AsRef::as_ref).collect())
+                .collect(),
+        )
+        .unwrap();
+
+        assert_eq!(aggregate(&multi_polygon), (1, 2, 8));
+        assert_eq!(aggregate(&multi_polygon), aggregate(&multi_polygon_ref));
     }
 }

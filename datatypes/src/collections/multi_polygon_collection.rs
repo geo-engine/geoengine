@@ -3,7 +3,9 @@ use crate::collections::{
     FeatureCollectionImplHelpers, GeoFeatureCollectionRowBuilder, IntoGeometryIterator,
     SimpleFeatureCollectionBuilder, SimpleFeatureCollectionRowBuilder,
 };
-use crate::primitives::{Coordinate2D, FeatureDataType, MultiPolygon, MultiPolygonRef};
+use crate::primitives::{
+    Coordinate2D, FeatureDataType, MultiPolygon, MultiPolygonAccess, MultiPolygonRef,
+};
 use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::Result;
 use arrow::array::{Array, BooleanArray, FixedSizeBinaryArray, ListArray, StructArray};

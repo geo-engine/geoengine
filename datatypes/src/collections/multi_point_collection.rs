@@ -408,7 +408,7 @@ mod tests {
     use super::*;
 
     use crate::collections::{FeatureCollectionBuilder, FeatureCollectionRowBuilder};
-    use crate::primitives::{FeatureDataRef, FeatureDataValue, NullableDataRef};
+    use crate::primitives::{FeatureDataRef, FeatureDataValue, MultiPointAccess, NullableDataRef};
     use serde_json::{from_str, json};
 
     #[test]
