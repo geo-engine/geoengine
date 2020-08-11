@@ -171,3 +171,59 @@ impl<'g> Into<geojson::Geometry> for MultiPolygonRef<'g> {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn access() {
+        fn aggregate<T: MultiPolygonAccess<R, L>, R: AsRef<[L]>, L: AsRef<[Coordinate2D]>>(
+            multi_line_string: &T,
+        ) -> (usize, usize, usize) {
+            let number_of_polygons = multi_line_string.polygons().len();
+            let number_of_rings = multi_line_string
+                .polygons()
+                .iter()
+                .map(AsRef::as_ref)
+                .map(<[L]>::len)
+                .sum();
+            let number_of_coordinates = multi_line_string
+                .polygons()
+                .iter()
+                .map(AsRef::as_ref)
+                .flat_map(<[L]>::iter)
+                .map(AsRef::as_ref)
+                .map(<[Coordinate2D]>::len)
+                .sum();
+
+            (number_of_polygons, number_of_rings, number_of_coordinates)
+        }
+
+        let coordinates = vec![vec![
+            vec![
+                (0.0, 0.1).into(),
+                (1.0, 1.1).into(),
+                (1.0, 0.1).into(),
+                (0.0, 0.1).into(),
+            ],
+            vec![
+                (3.0, 3.1).into(),
+                (4.0, 4.1).into(),
+                (4.0, 3.1).into(),
+                (3.0, 3.1).into(),
+            ],
+        ]];
+        let multi_polygon = MultiPolygon::new(coordinates.clone()).unwrap();
+        let multi_polygon_ref = MultiPolygonRef::new(
+            coordinates
+                .iter()
+                .map(|r| r.iter().map(AsRef::as_ref).collect())
+                .collect(),
+        )
+        .unwrap();
+
+        assert_eq!(aggregate(&multi_polygon), (1, 2, 8));
+        assert_eq!(aggregate(&multi_polygon), aggregate(&multi_polygon_ref));
+    }
+}

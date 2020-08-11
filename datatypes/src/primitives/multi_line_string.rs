@@ -109,3 +109,39 @@ impl<'g> Into<geojson::Geometry> for MultiLineStringRef<'g> {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn access() {
+        fn aggregate<T: MultiLineStringAccess<L>, L: AsRef<[Coordinate2D]>>(
+            multi_line_string: &T,
+        ) -> (usize, usize) {
+            let number_of_lines = multi_line_string.lines().len();
+            let number_of_coordinates = multi_line_string
+                .lines()
+                .iter()
+                .map(AsRef::as_ref)
+                .map(<[Coordinate2D]>::len)
+                .sum();
+
+            (number_of_lines, number_of_coordinates)
+        }
+
+        let coordinates = vec![
+            vec![(0.0, 0.1).into(), (1.0, 1.1).into()],
+            vec![(3.0, 3.1).into(), (4.0, 4.1).into()],
+        ];
+        let multi_line_string = MultiLineString::new(coordinates.clone()).unwrap();
+        let multi_line_string_ref =
+            MultiLineStringRef::new(coordinates.iter().map(AsRef::as_ref).collect()).unwrap();
+
+        assert_eq!(aggregate(&multi_line_string), (2, 4));
+        assert_eq!(
+            aggregate(&multi_line_string),
+            aggregate(&multi_line_string_ref)
+        );
+    }
+}

@@ -108,3 +108,28 @@ impl<'g> Into<geojson::Geometry> for MultiPointRef<'g> {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn access() {
+        fn aggregate<T: MultiPointAccess>(multi_point: &T) -> Coordinate2D {
+            let (x, y) = multi_point
+                .points()
+                .iter()
+                .fold((0., 0.), |(x, y), c| (x + c.x, y + c.y));
+            (x, y).into()
+        }
+
+        let coordinates = vec![(0.0, 0.1).into(), (1.0, 1.1).into()];
+        let multi_point = MultiPoint::new(coordinates.clone()).unwrap();
+        let multi_point_ref = MultiPointRef::new(&coordinates).unwrap();
+
+        let Coordinate2D { x, y } = aggregate(&multi_point);
+        float_cmp::approx_eq!(f64, x, 1.0);
+        float_cmp::approx_eq!(f64, y, 1.2);
+        assert_eq!(aggregate(&multi_point), aggregate(&multi_point_ref));
+    }
+}
