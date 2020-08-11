@@ -800,8 +800,6 @@ mod tests {
             data_type: RasterDataType::U8,
         };
 
-        dbg!(&dataset_information);
-
         let gdal_source = GdalSourceProcessor {
             dataset_information,
             gdal_params,

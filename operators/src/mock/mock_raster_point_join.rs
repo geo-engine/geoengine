@@ -186,7 +186,6 @@ mod tests {
         .boxed();
 
         let serialized = serde_json::to_string(&op).unwrap();
-        dbg!(&serialized);
         let expected = serde_json::json!({
             "type": "MockRasterPointJoinOperator",
             "raster_sources": [{
