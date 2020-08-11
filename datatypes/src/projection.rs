@@ -4,6 +4,7 @@ use serde::export::Formatter;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use snafu::ResultExt;
 use std::convert::TryInto;
+use std::str::FromStr;
 
 /// A projection authority that is part of a projection definition
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
@@ -77,7 +78,7 @@ impl<'de> Visitor<'de> for ProjectionDeserializeVisitor {
     where
         E: serde::de::Error,
     {
-        v.try_into().map_err(serde::de::Error::custom)
+        v.parse().map_err(serde::de::Error::custom)
     }
 }
 
@@ -108,18 +109,18 @@ impl TryInto<ProjectionAuthority> for &str {
     }
 }
 
-impl TryInto<Projection> for &str {
-    type Error = error::Error;
+impl FromStr for Projection {
+    type Err = error::Error;
 
-    fn try_into(self) -> Result<Projection, Self::Error> {
-        let split: Vec<&str> = self.split(':').collect();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let split: Vec<&str> = s.split(':').collect();
         match *split.as_slice() {
-            [authority, code] => Ok(Projection::new(
+            [authority, code] => Ok(Self::new(
                 authority.try_into()?,
                 code.parse::<u32>().context(error::ParseU32)?,
             )),
             _ => Err(error::Error::InvalidProjectionString {
-                projection_string: self.into(),
+                projection_string: s.into(),
             }),
         }
     }
@@ -182,7 +183,7 @@ impl<'de> Visitor<'de> for ProjectionOptionDeserializeVisitor {
             return Ok(ProjectionOption::None);
         }
 
-        let projection: Projection = v.try_into().map_err(serde::de::Error::custom)?;
+        let projection: Projection = v.parse().map_err(serde::de::Error::custom)?;
 
         Ok(projection.into())
     }
