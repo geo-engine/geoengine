@@ -3,7 +3,6 @@ use serde::de::Visitor;
 use serde::export::Formatter;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use snafu::ResultExt;
-use std::convert::TryInto;
 use std::str::FromStr;
 
 /// A projection authority that is part of a projection definition
@@ -91,18 +90,18 @@ impl<'de> Deserialize<'de> for Projection {
     }
 }
 
-impl TryInto<ProjectionAuthority> for &str {
-    type Error = error::Error;
+impl FromStr for ProjectionAuthority {
+    type Err = error::Error;
 
-    fn try_into(self) -> Result<ProjectionAuthority, Self::Error> {
-        Ok(match self {
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
             "EPSG" => ProjectionAuthority::Epsg,
             "SR-ORG" => ProjectionAuthority::SrOrg,
             "IAU2000" => ProjectionAuthority::Iau2000,
             "ESRI" => ProjectionAuthority::Esri,
             _ => {
                 return Err(error::Error::InvalidProjectionString {
-                    projection_string: self.into(),
+                    projection_string: s.into(),
                 })
             }
         })
@@ -113,10 +112,11 @@ impl FromStr for Projection {
     type Err = error::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let split: Vec<&str> = s.split(':').collect();
-        match *split.as_slice() {
-            [authority, code] => Ok(Self::new(
-                authority.try_into()?,
+        let mut split = s.split(':');
+
+        match (split.next(), split.next(), split.next()) {
+            (Some(authority), Some(code), None) => Ok(Self::new(
+                authority.parse()?,
                 code.parse::<u32>().context(error::ParseU32)?,
             )),
             _ => Err(error::Error::InvalidProjectionString {
