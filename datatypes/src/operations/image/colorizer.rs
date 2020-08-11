@@ -1,5 +1,6 @@
 use crate::error;
-use crate::operations::image::{LossyInto, RgbaTransmutable};
+use crate::operations::image::RgbaTransmutable;
+use crate::raster::Pixel;
 use crate::util::Result;
 use ordered_float::{FloatIsNan, NotNan};
 use serde::{Deserialize, Serialize};
@@ -335,7 +336,7 @@ impl<'c> ColorMapper<'c> {
     /// Map a raster value to a color from the colorizer
     pub fn call<T>(&self, value: T) -> RgbaColor
     where
-        T: LossyInto<f64> + RgbaTransmutable,
+        T: Pixel + RgbaTransmutable,
     {
         match self {
             ColorMapper::ColorTable {
@@ -345,7 +346,7 @@ impl<'c> ColorMapper<'c> {
                 no_data_color,
                 default_color,
             } => {
-                let value = value.lossy_into();
+                let value: f64 = value.as_();
                 if f64::is_nan(value) {
                     *no_data_color
                 } else if value < *min_value || value > *max_value {
@@ -362,7 +363,7 @@ impl<'c> ColorMapper<'c> {
                 color_map,
                 no_data_color,
             } => {
-                if let Ok(value) = NotNan::<f64>::new(value.lossy_into()) {
+                if let Ok(value) = NotNan::<f64>::new(value.as_()) {
                     *color_map.get(&value).unwrap_or(no_data_color)
                 } else {
                     *no_data_color

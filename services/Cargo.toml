@@ -12,10 +12,13 @@ edition = "2018"
 chrono = { version = "0.4", features = ["serde"] }
 geoengine-datatypes = { path = "../datatypes" }
 geoengine-operators = { path = "../operators" }
-pwhash = "0.3.0"
+tokio = { version = "0.2", features = ["macros"] }
+warp = "0.2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-snafu = "0.6"
-tokio = { version = "0.2", features = ["macros"] }
 uuid = { version = "0.8", features = ["serde", "v4", "v5"] }
-warp = "0.2"
+snafu = "0.6"
+pwhash = "0.3.0"
+serde_urlencoded = "0.6.1"
+futures = "0.3"
+image = "0.23"

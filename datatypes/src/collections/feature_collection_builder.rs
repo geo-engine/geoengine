@@ -189,8 +189,8 @@ where
 
     fn push_time_interval(&mut self, time_interval: TimeInterval) -> Result<()> {
         let date_builder = self.time_intervals_builder.values();
-        date_builder.append_value(time_interval.start())?;
-        date_builder.append_value(time_interval.end())?;
+        date_builder.append_value(time_interval.start().inner())?;
+        date_builder.append_value(time_interval.end().inner())?;
 
         self.time_intervals_builder.append(true)?;
 

@@ -9,6 +9,7 @@ use warp::{Rejection, Reply};
 
 pub mod projects;
 pub mod users;
+pub mod wms;
 pub mod workflows;
 
 type DB<T> = Arc<RwLock<T>>;
@@ -21,15 +22,13 @@ type DB<T> = Arc<RwLock<T>>;
 ///
 pub async fn handle_rejection(error: Rejection) -> Result<impl Reply, Rejection> {
     // TODO: handle/report serde deserialization error when e.g. a json attribute is missing/malformed
-    if let Some(err) = error.find::<Error>() {
+    error.find::<Error>().map_or(Err(warp::reject()), |err| {
         let json = warp::reply::json(&err.to_string());
         Ok(warp::reply::with_status(
             json,
             warp::http::StatusCode::BAD_REQUEST,
         ))
-    } else {
-        Err(warp::reject())
-    }
+    })
 }
 
 pub fn authenticate<T: UserDB>(

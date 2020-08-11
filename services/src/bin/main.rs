@@ -1,4 +1,5 @@
 use std::sync::Arc;
+
 use tokio::sync::RwLock;
 use warp::Filter;
 
@@ -55,6 +56,7 @@ async fn main() {
                 user_db.clone(),
                 project_db.clone(),
             ))
+            .or(handlers::wms::wms_handler(workflow_registry.clone()))
             .recover(handle_rejection),
     )
     .run(([127, 0, 0, 1], 3030))

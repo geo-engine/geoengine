@@ -2,12 +2,20 @@ use snafu::Snafu;
 use warp::reject::Reject;
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
-
-#[derive(Debug, PartialEq, Snafu)]
+#[derive(Debug, Snafu)]
 #[snafu(visibility = "pub(crate)")]
 pub enum Error {
     DataType {
-        error: geoengine_datatypes::error::Error,
+        source: geoengine_datatypes::error::Error,
+    },
+    Operator {
+        source: geoengine_operators::error::Error,
+    },
+    HTTP {
+        source: warp::http::Error,
+    },
+    Uuid {
+        source: uuid::Error,
     },
 
     #[snafu(display("Registration failed: {:?}", reason))]
@@ -18,6 +26,7 @@ pub enum Error {
     LogoutFailed,
     SessionDoesNotExist,
     InvalidSessionToken,
+    InvalidWorkflowResultType,
 
     ProjectCreateFailed,
     ProjectListFailed,
@@ -30,9 +39,13 @@ pub enum Error {
 impl Reject for Error {}
 
 impl From<geoengine_datatypes::error::Error> for Error {
-    fn from(datatypes_error: geoengine_datatypes::error::Error) -> Self {
-        Error::DataType {
-            error: datatypes_error,
-        }
+    fn from(e: geoengine_datatypes::error::Error) -> Self {
+        Self::DataType { source: e }
+    }
+}
+
+impl From<geoengine_operators::error::Error> for Error {
+    fn from(e: geoengine_operators::error::Error) -> Self {
+        Self::Operator { source: e }
     }
 }
