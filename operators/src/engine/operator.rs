@@ -7,10 +7,10 @@ use std::ops::Range;
 
 /// Common methods for `Operator`s
 pub trait Operator: std::fmt::Debug + Send + Sync {
-    /// Get the sources of the Operator
+    /// Get the sources of the `Operator`
     fn raster_sources(&self) -> &[Box<dyn RasterOperator>];
 
-    /// Get the sources of the Operator
+    /// Get the sources of the `Operator`
     fn vector_sources(&self) -> &[Box<dyn VectorOperator>];
 
     fn validate_children(
@@ -36,10 +36,11 @@ pub trait Operator: std::fmt::Debug + Send + Sync {
                 });
             }
         }
+
         Ok(())
     }
 
-    /// Get the projection of the result produced by this operator
+    /// Get the projection of the result produced by this `Operator`
     fn projection(&self) -> ProjectionOption;
 }
 

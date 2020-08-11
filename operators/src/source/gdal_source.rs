@@ -255,11 +255,9 @@ where
                 .into_iter()
                 .map(move |tile| (*time, tile))
                 .filter(move |(_, tile)| {
-                    if let Some(filter_bbox) = bbox {
+                    bbox.map_or(true, |filter_bbox| {
                         filter_bbox.intersects_bbox(&tile.spatial_bounds())
-                    } else {
-                        true
-                    }
+                    })
                 })
         })
     }
