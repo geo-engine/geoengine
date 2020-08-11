@@ -917,7 +917,7 @@ mod tests {
     }
 
     #[test]
-    fn nan_not_equals() {
+    fn nan_equals() {
         let collection = {
             let mut builder = MultiPointCollection::builder();
             builder
@@ -943,6 +943,32 @@ mod tests {
             builder.build().unwrap()
         };
 
-        assert_ne!(collection, collection);
+        assert_eq!(collection, collection);
+    }
+
+    #[test]
+    fn null_equals() {
+        let collection = {
+            let mut builder = MultiPointCollection::builder();
+            builder
+                .add_column("number".into(), FeatureDataType::NullableNumber)
+                .unwrap();
+            let mut builder = builder.finish_header();
+
+            builder
+                .push_geometry(Coordinate2D::new(0., 0.).into())
+                .unwrap();
+            builder
+                .push_time_interval(TimeInterval::new_unchecked(0, 1))
+                .unwrap();
+            builder
+                .push_data("number", FeatureDataValue::NullableNumber(None))
+                .unwrap();
+            builder.finish_row();
+
+            builder.build().unwrap()
+        };
+
+        assert_eq!(collection, collection);
     }
 }
