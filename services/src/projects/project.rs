@@ -287,10 +287,8 @@ pub enum LoadVersion {
 
 impl From<Option<Uuid>> for LoadVersion {
     fn from(id: Option<Uuid>) -> Self {
-        if let Some(id) = id {
+        id.map_or(LoadVersion::Latest, |id| {
             LoadVersion::Version(ProjectVersionId::from_uuid(id))
-        } else {
-            LoadVersion::Latest
-        }
+        })
     }
 }
