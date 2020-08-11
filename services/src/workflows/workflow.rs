@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use geoengine_operators::Operator;
+use geoengine_operators::engine::TypedOperator;
 
 identifier!(WorkflowId);
 
@@ -16,10 +16,9 @@ impl WorkflowId {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Workflow {
-    pub operator: Operator,
+    pub operator: TypedOperator,
 }
 
 // TODO: derive if/when operator is Clone

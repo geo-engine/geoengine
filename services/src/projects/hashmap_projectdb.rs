@@ -511,12 +511,13 @@ impl ProjectDB for HashMapProjectDB {
             error::ProjectUpdateFailed
         );
 
-        if let Some(i) = self.permissions.iter().position(|p| p == &permission) {
-            self.permissions.remove(i);
-            Ok(())
-        } else {
-            Err(error::Error::PermissionFailed)
-        }
+        self.permissions
+            .iter()
+            .position(|p| p == &permission)
+            .map_or(Err(error::Error::PermissionFailed), |i| {
+                self.permissions.remove(i);
+                Ok(())
+            })
     }
 }
 

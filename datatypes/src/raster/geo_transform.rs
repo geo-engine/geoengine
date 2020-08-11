@@ -1,14 +1,15 @@
 use crate::primitives::Coordinate2D;
+use serde::{Deserialize, Serialize};
 
 /// This is a typedef for the `GDAL GeoTransform`. It represents an affine transformation matrix.
 pub type GdalGeoTransform = [f64; 6];
 
 /// The `GeoTransform` is a more user friendly representation of the `GDAL GeoTransform` affine transformation matrix.
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct GeoTransform {
-    upper_left_coordinate: Coordinate2D,
-    x_pixel_size: f64,
-    y_pixel_size: f64,
+    pub upper_left_coordinate: Coordinate2D,
+    pub x_pixel_size: f64,
+    pub y_pixel_size: f64,
 }
 
 impl GeoTransform {

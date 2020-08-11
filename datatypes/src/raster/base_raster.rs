@@ -1,28 +1,35 @@
 use crate::raster::{
-    Capacity, Dim, GeoTransform, GridDimension, GridIndex, GridPixelAccess, GridPixelAccessMut,
-    Raster,
+    Capacity, Dim, GenericRaster, GeoTransform, GridDimension, GridIndex, GridPixelAccess,
+    GridPixelAccessMut, Pixel, Raster,
 };
 use crate::util::Result;
 use crate::{
     error,
     primitives::{BoundingBox2D, SpatialBounded, TemporalBounded, TimeInterval},
 };
+use num_traits::AsPrimitive;
+use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::convert::AsRef;
+use std::fmt::Debug;
 
-#[derive(Clone, Debug)]
-pub struct BaseRaster<D, T, C> {
-    grid_dimension: D,
-    data_container: C,
-    no_data_value: Option<T>,
-    geo_transform: GeoTransform,
-    temporal_bounds: TimeInterval,
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct BaseRaster<D, T, C>
+where
+    T: Pixel,
+{
+    pub grid_dimension: D,
+    pub data_container: C,
+    pub no_data_value: Option<T>,
+    pub geo_transform: GeoTransform,
+    pub temporal_bounds: TimeInterval,
 }
 
 impl<D, T, C> BaseRaster<D, T, C>
 where
     D: GridDimension,
     C: Capacity,
+    T: Pixel,
 {
     /// Generates a new raster
     ///
@@ -68,17 +75,43 @@ where
             geo_transform,
         })
     }
+
+    /// Converts the data type of the raster by converting it pixel-wise
+    /// TODO: Is is correct to always return a `Vec`?
+    pub fn convert<To>(self) -> BaseRaster<D, To, Vec<To>>
+    where
+        C: AsRef<[T]>,
+        To: Pixel,
+        T: AsPrimitive<To>,
+    {
+        BaseRaster::new(
+            self.grid_dimension,
+            self.data_container
+                .as_ref()
+                .iter()
+                .map(|&pixel| pixel.as_())
+                .collect(),
+            self.no_data_value.map(AsPrimitive::as_),
+            self.temporal_bounds,
+            self.geo_transform,
+        )
+        .expect("raster type conversion cannot fail")
+    }
 }
 
-impl<D, T, C> TemporalBounded for BaseRaster<D, T, C> {
+impl<D, T, C> TemporalBounded for BaseRaster<D, T, C>
+where
+    T: Pixel,
+{
     fn temporal_bounds(&self) -> TimeInterval {
         self.temporal_bounds
     }
 }
 
-impl<D, C, T> SpatialBounded for BaseRaster<D, C, T>
+impl<D, T, C> SpatialBounded for BaseRaster<D, T, C>
 where
     D: GridDimension,
+    T: Pixel,
 {
     fn spatial_bounds(&self) -> BoundingBox2D {
         let top_left_coord = self.geo_transform.grid_2d_to_coordinate_2d((0, 0));
@@ -93,7 +126,7 @@ where
 impl<D, T, C> Raster<D, T, C> for BaseRaster<D, T, C>
 where
     D: GridDimension,
-    T: Copy,
+    T: Pixel,
     C: Capacity,
 {
     fn dimension(&self) -> &D {
@@ -115,7 +148,7 @@ where
     D: GridDimension,
     I: GridIndex<D>,
     C: AsRef<[T]> + Capacity,
-    T: Copy,
+    T: Pixel,
 {
     fn pixel_value_at_grid_index(&self, grid_index: &I) -> Result<T> {
         let index = grid_index.grid_index_to_1d_index(&self.grid_dimension)?;
@@ -128,7 +161,7 @@ where
     D: GridDimension,
     I: GridIndex<D>,
     C: AsMut<[T]> + Capacity,
-    T: Copy,
+    T: Pixel,
 {
     fn set_pixel_value_at_grid_index(&mut self, grid_index: &I, value: T) -> Result<()> {
         let index = grid_index.grid_index_to_1d_index(&self.grid_dimension)?;
@@ -139,6 +172,15 @@ where
 
 pub type Raster2D<T> = BaseRaster<Dim<[usize; 2]>, T, Vec<T>>;
 pub type Raster3D<T> = BaseRaster<Dim<[usize; 3]>, T, Vec<T>>;
+
+impl<T: Send + Debug> GenericRaster for Raster2D<T>
+where
+    T: Pixel,
+{
+    fn get(&self) {
+        unimplemented!()
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -196,7 +238,7 @@ mod tests {
         )
         .unwrap();
         let value = raster2d.pixel_value_at_grid_index(&dim_index).unwrap();
-        assert!(value == 4);
+        assert_eq!(value, 4);
     }
 
     #[test]
@@ -220,7 +262,7 @@ mod tests {
             .set_pixel_value_at_grid_index(&tuple_index, 9)
             .unwrap();
         let value = raster2d.pixel_value_at_grid_index(&tuple_index).unwrap();
-        assert!(value == 9);
+        assert_eq!(value, 9);
         assert_eq!(raster2d.data_container, [1, 2, 3, 9, 5, 6]);
     }
 }

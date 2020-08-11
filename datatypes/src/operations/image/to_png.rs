@@ -1,6 +1,6 @@
 use crate::error;
-use crate::operations::image::{Colorizer, LossyInto, RgbaTransmutable};
-use crate::raster::{GridPixelAccess, Raster, Raster2D};
+use crate::operations::image::{Colorizer, RgbaTransmutable};
+use crate::raster::{GridDimension, GridPixelAccess, Pixel, Raster, Raster2D, TypedRaster2D};
 use crate::util::Result;
 use image::{DynamicImage, ImageFormat, RgbaImage};
 
@@ -11,20 +11,20 @@ pub trait ToPng {
 
 impl<T> ToPng for Raster2D<T>
 where
-    T: Copy + LossyInto<f64> + RgbaTransmutable,
+    T: Pixel + RgbaTransmutable,
 {
     fn to_png(&self, width: u32, height: u32, colorizer: &Colorizer) -> Result<Vec<u8>> {
         // TODO: use PNG color palette once it is available
 
-        let scale_x = (self.dimension()[0] as f64) / f64::from(width);
-        let scale_y = (self.dimension()[1] as f64) / f64::from(height);
+        let (.., raster_y_size, raster_x_size) = self.dimension().as_pattern();
+        let scale_x = (raster_x_size as f64) / f64::from(width);
+        let scale_y = (raster_y_size as f64) / f64::from(height);
 
         let color_mapper = colorizer.create_color_mapper();
 
         let image_buffer: RgbaImage = RgbaImage::from_fn(width, height, |x, y| {
-            if let Ok(pixel_value) =
-                self.pixel_value_at_grid_index(&image_pixel_to_raster_pixel(x, y, scale_x, scale_y))
-            {
+            let (grid_pixel_x, grid_pixel_y) = image_pixel_to_raster_pixel(x, y, scale_x, scale_y);
+            if let Ok(pixel_value) = self.pixel_value_at_grid_index(&(grid_pixel_y, grid_pixel_x)) {
                 color_mapper.call(pixel_value)
             } else {
                 colorizer.no_data_color()
@@ -44,6 +44,24 @@ where
     }
 }
 
+impl ToPng for TypedRaster2D {
+    fn to_png(&self, width: u32, height: u32, colorizer: &Colorizer) -> Result<Vec<u8>> {
+        match self {
+            TypedRaster2D::U8(r) => r.to_png(width, height, colorizer),
+            TypedRaster2D::U16(r) => r.to_png(width, height, colorizer),
+            TypedRaster2D::U32(r) => r.to_png(width, height, colorizer),
+            TypedRaster2D::U64(r) => r.to_png(width, height, colorizer),
+            TypedRaster2D::I8(r) => r.to_png(width, height, colorizer),
+            TypedRaster2D::I16(r) => r.to_png(width, height, colorizer),
+            TypedRaster2D::I32(r) => r.to_png(width, height, colorizer),
+            TypedRaster2D::I64(r) => r.to_png(width, height, colorizer),
+            TypedRaster2D::F32(r) => r.to_png(width, height, colorizer),
+            TypedRaster2D::F64(r) => r.to_png(width, height, colorizer),
+        }
+    }
+}
+
+// TODO: raster pixel access is currently modeled similar to numpy/ndarray with ..,z,y,x
 // TODO: move these functions to base raster (?)
 /// Map an image's (x, y) values to the grid cells of a raster.
 fn image_pixel_to_raster_pixel<ImagePixelType>(
@@ -83,7 +101,7 @@ mod tests {
         .unwrap();
 
         raster.set_pixel_value_at_grid_index(&(0, 0), 255).unwrap();
-        raster.set_pixel_value_at_grid_index(&(0, 1), 100).unwrap();
+        raster.set_pixel_value_at_grid_index(&(1, 0), 100).unwrap();
 
         let colorizer = Colorizer::linear_gradient(
             vec![
@@ -115,7 +133,7 @@ mod tests {
         .unwrap();
 
         raster.set_pixel_value_at_grid_index(&(0, 0), 10).unwrap();
-        raster.set_pixel_value_at_grid_index(&(0, 1), 5).unwrap();
+        raster.set_pixel_value_at_grid_index(&(1, 0), 5).unwrap();
 
         let colorizer = Colorizer::logarithmic_gradient(
             vec![
@@ -147,7 +165,7 @@ mod tests {
         .unwrap();
 
         raster.set_pixel_value_at_grid_index(&(0, 0), 2).unwrap();
-        raster.set_pixel_value_at_grid_index(&(0, 1), 1).unwrap();
+        raster.set_pixel_value_at_grid_index(&(1, 0), 1).unwrap();
 
         let colorizer = Colorizer::palette(
             [
@@ -185,7 +203,7 @@ mod tests {
             .set_pixel_value_at_grid_index(&(0, 0), 0xFF00_00FF_u32)
             .unwrap();
         raster
-            .set_pixel_value_at_grid_index(&(0, 1), 0x00FF_00FF_u32)
+            .set_pixel_value_at_grid_index(&(1, 0), 0x00FF_00FF_u32)
             .unwrap();
 
         let colorizer = Colorizer::rgba();

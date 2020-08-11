@@ -2,7 +2,10 @@ use arrow::error::ArrowError;
 use snafu::Snafu;
 
 use crate::collections::FeatureCollectionError;
-use crate::primitives::{Coordinate2D, PrimitivesError, TimeInterval};
+use crate::{
+    primitives::{Coordinate2D, PrimitivesError, TimeInterval},
+    raster::RasterDataType,
+};
 
 #[derive(Debug, PartialEq, Snafu)]
 #[snafu(visibility = "pub(crate)")]
@@ -104,6 +107,25 @@ pub enum Error {
 
     Primitives {
         source: PrimitivesError,
+    },
+
+    Blit {
+        details: String,
+    },
+    #[snafu(display("NonMatchingRasterTypes: a=\"{:?}\", b=\"{:?}\"", a, b))]
+    NonMatchingRasterTypes {
+        a: RasterDataType,
+        b: RasterDataType,
+    },
+
+    #[snafu(display("InvalidProjectionString: {}", projection_string))]
+    InvalidProjectionString {
+        projection_string: String,
+    },
+
+    #[snafu(display("ParseU32: {}", source))]
+    ParseU32 {
+        source: <u32 as std::str::FromStr>::Err,
     },
 }
 
