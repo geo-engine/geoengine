@@ -16,17 +16,7 @@ impl WorkflowId {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Workflow {
     pub operator: TypedOperator,
-}
-
-// TODO: derive if/when operator is Clone
-impl Clone for Workflow {
-    fn clone(&self) -> Self {
-        let serialized = serde_json::to_string(&self.operator).unwrap();
-        Self {
-            operator: serde_json::from_str(&serialized).unwrap(),
-        }
-    }
 }

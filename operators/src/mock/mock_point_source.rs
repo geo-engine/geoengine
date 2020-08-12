@@ -36,7 +36,7 @@ impl QueryProcessor for MockPointSourceProcessor {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MockPointSource {
     pub points: Vec<Coordinate2D>,
 }
