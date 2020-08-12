@@ -6,7 +6,7 @@ use uuid::Uuid;
 use warp::reply::Reply;
 use warp::{http::Response, Filter};
 
-use geoengine_datatypes::operations::image::{Colorizer, RgbaTransmutable, ToPng};
+use geoengine_datatypes::operations::image::{Colorizer, ToPng};
 use geoengine_datatypes::raster::{Blit, GeoTransform, Pixel, Raster2D};
 
 use crate::error;
@@ -201,7 +201,7 @@ async fn raster_stream_to_png_bytes<T>(
     request: &GetMap,
 ) -> Result<Vec<u8>>
 where
-    T: Pixel + RgbaTransmutable,
+    T: Pixel,
 {
     let tile_stream = processor.raster_query(query_rect, query_ctx);
 
