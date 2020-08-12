@@ -16,12 +16,12 @@ use geoengine_datatypes::collections::{
 };
 use geoengine_datatypes::{
     primitives::{BoundingBox2D, Coordinate2D, TimeInterval},
-    projection::{Projection, ProjectionOption},
+    projection::Projection,
 };
 
 use crate::engine::{
     Operator, QueryContext, QueryProcessor, QueryRectangle, TypedVectorQueryProcessor,
-    VectorOperator, VectorQueryProcessor,
+    VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::error;
 use crate::util::Result;
@@ -152,15 +152,15 @@ impl Operator for CsvSource {
     fn vector_sources(&self) -> &[Box<dyn crate::engine::VectorOperator>] {
         &[]
     }
-    fn projection(&self) -> ProjectionOption {
-        ProjectionOption::Projection(Projection::wgs84()) //TODO: support other projections
-    }
 }
 
 #[typetag::serde]
 impl VectorOperator for CsvSource {
-    fn result_type(&self) -> VectorDataType {
-        VectorDataType::MultiPoint
+    fn result_descriptor(&self) -> VectorResultDescriptor {
+        VectorResultDescriptor {
+            data_type: VectorDataType::MultiPoint,
+            projection: Projection::wgs84().into(),
+        }
     }
 
     fn vector_processor(&self) -> Result<crate::engine::TypedVectorQueryProcessor> {

@@ -1,6 +1,6 @@
 use crate::engine::{
     Operator, QueryProcessor, RasterOperator, RasterQueryProcessor, TypedVectorQueryProcessor,
-    VectorOperator, VectorQueryProcessor,
+    VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::util::Result;
 use futures::StreamExt;
@@ -88,6 +88,7 @@ pub struct MockRasterPointJoinOperator {
     raster_sources: Vec<Box<dyn RasterOperator>>,
     point_sources: Vec<Box<dyn VectorOperator>>,
     params: MockRasterPointJoinParams,
+    result_descriptor: Option<VectorResultDescriptor>,
 }
 
 impl Operator for MockRasterPointJoinOperator {
@@ -97,21 +98,12 @@ impl Operator for MockRasterPointJoinOperator {
     fn vector_sources(&self) -> &[Box<dyn VectorOperator>] {
         &self.point_sources
     }
-    fn projection(&self) -> ProjectionOption {
-        self.point_sources
-            .get(0)
-            .map_or_else(|| ProjectionOption::None, |o| o.projection())
-    }
 }
 
 #[typetag::serde]
 impl VectorOperator for MockRasterPointJoinOperator {
-    fn result_type(&self) -> VectorDataType {
-        VectorDataType::MultiPoint
-    }
-
     fn vector_processor(&self) -> Result<crate::engine::TypedVectorQueryProcessor> {
-        self.validate_children(1..2, 1..2)?;
+        self.validate_children(self.result_descriptor().projection, 1..2, 1..2)?;
 
         let raster_source = self.raster_sources[0].raster_processor()?;
         let point_source = match self.point_sources[0].vector_processor()? {
@@ -127,18 +119,34 @@ impl VectorOperator for MockRasterPointJoinOperator {
             _ => panic!(),
         }))
     }
+    fn result_descriptor(&self) -> VectorResultDescriptor {
+        if self.result_descriptor.is_none() {
+            let new_result_descriptor = VectorResultDescriptor {
+                projection: self.point_sources.get(0).map_or_else(
+                    || ProjectionOption::None,
+                    |o| o.result_descriptor().projection,
+                ),
+                data_type: VectorDataType::MultiPoint,
+            };
+
+            // self.result_descriptor = Some(new_result_descriptor); //TODO: discuss if this should be interior or if method is mut...
+            return new_result_descriptor;
+        }
+        self.result_descriptor.unwrap()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{
-        engine::{QueryContext, QueryRectangle},
+        engine::{QueryContext, QueryRectangle, RasterResultDescriptor},
         mock::{MockPointSource, MockRasterSource},
     };
     use futures::executor::block_on_stream;
     use geoengine_datatypes::{
         primitives::{BoundingBox2D, Coordinate2D, FeatureDataRef, TimeInterval},
+        projection::Projection,
         raster::{Raster2D, RasterDataType, TileInformation},
     };
 
@@ -171,7 +179,10 @@ mod tests {
 
         let mrs = MockRasterSource {
             data: vec![raster_tile],
-            raster_type: RasterDataType::U8,
+            result_descriptor: RasterResultDescriptor {
+                data_type: RasterDataType::U8,
+                projection: Projection::wgs84().into(),
+            },
         }
         .boxed();
 
@@ -182,6 +193,7 @@ mod tests {
             params,
             raster_sources: vec![mrs],
             point_sources: vec![mps],
+            result_descriptor: None,
         }
         .boxed();
 
@@ -237,7 +249,10 @@ mod tests {
                         }
                     }
                 }],
-                "raster_type": "U8"
+                "result_descriptor": {
+                    "data_type": "U8",
+                    "projection": "EPSG:4326"
+                }
             }],
             "point_sources": [{
                 "type": "MockPointSource",
@@ -254,7 +269,8 @@ mod tests {
             }],
             "params": {
                 "feature_name": "raster_values"
-            }
+            },
+            "result_descriptor": null
         })
         .to_string();
         assert_eq!(serialized, expected);
@@ -290,7 +306,10 @@ mod tests {
 
         let mrs = MockRasterSource {
             data: vec![raster_tile],
-            raster_type: RasterDataType::U8,
+            result_descriptor: RasterResultDescriptor {
+                data_type: RasterDataType::U8,
+                projection: Projection::wgs84().into(),
+            },
         }
         .boxed();
         let new_column_name = "raster_values".to_string();
@@ -301,6 +320,7 @@ mod tests {
             params,
             raster_sources: vec![mrs],
             point_sources: vec![mps],
+            result_descriptor: None,
         }
         .boxed();
 

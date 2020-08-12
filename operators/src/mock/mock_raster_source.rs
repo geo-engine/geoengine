@@ -1,13 +1,10 @@
 use crate::engine::{
-    Operator, QueryProcessor, RasterOperator, RasterQueryProcessor, TypedRasterQueryProcessor,
-    VectorOperator,
+    Operator, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+    TypedRasterQueryProcessor, VectorOperator,
 };
 use crate::util::Result;
 use futures::{stream, stream::StreamExt};
-use geoengine_datatypes::{
-    projection::{Projection, ProjectionOption},
-    raster::{FromPrimitive, Pixel, RasterDataType, RasterTile2D},
-};
+use geoengine_datatypes::raster::{FromPrimitive, Pixel, RasterDataType, RasterTile2D};
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 
@@ -45,7 +42,7 @@ where
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct MockRasterSource {
     pub data: Vec<RasterTile2D<u8>>,
-    pub raster_type: RasterDataType,
+    pub result_descriptor: RasterResultDescriptor,
 }
 
 impl Operator for MockRasterSource {
@@ -54,9 +51,6 @@ impl Operator for MockRasterSource {
     }
     fn vector_sources(&self) -> &[Box<dyn VectorOperator>] {
         &[]
-    }
-    fn projection(&self) -> ProjectionOption {
-        ProjectionOption::Projection(Projection::wgs84())
     }
 }
 
@@ -78,7 +72,7 @@ impl RasterOperator for MockRasterSource {
             MockRasterSourceProcessor::new(data).boxed()
         }
 
-        Ok(match self.result_type() {
+        Ok(match self.result_descriptor().data_type {
             RasterDataType::U8 => crate::engine::TypedRasterQueryProcessor::U8(
                 MockRasterSourceProcessor::new(self.data.clone()).boxed(),
             ),
@@ -109,8 +103,8 @@ impl RasterOperator for MockRasterSource {
             }
         })
     }
-    fn result_type(&self) -> RasterDataType {
-        self.raster_type
+    fn result_descriptor(&self) -> RasterResultDescriptor {
+        self.result_descriptor
     }
 }
 
@@ -119,6 +113,7 @@ mod tests {
     use super::*;
     use geoengine_datatypes::{
         primitives::TimeInterval,
+        projection::Projection,
         raster::{Raster2D, TileInformation},
     };
 
@@ -147,7 +142,10 @@ mod tests {
 
         let mrs = MockRasterSource {
             data: vec![raster_tile],
-            raster_type: RasterDataType::U8,
+            result_descriptor: RasterResultDescriptor {
+                data_type: RasterDataType::U8,
+                projection: Projection::wgs84().into(),
+            },
         }
         .boxed();
 
@@ -202,7 +200,10 @@ mod tests {
                     }
                 }
             }],
-            "raster_type": "U8"
+            "result_descriptor": {
+                "data_type": "U8",
+                "projection": "EPSG:4326"
+            }
         })
         .to_string();
         assert_eq!(serialized, spec);

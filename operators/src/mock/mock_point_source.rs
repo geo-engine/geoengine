@@ -1,6 +1,9 @@
 use crate::engine::{QueryContext, QueryProcessor, QueryRectangle};
 use crate::{
-    engine::{Operator, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor},
+    engine::{
+        Operator, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
+        VectorResultDescriptor,
+    },
     util::Result,
 };
 use futures::stream::{self, BoxStream, StreamExt};
@@ -8,7 +11,7 @@ use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::{
     collections::MultiPointCollection,
     primitives::{Coordinate2D, TimeInterval},
-    projection::{Projection, ProjectionOption},
+    projection::Projection,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -48,15 +51,15 @@ impl Operator for MockPointSource {
     fn vector_sources(&self) -> &[Box<dyn crate::engine::VectorOperator>] {
         &[]
     }
-    fn projection(&self) -> ProjectionOption {
-        ProjectionOption::Projection(Projection::wgs84())
-    }
 }
 
 #[typetag::serde]
 impl VectorOperator for MockPointSource {
-    fn result_type(&self) -> VectorDataType {
-        VectorDataType::MultiPoint
+    fn result_descriptor(&self) -> VectorResultDescriptor {
+        VectorResultDescriptor {
+            data_type: VectorDataType::MultiPoint,
+            projection: Projection::wgs84().into(),
+        }
     }
 
     fn vector_processor(&self) -> Result<crate::engine::TypedVectorQueryProcessor> {

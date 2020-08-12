@@ -15,23 +15,26 @@ pub trait Operator: std::fmt::Debug + Send + Sync {
 
     fn validate_children(
         &self,
+        expected_projection: ProjectionOption,
         number_of_raster_sources: Range<usize>,
         number_of_vector_sources: Range<usize>,
     ) -> Result<()> {
         if !number_of_raster_sources.contains(&self.raster_sources().len()) {}
         if !number_of_vector_sources.contains(&self.vector_sources().len()) {}
 
-        let result_projection = self.projection();
-
         for proj in self
             .raster_sources()
             .iter()
-            .map(|o| o.projection())
-            .chain(self.vector_sources().iter().map(|o| o.projection()))
+            .map(|o| o.result_descriptor().projection)
+            .chain(
+                self.vector_sources()
+                    .iter()
+                    .map(|o| o.result_descriptor().projection),
+            )
         {
-            if proj != result_projection {
+            if proj != expected_projection {
                 return Err(error::Error::InvalidProjection {
-                    expected: result_projection,
+                    expected: expected_projection,
                     found: proj,
                 });
             }
@@ -39,16 +42,13 @@ pub trait Operator: std::fmt::Debug + Send + Sync {
 
         Ok(())
     }
-
-    /// Get the projection of the result produced by this `Operator`
-    fn projection(&self) -> ProjectionOption;
 }
 
 /// Common methods for `VectorOperator`s
 #[typetag::serde(tag = "type")]
 pub trait VectorOperator: Operator {
     /// Get the result type of the `Operator`
-    fn result_type(&self) -> VectorDataType;
+    fn result_descriptor(&self) -> VectorResultDescriptor;
 
     /// Instantiate a `TypedVectorQueryProcessor` from a `RasterOperator`
     fn vector_processor(&self) -> Result<TypedVectorQueryProcessor>;
@@ -66,7 +66,7 @@ pub trait VectorOperator: Operator {
 #[typetag::serde(tag = "type")]
 pub trait RasterOperator: Operator {
     /// Get the result type of the `Operator`
-    fn result_type(&self) -> RasterDataType;
+    fn result_descriptor(&self) -> RasterResultDescriptor;
 
     /// Instantiate a `TypedRasterQueryProcessor` from a `RasterOperator`
     fn raster_processor(&self) -> Result<TypedRasterQueryProcessor>;
@@ -77,6 +77,68 @@ pub trait RasterOperator: Operator {
         Self: Sized + 'static,
     {
         Box::new(self)
+    }
+}
+
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Serialize, Deserialize)]
+pub struct RasterResultDescriptor {
+    pub data_type: RasterDataType,
+    pub projection: ProjectionOption,
+}
+
+impl RasterResultDescriptor {
+    pub fn map<F>(self, f: F) -> Self
+    where
+        F: Fn(Self) -> Self,
+    {
+        f(self)
+    }
+
+    pub fn map_data_type<F>(mut self, f: F) -> Self
+    where
+        F: Fn(RasterDataType) -> RasterDataType,
+    {
+        self.data_type = f(self.data_type);
+        self
+    }
+
+    pub fn map_projection<F>(mut self, f: F) -> Self
+    where
+        F: Fn(ProjectionOption) -> ProjectionOption,
+    {
+        self.projection = f(self.projection);
+        self
+    }
+}
+
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Serialize, Deserialize)]
+pub struct VectorResultDescriptor {
+    pub data_type: VectorDataType,
+    pub projection: ProjectionOption,
+}
+
+impl VectorResultDescriptor {
+    pub fn map<F>(self, f: F) -> Self
+    where
+        F: Fn(Self) -> Self,
+    {
+        f(self)
+    }
+
+    pub fn map_data_type<F>(mut self, f: F) -> Self
+    where
+        F: Fn(VectorDataType) -> VectorDataType,
+    {
+        self.data_type = f(self.data_type);
+        self
+    }
+
+    pub fn map_projection<F>(mut self, f: F) -> Self
+    where
+        F: Fn(ProjectionOption) -> ProjectionOption,
+    {
+        self.projection = f(self.projection);
+        self
     }
 }
 

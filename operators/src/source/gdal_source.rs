@@ -1,7 +1,7 @@
 use crate::{
     engine::{
-        Operator, QueryProcessor, RasterOperator, RasterQueryProcessor, TypedRasterQueryProcessor,
-        VectorOperator,
+        Operator, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+        TypedRasterQueryProcessor, VectorOperator,
     },
     util::Result,
 };
@@ -21,7 +21,7 @@ use futures::stream::{self, BoxStream, StreamExt};
 
 use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, SpatialBounded, TimeInterval};
 use geoengine_datatypes::{
-    projection::{Projection, ProjectionOption},
+    projection::Projection,
     raster::{
         Dim, GeoTransform, GridDimension, Ix, Pixel, Raster2D, RasterDataType, RasterTile2D,
         TileInformation,
@@ -414,15 +414,12 @@ impl Operator for GdalSource {
     fn vector_sources(&self) -> &[Box<dyn VectorOperator>] {
         &[]
     }
-    fn projection(&self) -> ProjectionOption {
-        ProjectionOption::Projection(Projection::wgs84()) //TODO: support other projections
-    }
 }
 
 #[typetag::serde]
 impl RasterOperator for GdalSource {
     fn raster_processor(&self) -> Result<TypedRasterQueryProcessor> {
-        Ok(match self.result_type() {
+        Ok(match self.result_descriptor().data_type {
             RasterDataType::U8 => TypedRasterQueryProcessor::U8(self.create_processor()),
             RasterDataType::U16 => TypedRasterQueryProcessor::U16(self.create_processor()),
             RasterDataType::U32 => TypedRasterQueryProcessor::U32(self.create_processor()),
@@ -435,10 +432,14 @@ impl RasterOperator for GdalSource {
             RasterDataType::F64 => TypedRasterQueryProcessor::F64(self.create_processor()),
         })
     }
-    fn result_type(&self) -> geoengine_datatypes::raster::RasterDataType {
-        JsonDatasetInformationProvider::with_dataset_id(&self.params.dataset_id)
-            .unwrap()
-            .data_type()
+    fn result_descriptor(&self) -> RasterResultDescriptor {
+        let dataset_information =
+            JsonDatasetInformationProvider::with_dataset_id(&self.params.dataset_id).unwrap(); // TODO: keep the information somewhere
+
+        RasterResultDescriptor {
+            data_type: dataset_information.data_type,
+            projection: Projection::wgs84().into(), // TODO: lookup
+        }
     }
 }
 
