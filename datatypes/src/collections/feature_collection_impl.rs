@@ -173,7 +173,9 @@ pub trait FeatureCollectionImplHelpers {
     /// Is the feature collection simple or does it contain multi-features?
     fn _is_simple(&self) -> bool;
 
-    fn f64_michael_equals(a: &Float64Array, b: &Float64Array) -> bool {
+    /// compares two f64 typed columns
+    /// treats NaN values as if they are equal
+    fn f64_column_equals(a: &Float64Array, b: &Float64Array) -> bool {
         if (a.len() != b.len()) || (a.null_count() != b.null_count()) {
             return false;
         }
@@ -732,7 +734,7 @@ macro_rules! feature_collection_impl {
 
                     match (c1.data_type(), c2.data_type()) {
                         (DataType::Float64, DataType::Float64) => {
-                            if !Self::f64_michael_equals(downcast_array(c1), downcast_array(c2)) {
+                            if !Self::f64_column_equals(downcast_array(c1), downcast_array(c2)) {
                                 return false;
                             }
                         }
