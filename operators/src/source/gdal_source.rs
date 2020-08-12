@@ -414,6 +414,12 @@ impl Operator for GdalSource {
     fn vector_sources(&self) -> &[Box<dyn VectorOperator>] {
         &[]
     }
+    fn raster_sources_mut(&mut self) -> &mut [Box<dyn RasterOperator>] {
+        &mut []
+    }
+    fn vector_sources_mut(&mut self) -> &mut [Box<dyn VectorOperator>] {
+        &mut []
+    }
 }
 
 #[typetag::serde]

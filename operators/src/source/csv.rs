@@ -152,6 +152,12 @@ impl Operator for CsvSource {
     fn vector_sources(&self) -> &[Box<dyn crate::engine::VectorOperator>] {
         &[]
     }
+    fn raster_sources_mut(&mut self) -> &mut [Box<dyn crate::engine::RasterOperator>] {
+        &mut []
+    }
+    fn vector_sources_mut(&mut self) -> &mut [Box<dyn VectorOperator>] {
+        &mut []
+    }
 }
 
 #[typetag::serde]

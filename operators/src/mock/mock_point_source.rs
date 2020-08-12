@@ -1,7 +1,7 @@
 use crate::engine::{QueryContext, QueryProcessor, QueryRectangle};
 use crate::{
     engine::{
-        Operator, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
+        Operator, RasterOperator, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
         VectorResultDescriptor,
     },
     util::Result,
@@ -45,11 +45,17 @@ pub struct MockPointSource {
 }
 
 impl Operator for MockPointSource {
-    fn raster_sources(&self) -> &[Box<dyn crate::engine::RasterOperator>] {
+    fn raster_sources(&self) -> &[Box<dyn RasterOperator>] {
         &[]
     }
-    fn vector_sources(&self) -> &[Box<dyn crate::engine::VectorOperator>] {
+    fn vector_sources(&self) -> &[Box<dyn VectorOperator>] {
         &[]
+    }
+    fn raster_sources_mut(&mut self) -> &mut [Box<dyn RasterOperator>] {
+        &mut []
+    }
+    fn vector_sources_mut(&mut self) -> &mut [Box<dyn VectorOperator>] {
+        &mut []
     }
 }
 
@@ -62,7 +68,7 @@ impl VectorOperator for MockPointSource {
         }
     }
 
-    fn vector_processor(&self) -> Result<crate::engine::TypedVectorQueryProcessor> {
+    fn vector_processor(&self) -> Result<TypedVectorQueryProcessor> {
         Ok(TypedVectorQueryProcessor::MultiPoint(
             MockPointSourceProcessor {
                 points: self.points.clone(),
@@ -94,7 +100,9 @@ mod tests {
     fn execute() {
         let points = vec![Coordinate2D::new(1., 2.); 3];
 
-        let mps = MockPointSource { points }.boxed();
+        let mut mps = MockPointSource { points }.boxed();
+        mps.initialize().unwrap();
+
         let typed_processor = mps.vector_processor();
         let point_processor = match typed_processor {
             Ok(TypedVectorQueryProcessor::MultiPoint(processor)) => processor,

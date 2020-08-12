@@ -98,6 +98,34 @@ impl Operator for MockRasterPointJoinOperator {
     fn vector_sources(&self) -> &[Box<dyn VectorOperator>] {
         &self.point_sources
     }
+    fn raster_sources_mut(&mut self) -> &mut [Box<dyn RasterOperator>] {
+        self.raster_sources.as_mut_slice()
+    }
+    fn vector_sources_mut(&mut self) -> &mut [Box<dyn VectorOperator>] {
+        self.point_sources.as_mut_slice()
+    }
+
+    fn initialize(&mut self) -> Result<()> {
+        for ro in self.raster_sources_mut() {
+            ro.initialize()?
+        }
+        for vo in self.vector_sources_mut() {
+            vo.initialize()?
+        }
+
+        if self.result_descriptor.is_none() {
+            let new_result_descriptor = VectorResultDescriptor {
+                projection: self.point_sources.get(0).map_or_else(
+                    || ProjectionOption::None,
+                    |o| o.result_descriptor().projection,
+                ),
+                data_type: VectorDataType::MultiPoint,
+            };
+            self.result_descriptor = Some(new_result_descriptor);
+        }
+
+        Ok(())
+    }
 }
 
 #[typetag::serde]
@@ -120,19 +148,7 @@ impl VectorOperator for MockRasterPointJoinOperator {
         }))
     }
     fn result_descriptor(&self) -> VectorResultDescriptor {
-        if self.result_descriptor.is_none() {
-            let new_result_descriptor = VectorResultDescriptor {
-                projection: self.point_sources.get(0).map_or_else(
-                    || ProjectionOption::None,
-                    |o| o.result_descriptor().projection,
-                ),
-                data_type: VectorDataType::MultiPoint,
-            };
-
-            // self.result_descriptor = Some(new_result_descriptor); //TODO: discuss if this should be interior or if method is mut...
-            return new_result_descriptor;
-        }
-        self.result_descriptor.unwrap()
+        self.result_descriptor.expect("not initialized")
     }
 }
 
@@ -316,13 +332,15 @@ mod tests {
         let params = MockRasterPointJoinParams {
             feature_name: new_column_name.clone(),
         };
-        let op = MockRasterPointJoinOperator {
+        let mut op = MockRasterPointJoinOperator {
             params,
             raster_sources: vec![mrs],
             point_sources: vec![mps],
             result_descriptor: None,
         }
         .boxed();
+
+        op.initialize().unwrap();
 
         let point_processor = match op.vector_processor() {
             Ok(TypedVectorQueryProcessor::MultiPoint(processor)) => processor,

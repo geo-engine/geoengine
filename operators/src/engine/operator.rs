@@ -13,6 +13,22 @@ pub trait Operator: std::fmt::Debug + Send + Sync {
     /// Get the sources of the `Operator`
     fn vector_sources(&self) -> &[Box<dyn VectorOperator>];
 
+    /// Get the sources of the `Operator`
+    fn raster_sources_mut(&mut self) -> &mut [Box<dyn RasterOperator>];
+
+    /// Get the sources of the `Operator`
+    fn vector_sources_mut(&mut self) -> &mut [Box<dyn VectorOperator>];
+
+    fn initialize(&mut self) -> Result<()> {
+        for ro in self.raster_sources_mut() {
+            ro.initialize()?
+        }
+        for vo in self.vector_sources_mut() {
+            vo.initialize()?
+        }
+        Ok(())
+    }
+
     fn validate_children(
         &self,
         expected_projection: ProjectionOption,
