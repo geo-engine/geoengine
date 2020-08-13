@@ -1,7 +1,8 @@
 use crate::{
     engine::{
-        InitializedRasterOperator, InitilaizedOperatorImpl, Operator, QueryProcessor,
-        RasterOperator, RasterQueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor,
+        InitializedRasterOperator, InitilaizedOperatorImpl, QueryProcessor, RasterOperator,
+        RasterQueryProcessor, RasterResultDescriptor, SourceOperatorImpl,
+        TypedRasterQueryProcessor,
     },
     util::Result,
 };
@@ -391,23 +392,7 @@ where
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-pub struct GdalSource {
-    pub params: GdalSourceParameters,
-}
-
-impl GdalSource {
-    pub fn create_processor<T>(&self) -> Box<dyn RasterQueryProcessor<RasterType = T>>
-    where
-        T: Pixel + gdal::raster::types::GdalType,
-    {
-        GdalSourceProcessor::<_, T>::from_params_with_json_provider(self.params.clone())
-            .unwrap()
-            .boxed()
-    }
-}
-
-impl Operator for GdalSource {}
+pub type GdalSource = SourceOperatorImpl<GdalSourceParameters>;
 
 #[typetag::serde]
 impl RasterOperator for GdalSource {

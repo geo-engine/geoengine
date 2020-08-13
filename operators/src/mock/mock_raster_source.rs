@@ -1,6 +1,6 @@
 use crate::engine::{
-    InitializedRasterOperator, InitilaizedOperatorImpl, Operator, QueryProcessor, RasterOperator,
-    RasterQueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor,
+    InitializedRasterOperator, InitilaizedOperatorImpl, QueryProcessor, RasterOperator,
+    RasterQueryProcessor, RasterResultDescriptor, SourceOperatorImpl, TypedRasterQueryProcessor,
 };
 use crate::util::Result;
 use futures::{stream, stream::StreamExt};
@@ -45,12 +45,7 @@ pub struct MockRasterSourceParams {
     pub result_descriptor: RasterResultDescriptor,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-pub struct MockRasterSource {
-    pub params: MockRasterSourceParams,
-}
-
-impl Operator for MockRasterSource {}
+pub type MockRasterSource = SourceOperatorImpl<MockRasterSourceParams>;
 
 #[typetag::serde]
 impl RasterOperator for MockRasterSource {

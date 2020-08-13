@@ -1,5 +1,5 @@
 use crate::engine::{
-    InitializedVectorOperator, InitilaizedOperatorImpl, Operator, QueryProcessor, RasterOperator,
+    InitializedVectorOperator, InitilaizedOperatorImpl, OperatorImpl, QueryProcessor,
     RasterQueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
     VectorResultDescriptor,
 };
@@ -82,38 +82,7 @@ pub struct MockRasterPointJoinParams {
     pub feature_name: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct MockRasterPointJoinOperator {
-    raster_sources: Vec<Box<dyn RasterOperator>>,
-    point_sources: Vec<Box<dyn VectorOperator>>,
-    params: MockRasterPointJoinParams,
-}
-
-impl Operator for MockRasterPointJoinOperator {
-    /*
-    fn initialize(&mut self) -> Result<()> {
-        for ro in self.raster_sources_mut() {
-            ro.initialize()?
-        }
-        for vo in self.vector_sources_mut() {
-            vo.initialize()?
-        }
-
-        if self.result_descriptor.is_none() {
-            let new_result_descriptor = VectorResultDescriptor {
-                projection: self.point_sources.get(0).map_or_else(
-                    || ProjectionOption::None,
-                    |o| o.result_descriptor().projection,
-                ),
-                data_type: VectorDataType::MultiPoint,
-            };
-            self.result_descriptor = Some(new_result_descriptor);
-        }
-
-        Ok(())
-    }
-    */
-}
+pub type MockRasterPointJoinOperator = OperatorImpl<MockRasterPointJoinParams>;
 
 #[typetag::serde]
 impl VectorOperator for MockRasterPointJoinOperator {
@@ -134,7 +103,7 @@ impl VectorOperator for MockRasterPointJoinOperator {
                 })
             },
             self.raster_sources,
-            self.point_sources,
+            self.vector_sources,
         )
         .map(InitilaizedOperatorImpl::boxed)
     }
@@ -171,7 +140,7 @@ impl InitializedVectorOperator
 mod tests {
     use super::*;
     use crate::{
-        engine::{QueryContext, QueryRectangle, RasterResultDescriptor},
+        engine::{QueryContext, QueryRectangle, RasterOperator, RasterResultDescriptor},
         mock::{MockPointSource, MockPointSourceParams, MockRasterSource, MockRasterSourceParams},
     };
     use futures::executor::block_on_stream;
@@ -228,13 +197,16 @@ mod tests {
         let op = MockRasterPointJoinOperator {
             params,
             raster_sources: vec![mrs],
-            point_sources: vec![mps],
+            vector_sources: vec![mps],
         }
         .boxed();
 
         let serialized = serde_json::to_string(&op).unwrap();
         let expected = serde_json::json!({
             "type": "MockRasterPointJoinOperator",
+            "params": {
+                "feature_name": "raster_values"
+            },
             "raster_sources": [{
                 "type": "MockRasterSource",
                     "params": {
@@ -291,7 +263,7 @@ mod tests {
                     }
                 }
             }],
-            "point_sources": [{
+            "vector_sources": [{
                 "type": "MockPointSource",
                 "params": {
                 "points": [{
@@ -304,10 +276,8 @@ mod tests {
                     "x": 1.0,
                     "y": 2.0
                 }]
-            }}],
-            "params": {
-                "feature_name": "raster_values"
-            }
+            }}]
+
         })
         .to_string();
         assert_eq!(serialized, expected);
@@ -361,7 +331,7 @@ mod tests {
         let op = MockRasterPointJoinOperator {
             params,
             raster_sources: vec![mrs],
-            point_sources: vec![mps],
+            vector_sources: vec![mps],
         }
         .boxed();
 

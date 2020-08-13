@@ -7,6 +7,22 @@ use serde::{Deserialize, Serialize};
 /// Common methods for `Operator`s
 pub trait Operator: std::fmt::Debug + Send + Sync {}
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct OperatorImpl<P> {
+    pub params: P,
+    pub raster_sources: Vec<Box<dyn RasterOperator>>,
+    pub vector_sources: Vec<Box<dyn VectorOperator>>,
+}
+
+impl<P> Operator for OperatorImpl<P> where P: std::fmt::Debug + Send + Sync {}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SourceOperatorImpl<P> {
+    pub params: P,
+}
+
+impl<P> Operator for SourceOperatorImpl<P> where P: std::fmt::Debug + Send + Sync {}
+
 /// Common methods for `VectorOperator`s
 #[typetag::serde(tag = "type")]
 pub trait VectorOperator: Operator {
