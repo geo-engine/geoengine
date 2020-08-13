@@ -16,7 +16,7 @@ pub struct OperatorImpl<P> {
 
 impl<P> Operator for OperatorImpl<P> where P: std::fmt::Debug + Send + Sync {}
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct SourceOperatorImpl<P> {
     pub params: P,
 }
