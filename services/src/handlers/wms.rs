@@ -129,7 +129,7 @@ async fn get_map<T: WorkflowRegistry>(
             warp::http::StatusCode::INTERNAL_SERVER_ERROR.into_response(),
         ));
     };
-    let mut operator = if let TypedOperator::Raster(r) = workflow.operator {
+    let operator = if let TypedOperator::Raster(r) = workflow.operator {
         r
     } else {
         return Err(warp::reject::custom(
@@ -137,12 +137,13 @@ async fn get_map<T: WorkflowRegistry>(
         ));
     };
 
-    operator
-        .initialize()
+    let execution_context = 42;
+    let initilaized = operator
+        .initialized_operator(execution_context)
         .context(error::Operator)
         .map_err(warp::reject::custom)?;
 
-    let processor = operator
+    let processor = initilaized
         .raster_processor()
         .context(error::Operator)
         .map_err(warp::reject::custom)?;

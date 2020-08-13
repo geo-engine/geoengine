@@ -1,7 +1,7 @@
 use crate::{
     engine::{
-        Operator, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-        TypedRasterQueryProcessor, VectorOperator,
+        InitializedRasterOperator, InitilaizedOperatorImpl, Operator, QueryProcessor,
+        RasterOperator, RasterQueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor,
     },
     util::Result,
 };
@@ -397,7 +397,7 @@ pub struct GdalSource {
 }
 
 impl GdalSource {
-    fn create_processor<T>(&self) -> Box<dyn RasterQueryProcessor<RasterType = T>>
+    pub fn create_processor<T>(&self) -> Box<dyn RasterQueryProcessor<RasterType = T>>
     where
         T: Pixel + gdal::raster::types::GdalType,
     {
@@ -407,45 +407,66 @@ impl GdalSource {
     }
 }
 
-impl Operator for GdalSource {
-    fn raster_sources(&self) -> &[Box<dyn RasterOperator>] {
-        &[]
-    }
-    fn vector_sources(&self) -> &[Box<dyn VectorOperator>] {
-        &[]
-    }
-    fn raster_sources_mut(&mut self) -> &mut [Box<dyn RasterOperator>] {
-        &mut []
-    }
-    fn vector_sources_mut(&mut self) -> &mut [Box<dyn VectorOperator>] {
-        &mut []
-    }
-}
+impl Operator for GdalSource {}
 
 #[typetag::serde]
 impl RasterOperator for GdalSource {
+    fn initialized_operator(
+        self: Box<Self>,
+        context: crate::engine::ExecutionContext,
+    ) -> Result<Box<dyn InitializedRasterOperator>> {
+        InitilaizedOperatorImpl::create(
+            self.params.clone(),
+            context,
+            |params, _, _, _| {
+                let dataset_information =
+                    JsonDatasetInformationProvider::with_dataset_id(&params.dataset_id)?; // TODO: keep the information somewhere
+
+                Ok(RasterResultDescriptor {
+                    data_type: dataset_information.data_type,
+                    projection: Projection::wgs84().into(), // TODO: lookup
+                })
+            },
+            vec![],
+            vec![],
+        )
+        .map(InitilaizedOperatorImpl::boxed)
+    }
+}
+
+impl InitializedRasterOperator
+    for InitilaizedOperatorImpl<GdalSourceParameters, RasterResultDescriptor>
+{
     fn raster_processor(&self) -> Result<TypedRasterQueryProcessor> {
         Ok(match self.result_descriptor().data_type {
-            RasterDataType::U8 => TypedRasterQueryProcessor::U8(self.create_processor()),
-            RasterDataType::U16 => TypedRasterQueryProcessor::U16(self.create_processor()),
-            RasterDataType::U32 => TypedRasterQueryProcessor::U32(self.create_processor()),
+            RasterDataType::U8 => TypedRasterQueryProcessor::U8(
+                GdalSourceProcessor::from_params_with_json_provider(self.params.clone())?.boxed(),
+            ),
+            RasterDataType::U16 => TypedRasterQueryProcessor::U16(
+                GdalSourceProcessor::from_params_with_json_provider(self.params.clone())?.boxed(),
+            ),
+            RasterDataType::U32 => TypedRasterQueryProcessor::U32(
+                GdalSourceProcessor::from_params_with_json_provider(self.params.clone())?.boxed(),
+            ),
             RasterDataType::U64 => unimplemented!("implement U64 type"), // TypedRasterQueryProcessor::U64(self.create_processor()),
             RasterDataType::I8 => unimplemented!("I8 type is not supported"),
-            RasterDataType::I16 => TypedRasterQueryProcessor::I16(self.create_processor()),
-            RasterDataType::I32 => TypedRasterQueryProcessor::I32(self.create_processor()),
+            RasterDataType::I16 => TypedRasterQueryProcessor::I16(
+                GdalSourceProcessor::from_params_with_json_provider(self.params.clone())?.boxed(),
+            ),
+            RasterDataType::I32 => TypedRasterQueryProcessor::I32(
+                GdalSourceProcessor::from_params_with_json_provider(self.params.clone())?.boxed(),
+            ),
             RasterDataType::I64 => unimplemented!("implement I64 type"), // TypedRasterQueryProcessor::I64(self.create_processor()),
-            RasterDataType::F32 => TypedRasterQueryProcessor::F32(self.create_processor()),
-            RasterDataType::F64 => TypedRasterQueryProcessor::F64(self.create_processor()),
+            RasterDataType::F32 => TypedRasterQueryProcessor::F32(
+                GdalSourceProcessor::from_params_with_json_provider(self.params.clone())?.boxed(),
+            ),
+            RasterDataType::F64 => TypedRasterQueryProcessor::F64(
+                GdalSourceProcessor::from_params_with_json_provider(self.params.clone())?.boxed(),
+            ),
         })
     }
     fn result_descriptor(&self) -> RasterResultDescriptor {
-        let dataset_information =
-            JsonDatasetInformationProvider::with_dataset_id(&self.params.dataset_id).unwrap(); // TODO: keep the information somewhere
-
-        RasterResultDescriptor {
-            data_type: dataset_information.data_type,
-            projection: Projection::wgs84().into(), // TODO: lookup
-        }
+        self.result_descriptor
     }
 }
 

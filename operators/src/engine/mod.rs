@@ -3,8 +3,9 @@ mod query;
 mod query_processor;
 
 pub use operator::{
-    Operator, RasterOperator, RasterResultDescriptor, TypedOperator, VectorOperator,
-    VectorResultDescriptor,
+    ExecutionContext, InitializedOperator, InitializedRasterOperator, InitializedVectorOperator,
+    InitilaizedOperatorImpl, Operator, RasterOperator, RasterResultDescriptor, TypedOperator,
+    VectorOperator, VectorResultDescriptor,
 };
 pub use query::{QueryContext, QueryRectangle};
 pub use query_processor::{

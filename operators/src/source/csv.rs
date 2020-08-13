@@ -20,8 +20,9 @@ use geoengine_datatypes::{
 };
 
 use crate::engine::{
-    Operator, QueryContext, QueryProcessor, QueryRectangle, TypedVectorQueryProcessor,
-    VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+    InitializedVectorOperator, InitilaizedOperatorImpl, Operator, QueryContext, QueryProcessor,
+    QueryRectangle, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
+    VectorResultDescriptor,
 };
 use crate::error;
 use crate::util::Result;
@@ -145,28 +146,35 @@ pub struct CsvSource {
     pub params: CsvSourceParameters,
 }
 
-impl Operator for CsvSource {
-    fn raster_sources(&self) -> &[Box<dyn crate::engine::RasterOperator>] {
-        &[]
-    }
-    fn vector_sources(&self) -> &[Box<dyn crate::engine::VectorOperator>] {
-        &[]
-    }
-    fn raster_sources_mut(&mut self) -> &mut [Box<dyn crate::engine::RasterOperator>] {
-        &mut []
-    }
-    fn vector_sources_mut(&mut self) -> &mut [Box<dyn VectorOperator>] {
-        &mut []
-    }
-}
+impl Operator for CsvSource {}
 
 #[typetag::serde]
 impl VectorOperator for CsvSource {
+    fn into_initialized_operator(
+        self: Box<Self>,
+        context: crate::engine::ExecutionContext,
+    ) -> Result<Box<dyn InitializedVectorOperator>> {
+        InitilaizedOperatorImpl::create(
+            self.params,
+            context,
+            |_, _, _, _| {
+                Ok(VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    projection: Projection::wgs84().into(),
+                })
+            },
+            vec![],
+            vec![],
+        )
+        .map(InitilaizedOperatorImpl::boxed)
+    }
+}
+
+impl InitializedVectorOperator
+    for InitilaizedOperatorImpl<CsvSourceParameters, VectorResultDescriptor>
+{
     fn result_descriptor(&self) -> VectorResultDescriptor {
-        VectorResultDescriptor {
-            data_type: VectorDataType::MultiPoint,
-            projection: Projection::wgs84().into(),
-        }
+        self.result_descriptor
     }
 
     fn vector_processor(&self) -> Result<crate::engine::TypedVectorQueryProcessor> {

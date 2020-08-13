@@ -1,73 +1,19 @@
 use super::query_processor::{TypedRasterQueryProcessor, TypedVectorQueryProcessor};
-use crate::{error, util::Result};
+use crate::util::Result;
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::{projection::ProjectionOption, raster::RasterDataType};
 use serde::{Deserialize, Serialize};
-use std::ops::Range;
 
 /// Common methods for `Operator`s
-pub trait Operator: std::fmt::Debug + Send + Sync {
-    /// Get the sources of the `Operator`
-    fn raster_sources(&self) -> &[Box<dyn RasterOperator>];
-
-    /// Get the sources of the `Operator`
-    fn vector_sources(&self) -> &[Box<dyn VectorOperator>];
-
-    /// Get the sources of the `Operator`
-    fn raster_sources_mut(&mut self) -> &mut [Box<dyn RasterOperator>];
-
-    /// Get the sources of the `Operator`
-    fn vector_sources_mut(&mut self) -> &mut [Box<dyn VectorOperator>];
-
-    fn initialize(&mut self) -> Result<()> {
-        for ro in self.raster_sources_mut() {
-            ro.initialize()?
-        }
-        for vo in self.vector_sources_mut() {
-            vo.initialize()?
-        }
-        Ok(())
-    }
-
-    fn validate_children(
-        &self,
-        expected_projection: ProjectionOption,
-        number_of_raster_sources: Range<usize>,
-        number_of_vector_sources: Range<usize>,
-    ) -> Result<()> {
-        if !number_of_raster_sources.contains(&self.raster_sources().len()) {}
-        if !number_of_vector_sources.contains(&self.vector_sources().len()) {}
-
-        for proj in self
-            .raster_sources()
-            .iter()
-            .map(|o| o.result_descriptor().projection)
-            .chain(
-                self.vector_sources()
-                    .iter()
-                    .map(|o| o.result_descriptor().projection),
-            )
-        {
-            if proj != expected_projection {
-                return Err(error::Error::InvalidProjection {
-                    expected: expected_projection,
-                    found: proj,
-                });
-            }
-        }
-
-        Ok(())
-    }
-}
+pub trait Operator: std::fmt::Debug + Send + Sync {}
 
 /// Common methods for `VectorOperator`s
 #[typetag::serde(tag = "type")]
 pub trait VectorOperator: Operator {
-    /// Get the result type of the `Operator`
-    fn result_descriptor(&self) -> VectorResultDescriptor;
-
-    /// Instantiate a `TypedVectorQueryProcessor` from a `RasterOperator`
-    fn vector_processor(&self) -> Result<TypedVectorQueryProcessor>;
+    fn into_initialized_operator(
+        self: Box<Self>,
+        context: ExecutionContext,
+    ) -> Result<Box<dyn InitializedVectorOperator>>;
 
     /// Wrap a box around a `VectorOperator`
     fn boxed(self) -> Box<dyn VectorOperator>
@@ -81,11 +27,10 @@ pub trait VectorOperator: Operator {
 /// Common methods for `RasterOperator`s
 #[typetag::serde(tag = "type")]
 pub trait RasterOperator: Operator {
-    /// Get the result type of the `Operator`
-    fn result_descriptor(&self) -> RasterResultDescriptor;
-
-    /// Instantiate a `TypedRasterQueryProcessor` from a `RasterOperator`
-    fn raster_processor(&self) -> Result<TypedRasterQueryProcessor>;
+    fn initialized_operator(
+        self: Box<Self>,
+        context: ExecutionContext,
+    ) -> Result<Box<dyn InitializedRasterOperator>>;
 
     /// Wrap a box around a `RasterOperator`
     fn boxed(self) -> Box<dyn RasterOperator>
@@ -93,6 +38,160 @@ pub trait RasterOperator: Operator {
         Self: Sized + 'static,
     {
         Box::new(self)
+    }
+}
+
+pub type ExecutionContext = u32;
+
+pub trait InitializedOperator {
+    fn execution_context(&self) -> &ExecutionContext;
+
+    /// Get the sources of the `Operator`
+    fn raster_sources(&self) -> &[Box<dyn InitializedRasterOperator>];
+
+    /// Get the sources of the `Operator`
+    fn vector_sources(&self) -> &[Box<dyn InitializedVectorOperator>];
+
+    /// Get the sources of the `Operator`
+    fn raster_sources_mut(&mut self) -> &mut [Box<dyn InitializedRasterOperator>];
+
+    /// Get the sources of the `Operator`
+    fn vector_sources_mut(&mut self) -> &mut [Box<dyn InitializedVectorOperator>];
+}
+
+pub trait InitializedVectorOperator: Send + Sync {
+    /// Get the result type of the `Operator`
+    fn result_descriptor(&self) -> VectorResultDescriptor;
+
+    /// Instantiate a `TypedVectorQueryProcessor` from a `RasterOperator`
+    fn vector_processor(&self) -> Result<TypedVectorQueryProcessor>;
+
+    /// Wrap a box around a `RasterOperator`
+    fn boxed(self) -> Box<dyn InitializedVectorOperator>
+    where
+        Self: Sized + 'static,
+    {
+        Box::new(self)
+    }
+}
+pub trait InitializedRasterOperator: Send + Sync {
+    /// Get the result type of the `Operator`
+    fn result_descriptor(&self) -> RasterResultDescriptor;
+
+    /// Instantiate a `TypedRasterQueryProcessor` from a `RasterOperator`
+    fn raster_processor(&self) -> Result<TypedRasterQueryProcessor>;
+
+    /// Wrap a box around a `RasterOperator`
+    fn boxed(self) -> Box<dyn InitializedRasterOperator>
+    where
+        Self: Sized + 'static,
+    {
+        Box::new(self)
+    }
+}
+
+impl InitializedRasterOperator for Box<dyn InitializedRasterOperator> {
+    fn result_descriptor(&self) -> RasterResultDescriptor {
+        self.as_ref().result_descriptor()
+    }
+    fn raster_processor(&self) -> Result<TypedRasterQueryProcessor> {
+        self.as_ref().raster_processor()
+    }
+}
+
+impl InitializedVectorOperator for Box<dyn InitializedVectorOperator> {
+    fn result_descriptor(&self) -> VectorResultDescriptor {
+        self.as_ref().result_descriptor()
+    }
+    fn vector_processor(&self) -> Result<TypedVectorQueryProcessor> {
+        self.as_ref().vector_processor()
+    }
+}
+
+pub struct InitilaizedOperatorImpl<Parameters, ResultDescriptor> {
+    pub params: Parameters,
+    pub raster_sources: Vec<Box<dyn InitializedRasterOperator>>,
+    pub vector_sources: Vec<Box<dyn InitializedVectorOperator>>,
+    pub context: ExecutionContext,
+    pub result_descriptor: ResultDescriptor,
+}
+
+impl<P, R> InitilaizedOperatorImpl<P, R> {
+    pub fn new(
+        params: P,
+        context: ExecutionContext,
+        result_descriptor: R,
+        raster_sources: Vec<Box<dyn InitializedRasterOperator>>,
+        vector_sources: Vec<Box<dyn InitializedVectorOperator>>,
+    ) -> Self {
+        Self {
+            params,
+            raster_sources,
+            vector_sources,
+            context,
+            result_descriptor,
+        }
+    }
+
+    pub fn create<F>(
+        params: P,
+        context: ExecutionContext,
+        result_descriptor_fn: F,
+        raster_sources_not_init: Vec<Box<dyn RasterOperator>>,
+        vector_sources_not_init: Vec<Box<dyn VectorOperator>>,
+    ) -> Result<Self>
+    where
+        F: Fn(
+            &P,
+            &ExecutionContext,
+            &[Box<dyn InitializedRasterOperator>],
+            &[Box<dyn InitializedVectorOperator>],
+        ) -> Result<R>,
+    {
+        let raster_sources = raster_sources_not_init
+            .into_iter()
+            .map(|o| o.initialized_operator(context))
+            .collect::<Result<Vec<Box<dyn InitializedRasterOperator>>>>()?;
+        let vector_sources = vector_sources_not_init
+            .into_iter()
+            .map(|o| o.into_initialized_operator(context))
+            .collect::<Result<Vec<Box<dyn InitializedVectorOperator>>>>()?;
+        let result_descriptor = result_descriptor_fn(
+            &params,
+            &context,
+            raster_sources.as_slice(),
+            vector_sources.as_slice(),
+        )?;
+
+        Ok(Self::new(
+            params,
+            context,
+            result_descriptor,
+            raster_sources,
+            vector_sources,
+        ))
+    }
+}
+
+impl<P, R> InitializedOperator for InitilaizedOperatorImpl<P, R>
+where
+    P: std::fmt::Debug + Clone,
+    R: std::fmt::Debug + Clone,
+{
+    fn execution_context(&self) -> &ExecutionContext {
+        &self.context
+    }
+    fn raster_sources(&self) -> &[Box<dyn InitializedRasterOperator>] {
+        self.raster_sources.as_slice()
+    }
+    fn vector_sources(&self) -> &[Box<dyn InitializedVectorOperator>] {
+        self.vector_sources.as_slice()
+    }
+    fn raster_sources_mut(&mut self) -> &mut [Box<dyn InitializedRasterOperator>] {
+        self.raster_sources.as_mut_slice()
+    }
+    fn vector_sources_mut(&mut self) -> &mut [Box<dyn InitializedVectorOperator>] {
+        self.vector_sources.as_mut_slice()
     }
 }
 
@@ -174,5 +273,23 @@ impl Into<TypedOperator> for Box<dyn VectorOperator> {
 impl Into<TypedOperator> for Box<dyn RasterOperator> {
     fn into(self) -> TypedOperator {
         TypedOperator::Raster(self)
+    }
+}
+
+/// An enum to differentiate between `InitializedOperator` variants
+pub enum TypedInitializedOperator {
+    Vector(Box<dyn InitializedVectorOperator>),
+    Raster(Box<dyn InitializedRasterOperator>),
+}
+
+impl Into<TypedInitializedOperator> for Box<dyn InitializedVectorOperator> {
+    fn into(self) -> TypedInitializedOperator {
+        TypedInitializedOperator::Vector(self)
+    }
+}
+
+impl Into<TypedInitializedOperator> for Box<dyn InitializedRasterOperator> {
+    fn into(self) -> TypedInitializedOperator {
+        TypedInitializedOperator::Raster(self)
     }
 }

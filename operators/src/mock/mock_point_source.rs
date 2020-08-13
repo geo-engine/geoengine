@@ -1,8 +1,8 @@
 use crate::engine::{QueryContext, QueryProcessor, QueryRectangle};
 use crate::{
     engine::{
-        Operator, RasterOperator, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
-        VectorResultDescriptor,
+        ExecutionContext, InitializedVectorOperator, InitilaizedOperatorImpl, Operator,
+        TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
     },
     util::Result,
 };
@@ -39,39 +39,51 @@ impl QueryProcessor for MockPointSourceProcessor {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct MockPointSource {
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MockPointSourceParams {
     pub points: Vec<Coordinate2D>,
 }
 
-impl Operator for MockPointSource {
-    fn raster_sources(&self) -> &[Box<dyn RasterOperator>] {
-        &[]
-    }
-    fn vector_sources(&self) -> &[Box<dyn VectorOperator>] {
-        &[]
-    }
-    fn raster_sources_mut(&mut self) -> &mut [Box<dyn RasterOperator>] {
-        &mut []
-    }
-    fn vector_sources_mut(&mut self) -> &mut [Box<dyn VectorOperator>] {
-        &mut []
-    }
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MockPointSource {
+    pub params: MockPointSourceParams,
 }
+
+impl Operator for MockPointSource {}
 
 #[typetag::serde]
 impl VectorOperator for MockPointSource {
+    fn into_initialized_operator(
+        self: Box<Self>,
+        context: ExecutionContext,
+    ) -> Result<Box<dyn InitializedVectorOperator>> {
+        InitilaizedOperatorImpl::create(
+            self.params,
+            context,
+            |_, _, _, _| {
+                Ok(VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    projection: Projection::wgs84().into(),
+                })
+            },
+            vec![],
+            vec![],
+        )
+        .map(InitilaizedOperatorImpl::boxed)
+    }
+}
+
+impl InitializedVectorOperator
+    for InitilaizedOperatorImpl<MockPointSourceParams, VectorResultDescriptor>
+{
     fn result_descriptor(&self) -> VectorResultDescriptor {
-        VectorResultDescriptor {
-            data_type: VectorDataType::MultiPoint,
-            projection: Projection::wgs84().into(),
-        }
+        self.result_descriptor
     }
 
     fn vector_processor(&self) -> Result<TypedVectorQueryProcessor> {
         Ok(TypedVectorQueryProcessor::MultiPoint(
             MockPointSourceProcessor {
-                points: self.points.clone(),
+                points: self.params.points.clone(),
             }
             .boxed(),
         ))
@@ -88,9 +100,12 @@ mod tests {
     fn serde() {
         let points = vec![Coordinate2D::new(1., 2.); 3];
 
-        let mps = MockPointSource { points }.boxed();
+        let mps = MockPointSource {
+            params: MockPointSourceParams { points },
+        }
+        .boxed();
         let serialized = serde_json::to_string(&mps).unwrap();
-        let expect = "{\"type\":\"MockPointSource\",\"points\":[{\"x\":1.0,\"y\":2.0},{\"x\":1.0,\"y\":2.0},{\"x\":1.0,\"y\":2.0}]}";
+        let expect = "{\"type\":\"MockPointSource\",\"params\":{\"points\":[{\"x\":1.0,\"y\":2.0},{\"x\":1.0,\"y\":2.0},{\"x\":1.0,\"y\":2.0}]}}";
         assert_eq!(serialized, expect);
 
         let _: Box<dyn VectorOperator> = serde_json::from_str(&serialized).unwrap();
@@ -98,12 +113,16 @@ mod tests {
 
     #[test]
     fn execute() {
+        let execution_context = 42;
         let points = vec![Coordinate2D::new(1., 2.); 3];
 
-        let mut mps = MockPointSource { points }.boxed();
-        mps.initialize().unwrap();
+        let mps = MockPointSource {
+            params: MockPointSourceParams { points },
+        }
+        .boxed();
+        let initialized = mps.into_initialized_operator(execution_context).unwrap();
 
-        let typed_processor = mps.vector_processor();
+        let typed_processor = initialized.vector_processor();
         let point_processor = match typed_processor {
             Ok(TypedVectorQueryProcessor::MultiPoint(processor)) => processor,
             _ => panic!(),

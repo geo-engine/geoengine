@@ -1,6 +1,6 @@
 use crate::engine::{
-    Operator, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-    TypedRasterQueryProcessor, VectorOperator,
+    InitializedRasterOperator, InitilaizedOperatorImpl, Operator, QueryProcessor, RasterOperator,
+    RasterQueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor,
 };
 use crate::util::Result;
 use futures::{stream, stream::StreamExt};
@@ -40,28 +40,38 @@ where
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
-pub struct MockRasterSource {
+pub struct MockRasterSourceParams {
     pub data: Vec<RasterTile2D<u8>>,
     pub result_descriptor: RasterResultDescriptor,
 }
 
-impl Operator for MockRasterSource {
-    fn raster_sources(&self) -> &[Box<dyn RasterOperator>] {
-        &[] // no sources!
-    }
-    fn vector_sources(&self) -> &[Box<dyn VectorOperator>] {
-        &[]
-    }
-    fn raster_sources_mut(&mut self) -> &mut [Box<dyn RasterOperator>] {
-        &mut []
-    }
-    fn vector_sources_mut(&mut self) -> &mut [Box<dyn VectorOperator>] {
-        &mut []
-    }
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+pub struct MockRasterSource {
+    pub params: MockRasterSourceParams,
 }
+
+impl Operator for MockRasterSource {}
 
 #[typetag::serde]
 impl RasterOperator for MockRasterSource {
+    fn initialized_operator(
+        self: Box<Self>,
+        context: crate::engine::ExecutionContext,
+    ) -> Result<Box<dyn InitializedRasterOperator>> {
+        InitilaizedOperatorImpl::create(
+            self.params,
+            context,
+            |params, _, _, _| Ok(params.result_descriptor),
+            vec![],
+            vec![],
+        )
+        .map(InitilaizedOperatorImpl::boxed)
+    }
+}
+
+impl InitializedRasterOperator
+    for InitilaizedOperatorImpl<MockRasterSourceParams, RasterResultDescriptor>
+{
     fn raster_processor(&self) -> Result<TypedRasterQueryProcessor> {
         fn converted<From, To>(
             raster_tiles: &[RasterTile2D<From>],
@@ -80,32 +90,32 @@ impl RasterOperator for MockRasterSource {
 
         Ok(match self.result_descriptor().data_type {
             RasterDataType::U8 => crate::engine::TypedRasterQueryProcessor::U8(
-                MockRasterSourceProcessor::new(self.data.clone()).boxed(),
+                MockRasterSourceProcessor::new(self.params.data.clone()).boxed(),
             ),
             RasterDataType::U16 => {
-                crate::engine::TypedRasterQueryProcessor::U16(converted(&self.data))
+                crate::engine::TypedRasterQueryProcessor::U16(converted(&self.params.data))
             }
             RasterDataType::U32 => {
-                crate::engine::TypedRasterQueryProcessor::U32(converted(&self.data))
+                crate::engine::TypedRasterQueryProcessor::U32(converted(&self.params.data))
             }
             RasterDataType::U64 => {
-                crate::engine::TypedRasterQueryProcessor::U64(converted(&self.data))
+                crate::engine::TypedRasterQueryProcessor::U64(converted(&self.params.data))
             }
             RasterDataType::I8 => unimplemented!("cannot cast u8 to i8"),
             RasterDataType::I16 => {
-                crate::engine::TypedRasterQueryProcessor::I16(converted(&self.data))
+                crate::engine::TypedRasterQueryProcessor::I16(converted(&self.params.data))
             }
             RasterDataType::I32 => {
-                crate::engine::TypedRasterQueryProcessor::I32(converted(&self.data))
+                crate::engine::TypedRasterQueryProcessor::I32(converted(&self.params.data))
             }
             RasterDataType::I64 => {
-                crate::engine::TypedRasterQueryProcessor::I64(converted(&self.data))
+                crate::engine::TypedRasterQueryProcessor::I64(converted(&self.params.data))
             }
             RasterDataType::F32 => {
-                crate::engine::TypedRasterQueryProcessor::F32(converted(&self.data))
+                crate::engine::TypedRasterQueryProcessor::F32(converted(&self.params.data))
             }
             RasterDataType::F64 => {
-                crate::engine::TypedRasterQueryProcessor::F64(converted(&self.data))
+                crate::engine::TypedRasterQueryProcessor::F64(converted(&self.params.data))
             }
         })
     }
@@ -147,10 +157,12 @@ mod tests {
         };
 
         let mrs = MockRasterSource {
-            data: vec![raster_tile],
-            result_descriptor: RasterResultDescriptor {
-                data_type: RasterDataType::U8,
-                projection: Projection::wgs84().into(),
+            params: MockRasterSourceParams {
+                data: vec![raster_tile],
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U8,
+                    projection: Projection::wgs84().into(),
+                },
             },
         }
         .boxed();
@@ -159,56 +171,58 @@ mod tests {
 
         let spec = serde_json::json!({
             "type": "MockRasterSource",
-            "data": [{
-                "time": {
-                    "start": -9_223_372_036_854_775_808_i64,
-                    "end": 9_223_372_036_854_775_807_i64
-                },
-                "tile": {
-                    "global_size_in_tiles": {
-                        "dimension_size": [1, 2]
-                    },
-                    "global_tile_position": {
-                        "dimension_size": [0, 0]
-                    },
-                    "global_pixel_position": {
-                        "dimension_size": [0, 0]
-                    },
-                    "tile_size_in_pixels": {
-                        "dimension_size": [3, 2]
-                    },
-                    "geo_transform": {
-                        "upper_left_coordinate": {
-                            "x": 0.0,
-                            "y": 0.0
-                        },
-                        "x_pixel_size": 1.0,
-                        "y_pixel_size": -1.0
-                    }
-                },
-                "data": {
-                    "grid_dimension": {
-                        "dimension_size": [3, 2]
-                    },
-                    "data_container": [1, 2, 3, 4, 5, 6],
-                    "no_data_value": null,
-                    "geo_transform": {
-                        "upper_left_coordinate": {
-                            "x": 0.0,
-                            "y": 0.0
-                        },
-                        "x_pixel_size": 1.0,
-                        "y_pixel_size": -1.0
-                    },
-                    "temporal_bounds": {
+            "params": {
+                "data": [{
+                    "time": {
                         "start": -9_223_372_036_854_775_808_i64,
                         "end": 9_223_372_036_854_775_807_i64
+                    },
+                    "tile": {
+                        "global_size_in_tiles": {
+                            "dimension_size": [1, 2]
+                        },
+                        "global_tile_position": {
+                            "dimension_size": [0, 0]
+                        },
+                        "global_pixel_position": {
+                            "dimension_size": [0, 0]
+                        },
+                        "tile_size_in_pixels": {
+                            "dimension_size": [3, 2]
+                        },
+                        "geo_transform": {
+                            "upper_left_coordinate": {
+                                "x": 0.0,
+                                "y": 0.0
+                            },
+                            "x_pixel_size": 1.0,
+                            "y_pixel_size": -1.0
+                        }
+                    },
+                    "data": {
+                        "grid_dimension": {
+                            "dimension_size": [3, 2]
+                        },
+                        "data_container": [1, 2, 3, 4, 5, 6],
+                        "no_data_value": null,
+                        "geo_transform": {
+                            "upper_left_coordinate": {
+                                "x": 0.0,
+                                "y": 0.0
+                            },
+                            "x_pixel_size": 1.0,
+                            "y_pixel_size": -1.0
+                        },
+                        "temporal_bounds": {
+                            "start": -9_223_372_036_854_775_808_i64,
+                            "end": 9_223_372_036_854_775_807_i64
+                        }
                     }
+                }],
+                "result_descriptor": {
+                    "data_type": "U8",
+                    "projection": "EPSG:4326"
                 }
-            }],
-            "result_descriptor": {
-                "data_type": "U8",
-                "projection": "EPSG:4326"
             }
         })
         .to_string();
@@ -216,7 +230,9 @@ mod tests {
 
         let deserialized: Box<dyn RasterOperator> = serde_json::from_str(&serialized).unwrap();
 
-        match deserialized.raster_processor().unwrap() {
+        let initialized = deserialized.initialized_operator(42).unwrap();
+
+        match initialized.raster_processor().unwrap() {
             crate::engine::TypedRasterQueryProcessor::U8(..) => {}
             _ => panic!("wrong raster type"),
         }

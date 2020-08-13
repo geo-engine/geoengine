@@ -1,6 +1,7 @@
 use crate::engine::{
-    Operator, QueryProcessor, RasterOperator, RasterQueryProcessor, TypedVectorQueryProcessor,
-    VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+    InitializedVectorOperator, InitilaizedOperatorImpl, Operator, QueryProcessor, RasterOperator,
+    RasterQueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
+    VectorResultDescriptor,
 };
 use crate::util::Result;
 use futures::StreamExt;
@@ -62,20 +63,18 @@ where
     }
 }
 
-impl MockRasterPointJoinOperator {
-    fn create_binary<T1>(
-        source_a: Box<dyn RasterQueryProcessor<RasterType = T1>>,
-        source_b: Box<dyn VectorQueryProcessor<VectorType = MultiPointCollection>>,
-        params: MockRasterPointJoinParams,
-    ) -> MockRasterPointJoinProcessor<
-        Box<dyn RasterQueryProcessor<RasterType = T1>>,
-        Box<dyn VectorQueryProcessor<VectorType = MultiPointCollection>>,
-    >
-    where
-        T1: Copy + Sync + 'static,
-    {
-        MockRasterPointJoinProcessor::new(source_a, source_b, params)
-    }
+fn create_binary_raster_vector<TR, TV>(
+    source_a: Box<dyn RasterQueryProcessor<RasterType = TR>>,
+    source_b: Box<dyn VectorQueryProcessor<VectorType = TV>>,
+    params: MockRasterPointJoinParams,
+) -> MockRasterPointJoinProcessor<
+    Box<dyn RasterQueryProcessor<RasterType = TR>>,
+    Box<dyn VectorQueryProcessor<VectorType = TV>>,
+>
+where
+    TR: Copy + Sync + 'static,
+{
+    MockRasterPointJoinProcessor::new(source_a, source_b, params)
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -88,23 +87,10 @@ pub struct MockRasterPointJoinOperator {
     raster_sources: Vec<Box<dyn RasterOperator>>,
     point_sources: Vec<Box<dyn VectorOperator>>,
     params: MockRasterPointJoinParams,
-    result_descriptor: Option<VectorResultDescriptor>,
 }
 
 impl Operator for MockRasterPointJoinOperator {
-    fn raster_sources(&self) -> &[Box<dyn RasterOperator>] {
-        &self.raster_sources
-    }
-    fn vector_sources(&self) -> &[Box<dyn VectorOperator>] {
-        &self.point_sources
-    }
-    fn raster_sources_mut(&mut self) -> &mut [Box<dyn RasterOperator>] {
-        self.raster_sources.as_mut_slice()
-    }
-    fn vector_sources_mut(&mut self) -> &mut [Box<dyn VectorOperator>] {
-        self.point_sources.as_mut_slice()
-    }
-
+    /*
     fn initialize(&mut self) -> Result<()> {
         for ro in self.raster_sources_mut() {
             ro.initialize()?
@@ -126,29 +112,58 @@ impl Operator for MockRasterPointJoinOperator {
 
         Ok(())
     }
+    */
 }
 
 #[typetag::serde]
 impl VectorOperator for MockRasterPointJoinOperator {
+    fn into_initialized_operator(
+        self: Box<Self>,
+        context: crate::engine::ExecutionContext,
+    ) -> Result<Box<dyn crate::engine::InitializedVectorOperator>> {
+        InitilaizedOperatorImpl::create(
+            self.params,
+            context,
+            |_, _, _, vs| {
+                Ok(VectorResultDescriptor {
+                    projection: vs.get(0).map_or_else(
+                        || ProjectionOption::None,
+                        |o| o.result_descriptor().projection,
+                    ),
+                    data_type: VectorDataType::MultiPoint,
+                })
+            },
+            self.raster_sources,
+            self.point_sources,
+        )
+        .map(InitilaizedOperatorImpl::boxed)
+    }
+}
+
+impl InitializedVectorOperator
+    for InitilaizedOperatorImpl<MockRasterPointJoinParams, VectorResultDescriptor>
+{
     fn vector_processor(&self) -> Result<crate::engine::TypedVectorQueryProcessor> {
-        self.validate_children(self.result_descriptor().projection, 1..2, 1..2)?;
+        // self.validate_children(self.result_descriptor().projection, 1..2, 1..2)?;
 
         let raster_source = self.raster_sources[0].raster_processor()?;
-        let point_source = match self.point_sources[0].vector_processor()? {
+        let point_source = match self.vector_sources[0].vector_processor()? {
             TypedVectorQueryProcessor::MultiPoint(v) => v,
             _ => panic!(),
         };
         Ok(TypedVectorQueryProcessor::MultiPoint(match raster_source {
-            crate::engine::TypedRasterQueryProcessor::U8(r) => Box::new(Self::create_binary::<u8>(
-                r,
-                point_source,
-                self.params.clone(),
-            )),
+            crate::engine::TypedRasterQueryProcessor::U8(r) => {
+                Box::new(create_binary_raster_vector::<u8, MultiPointCollection>(
+                    r,
+                    point_source,
+                    self.params.clone(),
+                ))
+            }
             _ => panic!(),
         }))
     }
     fn result_descriptor(&self) -> VectorResultDescriptor {
-        self.result_descriptor.expect("not initialized")
+        self.result_descriptor
     }
 }
 
@@ -157,7 +172,7 @@ mod tests {
     use super::*;
     use crate::{
         engine::{QueryContext, QueryRectangle, RasterResultDescriptor},
-        mock::{MockPointSource, MockRasterSource},
+        mock::{MockPointSource, MockPointSourceParams, MockRasterSource, MockRasterSourceParams},
     };
     use futures::executor::block_on_stream;
     use geoengine_datatypes::{
@@ -170,7 +185,10 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     fn serde() {
         let points = vec![Coordinate2D::new(1., 2.); 3];
-        let mps = MockPointSource { points }.boxed();
+        let mps = MockPointSource {
+            params: MockPointSourceParams { points },
+        }
+        .boxed();
 
         let raster = Raster2D::new(
             [3, 2].into(),
@@ -194,10 +212,12 @@ mod tests {
         };
 
         let mrs = MockRasterSource {
-            data: vec![raster_tile],
-            result_descriptor: RasterResultDescriptor {
-                data_type: RasterDataType::U8,
-                projection: Projection::wgs84().into(),
+            params: MockRasterSourceParams {
+                data: vec![raster_tile],
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U8,
+                    projection: Projection::wgs84().into(),
+                },
             },
         }
         .boxed();
@@ -209,7 +229,6 @@ mod tests {
             params,
             raster_sources: vec![mrs],
             point_sources: vec![mps],
-            result_descriptor: None,
         }
         .boxed();
 
@@ -218,60 +237,63 @@ mod tests {
             "type": "MockRasterPointJoinOperator",
             "raster_sources": [{
                 "type": "MockRasterSource",
-                "data": [{
-                    "time": {
-                        "start": -9_223_372_036_854_775_808_i64,
-                        "end": 9_223_372_036_854_775_807_i64
-                    },
-                    "tile": {
-                        "global_size_in_tiles": {
-                            "dimension_size": [1, 2]
-                        },
-                        "global_tile_position": {
-                            "dimension_size": [0, 0]
-                        },
-                        "global_pixel_position": {
-                            "dimension_size": [0, 0]
-                        },
-                        "tile_size_in_pixels": {
-                            "dimension_size": [3, 2]
-                        },
-                        "geo_transform": {
-                            "upper_left_coordinate": {
-                                "x": 0.0,
-                                "y": 0.0
-                            },
-                            "x_pixel_size": 1.0,
-                            "y_pixel_size": -1.0
-                        }
-                    },
-                    "data": {
-                        "grid_dimension": {
-                            "dimension_size": [3, 2]
-                        },
-                        "data_container": [1, 2, 3, 4, 5, 6],
-                        "no_data_value": null,
-                        "geo_transform": {
-                            "upper_left_coordinate": {
-                                "x": 0.0,
-                                "y": 0.0
-                            },
-                            "x_pixel_size": 1.0,
-                            "y_pixel_size": -1.0
-                        },
-                        "temporal_bounds": {
+                    "params": {
+                        "data": [{
+                        "time": {
                             "start": -9_223_372_036_854_775_808_i64,
                             "end": 9_223_372_036_854_775_807_i64
+                        },
+                        "tile": {
+                            "global_size_in_tiles": {
+                                "dimension_size": [1, 2]
+                            },
+                            "global_tile_position": {
+                                "dimension_size": [0, 0]
+                            },
+                            "global_pixel_position": {
+                                "dimension_size": [0, 0]
+                            },
+                            "tile_size_in_pixels": {
+                                "dimension_size": [3, 2]
+                            },
+                            "geo_transform": {
+                                "upper_left_coordinate": {
+                                    "x": 0.0,
+                                    "y": 0.0
+                                },
+                                "x_pixel_size": 1.0,
+                                "y_pixel_size": -1.0
+                            }
+                        },
+                        "data": {
+                            "grid_dimension": {
+                                "dimension_size": [3, 2]
+                            },
+                            "data_container": [1, 2, 3, 4, 5, 6],
+                            "no_data_value": null,
+                            "geo_transform": {
+                                "upper_left_coordinate": {
+                                    "x": 0.0,
+                                    "y": 0.0
+                                },
+                                "x_pixel_size": 1.0,
+                                "y_pixel_size": -1.0
+                            },
+                            "temporal_bounds": {
+                                "start": -9_223_372_036_854_775_808_i64,
+                                "end": 9_223_372_036_854_775_807_i64
+                            }
                         }
+                    }],
+                    "result_descriptor": {
+                        "data_type": "U8",
+                        "projection": "EPSG:4326"
                     }
-                }],
-                "result_descriptor": {
-                    "data_type": "U8",
-                    "projection": "EPSG:4326"
                 }
             }],
             "point_sources": [{
                 "type": "MockPointSource",
+                "params": {
                 "points": [{
                     "x": 1.0,
                     "y": 2.0
@@ -282,11 +304,10 @@ mod tests {
                     "x": 1.0,
                     "y": 2.0
                 }]
-            }],
+            }}],
             "params": {
                 "feature_name": "raster_values"
-            },
-            "result_descriptor": null
+            }
         })
         .to_string();
         assert_eq!(serialized, expected);
@@ -297,7 +318,10 @@ mod tests {
     #[allow(clippy::float_cmp)]
     fn execute() {
         let points = vec![Coordinate2D::new(1., 2.); 3];
-        let mps = MockPointSource { points }.boxed();
+        let mps = MockPointSource {
+            params: MockPointSourceParams { points },
+        }
+        .boxed();
 
         let raster = Raster2D::new(
             [3, 2].into(),
@@ -321,10 +345,12 @@ mod tests {
         };
 
         let mrs = MockRasterSource {
-            data: vec![raster_tile],
-            result_descriptor: RasterResultDescriptor {
-                data_type: RasterDataType::U8,
-                projection: Projection::wgs84().into(),
+            params: MockRasterSourceParams {
+                data: vec![raster_tile],
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U8,
+                    projection: Projection::wgs84().into(),
+                },
             },
         }
         .boxed();
@@ -332,17 +358,16 @@ mod tests {
         let params = MockRasterPointJoinParams {
             feature_name: new_column_name.clone(),
         };
-        let mut op = MockRasterPointJoinOperator {
+        let op = MockRasterPointJoinOperator {
             params,
             raster_sources: vec![mrs],
             point_sources: vec![mps],
-            result_descriptor: None,
         }
         .boxed();
 
-        op.initialize().unwrap();
+        let initialized = op.into_initialized_operator(42).unwrap();
 
-        let point_processor = match op.vector_processor() {
+        let point_processor = match initialized.vector_processor() {
             Ok(TypedVectorQueryProcessor::MultiPoint(processor)) => processor,
             _ => panic!(),
         };
