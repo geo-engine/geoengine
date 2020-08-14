@@ -42,7 +42,7 @@ where
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct MockRasterSource {
     pub data: Vec<RasterTile2D<u8>>,
     pub raster_type: RasterDataType,
@@ -91,7 +91,9 @@ impl RasterOperator for MockRasterSource {
             RasterDataType::U64 => {
                 crate::engine::TypedRasterQueryProcessor::U64(converted(&self.data))
             }
-            RasterDataType::I8 => unimplemented!("cannot cast u8 to i8"),
+            RasterDataType::I8 => {
+                crate::engine::TypedRasterQueryProcessor::I8(converted(&self.data))
+            }
             RasterDataType::I16 => {
                 crate::engine::TypedRasterQueryProcessor::I16(converted(&self.data))
             }
