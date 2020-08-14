@@ -89,14 +89,13 @@ impl FeatureCollectionImplHelpers for MultiPointCollection {
 
         for old_multipoints in &[geometries_a, geometries_b] {
             for multipoint_index in 0..old_multipoints.len() {
-                let multipoint_ref =
-                    old_multipoints.value(old_multipoints.offset() + multipoint_index);
+                let multipoint_ref = old_multipoints.value(multipoint_index);
                 let multipoint: &FixedSizeListArray = downcast_array(&multipoint_ref);
 
                 let new_points = new_multipoints.values();
 
                 for point_index in 0..multipoint.len() {
-                    let floats_ref = multipoint.value(multipoint.offset() + point_index);
+                    let floats_ref = multipoint.value(point_index);
                     let floats: &Float64Array = downcast_array(&floats_ref);
 
                     let new_floats = new_points.values();
@@ -345,7 +344,7 @@ impl<'l> Iterator for MultiPointIterator<'l> {
 
         let number_of_points = multi_point_array.len();
 
-        let floats_ref = multi_point_array.value(multi_point_array.offset());
+        let floats_ref = multi_point_array.value(0);
         let floats: &Float64Array = downcast_array(&floats_ref);
 
         let multi_point = MultiPointRef::new_unchecked(unsafe {

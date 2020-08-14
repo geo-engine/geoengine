@@ -1,4 +1,4 @@
-use crate::error::Error;
+use crate::error::{ArrowWrappedError, Error};
 use arrow::error::ArrowError;
 use snafu::Snafu;
 
@@ -7,7 +7,7 @@ use snafu::Snafu;
 pub enum FeatureCollectionError {
     #[snafu(display("Arrow internal error: {:?}", source))]
     ArrowInternal {
-        source: arrow::error::ArrowError,
+        source: ArrowWrappedError,
     },
 
     CannotAccessReservedColumn {
@@ -43,6 +43,8 @@ impl From<FeatureCollectionError> for Error {
 
 impl From<ArrowError> for FeatureCollectionError {
     fn from(source: ArrowError) -> Self {
-        FeatureCollectionError::ArrowInternal { source }
+        FeatureCollectionError::ArrowInternal {
+            source: source.into(),
+        }
     }
 }
