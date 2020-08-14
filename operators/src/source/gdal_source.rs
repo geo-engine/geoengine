@@ -391,7 +391,7 @@ where
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct GdalSource {
     pub params: GdalSourceParameters,
 }

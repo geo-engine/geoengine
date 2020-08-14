@@ -859,4 +859,115 @@ mod tests {
         assert_eq!(pc.len(), cloned.len());
         assert_eq!(pc.coordinates(), cloned.coordinates());
     }
+
+    #[test]
+    fn equals_builder_from_data() {
+        let a = MultiPointCollection::from_data(
+            vec![vec![(0., 0.).into()], vec![(1., 1.).into()]],
+            vec![
+                TimeInterval::new_unchecked(0, 1),
+                TimeInterval::new_unchecked(0, 1),
+            ],
+            {
+                let mut map = HashMap::new();
+                map.insert("number".into(), FeatureData::Number(vec![0., 1.]));
+                map
+            },
+        )
+        .unwrap();
+
+        let b = {
+            let mut builder = MultiPointCollection::builder();
+            builder
+                .add_column("number".into(), FeatureDataType::Number)
+                .unwrap();
+            let mut builder = builder.finish_header();
+
+            assert!(builder.is_empty());
+
+            builder
+                .push_geometry(Coordinate2D::new(0., 0.).into())
+                .unwrap();
+            builder
+                .push_time_interval(TimeInterval::new_unchecked(0, 1))
+                .unwrap();
+            builder
+                .push_data("number", FeatureDataValue::Number(0.))
+                .unwrap();
+            builder.finish_row();
+            builder
+                .push_geometry(Coordinate2D::new(1., 1.).into())
+                .unwrap();
+            builder
+                .push_time_interval(TimeInterval::new_unchecked(0, 1))
+                .unwrap();
+            builder
+                .push_data("number", FeatureDataValue::Number(1.))
+                .unwrap();
+            builder.finish_row();
+
+            assert_eq!(builder.len(), 2);
+
+            builder.build().unwrap()
+        };
+
+        assert_eq!(a.len(), b.len());
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn nan_equals() {
+        let collection = {
+            let mut builder = MultiPointCollection::builder();
+            builder
+                .add_column("number".into(), FeatureDataType::Number)
+                .unwrap();
+            let mut builder = builder.finish_header();
+
+            assert!(builder.is_empty());
+
+            builder
+                .push_geometry(Coordinate2D::new(0., 0.).into())
+                .unwrap();
+            builder
+                .push_time_interval(TimeInterval::new_unchecked(0, 1))
+                .unwrap();
+            builder
+                .push_data("number", FeatureDataValue::Number(f64::NAN))
+                .unwrap();
+            builder.finish_row();
+
+            assert!(!builder.is_empty());
+
+            builder.build().unwrap()
+        };
+
+        assert_eq!(collection, collection);
+    }
+
+    #[test]
+    fn null_equals() {
+        let collection = {
+            let mut builder = MultiPointCollection::builder();
+            builder
+                .add_column("number".into(), FeatureDataType::NullableNumber)
+                .unwrap();
+            let mut builder = builder.finish_header();
+
+            builder
+                .push_geometry(Coordinate2D::new(0., 0.).into())
+                .unwrap();
+            builder
+                .push_time_interval(TimeInterval::new_unchecked(0, 1))
+                .unwrap();
+            builder
+                .push_data("number", FeatureDataValue::NullableNumber(None))
+                .unwrap();
+            builder.finish_row();
+
+            builder.build().unwrap()
+        };
+
+        assert_eq!(collection, collection);
+    }
 }
