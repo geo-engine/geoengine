@@ -12,6 +12,7 @@ pub use self::data_type::{
 pub use self::geo_transform::{GdalGeoTransform, GeoTransform};
 pub use self::grid_dimension::{Dim, GridDimension, GridIndex, Ix};
 pub use self::operations::blit::Blit;
+pub use self::operations::classification::RasterClassification;
 pub use self::typed_raster::{TypedRaster2D, TypedRaster3D};
 use super::primitives::{SpatialBounded, TemporalBounded};
 use crate::util::Result;
