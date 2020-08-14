@@ -60,11 +60,19 @@ pub trait FeatureCollectionRowBuilder {
     /// Indicate a finished row
     fn finish_row(&mut self);
 
+    /// Return the number of finished rows
+    fn len(&self) -> usize;
+
+    /// Checks whether there was no row finished yet
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     /// Build the feature collection
     ///
     /// # Errors
     ///
-    /// This call fails if the lenghts of the columns do not match the number of times `finish_row()` was called.
+    /// This call fails if the lengths of the columns do not match the number of times `finish_row()` was called.
     ///
     fn build(self) -> Result<Self::Collection>;
 }
@@ -262,6 +270,10 @@ where
 
     fn finish_row(&mut self) {
         self.rows += 1;
+    }
+
+    fn len(&self) -> usize {
+        self.rows
     }
 
     fn build(mut self) -> Result<Self::Collection> {

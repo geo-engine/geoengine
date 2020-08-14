@@ -5,27 +5,27 @@ use geoengine_datatypes::{projection::ProjectionOption, raster::RasterDataType};
 use serde::{Deserialize, Serialize};
 
 /// Common methods for `Operator`s
-pub trait Operator: std::fmt::Debug + Send + Sync {}
+pub trait Operator: std::fmt::Debug + Send + Sync + CloneableOperator {}
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct OperatorImpl<P> {
     pub params: P,
     pub raster_sources: Vec<Box<dyn RasterOperator>>,
     pub vector_sources: Vec<Box<dyn VectorOperator>>,
 }
 
-impl<P> Operator for OperatorImpl<P> where P: std::fmt::Debug + Send + Sync {}
+impl<P> Operator for OperatorImpl<P> where P: std::fmt::Debug + Send + Sync + Clone + 'static {}
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct SourceOperatorImpl<P> {
     pub params: P,
 }
 
-impl<P> Operator for SourceOperatorImpl<P> where P: std::fmt::Debug + Send + Sync {}
+impl<P> Operator for SourceOperatorImpl<P> where P: std::fmt::Debug + Send + Sync + Clone + 'static {}
 
 /// Common methods for `VectorOperator`s
 #[typetag::serde(tag = "type")]
-pub trait VectorOperator: Operator {
+pub trait VectorOperator: Operator + CloneableVectorOperator {
     fn into_initialized_operator(
         self: Box<Self>,
         context: ExecutionContext,
@@ -42,7 +42,7 @@ pub trait VectorOperator: Operator {
 
 /// Common methods for `RasterOperator`s
 #[typetag::serde(tag = "type")]
-pub trait RasterOperator: Operator {
+pub trait RasterOperator: Operator + CloneableRasterOperator {
     fn initialized_operator(
         self: Box<Self>,
         context: ExecutionContext,
@@ -274,7 +274,7 @@ impl VectorResultDescriptor {
 }
 
 /// An enum to differentiate between `Operator` variants
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum TypedOperator {
     Vector(Box<dyn VectorOperator>),
     Raster(Box<dyn RasterOperator>),
@@ -307,5 +307,65 @@ impl Into<TypedInitializedOperator> for Box<dyn InitializedVectorOperator> {
 impl Into<TypedInitializedOperator> for Box<dyn InitializedRasterOperator> {
     fn into(self) -> TypedInitializedOperator {
         TypedInitializedOperator::Raster(self)
+    }
+}
+
+/// Helper trait for making boxed `Operator`s cloneable
+pub trait CloneableOperator {
+    fn clone_boxed(&self) -> Box<dyn Operator>;
+}
+
+/// Helper trait for making boxed `RasterOperator`s cloneable
+pub trait CloneableRasterOperator {
+    fn clone_boxed_raster(&self) -> Box<dyn RasterOperator>;
+}
+
+/// Helper trait for making boxed `VectorOperator`s cloneable
+pub trait CloneableVectorOperator {
+    fn clone_boxed_vector(&self) -> Box<dyn VectorOperator>;
+}
+
+impl<T> CloneableOperator for T
+where
+    T: 'static + Operator + Clone,
+{
+    fn clone_boxed(&self) -> Box<dyn Operator> {
+        Box::new(self.clone())
+    }
+}
+
+impl<T> CloneableRasterOperator for T
+where
+    T: 'static + RasterOperator + Clone,
+{
+    fn clone_boxed_raster(&self) -> Box<dyn RasterOperator> {
+        Box::new(self.clone())
+    }
+}
+
+impl<T> CloneableVectorOperator for T
+where
+    T: 'static + VectorOperator + Clone,
+{
+    fn clone_boxed_vector(&self) -> Box<dyn VectorOperator> {
+        Box::new(self.clone())
+    }
+}
+
+impl Clone for Box<dyn Operator> {
+    fn clone(&self) -> Box<dyn Operator> {
+        self.clone_boxed()
+    }
+}
+
+impl Clone for Box<dyn RasterOperator> {
+    fn clone(&self) -> Box<dyn RasterOperator> {
+        self.clone_boxed_raster()
+    }
+}
+
+impl Clone for Box<dyn VectorOperator> {
+    fn clone(&self) -> Box<dyn VectorOperator> {
+        self.clone_boxed_vector()
     }
 }

@@ -2,7 +2,7 @@ use crate::primitives::{FeatureDataType, TimeInterval};
 use crate::util::arrow::{downcast_array, downcast_dyn_array, ArrowTyped};
 use crate::util::Result;
 use arrow::array::{
-    Array, ArrayData, ArrayRef, BooleanArray, Date64Array, ListArray, PrimitiveArray,
+    Array, ArrayData, ArrayRef, BooleanArray, Date64Array, Float64Array, ListArray, PrimitiveArray,
     PrimitiveArrayOps, PrimitiveBuilder, StringArray, StringBuilder, StructArray,
 };
 use arrow::datatypes::{
@@ -172,6 +172,47 @@ pub trait FeatureCollectionImplHelpers {
 
     /// Is the feature collection simple or does it contain multi-features?
     fn _is_simple(&self) -> bool;
+
+    /// compares two f64 typed columns
+    /// treats NaN values as if they are equal
+    fn f64_column_equals(a: &Float64Array, b: &Float64Array) -> bool {
+        if (a.len() != b.len()) || (a.null_count() != b.null_count()) {
+            return false;
+        }
+        let number_of_values = a.len();
+
+        if a.null_count() == 0 {
+            let a_values: &[f64] = a.value_slice(0, number_of_values);
+            let b_values: &[f64] = a.value_slice(0, number_of_values);
+
+            for (&v1, &v2) in a_values.iter().zip(b_values) {
+                match (v1.is_nan(), v2.is_nan()) {
+                    (true, true) => continue,
+                    (false, false) if float_cmp::approx_eq!(f64, v1, v2) => continue,
+                    _ => return false,
+                }
+            }
+        } else {
+            for i in 0..number_of_values {
+                match (a.is_null(i), b.is_null(i)) {
+                    (true, true) => continue,
+                    (false, false) => (), // need to compare values
+                    _ => return false,
+                };
+
+                let v1: f64 = a.value(i);
+                let v2: f64 = b.value(i);
+
+                match (v1.is_nan(), v2.is_nan()) {
+                    (true, true) => continue,
+                    (false, false) if float_cmp::approx_eq!(f64, v1, v2) => continue,
+                    _ => return false,
+                }
+            }
+        }
+
+        true
+    }
 }
 
 /// This macro implements a `FeatureCollection` (and `Clone`)
@@ -668,6 +709,44 @@ macro_rules! feature_collection_impl {
                     StructArray::from(self.table().data()),
                     self.types().clone(),
                 )
+            }
+        }
+
+        impl PartialEq for $Collection
+        where
+            Self: crate::collections::FeatureCollectionImplHelpers,
+        {
+            fn eq(&self, other: &Self) -> bool {
+                use crate::collections::feature_collection_impl::FeatureCollectionImplHelpers;
+                use crate::util::arrow::downcast_array;
+                use arrow::datatypes::DataType;
+
+                if self.types() != other.types() {
+                    return false;
+                }
+
+                for key in self.types().keys() {
+                    let c1 = self.table().column_by_name(key).expect("column must exist");
+                    let c2 = other
+                        .table()
+                        .column_by_name(key)
+                        .expect("column must exist");
+
+                    match (c1.data_type(), c2.data_type()) {
+                        (DataType::Float64, DataType::Float64) => {
+                            if !Self::f64_column_equals(downcast_array(c1), downcast_array(c2)) {
+                                return false;
+                            }
+                        }
+                        _ => {
+                            if !c1.equals(c2.as_ref()) {
+                                return false;
+                            }
+                        }
+                    }
+                }
+
+                true
             }
         }
     };
