@@ -1,6 +1,7 @@
 use crate::engine::{
-    InitializedRasterOperator, InitilaizedOperatorImpl, QueryProcessor, RasterOperator,
-    RasterQueryProcessor, RasterResultDescriptor, SourceOperatorImpl, TypedRasterQueryProcessor,
+    InitializedOperatorB, InitializedRasterOperator, InitilaizedOperatorImpl, QueryProcessor,
+    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SourceOperatorImpl,
+    TypedRasterQueryProcessor,
 };
 use crate::util::Result;
 use futures::{stream, stream::StreamExt};
@@ -52,7 +53,7 @@ impl RasterOperator for MockRasterSource {
     fn initialized_operator(
         self: Box<Self>,
         context: crate::engine::ExecutionContext,
-    ) -> Result<Box<dyn InitializedRasterOperator>> {
+    ) -> Result<Box<InitializedRasterOperator>> {
         InitilaizedOperatorImpl::create(
             self.params,
             context,
@@ -65,10 +66,10 @@ impl RasterOperator for MockRasterSource {
     }
 }
 
-impl InitializedRasterOperator
+impl InitializedOperatorB<RasterResultDescriptor, TypedRasterQueryProcessor>
     for InitilaizedOperatorImpl<MockRasterSourceParams, RasterResultDescriptor, ()>
 {
-    fn raster_processor(&self) -> Result<TypedRasterQueryProcessor> {
+    fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         fn converted<From, To>(
             raster_tiles: &[RasterTile2D<From>],
         ) -> Box<dyn RasterQueryProcessor<RasterType = To>>
@@ -235,7 +236,7 @@ mod tests {
             .initialized_operator(execution_context)
             .unwrap();
 
-        match initialized.raster_processor().unwrap() {
+        match initialized.query_processor().unwrap() {
             crate::engine::TypedRasterQueryProcessor::U8(..) => {}
             _ => panic!("wrong raster type"),
         }

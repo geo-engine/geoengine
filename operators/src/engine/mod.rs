@@ -6,8 +6,8 @@ mod query_processor;
 mod result_descriptor;
 
 pub use operator::{
-    ExecutionContext, InitializedOperator, InitializedRasterOperator, InitializedVectorOperator,
-    Operator, RasterOperator, TypedOperator, VectorOperator,
+    ExecutionContext, InitializedOperator, InitializedOperatorB, InitializedRasterOperator,
+    InitializedVectorOperator, Operator, RasterOperator, TypedOperator, VectorOperator,
 };
 
 pub use clonable_operator::{

@@ -1,7 +1,7 @@
 use crate::{
     engine::{
-        InitializedRasterOperator, InitilaizedOperatorImpl, QueryProcessor, RasterOperator,
-        RasterQueryProcessor, RasterResultDescriptor, SourceOperatorImpl,
+        InitializedOperatorB, InitializedRasterOperator, InitilaizedOperatorImpl, QueryProcessor,
+        RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SourceOperatorImpl,
         TypedRasterQueryProcessor,
     },
     util::Result,
@@ -410,7 +410,7 @@ impl RasterOperator for GdalSource {
     fn initialized_operator(
         self: Box<Self>,
         context: crate::engine::ExecutionContext,
-    ) -> Result<Box<dyn InitializedRasterOperator>> {
+    ) -> Result<Box<InitializedRasterOperator>> {
         InitilaizedOperatorImpl::create(
             self.params.clone(),
             context,
@@ -428,14 +428,14 @@ impl RasterOperator for GdalSource {
     }
 }
 
-impl InitializedRasterOperator
+impl InitializedOperatorB<RasterResultDescriptor, TypedRasterQueryProcessor>
     for InitilaizedOperatorImpl<
         GdalSourceParameters,
         RasterResultDescriptor,
         JsonDatasetInformationProvider,
     >
 {
-    fn raster_processor(&self) -> Result<TypedRasterQueryProcessor> {
+    fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         Ok(match self.result_descriptor().data_type {
             RasterDataType::U8 => TypedRasterQueryProcessor::U8(
                 GdalSourceProcessor::from_params_with_provider(

@@ -1,8 +1,9 @@
 use crate::engine::{QueryContext, QueryProcessor, QueryRectangle};
 use crate::{
     engine::{
-        ExecutionContext, InitializedVectorOperator, InitilaizedOperatorImpl, SourceOperatorImpl,
-        TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+        ExecutionContext, InitializedOperatorB, InitializedVectorOperator, InitilaizedOperatorImpl,
+        SourceOperatorImpl, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
+        VectorResultDescriptor,
     },
     util::Result,
 };
@@ -51,7 +52,7 @@ impl VectorOperator for MockPointSource {
     fn into_initialized_operator(
         self: Box<Self>,
         context: ExecutionContext,
-    ) -> Result<Box<dyn InitializedVectorOperator>> {
+    ) -> Result<Box<InitializedVectorOperator>> {
         InitilaizedOperatorImpl::create(
             self.params,
             context,
@@ -69,14 +70,14 @@ impl VectorOperator for MockPointSource {
     }
 }
 
-impl InitializedVectorOperator
+impl InitializedOperatorB<VectorResultDescriptor, TypedVectorQueryProcessor>
     for InitilaizedOperatorImpl<MockPointSourceParams, VectorResultDescriptor, ()>
 {
     fn result_descriptor(&self) -> VectorResultDescriptor {
         self.result_descriptor
     }
 
-    fn vector_processor(&self) -> Result<TypedVectorQueryProcessor> {
+    fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
         Ok(TypedVectorQueryProcessor::MultiPoint(
             MockPointSourceProcessor {
                 points: self.params.points.clone(),
@@ -118,7 +119,7 @@ mod tests {
         .boxed();
         let initialized = mps.into_initialized_operator(execution_context).unwrap();
 
-        let typed_processor = initialized.vector_processor();
+        let typed_processor = initialized.query_processor();
         let point_processor = match typed_processor {
             Ok(TypedVectorQueryProcessor::MultiPoint(processor)) => processor,
             _ => panic!(),

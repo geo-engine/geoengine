@@ -20,8 +20,8 @@ use geoengine_datatypes::{
 };
 
 use crate::engine::{
-    InitializedVectorOperator, InitilaizedOperatorImpl, QueryContext, QueryProcessor,
-    QueryRectangle, SourceOperatorImpl, TypedVectorQueryProcessor, VectorOperator,
+    InitializedOperatorB, InitializedVectorOperator, InitilaizedOperatorImpl, QueryContext,
+    QueryProcessor, QueryRectangle, SourceOperatorImpl, TypedVectorQueryProcessor, VectorOperator,
     VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::error;
@@ -148,7 +148,7 @@ impl VectorOperator for CsvSource {
     fn into_initialized_operator(
         self: Box<Self>,
         context: crate::engine::ExecutionContext,
-    ) -> Result<Box<dyn InitializedVectorOperator>> {
+    ) -> Result<Box<InitializedVectorOperator>> {
         InitilaizedOperatorImpl::create(
             self.params,
             context,
@@ -166,14 +166,14 @@ impl VectorOperator for CsvSource {
     }
 }
 
-impl InitializedVectorOperator
+impl InitializedOperatorB<VectorResultDescriptor, TypedVectorQueryProcessor>
     for InitilaizedOperatorImpl<CsvSourceParameters, VectorResultDescriptor, ()>
 {
     fn result_descriptor(&self) -> VectorResultDescriptor {
         self.result_descriptor
     }
 
-    fn vector_processor(&self) -> Result<crate::engine::TypedVectorQueryProcessor> {
+    fn query_processor(&self) -> Result<crate::engine::TypedVectorQueryProcessor> {
         Ok(TypedVectorQueryProcessor::MultiPoint(
             CsvSourceProcessor {
                 params: self.params.clone(),

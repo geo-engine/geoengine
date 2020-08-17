@@ -145,7 +145,7 @@ async fn get_map<T: WorkflowRegistry>(
         .map_err(warp::reject::custom)?;
 
     let processor = initilaized
-        .raster_processor()
+        .query_processor()
         .context(error::Operator)
         .map_err(warp::reject::custom)?;
 

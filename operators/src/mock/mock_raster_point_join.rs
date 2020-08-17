@@ -1,5 +1,5 @@
 use crate::engine::{
-    InitializedVectorOperator, InitilaizedOperatorImpl, OperatorImpl, QueryProcessor,
+    InitializedOperatorB, InitilaizedOperatorImpl, OperatorImpl, QueryProcessor,
     RasterQueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
     VectorResultDescriptor,
 };
@@ -89,7 +89,7 @@ impl VectorOperator for MockRasterPointJoinOperator {
     fn into_initialized_operator(
         self: Box<Self>,
         context: crate::engine::ExecutionContext,
-    ) -> Result<Box<dyn crate::engine::InitializedVectorOperator>> {
+    ) -> Result<Box<crate::engine::InitializedVectorOperator>> {
         InitilaizedOperatorImpl::create(
             self.params,
             context,
@@ -110,14 +110,14 @@ impl VectorOperator for MockRasterPointJoinOperator {
     }
 }
 
-impl InitializedVectorOperator
+impl InitializedOperatorB<VectorResultDescriptor, TypedVectorQueryProcessor>
     for InitilaizedOperatorImpl<MockRasterPointJoinParams, VectorResultDescriptor, ()>
 {
-    fn vector_processor(&self) -> Result<crate::engine::TypedVectorQueryProcessor> {
+    fn query_processor(&self) -> Result<crate::engine::TypedVectorQueryProcessor> {
         // self.validate_children(self.result_descriptor().projection, 1..2, 1..2)?;
 
-        let raster_source = self.raster_sources[0].raster_processor()?;
-        let point_source = match self.vector_sources[0].vector_processor()? {
+        let raster_source = self.raster_sources[0].query_processor()?;
+        let point_source = match self.vector_sources[0].query_processor()? {
             TypedVectorQueryProcessor::MultiPoint(v) => v,
             _ => panic!(),
         };
@@ -342,7 +342,7 @@ mod tests {
 
         let initialized = op.into_initialized_operator(execution_context).unwrap();
 
-        let point_processor = match initialized.vector_processor() {
+        let point_processor = match initialized.query_processor() {
             Ok(TypedVectorQueryProcessor::MultiPoint(processor)) => processor,
             _ => panic!(),
         };
