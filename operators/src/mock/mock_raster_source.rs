@@ -124,6 +124,7 @@ impl InitializedRasterOperator
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::ExecutionContext;
     use geoengine_datatypes::{
         primitives::TimeInterval,
         projection::Projection,
@@ -227,7 +228,11 @@ mod tests {
 
         let deserialized: Box<dyn RasterOperator> = serde_json::from_str(&serialized).unwrap();
 
-        let initialized = deserialized.initialized_operator(42).unwrap();
+        let execution_context = ExecutionContext;
+
+        let initialized = deserialized
+            .initialized_operator(execution_context)
+            .unwrap();
 
         match initialized.raster_processor().unwrap() {
             crate::engine::TypedRasterQueryProcessor::U8(..) => {}

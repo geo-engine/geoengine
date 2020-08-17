@@ -17,7 +17,8 @@ use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 use futures::StreamExt;
 use geoengine_operators::engine::{
-    QueryContext, QueryRectangle, RasterQueryProcessor, TypedOperator, TypedRasterQueryProcessor,
+    ExecutionContext, QueryContext, QueryRectangle, RasterQueryProcessor, TypedOperator,
+    TypedRasterQueryProcessor,
 };
 
 type WR<T> = Arc<RwLock<T>>;
@@ -137,7 +138,7 @@ async fn get_map<T: WorkflowRegistry>(
         ));
     };
 
-    let execution_context = 42;
+    let execution_context = ExecutionContext;
     let initilaized = operator
         .initialized_operator(execution_context)
         .context(error::Operator)

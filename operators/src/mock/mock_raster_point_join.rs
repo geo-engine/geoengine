@@ -140,7 +140,9 @@ impl InitializedVectorOperator
 mod tests {
     use super::*;
     use crate::{
-        engine::{QueryContext, QueryRectangle, RasterOperator, RasterResultDescriptor},
+        engine::{
+            ExecutionContext, QueryContext, QueryRectangle, RasterOperator, RasterResultDescriptor,
+        },
         mock::{MockPointSource, MockPointSourceParams, MockRasterSource, MockRasterSourceParams},
     };
     use futures::executor::block_on_stream;
@@ -335,7 +337,9 @@ mod tests {
         }
         .boxed();
 
-        let initialized = op.into_initialized_operator(42).unwrap();
+        let execution_context = ExecutionContext;
+
+        let initialized = op.into_initialized_operator(execution_context).unwrap();
 
         let point_processor = match initialized.vector_processor() {
             Ok(TypedVectorQueryProcessor::MultiPoint(processor)) => processor,
