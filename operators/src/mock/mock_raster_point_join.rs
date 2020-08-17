@@ -93,7 +93,8 @@ impl VectorOperator for MockRasterPointJoinOperator {
         InitilaizedOperatorImpl::create(
             self.params,
             context,
-            |_, _, _, vs| {
+            |_, _, _, _| Ok(()),
+            |_, _, _, _, vs| {
                 Ok(VectorResultDescriptor {
                     projection: vs.get(0).map_or_else(
                         || ProjectionOption::None,
@@ -110,7 +111,7 @@ impl VectorOperator for MockRasterPointJoinOperator {
 }
 
 impl InitializedVectorOperator
-    for InitilaizedOperatorImpl<MockRasterPointJoinParams, VectorResultDescriptor>
+    for InitilaizedOperatorImpl<MockRasterPointJoinParams, VectorResultDescriptor, ()>
 {
     fn vector_processor(&self) -> Result<crate::engine::TypedVectorQueryProcessor> {
         // self.validate_children(self.result_descriptor().projection, 1..2, 1..2)?;

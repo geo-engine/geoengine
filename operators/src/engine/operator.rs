@@ -1,6 +1,7 @@
 use super::{
     query_processor::{TypedRasterQueryProcessor, TypedVectorQueryProcessor},
-    RasterResultDescriptor, VectorResultDescriptor,
+    CloneableInitializedOperator, CloneableOperator, CloneableRasterOperator,
+    CloneableVectorOperator, RasterResultDescriptor, VectorResultDescriptor,
 };
 use crate::util::Result;
 
@@ -46,7 +47,7 @@ pub trait VectorOperator: Operator + CloneableVectorOperator {
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct ExecutionContext;
 
-pub trait InitializedOperator {
+pub trait InitializedOperator: CloneableInitializedOperator {
     fn execution_context(&self) -> &ExecutionContext;
 
     /// Get the sources of the `Operator`
@@ -145,65 +146,5 @@ impl Into<TypedInitializedOperator> for Box<dyn InitializedVectorOperator> {
 impl Into<TypedInitializedOperator> for Box<dyn InitializedRasterOperator> {
     fn into(self) -> TypedInitializedOperator {
         TypedInitializedOperator::Raster(self)
-    }
-}
-
-/// Helper trait for making boxed `Operator`s cloneable
-pub trait CloneableOperator {
-    fn clone_boxed(&self) -> Box<dyn Operator>;
-}
-
-/// Helper trait for making boxed `RasterOperator`s cloneable
-pub trait CloneableRasterOperator {
-    fn clone_boxed_raster(&self) -> Box<dyn RasterOperator>;
-}
-
-/// Helper trait for making boxed `VectorOperator`s cloneable
-pub trait CloneableVectorOperator {
-    fn clone_boxed_vector(&self) -> Box<dyn VectorOperator>;
-}
-
-impl<T> CloneableOperator for T
-where
-    T: 'static + Operator + Clone,
-{
-    fn clone_boxed(&self) -> Box<dyn Operator> {
-        Box::new(self.clone())
-    }
-}
-
-impl<T> CloneableRasterOperator for T
-where
-    T: 'static + RasterOperator + Clone,
-{
-    fn clone_boxed_raster(&self) -> Box<dyn RasterOperator> {
-        Box::new(self.clone())
-    }
-}
-
-impl<T> CloneableVectorOperator for T
-where
-    T: 'static + VectorOperator + Clone,
-{
-    fn clone_boxed_vector(&self) -> Box<dyn VectorOperator> {
-        Box::new(self.clone())
-    }
-}
-
-impl Clone for Box<dyn Operator> {
-    fn clone(&self) -> Box<dyn Operator> {
-        self.clone_boxed()
-    }
-}
-
-impl Clone for Box<dyn RasterOperator> {
-    fn clone(&self) -> Box<dyn RasterOperator> {
-        self.clone_boxed_raster()
-    }
-}
-
-impl Clone for Box<dyn VectorOperator> {
-    fn clone(&self) -> Box<dyn VectorOperator> {
-        self.clone_boxed_vector()
     }
 }

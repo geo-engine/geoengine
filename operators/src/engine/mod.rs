@@ -1,3 +1,4 @@
+mod clonable_operator;
 mod operator;
 mod operator_impl;
 mod query;
@@ -9,6 +10,11 @@ pub use operator::{
     Operator, RasterOperator, TypedOperator, VectorOperator,
 };
 
+pub use clonable_operator::{
+    CloneableInitializedOperator, CloneableInitializedRasterOperator,
+    CloneableInitializedVectorOperator, CloneableOperator, CloneableRasterOperator,
+    CloneableVectorOperator,
+};
 pub use operator_impl::{InitilaizedOperatorImpl, OperatorImpl, SourceOperatorImpl};
 pub use query::{QueryContext, QueryRectangle};
 pub use query_processor::{

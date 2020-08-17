@@ -56,7 +56,8 @@ impl RasterOperator for MockRasterSource {
         InitilaizedOperatorImpl::create(
             self.params,
             context,
-            |params, _, _, _| Ok(params.result_descriptor),
+            |_, _, _, _| Ok(()),
+            |params, _, _, _, _| Ok(params.result_descriptor),
             vec![],
             vec![],
         )
@@ -65,7 +66,7 @@ impl RasterOperator for MockRasterSource {
 }
 
 impl InitializedRasterOperator
-    for InitilaizedOperatorImpl<MockRasterSourceParams, RasterResultDescriptor>
+    for InitilaizedOperatorImpl<MockRasterSourceParams, RasterResultDescriptor, ()>
 {
     fn raster_processor(&self) -> Result<TypedRasterQueryProcessor> {
         fn converted<From, To>(

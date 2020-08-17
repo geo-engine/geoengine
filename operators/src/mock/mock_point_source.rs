@@ -55,7 +55,8 @@ impl VectorOperator for MockPointSource {
         InitilaizedOperatorImpl::create(
             self.params,
             context,
-            |_, _, _, _| {
+            |_, _, _, _| Ok(()),
+            |_, _, _, _, _| {
                 Ok(VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
                     projection: Projection::wgs84().into(),
@@ -69,7 +70,7 @@ impl VectorOperator for MockPointSource {
 }
 
 impl InitializedVectorOperator
-    for InitilaizedOperatorImpl<MockPointSourceParams, VectorResultDescriptor>
+    for InitilaizedOperatorImpl<MockPointSourceParams, VectorResultDescriptor, ()>
 {
     fn result_descriptor(&self) -> VectorResultDescriptor {
         self.result_descriptor

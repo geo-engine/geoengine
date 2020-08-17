@@ -152,7 +152,8 @@ impl VectorOperator for CsvSource {
         InitilaizedOperatorImpl::create(
             self.params,
             context,
-            |_, _, _, _| {
+            |_, _, _, _| Ok(()),
+            |_, _, _, _, _| {
                 Ok(VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
                     projection: Projection::wgs84().into(),
@@ -166,7 +167,7 @@ impl VectorOperator for CsvSource {
 }
 
 impl InitializedVectorOperator
-    for InitilaizedOperatorImpl<CsvSourceParameters, VectorResultDescriptor>
+    for InitilaizedOperatorImpl<CsvSourceParameters, VectorResultDescriptor, ()>
 {
     fn result_descriptor(&self) -> VectorResultDescriptor {
         self.result_descriptor

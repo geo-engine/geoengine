@@ -21,21 +21,24 @@ pub struct SourceOperatorImpl<P> {
 
 impl<P> Operator for SourceOperatorImpl<P> where P: std::fmt::Debug + Send + Sync + Clone + 'static {}
 
-pub struct InitilaizedOperatorImpl<Parameters, ResultDescriptor> {
+#[derive(Clone)]
+pub struct InitilaizedOperatorImpl<Parameters, ResultDescriptor, State> {
     pub params: Parameters,
     pub raster_sources: Vec<Box<dyn InitializedRasterOperator>>,
     pub vector_sources: Vec<Box<dyn InitializedVectorOperator>>,
     pub context: ExecutionContext,
     pub result_descriptor: ResultDescriptor,
+    pub state: State,
 }
 
-impl<P, R> InitilaizedOperatorImpl<P, R> {
+impl<P, R, S> InitilaizedOperatorImpl<P, R, S> {
     pub fn new(
         params: P,
         context: ExecutionContext,
         result_descriptor: R,
         raster_sources: Vec<Box<dyn InitializedRasterOperator>>,
         vector_sources: Vec<Box<dyn InitializedVectorOperator>>,
+        state: S,
     ) -> Self {
         Self {
             params,
@@ -43,23 +46,32 @@ impl<P, R> InitilaizedOperatorImpl<P, R> {
             vector_sources,
             context,
             result_descriptor,
+            state,
         }
     }
 
-    pub fn create<F>(
+    pub fn create<RF, SF>(
         params: P,
         context: ExecutionContext,
-        result_descriptor_fn: F,
+        state_fn: SF,
+        result_descriptor_fn: RF,
         raster_sources_not_init: Vec<Box<dyn RasterOperator>>,
         vector_sources_not_init: Vec<Box<dyn VectorOperator>>,
     ) -> Result<Self>
     where
-        F: Fn(
+        RF: Fn(
+            &P,
+            &ExecutionContext,
+            &S,
+            &[Box<dyn InitializedRasterOperator>],
+            &[Box<dyn InitializedVectorOperator>],
+        ) -> Result<R>,
+        SF: Fn(
             &P,
             &ExecutionContext,
             &[Box<dyn InitializedRasterOperator>],
             &[Box<dyn InitializedVectorOperator>],
-        ) -> Result<R>,
+        ) -> Result<S>,
     {
         let raster_sources = raster_sources_not_init
             .into_iter()
@@ -69,9 +81,17 @@ impl<P, R> InitilaizedOperatorImpl<P, R> {
             .into_iter()
             .map(|o| o.into_initialized_operator(context))
             .collect::<Result<Vec<Box<dyn InitializedVectorOperator>>>>()?;
+        let state = state_fn(
+            &params,
+            &context,
+            raster_sources.as_slice(),
+            vector_sources.as_slice(),
+        )?;
+
         let result_descriptor = result_descriptor_fn(
             &params,
             &context,
+            &state,
             raster_sources.as_slice(),
             vector_sources.as_slice(),
         )?;
@@ -82,14 +102,16 @@ impl<P, R> InitilaizedOperatorImpl<P, R> {
             result_descriptor,
             raster_sources,
             vector_sources,
+            state,
         ))
     }
 }
 
-impl<P, R> InitializedOperator for InitilaizedOperatorImpl<P, R>
+impl<P, R, S> InitializedOperator for InitilaizedOperatorImpl<P, R, S>
 where
-    P: std::fmt::Debug + Clone,
-    R: std::fmt::Debug + Clone,
+    P: std::fmt::Debug + Clone + 'static,
+    R: std::fmt::Debug + Clone + 'static,
+    S: std::clone::Clone + 'static,
 {
     fn execution_context(&self) -> &ExecutionContext {
         &self.context
