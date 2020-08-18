@@ -114,8 +114,6 @@ impl InitializedVectorOperator
     for InitilaizedOperatorImpl<MockRasterPointJoinParams, VectorResultDescriptor, ()>
 {
     fn vector_processor(&self) -> Result<crate::engine::TypedVectorQueryProcessor> {
-        // self.validate_children(self.result_descriptor().projection, 1..2, 1..2)?;
-
         let raster_source = self.raster_sources[0].raster_processor()?;
         let point_source = match self.vector_sources[0].vector_processor()? {
             TypedVectorQueryProcessor::MultiPoint(v) => v,
