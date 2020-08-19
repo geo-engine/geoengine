@@ -1,4 +1,3 @@
-use arrow::error::ArrowError;
 use snafu::Snafu;
 
 use crate::collections::FeatureCollectionError;
@@ -6,14 +5,13 @@ use crate::{
     primitives::{Coordinate2D, PrimitivesError, TimeInterval},
     raster::RasterDataType,
 };
-use serde::export::Formatter;
 
-#[derive(Debug, PartialEq, Snafu)]
+#[derive(Debug, Snafu)]
 #[snafu(visibility = "pub(crate)")]
 pub enum Error {
     #[snafu(display("Arrow internal error: {:?}", source))]
     ArrowInternal {
-        source: ArrowWrappedError,
+        source: arrow::error::ArrowError,
     },
 
     #[snafu(display("Field is reserved or already in use: {}", name))]
@@ -127,86 +125,8 @@ pub enum Error {
     },
 }
 
-#[derive(Debug)]
-pub struct ArrowWrappedError {
-    error: arrow::error::ArrowError,
-}
-
-impl AsRef<arrow::error::ArrowError> for ArrowWrappedError {
-    fn as_ref(&self) -> &ArrowError {
-        &self.error
-    }
-}
-
-impl std::fmt::Display for ArrowWrappedError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
-        self.error.fmt(f)
-    }
-}
-
-impl std::error::Error for ArrowWrappedError {}
-
-impl From<arrow::error::ArrowError> for ArrowWrappedError {
-    fn from(error: ArrowError) -> Self {
-        Self { error }
-    }
-}
-
-impl PartialEq for ArrowWrappedError {
-    fn eq(&self, other: &Self) -> bool {
-        match (self.as_ref(), other.as_ref()) {
-            (
-                arrow::error::ArrowError::MemoryError(e1),
-                arrow::error::ArrowError::MemoryError(e2),
-            )
-            | (
-                arrow::error::ArrowError::ParseError(e1),
-                arrow::error::ArrowError::ParseError(e2),
-            )
-            | (
-                arrow::error::ArrowError::SchemaError(e1),
-                arrow::error::ArrowError::SchemaError(e2),
-            )
-            | (
-                arrow::error::ArrowError::ComputeError(e1),
-                arrow::error::ArrowError::ComputeError(e2),
-            )
-            | (arrow::error::ArrowError::CsvError(e1), arrow::error::ArrowError::CsvError(e2))
-            | (arrow::error::ArrowError::JsonError(e1), arrow::error::ArrowError::JsonError(e2))
-            | (arrow::error::ArrowError::IoError(e1), arrow::error::ArrowError::IoError(e2))
-            | (
-                arrow::error::ArrowError::InvalidArgumentError(e1),
-                arrow::error::ArrowError::InvalidArgumentError(e2),
-            )
-            | (
-                arrow::error::ArrowError::ParquetError(e1),
-                arrow::error::ArrowError::ParquetError(e2),
-            ) => e1 == e2,
-            (arrow::error::ArrowError::DivideByZero, arrow::error::ArrowError::DivideByZero)
-            | (
-                arrow::error::ArrowError::DictionaryKeyOverflowError,
-                arrow::error::ArrowError::DictionaryKeyOverflowError,
-            ) => true,
-            (arrow::error::ArrowError::ExternalError(_), _)
-            | (ArrowError::MemoryError(_), _)
-            | (ArrowError::ParseError(_), _)
-            | (ArrowError::SchemaError(_), _)
-            | (ArrowError::ComputeError(_), _)
-            | (ArrowError::DivideByZero, _)
-            | (ArrowError::CsvError(_), _)
-            | (ArrowError::JsonError(_), _)
-            | (ArrowError::IoError(_), _)
-            | (ArrowError::InvalidArgumentError(_), _)
-            | (ArrowError::ParquetError(_), _)
-            | (ArrowError::DictionaryKeyOverflowError, _) => false,
-        }
-    }
-}
-
 impl From<arrow::error::ArrowError> for Error {
-    fn from(arrow_error: ArrowError) -> Self {
-        Error::ArrowInternal {
-            source: arrow_error.into(),
-        }
+    fn from(source: arrow::error::ArrowError) -> Self {
+        Error::ArrowInternal { source }
     }
 }
