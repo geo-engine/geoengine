@@ -281,9 +281,9 @@ impl<'f> NullableCategoricalDataRef<'f> {
 /// assert_eq!(text_data_ref.as_ref().len(), 12);
 /// assert_eq!(text_data_ref.offsets().len(), 4);
 ///
-/// assert_eq!(text_data_ref.text_at(0), Ok("foobar"));
-/// assert_eq!(text_data_ref.text_at(1), Ok("foo"));
-/// assert_eq!(text_data_ref.text_at(2), Ok("bar"));
+/// assert_eq!(text_data_ref.text_at(0).unwrap(), "foobar");
+/// assert_eq!(text_data_ref.text_at(1).unwrap(), "foo");
+/// assert_eq!(text_data_ref.text_at(2).unwrap(), "bar");
 /// assert!(text_data_ref.text_at(3).is_err());
 /// ```
 ///
@@ -394,9 +394,9 @@ unsafe fn byte_ptr_to_str<'d>(bytes: *const u8, length: usize) -> &'d str {
 /// assert_eq!(text_data_ref.as_ref().len(), 9);
 /// assert_eq!(text_data_ref.offsets().len(), 4);
 ///
-/// assert_eq!(text_data_ref.text_at(0), Ok(Some("foobar")));
-/// assert_eq!(text_data_ref.text_at(1), Ok(None));
-/// assert_eq!(text_data_ref.text_at(2), Ok(Some("bar")));
+/// assert_eq!(text_data_ref.text_at(0).unwrap(), Some("foobar"));
+/// assert_eq!(text_data_ref.text_at(1).unwrap(), None);
+/// assert_eq!(text_data_ref.text_at(2).unwrap(), Some("bar"));
 /// assert!(text_data_ref.text_at(3).is_err());
 /// ```
 ///
