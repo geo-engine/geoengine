@@ -1,6 +1,7 @@
 use crate::util::arrow::ArrowTyped;
 use arrow::array::{Array, ArrayBuilder, ArrayDataRef, ArrayEqual, ArrayRef, JsonEqual};
 use arrow::datatypes::DataType;
+use arrow::error::ArrowError;
 use geojson::Geometry;
 use serde_json::Value;
 use std::any::Any;
@@ -49,6 +50,18 @@ impl Array for NoArrowArray {
 
 impl ArrayBuilder for NoArrowArray {
     fn len(&self) -> usize {
+        unreachable!("There is no implementation since there is no geometry")
+    }
+
+    fn is_empty(&self) -> bool {
+        unreachable!("There is no implementation since there is no geometry")
+    }
+
+    fn append_data(&mut self, _data: &[ArrayDataRef]) -> Result<(), ArrowError> {
+        unreachable!("There is no implementation since there is no geometry")
+    }
+
+    fn data_type(&self) -> DataType {
         unreachable!("There is no implementation since there is no geometry")
     }
 

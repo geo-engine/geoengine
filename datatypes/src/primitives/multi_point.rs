@@ -47,21 +47,14 @@ impl From<Coordinate2D> for MultiPoint {
 
 impl ArrowTyped for MultiPoint {
     type ArrowArray = arrow::array::ListArray;
-    type ArrowBuilder =
-        arrow::array::ListBuilder<arrow::array::FixedSizeListBuilder<arrow::array::Float64Builder>>;
+    type ArrowBuilder = arrow::array::ListBuilder<<Coordinate2D as ArrowTyped>::ArrowBuilder>;
 
     fn arrow_data_type() -> arrow::datatypes::DataType {
-        arrow::datatypes::DataType::List(Box::new(arrow::datatypes::DataType::FixedSizeList(
-            Box::new(arrow::datatypes::DataType::Float64),
-            2,
-        )))
+        arrow::datatypes::DataType::List(Box::new(Coordinate2D::arrow_data_type()))
     }
 
     fn arrow_builder(capacity: usize) -> Self::ArrowBuilder {
-        arrow::array::ListBuilder::new(arrow::array::FixedSizeListBuilder::new(
-            arrow::array::Float64Builder::new(capacity * 2),
-            2,
-        ))
+        arrow::array::ListBuilder::new(Coordinate2D::arrow_builder(capacity))
     }
 }
 

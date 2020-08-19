@@ -77,7 +77,7 @@ fn null_bytes() {
         assert_eq!(null_bitmap.len(), 1);
 
         assert_eq!(
-            null_bitmap.clone().to_buffer().data(), // must clone bitmap because there is no way to get a reference to the data
+            null_bitmap.clone().into_buffer().data(), // must clone bitmap because there is no way to get a reference to the data
             &[0b0000_1001] // right most bit is first element, 1 = valid value, 0 = null or unset
         );
     }

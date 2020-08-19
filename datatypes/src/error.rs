@@ -1,4 +1,3 @@
-use arrow::error::ArrowError;
 use snafu::Snafu;
 
 use crate::collections::FeatureCollectionError;
@@ -7,15 +6,12 @@ use crate::{
     raster::RasterDataType,
 };
 
-#[derive(Debug, PartialEq, Snafu)]
+#[derive(Debug, Snafu)]
 #[snafu(visibility = "pub(crate)")]
 pub enum Error {
-    // #[snafu(display("Arrow internal error: {:?}", source))]
-    #[snafu(display("Arrow internal error: {:?}", error))]
+    #[snafu(display("Arrow internal error: {:?}", source))]
     ArrowInternal {
-        // #[snafu(source(false))]
-        // source: arrow::error::ArrowError,
-        error: arrow::error::ArrowError,
+        source: arrow::error::ArrowError,
     },
 
     #[snafu(display("Field is reserved or already in use: {}", name))]
@@ -130,10 +126,7 @@ pub enum Error {
 }
 
 impl From<arrow::error::ArrowError> for Error {
-    fn from(arrow_error: ArrowError) -> Self {
-        Error::ArrowInternal {
-            // source: arrow_error,
-            error: arrow_error,
-        }
+    fn from(source: arrow::error::ArrowError) -> Self {
+        Error::ArrowInternal { source }
     }
 }

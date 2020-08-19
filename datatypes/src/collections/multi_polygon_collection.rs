@@ -8,7 +8,7 @@ use crate::primitives::{
 };
 use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::Result;
-use arrow::array::{Array, BooleanArray, FixedSizeBinaryArray, ListArray, StructArray};
+use arrow::array::{Array, BooleanArray, FixedSizeListArray, Float64Array, ListArray, StructArray};
 use arrow::datatypes::DataType;
 use std::collections::HashMap;
 use std::slice;
@@ -63,11 +63,17 @@ impl FeatureCollectionImplHelpers for MultiPolygonCollection {
                     let coordinate_builder = ring_builder.values();
 
                     let coordinates_ref = rings.value(ring_index);
-                    let coordinates = downcast_array::<FixedSizeBinaryArray>(&coordinates_ref);
+                    let coordinates = downcast_array::<FixedSizeListArray>(&coordinates_ref);
 
                     for coordinate_index in 0..(coordinates.len() as usize) {
-                        let bytes: &[u8] = coordinates.value(coordinate_index);
-                        coordinate_builder.append_value(bytes)?;
+                        let floats_ref = coordinates.value(coordinate_index);
+                        let floats: &Float64Array = downcast_array(&floats_ref);
+
+                        coordinate_builder
+                            .values()
+                            .append_slice(floats.value_slice(0, 2))?;
+
+                        coordinate_builder.append(true)?;
                     }
 
                     ring_builder.append(true)?;
@@ -103,11 +109,17 @@ impl FeatureCollectionImplHelpers for MultiPolygonCollection {
                         let coordinate_builder = ring_builder.values();
 
                         let coordinates_ref = rings.value(ring_index);
-                        let coordinates = downcast_array::<FixedSizeBinaryArray>(&coordinates_ref);
+                        let coordinates = downcast_array::<FixedSizeListArray>(&coordinates_ref);
 
                         for coordinate_index in 0..(coordinates.len() as usize) {
-                            let bytes: &[u8] = coordinates.value(coordinate_index);
-                            coordinate_builder.append_value(bytes)?;
+                            let floats_ref = coordinates.value(coordinate_index);
+                            let floats: &Float64Array = downcast_array(&floats_ref);
+
+                            coordinate_builder
+                                .values()
+                                .append_slice(floats.value_slice(0, 2))?;
+
+                            coordinate_builder.append(true)?;
                         }
 
                         ring_builder.append(true)?;
@@ -188,14 +200,17 @@ impl<'l> Iterator for MultiLineIterator<'l> {
 
             for ring_index in 0..number_of_rings {
                 let coordinate_array_ref = ring_array.value(ring_index);
-                let coordinate_array: &FixedSizeBinaryArray = downcast_array(&coordinate_array_ref);
+                let coordinate_array: &FixedSizeListArray = downcast_array(&coordinate_array_ref);
 
                 let number_of_coordinates = coordinate_array.len();
+
+                let float_array_ref = coordinate_array.value(0);
+                let float_array: &Float64Array = downcast_array(&float_array_ref);
 
                 ring_refs.push(unsafe {
                     #[allow(clippy::cast_ptr_alignment)]
                     slice::from_raw_parts(
-                        coordinate_array.value(0)[0] as *const u8 as *const Coordinate2D,
+                        float_array.raw_values() as *const Coordinate2D,
                         number_of_coordinates,
                     )
                 });
@@ -235,7 +250,11 @@ impl GeoFeatureCollectionRowBuilder<MultiPolygon>
                 let coordinate_builder = ring_builder.values();
 
                 for coordinate in ring {
-                    coordinate_builder.append_value(coordinate.as_ref())?;
+                    coordinate_builder
+                        .values()
+                        .append_slice(coordinate.as_ref())?;
+
+                    coordinate_builder.append(true)?;
                 }
 
                 ring_builder.append(true)?;
