@@ -21,4 +21,4 @@ pub use query_processor::{
     QueryProcessor, RasterQueryProcessor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
     VectorQueryProcessor,
 };
-pub use result_descriptor::{RasterResultDescriptor, VectorResultDescriptor};
+pub use result_descriptor::{RasterResultDescriptor, ResultDescriptor, VectorResultDescriptor};

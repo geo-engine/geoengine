@@ -22,13 +22,13 @@ pub struct SourceOperatorImpl<P> {
 impl<P> Operator for SourceOperatorImpl<P> where P: std::fmt::Debug + Send + Sync + Clone + 'static {}
 
 #[derive(Clone)]
-pub struct InitilaizedOperatorImpl<Parameters, ResultDescriptor, State> {
-    pub params: Parameters,
+pub struct InitilaizedOperatorImpl<P, R, S> {
+    pub params: P,
     pub raster_sources: Vec<Box<dyn InitializedRasterOperator>>,
     pub vector_sources: Vec<Box<dyn InitializedVectorOperator>>,
     pub context: ExecutionContext,
-    pub result_descriptor: ResultDescriptor,
-    pub state: State,
+    pub result_descriptor: R,
+    pub state: S,
 }
 
 impl<P, R, S> InitilaizedOperatorImpl<P, R, S> {
