@@ -1,7 +1,9 @@
-use crate::primitives::error;
+use crate::primitives::{error, GeometryRef};
 use crate::primitives::{Coordinate2D, Geometry};
-use crate::util::arrow::ArrowTyped;
+use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::Result;
+use arrow::array::BooleanArray;
+use arrow::error::ArrowError;
 use snafu::ensure;
 
 /// A trait that allows a common access to lines of `MultiLineString`s and its references
@@ -65,12 +67,124 @@ impl ArrowTyped for MultiLineString {
         let line_string_builder = arrow::array::ListBuilder::new(coordinate_builder);
         arrow::array::ListBuilder::new(line_string_builder) // multi line strings = lists of line strings
     }
+
+    fn concat(a: &Self::ArrowArray, b: &Self::ArrowArray) -> Result<Self::ArrowArray, ArrowError> {
+        use arrow::array::{Array, FixedSizeListArray, Float64Array, ListArray};
+
+        let mut multi_line_builder = Self::arrow_builder(a.len() + b.len());
+
+        for multi_lines in &[a, b] {
+            for multi_line_index in 0..multi_lines.len() {
+                let line_builder = multi_line_builder.values();
+
+                let lines_ref = multi_lines.value(multi_line_index);
+                let lines = downcast_array::<ListArray>(&lines_ref);
+
+                for line_index in 0..lines.len() {
+                    let coordinate_builder = line_builder.values();
+
+                    let coordinates_ref = lines.value(line_index);
+                    let coordinates = downcast_array::<FixedSizeListArray>(&coordinates_ref);
+
+                    for coordinate_index in 0..(coordinates.len() as usize) {
+                        let floats_ref = coordinates.value(coordinate_index);
+                        let floats: &Float64Array = downcast_array(&floats_ref);
+
+                        coordinate_builder
+                            .values()
+                            .append_slice(floats.value_slice(0, 2))?;
+
+                        coordinate_builder.append(true)?;
+                    }
+
+                    line_builder.append(true)?;
+                }
+
+                multi_line_builder.append(true)?;
+            }
+        }
+
+        Ok(multi_line_builder.finish())
+    }
+
+    fn filter(
+        multi_lines: &Self::ArrowArray,
+        filter_array: &BooleanArray,
+    ) -> Result<Self::ArrowArray, ArrowError> {
+        use arrow::array::{Array, FixedSizeListArray, Float64Array, ListArray};
+
+        let mut multi_line_builder = Self::arrow_builder(0);
+
+        for multi_line_index in 0..multi_lines.len() {
+            if !filter_array.value(multi_line_index) {
+                continue;
+            }
+
+            let line_builder = multi_line_builder.values();
+
+            let lines_ref = multi_lines.value(multi_line_index);
+            let lines = downcast_array::<ListArray>(&lines_ref);
+
+            for line_index in 0..lines.len() {
+                let coordinate_builder = line_builder.values();
+
+                let coordinates_ref = lines.value(line_index);
+                let coordinates = downcast_array::<FixedSizeListArray>(&coordinates_ref);
+
+                for coordinate_index in 0..(coordinates.len() as usize) {
+                    let floats_ref = coordinates.value(coordinate_index);
+                    let floats: &Float64Array = downcast_array(&floats_ref);
+
+                    coordinate_builder
+                        .values()
+                        .append_slice(floats.value_slice(0, 2))?;
+
+                    coordinate_builder.append(true)?;
+                }
+
+                line_builder.append(true)?;
+            }
+
+            multi_line_builder.append(true)?;
+        }
+
+        Ok(multi_line_builder.finish())
+    }
+
+    fn from_vec(multi_line_strings: Vec<Self>) -> Result<Self::ArrowArray, ArrowError>
+    where
+        Self: Sized,
+    {
+        let mut builder = Self::arrow_builder(multi_line_strings.len());
+        for multi_line_string in multi_line_strings {
+            let line_string_builder = builder.values();
+
+            for line_string in multi_line_string.as_ref() {
+                let coordinate_builder = line_string_builder.values();
+
+                for coordinate in line_string {
+                    let float_builder = coordinate_builder.values();
+                    float_builder.append_value(coordinate.x)?;
+                    float_builder.append_value(coordinate.y)?;
+                    coordinate_builder.append(true)?;
+                }
+
+                line_string_builder.append(true)?;
+            }
+
+            builder.append(true)?;
+        }
+
+        Ok(builder.finish())
+    }
 }
 
 #[derive(Debug, PartialEq)]
 pub struct MultiLineStringRef<'g> {
     point_coordinates: Vec<&'g [Coordinate2D]>,
 }
+
+impl<'r> GeometryRef for MultiLineStringRef<'r> {}
 
 impl<'g> MultiLineStringRef<'g> {
     pub fn new(coordinates: Vec<&'g [Coordinate2D]>) -> Result<Self> {

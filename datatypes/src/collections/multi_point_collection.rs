@@ -331,6 +331,16 @@ pub struct MultiPointIterator<'l> {
     length: usize,
 }
 
+impl<'l> MultiPointIterator<'l> {
+    pub fn new(geometry_column: &'l ListArray, length: usize) -> Self {
+        Self {
+            geometry_column,
+            index: 0,
+            length,
+        }
+    }
+}
+
 impl<'l> Iterator for MultiPointIterator<'l> {
     type Item = MultiPointRef<'l>;
 

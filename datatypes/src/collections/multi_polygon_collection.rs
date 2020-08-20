@@ -151,7 +151,7 @@ impl FeatureCollectionImplHelpers for MultiPolygonCollection {
 }
 
 impl<'l> IntoGeometryIterator<'l> for MultiPolygonCollection {
-    type GeometryIterator = MultiLineIterator<'l>;
+    type GeometryIterator = MultiPolygonIterator<'l>;
     type GeometryType = MultiPolygonRef<'l>;
 
     fn geometries(&'l self) -> Self::GeometryIterator {
@@ -162,7 +162,7 @@ impl<'l> IntoGeometryIterator<'l> for MultiPolygonCollection {
                 .expect("Column must exist since it is in the metadata"),
         );
 
-        MultiLineIterator {
+        MultiPolygonIterator {
             geometry_column,
             index: 0,
             length: self.len(),
@@ -171,13 +171,23 @@ impl<'l> IntoGeometryIterator<'l> for MultiPolygonCollection {
 }
 
 /// A collection iterator for multi points
-pub struct MultiLineIterator<'l> {
+pub struct MultiPolygonIterator<'l> {
     geometry_column: &'l ListArray,
     index: usize,
     length: usize,
 }
 
-impl<'l> Iterator for MultiLineIterator<'l> {
+impl<'l> MultiPolygonIterator<'l> {
+    pub fn new(geometry_column: &'l ListArray, length: usize) -> Self {
+        Self {
+            geometry_column,
+            index: 0,
+            length,
+        }
+    }
+}
+
+impl<'l> Iterator for MultiPolygonIterator<'l> {
     type Item = MultiPolygonRef<'l>;
 
     fn next(&mut self) -> Option<Self::Item> {

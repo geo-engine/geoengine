@@ -1,5 +1,6 @@
 pub(self) mod error;
 mod feature_collection;
+mod feature_collection_struct;
 #[macro_use]
 mod geo_feature_collection;
 #[macro_use]
@@ -20,6 +21,7 @@ pub use feature_collection_builder::{
     SimpleFeatureCollectionRowBuilder,
 };
 pub(self) use feature_collection_impl::FeatureCollectionImplHelpers;
+pub use feature_collection_struct::FeatureCollection as FeatureCollectionStruct;
 pub use geo_feature_collection::{IntoGeometryIterator, IntoGeometryOptionsIterator};
 
 pub use data_collection::DataCollection;

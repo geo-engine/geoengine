@@ -1,4 +1,5 @@
 use crate::error;
+use crate::primitives::PrimitivesError;
 use crate::util::Result;
 use arrow::bitmap::Bitmap;
 use snafu::ensure;
@@ -585,7 +586,9 @@ impl FeatureData {
     ///
     /// This method fails if an `arrow` internal error occurs
     ///
-    pub(crate) fn arrow_builder(&self) -> Result<Box<dyn arrow::array::ArrayBuilder>> {
+    pub(crate) fn arrow_builder(
+        &self,
+    ) -> Result<Box<dyn arrow::array::ArrayBuilder>, PrimitivesError> {
         Ok(match self {
             Self::Text(v) => {
                 let mut builder = arrow::array::StringBuilder::new(v.len());

@@ -806,7 +806,7 @@ mod macro_hygiene_test {
 
     impl<'i> crate::collections::IntoGeometryOptionsIterator<'i> for HygienicCollection {
         type GeometryOptionIterator = std::iter::Once<Option<Self::GeometryType>>;
-        type GeometryType = geojson::Geometry;
+        type GeometryType = crate::primitives::NoGeometry;
 
         fn geometry_options(&self) -> Self::GeometryOptionIterator {
             unimplemented!()

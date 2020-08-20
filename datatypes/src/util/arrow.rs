@@ -1,7 +1,8 @@
 use std::any::Any;
 
-use arrow::array::{Array, ArrayBuilder, ArrayRef};
+use arrow::array::{Array, ArrayBuilder, ArrayRef, BooleanArray};
 use arrow::datatypes::DataType;
+use arrow::error::ArrowError;
 
 /// Helper function to downcast an arrow array
 ///
@@ -26,10 +27,25 @@ pub fn downcast_mut_array<T: Any>(array: &mut dyn ArrayBuilder) -> &mut T {
 
 /// A trait to get information about the corresponding `arrow` type
 pub trait ArrowTyped {
-    type ArrowArray: Array;
+    type ArrowArray: Array + 'static;
     type ArrowBuilder: ArrayBuilder;
 
+    /// Return the specific arrow data type
     fn arrow_data_type() -> DataType;
 
+    /// Return a builder for the arrow data type
     fn arrow_builder(capacity: usize) -> Self::ArrowBuilder;
+
+    /// Concatenate two arrays that correspond to this type
+    fn concat(a: &Self::ArrowArray, b: &Self::ArrowArray) -> Result<Self::ArrowArray, ArrowError>;
+
+    /// Filter two arrays that correspond to this type
+    fn filter(
+        data_array: &Self::ArrowArray,
+        filter_array: &BooleanArray,
+    ) -> Result<Self::ArrowArray, ArrowError>;
+
+    fn from_vec(data: Vec<Self>) -> Result<Self::ArrowArray, ArrowError>
+    where
+        Self: Sized;
 }

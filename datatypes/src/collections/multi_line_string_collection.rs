@@ -133,7 +133,7 @@ impl FeatureCollectionImplHelpers for MultiLineStringCollection {
 }
 
 impl<'l> IntoGeometryIterator<'l> for MultiLineStringCollection {
-    type GeometryIterator = MultiLineIterator<'l>;
+    type GeometryIterator = MultiLineStringIterator<'l>;
     type GeometryType = MultiLineStringRef<'l>;
 
     fn geometries(&'l self) -> Self::GeometryIterator {
@@ -144,7 +144,7 @@ impl<'l> IntoGeometryIterator<'l> for MultiLineStringCollection {
                 .expect("Column must exist since it is in the metadata"),
         );
 
-        MultiLineIterator {
+        MultiLineStringIterator {
             geometry_column,
             index: 0,
             length: self.len(),
@@ -153,13 +153,23 @@ impl<'l> IntoGeometryIterator<'l> for MultiLineStringCollection {
 }
 
 /// A collection iterator for multi points
-pub struct MultiLineIterator<'l> {
+pub struct MultiLineStringIterator<'l> {
     geometry_column: &'l ListArray,
     index: usize,
     length: usize,
 }
 
-impl<'l> Iterator for MultiLineIterator<'l> {
+impl<'l> MultiLineStringIterator<'l> {
+    pub fn new(geometry_column: &'l ListArray, length: usize) -> Self {
+        Self {
+            geometry_column,
+            index: 0,
+            length,
+        }
+    }
+}
+
+impl<'l> Iterator for MultiLineStringIterator<'l> {
     type Item = MultiLineStringRef<'l>;
 
     fn next(&mut self) -> Option<Self::Item> {
