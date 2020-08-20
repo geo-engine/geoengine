@@ -1,6 +1,6 @@
 use crate::{
     engine::{
-        InitializedRasterOperator, InitilaizedOperatorImpl, QueryProcessor, RasterOperator,
+        InitializedOperatorImpl, InitializedRasterOperator, QueryProcessor, RasterOperator,
         RasterQueryProcessor, RasterResultDescriptor, SourceOperatorImpl,
         TypedRasterQueryProcessor,
     },
@@ -411,7 +411,7 @@ impl RasterOperator for GdalSource {
         self: Box<Self>,
         context: crate::engine::ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
-        InitilaizedOperatorImpl::create(
+        InitializedOperatorImpl::create(
             self.params.clone(),
             context,
             |params, _, _, _| JsonDatasetInformationProvider::with_dataset_id(&params.dataset_id),
@@ -424,12 +424,12 @@ impl RasterOperator for GdalSource {
             vec![],
             vec![],
         )
-        .map(InitilaizedOperatorImpl::boxed)
+        .map(InitializedOperatorImpl::boxed)
     }
 }
 
 impl InitializedRasterOperator
-    for InitilaizedOperatorImpl<
+    for InitializedOperatorImpl<
         GdalSourceParameters,
         RasterResultDescriptor,
         JsonDatasetInformationProvider,

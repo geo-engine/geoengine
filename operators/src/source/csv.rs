@@ -20,7 +20,7 @@ use geoengine_datatypes::{
 };
 
 use crate::engine::{
-    InitializedVectorOperator, InitilaizedOperatorImpl, QueryContext, QueryProcessor,
+    InitializedOperatorImpl, InitializedVectorOperator, QueryContext, QueryProcessor,
     QueryRectangle, SourceOperatorImpl, TypedVectorQueryProcessor, VectorOperator,
     VectorQueryProcessor, VectorResultDescriptor,
 };
@@ -149,7 +149,7 @@ impl VectorOperator for CsvSource {
         self: Box<Self>,
         context: crate::engine::ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
-        InitilaizedOperatorImpl::create(
+        InitializedOperatorImpl::create(
             self.params,
             context,
             |_, _, _, _| Ok(()),
@@ -162,12 +162,12 @@ impl VectorOperator for CsvSource {
             vec![],
             vec![],
         )
-        .map(InitilaizedOperatorImpl::boxed)
+        .map(InitializedOperatorImpl::boxed)
     }
 }
 
 impl InitializedVectorOperator
-    for InitilaizedOperatorImpl<CsvSourceParameters, VectorResultDescriptor, ()>
+    for InitializedOperatorImpl<CsvSourceParameters, VectorResultDescriptor, ()>
 {
     fn result_descriptor(&self) -> VectorResultDescriptor {
         self.result_descriptor

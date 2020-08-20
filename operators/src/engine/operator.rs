@@ -78,6 +78,7 @@ pub trait InitializedVectorOperator: Send + Sync {
         Box::new(self)
     }
 }
+
 pub trait InitializedRasterOperator: Send + Sync {
     /// Get the result type of the `Operator`
     fn result_descriptor(&self) -> RasterResultDescriptor;

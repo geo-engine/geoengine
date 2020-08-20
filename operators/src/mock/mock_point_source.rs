@@ -1,7 +1,7 @@
 use crate::engine::{QueryContext, QueryProcessor, QueryRectangle};
 use crate::{
     engine::{
-        ExecutionContext, InitializedVectorOperator, InitilaizedOperatorImpl, SourceOperatorImpl,
+        ExecutionContext, InitializedOperatorImpl, InitializedVectorOperator, SourceOperatorImpl,
         TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
     },
     util::Result,
@@ -52,7 +52,7 @@ impl VectorOperator for MockPointSource {
         self: Box<Self>,
         context: ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
-        InitilaizedOperatorImpl::create(
+        InitializedOperatorImpl::create(
             self.params,
             context,
             |_, _, _, _| Ok(()),
@@ -65,12 +65,12 @@ impl VectorOperator for MockPointSource {
             vec![],
             vec![],
         )
-        .map(InitilaizedOperatorImpl::boxed)
+        .map(InitializedOperatorImpl::boxed)
     }
 }
 
 impl InitializedVectorOperator
-    for InitilaizedOperatorImpl<MockPointSourceParams, VectorResultDescriptor, ()>
+    for InitializedOperatorImpl<MockPointSourceParams, VectorResultDescriptor, ()>
 {
     fn result_descriptor(&self) -> VectorResultDescriptor {
         self.result_descriptor

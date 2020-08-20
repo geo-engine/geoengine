@@ -22,7 +22,7 @@ pub struct SourceOperatorImpl<P> {
 impl<P> Operator for SourceOperatorImpl<P> where P: std::fmt::Debug + Send + Sync + Clone + 'static {}
 
 #[derive(Clone)]
-pub struct InitilaizedOperatorImpl<P, R, S> {
+pub struct InitializedOperatorImpl<P, R, S> {
     pub params: P,
     pub raster_sources: Vec<Box<dyn InitializedRasterOperator>>,
     pub vector_sources: Vec<Box<dyn InitializedVectorOperator>>,
@@ -31,7 +31,7 @@ pub struct InitilaizedOperatorImpl<P, R, S> {
     pub state: S,
 }
 
-impl<P, R, S> InitilaizedOperatorImpl<P, R, S> {
+impl<P, R, S> InitializedOperatorImpl<P, R, S> {
     pub fn new(
         params: P,
         context: ExecutionContext,
@@ -107,7 +107,7 @@ impl<P, R, S> InitilaizedOperatorImpl<P, R, S> {
     }
 }
 
-impl<P, R, S> InitializedOperator for InitilaizedOperatorImpl<P, R, S>
+impl<P, R, S> InitializedOperator for InitializedOperatorImpl<P, R, S>
 where
     P: std::fmt::Debug + Clone + 'static,
     R: std::fmt::Debug + Clone + 'static,

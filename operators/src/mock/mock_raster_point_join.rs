@@ -1,5 +1,5 @@
 use crate::engine::{
-    InitializedVectorOperator, InitilaizedOperatorImpl, OperatorImpl, QueryProcessor,
+    InitializedOperatorImpl, InitializedVectorOperator, OperatorImpl, QueryProcessor,
     RasterQueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
     VectorResultDescriptor,
 };
@@ -90,7 +90,7 @@ impl VectorOperator for MockRasterPointJoinOperator {
         self: Box<Self>,
         context: crate::engine::ExecutionContext,
     ) -> Result<Box<dyn crate::engine::InitializedVectorOperator>> {
-        InitilaizedOperatorImpl::create(
+        InitializedOperatorImpl::create(
             self.params,
             context,
             |_, _, _, _| Ok(()),
@@ -106,12 +106,12 @@ impl VectorOperator for MockRasterPointJoinOperator {
             self.raster_sources,
             self.vector_sources,
         )
-        .map(InitilaizedOperatorImpl::boxed)
+        .map(InitializedOperatorImpl::boxed)
     }
 }
 
 impl InitializedVectorOperator
-    for InitilaizedOperatorImpl<MockRasterPointJoinParams, VectorResultDescriptor, ()>
+    for InitializedOperatorImpl<MockRasterPointJoinParams, VectorResultDescriptor, ()>
 {
     fn vector_processor(&self) -> Result<crate::engine::TypedVectorQueryProcessor> {
         let raster_source = self.raster_sources[0].raster_processor()?;
