@@ -1,6 +1,6 @@
 use super::{
     ExecutionContext, InitializedOperator, InitializedRasterOperator, InitializedVectorOperator,
-    Operator, RasterOperator, VectorOperator,
+    Operator, RasterOperator, ResultDescriptor, VectorOperator,
 };
 use crate::util::Result;
 use serde::{Deserialize, Serialize};
@@ -109,9 +109,11 @@ impl<P, R, S> InitializedOperatorImpl<P, R, S> {
 impl<P, R, S> InitializedOperator for InitializedOperatorImpl<P, R, S>
 where
     P: std::fmt::Debug + Clone + 'static,
-    R: std::fmt::Debug + Clone + 'static,
+    R: std::fmt::Debug + Clone + 'static + ResultDescriptor,
     S: std::clone::Clone + 'static,
 {
+    type Descriptor = R;
+
     fn execution_context(&self) -> &ExecutionContext {
         &self.context
     }
@@ -126,5 +128,8 @@ where
     }
     fn vector_sources_mut(&mut self) -> &mut [Box<InitializedVectorOperator>] {
         self.vector_sources.as_mut_slice()
+    }
+    fn result_descriptor(&self) -> Self::Descriptor {
+        self.result_descriptor
     }
 }

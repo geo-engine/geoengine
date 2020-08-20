@@ -1,7 +1,7 @@
 use crate::engine::{
-    InitializedOperatorB, InitializedOperatorImpl, InitializedVectorOperator, OperatorImpl,
-    QueryProcessor, RasterQueryProcessor, TypedVectorQueryProcessor, VectorOperator,
-    VectorQueryProcessor, VectorResultDescriptor,
+    InitializedOperatorB, InitializedOperatorImpl, OperatorImpl, QueryProcessor,
+    RasterQueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
+    VectorResultDescriptor,
 };
 use crate::util::Result;
 use futures::StreamExt;
@@ -131,9 +131,6 @@ impl InitializedOperatorB<VectorResultDescriptor, TypedVectorQueryProcessor>
             }
             _ => panic!(),
         }))
-    }
-    fn result_descriptor(&self) -> VectorResultDescriptor {
-        self.result_descriptor
     }
 }
 

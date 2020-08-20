@@ -3,7 +3,7 @@ use geoengine_datatypes::{
 };
 use serde::{Deserialize, Serialize};
 
-pub trait ResultDescriptor {
+pub trait ResultDescriptor: Copy {
     type DataType;
     fn data_type(&self) -> Self::DataType;
     fn projection(&self) -> ProjectionOption;

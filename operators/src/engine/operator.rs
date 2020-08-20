@@ -1,7 +1,7 @@
 use super::{
     query_processor::{TypedRasterQueryProcessor, TypedVectorQueryProcessor},
     CloneableOperator, CloneableRasterOperator, CloneableVectorOperator, RasterResultDescriptor,
-    VectorResultDescriptor,
+    ResultDescriptor, VectorResultDescriptor,
 };
 use crate::util::Result;
 
@@ -48,7 +48,11 @@ pub trait VectorOperator: Operator + CloneableVectorOperator {
 pub struct ExecutionContext;
 
 pub trait InitializedOperator {
+    type Descriptor: ResultDescriptor + Clone;
     fn execution_context(&self) -> &ExecutionContext;
+
+    /// Get the result type of the `Operator`
+    fn result_descriptor(&self) -> Self::Descriptor;
 
     /// Get the sources of the `Operator`
     fn raster_sources(&self) -> &[Box<InitializedRasterOperator>];
@@ -69,10 +73,10 @@ pub type InitializedVectorOperator =
 pub type InitializedRasterOperator =
     dyn InitializedOperatorB<RasterResultDescriptor, TypedRasterQueryProcessor>;
 
-pub trait InitializedOperatorB<R, Q>: InitializedOperator + Send + Sync {
-    /// Get the result type of the `Operator`
-    fn result_descriptor(&self) -> R;
-
+pub trait InitializedOperatorB<R, Q>: InitializedOperator<Descriptor = R> + Send + Sync
+where
+    R: ResultDescriptor + std::clone::Clone,
+{
     /// Instantiate a `TypedVectorQueryProcessor` from a `RasterOperator`
     fn query_processor(&self) -> Result<Q>;
 
@@ -85,7 +89,12 @@ pub trait InitializedOperatorB<R, Q>: InitializedOperator + Send + Sync {
     }
 }
 
-impl InitializedOperator for Box<dyn InitializedOperator> {
+impl<R> InitializedOperator for Box<dyn InitializedOperator<Descriptor = R>>
+where
+    R: ResultDescriptor + std::clone::Clone,
+{
+    type Descriptor = R;
+
     fn execution_context(&self) -> &ExecutionContext {
         self.as_ref().execution_context()
     }
@@ -100,14 +109,18 @@ impl InitializedOperator for Box<dyn InitializedOperator> {
     }
     fn vector_sources_mut(&mut self) -> &mut [Box<InitializedVectorOperator>] {
         self.as_mut().vector_sources_mut()
+    }
+    fn result_descriptor(&self) -> Self::Descriptor {
+        todo!()
     }
 }
 
 impl<R, Q> InitializedOperator for Box<dyn InitializedOperatorB<R, Q>>
 where
-    R: Clone + 'static,
+    R: Clone + 'static + ResultDescriptor,
     Q: Clone + 'static,
 {
+    type Descriptor = R;
     fn execution_context(&self) -> &ExecutionContext {
         self.as_ref().execution_context()
     }
@@ -123,16 +136,16 @@ where
     fn vector_sources_mut(&mut self) -> &mut [Box<InitializedVectorOperator>] {
         self.as_mut().vector_sources_mut()
     }
+    fn result_descriptor(&self) -> Self::Descriptor {
+        self.as_ref().result_descriptor()
+    }
 }
 
 impl<R, Q> InitializedOperatorB<R, Q> for Box<dyn InitializedOperatorB<R, Q>>
 where
-    R: Clone + 'static,
+    R: Clone + 'static + ResultDescriptor,
     Q: Clone + 'static,
 {
-    fn result_descriptor(&self) -> R {
-        self.as_ref().result_descriptor()
-    }
     fn query_processor(&self) -> Result<Q> {
         self.as_ref().query_processor()
     }

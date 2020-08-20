@@ -1,7 +1,7 @@
 use crate::engine::{
-    InitializedOperatorB, InitializedOperatorImpl, InitializedRasterOperator, QueryProcessor,
-    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SourceOperatorImpl,
-    TypedRasterQueryProcessor,
+    InitializedOperator, InitializedOperatorB, InitializedOperatorImpl, InitializedRasterOperator,
+    QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+    SourceOperatorImpl, TypedRasterQueryProcessor,
 };
 use crate::util::Result;
 use futures::{stream, stream::StreamExt};
@@ -117,9 +117,6 @@ impl InitializedOperatorB<RasterResultDescriptor, TypedRasterQueryProcessor>
                 crate::engine::TypedRasterQueryProcessor::F64(converted(&self.params.data))
             }
         })
-    }
-    fn result_descriptor(&self) -> RasterResultDescriptor {
-        self.result_descriptor
     }
 }
 

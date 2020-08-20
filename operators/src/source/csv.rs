@@ -169,10 +169,6 @@ impl VectorOperator for CsvSource {
 impl InitializedOperatorB<VectorResultDescriptor, TypedVectorQueryProcessor>
     for InitializedOperatorImpl<CsvSourceParameters, VectorResultDescriptor, ()>
 {
-    fn result_descriptor(&self) -> VectorResultDescriptor {
-        self.result_descriptor
-    }
-
     fn query_processor(&self) -> Result<crate::engine::TypedVectorQueryProcessor> {
         Ok(TypedVectorQueryProcessor::MultiPoint(
             CsvSourceProcessor {

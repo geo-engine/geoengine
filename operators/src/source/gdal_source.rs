@@ -1,8 +1,8 @@
 use crate::{
     engine::{
-        InitializedOperatorB, InitializedOperatorImpl, InitializedRasterOperator, QueryProcessor,
-        RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SourceOperatorImpl,
-        TypedRasterQueryProcessor,
+        InitializedOperator, InitializedOperatorB, InitializedOperatorImpl,
+        InitializedRasterOperator, QueryProcessor, RasterOperator, RasterQueryProcessor,
+        RasterResultDescriptor, SourceOperatorImpl, TypedRasterQueryProcessor,
     },
     util::Result,
 };
@@ -490,9 +490,6 @@ impl InitializedOperatorB<RasterResultDescriptor, TypedRasterQueryProcessor>
                 .boxed(),
             ),
         })
-    }
-    fn result_descriptor(&self) -> RasterResultDescriptor {
-        self.result_descriptor
     }
 }
 

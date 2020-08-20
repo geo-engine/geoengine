@@ -73,10 +73,6 @@ impl VectorOperator for MockPointSource {
 impl InitializedOperatorB<VectorResultDescriptor, TypedVectorQueryProcessor>
     for InitializedOperatorImpl<MockPointSourceParams, VectorResultDescriptor, ()>
 {
-    fn result_descriptor(&self) -> VectorResultDescriptor {
-        self.result_descriptor
-    }
-
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
         Ok(TypedVectorQueryProcessor::MultiPoint(
             MockPointSourceProcessor {
