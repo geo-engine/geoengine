@@ -3,6 +3,12 @@ use geoengine_datatypes::{
 };
 use serde::{Deserialize, Serialize};
 
+pub trait ResultDescriptor {
+    type DataType;
+    fn data_type(&self) -> Self::DataType;
+    fn projection(&self) -> ProjectionOption;
+}
+
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Serialize, Deserialize)]
 pub struct RasterResultDescriptor {
     pub data_type: RasterDataType,
@@ -23,6 +29,16 @@ impl RasterResultDescriptor {
     {
         self.data_type = f(self.data_type);
         self
+    }
+}
+
+impl ResultDescriptor for RasterResultDescriptor {
+    type DataType = RasterDataType;
+    fn data_type(&self) -> Self::DataType {
+        self.data_type
+    }
+    fn projection(&self) -> ProjectionOption {
+        self.projection
     }
 }
 
@@ -54,5 +70,15 @@ impl VectorResultDescriptor {
     {
         self.projection = f(self.projection);
         self
+    }
+}
+
+impl ResultDescriptor for VectorResultDescriptor {
+    type DataType = VectorDataType;
+    fn data_type(&self) -> Self::DataType {
+        self.data_type
+    }
+    fn projection(&self) -> ProjectionOption {
+        self.projection
     }
 }

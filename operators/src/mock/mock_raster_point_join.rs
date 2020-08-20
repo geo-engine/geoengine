@@ -1,7 +1,7 @@
 use crate::engine::{
-    InitializedOperatorB, InitilaizedOperatorImpl, OperatorImpl, QueryProcessor,
-    RasterQueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
-    VectorResultDescriptor,
+    InitializedOperatorB, InitializedOperatorImpl, InitializedVectorOperator, OperatorImpl,
+    QueryProcessor, RasterQueryProcessor, TypedVectorQueryProcessor, VectorOperator,
+    VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::util::Result;
 use futures::StreamExt;
@@ -90,7 +90,7 @@ impl VectorOperator for MockRasterPointJoinOperator {
         self: Box<Self>,
         context: crate::engine::ExecutionContext,
     ) -> Result<Box<crate::engine::InitializedVectorOperator>> {
-        InitilaizedOperatorImpl::create(
+        InitializedOperatorImpl::create(
             self.params,
             context,
             |_, _, _, _| Ok(()),
@@ -106,12 +106,12 @@ impl VectorOperator for MockRasterPointJoinOperator {
             self.raster_sources,
             self.vector_sources,
         )
-        .map(InitilaizedOperatorImpl::boxed)
+        .map(InitializedOperatorImpl::boxed)
     }
 }
 
 impl InitializedOperatorB<VectorResultDescriptor, TypedVectorQueryProcessor>
-    for InitilaizedOperatorImpl<MockRasterPointJoinParams, VectorResultDescriptor, ()>
+    for InitializedOperatorImpl<MockRasterPointJoinParams, VectorResultDescriptor, ()>
 {
     fn query_processor(&self) -> Result<crate::engine::TypedVectorQueryProcessor> {
         // self.validate_children(self.result_descriptor().projection, 1..2, 1..2)?;

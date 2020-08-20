@@ -1,5 +1,5 @@
 use crate::engine::{
-    InitializedOperatorB, InitializedRasterOperator, InitilaizedOperatorImpl, QueryProcessor,
+    InitializedOperatorB, InitializedOperatorImpl, InitializedRasterOperator, QueryProcessor,
     RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SourceOperatorImpl,
     TypedRasterQueryProcessor,
 };
@@ -54,7 +54,7 @@ impl RasterOperator for MockRasterSource {
         self: Box<Self>,
         context: crate::engine::ExecutionContext,
     ) -> Result<Box<InitializedRasterOperator>> {
-        InitilaizedOperatorImpl::create(
+        InitializedOperatorImpl::create(
             self.params,
             context,
             |_, _, _, _| Ok(()),
@@ -62,12 +62,12 @@ impl RasterOperator for MockRasterSource {
             vec![],
             vec![],
         )
-        .map(InitilaizedOperatorImpl::boxed)
+        .map(InitializedOperatorImpl::boxed)
     }
 }
 
 impl InitializedOperatorB<RasterResultDescriptor, TypedRasterQueryProcessor>
-    for InitilaizedOperatorImpl<MockRasterSourceParams, RasterResultDescriptor, ()>
+    for InitializedOperatorImpl<MockRasterSourceParams, RasterResultDescriptor, ()>
 {
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         fn converted<From, To>(

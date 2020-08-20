@@ -15,10 +15,10 @@ pub use clonable_operator::{
     CloneableInitializedVectorOperator, CloneableOperator, CloneableRasterOperator,
     CloneableVectorOperator,
 };
-pub use operator_impl::{InitilaizedOperatorImpl, OperatorImpl, SourceOperatorImpl};
+pub use operator_impl::{InitializedOperatorImpl, OperatorImpl, SourceOperatorImpl};
 pub use query::{QueryContext, QueryRectangle};
 pub use query_processor::{
     QueryProcessor, RasterQueryProcessor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
     VectorQueryProcessor,
 };
-pub use result_descriptor::{RasterResultDescriptor, VectorResultDescriptor};
+pub use result_descriptor::{RasterResultDescriptor, ResultDescriptor, VectorResultDescriptor};
