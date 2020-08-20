@@ -17,24 +17,3 @@ pub trait IntoGeometryOptionsIterator<'i> {
     /// Return an iterator over geometries
     fn geometry_options(&'i self) -> Self::GeometryOptionIterator;
 }
-
-/// This macro implements `IntoGeometryOptionsIterator` for types that implement `IntoGeometryIterator`
-macro_rules! into_geometry_options_impl {
-    ($Collection:ty) => {
-        impl<'i> crate::collections::IntoGeometryOptionsIterator<'i> for $Collection
-        where
-            $Collection: crate::collections::IntoGeometryIterator<'i>,
-        {
-            type GeometryOptionIterator = crate::util::helpers::SomeIter<
-                <Self as crate::collections::IntoGeometryIterator<'i>>::GeometryIterator,
-                Self::GeometryType,
-            >;
-            type GeometryType =
-                <Self as crate::collections::IntoGeometryIterator<'i>>::GeometryType;
-
-            fn geometry_options(&'i self) -> Self::GeometryOptionIterator {
-                crate::util::helpers::SomeIter::new(self.geometries())
-            }
-        }
-    };
-}

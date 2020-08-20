@@ -15,7 +15,7 @@ where
 }
 
 /// A representation of a simple feature multi line string
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct MultiLineString {
     coordinates: Vec<Vec<Coordinate2D>>,
 }

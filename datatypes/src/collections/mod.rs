@@ -1,10 +1,8 @@
 pub(self) mod error;
 mod feature_collection;
-mod feature_collection_struct;
 #[macro_use]
 mod geo_feature_collection;
 #[macro_use]
-mod feature_collection_impl;
 mod data_types;
 mod feature_collection_builder;
 
@@ -16,12 +14,9 @@ mod multi_polygon_collection;
 pub(crate) use error::FeatureCollectionError;
 pub use feature_collection::FeatureCollection;
 pub use feature_collection_builder::{
-    BuilderProvider, FeatureCollectionBuilder, FeatureCollectionBuilderImplHelpers,
-    FeatureCollectionRowBuilder, GeoFeatureCollectionRowBuilder, SimpleFeatureCollectionBuilder,
-    SimpleFeatureCollectionRowBuilder,
+    BuilderProvider, FeatureCollectionBuilder, FeatureCollectionRowBuilder,
+    GeoFeatureCollectionRowBuilder,
 };
-pub(self) use feature_collection_impl::FeatureCollectionImplHelpers;
-pub use feature_collection_struct::FeatureCollection as FeatureCollectionStruct;
 pub use geo_feature_collection::{IntoGeometryIterator, IntoGeometryOptionsIterator};
 
 pub use data_collection::DataCollection;

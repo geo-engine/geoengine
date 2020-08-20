@@ -1,154 +1,15 @@
 use crate::collections::{
-    BuilderProvider, FeatureCollection, FeatureCollectionBuilderImplHelpers,
-    FeatureCollectionImplHelpers, GeoFeatureCollectionRowBuilder, IntoGeometryIterator,
-    SimpleFeatureCollectionBuilder, SimpleFeatureCollectionRowBuilder,
+    FeatureCollection, FeatureCollectionRowBuilder, GeoFeatureCollectionRowBuilder,
+    IntoGeometryIterator,
 };
-use crate::primitives::{
-    Coordinate2D, FeatureDataType, MultiPolygon, MultiPolygonAccess, MultiPolygonRef,
-};
-use crate::util::arrow::{downcast_array, ArrowTyped};
+use crate::primitives::{Coordinate2D, MultiPolygon, MultiPolygonAccess, MultiPolygonRef};
+use crate::util::arrow::downcast_array;
 use crate::util::Result;
-use arrow::array::{Array, BooleanArray, FixedSizeListArray, Float64Array, ListArray, StructArray};
-use arrow::datatypes::DataType;
-use std::collections::HashMap;
+use arrow::array::{Array, FixedSizeListArray, Float64Array, ListArray};
 use std::slice;
 
-/// This collection contains temporal multi-polygons miscellaneous data.
-#[derive(Debug)]
-pub struct MultiPolygonCollection {
-    table: StructArray,
-    types: HashMap<String, FeatureDataType>,
-}
-
-impl FeatureCollectionImplHelpers for MultiPolygonCollection {
-    fn new_from_internals(table: StructArray, types: HashMap<String, FeatureDataType>) -> Self {
-        Self { table, types }
-    }
-
-    fn table(&self) -> &StructArray {
-        &self.table
-    }
-
-    fn types(&self) -> &HashMap<String, FeatureDataType> {
-        &self.types
-    }
-
-    fn geometry_arrow_data_type() -> DataType {
-        MultiPolygon::arrow_data_type()
-    }
-
-    fn filtered_geometries(
-        multi_polygons: &ListArray,
-        filter_array: &BooleanArray,
-    ) -> Result<ListArray> {
-        let mut multi_polygon_builder = MultiPolygon::arrow_builder(0);
-
-        for multi_polygon_index in 0..multi_polygons.len() {
-            if !filter_array.value(multi_polygon_index) {
-                continue;
-            }
-
-            let polygon_builder = multi_polygon_builder.values();
-
-            let polygons_ref = multi_polygons.value(multi_polygon_index);
-            let polygons = downcast_array::<ListArray>(&polygons_ref);
-
-            for polygon_index in 0..polygons.len() {
-                let ring_builder = polygon_builder.values();
-
-                let rings_ref = polygons.value(polygon_index);
-                let rings = downcast_array::<ListArray>(&rings_ref);
-
-                for ring_index in 0..rings.len() {
-                    let coordinate_builder = ring_builder.values();
-
-                    let coordinates_ref = rings.value(ring_index);
-                    let coordinates = downcast_array::<FixedSizeListArray>(&coordinates_ref);
-
-                    for coordinate_index in 0..(coordinates.len() as usize) {
-                        let floats_ref = coordinates.value(coordinate_index);
-                        let floats: &Float64Array = downcast_array(&floats_ref);
-
-                        coordinate_builder
-                            .values()
-                            .append_slice(floats.value_slice(0, 2))?;
-
-                        coordinate_builder.append(true)?;
-                    }
-
-                    ring_builder.append(true)?;
-                }
-
-                polygon_builder.append(true)?;
-            }
-
-            multi_polygon_builder.append(true)?;
-        }
-
-        Ok(multi_polygon_builder.finish())
-    }
-
-    fn concat_geometries(geometries_a: &ListArray, geometries_b: &ListArray) -> Result<ListArray> {
-        let mut multi_polygon_builder =
-            MultiPolygon::arrow_builder(geometries_a.len() + geometries_b.len());
-
-        for multi_polygons in &[geometries_a, geometries_b] {
-            for multi_polygon_index in 0..multi_polygons.len() {
-                let polygon_builder = multi_polygon_builder.values();
-
-                let polygons_ref = multi_polygons.value(multi_polygon_index);
-                let polygons = downcast_array::<ListArray>(&polygons_ref);
-
-                for polygon_index in 0..polygons.len() {
-                    let ring_builder = polygon_builder.values();
-
-                    let rings_ref = polygons.value(polygon_index);
-                    let rings = downcast_array::<ListArray>(&rings_ref);
-
-                    for ring_index in 0..rings.len() {
-                        let coordinate_builder = ring_builder.values();
-
-                        let coordinates_ref = rings.value(ring_index);
-                        let coordinates = downcast_array::<FixedSizeListArray>(&coordinates_ref);
-
-                        for coordinate_index in 0..(coordinates.len() as usize) {
-                            let floats_ref = coordinates.value(coordinate_index);
-                            let floats: &Float64Array = downcast_array(&floats_ref);
-
-                            coordinate_builder
-                                .values()
-                                .append_slice(floats.value_slice(0, 2))?;
-
-                            coordinate_builder.append(true)?;
-                        }
-
-                        ring_builder.append(true)?;
-                    }
-
-                    polygon_builder.append(true)?;
-                }
-
-                multi_polygon_builder.append(true)?;
-            }
-        }
-
-        Ok(multi_polygon_builder.finish())
-    }
-
-    fn _is_simple(&self) -> bool {
-        let multi_polygon_array: &ListArray = downcast_array(
-            &self
-                .table
-                .column_by_name(MultiPolygonCollection::GEOMETRY_COLUMN_NAME)
-                .expect("Column must exist since it is in the metadata"),
-        );
-
-        let polygon_array_ref = multi_polygon_array.values();
-        let polygon_array: &ListArray = downcast_array(&polygon_array_ref);
-
-        multi_polygon_array.len() == polygon_array.len()
-    }
-}
+/// This collection contains temporal multi polygons and miscellaneous data.
+pub type MultiPolygonCollection = FeatureCollection<MultiPolygon>;
 
 impl<'l> IntoGeometryIterator<'l> for MultiPolygonCollection {
     type GeometryIterator = MultiPolygonIterator<'l>;
@@ -158,15 +19,11 @@ impl<'l> IntoGeometryIterator<'l> for MultiPolygonCollection {
         let geometry_column: &ListArray = downcast_array(
             &self
                 .table
-                .column_by_name(MultiPolygonCollection::GEOMETRY_COLUMN_NAME)
+                .column_by_name(Self::GEOMETRY_COLUMN_NAME)
                 .expect("Column must exist since it is in the metadata"),
         );
 
-        MultiPolygonIterator {
-            geometry_column,
-            index: 0,
-            length: self.len(),
-        }
+        Self::GeometryIterator::new(geometry_column, self.len())
     }
 }
 
@@ -244,12 +101,7 @@ impl<'l> Iterator for MultiPolygonIterator<'l> {
     }
 }
 
-into_geometry_options_impl!(MultiPolygonCollection);
-feature_collection_impl!(MultiPolygonCollection, true);
-
-impl GeoFeatureCollectionRowBuilder<MultiPolygon>
-    for SimpleFeatureCollectionRowBuilder<MultiPolygonCollection>
-{
+impl GeoFeatureCollectionRowBuilder<MultiPolygon> for FeatureCollectionRowBuilder<MultiPolygon> {
     fn push_geometry(&mut self, geometry: MultiPolygon) -> Result<()> {
         let polygon_builder = self.geometries_builder.values();
 
@@ -279,25 +131,11 @@ impl GeoFeatureCollectionRowBuilder<MultiPolygon>
     }
 }
 
-impl FeatureCollectionBuilderImplHelpers for MultiPolygonCollection {
-    type GeometriesBuilder = <MultiPolygon as ArrowTyped>::ArrowBuilder;
-
-    const HAS_GEOMETRIES: bool = true;
-
-    fn geometries_builder() -> Self::GeometriesBuilder {
-        MultiPolygon::arrow_builder(0)
-    }
-}
-
-impl BuilderProvider for MultiPolygonCollection {
-    type Builder = SimpleFeatureCollectionBuilder<Self>;
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    use crate::collections::{FeatureCollectionBuilder, FeatureCollectionRowBuilder};
+    use crate::collections::BuilderProvider;
     use crate::primitives::TimeInterval;
 
     #[test]

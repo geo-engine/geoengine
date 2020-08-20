@@ -19,7 +19,7 @@ type Ring = Vec<Coordinate2D>;
 type Polygon = Vec<Ring>;
 
 /// A representation of a simple feature multi polygon
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct MultiPolygon {
     polygons: Vec<Polygon>,
 }

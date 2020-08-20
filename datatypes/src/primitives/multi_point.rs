@@ -5,12 +5,14 @@ use crate::util::Result;
 use arrow::array::BooleanArray;
 use arrow::error::ArrowError;
 use snafu::ensure;
+use std::convert::{TryFrom, TryInto};
 
 /// A trait that allows a common access to points of `MultiPoint`s and its references
 pub trait MultiPointAccess {
     fn points(&self) -> &[Coordinate2D];
 }
 
+#[derive(Clone, Debug, PartialEq)]
 pub struct MultiPoint {
     coordinates: Vec<Coordinate2D>,
 }
@@ -24,6 +26,19 @@ impl MultiPoint {
 
     pub(crate) fn new_unchecked(coordinates: Vec<Coordinate2D>) -> Self {
         Self { coordinates }
+    }
+
+    pub fn many<M>(raw_multi_points: Vec<M>) -> Result<Vec<Self>>
+    where
+        M: TryInto<MultiPoint, Error = crate::error::Error>,
+    {
+        let mut multi_points = Vec::with_capacity(raw_multi_points.len());
+
+        for multi_point in raw_multi_points {
+            multi_points.push(multi_point.try_into()?);
+        }
+
+        Ok(multi_points)
     }
 }
 
@@ -44,6 +59,22 @@ impl AsRef<[Coordinate2D]> for MultiPoint {
 impl From<Coordinate2D> for MultiPoint {
     fn from(point: Coordinate2D) -> Self {
         Self::new_unchecked(vec![point])
+    }
+}
+
+impl TryFrom<Vec<Coordinate2D>> for MultiPoint {
+    type Error = crate::error::Error;
+
+    fn try_from(coordinates: Vec<Coordinate2D>) -> Result<Self, Self::Error> {
+        MultiPoint::new(coordinates)
+    }
+}
+
+impl TryFrom<Vec<(f64, f64)>> for MultiPoint {
+    type Error = crate::error::Error;
+
+    fn try_from(coordinates: Vec<(f64, f64)>) -> Result<Self, Self::Error> {
+        MultiPoint::new(coordinates.into_iter().map(Into::into).collect())
     }
 }
 
