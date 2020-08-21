@@ -189,12 +189,14 @@ where
 
     /// Returns whether this feature collection is simple, i.e., contains no multi-types
     pub fn is_simple(&self) -> bool {
-        let array_ref =
-            if let Some(array_ref) = self.table.column_by_name(Self::GEOMETRY_COLUMN_NAME) {
-                array_ref
-            } else {
-                return true; // a `FeatureCollection` without geometry column is simple by default
-            };
+        if !CollectionType::IS_GEOMETRY {
+            return true; // a `FeatureCollection` without geometry column is simple by default
+        }
+
+        let array_ref = self
+            .table
+            .column_by_name(Self::GEOMETRY_COLUMN_NAME)
+            .expect("must be there for collections with geometry");
 
         let features_array: &ListArray = downcast_array(array_ref);
 
