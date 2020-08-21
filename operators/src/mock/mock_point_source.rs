@@ -1,6 +1,9 @@
 use crate::engine::{QueryContext, QueryProcessor, QueryRectangle};
 use crate::{
-    engine::{Operator, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor},
+    engine::{
+        ExecutionContext, InitializedOperatorImpl, InitializedVectorOperator, SourceOperatorImpl,
+        TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+    },
     util::Result,
 };
 use futures::stream::{self, BoxStream, StreamExt};
@@ -8,7 +11,7 @@ use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::{
     collections::MultiPointCollection,
     primitives::{Coordinate2D, TimeInterval},
-    projection::{Projection, ProjectionOption},
+    projection::Projection,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -36,33 +39,47 @@ impl QueryProcessor for MockPointSourceProcessor {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct MockPointSource {
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MockPointSourceParams {
     pub points: Vec<Coordinate2D>,
 }
 
-impl Operator for MockPointSource {
-    fn raster_sources(&self) -> &[Box<dyn crate::engine::RasterOperator>] {
-        &[]
-    }
-    fn vector_sources(&self) -> &[Box<dyn crate::engine::VectorOperator>] {
-        &[]
-    }
-    fn projection(&self) -> ProjectionOption {
-        ProjectionOption::Projection(Projection::wgs84())
-    }
-}
+pub type MockPointSource = SourceOperatorImpl<MockPointSourceParams>;
 
 #[typetag::serde]
 impl VectorOperator for MockPointSource {
-    fn result_type(&self) -> VectorDataType {
-        VectorDataType::MultiPoint
+    fn into_initialized_operator(
+        self: Box<Self>,
+        context: ExecutionContext,
+    ) -> Result<Box<dyn InitializedVectorOperator>> {
+        InitializedOperatorImpl::create(
+            self.params,
+            context,
+            |_, _, _, _| Ok(()),
+            |_, _, _, _, _| {
+                Ok(VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    projection: Projection::wgs84().into(),
+                })
+            },
+            vec![],
+            vec![],
+        )
+        .map(InitializedOperatorImpl::boxed)
+    }
+}
+
+impl InitializedVectorOperator
+    for InitializedOperatorImpl<MockPointSourceParams, VectorResultDescriptor, ()>
+{
+    fn result_descriptor(&self) -> VectorResultDescriptor {
+        self.result_descriptor
     }
 
-    fn vector_processor(&self) -> Result<crate::engine::TypedVectorQueryProcessor> {
+    fn vector_processor(&self) -> Result<TypedVectorQueryProcessor> {
         Ok(TypedVectorQueryProcessor::MultiPoint(
             MockPointSourceProcessor {
-                points: self.points.clone(),
+                points: self.params.points.clone(),
             }
             .boxed(),
         ))
@@ -79,9 +96,12 @@ mod tests {
     fn serde() {
         let points = vec![Coordinate2D::new(1., 2.); 3];
 
-        let mps = MockPointSource { points }.boxed();
+        let mps = MockPointSource {
+            params: MockPointSourceParams { points },
+        }
+        .boxed();
         let serialized = serde_json::to_string(&mps).unwrap();
-        let expect = "{\"type\":\"MockPointSource\",\"points\":[{\"x\":1.0,\"y\":2.0},{\"x\":1.0,\"y\":2.0},{\"x\":1.0,\"y\":2.0}]}";
+        let expect = "{\"type\":\"MockPointSource\",\"params\":{\"points\":[{\"x\":1.0,\"y\":2.0},{\"x\":1.0,\"y\":2.0},{\"x\":1.0,\"y\":2.0}]}}";
         assert_eq!(serialized, expect);
 
         let _: Box<dyn VectorOperator> = serde_json::from_str(&serialized).unwrap();
@@ -89,10 +109,16 @@ mod tests {
 
     #[test]
     fn execute() {
+        let execution_context = ExecutionContext;
         let points = vec![Coordinate2D::new(1., 2.); 3];
 
-        let mps = MockPointSource { points }.boxed();
-        let typed_processor = mps.vector_processor();
+        let mps = MockPointSource {
+            params: MockPointSourceParams { points },
+        }
+        .boxed();
+        let initialized = mps.into_initialized_operator(execution_context).unwrap();
+
+        let typed_processor = initialized.vector_processor();
         let point_processor = match typed_processor {
             Ok(TypedVectorQueryProcessor::MultiPoint(processor)) => processor,
             _ => panic!(),

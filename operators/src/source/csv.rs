@@ -16,12 +16,13 @@ use geoengine_datatypes::collections::{
 };
 use geoengine_datatypes::{
     primitives::{BoundingBox2D, Coordinate2D, TimeInterval},
-    projection::{Projection, ProjectionOption},
+    projection::Projection,
 };
 
 use crate::engine::{
-    Operator, QueryContext, QueryProcessor, QueryRectangle, TypedVectorQueryProcessor,
-    VectorOperator, VectorQueryProcessor,
+    InitializedOperatorImpl, InitializedVectorOperator, QueryContext, QueryProcessor,
+    QueryRectangle, SourceOperatorImpl, TypedVectorQueryProcessor, VectorOperator,
+    VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::error;
 use crate::util::Result;
@@ -140,27 +141,36 @@ pub struct CsvSourceStreamState {
     poll_result: Option<Option<Result<MultiPointCollection>>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct CsvSource {
-    pub params: CsvSourceParameters,
-}
-
-impl Operator for CsvSource {
-    fn raster_sources(&self) -> &[Box<dyn crate::engine::RasterOperator>] {
-        &[]
-    }
-    fn vector_sources(&self) -> &[Box<dyn crate::engine::VectorOperator>] {
-        &[]
-    }
-    fn projection(&self) -> ProjectionOption {
-        ProjectionOption::Projection(Projection::wgs84()) //TODO: support other projections
-    }
-}
+pub type CsvSource = SourceOperatorImpl<CsvSourceParameters>;
 
 #[typetag::serde]
 impl VectorOperator for CsvSource {
-    fn result_type(&self) -> VectorDataType {
-        VectorDataType::MultiPoint
+    fn into_initialized_operator(
+        self: Box<Self>,
+        context: crate::engine::ExecutionContext,
+    ) -> Result<Box<dyn InitializedVectorOperator>> {
+        InitializedOperatorImpl::create(
+            self.params,
+            context,
+            |_, _, _, _| Ok(()),
+            |_, _, _, _, _| {
+                Ok(VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    projection: Projection::wgs84().into(),
+                })
+            },
+            vec![],
+            vec![],
+        )
+        .map(InitializedOperatorImpl::boxed)
+    }
+}
+
+impl InitializedVectorOperator
+    for InitializedOperatorImpl<CsvSourceParameters, VectorResultDescriptor, ()>
+{
+    fn result_descriptor(&self) -> VectorResultDescriptor {
+        self.result_descriptor
     }
 
     fn vector_processor(&self) -> Result<crate::engine::TypedVectorQueryProcessor> {

@@ -54,7 +54,7 @@ mod tests {
     use super::*;
     use crate::workflows::registry::{HashMapRegistry, WorkflowRegistry};
     use geoengine_operators::engine::VectorOperator;
-    use geoengine_operators::mock::MockPointSource;
+    use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
     use tokio::sync::RwLock;
 
     #[tokio::test]
@@ -63,7 +63,9 @@ mod tests {
 
         let workflow = Workflow {
             operator: MockPointSource {
-                points: vec![(0.0, 0.1).into(), (1.0, 1.1).into()],
+                params: MockPointSourceParams {
+                    points: vec![(0.0, 0.1).into(), (1.0, 1.1).into()],
+                },
             }
             .boxed()
             .into(),
@@ -90,7 +92,9 @@ mod tests {
 
         let workflow = Workflow {
             operator: MockPointSource {
-                points: vec![(0.0, 0.1).into(), (1.0, 1.1).into()],
+                params: MockPointSourceParams {
+                    points: vec![(0.0, 0.1).into(), (1.0, 1.1).into()],
+                },
             }
             .boxed()
             .into(),
