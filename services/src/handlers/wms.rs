@@ -6,7 +6,7 @@ use uuid::Uuid;
 use warp::reply::Reply;
 use warp::{http::Response, Filter};
 
-use geoengine_datatypes::operations::image::{Colorizer, RgbaTransmutable, ToPng};
+use geoengine_datatypes::operations::image::{Colorizer, ToPng};
 use geoengine_datatypes::raster::{Blit, GeoTransform, Pixel, Raster2D};
 
 use crate::error;
@@ -17,7 +17,8 @@ use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 use futures::StreamExt;
 use geoengine_operators::engine::{
-    QueryContext, QueryRectangle, RasterQueryProcessor, TypedOperator, TypedRasterQueryProcessor,
+    ExecutionContext, QueryContext, QueryRectangle, RasterQueryProcessor, TypedOperator,
+    TypedRasterQueryProcessor,
 };
 
 type WR<T> = Arc<RwLock<T>>;
@@ -137,7 +138,13 @@ async fn get_map<T: WorkflowRegistry>(
         ));
     };
 
-    let processor = operator
+    let execution_context = ExecutionContext;
+    let initilaized = operator
+        .initialized_operator(execution_context)
+        .context(error::Operator)
+        .map_err(warp::reject::custom)?;
+
+    let processor = initilaized
         .raster_processor()
         .context(error::Operator)
         .map_err(warp::reject::custom)?;
@@ -201,7 +208,7 @@ async fn raster_stream_to_png_bytes<T>(
     request: &GetMap,
 ) -> Result<Vec<u8>>
 where
-    T: Pixel + RgbaTransmutable,
+    T: Pixel,
 {
     let tile_stream = processor.raster_query(query_rect, query_ctx);
 
