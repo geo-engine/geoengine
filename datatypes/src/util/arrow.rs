@@ -36,10 +36,10 @@ pub trait ArrowTyped {
     /// Return a builder for the arrow data type
     fn arrow_builder(capacity: usize) -> Self::ArrowBuilder;
 
-    /// Concatenate two arrays that correspond to this type
+    /// Create a new array by concatenating the inputs
     fn concat(a: &Self::ArrowArray, b: &Self::ArrowArray) -> Result<Self::ArrowArray, ArrowError>;
 
-    /// Filter two arrays that correspond to this type
+    /// Filter an array by using a boolean filter array
     fn filter(
         data_array: &Self::ArrowArray,
         filter_array: &BooleanArray,
