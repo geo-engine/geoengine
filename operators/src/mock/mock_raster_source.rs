@@ -1,3 +1,4 @@
+use crate::call_generic_raster_processor;
 use crate::engine::{
     InitializedOperatorImpl, InitializedRasterOperator, QueryProcessor, RasterOperator,
     RasterQueryProcessor, RasterResultDescriptor, SourceOperatorImpl, TypedRasterQueryProcessor,

@@ -19,7 +19,6 @@
     clippy::wildcard_imports
 )]
 
-#[macro_use]
 pub mod engine;
 pub mod error;
 pub mod mock;

@@ -16,9 +16,9 @@ use crate::util::identifiers::Identifier;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 use futures::StreamExt;
+use geoengine_operators::call_on_generic_raster_processor;
 use geoengine_operators::engine::{
     ExecutionContext, QueryContext, QueryRectangle, RasterQueryProcessor, TypedOperator,
-    TypedRasterQueryProcessor,
 };
 
 type WR<T> = Arc<RwLock<T>>;
@@ -139,12 +139,12 @@ async fn get_map<T: WorkflowRegistry>(
     };
 
     let execution_context = ExecutionContext;
-    let initilaized = operator
+    let initialized = operator
         .initialized_operator(execution_context)
         .context(error::Operator)
         .map_err(warp::reject::custom)?;
 
-    let processor = initilaized
+    let processor = initialized
         .raster_processor()
         .context(error::Operator)
         .map_err(warp::reject::custom)?;
@@ -158,38 +158,10 @@ async fn get_map<T: WorkflowRegistry>(
         chunk_byte_size: 1024,
     };
 
-    let image_bytes = match processor {
-        TypedRasterQueryProcessor::U8(p) => {
-            raster_stream_to_png_bytes(p, query_rect, query_ctx, request).await
-        }
-        TypedRasterQueryProcessor::U16(p) => {
-            raster_stream_to_png_bytes(p, query_rect, query_ctx, request).await
-        }
-        TypedRasterQueryProcessor::U32(p) => {
-            raster_stream_to_png_bytes(p, query_rect, query_ctx, request).await
-        }
-        TypedRasterQueryProcessor::U64(p) => {
-            raster_stream_to_png_bytes(p, query_rect, query_ctx, request).await
-        }
-        TypedRasterQueryProcessor::I8(p) => {
-            raster_stream_to_png_bytes(p, query_rect, query_ctx, request).await
-        }
-        TypedRasterQueryProcessor::I16(p) => {
-            raster_stream_to_png_bytes(p, query_rect, query_ctx, request).await
-        }
-        TypedRasterQueryProcessor::I32(p) => {
-            raster_stream_to_png_bytes(p, query_rect, query_ctx, request).await
-        }
-        TypedRasterQueryProcessor::I64(p) => {
-            raster_stream_to_png_bytes(p, query_rect, query_ctx, request).await
-        }
-        TypedRasterQueryProcessor::F32(p) => {
-            raster_stream_to_png_bytes(p, query_rect, query_ctx, request).await
-        }
-        TypedRasterQueryProcessor::F64(p) => {
-            raster_stream_to_png_bytes(p, query_rect, query_ctx, request).await
-        }
-    }
+    let image_bytes = call_on_generic_raster_processor!(
+        processor,
+        p => raster_stream_to_png_bytes(p, query_rect, query_ctx, request).await
+    )
     .map_err(warp::reject::custom)?;
 
     Ok(Box::new(

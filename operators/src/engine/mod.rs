@@ -23,6 +23,7 @@ pub use query_processor::{
 };
 pub use result_descriptor::{RasterResultDescriptor, ResultDescriptor, VectorResultDescriptor};
 
+#[macro_export]
 macro_rules! call_generic_raster_processor {
     ($type_enum:expr, $function_call:expr) => {
         match $type_enum {
@@ -56,6 +57,24 @@ macro_rules! call_generic_raster_processor {
             geoengine_datatypes::raster::RasterDataType::F64 => {
                 crate::engine::TypedRasterQueryProcessor::F64($function_call)
             }
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! call_on_generic_raster_processor {
+    ($typed_raster:expr, $processor_var:ident => $function_call:expr) => {
+        match $typed_raster {
+            $crate::engine::TypedRasterQueryProcessor::U8($processor_var) => $function_call,
+            $crate::engine::TypedRasterQueryProcessor::U16($processor_var) => $function_call,
+            $crate::engine::TypedRasterQueryProcessor::U32($processor_var) => $function_call,
+            $crate::engine::TypedRasterQueryProcessor::U64($processor_var) => $function_call,
+            $crate::engine::TypedRasterQueryProcessor::I8($processor_var) => $function_call,
+            $crate::engine::TypedRasterQueryProcessor::I16($processor_var) => $function_call,
+            $crate::engine::TypedRasterQueryProcessor::I32($processor_var) => $function_call,
+            $crate::engine::TypedRasterQueryProcessor::I64($processor_var) => $function_call,
+            $crate::engine::TypedRasterQueryProcessor::F32($processor_var) => $function_call,
+            $crate::engine::TypedRasterQueryProcessor::F64($processor_var) => $function_call,
         }
     };
 }
