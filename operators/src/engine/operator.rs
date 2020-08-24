@@ -51,7 +51,7 @@ pub trait InitializedOperator {
     type Descriptor: ResultDescriptor + Clone;
     fn execution_context(&self) -> &ExecutionContext;
 
-    /// Get the result type of the `Operator`
+    /// Get the result descriptor of the `Operator`
     fn result_descriptor(&self) -> Self::Descriptor;
 
     /// Get the sources of the `Operator`

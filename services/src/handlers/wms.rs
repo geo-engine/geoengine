@@ -139,12 +139,12 @@ async fn get_map<T: WorkflowRegistry>(
     };
 
     let execution_context = ExecutionContext;
-    let initilaized = operator
+    let initialized = operator
         .initialized_operator(execution_context)
         .context(error::Operator)
         .map_err(warp::reject::custom)?;
 
-    let processor = initilaized
+    let processor = initialized
         .query_processor()
         .context(error::Operator)
         .map_err(warp::reject::custom)?;
