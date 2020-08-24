@@ -62,6 +62,12 @@ impl From<Coordinate2D> for MultiPoint {
     }
 }
 
+impl From<&Coordinate2D> for MultiPoint {
+    fn from(point: &Coordinate2D) -> Self {
+        Self::new_unchecked(vec![*point])
+    }
+}
+
 impl TryFrom<Vec<Coordinate2D>> for MultiPoint {
     type Error = crate::error::Error;
 
