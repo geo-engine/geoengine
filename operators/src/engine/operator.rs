@@ -95,6 +95,9 @@ where
     fn execution_context(&self) -> &ExecutionContext {
         self.as_ref().execution_context()
     }
+    fn result_descriptor(&self) -> Self::Descriptor {
+        todo!()
+    }
     fn raster_sources(&self) -> &[Box<InitializedRasterOperator>] {
         self.as_ref().raster_sources()
     }
@@ -106,9 +109,6 @@ where
     }
     fn vector_sources_mut(&mut self) -> &mut [Box<InitializedVectorOperator>] {
         self.as_mut().vector_sources_mut()
-    }
-    fn result_descriptor(&self) -> Self::Descriptor {
-        todo!()
     }
 }
 
@@ -121,6 +121,9 @@ where
     fn execution_context(&self) -> &ExecutionContext {
         self.as_ref().execution_context()
     }
+    fn result_descriptor(&self) -> Self::Descriptor {
+        self.as_ref().result_descriptor()
+    }
     fn raster_sources(&self) -> &[Box<InitializedRasterOperator>] {
         self.as_ref().raster_sources()
     }
@@ -132,9 +135,6 @@ where
     }
     fn vector_sources_mut(&mut self) -> &mut [Box<InitializedVectorOperator>] {
         self.as_mut().vector_sources_mut()
-    }
-    fn result_descriptor(&self) -> Self::Descriptor {
-        self.as_ref().result_descriptor()
     }
 }
 

@@ -113,6 +113,9 @@ where
     fn execution_context(&self) -> &ExecutionContext {
         &self.context
     }
+    fn result_descriptor(&self) -> Self::Descriptor {
+        self.result_descriptor
+    }
     fn raster_sources(&self) -> &[Box<InitializedRasterOperator>] {
         self.raster_sources.as_slice()
     }
@@ -124,8 +127,5 @@ where
     }
     fn vector_sources_mut(&mut self) -> &mut [Box<InitializedVectorOperator>] {
         self.vector_sources.as_mut_slice()
-    }
-    fn result_descriptor(&self) -> Self::Descriptor {
-        self.result_descriptor
     }
 }
