@@ -49,7 +49,7 @@ pub type MockPointSource = SourceOperatorImpl<MockPointSourceParams>;
 
 #[typetag::serde]
 impl VectorOperator for MockPointSource {
-    fn into_initialized_operator(
+    fn initialize(
         self: Box<Self>,
         context: ExecutionContext,
     ) -> Result<Box<InitializedVectorOperator>> {
@@ -113,7 +113,7 @@ mod tests {
             params: MockPointSourceParams { points },
         }
         .boxed();
-        let initialized = mps.into_initialized_operator(execution_context).unwrap();
+        let initialized = mps.initialize(execution_context).unwrap();
 
         let typed_processor = initialized.query_processor();
         let point_processor = match typed_processor {

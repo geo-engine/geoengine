@@ -13,7 +13,7 @@ pub trait Operator: std::fmt::Debug + Send + Sync + CloneableOperator {}
 /// Common methods for `RasterOperator`s
 #[typetag::serde(tag = "type")]
 pub trait RasterOperator: Operator + CloneableRasterOperator {
-    fn initialized_operator(
+    fn initialize(
         self: Box<Self>,
         context: ExecutionContext,
     ) -> Result<Box<InitializedRasterOperator>>;
@@ -30,7 +30,7 @@ pub trait RasterOperator: Operator + CloneableRasterOperator {
 /// Common methods for `VectorOperator`s
 #[typetag::serde(tag = "type")]
 pub trait VectorOperator: Operator + CloneableVectorOperator {
-    fn into_initialized_operator(
+    fn initialize(
         self: Box<Self>,
         context: ExecutionContext,
     ) -> Result<Box<InitializedVectorOperator>>;

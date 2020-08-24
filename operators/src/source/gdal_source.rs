@@ -407,7 +407,7 @@ pub type GdalSource = SourceOperatorImpl<GdalSourceParameters>;
 
 #[typetag::serde]
 impl RasterOperator for GdalSource {
-    fn initialized_operator(
+    fn initialize(
         self: Box<Self>,
         context: crate::engine::ExecutionContext,
     ) -> Result<Box<InitializedRasterOperator>> {

@@ -89,11 +89,3 @@ where
     }
     type Descriptor = R;
 }
-
-/* TODO: how to fix this?
-impl<R> Clone for Box<dyn InitializedOperator<Descriptor = R>> {
-    fn clone(&self) -> Box<dyn InitializedOperator<Descriptor = R>> {
-        self.clone_boxed()
-    }
-}
-*/

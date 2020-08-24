@@ -144,7 +144,7 @@ pub type CsvSource = SourceOperatorImpl<CsvSourceParameters>;
 
 #[typetag::serde]
 impl VectorOperator for CsvSource {
-    fn into_initialized_operator(
+    fn initialize(
         self: Box<Self>,
         context: crate::engine::ExecutionContext,
     ) -> Result<Box<InitializedVectorOperator>> {
@@ -154,8 +154,8 @@ impl VectorOperator for CsvSource {
             |_, _, _, _| Ok(()),
             |_, _, _, _, _| {
                 Ok(VectorResultDescriptor {
-                    data_type: VectorDataType::MultiPoint,
-                    projection: Projection::wgs84().into(),
+                    data_type: VectorDataType::MultiPoint, // TODO: get as user input
+                    projection: Projection::wgs84().into(), // TODO: get as user input
                 })
             },
             vec![],

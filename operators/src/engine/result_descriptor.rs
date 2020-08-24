@@ -30,6 +30,14 @@ impl RasterResultDescriptor {
         self.data_type = f(self.data_type);
         self
     }
+
+    pub fn map_projection<F>(mut self, f: F) -> Self
+    where
+        F: Fn(ProjectionOption) -> ProjectionOption,
+    {
+        self.projection = f(self.projection);
+        self
+    }
 }
 
 impl ResultDescriptor for RasterResultDescriptor {

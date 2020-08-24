@@ -50,7 +50,7 @@ pub type MockRasterSource = SourceOperatorImpl<MockRasterSourceParams>;
 
 #[typetag::serde]
 impl RasterOperator for MockRasterSource {
-    fn initialized_operator(
+    fn initialize(
         self: Box<Self>,
         context: crate::engine::ExecutionContext,
     ) -> Result<Box<InitializedRasterOperator>> {
@@ -229,9 +229,7 @@ mod tests {
 
         let execution_context = ExecutionContext;
 
-        let initialized = deserialized
-            .initialized_operator(execution_context)
-            .unwrap();
+        let initialized = deserialized.initialize(execution_context).unwrap();
 
         match initialized.query_processor().unwrap() {
             crate::engine::TypedRasterQueryProcessor::U8(..) => {}

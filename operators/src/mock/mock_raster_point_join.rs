@@ -86,7 +86,7 @@ pub type MockRasterPointJoinOperator = OperatorImpl<MockRasterPointJoinParams>;
 
 #[typetag::serde]
 impl VectorOperator for MockRasterPointJoinOperator {
-    fn into_initialized_operator(
+    fn initialize(
         self: Box<Self>,
         context: crate::engine::ExecutionContext,
     ) -> Result<Box<crate::engine::InitializedVectorOperator>> {
@@ -114,8 +114,6 @@ impl InitializedOperatorB<VectorResultDescriptor, TypedVectorQueryProcessor>
     for InitializedOperatorImpl<MockRasterPointJoinParams, VectorResultDescriptor, ()>
 {
     fn query_processor(&self) -> Result<crate::engine::TypedVectorQueryProcessor> {
-        // self.validate_children(self.result_descriptor().projection, 1..2, 1..2)?;
-
         let raster_source = self.raster_sources[0].query_processor()?;
         let point_source = match self.vector_sources[0].query_processor()? {
             TypedVectorQueryProcessor::MultiPoint(v) => v,
@@ -337,7 +335,7 @@ mod tests {
 
         let execution_context = ExecutionContext;
 
-        let initialized = op.into_initialized_operator(execution_context).unwrap();
+        let initialized = op.initialize(execution_context).unwrap();
 
         let point_processor = match initialized.query_processor() {
             Ok(TypedVectorQueryProcessor::MultiPoint(processor)) => processor,

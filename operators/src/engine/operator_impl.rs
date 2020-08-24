@@ -54,8 +54,8 @@ impl<P, R, S> InitializedOperatorImpl<P, R, S> {
         context: ExecutionContext,
         state_fn: SF,
         result_descriptor_fn: RF,
-        raster_sources_not_init: Vec<Box<dyn RasterOperator>>,
-        vector_sources_not_init: Vec<Box<dyn VectorOperator>>,
+        uninitialized_raster_sources: Vec<Box<dyn RasterOperator>>,
+        uninitialized_vector_sources: Vec<Box<dyn VectorOperator>>,
     ) -> Result<Self>
     where
         RF: Fn(
@@ -72,13 +72,13 @@ impl<P, R, S> InitializedOperatorImpl<P, R, S> {
             &[Box<InitializedVectorOperator>],
         ) -> Result<S>,
     {
-        let raster_sources = raster_sources_not_init
+        let raster_sources = uninitialized_raster_sources
             .into_iter()
-            .map(|o| o.initialized_operator(context))
+            .map(|o| o.initialize(context))
             .collect::<Result<Vec<Box<InitializedRasterOperator>>>>()?;
-        let vector_sources = vector_sources_not_init
+        let vector_sources = uninitialized_vector_sources
             .into_iter()
-            .map(|o| o.into_initialized_operator(context))
+            .map(|o| o.initialize(context))
             .collect::<Result<Vec<Box<InitializedVectorOperator>>>>()?;
         let state = state_fn(
             &params,
