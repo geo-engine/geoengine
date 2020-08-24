@@ -1,6 +1,7 @@
 use crate::util::arrow::ArrowTyped;
-use arrow::array::Float64Builder;
+use arrow::array::{BooleanArray, Float64Builder};
 use arrow::datatypes::DataType;
+use arrow::error::ArrowError;
 use serde::{Deserialize, Serialize};
 use std::{fmt, slice};
 
@@ -123,6 +124,27 @@ impl ArrowTyped for Coordinate2D {
 
     fn arrow_builder(capacity: usize) -> Self::ArrowBuilder {
         arrow::array::FixedSizeListBuilder::new(arrow::array::Float64Builder::new(capacity * 2), 2)
+    }
+
+    fn concat(
+        _a: &Self::ArrowArray,
+        _b: &Self::ArrowArray,
+    ) -> Result<Self::ArrowArray, ArrowError> {
+        unimplemented!("This is not used by now")
+    }
+
+    fn filter(
+        _data_array: &Self::ArrowArray,
+        _filter_array: &BooleanArray,
+    ) -> Result<Self::ArrowArray, ArrowError> {
+        unimplemented!("This is not used by now")
+    }
+
+    fn from_vec(_data: Vec<Self>) -> Result<Self::ArrowArray, ArrowError>
+    where
+        Self: Sized,
+    {
+        unimplemented!("This is not used by now")
     }
 }
 

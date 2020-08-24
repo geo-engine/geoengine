@@ -1,58 +1,10 @@
-use crate::collections::{
-    BuilderProvider, FeatureCollection, FeatureCollectionBuilderImplHelpers,
-    FeatureCollectionImplHelpers, SimpleFeatureCollectionBuilder,
-};
-use crate::error::Error;
-use crate::primitives::{FeatureDataType, NoGeometry};
-use crate::util::arrow::ArrowTyped;
-use arrow::array::{BooleanArray, ListArray, StructArray};
-use arrow::datatypes::DataType;
-use std::collections::HashMap;
+use crate::collections::{FeatureCollection, IntoGeometryOptionsIterator};
+use crate::primitives::NoGeometry;
 
-/// This collection contains temporal data but no geographical features.
-#[derive(Debug)]
-pub struct DataCollection {
-    table: StructArray,
-    types: HashMap<String, crate::primitives::FeatureDataType>,
-}
+/// This collection contains temporal data without geographical features.
+pub type DataCollection = FeatureCollection<NoGeometry>;
 
-impl FeatureCollectionImplHelpers for DataCollection {
-    fn new_from_internals(table: StructArray, types: HashMap<String, FeatureDataType>) -> Self {
-        Self { table, types }
-    }
-
-    fn table(&self) -> &StructArray {
-        &self.table
-    }
-
-    fn types(&self) -> &HashMap<String, FeatureDataType> {
-        &self.types
-    }
-
-    fn geometry_arrow_data_type() -> DataType {
-        unreachable!("This collection has no geometries")
-    }
-
-    fn filtered_geometries(
-        _features: &ListArray,
-        _filter_array: &BooleanArray,
-    ) -> crate::util::Result<ListArray> {
-        unreachable!("This collection has no geometries")
-    }
-
-    fn concat_geometries(
-        _geometries_a: &ListArray,
-        _geometries_b: &ListArray,
-    ) -> Result<ListArray, Error> {
-        unreachable!("This collection has no geometries")
-    }
-
-    fn _is_simple(&self) -> bool {
-        true
-    }
-}
-
-impl<'i> crate::collections::IntoGeometryOptionsIterator<'i> for DataCollection {
+impl<'i> IntoGeometryOptionsIterator<'i> for DataCollection {
     type GeometryOptionIterator = std::iter::Take<std::iter::Repeat<Option<Self::GeometryType>>>;
     type GeometryType = NoGeometry;
 
@@ -61,29 +13,14 @@ impl<'i> crate::collections::IntoGeometryOptionsIterator<'i> for DataCollection 
     }
 }
 
-feature_collection_impl!(DataCollection, false);
-
-impl FeatureCollectionBuilderImplHelpers for DataCollection {
-    type GeometriesBuilder = <NoGeometry as ArrowTyped>::ArrowBuilder;
-
-    const HAS_GEOMETRIES: bool = false;
-
-    fn geometries_builder() -> Self::GeometriesBuilder {
-        NoGeometry::arrow_builder(0)
-    }
-}
-
-impl BuilderProvider for DataCollection {
-    type Builder = SimpleFeatureCollectionBuilder<Self>;
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    use crate::collections::{FeatureCollectionBuilder, FeatureCollectionRowBuilder};
+    use crate::collections::BuilderProvider;
     use crate::primitives::{
-        FeatureData, FeatureDataRef, FeatureDataValue, NullableDataRef, TimeInterval,
+        FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue, NullableDataRef,
+        TimeInterval,
     };
 
     #[test]

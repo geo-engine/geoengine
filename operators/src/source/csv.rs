@@ -11,8 +11,7 @@ use serde::{Deserialize, Serialize};
 use snafu::{ensure, OptionExt, ResultExt};
 
 use geoengine_datatypes::collections::{
-    BuilderProvider, FeatureCollectionBuilder, FeatureCollectionRowBuilder,
-    GeoFeatureCollectionRowBuilder, MultiPointCollection, VectorDataType,
+    BuilderProvider, GeoFeatureCollectionRowBuilder, MultiPointCollection, VectorDataType,
 };
 use geoengine_datatypes::{
     primitives::{BoundingBox2D, Coordinate2D, TimeInterval},
@@ -398,8 +397,6 @@ struct ParsedRow {
 #[cfg(test)]
 mod tests {
     use std::io::{Seek, SeekFrom, Write};
-
-    use geoengine_datatypes::collections::FeatureCollection;
 
     use super::*;
 

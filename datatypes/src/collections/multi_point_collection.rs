@@ -1,308 +1,16 @@
-use std::collections::HashMap;
+use arrow::array::{Array, FixedSizeListArray, Float64Array, ListArray};
 
-use arrow::array::{
-    Array, ArrayBuilder, ArrayData, BooleanArray, Date64Builder, FixedSizeListArray,
-    FixedSizeListBuilder, Float64Array, Float64Builder, ListArray, ListBuilder, StructArray,
-    StructBuilder,
-};
-use arrow::datatypes::{DataType, Field};
-use snafu::ensure;
-
-use crate::collections::feature_collection_builder::BuilderProvider;
 use crate::collections::{
-    FeatureCollection, FeatureCollectionBuilderImplHelpers, FeatureCollectionImplHelpers,
-    GeoFeatureCollectionRowBuilder, IntoGeometryIterator, SimpleFeatureCollectionBuilder,
-    SimpleFeatureCollectionRowBuilder,
+    FeatureCollection, FeatureCollectionRowBuilder, GeoFeatureCollectionRowBuilder,
+    IntoGeometryIterator,
 };
-use crate::error::Error;
-use crate::primitives::{
-    Coordinate2D, FeatureData, FeatureDataType, MultiPoint, MultiPointRef, TimeInterval,
-};
-use crate::util::arrow::{downcast_array, ArrowTyped};
+use crate::primitives::{Coordinate2D, MultiPoint, MultiPointRef};
+use crate::util::arrow::downcast_array;
 use crate::util::Result;
-use crate::{error, json_map};
 use std::slice;
 
-/// This collection contains temporal multi-points and miscellaneous data.
-#[derive(Debug)]
-pub struct MultiPointCollection {
-    data: StructArray,
-    types: HashMap<String, FeatureDataType>,
-}
-
-impl FeatureCollectionImplHelpers for MultiPointCollection {
-    fn new_from_internals(data: StructArray, types: HashMap<String, FeatureDataType>) -> Self {
-        Self { data, types }
-    }
-
-    fn table(&self) -> &StructArray {
-        &self.data
-    }
-
-    fn types(&self) -> &HashMap<String, FeatureDataType> {
-        &self.types
-    }
-
-    /// `MultiPoint`s
-    fn geometry_arrow_data_type() -> DataType {
-        MultiPoint::arrow_data_type()
-    }
-
-    fn filtered_geometries(
-        features: &ListArray,
-        filter_array: &BooleanArray,
-    ) -> crate::util::Result<ListArray> {
-        let mut new_features =
-            ListBuilder::new(FixedSizeListBuilder::new(Float64Builder::new(2), 2));
-
-        for feature_index in 0..features.len() {
-            if filter_array.value(feature_index) {
-                let coordinate_builder = new_features.values();
-
-                let old_coordinates = features.value(feature_index);
-
-                for coordinate_index in 0..features.value_length(feature_index) {
-                    let old_floats_array = downcast_array::<FixedSizeListArray>(&old_coordinates)
-                        .value(coordinate_index as usize);
-
-                    let old_floats: &Float64Array = downcast_array(&old_floats_array);
-
-                    let float_builder = coordinate_builder.values();
-                    float_builder.append_slice(old_floats.value_slice(0, 2))?;
-
-                    coordinate_builder.append(true)?;
-                }
-
-                new_features.append(true)?;
-            }
-        }
-
-        Ok(new_features.finish())
-    }
-
-    fn concat_geometries(
-        geometries_a: &ListArray,
-        geometries_b: &ListArray,
-    ) -> Result<ListArray, Error> {
-        let mut new_multipoints =
-            ListBuilder::new(FixedSizeListBuilder::new(Float64Builder::new(2), 2));
-
-        for old_multipoints in &[geometries_a, geometries_b] {
-            for multipoint_index in 0..old_multipoints.len() {
-                let multipoint_ref = old_multipoints.value(multipoint_index);
-                let multipoint: &FixedSizeListArray = downcast_array(&multipoint_ref);
-
-                let new_points = new_multipoints.values();
-
-                for point_index in 0..multipoint.len() {
-                    let floats_ref = multipoint.value(point_index);
-                    let floats: &Float64Array = downcast_array(&floats_ref);
-
-                    let new_floats = new_points.values();
-                    new_floats.append_slice(floats.value_slice(0, 2))?;
-
-                    new_points.append(true)?;
-                }
-
-                new_multipoints.append(true)?;
-            }
-        }
-
-        Ok(new_multipoints.finish())
-    }
-
-    fn _is_simple(&self) -> bool {
-        self.len() == self.coordinates().len()
-    }
-}
-
-into_geometry_options_impl!(MultiPointCollection);
-
-feature_collection_impl!(MultiPointCollection, true);
-
-impl MultiPointCollection {
-    /// Create an empty `MultiPointCollection`.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use geoengine_datatypes::collections::{MultiPointCollection, FeatureCollection};
-    ///
-    /// let pc = MultiPointCollection::empty();
-    ///
-    /// assert_eq!(pc.len(), 0);
-    /// ```
-    pub fn empty() -> Self {
-        Self {
-            data: {
-                let columns = vec![
-                    Field::new(
-                        Self::GEOMETRY_COLUMN_NAME,
-                        Self::geometry_arrow_data_type(),
-                        false,
-                    ),
-                    Field::new(Self::TIME_COLUMN_NAME, Self::time_arrow_data_type(), false),
-                ];
-
-                StructArray::from(ArrayData::builder(DataType::Struct(columns)).len(0).build())
-            },
-            types: Default::default(),
-        }
-    }
-
-    /// Create a point collection from data
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use geoengine_datatypes::collections::{MultiPointCollection, FeatureCollection};
-    /// use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval, FeatureData};
-    /// use std::collections::HashMap;
-    ///
-    /// let pc = MultiPointCollection::from_data(
-    ///     vec![vec![(0., 0.).into()], vec![(1., 1.).into()]],
-    ///     vec![TimeInterval::new_unchecked(0, 1), TimeInterval::new_unchecked(0, 1)],
-    ///     {
-    ///         let mut map = HashMap::new();
-    ///         map.insert("number".into(), FeatureData::Number(vec![0., 1.]));
-    ///         map
-    ///     },
-    /// ).unwrap();
-    ///
-    /// assert_eq!(pc.len(), 2);
-    /// ```
-    ///
-    /// # Errors
-    ///
-    /// This constructor fails if the data lenghts are different or `data`'s keys use a reserved name
-    ///
-    pub fn from_data(
-        coordinates: Vec<Vec<Coordinate2D>>,
-        time_intervals: Vec<TimeInterval>,
-        data: HashMap<String, FeatureData>,
-    ) -> Result<Self> {
-        let capacity = coordinates.len();
-
-        let mut columns = vec![
-            Field::new(
-                Self::GEOMETRY_COLUMN_NAME,
-                Self::geometry_arrow_data_type(),
-                false,
-            ),
-            Field::new(Self::TIME_COLUMN_NAME, Self::time_arrow_data_type(), false),
-        ];
-
-        let mut builders: Vec<Box<dyn ArrayBuilder>> = vec![
-            Box::new({
-                let mut builder =
-                    ListBuilder::new(FixedSizeListBuilder::new(Float64Builder::new(2), 2));
-                for multi_point in coordinates {
-                    let coordinate_builder = builder.values();
-                    for coordinate in multi_point {
-                        let float_builder = coordinate_builder.values();
-                        float_builder.append_value(coordinate.x)?;
-                        float_builder.append_value(coordinate.y)?;
-                        coordinate_builder.append(true)?;
-                    }
-                    builder.append(true)?;
-                }
-
-                builder
-            }),
-            Box::new({
-                let mut builder = FixedSizeListBuilder::new(Date64Builder::new(capacity), 2);
-                for time_interval in time_intervals {
-                    let date_builder = builder.values();
-                    date_builder.append_value(time_interval.start().into())?;
-                    date_builder.append_value(time_interval.end().into())?;
-                    builder.append(true)?;
-                }
-
-                builder
-            }),
-        ];
-
-        let mut data_types = HashMap::with_capacity(data.len());
-
-        for (name, feature_data) in data {
-            ensure!(
-                !Self::is_reserved_name(&name),
-                error::ColumnNameConflict { name }
-            );
-
-            let column = Field::new(
-                &name,
-                feature_data.arrow_data_type(),
-                feature_data.nullable(),
-            );
-
-            columns.push(column);
-            builders.push(feature_data.arrow_builder()?);
-
-            data_types.insert(name, FeatureDataType::from(&feature_data));
-        }
-
-        let mut struct_builder = StructBuilder::new(columns, builders);
-        for _ in 0..capacity {
-            struct_builder.append(true)?;
-        }
-
-        // TODO: performance improvements by creating the buffers directly and not using so many loops
-
-        // TODO: wrap error for unequal number of rows in custom error
-
-        Ok(Self {
-            data: struct_builder.finish(),
-            types: data_types,
-        })
-    }
-
-    /// Retrieves the coordinates of this point collection
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use geoengine_datatypes::collections::{MultiPointCollection, FeatureCollection};
-    /// use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval, FeatureData};
-    /// use std::collections::HashMap;
-    ///
-    /// let pc = MultiPointCollection::from_data(
-    ///     vec![vec![(0., 0.).into()], vec![(1., 1.).into()], vec![(2., 2.).into()]],
-    ///     vec![TimeInterval::new_unchecked(0, 1), TimeInterval::new_unchecked(1, 2), TimeInterval::new_unchecked(2, 3)],
-    ///     HashMap::new(),
-    /// ).unwrap();
-    ///
-    /// assert_eq!(pc.len(), 3);
-    ///
-    /// let coords = pc.coordinates();
-    ///
-    /// assert_eq!(coords.len(), 3);
-    /// assert_eq!(coords, &[(0., 0.).into(), (1., 1.).into(), (2., 2.).into()]);
-    /// ```
-    ///
-    pub fn coordinates(&self) -> &[Coordinate2D] {
-        let features_ref = self
-            .data
-            .column_by_name(Self::GEOMETRY_COLUMN_NAME)
-            .expect("There must exist a feature column");
-        let features: &ListArray = downcast_array(features_ref);
-
-        let feature_coordinates_ref = features.values();
-        let feature_coordinates: &FixedSizeListArray = downcast_array(&feature_coordinates_ref);
-
-        let number_of_coordinates = feature_coordinates.data().len();
-
-        let floats_ref = feature_coordinates.values();
-        let floats: &Float64Array = downcast_array(&floats_ref);
-
-        unsafe {
-            slice::from_raw_parts(
-                floats.raw_values() as *const Coordinate2D,
-                number_of_coordinates,
-            )
-        }
-    }
-}
+/// This collection contains temporal multi points and miscellaneous data.
+pub type MultiPointCollection = FeatureCollection<MultiPoint>;
 
 impl<'l> IntoGeometryIterator<'l> for MultiPointCollection {
     type GeometryIterator = MultiPointIterator<'l>;
@@ -311,16 +19,12 @@ impl<'l> IntoGeometryIterator<'l> for MultiPointCollection {
     fn geometries(&'l self) -> Self::GeometryIterator {
         let geometry_column: &ListArray = downcast_array(
             &self
-                .data
+                .table
                 .column_by_name(MultiPointCollection::GEOMETRY_COLUMN_NAME)
                 .expect("Column must exist since it is in the metadata"),
         );
 
-        MultiPointIterator {
-            geometry_column,
-            index: 0,
-            length: self.len(),
-        }
+        Self::GeometryIterator::new(geometry_column, self.len())
     }
 }
 
@@ -329,6 +33,16 @@ pub struct MultiPointIterator<'l> {
     geometry_column: &'l ListArray,
     index: usize,
     length: usize,
+}
+
+impl<'l> MultiPointIterator<'l> {
+    pub fn new(geometry_column: &'l ListArray, length: usize) -> Self {
+        Self {
+            geometry_column,
+            index: 0,
+            length,
+        }
+    }
 }
 
 impl<'l> Iterator for MultiPointIterator<'l> {
@@ -366,24 +80,8 @@ impl<'l> Iterator for MultiPointIterator<'l> {
     }
 }
 
-impl FeatureCollectionBuilderImplHelpers for MultiPointCollection {
-    type GeometriesBuilder = <MultiPoint as ArrowTyped>::ArrowBuilder;
-
-    const HAS_GEOMETRIES: bool = true;
-
-    fn geometries_builder() -> Self::GeometriesBuilder {
-        MultiPoint::arrow_builder(0)
-    }
-}
-
-impl BuilderProvider for MultiPointCollection {
-    type Builder = SimpleFeatureCollectionBuilder<Self>;
-}
-
-impl GeoFeatureCollectionRowBuilder<MultiPoint>
-    for SimpleFeatureCollectionRowBuilder<MultiPointCollection>
-{
-    fn push_geometry(&mut self, geometry: MultiPoint) -> Result<(), Error> {
+impl GeoFeatureCollectionRowBuilder<MultiPoint> for FeatureCollectionRowBuilder<MultiPoint> {
+    fn push_geometry(&mut self, geometry: MultiPoint) -> Result<()> {
         let coordinate_builder = self.geometries_builder.values();
 
         for _ in geometry.as_ref() {
@@ -406,9 +104,13 @@ impl GeoFeatureCollectionRowBuilder<MultiPoint>
 mod tests {
     use super::*;
 
-    use crate::collections::{FeatureCollectionBuilder, FeatureCollectionRowBuilder};
-    use crate::primitives::{FeatureDataRef, FeatureDataValue, MultiPointAccess, NullableDataRef};
+    use crate::collections::BuilderProvider;
+    use crate::primitives::{
+        FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue, MultiPointAccess,
+        NullableDataRef, TimeInterval,
+    };
     use serde_json::{from_str, json};
+    use std::collections::HashMap;
 
     #[test]
     fn clone() {
@@ -423,11 +125,7 @@ mod tests {
     #[allow(clippy::float_cmp)]
     fn data() {
         let pc = MultiPointCollection::from_data(
-            vec![
-                vec![(0., 0.).into()],
-                vec![(1., 1.).into()],
-                vec![(2., 2.).into()],
-            ],
+            MultiPoint::many(vec![vec![(0., 0.)], vec![(1., 1.)], vec![(2., 2.)]]).unwrap(),
             vec![
                 TimeInterval::new_unchecked(0, 1),
                 TimeInterval::new_unchecked(1, 2),
@@ -465,11 +163,7 @@ mod tests {
     #[test]
     fn time_intervals() {
         let pc = MultiPointCollection::from_data(
-            vec![
-                vec![(0., 0.).into()],
-                vec![(1., 1.).into()],
-                vec![(2., 2.).into()],
-            ],
+            MultiPoint::many(vec![vec![(0., 0.)], vec![(1., 1.)], vec![(2., 2.)]]).unwrap(),
             vec![
                 TimeInterval::new_unchecked(0, 1),
                 TimeInterval::new_unchecked(1, 2),
@@ -594,11 +288,7 @@ mod tests {
     #[test]
     fn filter() {
         let pc = MultiPointCollection::from_data(
-            vec![
-                vec![(0., 0.).into()],
-                vec![(1., 1.).into()],
-                vec![(2., 2.).into()],
-            ],
+            MultiPoint::many(vec![vec![(0., 0.)], vec![(1., 1.)], vec![(2., 2.)]]).unwrap(),
             vec![
                 TimeInterval::new_unchecked(0, 1),
                 TimeInterval::new_unchecked(1, 2),
@@ -618,11 +308,7 @@ mod tests {
     #[test]
     fn append() {
         let collection_a = MultiPointCollection::from_data(
-            vec![
-                vec![(0., 0.).into()],
-                vec![(1., 1.).into()],
-                vec![(2., 2.).into()],
-            ],
+            MultiPoint::many(vec![vec![(0., 0.)], vec![(1., 1.)], vec![(2., 2.)]]).unwrap(),
             vec![
                 TimeInterval::new_unchecked(0, 1),
                 TimeInterval::new_unchecked(1, 2),
@@ -642,7 +328,7 @@ mod tests {
         .unwrap();
 
         let collection_b = MultiPointCollection::from_data(
-            vec![vec![(3., 3.).into()], vec![(4., 4.).into()]],
+            MultiPoint::many(vec![vec![(3., 3.)], vec![(4., 4.)]]).unwrap(),
             vec![
                 TimeInterval::new_unchecked(3, 4),
                 TimeInterval::new_unchecked(4, 5),
@@ -841,7 +527,7 @@ mod tests {
     #[test]
     fn clone2() {
         let pc = MultiPointCollection::from_data(
-            vec![vec![(0., 0.).into()], vec![(1., 1.).into()]],
+            MultiPoint::many(vec![vec![(0., 0.)], vec![(1., 1.)]]).unwrap(),
             vec![
                 TimeInterval::new_unchecked(0, 1),
                 TimeInterval::new_unchecked(0, 1),
@@ -857,13 +543,13 @@ mod tests {
         let cloned = pc.clone();
 
         assert_eq!(pc.len(), cloned.len());
-        assert_eq!(pc.coordinates(), cloned.coordinates());
+        assert_eq!(pc, cloned);
     }
 
     #[test]
     fn equals_builder_from_data() {
         let a = MultiPointCollection::from_data(
-            vec![vec![(0., 0.).into()], vec![(1., 1.).into()]],
+            MultiPoint::many(vec![vec![(0., 0.)], vec![(1., 1.)]]).unwrap(),
             vec![
                 TimeInterval::new_unchecked(0, 1),
                 TimeInterval::new_unchecked(0, 1),
