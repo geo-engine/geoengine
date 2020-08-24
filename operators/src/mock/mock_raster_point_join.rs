@@ -8,7 +8,7 @@ use futures::StreamExt;
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::raster::Pixel;
 use geoengine_datatypes::{
-    collections::{FeatureCollection, MultiPointCollection},
+    collections::MultiPointCollection,
     primitives::FeatureData,
     projection::ProjectionOption,
     raster::{GridPixelAccess, RasterTile2D},

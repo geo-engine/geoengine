@@ -1,7 +1,6 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use geoengine_datatypes::collections::{
-    BuilderProvider, FeatureCollectionBuilder, FeatureCollectionRowBuilder,
-    GeoFeatureCollectionRowBuilder, MultiPointCollection,
+    BuilderProvider, GeoFeatureCollectionRowBuilder, MultiPointCollection,
 };
 use geoengine_datatypes::primitives::{
     Coordinate2D, FeatureDataType, FeatureDataValue, TimeInterval,

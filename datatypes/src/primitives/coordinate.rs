@@ -1,5 +1,7 @@
 use crate::util::arrow::ArrowTyped;
+use arrow::array::{BooleanArray, Float64Builder};
 use arrow::datatypes::DataType;
+use arrow::error::ArrowError;
 use serde::{Deserialize, Serialize};
 use std::{fmt, slice};
 
@@ -112,24 +114,44 @@ impl<'c> Into<&'c [f64]> for &'c Coordinate2D {
     }
 }
 
-// TODO: use FixedSizeListBuilder of Float64Builder -> cf. https://issues.apache.org/jira/browse/ARROW-8508
 impl ArrowTyped for Coordinate2D {
-    type ArrowArray = arrow::array::FixedSizeBinaryArray;
-    type ArrowBuilder = arrow::array::FixedSizeBinaryBuilder;
+    type ArrowArray = arrow::array::FixedSizeListArray;
+    type ArrowBuilder = arrow::array::FixedSizeListBuilder<Float64Builder>;
 
     fn arrow_data_type() -> DataType {
-        arrow::datatypes::DataType::FixedSizeBinary(std::mem::size_of::<Self>() as i32)
+        arrow::datatypes::DataType::FixedSizeList(Box::new(arrow::datatypes::DataType::Float64), 2)
     }
 
     fn arrow_builder(capacity: usize) -> Self::ArrowBuilder {
-        arrow::array::FixedSizeBinaryBuilder::new(capacity, std::mem::size_of::<Self>() as i32)
+        arrow::array::FixedSizeListBuilder::new(arrow::array::Float64Builder::new(capacity * 2), 2)
+    }
+
+    fn concat(
+        _a: &Self::ArrowArray,
+        _b: &Self::ArrowArray,
+    ) -> Result<Self::ArrowArray, ArrowError> {
+        unimplemented!("This is not used by now")
+    }
+
+    fn filter(
+        _data_array: &Self::ArrowArray,
+        _filter_array: &BooleanArray,
+    ) -> Result<Self::ArrowArray, ArrowError> {
+        unimplemented!("This is not used by now")
+    }
+
+    fn from_vec(_data: Vec<Self>) -> Result<Self::ArrowArray, ArrowError>
+    where
+        Self: Sized,
+    {
+        unimplemented!("This is not used by now")
     }
 }
 
-impl AsRef<[u8]> for Coordinate2D {
-    fn as_ref(&self) -> &[u8] {
-        let raw_ptr = self as *const Coordinate2D as *const f64 as *const u8;
-        unsafe { std::slice::from_raw_parts(raw_ptr, std::mem::size_of::<Self>()) }
+impl AsRef<[f64]> for Coordinate2D {
+    fn as_ref(&self) -> &[f64] {
+        let raw_ptr = self as *const Coordinate2D as *const f64;
+        unsafe { std::slice::from_raw_parts(raw_ptr, 2) }
     }
 }
 

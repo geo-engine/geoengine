@@ -1,153 +1,50 @@
 use crate::collections::{
-    BuilderProvider, FeatureCollection, FeatureCollectionBuilderImplHelpers,
-    FeatureCollectionImplHelpers, GeoFeatureCollectionRowBuilder, IntoGeometryIterator,
-    SimpleFeatureCollectionBuilder, SimpleFeatureCollectionRowBuilder,
+    FeatureCollection, FeatureCollectionRowBuilder, GeoFeatureCollectionRowBuilder,
+    IntoGeometryIterator,
 };
-use crate::primitives::{
-    Coordinate2D, FeatureDataType, MultiLineString, MultiLineStringAccess, MultiLineStringRef,
-};
-use crate::util::arrow::{downcast_array, ArrowTyped};
+use crate::primitives::{Coordinate2D, MultiLineString, MultiLineStringAccess, MultiLineStringRef};
+use crate::util::arrow::downcast_array;
 use crate::util::Result;
-use arrow::array::{Array, BooleanArray, FixedSizeBinaryArray, ListArray, StructArray};
-use arrow::datatypes::DataType;
-use std::collections::HashMap;
+use arrow::array::{Array, FixedSizeListArray, Float64Array, ListArray};
 use std::slice;
 
-/// This collection contains temporal multi-lines and miscellaneous data.
-#[derive(Debug)]
-pub struct MultiLineStringCollection {
-    table: StructArray,
-    types: HashMap<String, FeatureDataType>,
-}
-
-impl FeatureCollectionImplHelpers for MultiLineStringCollection {
-    fn new_from_internals(table: StructArray, types: HashMap<String, FeatureDataType>) -> Self {
-        Self { table, types }
-    }
-
-    fn table(&self) -> &StructArray {
-        &self.table
-    }
-
-    fn types(&self) -> &HashMap<String, FeatureDataType> {
-        &self.types
-    }
-
-    fn geometry_arrow_data_type() -> DataType {
-        MultiLineString::arrow_data_type()
-    }
-
-    fn filtered_geometries(
-        multi_lines: &ListArray,
-        filter_array: &BooleanArray,
-    ) -> Result<ListArray> {
-        let mut multi_line_builder = MultiLineString::arrow_builder(0);
-
-        for multi_line_index in 0..multi_lines.len() {
-            if !filter_array.value(multi_line_index) {
-                continue;
-            }
-
-            let line_builder = multi_line_builder.values();
-
-            let lines_ref = multi_lines.value(multi_line_index);
-            let lines = downcast_array::<ListArray>(&lines_ref);
-
-            for line_index in 0..lines.len() {
-                let coordinate_builder = line_builder.values();
-
-                let coordinates_ref = lines.value(line_index);
-                let coordinates = downcast_array::<FixedSizeBinaryArray>(&coordinates_ref);
-
-                for coordinate_index in 0..(coordinates.len() as usize) {
-                    let bytes: &[u8] = coordinates.value(coordinate_index);
-                    coordinate_builder.append_value(bytes)?;
-                }
-
-                line_builder.append(true)?;
-            }
-
-            multi_line_builder.append(true)?;
-        }
-
-        Ok(multi_line_builder.finish())
-    }
-
-    fn concat_geometries(geometries_a: &ListArray, geometries_b: &ListArray) -> Result<ListArray> {
-        let mut multi_line_builder =
-            MultiLineString::arrow_builder(geometries_a.len() + geometries_b.len());
-
-        for multi_lines in &[geometries_a, geometries_b] {
-            for multi_line_index in 0..multi_lines.len() {
-                let line_builder = multi_line_builder.values();
-
-                let lines_ref = multi_lines.value(multi_line_index);
-                let lines = downcast_array::<ListArray>(&lines_ref);
-
-                for line_index in 0..lines.len() {
-                    let coordinate_builder = line_builder.values();
-
-                    let coordinates_ref = lines.value(line_index);
-                    let coordinates = downcast_array::<FixedSizeBinaryArray>(&coordinates_ref);
-
-                    for coordinate_index in 0..(coordinates.len() as usize) {
-                        let bytes: &[u8] = coordinates.value(coordinate_index);
-                        coordinate_builder.append_value(bytes)?;
-                    }
-
-                    line_builder.append(true)?;
-                }
-
-                multi_line_builder.append(true)?;
-            }
-        }
-
-        Ok(multi_line_builder.finish())
-    }
-
-    fn _is_simple(&self) -> bool {
-        let multi_line_array: &ListArray = downcast_array(
-            &self
-                .table
-                .column_by_name(MultiLineStringCollection::GEOMETRY_COLUMN_NAME)
-                .expect("Column must exist since it is in the metadata"),
-        );
-
-        let line_array_ref = multi_line_array.values();
-        let line_array: &ListArray = downcast_array(&line_array_ref);
-
-        multi_line_array.len() == line_array.len()
-    }
-}
+/// This collection contains temporal `MultiLineString`s and miscellaneous data.
+pub type MultiLineStringCollection = FeatureCollection<MultiLineString>;
 
 impl<'l> IntoGeometryIterator<'l> for MultiLineStringCollection {
-    type GeometryIterator = MultiLineIterator<'l>;
+    type GeometryIterator = MultiLineStringIterator<'l>;
     type GeometryType = MultiLineStringRef<'l>;
 
     fn geometries(&'l self) -> Self::GeometryIterator {
         let geometry_column: &ListArray = downcast_array(
             &self
                 .table
-                .column_by_name(MultiLineStringCollection::GEOMETRY_COLUMN_NAME)
+                .column_by_name(Self::GEOMETRY_COLUMN_NAME)
                 .expect("Column must exist since it is in the metadata"),
         );
 
-        MultiLineIterator {
-            geometry_column,
-            index: 0,
-            length: self.len(),
-        }
+        Self::GeometryIterator::new(geometry_column, self.len())
     }
 }
 
-/// A collection iterator for multi points
-pub struct MultiLineIterator<'l> {
+/// A collection iterator for `MultiLineString`s
+pub struct MultiLineStringIterator<'l> {
     geometry_column: &'l ListArray,
     index: usize,
     length: usize,
 }
 
-impl<'l> Iterator for MultiLineIterator<'l> {
+impl<'l> MultiLineStringIterator<'l> {
+    pub fn new(geometry_column: &'l ListArray, length: usize) -> Self {
+        Self {
+            geometry_column,
+            index: 0,
+            length,
+        }
+    }
+}
+
+impl<'l> Iterator for MultiLineStringIterator<'l> {
     type Item = MultiLineStringRef<'l>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -163,14 +60,17 @@ impl<'l> Iterator for MultiLineIterator<'l> {
 
         for line_index in 0..number_of_lines {
             let coordinate_array_ref = line_array.value(line_index);
-            let coordinate_array: &FixedSizeBinaryArray = downcast_array(&coordinate_array_ref);
+            let coordinate_array: &FixedSizeListArray = downcast_array(&coordinate_array_ref);
 
             let number_of_coordinates = coordinate_array.len();
+
+            let float_array_ref = coordinate_array.value(0);
+            let float_array: &Float64Array = downcast_array(&float_array_ref);
 
             line_coordinate_slices.push(unsafe {
                 #[allow(clippy::cast_ptr_alignment)]
                 slice::from_raw_parts(
-                    coordinate_array.value(0)[0] as *const u8 as *const Coordinate2D,
+                    float_array.raw_values() as *const Coordinate2D,
                     number_of_coordinates,
                 )
             });
@@ -191,11 +91,8 @@ impl<'l> Iterator for MultiLineIterator<'l> {
     }
 }
 
-into_geometry_options_impl!(MultiLineStringCollection);
-feature_collection_impl!(MultiLineStringCollection, true);
-
 impl GeoFeatureCollectionRowBuilder<MultiLineString>
-    for SimpleFeatureCollectionRowBuilder<MultiLineStringCollection>
+    for FeatureCollectionRowBuilder<MultiLineString>
 {
     fn push_geometry(&mut self, geometry: MultiLineString) -> Result<()> {
         let line_builder = self.geometries_builder.values();
@@ -204,7 +101,11 @@ impl GeoFeatureCollectionRowBuilder<MultiLineString>
             let coordinate_builder = line_builder.values();
 
             for coordinate in line {
-                coordinate_builder.append_value(coordinate.as_ref())?;
+                coordinate_builder
+                    .values()
+                    .append_slice(coordinate.as_ref())?;
+
+                coordinate_builder.append(true)?;
             }
 
             line_builder.append(true)?;
@@ -216,25 +117,11 @@ impl GeoFeatureCollectionRowBuilder<MultiLineString>
     }
 }
 
-impl FeatureCollectionBuilderImplHelpers for MultiLineStringCollection {
-    type GeometriesBuilder = <MultiLineString as ArrowTyped>::ArrowBuilder;
-
-    const HAS_GEOMETRIES: bool = true;
-
-    fn geometries_builder() -> Self::GeometriesBuilder {
-        MultiLineString::arrow_builder(0)
-    }
-}
-
-impl BuilderProvider for MultiLineStringCollection {
-    type Builder = SimpleFeatureCollectionBuilder<Self>;
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    use crate::collections::{FeatureCollectionBuilder, FeatureCollectionRowBuilder};
+    use crate::collections::BuilderProvider;
     use crate::primitives::TimeInterval;
 
     #[test]

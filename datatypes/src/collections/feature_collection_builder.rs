@@ -1,6 +1,4 @@
-use crate::collections::{
-    error, FeatureCollection, FeatureCollectionError, FeatureCollectionImplHelpers,
-};
+use crate::collections::{error, FeatureCollection, FeatureCollectionError};
 use crate::primitives::{FeatureDataType, FeatureDataValue, Geometry, TimeInterval};
 use crate::util::arrow::{downcast_mut_array, ArrowTyped};
 use crate::util::Result;
@@ -15,66 +13,19 @@ use std::marker::PhantomData;
 use std::{iter, mem};
 
 pub trait BuilderProvider {
-    type Builder: FeatureCollectionBuilder;
+    type CollectionType: Geometry + ArrowTyped;
 
     /// Return a builder for the feature collection
-    fn builder() -> Self::Builder {
-        Self::Builder::default()
+    fn builder() -> FeatureCollectionBuilder<Self::CollectionType> {
+        Default::default()
     }
 }
 
-pub trait FeatureCollectionBuilder: Default {
-    type RowBuilder: FeatureCollectionRowBuilder;
-
-    /// Adds a column to the collection.
-    ///
-    /// # Errors
-    ///
-    /// Adding a column fails if there are already rows in the builder or the column name is reserved
-    ///
-    fn add_column(&mut self, name: String, data_type: FeatureDataType) -> Result<()>;
-
-    /// Stop finishing the header, i.e., the columns of the feature collection to build and return a row builder
-    fn finish_header(self) -> Self::RowBuilder;
-}
-
-pub trait FeatureCollectionRowBuilder {
-    type Collection: FeatureCollection;
-
-    /// Add a time interval to the collection
-    ///
-    /// # Errors
-    ///
-    /// This call fails on internal errors of the builder
-    ///
-    fn push_time_interval(&mut self, time_interval: TimeInterval) -> Result<()>;
-
-    /// Add data to the builder
-    ///
-    /// # Errors
-    ///
-    /// This call fails if the data types of the column and the data item do not match
-    ///
-    fn push_data(&mut self, column: &str, data: FeatureDataValue) -> Result<()>;
-
-    /// Indicate a finished row
-    fn finish_row(&mut self);
-
-    /// Return the number of finished rows
-    fn len(&self) -> usize;
-
-    /// Checks whether there was no row finished yet
-    fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
-    /// Build the feature collection
-    ///
-    /// # Errors
-    ///
-    /// This call fails if the lengths of the columns do not match the number of times `finish_row()` was called.
-    ///
-    fn build(self) -> Result<Self::Collection>;
+impl<CollectionType> BuilderProvider for FeatureCollection<CollectionType>
+where
+    CollectionType: Geometry + ArrowTyped,
+{
+    type CollectionType = CollectionType;
 }
 
 pub trait GeoFeatureCollectionRowBuilder<G>
@@ -90,62 +41,29 @@ where
     fn push_geometry(&mut self, geometry: G) -> Result<()>;
 }
 
-/// Implementing this trait allows implementing a builder with no further overhead
-pub trait FeatureCollectionBuilderImplHelpers {
-    type GeometriesBuilder: ArrayBuilder;
-
-    /// Does this collection have geometries?
-    const HAS_GEOMETRIES: bool;
-
-    /// Provide a builder for creating the geometry column
-    fn geometries_builder() -> Self::GeometriesBuilder;
-}
-
 /// A default implementation of a feature collection builder
 #[derive(Debug)]
-pub struct SimpleFeatureCollectionBuilder<Collection>
+pub struct FeatureCollectionBuilder<CollectionType>
 where
-    Collection: FeatureCollection + FeatureCollectionBuilderImplHelpers,
+    CollectionType: Geometry + ArrowTyped,
 {
     types: HashMap<String, FeatureDataType>,
-    _collection: PhantomData<Collection>,
+    _collection_type: PhantomData<CollectionType>,
 }
 
-/// A default implementation of a feature collection row builder
-pub struct SimpleFeatureCollectionRowBuilder<Collection>
+impl<CollectionType> FeatureCollectionBuilder<CollectionType>
 where
-    Collection: FeatureCollection + FeatureCollectionBuilderImplHelpers,
+    CollectionType: Geometry + ArrowTyped,
 {
-    pub(super) geometries_builder: Collection::GeometriesBuilder,
-    time_intervals_builder: <TimeInterval as ArrowTyped>::ArrowBuilder,
-    builders: HashMap<String, Box<dyn ArrayBuilder>>,
-    types: HashMap<String, FeatureDataType>,
-    rows: usize,
-    _collection: PhantomData<Collection>,
-}
-
-impl<Collection> Default for SimpleFeatureCollectionBuilder<Collection>
-where
-    Collection: FeatureCollection + FeatureCollectionBuilderImplHelpers,
-{
-    fn default() -> Self {
-        Self {
-            types: HashMap::default(),
-            _collection: PhantomData,
-        }
-    }
-}
-
-impl<Collection> FeatureCollectionBuilder for SimpleFeatureCollectionBuilder<Collection>
-where
-    Collection:
-        FeatureCollection + FeatureCollectionImplHelpers + FeatureCollectionBuilderImplHelpers,
-{
-    type RowBuilder = SimpleFeatureCollectionRowBuilder<Collection>;
-
-    fn add_column(&mut self, name: String, data_type: FeatureDataType) -> Result<()> {
+    /// Adds a column to the collection.
+    ///
+    /// # Errors
+    ///
+    /// Adding a column fails if there are already rows in the builder or the column name is reserved
+    ///
+    pub fn add_column(&mut self, name: String, data_type: FeatureDataType) -> Result<()> {
         ensure!(
-            !Collection::is_reserved_name(&name),
+            !FeatureCollection::<CollectionType>::is_reserved_name(&name),
             error::ColumnAlreadyExists { name }
         );
 
@@ -164,9 +82,10 @@ where
         }
     }
 
-    fn finish_header(self) -> Self::RowBuilder {
-        Self::RowBuilder {
-            geometries_builder: Collection::geometries_builder(),
+    /// Stop finishing the header, i.e., the columns of the feature collection to build and return a row builder
+    pub fn finish_header(self) -> FeatureCollectionRowBuilder<CollectionType> {
+        FeatureCollectionRowBuilder {
+            geometries_builder: CollectionType::arrow_builder(0),
             time_intervals_builder: TimeInterval::arrow_builder(0),
             builders: self
                 .types
@@ -175,19 +94,35 @@ where
                 .collect(),
             types: self.types,
             rows: 0,
-            _collection: PhantomData,
+            _collection_type: PhantomData,
         }
     }
 }
 
-impl<Collection> FeatureCollectionRowBuilder for SimpleFeatureCollectionRowBuilder<Collection>
+/// A default implementation of a feature collection row builder
+pub struct FeatureCollectionRowBuilder<CollectionType>
 where
-    Collection:
-        FeatureCollection + FeatureCollectionImplHelpers + FeatureCollectionBuilderImplHelpers,
+    CollectionType: Geometry + ArrowTyped,
 {
-    type Collection = Collection;
+    pub(super) geometries_builder: CollectionType::ArrowBuilder,
+    time_intervals_builder: <TimeInterval as ArrowTyped>::ArrowBuilder,
+    builders: HashMap<String, Box<dyn ArrayBuilder>>,
+    types: HashMap<String, FeatureDataType>,
+    rows: usize,
+    _collection_type: PhantomData<CollectionType>,
+}
 
-    fn push_time_interval(&mut self, time_interval: TimeInterval) -> Result<()> {
+impl<CollectionType> FeatureCollectionRowBuilder<CollectionType>
+where
+    CollectionType: Geometry + ArrowTyped,
+{
+    /// Add a time interval to the collection
+    ///
+    /// # Errors
+    ///
+    /// This call fails on internal errors of the builder
+    ///
+    pub fn push_time_interval(&mut self, time_interval: TimeInterval) -> Result<()> {
         let date_builder = self.time_intervals_builder.values();
         date_builder.append_value(time_interval.start().inner())?;
         date_builder.append_value(time_interval.end().inner())?;
@@ -197,7 +132,13 @@ where
         Ok(())
     }
 
-    fn push_data(&mut self, column: &str, data: FeatureDataValue) -> Result<()> {
+    /// Add data to the builder
+    ///
+    /// # Errors
+    ///
+    /// This call fails if the data types of the column and the data item do not match
+    ///
+    pub fn push_data(&mut self, column: &str, data: FeatureDataValue) -> Result<()> {
         // also checks that column exists
         let data_builder = if let Some(builder) = self.builders.get_mut(column) {
             builder
@@ -268,20 +209,33 @@ where
         Ok(())
     }
 
-    fn finish_row(&mut self) {
+    /// Indicate a finished row
+    pub fn finish_row(&mut self) {
         self.rows += 1;
     }
 
-    fn len(&self) -> usize {
+    /// Return the number of finished rows
+    pub fn len(&self) -> usize {
         self.rows
     }
 
-    fn build(mut self) -> Result<Self::Collection> {
+    /// Checks whether there was no row finished yet
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Build the feature collection
+    ///
+    /// # Errors
+    ///
+    /// This call fails if the lengths of the columns do not match the number of times `finish_row()` was called.
+    ///
+    pub fn build(mut self) -> Result<FeatureCollection<CollectionType>> {
         for builder in self
             .builders
             .values()
             .map(AsRef::as_ref)
-            .chain(if Self::Collection::HAS_GEOMETRIES {
+            .chain(if CollectionType::IS_GEOMETRY {
                 Some(&self.geometries_builder as &dyn ArrayBuilder)
             } else {
                 None
@@ -302,18 +256,18 @@ where
         let mut columns = Vec::with_capacity(self.types.len() + 2);
         let mut builders: Vec<Box<dyn ArrayBuilder>> = Vec::with_capacity(self.types.len() + 2);
 
-        if Self::Collection::HAS_GEOMETRIES {
+        if CollectionType::IS_GEOMETRY {
             columns.push(Field::new(
-                Self::Collection::GEOMETRY_COLUMN_NAME,
-                Self::Collection::geometry_arrow_data_type(),
+                FeatureCollection::<CollectionType>::GEOMETRY_COLUMN_NAME,
+                CollectionType::arrow_data_type(),
                 false,
             ));
             builders.push(Box::new(self.geometries_builder));
         }
 
         columns.push(Field::new(
-            Self::Collection::TIME_COLUMN_NAME,
-            Self::Collection::time_arrow_data_type(),
+            FeatureCollection::<CollectionType>::TIME_COLUMN_NAME,
+            TimeInterval::arrow_data_type(),
             false,
         ));
         builders.push(Box::new(self.time_intervals_builder));
@@ -338,6 +292,21 @@ where
             struct_builder.finish()
         };
 
-        Ok(Self::Collection::new_from_internals(table, self.types))
+        Ok(FeatureCollection::<CollectionType>::new_from_internals(
+            table, self.types,
+        ))
+    }
+}
+
+/// By implementing `Default` ourselves we omit `CollectionType` implementing `Default`
+impl<CollectionType> Default for FeatureCollectionBuilder<CollectionType>
+where
+    CollectionType: Geometry + ArrowTyped,
+{
+    fn default() -> Self {
+        Self {
+            types: Default::default(),
+            _collection_type: Default::default(),
+        }
     }
 }

@@ -1,13 +1,15 @@
-use crate::error::Error;
 use arrow::error::ArrowError;
 use snafu::Snafu;
 
-#[derive(Debug, PartialEq, Snafu)]
+use crate::error::Error;
+use crate::primitives::PrimitivesError;
+
+#[derive(Debug, Snafu)]
 #[snafu(visibility = "pub(crate)")]
 pub enum FeatureCollectionError {
     #[snafu(display("Arrow internal error: {:?}", source))]
     ArrowInternal {
-        source: arrow::error::ArrowError,
+        source: ArrowError,
     },
 
     CannotAccessReservedColumn {
@@ -20,6 +22,10 @@ pub enum FeatureCollectionError {
 
     ColumnAlreadyExists {
         name: String,
+    },
+
+    Primitives {
+        source: PrimitivesError,
     },
 
     UnmatchedLength {
@@ -44,5 +50,11 @@ impl From<FeatureCollectionError> for Error {
 impl From<ArrowError> for FeatureCollectionError {
     fn from(source: ArrowError) -> Self {
         FeatureCollectionError::ArrowInternal { source }
+    }
+}
+
+impl From<PrimitivesError> for FeatureCollectionError {
+    fn from(source: PrimitivesError) -> Self {
+        FeatureCollectionError::Primitives { source }
     }
 }

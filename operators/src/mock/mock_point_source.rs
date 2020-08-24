@@ -31,7 +31,7 @@ impl QueryProcessor for MockPointSourceProcessor {
         let chunk_size = ctx.chunk_byte_size / std::mem::size_of::<Coordinate2D>();
         stream::iter(self.points.chunks(chunk_size).map(|chunk| {
             Ok(MultiPointCollection::from_data(
-                chunk.iter().map(|x| vec![*x]).collect(),
+                chunk.iter().map(Into::into).collect(),
                 vec![TimeInterval::default(); chunk.len()],
                 HashMap::new(),
             )?)
@@ -87,7 +87,7 @@ impl InitializedOperatorB<VectorResultDescriptor, TypedVectorQueryProcessor>
 mod tests {
     use super::*;
     use futures::executor::block_on_stream;
-    use geoengine_datatypes::{collections::FeatureCollection, primitives::BoundingBox2D};
+    use geoengine_datatypes::primitives::BoundingBox2D;
 
     #[test]
     fn serde() {

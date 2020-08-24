@@ -1,7 +1,10 @@
+use crate::primitives::{Geometry, GeometryRef};
 use crate::util::arrow::ArrowTyped;
-use arrow::array::{Array, ArrayBuilder, ArrayDataRef, ArrayEqual, ArrayRef, JsonEqual};
+use arrow::array::{
+    Array, ArrayBuilder, ArrayDataRef, ArrayEqual, ArrayRef, BooleanArray, JsonEqual,
+};
 use arrow::datatypes::DataType;
-use geojson::Geometry;
+use arrow::error::ArrowError;
 use serde_json::Value;
 use std::any::Any;
 
@@ -9,6 +12,12 @@ use std::any::Any;
 /// Currently, this is only required for `FeatureCollection` implementations.
 #[derive(Clone, Debug)]
 pub struct NoGeometry;
+
+impl Geometry for NoGeometry {
+    const IS_GEOMETRY: bool = false;
+}
+
+impl GeometryRef for NoGeometry {}
 
 impl ArrowTyped for NoGeometry {
     type ArrowArray = NoArrowArray;
@@ -21,10 +30,31 @@ impl ArrowTyped for NoGeometry {
     fn arrow_builder(_capacity: usize) -> Self::ArrowBuilder {
         NoArrowArray
     }
+
+    fn concat(
+        _a: &Self::ArrowArray,
+        _b: &Self::ArrowArray,
+    ) -> Result<Self::ArrowArray, ArrowError> {
+        unreachable!("There is no concat since there is no geometry")
+    }
+
+    fn filter(
+        _data_array: &Self::ArrowArray,
+        _filter_array: &BooleanArray,
+    ) -> Result<Self::ArrowArray, ArrowError> {
+        unreachable!("There is no filter since there is no geometry")
+    }
+
+    fn from_vec(_data: Vec<Self>) -> Result<Self::ArrowArray, ArrowError>
+    where
+        Self: Sized,
+    {
+        unreachable!("There is no from since there is no geometry")
+    }
 }
 
 impl Into<geojson::Geometry> for NoGeometry {
-    fn into(self) -> Geometry {
+    fn into(self) -> geojson::Geometry {
         unreachable!("There is no geometry since there is no geometry")
     }
 }
@@ -49,6 +79,18 @@ impl Array for NoArrowArray {
 
 impl ArrayBuilder for NoArrowArray {
     fn len(&self) -> usize {
+        unreachable!("There is no implementation since there is no geometry")
+    }
+
+    fn is_empty(&self) -> bool {
+        unreachable!("There is no implementation since there is no geometry")
+    }
+
+    fn append_data(&mut self, _data: &[ArrayDataRef]) -> Result<(), ArrowError> {
+        unreachable!("There is no implementation since there is no geometry")
+    }
+
+    fn data_type(&self) -> DataType {
         unreachable!("There is no implementation since there is no geometry")
     }
 
