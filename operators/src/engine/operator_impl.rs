@@ -1,6 +1,6 @@
 use super::{
-    ExecutionContext, InitializedOperator, InitializedRasterOperator, InitializedVectorOperator,
-    RasterOperator, ResultDescriptor, VectorOperator,
+    ExecutionContext, InitializedOperatorBase, InitializedRasterOperator,
+    InitializedVectorOperator, RasterOperator, ResultDescriptor, VectorOperator,
 };
 use crate::util::Result;
 use serde::{Deserialize, Serialize};
@@ -102,7 +102,7 @@ impl<P, R, S> InitializedOperatorImpl<P, R, S> {
     }
 }
 
-impl<P, R, S> InitializedOperator for InitializedOperatorImpl<P, R, S>
+impl<P, R, S> InitializedOperatorBase for InitializedOperatorImpl<P, R, S>
 where
     P: std::fmt::Debug + Clone + 'static,
     R: std::fmt::Debug + Clone + 'static + ResultDescriptor,

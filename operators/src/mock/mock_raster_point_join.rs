@@ -1,5 +1,5 @@
 use crate::engine::{
-    InitializedOperatorB, InitializedOperatorImpl, Operator, QueryProcessor, RasterQueryProcessor,
+    InitializedOperator, InitializedOperatorImpl, Operator, QueryProcessor, RasterQueryProcessor,
     TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::util::Result;
@@ -109,7 +109,7 @@ impl VectorOperator for MockRasterPointJoinOperator {
     }
 }
 
-impl InitializedOperatorB<VectorResultDescriptor, TypedVectorQueryProcessor>
+impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
     for InitializedOperatorImpl<MockRasterPointJoinParams, VectorResultDescriptor, ()>
 {
     fn query_processor(&self) -> Result<crate::engine::TypedVectorQueryProcessor> {

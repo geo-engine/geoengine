@@ -1,7 +1,7 @@
 use crate::engine::{
-    InitializedOperator, InitializedOperatorB, InitializedOperatorImpl, InitializedRasterOperator,
-    QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SourceOperator,
-    TypedRasterQueryProcessor,
+    InitializedOperator, InitializedOperatorBase, InitializedOperatorImpl,
+    InitializedRasterOperator, QueryProcessor, RasterOperator, RasterQueryProcessor,
+    RasterResultDescriptor, SourceOperator, TypedRasterQueryProcessor,
 };
 use crate::util::Result;
 use futures::{stream, stream::StreamExt};
@@ -66,7 +66,7 @@ impl RasterOperator for MockRasterSource {
     }
 }
 
-impl InitializedOperatorB<RasterResultDescriptor, TypedRasterQueryProcessor>
+impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
     for InitializedOperatorImpl<MockRasterSourceParams, RasterResultDescriptor, ()>
 {
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {

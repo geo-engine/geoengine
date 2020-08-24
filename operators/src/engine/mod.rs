@@ -6,7 +6,7 @@ mod query_processor;
 mod result_descriptor;
 
 pub use operator::{
-    ExecutionContext, InitializedOperator, InitializedOperatorB, InitializedRasterOperator,
+    ExecutionContext, InitializedOperator, InitializedOperatorBase, InitializedRasterOperator,
     InitializedVectorOperator, RasterOperator, TypedOperator, VectorOperator,
 };
 

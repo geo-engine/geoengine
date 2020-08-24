@@ -44,7 +44,7 @@ pub trait VectorOperator: CloneableVectorOperator + Send + Sync + std::fmt::Debu
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct ExecutionContext;
 
-pub trait InitializedOperator {
+pub trait InitializedOperatorBase {
     type Descriptor: ResultDescriptor + Clone;
     fn execution_context(&self) -> &ExecutionContext;
 
@@ -65,12 +65,12 @@ pub trait InitializedOperator {
 }
 
 pub type InitializedVectorOperator =
-    dyn InitializedOperatorB<VectorResultDescriptor, TypedVectorQueryProcessor>;
+    dyn InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>;
 
 pub type InitializedRasterOperator =
-    dyn InitializedOperatorB<RasterResultDescriptor, TypedRasterQueryProcessor>;
+    dyn InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>;
 
-pub trait InitializedOperatorB<R, Q>: InitializedOperator<Descriptor = R> + Send + Sync
+pub trait InitializedOperator<R, Q>: InitializedOperatorBase<Descriptor = R> + Send + Sync
 where
     R: ResultDescriptor + std::clone::Clone,
 {
@@ -78,7 +78,7 @@ where
     fn query_processor(&self) -> Result<Q>;
 
     /// Wrap a box around a `RasterOperator`
-    fn boxed(self) -> Box<dyn InitializedOperatorB<R, Q>>
+    fn boxed(self) -> Box<dyn InitializedOperator<R, Q>>
     where
         Self: Sized + 'static,
     {
@@ -86,7 +86,7 @@ where
     }
 }
 
-impl<R> InitializedOperator for Box<dyn InitializedOperator<Descriptor = R>>
+impl<R> InitializedOperatorBase for Box<dyn InitializedOperatorBase<Descriptor = R>>
 where
     R: ResultDescriptor + std::clone::Clone,
 {
@@ -112,7 +112,7 @@ where
     }
 }
 
-impl<R, Q> InitializedOperator for Box<dyn InitializedOperatorB<R, Q>>
+impl<R, Q> InitializedOperatorBase for Box<dyn InitializedOperator<R, Q>>
 where
     R: Clone + 'static + ResultDescriptor,
     Q: Clone + 'static,
@@ -138,7 +138,7 @@ where
     }
 }
 
-impl<R, Q> InitializedOperatorB<R, Q> for Box<dyn InitializedOperatorB<R, Q>>
+impl<R, Q> InitializedOperator<R, Q> for Box<dyn InitializedOperator<R, Q>>
 where
     R: Clone + 'static + ResultDescriptor,
     Q: Clone + 'static,

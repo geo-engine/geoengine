@@ -1,6 +1,6 @@
 use crate::{
     engine::{
-        InitializedOperator, InitializedOperatorB, InitializedOperatorImpl,
+        InitializedOperator, InitializedOperatorBase, InitializedOperatorImpl,
         InitializedRasterOperator, QueryProcessor, RasterOperator, RasterQueryProcessor,
         RasterResultDescriptor, SourceOperator, TypedRasterQueryProcessor,
     },
@@ -428,7 +428,7 @@ impl RasterOperator for GdalSource {
     }
 }
 
-impl InitializedOperatorB<RasterResultDescriptor, TypedRasterQueryProcessor>
+impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
     for InitializedOperatorImpl<
         GdalSourceParameters,
         RasterResultDescriptor,
