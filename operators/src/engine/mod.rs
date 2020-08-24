@@ -7,15 +7,14 @@ mod result_descriptor;
 
 pub use operator::{
     ExecutionContext, InitializedOperator, InitializedOperatorB, InitializedRasterOperator,
-    InitializedVectorOperator, Operator, RasterOperator, TypedOperator, VectorOperator,
+    InitializedVectorOperator, RasterOperator, TypedOperator, VectorOperator,
 };
 
 pub use clonable_operator::{
     CloneableInitializedOperator, CloneableInitializedRasterOperator,
-    CloneableInitializedVectorOperator, CloneableOperator, CloneableRasterOperator,
-    CloneableVectorOperator,
+    CloneableInitializedVectorOperator, CloneableRasterOperator, CloneableVectorOperator,
 };
-pub use operator_impl::{InitializedOperatorImpl, OperatorImpl, SourceOperatorImpl};
+pub use operator_impl::{InitializedOperatorImpl, Operator, SourceOperator};
 pub use query::{QueryContext, QueryRectangle};
 pub use query_processor::{
     QueryProcessor, RasterQueryProcessor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,

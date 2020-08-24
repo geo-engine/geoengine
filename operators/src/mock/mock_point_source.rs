@@ -2,7 +2,7 @@ use crate::engine::{QueryContext, QueryProcessor, QueryRectangle};
 use crate::{
     engine::{
         ExecutionContext, InitializedOperatorB, InitializedOperatorImpl, InitializedVectorOperator,
-        SourceOperatorImpl, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
+        SourceOperator, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
         VectorResultDescriptor,
     },
     util::Result,
@@ -45,7 +45,7 @@ pub struct MockPointSourceParams {
     pub points: Vec<Coordinate2D>,
 }
 
-pub type MockPointSource = SourceOperatorImpl<MockPointSourceParams>;
+pub type MockPointSource = SourceOperator<MockPointSourceParams>;
 
 #[typetag::serde]
 impl VectorOperator for MockPointSource {

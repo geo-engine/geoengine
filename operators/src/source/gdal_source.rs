@@ -2,7 +2,7 @@ use crate::{
     engine::{
         InitializedOperator, InitializedOperatorB, InitializedOperatorImpl,
         InitializedRasterOperator, QueryProcessor, RasterOperator, RasterQueryProcessor,
-        RasterResultDescriptor, SourceOperatorImpl, TypedRasterQueryProcessor,
+        RasterResultDescriptor, SourceOperator, TypedRasterQueryProcessor,
     },
     util::Result,
 };
@@ -403,7 +403,7 @@ where
     }
 }
 
-pub type GdalSource = SourceOperatorImpl<GdalSourceParameters>;
+pub type GdalSource = SourceOperator<GdalSourceParameters>;
 
 #[typetag::serde]
 impl RasterOperator for GdalSource {

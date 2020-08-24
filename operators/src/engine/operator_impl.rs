@@ -1,25 +1,21 @@
 use super::{
     ExecutionContext, InitializedOperator, InitializedRasterOperator, InitializedVectorOperator,
-    Operator, RasterOperator, ResultDescriptor, VectorOperator,
+    RasterOperator, ResultDescriptor, VectorOperator,
 };
 use crate::util::Result;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct OperatorImpl<P> {
+pub struct Operator<P> {
     pub params: P,
     pub raster_sources: Vec<Box<dyn RasterOperator>>,
     pub vector_sources: Vec<Box<dyn VectorOperator>>,
 }
 
-impl<P> Operator for OperatorImpl<P> where P: std::fmt::Debug + Send + Sync + Clone + 'static {}
-
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
-pub struct SourceOperatorImpl<P> {
+pub struct SourceOperator<P> {
     pub params: P,
 }
-
-impl<P> Operator for SourceOperatorImpl<P> where P: std::fmt::Debug + Send + Sync + Clone + 'static {}
 
 pub struct InitializedOperatorImpl<P, R, S> {
     pub params: P,

@@ -1,18 +1,15 @@
 use super::{
     query_processor::{TypedRasterQueryProcessor, TypedVectorQueryProcessor},
-    CloneableOperator, CloneableRasterOperator, CloneableVectorOperator, RasterResultDescriptor,
-    ResultDescriptor, VectorResultDescriptor,
+    CloneableRasterOperator, CloneableVectorOperator, RasterResultDescriptor, ResultDescriptor,
+    VectorResultDescriptor,
 };
 use crate::util::Result;
 
 use serde::{Deserialize, Serialize};
 
-/// Common methods for `Operator`s
-pub trait Operator: std::fmt::Debug + Send + Sync + CloneableOperator {}
-
 /// Common methods for `RasterOperator`s
 #[typetag::serde(tag = "type")]
-pub trait RasterOperator: Operator + CloneableRasterOperator {
+pub trait RasterOperator: CloneableRasterOperator + Send + Sync + std::fmt::Debug {
     fn initialize(
         self: Box<Self>,
         context: ExecutionContext,
@@ -29,7 +26,7 @@ pub trait RasterOperator: Operator + CloneableRasterOperator {
 
 /// Common methods for `VectorOperator`s
 #[typetag::serde(tag = "type")]
-pub trait VectorOperator: Operator + CloneableVectorOperator {
+pub trait VectorOperator: CloneableVectorOperator + Send + Sync + std::fmt::Debug {
     fn initialize(
         self: Box<Self>,
         context: ExecutionContext,

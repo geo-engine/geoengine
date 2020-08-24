@@ -20,7 +20,7 @@ use geoengine_datatypes::{
 
 use crate::engine::{
     InitializedOperatorB, InitializedOperatorImpl, InitializedVectorOperator, QueryContext,
-    QueryProcessor, QueryRectangle, SourceOperatorImpl, TypedVectorQueryProcessor, VectorOperator,
+    QueryProcessor, QueryRectangle, SourceOperator, TypedVectorQueryProcessor, VectorOperator,
     VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::error;
@@ -140,7 +140,7 @@ pub struct CsvSourceStreamState {
     poll_result: Option<Option<Result<MultiPointCollection>>>,
 }
 
-pub type CsvSource = SourceOperatorImpl<CsvSourceParameters>;
+pub type CsvSource = SourceOperator<CsvSourceParameters>;
 
 #[typetag::serde]
 impl VectorOperator for CsvSource {

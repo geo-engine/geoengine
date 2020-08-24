@@ -1,7 +1,6 @@
 use crate::engine::{
-    InitializedOperatorB, InitializedOperatorImpl, OperatorImpl, QueryProcessor,
-    RasterQueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
-    VectorResultDescriptor,
+    InitializedOperatorB, InitializedOperatorImpl, Operator, QueryProcessor, RasterQueryProcessor,
+    TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::util::Result;
 use futures::StreamExt;
@@ -82,7 +81,7 @@ pub struct MockRasterPointJoinParams {
     pub feature_name: String,
 }
 
-pub type MockRasterPointJoinOperator = OperatorImpl<MockRasterPointJoinParams>;
+pub type MockRasterPointJoinOperator = Operator<MockRasterPointJoinParams>;
 
 #[typetag::serde]
 impl VectorOperator for MockRasterPointJoinOperator {
