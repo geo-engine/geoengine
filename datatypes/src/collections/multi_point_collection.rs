@@ -681,6 +681,7 @@ mod tests {
                 .column_range_filter(
                     "foo",
                     &[FeatureDataValue::Decimal(1)..=FeatureDataValue::Decimal(3)],
+                    false
                 )
                 .unwrap(),
             collection
@@ -693,6 +694,7 @@ mod tests {
                 .column_range_filter(
                     "foo",
                     &[FeatureDataValue::Decimal(1)..FeatureDataValue::Decimal(3)],
+                    false
                 )
                 .unwrap(),
             collection
@@ -708,6 +710,7 @@ mod tests {
                         (FeatureDataValue::Decimal(0)..=FeatureDataValue::Decimal(0)),
                         (FeatureDataValue::Decimal(4)..=FeatureDataValue::Decimal(4))
                     ],
+                    false
                 )
                 .unwrap(),
             collection
@@ -740,7 +743,7 @@ mod tests {
 
         assert_eq!(
             collection
-                .column_range_filter("foo", &[FeatureDataValue::Number(1.5)..],)
+                .column_range_filter("foo", &[FeatureDataValue::Number(1.5)..], false)
                 .unwrap(),
             collection
                 .filter(vec![false, false, true, true, true])
@@ -778,10 +781,59 @@ mod tests {
 
         assert_eq!(
             collection
-                .column_range_filter("foo", &[..FeatureDataValue::Text("c".into())],)
+                .column_range_filter("foo", &[..FeatureDataValue::Text("c".into())], false)
                 .unwrap(),
             collection
                 .filter(vec![true, true, false, false, false])
+                .unwrap()
+        );
+    }
+
+    #[test]
+    fn range_filter_null() {
+        let collection = MultiPointCollection::from_data(
+            MultiPoint::many(vec![
+                (0.0, 0.1),
+                (1.0, 1.1),
+                (2.0, 3.1),
+                (3.0, 3.1),
+                (4.0, 4.1),
+            ])
+            .unwrap(),
+            vec![TimeInterval::new_unchecked(0, 1); 5],
+            [(
+                "foo".to_string(),
+                FeatureData::NullableDecimal(vec![Some(0), None, Some(2), Some(3), Some(4)]),
+            )]
+            .iter()
+            .cloned()
+            .collect(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            collection
+                .column_range_filter(
+                    "foo",
+                    &[FeatureDataValue::Decimal(1)..=FeatureDataValue::Decimal(3)],
+                    false
+                )
+                .unwrap(),
+            collection
+                .filter(vec![false, false, true, true, false])
+                .unwrap()
+        );
+
+        assert_eq!(
+            collection
+                .column_range_filter(
+                    "foo",
+                    &[FeatureDataValue::Decimal(1)..=FeatureDataValue::Decimal(3)],
+                    true
+                )
+                .unwrap(),
+            collection
+                .filter(vec![false, true, true, true, false])
                 .unwrap()
         );
     }

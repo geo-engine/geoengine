@@ -5,10 +5,10 @@ use std::ops::{Bound, RangeBounds};
 use std::sync::Arc;
 
 use arrow::array::{
-    Array, ArrayData, ArrayRef, BooleanArray, Float64Array, Int64Array, ListArray, StringArray,
-    StructArray,
+    as_primitive_array, as_string_array, Array, ArrayData, ArrayRef, BooleanArray, Float64Array,
+    ListArray, StructArray,
 };
-use arrow::datatypes::{DataType, Field};
+use arrow::datatypes::{DataType, Field, Float64Type, Int64Type};
 use arrow::error::ArrowError;
 use snafu::ensure;
 
@@ -570,8 +570,14 @@ where
         ))
     }
 
-    /// Filter a column by one or more ranges
-    pub fn column_range_filter<R>(&self, column: &str, ranges: &[R]) -> Result<Self>
+    /// Filter a column by one or more ranges.
+    /// If `keep_nulls` is false, then all nulls will be discarded.
+    pub fn column_range_filter<R>(
+        &self,
+        column: &str,
+        ranges: &[R],
+        keep_nulls: bool,
+    ) -> Result<Self>
     where
         R: RangeBounds<FeatureDataValue>,
     {
@@ -594,7 +600,7 @@ where
         match column_type {
             FeatureDataType::Number | FeatureDataType::NullableNumber => {
                 apply_filters(
-                    downcast_array::<Float64Array>(column),
+                    as_primitive_array::<Float64Type>(column),
                     &mut filter_array,
                     ranges,
                     arrow::compute::gt_eq_scalar,
@@ -605,7 +611,7 @@ where
             }
             FeatureDataType::Decimal | FeatureDataType::NullableDecimal => {
                 apply_filters(
-                    downcast_array::<Int64Array>(column),
+                    as_primitive_array::<Int64Type>(column),
                     &mut filter_array,
                     ranges,
                     arrow::compute::gt_eq_scalar,
@@ -616,7 +622,7 @@ where
             }
             FeatureDataType::Text | FeatureDataType::NullableText => {
                 apply_filters(
-                    downcast_array::<StringArray>(column),
+                    as_string_array(column),
                     &mut filter_array,
                     ranges,
                     arrow::compute::gt_eq_utf8_scalar,
@@ -632,7 +638,24 @@ where
 
         ensure!(filter_array.is_some(), error::EmptyPredicate);
 
-        self.filter(filter_array.unwrap())
+        // update filter array with nulls from original array
+        if keep_nulls && column.null_count() > 0 {
+            let null_bitmap = column
+                .data_ref()
+                .null_bitmap()
+                .as_ref()
+                .expect("must exist if null_count > 0");
+
+            let mut null_array_builder = BooleanArray::builder(column.len());
+            for i in 0..column.len() {
+                null_array_builder.append_value(!null_bitmap.is_set(i))?;
+            }
+            let null_array = null_array_builder.finish();
+
+            update_filter_array(&mut filter_array, Some(null_array), None)?;
+        }
+
+        self.filter(filter_array.expect("checked by ensure"))
     }
 
     /// Appends a collection to another one
