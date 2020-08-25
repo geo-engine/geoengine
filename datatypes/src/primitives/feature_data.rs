@@ -3,6 +3,7 @@ use crate::primitives::PrimitivesError;
 use crate::util::Result;
 use arrow::bitmap::Bitmap;
 use snafu::ensure;
+use std::convert::TryFrom;
 use std::slice;
 use std::str;
 
@@ -690,5 +691,57 @@ impl<'f> From<&'f FeatureDataRef<'f>> for FeatureDataType {
             FeatureDataRef::Categorical(_) => Self::Categorical,
             FeatureDataRef::NullableCategorical(_) => Self::NullableCategorical,
         }
+    }
+}
+
+impl TryFrom<&FeatureDataValue> for f64 {
+    type Error = crate::collections::FeatureCollectionError;
+
+    fn try_from(value: &FeatureDataValue) -> Result<Self, Self::Error> {
+        Ok(match value {
+            FeatureDataValue::Number(v) => *v,
+            FeatureDataValue::NullableNumber(v) if v.is_some() => v.unwrap(),
+            _ => return Err(crate::collections::FeatureCollectionError::WrongDataType),
+        })
+    }
+}
+
+impl TryFrom<FeatureDataValue> for f64 {
+    type Error = crate::collections::FeatureCollectionError;
+
+    fn try_from(value: FeatureDataValue) -> Result<Self, Self::Error> {
+        f64::try_from(&value)
+    }
+}
+
+impl TryFrom<&FeatureDataValue> for i64 {
+    type Error = crate::collections::FeatureCollectionError;
+
+    fn try_from(value: &FeatureDataValue) -> Result<i64, Self::Error> {
+        Ok(match value {
+            FeatureDataValue::Decimal(v) => *v,
+            FeatureDataValue::NullableDecimal(v) if v.is_some() => v.unwrap(),
+            _ => return Err(crate::collections::FeatureCollectionError::WrongDataType),
+        })
+    }
+}
+
+impl TryFrom<FeatureDataValue> for i64 {
+    type Error = crate::collections::FeatureCollectionError;
+
+    fn try_from(value: FeatureDataValue) -> Result<i64, Self::Error> {
+        i64::try_from(&value)
+    }
+}
+
+impl<'s> TryFrom<&'s FeatureDataValue> for &'s str {
+    type Error = crate::collections::FeatureCollectionError;
+
+    fn try_from(value: &FeatureDataValue) -> Result<&str, Self::Error> {
+        Ok(match value {
+            FeatureDataValue::Text(v) => v.as_ref(),
+            FeatureDataValue::NullableText(v) if v.is_some() => v.as_ref().unwrap(),
+            _ => return Err(crate::collections::FeatureCollectionError::WrongDataType),
+        })
     }
 }

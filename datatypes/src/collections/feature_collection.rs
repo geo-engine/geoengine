@@ -1,25 +1,34 @@
+use std::collections::{HashMap, HashSet};
+use std::convert::{TryFrom, TryInto};
+use std::marker::PhantomData;
+use std::ops::{Bound, RangeBounds};
+use std::sync::Arc;
+
+use arrow::array::{
+    Array, ArrayData, ArrayRef, BooleanArray, Float64Array, Int64Array, ListArray, StringArray,
+    StructArray,
+};
+use arrow::datatypes::{DataType, Field};
+use arrow::error::ArrowError;
+use snafu::ensure;
+
 use crate::collections::{error, IntoGeometryIterator};
 use crate::collections::{FeatureCollectionError, IntoGeometryOptionsIterator};
 use crate::json_map;
 use crate::primitives::{
-    CategoricalDataRef, DecimalDataRef, FeatureData, FeatureDataRef, FeatureDataType, Geometry,
-    NullableCategoricalDataRef, NullableDecimalDataRef, NullableNumberDataRef, NullableTextDataRef,
-    NumberDataRef, TextDataRef, TimeInterval,
+    CategoricalDataRef, DecimalDataRef, FeatureData, FeatureDataRef, FeatureDataType,
+    FeatureDataValue, Geometry, NullableCategoricalDataRef, NullableDecimalDataRef,
+    NullableNumberDataRef, NullableTextDataRef, NumberDataRef, TextDataRef, TimeInterval,
 };
 use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::helpers::SomeIter;
 use crate::util::Result;
-use arrow::array::{Array, ArrayData, ArrayRef, Float64Array, ListArray, StructArray};
-use arrow::datatypes::{DataType, Field};
-use serde::export::PhantomData;
-use snafu::ensure;
-use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct FeatureCollection<CollectionType> {
     pub(super) table: StructArray,
-    pub(super) types: HashMap<String, FeatureDataType>, // TODO: make it a `CoW`?
+    pub(super) types: HashMap<String, FeatureDataType>,
+    // TODO: make it a `CoW`?
     collection_type: PhantomData<CollectionType>,
 }
 
@@ -513,7 +522,10 @@ where
     ///
     /// This method fails if the `mask`'s length does not equal the length of the feature collection
     ///
-    pub fn filter(&self, mask: Vec<bool>) -> Result<Self> {
+    pub fn filter<M>(&self, mask: M) -> Result<Self>
+    where
+        M: FilterArray,
+    {
         ensure!(
             mask.len() == self.table.len(),
             error::UnmatchedLength {
@@ -556,6 +568,71 @@ where
             filtered_data.into(),
             self.types.clone(),
         ))
+    }
+
+    /// Filter a column by one or more ranges
+    pub fn column_range_filter<R>(&self, column: &str, ranges: &[R]) -> Result<Self>
+    where
+        R: RangeBounds<FeatureDataValue>,
+    {
+        let column_type = self.types.get(column);
+        ensure!(
+            column_type.is_some(),
+            error::ColumnDoesNotExist {
+                name: column.to_string()
+            }
+        );
+
+        let column = self
+            .table
+            .column_by_name(column)
+            .expect("checked by ensure");
+        let column_type = column_type.expect("checked by ensure");
+
+        let mut filter_array = None;
+
+        match column_type {
+            FeatureDataType::Number | FeatureDataType::NullableNumber => {
+                apply_filters(
+                    downcast_array::<Float64Array>(column),
+                    &mut filter_array,
+                    ranges,
+                    arrow::compute::gt_eq_scalar,
+                    arrow::compute::gt_scalar,
+                    arrow::compute::lt_eq_scalar,
+                    arrow::compute::lt_scalar,
+                )?;
+            }
+            FeatureDataType::Decimal | FeatureDataType::NullableDecimal => {
+                apply_filters(
+                    downcast_array::<Int64Array>(column),
+                    &mut filter_array,
+                    ranges,
+                    arrow::compute::gt_eq_scalar,
+                    arrow::compute::gt_scalar,
+                    arrow::compute::lt_eq_scalar,
+                    arrow::compute::lt_scalar,
+                )?;
+            }
+            FeatureDataType::Text | FeatureDataType::NullableText => {
+                apply_filters(
+                    downcast_array::<StringArray>(column),
+                    &mut filter_array,
+                    ranges,
+                    arrow::compute::gt_eq_utf8_scalar,
+                    arrow::compute::gt_utf8_scalar,
+                    arrow::compute::lt_eq_utf8_scalar,
+                    arrow::compute::lt_utf8_scalar,
+                )?;
+            }
+            FeatureDataType::Categorical | FeatureDataType::NullableCategorical => {
+                return Err(error::FeatureCollectionError::WrongDataType.into());
+            }
+        }
+
+        ensure!(filter_array.is_some(), error::EmptyPredicate);
+
+        self.filter(filter_array.unwrap())
     }
 
     /// Appends a collection to another one
@@ -766,10 +843,100 @@ fn struct_array_from_data(
     )
 }
 
+/// Types that are suitable to act as filters
+pub trait FilterArray: Into<BooleanArray> {
+    fn len(&self) -> usize;
+}
+
+impl FilterArray for Vec<bool> {
+    fn len(&self) -> usize {
+        Vec::<_>::len(self)
+    }
+}
+
+impl FilterArray for BooleanArray {
+    fn len(&self) -> usize {
+        <Self as arrow::array::Array>::len(self)
+    }
+}
+
+fn update_filter_array(
+    filter_array: &mut Option<BooleanArray>,
+    partial_filter_a: Option<BooleanArray>,
+    partial_filter_b: Option<BooleanArray>,
+) -> Result<()> {
+    let partial_filter = match (partial_filter_a, partial_filter_b) {
+        (Some(f1), Some(f2)) => Some(arrow::compute::and(&f1, &f2)?),
+        (Some(f1), None) => Some(f1),
+        (None, Some(f2)) => Some(f2),
+        (None, None) => None,
+    };
+
+    *filter_array = match (filter_array.take(), partial_filter) {
+        (Some(f1), Some(f2)) => Some(arrow::compute::or(&f1, &f2)?),
+        (Some(f1), None) => Some(f1),
+        (None, Some(f2)) => Some(f2),
+        (None, None) => None,
+    };
+
+    Ok(())
+}
+
+fn apply_filter_on_bound<'b, T, A>(
+    bound: Bound<&'b FeatureDataValue>,
+    array: &'b A,
+    included_fn: fn(&'b A, T) -> Result<BooleanArray, ArrowError>,
+    excluded_fn: fn(&'b A, T) -> Result<BooleanArray, ArrowError>,
+) -> Result<Option<BooleanArray>>
+where
+    T: TryFrom<&'b FeatureDataValue, Error = error::FeatureCollectionError>,
+{
+    Ok(match bound {
+        Bound::Included(v) => Some(included_fn(array, v.try_into()?)?),
+        Bound::Excluded(v) => Some(excluded_fn(array, v.try_into()?)?),
+        Bound::Unbounded => None,
+    })
+}
+
+fn apply_filters<'b, T, A, R>(
+    column: &'b A,
+    filter_array: &mut Option<BooleanArray>,
+    ranges: &'b [R],
+    included_lower_fn: fn(&'b A, T) -> Result<BooleanArray, ArrowError>,
+    excluded_lower_fn: fn(&'b A, T) -> Result<BooleanArray, ArrowError>,
+    included_upper_fn: fn(&'b A, T) -> Result<BooleanArray, ArrowError>,
+    excluded_upper_fn: fn(&'b A, T) -> Result<BooleanArray, ArrowError>,
+) -> Result<()>
+where
+    T: TryFrom<&'b FeatureDataValue, Error = error::FeatureCollectionError>,
+    R: RangeBounds<FeatureDataValue>,
+{
+    for range in ranges {
+        update_filter_array(
+            filter_array,
+            apply_filter_on_bound(
+                range.start_bound(),
+                column,
+                included_lower_fn,
+                excluded_lower_fn,
+            )?,
+            apply_filter_on_bound(
+                range.end_bound(),
+                column,
+                included_upper_fn,
+                excluded_upper_fn,
+            )?,
+        )?;
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::primitives::{MultiPoint, NoGeometry};
+
+    use super::*;
 
     #[test]
     fn is_reserved_name() {

@@ -656,4 +656,133 @@ mod tests {
 
         assert_eq!(collection, collection);
     }
+
+    #[test]
+    fn range_filter_decimal() {
+        let collection = MultiPointCollection::from_data(
+            MultiPoint::many(vec![
+                (0.0, 0.1),
+                (1.0, 1.1),
+                (2.0, 3.1),
+                (3.0, 3.1),
+                (4.0, 4.1),
+            ])
+            .unwrap(),
+            vec![TimeInterval::new_unchecked(0, 1); 5],
+            [("foo".to_string(), FeatureData::Decimal(vec![0, 1, 2, 3, 4]))]
+                .iter()
+                .cloned()
+                .collect(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            collection
+                .column_range_filter(
+                    "foo",
+                    &[FeatureDataValue::Decimal(1)..=FeatureDataValue::Decimal(3)],
+                )
+                .unwrap(),
+            collection
+                .filter(vec![false, true, true, true, false])
+                .unwrap()
+        );
+
+        assert_eq!(
+            collection
+                .column_range_filter(
+                    "foo",
+                    &[FeatureDataValue::Decimal(1)..FeatureDataValue::Decimal(3)],
+                )
+                .unwrap(),
+            collection
+                .filter(vec![false, true, true, false, false])
+                .unwrap()
+        );
+
+        assert_eq!(
+            collection
+                .column_range_filter(
+                    "foo",
+                    &[
+                        (FeatureDataValue::Decimal(0)..=FeatureDataValue::Decimal(0)),
+                        (FeatureDataValue::Decimal(4)..=FeatureDataValue::Decimal(4))
+                    ],
+                )
+                .unwrap(),
+            collection
+                .filter(vec![true, false, false, false, true])
+                .unwrap()
+        );
+    }
+
+    #[test]
+    fn range_filter_float() {
+        let collection = MultiPointCollection::from_data(
+            MultiPoint::many(vec![
+                (0.0, 0.1),
+                (1.0, 1.1),
+                (2.0, 3.1),
+                (3.0, 3.1),
+                (4.0, 4.1),
+            ])
+            .unwrap(),
+            vec![TimeInterval::new_unchecked(0, 1); 5],
+            [(
+                "foo".to_string(),
+                FeatureData::Number(vec![0., 1., 2., 3., 4.]),
+            )]
+            .iter()
+            .cloned()
+            .collect(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            collection
+                .column_range_filter("foo", &[FeatureDataValue::Number(1.5)..],)
+                .unwrap(),
+            collection
+                .filter(vec![false, false, true, true, true])
+                .unwrap()
+        );
+    }
+
+    #[test]
+    fn range_filter_text() {
+        let collection = MultiPointCollection::from_data(
+            MultiPoint::many(vec![
+                (0.0, 0.1),
+                (1.0, 1.1),
+                (2.0, 3.1),
+                (3.0, 3.1),
+                (4.0, 4.1),
+            ])
+            .unwrap(),
+            vec![TimeInterval::new_unchecked(0, 1); 5],
+            [(
+                "foo".to_string(),
+                FeatureData::Text(vec![
+                    "aaa".to_string(),
+                    "bbb".to_string(),
+                    "ccc".to_string(),
+                    "ddd".to_string(),
+                    "eee".to_string(),
+                ]),
+            )]
+            .iter()
+            .cloned()
+            .collect(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            collection
+                .column_range_filter("foo", &[..FeatureDataValue::Text("c".into())],)
+                .unwrap(),
+            collection
+                .filter(vec![true, true, false, false, false])
+                .unwrap()
+        );
+    }
 }
