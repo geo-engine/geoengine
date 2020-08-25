@@ -53,7 +53,7 @@ pub enum Error {
         dimension_cap,
         data_cap
     ))]
-    DimnsionCapacityDoesNotMatchDataCapacity {
+    DimensionCapacityDoesNotMatchDataCapacity {
         dimension_cap: usize,
         data_cap: usize,
     },
