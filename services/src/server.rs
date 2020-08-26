@@ -61,6 +61,7 @@ pub async fn start_server(shutdown_rx: Option<Receiver<()>>) -> Result<()> {
         .or(handlers::wms::wms_handler(workflow_registry.clone()))
         .recover(handle_rejection);
 
+    #[allow(clippy::option_if_let_else)]
     let task = if let Some(receiver) = shutdown_rx {
         let (_, server) =
             warp::serve(handler).bind_with_graceful_shutdown(([127, 0, 0, 1], 3030), async {
