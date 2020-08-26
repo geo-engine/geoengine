@@ -97,7 +97,7 @@ where
         self.as_ref().execution_context()
     }
     fn result_descriptor(&self) -> Self::Descriptor {
-        todo!()
+        self.as_ref().result_descriptor()
     }
     fn raster_sources(&self) -> &[Box<InitializedRasterOperator>] {
         self.as_ref().raster_sources()
