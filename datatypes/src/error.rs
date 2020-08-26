@@ -5,6 +5,7 @@ use crate::{
     primitives::{Coordinate2D, PrimitivesError, TimeInterval},
     raster::RasterDataType,
 };
+use std::convert::Infallible;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility = "pub(crate)")]
@@ -52,7 +53,7 @@ pub enum Error {
         dimension_cap,
         data_cap
     ))]
-    DimnsionCapacityDoesNotMatchDataCapacity {
+    DimensionCapacityDoesNotMatchDataCapacity {
         dimension_cap: usize,
         data_cap: usize,
     },
@@ -128,5 +129,11 @@ pub enum Error {
 impl From<arrow::error::ArrowError> for Error {
     fn from(source: arrow::error::ArrowError) -> Self {
         Error::ArrowInternal { source }
+    }
+}
+
+impl From<Infallible> for Error {
+    fn from(_: Infallible) -> Self {
+        unreachable!("This function cannot be called on a non-failing type")
     }
 }
