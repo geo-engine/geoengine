@@ -8,10 +8,13 @@ use serde::{Deserialize, Serialize};
 pub trait ResultDescriptor: Copy {
     type DataType;
 
+    /// Return the type-specific result data type
     fn data_type(&self) -> Self::DataType;
 
+    /// Return the projection of the result
     fn projection(&self) -> ProjectionOption;
 
+    /// Map one descriptor to another one
     fn map<F>(self, f: F) -> Self
     where
         F: Fn(Self) -> Self,
@@ -19,15 +22,18 @@ pub trait ResultDescriptor: Copy {
         f(self)
     }
 
+    /// Map one descriptor to another one by modifying only the projection
     fn map_projection<F>(self, f: F) -> Self
     where
         F: Fn(Self::DataType) -> Self::DataType;
 
+    /// Map one descriptor to another one by modifying only the data type
     fn map_data_type<F>(self, f: F) -> Self
     where
         F: Fn(ProjectionOption) -> ProjectionOption;
 }
 
+/// A `ResultDescriptor` for raster queries
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Serialize, Deserialize)]
 pub struct RasterResultDescriptor {
     pub data_type: RasterDataType,
@@ -62,19 +68,11 @@ impl ResultDescriptor for RasterResultDescriptor {
     }
 }
 
+/// A `ResultDescriptor` for vector queries
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Serialize, Deserialize)]
 pub struct VectorResultDescriptor {
     pub data_type: VectorDataType,
     pub projection: ProjectionOption,
-}
-
-impl VectorResultDescriptor {
-    pub fn map<F>(self, f: F) -> Self
-    where
-        F: Fn(Self) -> Self,
-    {
-        f(self)
-    }
 }
 
 impl ResultDescriptor for VectorResultDescriptor {
