@@ -24,6 +24,8 @@ pub enum FeatureCollectionError {
         name: String,
     },
 
+    EmptyPredicate,
+
     Primitives {
         source: PrimitivesError,
     },

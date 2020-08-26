@@ -28,14 +28,15 @@ impl MultiPoint {
         Self { coordinates }
     }
 
-    pub fn many<M>(raw_multi_points: Vec<M>) -> Result<Vec<Self>>
+    pub fn many<M, E>(raw_multi_points: Vec<M>) -> Result<Vec<Self>>
     where
-        M: TryInto<MultiPoint, Error = crate::error::Error>,
+        M: TryInto<MultiPoint, Error = E>,
+        E: Into<crate::error::Error>,
     {
         let mut multi_points = Vec::with_capacity(raw_multi_points.len());
 
         for multi_point in raw_multi_points {
-            multi_points.push(multi_point.try_into()?);
+            multi_points.push(multi_point.try_into().map_err(Into::into)?);
         }
 
         Ok(multi_points)
@@ -56,9 +57,12 @@ impl AsRef<[Coordinate2D]> for MultiPoint {
     }
 }
 
-impl From<Coordinate2D> for MultiPoint {
-    fn from(point: Coordinate2D) -> Self {
-        Self::new_unchecked(vec![point])
+impl<C> From<C> for MultiPoint
+where
+    C: Into<Coordinate2D>,
+{
+    fn from(c: C) -> Self {
+        Self::new_unchecked(vec![c.into()])
     }
 }
 
