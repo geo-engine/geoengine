@@ -104,9 +104,9 @@ impl<P, R, S> InitializedOperatorImpl<P, R, S> {
 
 impl<P, R, S> InitializedOperatorBase for InitializedOperatorImpl<P, R, S>
 where
-    P: std::fmt::Debug + Clone + 'static,
-    R: std::fmt::Debug + Clone + 'static + ResultDescriptor,
-    S: std::clone::Clone + 'static,
+    P: Clone,
+    R: ResultDescriptor,
+    S: Clone,
 {
     type Descriptor = R;
 

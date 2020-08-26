@@ -3,6 +3,7 @@ use super::{
     CloneableRasterOperator, CloneableVectorOperator, RasterResultDescriptor, ResultDescriptor,
     VectorResultDescriptor,
 };
+use crate::engine::query_processor::QueryProcessor;
 use crate::util::Result;
 
 use serde::{Deserialize, Serialize};
@@ -72,7 +73,7 @@ pub type InitializedRasterOperator =
 
 pub trait InitializedOperator<R, Q>: InitializedOperatorBase<Descriptor = R> + Send + Sync
 where
-    R: ResultDescriptor + std::clone::Clone,
+    R: ResultDescriptor,
 {
     /// Instantiate a `TypedVectorQueryProcessor` from a `RasterOperator`
     fn query_processor(&self) -> Result<Q>;
@@ -114,8 +115,8 @@ where
 
 impl<R, Q> InitializedOperatorBase for Box<dyn InitializedOperator<R, Q>>
 where
-    R: Clone + 'static + ResultDescriptor,
-    Q: Clone + 'static,
+    R: ResultDescriptor,
+    Q: QueryProcessor,
 {
     type Descriptor = R;
     fn execution_context(&self) -> &ExecutionContext {
@@ -140,8 +141,8 @@ where
 
 impl<R, Q> InitializedOperator<R, Q> for Box<dyn InitializedOperator<R, Q>>
 where
-    R: Clone + 'static + ResultDescriptor,
-    Q: Clone + 'static,
+    R: ResultDescriptor,
+    Q: QueryProcessor,
 {
     fn query_processor(&self) -> Result<Q> {
         self.as_ref().query_processor()
