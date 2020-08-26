@@ -184,6 +184,49 @@ macro_rules! call_generic_raster2d {
     };
 }
 
+/// Calls a function on two `TypedRaster2D`s by calling it on all variant combinations.
+/// Call via `call_generic_raster2d!(input, raster => function)`.
+#[macro_export]
+macro_rules! call_bi_generic_raster2d {
+    (
+        $input_a:expr, $input_b:expr,
+        ( $raster_a:ident, $raster_b:ident ) => $function_call:expr
+    ) => {
+        // TODO: this should be automated, but it seems like this requires a procedural macro
+        call_bi_generic_raster2d!(
+            @variants
+            $input_a, $input_b,
+            ( $raster_a, $raster_b ) => $function_call,
+            (U8, U8), (U8, U16), (U8, U32), (U8, U64), (U8, I8), (U8, I16), (U8, I32), (U8, I64), (U8, F32), (U8, F64),
+            (U16, U8), (U16, U16), (U16, U32), (U16, U64), (U16, I8), (U16, I16), (U16, I32), (U16, I64), (U16, F32), (U16, F64),
+            (U32, U8), (U32, U16), (U32, U32), (U32, U64), (U32, I8), (U32, I16), (U32, I32), (U32, I64), (U32, F32), (U32, F64),
+            (U64, U8), (U64, U16), (U64, U32), (U64, U64), (U64, I8), (U64, I16), (U64, I32), (U64, I64), (U64, F32), (U64, F64),
+            (I8, U8), (I8, U16), (I8, U32), (I8, U64), (I8, I8), (I8, I16), (I8, I32), (I8, I64), (I8, F32), (I8, F64),
+            (I16, U8), (I16, U16), (I16, U32), (I16, U64), (I16, I8), (I16, I16), (I16, I32), (I16, I64), (I16, F32), (I16, F64),
+            (I32, U8), (I32, U16), (I32, U32), (I32, U64), (I32, I8), (I32, I16), (I32, I32), (I32, I64), (I32, F32), (I32, F64),
+            (I64, U8), (I64, U16), (I64, U32), (I64, U64), (I64, I8), (I64, I16), (I64, I32), (I64, I64), (I64, F32), (I64, F64),
+            (F32, U8), (F32, U16), (F32, U32), (F32, U64), (F32, I8), (F32, I16), (F32, I32), (F32, I64), (F32, F32), (F32, F64),
+            (F64, U8), (F64, U16), (F64, U32), (F64, U64), (F64, I8), (F64, I16), (F64, I32), (F64, I64), (F64, F32), (F64, F64)
+        )
+    };
+
+    (@variants
+        $input_a:expr, $input_b:expr,
+        ( $raster_a:ident, $raster_b:ident ) => $function_call:expr,
+        $(($variant_a:tt,$variant_b:tt)),+
+    ) => {
+        match ($input_a, $input_b) {
+            $(
+                (
+                    $crate::raster::TypedRaster2D::$variant_a($raster_a),
+                    $crate::raster::TypedRaster2D::$variant_b($raster_b),
+                ) => $function_call,
+            )+
+        }
+    };
+
+}
+
 /// Generates a a `TypedRaster2D` by calling a function for all variants.
 /// Call via `generate_generic_raster2d!(type, function)`.
 #[macro_export]
@@ -295,6 +338,44 @@ mod tests {
                 )
                 .unwrap(),
             )
+        );
+    }
+
+    #[test]
+    fn call_bi_generic_raster2d() {
+        fn first_pixel_add<T: Pixel, U: Pixel>(a: &Raster2D<T>, b: &Raster2D<U>) -> i64 {
+            let pixel_a: i64 = a.pixel_value_at_grid_index(&(0, 0)).unwrap().as_();
+            let pixel_b: i64 = b.pixel_value_at_grid_index(&(0, 0)).unwrap().as_();
+            pixel_a + pixel_b
+        }
+
+        let typed_raster_a = TypedRaster2D::U32(
+            Raster2D::new(
+                [3, 2].into(),
+                vec![1, 2, 3, 4, 5, 6],
+                None,
+                Default::default(),
+                [1.0, 1.0, 0.0, 1.0, 0.0, 1.0].into(),
+            )
+            .unwrap(),
+        );
+        let typed_raster_b = TypedRaster2D::U16(
+            Raster2D::new(
+                [3, 2].into(),
+                vec![1, 2, 3, 4, 5, 6],
+                None,
+                Default::default(),
+                [1.0, 1.0, 0.0, 1.0, 0.0, 1.0].into(),
+            )
+            .unwrap(),
+        );
+
+        assert_eq!(
+            call_bi_generic_raster2d!(
+                typed_raster_a, typed_raster_b,
+                (a, b) => first_pixel_add(&a, &b)
+            ),
+            2
         );
     }
 }
