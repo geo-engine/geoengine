@@ -44,8 +44,8 @@ where
     /// # Examples
     ///
     /// ```
-    /// use crate::raster::{Raster, Dim, Raster2D, GridPixelAccess};
-    /// use crate::primitives::TimeInterval;
+    /// use geoengine_datatypes::raster::{Raster, Dim, Raster2D, GridPixelAccess};
+    /// use geoengine_datatypes::primitives::TimeInterval;
     ///
     /// let mut raster2d = Raster2D::new(
     ///    [3, 2].into(),
@@ -74,8 +74,8 @@ where
     /// # Examples
     ///
     /// ```
-    /// use crate::raster::{Raster, Dim, Raster2D, GridPixelAccessMut};
-    /// use crate::primitives::TimeInterval;
+    /// use geoengine_datatypes::raster::{Raster, Dim, Raster2D, GridPixelAccessMut};
+    /// use geoengine_datatypes::primitives::TimeInterval;
     ///
     /// let mut raster2d = Raster2D::new(
     ///    [3, 2].into(),
