@@ -221,11 +221,36 @@ where
         name == Self::GEOMETRY_COLUMN_NAME || name == Self::TIME_COLUMN_NAME
     }
 
+    /// Retrieves the column's `FeatureDataType`
+    ///
+    /// # Errors
+    ///
+    /// This method fails if there is no `column_name` with that name
+    ///
+    #[allow(clippy::option_if_let_else)]
+    pub fn column_type(&self, column_name: &str) -> Result<FeatureDataType> {
+        ensure!(
+            !Self::is_reserved_name(column_name),
+            error::CannotAccessReservedColumn {
+                name: column_name.to_string(),
+            }
+        );
+
+        if let Some(feature_data_type) = self.types.get(column_name) {
+            Ok(*feature_data_type)
+        } else {
+            Err(error::FeatureCollectionError::ColumnDoesNotExist {
+                name: column_name.to_string(),
+            }
+            .into())
+        }
+    }
+
     /// Retrieve column data
     ///
     /// # Errors
     ///
-    /// This method fails if there is no `column` with that name
+    /// This method fails if there is no `column_name` with that name
     ///
     pub fn data(&self, column_name: &str) -> Result<FeatureDataRef> {
         ensure!(

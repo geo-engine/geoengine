@@ -1,16 +1,21 @@
 use crate::engine::{
     ExecutionContext, InitializedOperator, InitializedOperatorImpl, InitializedVectorOperator,
-    Operator, QueryContext, QueryRectangle, TypedVectorQueryProcessor, VectorOperator,
-    VectorQueryProcessor, VectorResultDescriptor,
+    Operator, QueryContext, QueryProcessor, QueryRectangle, TypedVectorQueryProcessor,
+    VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::error;
 use crate::util::input::StringOrNumber;
 use crate::util::Result;
 use failure::_core::marker::PhantomData;
+use failure::_core::ops::RangeInclusive;
 use futures::stream::BoxStream;
-use geoengine_datatypes::collections::VectorDataType;
+use futures::StreamExt;
+use geoengine_datatypes::collections::FeatureCollection;
+use geoengine_datatypes::primitives::{FeatureDataType, FeatureDataValue, Geometry};
+use geoengine_datatypes::util::arrow::ArrowTyped;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
+use std::convert::TryInto;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ColumnRangeFilterParams {
@@ -62,50 +67,109 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
     for InitializedColumnRangeFilter
 {
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
-        match self.result_descriptor.data_type {
+        match self.vector_sources[0].query_processor()? {
             // TODO: use macro for that
-            VectorDataType::Data => Ok(TypedVectorQueryProcessor::Data(
-                ColumnRangeFilterProcessor::new().boxed(),
+            TypedVectorQueryProcessor::Data(source) => Ok(TypedVectorQueryProcessor::Data(
+                ColumnRangeFilterProcessor::new(source, self.params.clone()).boxed(),
             )),
-            VectorDataType::MultiPoint => Ok(TypedVectorQueryProcessor::MultiPoint(
-                ColumnRangeFilterProcessor::new().boxed(),
-            )),
-            VectorDataType::MultiLineString => Ok(TypedVectorQueryProcessor::MultiLineString(
-                ColumnRangeFilterProcessor::new().boxed(),
-            )),
-            VectorDataType::MultiPolygon => Ok(TypedVectorQueryProcessor::MultiPolygon(
-                ColumnRangeFilterProcessor::new().boxed(),
-            )),
+            TypedVectorQueryProcessor::MultiPoint(source) => {
+                Ok(TypedVectorQueryProcessor::MultiPoint(
+                    ColumnRangeFilterProcessor::new(source, self.params.clone()).boxed(),
+                ))
+            }
+            TypedVectorQueryProcessor::MultiLineString(source) => {
+                Ok(TypedVectorQueryProcessor::MultiLineString(
+                    ColumnRangeFilterProcessor::new(source, self.params.clone()).boxed(),
+                ))
+            }
+            TypedVectorQueryProcessor::MultiPolygon(source) => {
+                Ok(TypedVectorQueryProcessor::MultiPolygon(
+                    ColumnRangeFilterProcessor::new(source, self.params.clone()).boxed(),
+                ))
+            }
         }
     }
 }
 
-pub struct ColumnRangeFilterProcessor<V> {
-    vector_type: PhantomData<V>,
+pub struct ColumnRangeFilterProcessor<G> {
+    vector_type: PhantomData<FeatureCollection<G>>,
+    source: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
+    params: ColumnRangeFilterParams,
 }
 
-impl<V> ColumnRangeFilterProcessor<V>
+impl<G> ColumnRangeFilterProcessor<G>
 where
-    V: Sync + Send,
+    G: Geometry + ArrowTyped + Sync + Send,
 {
-    pub fn new() -> Self {
+    pub fn new(
+        source: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
+        params: ColumnRangeFilterParams,
+    ) -> Self {
         Self {
             vector_type: Default::default(),
+            source,
+            params,
         }
     }
 }
 
-impl<V> VectorQueryProcessor for ColumnRangeFilterProcessor<V>
+impl<G> VectorQueryProcessor for ColumnRangeFilterProcessor<G>
 where
-    V: Sync + Send,
+    G: Geometry + ArrowTyped + Sync + Send + 'static,
 {
-    type VectorType = V;
+    type VectorType = FeatureCollection<G>;
 
     fn vector_query(
         &self,
-        _query: QueryRectangle,
-        _ctx: QueryContext,
+        query: QueryRectangle,
+        ctx: QueryContext,
     ) -> BoxStream<Result<Self::VectorType>> {
-        unimplemented!()
+        let column_name = self.params.column.clone();
+        let ranges = self.params.ranges.clone();
+        let keep_nulls = self.params.keep_nulls;
+
+        // TODO: create stream adapter that munches collections together to adhere to chunk size
+        self.source
+            .query(query, ctx)
+            .map(move |collection| {
+                let collection = collection?;
+
+                let filter_ranges: Result<Vec<RangeInclusive<FeatureDataValue>>> =
+                    // TODO: do transformation work only once
+                    match collection.column_type(&column_name)? {
+                        FeatureDataType::Text | FeatureDataType::NullableText => ranges
+                            .iter()
+                            .map(|(range_start, range_end)| {
+                                Ok(FeatureDataValue::Text(range_start.try_into()?)
+                                    ..=FeatureDataValue::Text(range_end.try_into()?))
+                            })
+                            .collect(),
+                        FeatureDataType::Number | FeatureDataType::NullableNumber => ranges
+                            .iter()
+                            .map(|(range_start, range_end)| {
+                                Ok(FeatureDataValue::Number(range_start.try_into()?)
+                                    ..=FeatureDataValue::Number(range_end.try_into()?))
+                            })
+                            .collect(),
+                        FeatureDataType::Decimal | FeatureDataType::NullableDecimal => ranges
+                            .iter()
+                            .map(|(range_start, range_end)| {
+                                Ok(FeatureDataValue::Decimal(range_start.try_into()?)
+                                    ..=FeatureDataValue::Decimal(range_end.try_into()?))
+                            })
+                            .collect(),
+                        FeatureDataType::Categorical | FeatureDataType::NullableCategorical => {
+                            Err(error::Error::InvalidType {
+                                expected: "text, number, or decimal".to_string(),
+                                found: "categorical".to_string(),
+                            })
+                        }
+                    };
+
+                collection
+                    .column_range_filter(&column_name, &filter_ranges?, keep_nulls)
+                    .map_err(Into::into)
+            })
+            .boxed()
     }
 }

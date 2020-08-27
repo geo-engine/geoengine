@@ -80,14 +80,22 @@ impl<'de> Visitor<'de> for StringOrNumberDeserializer {
 impl TryFrom<StringOrNumber> for f64 {
     type Error = error::Error;
 
-    fn try_from(value: StringOrNumber) -> Result<f64, Self::Error> {
+    fn try_from(value: StringOrNumber) -> Result<Self, Self::Error> {
+        Self::try_from(&value)
+    }
+}
+
+impl TryFrom<&StringOrNumber> for f64 {
+    type Error = error::Error;
+
+    fn try_from(value: &StringOrNumber) -> Result<Self, Self::Error> {
         match value {
             StringOrNumber::String(_) => Err(error::Error::InvalidType {
                 expected: "number".to_string(),
                 found: "string".to_string(),
             }),
-            StringOrNumber::Number(v) => Ok(v),
-            StringOrNumber::Decimal(v) => Ok(v as f64),
+            StringOrNumber::Number(v) => Ok(*v),
+            StringOrNumber::Decimal(v) => Ok(*v as f64),
         }
     }
 }
@@ -95,14 +103,22 @@ impl TryFrom<StringOrNumber> for f64 {
 impl TryFrom<StringOrNumber> for i64 {
     type Error = error::Error;
 
-    fn try_from(value: StringOrNumber) -> Result<i64, Self::Error> {
+    fn try_from(value: StringOrNumber) -> Result<Self, Self::Error> {
+        Self::try_from(&value)
+    }
+}
+
+impl TryFrom<&StringOrNumber> for i64 {
+    type Error = error::Error;
+
+    fn try_from(value: &StringOrNumber) -> Result<Self, Self::Error> {
         match value {
             StringOrNumber::String(_) => Err(error::Error::InvalidType {
                 expected: "number".to_string(),
                 found: "string".to_string(),
             }),
-            StringOrNumber::Number(v) => Ok(v as i64),
-            StringOrNumber::Decimal(v) => Ok(v),
+            StringOrNumber::Number(v) => Ok(*v as i64),
+            StringOrNumber::Decimal(v) => Ok(*v),
         }
     }
 }
@@ -110,7 +126,31 @@ impl TryFrom<StringOrNumber> for i64 {
 impl TryFrom<StringOrNumber> for String {
     type Error = error::Error;
 
-    fn try_from(value: StringOrNumber) -> Result<String, Self::Error> {
+    fn try_from(value: StringOrNumber) -> Result<Self, Self::Error> {
+        match value {
+            StringOrNumber::String(v) => Ok(v),
+            StringOrNumber::Number(_) | StringOrNumber::Decimal(_) => {
+                Err(error::Error::InvalidType {
+                    expected: "string".to_string(),
+                    found: "number".to_string(),
+                })
+            }
+        }
+    }
+}
+
+impl TryFrom<&StringOrNumber> for String {
+    type Error = error::Error;
+
+    fn try_from(value: &StringOrNumber) -> Result<Self, Self::Error> {
+        Self::try_from(value.clone())
+    }
+}
+
+impl<'v> TryFrom<&'v StringOrNumber> for &'v str {
+    type Error = error::Error;
+
+    fn try_from(value: &'v StringOrNumber) -> Result<Self, Self::Error> {
         match value {
             StringOrNumber::String(v) => Ok(v),
             StringOrNumber::Number(_) | StringOrNumber::Decimal(_) => {
@@ -171,10 +211,19 @@ mod tests {
             String::try_from(StringOrNumber::String("foobar".to_string())).unwrap(),
             "foobar".to_string()
         );
+        assert_eq!(
+            String::try_from(&StringOrNumber::String("foobar".to_string())).unwrap(),
+            "foobar"
+        );
 
         assert_eq!(f64::try_from(StringOrNumber::Number(1337.)).unwrap(), 1337.);
+        assert_eq!(
+            f64::try_from(&StringOrNumber::Number(1337.)).unwrap(),
+            1337.
+        );
 
         assert_eq!(i64::try_from(StringOrNumber::Number(1337.)).unwrap(), 1337);
+        assert_eq!(i64::try_from(&StringOrNumber::Number(1337.)).unwrap(), 1337);
 
         assert_eq!(i64::try_from(StringOrNumber::Decimal(42)).unwrap(), 42);
 
