@@ -1,8 +1,8 @@
 use crate::{
     engine::{
-        InitializedOperatorImpl, InitializedRasterOperator, QueryProcessor, RasterOperator,
-        RasterQueryProcessor, RasterResultDescriptor, SourceOperatorImpl,
-        TypedRasterQueryProcessor,
+        InitializedOperator, InitializedOperatorBase, InitializedOperatorImpl,
+        InitializedRasterOperator, QueryProcessor, RasterOperator, RasterQueryProcessor,
+        RasterResultDescriptor, SourceOperator, TypedRasterQueryProcessor,
     },
     util::Result,
 };
@@ -403,14 +403,14 @@ where
     }
 }
 
-pub type GdalSource = SourceOperatorImpl<GdalSourceParameters>;
+pub type GdalSource = SourceOperator<GdalSourceParameters>;
 
 #[typetag::serde]
 impl RasterOperator for GdalSource {
-    fn initialized_operator(
+    fn initialize(
         self: Box<Self>,
         context: crate::engine::ExecutionContext,
-    ) -> Result<Box<dyn InitializedRasterOperator>> {
+    ) -> Result<Box<InitializedRasterOperator>> {
         InitializedOperatorImpl::create(
             self.params.clone(),
             context,
@@ -428,14 +428,14 @@ impl RasterOperator for GdalSource {
     }
 }
 
-impl InitializedRasterOperator
+impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
     for InitializedOperatorImpl<
         GdalSourceParameters,
         RasterResultDescriptor,
         JsonDatasetInformationProvider,
     >
 {
-    fn raster_processor(&self) -> Result<TypedRasterQueryProcessor> {
+    fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         Ok(match self.result_descriptor().data_type {
             RasterDataType::U8 => TypedRasterQueryProcessor::U8(
                 GdalSourceProcessor::from_params_with_provider(
@@ -490,9 +490,6 @@ impl InitializedRasterOperator
                 .boxed(),
             ),
         })
-    }
-    fn result_descriptor(&self) -> RasterResultDescriptor {
-        self.result_descriptor
     }
 }
 

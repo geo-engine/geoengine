@@ -1,6 +1,7 @@
 use crate::engine::{
-    InitializedOperatorImpl, InitializedRasterOperator, QueryProcessor, RasterOperator,
-    RasterQueryProcessor, RasterResultDescriptor, SourceOperatorImpl, TypedRasterQueryProcessor,
+    InitializedOperator, InitializedOperatorBase, InitializedOperatorImpl,
+    InitializedRasterOperator, QueryProcessor, RasterOperator, RasterQueryProcessor,
+    RasterResultDescriptor, SourceOperator, TypedRasterQueryProcessor,
 };
 use crate::util::Result;
 use futures::{stream, stream::StreamExt};
@@ -45,14 +46,14 @@ pub struct MockRasterSourceParams {
     pub result_descriptor: RasterResultDescriptor,
 }
 
-pub type MockRasterSource = SourceOperatorImpl<MockRasterSourceParams>;
+pub type MockRasterSource = SourceOperator<MockRasterSourceParams>;
 
 #[typetag::serde]
 impl RasterOperator for MockRasterSource {
-    fn initialized_operator(
+    fn initialize(
         self: Box<Self>,
         context: crate::engine::ExecutionContext,
-    ) -> Result<Box<dyn InitializedRasterOperator>> {
+    ) -> Result<Box<InitializedRasterOperator>> {
         InitializedOperatorImpl::create(
             self.params,
             context,
@@ -65,10 +66,10 @@ impl RasterOperator for MockRasterSource {
     }
 }
 
-impl InitializedRasterOperator
+impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
     for InitializedOperatorImpl<MockRasterSourceParams, RasterResultDescriptor, ()>
 {
-    fn raster_processor(&self) -> Result<TypedRasterQueryProcessor> {
+    fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         fn converted<From, To>(
             raster_tiles: &[RasterTile2D<From>],
         ) -> Box<dyn RasterQueryProcessor<RasterType = To>>
@@ -116,9 +117,6 @@ impl InitializedRasterOperator
                 crate::engine::TypedRasterQueryProcessor::F64(converted(&self.params.data))
             }
         })
-    }
-    fn result_descriptor(&self) -> RasterResultDescriptor {
-        self.result_descriptor
     }
 }
 
@@ -231,11 +229,9 @@ mod tests {
 
         let execution_context = ExecutionContext;
 
-        let initialized = deserialized
-            .initialized_operator(execution_context)
-            .unwrap();
+        let initialized = deserialized.initialize(execution_context).unwrap();
 
-        match initialized.raster_processor().unwrap() {
+        match initialized.query_processor().unwrap() {
             crate::engine::TypedRasterQueryProcessor::U8(..) => {}
             _ => panic!("wrong raster type"),
         }

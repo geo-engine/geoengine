@@ -19,8 +19,8 @@ use geoengine_datatypes::{
 };
 
 use crate::engine::{
-    InitializedOperatorImpl, InitializedVectorOperator, QueryContext, QueryProcessor,
-    QueryRectangle, SourceOperatorImpl, TypedVectorQueryProcessor, VectorOperator,
+    InitializedOperator, InitializedOperatorImpl, InitializedVectorOperator, QueryContext,
+    QueryProcessor, QueryRectangle, SourceOperator, TypedVectorQueryProcessor, VectorOperator,
     VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::error;
@@ -140,22 +140,22 @@ pub struct CsvSourceStreamState {
     poll_result: Option<Option<Result<MultiPointCollection>>>,
 }
 
-pub type CsvSource = SourceOperatorImpl<CsvSourceParameters>;
+pub type CsvSource = SourceOperator<CsvSourceParameters>;
 
 #[typetag::serde]
 impl VectorOperator for CsvSource {
-    fn into_initialized_operator(
+    fn initialize(
         self: Box<Self>,
         context: crate::engine::ExecutionContext,
-    ) -> Result<Box<dyn InitializedVectorOperator>> {
+    ) -> Result<Box<InitializedVectorOperator>> {
         InitializedOperatorImpl::create(
             self.params,
             context,
             |_, _, _, _| Ok(()),
             |_, _, _, _, _| {
                 Ok(VectorResultDescriptor {
-                    data_type: VectorDataType::MultiPoint,
-                    projection: Projection::wgs84().into(),
+                    data_type: VectorDataType::MultiPoint, // TODO: get as user input
+                    projection: Projection::wgs84().into(), // TODO: get as user input
                 })
             },
             vec![],
@@ -165,14 +165,10 @@ impl VectorOperator for CsvSource {
     }
 }
 
-impl InitializedVectorOperator
+impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
     for InitializedOperatorImpl<CsvSourceParameters, VectorResultDescriptor, ()>
 {
-    fn result_descriptor(&self) -> VectorResultDescriptor {
-        self.result_descriptor
-    }
-
-    fn vector_processor(&self) -> Result<crate::engine::TypedVectorQueryProcessor> {
+    fn query_processor(&self) -> Result<crate::engine::TypedVectorQueryProcessor> {
         Ok(TypedVectorQueryProcessor::MultiPoint(
             CsvSourceProcessor {
                 params: self.params.clone(),
