@@ -2,7 +2,7 @@ use geoengine_services::server;
 use tokio::sync::oneshot;
 use tokio::sync::oneshot::Sender;
 
-// Example of a client communicating with the geo engine
+/// Example of a client communicating with the geo engine
 #[tokio::main]
 async fn main() {
     // TODO: use special config for port etc. for starting the server and connecting to it
