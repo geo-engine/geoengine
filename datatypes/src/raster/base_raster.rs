@@ -61,7 +61,7 @@ where
     ) -> Result<Self> {
         ensure!(
             grid_dimension.capacity() == data_container.capacity(),
-            error::DimnsionCapacityDoesNotMatchDataCapacity {
+            error::DimensionCapacityDoesNotMatchDataCapacity {
                 dimension_cap: grid_dimension.capacity(),
                 data_cap: data_container.capacity()
             }

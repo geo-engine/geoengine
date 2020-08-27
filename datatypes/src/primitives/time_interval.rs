@@ -1,7 +1,9 @@
 use crate::error;
 use crate::primitives::TimeInstance;
-use crate::util::arrow::ArrowTyped;
+use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::Result;
+use arrow::array::{Array, BooleanArray};
+use arrow::error::ArrowError;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::cmp::Ordering;
@@ -332,6 +334,74 @@ impl ArrowTyped for TimeInterval {
 
     fn arrow_builder(capacity: usize) -> Self::ArrowBuilder {
         arrow::array::FixedSizeListBuilder::new(arrow::array::Date64Builder::new(2 * capacity), 2)
+    }
+
+    fn concat(a: &Self::ArrowArray, b: &Self::ArrowArray) -> Result<Self::ArrowArray, ArrowError> {
+        let new_length = a.len() + b.len();
+        let mut new_time_intervals = TimeInterval::arrow_builder(new_length);
+
+        {
+            use arrow::array::Date64Array;
+
+            let int_builder = new_time_intervals.values();
+
+            let ints_a_ref = a.values();
+            let ints_b_ref = b.values();
+
+            let ints_a: &Date64Array = downcast_array(&ints_a_ref);
+            let ints_b: &Date64Array = downcast_array(&ints_b_ref);
+
+            int_builder.append_slice(ints_a.value_slice(0, ints_a.len()))?;
+            int_builder.append_slice(ints_b.value_slice(0, ints_b.len()))?;
+        }
+
+        for _ in 0..new_length {
+            new_time_intervals.append(true)?;
+        }
+
+        Ok(new_time_intervals.finish())
+    }
+
+    fn filter(
+        time_intervals: &Self::ArrowArray,
+        filter_array: &BooleanArray,
+    ) -> Result<Self::ArrowArray, ArrowError> {
+        use arrow::array::Date64Array;
+
+        let mut new_time_intervals = Self::arrow_builder(0);
+
+        for feature_index in 0..time_intervals.len() {
+            if !filter_array.value(feature_index) {
+                continue;
+            }
+
+            let old_timestamps_ref = time_intervals.value(feature_index);
+            let old_timestamps: &Date64Array = downcast_array(&old_timestamps_ref);
+
+            let date_builder = new_time_intervals.values();
+            date_builder.append_slice(old_timestamps.value_slice(0, 2))?;
+
+            new_time_intervals.append(true)?;
+        }
+
+        Ok(new_time_intervals.finish())
+    }
+
+    fn from_vec(time_intervals: Vec<Self>) -> Result<Self::ArrowArray, ArrowError>
+    where
+        Self: Sized,
+    {
+        // TODO: build faster(?) without builder
+
+        let mut builder = Self::arrow_builder(time_intervals.len());
+        for time_interval in time_intervals {
+            let date_builder = builder.values();
+            date_builder.append_value(time_interval.start().into())?;
+            date_builder.append_value(time_interval.end().into())?;
+            builder.append(true)?;
+        }
+
+        Ok(builder.finish())
     }
 }
 

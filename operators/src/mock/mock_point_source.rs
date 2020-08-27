@@ -1,8 +1,9 @@
 use crate::engine::{QueryContext, QueryProcessor, QueryRectangle};
 use crate::{
     engine::{
-        ExecutionContext, InitializedOperatorImpl, InitializedVectorOperator, SourceOperatorImpl,
-        TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+        ExecutionContext, InitializedOperator, InitializedOperatorImpl, InitializedVectorOperator,
+        SourceOperator, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
+        VectorResultDescriptor,
     },
     util::Result,
 };
@@ -30,7 +31,7 @@ impl QueryProcessor for MockPointSourceProcessor {
         let chunk_size = ctx.chunk_byte_size / std::mem::size_of::<Coordinate2D>();
         stream::iter(self.points.chunks(chunk_size).map(|chunk| {
             Ok(MultiPointCollection::from_data(
-                chunk.iter().map(|x| vec![*x]).collect(),
+                chunk.iter().map(Into::into).collect(),
                 vec![TimeInterval::default(); chunk.len()],
                 HashMap::new(),
             )?)
@@ -44,14 +45,14 @@ pub struct MockPointSourceParams {
     pub points: Vec<Coordinate2D>,
 }
 
-pub type MockPointSource = SourceOperatorImpl<MockPointSourceParams>;
+pub type MockPointSource = SourceOperator<MockPointSourceParams>;
 
 #[typetag::serde]
 impl VectorOperator for MockPointSource {
-    fn into_initialized_operator(
+    fn initialize(
         self: Box<Self>,
         context: ExecutionContext,
-    ) -> Result<Box<dyn InitializedVectorOperator>> {
+    ) -> Result<Box<InitializedVectorOperator>> {
         InitializedOperatorImpl::create(
             self.params,
             context,
@@ -69,14 +70,10 @@ impl VectorOperator for MockPointSource {
     }
 }
 
-impl InitializedVectorOperator
+impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
     for InitializedOperatorImpl<MockPointSourceParams, VectorResultDescriptor, ()>
 {
-    fn result_descriptor(&self) -> VectorResultDescriptor {
-        self.result_descriptor
-    }
-
-    fn vector_processor(&self) -> Result<TypedVectorQueryProcessor> {
+    fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
         Ok(TypedVectorQueryProcessor::MultiPoint(
             MockPointSourceProcessor {
                 points: self.params.points.clone(),
@@ -90,7 +87,7 @@ impl InitializedVectorOperator
 mod tests {
     use super::*;
     use futures::executor::block_on_stream;
-    use geoengine_datatypes::{collections::FeatureCollection, primitives::BoundingBox2D};
+    use geoengine_datatypes::primitives::BoundingBox2D;
 
     #[test]
     fn serde() {
@@ -116,9 +113,9 @@ mod tests {
             params: MockPointSourceParams { points },
         }
         .boxed();
-        let initialized = mps.into_initialized_operator(execution_context).unwrap();
+        let initialized = mps.initialize(execution_context).unwrap();
 
-        let typed_processor = initialized.vector_processor();
+        let typed_processor = initialized.query_processor();
         let point_processor = match typed_processor {
             Ok(TypedVectorQueryProcessor::MultiPoint(processor)) => processor,
             _ => panic!(),

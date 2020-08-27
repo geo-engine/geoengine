@@ -29,4 +29,12 @@ pub use time_instance::TimeInstance;
 pub use time_interval::TimeInterval;
 
 /// Marker trait for geometry types
-pub trait Geometry {}
+// TODO: rename to CollectionType oder something?…
+pub trait Geometry {
+    // TODO: introduce once generic associated types are possible due to lifetime introduction for ref type
+    // type REF: GeometryRef;
+
+    const IS_GEOMETRY: bool = true;
+}
+
+pub trait GeometryRef: Into<geojson::Geometry> {}

@@ -1,7 +1,9 @@
-use crate::primitives::error;
+use crate::primitives::{error, GeometryRef};
 use crate::primitives::{Coordinate2D, Geometry};
-use crate::util::arrow::ArrowTyped;
+use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::Result;
+use arrow::array::BooleanArray;
+use arrow::error::ArrowError;
 use snafu::ensure;
 
 /// A trait that allows a common access to polygons of `MultiPolygon`s and its references
@@ -17,7 +19,7 @@ type Ring = Vec<Coordinate2D>;
 type Polygon = Vec<Ring>;
 
 /// A representation of a simple feature multi polygon
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct MultiPolygon {
     polygons: Vec<Polygon>,
 }
@@ -102,6 +104,140 @@ impl ArrowTyped for MultiPolygon {
         let polygon_builder = arrow::array::ListBuilder::new(ring_builder);
         arrow::array::ListBuilder::new(polygon_builder)
     }
+
+    fn concat(a: &Self::ArrowArray, b: &Self::ArrowArray) -> Result<Self::ArrowArray, ArrowError> {
+        use arrow::array::{Array, FixedSizeListArray, Float64Array, ListArray};
+
+        let mut multi_polygon_builder = Self::arrow_builder(a.len() + b.len());
+
+        for multi_polygons in &[a, b] {
+            for multi_polygon_index in 0..multi_polygons.len() {
+                let polygon_builder = multi_polygon_builder.values();
+
+                let polygons_ref = multi_polygons.value(multi_polygon_index);
+                let polygons = downcast_array::<ListArray>(&polygons_ref);
+
+                for polygon_index in 0..polygons.len() {
+                    let ring_builder = polygon_builder.values();
+
+                    let rings_ref = polygons.value(polygon_index);
+                    let rings = downcast_array::<ListArray>(&rings_ref);
+
+                    for ring_index in 0..rings.len() {
+                        let coordinate_builder = ring_builder.values();
+
+                        let coordinates_ref = rings.value(ring_index);
+                        let coordinates = downcast_array::<FixedSizeListArray>(&coordinates_ref);
+
+                        for coordinate_index in 0..(coordinates.len() as usize) {
+                            let floats_ref = coordinates.value(coordinate_index);
+                            let floats: &Float64Array = downcast_array(&floats_ref);
+
+                            coordinate_builder
+                                .values()
+                                .append_slice(floats.value_slice(0, 2))?;
+
+                            coordinate_builder.append(true)?;
+                        }
+
+                        ring_builder.append(true)?;
+                    }
+
+                    polygon_builder.append(true)?;
+                }
+
+                multi_polygon_builder.append(true)?;
+            }
+        }
+
+        Ok(multi_polygon_builder.finish())
+    }
+
+    fn filter(
+        multi_polygons: &Self::ArrowArray,
+        filter_array: &BooleanArray,
+    ) -> Result<Self::ArrowArray, ArrowError> {
+        use arrow::array::{Array, FixedSizeListArray, Float64Array, ListArray};
+
+        let mut multi_polygon_builder = Self::arrow_builder(0);
+
+        for multi_polygon_index in 0..multi_polygons.len() {
+            if !filter_array.value(multi_polygon_index) {
+                continue;
+            }
+
+            let polygon_builder = multi_polygon_builder.values();
+
+            let polygons_ref = multi_polygons.value(multi_polygon_index);
+            let polygons = downcast_array::<ListArray>(&polygons_ref);
+
+            for polygon_index in 0..polygons.len() {
+                let ring_builder = polygon_builder.values();
+
+                let rings_ref = polygons.value(polygon_index);
+                let rings = downcast_array::<ListArray>(&rings_ref);
+
+                for ring_index in 0..rings.len() {
+                    let coordinate_builder = ring_builder.values();
+
+                    let coordinates_ref = rings.value(ring_index);
+                    let coordinates = downcast_array::<FixedSizeListArray>(&coordinates_ref);
+
+                    for coordinate_index in 0..(coordinates.len() as usize) {
+                        let floats_ref = coordinates.value(coordinate_index);
+                        let floats: &Float64Array = downcast_array(&floats_ref);
+
+                        coordinate_builder
+                            .values()
+                            .append_slice(floats.value_slice(0, 2))?;
+
+                        coordinate_builder.append(true)?;
+                    }
+
+                    ring_builder.append(true)?;
+                }
+
+                polygon_builder.append(true)?;
+            }
+
+            multi_polygon_builder.append(true)?;
+        }
+
+        Ok(multi_polygon_builder.finish())
+    }
+
+    fn from_vec(multi_polygons: Vec<Self>) -> Result<Self::ArrowArray, ArrowError>
+    where
+        Self: Sized,
+    {
+        let mut builder = Self::arrow_builder(multi_polygons.len());
+        for multi_polygon in multi_polygons {
+            let polygon_builder = builder.values();
+
+            for polygon in multi_polygon.as_ref() {
+                let ring_builder = polygon_builder.values();
+
+                for ring in polygon {
+                    let coordinate_builder = ring_builder.values();
+
+                    for coordinate in ring {
+                        let float_builder = coordinate_builder.values();
+                        float_builder.append_value(coordinate.x)?;
+                        float_builder.append_value(coordinate.y)?;
+                        coordinate_builder.append(true)?;
+                    }
+
+                    ring_builder.append(true)?;
+                }
+
+                polygon_builder.append(true)?;
+            }
+
+            builder.append(true)?;
+        }
+
+        Ok(builder.finish())
+    }
 }
 
 type RingRef<'g> = &'g [Coordinate2D];
@@ -111,6 +247,8 @@ type PolygonRef<'g> = Vec<RingRef<'g>>;
 pub struct MultiPolygonRef<'g> {
     polygons: Vec<PolygonRef<'g>>,
 }
+
+impl<'r> GeometryRef for MultiPolygonRef<'r> {}
 
 impl<'g> MultiPolygonRef<'g> {
     pub fn new(polygons: Vec<PolygonRef<'g>>) -> Result<Self> {
