@@ -173,3 +173,109 @@ where
             .boxed()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mock::{MockFeatureCollectionSource, MockFeatureCollectionSourceParams};
+    use geoengine_datatypes::collections::MultiPointCollection;
+    use geoengine_datatypes::primitives::{
+        BoundingBox2D, Coordinate2D, FeatureData, MultiPoint, TimeInterval,
+    };
+
+    #[test]
+    fn serde() {
+        let filter = ColumnRangeFilter {
+            params: ColumnRangeFilterParams {
+                column: "foobar".to_string(),
+                ranges: vec![(1.into(), 2.into())],
+                keep_nulls: false,
+            },
+            vector_sources: vec![],
+            raster_sources: vec![],
+        }
+        .boxed();
+
+        let serialized = serde_json::to_string(&filter).unwrap();
+
+        assert_eq!(
+            serialized,
+            serde_json::json!({
+                "type": "ColumnRangeFilter",
+                "params": {
+                    "column": "foobar",
+                    "ranges": [
+                        [1, 2]
+                    ],
+                    "keep_nulls": false
+                },
+                "raster_sources": [],
+                "vector_sources": []
+            })
+            .to_string()
+        );
+
+        let _: Box<dyn VectorOperator> = serde_json::from_str(&serialized).unwrap();
+    }
+
+    #[tokio::test]
+    async fn execute() {
+        let column_name = "foo";
+
+        let collection = MultiPointCollection::from_data(
+            MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1), (2.0, 2.1), (3.0, 3.1)]).unwrap(),
+            vec![TimeInterval::new(0, 1).unwrap(); 4],
+            [(
+                column_name.to_string(),
+                FeatureData::Number(vec![0., 1., 2., 3.]),
+            )]
+            .iter()
+            .cloned()
+            .collect(),
+        )
+        .unwrap();
+
+        let source = MockFeatureCollectionSource {
+            params: MockFeatureCollectionSourceParams {
+                collection: collection.clone(),
+            },
+        }
+        .boxed();
+
+        let filter = ColumnRangeFilter {
+            params: ColumnRangeFilterParams {
+                column: column_name.to_string(),
+                ranges: vec![(1.into(), 2.into())],
+                keep_nulls: false,
+            },
+            vector_sources: vec![source],
+            raster_sources: vec![],
+        }
+        .boxed();
+
+        let initialized = filter.initialize(ExecutionContext).unwrap();
+
+        let point_processor = match initialized.query_processor() {
+            Ok(TypedVectorQueryProcessor::MultiPoint(processor)) => processor,
+            _ => panic!(),
+        };
+
+        let query_rectangle = QueryRectangle {
+            bbox: BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
+            time_interval: TimeInterval::default(),
+        };
+        let ctx = QueryContext {
+            chunk_byte_size: 2 * std::mem::size_of::<Coordinate2D>(),
+        };
+        let stream = point_processor.vector_query(query_rectangle, ctx);
+
+        let collections: Vec<MultiPointCollection> = stream.map(Result::unwrap).collect().await;
+
+        assert_eq!(collections.len(), 1);
+
+        assert_eq!(
+            collections[0],
+            collection.filter(vec![false, true, true, false]).unwrap()
+        );
+    }
+}

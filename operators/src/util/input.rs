@@ -77,6 +77,30 @@ impl<'de> Visitor<'de> for StringOrNumberDeserializer {
     }
 }
 
+impl From<f64> for StringOrNumber {
+    fn from(v: f64) -> Self {
+        StringOrNumber::Number(v)
+    }
+}
+
+impl From<i64> for StringOrNumber {
+    fn from(v: i64) -> Self {
+        StringOrNumber::Decimal(v)
+    }
+}
+
+impl From<String> for StringOrNumber {
+    fn from(v: String) -> Self {
+        StringOrNumber::String(v)
+    }
+}
+
+impl From<&str> for StringOrNumber {
+    fn from(v: &str) -> Self {
+        StringOrNumber::from(v.to_string())
+    }
+}
+
 impl TryFrom<StringOrNumber> for f64 {
     type Error = error::Error;
 

@@ -1,9 +1,11 @@
+use crate::collections::VectorDataType;
 use crate::primitives::{error, GeometryRef};
 use crate::primitives::{Coordinate2D, Geometry};
 use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::Result;
 use arrow::array::BooleanArray;
 use arrow::error::ArrowError;
+use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
 /// A trait that allows a common access to polygons of `MultiPolygon`s and its references
@@ -19,7 +21,7 @@ type Ring = Vec<Coordinate2D>;
 type Polygon = Vec<Ring>;
 
 /// A representation of a simple feature multi polygon
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct MultiPolygon {
     polygons: Vec<Polygon>,
 }
@@ -73,7 +75,9 @@ impl MultiPolygonAccess<Polygon, Ring> for MultiPolygon {
     }
 }
 
-impl Geometry for MultiPolygon {}
+impl Geometry for MultiPolygon {
+    const DATA_TYPE: VectorDataType = VectorDataType::MultiPolygon;
+}
 
 impl AsRef<[Polygon]> for MultiPolygon {
     fn as_ref(&self) -> &[Polygon] {

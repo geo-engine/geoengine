@@ -10,6 +10,7 @@ use arrow::array::{
 };
 use arrow::datatypes::{DataType, Field, Float64Type, Int64Type};
 use arrow::error::ArrowError;
+use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
 use crate::collections::{error, IntoGeometryIterator};
@@ -24,11 +25,15 @@ use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::helpers::SomeIter;
 use crate::util::Result;
 
-#[derive(Debug)]
+#[allow(clippy::unsafe_derive_deserialize)] // TODO: cf. https://github.com/rust-lang/rust-clippy/pull/5870
+#[derive(Debug, Deserialize, Serialize)]
 pub struct FeatureCollection<CollectionType> {
+    #[serde(with = "struct_serde")]
     pub(super) table: StructArray,
-    pub(super) types: HashMap<String, FeatureDataType>,
+
     // TODO: make it a `CoW`?
+    pub(super) types: HashMap<String, FeatureDataType>,
+
     collection_type: PhantomData<CollectionType>,
 }
 
@@ -978,6 +983,80 @@ where
     }
 
     Ok(())
+}
+
+/// Custom serializer for Arrow's `StructArray`
+mod struct_serde {
+    use super::*;
+
+    use arrow::record_batch::RecordBatch;
+    use serde::de::Visitor;
+    use serde::ser::Error;
+    use serde::{Deserializer, Serializer};
+    use std::fmt::Formatter;
+    use std::io::Cursor;
+
+    pub fn serialize<S>(struct_array: &StructArray, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let batch = RecordBatch::from(struct_array);
+
+        let mut bytes = Vec::<u8>::new();
+
+        let mut csv_writer = arrow::csv::WriterBuilder::default().build(&mut bytes);
+        csv_writer
+            .write(&batch)
+            .map_err(|error| S::Error::custom(error.to_string()))?;
+        drop(csv_writer);
+
+        serializer.serialize_bytes(&bytes)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<StructArray, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_bytes(StructArrayDeserializer)
+    }
+
+    struct StructArrayDeserializer;
+
+    impl<'de> Visitor<'de> for StructArrayDeserializer {
+        type Value = StructArray;
+
+        fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+            formatter.write_str("an Arrow StructArray")
+        }
+
+        fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            let reader = Cursor::new(v);
+
+            let mut csv_reader = arrow::csv::ReaderBuilder::default()
+                .with_batch_size(usize::MAX /* TODO: deal with batches somehow */)
+                .build(reader)
+                .map_err(|error| E::custom(error.to_string()))?;
+
+            let mut batches = Vec::new();
+            while let Some(batch) = csv_reader
+                .next()
+                .map_err(|error| E::custom(error.to_string()))?
+            {
+                batches.push(batch);
+            }
+
+            if batches.len() != 1 {
+                return Err(E::custom(
+                    "there must be exactly one batch for deserializing this struct",
+                ));
+            }
+
+            Ok(batches.pop().expect("checked").into())
+        }
+    }
 }
 
 #[cfg(test)]
