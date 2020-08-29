@@ -135,9 +135,7 @@ mod tests {
         .unwrap();
 
         let source = MockFeatureCollectionSource {
-            params: MockFeatureCollectionSourceParams {
-                collection: collection,
-            },
+            params: MockFeatureCollectionSourceParams { collection },
         }
         .boxed();
 
