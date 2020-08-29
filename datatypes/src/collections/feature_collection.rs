@@ -989,8 +989,8 @@ where
 mod struct_serde {
     use super::*;
 
-    use arrow::record_batch::RecordBatch;
-    use serde::de::Visitor;
+    use arrow::record_batch::{RecordBatch, RecordBatchReader};
+    use serde::de::{SeqAccess, Visitor};
     use serde::ser::Error;
     use serde::{Deserializer, Serializer};
     use std::fmt::Formatter;
@@ -1002,15 +1002,23 @@ mod struct_serde {
     {
         let batch = RecordBatch::from(struct_array);
 
-        let mut bytes = Vec::<u8>::new();
+        let mut serialized_struct = Vec::<u8>::new();
 
-        let mut csv_writer = arrow::csv::WriterBuilder::default().build(&mut bytes);
-        csv_writer
+        let mut writer = arrow::ipc::writer::FileWriter::try_new(
+            &mut serialized_struct,
+            batch.schema().as_ref(),
+        )
+        .map_err(|error| S::Error::custom(error.to_string()))?;
+        writer
             .write(&batch)
             .map_err(|error| S::Error::custom(error.to_string()))?;
-        drop(csv_writer);
+        writer
+            .finish()
+            .map_err(|error| S::Error::custom(error.to_string()))?;
 
-        serializer.serialize_bytes(&bytes)
+        drop(writer);
+
+        serializer.serialize_bytes(&serialized_struct)
     }
 
     pub fn deserialize<'de, D>(deserializer: D) -> Result<StructArray, D::Error>
@@ -1033,28 +1041,37 @@ mod struct_serde {
         where
             E: serde::de::Error,
         {
-            let reader = Cursor::new(v);
+            let cursor = Cursor::new(v);
 
-            let mut csv_reader = arrow::csv::ReaderBuilder::default()
-                .with_batch_size(usize::MAX /* TODO: deal with batches somehow */)
-                .build(reader)
+            let mut reader = arrow::ipc::reader::FileReader::try_new(cursor)
                 .map_err(|error| E::custom(error.to_string()))?;
 
-            let mut batches = Vec::new();
-            while let Some(batch) = csv_reader
-                .next()
-                .map_err(|error| E::custom(error.to_string()))?
-            {
-                batches.push(batch);
-            }
-
-            if batches.len() != 1 {
+            if reader.num_batches() != 1 {
                 return Err(E::custom(
                     "there must be exactly one batch for deserializing this struct",
                 ));
             }
 
-            Ok(batches.pop().expect("checked").into())
+            let batch = reader
+                .next_batch()
+                .map_err(|error| E::custom(error.to_string()))?
+                .expect("checked");
+
+            Ok(batch.into())
+        }
+
+        // TODO: this is super stupid, but serde calls this function somehow
+        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+        where
+            A: SeqAccess<'de>,
+        {
+            let mut bytes = Vec::with_capacity(seq.size_hint().unwrap_or(0));
+
+            while let Some(byte) = seq.next_element()? {
+                bytes.push(byte);
+            }
+
+            self.visit_byte_buf(bytes)
         }
     }
 }
