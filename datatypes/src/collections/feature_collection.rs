@@ -25,7 +25,7 @@ use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::helpers::SomeIter;
 use crate::util::Result;
 
-#[allow(clippy::unsafe_derive_deserialize)] // TODO: cf. https://github.com/rust-lang/rust-clippy/pull/5870
+#[allow(clippy::unsafe_derive_deserialize)]
 #[derive(Debug, Deserialize, Serialize)]
 pub struct FeatureCollection<CollectionType> {
     #[serde(with = "struct_serde")]

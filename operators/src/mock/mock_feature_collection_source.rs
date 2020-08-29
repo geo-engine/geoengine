@@ -52,7 +52,7 @@ pub type MockFeatureCollectionSource<G> = SourceOperator<MockFeatureCollectionSo
 // TODO: implementation is done with `paste!`, but we can use `core::concat_idents` once its stable
 
 macro_rules! impl_mock_feature_collection_source {
-    ($geometry:ident, $output:ident) => {
+    ($geometry:ty, $output:ident) => {
         paste::paste! {
             impl_mock_feature_collection_source!(
                 $geometry,
@@ -62,7 +62,7 @@ macro_rules! impl_mock_feature_collection_source {
         }
     };
 
-    ($geometry:ident, $output:ident, $newtype:ident) => {
+    ($geometry:ty, $output:ident, $newtype:ident) => {
         type $newtype = MockFeatureCollectionSource<$geometry>;
 
         #[typetag::serde]
@@ -77,7 +77,7 @@ macro_rules! impl_mock_feature_collection_source {
                     |_, _, _, _| Ok(()),
                     |_, _, _, _, _| {
                         Ok(VectorResultDescriptor {
-                            data_type: $geometry::DATA_TYPE,
+                            data_type: <$geometry>::DATA_TYPE,
                             projection: Projection::wgs84().into(), // TODO: get from `FeatureCollection`
                         })
                     },
