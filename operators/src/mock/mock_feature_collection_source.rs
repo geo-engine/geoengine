@@ -205,7 +205,6 @@ mod tests {
                         "types": {
                             "foobar": "NullableDecimal"
                         },
-                        "collection_type": null
                     }
                 }
             })

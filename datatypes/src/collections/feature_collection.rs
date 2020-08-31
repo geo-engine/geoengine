@@ -34,6 +34,7 @@ pub struct FeatureCollection<CollectionType> {
     // TODO: make it a `CoW`?
     pub(super) types: HashMap<String, FeatureDataType>,
 
+    #[serde(skip)]
     collection_type: PhantomData<CollectionType>,
 }
 
