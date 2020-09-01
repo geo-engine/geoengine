@@ -1,0 +1,404 @@
+use std::sync::Arc;
+
+use snafu::ResultExt;
+use tokio::sync::RwLock;
+use uuid::Uuid;
+use warp::reply::Reply;
+use warp::{http::Response, Filter};
+
+use crate::error;
+use crate::error::Result;
+use crate::ogc::wfs::request::{GetCapabilities, GetFeature, TypeNames, WFSRequest};
+use crate::util::identifiers::Identifier;
+use crate::workflows::registry::WorkflowRegistry;
+use crate::workflows::workflow::WorkflowId;
+use futures::StreamExt;
+use geoengine_datatypes::collections::{FeatureCollection, MultiPointCollection};
+use geoengine_datatypes::primitives::{FeatureData, MultiPoint, TimeInterval};
+use geoengine_operators::engine::{
+    ExecutionContext, QueryContext, QueryRectangle, TypedOperator, TypedVectorQueryProcessor,
+    VectorQueryProcessor,
+};
+use serde_json::json;
+
+type WR<T> = Arc<RwLock<T>>;
+
+pub fn wfs_handler<T: WorkflowRegistry>(
+    workflow_registry: WR<T>,
+) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+    warp::get()
+        .and(warp::path!("wfs"))
+        .and(warp::query::<WFSRequest>())
+        .and(warp::any().map(move || Arc::clone(&workflow_registry)))
+        .and_then(wfs)
+}
+
+// TODO: move into handler once async closures are available?
+async fn wfs<T: WorkflowRegistry>(
+    request: WFSRequest,
+    workflow_registry: WR<T>,
+) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
+    // TODO: authentication
+    // TODO: more useful error output than "invalid query string"
+    match request {
+        WFSRequest::GetCapabilities(request) => get_capabilities(&request),
+        WFSRequest::GetFeature(request) => get_feature(&request, &workflow_registry).await,
+        _ => Ok(Box::new(
+            warp::http::StatusCode::NOT_IMPLEMENTED.into_response(),
+        )),
+    }
+}
+
+fn get_capabilities(_request: &GetCapabilities) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
+    // TODO: implement
+    // TODO: at least inject correct url of the instance and return data for the default layer
+    let mock = r#"<?xml version="1.0" encoding="UTF-8"?>
+<wfs:WFS_Capabilities version="2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns="http://www.opengis.net/wfs/2.0"
+    xmlns:wfs="http://www.opengis.net/wfs/2.0"
+    xmlns:ows="http://www.opengis.net/ows/1.1"
+    xmlns:gml="http://www.opengis.net/gml/3.2"
+    xmlns:fes="http://www.opengis.net/fes/2.0"
+    xmlns:xlink="http://www.w3.org/1999/xlink"
+    xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:schemaLocation="http://www.opengis.net/wfs/2.0 http://schemas.opengis.net/wfs/2.0/wfs.xsd http://inspire.ec.europa.eu/schemas/inspire_dls/1.0 http://inspire.ec.europa.eu/schemas/inspire_dls/1.0/inspire_dls.xsd"
+    xmlns:xml="http://www.w3.org/XML/1998/namespace">
+    <ows:ServiceIdentification>
+        <ows:Title>Geo Engine</ows:Title>     
+        <ows:ServiceType>WFS</ows:ServiceType>
+        <ows:ServiceTypeVersion>2.0.0</ows:ServiceTypeVersion>
+        <ows:Fees>NONE</ows:Fees>
+        <ows:AccessConstraints>NONE</ows:AccessConstraints>
+    </ows:ServiceIdentification>
+    <ows:ServiceProvider>
+        <ows:ProviderName>Geo Engine</ows:ProviderName>    
+		<ows:ServiceContact>
+            <ows:ContactInfo>
+                <ows:Address>
+                    <ows:ElectronicMailAddress>info@geoengine.de</ows:ElectronicMailAddress>
+                </ows:Address>
+            </ows:ContactInfo>
+        </ows:ServiceContact>		
+    </ows:ServiceProvider>
+    <ows:OperationsMetadata>
+        <ows:Operation name="GetCapabilities">
+            <ows:DCP>
+                <ows:HTTP>
+                    <ows:Get xlink:href="http://localhost/wfs"/>
+                    <ows:Post xlink:href="http://localhost/wfs"/>
+                </ows:HTTP>
+            </ows:DCP>
+            <ows:Parameter name="AcceptVersions">
+                <ows:AllowedValues>
+                    <ows:Value>2.0.0</ows:Value>
+                </ows:AllowedValues>
+            </ows:Parameter>
+            <ows:Parameter name="AcceptFormats">
+                <ows:AllowedValues>
+                    <ows:Value>text/xml</ows:Value>
+                </ows:AllowedValues>
+            </ows:Parameter>
+        </ows:Operation>  
+        <ows:Operation name="GetFeature">
+            <ows:DCP>
+                <ows:HTTP>
+                    <ows:Get xlink:href="http://localhost/wfs"/>
+                    <ows:Post xlink:href="http://localhost/wfs"/>
+                </ows:HTTP>
+            </ows:DCP>
+            <ows:Parameter name="resultType">
+                <ows:AllowedValues>
+                    <ows:Value>results</ows:Value>
+                    <ows:Value>hits</ows:Value>
+                </ows:AllowedValues>
+            </ows:Parameter>
+            <ows:Parameter name="outputFormat">
+                <ows:AllowedValues>
+                    <ows:Value>application/json</ows:Value>
+                    <ows:Value>json</ows:Value>
+                </ows:AllowedValues>
+            </ows:Parameter>
+            <ows:Constraint name="PagingIsTransactionSafe">
+                <ows:NoValues/>
+                <ows:DefaultValue>FALSE</ows:DefaultValue>
+            </ows:Constraint>
+        </ows:Operation>
+     
+        <ows:Constraint name="ImplementsBasicWFS">
+            <ows:NoValues/>
+            <ows:DefaultValue>TRUE</ows:DefaultValue>
+        </ows:Constraint>
+     
+    </ows:OperationsMetadata>
+    <FeatureTypeList>
+        <FeatureType>
+            <Name>Test</Name>
+            <Title>Test</Title>
+            <Abstract>Verwaltungsgebiete Gemeinden Bayern - Datenquelle: Bayerische Vermessungsverwaltung – www.geodaten.bayern.de</Abstract>
+            <DefaultCRS>urn:ogc:def:crs:EPSG::4326</DefaultCRS>
+            <ows:WGS84BoundingBox>
+                <ows:LowerCorner>-90 -180</ows:LowerCorner>
+                <ows:UpperCorner>90 180</ows:UpperCorner>
+            </ows:WGS84BoundingBox>
+        </FeatureType>       
+    </FeatureTypeList>
+</wfs:WFS_Capabilities>"#;
+
+    Ok(Box::new(warp::reply::html(mock)))
+}
+
+async fn get_feature<T: WorkflowRegistry>(
+    request: &GetFeature,
+    workflow_registry: &WR<T>,
+) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
+    // TODO: validate request?
+    // TODO: properly handle request
+    if request.type_names
+        == (TypeNames {
+            namespace: None,
+            feature_type: "test".to_string(),
+        })
+    {
+        return get_feature_mock(request);
+    }
+
+    // TODO: how to map from typeNames to workflows? use special namespace for workflows from registry?
+    let workflow = workflow_registry.read().await.load(&WorkflowId::from_uuid(
+        Uuid::parse_str(&request.type_names.feature_type)
+            .context(error::Uuid)
+            .map_err(warp::reject::custom)?,
+    ));
+
+    let workflow = if let Some(workflow) = workflow {
+        workflow
+    } else {
+        // TODO: output appropriate error
+        return Ok(Box::new(
+            warp::http::StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        ));
+    };
+    let operator = if let TypedOperator::Vector(r) = workflow.operator {
+        r
+    } else {
+        return Err(warp::reject::custom(
+            error::Error::InvalidWorkflowResultType,
+        ));
+    };
+
+    let execution_context = ExecutionContext;
+    let initialized = operator
+        .initialize(execution_context)
+        .context(error::Operator)
+        .map_err(warp::reject::custom)?;
+
+    let processor = initialized
+        .query_processor()
+        .context(error::Operator)
+        .map_err(warp::reject::custom)?;
+
+    let query_rect = QueryRectangle {
+        bbox: request.bbox,
+        time_interval: request.time.unwrap_or_default(), // TODO: choose latest? something cheaper than all timestamps
+    };
+    let query_ctx = QueryContext {
+        // TODO: define meaningful query context
+        chunk_byte_size: 1024,
+    };
+
+    // TODO: support geojson output for types other than multipoints
+    let json = match processor {
+        // TypedVectorQueryProcessor::Data(p) => {
+        //     vector_stream_to_geojson(p, query_rect, query_ctx).await
+        // }
+        TypedVectorQueryProcessor::MultiPoint(p) => {
+            point_stream_to_geojson(p, query_rect, query_ctx).await
+        }
+        // TypedVectorQueryProcessor::MultiLineString(p) => {
+        //     vector_stream_to_geojson(p, query_rect, query_ctx).await
+        // }
+        // TypedVectorQueryProcessor::MultiPolygon(p) => {
+        //     vector_stream_to_geojson(p, query_rect, query_ctx).await
+        // }
+        _ => {
+            return Ok(Box::new(
+                warp::http::StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+            ))
+        }
+    }
+    // .context(error::Operator)
+    .map_err(warp::reject::custom)?;
+
+    Ok(Box::new(
+        Response::builder()
+            .header("Content-Type", "application/json")
+            .body(json.to_string())
+            .context(error::HTTP)
+            .map_err(warp::reject::custom)?,
+    ))
+}
+
+// TODO: generify function to work with arbitrary FeatureCollection<T>.
+//       Currently the problem is the lifetime on the IntoGeometryOptionIterator trait bound
+//       that is required for calling to_geo_json on a feature collection
+async fn point_stream_to_geojson(
+    processor: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<MultiPoint>>>,
+    query_rect: QueryRectangle,
+    query_ctx: QueryContext,
+) -> Result<serde_json::Value> {
+    let features: Vec<serde_json::Value> = Vec::new();
+
+    // TODO: more efficient merging of the partial feature collections
+    let stream = processor.vector_query(query_rect, query_ctx);
+
+    let features = stream
+        .fold(
+            Result::<Vec<serde_json::Value>, error::Error>::Ok(features),
+            |output, collection| async move {
+                match (output, collection) {
+                    (Ok(mut output), Ok(collection)) => {
+                        // TODO: avoid parsing the generated json
+                        let mut json: serde_json::Value =
+                            serde_json::from_str(&collection.to_geo_json())
+                                .expect("to_geojson is correct");
+                        let more_features = json
+                            .get_mut("features")
+                            .expect("to_geojson is correct")
+                            .as_array_mut()
+                            .expect("to geojson is correct");
+
+                        output.append(more_features);
+                        Ok(output)
+                    }
+                    (Err(error), _) => Err(error),
+                    (_, Err(error)) => Err(error.into()),
+                }
+            },
+        )
+        .await?;
+
+    let mut output = json!({
+        "type": "FeatureCollection"
+    });
+
+    output
+        .as_object_mut()
+        .expect("as defined")
+        .insert("features".into(), serde_json::Value::Array(features));
+
+    Ok(output)
+}
+
+fn get_feature_mock(_request: &GetFeature) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
+    let collection = MultiPointCollection::from_data(
+        MultiPoint::many(vec![
+            (0.0, 0.1),
+            (1.0, 1.1),
+            (2.0, 3.1),
+            (3.0, 3.1),
+            (4.0, 4.1),
+        ])
+        .unwrap(),
+        vec![TimeInterval::new_unchecked(0, 1); 5],
+        [(
+            "foo".to_string(),
+            FeatureData::NullableDecimal(vec![Some(0), None, Some(2), Some(3), Some(4)]),
+        )]
+        .iter()
+        .cloned()
+        .collect(),
+    )
+    .unwrap();
+
+    Ok(Box::new(warp::reply::html(collection.to_geo_json())))
+}
+
+#[cfg(test)]
+mod tests {
+    use geoengine_operators::source::CsvSourceParameters;
+
+    use crate::workflows::registry::HashMapRegistry;
+
+    use super::*;
+    use crate::workflows::workflow::Workflow;
+    use geoengine_operators::source::csv::{
+        CsvGeometrySpecification, CsvSource, CsvTimeSpecification,
+    };
+    use std::io::{Seek, SeekFrom, Write};
+
+    #[tokio::test]
+    async fn mock_test() {
+        let workflow_registry = Arc::new(RwLock::new(HashMapRegistry::default()));
+
+        let res = warp::test::request()
+            .method("GET")
+            .path("/wfs?request=GetFeature&service=WFS&version=2.0.0&typeNames=test&bbox=1,2,3,4")
+            .reply(&wfs_handler(workflow_registry))
+            .await;
+        assert_eq!(res.status(), 200);
+        let body: String = String::from_utf8(res.body().to_vec()).unwrap();
+        assert_eq!(
+            body,
+            r#"{"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Point","coordinates":[0.0,0.1]},"properties":{"foo":null},"when":{"start":"1970-01-01T00:00:00+00:00","end":"1970-01-01T00:00:00.001+00:00","type":"Interval"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[1.0,1.1]},"properties":{"foo":0},"when":{"start":"1970-01-01T00:00:00+00:00","end":"1970-01-01T00:00:00.001+00:00","type":"Interval"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[2.0,3.1]},"properties":{"foo":null},"when":{"start":"1970-01-01T00:00:00+00:00","end":"1970-01-01T00:00:00.001+00:00","type":"Interval"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[3.0,3.1]},"properties":{"foo":null},"when":{"start":"1970-01-01T00:00:00+00:00","end":"1970-01-01T00:00:00.001+00:00","type":"Interval"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[4.0,4.1]},"properties":{"foo":null},"when":{"start":"1970-01-01T00:00:00+00:00","end":"1970-01-01T00:00:00.001+00:00","type":"Interval"}}]}"#
+        );
+    }
+
+    #[tokio::test]
+    async fn get_capabilities() {
+        let workflow_registry = Arc::new(RwLock::new(HashMapRegistry::default()));
+
+        let res = warp::test::request()
+            .method("GET")
+            .path("/wfs?request=GetCapabilities&service=WFS")
+            .reply(&wfs_handler(workflow_registry))
+            .await;
+        assert_eq!(res.status(), 200);
+
+        // TODO: validate xml?
+    }
+
+    #[tokio::test]
+    async fn get_feature() {
+        let mut temp_file = tempfile::NamedTempFile::new().unwrap();
+        write!(
+            temp_file,
+            "
+x;y
+0;1
+2;3
+4;5
+"
+        )
+        .unwrap();
+        temp_file.seek(SeekFrom::Start(0)).unwrap();
+
+        let workflow_registry = Arc::new(RwLock::new(HashMapRegistry::default()));
+
+        let workflow = Workflow {
+            operator: TypedOperator::Vector(Box::new(CsvSource {
+                params: CsvSourceParameters {
+                    file_path: temp_file.path().into(),
+                    field_separator: ';',
+                    geometry: CsvGeometrySpecification::XY {
+                        x: "x".into(),
+                        y: "y".into(),
+                    },
+                    time: CsvTimeSpecification::None,
+                },
+            })),
+        };
+
+        let id = workflow_registry.write().await.register(workflow.clone());
+
+        let res = warp::test::request()
+            .method("GET")
+            .path(&format!("/wfs?request=GetFeature&service=WFS&version=2.0.0&typeNames={}&bbox=-90,-180,90,180&crs=EPSG4326", id.to_string()))
+            .reply(&wfs_handler(workflow_registry))
+            .await;
+        let body: String = String::from_utf8(res.body().to_vec()).unwrap();
+        assert_eq!(
+            body,
+            r#"{"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Point","coordinates":[0.0,1.0]},"properties":{},"when":{"start":"-262144-01-01T00:00:00+00:00","end":"+262143-12-31T23:59:59.999+00:00","type":"Interval"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[2.0,3.0]},"properties":{},"when":{"start":"-262144-01-01T00:00:00+00:00","end":"+262143-12-31T23:59:59.999+00:00","type":"Interval"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[4.0,5.0]},"properties":{},"when":{"start":"-262144-01-01T00:00:00+00:00","end":"+262143-12-31T23:59:59.999+00:00","type":"Interval"}}]}"#
+        );
+        assert_eq!(res.status(), 200);
+    }
+}

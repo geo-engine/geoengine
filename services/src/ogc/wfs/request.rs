@@ -138,7 +138,7 @@ mod tests {
 
     #[test]
     fn deserialize_get_feature() {
-        let query = "request=GetFeature&service=WFS&version=2.0.0&typeNames=ns:test&bbox=1,2,3,4&format=image/png";
+        let query = "request=GetFeature&service=WFS&version=2.0.0&typeNames=ns:test&bbox=1,2,3,4";
         let parsed: WFSRequest = serde_urlencoded::from_str(query).unwrap();
 
         let request = WFSRequest::GetFeature(GetFeature {
