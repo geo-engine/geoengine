@@ -39,10 +39,7 @@ pub struct FeatureCollection<CollectionType> {
     collection_type: PhantomData<CollectionType>,
 }
 
-impl<CollectionType> FeatureCollection<CollectionType>
-where
-    CollectionType: Geometry + ArrowTyped,
-{
+impl<CollectionType> FeatureCollection<CollectionType> {
     /// Reserved name for geometry column
     pub const GEOMETRY_COLUMN_NAME: &'static str = "__geometry";
 
@@ -61,7 +58,12 @@ where
             collection_type: Default::default(),
         }
     }
+}
 
+impl<CollectionType> FeatureCollection<CollectionType>
+where
+    CollectionType: Geometry + ArrowTyped,
+{
     /// Create an empty `FeatureCollection`.
     ///
     /// # Examples
@@ -325,7 +327,7 @@ where
         let number_of_time_intervals = self.len();
 
         let timestamps_ref = features.values();
-        let timestamps: &arrow::array::Date64Array = downcast_array(&timestamps_ref);
+        let timestamps: &arrow::array::Int64Array = downcast_array(&timestamps_ref);
 
         unsafe {
             std::slice::from_raw_parts(
@@ -862,7 +864,10 @@ impl<CollectionType> PartialEq for FeatureCollection<CollectionType> {
             return false;
         }
 
-        for key in self.types.keys() {
+        for key in self.types.keys().chain(&[
+            Self::GEOMETRY_COLUMN_NAME.to_string(),
+            Self::TIME_COLUMN_NAME.to_string(),
+        ]) {
             let c1 = self.table.column_by_name(key).expect("column must exist");
             let c2 = other.table.column_by_name(key).expect("column must exist");
 
