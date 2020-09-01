@@ -13,6 +13,7 @@
     clippy::module_name_repetitions,
     clippy::must_use_candidate,
     clippy::non_ascii_literal,
+    clippy::option_if_let_else,
     clippy::similar_names,
     clippy::single_match_else,
     clippy::type_repetition_in_bounds,
