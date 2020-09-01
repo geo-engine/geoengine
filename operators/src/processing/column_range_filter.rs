@@ -1,3 +1,4 @@
+use crate::adapters::FeatureCollectionChunkMerger;
 use crate::engine::{
     ExecutionContext, InitializedOperator, InitializedOperatorImpl, InitializedVectorOperator,
     Operator, QueryContext, QueryProcessor, QueryRectangle, TypedVectorQueryProcessor,
@@ -128,13 +129,10 @@ where
         let ranges = self.params.ranges.clone();
         let keep_nulls = self.params.keep_nulls;
 
-        // TODO: create stream adapter that munches collections together to adhere to chunk size
-        self.source
-            .query(query, ctx)
-            .map(move |collection| {
-                let collection = collection?;
+        let filter_stream = self.source.query(query, ctx).map(move |collection| {
+            let collection = collection?;
 
-                let filter_ranges: Result<Vec<RangeInclusive<FeatureDataValue>>> =
+            let filter_ranges: Result<Vec<RangeInclusive<FeatureDataValue>>> =
                     // TODO: do transformation work only once
                     match collection.column_type(&column_name)? {
                         FeatureDataType::Text | FeatureDataType::NullableText => ranges
@@ -166,11 +164,15 @@ where
                         }
                     };
 
-                collection
-                    .column_range_filter(&column_name, &filter_ranges?, keep_nulls)
-                    .map_err(Into::into)
-            })
-            .boxed()
+            collection
+                .column_range_filter(&column_name, &filter_ranges?, keep_nulls)
+                .map_err(Into::into)
+        });
+
+        let merged_chunks_stream =
+            FeatureCollectionChunkMerger::new(filter_stream.fuse(), ctx.chunk_byte_size);
+
+        merged_chunks_stream.boxed()
     }
 }
 

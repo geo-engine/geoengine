@@ -20,6 +20,7 @@
     clippy::wildcard_imports
 )]
 
+pub mod adapters;
 pub mod engine;
 pub mod error;
 pub mod mock;
