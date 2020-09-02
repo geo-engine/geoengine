@@ -16,8 +16,7 @@ use futures::StreamExt;
 use geoengine_datatypes::collections::{FeatureCollection, MultiPointCollection};
 use geoengine_datatypes::primitives::{FeatureData, MultiPoint, TimeInstance, TimeInterval};
 use geoengine_operators::engine::{
-    ExecutionContext, QueryContext, QueryRectangle, TypedOperator, TypedVectorQueryProcessor,
-    VectorQueryProcessor,
+    ExecutionContext, QueryContext, QueryRectangle, TypedVectorQueryProcessor, VectorQueryProcessor,
 };
 use serde_json::json;
 
@@ -182,13 +181,11 @@ async fn get_feature<T: WorkflowRegistry>(
         }
     };
 
-    let operator = if let TypedOperator::Vector(r) = workflow.operator {
-        r
-    } else {
-        return Err(warp::reject::custom(
-            error::Error::InvalidWorkflowResultType,
-        ));
-    };
+    let operator = workflow
+        .operator
+        .get_vector()
+        .context(error::Operator)
+        .map_err(warp::reject::custom)?;
 
     let execution_context = ExecutionContext;
     let initialized = operator
@@ -327,6 +324,7 @@ mod tests {
 
     use super::*;
     use crate::workflows::workflow::Workflow;
+    use geoengine_operators::engine::TypedOperator;
     use geoengine_operators::source::csv::{
         CsvGeometrySpecification, CsvSource, CsvTimeSpecification,
     };

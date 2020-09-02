@@ -29,7 +29,6 @@ pub enum Error {
     LogoutFailed,
     SessionDoesNotExist,
     InvalidSessionToken,
-    InvalidWorkflowResultType,
 
     ProjectCreateFailed,
     ProjectListFailed,

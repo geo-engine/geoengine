@@ -18,8 +18,7 @@ use crate::workflows::workflow::WorkflowId;
 use futures::StreamExt;
 use geoengine_datatypes::primitives::{TimeInstance, TimeInterval};
 use geoengine_operators::engine::{
-    ExecutionContext, QueryContext, QueryRectangle, RasterQueryProcessor, TypedOperator,
-    TypedRasterQueryProcessor,
+    ExecutionContext, QueryContext, QueryRectangle, RasterQueryProcessor, TypedRasterQueryProcessor,
 };
 
 type WR<T> = Arc<RwLock<T>>;
@@ -134,13 +133,11 @@ async fn get_map<T: WorkflowRegistry>(
             warp::http::StatusCode::INTERNAL_SERVER_ERROR.into_response(),
         ));
     };
-    let operator = if let TypedOperator::Raster(r) = workflow.operator {
-        r
-    } else {
-        return Err(warp::reject::custom(
-            error::Error::InvalidWorkflowResultType,
-        ));
-    };
+    let operator = workflow
+        .operator
+        .get_raster()
+        .context(error::Operator)
+        .map_err(warp::reject::custom)?;
 
     let execution_context = ExecutionContext;
     let initialized = operator
@@ -304,7 +301,7 @@ fn get_map_mock(request: &GetMap) -> Result<Box<dyn warp::Reply>, warp::Rejectio
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::primitives::{BoundingBox2D, TimeInterval};
-    use geoengine_operators::engine::RasterOperator;
+    use geoengine_operators::engine::{RasterOperator, TypedOperator};
     use geoengine_operators::source::{
         gdal_source::GdalSourceProcessor, GdalSource, GdalSourceParameters,
     };
