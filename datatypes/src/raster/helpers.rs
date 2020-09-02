@@ -1,4 +1,4 @@
-/// Maps a `TypedRaster2D` to another `TypedRaster2D` by calling a function on all its variants.
+/// Maps a `TypedRaster2D` to another `TypedRaster2D` by calling a function on its variant.
 /// Call via `map_generic_raster2d!(input, raster => function)`.
 #[macro_export]
 macro_rules! map_generic_raster2d {
@@ -20,7 +20,7 @@ macro_rules! map_generic_raster2d {
     };
 }
 
-/// Calls a function on a `TypedRaster2D`  by calling it on all its variants.
+/// Calls a function on a `TypedRaster2D`  by calling it on its variant.
 /// Call via `call_generic_raster2d!(input, raster => function)`.
 #[macro_export]
 macro_rules! call_generic_raster2d {
@@ -40,7 +40,7 @@ macro_rules! call_generic_raster2d {
     };
 }
 
-/// Calls a function on two `TypedRaster2D`s by calling it on all variant combinations.
+/// Calls a function on two `TypedRaster2D`s by calling it on their variant combination.
 /// Call via `call_bi_generic_raster2d!(input, (raster_a, raster_b) => function)`.
 #[macro_export]
 macro_rules! call_bi_generic_raster2d {
@@ -83,7 +83,7 @@ macro_rules! call_bi_generic_raster2d {
 
 }
 
-/// Calls a function on two `TypedRaster2D`s by calling it on all its variant combinations.
+/// Calls a function on two `TypedRaster2D`s by calling it on their variant combination.
 /// Call via `call_bi_generic_raster2d_same!(input, (raster_a, raster_b) => function)`.
 /// The resulting call requires the rasters to be of the same type.
 /// Otherwise, the last optional parameter is a catch-all function (or it just panics).
@@ -133,7 +133,7 @@ macro_rules! call_bi_generic_raster2d_same {
     };
 }
 
-/// Calls a function on two `TypedRaster2D`s by calling it on all its variant combinations.
+/// Calls a function on two `TypedRaster2D`s by calling it on their variant combination.
 /// Call via `call_bi_generic_raster2d_staircase!(input, (raster_a, raster_b) => function)`.
 /// This macro requires the first raster type to be greater or equal to the second one.
 /// Otherwise, the last optional parameter is a catch-all function (or it just panics).
@@ -192,7 +192,7 @@ macro_rules! call_bi_generic_raster2d_staircase {
     };
 }
 
-/// Generates a a `TypedRaster2D` by calling a function for all variants.
+/// Generates a a `TypedRaster2D` by calling a function on its variant.
 /// Call via `generate_generic_raster2d!(type, function)`.
 #[macro_export]
 macro_rules! generate_generic_raster2d {
