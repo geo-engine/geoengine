@@ -20,7 +20,7 @@ macro_rules! map_generic_raster2d {
     };
 }
 
-/// Calls a function on a `TypedRaster2D`  by calling it on its variant.
+/// Calls a function on a `TypedRaster2D` by calling it on its variant.
 /// Call via `call_generic_raster2d!(input, raster => function)`.
 #[macro_export]
 macro_rules! call_generic_raster2d {
