@@ -112,7 +112,7 @@ pub fn parse_type_names<'de, D>(deserializer: D) -> Result<TypeNames, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
-    let s = <&str as serde::Deserialize>::deserialize(deserializer)?;
+    let s = String::deserialize(deserializer)?;
 
     if let Some(pos) = s.find(':') {
         let namespace = Some(s[..pos].to_string());
@@ -125,7 +125,7 @@ where
     } else {
         Ok(TypeNames {
             namespace: None,
-            feature_type: s.into(),
+            feature_type: s,
         })
     }
 }
@@ -186,6 +186,43 @@ mod tests {
                 feature_type: "test".into(),
             },
             property_name: Some("P1,P2".into()),
+        });
+
+        assert_eq!(parsed, request);
+    }
+
+    #[test]
+    fn deserialize_url_encoded() {
+        let op = r#"{"a":"b"}"#.to_string();
+
+        let params = &[
+            ("request", "GetFeature"),
+            ("service", "WFS"),
+            ("version", "2.0.0"),
+            ("typeNames", &format!("json:{}", op)),
+            ("bbox", "-90,-180,90,180"),
+            ("crs", "EPSG:4326"),
+        ];
+        let url = serde_urlencoded::to_string(params).unwrap();
+
+        let parsed: WFSRequest = serde_urlencoded::from_str(&url).unwrap();
+
+        let request = WFSRequest::GetFeature(GetFeature {
+            version: "2.0.0".into(),
+            time: None,
+            srs_name: None,
+            namespaces: None,
+            count: None,
+            sort_by: None,
+            result_type: None,
+            filter: None,
+            bbox: BoundingBox2D::new(Coordinate2D::new(-90., -180.), Coordinate2D::new(90., 180.))
+                .unwrap(),
+            type_names: TypeNames {
+                namespace: Some("json".into()),
+                feature_type: op,
+            },
+            property_name: None,
         });
 
         assert_eq!(parsed, request);

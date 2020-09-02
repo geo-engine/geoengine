@@ -1,12 +1,13 @@
 use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, TimeInterval};
 use serde::de::Error;
+use serde::Deserialize;
 
 /// Parse bbox, format is: "x1,y1,x2,y2"
 pub fn parse_bbox<'de, D>(deserializer: D) -> Result<BoundingBox2D, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
-    let s = <&str as serde::Deserialize>::deserialize(deserializer)?;
+    let s = String::deserialize(deserializer)?;
 
     let split: Vec<Result<f64, std::num::ParseFloatError>> = s.split(',').map(str::parse).collect();
 
@@ -30,7 +31,7 @@ where
 {
     // TODO: support relative time intervals
 
-    let s = <&str as serde::Deserialize>::deserialize(deserializer)?;
+    let s = String::deserialize(deserializer)?;
 
     let split: Vec<_> = s
         .split('/')

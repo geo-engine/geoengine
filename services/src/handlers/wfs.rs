@@ -11,7 +11,7 @@ use crate::error::Result;
 use crate::ogc::wfs::request::{GetCapabilities, GetFeature, TypeNames, WFSRequest};
 use crate::util::identifiers::Identifier;
 use crate::workflows::registry::WorkflowRegistry;
-use crate::workflows::workflow::WorkflowId;
+use crate::workflows::workflow::{Workflow, WorkflowId};
 use futures::StreamExt;
 use geoengine_datatypes::collections::{FeatureCollection, MultiPointCollection};
 use geoengine_datatypes::primitives::{FeatureData, MultiPoint, TimeInterval};
@@ -161,21 +161,28 @@ async fn get_feature<T: WorkflowRegistry>(
         return get_feature_mock(request);
     }
 
-    // TODO: how to map from typeNames to workflows? use special namespace for workflows from registry?
-    let workflow = workflow_registry.read().await.load(&WorkflowId::from_uuid(
-        Uuid::parse_str(&request.type_names.feature_type)
-            .context(error::Uuid)
+    let workflow: Workflow = match request.type_names.namespace.as_deref() {
+        Some("registry") => workflow_registry
+            .read()
+            .await
+            .load(&WorkflowId::from_uuid(
+                Uuid::parse_str(&request.type_names.feature_type)
+                    .context(error::Uuid)
+                    .map_err(warp::reject::custom)?,
+            ))
+            .ok_or(error::Error::WorkflowLoadFromRegistryFailed)
             .map_err(warp::reject::custom)?,
-    ));
-
-    let workflow = if let Some(workflow) = workflow {
-        workflow
-    } else {
-        // TODO: output appropriate error
-        return Ok(Box::new(
-            warp::http::StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-        ));
+        Some("json") => serde_json::from_str(&request.type_names.feature_type)
+            .context(error::SerdeJson)
+            .map_err(warp::reject::custom)?,
+        Some(_) => {
+            return Err(warp::reject::custom(error::Error::InvalidNamespace));
+        }
+        None => {
+            return Err(warp::reject::custom(error::Error::InvalidWFSTypeNames));
+        }
     };
+
     let operator = if let TypedOperator::Vector(r) = workflow.operator {
         r
     } else {
@@ -356,7 +363,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn get_feature() {
+    async fn get_feature_registry() {
         let mut temp_file = tempfile::NamedTempFile::new().unwrap();
         write!(
             temp_file,
@@ -390,7 +397,62 @@ x;y
 
         let res = warp::test::request()
             .method("GET")
-            .path(&format!("/wfs?request=GetFeature&service=WFS&version=2.0.0&typeNames={}&bbox=-90,-180,90,180&crs=EPSG4326", id.to_string()))
+            .path(&format!("/wfs?request=GetFeature&service=WFS&version=2.0.0&typeNames=registry:{}&bbox=-90,-180,90,180&crs=EPSG:4326", id.to_string()))
+            .reply(&wfs_handler(workflow_registry))
+            .await;
+        let body: String = String::from_utf8(res.body().to_vec()).unwrap();
+        assert_eq!(
+            body,
+            r#"{"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Point","coordinates":[0.0,1.0]},"properties":{},"when":{"start":"-262144-01-01T00:00:00+00:00","end":"+262143-12-31T23:59:59.999+00:00","type":"Interval"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[2.0,3.0]},"properties":{},"when":{"start":"-262144-01-01T00:00:00+00:00","end":"+262143-12-31T23:59:59.999+00:00","type":"Interval"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[4.0,5.0]},"properties":{},"when":{"start":"-262144-01-01T00:00:00+00:00","end":"+262143-12-31T23:59:59.999+00:00","type":"Interval"}}]}"#
+        );
+        assert_eq!(res.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn get_feature_json() {
+        let mut temp_file = tempfile::NamedTempFile::new().unwrap();
+        write!(
+            temp_file,
+            "
+x;y
+0;1
+2;3
+4;5
+"
+        )
+        .unwrap();
+        temp_file.seek(SeekFrom::Start(0)).unwrap();
+
+        let workflow_registry = Arc::new(RwLock::new(HashMapRegistry::default()));
+
+        let workflow = Workflow {
+            operator: TypedOperator::Vector(Box::new(CsvSource {
+                params: CsvSourceParameters {
+                    file_path: temp_file.path().into(),
+                    field_separator: ';',
+                    geometry: CsvGeometrySpecification::XY {
+                        x: "x".into(),
+                        y: "y".into(),
+                    },
+                    time: CsvTimeSpecification::None,
+                },
+            })),
+        };
+
+        let json = serde_json::to_string(&workflow).unwrap();
+
+        let params = &[
+            ("request", "GetFeature"),
+            ("service", "WFS"),
+            ("version", "2.0.0"),
+            ("typeNames", &format!("json:{}", json)),
+            ("bbox", "-90,-180,90,180"),
+            ("crs", "EPSG:4326"),
+        ];
+        let url = format!("/wfs?{}", &serde_urlencoded::to_string(params).unwrap());
+        let res = warp::test::request()
+            .method("GET")
+            .path(&url)
             .reply(&wfs_handler(workflow_registry))
             .await;
         let body: String = String::from_utf8(res.body().to_vec()).unwrap();

@@ -17,6 +17,9 @@ pub enum Error {
     Uuid {
         source: uuid::Error,
     },
+    SerdeJson {
+        source: serde_json::Error,
+    },
 
     #[snafu(display("Registration failed: {:?}", reason))]
     RegistrationFailed {
@@ -34,6 +37,12 @@ pub enum Error {
     ProjectUpdateFailed,
     ProjectDeleteFailed,
     PermissionFailed,
+
+    WorkflowLoadFromRegistryFailed,
+
+    InvalidNamespace,
+
+    InvalidWFSTypeNames,
 }
 
 impl Reject for Error {}
