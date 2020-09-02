@@ -16,6 +16,7 @@ use crate::util::identifiers::Identifier;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 use futures::StreamExt;
+use geoengine_datatypes::primitives::{TimeInstance, TimeInterval};
 use geoengine_operators::engine::{
     ExecutionContext, QueryContext, QueryRectangle, RasterQueryProcessor, TypedOperator,
     TypedRasterQueryProcessor,
@@ -154,7 +155,10 @@ async fn get_map<T: WorkflowRegistry>(
 
     let query_rect = QueryRectangle {
         bbox: request.bbox,
-        time_interval: request.time.unwrap_or_default(), // TODO: choose latest? something cheaper than all timestamps
+        time_interval: request.time.unwrap_or_else(|| {
+            let time = TimeInstance::from(chrono::offset::Utc::now());
+            TimeInterval::new_unchecked(time, time)
+        }),
     };
     let query_ctx = QueryContext {
         // TODO: define meaningful query context
