@@ -228,10 +228,9 @@ async fn get_feature<T: WorkflowRegistry>(
         _ => {
             return Ok(Box::new(
                 warp::http::StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-            ))
+            ));
         }
     }
-    // .context(error::Operator)
     .map_err(warp::reject::custom)?;
 
     Ok(Box::new(
@@ -329,6 +328,7 @@ mod tests {
     use geoengine_operators::source::csv::{
         CsvGeometrySpecification, CsvSource, CsvTimeSpecification,
     };
+    use serde_json::json;
     use std::io::{Seek, SeekFrom, Write};
 
     #[tokio::test]
@@ -344,7 +344,83 @@ mod tests {
         let body: String = String::from_utf8(res.body().to_vec()).unwrap();
         assert_eq!(
             body,
-            r#"{"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Point","coordinates":[0.0,0.1]},"properties":{"foo":null},"when":{"start":"1970-01-01T00:00:00+00:00","end":"1970-01-01T00:00:00.001+00:00","type":"Interval"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[1.0,1.1]},"properties":{"foo":0},"when":{"start":"1970-01-01T00:00:00+00:00","end":"1970-01-01T00:00:00.001+00:00","type":"Interval"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[2.0,3.1]},"properties":{"foo":null},"when":{"start":"1970-01-01T00:00:00+00:00","end":"1970-01-01T00:00:00.001+00:00","type":"Interval"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[3.0,3.1]},"properties":{"foo":null},"when":{"start":"1970-01-01T00:00:00+00:00","end":"1970-01-01T00:00:00.001+00:00","type":"Interval"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[4.0,4.1]},"properties":{"foo":null},"when":{"start":"1970-01-01T00:00:00+00:00","end":"1970-01-01T00:00:00.001+00:00","type":"Interval"}}]}"#
+            json!({
+                "type": "FeatureCollection",
+                "features": [{
+                        "type": "Feature",
+                        "geometry": {
+                            "type": "Point",
+                            "coordinates": [0.0, 0.1]
+                        },
+                        "properties": {
+                            "foo": null
+                        },
+                        "when": {
+                            "start": "1970-01-01T00:00:00+00:00",
+                            "end": "1970-01-01T00:00:00.001+00:00",
+                            "type": "Interval"
+                        }
+                    },
+                    {
+                        "type": "Feature",
+                        "geometry": {
+                            "type": "Point",
+                            "coordinates": [1.0, 1.1]
+                        },
+                        "properties": {
+                            "foo": 0
+                        },
+                        "when": {
+                            "start": "1970-01-01T00:00:00+00:00",
+                            "end": "1970-01-01T00:00:00.001+00:00",
+                            "type": "Interval"
+                        }
+                    }, {
+                        "type": "Feature",
+                        "geometry": {
+                            "type": "Point",
+                            "coordinates": [2.0, 3.1]
+                        },
+                        "properties": {
+                            "foo": null
+                        },
+                        "when": {
+                            "start": "1970-01-01T00:00:00+00:00",
+                            "end": "1970-01-01T00:00:00.001+00:00",
+                            "type": "Interval"
+                        }
+                    }, {
+                        "type": "Feature",
+                        "geometry": {
+                            "type": "Point",
+                            "coordinates": [3.0, 3.1]
+                        },
+                        "properties": {
+                            "foo": null
+                        },
+                        "when": {
+                            "start": "1970-01-01T00:00:00+00:00",
+                            "end": "1970-01-01T00:00:00.001+00:00",
+                            "type": "Interval"
+                        }
+                    }, {
+                        "type": "Feature",
+                        "geometry": {
+                            "type": "Point",
+                            "coordinates": [4.0, 4.1]
+                        },
+                        "properties": {
+                            "foo": null
+                        },
+                        "when": {
+                            "start": "1970-01-01T00:00:00+00:00",
+                            "end": "1970-01-01T00:00:00.001+00:00",
+                            "type": "Interval"
+                        }
+                    }
+                ]
+            })
+            .to_string()
         );
     }
 
@@ -403,7 +479,47 @@ x;y
         let body: String = String::from_utf8(res.body().to_vec()).unwrap();
         assert_eq!(
             body,
-            r#"{"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Point","coordinates":[0.0,1.0]},"properties":{},"when":{"start":"-262144-01-01T00:00:00+00:00","end":"+262143-12-31T23:59:59.999+00:00","type":"Interval"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[2.0,3.0]},"properties":{},"when":{"start":"-262144-01-01T00:00:00+00:00","end":"+262143-12-31T23:59:59.999+00:00","type":"Interval"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[4.0,5.0]},"properties":{},"when":{"start":"-262144-01-01T00:00:00+00:00","end":"+262143-12-31T23:59:59.999+00:00","type":"Interval"}}]}"#
+            json!({
+                "type": "FeatureCollection",
+                "features": [{
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [0.0, 1.0]
+                    },
+                    "properties": {},
+                    "when": {
+                        "start": "-262144-01-01T00:00:00+00:00",
+                        "end": "+262143-12-31T23:59:59.999+00:00",
+                        "type": "Interval"
+                    }
+                }, {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [2.0, 3.0]
+                    },
+                    "properties": {},
+                    "when": {
+                        "start": "-262144-01-01T00:00:00+00:00",
+                        "end": "+262143-12-31T23:59:59.999+00:00",
+                        "type": "Interval"
+                    }
+                }, {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [4.0, 5.0]
+                    },
+                    "properties": {},
+                    "when": {
+                        "start": "-262144-01-01T00:00:00+00:00",
+                        "end": "+262143-12-31T23:59:59.999+00:00",
+                        "type": "Interval"
+                    }
+                }]
+            })
+            .to_string()
         );
         assert_eq!(res.status(), 200);
     }
@@ -458,7 +574,47 @@ x;y
         let body: String = String::from_utf8(res.body().to_vec()).unwrap();
         assert_eq!(
             body,
-            r#"{"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Point","coordinates":[0.0,1.0]},"properties":{},"when":{"start":"-262144-01-01T00:00:00+00:00","end":"+262143-12-31T23:59:59.999+00:00","type":"Interval"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[2.0,3.0]},"properties":{},"when":{"start":"-262144-01-01T00:00:00+00:00","end":"+262143-12-31T23:59:59.999+00:00","type":"Interval"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[4.0,5.0]},"properties":{},"when":{"start":"-262144-01-01T00:00:00+00:00","end":"+262143-12-31T23:59:59.999+00:00","type":"Interval"}}]}"#
+            json!({
+                "type": "FeatureCollection",
+                "features": [{
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [0.0, 1.0]
+                    },
+                    "properties": {},
+                    "when": {
+                        "start": "-262144-01-01T00:00:00+00:00",
+                        "end": "+262143-12-31T23:59:59.999+00:00",
+                        "type": "Interval"
+                    }
+                }, {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [2.0, 3.0]
+                    },
+                    "properties": {},
+                    "when": {
+                        "start": "-262144-01-01T00:00:00+00:00",
+                        "end": "+262143-12-31T23:59:59.999+00:00",
+                        "type": "Interval"
+                    }
+                }, {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [4.0, 5.0]
+                    },
+                    "properties": {},
+                    "when": {
+                        "start": "-262144-01-01T00:00:00+00:00",
+                        "end": "+262143-12-31T23:59:59.999+00:00",
+                        "type": "Interval"
+                    }
+                }]
+            })
+            .to_string()
         );
         assert_eq!(res.status(), 200);
     }

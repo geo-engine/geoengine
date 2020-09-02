@@ -163,8 +163,29 @@ mod tests {
 
     #[test]
     fn deserialize_get_feature_full() {
-        let query = "request=GetFeature&service=WFS&version=2.0.0&typeNames=ns:test&bbox=1,2,3,4&srsName=EPSG:4326&format=image/png&time=2000-01-01T00:00:00.0Z/2000-01-02T00:00:00.0Z&namespaces=xmlns%28dog%3Dhttp%3A%2F%2Fwww.example.com%2Fnamespaces%2Fdog%29&count=10&sortBy=Name%5B%2BA%5D&resultType=results&filter=%3CFilter%3E%0A%20%20%3CAnd%3E%0A%20%20%20%20%3CPropertyIsEqualTo%3E%3CValueReference%3Edog%3Aage%3C%2FValueReference%3E%3CLiteral%3E2%3C%2FLiteral%3E%3C%2FPropertyIsEqualTo%3E%0A%20%20%20%20%3CPropertyIsEqualTo%3E%3CValueReference%3Edog%3Aweight%3C%2FValueReference%3E%3CLiteral%3E5%3C%2FLiteral%3E%3C%2FPropertyIsEqualTo%3E%0A%20%20%3C%2FAnd%3E%0A%3C%2FFilter%3E&propertyName=P1,P2";
-        let parsed: WFSRequest = serde_urlencoded::from_str(query).unwrap();
+        let params = &[
+            ("request", "GetFeature"),
+            ("service", "WFS"),
+            ("version", "2.0.0"),
+            ("typeNames", "ns:test"),
+            ("bbox", "1,2,3,4"),
+            ("srsName", "EPSG:4326"),
+            ("format", "image/png"),
+            ("time", "2000-01-01T00:00:00.0Z/2000-01-02T00:00:00.0Z"),
+            ("namespaces","xmlns(dog=http://www.example.com/namespaces/dog)"),
+            ("count","10"),
+            ("sortBy","Name[+A]"),
+            ("resultType","results"),
+            ("filter","<Filter>
+  <And>
+    <PropertyIsEqualTo><ValueReference>dog:age</ValueReference><Literal>2</Literal></PropertyIsEqualTo>
+    <PropertyIsEqualTo><ValueReference>dog:weight</ValueReference><Literal>5</Literal></PropertyIsEqualTo>
+  </And>
+</Filter>"),
+            ("propertyName","P1,P2"),
+        ];
+        let query = serde_urlencoded::to_string(params).unwrap();
+        let parsed: WFSRequest = serde_urlencoded::from_str(&query).unwrap();
 
         let request = WFSRequest::GetFeature(GetFeature {
             version: "2.0.0".into(),
