@@ -57,6 +57,7 @@ async fn main() {
                 project_db.clone(),
             ))
             .or(handlers::wms::wms_handler(workflow_registry.clone()))
+            .or(handlers::wfs::wfs_handler(workflow_registry.clone()))
             .recover(handle_rejection),
     )
     .run(([127, 0, 0, 1], 3030))
