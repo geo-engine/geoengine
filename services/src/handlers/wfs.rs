@@ -51,17 +51,17 @@ async fn wfs<T: WorkflowRegistry>(
 
 fn get_capabilities(_request: &GetCapabilities) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
     // TODO: implement
-    // TODO: at least inject correct url of the instance and return data for the default layer
-    let mock = r#"<?xml version="1.0" encoding="UTF-8"?>
+    // TODO: inject correct url of the instance and return data for the default layer
+    let wfs_url = "http://localhost/wfs".to_string();
+    let mock = format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
 <wfs:WFS_Capabilities version="2.0.0"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xmlns="http://www.opengis.net/wfs/2.0"
     xmlns:wfs="http://www.opengis.net/wfs/2.0"
     xmlns:ows="http://www.opengis.net/ows/1.1"
-    xmlns:gml="http://www.opengis.net/gml/3.2"
-    xmlns:fes="http://www.opengis.net/fes/2.0"
     xmlns:xlink="http://www.w3.org/1999/xlink"
-    xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:schemaLocation="http://www.opengis.net/wfs/2.0 http://schemas.opengis.net/wfs/2.0/wfs.xsd http://inspire.ec.europa.eu/schemas/inspire_dls/1.0 http://inspire.ec.europa.eu/schemas/inspire_dls/1.0/inspire_dls.xsd"
+    xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:schemaLocation="http://www.opengis.net/wfs/2.0 http://schemas.opengis.net/wfs/2.0/wfs.xsd"
     xmlns:xml="http://www.w3.org/XML/1998/namespace">
     <ows:ServiceIdentification>
         <ows:Title>Geo Engine</ows:Title>     
@@ -84,8 +84,8 @@ fn get_capabilities(_request: &GetCapabilities) -> Result<Box<dyn warp::Reply>, 
         <ows:Operation name="GetCapabilities">
             <ows:DCP>
                 <ows:HTTP>
-                    <ows:Get xlink:href="http://localhost/wfs"/>
-                    <ows:Post xlink:href="http://localhost/wfs"/>
+                    <ows:Get xlink:href="{wfs_url}"/>
+                    <ows:Post xlink:href="{wfs_url}"/>
                 </ows:HTTP>
             </ows:DCP>
             <ows:Parameter name="AcceptVersions">
@@ -102,8 +102,8 @@ fn get_capabilities(_request: &GetCapabilities) -> Result<Box<dyn warp::Reply>, 
         <ows:Operation name="GetFeature">
             <ows:DCP>
                 <ows:HTTP>
-                    <ows:Get xlink:href="http://localhost/wfs"/>
-                    <ows:Post xlink:href="http://localhost/wfs"/>
+                    <ows:Get xlink:href="{wfs_url}"/>
+                    <ows:Post xlink:href="{wfs_url}"/>
                 </ows:HTTP>
             </ows:DCP>
             <ows:Parameter name="resultType">
@@ -122,19 +122,16 @@ fn get_capabilities(_request: &GetCapabilities) -> Result<Box<dyn warp::Reply>, 
                 <ows:NoValues/>
                 <ows:DefaultValue>FALSE</ows:DefaultValue>
             </ows:Constraint>
-        </ows:Operation>
-     
+        </ows:Operation>     
         <ows:Constraint name="ImplementsBasicWFS">
             <ows:NoValues/>
             <ows:DefaultValue>TRUE</ows:DefaultValue>
-        </ows:Constraint>
-     
+        </ows:Constraint>     
     </ows:OperationsMetadata>
     <FeatureTypeList>
         <FeatureType>
             <Name>Test</Name>
             <Title>Test</Title>
-            <Abstract>Verwaltungsgebiete Gemeinden Bayern - Datenquelle: Bayerische Vermessungsverwaltung – www.geodaten.bayern.de</Abstract>
             <DefaultCRS>urn:ogc:def:crs:EPSG::4326</DefaultCRS>
             <ows:WGS84BoundingBox>
                 <ows:LowerCorner>-90 -180</ows:LowerCorner>
@@ -142,7 +139,9 @@ fn get_capabilities(_request: &GetCapabilities) -> Result<Box<dyn warp::Reply>, 
             </ows:WGS84BoundingBox>
         </FeatureType>       
     </FeatureTypeList>
-</wfs:WFS_Capabilities>"#;
+</wfs:WFS_Capabilities>"#,
+        wfs_url = wfs_url
+    );
 
     Ok(Box::new(warp::reply::html(mock)))
 }

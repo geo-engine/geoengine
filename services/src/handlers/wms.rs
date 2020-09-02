@@ -52,8 +52,10 @@ async fn wms<T: WorkflowRegistry>(
 
 fn get_capabilities(_request: &GetCapabilities) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
     // TODO: implement
-    // TODO: at least inject correct url of the instance and return data for the default layer
-    let mock = r#"<WMS_Capabilities xmlns="http://www.opengis.net/wms" xmlns:sld="http://www.opengis.net/sld" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="1.3.0" xsi:schemaLocation="http://www.opengis.net/wms http://schemas.opengis.net/wms/1.3.0/capabilities_1_3_0.xsd http://www.opengis.net/sld http://schemas.opengis.net/sld/1.1.0/sld_capabilities.xsd">
+    // TODO: inject correct url of the instance and return data for the default layer
+    let wms_url = "http://localhost/wms".to_string();
+    let mock = format!(
+        r#"<WMS_Capabilities xmlns="http://www.opengis.net/wms" xmlns:sld="http://www.opengis.net/sld" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="1.3.0" xsi:schemaLocation="http://www.opengis.net/wms http://schemas.opengis.net/wms/1.3.0/capabilities_1_3_0.xsd http://www.opengis.net/sld http://schemas.opengis.net/sld/1.1.0/sld_capabilities.xsd">
     <Service>
         <Name>WMS</Name>
         <Title>Geo Engine WMS</Title>
@@ -66,7 +68,7 @@ fn get_capabilities(_request: &GetCapabilities) -> Result<Box<dyn warp::Reply>, 
                 <DCPType>
                     <HTTP>
                         <Get>
-                            <OnlineResource xlink:href="http://localhost"/>
+                            <OnlineResource xlink:href="{wms_url}"/>
                         </Get>
                     </HTTP>
                 </DCPType>
@@ -76,7 +78,7 @@ fn get_capabilities(_request: &GetCapabilities) -> Result<Box<dyn warp::Reply>, 
                 <DCPType>
                     <HTTP>
                         <Get>
-                            <OnlineResource xlink:href="http://localhost"/>
+                            <OnlineResource xlink:href="{wms_url}"/>
                         </Get>
                     </HTTP>
                 </DCPType>
@@ -100,7 +102,9 @@ fn get_capabilities(_request: &GetCapabilities) -> Result<Box<dyn warp::Reply>, 
             <BoundingBox CRS="EPSG:4326" minx="-90.0" miny="-180.0" maxx="90.0" maxy="180.0"/>
         </Layer>
     </Capability>
-</WMS_Capabilities>"#;
+</WMS_Capabilities>"#,
+        wms_url = wms_url
+    );
 
     Ok(Box::new(warp::reply::html(mock)))
 }
