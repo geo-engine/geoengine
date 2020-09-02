@@ -13,7 +13,7 @@ where
 
     if let [Ok(x1), Ok(y1), Ok(x2), Ok(y2)] = *split.as_slice() {
         BoundingBox2D::new(Coordinate2D::new(x1, y1), Coordinate2D::new(x2, y2))
-            .map_err(|_| D::Error::custom("Invalid bbox"))
+            .map_err(D::Error::custom)
     } else {
         Err(D::Error::custom("Invalid bbox"))
     }
@@ -41,10 +41,10 @@ where
     match *split.as_slice() {
         [Ok(time)] => TimeInterval::new(time.timestamp(), time.timestamp())
             .map(Some)
-            .map_err(|_| D::Error::custom("Invalid time")),
+            .map_err(D::Error::custom),
         [Ok(start), Ok(end)] => TimeInterval::new(start.timestamp(), end.timestamp())
             .map(Some)
-            .map_err(|_| D::Error::custom("Invalid time")),
+            .map_err(D::Error::custom),
         _ => Err(D::Error::custom("Invalid time")),
     }
 }
