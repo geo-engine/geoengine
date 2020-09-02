@@ -114,7 +114,6 @@ async fn get_map<T: WorkflowRegistry>(
     workflow_registry: &WR<T>,
 ) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
     // TODO: validate request?
-    // TODO: properly handle request
     if request.layer == "test" {
         return get_map_mock(request);
     }

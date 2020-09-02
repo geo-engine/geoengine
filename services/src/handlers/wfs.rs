@@ -151,7 +151,6 @@ async fn get_feature<T: WorkflowRegistry>(
     workflow_registry: &WR<T>,
 ) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
     // TODO: validate request?
-    // TODO: properly handle request
     if request.type_names
         == (TypeNames {
             namespace: None,
