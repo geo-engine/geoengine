@@ -119,9 +119,7 @@ async fn get_map<T: WorkflowRegistry>(
     }
 
     let workflow = workflow_registry.read().await.load(&WorkflowId::from_uuid(
-        Uuid::parse_str(&request.layer)
-            .context(error::Uuid)
-            .map_err(warp::reject::custom)?,
+        Uuid::parse_str(&request.layer).context(error::Uuid)?,
     ));
 
     let workflow = if let Some(workflow) = workflow {
@@ -133,22 +131,14 @@ async fn get_map<T: WorkflowRegistry>(
             warp::http::StatusCode::INTERNAL_SERVER_ERROR.into_response(),
         ));
     };
-    let operator = workflow
-        .operator
-        .get_raster()
-        .context(error::Operator)
-        .map_err(warp::reject::custom)?;
+    let operator = workflow.operator.get_raster().context(error::Operator)?;
 
     let execution_context = ExecutionContext;
     let initialized = operator
         .initialize(execution_context)
-        .context(error::Operator)
-        .map_err(warp::reject::custom)?;
+        .context(error::Operator)?;
 
-    let processor = initialized
-        .query_processor()
-        .context(error::Operator)
-        .map_err(warp::reject::custom)?;
+    let processor = initialized.query_processor().context(error::Operator)?;
 
     let query_rect = QueryRectangle {
         bbox: request.bbox,
@@ -193,15 +183,13 @@ async fn get_map<T: WorkflowRegistry>(
         TypedRasterQueryProcessor::F64(p) => {
             raster_stream_to_png_bytes(p, query_rect, query_ctx, request).await
         }
-    }
-    .map_err(warp::reject::custom)?;
+    }?;
 
     Ok(Box::new(
         Response::builder()
             .header("Content-Type", "image/png")
             .body(image_bytes)
-            .context(error::HTTP)
-            .map_err(warp::reject::custom)?,
+            .context(error::HTTP)?,
     ))
 }
 
@@ -280,21 +268,18 @@ fn get_map_mock(request: &GetMap) -> Result<Box<dyn warp::Reply>, warp::Rejectio
         Default::default(),
         Default::default(),
     )
-    .context(error::DataType)
-    .map_err(warp::reject::custom)?;
+    .context(error::DataType)?;
 
     let colorizer = Colorizer::rgba();
     let image_bytes = raster
         .to_png(request.width, request.height, &colorizer)
-        .context(error::DataType)
-        .map_err(warp::reject::custom)?;
+        .context(error::DataType)?;
 
     Ok(Box::new(
         Response::builder()
             .header("Content-Type", "image/png")
             .body(image_bytes)
-            .context(error::HTTP)
-            .map_err(warp::reject::custom)?,
+            .context(error::HTTP)?,
     ))
 }
 

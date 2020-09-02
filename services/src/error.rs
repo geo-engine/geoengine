@@ -57,3 +57,9 @@ impl From<geoengine_operators::error::Error> for Error {
         Self::Operator { source: e }
     }
 }
+
+impl From<Error> for warp::Rejection {
+    fn from(e: Error) -> Self {
+        warp::reject::custom(e)
+    }
+}

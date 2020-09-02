@@ -164,39 +164,28 @@ async fn get_feature<T: WorkflowRegistry>(
             .read()
             .await
             .load(&WorkflowId::from_uuid(
-                Uuid::parse_str(&request.type_names.feature_type)
-                    .context(error::Uuid)
-                    .map_err(warp::reject::custom)?,
+                Uuid::parse_str(&request.type_names.feature_type).context(error::Uuid)?,
             ))
-            .ok_or(error::Error::WorkflowLoadFromRegistryFailed)
-            .map_err(warp::reject::custom)?,
-        Some("json") => serde_json::from_str(&request.type_names.feature_type)
-            .context(error::SerdeJson)
-            .map_err(warp::reject::custom)?,
+            .ok_or(error::Error::WorkflowLoadFromRegistryFailed)?,
+        Some("json") => {
+            serde_json::from_str(&request.type_names.feature_type).context(error::SerdeJson)?
+        }
         Some(_) => {
-            return Err(warp::reject::custom(error::Error::InvalidNamespace));
+            return Err(error::Error::InvalidNamespace.into());
         }
         None => {
-            return Err(warp::reject::custom(error::Error::InvalidWFSTypeNames));
+            return Err(error::Error::InvalidWFSTypeNames.into());
         }
     };
 
-    let operator = workflow
-        .operator
-        .get_vector()
-        .context(error::Operator)
-        .map_err(warp::reject::custom)?;
+    let operator = workflow.operator.get_vector().context(error::Operator)?;
 
     let execution_context = ExecutionContext;
     let initialized = operator
         .initialize(execution_context)
-        .context(error::Operator)
-        .map_err(warp::reject::custom)?;
+        .context(error::Operator)?;
 
-    let processor = initialized
-        .query_processor()
-        .context(error::Operator)
-        .map_err(warp::reject::custom)?;
+    let processor = initialized.query_processor().context(error::Operator)?;
 
     let query_rect = QueryRectangle {
         bbox: request.bbox,
@@ -229,15 +218,13 @@ async fn get_feature<T: WorkflowRegistry>(
                 warp::http::StatusCode::INTERNAL_SERVER_ERROR.into_response(),
             ));
         }
-    }
-    .map_err(warp::reject::custom)?;
+    }?;
 
     Ok(Box::new(
         Response::builder()
             .header("Content-Type", "application/json")
             .body(json.to_string())
-            .context(error::HTTP)
-            .map_err(warp::reject::custom)?,
+            .context(error::HTTP)?,
     ))
 }
 
