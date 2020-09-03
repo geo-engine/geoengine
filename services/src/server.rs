@@ -59,6 +59,7 @@ pub async fn start_server(shutdown_rx: Option<Receiver<()>>) -> Result<()> {
             project_db.clone(),
         ))
         .or(handlers::wms::wms_handler(workflow_registry.clone()))
+        .or(handlers::wfs::wfs_handler(workflow_registry.clone()))
         .recover(handle_rejection);
 
     #[allow(clippy::option_if_let_else)]
