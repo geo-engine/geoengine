@@ -20,6 +20,12 @@ pub enum Error {
     SerdeJson {
         source: serde_json::Error,
     },
+    IO {
+        source: std::io::Error,
+    },
+    TokioJoin {
+        source: tokio::task::JoinError,
+    },
 
     #[snafu(display("Registration failed: {:?}", reason))]
     RegistrationFailed {
