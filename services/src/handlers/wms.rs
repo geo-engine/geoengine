@@ -296,6 +296,7 @@ mod tests {
     use super::*;
     use crate::ogc::wms::request::GetMapFormat;
     use crate::workflows::workflow::Workflow;
+    use xml::ParserConfig;
 
     #[tokio::test]
     async fn test() {
@@ -324,7 +325,12 @@ mod tests {
             .await;
         assert_eq!(res.status(), 200);
 
-        // TODO: validate xml?
+        // TODO: validate against schema
+        let reader = ParserConfig::default().create_reader(res.body().as_ref());
+
+        for event in reader {
+            assert!(event.is_ok());
+        }
     }
 
     #[tokio::test]

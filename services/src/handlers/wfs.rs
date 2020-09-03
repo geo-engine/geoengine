@@ -317,6 +317,7 @@ mod tests {
     };
     use serde_json::json;
     use std::io::{Seek, SeekFrom, Write};
+    use xml::ParserConfig;
 
     #[tokio::test]
     async fn mock_test() {
@@ -420,9 +421,15 @@ mod tests {
             .path("/wfs?request=GetCapabilities&service=WFS")
             .reply(&wfs_handler(workflow_registry))
             .await;
+
         assert_eq!(res.status(), 200);
 
-        // TODO: validate xml?
+        // TODO: validate against schema
+        let reader = ParserConfig::default().create_reader(res.body().as_ref());
+
+        for event in reader {
+            assert!(event.is_ok());
+        }
     }
 
     #[tokio::test]
