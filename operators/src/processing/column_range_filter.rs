@@ -7,7 +7,6 @@ use crate::engine::{
 use crate::error;
 use crate::util::input::StringOrNumberRange;
 use crate::util::Result;
-use failure::_core::ops::RangeInclusive;
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::collections::FeatureCollection;
@@ -16,6 +15,7 @@ use geoengine_datatypes::util::arrow::ArrowTyped;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::marker::PhantomData;
+use std::ops::RangeInclusive;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ColumnRangeFilterParams {
