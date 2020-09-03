@@ -5,9 +5,8 @@ use crate::engine::{
     VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::error;
-use crate::util::input::StringOrNumber;
+use crate::util::input::StringOrNumberRange;
 use crate::util::Result;
-use failure::_core::marker::PhantomData;
 use failure::_core::ops::RangeInclusive;
 use futures::stream::BoxStream;
 use futures::StreamExt;
@@ -16,12 +15,12 @@ use geoengine_datatypes::primitives::{FeatureDataType, FeatureDataValue, Geometr
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
-use std::convert::TryInto;
+use std::marker::PhantomData;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ColumnRangeFilterParams {
     pub column: String,
-    pub ranges: Vec<(StringOrNumber, StringOrNumber)>,
+    pub ranges: Vec<StringOrNumberRange>,
     pub keep_nulls: bool,
 }
 
@@ -95,7 +94,9 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
 pub struct ColumnRangeFilterProcessor<G> {
     vector_type: PhantomData<FeatureCollection<G>>,
     source: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
-    params: ColumnRangeFilterParams,
+    column: String,
+    keep_nulls: bool,
+    ranges: Vec<StringOrNumberRange>,
 }
 
 impl<G> ColumnRangeFilterProcessor<G>
@@ -109,7 +110,9 @@ where
         Self {
             vector_type: Default::default(),
             source,
-            params,
+            column: params.column,
+            keep_nulls: params.keep_nulls,
+            ranges: params.ranges,
         }
     }
 }
@@ -125,47 +128,41 @@ where
         query: QueryRectangle,
         ctx: QueryContext,
     ) -> BoxStream<Result<Self::VectorType>> {
-        let column_name = self.params.column.clone();
-        let ranges = self.params.ranges.clone();
-        let keep_nulls = self.params.keep_nulls;
+        let column_name = self.column.clone();
+        let ranges = self.ranges.clone();
+        let keep_nulls = self.keep_nulls;
 
         let filter_stream = self.source.query(query, ctx).map(move |collection| {
             let collection = collection?;
 
-            let filter_ranges: Result<Vec<RangeInclusive<FeatureDataValue>>> =
-                    // TODO: do transformation work only once
-                    match collection.column_type(&column_name)? {
-                        FeatureDataType::Text | FeatureDataType::NullableText => ranges
-                            .iter()
-                            .map(|(range_start, range_end)| {
-                                Ok(FeatureDataValue::Text(range_start.try_into()?)
-                                    ..=FeatureDataValue::Text(range_end.try_into()?))
-                            })
-                            .collect(),
-                        FeatureDataType::Number | FeatureDataType::NullableNumber => ranges
-                            .iter()
-                            .map(|(range_start, range_end)| {
-                                Ok(FeatureDataValue::Number(range_start.try_into()?)
-                                    ..=FeatureDataValue::Number(range_end.try_into()?))
-                            })
-                            .collect(),
-                        FeatureDataType::Decimal | FeatureDataType::NullableDecimal => ranges
-                            .iter()
-                            .map(|(range_start, range_end)| {
-                                Ok(FeatureDataValue::Decimal(range_start.try_into()?)
-                                    ..=FeatureDataValue::Decimal(range_end.try_into()?))
-                            })
-                            .collect(),
-                        FeatureDataType::Categorical | FeatureDataType::NullableCategorical => {
-                            Err(error::Error::InvalidType {
-                                expected: "text, number, or decimal".to_string(),
-                                found: "categorical".to_string(),
-                            })
-                        }
-                    };
+            // TODO: do transformation work only once
+            let ranges: Result<Vec<RangeInclusive<FeatureDataValue>>> =
+                match collection.column_type(&column_name)? {
+                    FeatureDataType::Text | FeatureDataType::NullableText => ranges
+                        .iter()
+                        .cloned()
+                        .map(|range| range.into_string_range().map(Into::into))
+                        .collect(),
+                    FeatureDataType::Number | FeatureDataType::NullableNumber => ranges
+                        .iter()
+                        .cloned()
+                        .map(|range| range.into_number_range().map(Into::into))
+                        .collect(),
+                    FeatureDataType::Decimal | FeatureDataType::NullableDecimal => ranges
+                        .iter()
+                        .cloned()
+                        .map(|range| range.into_decimal_range().map(Into::into))
+                        .collect(),
+                    FeatureDataType::Categorical | FeatureDataType::NullableCategorical => {
+                        Err(error::Error::InvalidType {
+                            expected: "text, number, or decimal".to_string(),
+                            found: "categorical".to_string(),
+                        })
+                    }
+                };
 
             collection
-                .column_range_filter(&column_name, &filter_ranges?, keep_nulls)
+                .column_range_filter(&column_name, &ranges?, keep_nulls)
                 .map_err(Into::into)
         });
 
@@ -190,7 +187,7 @@ mod tests {
         let filter = ColumnRangeFilter {
             params: ColumnRangeFilterParams {
                 column: "foobar".to_string(),
-                ranges: vec![(1.into(), 2.into())],
+                ranges: vec![(1..=2).into()],
                 keep_nulls: false,
             },
             vector_sources: vec![],
@@ -247,7 +244,7 @@ mod tests {
         let filter = ColumnRangeFilter {
             params: ColumnRangeFilterParams {
                 column: column_name.to_string(),
-                ranges: vec![(1.into(), 2.into())],
+                ranges: vec![(1..=2).into()],
                 keep_nulls: false,
             },
             vector_sources: vec![source],
