@@ -192,7 +192,7 @@ macro_rules! call_bi_generic_raster2d_staircase {
     };
 }
 
-/// Generates a a `TypedRaster2D` by calling a function on its variant.
+/// Generates a a `TypedRaster2D` by calling a function with the specified data type variant.
 /// Call via `generate_generic_raster2d!(type, function)`.
 #[macro_export]
 macro_rules! generate_generic_raster2d {
