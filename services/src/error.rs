@@ -17,6 +17,12 @@ pub enum Error {
     Uuid {
         source: uuid::Error,
     },
+    IO {
+        source: std::io::Error,
+    },
+    TokioJoin {
+        source: tokio::task::JoinError,
+    },
 
     #[snafu(display("Registration failed: {:?}", reason))]
     RegistrationFailed {
