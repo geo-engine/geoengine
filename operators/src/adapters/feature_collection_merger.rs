@@ -131,11 +131,12 @@ mod tests {
         ExecutionContext, QueryContext, QueryProcessor, QueryRectangle, TypedVectorQueryProcessor,
         VectorOperator,
     };
+    use crate::error::Error;
     use crate::mock::{
         MockFeatureCollectionSource, MockFeatureCollectionSourceParams, MockPointSource,
         MockPointSourceParams,
     };
-    use futures::StreamExt;
+    use futures::{StreamExt, TryStreamExt};
     use geoengine_datatypes::collections::{DataCollection, MultiPointCollection};
     use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, MultiPoint, TimeInterval};
 
@@ -246,5 +247,52 @@ mod tests {
             .await;
 
         assert_eq!(collections.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn intermediate_errors() {
+        let source = futures::stream::iter(vec![
+            MultiPointCollection::from_data(
+                MultiPoint::many(vec![(0.0, 0.1)]).unwrap(),
+                vec![TimeInterval::new(0, 1).unwrap()],
+                Default::default(),
+            ),
+            MultiPointCollection::from_data(
+                vec![], // should fail
+                vec![TimeInterval::new(0, 1).unwrap()],
+                Default::default(),
+            ),
+            MultiPointCollection::from_data(
+                MultiPoint::many(vec![(1.0, 1.1)]).unwrap(),
+                vec![TimeInterval::new(0, 1).unwrap()],
+                Default::default(),
+            ),
+        ])
+        .map_err(Error::from);
+
+        let merged_collections = FeatureCollectionChunkMerger::new(source.fuse(), 0)
+            .collect::<Vec<Result<MultiPointCollection>>>()
+            .await;
+
+        assert_eq!(merged_collections.len(), 3);
+        assert_eq!(
+            merged_collections[0].as_ref().unwrap(),
+            &MultiPointCollection::from_data(
+                MultiPoint::many(vec![(0.0, 0.1)]).unwrap(),
+                vec![TimeInterval::new(0, 1).unwrap()],
+                Default::default(),
+            )
+            .unwrap()
+        );
+        assert!(merged_collections[1].is_err());
+        assert_eq!(
+            merged_collections[2].as_ref().unwrap(),
+            &MultiPointCollection::from_data(
+                MultiPoint::many(vec![(1.0, 1.1)]).unwrap(),
+                vec![TimeInterval::new(0, 1).unwrap()],
+                Default::default(),
+            )
+            .unwrap()
+        );
     }
 }
