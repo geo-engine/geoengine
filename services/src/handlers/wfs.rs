@@ -160,13 +160,9 @@ async fn get_feature<T: WorkflowRegistry>(
     }
 
     let workflow: Workflow = match request.type_names.namespace.as_deref() {
-        Some("registry") => workflow_registry
-            .read()
-            .await
-            .load(&WorkflowId::from_uuid(
-                Uuid::parse_str(&request.type_names.feature_type).context(error::Uuid)?,
-            ))
-            .ok_or(error::Error::WorkflowLoadFromRegistryFailed)?,
+        Some("registry") => workflow_registry.read().await.load(&WorkflowId::from_uuid(
+            Uuid::parse_str(&request.type_names.feature_type).context(error::Uuid)?,
+        ))?,
         Some("json") => {
             serde_json::from_str(&request.type_names.feature_type).context(error::SerdeJson)?
         }
@@ -463,7 +459,11 @@ x;y
             })),
         };
 
-        let id = workflow_registry.write().await.register(workflow.clone());
+        let id = workflow_registry
+            .write()
+            .await
+            .register(workflow.clone())
+            .unwrap();
 
         let res = warp::test::request()
             .method("GET")

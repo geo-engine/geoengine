@@ -43,11 +43,11 @@ pub enum Error {
     ProjectDeleteFailed,
     PermissionFailed,
 
-    WorkflowLoadFromRegistryFailed,
-
     InvalidNamespace,
 
     InvalidWFSTypeNames,
+
+    NoWorkflowForGivenId,
 }
 
 impl Reject for Error {}

@@ -120,17 +120,8 @@ async fn get_map<T: WorkflowRegistry>(
 
     let workflow = workflow_registry.read().await.load(&WorkflowId::from_uuid(
         Uuid::parse_str(&request.layer).context(error::Uuid)?,
-    ));
+    ))?;
 
-    let workflow = if let Some(workflow) = workflow {
-        workflow
-    } else {
-        // TODO: output error
-        // TODO: respect GetMapExceptionFormat
-        return Ok(Box::new(
-            warp::http::StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-        ));
-    };
     let operator = workflow.operator.get_raster().context(error::Operator)?;
 
     let execution_context = ExecutionContext;
@@ -395,7 +386,11 @@ mod tests {
             ),
         };
 
-        let id = workflow_registry.write().await.register(workflow.clone());
+        let id = workflow_registry
+            .write()
+            .await
+            .register(workflow.clone())
+            .unwrap();
 
         let res = warp::test::request()
             .method("GET")
