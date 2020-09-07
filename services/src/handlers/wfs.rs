@@ -195,7 +195,7 @@ async fn get_feature<T: WorkflowRegistry>(
         }),
     };
     let query_ctx = QueryContext {
-        // TODO: define meaningful query context
+        // TODO: use production config and test config sizes here
         chunk_byte_size: 1024,
     };
 
