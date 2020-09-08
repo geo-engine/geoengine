@@ -19,8 +19,7 @@ use futures::StreamExt;
 use geoengine_datatypes::primitives::{TimeInstance, TimeInterval};
 use geoengine_operators::call_on_generic_raster_processor;
 use geoengine_operators::engine::{
-    ExecutionContext, QueryContext, QueryRectangle, RasterQueryProcessor, TypedOperator,
-    TypedRasterQueryProcessor,
+    ExecutionContext, QueryContext, QueryRectangle, RasterQueryProcessor,
 };
 
 type WR<T> = Arc<RwLock<T>>;
