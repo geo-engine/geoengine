@@ -151,6 +151,7 @@ where
 
 /// An enum to differentiate between `Operator` variants
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(tag = "type", content = "operator")]
 pub enum TypedOperator {
     Vector(Box<dyn VectorOperator>),
     Raster(Box<dyn RasterOperator>),

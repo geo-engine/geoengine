@@ -18,5 +18,55 @@ impl WorkflowId {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Workflow {
+    #[serde(flatten)]
     pub operator: TypedOperator,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use geoengine_datatypes::primitives::Coordinate2D;
+    use geoengine_operators::engine::VectorOperator;
+    use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
+
+    #[test]
+    fn serde() {
+        let workflow = Workflow {
+            operator: TypedOperator::Vector(
+                MockPointSource {
+                    params: MockPointSourceParams {
+                        points: vec![Coordinate2D::new(1., 2.); 3],
+                    },
+                }
+                .boxed(),
+            ),
+        };
+
+        let serialized_workflow = serde_json::to_string(&workflow).unwrap();
+
+        assert_eq!(
+            serialized_workflow,
+            serde_json::json!({
+                "type": "Vector",
+                "operator": {
+                    "type": "MockPointSource",
+                    "params": {
+                        "points": [{
+                            "x": 1.0,
+                            "y": 2.0
+                        }, {
+                            "x": 1.0,
+                            "y": 2.0
+                        }, {
+                            "x": 1.0,
+                            "y": 2.0
+                        }]
+                    }
+                }
+            })
+            .to_string()
+        );
+
+        // TODO: check deserialization
+    }
 }
