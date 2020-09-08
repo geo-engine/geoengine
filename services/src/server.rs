@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use tokio::sync::RwLock;
-use warp::Filter;
+use warp::{Filter, Rejection};
 
 use crate::error;
 use crate::error::Result;
@@ -11,9 +11,14 @@ use crate::projects::hashmap_projectdb::HashMapProjectDB;
 use crate::users::hashmap_userdb::HashMapUserDB;
 use crate::workflows::registry::HashMapRegistry;
 use snafu::ResultExt;
+use std::path::PathBuf;
 use tokio::sync::oneshot::Receiver;
+use warp::fs::File;
 
-pub async fn start_server(shutdown_rx: Option<Receiver<()>>) -> Result<()> {
+pub async fn start_server(
+    shutdown_rx: Option<Receiver<()>>,
+    static_files_dir: Option<PathBuf>,
+) -> Result<()> {
     let user_db = Arc::new(RwLock::new(HashMapUserDB::default()));
     let workflow_registry = Arc::new(RwLock::new(HashMapRegistry::default()));
     let project_db = Arc::new(RwLock::new(HashMapProjectDB::default()));
@@ -59,9 +64,9 @@ pub async fn start_server(shutdown_rx: Option<Receiver<()>>) -> Result<()> {
             project_db.clone(),
         ))
         .or(handlers::wms::wms_handler(workflow_registry.clone()))
+        .or(serve_static_directory(static_files_dir))
         .recover(handle_rejection);
 
-    #[allow(clippy::option_if_let_else)]
     let task = if let Some(receiver) = shutdown_rx {
         let (_, server) =
             warp::serve(handler).bind_with_graceful_shutdown(([127, 0, 0, 1], 3030), async {
@@ -74,4 +79,21 @@ pub async fn start_server(shutdown_rx: Option<Receiver<()>>) -> Result<()> {
     };
 
     task.await.context(error::TokioJoin)
+}
+
+fn serve_static_directory(
+    path: Option<PathBuf>,
+) -> impl Filter<Extract = (File,), Error = Rejection> + Clone {
+    let has_path = path.is_some();
+
+    warp::path("static")
+        .and_then(move || async move {
+            if has_path {
+                Ok(())
+            } else {
+                Err(warp::reject::not_found())
+            }
+        })
+        .and(warp::fs::dir(path.unwrap_or_default()))
+        .map(|_, dir| dir)
 }
