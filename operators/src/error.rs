@@ -58,6 +58,14 @@ pub enum Error {
     SerdeJson {
         source: serde_json::Error,
     },
+    OCL {
+        #[snafu(source(from(ocl::error::Error, failure::Fail::compat)))]
+        source: failure::Compat<ocl::error::Error>,
+    },
+    CLProgramInvalidRasterIndex,
+    CLProgramInvalidRasterDataType,
+    CLProgramUnspecifiedRaster,
+    CLInvalidInputsForIterationType,
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {

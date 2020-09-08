@@ -91,6 +91,22 @@ where
         }
         None
     }
+
+    // TODO: implement for other types
+    pub fn get_i32_ref_mut(&mut self) -> Option<&mut BaseRaster<D, i32, Vec<i32>>> {
+        if let TypedRasterNDim::I32(r) = self {
+            return Some(r);
+        }
+        None
+    }
+
+    // TODO: implement for other types
+    pub fn get_i32_ref(&self) -> Option<&BaseRaster<D, i32, Vec<i32>>> {
+        if let TypedRasterNDim::I32(r) = self {
+            return Some(r);
+        }
+        None
+    }
 }
 
 // TODO: use a macro?
