@@ -2,9 +2,11 @@ mod base_raster;
 mod data_type;
 mod geo_transform;
 mod grid_dimension;
+mod helpers;
 mod operations;
 mod raster_tile;
 mod typed_raster;
+
 pub use self::base_raster::{BaseRaster, Raster2D, Raster3D};
 pub use self::data_type::{
     DynamicRasterDataType, FromPrimitive, Pixel, RasterDataType, StaticRasterDataType, TypedValue,
@@ -110,26 +112,31 @@ impl<T> Capacity for [T] {
         self.len()
     }
 }
+
 impl<T> Capacity for &[T] {
     fn capacity(&self) -> usize {
         self.len()
     }
 }
+
 impl<T> Capacity for [T; 1] {
     fn capacity(&self) -> usize {
         self.len()
     }
 }
+
 impl<T> Capacity for [T; 2] {
     fn capacity(&self) -> usize {
         self.len()
     }
 }
+
 impl<T> Capacity for [T; 3] {
     fn capacity(&self) -> usize {
         self.len()
     }
 }
+
 impl<T> Capacity for Vec<T> {
     fn capacity(&self) -> usize {
         self.len()
