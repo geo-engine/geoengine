@@ -23,6 +23,9 @@ pub enum Error {
     TokioJoin {
         source: tokio::task::JoinError,
     },
+    UnableToParseQueryString {
+        source: serde_urlencoded::de::Error,
+    },
 
     #[snafu(display("Registration failed: {:?}", reason))]
     RegistrationFailed {

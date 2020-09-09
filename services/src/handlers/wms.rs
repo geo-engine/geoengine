@@ -28,7 +28,18 @@ pub fn wms_handler<T: WorkflowRegistry>(
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::get()
         .and(warp::path!("wms"))
-        .and(warp::query::<WMSRequest>())
+        .and(
+            warp::query::raw().and_then(|query_string: String| async move {
+                // TODO: make case insensitive by using serde-aux instead
+                let query_string = query_string.replace("REQUEST", "request");
+
+                // TODO: replace `map_err` with `into`
+                serde_urlencoded::from_str::<WMSRequest>(&query_string)
+                    .context(error::UnableToParseQueryString)
+                    .map_err(warp::reject::custom)
+            }),
+        )
+        // .and(warp::query::<WMSRequest>())
         .and(warp::any().map(move || Arc::clone(&workflow_registry)))
         .and_then(wms)
 }
@@ -111,12 +122,12 @@ async fn get_map<T: WorkflowRegistry>(
 ) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
     // TODO: validate request?
     // TODO: properly handle request
-    if request.layer == "test" {
+    if request.layers == "test" {
         return get_map_mock(request);
     }
 
     let workflow = workflow_registry.read().await.load(&WorkflowId::from_uuid(
-        Uuid::parse_str(&request.layer)
+        Uuid::parse_str(&request.layers)
             .context(error::Uuid)
             .map_err(warp::reject::custom)?,
     ));
@@ -286,7 +297,7 @@ mod tests {
 
         let res = warp::test::request()
             .method("GET")
-            .path("/wms?request=GetMap&service=WMS&version=1.3.0&layer=test&bbox=1,2,3,4&width=100&height=100&crs=foo&styles=ssss&format=image/png")
+            .path("/wms?request=GetMap&service=WMS&version=1.3.0&layers=test&bbox=1,2,3,4&width=100&height=100&crs=foo&styles=ssss&format=image/png")
             .reply(&wms_handler(workflow_registry))
             .await;
         assert_eq!(res.status(), 200);
@@ -335,7 +346,7 @@ mod tests {
                 height: 600,
                 bbox: query_bbox,
                 format: GetMapFormat::ImagePng,
-                layer: "".to_string(),
+                layers: "".to_string(),
                 crs: "".to_string(),
                 styles: "".to_string(),
                 time: None,
@@ -376,9 +387,40 @@ mod tests {
 
         let res = warp::test::request()
             .method("GET")
-            .path(&format!("/wms?request=GetMap&service=WMS&version=1.3.0&layer={}&bbox=-10,20,50,80&width=600&height=600&crs=foo&styles=ssss&format=image/png", id.to_string()))
+            .path(&format!("/wms?request=GetMap&service=WMS&version=1.3.0&layers={}&bbox=-10,20,50,80&width=600&height=600&crs=foo&styles=ssss&format=image/png", id.to_string()))
             .reply(&wms_handler(workflow_registry))
             .await;
+        assert_eq!(res.status(), 200);
+        assert_eq!(
+            include_bytes!("../../../services/test-data/wms/raster.png") as &[u8],
+            res.body().to_vec().as_slice()
+        );
+    }
+
+    #[tokio::test]
+    async fn get_map_uppercase() {
+        let workflow_registry = Arc::new(RwLock::new(HashMapRegistry::default()));
+
+        let workflow = Workflow {
+            operator: TypedOperator::Raster(
+                GdalSource {
+                    params: GdalSourceParameters {
+                        dataset_id: "test".to_owned(),
+                        channel: None,
+                    },
+                }
+                .boxed(),
+            ),
+        };
+
+        let id = workflow_registry.write().await.register(workflow.clone());
+
+        let res = warp::test::request()
+            .method("GET")
+            .path(&format!("/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS={}&CRS=EPSG%3A3857&STYLES=&WIDTH=600&HEIGHT=600&BBOX=-10,20,50,80", id.to_string()))
+            .reply(&wms_handler(workflow_registry))
+            .await;
+
         assert_eq!(res.status(), 200);
         assert_eq!(
             include_bytes!("../../../services/test-data/wms/raster.png") as &[u8],

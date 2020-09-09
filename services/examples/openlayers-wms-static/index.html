@@ -53,11 +53,14 @@
 
         console.log("Creating layer with workflow id:", workflow_id);
 
+        // TODO: use real layer
+        console.log("Using `test` workflow instead");
+
         const layer = new ol.layer.Image({
             extent: [-13884991, 2870341, -7455066, 6338219],
             source: new ol.source.ImageWMS({
                 url: '/wms',
-                params: {'LAYERS': workflow_id},
+                params: {'LAYERS': 'test' /*workflow_id*/},
                 ratio: 1,
             }),
         });
