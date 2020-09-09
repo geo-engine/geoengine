@@ -4,7 +4,7 @@ use snafu::ResultExt;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 use warp::reply::Reply;
-use warp::{http::Response, Filter};
+use warp::{http::Response, Filter, Rejection};
 
 use geoengine_datatypes::operations::image::{Colorizer, ToPng};
 use geoengine_datatypes::raster::{Blit, GeoTransform, Pixel, Raster2D};
@@ -34,10 +34,9 @@ pub fn wms_handler<T: WorkflowRegistry>(
                 // TODO: make case insensitive by using serde-aux instead
                 let query_string = query_string.replace("REQUEST", "request");
 
-                // TODO: replace `map_err` with `into`
                 serde_urlencoded::from_str::<WMSRequest>(&query_string)
                     .context(error::UnableToParseQueryString)
-                    .map_err(warp::reject::custom)
+                    .map_err(Rejection::from)
             }),
         )
         // .and(warp::query::<WMSRequest>())
@@ -126,12 +125,12 @@ async fn get_map<T: WorkflowRegistry>(
     workflow_registry: &WR<T>,
 ) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
     // TODO: validate request?
-    if request.layer == "test" {
+    if request.layers == "test" {
         return get_map_mock(request);
     }
 
     let workflow = workflow_registry.read().await.load(&WorkflowId::from_uuid(
-        Uuid::parse_str(&request.layer).context(error::Uuid)?,
+        Uuid::parse_str(&request.layers).context(error::Uuid)?,
     ))?;
 
     let operator = workflow.operator.get_raster().context(error::Operator)?;
@@ -185,7 +184,7 @@ where
     let query_geo_transform = GeoTransform::new(
         query_rect.bbox.upper_left(),
         query_rect.bbox.size_x() / f64::from(request.width),
-        -query_rect.bbox.size_y() / f64::from(request.height), // TODO: negativ, s.t. geo transform fits...
+        -query_rect.bbox.size_y() / f64::from(request.height), // TODO: negative, s.t. geo transform fits...
     );
 
     let output_raster: Result<Raster2D<T>> = Raster2D::new(
@@ -209,7 +208,7 @@ where
             };
 
             match result {
-                Ok(updated_rasted2d) => futures::future::ok(updated_rasted2d),
+                Ok(updated_raster2d) => futures::future::ok(updated_raster2d),
                 Err(error) => futures::future::err(error),
             }
         })
@@ -404,7 +403,11 @@ mod tests {
             ),
         };
 
-        let id = workflow_registry.write().await.register(workflow.clone());
+        let id = workflow_registry
+            .write()
+            .await
+            .register(workflow.clone())
+            .unwrap();
 
         let res = warp::test::request()
             .method("GET")
