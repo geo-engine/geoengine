@@ -295,4 +295,54 @@ mod tests {
             .unwrap()
         );
     }
+
+    #[tokio::test]
+    async fn interleaving_pendings() {
+        let mut stream_history: Vec<Poll<Option<Result<MultiPointCollection>>>> = vec![
+            Poll::Pending,
+            Poll::Ready(Some(
+                MultiPointCollection::from_data(
+                    MultiPoint::many(vec![(0.0, 0.1)]).unwrap(),
+                    vec![TimeInterval::new(0, 1).unwrap()],
+                    Default::default(),
+                )
+                .map_err(Error::from),
+            )),
+            Poll::Pending,
+            Poll::Ready(Some(
+                MultiPointCollection::from_data(
+                    MultiPoint::many(vec![(1.0, 1.1)]).unwrap(),
+                    vec![TimeInterval::new(0, 1).unwrap()],
+                    Default::default(),
+                )
+                .map_err(Error::from),
+            )),
+        ];
+        stream_history.reverse();
+
+        let stream = futures::stream::poll_fn(move |cx| {
+            let item = stream_history.pop().unwrap_or(Poll::Ready(None));
+
+            if let Poll::Pending = item {
+                cx.waker().wake_by_ref();
+            }
+
+            item
+        });
+
+        let merged_collections = FeatureCollectionChunkMerger::new(stream.fuse(), usize::MAX)
+            .collect::<Vec<Result<MultiPointCollection>>>()
+            .await;
+
+        assert_eq!(merged_collections.len(), 1);
+        assert_eq!(
+            merged_collections[0].as_ref().unwrap(),
+            &MultiPointCollection::from_data(
+                MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1)]).unwrap(),
+                vec![TimeInterval::new(0, 1).unwrap(); 2],
+                Default::default(),
+            )
+            .unwrap()
+        );
+    }
 }
