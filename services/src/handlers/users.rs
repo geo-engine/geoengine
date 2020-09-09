@@ -23,12 +23,8 @@ async fn register_user<T: UserDB>(
     user: UserRegistration,
     user_db: DB<T>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    let user = user.validated().map_err(warp::reject::custom)?;
-    let id = user_db
-        .write()
-        .await
-        .register(user)
-        .map_err(warp::reject::custom)?;
+    let user = user.validated()?;
+    let id = user_db.write().await.register(user)?;
     Ok(warp::reply::json(&id))
 }
 

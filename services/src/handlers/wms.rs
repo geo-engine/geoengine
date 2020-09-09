@@ -16,9 +16,10 @@ use crate::util::identifiers::Identifier;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 use futures::StreamExt;
+use geoengine_datatypes::primitives::{TimeInstance, TimeInterval};
 use geoengine_operators::call_on_generic_raster_processor;
 use geoengine_operators::engine::{
-    ExecutionContext, QueryContext, QueryRectangle, RasterQueryProcessor, TypedOperator,
+    ExecutionContext, QueryContext, QueryRectangle, RasterQueryProcessor,
 };
 
 type WR<T> = Arc<RwLock<T>>;
@@ -63,8 +64,10 @@ async fn wms<T: WorkflowRegistry>(
 
 fn get_capabilities(_request: &GetCapabilities) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
     // TODO: implement
-    // TODO: at least inject correct url of the instance and return data for the default layer
-    let mock = r#"<WMS_Capabilities xmlns="http://www.opengis.net/wms" xmlns:sld="http://www.opengis.net/sld" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="1.3.0" xsi:schemaLocation="http://www.opengis.net/wms http://schemas.opengis.net/wms/1.3.0/capabilities_1_3_0.xsd http://www.opengis.net/sld http://schemas.opengis.net/sld/1.1.0/sld_capabilities.xsd">
+    // TODO: inject correct url of the instance and return data for the default layer
+    let wms_url = "http://localhost/wms".to_string();
+    let mock = format!(
+        r#"<WMS_Capabilities xmlns="http://www.opengis.net/wms" xmlns:sld="http://www.opengis.net/sld" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="1.3.0" xsi:schemaLocation="http://www.opengis.net/wms http://schemas.opengis.net/wms/1.3.0/capabilities_1_3_0.xsd http://www.opengis.net/sld http://schemas.opengis.net/sld/1.1.0/sld_capabilities.xsd">
     <Service>
         <Name>WMS</Name>
         <Title>Geo Engine WMS</Title>
@@ -77,7 +80,7 @@ fn get_capabilities(_request: &GetCapabilities) -> Result<Box<dyn warp::Reply>, 
                 <DCPType>
                     <HTTP>
                         <Get>
-                            <OnlineResource xlink:href="http://localhost"/>
+                            <OnlineResource xlink:href="{wms_url}"/>
                         </Get>
                     </HTTP>
                 </DCPType>
@@ -87,7 +90,7 @@ fn get_capabilities(_request: &GetCapabilities) -> Result<Box<dyn warp::Reply>, 
                 <DCPType>
                     <HTTP>
                         <Get>
-                            <OnlineResource xlink:href="http://localhost"/>
+                            <OnlineResource xlink:href="{wms_url}"/>
                         </Get>
                     </HTTP>
                 </DCPType>
@@ -111,7 +114,9 @@ fn get_capabilities(_request: &GetCapabilities) -> Result<Box<dyn warp::Reply>, 
             <BoundingBox CRS="EPSG:4326" minx="-90.0" miny="-180.0" maxx="90.0" maxy="180.0"/>
         </Layer>
     </Capability>
-</WMS_Capabilities>"#;
+</WMS_Capabilities>"#,
+        wms_url = wms_url
+    );
 
     Ok(Box::new(warp::reply::html(mock)))
 }
@@ -121,48 +126,29 @@ async fn get_map<T: WorkflowRegistry>(
     workflow_registry: &WR<T>,
 ) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
     // TODO: validate request?
-    // TODO: properly handle request
-    if request.layers == "test" {
+    if request.layer == "test" {
         return get_map_mock(request);
     }
 
     let workflow = workflow_registry.read().await.load(&WorkflowId::from_uuid(
-        Uuid::parse_str(&request.layers)
-            .context(error::Uuid)
-            .map_err(warp::reject::custom)?,
-    ));
+        Uuid::parse_str(&request.layer).context(error::Uuid)?,
+    ))?;
 
-    let workflow = if let Some(workflow) = workflow {
-        workflow
-    } else {
-        // TODO: output error
-        // TODO: respect GetMapExceptionFormat
-        return Ok(Box::new(
-            warp::http::StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-        ));
-    };
-    let operator = if let TypedOperator::Raster(r) = workflow.operator {
-        r
-    } else {
-        return Err(warp::reject::custom(
-            error::Error::InvalidWorkflowResultType,
-        ));
-    };
+    let operator = workflow.operator.get_raster().context(error::Operator)?;
 
     let execution_context = ExecutionContext;
     let initialized = operator
         .initialize(execution_context)
-        .context(error::Operator)
-        .map_err(warp::reject::custom)?;
+        .context(error::Operator)?;
 
-    let processor = initialized
-        .query_processor()
-        .context(error::Operator)
-        .map_err(warp::reject::custom)?;
+    let processor = initialized.query_processor().context(error::Operator)?;
 
     let query_rect = QueryRectangle {
         bbox: request.bbox,
-        time_interval: request.time.unwrap_or_default(), // TODO: choose latest? something cheaper than all timestamps
+        time_interval: request.time.unwrap_or_else(|| {
+            let time = TimeInstance::from(chrono::offset::Utc::now());
+            TimeInterval::new_unchecked(time, time)
+        }),
     };
     let query_ctx = QueryContext {
         // TODO: define meaningful query context
@@ -172,15 +158,13 @@ async fn get_map<T: WorkflowRegistry>(
     let image_bytes = call_on_generic_raster_processor!(
         processor,
         p => raster_stream_to_png_bytes(p, query_rect, query_ctx, request).await
-    )
-    .map_err(warp::reject::custom)?;
+    )?;
 
     Ok(Box::new(
         Response::builder()
             .header("Content-Type", "image/png")
             .body(image_bytes)
-            .context(error::HTTP)
-            .map_err(warp::reject::custom)?,
+            .context(error::HTTP)?,
     ))
 }
 
@@ -259,28 +243,25 @@ fn get_map_mock(request: &GetMap) -> Result<Box<dyn warp::Reply>, warp::Rejectio
         Default::default(),
         Default::default(),
     )
-    .context(error::DataType)
-    .map_err(warp::reject::custom)?;
+    .context(error::DataType)?;
 
     let colorizer = Colorizer::rgba();
     let image_bytes = raster
         .to_png(request.width, request.height, &colorizer)
-        .context(error::DataType)
-        .map_err(warp::reject::custom)?;
+        .context(error::DataType)?;
 
     Ok(Box::new(
         Response::builder()
             .header("Content-Type", "image/png")
             .body(image_bytes)
-            .context(error::HTTP)
-            .map_err(warp::reject::custom)?,
+            .context(error::HTTP)?,
     ))
 }
 
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::primitives::{BoundingBox2D, TimeInterval};
-    use geoengine_operators::engine::RasterOperator;
+    use geoengine_operators::engine::{RasterOperator, TypedOperator};
     use geoengine_operators::source::{
         gdal_source::GdalSourceProcessor, GdalSource, GdalSourceParameters,
     };
@@ -290,6 +271,7 @@ mod tests {
     use super::*;
     use crate::ogc::wms::request::GetMapFormat;
     use crate::workflows::workflow::Workflow;
+    use xml::ParserConfig;
 
     #[tokio::test]
     async fn test() {
@@ -318,7 +300,12 @@ mod tests {
             .await;
         assert_eq!(res.status(), 200);
 
-        // TODO: validate xml?
+        // TODO: validate against schema
+        let reader = ParserConfig::default().create_reader(res.body().as_ref());
+
+        for event in reader {
+            assert!(event.is_ok());
+        }
     }
 
     #[tokio::test]
@@ -383,7 +370,11 @@ mod tests {
             ),
         };
 
-        let id = workflow_registry.write().await.register(workflow.clone());
+        let id = workflow_registry
+            .write()
+            .await
+            .register(workflow.clone())
+            .unwrap();
 
         let res = warp::test::request()
             .method("GET")

@@ -34,7 +34,7 @@ async fn register_workflow<T: WorkflowRegistry>(
     workflow_registry: DB<T>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let mut wr = workflow_registry.write().await;
-    let id = wr.register(workflow);
+    let id = wr.register(workflow)?;
     Ok(warp::reply::json(&id))
 }
 
@@ -43,10 +43,7 @@ async fn load_workflow<T: WorkflowRegistry>(
     workflow_registry: DB<T>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let wr = workflow_registry.read().await;
-    match wr.load(&WorkflowId::from_uuid(id)) {
-        Some(w) => Ok(warp::reply::json(&w).into_response()),
-        None => Ok(warp::http::StatusCode::NOT_FOUND.into_response()),
-    }
+    Ok(warp::reply::json(&wr.load(&WorkflowId::from_uuid(id))?).into_response())
 }
 
 #[cfg(test)]
@@ -100,7 +97,11 @@ mod tests {
             .into(),
         };
 
-        let id = workflow_registry.write().await.register(workflow.clone());
+        let id = workflow_registry
+            .write()
+            .await
+            .register(workflow.clone())
+            .unwrap();
 
         let res = warp::test::request()
             .method("GET")

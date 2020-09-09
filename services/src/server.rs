@@ -64,6 +64,7 @@ pub async fn start_server(
             project_db.clone(),
         ))
         .or(handlers::wms::wms_handler(workflow_registry.clone()))
+        .or(handlers::wfs::wfs_handler(workflow_registry.clone()))
         .or(serve_static_directory(static_files_dir))
         .recover(handle_rejection);
 
