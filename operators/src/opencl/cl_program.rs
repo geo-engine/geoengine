@@ -89,7 +89,7 @@ impl CLProgram {
             );
         }
 
-        for (idx, raster) in self.input_rasters.iter().enumerate() {
+        for (idx, raster) in self.output_rasters.iter().enumerate() {
             s += &format!(
                 "typedef {} OUT_TYPE{};\n",
                 Self::raster_data_type_to_cl(*raster),
@@ -125,7 +125,7 @@ impl CLProgram {
             .context(error::OCL)?;
 
         let platform = Platform::default(); // TODO: make configurable
-        let device = Device::first(platform).context(error::OCL)?;
+        let device = Device::first(platform).context(error::OCL)?; // TODO: make configurable
 
         let queue = Queue::new(&ctx, device, None).context(error::OCL)?;
 
@@ -158,7 +158,16 @@ impl CLProgram {
 }
 
 enum OutputBuffer {
+    U8(Buffer<u8>),
+    U16(Buffer<u16>),
+    U32(Buffer<u32>),
+    U64(Buffer<u64>),
+    I8(Buffer<i8>),
+    I16(Buffer<i16>),
     I32(Buffer<i32>),
+    I64(Buffer<i64>),
+    F32(Buffer<f32>),
+    F64(Buffer<f64>),
 }
 
 pub struct CLProgramParameters<'a> {
@@ -243,15 +252,28 @@ impl CompiledCLProgram {
         )
     }
 
-    fn create_output_buffer<T>(&self, raster: &Raster2D<T>) -> Result<Buffer<T>>
+    fn add_output_buffer<T>(
+        &mut self,
+        idx: usize,
+        raster: &Raster2D<T>,
+        f: fn(Buffer<T>) -> OutputBuffer,
+    ) -> Result<()>
     where
         T: Pixel + ocl::OclPrm,
     {
-        Buffer::<T>::builder()
+        let buffer = Buffer::<T>::builder()
             .queue(self.kernel.default_queue().expect("checked").clone())
             .len(raster.data_container.len())
             .build()
-            .context(error::OCL)
+            .context(error::OCL)?;
+
+        self.kernel
+            .set_arg(format!("OUT{}", idx), &buffer)
+            .context(error::OCL)?;
+
+        self.output_buffers.push(f(buffer));
+
+        Ok(())
     }
 
     fn set_arguments(&mut self, params: &CLProgramParameters) -> Result<()> {
@@ -277,24 +299,37 @@ impl CompiledCLProgram {
 
         for (idx, raster) in params.output_rasters.iter().enumerate() {
             let raster = raster.as_ref().expect("checked");
-            // TODO: missing types
             match raster {
-                TypedRaster2D::U8(_raster) => {}
-                TypedRaster2D::U16(_raster) => {}
-                TypedRaster2D::U32(_raster) => {}
-                TypedRaster2D::U64(_raster) => {}
-                TypedRaster2D::I8(_raster) => {}
-                TypedRaster2D::I16(_raster) => {}
-                TypedRaster2D::I32(raster) => {
-                    let buffer = self.create_output_buffer(raster)?;
-                    self.kernel
-                        .set_arg(format!("OUT{}", idx), &buffer)
-                        .context(error::OCL)?;
-                    self.output_buffers.push(OutputBuffer::I32(buffer));
+                TypedRaster2D::U8(raster) => {
+                    self.add_output_buffer(idx, raster, OutputBuffer::U8)?
                 }
-                TypedRaster2D::I64(_raster) => {}
-                TypedRaster2D::F32(_raster) => {}
-                TypedRaster2D::F64(_raster) => {}
+                TypedRaster2D::U16(raster) => {
+                    self.add_output_buffer(idx, raster, OutputBuffer::U16)?
+                }
+                TypedRaster2D::U32(raster) => {
+                    self.add_output_buffer(idx, raster, OutputBuffer::U32)?
+                }
+                TypedRaster2D::U64(raster) => {
+                    self.add_output_buffer(idx, raster, OutputBuffer::U64)?
+                }
+                TypedRaster2D::I8(raster) => {
+                    self.add_output_buffer(idx, raster, OutputBuffer::I8)?
+                }
+                TypedRaster2D::I16(raster) => {
+                    self.add_output_buffer(idx, raster, OutputBuffer::I16)?
+                }
+                TypedRaster2D::I32(raster) => {
+                    self.add_output_buffer(idx, raster, OutputBuffer::I32)?
+                }
+                TypedRaster2D::I64(raster) => {
+                    self.add_output_buffer(idx, raster, OutputBuffer::I64)?
+                }
+                TypedRaster2D::F32(raster) => {
+                    self.add_output_buffer(idx, raster, OutputBuffer::F32)?
+                }
+                TypedRaster2D::F64(raster) => {
+                    self.add_output_buffer(idx, raster, OutputBuffer::F64)?
+                }
             }
         }
 
@@ -327,13 +362,67 @@ impl CompiledCLProgram {
             .zip(params.output_rasters.iter_mut())
         {
             match (output_buffer, output_raster) {
+                (OutputBuffer::U8(buffer), Some(TypedRaster2D::U8(raster))) => {
+                    buffer
+                        .read(raster.data_container.as_mut_slice())
+                        .enq()
+                        .context(error::OCL)?;
+                }
+                (OutputBuffer::U16(buffer), Some(TypedRaster2D::U16(raster))) => {
+                    buffer
+                        .read(raster.data_container.as_mut_slice())
+                        .enq()
+                        .context(error::OCL)?;
+                }
+                (OutputBuffer::U32(buffer), Some(TypedRaster2D::U32(raster))) => {
+                    buffer
+                        .read(raster.data_container.as_mut_slice())
+                        .enq()
+                        .context(error::OCL)?;
+                }
+                (OutputBuffer::U64(buffer), Some(TypedRaster2D::U64(raster))) => {
+                    buffer
+                        .read(raster.data_container.as_mut_slice())
+                        .enq()
+                        .context(error::OCL)?;
+                }
+                (OutputBuffer::I8(buffer), Some(TypedRaster2D::I8(raster))) => {
+                    buffer
+                        .read(raster.data_container.as_mut_slice())
+                        .enq()
+                        .context(error::OCL)?;
+                }
+                (OutputBuffer::I16(buffer), Some(TypedRaster2D::I16(raster))) => {
+                    buffer
+                        .read(raster.data_container.as_mut_slice())
+                        .enq()
+                        .context(error::OCL)?;
+                }
                 (OutputBuffer::I32(buffer), Some(TypedRaster2D::I32(raster))) => {
                     buffer
                         .read(raster.data_container.as_mut_slice())
                         .enq()
                         .context(error::OCL)?;
                 }
-                _ => unimplemented!(),
+                (OutputBuffer::I64(buffer), Some(TypedRaster2D::I64(raster))) => {
+                    buffer
+                        .read(raster.data_container.as_mut_slice())
+                        .enq()
+                        .context(error::OCL)?;
+                }
+                (OutputBuffer::F32(buffer), Some(TypedRaster2D::F32(raster))) => {
+                    buffer
+                        .read(raster.data_container.as_mut_slice())
+                        .enq()
+                        .context(error::OCL)?;
+                }
+                (OutputBuffer::F64(buffer), Some(TypedRaster2D::F64(raster))) => {
+                    buffer
+                        .read(raster.data_container.as_mut_slice())
+                        .enq()
+                        .context(error::OCL)?;
+                }
+                _ => unreachable!(),
             };
         }
 
@@ -419,6 +508,71 @@ __kernel void add(
         assert_eq!(
             raster_res.get_i32().unwrap().data_container,
             vec![2, 4, 6, 8, 10, 12]
+        );
+    }
+
+    #[test]
+    fn mixed_types() {
+        let raster_a = TypedRaster2D::I32(
+            Raster2D::new(
+                [3, 2].into(),
+                vec![1, 2, 3, 4, 5, 6],
+                None,
+                Default::default(),
+                Default::default(),
+            )
+            .unwrap(),
+        );
+
+        let raster_b = TypedRaster2D::U16(
+            Raster2D::new(
+                [3, 2].into(),
+                vec![7, 8, 9, 10, 11, 12],
+                None,
+                Default::default(),
+                Default::default(),
+            )
+            .unwrap(),
+        );
+
+        let mut raster_res = TypedRaster2D::I64(
+            Raster2D::new(
+                [3, 2].into(),
+                vec![-1, -1, -1, -1, -1, -1],
+                None,
+                Default::default(),
+                Default::default(),
+            )
+            .unwrap(),
+        );
+
+        let kernel = r#"
+__kernel void add(
+            __global IN_TYPE0* a,
+            __global IN_TYPE1* b,
+            __global OUT_TYPE0* res)
+            
+{
+    uint const idx = get_global_id(0);
+    res[idx] = a[idx] + b[idx];
+}"#;
+
+        let mut cl_program = CLProgram::new(IterationType::Raster);
+        cl_program.add_input_raster(raster_a.raster_data_type());
+        cl_program.add_input_raster(raster_b.raster_data_type());
+        cl_program.add_output_raster(raster_res.raster_data_type());
+
+        let mut compiled = cl_program.compile(kernel, "add").unwrap();
+
+        let mut params = compiled.params();
+        params.set_input_raster(0, &raster_a).unwrap();
+        params.set_input_raster(1, &raster_b).unwrap();
+        params.set_output_raster(0, &mut raster_res).unwrap();
+        compiled.run(params).unwrap();
+
+        assert_eq!(
+            raster_res.get_i64_ref().unwrap().data_container,
+            vec![8, 10, 12, 14, 16, 18]
         );
     }
 }

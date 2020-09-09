@@ -92,7 +92,118 @@ where
         None
     }
 
-    // TODO: implement for other types
+    pub fn get_u8_ref(&self) -> Option<&BaseRaster<D, u8, Vec<u8>>> {
+        if let TypedRasterNDim::U8(r) = self {
+            return Some(r);
+        }
+        None
+    }
+
+    pub fn get_u16_ref(&self) -> Option<&BaseRaster<D, u16, Vec<u16>>> {
+        if let TypedRasterNDim::U16(r) = self {
+            return Some(r);
+        }
+        None
+    }
+
+    pub fn get_u32_ref(&self) -> Option<&BaseRaster<D, u32, Vec<u32>>> {
+        if let TypedRasterNDim::U32(r) = self {
+            return Some(r);
+        }
+        None
+    }
+
+    pub fn get_u64_ref(&self) -> Option<&BaseRaster<D, u64, Vec<u64>>> {
+        if let TypedRasterNDim::U64(r) = self {
+            return Some(r);
+        }
+        None
+    }
+
+    pub fn get_i8_ref(&self) -> Option<&BaseRaster<D, i8, Vec<i8>>> {
+        if let TypedRasterNDim::I8(r) = self {
+            return Some(r);
+        }
+        None
+    }
+
+    pub fn get_i16_ref(&self) -> Option<&BaseRaster<D, i16, Vec<i16>>> {
+        if let TypedRasterNDim::I16(r) = self {
+            return Some(r);
+        }
+        None
+    }
+
+    pub fn get_i32_ref(&self) -> Option<&BaseRaster<D, i32, Vec<i32>>> {
+        if let TypedRasterNDim::I32(r) = self {
+            return Some(r);
+        }
+        None
+    }
+
+    pub fn get_i64_ref(&self) -> Option<&BaseRaster<D, i64, Vec<i64>>> {
+        if let TypedRasterNDim::I64(r) = self {
+            return Some(r);
+        }
+        None
+    }
+
+    pub fn get_f32_ref(&self) -> Option<&BaseRaster<D, f32, Vec<f32>>> {
+        if let TypedRasterNDim::F32(r) = self {
+            return Some(r);
+        }
+        None
+    }
+
+    pub fn get_f64_ref(&self) -> Option<&BaseRaster<D, f64, Vec<f64>>> {
+        if let TypedRasterNDim::F64(r) = self {
+            return Some(r);
+        }
+        None
+    }
+
+    pub fn get_u8_ref_mut(&mut self) -> Option<&mut BaseRaster<D, u8, Vec<u8>>> {
+        if let TypedRasterNDim::U8(r) = self {
+            return Some(r);
+        }
+        None
+    }
+
+    pub fn get_u16_ref_mut(&mut self) -> Option<&mut BaseRaster<D, u16, Vec<u16>>> {
+        if let TypedRasterNDim::U16(r) = self {
+            return Some(r);
+        }
+        None
+    }
+
+    pub fn get_u32_ref_mut(&mut self) -> Option<&mut BaseRaster<D, u32, Vec<u32>>> {
+        if let TypedRasterNDim::U32(r) = self {
+            return Some(r);
+        }
+        None
+    }
+
+    pub fn get_u64_ref_mut(&mut self) -> Option<&mut BaseRaster<D, u64, Vec<u64>>> {
+        if let TypedRasterNDim::U64(r) = self {
+            return Some(r);
+        }
+        None
+    }
+
+    pub fn get_i8_ref_mut(&mut self) -> Option<&mut BaseRaster<D, i8, Vec<i8>>> {
+        if let TypedRasterNDim::I8(r) = self {
+            return Some(r);
+        }
+        None
+    }
+
+    pub fn get_i16_ref_mut(&mut self) -> Option<&mut BaseRaster<D, i16, Vec<i16>>> {
+        if let TypedRasterNDim::I16(r) = self {
+            return Some(r);
+        }
+        None
+    }
+
     pub fn get_i32_ref_mut(&mut self) -> Option<&mut BaseRaster<D, i32, Vec<i32>>> {
         if let TypedRasterNDim::I32(r) = self {
             return Some(r);
@@ -100,9 +211,22 @@ where
         None
     }
 
-    // TODO: implement for other types
-    pub fn get_i32_ref(&self) -> Option<&BaseRaster<D, i32, Vec<i32>>> {
-        if let TypedRasterNDim::I32(r) = self {
+    pub fn get_i64_ref_mut(&mut self) -> Option<&mut BaseRaster<D, i64, Vec<i64>>> {
+        if let TypedRasterNDim::I64(r) = self {
+            return Some(r);
+        }
+        None
+    }
+
+    pub fn get_f32_ref_mut(&mut self) -> Option<&mut BaseRaster<D, f32, Vec<f32>>> {
+        if let TypedRasterNDim::F32(r) = self {
+            return Some(r);
+        }
+        None
+    }
+
+    pub fn get_f64_ref_mut(&mut self) -> Option<&mut BaseRaster<D, f64, Vec<f64>>> {
+        if let TypedRasterNDim::F64(r) = self {
             return Some(r);
         }
         None
