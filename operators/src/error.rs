@@ -65,6 +65,7 @@ pub enum Error {
         expected: String,
         found: String,
     },
+    InvalidOperatorType,
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {

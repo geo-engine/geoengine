@@ -28,7 +28,7 @@ async fn create_project<T: ProjectDB>(
     create: CreateProject,
     project_db: DB<T>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    let create = create.validated().map_err(warp::reject::custom)?;
+    let create = create.validated()?;
     let id = project_db.write().await.create(session.user, create);
     Ok(warp::reply::json(&id))
 }
@@ -51,7 +51,7 @@ async fn list_projects<T: ProjectDB>(
     options: ProjectListOptions,
     project_db: DB<T>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    let options = options.validated().map_err(warp::reject::custom)?;
+    let options = options.validated()?;
     let listing = project_db.read().await.list(session.user, options);
     Ok(warp::reply::json(&listing))
 }
@@ -82,8 +82,7 @@ async fn load_project<T: ProjectDB>(
     let id = project_db
         .read()
         .await
-        .load(session.user, project, version)
-        .map_err(warp::reject::custom)?;
+        .load(session.user, project, version)?;
     Ok(warp::reply::json(&id))
 }
 
@@ -105,12 +104,8 @@ async fn update_project<T: ProjectDB>(
     update: UpdateProject,
     project_db: DB<T>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    let update = update.validated().map_err(warp::reject::custom)?;
-    project_db
-        .write()
-        .await
-        .update(session.user, update)
-        .map_err(warp::reject::custom)?;
+    let update = update.validated()?;
+    project_db.write().await.update(session.user, update)?;
     Ok(warp::reply())
 }
 
@@ -132,11 +127,7 @@ async fn delete_project<T: ProjectDB>(
     project: ProjectId,
     project_db: DB<T>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    project_db
-        .write()
-        .await
-        .delete(session.user, project)
-        .map_err(warp::reject::custom)?;
+    project_db.write().await.delete(session.user, project)?;
     Ok(warp::reply())
 }
 
@@ -158,11 +149,7 @@ async fn project_versions<T: ProjectDB>(
     project: ProjectId,
     project_db: DB<T>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    let versions = project_db
-        .write()
-        .await
-        .versions(session.user, project)
-        .map_err(warp::reject::custom)?;
+    let versions = project_db.write().await.versions(session.user, project)?;
     Ok(warp::reply::json(&versions))
 }
 
@@ -187,8 +174,7 @@ async fn add_permission<T: ProjectDB>(
     project_db
         .write()
         .await
-        .add_permission(session.user, permission)
-        .map_err(warp::reject::custom)?;
+        .add_permission(session.user, permission)?;
     Ok(warp::reply())
 }
 
@@ -213,8 +199,7 @@ async fn remove_permission<T: ProjectDB>(
     project_db
         .write()
         .await
-        .remove_permission(session.user, permission)
-        .map_err(warp::reject::custom)?;
+        .remove_permission(session.user, permission)?;
     Ok(warp::reply())
 }
 
@@ -239,8 +224,7 @@ async fn list_permissions<T: ProjectDB>(
     let permissions = project_db
         .write()
         .await
-        .list_permissions(session.user, project)
-        .map_err(warp::reject::custom)?;
+        .list_permissions(session.user, project)?;
     Ok(warp::reply::json(&permissions))
 }
 
