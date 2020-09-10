@@ -4,7 +4,7 @@ use snafu::ResultExt;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 use warp::reply::Reply;
-use warp::{http::Response, Filter};
+use warp::{http::Response, Filter, Rejection};
 
 use geoengine_datatypes::operations::image::{Colorizer, ToPng};
 use geoengine_datatypes::raster::{Blit, GeoTransform, Pixel, Raster2D};
@@ -29,7 +29,17 @@ pub fn wms_handler<T: WorkflowRegistry>(
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::get()
         .and(warp::path!("wms"))
-        .and(warp::query::<WMSRequest>())
+        .and(
+            warp::query::raw().and_then(|query_string: String| async move {
+                // TODO: make case insensitive by using serde-aux instead
+                let query_string = query_string.replace("REQUEST", "request");
+
+                serde_urlencoded::from_str::<WMSRequest>(&query_string)
+                    .context(error::UnableToParseQueryString)
+                    .map_err(Rejection::from)
+            }),
+        )
+        // .and(warp::query::<WMSRequest>())
         .and(warp::any().map(move || Arc::clone(&workflow_registry)))
         .and_then(wms)
 }
@@ -115,12 +125,12 @@ async fn get_map<T: WorkflowRegistry>(
     workflow_registry: &WR<T>,
 ) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
     // TODO: validate request?
-    if request.layer == "test" {
+    if request.layers == "test" {
         return get_map_mock(request);
     }
 
     let workflow = workflow_registry.read().await.load(&WorkflowId::from_uuid(
-        Uuid::parse_str(&request.layer).context(error::Uuid)?,
+        Uuid::parse_str(&request.layers).context(error::Uuid)?,
     ))?;
 
     let operator = workflow.operator.get_raster().context(error::Operator)?;
@@ -174,7 +184,7 @@ where
     let query_geo_transform = GeoTransform::new(
         query_rect.bbox.upper_left(),
         query_rect.bbox.size_x() / f64::from(request.width),
-        -query_rect.bbox.size_y() / f64::from(request.height), // TODO: negativ, s.t. geo transform fits...
+        -query_rect.bbox.size_y() / f64::from(request.height), // TODO: negative, s.t. geo transform fits...
     );
 
     let output_raster: Result<Raster2D<T>> = Raster2D::new(
@@ -198,7 +208,7 @@ where
             };
 
             match result {
-                Ok(updated_rasted2d) => futures::future::ok(updated_rasted2d),
+                Ok(updated_raster2d) => futures::future::ok(updated_raster2d),
                 Err(error) => futures::future::err(error),
             }
         })
@@ -268,7 +278,7 @@ mod tests {
 
         let res = warp::test::request()
             .method("GET")
-            .path("/wms?request=GetMap&service=WMS&version=1.3.0&layer=test&bbox=1,2,3,4&width=100&height=100&crs=foo&styles=ssss&format=image/png")
+            .path("/wms?request=GetMap&service=WMS&version=1.3.0&layers=test&bbox=1,2,3,4&width=100&height=100&crs=foo&styles=ssss&format=image/png")
             .reply(&wms_handler(workflow_registry))
             .await;
         assert_eq!(res.status(), 200);
@@ -322,7 +332,7 @@ mod tests {
                 height: 600,
                 bbox: query_bbox,
                 format: GetMapFormat::ImagePng,
-                layer: "".to_string(),
+                layers: "".to_string(),
                 crs: "".to_string(),
                 styles: "".to_string(),
                 time: None,
@@ -367,9 +377,44 @@ mod tests {
 
         let res = warp::test::request()
             .method("GET")
-            .path(&format!("/wms?request=GetMap&service=WMS&version=1.3.0&layer={}&bbox=-10,20,50,80&width=600&height=600&crs=foo&styles=ssss&format=image/png", id.to_string()))
+            .path(&format!("/wms?request=GetMap&service=WMS&version=1.3.0&layers={}&bbox=-10,20,50,80&width=600&height=600&crs=foo&styles=ssss&format=image/png", id.to_string()))
             .reply(&wms_handler(workflow_registry))
             .await;
+        assert_eq!(res.status(), 200);
+        assert_eq!(
+            include_bytes!("../../../services/test-data/wms/raster.png") as &[u8],
+            res.body().to_vec().as_slice()
+        );
+    }
+
+    #[tokio::test]
+    async fn get_map_uppercase() {
+        let workflow_registry = Arc::new(RwLock::new(HashMapRegistry::default()));
+
+        let workflow = Workflow {
+            operator: TypedOperator::Raster(
+                GdalSource {
+                    params: GdalSourceParameters {
+                        dataset_id: "test".to_owned(),
+                        channel: None,
+                    },
+                }
+                .boxed(),
+            ),
+        };
+
+        let id = workflow_registry
+            .write()
+            .await
+            .register(workflow.clone())
+            .unwrap();
+
+        let res = warp::test::request()
+            .method("GET")
+            .path(&format!("/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS={}&CRS=EPSG%3A3857&STYLES=&WIDTH=600&HEIGHT=600&BBOX=-10,20,50,80", id.to_string()))
+            .reply(&wms_handler(workflow_registry))
+            .await;
+
         assert_eq!(res.status(), 200);
         assert_eq!(
             include_bytes!("../../../services/test-data/wms/raster.png") as &[u8],
