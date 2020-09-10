@@ -26,9 +26,18 @@ pub enum Error {
     TokioJoin {
         source: tokio::task::JoinError,
     },
+
+    TokioSignal {
+        source: std::io::Error,
+    },
+
+    TokioChannelSend,
+
     UnableToParseQueryString {
         source: serde_urlencoded::de::Error,
     },
+
+    ServerStartup,
 
     #[snafu(display("Registration failed: {:?}", reason))]
     RegistrationFailed {

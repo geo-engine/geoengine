@@ -1,12 +1,12 @@
+use geoengine_services::error::Error;
 use geoengine_services::server;
 use std::path::Path;
 use std::{thread, time};
-use tokio::signal;
-use tokio::sync::oneshot::{self, Sender};
+use tokio::sync::oneshot;
 
 /// Example of a client communicating with the geo engine
 #[tokio::main]
-async fn main() -> Result<(), ()> {
+async fn main() -> Result<(), Error> {
     // TODO: use special config for port etc. for starting the server and connecting to it
     let base_url = "http://localhost:3030/".to_string();
 
@@ -22,16 +22,15 @@ async fn main() -> Result<(), ()> {
     let (server, startup_success, interrupt_success) = tokio::join!(
         server::start_server(Some(shutdown_rx), Some(static_files_directory)),
         output_info(&base_url),
-        interrupt_handler(shutdown_tx),
+        server::interrupt_handler(shutdown_tx, Some(|| eprintln!("Shutting down server…"))),
     );
-    server.unwrap();
 
-    startup_success.and(interrupt_success)
+    server.and(startup_success).and(interrupt_success)
 }
 
-async fn output_info(base_url: &str) -> Result<(), ()> {
+async fn output_info(base_url: &str) -> Result<(), Error> {
     if !server_has_started(base_url).await {
-        return Err(());
+        return Err(Error::ServerStartup);
     }
 
     eprintln!(
@@ -40,14 +39,6 @@ async fn output_info(base_url: &str) -> Result<(), ()> {
     );
 
     Ok(())
-}
-
-async fn interrupt_handler(shutdown_tx: Sender<()>) -> Result<(), ()> {
-    signal::ctrl_c().await.or(Err(()))?;
-
-    eprintln!("Shutting down server…");
-
-    shutdown_tx.send(())
 }
 
 const WAIT_SERVER_RETRIES: i32 = 5;

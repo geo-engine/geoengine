@@ -4,7 +4,7 @@ use tokio::sync::RwLock;
 use warp::{Filter, Rejection};
 
 use crate::error;
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::handlers;
 use crate::handlers::handle_rejection;
 use crate::projects::hashmap_projectdb::HashMapProjectDB;
@@ -12,7 +12,8 @@ use crate::users::hashmap_userdb::HashMapUserDB;
 use crate::workflows::registry::HashMapRegistry;
 use snafu::ResultExt;
 use std::path::PathBuf;
-use tokio::sync::oneshot::Receiver;
+use tokio::signal;
+use tokio::sync::oneshot::{Receiver, Sender};
 use warp::fs::File;
 
 pub async fn start_server(
@@ -97,4 +98,14 @@ fn serve_static_directory(
         })
         .and(warp::fs::dir(path.unwrap_or_default()))
         .map(|_, dir| dir)
+}
+
+pub async fn interrupt_handler(shutdown_tx: Sender<()>, callback: Option<fn()>) -> Result<()> {
+    signal::ctrl_c().await.context(error::TokioSignal)?;
+
+    if let Some(callback) = callback {
+        callback();
+    }
+
+    shutdown_tx.send(()).map_err(|_| Error::TokioChannelSend)
 }
