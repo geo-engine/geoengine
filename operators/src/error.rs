@@ -59,8 +59,7 @@ pub enum Error {
         source: serde_json::Error,
     },
     OCL {
-        #[snafu(source(from(ocl::error::Error, failure::Fail::compat)))]
-        source: failure::Compat<ocl::error::Error>,
+        ocl_error: ocl::error::Error,
     },
     CLProgramInvalidRasterIndex,
     CLProgramInvalidRasterDataType,
@@ -95,5 +94,11 @@ impl From<serde_json::Error> for Error {
         Self::SerdeJson {
             source: serde_json_error,
         }
+    }
+}
+
+impl From<ocl::Error> for Error {
+    fn from(ocl_error: ocl::Error) -> Self {
+        Self::OCL { ocl_error }
     }
 }

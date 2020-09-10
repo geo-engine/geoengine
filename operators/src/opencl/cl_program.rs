@@ -9,7 +9,6 @@ use ocl::builders::{KernelBuilder, ProgramBuilder};
 use ocl::prm::{cl_double, cl_uint, cl_ushort};
 use ocl::{Buffer, Context, Device, Kernel, MemFlags, OclPrm, Platform, Queue};
 use snafu::ensure;
-use snafu::ResultExt;
 
 /// Whether the kernel iterates over pixels or features
 #[derive(PartialEq, Clone, Copy, Debug)]
@@ -160,21 +159,19 @@ typedef struct {
         let platform = Platform::default(); // TODO: make configurable
 
         // TODO: fails for concurrent access, see https://github.com/cogciprocate/ocl/issues/189
-        let device = Device::first(platform).context(error::OCL)?; // TODO: make configurable
+        let device = Device::first(platform)?; // TODO: make configurable
 
         let ctx = Context::builder()
             .platform(platform)
             .devices(device)
-            .build()
-            .context(error::OCL)?; // TODO: make configurable
+            .build()?; // TODO: make configurable
 
         let program = ProgramBuilder::new()
             .src(typedefs)
             .src(source)
-            .build(&ctx)
-            .context(error::OCL)?;
+            .build(&ctx)?;
 
-        let queue = Queue::new(&ctx, device, None).context(error::OCL)?;
+        let queue = Queue::new(&ctx, device, None)?;
 
         let mut kernel = KernelBuilder::new();
         kernel.queue(queue).program(&program).name(kernel_name);
@@ -189,13 +186,13 @@ typedef struct {
             kernel.arg_named(format!("OUT_INFO{}", idx), None::<&Buffer<RasterInfo>>);
         }
 
-        kernel.build().context(error::OCL)?;
+        kernel.build()?;
 
         // TODO: raster meta data
 
         // TODO: feature collections
 
-        let kernel = kernel.build().context(error::OCL)?;
+        let kernel = kernel.build()?;
 
         Ok(CompiledCLProgram::new(
             kernel,
@@ -348,12 +345,9 @@ impl CompiledCLProgram {
         let buffer = Buffer::<T>::builder()
             .queue(self.kernel.default_queue().expect("checked").clone())
             .len(raster.data_container.len())
-            .build()
-            .context(error::OCL)?;
+            .build()?;
 
-        self.kernel
-            .set_arg(format!("OUT{}", idx), &buffer)
-            .context(error::OCL)?;
+        self.kernel.set_arg(format!("OUT{}", idx), &buffer)?;
 
         self.output_buffers.push(f(buffer));
 
@@ -362,11 +356,9 @@ impl CompiledCLProgram {
             .flags(MemFlags::new().read_only())
             .len(1)
             .copy_host_slice(&[RasterInfo::from_raster(&raster)])
-            .build()
-            .context(error::OCL)?;
+            .build()?;
         self.kernel
-            .set_arg(format!("OUT_INFO{}", idx), info_buffer)
-            .context(error::OCL)?;
+            .set_arg(format!("OUT_INFO{}", idx), info_buffer)?;
 
         Ok(())
     }
@@ -386,16 +378,16 @@ impl CompiledCLProgram {
                 .flags(MemFlags::new().read_only())
                 .len(raster.data_container.len())
                 .copy_host_slice(&raster.data_container)
-                .build().context(error::OCL)?;
-                self.kernel.set_arg(format!("IN{}",idx), data_buffer).context(error::OCL)?;
+                .build()?;
+                self.kernel.set_arg(format!("IN{}",idx), data_buffer)?;
 
                 let info_buffer = Buffer::builder()
                 .queue(self.kernel.default_queue().expect("checked").clone())
                 .flags(MemFlags::new().read_only())
                 .len(1)
                 .copy_host_slice(&[RasterInfo::from_raster(&raster)])
-                .build().context(error::OCL)?;
-                self.kernel.set_arg(format!("IN_INFO{}",idx), info_buffer).context(error::OCL)?;
+                .build()?;
+                self.kernel.set_arg(format!("IN_INFO{}",idx), info_buffer)?;
             });
         }
 
@@ -454,8 +446,7 @@ impl CompiledCLProgram {
             self.kernel
                 .cmd()
                 .global_work_size(self.work_size(&params))
-                .enq()
-                .context(error::OCL)?;
+                .enq()?;
         }
 
         for (output_buffer, output_raster) in self
@@ -465,64 +456,34 @@ impl CompiledCLProgram {
         {
             match (output_buffer, output_raster) {
                 (OutputBuffer::U8(buffer), Some(TypedRaster2D::U8(raster))) => {
-                    buffer
-                        .read(raster.data_container.as_mut_slice())
-                        .enq()
-                        .context(error::OCL)?;
+                    buffer.read(raster.data_container.as_mut_slice()).enq()?;
                 }
                 (OutputBuffer::U16(buffer), Some(TypedRaster2D::U16(raster))) => {
-                    buffer
-                        .read(raster.data_container.as_mut_slice())
-                        .enq()
-                        .context(error::OCL)?;
+                    buffer.read(raster.data_container.as_mut_slice()).enq()?;
                 }
                 (OutputBuffer::U32(buffer), Some(TypedRaster2D::U32(raster))) => {
-                    buffer
-                        .read(raster.data_container.as_mut_slice())
-                        .enq()
-                        .context(error::OCL)?;
+                    buffer.read(raster.data_container.as_mut_slice()).enq()?;
                 }
                 (OutputBuffer::U64(buffer), Some(TypedRaster2D::U64(raster))) => {
-                    buffer
-                        .read(raster.data_container.as_mut_slice())
-                        .enq()
-                        .context(error::OCL)?;
+                    buffer.read(raster.data_container.as_mut_slice()).enq()?;
                 }
                 (OutputBuffer::I8(buffer), Some(TypedRaster2D::I8(raster))) => {
-                    buffer
-                        .read(raster.data_container.as_mut_slice())
-                        .enq()
-                        .context(error::OCL)?;
+                    buffer.read(raster.data_container.as_mut_slice()).enq()?;
                 }
                 (OutputBuffer::I16(buffer), Some(TypedRaster2D::I16(raster))) => {
-                    buffer
-                        .read(raster.data_container.as_mut_slice())
-                        .enq()
-                        .context(error::OCL)?;
+                    buffer.read(raster.data_container.as_mut_slice()).enq()?;
                 }
                 (OutputBuffer::I32(buffer), Some(TypedRaster2D::I32(raster))) => {
-                    buffer
-                        .read(raster.data_container.as_mut_slice())
-                        .enq()
-                        .context(error::OCL)?;
+                    buffer.read(raster.data_container.as_mut_slice()).enq()?;
                 }
                 (OutputBuffer::I64(buffer), Some(TypedRaster2D::I64(raster))) => {
-                    buffer
-                        .read(raster.data_container.as_mut_slice())
-                        .enq()
-                        .context(error::OCL)?;
+                    buffer.read(raster.data_container.as_mut_slice()).enq()?;
                 }
                 (OutputBuffer::F32(buffer), Some(TypedRaster2D::F32(raster))) => {
-                    buffer
-                        .read(raster.data_container.as_mut_slice())
-                        .enq()
-                        .context(error::OCL)?;
+                    buffer.read(raster.data_container.as_mut_slice()).enq()?;
                 }
                 (OutputBuffer::F64(buffer), Some(TypedRaster2D::F64(raster))) => {
-                    buffer
-                        .read(raster.data_container.as_mut_slice())
-                        .enq()
-                        .context(error::OCL)?;
+                    buffer.read(raster.data_container.as_mut_slice()).enq()?;
                 }
                 _ => unreachable!(),
             };
