@@ -1,9 +1,11 @@
+use crate::collections::VectorDataType;
 use crate::primitives::{error, GeometryRef};
 use crate::primitives::{Coordinate2D, Geometry};
 use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::Result;
 use arrow::array::BooleanArray;
 use arrow::error::ArrowError;
+use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
 /// A trait that allows a common access to lines of `MultiLineString`s and its references
@@ -15,7 +17,7 @@ where
 }
 
 /// A representation of a simple feature multi line string
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct MultiLineString {
     coordinates: Vec<Vec<Coordinate2D>>,
 }
@@ -41,7 +43,9 @@ impl MultiLineStringAccess<Vec<Coordinate2D>> for MultiLineString {
     }
 }
 
-impl Geometry for MultiLineString {}
+impl Geometry for MultiLineString {
+    const DATA_TYPE: VectorDataType = VectorDataType::MultiLineString;
+}
 
 impl AsRef<[Vec<Coordinate2D>]> for MultiLineString {
     fn as_ref(&self) -> &[Vec<Coordinate2D>] {

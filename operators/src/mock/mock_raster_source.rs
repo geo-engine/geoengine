@@ -1,10 +1,12 @@
+use crate::call_generic_raster_processor;
 use crate::engine::{
-    InitializedOperatorImpl, InitializedRasterOperator, QueryProcessor, RasterOperator,
-    RasterQueryProcessor, RasterResultDescriptor, SourceOperatorImpl, TypedRasterQueryProcessor,
+    InitializedOperator, InitializedOperatorBase, InitializedOperatorImpl,
+    InitializedRasterOperator, QueryProcessor, RasterOperator, RasterQueryProcessor,
+    RasterResultDescriptor, SourceOperator, TypedRasterQueryProcessor,
 };
 use crate::util::Result;
 use futures::{stream, stream::StreamExt};
-use geoengine_datatypes::raster::{FromPrimitive, Pixel, RasterDataType, RasterTile2D};
+use geoengine_datatypes::raster::{FromPrimitive, Pixel, RasterTile2D};
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 
@@ -45,14 +47,14 @@ pub struct MockRasterSourceParams {
     pub result_descriptor: RasterResultDescriptor,
 }
 
-pub type MockRasterSource = SourceOperatorImpl<MockRasterSourceParams>;
+pub type MockRasterSource = SourceOperator<MockRasterSourceParams>;
 
 #[typetag::serde]
 impl RasterOperator for MockRasterSource {
-    fn initialized_operator(
+    fn initialize(
         self: Box<Self>,
         context: crate::engine::ExecutionContext,
-    ) -> Result<Box<dyn InitializedRasterOperator>> {
+    ) -> Result<Box<InitializedRasterOperator>> {
         InitializedOperatorImpl::create(
             self.params,
             context,
@@ -65,10 +67,10 @@ impl RasterOperator for MockRasterSource {
     }
 }
 
-impl InitializedRasterOperator
+impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
     for InitializedOperatorImpl<MockRasterSourceParams, RasterResultDescriptor, ()>
 {
-    fn raster_processor(&self) -> Result<TypedRasterQueryProcessor> {
+    fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         fn converted<From, To>(
             raster_tiles: &[RasterTile2D<From>],
         ) -> Box<dyn RasterQueryProcessor<RasterType = To>>
@@ -84,41 +86,10 @@ impl InitializedRasterOperator
             MockRasterSourceProcessor::new(data).boxed()
         }
 
-        Ok(match self.result_descriptor().data_type {
-            RasterDataType::U8 => crate::engine::TypedRasterQueryProcessor::U8(
-                MockRasterSourceProcessor::new(self.params.data.clone()).boxed(),
-            ),
-            RasterDataType::U16 => {
-                crate::engine::TypedRasterQueryProcessor::U16(converted(&self.params.data))
-            }
-            RasterDataType::U32 => {
-                crate::engine::TypedRasterQueryProcessor::U32(converted(&self.params.data))
-            }
-            RasterDataType::U64 => {
-                crate::engine::TypedRasterQueryProcessor::U64(converted(&self.params.data))
-            }
-            RasterDataType::I8 => {
-                crate::engine::TypedRasterQueryProcessor::I8(converted(&self.params.data))
-            }
-            RasterDataType::I16 => {
-                crate::engine::TypedRasterQueryProcessor::I16(converted(&self.params.data))
-            }
-            RasterDataType::I32 => {
-                crate::engine::TypedRasterQueryProcessor::I32(converted(&self.params.data))
-            }
-            RasterDataType::I64 => {
-                crate::engine::TypedRasterQueryProcessor::I64(converted(&self.params.data))
-            }
-            RasterDataType::F32 => {
-                crate::engine::TypedRasterQueryProcessor::F32(converted(&self.params.data))
-            }
-            RasterDataType::F64 => {
-                crate::engine::TypedRasterQueryProcessor::F64(converted(&self.params.data))
-            }
-        })
-    }
-    fn result_descriptor(&self) -> RasterResultDescriptor {
-        self.result_descriptor
+        Ok(call_generic_raster_processor!(
+            self.result_descriptor().data_type,
+            converted(&self.params.data)
+        ))
     }
 }
 
@@ -126,6 +97,7 @@ impl InitializedRasterOperator
 mod tests {
     use super::*;
     use crate::engine::ExecutionContext;
+    use geoengine_datatypes::raster::RasterDataType;
     use geoengine_datatypes::{
         primitives::TimeInterval,
         projection::Projection,
@@ -231,11 +203,9 @@ mod tests {
 
         let execution_context = ExecutionContext;
 
-        let initialized = deserialized
-            .initialized_operator(execution_context)
-            .unwrap();
+        let initialized = deserialized.initialize(execution_context).unwrap();
 
-        match initialized.raster_processor().unwrap() {
+        match initialized.query_processor().unwrap() {
             crate::engine::TypedRasterQueryProcessor::U8(..) => {}
             _ => panic!("wrong raster type"),
         }

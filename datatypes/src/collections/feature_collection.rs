@@ -10,6 +10,7 @@ use arrow::array::{
 };
 use arrow::datatypes::{DataType, Field, Float64Type, Int64Type};
 use arrow::error::ArrowError;
+use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
 use crate::collections::{error, IntoGeometryIterator};
@@ -23,19 +24,22 @@ use crate::primitives::{
 use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::helpers::SomeIter;
 use crate::util::Result;
+use std::mem;
 
-#[derive(Debug)]
+#[allow(clippy::unsafe_derive_deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct FeatureCollection<CollectionType> {
+    #[serde(with = "struct_serde")]
     pub(super) table: StructArray,
-    pub(super) types: HashMap<String, FeatureDataType>,
+
     // TODO: make it a `CoW`?
+    pub(super) types: HashMap<String, FeatureDataType>,
+
+    #[serde(skip)]
     collection_type: PhantomData<CollectionType>,
 }
 
-impl<CollectionType> FeatureCollection<CollectionType>
-where
-    CollectionType: Geometry + ArrowTyped,
-{
+impl<CollectionType> FeatureCollection<CollectionType> {
     /// Reserved name for geometry column
     pub const GEOMETRY_COLUMN_NAME: &'static str = "__geometry";
 
@@ -54,7 +58,12 @@ where
             collection_type: Default::default(),
         }
     }
+}
 
+impl<CollectionType> FeatureCollection<CollectionType>
+where
+    CollectionType: Geometry + ArrowTyped,
+{
     /// Create an empty `FeatureCollection`.
     ///
     /// # Examples
@@ -221,11 +230,36 @@ where
         name == Self::GEOMETRY_COLUMN_NAME || name == Self::TIME_COLUMN_NAME
     }
 
+    /// Retrieves the column's `FeatureDataType`
+    ///
+    /// # Errors
+    ///
+    /// This method fails if there is no `column_name` with that name
+    ///
+    #[allow(clippy::option_if_let_else)]
+    pub fn column_type(&self, column_name: &str) -> Result<FeatureDataType> {
+        ensure!(
+            !Self::is_reserved_name(column_name),
+            error::CannotAccessReservedColumn {
+                name: column_name.to_string(),
+            }
+        );
+
+        if let Some(feature_data_type) = self.types.get(column_name) {
+            Ok(*feature_data_type)
+        } else {
+            Err(error::FeatureCollectionError::ColumnDoesNotExist {
+                name: column_name.to_string(),
+            }
+            .into())
+        }
+    }
+
     /// Retrieve column data
     ///
     /// # Errors
     ///
-    /// This method fails if there is no `column` with that name
+    /// This method fails if there is no `column_name` with that name
     ///
     pub fn data(&self, column_name: &str) -> Result<FeatureDataRef> {
         ensure!(
@@ -293,7 +327,7 @@ where
         let number_of_time_intervals = self.len();
 
         let timestamps_ref = features.values();
-        let timestamps: &arrow::array::Date64Array = downcast_array(&timestamps_ref);
+        let timestamps: &arrow::array::Int64Array = downcast_array(&timestamps_ref);
 
         unsafe {
             std::slice::from_raw_parts(
@@ -756,6 +790,21 @@ where
 
         feature_collection.to_string()
     }
+
+    /// Returns the byte-size of this collection
+    pub fn byte_size(&self) -> usize {
+        let table_size = get_array_memory_size(&self.table.data()) + mem::size_of_val(&self.table);
+
+        // TODO: store information? avoid re-calculation?
+        let map_size = mem::size_of_val(&self.types)
+            + self
+                .types
+                .iter()
+                .map(|(k, v)| mem::size_of_val(k) + k.as_bytes().len() + mem::size_of_val(v))
+                .sum::<usize>();
+
+        table_size + map_size
+    }
 }
 
 impl<CollectionType> Clone for FeatureCollection<CollectionType> {
@@ -815,7 +864,10 @@ impl<CollectionType> PartialEq for FeatureCollection<CollectionType> {
             return false;
         }
 
-        for key in self.types.keys() {
+        for key in self.types.keys().chain(&[
+            Self::GEOMETRY_COLUMN_NAME.to_string(),
+            Self::TIME_COLUMN_NAME.to_string(),
+        ]) {
             let c1 = self.table.column_by_name(key).expect("column must exist");
             let c2 = other.table.column_by_name(key).expect("column must exist");
 
@@ -955,6 +1007,122 @@ where
     Ok(())
 }
 
+/// Taken from <https://github.com/apache/arrow/blob/master/rust/arrow/src/array/data.rs>
+/// TODO: replace with existing call on next version
+pub fn get_array_memory_size(data: &ArrayData) -> usize {
+    let mut size = 0;
+    // Calculate size of the fields that don't have [get_array_memory_size] method internally.
+    size += mem::size_of_val(data)
+        - mem::size_of_val(&data.buffers())
+        - mem::size_of_val(&data.null_bitmap())
+        - mem::size_of_val(&data.child_data());
+
+    // Calculate rest of the fields top down which contain actual data
+    for buffer in data.buffers() {
+        size += mem::size_of_val(&buffer);
+        size += buffer.capacity();
+    }
+    if let Some(bitmap) = data.null_bitmap() {
+        size += bitmap.buffer_ref().capacity() + mem::size_of_val(bitmap);
+    }
+    for child in data.child_data() {
+        size += get_array_memory_size(child);
+    }
+
+    size
+}
+
+/// Custom serializer for Arrow's `StructArray`
+mod struct_serde {
+    use super::*;
+
+    use arrow::record_batch::{RecordBatch, RecordBatchReader};
+    use serde::de::{SeqAccess, Visitor};
+    use serde::ser::Error;
+    use serde::{Deserializer, Serializer};
+    use std::fmt::Formatter;
+    use std::io::Cursor;
+
+    pub fn serialize<S>(struct_array: &StructArray, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let batch = RecordBatch::from(struct_array);
+
+        let mut serialized_struct = Vec::<u8>::new();
+
+        let mut writer = arrow::ipc::writer::FileWriter::try_new(
+            &mut serialized_struct,
+            batch.schema().as_ref(),
+        )
+        .map_err(|error| S::Error::custom(error.to_string()))?;
+        writer
+            .write(&batch)
+            .map_err(|error| S::Error::custom(error.to_string()))?;
+        writer
+            .finish()
+            .map_err(|error| S::Error::custom(error.to_string()))?;
+
+        drop(writer);
+
+        serializer.serialize_bytes(&serialized_struct)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<StructArray, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_bytes(StructArrayDeserializer)
+    }
+
+    struct StructArrayDeserializer;
+
+    impl<'de> Visitor<'de> for StructArrayDeserializer {
+        type Value = StructArray;
+
+        fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+            formatter.write_str("an Arrow StructArray")
+        }
+
+        fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            let cursor = Cursor::new(v);
+
+            let mut reader = arrow::ipc::reader::FileReader::try_new(cursor)
+                .map_err(|error| E::custom(error.to_string()))?;
+
+            if reader.num_batches() != 1 {
+                return Err(E::custom(
+                    "there must be exactly one batch for deserializing this struct",
+                ));
+            }
+
+            let batch = reader
+                .next_batch()
+                .map_err(|error| E::custom(error.to_string()))?
+                .expect("checked");
+
+            Ok(batch.into())
+        }
+
+        // TODO: this is super stupid, but serde calls this function somehow
+        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+        where
+            A: SeqAccess<'de>,
+        {
+            let mut bytes = Vec::with_capacity(seq.size_hint().unwrap_or(0));
+
+            while let Some(byte) = seq.next_element()? {
+                bytes.push(byte);
+            }
+
+            self.visit_byte_buf(bytes)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::primitives::{MultiPoint, NoGeometry};
@@ -967,5 +1135,46 @@ mod tests {
             "__geometry"
         ));
         assert!(!FeatureCollection::<NoGeometry>::is_reserved_name("foobar"));
+    }
+
+    #[test]
+    fn byte_size() {
+        fn gen_collection(length: usize) -> FeatureCollection<NoGeometry> {
+            FeatureCollection::<NoGeometry>::from_data(
+                vec![],
+                vec![TimeInterval::new(0, 1).unwrap(); length],
+                Default::default(),
+            )
+            .unwrap()
+        }
+
+        fn time_interval_size(length: usize) -> usize {
+            if length == 0 {
+                return 0;
+            }
+
+            let base = 64;
+            let buffer = (((length - 1) / 4) + 1) * ((8 + 8) * 4);
+
+            base + buffer
+        }
+
+        let empty_hash_map_size = 48;
+        assert_eq!(
+            mem::size_of::<HashMap<String, FeatureData>>(),
+            empty_hash_map_size
+        );
+
+        let struct_stack_size = 32;
+        assert_eq!(mem::size_of::<StructArray>(), struct_stack_size);
+
+        for i in 0..10 {
+            assert_eq!(
+                gen_collection(i).byte_size(),
+                empty_hash_map_size + struct_stack_size + 264 + time_interval_size(i)
+            );
+        }
+
+        // TODO: rely on numbers once the arrow library provides this feature
     }
 }

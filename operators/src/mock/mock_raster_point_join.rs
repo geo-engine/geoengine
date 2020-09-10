@@ -1,7 +1,6 @@
 use crate::engine::{
-    InitializedOperatorImpl, InitializedVectorOperator, OperatorImpl, QueryProcessor,
-    RasterQueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
-    VectorResultDescriptor,
+    InitializedOperator, InitializedOperatorImpl, Operator, QueryProcessor, RasterQueryProcessor,
+    TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::util::Result;
 use futures::StreamExt;
@@ -82,14 +81,14 @@ pub struct MockRasterPointJoinParams {
     pub feature_name: String,
 }
 
-pub type MockRasterPointJoinOperator = OperatorImpl<MockRasterPointJoinParams>;
+pub type MockRasterPointJoinOperator = Operator<MockRasterPointJoinParams>;
 
 #[typetag::serde]
 impl VectorOperator for MockRasterPointJoinOperator {
-    fn into_initialized_operator(
+    fn initialize(
         self: Box<Self>,
         context: crate::engine::ExecutionContext,
-    ) -> Result<Box<dyn crate::engine::InitializedVectorOperator>> {
+    ) -> Result<Box<crate::engine::InitializedVectorOperator>> {
         InitializedOperatorImpl::create(
             self.params,
             context,
@@ -110,12 +109,12 @@ impl VectorOperator for MockRasterPointJoinOperator {
     }
 }
 
-impl InitializedVectorOperator
+impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
     for InitializedOperatorImpl<MockRasterPointJoinParams, VectorResultDescriptor, ()>
 {
-    fn vector_processor(&self) -> Result<crate::engine::TypedVectorQueryProcessor> {
-        let raster_source = self.raster_sources[0].raster_processor()?;
-        let point_source = match self.vector_sources[0].vector_processor()? {
+    fn query_processor(&self) -> Result<crate::engine::TypedVectorQueryProcessor> {
+        let raster_source = self.raster_sources[0].query_processor()?;
+        let point_source = match self.vector_sources[0].query_processor()? {
             TypedVectorQueryProcessor::MultiPoint(v) => v,
             _ => panic!(),
         };
@@ -129,9 +128,6 @@ impl InitializedVectorOperator
             }
             _ => panic!(),
         }))
-    }
-    fn result_descriptor(&self) -> VectorResultDescriptor {
-        self.result_descriptor
     }
 }
 
@@ -338,9 +334,9 @@ mod tests {
 
         let execution_context = ExecutionContext;
 
-        let initialized = op.into_initialized_operator(execution_context).unwrap();
+        let initialized = op.initialize(execution_context).unwrap();
 
-        let point_processor = match initialized.vector_processor() {
+        let point_processor = match initialized.query_processor() {
             Ok(TypedVectorQueryProcessor::MultiPoint(processor)) => processor,
             _ => panic!(),
         };

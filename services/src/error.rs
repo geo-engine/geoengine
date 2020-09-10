@@ -17,6 +17,27 @@ pub enum Error {
     Uuid {
         source: uuid::Error,
     },
+    SerdeJson {
+        source: serde_json::Error,
+    },
+    IO {
+        source: std::io::Error,
+    },
+    TokioJoin {
+        source: tokio::task::JoinError,
+    },
+
+    TokioSignal {
+        source: std::io::Error,
+    },
+
+    TokioChannelSend,
+
+    UnableToParseQueryString {
+        source: serde_urlencoded::de::Error,
+    },
+
+    ServerStartup,
 
     #[snafu(display("Registration failed: {:?}", reason))]
     RegistrationFailed {
@@ -26,7 +47,6 @@ pub enum Error {
     LogoutFailed,
     SessionDoesNotExist,
     InvalidSessionToken,
-    InvalidWorkflowResultType,
 
     ProjectCreateFailed,
     ProjectListFailed,
@@ -34,6 +54,12 @@ pub enum Error {
     ProjectUpdateFailed,
     ProjectDeleteFailed,
     PermissionFailed,
+
+    InvalidNamespace,
+
+    InvalidWFSTypeNames,
+
+    NoWorkflowForGivenId,
 }
 
 impl Reject for Error {}
@@ -47,5 +73,11 @@ impl From<geoengine_datatypes::error::Error> for Error {
 impl From<geoengine_operators::error::Error> for Error {
     fn from(e: geoengine_operators::error::Error) -> Self {
         Self::Operator { source: e }
+    }
+}
+
+impl From<Error> for warp::Rejection {
+    fn from(e: Error) -> Self {
+        warp::reject::custom(e)
     }
 }

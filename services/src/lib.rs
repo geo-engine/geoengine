@@ -12,10 +12,10 @@
     clippy::module_name_repetitions,
     clippy::must_use_candidate,
     clippy::non_ascii_literal,
+    clippy::option_if_let_else,
     clippy::similar_names,
     clippy::single_match_else,
     clippy::type_repetition_in_bounds,
-    clippy::used_underscore_binding, // TODO: remove wrt. https://github.com/rust-lang/rust-clippy/issues/5360
     clippy::wildcard_imports
 )]
 
@@ -25,5 +25,6 @@ pub mod error;
 pub mod handlers;
 pub mod ogc;
 pub mod projects;
+pub mod server;
 pub mod users;
 pub mod workflows;

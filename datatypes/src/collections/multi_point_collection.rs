@@ -837,4 +837,31 @@ mod tests {
                 .unwrap()
         );
     }
+
+    #[test]
+    fn serde() {
+        let collection = MultiPointCollection::from_data(
+            MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1), (2.0, 3.1)]).unwrap(),
+            vec![TimeInterval::new_unchecked(0, 1); 3],
+            [
+                (
+                    "foo".to_string(),
+                    FeatureData::NullableDecimal(vec![Some(0), None, Some(2)]),
+                ),
+                (
+                    "bar".to_string(),
+                    FeatureData::Text(vec!["a".into(), "b".into(), "c".into()]),
+                ),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+        )
+        .unwrap();
+
+        let serialized = serde_json::to_string(&collection).unwrap();
+        let deserialized: MultiPointCollection = serde_json::from_str(&serialized).unwrap();
+
+        assert_eq!(collection, deserialized);
+    }
 }

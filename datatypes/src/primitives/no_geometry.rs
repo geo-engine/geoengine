@@ -1,3 +1,4 @@
+use crate::collections::VectorDataType;
 use crate::primitives::{Geometry, GeometryRef};
 use crate::util::arrow::ArrowTyped;
 use arrow::array::{
@@ -5,16 +6,18 @@ use arrow::array::{
 };
 use arrow::datatypes::DataType;
 use arrow::error::ArrowError;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::any::Any;
 
 /// A zero-sized placeholder struct for situations where a geometry is necessary.
 /// Currently, this is only required for `FeatureCollection` implementations.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct NoGeometry;
 
 impl Geometry for NoGeometry {
     const IS_GEOMETRY: bool = false;
+    const DATA_TYPE: VectorDataType = VectorDataType::Data;
 }
 
 impl GeometryRef for NoGeometry {}

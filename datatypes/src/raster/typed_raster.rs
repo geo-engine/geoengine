@@ -3,7 +3,7 @@ use super::{BaseRaster, Dim, DynamicRasterDataType, GridDimension, RasterDataTyp
 pub type TypedRaster2D = TypedRasterNDim<Dim<[usize; 2]>>;
 pub type TypedRaster3D = TypedRasterNDim<Dim<[usize; 3]>>;
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum TypedRasterNDim<D: GridDimension> {
     U8(BaseRaster<D, u8, Vec<u8>>),
     U16(BaseRaster<D, u16, Vec<u16>>),
