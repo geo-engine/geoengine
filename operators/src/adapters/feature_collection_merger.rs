@@ -296,7 +296,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[tokio::test(max_threads = 1)]
     async fn interleaving_pendings() {
         let mut stream_history: Vec<Poll<Option<Result<MultiPointCollection>>>> = vec![
             Poll::Pending,
