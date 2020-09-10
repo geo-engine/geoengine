@@ -323,17 +323,25 @@ impl PartialOrd for TimeInterval {
 
 impl ArrowTyped for TimeInterval {
     type ArrowArray = arrow::array::FixedSizeListArray;
-    type ArrowBuilder = arrow::array::FixedSizeListBuilder<arrow::array::Date64Builder>;
+    // TODO: use date if dates out-of-range is fixed for us
+    // type ArrowBuilder = arrow::array::FixedSizeListBuilder<arrow::array::Date64Builder>;
+    type ArrowBuilder = arrow::array::FixedSizeListBuilder<arrow::array::Int64Builder>;
 
     fn arrow_data_type() -> arrow::datatypes::DataType {
-        arrow::datatypes::DataType::FixedSizeList(
-            arrow::datatypes::DataType::Date64(arrow::datatypes::DateUnit::Millisecond).into(),
-            2,
-        )
+        // TODO: use date if dates out-of-range is fixed for us
+        // arrow::datatypes::DataType::FixedSizeList(
+        //     arrow::datatypes::DataType::Date64(arrow::datatypes::DateUnit::Millisecond).into(),
+        //     2,
+        // )
+
+        arrow::datatypes::DataType::FixedSizeList(arrow::datatypes::DataType::Int64.into(), 2)
     }
 
     fn arrow_builder(capacity: usize) -> Self::ArrowBuilder {
-        arrow::array::FixedSizeListBuilder::new(arrow::array::Date64Builder::new(2 * capacity), 2)
+        // TODO: use date if dates out-of-range is fixed for us
+        // arrow::array::FixedSizeListBuilder::new(arrow::array::Date64Builder::new(2 * capacity), 2)
+
+        arrow::array::FixedSizeListBuilder::new(arrow::array::Int64Builder::new(2 * capacity), 2)
     }
 
     fn concat(a: &Self::ArrowArray, b: &Self::ArrowArray) -> Result<Self::ArrowArray, ArrowError> {
@@ -341,15 +349,17 @@ impl ArrowTyped for TimeInterval {
         let mut new_time_intervals = TimeInterval::arrow_builder(new_length);
 
         {
-            use arrow::array::Date64Array;
+            // TODO: use date if dates out-of-range is fixed for us
+            // use arrow::array::Date64Array;
+            use arrow::array::Int64Array;
 
             let int_builder = new_time_intervals.values();
 
             let ints_a_ref = a.values();
             let ints_b_ref = b.values();
 
-            let ints_a: &Date64Array = downcast_array(&ints_a_ref);
-            let ints_b: &Date64Array = downcast_array(&ints_b_ref);
+            let ints_a: &Int64Array = downcast_array(&ints_a_ref);
+            let ints_b: &Int64Array = downcast_array(&ints_b_ref);
 
             int_builder.append_slice(ints_a.value_slice(0, ints_a.len()))?;
             int_builder.append_slice(ints_b.value_slice(0, ints_b.len()))?;
@@ -366,7 +376,9 @@ impl ArrowTyped for TimeInterval {
         time_intervals: &Self::ArrowArray,
         filter_array: &BooleanArray,
     ) -> Result<Self::ArrowArray, ArrowError> {
-        use arrow::array::Date64Array;
+        // TODO: use date if dates out-of-range is fixed for us
+        // use arrow::array::Date64Array;
+        use arrow::array::Int64Array;
 
         let mut new_time_intervals = Self::arrow_builder(0);
 
@@ -376,7 +388,7 @@ impl ArrowTyped for TimeInterval {
             }
 
             let old_timestamps_ref = time_intervals.value(feature_index);
-            let old_timestamps: &Date64Array = downcast_array(&old_timestamps_ref);
+            let old_timestamps: &Int64Array = downcast_array(&old_timestamps_ref);
 
             let date_builder = new_time_intervals.values();
             date_builder.append_slice(old_timestamps.value_slice(0, 2))?;

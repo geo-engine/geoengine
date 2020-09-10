@@ -11,6 +11,7 @@ mod spatio_temporal_bounded;
 mod time_instance;
 mod time_interval;
 
+use crate::collections::VectorDataType;
 pub use bounding_box::BoundingBox2D;
 pub use coordinate::Coordinate2D;
 pub(crate) use error::PrimitivesError;
@@ -25,16 +26,20 @@ pub use multi_point::{MultiPoint, MultiPointAccess, MultiPointRef};
 pub use multi_polygon::{MultiPolygon, MultiPolygonAccess, MultiPolygonRef};
 pub use no_geometry::NoGeometry;
 pub use spatio_temporal_bounded::{SpatialBounded, TemporalBounded};
+use std::fmt::Debug;
 pub use time_instance::TimeInstance;
 pub use time_interval::TimeInterval;
 
 /// Marker trait for geometry types
 // TODO: rename to CollectionType oder something?…
-pub trait Geometry {
+pub trait Geometry: Clone + Debug + Send + Sync {
     // TODO: introduce once generic associated types are possible due to lifetime introduction for ref type
     // type REF: GeometryRef;
 
     const IS_GEOMETRY: bool = true;
+
+    // move to primitives module?
+    const DATA_TYPE: VectorDataType;
 }
 
 pub trait GeometryRef: Into<geojson::Geometry> {}

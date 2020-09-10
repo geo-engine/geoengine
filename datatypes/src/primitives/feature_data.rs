@@ -2,12 +2,13 @@ use crate::error;
 use crate::primitives::PrimitivesError;
 use crate::util::Result;
 use arrow::bitmap::Bitmap;
+use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::convert::TryFrom;
 use std::slice;
 use std::str;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
 pub enum FeatureDataType {
     Text,
     NullableText,
@@ -19,7 +20,7 @@ pub enum FeatureDataType {
     NullableCategorical,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum FeatureData {
     Text(Vec<String>),
     NullableText(Vec<Option<String>>),
@@ -31,7 +32,7 @@ pub enum FeatureData {
     NullableCategorical(Vec<Option<u8>>),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum FeatureDataValue {
     Text(String),
     NullableText(Option<String>),
