@@ -4,8 +4,10 @@ use geoengine_datatypes::call_generic_raster2d;
 use geoengine_datatypes::raster::{
     DynamicRasterDataType, Pixel, Raster2D, RasterDataType, TypedRaster2D,
 };
-use ocl::builders::{ContextBuilder, KernelBuilder, ProgramBuilder};
-use ocl::{Buffer, Device, Kernel, MemFlags, Platform, Queue};
+use num_traits::AsPrimitive;
+use ocl::builders::{KernelBuilder, ProgramBuilder};
+use ocl::prm::{cl_double, cl_uint, cl_ushort};
+use ocl::{Buffer, Context, Device, Kernel, MemFlags, OclPrm, Platform, Queue};
 use snafu::ensure;
 use snafu::ResultExt;
 
@@ -16,10 +18,22 @@ pub enum IterationType {
     Vector,
 }
 
+// TODO: remove this struct if only data type is relevant and pass it directly
+#[derive(PartialEq, Clone, Copy, Debug)]
+pub struct RasterArgument {
+    pub data_type: RasterDataType,
+}
+
+impl RasterArgument {
+    pub fn new(data_type: RasterDataType) -> Self {
+        Self { data_type }
+    }
+}
+
 /// Specifies in and output types of CL program and compiles the source into a reusable `CompiledCLProgram`
 pub struct CLProgram {
-    input_rasters: Vec<RasterDataType>,
-    output_rasters: Vec<RasterDataType>,
+    input_rasters: Vec<RasterArgument>,
+    output_rasters: Vec<RasterArgument>,
     iteration_type: IterationType,
 }
 
@@ -32,11 +46,11 @@ impl CLProgram {
         }
     }
 
-    pub fn add_input_raster(&mut self, raster: RasterDataType) {
+    pub fn add_input_raster(&mut self, raster: RasterArgument) {
         self.input_rasters.push(raster);
     }
 
-    pub fn add_output_raster(&mut self, raster: RasterDataType) {
+    pub fn add_output_raster(&mut self, raster: RasterArgument) {
         self.output_rasters.push(raster);
     }
 
@@ -59,7 +73,7 @@ impl CLProgram {
         .into()
     }
 
-    fn add_buffer_placeholder(
+    fn add_data_buffer_placeholder(
         kernel: &mut KernelBuilder,
         arg_name: String,
         data_type: RasterDataType,
@@ -81,18 +95,45 @@ impl CLProgram {
     fn create_type_definitions(&self) -> String {
         let mut s = String::new();
 
+        s.push_str(
+            r####"
+typedef struct {
+	uint size[3];
+	double origin[3];
+	double scale[3];
+	double min, max, no_data;
+	ushort crs_code;
+	ushort has_no_data;
+} RasterInfo;
+
+#define R(t,x,y) t ## _data[y * t ## _info->size[0] + x]
+"####,
+        );
+
         for (idx, raster) in self.input_rasters.iter().enumerate() {
             s += &format!(
                 "typedef {} IN_TYPE{};\n",
-                Self::raster_data_type_to_cl(*raster),
+                Self::raster_data_type_to_cl(raster.data_type),
                 idx
             );
+
+            if raster.data_type == RasterDataType::F32 || raster.data_type == RasterDataType::F64 {
+                s += &format!(
+                    "#define ISNODATA{}(v,i) (i->has_no_data && (isnan(v) || v == i->no_data))\n",
+                    idx
+                );
+            } else {
+                s += &format!(
+                    "#define ISNODATA{}(v,i) (i->has_no_data && v == i->no_data)\n",
+                    idx
+                );
+            }
         }
 
         for (idx, raster) in self.output_rasters.iter().enumerate() {
             s += &format!(
                 "typedef {} OUT_TYPE{};\n",
-                Self::raster_data_type_to_cl(*raster),
+                Self::raster_data_type_to_cl(raster.data_type),
                 idx
             );
         }
@@ -116,7 +157,16 @@ impl CLProgram {
 
         // TODO: add code for pixel to world
 
-        let ctx = ContextBuilder::new().build().context(error::OCL)?; // TODO: make configurable
+        let platform = Platform::default(); // TODO: make configurable
+
+        // TODO: fails for concurrent access, see https://github.com/cogciprocate/ocl/issues/189
+        let device = Device::first(platform).context(error::OCL)?; // TODO: make configurable
+
+        let ctx = Context::builder()
+            .platform(platform)
+            .devices(device)
+            .build()
+            .context(error::OCL)?; // TODO: make configurable
 
         let program = ProgramBuilder::new()
             .src(typedefs)
@@ -124,20 +174,19 @@ impl CLProgram {
             .build(&ctx)
             .context(error::OCL)?;
 
-        let platform = Platform::default(); // TODO: make configurable
-        let device = Device::first(platform).context(error::OCL)?; // TODO: make configurable
-
         let queue = Queue::new(&ctx, device, None).context(error::OCL)?;
 
         let mut kernel = KernelBuilder::new();
         kernel.queue(queue).program(&program).name(kernel_name);
 
         for (idx, raster) in self.input_rasters.iter().enumerate() {
-            Self::add_buffer_placeholder(&mut kernel, format!("IN{}", idx), *raster);
+            Self::add_data_buffer_placeholder(&mut kernel, format!("IN{}", idx), raster.data_type);
+            kernel.arg_named(format!("IN_INFO{}", idx), None::<&Buffer<RasterInfo>>);
         }
 
         for (idx, raster) in self.output_rasters.iter().enumerate() {
-            Self::add_buffer_placeholder(&mut kernel, format!("OUT{}", idx), *raster);
+            Self::add_data_buffer_placeholder(&mut kernel, format!("OUT{}", idx), raster.data_type);
+            kernel.arg_named(format!("OUT_INFO{}", idx), None::<&Buffer<RasterInfo>>);
         }
 
         kernel.build().context(error::OCL)?;
@@ -171,16 +220,16 @@ enum OutputBuffer {
 }
 
 pub struct CLProgramParameters<'a> {
-    input_raster_types: Vec<RasterDataType>,
-    output_raster_types: Vec<RasterDataType>,
+    input_raster_types: Vec<RasterArgument>,
+    output_raster_types: Vec<RasterArgument>,
     input_rasters: Vec<Option<&'a TypedRaster2D>>,
     output_rasters: Vec<Option<&'a mut TypedRaster2D>>,
 }
 
 impl<'a> CLProgramParameters<'a> {
     fn new(
-        input_raster_types: Vec<RasterDataType>,
-        output_raster_types: Vec<RasterDataType>,
+        input_raster_types: Vec<RasterArgument>,
+        output_raster_types: Vec<RasterArgument>,
     ) -> Self {
         let mut v = Vec::new();
         v.resize_with(output_raster_types.len(), || None);
@@ -199,7 +248,7 @@ impl<'a> CLProgramParameters<'a> {
             error::CLProgramInvalidRasterIndex
         );
         ensure!(
-            raster.raster_data_type() == self.input_raster_types[idx],
+            raster.raster_data_type() == self.input_raster_types[idx].data_type,
             error::CLProgramInvalidRasterDataType
         );
         self.input_rasters[idx] = Some(raster);
@@ -212,7 +261,7 @@ impl<'a> CLProgramParameters<'a> {
             error::CLProgramInvalidRasterIndex
         );
         ensure!(
-            raster.raster_data_type() == self.output_raster_types[idx],
+            raster.raster_data_type() == self.output_raster_types[idx].data_type,
             error::CLProgramInvalidRasterDataType
         );
         self.output_rasters[idx] = Some(raster);
@@ -220,12 +269,47 @@ impl<'a> CLProgramParameters<'a> {
     }
 }
 
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+struct RasterInfo {
+    pub size: [cl_uint; 3],
+    pub origin: [cl_double; 3],
+    pub scale: [cl_double; 3],
+
+    pub min: cl_double,
+    pub max: cl_double,
+    pub no_data: cl_double,
+
+    pub crs_code: cl_ushort,
+    pub has_no_data: cl_ushort,
+}
+
+unsafe impl Send for RasterInfo {}
+unsafe impl Sync for RasterInfo {}
+unsafe impl OclPrm for RasterInfo {}
+
+impl RasterInfo {
+    pub fn from_raster<T: Pixel>(raster: &Raster2D<T>) -> Self {
+        // TODO: extract information from raster
+        Self {
+            size: [0, 0, 0],
+            origin: [0., 0., 0.],
+            scale: [0., 0., 0.],
+            min: 0.,
+            max: 0.,
+            no_data: raster.no_data_value.map_or(0., AsPrimitive::as_),
+            crs_code: 0,
+            has_no_data: u16::from(raster.no_data_value.is_some()),
+        }
+    }
+}
+
 /// Allows running kernels on different inputs and outputs
 pub struct CompiledCLProgram {
     kernel: Kernel,
     iteration_type: IterationType,
-    input_raster_types: Vec<RasterDataType>,
-    output_raster_types: Vec<RasterDataType>,
+    input_raster_types: Vec<RasterArgument>,
+    output_raster_types: Vec<RasterArgument>,
     output_buffers: Vec<OutputBuffer>,
 }
 
@@ -233,8 +317,8 @@ impl CompiledCLProgram {
     pub fn new(
         kernel: Kernel,
         iteration_type: IterationType,
-        input_raster_types: Vec<RasterDataType>,
-        output_raster_types: Vec<RasterDataType>,
+        input_raster_types: Vec<RasterArgument>,
+        output_raster_types: Vec<RasterArgument>,
     ) -> Self {
         Self {
             kernel,
@@ -259,7 +343,7 @@ impl CompiledCLProgram {
         f: fn(Buffer<T>) -> OutputBuffer,
     ) -> Result<()>
     where
-        T: Pixel + ocl::OclPrm,
+        T: Pixel + OclPrm,
     {
         let buffer = Buffer::<T>::builder()
             .queue(self.kernel.default_queue().expect("checked").clone())
@@ -272,6 +356,17 @@ impl CompiledCLProgram {
             .context(error::OCL)?;
 
         self.output_buffers.push(f(buffer));
+
+        let info_buffer = Buffer::builder()
+            .queue(self.kernel.default_queue().expect("checked").clone())
+            .flags(MemFlags::new().read_only())
+            .len(1)
+            .copy_host_slice(&[RasterInfo::from_raster(&raster)])
+            .build()
+            .context(error::OCL)?;
+        self.kernel
+            .set_arg(format!("OUT_INFO{}", idx), info_buffer)
+            .context(error::OCL)?;
 
         Ok(())
     }
@@ -286,14 +381,21 @@ impl CompiledCLProgram {
         for (idx, raster) in params.input_rasters.iter().enumerate() {
             let raster = raster.expect("checked");
             call_generic_raster2d!(raster, raster => {
-            let buffer = Buffer::builder()
+                let data_buffer = Buffer::builder()
                 .queue(self.kernel.default_queue().expect("checked").clone())
                 .flags(MemFlags::new().read_only())
                 .len(raster.data_container.len())
                 .copy_host_slice(&raster.data_container)
                 .build().context(error::OCL)?;
+                self.kernel.set_arg(format!("IN{}",idx), data_buffer).context(error::OCL)?;
 
-                self.kernel.set_arg(format!("IN{}",idx), buffer).context(error::OCL)?;
+                let info_buffer = Buffer::builder()
+                .queue(self.kernel.default_queue().expect("checked").clone())
+                .flags(MemFlags::new().read_only())
+                .len(1)
+                .copy_host_slice(&[RasterInfo::from_raster(&raster)])
+                .build().context(error::OCL)?;
+                self.kernel.set_arg(format!("IN_INFO{}",idx), info_buffer).context(error::OCL)?;
             });
         }
 
@@ -437,7 +539,7 @@ mod tests {
 
     #[test]
     fn kernel_reuse() {
-        let raster_a = TypedRaster2D::I32(
+        let in0 = TypedRaster2D::I32(
             Raster2D::new(
                 [3, 2].into(),
                 vec![1, 2, 3, 4, 5, 6],
@@ -448,7 +550,7 @@ mod tests {
             .unwrap(),
         );
 
-        let raster_b = TypedRaster2D::I32(
+        let in1 = TypedRaster2D::I32(
             Raster2D::new(
                 [3, 2].into(),
                 vec![7, 8, 9, 10, 11, 12],
@@ -459,7 +561,7 @@ mod tests {
             .unwrap(),
         );
 
-        let mut raster_res = TypedRaster2D::I32(
+        let mut out = TypedRaster2D::I32(
             Raster2D::new(
                 [3, 2].into(),
                 vec![-1, -1, -1, -1, -1, -1],
@@ -472,48 +574,50 @@ mod tests {
 
         let kernel = r#"
 __kernel void add(
-            __global IN_TYPE0* a,
-            __global IN_TYPE1* b,
-            __global OUT_TYPE0* res)
-            
+            __global const IN_TYPE0 *in_data0,
+            __global const RasterInfo *in_info0,
+            __global const IN_TYPE1* in_data1,
+            __global const RasterInfo *in_info1,
+            __global OUT_TYPE0* out_data,
+            __global const RasterInfo *out_info)            
 {
     uint const idx = get_global_id(0);
-    res[idx] = a[idx] + b[idx];
+    out_data[idx] = in_data0[idx] + in_data1[idx];
 }"#;
 
         let mut cl_program = CLProgram::new(IterationType::Raster);
-        cl_program.add_input_raster(raster_a.raster_data_type());
-        cl_program.add_input_raster(raster_b.raster_data_type());
-        cl_program.add_output_raster(raster_res.raster_data_type());
+        cl_program.add_input_raster(RasterArgument::new(in0.raster_data_type()));
+        cl_program.add_input_raster(RasterArgument::new(in1.raster_data_type()));
+        cl_program.add_output_raster(RasterArgument::new(out.raster_data_type()));
 
         let mut compiled = cl_program.compile(kernel, "add").unwrap();
 
         let mut params = compiled.params();
-        params.set_input_raster(0, &raster_a).unwrap();
-        params.set_input_raster(1, &raster_b).unwrap();
-        params.set_output_raster(0, &mut raster_res).unwrap();
+        params.set_input_raster(0, &in0).unwrap();
+        params.set_input_raster(1, &in1).unwrap();
+        params.set_output_raster(0, &mut out).unwrap();
         compiled.run(params).unwrap();
 
         assert_eq!(
-            raster_res.get_i32_ref().unwrap().data_container,
+            out.get_i32_ref().unwrap().data_container,
             vec![8, 10, 12, 14, 16, 18]
         );
 
         let mut params = compiled.params();
-        params.set_input_raster(0, &raster_a).unwrap();
-        params.set_input_raster(1, &raster_a).unwrap();
-        params.set_output_raster(0, &mut raster_res).unwrap();
+        params.set_input_raster(0, &in0).unwrap();
+        params.set_input_raster(1, &in0).unwrap();
+        params.set_output_raster(0, &mut out).unwrap();
         compiled.run(params).unwrap();
 
         assert_eq!(
-            raster_res.get_i32().unwrap().data_container,
+            out.get_i32().unwrap().data_container,
             vec![2, 4, 6, 8, 10, 12]
         );
     }
 
     #[test]
     fn mixed_types() {
-        let raster_a = TypedRaster2D::I32(
+        let in0 = TypedRaster2D::I32(
             Raster2D::new(
                 [3, 2].into(),
                 vec![1, 2, 3, 4, 5, 6],
@@ -524,7 +628,7 @@ __kernel void add(
             .unwrap(),
         );
 
-        let raster_b = TypedRaster2D::U16(
+        let in1 = TypedRaster2D::U16(
             Raster2D::new(
                 [3, 2].into(),
                 vec![7, 8, 9, 10, 11, 12],
@@ -535,7 +639,7 @@ __kernel void add(
             .unwrap(),
         );
 
-        let mut raster_res = TypedRaster2D::I64(
+        let mut out = TypedRaster2D::I64(
             Raster2D::new(
                 [3, 2].into(),
                 vec![-1, -1, -1, -1, -1, -1],
@@ -548,31 +652,197 @@ __kernel void add(
 
         let kernel = r#"
 __kernel void add(
-            __global IN_TYPE0* a,
-            __global IN_TYPE1* b,
-            __global OUT_TYPE0* res)
-            
+            __global const IN_TYPE0 *in_data0,
+            __global const RasterInfo *in_info0,
+            __global const IN_TYPE1* in_data1,
+            __global const RasterInfo *in_info1,
+            __global OUT_TYPE0* out_data,
+            __global const RasterInfo *out_info)            
 {
     uint const idx = get_global_id(0);
-    res[idx] = a[idx] + b[idx];
+    out_data[idx] = in_data0[idx] + in_data1[idx];
 }"#;
 
         let mut cl_program = CLProgram::new(IterationType::Raster);
-        cl_program.add_input_raster(raster_a.raster_data_type());
-        cl_program.add_input_raster(raster_b.raster_data_type());
-        cl_program.add_output_raster(raster_res.raster_data_type());
+        cl_program.add_input_raster(RasterArgument::new(in0.raster_data_type()));
+        cl_program.add_input_raster(RasterArgument::new(in1.raster_data_type()));
+        cl_program.add_output_raster(RasterArgument::new(out.raster_data_type()));
 
         let mut compiled = cl_program.compile(kernel, "add").unwrap();
 
         let mut params = compiled.params();
-        params.set_input_raster(0, &raster_a).unwrap();
-        params.set_input_raster(1, &raster_b).unwrap();
-        params.set_output_raster(0, &mut raster_res).unwrap();
+        params.set_input_raster(0, &in0).unwrap();
+        params.set_input_raster(1, &in1).unwrap();
+        params.set_output_raster(0, &mut out).unwrap();
         compiled.run(params).unwrap();
 
         assert_eq!(
-            raster_res.get_i64_ref().unwrap().data_container,
+            out.get_i64_ref().unwrap().data_container,
             vec![8, 10, 12, 14, 16, 18]
+        );
+    }
+
+    #[test]
+    fn raster_info() {
+        let in0 = TypedRaster2D::I32(
+            Raster2D::new(
+                [3, 2].into(),
+                vec![1, 2, 3, 4, 5, 6],
+                Some(1337),
+                Default::default(),
+                Default::default(),
+            )
+            .unwrap(),
+        );
+
+        let mut out = TypedRaster2D::I64(
+            Raster2D::new(
+                [3, 2].into(),
+                vec![-1, -1, -1, -1, -1, -1],
+                None,
+                Default::default(),
+                Default::default(),
+            )
+            .unwrap(),
+        );
+
+        let kernel = r#"
+__kernel void no_data( 
+            __global const IN_TYPE0 *in_data,
+            __global const RasterInfo *in_info,
+            __global OUT_TYPE0* out_data,
+            __global const RasterInfo *out_info)            
+{
+    uint const idx = get_global_id(0);
+    out_data[idx] = in_info->no_data;
+}"#;
+
+        let mut cl_program = CLProgram::new(IterationType::Raster);
+        cl_program.add_input_raster(RasterArgument::new(in0.raster_data_type()));
+        cl_program.add_output_raster(RasterArgument::new(out.raster_data_type()));
+
+        let mut compiled = cl_program.compile(kernel, "no_data").unwrap();
+
+        let mut params = compiled.params();
+        params.set_input_raster(0, &in0).unwrap();
+        params.set_output_raster(0, &mut out).unwrap();
+        compiled.run(params).unwrap();
+
+        assert_eq!(
+            out.get_i64_ref().unwrap().data_container,
+            vec![1337, 1337, 1337, 1337, 1337, 1337]
+        );
+    }
+
+    #[test]
+    fn no_data() {
+        let in0 = TypedRaster2D::I32(
+            Raster2D::new(
+                [3, 2].into(),
+                vec![1, 1337, 3, 4, 5, 6],
+                Some(1337),
+                Default::default(),
+                Default::default(),
+            )
+            .unwrap(),
+        );
+
+        let mut out = TypedRaster2D::I64(
+            Raster2D::new(
+                [3, 2].into(),
+                vec![-1, -1, -1, -1, -1, -1],
+                None,
+                Default::default(),
+                Default::default(),
+            )
+            .unwrap(),
+        );
+
+        let kernel = r#"
+__kernel void no_data( 
+            __global const IN_TYPE0 *in_data,
+            __global const RasterInfo *in_info,
+            __global OUT_TYPE0* out_data,
+            __global const RasterInfo *out_info)            
+{
+    uint const idx = get_global_id(0);
+    if (ISNODATA0(in_data[idx], in_info)) {    
+        out_data[idx] = 1;
+    } else {
+        out_data[idx] = 0;
+    }
+}"#;
+
+        let mut cl_program = CLProgram::new(IterationType::Raster);
+        cl_program.add_input_raster(RasterArgument::new(in0.raster_data_type()));
+        cl_program.add_output_raster(RasterArgument::new(out.raster_data_type()));
+
+        let mut compiled = cl_program.compile(kernel, "no_data").unwrap();
+
+        let mut params = compiled.params();
+        params.set_input_raster(0, &in0).unwrap();
+        params.set_output_raster(0, &mut out).unwrap();
+        compiled.run(params).unwrap();
+
+        assert_eq!(
+            out.get_i64_ref().unwrap().data_container,
+            vec![0, 1, 0, 0, 0, 0]
+        );
+    }
+
+    #[test]
+    fn no_data_float() {
+        let in0 = TypedRaster2D::F32(
+            Raster2D::new(
+                [3, 2].into(),
+                vec![1., 1337., f32::NAN, 4., 5., 6.],
+                Some(1337.),
+                Default::default(),
+                Default::default(),
+            )
+            .unwrap(),
+        );
+
+        let mut out = TypedRaster2D::I64(
+            Raster2D::new(
+                [3, 2].into(),
+                vec![-1, -1, -1, -1, -1, -1],
+                None,
+                Default::default(),
+                Default::default(),
+            )
+            .unwrap(),
+        );
+
+        let kernel = r#"
+__kernel void no_data( 
+            __global const IN_TYPE0 *in_data,
+            __global const RasterInfo *in_info,
+            __global OUT_TYPE0* out_data,
+            __global const RasterInfo *out_info)            
+{
+    uint const idx = get_global_id(0);
+    if (ISNODATA0(in_data[idx], in_info)) {    
+        out_data[idx] = 1;
+    } else {
+        out_data[idx] = 0;
+    }
+}"#;
+
+        let mut cl_program = CLProgram::new(IterationType::Raster);
+        cl_program.add_input_raster(RasterArgument::new(in0.raster_data_type()));
+        cl_program.add_output_raster(RasterArgument::new(out.raster_data_type()));
+
+        let mut compiled = cl_program.compile(kernel, "no_data").unwrap();
+
+        let mut params = compiled.params();
+        params.set_input_raster(0, &in0).unwrap();
+        params.set_output_raster(0, &mut out).unwrap();
+        compiled.run(params).unwrap();
+
+        assert_eq!(
+            out.get_i64_ref().unwrap().data_container,
+            vec![0, 1, 1, 0, 0, 0]
         );
     }
 }
