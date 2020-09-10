@@ -4,11 +4,17 @@ use geoengine_datatypes::call_generic_raster2d;
 use geoengine_datatypes::raster::{
     DynamicRasterDataType, Pixel, Raster2D, RasterDataType, TypedRaster2D,
 };
+use lazy_static::lazy_static;
 use num_traits::AsPrimitive;
 use ocl::builders::{KernelBuilder, ProgramBuilder};
 use ocl::prm::{cl_double, cl_uint, cl_ushort};
 use ocl::{Buffer, Context, Device, Kernel, MemFlags, OclPrm, Platform, Queue};
 use snafu::ensure;
+
+// workaround for concurrency issue, see <https://github.com/cogciprocate/ocl/issues/189>
+lazy_static! {
+    static ref DEVICE: Device = Device::first(Platform::default()).expect("Device has to exist");
+}
 
 /// Whether the kernel iterates over pixels or features
 #[derive(PartialEq, Clone, Copy, Debug)]
@@ -158,8 +164,9 @@ typedef struct {
 
         let platform = Platform::default(); // TODO: make configurable
 
-        // TODO: fails for concurrent access, see https://github.com/cogciprocate/ocl/issues/189
-        let device = Device::first(platform)?; // TODO: make configurable
+        // the following fails for concurrent access, see <https://github.com/cogciprocate/ocl/issues/189>
+        // let device = Device::first(platform)?;
+        let device = *DEVICE; // TODO: make configurable
 
         let ctx = Context::builder()
             .platform(platform)
