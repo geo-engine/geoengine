@@ -124,6 +124,7 @@ pub enum Error {
     ParseU32 {
         source: <u32 as std::str::FromStr>::Err,
     },
+    InvalidTypedRasterConversion,
 }
 
 impl From<arrow::error::ArrowError> for Error {

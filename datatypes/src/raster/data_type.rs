@@ -1,4 +1,5 @@
 use crate::operations::image::RgbaTransmutable;
+use crate::raster::typed_raster::TypedRasterConversion;
 use num_traits::{AsPrimitive, Num};
 use serde::{Deserialize, Serialize};
 
@@ -35,6 +36,7 @@ pub trait Pixel:
     + FromPrimitive<Self>
     + StaticRasterDataType
     + RgbaTransmutable
+    + TypedRasterConversion
 {
 }
 

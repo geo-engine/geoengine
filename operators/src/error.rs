@@ -65,6 +65,7 @@ pub enum Error {
     CLProgramInvalidRasterDataType,
     CLProgramUnspecifiedRaster,
     CLInvalidInputsForIterationType,
+    InvalidExpression,
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {

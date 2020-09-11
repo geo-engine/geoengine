@@ -145,6 +145,12 @@ impl TypedRasterQueryProcessor {
             _ => None,
         }
     }
+    pub fn get_i8(self) -> Option<Box<dyn RasterQueryProcessor<RasterType = i8>>> {
+        match self {
+            Self::I8(r) => Some(r),
+            _ => None,
+        }
+    }
     pub fn get_i16(self) -> Option<Box<dyn RasterQueryProcessor<RasterType = i16>>> {
         match self {
             Self::I16(r) => Some(r),

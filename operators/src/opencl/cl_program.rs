@@ -8,7 +8,7 @@ use lazy_static::lazy_static;
 use num_traits::AsPrimitive;
 use ocl::builders::{KernelBuilder, ProgramBuilder};
 use ocl::prm::{cl_double, cl_uint, cl_ushort};
-use ocl::{Buffer, Context, Device, Kernel, MemFlags, OclPrm, Platform, Queue};
+use ocl::{Buffer, Context, Device, Kernel, MemFlags, OclPrm, Platform, Program, Queue};
 use snafu::ensure;
 
 // workaround for concurrency issue, see <https://github.com/cogciprocate/ocl/issues/189>
@@ -76,25 +76,6 @@ impl CLProgram {
             RasterDataType::F64 => "double",
         }
         .into()
-    }
-
-    fn add_data_buffer_placeholder(
-        kernel: &mut KernelBuilder,
-        arg_name: String,
-        data_type: RasterDataType,
-    ) {
-        match data_type {
-            RasterDataType::U8 => kernel.arg_named(arg_name, None::<&Buffer<u8>>),
-            RasterDataType::U16 => kernel.arg_named(arg_name, None::<&Buffer<u16>>),
-            RasterDataType::U32 => kernel.arg_named(arg_name, None::<&Buffer<u32>>),
-            RasterDataType::U64 => kernel.arg_named(arg_name, None::<&Buffer<u64>>),
-            RasterDataType::I8 => kernel.arg_named(arg_name, None::<&Buffer<i8>>),
-            RasterDataType::I16 => kernel.arg_named(arg_name, None::<&Buffer<i16>>),
-            RasterDataType::I32 => kernel.arg_named(arg_name, None::<&Buffer<i32>>),
-            RasterDataType::I64 => kernel.arg_named(arg_name, None::<&Buffer<i64>>),
-            RasterDataType::F32 => kernel.arg_named(arg_name, None::<&Buffer<f32>>),
-            RasterDataType::F64 => kernel.arg_named(arg_name, None::<&Buffer<f64>>),
-        };
     }
 
     fn create_type_definitions(&self) -> String {
@@ -178,31 +159,16 @@ typedef struct {
             .src(source)
             .build(&ctx)?;
 
-        let queue = Queue::new(&ctx, device, None)?;
-
-        let mut kernel = KernelBuilder::new();
-        kernel.queue(queue).program(&program).name(kernel_name);
-
-        for (idx, raster) in self.input_rasters.iter().enumerate() {
-            Self::add_data_buffer_placeholder(&mut kernel, format!("IN{}", idx), raster.data_type);
-            kernel.arg_named(format!("IN_INFO{}", idx), None::<&Buffer<RasterInfo>>);
-        }
-
-        for (idx, raster) in self.output_rasters.iter().enumerate() {
-            Self::add_data_buffer_placeholder(&mut kernel, format!("OUT{}", idx), raster.data_type);
-            kernel.arg_named(format!("OUT_INFO{}", idx), None::<&Buffer<RasterInfo>>);
-        }
-
-        kernel.build()?;
+        // TODO: create kernel builder here once it is cloneable
 
         // TODO: raster meta data
 
         // TODO: feature collections
 
-        let kernel = kernel.build()?;
-
         Ok(CompiledCLProgram::new(
-            kernel,
+            ctx,
+            program,
+            kernel_name.to_string(),
             self.iteration_type,
             self.input_rasters,
             self.output_rasters,
@@ -210,6 +176,7 @@ typedef struct {
     }
 }
 
+#[derive(Clone)]
 enum OutputBuffer {
     U8(Buffer<u8>),
     U16(Buffer<u16>),
@@ -309,23 +276,32 @@ impl RasterInfo {
 }
 
 /// Allows running kernels on different inputs and outputs
+#[derive(Clone)]
 pub struct CompiledCLProgram {
-    kernel: Kernel,
+    ctx: Context,
+    program: Program,
+    kernel_name: String,
     iteration_type: IterationType,
     input_raster_types: Vec<RasterArgument>,
     output_raster_types: Vec<RasterArgument>,
     output_buffers: Vec<OutputBuffer>,
 }
 
+unsafe impl Send for CompiledCLProgram {}
+
 impl CompiledCLProgram {
     pub fn new(
-        kernel: Kernel,
+        ctx: Context,
+        program: Program,
+        kernel_name: String,
         iteration_type: IterationType,
         input_raster_types: Vec<RasterArgument>,
         output_raster_types: Vec<RasterArgument>,
     ) -> Self {
         Self {
-            kernel,
+            ctx,
+            program,
+            kernel_name,
             iteration_type,
             input_raster_types,
             output_raster_types,
@@ -333,15 +309,35 @@ impl CompiledCLProgram {
         }
     }
 
-    pub fn params<'a>(&self) -> CLProgramParameters<'a> {
+    pub fn params<'b>(&self) -> CLProgramParameters<'b> {
         CLProgramParameters::new(
             self.input_raster_types.clone(),
             self.output_raster_types.clone(),
         )
     }
 
+    fn add_data_buffer_placeholder(
+        kernel: &mut KernelBuilder,
+        arg_name: String,
+        data_type: RasterDataType,
+    ) {
+        match data_type {
+            RasterDataType::U8 => kernel.arg_named(arg_name, None::<&Buffer<u8>>),
+            RasterDataType::U16 => kernel.arg_named(arg_name, None::<&Buffer<u16>>),
+            RasterDataType::U32 => kernel.arg_named(arg_name, None::<&Buffer<u32>>),
+            RasterDataType::U64 => kernel.arg_named(arg_name, None::<&Buffer<u64>>),
+            RasterDataType::I8 => kernel.arg_named(arg_name, None::<&Buffer<i8>>),
+            RasterDataType::I16 => kernel.arg_named(arg_name, None::<&Buffer<i16>>),
+            RasterDataType::I32 => kernel.arg_named(arg_name, None::<&Buffer<i32>>),
+            RasterDataType::I64 => kernel.arg_named(arg_name, None::<&Buffer<i64>>),
+            RasterDataType::F32 => kernel.arg_named(arg_name, None::<&Buffer<f32>>),
+            RasterDataType::F64 => kernel.arg_named(arg_name, None::<&Buffer<f64>>),
+        };
+    }
+
     fn add_output_buffer<T>(
         &mut self,
+        kernel: &Kernel,
         idx: usize,
         raster: &Raster2D<T>,
         f: fn(Buffer<T>) -> OutputBuffer,
@@ -350,27 +346,26 @@ impl CompiledCLProgram {
         T: Pixel + OclPrm,
     {
         let buffer = Buffer::<T>::builder()
-            .queue(self.kernel.default_queue().expect("checked").clone())
+            .queue(kernel.default_queue().expect("expect").clone())
             .len(raster.data_container.len())
             .build()?;
 
-        self.kernel.set_arg(format!("OUT{}", idx), &buffer)?;
+        kernel.set_arg(format!("OUT{}", idx), &buffer)?;
 
         self.output_buffers.push(f(buffer));
 
         let info_buffer = Buffer::builder()
-            .queue(self.kernel.default_queue().expect("checked").clone())
+            .queue(kernel.default_queue().expect("checked").clone())
             .flags(MemFlags::new().read_only())
             .len(1)
             .copy_host_slice(&[RasterInfo::from_raster(&raster)])
             .build()?;
-        self.kernel
-            .set_arg(format!("OUT_INFO{}", idx), info_buffer)?;
+        kernel.set_arg(format!("OUT_INFO{}", idx), info_buffer)?;
 
         Ok(())
     }
 
-    fn set_arguments(&mut self, params: &CLProgramParameters) -> Result<()> {
+    fn set_arguments(&mut self, kernel: &Kernel, params: &CLProgramParameters) -> Result<()> {
         ensure!(
             params.input_rasters.iter().all(Option::is_some),
             error::CLProgramUnspecifiedRaster
@@ -381,20 +376,20 @@ impl CompiledCLProgram {
             let raster = raster.expect("checked");
             call_generic_raster2d!(raster, raster => {
                 let data_buffer = Buffer::builder()
-                .queue(self.kernel.default_queue().expect("checked").clone())
+                .queue(kernel.default_queue().expect("checked").clone())
                 .flags(MemFlags::new().read_only())
                 .len(raster.data_container.len())
                 .copy_host_slice(&raster.data_container)
                 .build()?;
-                self.kernel.set_arg(format!("IN{}",idx), data_buffer)?;
+                kernel.set_arg(format!("IN{}",idx), data_buffer)?;
 
                 let info_buffer = Buffer::builder()
-                .queue(self.kernel.default_queue().expect("checked").clone())
+                .queue(kernel.default_queue().expect("checked").clone())
                 .flags(MemFlags::new().read_only())
                 .len(1)
                 .copy_host_slice(&[RasterInfo::from_raster(&raster)])
                 .build()?;
-                self.kernel.set_arg(format!("IN_INFO{}",idx), info_buffer)?;
+                kernel.set_arg(format!("IN_INFO{}",idx), info_buffer)?;
             });
         }
 
@@ -402,34 +397,34 @@ impl CompiledCLProgram {
             let raster = raster.as_ref().expect("checked");
             match raster {
                 TypedRaster2D::U8(raster) => {
-                    self.add_output_buffer(idx, raster, OutputBuffer::U8)?
+                    self.add_output_buffer(kernel, idx, raster, OutputBuffer::U8)?
                 }
                 TypedRaster2D::U16(raster) => {
-                    self.add_output_buffer(idx, raster, OutputBuffer::U16)?
+                    self.add_output_buffer(kernel, idx, raster, OutputBuffer::U16)?
                 }
                 TypedRaster2D::U32(raster) => {
-                    self.add_output_buffer(idx, raster, OutputBuffer::U32)?
+                    self.add_output_buffer(kernel, idx, raster, OutputBuffer::U32)?
                 }
                 TypedRaster2D::U64(raster) => {
-                    self.add_output_buffer(idx, raster, OutputBuffer::U64)?
+                    self.add_output_buffer(kernel, idx, raster, OutputBuffer::U64)?
                 }
                 TypedRaster2D::I8(raster) => {
-                    self.add_output_buffer(idx, raster, OutputBuffer::I8)?
+                    self.add_output_buffer(kernel, idx, raster, OutputBuffer::I8)?
                 }
                 TypedRaster2D::I16(raster) => {
-                    self.add_output_buffer(idx, raster, OutputBuffer::I16)?
+                    self.add_output_buffer(kernel, idx, raster, OutputBuffer::I16)?
                 }
                 TypedRaster2D::I32(raster) => {
-                    self.add_output_buffer(idx, raster, OutputBuffer::I32)?
+                    self.add_output_buffer(kernel, idx, raster, OutputBuffer::I32)?
                 }
                 TypedRaster2D::I64(raster) => {
-                    self.add_output_buffer(idx, raster, OutputBuffer::I64)?
+                    self.add_output_buffer(kernel, idx, raster, OutputBuffer::I64)?
                 }
                 TypedRaster2D::F32(raster) => {
-                    self.add_output_buffer(idx, raster, OutputBuffer::F32)?
+                    self.add_output_buffer(kernel, idx, raster, OutputBuffer::F32)?
                 }
                 TypedRaster2D::F64(raster) => {
-                    self.add_output_buffer(idx, raster, OutputBuffer::F64)?
+                    self.add_output_buffer(kernel, idx, raster, OutputBuffer::F64)?
                 }
             }
         }
@@ -447,10 +442,33 @@ impl CompiledCLProgram {
     }
 
     pub fn run(&mut self, mut params: CLProgramParameters) -> Result<()> {
-        self.set_arguments(&params)?;
+        // TODO: select correct device
+        let queue = Queue::new(&self.ctx, self.ctx.devices()[0], None)?;
+
+        // TODO: create the kernel builder only once in CLProgram once it is cloneable
+        let mut kernel = Kernel::builder();
+        kernel
+            .queue(queue)
+            .program(&self.program)
+            .name(&self.kernel_name);
+
+        // TODO: set the arguments either in CLProgram or set them directly instead of placeholders
+        for (idx, raster) in self.input_raster_types.iter().enumerate() {
+            Self::add_data_buffer_placeholder(&mut kernel, format!("IN{}", idx), raster.data_type);
+            kernel.arg_named(format!("IN_INFO{}", idx), None::<&Buffer<RasterInfo>>);
+        }
+
+        for (idx, raster) in self.output_raster_types.iter().enumerate() {
+            Self::add_data_buffer_placeholder(&mut kernel, format!("OUT{}", idx), raster.data_type);
+            kernel.arg_named(format!("OUT_INFO{}", idx), None::<&Buffer<RasterInfo>>);
+        }
+
+        let kernel = kernel.build()?;
+
+        self.set_arguments(&kernel, &params)?;
 
         unsafe {
-            self.kernel
+            kernel
                 .cmd()
                 .global_work_size(self.work_size(&params))
                 .enq()?;
