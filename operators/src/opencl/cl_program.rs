@@ -1,14 +1,17 @@
 use crate::error;
 use crate::util::Result;
 use geoengine_datatypes::call_generic_raster2d;
+use geoengine_datatypes::raster::Raster;
 use geoengine_datatypes::raster::{
-    DynamicRasterDataType, Pixel, Raster2D, RasterDataType, TypedRaster2D,
+    DynamicRasterDataType, GridDimension, Pixel, Raster2D, RasterDataType, TypedRaster2D,
 };
 use lazy_static::lazy_static;
 use num_traits::AsPrimitive;
 use ocl::builders::{KernelBuilder, ProgramBuilder};
 use ocl::prm::{cl_double, cl_uint, cl_ushort};
-use ocl::{Buffer, Context, Device, Kernel, MemFlags, OclPrm, Platform, Program, Queue};
+use ocl::{
+    Buffer, Context, Device, Kernel, MemFlags, OclPrm, Platform, Program, Queue, SpatialDims,
+};
 use snafu::ensure;
 
 // workaround for concurrency issue, see <https://github.com/cogciprocate/ocl/issues/189>
@@ -263,7 +266,11 @@ impl RasterInfo {
     pub fn from_raster<T: Pixel>(raster: &Raster2D<T>) -> Self {
         // TODO: extract information from raster
         Self {
-            size: [0, 0, 0],
+            size: [
+                raster.dimension().size_of_x_axis().as_(),
+                raster.dimension().size_of_y_axis().as_(),
+                0,
+            ],
             origin: [0., 0., 0.],
             scale: [0., 0., 0.],
             min: 0.,
@@ -432,11 +439,10 @@ impl CompiledCLProgram {
         Ok(())
     }
 
-    fn work_size(&self, params: &CLProgramParameters) -> usize {
+    fn work_size(&self, params: &CLProgramParameters) -> SpatialDims {
         match self.iteration_type {
-            IterationType::Raster => {
-                call_generic_raster2d!(params.input_rasters[0].expect("checked"), raster => raster.data_container.len())
-            }
+            IterationType::Raster => call_generic_raster2d!(params.output_rasters[0].as_ref()
+                .expect("checked"), raster => SpatialDims::Two(raster.dimension().size_of_x_axis(), raster.dimension().size_of_y_axis())),
             IterationType::Vector => unimplemented!(),
         }
     }
@@ -467,11 +473,9 @@ impl CompiledCLProgram {
 
         self.set_arguments(&kernel, &params)?;
 
+        let dims = self.work_size(&params);
         unsafe {
-            kernel
-                .cmd()
-                .global_work_size(self.work_size(&params))
-                .enq()?;
+            kernel.cmd().global_work_size(dims).enq()?;
         }
 
         for (output_buffer, output_raster) in self
@@ -567,7 +571,7 @@ __kernel void add(
             __global OUT_TYPE0* out_data,
             __global const RasterInfo *out_info)            
 {
-    uint const idx = get_global_id(0);
+    uint const idx = get_global_id(0) + get_global_id(1) * in_info0->size[0];
     out_data[idx] = in_data0[idx] + in_data1[idx];
 }"#;
 
@@ -645,7 +649,7 @@ __kernel void add(
             __global OUT_TYPE0* out_data,
             __global const RasterInfo *out_info)            
 {
-    uint const idx = get_global_id(0);
+    uint const idx = get_global_id(0) + get_global_id(1) * in_info0->size[0];
     out_data[idx] = in_data0[idx] + in_data1[idx];
 }"#;
 
@@ -699,7 +703,7 @@ __kernel void no_data(
             __global OUT_TYPE0* out_data,
             __global const RasterInfo *out_info)            
 {
-    uint const idx = get_global_id(0);
+    uint const idx = get_global_id(0) + get_global_id(1) * in_info->size[0];
     out_data[idx] = in_info->no_data;
 }"#;
 
@@ -751,7 +755,7 @@ __kernel void no_data(
             __global OUT_TYPE0* out_data,
             __global const RasterInfo *out_info)            
 {
-    uint const idx = get_global_id(0);
+    uint const idx = get_global_id(0) + get_global_id(1) * in_info->size[0];
     if (ISNODATA0(in_data[idx], in_info)) {    
         out_data[idx] = 1;
     } else {
@@ -807,7 +811,7 @@ __kernel void no_data(
             __global OUT_TYPE0* out_data,
             __global const RasterInfo *out_info)            
 {
-    uint const idx = get_global_id(0);
+    uint const idx = get_global_id(0) + get_global_id(1) * in_info->size[0];
     if (ISNODATA0(in_data[idx], in_info)) {    
         out_data[idx] = 1;
     } else {
@@ -829,6 +833,58 @@ __kernel void no_data(
         assert_eq!(
             out.get_i64_ref().unwrap().data_container,
             vec![0, 1, 1, 0, 0, 0]
+        );
+    }
+
+    #[test]
+    fn gid_calculation() {
+        let in0 = TypedRaster2D::I32(
+            Raster2D::new(
+                [3, 2].into(),
+                vec![0; 6],
+                None,
+                Default::default(),
+                Default::default(),
+            )
+            .unwrap(),
+        );
+
+        let mut out = TypedRaster2D::I32(
+            Raster2D::new(
+                [3, 2].into(),
+                vec![0; 6],
+                None,
+                Default::default(),
+                Default::default(),
+            )
+            .unwrap(),
+        );
+
+        let kernel = r#"
+__kernel void gid( 
+            __global const IN_TYPE0 *in_data0,
+            __global const RasterInfo *in_info0,
+            __global OUT_TYPE0* out_data,
+            __global const RasterInfo *out_info)            
+{
+    int idx = get_global_id(0) + get_global_id(1) * in_info0->size[0];
+    out_data[idx] = idx;
+}"#;
+
+        let mut cl_program = CLProgram::new(IterationType::Raster);
+        cl_program.add_input_raster(RasterArgument::new(in0.raster_data_type()));
+        cl_program.add_output_raster(RasterArgument::new(out.raster_data_type()));
+
+        let mut compiled = cl_program.compile(kernel, "gid").unwrap();
+
+        let mut params = compiled.params();
+        params.set_input_raster(0, &in0).unwrap();
+        params.set_output_raster(0, &mut out).unwrap();
+        compiled.run(params).unwrap();
+
+        assert_eq!(
+            out.get_i32_ref().unwrap().data_container,
+            vec![0, 1, 2, 3, 4, 5]
         );
     }
 }
