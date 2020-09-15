@@ -1,16 +1,34 @@
+use clap::Clap;
 use geoengine_services::error::Error;
 use geoengine_services::server;
 use std::path::Path;
 use std::{thread, time};
 use tokio::sync::oneshot;
 
+#[derive(Clap)]
+struct Opts {
+    #[clap(subcommand)]
+    protocol: Protocol,
+}
+
+#[derive(Clap)]
+enum Protocol {
+    WMS,
+    WFS,
+}
+
 /// Example of a client communicating with the geo engine
 #[tokio::main]
 async fn main() -> Result<(), Error> {
+    let opts: Opts = Opts::parse();
+
     // TODO: use special config for port etc. for starting the server and connecting to it
     let base_url = "http://localhost:3030/".to_string();
 
-    let static_files_directory = Path::new(file!()).with_file_name("openlayers-wms-static/");
+    let static_files_directory = Path::new(file!()).with_file_name(match opts.protocol {
+        Protocol::WMS => "openlayers-wms-static/",
+        Protocol::WFS => "openlayers-wfs-static/",
+    });
 
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
 

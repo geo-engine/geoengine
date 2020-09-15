@@ -50,6 +50,7 @@ pub struct GetFeature {
     pub version: String,
     #[serde(deserialize_with = "parse_type_names")]
     pub type_names: TypeNames,
+    // TODO: fifths parameter can be CRS
     #[serde(deserialize_with = "parse_bbox")]
     pub bbox: BoundingBox2D,
     #[serde(default)]
@@ -248,4 +249,41 @@ mod tests {
 
         assert_eq!(parsed, request);
     }
+
+    // #[test]
+    // fn deserialize_ol_example_request() {
+    //     let op = r#"{"a":"b"}"#.to_string();
+    //
+    //     let params = &[
+    //         ("service", "WFS"),
+    //         ("version", "2.0.0"),
+    //         ("request", "GetFeature"),
+    //         ("typeNames", "osm:water_areas"),
+    //         ("bbox", "-90,-180,90,180"),
+    //         ("crs", "EPSG:4326"),
+    //     ];
+    //     let url = serde_urlencoded::to_string(params).unwrap();
+    //
+    //     let parsed: WFSRequest = serde_urlencoded::from_str(&url).unwrap();
+    //
+    //     let request = WFSRequest::GetFeature(GetFeature {
+    //         version: "2.0.0".into(),
+    //         time: None,
+    //         srs_name: None,
+    //         namespaces: None,
+    //         count: None,
+    //         sort_by: None,
+    //         result_type: None,
+    //         filter: None,
+    //         bbox: BoundingBox2D::new(Coordinate2D::new(-90., -180.), Coordinate2D::new(90., 180.))
+    //             .unwrap(),
+    //         type_names: TypeNames {
+    //             namespace: Some("json".into()),
+    //             feature_type: op,
+    //         },
+    //         property_name: None,
+    //     });
+    //
+    //     assert_eq!(parsed, request);
+    // }
 }

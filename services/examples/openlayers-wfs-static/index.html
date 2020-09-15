@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>WFS Example</title>
+    <link rel="stylesheet" href="ol.css" type="text/css">
+    <style>
+        html, body, .map {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+    <script src="ol.js"></script>
+</head>
+<body>
+<div id="map" class="map"></div>
+<script type="text/javascript">
+    const map = new ol.Map({
+        layers: [
+            new ol.layer.Tile({
+                source: new ol.source.OSM(),
+            }),
+        ],
+        target: 'map',
+        view: new ol.View({
+            center: [0, 0],
+            zoom: 4,
+        }),
+    });
+
+    const workflow = {
+        "type": "Vector",
+        "operator": {
+            "type": "MockPointSource",
+            "params": {
+                "points": [{
+                    "x": 0.0,
+                    "y": 0.0
+                }, {
+                    // Marburg
+                    "x": 8.7667933,
+                    "y": 50.8021728
+                }, {
+                    // Cologne
+                    "x": 6.9602786,
+                    "y": 50.937531
+                }]
+            }
+        }
+    };
+
+    fetch('/workflow/register', {
+        method: 'POST',
+        body: JSON.stringify(workflow),
+        headers: {
+            'Content-type': 'application/json; charset=UTF-8'
+        }
+    }).then(
+        response => response.json()
+    ).then(json => {
+        const workflow_id = json.id;
+
+        console.log("Creating layer with workflow id:", workflow_id);
+
+        const vectorSource = new ol.source.Vector({
+            format: new ol.format.GeoJSON(),
+            url: function (extent) {
+                return (
+                    '/wfs?service=WFS&' +
+                    'version=2.0.0&request=GetFeature&typeNames=registry:' + workflow_id + '&' +
+                    'outputFormat=application/json&srsName=EPSG:3857&' +
+                    'bbox=' +
+                    extent.join(',') +
+                    /* TODO: allow ',EPSG:3857' */ ''
+                );
+            },
+            strategy: ol.loadingstrategy.bbox,
+        });
+
+        const vector = new ol.layer.Vector({
+            source: vectorSource,
+            style: new ol.style.Style({
+                image: new ol.style.Circle({
+                    radius: 10,
+                    fill: new ol.style.Fill({
+                        color: '#EE1166',
+                    }),
+                    stroke: new ol.style.Stroke({
+                        color: '#000000',
+                        width: 2,
+                    }),
+                }),
+            }),
+        });
+
+        map.addLayer(vector);
+    });
+</script>
+</body>
+</html>
