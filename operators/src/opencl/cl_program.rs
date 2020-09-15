@@ -1,10 +1,10 @@
 use crate::error;
 use crate::util::Result;
-use geoengine_datatypes::call_generic_raster2d;
 use geoengine_datatypes::raster::Raster;
 use geoengine_datatypes::raster::{
     DynamicRasterDataType, GridDimension, Pixel, Raster2D, RasterDataType, TypedRaster2D,
 };
+use geoengine_datatypes::{call_generic_raster2d, call_generic_raster2d_ext};
 use lazy_static::lazy_static;
 use num_traits::AsPrimitive;
 use ocl::builders::{KernelBuilder, ProgramBuilder};
@@ -342,36 +342,6 @@ impl CompiledCLProgram {
         };
     }
 
-    fn add_output_buffer<T>(
-        &mut self,
-        kernel: &Kernel,
-        idx: usize,
-        raster: &Raster2D<T>,
-        f: fn(Buffer<T>) -> OutputBuffer,
-    ) -> Result<()>
-    where
-        T: Pixel + OclPrm,
-    {
-        let buffer = Buffer::<T>::builder()
-            .queue(kernel.default_queue().expect("expect").clone())
-            .len(raster.data_container.len())
-            .build()?;
-
-        kernel.set_arg(format!("OUT{}", idx), &buffer)?;
-
-        self.output_buffers.push(f(buffer));
-
-        let info_buffer = Buffer::builder()
-            .queue(kernel.default_queue().expect("checked").clone())
-            .flags(MemFlags::new().read_only())
-            .len(1)
-            .copy_host_slice(&[RasterInfo::from_raster(&raster)])
-            .build()?;
-        kernel.set_arg(format!("OUT_INFO{}", idx), info_buffer)?;
-
-        Ok(())
-    }
-
     fn set_arguments(&mut self, kernel: &Kernel, params: &CLProgramParameters) -> Result<()> {
         ensure!(
             params.input_rasters.iter().all(Option::is_some),
@@ -402,38 +372,24 @@ impl CompiledCLProgram {
 
         for (idx, raster) in params.output_rasters.iter().enumerate() {
             let raster = raster.as_ref().expect("checked");
-            match raster {
-                TypedRaster2D::U8(raster) => {
-                    self.add_output_buffer(kernel, idx, raster, OutputBuffer::U8)?
-                }
-                TypedRaster2D::U16(raster) => {
-                    self.add_output_buffer(kernel, idx, raster, OutputBuffer::U16)?
-                }
-                TypedRaster2D::U32(raster) => {
-                    self.add_output_buffer(kernel, idx, raster, OutputBuffer::U32)?
-                }
-                TypedRaster2D::U64(raster) => {
-                    self.add_output_buffer(kernel, idx, raster, OutputBuffer::U64)?
-                }
-                TypedRaster2D::I8(raster) => {
-                    self.add_output_buffer(kernel, idx, raster, OutputBuffer::I8)?
-                }
-                TypedRaster2D::I16(raster) => {
-                    self.add_output_buffer(kernel, idx, raster, OutputBuffer::I16)?
-                }
-                TypedRaster2D::I32(raster) => {
-                    self.add_output_buffer(kernel, idx, raster, OutputBuffer::I32)?
-                }
-                TypedRaster2D::I64(raster) => {
-                    self.add_output_buffer(kernel, idx, raster, OutputBuffer::I64)?
-                }
-                TypedRaster2D::F32(raster) => {
-                    self.add_output_buffer(kernel, idx, raster, OutputBuffer::F32)?
-                }
-                TypedRaster2D::F64(raster) => {
-                    self.add_output_buffer(kernel, idx, raster, OutputBuffer::F64)?
-                }
-            }
+            call_generic_raster2d_ext!(raster, OutputBuffer, (raster, e) => {
+                let buffer = Buffer::builder()
+                    .queue(kernel.default_queue().expect("expect").clone())
+                    .len(raster.data_container.len())
+                    .build()?;
+
+                kernel.set_arg(format!("OUT{}", idx), &buffer)?;
+
+                self.output_buffers.push(e(buffer));
+
+                let info_buffer = Buffer::builder()
+                    .queue(kernel.default_queue().expect("checked").clone())
+                    .flags(MemFlags::new().read_only())
+                    .len(1)
+                    .copy_host_slice(&[RasterInfo::from_raster(&raster)])
+                    .build()?;
+                kernel.set_arg(format!("OUT_INFO{}", idx), info_buffer)?;
+            })
         }
 
         Ok(())

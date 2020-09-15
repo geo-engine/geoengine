@@ -214,10 +214,35 @@ macro_rules! generate_generic_raster2d {
     };
 }
 
+/// Calls a function on a `TypedRaster2D` and some `RasterDataType`-like enum, effectively matching
+/// the raster with the corresponding enum value of the other enum.
+/// Call via `call_generic_raster2d_ext!(input, (raster, e) => function)`.
+#[macro_export]
+macro_rules! call_generic_raster2d_ext {
+    ($input_raster:expr, $other_enum:ty, ($raster:ident, $enum:ident) => $func:expr) => {
+        call_generic_raster2d_ext!(
+            @variants $input_raster, $other_enum, ($raster, $enum) => $func,
+            U8, U16, U32, U64, I8, I16, I32, I64, F32, F64
+        )
+    };
+
+    (@variants $input_raster:expr, $other_enum:ty, ($raster:ident, $enum:ident) => $func:expr, $($variant:tt),+) => {
+        match $input_raster {
+            $(
+                $crate::raster::TypedRaster2D::$variant($raster) => {
+                    let $enum = <$other_enum>::$variant;
+                    $func
+                }
+            )+
+        }
+    };
+}
+
 #[cfg(test)]
 mod tests {
     use crate::raster::{GridPixelAccess, Pixel, Raster2D, RasterDataType, TypedRaster2D};
     use crate::util::test::catch_unwind_silent;
+    use serde::export::PhantomData;
 
     #[test]
     fn map_generic_raster2d() {
@@ -445,5 +470,46 @@ mod tests {
             (a, b) => first_pixel_add(a, b)
         ))
         .is_err());
+    }
+
+    #[test]
+    fn ext() {
+        struct T<S> {
+            s: PhantomData<S>,
+        }
+
+        enum Foo {
+            U8(T<u8>),
+            U16(T<u16>),
+            U32(T<u32>),
+            U64(T<u64>),
+            I8(T<i8>),
+            I16(T<i16>),
+            I32(T<i32>),
+            I64(T<i64>),
+            F32(T<f32>),
+            F64(T<f64>),
+        }
+
+        let typed_raster_a = TypedRaster2D::U32(
+            Raster2D::new(
+                [3, 2].into(),
+                vec![1, 2, 3, 4, 5, 6],
+                None,
+                Default::default(),
+                [1.0, 1.0, 0.0, 1.0, 0.0, 1.0].into(),
+            )
+            .unwrap(),
+        );
+
+        fn foo<S>(_f: fn(T<S>) -> Foo, _r: Raster2D<S>)
+        where
+            S: Pixel,
+        {
+        }
+
+        call_generic_raster2d_ext!(typed_raster_a, Foo, (raster, e) => {
+            foo(e, raster)
+        });
     }
 }
