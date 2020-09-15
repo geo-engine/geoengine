@@ -142,14 +142,14 @@ where
         // TODO: generate code for arbitrary amount of inputs
         let source = r#"
 __kernel void expressionkernel(
-                __global const IN_TYPE0 *in_data0,
+            __global const IN_TYPE0 *in_data0,
             __global const RasterInfo *in_info0,
             __global const IN_TYPE1* in_data1,
             __global const RasterInfo *in_info1,
             __global OUT_TYPE0* out_data,
             __global const RasterInfo *out_info)
 {
-    int gid = get_global_id(0) + get_global_id(1) * in_info0->size[0];
+    uint const gid = get_global_id(0) + get_global_id(1) * in_info0->size[0];
     if (gid >= in_info0->size[0]*in_info0->size[1]*in_info0->size[2])
         return;
 
@@ -159,7 +159,7 @@ __kernel void expressionkernel(
         return;
     }
 
-    IN_TYPE0 B = in_data0[gid];
+    IN_TYPE0 B = in_data1[gid];
     if (ISNODATA1(B, in_info1)) {
         out_data[gid] = out_info->no_data;
         return;

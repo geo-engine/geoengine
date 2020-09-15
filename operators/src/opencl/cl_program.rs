@@ -269,7 +269,7 @@ impl RasterInfo {
             size: [
                 raster.dimension().size_of_x_axis().as_(),
                 raster.dimension().size_of_y_axis().as_(),
-                0,
+                1, // TODO
             ],
             origin: [0., 0., 0.],
             scale: [0., 0., 0.],
