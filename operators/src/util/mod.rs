@@ -1,3 +1,5 @@
+pub mod input;
+
 use crate::error::Error;
 use std::ops::Deref;
 use std::sync::{Mutex, MutexGuard};

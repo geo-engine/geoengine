@@ -19,6 +19,8 @@ gdal = { version = "0.6", features = ["gdal_2_2"] }
 geo = "0.12"
 num-traits = "0.2"
 ocl = "0.19"
+paste = "1.0" # TODO remove, once https://doc.rust-lang.org/core/macro.concat_idents.html is stable
+pin-project = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 typetag = "0.1"

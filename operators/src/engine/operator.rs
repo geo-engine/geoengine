@@ -4,6 +4,7 @@ use super::{
     VectorResultDescriptor,
 };
 use crate::engine::query_processor::QueryProcessor;
+use crate::error;
 use crate::util::Result;
 
 use serde::{Deserialize, Serialize};
@@ -151,9 +152,26 @@ where
 
 /// An enum to differentiate between `Operator` variants
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(tag = "type", content = "operator")]
 pub enum TypedOperator {
     Vector(Box<dyn VectorOperator>),
     Raster(Box<dyn RasterOperator>),
+}
+
+impl TypedOperator {
+    pub fn get_vector(self) -> Result<Box<dyn VectorOperator>> {
+        if let TypedOperator::Vector(o) = self {
+            return Ok(o);
+        }
+        Err(error::Error::InvalidOperatorType)
+    }
+
+    pub fn get_raster(self) -> Result<Box<dyn RasterOperator>> {
+        if let TypedOperator::Raster(o) = self {
+            return Ok(o);
+        }
+        Err(error::Error::InvalidOperatorType)
+    }
 }
 
 impl Into<TypedOperator> for Box<dyn VectorOperator> {

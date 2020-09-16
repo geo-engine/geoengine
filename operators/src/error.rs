@@ -1,6 +1,6 @@
-use failure::Fail;
+use failure::Fail; // TODO: replace failure in gdal and then remove
 use snafu::Snafu;
-use std::ops::Range; // TODO: replace failure in gdal and then remove
+use std::ops::Range;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility = "pub(crate)")]
@@ -27,6 +27,8 @@ pub enum Error {
         expected: geoengine_datatypes::projection::ProjectionOption,
         found: geoengine_datatypes::projection::ProjectionOption,
     },
+
+    // TODO: use something more general than `Range`, e.g. `dyn RangeBounds` that can, however not be made into an object
     #[snafu(display(
         "InvalidNumberOfRasterInputsError: expected \"[{} .. {}]\" found \"{}\"",
         expected.start, expected.end,
@@ -66,6 +68,12 @@ pub enum Error {
     CLProgramUnspecifiedRaster,
     CLInvalidInputsForIterationType,
     InvalidExpression,
+
+    InvalidType {
+        expected: String,
+        found: String,
+    },
+    InvalidOperatorType,
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {

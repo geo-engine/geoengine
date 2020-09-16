@@ -2,24 +2,22 @@ POST http://localhost:3030/workflow/register
 Content-Type: application/json
 
 {
-  "operator": {
-    "type": "projection",
-    "params": {
-      "src_crs": "EPSG:4326",
-      "dest_crs": "EPSG:3857"
-    },
-    "sources": {
-      "rasters": [
-        {
-          "type": "gdal_source",
-          "params": {
-            "source_name": "test",
-            "channel": 0
-          }
+    "type": "Vector",
+    "operator": {
+        "type": "MockPointSource",
+        "params": {
+            "points": [{
+                "x": 1.0,
+                "y": 2.0
+            }, {
+                "x": 1.0,
+                "y": 2.0
+            }, {
+                "x": 1.0,
+                "y": 2.0
+            }]
         }
-      ]
     }
-  }
 }
 
 ###
@@ -38,9 +36,9 @@ POST http://localhost:3030/user/register
 Content-Type: application/json
 
 {
-  "email": "foo@bar.de",
-  "password": "secret123",
-  "real_name": "Foo Bar"
+    "email": "foo@bar.de",
+    "password": "secret123",
+    "real_name": "Foo Bar"
 }
 
 ###
@@ -49,8 +47,8 @@ POST http://localhost:3030/user/login
 Content-Type: application/json
 
 {
-  "email": "foo@bar.de",
-  "password": "secret123"
+    "email": "foo@bar.de",
+    "password": "secret123"
 }
 
 ###
@@ -59,8 +57,8 @@ POST http://localhost:3030/user/login
 Content-Type: application/json
 
 {
-  "email": "foo@bar.de",
-  "password": "wrong"
+    "email": "foo@bar.de",
+    "password": "wrong"
 }
 
 ###
@@ -82,8 +80,8 @@ Authorization: 9bf9fdb9-e5cd-45c2-8782-9907f088f56b
 Content-Type: application/json
 
 {
-  "name": "Test",
-  "description": "Foobar"
+    "name": "Test",
+    "description": "Foobar"
 }
 
 ###
@@ -93,10 +91,10 @@ Authorization: 9bf9fdb9-e5cd-45c2-8782-9907f088f56b
 Content-Type: application/json
 
 {
-  "owner": "any",
-  "filter": "none",
-  "offset": 0,
-  "limit": 1
+    "owner": "any",
+    "filter": "none",
+    "offset": 0,
+    "limit": 1
 }
 
 ###

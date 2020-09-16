@@ -10,7 +10,7 @@ async fn main() {
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
 
     let (server, success) = tokio::join!(
-        server::start_server(Some(shutdown_rx)),
+        server::start_server(Some(shutdown_rx), None),
         queries(shutdown_tx),
     );
     server.expect("server run");

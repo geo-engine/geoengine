@@ -1,9 +1,11 @@
+use crate::collections::VectorDataType;
 use crate::primitives::{error, GeometryRef};
 use crate::primitives::{Coordinate2D, Geometry};
 use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::Result;
 use arrow::array::BooleanArray;
 use arrow::error::ArrowError;
+use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::convert::{TryFrom, TryInto};
 
@@ -12,7 +14,7 @@ pub trait MultiPointAccess {
     fn points(&self) -> &[Coordinate2D];
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct MultiPoint {
     coordinates: Vec<Coordinate2D>,
 }
@@ -49,7 +51,9 @@ impl MultiPointAccess for MultiPoint {
     }
 }
 
-impl Geometry for MultiPoint {}
+impl Geometry for MultiPoint {
+    const DATA_TYPE: VectorDataType = VectorDataType::MultiPoint;
+}
 
 impl AsRef<[Coordinate2D]> for MultiPoint {
     fn as_ref(&self) -> &[Coordinate2D] {
