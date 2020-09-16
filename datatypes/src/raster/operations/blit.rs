@@ -14,6 +14,12 @@ impl<T: Pixel> Blit<Raster2D<T>> for Raster2D<T> {
         // TODO: same crs
         // TODO: allow approximately equal pixel sizes?
         // TODO: ensure pixels are aligned
+        
+        // TODO: REMOVE
+        println!(
+            "{:?}  == {:?}", self.geo_transform, source.geo_transform
+        );
+
         ensure!(
             (self.geo_transform().x_pixel_size == source.geo_transform().x_pixel_size)
                 && (self.geo_transform().y_pixel_size == source.geo_transform().y_pixel_size),

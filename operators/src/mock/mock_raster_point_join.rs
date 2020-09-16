@@ -332,7 +332,7 @@ mod tests {
         }
         .boxed();
 
-        let execution_context = ExecutionContext;
+        let execution_context = ExecutionContext::mock_empty();
 
         let initialized = op.initialize(execution_context).unwrap();
 

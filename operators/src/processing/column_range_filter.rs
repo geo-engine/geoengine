@@ -252,7 +252,7 @@ mod tests {
         }
         .boxed();
 
-        let initialized = filter.initialize(ExecutionContext).unwrap();
+        let initialized = filter.initialize(ExecutionContext::mock_empty()).unwrap();
 
         let point_processor = match initialized.query_processor() {
             Ok(TypedVectorQueryProcessor::MultiPoint(processor)) => processor,

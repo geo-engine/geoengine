@@ -125,7 +125,7 @@ async fn get_map<T: WorkflowRegistry>(
     workflow_registry: &WR<T>,
 ) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
     // TODO: validate request?
-    if request.layers == "test" {
+    if request.layers == "mock_raster" {
         return get_map_mock(request);
     }
 
@@ -135,7 +135,10 @@ async fn get_map<T: WorkflowRegistry>(
 
     let operator = workflow.operator.get_raster().context(error::Operator)?;
 
-    let execution_context = ExecutionContext;
+    let execution_context = ExecutionContext {
+        raster_data_root: "../operators/test-data/raster" // ./ is the crate root when run as example from the multi crate root... doh
+    };
+
     let initialized = operator
         .initialize(execution_context)
         .context(error::Operator)?;
@@ -187,6 +190,9 @@ where
         -query_rect.bbox.size_y() / f64::from(request.height), // TODO: negative, s.t. geo transform fits...
     );
 
+    println!("{:?}", dim);
+    println!("{:?}", query_geo_transform);
+
     let output_raster: Result<Raster2D<T>> = Raster2D::new(
         dim.into(),
         data,
@@ -195,6 +201,8 @@ where
         query_geo_transform,
     )
     .context(error::DataType);
+   
+    println!("{:?}", dim);
 
     let output_raster = tile_stream
         .fold(output_raster, |raster2d, tile| {
@@ -206,6 +214,8 @@ where
                 (Err(error), _) => Err(error),
                 (_, Err(error)) => Err(error.into()),
             };
+
+            println!("{:?}", result);
 
             match result {
                 Ok(updated_raster2d) => futures::future::ok(updated_raster2d),
@@ -278,7 +288,7 @@ mod tests {
 
         let res = warp::test::request()
             .method("GET")
-            .path("/wms?request=GetMap&service=WMS&version=1.3.0&layers=test&bbox=1,2,3,4&width=100&height=100&crs=foo&styles=ssss&format=image/png")
+            .path("/wms?request=GetMap&service=WMS&version=1.3.0&layers=mock_raster&bbox=1,2,3,4&width=100&height=100&crs=foo&styles=ssss&format=image/png")
             .reply(&wms_handler(workflow_registry))
             .await;
         assert_eq!(res.status(), 200);
@@ -315,7 +325,7 @@ mod tests {
         };
 
         let gdal_source =
-            GdalSourceProcessor::<_, u8>::from_params_with_json_provider(gdal_params).unwrap();
+            GdalSourceProcessor::<_, u8>::from_params_with_json_provider(gdal_params, "../operators/test-data/raster").unwrap();
 
         let query_bbox = BoundingBox2D::new((-10., 20.).into(), (50., 80.).into()).unwrap();
 

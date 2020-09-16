@@ -64,7 +64,7 @@ pub struct GdalSourceParameters {
 
 pub trait GdalDatasetInformation {
     type CreatedType: Sized;
-    fn with_dataset_id(id: &str) -> Result<Self::CreatedType>;
+    fn with_dataset_id(id: &str, raster_data_root: &'static str) -> Result<Self::CreatedType>;
     fn grid_tile_provider(&self) -> &TileGridProvider;
     fn time_interval_provider(&self) -> &TimeIntervalProvider;
     fn file_name_with_time_placeholder(&self) -> &str;
@@ -75,6 +75,12 @@ pub trait GdalDatasetInformation {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct JsonDatasetInformationProvider {
+    pub dataset_information: JsonDatasetInformation,
+    pub raster_data_root: &'static str,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct JsonDatasetInformation {
     pub time: TimeIntervalProvider,
     pub tile: TileGridProvider,
     pub file_name_with_time_placeholder: String,
@@ -83,33 +89,33 @@ pub struct JsonDatasetInformationProvider {
     pub data_type: RasterDataType,
 }
 
+
 impl JsonDatasetInformationProvider {
-    const ROOT_PATH: &'static str = "../operators/test-data/raster";
     const DEFINTION_SUBPATH: &'static str = "./dataset_defs/";
 
     // TODO: provide the base path from config?
-    pub fn root_path() -> &'static str {
-        Self::ROOT_PATH
+    pub fn root_path(&self) -> &'static str {
+        self.raster_data_root
     }
 
-    pub fn write_to_file(&self, id: &str) -> Result<()> {
+    pub fn write_to_file(&self, id: &str, raster_data_root: &str) -> Result<()> {
         let mut dataset_information_path: PathBuf =
-            [Self::root_path(), Self::DEFINTION_SUBPATH, id]
+            [raster_data_root, Self::DEFINTION_SUBPATH, id]
                 .iter()
                 .collect();
         dataset_information_path.set_extension("json");
 
         let file = std::fs::File::create(dataset_information_path)?;
         let buffered_writer = BufWriter::new(file);
-        Ok(serde_json::to_writer(buffered_writer, self)?)
+        Ok(serde_json::to_writer(buffered_writer, &self.dataset_information)?)
     }
 }
 
 impl GdalDatasetInformation for JsonDatasetInformationProvider {
     type CreatedType = Self;
-    fn with_dataset_id(id: &str) -> Result<Self> {
+    fn with_dataset_id(id: &str, raster_data_root: &'static str) -> Result<Self> {
         let mut dataset_information_path: PathBuf =
-            [Self::root_path(), Self::DEFINTION_SUBPATH, &id]
+            [raster_data_root, Self::DEFINTION_SUBPATH, id]
                 .iter()
                 .collect();
         dataset_information_path.set_extension("json");
@@ -117,29 +123,33 @@ impl GdalDatasetInformation for JsonDatasetInformationProvider {
         let mut buffered_reader = BufReader::new(file);
         let mut contents = String::new();
         buffered_reader.read_to_string(&mut contents)?;
-        Ok(serde_json::from_str::<Self>(&contents)?)
+        let dataset_information = serde_json::from_str(&contents)?;
+        Ok(JsonDatasetInformationProvider{
+            dataset_information: dataset_information,
+            raster_data_root: raster_data_root
+        })
     }
     fn grid_tile_provider(&self) -> &TileGridProvider {
-        &self.tile
+        &self.dataset_information.tile
     }
     fn time_interval_provider(&self) -> &TimeIntervalProvider {
-        &self.time
+        &self.dataset_information.time
     }
     fn file_name_with_time_placeholder(&self) -> &str {
-        &self.file_name_with_time_placeholder
+        &self.dataset_information.file_name_with_time_placeholder
     }
     fn time_format(&self) -> &str {
-        &self.time_format
+        &self.dataset_information.time_format
     }
 
     fn dataset_path(&self) -> PathBuf {
-        let path: PathBuf = [Self::ROOT_PATH, Self::DEFINTION_SUBPATH, &self.base_path]
+        let path: PathBuf = [self.raster_data_root, Self::DEFINTION_SUBPATH, &self.dataset_information.base_path]
             .iter()
             .collect();
         path
     }
     fn data_type(&self) -> RasterDataType {
-        self.data_type
+        self.dataset_information.data_type
     }
 }
 
@@ -213,8 +223,8 @@ impl<T> GdalSourceProcessor<JsonDatasetInformationProvider, T>
 where
     T: gdal::raster::types::GdalType + Pixel,
 {
-    pub fn from_params_with_json_provider(params: GdalSourceParameters) -> Result<Self> {
-        GdalSourceProcessor::from_params(params)
+    pub fn from_params_with_json_provider(params: GdalSourceParameters, raster_data_root: &'static str) -> Result<Self> {
+        GdalSourceProcessor::from_params(params, raster_data_root)
     }
 }
 
@@ -227,8 +237,8 @@ where
     /// Generates a new `GdalSource` from the provided parameters
     /// TODO: move the time interval and grid tile information generation somewhere else...
     ///
-    pub fn from_params(params: GdalSourceParameters) -> Result<Self> {
-        let dataset_information = P::with_dataset_id(&params.dataset_id)?;
+    pub fn from_params(params: GdalSourceParameters, raster_data_root: &'static str) -> Result<Self> {
+        let dataset_information = P::with_dataset_id(&params.dataset_id, raster_data_root)?;
 
         GdalSourceProcessor::from_params_with_provider(params, dataset_information)
     }
@@ -414,10 +424,10 @@ impl RasterOperator for GdalSource {
         InitializedOperatorImpl::create(
             self.params.clone(),
             context,
-            |params, _, _, _| JsonDatasetInformationProvider::with_dataset_id(&params.dataset_id),
+            |params, _, _, _| JsonDatasetInformationProvider::with_dataset_id(&params.dataset_id, context.raster_data_root),
             |_, _, state, _, _| {
                 Ok(RasterResultDescriptor {
-                    data_type: state.data_type,
+                    data_type: state.dataset_information.data_type,
                     projection: Projection::wgs84().into(), // TODO: lookup from dataset
                 })
             },
@@ -638,7 +648,7 @@ mod tests {
             channel: None,
         };
 
-        let dataset_information = JsonDatasetInformationProvider {
+        let dataset_information = JsonDatasetInformation {
             file_name_with_time_placeholder: "MOD13A2_M_NDVI_2014-01-01.TIFF".into(),
             time_format: "".into(),
             time: time_interval_provider,
@@ -647,8 +657,14 @@ mod tests {
             data_type: RasterDataType::U8,
         };
 
+        let dataset_information_provider = JsonDatasetInformationProvider {
+            dataset_information: dataset_information,
+            raster_data_root: "../operators/test-data/raster",
+
+        };
+
         let gdal_source = GdalSourceProcessor::<_, u8> {
-            dataset_information,
+            dataset_information: dataset_information_provider,
             gdal_params,
             phantom_data: PhantomData,
         };
@@ -782,7 +798,7 @@ mod tests {
             channel: None,
         };
 
-        let dataset_information = JsonDatasetInformationProvider {
+        let dataset_information = JsonDatasetInformation {
             file_name_with_time_placeholder: "MOD13A2_M_NDVI_2014-01-01.TIFF".into(),
             time_format: "".into(),
             time: time_interval_provider,
@@ -791,8 +807,14 @@ mod tests {
             data_type: RasterDataType::U8,
         };
 
+        let dataset_information_provider = JsonDatasetInformationProvider {
+            dataset_information: dataset_information,
+            raster_data_root: "../operators/test-data/raster",
+
+        };
+
         let gdal_source = GdalSourceProcessor::<_, u8> {
-            dataset_information,
+            dataset_information: dataset_information_provider,
             gdal_params,
             phantom_data: PhantomData,
         };
@@ -842,7 +864,7 @@ mod tests {
             channel: None,
         };
 
-        let dataset_information = JsonDatasetInformationProvider {
+        let dataset_information = JsonDatasetInformation {
             file_name_with_time_placeholder: "MOD13A2_M_NDVI_2014-01-01.TIFF".into(),
             time_format: "".into(),
             time: time_interval_provider,
@@ -851,8 +873,14 @@ mod tests {
             data_type: RasterDataType::U8,
         };
 
+        let dataset_information_provider = JsonDatasetInformationProvider {
+            dataset_information: dataset_information,
+            raster_data_root: "../operators/test-data/raster",
+
+        };
+
         let gdal_source = GdalSourceProcessor {
-            dataset_information,
+            dataset_information: dataset_information_provider,
             gdal_params,
             phantom_data: PhantomData,
         };
@@ -913,7 +941,7 @@ mod tests {
             channel: None,
         };
 
-        let dataset_information = JsonDatasetInformationProvider {
+        let dataset_information = JsonDatasetInformation {
             file_name_with_time_placeholder: "MOD13A2_M_NDVI_2014-01-01.TIFF".into(),
             time_format: "".into(),
             time: time_interval_provider,
@@ -922,8 +950,14 @@ mod tests {
             data_type: RasterDataType::U8,
         };
 
+        let dataset_information_provider = JsonDatasetInformationProvider {
+            dataset_information: dataset_information,
+            raster_data_root: "../operators/test-data/raster",
+
+        };
+
         let gdal_source = GdalSourceProcessor {
-            dataset_information,
+            dataset_information: dataset_information_provider,
             gdal_params,
             phantom_data: PhantomData,
         };
@@ -985,7 +1019,7 @@ mod tests {
             channel: None,
         };
 
-        let dataset_information = JsonDatasetInformationProvider {
+        let dataset_information = JsonDatasetInformation {
             file_name_with_time_placeholder: "MOD13A2_M_NDVI_2014-01-01.TIFF".into(),
             time_format: "".into(),
             time: time_interval_provider,
@@ -994,8 +1028,14 @@ mod tests {
             data_type: RasterDataType::U8,
         };
 
+        let dataset_information_provider = JsonDatasetInformationProvider {
+            dataset_information: dataset_information,
+            raster_data_root: "../operators/test-data/raster",
+
+        };
+
         let gdal_source = GdalSourceProcessor::<_, u8> {
-            dataset_information,
+            dataset_information: dataset_information_provider,
             gdal_params,
             phantom_data: PhantomData,
         };
@@ -1058,7 +1098,7 @@ mod tests {
             channel: None,
         };
 
-        let dataset_information = JsonDatasetInformationProvider {
+        let dataset_information = JsonDatasetInformation {
             file_name_with_time_placeholder: "MOD13A2_M_NDVI_2014-01-01.TIFF".into(),
             time_format: "".into(),
             time: time_interval_provider,
@@ -1067,9 +1107,15 @@ mod tests {
             data_type: RasterDataType::U8,
         };
 
+        let dataset_information_provider = JsonDatasetInformationProvider {
+            dataset_information: dataset_information,
+            raster_data_root: "../operators/test-data/raster",
+
+        };
+
         let x_r = GdalSourceProcessor::<_, u8>::load_tile_data_async(
             gdal_params,
-            dataset_information,
+            dataset_information_provider,
             time_interval,
             tile_information,
         )

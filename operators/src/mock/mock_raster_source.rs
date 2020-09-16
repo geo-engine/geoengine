@@ -201,7 +201,7 @@ mod tests {
 
         let deserialized: Box<dyn RasterOperator> = serde_json::from_str(&serialized).unwrap();
 
-        let execution_context = ExecutionContext;
+        let execution_context = ExecutionContext::mock_empty();
 
         let initialized = deserialized.initialize(execution_context).unwrap();
 

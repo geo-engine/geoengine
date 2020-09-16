@@ -153,7 +153,7 @@ mod tests {
             },
         };
 
-        let source = source.boxed().initialize(ExecutionContext).unwrap();
+        let source = source.boxed().initialize(ExecutionContext::mock_empty()).unwrap();
 
         let processor =
             if let TypedVectorQueryProcessor::MultiPoint(p) = source.query_processor().unwrap() {
@@ -226,7 +226,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(ExecutionContext)
+        .initialize(ExecutionContext::mock_empty())
         .unwrap();
 
         let processor =

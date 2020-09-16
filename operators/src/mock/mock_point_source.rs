@@ -106,7 +106,7 @@ mod tests {
 
     #[test]
     fn execute() {
-        let execution_context = ExecutionContext;
+        let execution_context = ExecutionContext::mock_empty();
         let points = vec![Coordinate2D::new(1., 2.); 3];
 
         let mps = MockPointSource {

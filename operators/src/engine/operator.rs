@@ -44,7 +44,17 @@ pub trait VectorOperator: CloneableVectorOperator + Send + Sync + std::fmt::Debu
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub struct ExecutionContext;
+pub struct ExecutionContext{
+    pub raster_data_root: &'static str
+}
+
+impl ExecutionContext {
+    pub fn mock_empty() -> Self {
+        ExecutionContext {
+            raster_data_root: ""
+        }
+    }
+}
 
 pub trait InitializedOperatorBase {
     type Descriptor: ResultDescriptor + Clone;
