@@ -65,8 +65,8 @@ pub struct GdalSourceParameters {
 pub trait GdalDatasetInformation {
     type CreatedType: Sized;
     fn with_dataset_id(id: &str, raster_data_root: &'static str) -> Result<Self::CreatedType>;
-    fn grid_tile_provider(&self) -> &TileGridProvider;
-    fn time_interval_provider(&self) -> &TimeIntervalProvider;
+    fn native_tiling_information(&self) -> &TilingInformation;
+    fn native_time_information(&self) -> &TimeIntervalInformation;
     fn file_name_with_time_placeholder(&self) -> &str;
     fn time_format(&self) -> &str;
     fn dataset_path(&self) -> PathBuf;
@@ -81,14 +81,13 @@ pub struct JsonDatasetInformationProvider {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct JsonDatasetInformation {
-    pub time: TimeIntervalProvider,
-    pub tile: TileGridProvider,
+    pub time: TimeIntervalInformation,
+    pub tile: TilingInformation,
     pub file_name_with_time_placeholder: String,
     pub time_format: String,
     pub base_path: String,
     pub data_type: RasterDataType,
 }
-
 
 impl JsonDatasetInformationProvider {
     const DEFINTION_SUBPATH: &'static str = "./dataset_defs/";
@@ -99,40 +98,41 @@ impl JsonDatasetInformationProvider {
     }
 
     pub fn write_to_file(&self, id: &str, raster_data_root: &str) -> Result<()> {
-        let mut dataset_information_path: PathBuf =
-            [raster_data_root, Self::DEFINTION_SUBPATH, id]
-                .iter()
-                .collect();
+        let mut dataset_information_path: PathBuf = [raster_data_root, Self::DEFINTION_SUBPATH, id]
+            .iter()
+            .collect();
         dataset_information_path.set_extension("json");
 
         let file = std::fs::File::create(dataset_information_path)?;
         let buffered_writer = BufWriter::new(file);
-        Ok(serde_json::to_writer(buffered_writer, &self.dataset_information)?)
+        Ok(serde_json::to_writer(
+            buffered_writer,
+            &self.dataset_information,
+        )?)
     }
 }
 
 impl GdalDatasetInformation for JsonDatasetInformationProvider {
     type CreatedType = Self;
     fn with_dataset_id(id: &str, raster_data_root: &'static str) -> Result<Self> {
-        let mut dataset_information_path: PathBuf =
-            [raster_data_root, Self::DEFINTION_SUBPATH, id]
-                .iter()
-                .collect();
+        let mut dataset_information_path: PathBuf = [raster_data_root, Self::DEFINTION_SUBPATH, id]
+            .iter()
+            .collect();
         dataset_information_path.set_extension("json");
         let file = std::fs::File::open(dataset_information_path)?;
         let mut buffered_reader = BufReader::new(file);
         let mut contents = String::new();
         buffered_reader.read_to_string(&mut contents)?;
         let dataset_information = serde_json::from_str(&contents)?;
-        Ok(JsonDatasetInformationProvider{
+        Ok(JsonDatasetInformationProvider {
             dataset_information: dataset_information,
-            raster_data_root: raster_data_root
+            raster_data_root: raster_data_root,
         })
     }
-    fn grid_tile_provider(&self) -> &TileGridProvider {
+    fn native_tiling_information(&self) -> &TilingInformation {
         &self.dataset_information.tile
     }
-    fn time_interval_provider(&self) -> &TimeIntervalProvider {
+    fn native_time_information(&self) -> &TimeIntervalInformation {
         &self.dataset_information.time
     }
     fn file_name_with_time_placeholder(&self) -> &str {
@@ -143,9 +143,13 @@ impl GdalDatasetInformation for JsonDatasetInformationProvider {
     }
 
     fn dataset_path(&self) -> PathBuf {
-        let path: PathBuf = [self.raster_data_root, Self::DEFINTION_SUBPATH, &self.dataset_information.base_path]
-            .iter()
-            .collect();
+        let path: PathBuf = [
+            self.raster_data_root,
+            Self::DEFINTION_SUBPATH,
+            &self.dataset_information.base_path,
+        ]
+        .iter()
+        .collect();
         path
     }
     fn data_type(&self) -> RasterDataType {
@@ -154,11 +158,11 @@ impl GdalDatasetInformation for JsonDatasetInformationProvider {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct TimeIntervalProvider {
+pub struct TimeIntervalInformation {
     pub time_intervals: Vec<TimeInterval>,
 }
 
-impl TimeIntervalProvider {
+impl TimeIntervalInformation {
     pub fn time_intervals(&self) -> &[TimeInterval] {
         &self.time_intervals
     }
@@ -166,14 +170,14 @@ impl TimeIntervalProvider {
 
 /// A provider of tile (size) information for a raster/grid
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
-pub struct TileGridProvider {
+pub struct TilingInformation {
     pub global_pixel_size: Dim<[Ix; 2]>,
     pub tile_pixel_size: Dim<[Ix; 2]>,
     // pub grid_tiles : Vec<Dim<[Ix; 2]>>,
     pub dataset_geo_transform: GeoTransform,
 }
 
-impl TileGridProvider {
+impl TilingInformation {
     /// generates a vec with `TileInformation` for each tile
     fn tile_informations(&self) -> Vec<TileInformation> {
         let &[.., y_pixels_global, x_pixels_global] = self.global_pixel_size.dimension_size();
@@ -223,7 +227,10 @@ impl<T> GdalSourceProcessor<JsonDatasetInformationProvider, T>
 where
     T: gdal::raster::types::GdalType + Pixel,
 {
-    pub fn from_params_with_json_provider(params: GdalSourceParameters, raster_data_root: &'static str) -> Result<Self> {
+    pub fn from_params_with_json_provider(
+        params: GdalSourceParameters,
+        raster_data_root: &'static str,
+    ) -> Result<Self> {
         GdalSourceProcessor::from_params(params, raster_data_root)
     }
 }
@@ -237,7 +244,10 @@ where
     /// Generates a new `GdalSource` from the provided parameters
     /// TODO: move the time interval and grid tile information generation somewhere else...
     ///
-    pub fn from_params(params: GdalSourceParameters, raster_data_root: &'static str) -> Result<Self> {
+    pub fn from_params(
+        params: GdalSourceParameters,
+        raster_data_root: &'static str,
+    ) -> Result<Self> {
         let dataset_information = P::with_dataset_id(&params.dataset_id, raster_data_root)?;
 
         GdalSourceProcessor::from_params_with_provider(params, dataset_information)
@@ -267,12 +277,12 @@ where
     ) -> impl Iterator<Item = (TimeInterval, TileInformation)> + '_ {
         let time_interval_iterator = self
             .dataset_information
-            .time_interval_provider()
+            .native_time_information()
             .time_intervals()
             .iter();
         time_interval_iterator.flat_map(move |time| {
             self.dataset_information
-                .grid_tile_provider()
+                .native_tiling_information()
                 .tile_informations()
                 .into_iter()
                 .map(move |tile| (*time, tile))
@@ -424,7 +434,12 @@ impl RasterOperator for GdalSource {
         InitializedOperatorImpl::create(
             self.params.clone(),
             context,
-            |params, _, _, _| JsonDatasetInformationProvider::with_dataset_id(&params.dataset_id, context.raster_data_root),
+            |params, _, _, _| {
+                JsonDatasetInformationProvider::with_dataset_id(
+                    &params.dataset_id,
+                    context.raster_data_root,
+                )
+            },
             |_, _, state, _, _| {
                 Ok(RasterResultDescriptor {
                     data_type: state.dataset_information.data_type,
@@ -525,7 +540,7 @@ mod tests {
             dataset_y_pixel_size,
         );
 
-        let grid_tile_provider = TileGridProvider {
+        let grid_tile_provider = TilingInformation {
             global_pixel_size: global_size_in_pixels.into(),
             tile_pixel_size: tile_size_in_pixels.into(),
             dataset_geo_transform,
@@ -630,13 +645,13 @@ mod tests {
             dataset_y_pixel_size,
         );
 
-        let grid_tile_provider = TileGridProvider {
+        let grid_tile_provider = TilingInformation {
             global_pixel_size: global_size_in_pixels.into(),
             tile_pixel_size: tile_size_in_pixels.into(),
             dataset_geo_transform,
         };
 
-        let time_interval_provider = TimeIntervalProvider {
+        let time_interval_provider = TimeIntervalInformation {
             time_intervals: vec![
                 TimeInterval::new_unchecked(1, 2),
                 TimeInterval::new_unchecked(2, 3),
@@ -660,7 +675,6 @@ mod tests {
         let dataset_information_provider = JsonDatasetInformationProvider {
             dataset_information: dataset_information,
             raster_data_root: "../operators/test-data/raster",
-
         };
 
         let gdal_source = GdalSourceProcessor::<_, u8> {
@@ -784,12 +798,12 @@ mod tests {
             dataset_y_pixel_size,
         );
 
-        let grid_tile_provider = TileGridProvider {
+        let grid_tile_provider = TilingInformation {
             global_pixel_size: global_size_in_pixels.into(),
             tile_pixel_size: tile_size_in_pixels.into(),
             dataset_geo_transform,
         };
-        let time_interval_provider = TimeIntervalProvider {
+        let time_interval_provider = TimeIntervalInformation {
             time_intervals: vec![TimeInterval::new_unchecked(0, 1)],
         };
 
@@ -810,7 +824,6 @@ mod tests {
         let dataset_information_provider = JsonDatasetInformationProvider {
             dataset_information: dataset_information,
             raster_data_root: "../operators/test-data/raster",
-
         };
 
         let gdal_source = GdalSourceProcessor::<_, u8> {
@@ -849,13 +862,13 @@ mod tests {
             dataset_y_pixel_size,
         );
 
-        let grid_tile_provider = TileGridProvider {
+        let grid_tile_provider = TilingInformation {
             global_pixel_size: global_size_in_pixels.into(),
             tile_pixel_size: tile_size_in_pixels.into(),
             dataset_geo_transform,
         };
 
-        let time_interval_provider = TimeIntervalProvider {
+        let time_interval_provider = TimeIntervalInformation {
             time_intervals: vec![TimeInterval::new_unchecked(1, 2)],
         };
 
@@ -876,7 +889,6 @@ mod tests {
         let dataset_information_provider = JsonDatasetInformationProvider {
             dataset_information: dataset_information,
             raster_data_root: "../operators/test-data/raster",
-
         };
 
         let gdal_source = GdalSourceProcessor {
@@ -926,13 +938,13 @@ mod tests {
             dataset_y_pixel_size,
         );
 
-        let grid_tile_provider = TileGridProvider {
+        let grid_tile_provider = TilingInformation {
             global_pixel_size: global_size_in_pixels.into(),
             tile_pixel_size: tile_size_in_pixels.into(),
             dataset_geo_transform,
         };
 
-        let time_interval_provider = TimeIntervalProvider {
+        let time_interval_provider = TimeIntervalInformation {
             time_intervals: vec![TimeInterval::new_unchecked(1, 2)],
         };
 
@@ -953,7 +965,6 @@ mod tests {
         let dataset_information_provider = JsonDatasetInformationProvider {
             dataset_information: dataset_information,
             raster_data_root: "../operators/test-data/raster",
-
         };
 
         let gdal_source = GdalSourceProcessor {
@@ -1004,13 +1015,13 @@ mod tests {
             dataset_y_pixel_size,
         );
 
-        let grid_tile_provider = TileGridProvider {
+        let grid_tile_provider = TilingInformation {
             global_pixel_size: global_size_in_pixels.into(),
             tile_pixel_size: tile_size_in_pixels.into(),
             dataset_geo_transform,
         };
 
-        let time_interval_provider = TimeIntervalProvider {
+        let time_interval_provider = TimeIntervalInformation {
             time_intervals: vec![TimeInterval::new_unchecked(1, 2)],
         };
 
@@ -1031,7 +1042,6 @@ mod tests {
         let dataset_information_provider = JsonDatasetInformationProvider {
             dataset_information: dataset_information,
             raster_data_root: "../operators/test-data/raster",
-
         };
 
         let gdal_source = GdalSourceProcessor::<_, u8> {
@@ -1083,13 +1093,13 @@ mod tests {
             dataset_geo_transform,
         );
 
-        let grid_tile_provider = TileGridProvider {
+        let grid_tile_provider = TilingInformation {
             global_pixel_size: global_size_in_pixels.into(),
             tile_pixel_size: tile_size_in_pixels.into(),
             dataset_geo_transform,
         };
 
-        let time_interval_provider = TimeIntervalProvider {
+        let time_interval_provider = TimeIntervalInformation {
             time_intervals: vec![time_interval],
         };
 
@@ -1110,7 +1120,6 @@ mod tests {
         let dataset_information_provider = JsonDatasetInformationProvider {
             dataset_information: dataset_information,
             raster_data_root: "../operators/test-data/raster",
-
         };
 
         let x_r = GdalSourceProcessor::<_, u8>::load_tile_data_async(

@@ -137,7 +137,7 @@ mod tests {
         MockPointSourceParams,
     };
     use futures::{StreamExt, TryStreamExt};
-    use geoengine_datatypes::collections::{DataCollection, MultiPointCollection};
+    use geoengine_datatypes::{collections::{DataCollection, MultiPointCollection}, primitives::SpatialResolution};
     use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, MultiPoint, TimeInterval};
 
     #[tokio::test]
@@ -165,6 +165,7 @@ mod tests {
         let qrect = QueryRectangle {
             bbox: BoundingBox2D::new((0.0, 0.0).into(), (10.0, 10.0).into()).unwrap(),
             time_interval: Default::default(),
+            spatial_resolution: SpatialResolution::default(),
         };
         let cx = QueryContext {
             chunk_byte_size: std::mem::size_of::<Coordinate2D>() * 2,
@@ -239,6 +240,7 @@ mod tests {
         let qrect = QueryRectangle {
             bbox: BoundingBox2D::new((0.0, 0.0).into(), (0.0, 0.0).into()).unwrap(),
             time_interval: Default::default(),
+            spatial_resolution: SpatialResolution::default(),
         };
         let cx = QueryContext { chunk_byte_size: 0 };
 

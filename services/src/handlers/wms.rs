@@ -6,7 +6,7 @@ use uuid::Uuid;
 use warp::reply::Reply;
 use warp::{http::Response, Filter, Rejection};
 
-use geoengine_datatypes::operations::image::{Colorizer, ToPng};
+use geoengine_datatypes::{operations::image::{Colorizer, ToPng}, primitives::SpatialResolution};
 use geoengine_datatypes::raster::{Blit, GeoTransform, Pixel, Raster2D};
 
 use crate::error;
@@ -145,12 +145,16 @@ async fn get_map<T: WorkflowRegistry>(
 
     let processor = initialized.query_processor().context(error::Operator)?;
 
+    let x_query_resolution = request.bbox.size_x() / f64::from(request.width);
+    let y_query_resolution = request.bbox.size_y() / f64::from(request.height);
+
     let query_rect = QueryRectangle {
         bbox: request.bbox,
         time_interval: request.time.unwrap_or_else(|| {
             let time = TimeInstance::from(chrono::offset::Utc::now());
             TimeInterval::new_unchecked(time, time)
         }),
+        spatial_resolution: SpatialResolution::new(x_query_resolution, y_query_resolution),
     };
     let query_ctx = QueryContext {
         // TODO: define meaningful query context
@@ -181,13 +185,16 @@ where
 {
     let tile_stream = processor.raster_query(query_rect, query_ctx);
 
+    let x_query_resolution = query_rect.bbox.size_x() / f64::from(request.width);
+    let y_query_resolution = query_rect.bbox.size_y() / f64::from(request.height);
+
     // build png
     let dim = [request.height as usize, request.width as usize];
     let data: Vec<T> = vec![T::zero(); dim[0] * dim[1]];
     let query_geo_transform = GeoTransform::new(
         query_rect.bbox.upper_left(),
-        query_rect.bbox.size_x() / f64::from(request.width),
-        -query_rect.bbox.size_y() / f64::from(request.height), // TODO: negative, s.t. geo transform fits...
+        x_query_resolution,
+        -y_query_resolution, // TODO: negative, s.t. geo transform fits...
     );
 
     println!("{:?}", dim);
@@ -334,6 +341,7 @@ mod tests {
             QueryRectangle {
                 bbox: query_bbox,
                 time_interval: TimeInterval::default(),
+                spatial_resolution: SpatialResolution::default(),
             },
             QueryContext { chunk_byte_size: 0 },
             &GetMap {

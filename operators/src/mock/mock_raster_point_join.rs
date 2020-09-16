@@ -145,7 +145,7 @@ mod tests {
         primitives::{BoundingBox2D, Coordinate2D, FeatureDataRef, TimeInterval},
         projection::Projection,
         raster::{Raster2D, RasterDataType, TileInformation},
-    };
+    primitives::SpatialResolution};
 
     #[test]
     #[allow(clippy::too_many_lines)]
@@ -344,6 +344,7 @@ mod tests {
         let query_rectangle = QueryRectangle {
             bbox: BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
             time_interval: TimeInterval::default(),
+            spatial_resolution: SpatialResolution::default(),
         };
         let ctx = QueryContext {
             chunk_byte_size: 2 * std::mem::size_of::<Coordinate2D>(),

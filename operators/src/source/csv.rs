@@ -394,7 +394,9 @@ struct ParsedRow {
 mod tests {
     use std::io::{Seek, SeekFrom, Write};
 
-    use super::*;
+        use geoengine_datatypes::primitives::SpatialResolution;
+
+use super::*;
 
     #[tokio::test]
     async fn read_points() {
@@ -534,6 +536,7 @@ x,y
                 Coordinate2D::new(3., 3.),
             ),
             time_interval: TimeInterval::new_unchecked(0, 1),
+            spatial_resolution: SpatialResolution::default(),
         };
         let ctx = QueryContext {
             chunk_byte_size: 10 * 8 * 2,

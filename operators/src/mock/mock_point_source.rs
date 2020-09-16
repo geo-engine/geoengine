@@ -87,7 +87,7 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
 mod tests {
     use super::*;
     use futures::executor::block_on_stream;
-    use geoengine_datatypes::primitives::BoundingBox2D;
+    use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution};
 
     #[test]
     fn serde() {
@@ -124,6 +124,7 @@ mod tests {
         let query_rectangle = QueryRectangle {
             bbox: BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
             time_interval: TimeInterval::default(),
+            spatial_resolution: SpatialResolution::default(),
         };
         let ctx = QueryContext {
             chunk_byte_size: 2 * std::mem::size_of::<Coordinate2D>(),

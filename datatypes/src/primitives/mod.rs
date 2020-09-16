@@ -10,6 +10,7 @@ mod no_geometry;
 mod spatio_temporal_bounded;
 mod time_instance;
 mod time_interval;
+mod spatial_resolution;
 
 use crate::collections::VectorDataType;
 pub use bounding_box::BoundingBox2D;
@@ -29,6 +30,7 @@ pub use spatio_temporal_bounded::{SpatialBounded, TemporalBounded};
 use std::fmt::Debug;
 pub use time_instance::TimeInstance;
 pub use time_interval::TimeInterval;
+pub use spatial_resolution::SpatialResolution;
 
 /// Marker trait for geometry types
 // TODO: rename to CollectionType oder something?…

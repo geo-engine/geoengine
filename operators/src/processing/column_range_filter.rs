@@ -177,7 +177,7 @@ where
 mod tests {
     use super::*;
     use crate::mock::{MockFeatureCollectionSource, MockFeatureCollectionSourceParams};
-    use geoengine_datatypes::collections::MultiPointCollection;
+    use geoengine_datatypes::{collections::MultiPointCollection, primitives::SpatialResolution};
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, FeatureData, MultiPoint, TimeInterval,
     };
@@ -262,6 +262,7 @@ mod tests {
         let query_rectangle = QueryRectangle {
             bbox: BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
             time_interval: TimeInterval::default(),
+            spatial_resolution: SpatialResolution::default(),
         };
         let ctx = QueryContext {
             chunk_byte_size: 2 * std::mem::size_of::<Coordinate2D>(),
