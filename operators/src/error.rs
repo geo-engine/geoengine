@@ -65,7 +65,10 @@ pub enum Error {
     },
     CLProgramInvalidRasterIndex,
     CLProgramInvalidRasterDataType,
+    CLProgramInvalidFeaturesIndex,
+    CLProgramInvalidVectorDataType,
     CLProgramUnspecifiedRaster,
+    CLProgramUnspecifiedFeatures,
     CLInvalidInputsForIterationType,
     InvalidExpression,
 
