@@ -26,6 +26,5 @@ pub mod error;
 pub mod mock;
 pub mod opencl;
 pub mod processing;
-pub mod processing;
 pub mod source;
 pub mod util;
