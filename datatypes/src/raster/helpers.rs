@@ -41,7 +41,7 @@ macro_rules! call_generic_raster2d {
 }
 
 /// Calls a function on two `TypedRaster2D`s by calling it on their variant combination.
-/// Call via `call_bi_generic_raster2d!(input, (raster_a, raster_b) => function)`.
+/// Call via `call_bi_generic_raster2d!(input_a, input_b, (raster_a, raster_b) => function)`.
 #[macro_export]
 macro_rules! call_bi_generic_raster2d {
     (
@@ -84,7 +84,7 @@ macro_rules! call_bi_generic_raster2d {
 }
 
 /// Calls a function on two `TypedRaster2D`s by calling it on their variant combination.
-/// Call via `call_bi_generic_raster2d_same!(input, (raster_a, raster_b) => function)`.
+/// Call via `call_bi_generic_raster2d_same!(input_a, input_b, (raster_a, raster_b) => function)`.
 /// The resulting call requires the rasters to be of the same type.
 /// Otherwise, the last optional parameter is a catch-all function (or it just panics).
 #[macro_export]
@@ -134,7 +134,7 @@ macro_rules! call_bi_generic_raster2d_same {
 }
 
 /// Calls a function on two `TypedRaster2D`s by calling it on their variant combination.
-/// Call via `call_bi_generic_raster2d_staircase!(input, (raster_a, raster_b) => function)`.
+/// Call via `call_bi_generic_raster2d_staircase!(input_a, input_b, (raster_a, raster_b) => function)`.
 /// This macro requires the first raster type to be greater or equal to the second one.
 /// Otherwise, the last optional parameter is a catch-all function (or it just panics).
 #[macro_export]
@@ -491,6 +491,12 @@ mod tests {
             F64(T<f64>),
         }
 
+        fn foo<S>(_f: fn(T<S>) -> Foo, _r: &Raster2D<S>)
+        where
+            S: Pixel,
+        {
+        }
+
         let typed_raster_a = TypedRaster2D::U32(
             Raster2D::new(
                 [3, 2].into(),
@@ -502,14 +508,8 @@ mod tests {
             .unwrap(),
         );
 
-        fn foo<S>(_f: fn(T<S>) -> Foo, _r: Raster2D<S>)
-        where
-            S: Pixel,
-        {
-        }
-
         call_generic_raster2d_ext!(typed_raster_a, Foo, (raster, e) => {
-            foo(e, raster)
+            foo(e, &raster)
         });
     }
 }

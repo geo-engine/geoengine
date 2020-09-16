@@ -5,6 +5,7 @@ use crate::engine::{
 };
 use crate::opencl::cl_program::{CLProgram, CompiledCLProgram, IterationType, RasterArgument};
 use crate::util::Result;
+use crate::{call_bi_generic_processor, call_generic_raster_processor};
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::projection::ProjectionOption;
@@ -75,7 +76,6 @@ impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
     for InitializedOperatorImpl<ExpressionParams, RasterResultDescriptor, ()>
 {
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
-        // TODO: match input variant combination
         // TODO: handle different number of sources
 
         match *self.raster_sources.as_slice() {
@@ -83,26 +83,19 @@ impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
                 let a = a.query_processor()?;
                 let b = b.query_processor()?;
 
-                match (a, b) {
-                    (TypedRasterQueryProcessor::I8(p_a), TypedRasterQueryProcessor::I8(p_b)) => {
-                        Ok(match self.params.output_type {
-                            RasterDataType::I8 => TypedRasterQueryProcessor::I8(
-                                ExpressionQueryProcessor::new(
-                                    &SafeExpression {
-                                        expression: self.params.expression.clone(),
-                                    },
-                                    p_a,
-                                    p_b,
-                                )
-                                .boxed(),
-                            ),
-                            _ => unimplemented!(),
-                        })
-                    }
-                    _ => unimplemented!(),
-                }
+                call_bi_generic_processor!(a, b, (p_a, p_b) => {
+                    let res = call_generic_raster_processor!(self.params.output_type, ExpressionQueryProcessor::new(
+                                &SafeExpression {
+                                    expression: self.params.expression.clone(),
+                                },
+                                p_a,
+                                p_b,
+                            )
+                            .boxed());
+                    Ok(res)
+                })
             }
-            _ => unimplemented!(),
+            _ => unimplemented!(), // TODO: handle more than two inputs
         }
     }
 }

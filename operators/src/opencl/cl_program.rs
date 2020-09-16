@@ -142,8 +142,6 @@ typedef struct {
 
         let typedefs = self.create_type_definitions();
 
-        // TODO: add raster meta data info (NODATA etc.)
-
         // TODO: add code for pixel to world
 
         let platform = Platform::default(); // TODO: make configurable
@@ -163,8 +161,6 @@ typedef struct {
             .build(&ctx)?;
 
         // TODO: create kernel builder here once it is cloneable
-
-        // TODO: raster meta data
 
         // TODO: feature collections
 
@@ -264,7 +260,7 @@ unsafe impl OclPrm for RasterInfo {}
 
 impl RasterInfo {
     pub fn from_raster<T: Pixel>(raster: &Raster2D<T>) -> Self {
-        // TODO: extract information from raster
+        // TODO: extract missing information from raster
         Self {
             size: [
                 raster.dimension().size_of_x_axis().as_(),
