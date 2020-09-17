@@ -6,8 +6,11 @@ use uuid::Uuid;
 use warp::reply::Reply;
 use warp::{http::Response, Filter, Rejection};
 
-use geoengine_datatypes::{operations::image::{Colorizer, ToPng}, primitives::SpatialResolution};
 use geoengine_datatypes::raster::{Blit, GeoTransform, Pixel, Raster2D};
+use geoengine_datatypes::{
+    operations::image::{Colorizer, ToPng},
+    primitives::SpatialResolution,
+};
 
 use crate::error;
 use crate::error::Result;
@@ -136,7 +139,7 @@ async fn get_map<T: WorkflowRegistry>(
     let operator = workflow.operator.get_raster().context(error::Operator)?;
 
     let execution_context = ExecutionContext {
-        raster_data_root: "../operators/test-data/raster" // ./ is the crate root when run as example from the multi crate root... doh
+        raster_data_root: "./operators/test-data/raster", // ./ is the crate root when run as example from the multi crate root... doh
     };
 
     let initialized = operator
@@ -197,8 +200,8 @@ where
         -y_query_resolution, // TODO: negative, s.t. geo transform fits...
     );
 
-    println!("{:?}", dim);
-    println!("{:?}", query_geo_transform);
+    dbg!(dim);
+    dbg!(query_geo_transform);
 
     let output_raster: Result<Raster2D<T>> = Raster2D::new(
         dim.into(),
@@ -208,8 +211,6 @@ where
         query_geo_transform,
     )
     .context(error::DataType);
-   
-    println!("{:?}", dim);
 
     let output_raster = tile_stream
         .fold(output_raster, |raster2d, tile| {
@@ -221,8 +222,6 @@ where
                 (Err(error), _) => Err(error),
                 (_, Err(error)) => Err(error.into()),
             };
-
-            println!("{:?}", result);
 
             match result {
                 Ok(updated_raster2d) => futures::future::ok(updated_raster2d),
@@ -331,8 +330,11 @@ mod tests {
             channel: None,
         };
 
-        let gdal_source =
-            GdalSourceProcessor::<_, u8>::from_params_with_json_provider(gdal_params, "../operators/test-data/raster").unwrap();
+        let gdal_source = GdalSourceProcessor::<_, u8>::from_params_with_json_provider(
+            gdal_params,
+            "../operators/test-data/raster",
+        )
+        .unwrap();
 
         let query_bbox = BoundingBox2D::new((-10., 20.).into(), (50., 80.).into()).unwrap();
 

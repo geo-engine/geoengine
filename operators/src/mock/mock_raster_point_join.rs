@@ -142,10 +142,11 @@ mod tests {
     };
     use futures::executor::block_on_stream;
     use geoengine_datatypes::{
+        primitives::SpatialResolution,
         primitives::{BoundingBox2D, Coordinate2D, FeatureDataRef, TimeInterval},
         projection::Projection,
         raster::{Raster2D, RasterDataType, TileInformation},
-    primitives::SpatialResolution};
+    };
 
     #[test]
     #[allow(clippy::too_many_lines)]
@@ -168,7 +169,7 @@ mod tests {
         let raster_tile = RasterTile2D {
             time: TimeInterval::default(),
             tile: TileInformation {
-                geo_transform: Default::default(),
+                global_geo_transform: Default::default(),
                 global_pixel_position: [0, 0].into(),
                 global_size_in_tiles: [1, 2].into(),
                 global_tile_position: [0, 0].into(),
@@ -225,7 +226,7 @@ mod tests {
                             "tile_size_in_pixels": {
                                 "dimension_size": [3, 2]
                             },
-                            "geo_transform": {
+                            "global_geo_transform": {
                                 "upper_left_coordinate": {
                                     "x": 0.0,
                                     "y": 0.0
@@ -302,7 +303,7 @@ mod tests {
         let raster_tile = RasterTile2D {
             time: TimeInterval::default(),
             tile: TileInformation {
-                geo_transform: Default::default(),
+                global_geo_transform: Default::default(),
                 global_pixel_position: [0, 0].into(),
                 global_size_in_tiles: [1, 2].into(),
                 global_tile_position: [0, 0].into(),

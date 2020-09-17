@@ -118,7 +118,7 @@ mod tests {
         let raster_tile = RasterTile2D {
             time: TimeInterval::default(),
             tile: TileInformation {
-                geo_transform: Default::default(),
+                global_geo_transform: Default::default(),
                 global_pixel_position: [0, 0].into(),
                 global_size_in_tiles: [1, 2].into(),
                 global_tile_position: [0, 0].into(),
@@ -161,7 +161,7 @@ mod tests {
                         "tile_size_in_pixels": {
                             "dimension_size": [3, 2]
                         },
-                        "geo_transform": {
+                        "global_geo_transform": {
                             "upper_left_coordinate": {
                                 "x": 0.0,
                                 "y": 0.0

@@ -46,7 +46,7 @@ pub struct TileInformation {
     pub global_tile_position: Dim<[Ix; 2]>,
     pub global_pixel_position: Dim<[Ix; 2]>,
     pub tile_size_in_pixels: Dim<[Ix; 2]>,
-    pub geo_transform: GeoTransform,
+    pub global_geo_transform: GeoTransform,
 }
 
 impl TileInformation {
@@ -55,14 +55,14 @@ impl TileInformation {
         global_tile_position: Dim<[Ix; 2]>,
         global_pixel_position: Dim<[Ix; 2]>,
         tile_size_in_pixels: Dim<[Ix; 2]>,
-        geo_transform: GeoTransform,
+        global_geo_transform: GeoTransform,
     ) -> Self {
         Self {
             global_size_in_tiles,
             global_tile_position,
             global_pixel_position,
             tile_size_in_pixels,
-            geo_transform,
+            global_geo_transform: global_geo_transform,
         }
     }
     pub fn global_size_in_tiles(&self) -> Dim<[Ix; 2]> {
@@ -71,21 +71,50 @@ impl TileInformation {
     pub fn global_tile_position(&self) -> Dim<[Ix; 2]> {
         self.global_tile_position
     }
-    pub fn global_pixel_position(&self) -> Dim<[Ix; 2]> {
+    pub fn global_pixel_position_upper_left(&self) -> Dim<[Ix; 2]> {
         self.global_pixel_position
     }
+
+    pub fn global_pixel_position_lower_right(&self) -> Dim<[Ix; 2]> {
+        let (global_y, global_x) = self.global_pixel_position_upper_left().as_pattern();
+        let (size_y, size_x) = self.tile_size_in_pixels.as_pattern();
+        (global_y + size_y, global_x + size_x).into() // TODO: -1?
+    }
+
     pub fn tile_size_in_pixels(&self) -> Dim<[Ix; 2]> {
         self.tile_size_in_pixels
+    }
+
+    pub fn tile_pixel_position_to_global(
+        &self,
+        local_pixel_position: Dim<[Ix; 2]>,
+    ) -> Dim<[Ix; 2]> {
+        let (global_y, global_x) = self.global_pixel_position_upper_left().as_pattern();
+        let (local_y, local_x) = local_pixel_position.as_pattern();
+        (global_y + local_y, global_x + local_x).into()
+    }
+
+    pub fn tile_geo_transform(&self) -> GeoTransform {
+        let tile_upper_left_coord = self
+            .global_geo_transform
+            .grid_2d_to_coordinate_2d(self.global_pixel_position.as_pattern());
+
+        GeoTransform::new(
+            tile_upper_left_coord,
+            self.global_geo_transform.x_pixel_size,
+            self.global_geo_transform.y_pixel_size,
+        )
     }
 }
 
 impl SpatialBounded for TileInformation {
     fn spatial_bounds(&self) -> BoundingBox2D {
-        let top_left_coord = self.geo_transform.grid_2d_to_coordinate_2d((0, 0));
-        let (.., tile_y_size, tile_x_size) = self.tile_size_in_pixels.as_pattern();
+        let top_left_coord = self
+            .global_geo_transform
+            .grid_2d_to_coordinate_2d(self.global_pixel_position_upper_left().as_pattern());
         let lower_right_coord = self
-            .geo_transform
-            .grid_2d_to_coordinate_2d((tile_y_size, tile_x_size));
+            .global_geo_transform
+            .grid_2d_to_coordinate_2d(self.global_pixel_position_lower_right().as_pattern());
         BoundingBox2D::new_upper_left_lower_right_unchecked(top_left_coord, lower_right_coord)
     }
 }
@@ -123,6 +152,6 @@ where
         self.data.data_container()
     }
     fn geo_transform(&self) -> &GeoTransform {
-        &self.tile.geo_transform
+        &self.tile.global_geo_transform
     }
 }

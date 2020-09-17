@@ -18,8 +18,8 @@ impl SpatialResolution {
 impl Default for SpatialResolution {
     fn default() -> Self {
         SpatialResolution {
-            x_axis_resolution: 1.0,
-            y_axis_resolution: 1.0
+            x_axis_resolution: 0.1,
+            y_axis_resolution: 0.1
         }
     }
 }
