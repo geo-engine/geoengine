@@ -15,10 +15,6 @@ impl<T: Pixel> Blit<Raster2D<T>> for Raster2D<T> {
         // TODO: allow approximately equal pixel sizes?
         // TODO: ensure pixels are aligned
 
-        // TODO: REMOVE
-        dbg!(self.geo_transform);
-        dbg!(source.geo_transform);
-
         ensure!(
             (self.geo_transform().x_pixel_size == source.geo_transform().x_pixel_size)
                 && (self.geo_transform().y_pixel_size == source.geo_transform().y_pixel_size),
@@ -26,9 +22,6 @@ impl<T: Pixel> Blit<Raster2D<T>> for Raster2D<T> {
                 details: "Incompatible pixel size"
             }
         );
-
-        dbg!(source.spatial_bounds());
-        dbg!(self.spatial_bounds());
 
         let intersection = self
             .spatial_bounds()

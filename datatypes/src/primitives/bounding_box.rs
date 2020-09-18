@@ -357,7 +357,7 @@ impl BoundingBox2D {
     /// ```
     ///
     pub fn intersection(&self, other_bbox: &Self) -> Option<Self> {
-        if self.overlaps_bbox(other_bbox) {
+        if self.intersects_bbox(other_bbox) {
             let ll_x = f64::max(
                 self.lower_left_coordinate.x,
                 other_bbox.lower_left_coordinate.x,

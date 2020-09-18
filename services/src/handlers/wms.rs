@@ -6,10 +6,13 @@ use uuid::Uuid;
 use warp::reply::Reply;
 use warp::{http::Response, Filter, Rejection};
 
-use geoengine_datatypes::raster::{Blit, GeoTransform, Pixel, Raster2D};
 use geoengine_datatypes::{
     operations::image::{Colorizer, ToPng},
     primitives::SpatialResolution,
+};
+use geoengine_datatypes::{
+    primitives::BoundingBox2D,
+    raster::{Blit, GeoTransform, Pixel, Raster2D},
 };
 
 use crate::error;
@@ -139,7 +142,7 @@ async fn get_map<T: WorkflowRegistry>(
     let operator = workflow.operator.get_raster().context(error::Operator)?;
 
     let execution_context = ExecutionContext {
-        raster_data_root: "./operators/test-data/raster", // ./ is the crate root when run as example from the multi crate root... doh
+        raster_data_root: "../operators/test-data/raster", // ./ is the crate root when run as example from the multi crate root... doh
     };
 
     let initialized = operator
@@ -148,17 +151,23 @@ async fn get_map<T: WorkflowRegistry>(
 
     let processor = initialized.query_processor().context(error::Operator)?;
 
-    let x_query_resolution = request.bbox.size_x() / f64::from(request.width);
-    let y_query_resolution = request.bbox.size_y() / f64::from(request.height);
+    let query_bbox = BoundingBox2D::new(
+        (request.bbox.lower_left().y, request.bbox.lower_left().x).into(),
+        (request.bbox.upper_right().y, request.bbox.upper_right().x).into(),
+    )
+    .context(error::DataType)?; // FIXME: handle WGS84 reverse order axes
+    let x_query_resolution = query_bbox.size_x() / f64::from(request.width);
+    let y_query_resolution = query_bbox.size_y() / f64::from(request.height);
 
     let query_rect = QueryRectangle {
-        bbox: request.bbox,
+        bbox: query_bbox,
         time_interval: request.time.unwrap_or_else(|| {
             let time = TimeInstance::from(chrono::offset::Utc::now());
             TimeInterval::new_unchecked(time, time)
         }),
         spatial_resolution: SpatialResolution::new(x_query_resolution, y_query_resolution),
     };
+
     let query_ctx = QueryContext {
         // TODO: define meaningful query context
         chunk_byte_size: 1024,
@@ -199,9 +208,6 @@ where
         x_query_resolution,
         -y_query_resolution, // TODO: negative, s.t. geo transform fits...
     );
-
-    dbg!(dim);
-    dbg!(query_geo_transform);
 
     let output_raster: Result<Raster2D<T>> = Raster2D::new(
         dim.into(),
@@ -369,6 +375,56 @@ mod tests {
 
         assert_eq!(
             include_bytes!("../../../services/test-data/wms/raster.png") as &[u8],
+            image_bytes.as_slice()
+        );
+    }
+
+    #[tokio::test]
+    async fn png_from_stream_non_full() {
+        let gdal_params = GdalSourceParameters {
+            dataset_id: "test".to_owned(),
+            channel: None,
+        };
+
+        let gdal_source = GdalSourceProcessor::<_, u8>::from_params_with_json_provider(
+            gdal_params,
+            "../operators/test-data/raster",
+        )
+        .unwrap();
+
+        let query_bbox = BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap();
+
+        let image_bytes = raster_stream_to_png_bytes(
+            gdal_source.boxed(),
+            QueryRectangle {
+                bbox: query_bbox,
+                time_interval: TimeInterval::default(),
+                spatial_resolution: SpatialResolution::new(1.0, 1.0),
+            },
+            QueryContext { chunk_byte_size: 0 },
+            &GetMap {
+                version: "".to_string(),
+                width: 360,
+                height: 180,
+                bbox: query_bbox,
+                format: GetMapFormat::ImagePng,
+                layers: "".to_string(),
+                crs: "".to_string(),
+                styles: "".to_string(),
+                time: None,
+                transparent: None,
+                bgcolor: None,
+                sld: None,
+                sld_body: None,
+                elevation: None,
+                exceptions: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            include_bytes!("../../../services/test-data/wms/raster_small.png") as &[u8],
             image_bytes.as_slice()
         );
     }

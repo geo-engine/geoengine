@@ -10,6 +10,7 @@ use crate::{
 use gdal::raster::dataset::Dataset as GdalDataset;
 use gdal::raster::rasterband::RasterBand as GdalRasterBand;
 use std::{
+    cmp::min,
     io::{BufReader, BufWriter, Read},
     marker::PhantomData,
     path::PathBuf,
@@ -193,21 +194,23 @@ impl TilingInformation {
     fn tile_informations(&self) -> Vec<TileInformation> {
         let &[.., y_pixels_global, x_pixels_global] = self.global_pixel_size.dimension_size();
         let &[.., y_pixels_tile, x_pixels_tile] = self.tile_pixel_size.dimension_size();
-        let x_tiles = x_pixels_global / x_pixels_tile;
-        let y_tiles = y_pixels_global / y_pixels_tile;
+        let x_tiles = (x_pixels_global as f32 / x_pixels_tile as f32).ceil() as usize;
+        let y_tiles = (y_pixels_global as f32 / y_pixels_tile as f32).ceil() as usize;
 
         let mut tile_information = Vec::with_capacity(y_tiles * x_tiles);
 
         for (yi, y) in (0..y_pixels_global).step_by(y_pixels_tile).enumerate() {
             // TODO: discuss if the tile information should store global pixel or global tile size)
             for (xi, x) in (0..x_pixels_global).step_by(x_pixels_tile).enumerate() {
-                // prev.
+                // resize tile to max available data. TODO: replaces like this: Fill with nodata, clip only on the SRS bounds?
+                let current_tile_pixels_x = min(x_pixels_tile, x_pixels_global - x);
+                let current_tile_pixels_y = min(y_pixels_tile, y_pixels_global - y);
 
                 tile_information.push(TileInformation::new(
                     (y_tiles, x_tiles).into(),
                     (yi, xi).into(),
                     (y, x).into(),
-                    (y_pixels_tile, x_pixels_tile).into(),
+                    (current_tile_pixels_y, current_tile_pixels_x).into(),
                     self.geo_transform,
                 ))
             }
@@ -305,8 +308,6 @@ where
                     .lower_right_coordinate(),
             );
 
-        dbg!(query_scale_global_lower_right_pixel);
-
         // build a new tiling information for the dataset with the pixel size of the query
         let query_tile_information = TilingInformation {
             geo_transform: query_scale_geo_transform,
@@ -397,7 +398,6 @@ where
 
         // transform the tile bounds to coordinates
         let tile_geo_transform = tile_information.global_geo_transform;
-        dbg!(tile_information);
 
         let tile_upper_left_coord = tile_geo_transform.grid_2d_to_coordinate_2d(
             tile_information
@@ -410,7 +410,6 @@ where
                 .global_pixel_position_lower_right()
                 .as_pattern(),
         );
-        dbg!(tile_lower_right_coord);
 
         // transform the tile bound into original pixels
         let native_geo_transform = gdal_dataset_information
@@ -424,19 +423,16 @@ where
             native_geo_transform.coordinate_2d_to_grid_2d(tile_lower_right_coord);
 
         let native_pixel_origin = (x_pixel_position_ul as isize, y_pixel_position_ul as isize);
-        dbg!(native_pixel_origin);
 
         let native_pixel_size = (
             x_pixel_position_lr - x_pixel_position_ul,
             y_pixel_position_lr - y_pixel_position_ul,
         );
-        dbg!(native_pixel_size);
 
         let (query_tile_size_y, query_tile_size_x) =
             tile_information.tile_size_in_pixels().as_pattern();
 
         let query_pixel_size = (query_tile_size_x, query_tile_size_y);
-        dbg!(query_pixel_size);
 
         // read the data from the rasterband
         let buffer = rasterband.read_as::<T>(
