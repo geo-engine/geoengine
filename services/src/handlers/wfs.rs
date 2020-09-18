@@ -308,9 +308,7 @@ mod tests {
     use super::*;
     use crate::workflows::workflow::Workflow;
     use geoengine_operators::engine::TypedOperator;
-    use geoengine_operators::source::csv::{
-        CsvGeometrySpecification, CsvSource, CsvTimeSpecification,
-    };
+    use geoengine_operators::source::{CsvGeometrySpecification, CsvSource, CsvTimeSpecification};
     use serde_json::json;
     use std::io::{Seek, SeekFrom, Write};
     use xml::ParserConfig;

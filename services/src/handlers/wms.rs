@@ -261,9 +261,7 @@ fn get_map_mock(request: &GetMap) -> Result<Box<dyn warp::Reply>, warp::Rejectio
 mod tests {
     use geoengine_datatypes::primitives::{BoundingBox2D, TimeInterval};
     use geoengine_operators::engine::{RasterOperator, TypedOperator};
-    use geoengine_operators::source::{
-        gdal_source::GdalSourceProcessor, GdalSource, GdalSourceParameters,
-    };
+    use geoengine_operators::source::{GdalSource, GdalSourceParameters, GdalSourceProcessor};
 
     use crate::workflows::registry::HashMapRegistry;
 
