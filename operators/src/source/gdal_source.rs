@@ -128,8 +128,8 @@ impl GdalDatasetInformation for JsonDatasetInformationProvider {
         buffered_reader.read_to_string(&mut contents)?;
         let dataset_information = serde_json::from_str(&contents)?;
         Ok(JsonDatasetInformationProvider {
-            dataset_information: dataset_information,
-            raster_data_root: raster_data_root,
+            dataset_information,
+            raster_data_root,
         })
     }
     fn native_tiling_information(&self) -> &TilingInformation {
@@ -725,7 +725,7 @@ mod tests {
         };
 
         let dataset_information_provider = JsonDatasetInformationProvider {
-            dataset_information: dataset_information,
+            dataset_information,
             raster_data_root: "../operators/test-data/raster",
         };
 
@@ -865,7 +865,7 @@ mod tests {
         };
 
         let dataset_information_provider = JsonDatasetInformationProvider {
-            dataset_information: dataset_information,
+            dataset_information,
             raster_data_root: "../operators/test-data/raster",
         };
 
@@ -893,7 +893,7 @@ mod tests {
                     result_size_in_tiles.into(),
                     (0, 0).into(),
                     (0, 0).into(),
-                    tile_size_in_pixels.into(),
+                    (360, 600).into(), // TODO: change when source blits into full tile
                     result_geo_transform
                 )
             )
@@ -906,7 +906,7 @@ mod tests {
                     result_size_in_tiles.into(),
                     (0, 1).into(),
                     (0, 600).into(),
-                    tile_size_in_pixels.into(),
+                    (360, 120).into(), // TODO: change when source blits into full tile
                     result_geo_transform
                 )
             )
@@ -951,7 +951,7 @@ mod tests {
         };
 
         let dataset_information_provider = JsonDatasetInformationProvider {
-            dataset_information: dataset_information,
+            dataset_information,
             raster_data_root: "../operators/test-data/raster",
         };
 
@@ -1016,7 +1016,7 @@ mod tests {
         };
 
         let dataset_information_provider = JsonDatasetInformationProvider {
-            dataset_information: dataset_information,
+            dataset_information,
             raster_data_root: "../operators/test-data/raster",
         };
 
@@ -1095,7 +1095,7 @@ mod tests {
         };
 
         let dataset_information_provider = JsonDatasetInformationProvider {
-            dataset_information: dataset_information,
+            dataset_information,
             raster_data_root: "../operators/test-data/raster",
         };
 
@@ -1172,7 +1172,7 @@ mod tests {
         };
 
         let dataset_information_provider = JsonDatasetInformationProvider {
-            dataset_information: dataset_information,
+            dataset_information,
             raster_data_root: "../operators/test-data/raster",
         };
 
@@ -1253,7 +1253,7 @@ mod tests {
         };
 
         let dataset_information_provider = JsonDatasetInformationProvider {
-            dataset_information: dataset_information,
+            dataset_information,
             raster_data_root: "../operators/test-data/raster",
         };
 

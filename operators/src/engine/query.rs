@@ -1,4 +1,4 @@
-use geoengine_datatypes::primitives::{BoundingBox2D, TimeInterval, SpatialResolution};
+use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution, TimeInterval};
 
 /// A spatio-temporal rectangle for querying data
 #[derive(Copy, Clone, Debug)]

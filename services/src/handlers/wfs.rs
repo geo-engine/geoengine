@@ -13,8 +13,11 @@ use crate::util::identifiers::Identifier;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use futures::StreamExt;
-use geoengine_datatypes::{collections::{FeatureCollection, MultiPointCollection}, primitives::SpatialResolution};
 use geoengine_datatypes::primitives::{FeatureData, MultiPoint, TimeInstance, TimeInterval};
+use geoengine_datatypes::{
+    collections::{FeatureCollection, MultiPointCollection},
+    primitives::SpatialResolution,
+};
 use geoengine_operators::engine::{
     ExecutionContext, QueryContext, QueryRectangle, TypedVectorQueryProcessor, VectorQueryProcessor,
 };

@@ -394,9 +394,9 @@ struct ParsedRow {
 mod tests {
     use std::io::{Seek, SeekFrom, Write};
 
-        use geoengine_datatypes::primitives::SpatialResolution;
+    use geoengine_datatypes::primitives::SpatialResolution;
 
-use super::*;
+    use super::*;
 
     #[tokio::test]
     async fn read_points() {

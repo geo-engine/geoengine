@@ -62,7 +62,7 @@ impl TileInformation {
             global_tile_position,
             global_pixel_position,
             tile_size_in_pixels,
-            global_geo_transform: global_geo_transform,
+            global_geo_transform,
         }
     }
     pub fn global_size_in_tiles(&self) -> Dim<[Ix; 2]> {

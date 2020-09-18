@@ -137,8 +137,11 @@ mod tests {
         MockPointSourceParams,
     };
     use futures::{StreamExt, TryStreamExt};
-    use geoengine_datatypes::{collections::{DataCollection, MultiPointCollection}, primitives::SpatialResolution};
     use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, MultiPoint, TimeInterval};
+    use geoengine_datatypes::{
+        collections::{DataCollection, MultiPointCollection},
+        primitives::SpatialResolution,
+    };
 
     #[tokio::test]
     async fn simple() {
@@ -153,7 +156,10 @@ mod tests {
             },
         };
 
-        let source = source.boxed().initialize(ExecutionContext::mock_empty()).unwrap();
+        let source = source
+            .boxed()
+            .initialize(ExecutionContext::mock_empty())
+            .unwrap();
 
         let processor =
             if let TypedVectorQueryProcessor::MultiPoint(p) = source.query_processor().unwrap() {

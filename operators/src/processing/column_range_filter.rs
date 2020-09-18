@@ -177,10 +177,10 @@ where
 mod tests {
     use super::*;
     use crate::mock::{MockFeatureCollectionSource, MockFeatureCollectionSourceParams};
-    use geoengine_datatypes::{collections::MultiPointCollection, primitives::SpatialResolution};
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, FeatureData, MultiPoint, TimeInterval,
     };
+    use geoengine_datatypes::{collections::MultiPointCollection, primitives::SpatialResolution};
 
     #[test]
     fn serde() {
