@@ -124,7 +124,8 @@ impl MultiPointCollection {
         }
     }
 
-    pub fn coordinates_offsets(&self) -> &[i32] {
+    #[allow(clippy::cast_ptr_alignment)]
+    pub fn multipoint_offsets(&self) -> &[i32] {
         let geometries_ref = self
             .table
             .column_by_name(Self::GEOMETRY_COLUMN_NAME)
@@ -941,7 +942,7 @@ mod tests {
             ]
         );
 
-        let offsets = pc.coordinates_offsets();
+        let offsets = pc.multipoint_offsets();
         assert_eq!(offsets.len(), 4);
         assert_eq!(offsets, &[0, 1, 3, 4]);
     }
