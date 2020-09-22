@@ -83,7 +83,7 @@ impl GeoTransform {
     /// use geoengine_datatypes::primitives::{Coordinate2D};
     ///
     /// let geo_transform = GeoTransform::new_with_coordinate_x_y(0.0, 1.0, 0.0, -1.0);
-    /// assert_eq!(geo_transform.coordinate_2d_to_grid_2d(&(0.0, 0.0).into()), (0, 0))
+    /// assert_eq!(geo_transform.coordinate_2d_to_grid_2d((0.0, 0.0).into()), (0, 0))
     /// ```
     ///
     pub fn coordinate_2d_to_grid_2d(&self, coord: Coordinate2D) -> (usize, usize) {
