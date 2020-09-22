@@ -4,15 +4,15 @@ use geoengine_datatypes::{
 use serde::{Deserialize, Serialize};
 
 /// A descriptor that contains information about the query result, for instance, the data type
-/// and projection.
+/// and spatial reference.
 pub trait ResultDescriptor: Copy {
     type DataType;
 
     /// Return the type-specific result data type
     fn data_type(&self) -> Self::DataType;
 
-    /// Return the projection of the result
-    fn projection(&self) -> SpatialReferenceOption;
+    /// Return the spatial reference of the result
+    fn spatial_reference(&self) -> SpatialReferenceOption;
 
     /// Map one descriptor to another one
     fn map<F>(self, f: F) -> Self
@@ -22,8 +22,8 @@ pub trait ResultDescriptor: Copy {
         f(self)
     }
 
-    /// Map one descriptor to another one by modifying only the projection
-    fn map_projection<F>(self, f: F) -> Self
+    /// Map one descriptor to another one by modifying only the spatial reference
+    fn map_spatial_reference<F>(self, f: F) -> Self
     where
         F: Fn(Self::DataType) -> Self::DataType;
 
@@ -37,7 +37,7 @@ pub trait ResultDescriptor: Copy {
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Serialize, Deserialize)]
 pub struct RasterResultDescriptor {
     pub data_type: RasterDataType,
-    pub projection: SpatialReferenceOption,
+    pub spatial_reference: SpatialReferenceOption,
 }
 
 impl ResultDescriptor for RasterResultDescriptor {
@@ -47,11 +47,11 @@ impl ResultDescriptor for RasterResultDescriptor {
         self.data_type
     }
 
-    fn projection(&self) -> SpatialReferenceOption {
-        self.projection
+    fn spatial_reference(&self) -> SpatialReferenceOption {
+        self.spatial_reference
     }
 
-    fn map_projection<F>(mut self, f: F) -> Self
+    fn map_spatial_reference<F>(mut self, f: F) -> Self
     where
         F: Fn(Self::DataType) -> Self::DataType,
     {
@@ -63,7 +63,7 @@ impl ResultDescriptor for RasterResultDescriptor {
     where
         F: Fn(SpatialReferenceOption) -> SpatialReferenceOption,
     {
-        self.projection = f(self.projection);
+        self.spatial_reference = f(self.spatial_reference);
         self
     }
 }
@@ -72,7 +72,7 @@ impl ResultDescriptor for RasterResultDescriptor {
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Serialize, Deserialize)]
 pub struct VectorResultDescriptor {
     pub data_type: VectorDataType,
-    pub projection: SpatialReferenceOption,
+    pub spatial_reference: SpatialReferenceOption,
 }
 
 impl ResultDescriptor for VectorResultDescriptor {
@@ -82,11 +82,11 @@ impl ResultDescriptor for VectorResultDescriptor {
         self.data_type
     }
 
-    fn projection(&self) -> SpatialReferenceOption {
-        self.projection
+    fn spatial_reference(&self) -> SpatialReferenceOption {
+        self.spatial_reference
     }
 
-    fn map_projection<F>(mut self, f: F) -> Self
+    fn map_spatial_reference<F>(mut self, f: F) -> Self
     where
         F: Fn(Self::DataType) -> Self::DataType,
     {
@@ -98,7 +98,7 @@ impl ResultDescriptor for VectorResultDescriptor {
     where
         F: Fn(SpatialReferenceOption) -> SpatialReferenceOption,
     {
-        self.projection = f(self.projection);
+        self.spatial_reference = f(self.spatial_reference);
         self
     }
 }

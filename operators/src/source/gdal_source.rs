@@ -418,7 +418,7 @@ impl RasterOperator for GdalSource {
             |_, _, state, _, _| {
                 Ok(RasterResultDescriptor {
                     data_type: state.data_type,
-                    projection: SpatialReference::wgs84().into(), // TODO: lookup from dataset
+                    spatial_reference: SpatialReference::wgs84().into(), // TODO: lookup from dataset
                 })
             },
             vec![],

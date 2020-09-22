@@ -19,11 +19,11 @@ pub enum Error {
     },
     QueryProcessor,
     #[snafu(display(
-        "InvalidProjectionError: expected \"{}\" found \"{}\"",
+        "InvalidSpatialReferenceError: expected \"{}\" found \"{}\"",
         expected,
         found
     ))]
-    InvalidProjection {
+    InvalidSpatialReference {
         expected: geoengine_datatypes::spatial_reference::SpatialReferenceOption,
         found: geoengine_datatypes::spatial_reference::SpatialReferenceOption,
     },

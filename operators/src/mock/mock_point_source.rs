@@ -60,7 +60,7 @@ impl VectorOperator for MockPointSource {
             |_, _, _, _, _| {
                 Ok(VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
-                    projection: SpatialReference::wgs84().into(),
+                    spatial_reference: SpatialReference::wgs84().into(),
                 })
             },
             vec![],

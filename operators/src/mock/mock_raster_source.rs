@@ -132,7 +132,7 @@ mod tests {
                 data: vec![raster_tile],
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
-                    projection: SpatialReference::wgs84().into(),
+                    spatial_reference: SpatialReference::wgs84().into(),
                 },
             },
         }
@@ -192,7 +192,7 @@ mod tests {
                 }],
                 "result_descriptor": {
                     "data_type": "U8",
-                    "projection": "EPSG:4326"
+                    "spatial_reference": "EPSG:4326"
                 }
             }
         })

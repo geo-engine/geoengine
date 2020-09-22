@@ -26,7 +26,7 @@ pub struct Project {
     pub layers: Vec<Layer>,
     pub view: STRectangle,
     pub bounds: STRectangle,
-    // TODO: projection/coordinate reference system, must be either stored in the rectangle/bbox or globally for project
+    // TODO: spatial reference system, must be either stored in the rectangle/bbox or globally for project
 }
 
 impl Project {

@@ -5,7 +5,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use snafu::ResultExt;
 use std::str::FromStr;
 
-/// A projection authority that is part of a projection definition
+/// A spatial reference authority that is part of a spatial reference definition
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING-KEBAB-CASE")]
 pub enum SpatialReferenceAuthority {
@@ -30,7 +30,7 @@ impl std::fmt::Display for SpatialReferenceAuthority {
     }
 }
 
-/// A projection consists of an authority and a code
+/// A spatial reference consists of an authority and a code
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub struct SpatialReference {
     authority: SpatialReferenceAuthority,
@@ -42,7 +42,7 @@ impl SpatialReference {
         Self { authority, code }
     }
 
-    /// the WGS 84 projection
+    /// the WGS 84 spatial reference system
     pub fn wgs84() -> Self {
         Self::new(SpatialReferenceAuthority::Epsg, 4326)
     }
@@ -63,14 +63,14 @@ impl Serialize for SpatialReference {
     }
 }
 
-/// Helper struct for deserializing a `Projection`
-struct ProjectionDeserializeVisitor;
+/// Helper struct for deserializing a `SpatialReferencce`
+struct SpatialReferenceDeserializeVisitor;
 
-impl<'de> Visitor<'de> for ProjectionDeserializeVisitor {
+impl<'de> Visitor<'de> for SpatialReferenceDeserializeVisitor {
     type Value = SpatialReference;
 
     fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
-        formatter.write_str("a projection in the form authority:code")
+        formatter.write_str("a spatial reference in the form authority:code")
     }
 
     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
@@ -86,7 +86,7 @@ impl<'de> Deserialize<'de> for SpatialReference {
     where
         D: Deserializer<'de>,
     {
-        deserializer.deserialize_str(ProjectionDeserializeVisitor)
+        deserializer.deserialize_str(SpatialReferenceDeserializeVisitor)
     }
 }
 
@@ -100,8 +100,8 @@ impl FromStr for SpatialReferenceAuthority {
             "IAU2000" => SpatialReferenceAuthority::Iau2000,
             "ESRI" => SpatialReferenceAuthority::Esri,
             _ => {
-                return Err(error::Error::InvalidProjectionString {
-                    projection_string: s.into(),
+                return Err(error::Error::InvalidSpatialReferenceString {
+                    spatial_reference_string: s.into(),
                 })
             }
         })
@@ -119,8 +119,8 @@ impl FromStr for SpatialReference {
                 authority.parse()?,
                 code.parse::<u32>().context(error::ParseU32)?,
             )),
-            _ => Err(error::Error::InvalidProjectionString {
-                projection_string: s.into(),
+            _ => Err(error::Error::InvalidSpatialReferenceString {
+                spatial_reference_string: s.into(),
             }),
         }
     }
@@ -128,14 +128,14 @@ impl FromStr for SpatialReference {
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub enum SpatialReferenceOption {
-    Projection(SpatialReference),
+    SpatialReference(SpatialReference),
     None,
 }
 
 impl std::fmt::Display for SpatialReferenceOption {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SpatialReferenceOption::Projection(p) => write!(f, "{}", p),
+            SpatialReferenceOption::SpatialReference(p) => write!(f, "{}", p),
             SpatialReferenceOption::None => Ok(()),
         }
     }
@@ -143,14 +143,14 @@ impl std::fmt::Display for SpatialReferenceOption {
 
 impl Into<SpatialReferenceOption> for SpatialReference {
     fn into(self) -> SpatialReferenceOption {
-        SpatialReferenceOption::Projection(self)
+        SpatialReferenceOption::SpatialReference(self)
     }
 }
 
 impl From<Option<SpatialReference>> for SpatialReferenceOption {
     fn from(option: Option<SpatialReference>) -> Self {
         match option {
-            Some(p) => SpatialReferenceOption::Projection(p),
+            Some(p) => SpatialReferenceOption::SpatialReference(p),
             None => SpatialReferenceOption::None,
         }
     }
@@ -165,14 +165,14 @@ impl Serialize for SpatialReferenceOption {
     }
 }
 
-/// Helper struct for deserializing a `ProjectionOption`
-struct ProjectionOptionDeserializeVisitor;
+/// Helper struct for deserializing a `SpatialReferenceOption`
+struct SpatialReferenceOptionDeserializeVisitor;
 
-impl<'de> Visitor<'de> for ProjectionOptionDeserializeVisitor {
+impl<'de> Visitor<'de> for SpatialReferenceOptionDeserializeVisitor {
     type Value = SpatialReferenceOption;
 
     fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
-        formatter.write_str("a projection in the form authority:code")
+        formatter.write_str("a spatial reference in the form authority:code")
     }
 
     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
@@ -183,9 +183,9 @@ impl<'de> Visitor<'de> for ProjectionOptionDeserializeVisitor {
             return Ok(SpatialReferenceOption::None);
         }
 
-        let projection: SpatialReference = v.parse().map_err(serde::de::Error::custom)?;
+        let spatial_reference: SpatialReference = v.parse().map_err(serde::de::Error::custom)?;
 
-        Ok(projection.into())
+        Ok(spatial_reference.into())
     }
 }
 
@@ -194,7 +194,7 @@ impl<'de> Deserialize<'de> for SpatialReferenceOption {
     where
         D: Deserializer<'de>,
     {
-        deserializer.deserialize_str(ProjectionOptionDeserializeVisitor)
+        deserializer.deserialize_str(SpatialReferenceOptionDeserializeVisitor)
     }
 }
 
@@ -280,12 +280,11 @@ mod tests {
     }
 
     #[test]
-    fn projection_option_serde() {
+    fn spatial_reference_option_serde() {
         assert_eq!(
-            serde_json::to_string(&SpatialReferenceOption::Projection(SpatialReference::new(
-                SpatialReferenceAuthority::Epsg,
-                4326
-            )))
+            serde_json::to_string(&SpatialReferenceOption::SpatialReference(
+                SpatialReference::new(SpatialReferenceAuthority::Epsg, 4326)
+            ))
             .unwrap(),
             "\"EPSG:4326\""
         );
@@ -296,7 +295,7 @@ mod tests {
         );
 
         assert_eq!(
-            SpatialReferenceOption::Projection(SpatialReference::new(
+            SpatialReferenceOption::SpatialReference(SpatialReference::new(
                 SpatialReferenceAuthority::Epsg,
                 4326
             )),

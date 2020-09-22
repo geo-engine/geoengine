@@ -95,9 +95,9 @@ impl VectorOperator for MockRasterPointJoinOperator {
             |_, _, _, _| Ok(()),
             |_, _, _, _, vs| {
                 Ok(VectorResultDescriptor {
-                    projection: vs.get(0).map_or_else(
+                    spatial_reference: vs.get(0).map_or_else(
                         || SpatialReferenceOption::None,
-                        |o| o.result_descriptor().projection,
+                        |o| o.result_descriptor().spatial_reference,
                     ),
                     data_type: VectorDataType::MultiPoint,
                 })
@@ -182,7 +182,7 @@ mod tests {
                 data: vec![raster_tile],
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
-                    projection: SpatialReference::wgs84().into(),
+                    spatial_reference: SpatialReference::wgs84().into(),
                 },
             },
         }
@@ -256,7 +256,7 @@ mod tests {
                     }],
                     "result_descriptor": {
                         "data_type": "U8",
-                        "projection": "EPSG:4326"
+                        "spatial_reference": "EPSG:4326"
                     }
                 }
             }],
@@ -316,7 +316,7 @@ mod tests {
                 data: vec![raster_tile],
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
-                    projection: SpatialReference::wgs84().into(),
+                    spatial_reference: SpatialReference::wgs84().into(),
                 },
             },
         }
