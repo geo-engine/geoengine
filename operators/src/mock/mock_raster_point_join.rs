@@ -9,8 +9,8 @@ use geoengine_datatypes::raster::Pixel;
 use geoengine_datatypes::{
     collections::MultiPointCollection,
     primitives::FeatureData,
-    projection::ProjectionOption,
     raster::{GridPixelAccess, RasterTile2D},
+    spatial_reference::SpatialReferenceOption,
 };
 use serde::{Deserialize, Serialize};
 
@@ -96,7 +96,7 @@ impl VectorOperator for MockRasterPointJoinOperator {
             |_, _, _, _, vs| {
                 Ok(VectorResultDescriptor {
                     projection: vs.get(0).map_or_else(
-                        || ProjectionOption::None,
+                        || SpatialReferenceOption::None,
                         |o| o.result_descriptor().projection,
                     ),
                     data_type: VectorDataType::MultiPoint,
@@ -143,8 +143,8 @@ mod tests {
     use futures::executor::block_on_stream;
     use geoengine_datatypes::{
         primitives::{BoundingBox2D, Coordinate2D, FeatureDataRef, TimeInterval},
-        projection::Projection,
         raster::{Raster2D, RasterDataType, TileInformation},
+        spatial_reference::SpatialReference,
     };
 
     #[test]
@@ -182,7 +182,7 @@ mod tests {
                 data: vec![raster_tile],
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
-                    projection: Projection::wgs84().into(),
+                    projection: SpatialReference::wgs84().into(),
                 },
             },
         }
@@ -316,7 +316,7 @@ mod tests {
                 data: vec![raster_tile],
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
-                    projection: Projection::wgs84().into(),
+                    projection: SpatialReference::wgs84().into(),
                 },
             },
         }

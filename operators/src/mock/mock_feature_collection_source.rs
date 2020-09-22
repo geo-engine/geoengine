@@ -10,7 +10,7 @@ use geoengine_datatypes::collections::FeatureCollection;
 use geoengine_datatypes::primitives::{
     Geometry, MultiLineString, MultiPoint, MultiPolygon, NoGeometry,
 };
-use geoengine_datatypes::projection::Projection;
+use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use serde::{Deserialize, Serialize};
 
@@ -78,7 +78,7 @@ macro_rules! impl_mock_feature_collection_source {
                     |_, _, _, _, _| {
                         Ok(VectorResultDescriptor {
                             data_type: <$geometry>::DATA_TYPE,
-                            projection: Projection::wgs84().into(), // TODO: get from `FeatureCollection`
+                            projection: SpatialReference::wgs84().into(), // TODO: get from `FeatureCollection`
                         })
                     },
                     vec![],

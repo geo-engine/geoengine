@@ -24,8 +24,8 @@ pub enum Error {
         found
     ))]
     InvalidProjection {
-        expected: geoengine_datatypes::projection::ProjectionOption,
-        found: geoengine_datatypes::projection::ProjectionOption,
+        expected: geoengine_datatypes::spatial_reference::SpatialReferenceOption,
+        found: geoengine_datatypes::spatial_reference::SpatialReferenceOption,
     },
 
     // TODO: use something more general than `Range`, e.g. `dyn RangeBounds` that can, however not be made into an object

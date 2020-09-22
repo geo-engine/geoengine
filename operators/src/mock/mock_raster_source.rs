@@ -100,8 +100,8 @@ mod tests {
     use geoengine_datatypes::raster::RasterDataType;
     use geoengine_datatypes::{
         primitives::TimeInterval,
-        projection::Projection,
         raster::{Raster2D, TileInformation},
+        spatial_reference::SpatialReference,
     };
 
     #[test]
@@ -132,7 +132,7 @@ mod tests {
                 data: vec![raster_tile],
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
-                    projection: Projection::wgs84().into(),
+                    projection: SpatialReference::wgs84().into(),
                 },
             },
         }

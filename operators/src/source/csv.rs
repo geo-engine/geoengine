@@ -15,7 +15,7 @@ use geoengine_datatypes::collections::{
 };
 use geoengine_datatypes::{
     primitives::{BoundingBox2D, Coordinate2D, TimeInterval},
-    projection::Projection,
+    spatial_reference::SpatialReference,
 };
 
 use crate::engine::{
@@ -155,7 +155,7 @@ impl VectorOperator for CsvSource {
             |_, _, _, _, _| {
                 Ok(VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint, // TODO: get as user input
-                    projection: Projection::wgs84().into(), // TODO: get as user input
+                    projection: SpatialReference::wgs84().into(), // TODO: get as user input
                 })
             },
             vec![],
