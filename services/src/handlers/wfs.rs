@@ -192,7 +192,7 @@ async fn get_feature<T: WorkflowRegistry>(
             let time = TimeInstance::from(chrono::offset::Utc::now());
             TimeInterval::new_unchecked(time, time)
         }),
-        spatial_resolution: SpatialResolution::default(),
+        spatial_resolution: SpatialResolution::zero_point_one(),
     };
     let query_ctx = QueryContext {
         // TODO: use production config and test config sizes here

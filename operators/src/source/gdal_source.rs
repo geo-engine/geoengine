@@ -738,7 +738,7 @@ mod tests {
         let vres: Vec<_> = gdal_source
             .time_tile_iter(
                 BoundingBox2D::new((-180.0, -90.0).into(), (180.0, 90.0).into()).unwrap(),
-                SpatialResolution::default(),
+                SpatialResolution::zero_point_one(),
             )
             .collect();
 
@@ -1029,7 +1029,7 @@ mod tests {
         let vres: Vec<Result<RasterTile2D<u8>, Error>> = gdal_source
             .time_tile_iter(
                 BoundingBox2D::new((-180.0, -90.0).into(), (180.0, 90.0).into()).unwrap(),
-                SpatialResolution::default(),
+                SpatialResolution::zero_point_one(),
             )
             .map(|(time_interval, tile_information)| {
                 gdal_source.load_tile_data(time_interval, tile_information)
@@ -1108,7 +1108,7 @@ mod tests {
         let query_bbox = BoundingBox2D::new((-30., 0.).into(), (35., 65.).into()).unwrap();
 
         let vres: Vec<Result<RasterTile2D<u8>, Error>> = gdal_source
-            .time_tile_iter(query_bbox, SpatialResolution::default())
+            .time_tile_iter(query_bbox, SpatialResolution::zero_point_one())
             .map(|(time_interval, tile_information)| {
                 gdal_source.load_tile_data(time_interval, tile_information)
             })
@@ -1184,7 +1184,7 @@ mod tests {
 
         let mut stream_data = block_on_stream(gdal_source.tile_stream(
             BoundingBox2D::new((-180.0, -90.0).into(), (180.0, 90.0).into()).unwrap(),
-            SpatialResolution::default(),
+            SpatialResolution::zero_point_one(),
         ));
 
         let ndvi_center_pixel_values = vec![

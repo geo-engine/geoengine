@@ -171,7 +171,7 @@ mod tests {
         let qrect = QueryRectangle {
             bbox: BoundingBox2D::new((0.0, 0.0).into(), (10.0, 10.0).into()).unwrap(),
             time_interval: Default::default(),
-            spatial_resolution: SpatialResolution::default(),
+            spatial_resolution: SpatialResolution::zero_point_one(),
         };
         let cx = QueryContext {
             chunk_byte_size: std::mem::size_of::<Coordinate2D>() * 2,
@@ -246,7 +246,7 @@ mod tests {
         let qrect = QueryRectangle {
             bbox: BoundingBox2D::new((0.0, 0.0).into(), (0.0, 0.0).into()).unwrap(),
             time_interval: Default::default(),
-            spatial_resolution: SpatialResolution::default(),
+            spatial_resolution: SpatialResolution::zero_point_one(),
         };
         let cx = QueryContext { chunk_byte_size: 0 };
 

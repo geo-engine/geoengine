@@ -22,11 +22,24 @@ impl SpatialResolution {
         ensure!(y > 0.0, error::InvalidSpatialResolution { value: y });
         Ok(Self::new_unchecked(x, y))
     }
-}
 
-impl Default for SpatialResolution {
-    fn default() -> Self {
+    pub fn zero_point_one() -> Self {
         SpatialResolution { x: 0.1, y: 0.1 }
+    }
+
+    pub fn zero_point_five() -> Self {
+        SpatialResolution { x: 0.5, y: 0.5 }
+    }
+
+    pub fn one() -> Self {
+        SpatialResolution { x: 1., y: 1. }
+    }
+
+    pub fn mul(&self, factor: f64) -> Self {
+        SpatialResolution {
+            x: self.x * factor,
+            y: self.y * factor,
+        }
     }
 }
 

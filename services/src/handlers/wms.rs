@@ -352,7 +352,7 @@ mod tests {
             QueryRectangle {
                 bbox: query_bbox,
                 time_interval: TimeInterval::default(),
-                spatial_resolution: SpatialResolution::default(),
+                spatial_resolution: SpatialResolution::zero_point_one(),
             },
             QueryContext { chunk_byte_size: 0 },
             &GetMap {

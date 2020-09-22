@@ -536,7 +536,7 @@ x,y
                 Coordinate2D::new(3., 3.),
             ),
             time_interval: TimeInterval::new_unchecked(0, 1),
-            spatial_resolution: SpatialResolution::default(),
+            spatial_resolution: SpatialResolution::zero_point_one(),
         };
         let ctx = QueryContext {
             chunk_byte_size: 10 * 8 * 2,
