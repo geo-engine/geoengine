@@ -165,7 +165,10 @@ async fn get_map<T: WorkflowRegistry>(
             let time = TimeInstance::from(chrono::offset::Utc::now());
             TimeInterval::new_unchecked(time, time)
         }),
-        spatial_resolution: SpatialResolution::new(x_query_resolution, y_query_resolution),
+        spatial_resolution: SpatialResolution::new_unchecked(
+            x_query_resolution,
+            y_query_resolution,
+        ),
     };
 
     let query_ctx = QueryContext {
@@ -399,7 +402,7 @@ mod tests {
             QueryRectangle {
                 bbox: query_bbox,
                 time_interval: TimeInterval::default(),
-                spatial_resolution: SpatialResolution::new(1.0, 1.0),
+                spatial_resolution: SpatialResolution::new_unchecked(1.0, 1.0),
             },
             QueryContext { chunk_byte_size: 0 },
             &GetMap {

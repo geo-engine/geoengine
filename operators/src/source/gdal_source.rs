@@ -296,8 +296,8 @@ where
                 .native_tiling_information()
                 .geo_transform
                 .upper_left_coordinate,
-            spatial_resolution.x_axis_resolution,
-            -spatial_resolution.y_axis_resolution, // TODO: negative, s.t. geo transform fits...
+            spatial_resolution.x,
+            -spatial_resolution.y, // TODO: negative, s.t. geo transform fits...
         );
 
         // transform the native dataset size to the virtual size of the queried dataset
@@ -881,7 +881,7 @@ mod tests {
         let vres: Vec<_> = gdal_source
             .time_tile_iter(
                 BoundingBox2D::new((-180.0, -90.0).into(), (180.0, 90.0).into()).unwrap(),
-                SpatialResolution::new(0.5, 0.5),
+                SpatialResolution::new_unchecked(0.5, 0.5),
             )
             .collect();
 
