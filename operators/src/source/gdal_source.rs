@@ -25,11 +25,11 @@ use geoengine_datatypes::primitives::{
     BoundingBox2D, Coordinate2D, SpatialBounded, SpatialResolution, TimeInterval,
 };
 use geoengine_datatypes::{
-    projection::Projection,
     raster::{
         Dim, GeoTransform, GridDimension, Ix, Pixel, Raster2D, RasterDataType, RasterTile2D,
         TileInformation,
     },
+    spatial_reference::SpatialReference,
 };
 
 /// Parameters for the GDAL Source Operator
@@ -514,8 +514,8 @@ impl RasterOperator for GdalSource {
             },
             |_, _, state, _, _| {
                 Ok(RasterResultDescriptor {
-                    data_type: state.dataset_information.data_type,
-                    projection: Projection::wgs84().into(), // TODO: lookup from dataset
+                    data_type: state.data_type(),
+                    spatial_reference: SpatialReference::wgs84().into(), // TODO: lookup from dataset
                 })
             },
             vec![],
