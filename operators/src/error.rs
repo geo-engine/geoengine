@@ -66,6 +66,10 @@ pub enum Error {
         found: String,
     },
     InvalidOperatorType,
+
+    UnknownDataset {
+        name: String,
+    },
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {
