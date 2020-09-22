@@ -115,9 +115,9 @@ pub enum Error {
         b: RasterDataType,
     },
 
-    #[snafu(display("InvalidProjectionString: {}", projection_string))]
-    InvalidProjectionString {
-        projection_string: String,
+    #[snafu(display("InvalidSpatialReferenceString: {}", spatial_reference_string))]
+    InvalidSpatialReferenceString {
+        spatial_reference_string: String,
     },
 
     #[snafu(display("ParseU32: {}", source))]

@@ -12,7 +12,7 @@ use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::{
     collections::MultiPointCollection,
     primitives::{Coordinate2D, TimeInterval},
-    projection::Projection,
+    spatial_reference::SpatialReference,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -60,7 +60,7 @@ impl VectorOperator for MockPointSource {
             |_, _, _, _, _| {
                 Ok(VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
-                    projection: Projection::wgs84().into(),
+                    spatial_reference: SpatialReference::wgs84().into(),
                 })
             },
             vec![],
