@@ -1,7 +1,7 @@
 use crate::ogc::util::{parse_bbox, parse_time};
 use crate::util::from_str_option;
 use geoengine_datatypes::primitives::{BoundingBox2D, TimeInterval};
-use geoengine_datatypes::projection::Projection;
+use geoengine_datatypes::spatial_reference::SpatialReference;
 use serde::{Deserialize, Serialize};
 
 // TODO: ignore case for field names
@@ -56,7 +56,7 @@ pub struct GetFeature {
     #[serde(default)]
     #[serde(deserialize_with = "parse_time")]
     pub time: Option<TimeInterval>,
-    pub srs_name: Option<Projection>,
+    pub srs_name: Option<SpatialReference>,
     pub namespaces: Option<String>, // TODO e.g. xmlns(dog=http://www.example.com/namespaces/dog)
     #[serde(default)]
     #[serde(deserialize_with = "from_str_option")]
@@ -135,7 +135,7 @@ where
 mod tests {
     use super::*;
     use geoengine_datatypes::primitives::Coordinate2D;
-    use geoengine_datatypes::projection::ProjectionAuthority;
+    use geoengine_datatypes::spatial_reference::SpatialReferenceAuthority;
 
     #[test]
     fn deserialize_get_feature() {
@@ -191,7 +191,7 @@ mod tests {
         let request = WFSRequest::GetFeature(GetFeature {
             version: "2.0.0".into(),
             time: Some(TimeInterval::new(946_684_800, 946_771_200).unwrap()),
-            srs_name: Some(Projection::new(ProjectionAuthority::Epsg, 4326)),
+            srs_name: Some(SpatialReference::new(SpatialReferenceAuthority::Epsg, 4326)),
             namespaces: Some("xmlns(dog=http://www.example.com/namespaces/dog)".into()),
             count: Some(10),
             sort_by: Some("Name[+A]".into()),
