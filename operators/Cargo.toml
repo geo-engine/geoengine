@@ -9,6 +9,7 @@ authors = [
 edition = "2018"
 
 [dependencies]
+arrow = {version = "1.0", features = ["simd"] }
 chrono = "0.4"
 csv = "1.1"
 geoengine-datatypes = { path = "../datatypes" }

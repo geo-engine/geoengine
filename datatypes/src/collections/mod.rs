@@ -4,6 +4,7 @@ mod feature_collection;
 mod geo_feature_collection;
 #[macro_use]
 mod data_types;
+mod batch_builder;
 mod feature_collection_builder;
 
 mod data_collection;
@@ -25,6 +26,7 @@ pub use multi_line_string_collection::MultiLineStringCollection;
 pub use multi_point_collection::MultiPointCollection;
 pub use multi_polygon_collection::MultiPolygonCollection;
 
+pub use batch_builder::{FeatureCollectionBatchBuilder, GeoFromBuffers, MultiPointBuffers};
 pub use data_types::TypedFeatureCollection;
 
 /// Calls a function on a `TypedFeatureCollection` by calling it on its variant.

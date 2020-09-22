@@ -905,7 +905,7 @@ where
 }
 
 /// Create an `arrow` struct from column meta data and data
-fn struct_array_from_data(
+pub fn struct_array_from_data(
     columns: Vec<Field>,
     column_values: Vec<ArrayRef>,
     number_of_features: usize,

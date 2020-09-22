@@ -1,7 +1,11 @@
 use crate::error;
 use crate::util::Result;
-use geoengine_datatypes::collections::{TypedFeatureCollection, VectorDataType};
-use geoengine_datatypes::primitives::{Coordinate2D, FeatureDataType};
+use arrow::buffer::MutableBuffer;
+use geoengine_datatypes::collections::{
+    FeatureCollectionBatchBuilder, GeoFromBuffers, MultiPointBuffers, TypedFeatureCollection,
+    VectorDataType,
+};
+use geoengine_datatypes::primitives::{Coordinate2D, FeatureDataType, MultiPoint};
 use geoengine_datatypes::raster::Raster;
 use geoengine_datatypes::raster::{
     DynamicRasterDataType, GridDimension, Pixel, Raster2D, RasterDataType, TypedRaster2D,
@@ -240,7 +244,7 @@ pub struct CLProgramParameters<'a> {
     input_feature_types: Vec<VectorArgument>,
     output_feature_types: Vec<VectorArgument>,
     input_features: Vec<Option<&'a TypedFeatureCollection>>,
-    output_features: Vec<Option<&'a mut TypedFeatureCollection>>,
+    output_features: Vec<Option<&'a mut FeatureCollectionBatchBuilder<MultiPoint>>>, // TODO: generify
 }
 
 impl<'a> CLProgramParameters<'a> {
@@ -321,22 +325,24 @@ impl<'a> CLProgramParameters<'a> {
     pub fn set_output_features(
         &mut self,
         idx: usize,
-        features: &'a mut TypedFeatureCollection,
+        features: &'a mut FeatureCollectionBatchBuilder<MultiPoint>, // TODO: generify
     ) -> Result<()> {
         ensure!(
             idx < self.output_feature_types.len(),
             error::CLProgramInvalidFeaturesIndex
         );
-        ensure!(
-            features.vector_data_type() == self.output_feature_types[idx].vector_type,
-            error::CLProgramInvalidVectorDataType
-        );
+        // TODO: check type of output
+        // ensure!(
+        //     features.vector_data_type() == self.output_feature_types[idx].vector_type,
+        //     error::CLProgramInvalidVectorDataType
+        // );
 
-        let mut iter = self.output_feature_types[idx]
-            .columns
-            .iter()
-            .zip(self.output_feature_types[idx].column_types.iter());
-        call_generic_features!(features, f => iter.all(|(n, t)| f.column_type(n).map_or(false, |to| to == *t)));
+        // TODO: check columns of output
+        // let mut iter = self.output_feature_types[idx]
+        //     .columns
+        //     .iter()
+        //     .zip(self.output_feature_types[idx].column_types.iter());
+        // call_generic_features!(features, f => iter.all(|(n, t)| f.column_type(n).map_or(false, |to| to == *t)));
 
         self.output_features[idx] = Some(features);
         Ok(())
@@ -501,38 +507,30 @@ impl CompiledCLProgram {
         }
 
         for (idx, features) in params.output_features.iter().enumerate() {
-            let features = features.as_ref().expect("checked");
+            let _features = features.as_ref().expect("checked");
+            // TODO: generify for lines and polygons
 
-            match features {
-                TypedFeatureCollection::Data(_) => {
-                    // no geo
-                }
-                TypedFeatureCollection::MultiPoint(points) => {
-                    let coordinates = points.coordinates();
-                    let buffer = Buffer::<Coordinate2D>::builder()
-                        .queue(kernel.default_queue().expect("expect").clone())
-                        .len(coordinates.len())
-                        .build()?;
+            // TODO determine number of output coordinates
+            let num_coordinates = 0;
+            let buffer = Buffer::<Coordinate2D>::builder()
+                .queue(kernel.default_queue().expect("expect").clone())
+                .len(num_coordinates)
+                .build()?;
 
-                    kernel.set_arg(format!("OUT_POINT_COORDS{}", idx), &buffer)?;
-                    self.coordinates_output_buffers.push(buffer);
+            kernel.set_arg(format!("OUT_POINT_COORDS{}", idx), &buffer)?;
+            self.coordinates_output_buffers.push(buffer);
 
-                    let coordinates_offsets = points.multipoint_offsets();
-                    let buffer = Buffer::<i32>::builder()
-                        .queue(kernel.default_queue().expect("expect").clone())
-                        .len(coordinates_offsets.len())
-                        .build()?;
+            // TODO: determine number of output coordinates
+            let num_offets = 0;
+            let buffer = Buffer::<i32>::builder()
+                .queue(kernel.default_queue().expect("expect").clone())
+                .len(num_offets)
+                .build()?;
 
-                    kernel.set_arg(format!("OUT_POINT_OFFSETS{}", idx), &buffer)?;
-                    self.point_offsets_output_buffers.push(buffer);
-                }
-                TypedFeatureCollection::MultiLineString(_)
-                | TypedFeatureCollection::MultiPolygon(_) => todo!(),
-            }
+            kernel.set_arg(format!("OUT_POINT_OFFSETS{}", idx), &buffer)?;
+            self.point_offsets_output_buffers.push(buffer);
 
-            call_generic_features!(features, features => {
-                // TODO: columns buffers
-            });
+            // TODO: columns and time
         }
 
         Ok(())
@@ -599,7 +597,9 @@ impl CompiledCLProgram {
         match self.iteration_type {
             IterationType::Raster => call_generic_raster2d!(params.output_rasters[0].as_ref()
                 .expect("checked"), raster => SpatialDims::Two(raster.dimension().size_of_x_axis(), raster.dimension().size_of_y_axis())),
-            IterationType::Vector => unimplemented!(),
+            IterationType::Vector => {
+                call_generic_features!(params.input_features[0].as_ref().expect("checked"), f => SpatialDims::One(f.len()))
+            }
         }
     }
 
@@ -675,34 +675,47 @@ impl CompiledCLProgram {
             };
         }
 
-        for ((features, coordinates_buffer), offsets_buffer) in params
+        for ((builder, coordinates_buffer), offsets_buffer) in params
             .output_features
-            .iter()
+            .drain(..) // TODO: avoid
             .zip(self.coordinates_output_buffers.iter())
             .zip(self.point_offsets_output_buffers.iter())
         {
-            match features.as_ref().expect("must exist") {
-                TypedFeatureCollection::Data(_) => {
-                    // no geo
-                }
-                TypedFeatureCollection::MultiPoint(points) => {
-                    // TODO: don't need to initialize
-                    // TODO: better way of determining length of coordinates
-                    let mut coordinates: Vec<Coordinate2D> =
-                        vec![Default::default(); points.coordinates().len()];
-                    coordinates_buffer.read(coordinates.as_mut_slice()).enq()?;
+            let builder = builder.expect("checked");
+            // TODO generify for lines and polygons
 
-                    let mut offsets: Vec<i32> =
-                        vec![Default::default(); points.multipoint_offsets().len()];
-                    offsets_buffer.read(offsets.as_mut_slice()).enq()?;
+            // TODO: determine number of features
+            let num_features = 0;
+            // TODO: determine number of coordinates
+            let num_coords = 0;
 
-                    // TODO: fill output features collection
-                }
-                TypedFeatureCollection::MultiLineString(_)
-                | TypedFeatureCollection::MultiPolygon(_) => todo!(),
-            }
+            builder.set_geo(MultiPointBuffers {
+                offsets: Self::read_ocl_to_arrow_buffer(offsets_buffer, num_features + 1)?,
+                coords: Self::read_ocl_to_arrow_buffer(coordinates_buffer, num_coords)?,
+            })?;
+
+            // TODO: time, columns
+            builder.set_default_time_intervals()?;
+
+            builder.finish()?;
         }
         Ok(())
+    }
+
+    fn read_ocl_to_arrow_buffer<T: OclPrm>(
+        ocl_buffer: &Buffer<T>,
+        len: usize,
+    ) -> Result<arrow::buffer::Buffer> {
+        let mut arrow_buffer = MutableBuffer::new(len * std::mem::size_of::<T>());
+        arrow_buffer.resize(len * std::mem::size_of::<T>()).unwrap();
+
+        let dest = unsafe {
+            std::slice::from_raw_parts_mut(arrow_buffer.data_mut().as_ptr() as *mut T, len)
+        };
+
+        ocl_buffer.read(dest).enq()?;
+
+        Ok(arrow_buffer.freeze())
     }
 
     fn set_argument_placeholders(&mut self, mut kernel: &mut KernelBuilder) {
@@ -751,10 +764,17 @@ impl CompiledCLProgram {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use geoengine_datatypes::collections::MultiPointCollection;
+    use arrow::array::{ArrayData, PrimitiveArray};
+    use arrow::buffer::MutableBuffer;
+    use arrow::datatypes::{DataType, Int32Type};
+    use geoengine_datatypes::collections::{
+        BuilderProvider, FeatureCollection, MultiPointCollection,
+    };
     use geoengine_datatypes::primitives::{MultiPoint, TimeInterval};
     use geoengine_datatypes::raster::Raster2D;
+    use ocl::ProQue;
     use std::collections::HashMap;
+    use std::sync::Arc;
 
     #[test]
     fn kernel_reuse() {
@@ -1132,38 +1152,30 @@ __kernel void gid(
             .unwrap(),
         );
 
-        // TODO: avoid creating a output collection
-        let mut out = TypedFeatureCollection::MultiPoint(
-            MultiPointCollection::from_data(
-                MultiPoint::many(vec![vec![(0., 0.)], vec![(1., 1.)], vec![(2., 2.)]]).unwrap(),
-                vec![
-                    TimeInterval::new_unchecked(0, 1),
-                    TimeInterval::new_unchecked(1, 2),
-                    TimeInterval::new_unchecked(2, 3),
-                ],
-                HashMap::new(),
-            )
-            .unwrap(),
-        );
+        let mut out = FeatureCollection::<MultiPoint>::builder().batch_builder(3);
 
         let kernel = r#"
 __kernel void points( 
             __global const double2 *IN_POINT_COORDS0,
             __global const int *IN_POINT_OFFSETS0,
-            __global const double2 *OUT_POINT_COORDS0,
-            __global const int *OUT_POINT_OFFSETS0)            
+            __global double2 *OUT_POINT_COORDS0,
+            __global int *OUT_POINT_OFFSETS0)            
 {
     int idx = get_global_id(0);
-    OUT_POINT_COORD0[idx] = IN_POINT_COORDS[idx] + 1;
+    OUT_POINT_COORDS0[idx] = IN_POINT_COORDS0[idx] + 1;
 }"#;
 
-        let mut cl_program = CLProgram::new(IterationType::Raster);
+        let mut cl_program = CLProgram::new(IterationType::Vector);
         cl_program.add_input_features(VectorArgument::new(
             input.vector_data_type(),
             vec![],
             vec![],
         ));
-        cl_program.add_input_features(VectorArgument::new(out.vector_data_type(), vec![], vec![]));
+        cl_program.add_output_features(VectorArgument::new(
+            VectorDataType::MultiPoint,
+            vec![],
+            vec![],
+        ));
 
         let mut compiled = cl_program.compile(kernel, "points").unwrap();
 
@@ -1173,8 +1185,61 @@ __kernel void points(
         compiled.run(params).unwrap();
 
         assert_eq!(
-            out.get_points().unwrap().coordinates(),
+            out.output.unwrap().coordinates(),
             &[[1., 2.].into(), [2., 3.].into(), [3., 4.].into()]
         );
+    }
+
+    #[test]
+    #[allow(clippy::cast_ptr_alignment)]
+    fn read_ocl_to_arrow_buffer() {
+        let src = r#"
+__kernel void nop(__global int* buffer) {
+    buffer[get_global_id(0)] = get_global_id(0);
+}
+"#;
+
+        let len = 4;
+
+        let pro_que = ProQue::builder().src(src).dims(len).build().unwrap();
+
+        let ocl_buffer = pro_que.create_buffer::<i32>().unwrap();
+
+        let kernel = pro_que
+            .kernel_builder("nop")
+            .arg(&ocl_buffer)
+            .build()
+            .unwrap();
+
+        unsafe {
+            kernel.enq().unwrap();
+        }
+
+        let mut vec = vec![0; ocl_buffer.len()];
+        ocl_buffer.read(&mut vec).enq().unwrap();
+
+        assert_eq!(vec, &[0, 1, 2, 3]);
+
+        let mut arrow_buffer = MutableBuffer::new(len * std::mem::size_of::<i32>());
+        arrow_buffer
+            .resize(len * std::mem::size_of::<i32>())
+            .unwrap();
+
+        let dest = unsafe {
+            std::slice::from_raw_parts_mut(arrow_buffer.data_mut().as_ptr() as *mut i32, len)
+        };
+
+        ocl_buffer.read(dest).enq().unwrap();
+
+        let arrow_buffer = arrow_buffer.freeze();
+
+        let data = ArrayData::builder(DataType::Int32)
+            .len(len)
+            .add_buffer(arrow_buffer)
+            .build();
+
+        let array = Arc::new(PrimitiveArray::<Int32Type>::from(data));
+
+        assert_eq!(array.value_slice(0, len), &[0, 1, 2, 3]);
     }
 }
