@@ -175,7 +175,6 @@ impl TimeIntervalInformation {
 pub struct TilingInformation {
     pub global_pixel_size: Dim2D,
     pub tile_pixel_size: Dim2D,
-    // pub grid_tiles : Vec<Dim2D>,
     pub geo_transform: GeoTransform,
 }
 
