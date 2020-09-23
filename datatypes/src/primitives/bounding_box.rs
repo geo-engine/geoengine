@@ -838,4 +838,12 @@ mod tests {
         };
         assert!(!query.intersects_bbox(&tile_0_5));
     }
+
+    #[test]
+    fn intersects_inner() {
+        let bbox = BoundingBox2D::new((0.0, 0.0).into(), (15.0, 15.0).into()).unwrap();
+        let bbox2 = BoundingBox2D::new((5.0, 5.0).into(), (10.0, 10.0).into()).unwrap();
+
+        assert_eq!(bbox.intersection(&bbox2), Some(bbox2));
+    }
 }
