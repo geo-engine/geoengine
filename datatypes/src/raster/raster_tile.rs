@@ -1,12 +1,12 @@
-use super::{BaseRaster, Dim, GeoTransform, GridDimension, Ix, Raster};
+use super::{BaseRaster, Dim2D, Dim3D, GeoTransform, GridDimension, Raster};
 use crate::primitives::{BoundingBox2D, SpatialBounded, TemporalBounded, TimeInterval};
 use crate::raster::data_type::FromPrimitive;
 use crate::raster::Pixel;
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 
-pub type RasterTile2D<T> = RasterTile<Dim<[Ix; 2]>, T>;
-pub type RasterTile3D<T> = RasterTile<Dim<[Ix; 3]>, T>;
+pub type RasterTile2D<T> = RasterTile<Dim2D, T>;
+pub type RasterTile3D<T> = RasterTile<Dim3D, T>;
 
 /// A `RasterTile2D` is the main type used to iterate over tiles of 2D raster data
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -42,19 +42,19 @@ where
 /// The `TileInformation` is used to represent the spatial position of each tile
 #[derive(PartialEq, Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct TileInformation {
-    pub global_size_in_tiles: Dim<[Ix; 2]>,
-    pub global_tile_position: Dim<[Ix; 2]>,
-    pub global_pixel_position: Dim<[Ix; 2]>,
-    pub tile_size_in_pixels: Dim<[Ix; 2]>,
+    pub global_size_in_tiles: Dim2D,
+    pub global_tile_position: Dim2D,
+    pub global_pixel_position: Dim2D,
+    pub tile_size_in_pixels: Dim2D,
     pub global_geo_transform: GeoTransform,
 }
 
 impl TileInformation {
     pub fn new(
-        global_size_in_tiles: Dim<[Ix; 2]>,
-        global_tile_position: Dim<[Ix; 2]>,
-        global_pixel_position: Dim<[Ix; 2]>,
-        tile_size_in_pixels: Dim<[Ix; 2]>,
+        global_size_in_tiles: Dim2D,
+        global_tile_position: Dim2D,
+        global_pixel_position: Dim2D,
+        tile_size_in_pixels: Dim2D,
         global_geo_transform: GeoTransform,
     ) -> Self {
         Self {
@@ -65,33 +65,26 @@ impl TileInformation {
             global_geo_transform,
         }
     }
-    pub fn global_size_in_tiles(&self) -> Dim<[Ix; 2]> {
+    pub fn global_size_in_tiles(&self) -> Dim2D {
         self.global_size_in_tiles
     }
-    pub fn global_tile_position(&self) -> Dim<[Ix; 2]> {
+    pub fn global_tile_position(&self) -> Dim2D {
         self.global_tile_position
     }
-    pub fn global_pixel_position_upper_left(&self) -> Dim<[Ix; 2]> {
+    pub fn global_pixel_position_upper_left(&self) -> Dim2D {
         self.global_pixel_position
     }
 
-    pub fn global_pixel_position_lower_right(&self) -> Dim<[Ix; 2]> {
-        let (global_y, global_x) = self.global_pixel_position_upper_left().as_pattern();
-        let (size_y, size_x) = self.tile_size_in_pixels.as_pattern();
-        (global_y + size_y, global_x + size_x).into() // TODO: -1?
+    pub fn global_pixel_position_lower_right(&self) -> Dim2D {
+        self.global_pixel_position_upper_left() + self.tile_size_in_pixels
     }
 
-    pub fn tile_size_in_pixels(&self) -> Dim<[Ix; 2]> {
+    pub fn tile_size_in_pixels(&self) -> Dim2D {
         self.tile_size_in_pixels
     }
 
-    pub fn tile_pixel_position_to_global(
-        &self,
-        local_pixel_position: Dim<[Ix; 2]>,
-    ) -> Dim<[Ix; 2]> {
-        let (global_y, global_x) = self.global_pixel_position_upper_left().as_pattern();
-        let (local_y, local_x) = local_pixel_position.as_pattern();
-        (global_y + local_y, global_x + local_x).into()
+    pub fn tile_pixel_position_to_global(&self, local_pixel_position: Dim2D) -> Dim2D {
+        self.global_pixel_position_upper_left() + local_pixel_position
     }
 
     pub fn tile_geo_transform(&self) -> GeoTransform {

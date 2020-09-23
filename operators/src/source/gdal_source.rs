@@ -21,13 +21,13 @@ use serde::{Deserialize, Serialize};
 
 use futures::stream::{self, BoxStream, StreamExt};
 
-use geoengine_datatypes::primitives::{
-    BoundingBox2D, Coordinate2D, SpatialBounded, SpatialResolution, TimeInterval,
+use geoengine_datatypes::{
+    primitives::{BoundingBox2D, Coordinate2D, SpatialBounded, SpatialResolution, TimeInterval},
+    raster::Dim2D,
 };
 use geoengine_datatypes::{
     raster::{
-        Dim, GeoTransform, GridDimension, Ix, Pixel, Raster2D, RasterDataType, RasterTile2D,
-        TileInformation,
+        GeoTransform, GridDimension, Pixel, Raster2D, RasterDataType, RasterTile2D, TileInformation,
     },
     spatial_reference::SpatialReference,
 };
@@ -174,9 +174,9 @@ impl TimeIntervalInformation {
 /// A provider of tile (size) information for a raster/grid
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct TilingInformation {
-    pub global_pixel_size: Dim<[Ix; 2]>,
-    pub tile_pixel_size: Dim<[Ix; 2]>,
-    // pub grid_tiles : Vec<Dim<[Ix; 2]>>,
+    pub global_pixel_size: Dim2D,
+    pub tile_pixel_size: Dim2D,
+    // pub grid_tiles : Vec<Dim2D>,
     pub geo_transform: GeoTransform,
 }
 

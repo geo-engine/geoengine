@@ -1,4 +1,4 @@
-use std::convert::TryFrom;
+use std::{convert::TryFrom, ops::Add, ops::Div, ops::Mul, ops::Sub};
 
 use crate::primitives::error;
 use crate::util::Result;
@@ -34,13 +34,6 @@ impl SpatialResolution {
     pub fn one() -> Self {
         SpatialResolution { x: 1., y: 1. }
     }
-
-    pub fn mul(&self, factor: f64) -> Self {
-        SpatialResolution {
-            x: self.x * factor,
-            y: self.y * factor,
-        }
-    }
 }
 
 impl TryFrom<(f64, f64)> for SpatialResolution {
@@ -48,5 +41,49 @@ impl TryFrom<(f64, f64)> for SpatialResolution {
 
     fn try_from(value: (f64, f64)) -> Result<Self, Self::Error> {
         Self::new(value.0, value.1)
+    }
+}
+
+impl Add for SpatialResolution {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        SpatialResolution {
+            x: self.x + rhs.x,
+            y: self.y + rhs.y,
+        }
+    }
+}
+
+impl Sub for SpatialResolution {
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        SpatialResolution {
+            x: self.x - rhs.x,
+            y: self.y - rhs.y,
+        }
+    }
+}
+
+impl Mul<f64> for SpatialResolution {
+    type Output = Self;
+
+    fn mul(self, rhs: f64) -> Self::Output {
+        SpatialResolution {
+            x: self.x + rhs,
+            y: self.y + rhs,
+        }
+    }
+}
+
+impl Div<f64> for SpatialResolution {
+    type Output = Self;
+
+    fn div(self, rhs: f64) -> Self::Output {
+        SpatialResolution {
+            x: self.x + rhs,
+            y: self.y + rhs,
+        }
     }
 }
