@@ -1,7 +1,10 @@
-use crate::collections::error;
 use crate::collections::feature_collection::struct_array_from_data;
-use crate::collections::FeatureCollection;
-use crate::primitives::{Coordinate2D, FeatureDataType, Geometry, MultiPoint, TimeInterval};
+use crate::collections::{error, FeatureCollectionError, TypedFeatureCollection};
+use crate::collections::{FeatureCollection, VectorDataType};
+use crate::primitives::{
+    Coordinate2D, FeatureDataType, Geometry, MultiLineString, MultiPoint, MultiPolygon, NoGeometry,
+    TimeInterval,
+};
 use crate::util::arrow::ArrowTyped;
 use crate::util::Result;
 use arrow::array::{ArrayData, ArrayRef, FixedSizeListArray, ListArray, PrimitiveArray};
@@ -12,36 +15,109 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 #[derive(Debug)]
-pub struct FeatureCollectionBatchBuilder<CollectionType>
-where
-    CollectionType: Geometry + ArrowTyped,
-{
+pub struct FeatureCollectionBatchBuilder {
     types: HashMap<String, FeatureDataType>,
     column_arrays: HashMap<String, ArrayRef>,
     time_array: Option<ArrayRef>,
     geo_array: Option<ArrayRef>,
-    feature_count: usize,
-    pub output: Option<FeatureCollection<CollectionType>>,
+    num_features: usize,
+    num_coords: usize,
+    num_lines: Option<usize>,
+    num_polygons: Option<usize>,
+    num_rings: Option<usize>,
+    pub output: Option<TypedFeatureCollection>,
+    pub output_type: VectorDataType,
 }
 
-impl<CollectionType> FeatureCollectionBatchBuilder<CollectionType>
-where
-    CollectionType: Geometry + ArrowTyped,
-{
-    pub fn new(types: HashMap<String, FeatureDataType>, feature_count: usize) -> Self {
+impl FeatureCollectionBatchBuilder {
+    pub fn new(
+        output_type: VectorDataType,
+        types: HashMap<String, FeatureDataType>,
+        num_features: usize,
+        num_coords: usize,
+    ) -> Self {
         Self {
             types,
             column_arrays: HashMap::new(),
             time_array: None,
             geo_array: None,
-            feature_count,
+            num_features,
+            num_coords,
+            num_lines: None,
+            num_polygons: None,
+            num_rings: None,
             output: None,
+            output_type,
         }
+    }
+
+    pub fn points(
+        types: HashMap<String, FeatureDataType>,
+        num_features: usize,
+        num_coords: usize,
+    ) -> Self {
+        Self {
+            types,
+            column_arrays: HashMap::new(),
+            time_array: None,
+            geo_array: None,
+            num_features,
+            num_coords,
+            num_lines: None,
+            num_polygons: None,
+            num_rings: None,
+            output: None,
+            output_type: VectorDataType::MultiPoint,
+        }
+    }
+
+    pub fn lines(
+        types: HashMap<String, FeatureDataType>,
+        num_features: usize,
+        num_lines: usize,
+        num_coords: usize,
+    ) -> Self {
+        Self {
+            types,
+            column_arrays: HashMap::new(),
+            time_array: None,
+            geo_array: None,
+            num_features,
+            num_coords,
+            num_lines: Some(num_lines),
+            num_polygons: None,
+            num_rings: None,
+            output: None,
+            output_type: VectorDataType::MultiLineString,
+        }
+    }
+
+    pub fn num_features(&self) -> usize {
+        self.num_features
+    }
+
+    pub fn num_coords(&self) -> usize {
+        self.num_coords
+    }
+
+    pub fn num_lines(&self) -> Result<usize> {
+        self.num_lines
+            .ok_or_else(|| FeatureCollectionError::WrongDataType.into())
+    }
+
+    pub fn num_polygons(&self) -> Result<usize> {
+        self.num_polygons
+            .ok_or_else(|| FeatureCollectionError::WrongDataType.into())
+    }
+
+    pub fn num_rings(&self) -> Result<usize> {
+        self.num_rings
+            .ok_or_else(|| FeatureCollectionError::WrongDataType.into())
     }
 
     pub fn set_time_intervals(&mut self, values_buffer: Buffer) -> Result<()> {
         let data = ArrayData::builder(TimeInterval::arrow_data_type())
-            .len(self.feature_count)
+            .len(self.num_features)
             .add_buffer(values_buffer)
             .build();
 
@@ -53,10 +129,10 @@ where
     }
 
     pub fn set_default_time_intervals(&mut self) -> Result<()> {
-        let mut time_intervals_builder = TimeInterval::arrow_builder(self.feature_count);
+        let mut time_intervals_builder = TimeInterval::arrow_builder(self.num_features);
 
         let default = TimeInterval::default();
-        for _ in 0..self.feature_count {
+        for _ in 0..self.num_features {
             let date_builder = time_intervals_builder.values();
             date_builder.append_value(default.start().inner())?;
             date_builder.append_value(default.end().inner())?;
@@ -70,6 +146,38 @@ where
 
         Ok(())
     }
+
+    pub fn set_points(&mut self, coords: Buffer, offsets: Buffer) -> Result<()> {
+        // TODO: check buffers validity / size
+
+        let num_features = offsets.len() / std::mem::size_of::<i32>() - 1;
+        let num_coords = coords.len() / (2 * std::mem::size_of::<f64>());
+        let num_floats = num_coords * 2;
+        let data = ArrayData::builder(MultiPoint::arrow_data_type())
+            .len(num_features)
+            .add_buffer(offsets)
+            .add_child_data(
+                ArrayData::builder(Coordinate2D::arrow_data_type())
+                    .len(num_coords)
+                    .add_child_data(
+                        ArrayData::builder(DataType::Float64)
+                            .len(num_floats)
+                            .add_buffer(coords)
+                            .build(),
+                    )
+                    .build(),
+            )
+            .build();
+
+        // TODO: fix "offsets do not start at zero" that sometimes happens <https://github.com/apache/arrow/blob/de7cc0fa5de98bcb875dcde359b0d425d9c0aa8d/rust/arrow/src/array/array.rs#L1062>
+        let array = Arc::new(ListArray::from(data)) as ArrayRef;
+
+        self.geo_array = Some(array);
+
+        Ok(())
+    }
+
+    // TODO: set lines/polygons
 
     /// Set the column values for the given column from the given buffers.
     /// `values_buffer` buffer with data of values for construction of primitive array
@@ -93,7 +201,7 @@ where
         // TODO: check if type T corresponds to column type
 
         let builder = ArrayData::builder(DataType::Float64)
-            .len(self.feature_count)
+            .len(self.num_features)
             .add_buffer(values_buffer);
 
         let data = if let Some(nulls) = nulls_buffer {
@@ -110,6 +218,45 @@ where
     }
 
     pub fn finish(&mut self) -> Result<()> {
+        match self.output_type {
+            VectorDataType::Data => self.finish_data(),
+            VectorDataType::MultiPoint => self.finish_points(),
+            VectorDataType::MultiLineString => self.finish_lines(),
+            VectorDataType::MultiPolygon => self.finish_polygons(),
+        }
+    }
+
+    pub fn finish_points(&mut self) -> Result<()> {
+        self.output = Some(TypedFeatureCollection::MultiPoint(
+            self.finish_collection::<MultiPoint>()?,
+        ));
+        Ok(())
+    }
+
+    pub fn finish_lines(&mut self) -> Result<()> {
+        self.output = Some(TypedFeatureCollection::MultiLineString(
+            self.finish_collection::<MultiLineString>()?,
+        ));
+        Ok(())
+    }
+
+    pub fn finish_polygons(&mut self) -> Result<()> {
+        self.output = Some(TypedFeatureCollection::MultiPolygon(
+            self.finish_collection::<MultiPolygon>()?,
+        ));
+        Ok(())
+    }
+
+    pub fn finish_data(&mut self) -> Result<()> {
+        self.output = Some(TypedFeatureCollection::Data(
+            self.finish_collection::<NoGeometry>()?,
+        ));
+        Ok(())
+    }
+
+    fn finish_collection<CollectionType: Geometry + ArrowTyped>(
+        &mut self,
+    ) -> Result<FeatureCollection<CollectionType>> {
         ensure!(
             self.types
                 .keys()
@@ -154,78 +301,12 @@ where
         let time = std::mem::replace(&mut self.time_array, None);
         arrays.push(time.expect("checked"));
 
-        let collection = FeatureCollection::<CollectionType>::new_from_internals(
-            struct_array_from_data(columns, arrays, self.feature_count),
+        Ok(FeatureCollection::<CollectionType>::new_from_internals(
+            struct_array_from_data(columns, arrays, self.num_features),
             self.types.clone(),
-        );
-
-        self.output = Some(collection);
-
-        Ok(())
+        ))
     }
 }
-
-pub struct MultiPointBuffers {
-    pub offsets: Buffer,
-    pub coords: Buffer,
-}
-
-// struct MultiLineStringBuffers {
-//     line_offsets: Buffer,
-//     coords_offsets: Buffer,
-//     coords: Buffer,
-// }
-//
-// struct MultiPolygonBuffers {
-//     polygon_offsets: Buffer,
-//     rings_offsets: Buffer,
-//     coords_offsets: Buffer,
-//     coords: Buffer,
-// }
-
-pub trait GeoFromBuffers<CollectionType>
-where
-    CollectionType: Geometry + ArrowTyped,
-{
-    type Buffers;
-    fn set_geo(&mut self, buffers: Self::Buffers) -> Result<()>;
-}
-
-impl GeoFromBuffers<MultiPoint> for FeatureCollectionBatchBuilder<MultiPoint> {
-    type Buffers = MultiPointBuffers;
-    fn set_geo(&mut self, buffers: MultiPointBuffers) -> Result<()> {
-        // TODO: check buffers validity / size
-
-        let MultiPointBuffers { offsets, coords } = buffers;
-
-        let num_multi_points = offsets.len() / std::mem::size_of::<i32>() - 1;
-        let num_coords = coords.len() / std::mem::size_of::<f64>();
-        let num_points = num_coords / 2;
-        let data = ArrayData::builder(MultiPoint::arrow_data_type())
-            .len(num_multi_points)
-            .add_buffer(offsets)
-            .add_child_data(
-                ArrayData::builder(Coordinate2D::arrow_data_type())
-                    .len(num_points)
-                    .add_child_data(
-                        ArrayData::builder(DataType::Float64)
-                            .len(num_coords)
-                            .add_buffer(coords)
-                            .build(),
-                    )
-                    .build(),
-            )
-            .build();
-
-        let array = Arc::new(ListArray::from(data)) as ArrayRef;
-
-        self.geo_array = Some(array);
-
-        Ok(())
-    }
-}
-
-// TODO: GeoFromBuffers for lines and polygons
 
 #[cfg(test)]
 mod tests {
@@ -244,7 +325,7 @@ mod tests {
         builder
             .add_column("foo".into(), FeatureDataType::NullableNumber)
             .unwrap();
-        let mut builder = builder.batch_builder(4);
+        let mut builder = builder.batch_builder(VectorDataType::Data, 4, 0);
         builder.set_default_time_intervals().unwrap();
 
         let numbers = vec![1., 2., 3., 4.];
@@ -269,7 +350,7 @@ mod tests {
 
         builder.finish().unwrap();
 
-        let collection = builder.output.unwrap();
+        let collection = builder.output.unwrap().get_data().unwrap();
 
         assert_eq!(collection.len(), 4);
 
@@ -291,7 +372,8 @@ mod tests {
 
     #[test]
     fn point_coords_to_array() {
-        let mut builder = MultiPointCollection::builder().batch_builder(3);
+        let mut builder =
+            MultiPointCollection::builder().batch_builder(VectorDataType::MultiPoint, 3, 8);
         builder.set_default_time_intervals().unwrap();
 
         let coords: Vec<f64> = vec![0.0, 0.0, 1.1, 1.1, 2.2, 2.2, 3.3, 3.3];
@@ -300,16 +382,11 @@ mod tests {
         let coords_buffer = Buffer::from(coords.as_slice().to_byte_slice());
         let offsets_buffer = Buffer::from(offsets.to_byte_slice());
 
-        builder
-            .set_geo(MultiPointBuffers {
-                offsets: offsets_buffer,
-                coords: coords_buffer,
-            })
-            .unwrap();
+        builder.set_points(coords_buffer, offsets_buffer).unwrap();
 
         builder.finish().unwrap();
 
-        let collection = builder.output.unwrap();
+        let collection = builder.output.unwrap().get_points().unwrap();
 
         assert_eq!(
             collection.to_geo_json(),

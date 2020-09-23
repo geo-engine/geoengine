@@ -1,5 +1,5 @@
 use crate::collections::batch_builder::FeatureCollectionBatchBuilder;
-use crate::collections::{error, FeatureCollection, FeatureCollectionError};
+use crate::collections::{error, FeatureCollection, FeatureCollectionError, VectorDataType};
 use crate::primitives::{FeatureDataType, FeatureDataValue, Geometry, TimeInterval};
 use crate::util::arrow::{downcast_mut_array, ArrowTyped};
 use crate::util::Result;
@@ -101,9 +101,11 @@ where
 
     pub fn batch_builder(
         self,
-        feature_count: usize,
-    ) -> FeatureCollectionBatchBuilder<CollectionType> {
-        FeatureCollectionBatchBuilder::<CollectionType>::new(self.types, feature_count)
+        output_type: VectorDataType, // TODO: derive from CollectionType
+        num_features: usize,
+        num_coords: usize,
+    ) -> FeatureCollectionBatchBuilder {
+        FeatureCollectionBatchBuilder::new(output_type, self.types, num_features, num_coords)
     }
 }
 

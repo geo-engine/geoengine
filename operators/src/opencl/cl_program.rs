@@ -2,10 +2,9 @@ use crate::error;
 use crate::util::Result;
 use arrow::buffer::MutableBuffer;
 use geoengine_datatypes::collections::{
-    FeatureCollectionBatchBuilder, GeoFromBuffers, MultiPointBuffers, TypedFeatureCollection,
-    VectorDataType,
+    FeatureCollectionBatchBuilder, TypedFeatureCollection, VectorDataType,
 };
-use geoengine_datatypes::primitives::{Coordinate2D, FeatureDataType, MultiPoint};
+use geoengine_datatypes::primitives::{Coordinate2D, FeatureDataType};
 use geoengine_datatypes::raster::Raster;
 use geoengine_datatypes::raster::{
     DynamicRasterDataType, GridDimension, Pixel, Raster2D, RasterDataType, TypedRaster2D,
@@ -30,8 +29,9 @@ lazy_static! {
 /// Whether the kernel iterates over pixels or features
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub enum IterationType {
-    Raster,
-    Vector,
+    Raster,            // 2D Kernel, width x height
+    VectorFeatures,    // 1d kernel width = number of features
+    VectorCoordinates, // 1d kernel width = number of coordinates
 }
 
 // TODO: remove this struct if only data type is relevant and pass it directly
@@ -178,7 +178,9 @@ typedef struct {
 
     pub fn compile(self, source: &str, kernel_name: &str) -> Result<CompiledCLProgram> {
         ensure!(
-            (self.iteration_type == IterationType::Vector && !self.input_features.is_empty())
+            ((self.iteration_type == IterationType::VectorFeatures
+                || self.iteration_type == IterationType::VectorCoordinates)
+                && (!self.input_features.is_empty() && !self.output_features.is_empty()))
                 || (self.iteration_type == IterationType::Raster
                     && !self.input_rasters.is_empty()
                     && !self.output_rasters.is_empty()),
@@ -223,7 +225,7 @@ typedef struct {
 }
 
 #[derive(Clone)]
-enum OutputBuffer {
+enum RasterOutputBuffer {
     U8(Buffer<u8>),
     U16(Buffer<u16>),
     U32(Buffer<u32>),
@@ -236,7 +238,38 @@ enum OutputBuffer {
     F64(Buffer<f64>),
 }
 
-pub struct CLProgramParameters<'a> {
+enum FeatureGeoOutputBuffer {
+    Points(PointBuffers),
+    _Lines(LineBuffers),
+    _Polygons(PolygonBuffers),
+}
+
+struct PointBuffers {
+    coords: Buffer<Coordinate2D>,
+    offsets: Buffer<i32>,
+}
+
+struct LineBuffers {
+    _coords: Buffer<Coordinate2D>,
+    _line_offsets: Buffer<i32>,
+    _feature_offsets: Buffer<i32>,
+}
+
+struct PolygonBuffers {
+    _coords: Buffer<Coordinate2D>,
+    _ring_offsets: Buffer<i32>,
+    _polygon_offsets: Buffer<i32>,
+    _feature_offets: Buffer<i32>,
+}
+
+struct FeatureOutputBuffers {
+    geo: FeatureGeoOutputBuffer,
+    _numbers: Vec<Buffer<f64>>,
+    _decimals: Vec<Buffer<i64>>,
+    // TODO: categories, strings
+}
+
+pub struct CLProgramRunnable<'a> {
     input_raster_types: Vec<RasterArgument>,
     output_raster_types: Vec<RasterArgument>,
     input_rasters: Vec<Option<&'a TypedRaster2D>>,
@@ -244,10 +277,12 @@ pub struct CLProgramParameters<'a> {
     input_feature_types: Vec<VectorArgument>,
     output_feature_types: Vec<VectorArgument>,
     input_features: Vec<Option<&'a TypedFeatureCollection>>,
-    output_features: Vec<Option<&'a mut FeatureCollectionBatchBuilder<MultiPoint>>>, // TODO: generify
+    output_features: Vec<Option<&'a mut FeatureCollectionBatchBuilder>>,
+    raster_output_buffers: Vec<RasterOutputBuffer>,
+    feature_output_buffers: Vec<FeatureOutputBuffers>,
 }
 
-impl<'a> CLProgramParameters<'a> {
+impl<'a> CLProgramRunnable<'a> {
     fn new(
         input_raster_types: Vec<RasterArgument>,
         output_raster_types: Vec<RasterArgument>,
@@ -269,6 +304,8 @@ impl<'a> CLProgramParameters<'a> {
             input_feature_types,
             output_feature_types,
             output_features,
+            raster_output_buffers: vec![],
+            feature_output_buffers: vec![],
         }
     }
 
@@ -325,7 +362,7 @@ impl<'a> CLProgramParameters<'a> {
     pub fn set_output_features(
         &mut self,
         idx: usize,
-        features: &'a mut FeatureCollectionBatchBuilder<MultiPoint>, // TODO: generify
+        features: &'a mut FeatureCollectionBatchBuilder, // TODO: generify
     ) -> Result<()> {
         ensure!(
             idx < self.output_feature_types.len(),
@@ -346,6 +383,222 @@ impl<'a> CLProgramParameters<'a> {
 
         self.output_features[idx] = Some(features);
         Ok(())
+    }
+
+    fn set_feature_arguments(&mut self, kernel: &Kernel) -> Result<()> {
+        ensure!(
+            self.input_features.iter().all(Option::is_some),
+            error::CLProgramUnspecifiedFeatures
+        );
+
+        for (idx, features) in self.input_features.iter().enumerate() {
+            let features = features.expect("checked");
+
+            match features {
+                TypedFeatureCollection::Data(_) => {
+                    // no geo
+                }
+                TypedFeatureCollection::MultiPoint(points) => {
+                    let coordinates = points.coordinates();
+                    let buffer = Buffer::builder()
+                        .queue(kernel.default_queue().expect("expect").clone())
+                        .len(coordinates.len())
+                        .copy_host_slice(coordinates)
+                        .build()?;
+
+                    kernel.set_arg(format!("IN_POINT_COORDS{}", idx), &buffer)?;
+
+                    let coordinates_offsets = points.multipoint_offsets();
+                    let buffer = Buffer::builder()
+                        .queue(kernel.default_queue().expect("expect").clone())
+                        .len(coordinates_offsets.len())
+                        .copy_host_slice(coordinates_offsets)
+                        .build()?;
+
+                    kernel.set_arg(format!("IN_POINT_OFFSETS{}", idx), &buffer)?;
+                }
+                TypedFeatureCollection::MultiLineString(_)
+                | TypedFeatureCollection::MultiPolygon(_) => todo!(),
+            }
+
+            call_generic_features!(features, features => {
+                // TODO: columns buffers
+            });
+        }
+
+        for (idx, features) in self.output_features.iter().enumerate() {
+            let features = features.as_ref().expect("checked");
+
+            let geo_buffers = match features.output_type {
+                VectorDataType::MultiPoint => {
+                    let coords = Buffer::<Coordinate2D>::builder()
+                        .queue(kernel.default_queue().expect("expect").clone())
+                        .len(features.num_coords())
+                        .build()?;
+                    kernel.set_arg(format!("OUT_POINT_COORDS{}", idx), &coords)?;
+
+                    let offsets = Buffer::<i32>::builder()
+                        .queue(kernel.default_queue().expect("expect").clone())
+                        .len(features.num_features() + 1)
+                        .build()?;
+                    kernel.set_arg(format!("OUT_POINT_OFFSETS{}", idx), &offsets)?;
+
+                    FeatureGeoOutputBuffer::Points(PointBuffers { coords, offsets })
+                }
+                _ => todo!(),
+            };
+
+            // TODO: column, time buffers
+
+            // TODO: columns and time
+
+            self.feature_output_buffers.push(FeatureOutputBuffers {
+                geo: geo_buffers,
+                _numbers: vec![],
+                _decimals: vec![],
+            })
+        }
+
+        Ok(())
+    }
+
+    fn set_raster_arguments(&mut self, kernel: &Kernel) -> Result<()> {
+        ensure!(
+            self.input_rasters.iter().all(Option::is_some),
+            error::CLProgramUnspecifiedRaster
+        );
+
+        for (idx, raster) in self.input_rasters.iter().enumerate() {
+            let raster = raster.expect("checked");
+            call_generic_raster2d!(raster, raster => {
+                let data_buffer = Buffer::builder()
+                .queue(kernel.default_queue().expect("checked").clone())
+                .flags(MemFlags::new().read_only())
+                .len(raster.data_container.len())
+                .copy_host_slice(&raster.data_container)
+                .build()?;
+                kernel.set_arg(format!("IN{}",idx), data_buffer)?;
+
+                let info_buffer = Buffer::builder()
+                .queue(kernel.default_queue().expect("checked").clone())
+                .flags(MemFlags::new().read_only())
+                .len(1)
+                .copy_host_slice(&[RasterInfo::from_raster(&raster)])
+                .build()?;
+                kernel.set_arg(format!("IN_INFO{}",idx), info_buffer)?;
+            });
+        }
+
+        for (idx, raster) in self.output_rasters.iter().enumerate() {
+            let raster = raster.as_ref().expect("checked");
+            call_generic_raster2d_ext!(raster, RasterOutputBuffer, (raster, e) => {
+                let buffer = Buffer::builder()
+                    .queue(kernel.default_queue().expect("expect").clone())
+                    .len(raster.data_container.len())
+                    .build()?;
+
+                kernel.set_arg(format!("OUT{}", idx), &buffer)?;
+
+                self.raster_output_buffers.push(e(buffer));
+
+                let info_buffer = Buffer::builder()
+                    .queue(kernel.default_queue().expect("checked").clone())
+                    .flags(MemFlags::new().read_only())
+                    .len(1)
+                    .copy_host_slice(&[RasterInfo::from_raster(&raster)])
+                    .build()?;
+                kernel.set_arg(format!("OUT_INFO{}", idx), info_buffer)?;
+            })
+        }
+
+        Ok(())
+    }
+
+    fn read_output_buffers(&mut self) -> Result<()> {
+        for (output_buffer, output_raster) in self
+            .raster_output_buffers
+            .drain(..)
+            .zip(self.output_rasters.iter_mut())
+        {
+            match (output_buffer, output_raster) {
+                (RasterOutputBuffer::U8(ref buffer), Some(TypedRaster2D::U8(raster))) => {
+                    buffer.read(raster.data_container.as_mut_slice()).enq()?;
+                }
+                (RasterOutputBuffer::U16(ref buffer), Some(TypedRaster2D::U16(raster))) => {
+                    buffer.read(raster.data_container.as_mut_slice()).enq()?;
+                }
+                (RasterOutputBuffer::U32(ref buffer), Some(TypedRaster2D::U32(raster))) => {
+                    buffer.read(raster.data_container.as_mut_slice()).enq()?;
+                }
+                (RasterOutputBuffer::U64(ref buffer), Some(TypedRaster2D::U64(raster))) => {
+                    buffer.read(raster.data_container.as_mut_slice()).enq()?;
+                }
+                (RasterOutputBuffer::I8(ref buffer), Some(TypedRaster2D::I8(raster))) => {
+                    buffer.read(raster.data_container.as_mut_slice()).enq()?;
+                }
+                (RasterOutputBuffer::I16(ref buffer), Some(TypedRaster2D::I16(raster))) => {
+                    buffer.read(raster.data_container.as_mut_slice()).enq()?;
+                }
+                (RasterOutputBuffer::I32(ref buffer), Some(TypedRaster2D::I32(raster))) => {
+                    buffer.read(raster.data_container.as_mut_slice()).enq()?;
+                }
+                (RasterOutputBuffer::I64(ref buffer), Some(TypedRaster2D::I64(raster))) => {
+                    buffer.read(raster.data_container.as_mut_slice()).enq()?;
+                }
+                (RasterOutputBuffer::F32(ref buffer), Some(TypedRaster2D::F32(raster))) => {
+                    buffer.read(raster.data_container.as_mut_slice()).enq()?;
+                }
+                (RasterOutputBuffer::F64(ref buffer), Some(TypedRaster2D::F64(raster))) => {
+                    buffer.read(raster.data_container.as_mut_slice()).enq()?;
+                }
+                _ => unreachable!(),
+            };
+        }
+
+        for (output_buffers, builder) in self
+            .feature_output_buffers
+            .drain(..)
+            .zip(self.output_features.drain(..))
+        {
+            let builder = builder.expect("checked");
+
+            match output_buffers.geo {
+                FeatureGeoOutputBuffer::Points(buffers) => {
+                    let offsets_buffer = Self::read_ocl_to_arrow_buffer(
+                        &buffers.offsets,
+                        builder.num_features() + 1,
+                    )?;
+                    let coords_buffer =
+                        Self::read_ocl_to_arrow_buffer(&buffers.coords, builder.num_coords())?;
+                    builder.set_points(coords_buffer, offsets_buffer)?;
+                }
+                _ => todo!(),
+            }
+
+            // TODO: time, columns
+            builder.set_default_time_intervals()?;
+
+            builder.finish()?;
+        }
+        Ok(())
+    }
+
+    fn read_ocl_to_arrow_buffer<T: OclPrm>(
+        ocl_buffer: &Buffer<T>,
+        len: usize,
+    ) -> Result<arrow::buffer::Buffer> {
+        // TODO: fix "offsets do not start at zero" that sometimes happens <https://github.com/apache/arrow/blob/de7cc0fa5de98bcb875dcde359b0d425d9c0aa8d/rust/arrow/src/array/array.rs#L1062>
+
+        let mut arrow_buffer = MutableBuffer::new(len * std::mem::size_of::<T>());
+        arrow_buffer.resize(len * std::mem::size_of::<T>()).unwrap();
+
+        let dest = unsafe {
+            std::slice::from_raw_parts_mut(arrow_buffer.data_mut().as_ptr() as *mut T, len)
+        };
+
+        ocl_buffer.read(dest).enq()?;
+
+        Ok(arrow_buffer.freeze())
     }
 }
 
@@ -397,11 +650,8 @@ pub struct CompiledCLProgram {
     iteration_type: IterationType,
     input_raster_types: Vec<RasterArgument>,
     output_raster_types: Vec<RasterArgument>,
-    raster_output_buffers: Vec<OutputBuffer>,
     input_feature_types: Vec<VectorArgument>,
     output_feature_types: Vec<VectorArgument>,
-    coordinates_output_buffers: Vec<Buffer<Coordinate2D>>,
-    point_offsets_output_buffers: Vec<Buffer<i32>>,
 }
 
 unsafe impl Send for CompiledCLProgram {}
@@ -425,16 +675,13 @@ impl CompiledCLProgram {
             iteration_type,
             input_raster_types,
             output_raster_types,
-            raster_output_buffers: vec![],
             input_feature_types,
             output_feature_types,
-            coordinates_output_buffers: vec![],
-            point_offsets_output_buffers: vec![],
         }
     }
 
-    pub fn params<'b>(&self) -> CLProgramParameters<'b> {
-        CLProgramParameters::new(
+    pub fn runnable<'b>(&self) -> CLProgramRunnable<'b> {
+        CLProgramRunnable::new(
             self.input_raster_types.clone(),
             self.output_raster_types.clone(),
             self.input_feature_types.clone(),
@@ -461,149 +708,26 @@ impl CompiledCLProgram {
         };
     }
 
-    fn set_feature_arguments(
-        &mut self,
-        kernel: &Kernel,
-        params: &CLProgramParameters,
-    ) -> Result<()> {
-        ensure!(
-            params.input_features.iter().all(Option::is_some),
-            error::CLProgramUnspecifiedFeatures
-        );
-
-        for (idx, features) in params.input_features.iter().enumerate() {
-            let features = features.expect("checked");
-
-            match features {
-                TypedFeatureCollection::Data(_) => {
-                    // no geo
-                }
-                TypedFeatureCollection::MultiPoint(points) => {
-                    let coordinates = points.coordinates();
-                    let buffer = Buffer::builder()
-                        .queue(kernel.default_queue().expect("expect").clone())
-                        .len(coordinates.len())
-                        .copy_host_slice(coordinates)
-                        .build()?;
-
-                    kernel.set_arg(format!("IN_POINT_COORDS{}", idx), &buffer)?;
-
-                    let coordinates_offsets = points.multipoint_offsets();
-                    let buffer = Buffer::builder()
-                        .queue(kernel.default_queue().expect("expect").clone())
-                        .len(coordinates_offsets.len())
-                        .copy_host_slice(coordinates_offsets)
-                        .build()?;
-
-                    kernel.set_arg(format!("IN_POINT_OFFSETS{}", idx), &buffer)?;
-                }
-                TypedFeatureCollection::MultiLineString(_)
-                | TypedFeatureCollection::MultiPolygon(_) => todo!(),
-            }
-
-            call_generic_features!(features, features => {
-                // TODO: columns buffers
-            });
-        }
-
-        for (idx, features) in params.output_features.iter().enumerate() {
-            let _features = features.as_ref().expect("checked");
-            // TODO: generify for lines and polygons
-
-            // TODO determine number of output coordinates
-            let num_coordinates = 0;
-            let buffer = Buffer::<Coordinate2D>::builder()
-                .queue(kernel.default_queue().expect("expect").clone())
-                .len(num_coordinates)
-                .build()?;
-
-            kernel.set_arg(format!("OUT_POINT_COORDS{}", idx), &buffer)?;
-            self.coordinates_output_buffers.push(buffer);
-
-            // TODO: determine number of output coordinates
-            let num_offets = 0;
-            let buffer = Buffer::<i32>::builder()
-                .queue(kernel.default_queue().expect("expect").clone())
-                .len(num_offets)
-                .build()?;
-
-            kernel.set_arg(format!("OUT_POINT_OFFSETS{}", idx), &buffer)?;
-            self.point_offsets_output_buffers.push(buffer);
-
-            // TODO: columns and time
-        }
-
-        Ok(())
-    }
-
-    fn set_raster_arguments(
-        &mut self,
-        kernel: &Kernel,
-        params: &CLProgramParameters,
-    ) -> Result<()> {
-        ensure!(
-            params.input_rasters.iter().all(Option::is_some),
-            error::CLProgramUnspecifiedRaster
-        );
-        self.raster_output_buffers.clear();
-
-        for (idx, raster) in params.input_rasters.iter().enumerate() {
-            let raster = raster.expect("checked");
-            call_generic_raster2d!(raster, raster => {
-                let data_buffer = Buffer::builder()
-                .queue(kernel.default_queue().expect("checked").clone())
-                .flags(MemFlags::new().read_only())
-                .len(raster.data_container.len())
-                .copy_host_slice(&raster.data_container)
-                .build()?;
-                kernel.set_arg(format!("IN{}",idx), data_buffer)?;
-
-                let info_buffer = Buffer::builder()
-                .queue(kernel.default_queue().expect("checked").clone())
-                .flags(MemFlags::new().read_only())
-                .len(1)
-                .copy_host_slice(&[RasterInfo::from_raster(&raster)])
-                .build()?;
-                kernel.set_arg(format!("IN_INFO{}",idx), info_buffer)?;
-            });
-        }
-
-        for (idx, raster) in params.output_rasters.iter().enumerate() {
-            let raster = raster.as_ref().expect("checked");
-            call_generic_raster2d_ext!(raster, OutputBuffer, (raster, e) => {
-                let buffer = Buffer::builder()
-                    .queue(kernel.default_queue().expect("expect").clone())
-                    .len(raster.data_container.len())
-                    .build()?;
-
-                kernel.set_arg(format!("OUT{}", idx), &buffer)?;
-
-                self.raster_output_buffers.push(e(buffer));
-
-                let info_buffer = Buffer::builder()
-                    .queue(kernel.default_queue().expect("checked").clone())
-                    .flags(MemFlags::new().read_only())
-                    .len(1)
-                    .copy_host_slice(&[RasterInfo::from_raster(&raster)])
-                    .build()?;
-                kernel.set_arg(format!("OUT_INFO{}", idx), info_buffer)?;
-            })
-        }
-
-        Ok(())
-    }
-
-    fn work_size(&self, params: &CLProgramParameters) -> SpatialDims {
+    fn work_size(&self, runnable: &CLProgramRunnable) -> SpatialDims {
         match self.iteration_type {
-            IterationType::Raster => call_generic_raster2d!(params.output_rasters[0].as_ref()
+            IterationType::Raster => call_generic_raster2d!(runnable.output_rasters[0].as_ref()
                 .expect("checked"), raster => SpatialDims::Two(raster.dimension().size_of_x_axis(), raster.dimension().size_of_y_axis())),
-            IterationType::Vector => {
-                call_generic_features!(params.input_features[0].as_ref().expect("checked"), f => SpatialDims::One(f.len()))
-            }
+            IterationType::VectorFeatures => SpatialDims::One(
+                runnable.output_features[0]
+                    .as_ref()
+                    .expect("checked")
+                    .num_features(),
+            ),
+            IterationType::VectorCoordinates => SpatialDims::One(
+                runnable.output_features[0]
+                    .as_ref()
+                    .expect("checked")
+                    .num_coords(),
+            ),
         }
     }
 
-    pub fn run(&mut self, params: CLProgramParameters) -> Result<()> {
+    pub fn run(&mut self, mut runnable: CLProgramRunnable) -> Result<()> {
         // TODO: select correct device
         let queue = Queue::new(&self.ctx, self.ctx.devices()[0], None)?;
 
@@ -620,102 +744,18 @@ impl CompiledCLProgram {
 
         let kernel = kernel.build()?;
 
-        self.set_raster_arguments(&kernel, &params)?;
+        runnable.set_raster_arguments(&kernel)?;
 
-        self.set_feature_arguments(&kernel, &params)?;
+        runnable.set_feature_arguments(&kernel)?;
 
-        let dims = self.work_size(&params);
+        let dims = self.work_size(&runnable);
         unsafe {
             kernel.cmd().global_work_size(dims).enq()?;
         }
 
-        self.read_output_buffers(params)?;
+        runnable.read_output_buffers()?;
 
         Ok(())
-    }
-
-    fn read_output_buffers(&mut self, mut params: CLProgramParameters) -> Result<()> {
-        for (output_buffer, output_raster) in self
-            .raster_output_buffers
-            .iter()
-            .zip(params.output_rasters.iter_mut())
-        {
-            match (output_buffer, output_raster) {
-                (OutputBuffer::U8(buffer), Some(TypedRaster2D::U8(raster))) => {
-                    buffer.read(raster.data_container.as_mut_slice()).enq()?;
-                }
-                (OutputBuffer::U16(buffer), Some(TypedRaster2D::U16(raster))) => {
-                    buffer.read(raster.data_container.as_mut_slice()).enq()?;
-                }
-                (OutputBuffer::U32(buffer), Some(TypedRaster2D::U32(raster))) => {
-                    buffer.read(raster.data_container.as_mut_slice()).enq()?;
-                }
-                (OutputBuffer::U64(buffer), Some(TypedRaster2D::U64(raster))) => {
-                    buffer.read(raster.data_container.as_mut_slice()).enq()?;
-                }
-                (OutputBuffer::I8(buffer), Some(TypedRaster2D::I8(raster))) => {
-                    buffer.read(raster.data_container.as_mut_slice()).enq()?;
-                }
-                (OutputBuffer::I16(buffer), Some(TypedRaster2D::I16(raster))) => {
-                    buffer.read(raster.data_container.as_mut_slice()).enq()?;
-                }
-                (OutputBuffer::I32(buffer), Some(TypedRaster2D::I32(raster))) => {
-                    buffer.read(raster.data_container.as_mut_slice()).enq()?;
-                }
-                (OutputBuffer::I64(buffer), Some(TypedRaster2D::I64(raster))) => {
-                    buffer.read(raster.data_container.as_mut_slice()).enq()?;
-                }
-                (OutputBuffer::F32(buffer), Some(TypedRaster2D::F32(raster))) => {
-                    buffer.read(raster.data_container.as_mut_slice()).enq()?;
-                }
-                (OutputBuffer::F64(buffer), Some(TypedRaster2D::F64(raster))) => {
-                    buffer.read(raster.data_container.as_mut_slice()).enq()?;
-                }
-                _ => unreachable!(),
-            };
-        }
-
-        for ((builder, coordinates_buffer), offsets_buffer) in params
-            .output_features
-            .drain(..) // TODO: avoid
-            .zip(self.coordinates_output_buffers.iter())
-            .zip(self.point_offsets_output_buffers.iter())
-        {
-            let builder = builder.expect("checked");
-            // TODO generify for lines and polygons
-
-            // TODO: determine number of features
-            let num_features = 0;
-            // TODO: determine number of coordinates
-            let num_coords = 0;
-
-            builder.set_geo(MultiPointBuffers {
-                offsets: Self::read_ocl_to_arrow_buffer(offsets_buffer, num_features + 1)?,
-                coords: Self::read_ocl_to_arrow_buffer(coordinates_buffer, num_coords)?,
-            })?;
-
-            // TODO: time, columns
-            builder.set_default_time_intervals()?;
-
-            builder.finish()?;
-        }
-        Ok(())
-    }
-
-    fn read_ocl_to_arrow_buffer<T: OclPrm>(
-        ocl_buffer: &Buffer<T>,
-        len: usize,
-    ) -> Result<arrow::buffer::Buffer> {
-        let mut arrow_buffer = MutableBuffer::new(len * std::mem::size_of::<T>());
-        arrow_buffer.resize(len * std::mem::size_of::<T>()).unwrap();
-
-        let dest = unsafe {
-            std::slice::from_raw_parts_mut(arrow_buffer.data_mut().as_ptr() as *mut T, len)
-        };
-
-        ocl_buffer.read(dest).enq()?;
-
-        Ok(arrow_buffer.freeze())
     }
 
     fn set_argument_placeholders(&mut self, mut kernel: &mut KernelBuilder) {
@@ -735,7 +775,10 @@ impl CompiledCLProgram {
                     // no geo
                 }
                 VectorDataType::MultiPoint => {
-                    kernel.arg_named(format!("IN_POINT_COORDS{}", idx), None::<&Buffer<f64>>);
+                    kernel.arg_named(
+                        format!("IN_POINT_COORDS{}", idx),
+                        None::<&Buffer<Coordinate2D>>,
+                    );
                     kernel.arg_named(format!("IN_POINT_OFFSETS{}", idx), None::<&Buffer<i32>>);
                 }
                 VectorDataType::MultiLineString | VectorDataType::MultiPolygon => todo!(),
@@ -750,7 +793,10 @@ impl CompiledCLProgram {
                     // no geo
                 }
                 VectorDataType::MultiPoint => {
-                    kernel.arg_named(format!("OUT_POINT_COORDS{}", idx), None::<&Buffer<f64>>);
+                    kernel.arg_named(
+                        format!("OUT_POINT_COORDS{}", idx),
+                        None::<&Buffer<Coordinate2D>>,
+                    );
                     kernel.arg_named(format!("OUT_POINT_OFFSETS{}", idx), None::<&Buffer<i32>>);
                 }
                 VectorDataType::MultiLineString | VectorDataType::MultiPolygon => todo!(),
@@ -831,22 +877,22 @@ __kernel void add(
 
         let mut compiled = cl_program.compile(kernel, "add").unwrap();
 
-        let mut params = compiled.params();
-        params.set_input_raster(0, &in0).unwrap();
-        params.set_input_raster(1, &in1).unwrap();
-        params.set_output_raster(0, &mut out).unwrap();
-        compiled.run(params).unwrap();
+        let mut runnable = compiled.runnable();
+        runnable.set_input_raster(0, &in0).unwrap();
+        runnable.set_input_raster(1, &in1).unwrap();
+        runnable.set_output_raster(0, &mut out).unwrap();
+        compiled.run(runnable).unwrap();
 
         assert_eq!(
             out.get_i32_ref().unwrap().data_container,
             vec![8, 10, 12, 14, 16, 18]
         );
 
-        let mut params = compiled.params();
-        params.set_input_raster(0, &in0).unwrap();
-        params.set_input_raster(1, &in0).unwrap();
-        params.set_output_raster(0, &mut out).unwrap();
-        compiled.run(params).unwrap();
+        let mut runnable = compiled.runnable();
+        runnable.set_input_raster(0, &in0).unwrap();
+        runnable.set_input_raster(1, &in0).unwrap();
+        runnable.set_output_raster(0, &mut out).unwrap();
+        compiled.run(runnable).unwrap();
 
         assert_eq!(
             out.get_i32().unwrap().data_container,
@@ -909,11 +955,11 @@ __kernel void add(
 
         let mut compiled = cl_program.compile(kernel, "add").unwrap();
 
-        let mut params = compiled.params();
-        params.set_input_raster(0, &in0).unwrap();
-        params.set_input_raster(1, &in1).unwrap();
-        params.set_output_raster(0, &mut out).unwrap();
-        compiled.run(params).unwrap();
+        let mut runnable = compiled.runnable();
+        runnable.set_input_raster(0, &in0).unwrap();
+        runnable.set_input_raster(1, &in1).unwrap();
+        runnable.set_output_raster(0, &mut out).unwrap();
+        compiled.run(runnable).unwrap();
 
         assert_eq!(
             out.get_i64_ref().unwrap().data_container,
@@ -962,10 +1008,10 @@ __kernel void no_data(
 
         let mut compiled = cl_program.compile(kernel, "no_data").unwrap();
 
-        let mut params = compiled.params();
-        params.set_input_raster(0, &in0).unwrap();
-        params.set_output_raster(0, &mut out).unwrap();
-        compiled.run(params).unwrap();
+        let mut runnable = compiled.runnable();
+        runnable.set_input_raster(0, &in0).unwrap();
+        runnable.set_output_raster(0, &mut out).unwrap();
+        compiled.run(runnable).unwrap();
 
         assert_eq!(
             out.get_i64_ref().unwrap().data_container,
@@ -1018,10 +1064,10 @@ __kernel void no_data(
 
         let mut compiled = cl_program.compile(kernel, "no_data").unwrap();
 
-        let mut params = compiled.params();
-        params.set_input_raster(0, &in0).unwrap();
-        params.set_output_raster(0, &mut out).unwrap();
-        compiled.run(params).unwrap();
+        let mut runnable = compiled.runnable();
+        runnable.set_input_raster(0, &in0).unwrap();
+        runnable.set_output_raster(0, &mut out).unwrap();
+        compiled.run(runnable).unwrap();
 
         assert_eq!(
             out.get_i64_ref().unwrap().data_container,
@@ -1074,10 +1120,10 @@ __kernel void no_data(
 
         let mut compiled = cl_program.compile(kernel, "no_data").unwrap();
 
-        let mut params = compiled.params();
-        params.set_input_raster(0, &in0).unwrap();
-        params.set_output_raster(0, &mut out).unwrap();
-        compiled.run(params).unwrap();
+        let mut runnable = compiled.runnable();
+        runnable.set_input_raster(0, &in0).unwrap();
+        runnable.set_output_raster(0, &mut out).unwrap();
+        compiled.run(runnable).unwrap();
 
         assert_eq!(
             out.get_i64_ref().unwrap().data_container,
@@ -1126,10 +1172,10 @@ __kernel void gid(
 
         let mut compiled = cl_program.compile(kernel, "gid").unwrap();
 
-        let mut params = compiled.params();
-        params.set_input_raster(0, &in0).unwrap();
-        params.set_output_raster(0, &mut out).unwrap();
-        compiled.run(params).unwrap();
+        let mut runnable = compiled.runnable();
+        runnable.set_input_raster(0, &in0).unwrap();
+        runnable.set_output_raster(0, &mut out).unwrap();
+        compiled.run(runnable).unwrap();
 
         assert_eq!(
             out.get_i32_ref().unwrap().data_container,
@@ -1139,9 +1185,16 @@ __kernel void gid(
 
     #[test]
     fn points() {
+        // TODO: fix "offsets do not start at zero" that sometimes happens <https://github.com/apache/arrow/blob/de7cc0fa5de98bcb875dcde359b0d425d9c0aa8d/rust/arrow/src/array/array.rs#L1062>
+
         let input = TypedFeatureCollection::MultiPoint(
             MultiPointCollection::from_data(
-                MultiPoint::many(vec![vec![(0., 0.)], vec![(1., 1.)], vec![(2., 2.)]]).unwrap(),
+                MultiPoint::many(vec![
+                    vec![(0., 0.)],
+                    vec![(1., 1.), (2., 2.)],
+                    vec![(3., 3.)],
+                ])
+                .unwrap(),
                 vec![
                     TimeInterval::new_unchecked(0, 1),
                     TimeInterval::new_unchecked(1, 2),
@@ -1152,7 +1205,11 @@ __kernel void gid(
             .unwrap(),
         );
 
-        let mut out = FeatureCollection::<MultiPoint>::builder().batch_builder(3);
+        let mut out = FeatureCollection::<MultiPoint>::builder().batch_builder(
+            VectorDataType::MultiPoint,
+            3,
+            4,
+        );
 
         let kernel = r#"
 __kernel void points( 
@@ -1162,10 +1219,11 @@ __kernel void points(
             __global int *OUT_POINT_OFFSETS0)            
 {
     int idx = get_global_id(0);
-    OUT_POINT_COORDS0[idx] = IN_POINT_COORDS0[idx] + 1;
+    OUT_POINT_COORDS0[idx].x = IN_POINT_COORDS0[idx].x;
+    OUT_POINT_COORDS0[idx].y = IN_POINT_COORDS0[idx].y + 1;
 }"#;
 
-        let mut cl_program = CLProgram::new(IterationType::Vector);
+        let mut cl_program = CLProgram::new(IterationType::VectorCoordinates);
         cl_program.add_input_features(VectorArgument::new(
             input.vector_data_type(),
             vec![],
@@ -1179,14 +1237,19 @@ __kernel void points(
 
         let mut compiled = cl_program.compile(kernel, "points").unwrap();
 
-        let mut params = compiled.params();
-        params.set_input_features(0, &input).unwrap();
-        params.set_output_features(0, &mut out).unwrap();
-        compiled.run(params).unwrap();
+        let mut runnable = compiled.runnable();
+        runnable.set_input_features(0, &input).unwrap();
+        runnable.set_output_features(0, &mut out).unwrap();
+        compiled.run(runnable).unwrap();
 
         assert_eq!(
-            out.output.unwrap().coordinates(),
-            &[[1., 2.].into(), [2., 3.].into(), [3., 4.].into()]
+            out.output.unwrap().get_points().unwrap().coordinates(),
+            &[
+                [0., 1.].into(),
+                [1., 2.].into(),
+                [2., 3.].into(),
+                [3., 4.].into()
+            ]
         );
     }
 
@@ -1201,7 +1264,12 @@ __kernel void nop(__global int* buffer) {
 
         let len = 4;
 
-        let pro_que = ProQue::builder().src(src).dims(len).build().unwrap();
+        let pro_que = ProQue::builder()
+            .device(*DEVICE)
+            .src(src)
+            .dims(len)
+            .build()
+            .unwrap();
 
         let ocl_buffer = pro_que.create_buffer::<i32>().unwrap();
 

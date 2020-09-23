@@ -13,6 +13,7 @@ pub enum VectorDataType {
     MultiPolygon,
 }
 
+#[derive(Debug)]
 pub enum TypedFeatureCollection {
     Data(DataCollection),
     MultiPoint(MultiPointCollection),
@@ -34,6 +35,13 @@ impl TypedFeatureCollection {
     pub fn get_points(self) -> Option<MultiPointCollection> {
         if let TypedFeatureCollection::MultiPoint(points) = self {
             return Some(points);
+        }
+        None
+    }
+
+    pub fn get_data(self) -> Option<DataCollection> {
+        if let TypedFeatureCollection::Data(data) = self {
+            return Some(data);
         }
         None
     }

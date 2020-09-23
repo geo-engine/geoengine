@@ -214,7 +214,7 @@ where
 
                     let a_typed = a.data.into();
                     let b_typed = b.data.into();
-                    let mut params = cl_program.params();
+                    let mut params = cl_program.runnable();
 
                     params.set_input_raster(0, &a_typed).unwrap();
                     params.set_input_raster(1, &b_typed).unwrap();
