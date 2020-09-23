@@ -181,7 +181,7 @@ async fn get_feature<T: WorkflowRegistry>(
 
     let execution_context = ExecutionContext::mock_empty();
     let initialized = operator
-        .initialize(execution_context)
+        .initialize(&execution_context)
         .context(error::Operator)?;
 
     let processor = initialized.query_processor().context(error::Operator)?;

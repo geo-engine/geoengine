@@ -30,7 +30,7 @@ pub type ColumnRangeFilter = Operator<ColumnRangeFilterParams>;
 impl VectorOperator for ColumnRangeFilter {
     fn initialize(
         self: Box<Self>,
-        context: ExecutionContext,
+        context: &ExecutionContext,
     ) -> Result<Box<InitializedVectorOperator>> {
         // TODO: create generic validate util
         ensure!(
@@ -252,7 +252,7 @@ mod tests {
         }
         .boxed();
 
-        let initialized = filter.initialize(ExecutionContext::mock_empty()).unwrap();
+        let initialized = filter.initialize(&ExecutionContext::mock_empty()).unwrap();
 
         let point_processor = match initialized.query_processor() {
             Ok(TypedVectorQueryProcessor::MultiPoint(processor)) => processor,

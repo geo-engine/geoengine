@@ -21,7 +21,7 @@ pub struct InitializedOperatorImpl<P, R, S> {
     pub params: P,
     pub raster_sources: Vec<Box<InitializedRasterOperator>>,
     pub vector_sources: Vec<Box<InitializedVectorOperator>>,
-    pub context: ExecutionContext,
+    // pub context: ExecutionContext,
     pub result_descriptor: R,
     pub state: S,
 }
@@ -29,7 +29,6 @@ pub struct InitializedOperatorImpl<P, R, S> {
 impl<P, R, S> InitializedOperatorImpl<P, R, S> {
     pub fn new(
         params: P,
-        context: ExecutionContext,
         result_descriptor: R,
         raster_sources: Vec<Box<InitializedRasterOperator>>,
         vector_sources: Vec<Box<InitializedVectorOperator>>,
@@ -39,7 +38,7 @@ impl<P, R, S> InitializedOperatorImpl<P, R, S> {
             params,
             raster_sources,
             vector_sources,
-            context,
+            // context,
             result_descriptor,
             state,
         }
@@ -47,7 +46,7 @@ impl<P, R, S> InitializedOperatorImpl<P, R, S> {
 
     pub fn create<RF, SF>(
         params: P,
-        context: ExecutionContext,
+        context: &ExecutionContext,
         state_fn: SF,
         result_descriptor_fn: RF,
         uninitialized_raster_sources: Vec<Box<dyn RasterOperator>>,
@@ -93,7 +92,6 @@ impl<P, R, S> InitializedOperatorImpl<P, R, S> {
 
         Ok(Self::new(
             params,
-            context,
             result_descriptor,
             raster_sources,
             vector_sources,
@@ -110,9 +108,9 @@ where
 {
     type Descriptor = R;
 
-    fn execution_context(&self) -> &ExecutionContext {
-        &self.context
-    }
+    // fn execution_context(&self) -> &ExecutionContext {
+    //    &self.context
+    // }
     fn result_descriptor(&self) -> Self::Descriptor {
         self.result_descriptor
     }

@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use super::{
     query_processor::{TypedRasterQueryProcessor, TypedVectorQueryProcessor},
     CloneableRasterOperator, CloneableVectorOperator, RasterResultDescriptor, ResultDescriptor,
@@ -14,7 +16,7 @@ use serde::{Deserialize, Serialize};
 pub trait RasterOperator: CloneableRasterOperator + Send + Sync + std::fmt::Debug {
     fn initialize(
         self: Box<Self>,
-        context: ExecutionContext,
+        context: &ExecutionContext,
     ) -> Result<Box<InitializedRasterOperator>>;
 
     /// Wrap a box around a `RasterOperator`
@@ -31,7 +33,7 @@ pub trait RasterOperator: CloneableRasterOperator + Send + Sync + std::fmt::Debu
 pub trait VectorOperator: CloneableVectorOperator + Send + Sync + std::fmt::Debug {
     fn initialize(
         self: Box<Self>,
-        context: ExecutionContext,
+        context: &ExecutionContext,
     ) -> Result<Box<InitializedVectorOperator>>;
 
     /// Wrap a box around a `VectorOperator`
@@ -43,22 +45,22 @@ pub trait VectorOperator: CloneableVectorOperator + Send + Sync + std::fmt::Debu
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ExecutionContext {
-    pub raster_data_root: &'static str,
+    pub raster_data_root: PathBuf,
 }
 
 impl ExecutionContext {
     pub fn mock_empty() -> Self {
         ExecutionContext {
-            raster_data_root: "",
+            raster_data_root: "".into(),
         }
     }
 }
 
 pub trait InitializedOperatorBase {
     type Descriptor: ResultDescriptor + Clone;
-    fn execution_context(&self) -> &ExecutionContext;
+    // fn execution_context(&self) -> &ExecutionContext;
 
     /// Get the result descriptor of the `Operator`
     fn result_descriptor(&self) -> Self::Descriptor;
@@ -104,9 +106,10 @@ where
 {
     type Descriptor = R;
 
-    fn execution_context(&self) -> &ExecutionContext {
-        self.as_ref().execution_context()
-    }
+    //fn execution_context(&self) -> &ExecutionContext {
+    //    self.as_ref().execution_context()
+    //}
+
     fn result_descriptor(&self) -> Self::Descriptor {
         self.as_ref().result_descriptor()
     }
@@ -130,9 +133,9 @@ where
     Q: QueryProcessor,
 {
     type Descriptor = R;
-    fn execution_context(&self) -> &ExecutionContext {
-        self.as_ref().execution_context()
-    }
+    //fn execution_context(&self) -> &ExecutionContext {
+    //    self.as_ref().execution_context()
+    //}
     fn result_descriptor(&self) -> Self::Descriptor {
         self.as_ref().result_descriptor()
     }

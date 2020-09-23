@@ -53,7 +53,7 @@ pub type MockRasterSource = SourceOperator<MockRasterSourceParams>;
 impl RasterOperator for MockRasterSource {
     fn initialize(
         self: Box<Self>,
-        context: crate::engine::ExecutionContext,
+        context: &crate::engine::ExecutionContext,
     ) -> Result<Box<InitializedRasterOperator>> {
         InitializedOperatorImpl::create(
             self.params,
@@ -203,7 +203,7 @@ mod tests {
 
         let execution_context = ExecutionContext::mock_empty();
 
-        let initialized = deserialized.initialize(execution_context).unwrap();
+        let initialized = deserialized.initialize(&execution_context).unwrap();
 
         match initialized.query_processor().unwrap() {
             crate::engine::TypedRasterQueryProcessor::U8(..) => {}

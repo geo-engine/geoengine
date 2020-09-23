@@ -158,7 +158,7 @@ mod tests {
 
         let source = source
             .boxed()
-            .initialize(ExecutionContext::mock_empty())
+            .initialize(&ExecutionContext::mock_empty())
             .unwrap();
 
         let processor =
@@ -233,7 +233,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(ExecutionContext::mock_empty())
+        .initialize(&ExecutionContext::mock_empty())
         .unwrap();
 
         let processor =

@@ -13,6 +13,7 @@ use std::{
     cmp::min,
     io::{BufReader, BufWriter, Read},
     marker::PhantomData,
+    path::Path,
     path::PathBuf,
 };
 //use gdal::metadata::Metadata; // TODO: handle metadata
@@ -67,7 +68,7 @@ pub struct GdalSourceParameters {
 
 pub trait GdalDatasetInformation {
     type CreatedType: Sized;
-    fn with_dataset_id(id: &str, raster_data_root: &'static str) -> Result<Self::CreatedType>;
+    fn with_dataset_id(id: &str, raster_data_root: &Path) -> Result<Self::CreatedType>;
     fn native_tiling_information(&self) -> &TilingInformation;
     fn native_time_information(&self) -> &TimeIntervalInformation;
     fn file_name_with_time_placeholder(&self) -> &str;
@@ -79,7 +80,7 @@ pub trait GdalDatasetInformation {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct JsonDatasetInformationProvider {
     pub dataset_information: JsonDatasetInformation,
-    pub raster_data_root: &'static str,
+    pub raster_data_root: PathBuf,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -88,7 +89,7 @@ pub struct JsonDatasetInformation {
     pub tile: TilingInformation,
     pub file_name_with_time_placeholder: String,
     pub time_format: String,
-    pub base_path: String,
+    pub base_path: PathBuf,
     pub data_type: RasterDataType,
 }
 
@@ -96,14 +97,14 @@ impl JsonDatasetInformationProvider {
     const DEFINTION_SUBPATH: &'static str = "./dataset_defs/";
 
     // TODO: provide the base path from config?
-    pub fn root_path(&self) -> &'static str {
-        self.raster_data_root
+    pub fn root_path(&self) -> &Path {
+        &self.raster_data_root
     }
 
-    pub fn write_to_file(&self, id: &str, raster_data_root: &str) -> Result<()> {
-        let mut dataset_information_path: PathBuf = [raster_data_root, Self::DEFINTION_SUBPATH, id]
-            .iter()
-            .collect();
+    pub fn write_to_file(&self, id: &str, raster_data_root: &Path) -> Result<()> {
+        let mut dataset_information_path: PathBuf = PathBuf::from(raster_data_root)
+            .join(Self::DEFINTION_SUBPATH)
+            .join(id);
         dataset_information_path.set_extension("json");
 
         let file = std::fs::File::create(dataset_information_path)?;
@@ -117,10 +118,12 @@ impl JsonDatasetInformationProvider {
 
 impl GdalDatasetInformation for JsonDatasetInformationProvider {
     type CreatedType = Self;
-    fn with_dataset_id(id: &str, raster_data_root: &'static str) -> Result<Self> {
-        let mut dataset_information_path: PathBuf = [raster_data_root, Self::DEFINTION_SUBPATH, id]
-            .iter()
-            .collect();
+    fn with_dataset_id(id: &str, raster_data_root: &Path) -> Result<Self> {
+        let raster_data_root_buf = PathBuf::from(raster_data_root);
+        let mut dataset_information_path: PathBuf = raster_data_root_buf
+            .clone()
+            .join(Self::DEFINTION_SUBPATH)
+            .join(id);
         dataset_information_path.set_extension("json");
         let file = std::fs::File::open(dataset_information_path)?;
         let mut buffered_reader = BufReader::new(file);
@@ -129,7 +132,7 @@ impl GdalDatasetInformation for JsonDatasetInformationProvider {
         let dataset_information = serde_json::from_str(&contents)?;
         Ok(JsonDatasetInformationProvider {
             dataset_information,
-            raster_data_root,
+            raster_data_root: raster_data_root_buf,
         })
     }
     fn native_tiling_information(&self) -> &TilingInformation {
@@ -146,14 +149,10 @@ impl GdalDatasetInformation for JsonDatasetInformationProvider {
     }
 
     fn dataset_path(&self) -> PathBuf {
-        let path: PathBuf = [
-            self.raster_data_root,
-            Self::DEFINTION_SUBPATH,
-            &self.dataset_information.base_path,
-        ]
-        .iter()
-        .collect();
-        path
+        self.raster_data_root
+            .clone()
+            .join(Self::DEFINTION_SUBPATH)
+            .join(&self.dataset_information.base_path)
     }
     fn data_type(&self) -> RasterDataType {
         self.dataset_information.data_type
@@ -243,7 +242,7 @@ where
 {
     pub fn from_params_with_json_provider(
         params: GdalSourceParameters,
-        raster_data_root: &'static str,
+        raster_data_root: &Path,
     ) -> Result<Self> {
         GdalSourceProcessor::from_params(params, raster_data_root)
     }
@@ -258,10 +257,7 @@ where
     /// Generates a new `GdalSource` from the provided parameters
     /// TODO: move the time interval and grid tile information generation somewhere else...
     ///
-    pub fn from_params(
-        params: GdalSourceParameters,
-        raster_data_root: &'static str,
-    ) -> Result<Self> {
+    pub fn from_params(params: GdalSourceParameters, raster_data_root: &Path) -> Result<Self> {
         let dataset_information = P::with_dataset_id(&params.dataset_id, raster_data_root)?;
 
         GdalSourceProcessor::from_params_with_provider(params, dataset_information)
@@ -501,15 +497,15 @@ pub type GdalSource = SourceOperator<GdalSourceParameters>;
 impl RasterOperator for GdalSource {
     fn initialize(
         self: Box<Self>,
-        context: crate::engine::ExecutionContext,
+        context: &crate::engine::ExecutionContext,
     ) -> Result<Box<InitializedRasterOperator>> {
         InitializedOperatorImpl::create(
             self.params.clone(),
             context,
-            |params, _, _, _| {
+            |params, exe_context, _, _| {
                 JsonDatasetInformationProvider::with_dataset_id(
                     &params.dataset_id,
-                    context.raster_data_root,
+                    &exe_context.raster_data_root,
                 )
             },
             |_, _, state, _, _| {
@@ -726,7 +722,7 @@ mod tests {
 
         let dataset_information_provider = JsonDatasetInformationProvider {
             dataset_information,
-            raster_data_root: "../operators/test-data/raster",
+            raster_data_root: "../operators/test-data/raster".into(),
         };
 
         let gdal_source = GdalSourceProcessor::<_, u8> {
@@ -866,7 +862,7 @@ mod tests {
 
         let dataset_information_provider = JsonDatasetInformationProvider {
             dataset_information,
-            raster_data_root: "../operators/test-data/raster",
+            raster_data_root: "../operators/test-data/raster".into(),
         };
 
         let gdal_source = GdalSourceProcessor::<_, u8> {
@@ -952,7 +948,7 @@ mod tests {
 
         let dataset_information_provider = JsonDatasetInformationProvider {
             dataset_information,
-            raster_data_root: "../operators/test-data/raster",
+            raster_data_root: "../operators/test-data/raster".into(),
         };
 
         let gdal_source = GdalSourceProcessor::<_, u8> {
@@ -1017,7 +1013,7 @@ mod tests {
 
         let dataset_information_provider = JsonDatasetInformationProvider {
             dataset_information,
-            raster_data_root: "../operators/test-data/raster",
+            raster_data_root: "../operators/test-data/raster".into(),
         };
 
         let gdal_source = GdalSourceProcessor {
@@ -1096,7 +1092,7 @@ mod tests {
 
         let dataset_information_provider = JsonDatasetInformationProvider {
             dataset_information,
-            raster_data_root: "../operators/test-data/raster",
+            raster_data_root: "../operators/test-data/raster".into(),
         };
 
         let gdal_source = GdalSourceProcessor {
@@ -1173,7 +1169,7 @@ mod tests {
 
         let dataset_information_provider = JsonDatasetInformationProvider {
             dataset_information,
-            raster_data_root: "../operators/test-data/raster",
+            raster_data_root: "../operators/test-data/raster".into(),
         };
 
         let gdal_source = GdalSourceProcessor::<_, u8> {
@@ -1254,7 +1250,7 @@ mod tests {
 
         let dataset_information_provider = JsonDatasetInformationProvider {
             dataset_information,
-            raster_data_root: "../operators/test-data/raster",
+            raster_data_root: "../operators/test-data/raster".into(),
         };
 
         let x_r = GdalSourceProcessor::<_, u8>::load_tile_data_async(

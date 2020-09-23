@@ -69,7 +69,7 @@ macro_rules! impl_mock_feature_collection_source {
         impl VectorOperator for $newtype {
             fn initialize(
                 self: Box<Self>,
-                context: ExecutionContext,
+                context: &ExecutionContext,
             ) -> Result<Box<InitializedVectorOperator>> {
                 InitializedOperatorImpl::create(
                     self.params,
@@ -237,7 +237,7 @@ mod tests {
         }
         .boxed();
 
-        let source = source.initialize(ExecutionContext::mock_empty()).unwrap();
+        let source = source.initialize(&ExecutionContext::mock_empty()).unwrap();
 
         let processor =
             if let Ok(TypedVectorQueryProcessor::MultiPoint(p)) = source.query_processor() {

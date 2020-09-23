@@ -51,7 +51,7 @@ pub type MockPointSource = SourceOperator<MockPointSourceParams>;
 impl VectorOperator for MockPointSource {
     fn initialize(
         self: Box<Self>,
-        context: ExecutionContext,
+        context: &ExecutionContext,
     ) -> Result<Box<InitializedVectorOperator>> {
         InitializedOperatorImpl::create(
             self.params,
@@ -113,7 +113,7 @@ mod tests {
             params: MockPointSourceParams { points },
         }
         .boxed();
-        let initialized = mps.initialize(execution_context).unwrap();
+        let initialized = mps.initialize(&execution_context).unwrap();
 
         let typed_processor = initialized.query_processor();
         let point_processor = match typed_processor {

@@ -142,11 +142,11 @@ async fn get_map<T: WorkflowRegistry>(
     let operator = workflow.operator.get_raster().context(error::Operator)?;
 
     let execution_context = ExecutionContext {
-        raster_data_root: "../operators/test-data/raster", // ./ is the crate root when run as example from the multi crate root... doh
+        raster_data_root: "../operators/test-data/raster".into(), // ./ is the crate root when run as example from the multi crate root... doh
     };
 
     let initialized = operator
-        .initialize(execution_context)
+        .initialize(&execution_context)
         .context(error::Operator)?;
 
     let processor = initialized.query_processor().context(error::Operator)?;
@@ -284,6 +284,8 @@ fn get_map_mock(request: &GetMap) -> Result<Box<dyn warp::Reply>, warp::Rejectio
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use geoengine_datatypes::primitives::{BoundingBox2D, TimeInterval};
     use geoengine_operators::engine::{RasterOperator, TypedOperator};
     use geoengine_operators::source::{
@@ -341,7 +343,7 @@ mod tests {
 
         let gdal_source = GdalSourceProcessor::<_, u8>::from_params_with_json_provider(
             gdal_params,
-            "../operators/test-data/raster",
+            &PathBuf::from("../operators/test-data/raster"),
         )
         .unwrap();
 
@@ -391,7 +393,7 @@ mod tests {
 
         let gdal_source = GdalSourceProcessor::<_, u8>::from_params_with_json_provider(
             gdal_params,
-            "../operators/test-data/raster",
+            PathBuf::from("../operators/test-data/raster").as_ref(),
         )
         .unwrap();
 
