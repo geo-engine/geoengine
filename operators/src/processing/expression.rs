@@ -8,8 +8,8 @@ use crate::util::Result;
 use crate::{call_bi_generic_processor, call_generic_raster_processor};
 use futures::stream::BoxStream;
 use futures::StreamExt;
-use geoengine_datatypes::projection::ProjectionOption;
 use geoengine_datatypes::raster::{Pixel, Raster, Raster2D, RasterDataType, RasterTile2D};
+use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::collections::HashSet;
@@ -62,7 +62,7 @@ impl RasterOperator for Expression {
             |params, _, _, _, _| {
                 Ok(RasterResultDescriptor {
                     data_type: params.output_type,
-                    projection: ProjectionOption::None, // TODO
+                    spatial_reference: SpatialReferenceOption::None, // TODO
                 })
             },
             self.raster_sources,
@@ -278,8 +278,8 @@ mod tests {
     use crate::engine::ExecutionContext;
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use geoengine_datatypes::primitives::{BoundingBox2D, TimeInterval};
-    use geoengine_datatypes::projection::Projection;
     use geoengine_datatypes::raster::TileInformation;
+    use geoengine_datatypes::spatial_reference::SpatialReference;
 
     #[tokio::test]
     async fn basic() {
@@ -352,7 +352,7 @@ mod tests {
                 data: vec![raster_tile],
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::I8,
-                    projection: Projection::wgs84().into(),
+                    spatial_reference: SpatialReference::wgs84().into(),
                 },
             },
         }
