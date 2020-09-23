@@ -120,10 +120,8 @@ impl GdalDatasetInformation for JsonDatasetInformationProvider {
     type CreatedType = Self;
     fn with_dataset_id(id: &str, raster_data_root: &Path) -> Result<Self> {
         let raster_data_root_buf = PathBuf::from(raster_data_root);
-        let mut dataset_information_path: PathBuf = raster_data_root_buf
-            .clone()
-            .join(Self::DEFINTION_SUBPATH)
-            .join(id);
+        let mut dataset_information_path: PathBuf =
+            raster_data_root_buf.join(Self::DEFINTION_SUBPATH).join(id);
         dataset_information_path.set_extension("json");
         let file = std::fs::File::open(dataset_information_path)?;
         let mut buffered_reader = BufReader::new(file);
