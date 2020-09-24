@@ -115,6 +115,10 @@ impl FeatureCollectionBatchBuilder {
             .ok_or_else(|| FeatureCollectionError::WrongDataType.into())
     }
 
+    pub fn column_types(&self) -> HashMap<String, FeatureDataType> {
+        self.types.clone()
+    }
+
     pub fn set_time_intervals(&mut self, values_buffer: Buffer) -> Result<()> {
         let data = ArrayData::builder(TimeInterval::arrow_data_type())
             .len(self.num_features)

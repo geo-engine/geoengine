@@ -2,6 +2,7 @@ use crate::error;
 use crate::util::Result;
 use arrow::buffer::MutableBuffer;
 use arrow::datatypes::{Float64Type, Int64Type};
+use arrow::util::bit_util;
 use geoengine_datatypes::collections::{
     FeatureCollectionBatchBuilder, TypedFeatureCollection, VectorDataType,
 };
@@ -37,7 +38,6 @@ pub enum IterationType {
     VectorCoordinates, // 1d kernel width = number of coordinates
 }
 
-// TODO: remove this struct if only data type is relevant and pass it directly
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub struct RasterArgument {
     pub data_type: RasterDataType,
@@ -105,25 +105,6 @@ impl CLProgram {
         self.output_rasters.push(raster);
     }
 
-    // fn add_points(points: &MultiPointCollection) {}
-
-    fn raster_data_type_to_cl(data_type: RasterDataType) -> String {
-        // TODO: maybe attach this info to raster data type together with gdal data type etc
-        match data_type {
-            RasterDataType::U8 => "uchar",
-            RasterDataType::U16 => "ushort",
-            RasterDataType::U32 => "uint",
-            RasterDataType::U64 => "ulong",
-            RasterDataType::I8 => "char",
-            RasterDataType::I16 => "short",
-            RasterDataType::I32 => "int",
-            RasterDataType::I64 => "long",
-            RasterDataType::F32 => "float",
-            RasterDataType::F64 => "double",
-        }
-        .into()
-    }
-
     pub fn add_input_features(&mut self, vector_type: VectorArgument) {
         self.input_features.push(vector_type);
     }
@@ -155,11 +136,7 @@ typedef struct {
         );
 
         for (idx, raster) in self.input_rasters.iter().enumerate() {
-            s += &format!(
-                "typedef {} IN_TYPE{};\n",
-                Self::raster_data_type_to_cl(raster.data_type),
-                idx
-            );
+            s += &format!("typedef {} IN_TYPE{};\n", raster.data_type.ocl_type(), idx);
 
             if raster.data_type == RasterDataType::F32 || raster.data_type == RasterDataType::F64 {
                 s += &format!(
@@ -175,11 +152,7 @@ typedef struct {
         }
 
         for (idx, raster) in self.output_rasters.iter().enumerate() {
-            s += &format!(
-                "typedef {} OUT_TYPE{};\n",
-                Self::raster_data_type_to_cl(raster.data_type),
-                idx
-            );
+            s += &format!("typedef {} OUT_TYPE{};\n", raster.data_type.ocl_type(), idx);
         }
 
         s
@@ -198,8 +171,6 @@ typedef struct {
 
         let typedefs = self.create_type_definitions();
 
-        // TODO: add code for pixel to world
-
         let platform = Platform::default(); // TODO: make configurable
 
         // the following fails for concurrent access, see <https://github.com/cogciprocate/ocl/issues/189>
@@ -216,9 +187,7 @@ typedef struct {
             .src(source)
             .build(&ctx)?;
 
-        // TODO: create kernel builder here once it is cloneable
-
-        // TODO: feature collections
+        // TODO: create kernel builder here once it is cloneable <https://github.com/cogciprocate/ocl/issues/190>
 
         Ok(CompiledCLProgram::new(
             ctx,
@@ -369,7 +338,8 @@ impl<'a> CLProgramRunnable<'a> {
             .columns
             .iter()
             .zip(self.input_feature_types[idx].column_types.iter());
-        call_generic_features!(features, f => iter.all(|(n, t)| f.column_type(n).map_or(false, |to| to == *t)));
+        let columns_ok = call_generic_features!(features, f => iter.all(|(n, t)| f.column_type(n).map_or(false, |to| to == *t)));
+        ensure!(columns_ok, error::CLProgramInvalidColumn);
 
         self.input_features[idx] = Some(features);
         Ok(())
@@ -378,24 +348,30 @@ impl<'a> CLProgramRunnable<'a> {
     pub fn set_output_features(
         &mut self,
         idx: usize,
-        features: &'a mut FeatureCollectionBatchBuilder, // TODO: generify
+        features: &'a mut FeatureCollectionBatchBuilder,
     ) -> Result<()> {
         ensure!(
             idx < self.output_feature_types.len(),
             error::CLProgramInvalidFeaturesIndex
         );
-        // TODO: check type of output
-        // ensure!(
-        //     features.vector_data_type() == self.output_feature_types[idx].vector_type,
-        //     error::CLProgramInvalidVectorDataType
-        // );
+        ensure!(
+            features.output_type == self.output_feature_types[idx].vector_type,
+            error::CLProgramInvalidVectorDataType
+        );
 
-        // TODO: check columns of output
-        // let mut iter = self.output_feature_types[idx]
-        //     .columns
-        //     .iter()
-        //     .zip(self.output_feature_types[idx].column_types.iter());
-        // call_generic_features!(features, f => iter.all(|(n, t)| f.column_type(n).map_or(false, |to| to == *t)));
+        let input_types = features.column_types();
+        ensure!(
+            self.output_feature_types[idx]
+                .columns
+                .iter()
+                .zip(self.output_feature_types[idx].column_types.iter())
+                .all(|(column, column_type)| {
+                    input_types
+                        .get(column)
+                        .map_or(false, |input_type| input_type == column_type)
+                }),
+            error::CLProgramInvalidColumn
+        );
 
         self.output_features[idx] = Some(features);
         Ok(())
@@ -615,7 +591,7 @@ impl<'a> CLProgramRunnable<'a> {
                 .len(len)
                 .copy_host_slice(nulls.as_slice())
                 .build()?;
-            kernel.set_arg(format!("IN_POINT{}_COLUMN_NULLS_{}", idx, column), &buffer)?;
+            kernel.set_arg(format!("IN_POINT{}_NULLS_{}", idx, column), &buffer)?;
         }
 
         Ok(())
@@ -640,7 +616,7 @@ impl<'a> CLProgramRunnable<'a> {
                 .queue(kernel.default_queue().expect("expect").clone())
                 .len(len)
                 .build()?;
-            kernel.set_arg(format!("OUT_POINT{}_COLUMN_NULLS_{}", idx, column), &buffer)?;
+            kernel.set_arg(format!("OUT_POINT{}_NULLS_{}", idx, column), &buffer)?;
 
             Some(buffer)
         } else {
@@ -777,10 +753,22 @@ impl<'a> CLProgramRunnable<'a> {
                 let values_buffer =
                     Self::read_ocl_to_arrow_buffer(&column_buffer.values, builder.num_features())?;
 
-                let nulls_buffer = if let Some(_nulls) = column_buffer.nulls {
-                    // TODO: read i32 into null buffers as bool
-                    // Self::read_ocl_to_arrow_buffer(&column_buffer.nulls, builder.num_features())?;
-                    None
+                let nulls_buffer = if let Some(nulls_buffer) = column_buffer.nulls {
+                    // TODO: read i32 into null buffers as bool more efficiently
+                    let mut nulls = vec![0_i32; builder.num_features()];
+                    nulls_buffer.read(&mut nulls).enq()?;
+
+                    let num_bytes = bit_util::ceil(nulls.len(), 8);
+                    let mut arrow_buffer =
+                        MutableBuffer::new(num_bytes).with_bitset(num_bytes, false);
+                    let null_slice = arrow_buffer.data_mut();
+
+                    for (i, null) in nulls.iter().enumerate() {
+                        if *null != 0 {
+                            bit_util::set_bit(null_slice, i);
+                        }
+                    }
+                    Some(arrow_buffer.freeze())
                 } else {
                     None
                 };
@@ -796,10 +784,22 @@ impl<'a> CLProgramRunnable<'a> {
                 let values_buffer =
                     Self::read_ocl_to_arrow_buffer(&column_buffer.values, builder.num_features())?;
 
-                let nulls_buffer = if let Some(_nulls) = column_buffer.nulls {
-                    // TODO: read i32 into null buffers as bool
-                    // Self::read_ocl_to_arrow_buffer(&column_buffer.nulls, builder.num_features())?;
-                    None
+                let nulls_buffer = if let Some(nulls_buffer) = column_buffer.nulls {
+                    // TODO: read i32 into null buffers as bool more efficiently
+                    let mut nulls = vec![0_i32; builder.num_features()];
+                    nulls_buffer.read(&mut nulls).enq()?;
+
+                    let num_bytes = bit_util::ceil(nulls.len(), 8);
+                    let mut arrow_buffer =
+                        MutableBuffer::new(num_bytes).with_bitset(num_bytes, false);
+                    let null_slice = arrow_buffer.data_mut();
+
+                    for (i, null) in nulls.iter().enumerate() {
+                        if *null != 0 {
+                            bit_util::set_bit(null_slice, i);
+                        }
+                    }
+                    Some(arrow_buffer.freeze())
                 } else {
                     None
                 };
@@ -1644,7 +1644,7 @@ __kernel void columns(
             false,
         ));
         cl_program.add_output_features(VectorArgument::new(
-            VectorDataType::MultiPoint,
+            VectorDataType::Data,
             vec!["foo".into()],
             vec![FeatureDataType::Number],
             false,
@@ -1660,6 +1660,83 @@ __kernel void columns(
 
         match out.output.unwrap().get_data().unwrap().data("foo").unwrap() {
             FeatureDataRef::Number(numbers) => assert_eq!(numbers.as_ref(), &[1., 2., 3.]),
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn columns_null() {
+        let input = TypedFeatureCollection::Data(
+            DataCollection::from_data(
+                vec![NoGeometry; 3],
+                vec![
+                    TimeInterval::new_unchecked(0, 1),
+                    TimeInterval::new_unchecked(1, 2),
+                    TimeInterval::new_unchecked(2, 3),
+                ],
+                [(
+                    "foo".to_string(),
+                    FeatureData::NullableNumber(vec![Some(0.), None, Some(2.)]),
+                )]
+                .iter()
+                .cloned()
+                .collect(),
+            )
+            .unwrap(),
+        );
+
+        let mut builder = FeatureCollection::<MultiPoint>::builder();
+        builder
+            .add_column("foo".into(), FeatureDataType::NullableNumber)
+            .unwrap();
+        let mut out = builder.batch_builder(VectorDataType::Data, 3, 4);
+
+        let kernel = r#"
+__kernel void columns( 
+            __global const double *IN_POINT0_COLUMN_foo,
+            __global const int *IN_POINT0_NULLS_foo,
+            __global double *OUT_POINT0_COLUMN_foo,
+            __global int *OUT_POINT0_NULLS_foo)            
+{
+    int idx = get_global_id(0);
+    if (IN_POINT0_NULLS_foo[idx]) {
+        OUT_POINT0_COLUMN_foo[idx] = 1337;
+        OUT_POINT0_NULLS_foo[idx] = -1;
+    } else {
+        OUT_POINT0_COLUMN_foo[idx] = 0;
+        OUT_POINT0_NULLS_foo[idx] = 0;
+    }
+}"#;
+
+        let mut cl_program = CLProgram::new(IterationType::VectorFeatures);
+        cl_program.add_input_features(VectorArgument::new(
+            input.vector_data_type(),
+            vec!["foo".into()],
+            vec![FeatureDataType::NullableNumber],
+            false,
+            false,
+        ));
+        cl_program.add_output_features(VectorArgument::new(
+            VectorDataType::Data,
+            vec!["foo".into()],
+            vec![FeatureDataType::NullableNumber],
+            false,
+            false,
+        ));
+
+        let mut compiled = cl_program.compile(kernel, "columns").unwrap();
+
+        let mut runnable = compiled.runnable();
+        runnable.set_input_features(0, &input).unwrap();
+        runnable.set_output_features(0, &mut out).unwrap();
+        compiled.run(runnable).unwrap();
+
+        match out.output.unwrap().get_data().unwrap().data("foo").unwrap() {
+            FeatureDataRef::NullableNumber(numbers) => {
+                assert_eq!(numbers.as_ref(), &[0., 1337., 0.]);
+                assert_eq!(numbers.nulls().as_slice(), &[true, false, true])
+            }
             _ => panic!(),
         }
     }

@@ -69,6 +69,7 @@ pub enum Error {
     CLProgramInvalidVectorDataType,
     CLProgramUnspecifiedRaster,
     CLProgramUnspecifiedFeatures,
+    CLProgramInvalidColumn,
     CLInvalidInputsForIterationType,
     InvalidExpression,
 
