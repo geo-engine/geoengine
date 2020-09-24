@@ -805,6 +805,24 @@ where
 
         table_size + map_size
     }
+
+    /// Return the names of the columns of this type
+    pub fn column_names(&self, column_type: FeatureDataType) -> Vec<String> {
+        self.types
+            .iter()
+            .filter_map(|(k, v)| {
+                if v == &column_type {
+                    Some(k.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    pub fn column_types(&self) -> HashMap<String, FeatureDataType> {
+        self.types.clone()
+    }
 }
 
 impl<CollectionType> Clone for FeatureCollection<CollectionType> {
