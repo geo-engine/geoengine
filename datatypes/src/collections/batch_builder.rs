@@ -153,6 +153,7 @@ impl FeatureCollectionBatchBuilder {
 
     pub fn set_points(&mut self, coords: Buffer, offsets: Buffer) -> Result<()> {
         // TODO: check buffers validity / size
+        // TODO: check offsets start at zero and are valid
 
         let num_features = offsets.len() / std::mem::size_of::<i32>() - 1;
         let num_coords = coords.len() / (2 * std::mem::size_of::<f64>());
@@ -173,7 +174,6 @@ impl FeatureCollectionBatchBuilder {
             )
             .build();
 
-        // TODO: fix "offsets do not start at zero" that sometimes happens <https://github.com/apache/arrow/blob/de7cc0fa5de98bcb875dcde359b0d425d9c0aa8d/rust/arrow/src/array/array.rs#L1062>
         let array = Arc::new(ListArray::from(data)) as ArrayRef;
 
         self.geo_array = Some(array);

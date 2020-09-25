@@ -825,8 +825,6 @@ impl<'a> CLProgramRunnable<'a> {
         ocl_buffer: &Buffer<T>,
         len: usize,
     ) -> Result<arrow::buffer::Buffer> {
-        // TODO: fix "offsets do not start at zero" that sometimes happens <https://github.com/apache/arrow/blob/de7cc0fa5de98bcb875dcde359b0d425d9c0aa8d/rust/arrow/src/array/array.rs#L1062>
-
         let mut arrow_buffer = MutableBuffer::new(len * std::mem::size_of::<T>());
         arrow_buffer.resize(len * std::mem::size_of::<T>()).unwrap();
 
@@ -1471,8 +1469,6 @@ __kernel void gid(
 
     #[test]
     fn points() {
-        // TODO: fix "offsets do not start at zero" that sometimes happens <https://github.com/apache/arrow/blob/de7cc0fa5de98bcb875dcde359b0d425d9c0aa8d/rust/arrow/src/array/array.rs#L1062>
-
         let input = TypedFeatureCollection::MultiPoint(
             MultiPointCollection::from_data(
                 MultiPoint::many(vec![
@@ -1507,6 +1503,7 @@ __kernel void points(
     int idx = get_global_id(0);
     OUT_POINT_COORDS0[idx].x = IN_POINT_COORDS0[idx].x;
     OUT_POINT_COORDS0[idx].y = IN_POINT_COORDS0[idx].y + 1;
+    OUT_POINT_OFFSETS0[idx] = IN_POINT_OFFSETS0[idx];
 }"#;
 
         let mut cl_program = CLProgram::new(IterationType::VectorCoordinates);
@@ -1532,8 +1529,9 @@ __kernel void points(
         runnable.set_output_features(0, &mut out).unwrap();
         compiled.run(runnable).unwrap();
 
+        let collection = out.output.unwrap().get_points().unwrap();
         assert_eq!(
-            out.output.unwrap().get_points().unwrap().coordinates(),
+            collection.coordinates(),
             &[
                 [0., 1.].into(),
                 [1., 2.].into(),
@@ -1541,6 +1539,8 @@ __kernel void points(
                 [3., 4.].into()
             ]
         );
+
+        assert_eq!(collection.multipoint_offsets(), &[0, 1, 3, 4]);
     }
 
     #[test]
