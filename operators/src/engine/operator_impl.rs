@@ -21,7 +21,6 @@ pub struct InitializedOperatorImpl<P, R, S> {
     pub params: P,
     pub raster_sources: Vec<Box<InitializedRasterOperator>>,
     pub vector_sources: Vec<Box<InitializedVectorOperator>>,
-    // pub context: ExecutionContext,
     pub result_descriptor: R,
     pub state: S,
 }
