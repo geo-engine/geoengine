@@ -128,9 +128,6 @@ where
     Q: QueryProcessor,
 {
     type Descriptor = R;
-    //fn execution_context(&self) -> &ExecutionContext {
-    //    self.as_ref().execution_context()
-    //}
     fn result_descriptor(&self) -> Self::Descriptor {
         self.as_ref().result_descriptor()
     }
