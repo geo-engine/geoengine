@@ -107,9 +107,6 @@ where
 {
     type Descriptor = R;
 
-    // fn execution_context(&self) -> &ExecutionContext {
-    //    &self.context
-    // }
     fn result_descriptor(&self) -> Self::Descriptor {
         self.result_descriptor
     }
