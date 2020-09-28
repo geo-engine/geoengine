@@ -1,62 +1,61 @@
-use std::sync::Arc;
 use uuid::Uuid;
 use warp::reply::Reply;
 use warp::Filter;
 
-use crate::handlers::DB;
+use crate::handlers::Context;
 use crate::util::identifiers::Identifier;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 
 // TODO: require authorized access
-pub fn register_workflow_handler<T: WorkflowRegistry>(
-    workflow_registry: DB<T>,
+pub fn register_workflow_handler<C: Context>(
+    ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::post()
         .and(warp::path!("workflow" / "register"))
         .and(warp::body::json())
-        .and(warp::any().map(move || Arc::clone(&workflow_registry)))
+        .and(warp::any().map(move || ctx.clone()))
         .and_then(register_workflow)
 }
 
-pub fn load_workflow_handler<T: WorkflowRegistry>(
-    workflow_registry: DB<T>,
+pub fn load_workflow_handler<C: Context>(
+    ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::get()
         .and(warp::path!("workflow" / Uuid))
-        .and(warp::any().map(move || Arc::clone(&workflow_registry)))
+        .and(warp::any().map(move || ctx.clone()))
         .and_then(load_workflow)
 }
 
 // TODO: move into handler once async closures are available?
-async fn register_workflow<T: WorkflowRegistry>(
+async fn register_workflow<C: Context>(
     workflow: Workflow,
-    workflow_registry: DB<T>,
+    ctx: C,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    let mut wr = workflow_registry.write().await;
-    let id = wr.register(workflow)?;
+    let id = ctx.workflow_registry().write().await.register(workflow)?;
     Ok(warp::reply::json(&id))
 }
 
-async fn load_workflow<T: WorkflowRegistry>(
-    id: Uuid,
-    workflow_registry: DB<T>,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    let wr = workflow_registry.read().await;
-    Ok(warp::reply::json(&wr.load(&WorkflowId::from_uuid(id))?).into_response())
+async fn load_workflow<C: Context>(id: Uuid, ctx: C) -> Result<impl warp::Reply, warp::Rejection> {
+    let wf = ctx
+        .workflow_registry()
+        .read()
+        .await
+        .load(&WorkflowId::from_uuid(id))?;
+    Ok(warp::reply::json(&wf).into_response())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::workflows::registry::{HashMapRegistry, WorkflowRegistry};
+    use crate::handlers::DefaultContext;
+    use crate::workflows::registry::WorkflowRegistry;
     use geoengine_operators::engine::VectorOperator;
     use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
-    use tokio::sync::RwLock;
 
     #[tokio::test]
     async fn register() {
-        let workflow_registry = Arc::new(RwLock::new(HashMapRegistry::default()));
+        let ctx = DefaultContext::default();
 
         let workflow = Workflow {
             operator: MockPointSource {
@@ -74,7 +73,7 @@ mod tests {
             .path("/workflow/register")
             .header("Content-Length", "0")
             .json(&workflow)
-            .reply(&register_workflow_handler(workflow_registry.clone()))
+            .reply(&register_workflow_handler(ctx))
             .await;
 
         assert_eq!(res.status(), 200);
@@ -85,7 +84,7 @@ mod tests {
 
     #[tokio::test]
     async fn load() {
-        let workflow_registry = Arc::new(RwLock::new(HashMapRegistry::default()));
+        let ctx = DefaultContext::default();
 
         let workflow = Workflow {
             operator: MockPointSource {
@@ -97,7 +96,8 @@ mod tests {
             .into(),
         };
 
-        let id = workflow_registry
+        let id = ctx
+            .workflow_registry()
             .write()
             .await
             .register(workflow.clone())
@@ -106,7 +106,7 @@ mod tests {
         let res = warp::test::request()
             .method("GET")
             .path(&format!("/workflow/{}", id.to_string()))
-            .reply(&load_workflow_handler(workflow_registry.clone()))
+            .reply(&load_workflow_handler(ctx))
             .await;
 
         assert_eq!(res.status(), 200);
@@ -115,12 +115,12 @@ mod tests {
 
     #[tokio::test]
     async fn load_not_exist() {
-        let workflow_registry = Arc::new(RwLock::new(HashMapRegistry::default()));
+        let ctx = DefaultContext::default();
 
         let res = warp::test::request()
             .method("GET")
             .path("/workflow/1")
-            .reply(&load_workflow_handler(workflow_registry.clone()))
+            .reply(&load_workflow_handler(ctx))
             .await;
 
         assert_eq!(res.status(), 404);

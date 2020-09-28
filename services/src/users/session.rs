@@ -8,7 +8,7 @@ use crate::error;
 use crate::error::Result;
 use crate::users::user::{User, UserId};
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, Copy)]
 pub struct SessionToken {
     token: Uuid,
 }

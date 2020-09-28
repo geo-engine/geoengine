@@ -1,64 +1,62 @@
-use crate::handlers::{authenticate, DB};
+use crate::handlers::{authenticate, Context};
 use crate::projects::project::{
     CreateProject, LoadVersion, ProjectId, ProjectListOptions, UpdateProject, UserProjectPermission,
 };
 use crate::projects::projectdb::ProjectDB;
-use crate::users::session::Session;
-use crate::users::userdb::UserDB;
 use crate::util::user_input::UserInput;
-use std::sync::Arc;
 use uuid::Uuid;
 use warp::Filter;
 
-pub fn create_project_handler<T: UserDB, R: ProjectDB>(
-    user_db: DB<T>,
-    project_db: DB<R>,
+pub fn create_project_handler<C: Context>(
+    ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::post()
         .and(warp::path!("project" / "create"))
-        .and(authenticate(user_db))
+        .and(authenticate(ctx))
         .and(warp::body::json())
-        .and(warp::any().map(move || Arc::clone(&project_db)))
         .and_then(create_project)
 }
 
 // TODO: move into handler once async closures are available?
-async fn create_project<T: ProjectDB>(
-    session: Session,
+async fn create_project<C: Context>(
+    ctx: C,
     create: CreateProject,
-    project_db: DB<T>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let create = create.validated()?;
-    let id = project_db.write().await.create(session.user, create);
+    let id = ctx
+        .project_db()
+        .write()
+        .await
+        .create(ctx.session()?.user, create);
     Ok(warp::reply::json(&id))
 }
 
-pub fn list_projects_handler<T: UserDB, R: ProjectDB>(
-    user_db: DB<T>,
-    project_db: DB<R>,
+pub fn list_projects_handler<C: Context>(
+    ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::post()
         .and(warp::path!("project" / "list"))
-        .and(authenticate(user_db))
+        .and(authenticate(ctx))
         .and(warp::body::json())
-        .and(warp::any().map(move || Arc::clone(&project_db)))
         .and_then(list_projects)
 }
 
 // TODO: move into handler once async closures are available?
-async fn list_projects<T: ProjectDB>(
-    session: Session,
+async fn list_projects<C: Context>(
+    ctx: C,
     options: ProjectListOptions,
-    project_db: DB<T>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let options = options.validated()?;
-    let listing = project_db.read().await.list(session.user, options);
+    let listing = ctx
+        .project_db()
+        .read()
+        .await
+        .list(ctx.session()?.user, options);
     Ok(warp::reply::json(&listing))
 }
 
-pub fn load_project_handler<T: UserDB, R: ProjectDB>(
-    user_db: DB<T>,
-    project_db: DB<R>,
+pub fn load_project_handler<C: Context>(
+    ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::post()
         .and(
@@ -66,189 +64,179 @@ pub fn load_project_handler<T: UserDB, R: ProjectDB>(
                 .or(warp::path!("project" / "load").map(|| LoadVersion::Latest))
                 .unify(),
         )
-        .and(authenticate(user_db))
+        .and(authenticate(ctx))
         .and(warp::body::json())
-        .and(warp::any().map(move || Arc::clone(&project_db)))
         .and_then(load_project)
 }
 
 // TODO: move into handler once async closures are available?
-async fn load_project<T: ProjectDB>(
+async fn load_project<C: Context>(
     version: LoadVersion,
-    session: Session,
+    ctx: C,
     project: ProjectId,
-    project_db: DB<T>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    let id = project_db
+    let id = ctx
+        .project_db()
         .read()
         .await
-        .load(session.user, project, version)?;
+        .load(ctx.session()?.user, project, version)?;
     Ok(warp::reply::json(&id))
 }
 
-pub fn update_project_handler<T: UserDB, R: ProjectDB>(
-    user_db: DB<T>,
-    project_db: DB<R>,
+pub fn update_project_handler<C: Context>(
+    ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::post()
         .and(warp::path!("project" / "update"))
-        .and(authenticate(user_db))
+        .and(authenticate(ctx))
         .and(warp::body::json())
-        .and(warp::any().map(move || Arc::clone(&project_db)))
         .and_then(update_project)
 }
 
 // TODO: move into handler once async closures are available?
-async fn update_project<T: ProjectDB>(
-    session: Session,
+async fn update_project<C: Context>(
+    ctx: C,
     update: UpdateProject,
-    project_db: DB<T>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let update = update.validated()?;
-    project_db.write().await.update(session.user, update)?;
+    ctx.project_db()
+        .write()
+        .await
+        .update(ctx.session()?.user, update)?;
     Ok(warp::reply())
 }
 
-pub fn delete_project_handler<T: UserDB, R: ProjectDB>(
-    user_db: DB<T>,
-    project_db: DB<R>,
+pub fn delete_project_handler<C: Context>(
+    ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::post()
         .and(warp::path!("project" / "delete"))
-        .and(authenticate(user_db))
+        .and(authenticate(ctx))
         .and(warp::body::json())
-        .and(warp::any().map(move || Arc::clone(&project_db)))
         .and_then(delete_project)
 }
 
 // TODO: move into handler once async closures are available?
-async fn delete_project<T: ProjectDB>(
-    session: Session,
+async fn delete_project<C: Context>(
+    ctx: C,
     project: ProjectId,
-    project_db: DB<T>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    project_db.write().await.delete(session.user, project)?;
+    ctx.project_db()
+        .write()
+        .await
+        .delete(ctx.session()?.user, project)?;
     Ok(warp::reply())
 }
 
-pub fn project_versions_handler<T: UserDB, R: ProjectDB>(
-    user_db: DB<T>,
-    project_db: DB<R>,
+pub fn project_versions_handler<C: Context>(
+    ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::get()
         .and(warp::path!("project" / "versions"))
-        .and(authenticate(user_db))
+        .and(authenticate(ctx))
         .and(warp::body::json())
-        .and(warp::any().map(move || Arc::clone(&project_db)))
         .and_then(project_versions)
 }
 
 // TODO: move into handler once async closures are available?
-async fn project_versions<T: ProjectDB>(
-    session: Session,
+async fn project_versions<C: Context>(
+    ctx: C,
     project: ProjectId,
-    project_db: DB<T>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    let versions = project_db.write().await.versions(session.user, project)?;
+    let versions = ctx
+        .project_db()
+        .write()
+        .await
+        .versions(ctx.session()?.user, project)?;
     Ok(warp::reply::json(&versions))
 }
 
-pub fn add_permission_handler<T: UserDB, R: ProjectDB>(
-    user_db: DB<T>,
-    project_db: DB<R>,
+pub fn add_permission_handler<C: Context>(
+    ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::post()
         .and(warp::path!("project" / "permission" / "add"))
-        .and(authenticate(user_db))
+        .and(authenticate(ctx))
         .and(warp::body::json())
-        .and(warp::any().map(move || Arc::clone(&project_db)))
         .and_then(add_permission)
 }
 
 // TODO: move into handler once async closures are available?
-async fn add_permission<T: ProjectDB>(
-    session: Session,
+async fn add_permission<C: Context>(
+    ctx: C,
     permission: UserProjectPermission,
-    project_db: DB<T>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    project_db
+    ctx.project_db()
         .write()
         .await
-        .add_permission(session.user, permission)?;
+        .add_permission(ctx.session()?.user, permission)?;
     Ok(warp::reply())
 }
 
-pub fn remove_permission_handler<T: UserDB, R: ProjectDB>(
-    user_db: DB<T>,
-    project_db: DB<R>,
+pub fn remove_permission_handler<C: Context>(
+    ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::post()
         .and(warp::path!("project" / "permission" / "remove"))
-        .and(authenticate(user_db))
+        .and(authenticate(ctx))
         .and(warp::body::json())
-        .and(warp::any().map(move || Arc::clone(&project_db)))
         .and_then(remove_permission)
 }
 
 // TODO: move into handler once async closures are available?
-async fn remove_permission<T: ProjectDB>(
-    session: Session,
+async fn remove_permission<C: Context>(
+    ctx: C,
     permission: UserProjectPermission,
-    project_db: DB<T>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    project_db
+    ctx.project_db()
         .write()
         .await
-        .remove_permission(session.user, permission)?;
+        .remove_permission(ctx.session()?.user, permission)?;
     Ok(warp::reply())
 }
 
-pub fn list_permissions_handler<T: UserDB, R: ProjectDB>(
-    user_db: DB<T>,
-    project_db: DB<R>,
+pub fn list_permissions_handler<C: Context>(
+    ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::post()
         .and(warp::path!("project" / "permission" / "list"))
-        .and(authenticate(user_db))
+        .and(authenticate(ctx))
         .and(warp::body::json())
-        .and(warp::any().map(move || Arc::clone(&project_db)))
         .and_then(list_permissions)
 }
 
 // TODO: move into handler once async closures are available?
-async fn list_permissions<T: ProjectDB>(
-    session: Session,
+async fn list_permissions<C: Context>(
+    ctx: C,
     project: ProjectId,
-    project_db: DB<T>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    let permissions = project_db
+    let permissions = ctx
+        .project_db()
         .write()
         .await
-        .list_permissions(session.user, project)?;
+        .list_permissions(ctx.session()?.user, project)?;
     Ok(warp::reply::json(&permissions))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::projects::hashmap_projectdb::HashMapProjectDB;
+    use crate::handlers::DefaultContext;
     use crate::projects::project::{
         Layer, LayerInfo, OrderBy, Project, ProjectFilter, ProjectId, ProjectListing,
         ProjectPermission, ProjectVersion, RasterInfo, STRectangle, UpdateProject,
     };
-    use crate::users::hashmap_userdb::HashMapUserDB;
     use crate::users::user::{UserCredentials, UserRegistration};
+    use crate::users::userdb::UserDB;
     use crate::util::identifiers::Identifier;
     use crate::workflows::workflow::WorkflowId;
     use geoengine_datatypes::operations::image::Colorizer;
-    use tokio::sync::RwLock;
 
     #[tokio::test]
     async fn create() {
-        let user_db = Arc::new(RwLock::new(HashMapUserDB::default()));
-        let project_db = Arc::new(RwLock::new(HashMapProjectDB::default()));
+        let ctx = DefaultContext::default();
 
-        user_db
+        ctx.user_db()
             .write()
             .await
             .register(
@@ -262,7 +250,8 @@ mod tests {
             )
             .unwrap();
 
-        let session = user_db
+        let session = ctx
+            .user_db()
             .write()
             .await
             .login(UserCredentials {
@@ -284,7 +273,7 @@ mod tests {
             .header("Content-Length", "0")
             .header("Authorization", session.token.to_string())
             .json(&create)
-            .reply(&create_project_handler(user_db.clone(), project_db.clone()))
+            .reply(&create_project_handler(ctx))
             .await;
 
         assert_eq!(res.status(), 200);
@@ -295,10 +284,9 @@ mod tests {
 
     #[tokio::test]
     async fn list() {
-        let user_db = Arc::new(RwLock::new(HashMapUserDB::default()));
-        let project_db = Arc::new(RwLock::new(HashMapProjectDB::default()));
+        let ctx = DefaultContext::default();
 
-        user_db
+        ctx.user_db()
             .write()
             .await
             .register(
@@ -312,7 +300,8 @@ mod tests {
             )
             .unwrap();
 
-        let session = user_db
+        let session = ctx
+            .user_db()
             .write()
             .await
             .login(UserCredentials {
@@ -330,7 +319,7 @@ mod tests {
             }
             .validated()
             .unwrap();
-            project_db.write().await.create(session.user, create);
+            ctx.project_db().write().await.create(session.user, create);
         }
 
         let options = ProjectListOptions {
@@ -351,7 +340,7 @@ mod tests {
             .header("Content-Length", "0")
             .header("Authorization", session.token.to_string())
             .json(&options)
-            .reply(&list_projects_handler(user_db.clone(), project_db.clone()))
+            .reply(&list_projects_handler(ctx))
             .await;
 
         assert_eq!(res.status(), 200);
@@ -364,10 +353,9 @@ mod tests {
 
     #[tokio::test]
     async fn load() {
-        let user_db = Arc::new(RwLock::new(HashMapUserDB::default()));
-        let project_db = Arc::new(RwLock::new(HashMapProjectDB::default()));
+        let ctx = DefaultContext::default();
 
-        user_db
+        ctx.user_db()
             .write()
             .await
             .register(
@@ -381,7 +369,8 @@ mod tests {
             )
             .unwrap();
 
-        let session = user_db
+        let session = ctx
+            .user_db()
             .write()
             .await
             .login(UserCredentials {
@@ -390,7 +379,7 @@ mod tests {
             })
             .unwrap();
 
-        let project = project_db.write().await.create(
+        let project = ctx.project_db().write().await.create(
             session.user,
             CreateProject {
                 name: "Test".to_string(),
@@ -408,7 +397,7 @@ mod tests {
             .header("Content-Length", "0")
             .header("Authorization", session.token.to_string())
             .json(&project)
-            .reply(&load_project_handler(user_db.clone(), project_db.clone()))
+            .reply(&load_project_handler(ctx))
             .await;
 
         assert_eq!(res.status(), 200);
@@ -419,10 +408,9 @@ mod tests {
 
     #[tokio::test]
     async fn load_version() {
-        let user_db = Arc::new(RwLock::new(HashMapUserDB::default()));
-        let project_db = Arc::new(RwLock::new(HashMapProjectDB::default()));
+        let ctx = DefaultContext::default();
 
-        user_db
+        ctx.user_db()
             .write()
             .await
             .register(
@@ -436,7 +424,8 @@ mod tests {
             )
             .unwrap();
 
-        let session = user_db
+        let session = ctx
+            .user_db()
             .write()
             .await
             .login(UserCredentials {
@@ -445,7 +434,7 @@ mod tests {
             })
             .unwrap();
 
-        let project = project_db.write().await.create(
+        let project = ctx.project_db().write().await.create(
             session.user,
             CreateProject {
                 name: "Test".to_string(),
@@ -457,7 +446,7 @@ mod tests {
             .unwrap(),
         );
 
-        let _ = project_db.write().await.update(
+        let _ = ctx.project_db().write().await.update(
             session.user,
             UpdateProject {
                 id: project,
@@ -477,7 +466,7 @@ mod tests {
             .header("Content-Length", "0")
             .header("Authorization", session.token.to_string())
             .json(&project)
-            .reply(&load_project_handler(user_db.clone(), project_db.clone()))
+            .reply(&load_project_handler(ctx.clone()))
             .await;
 
         assert_eq!(res.status(), 200);
@@ -488,7 +477,8 @@ mod tests {
             "TestUpdate"
         );
 
-        let versions = project_db
+        let versions = ctx
+            .project_db()
             .read()
             .await
             .versions(session.user, project)
@@ -501,7 +491,7 @@ mod tests {
             .header("Content-Length", "0")
             .header("Authorization", session.token.to_string())
             .json(&project)
-            .reply(&load_project_handler(user_db.clone(), project_db.clone()))
+            .reply(&load_project_handler(ctx))
             .await;
 
         assert_eq!(res.status(), 200);
@@ -512,10 +502,9 @@ mod tests {
 
     #[tokio::test]
     async fn update() {
-        let user_db = Arc::new(RwLock::new(HashMapUserDB::default()));
-        let project_db = Arc::new(RwLock::new(HashMapProjectDB::default()));
+        let ctx = DefaultContext::default();
 
-        user_db
+        ctx.user_db()
             .write()
             .await
             .register(
@@ -529,7 +518,8 @@ mod tests {
             )
             .unwrap();
 
-        let session = user_db
+        let session = ctx
+            .user_db()
             .write()
             .await
             .login(UserCredentials {
@@ -538,7 +528,7 @@ mod tests {
             })
             .unwrap();
 
-        let project = project_db.write().await.create(
+        let project = ctx.project_db().write().await.create(
             session.user,
             CreateProject {
                 name: "Test".to_string(),
@@ -571,12 +561,13 @@ mod tests {
             .header("Content-Length", "0")
             .header("Authorization", session.token.to_string())
             .json(&update)
-            .reply(&update_project_handler(user_db.clone(), project_db.clone()))
+            .reply(&update_project_handler(ctx.clone()))
             .await;
 
         assert_eq!(res.status(), 200);
 
-        let loaded = project_db
+        let loaded = ctx
+            .project_db()
             .read()
             .await
             .load_latest(session.user, project)
@@ -587,10 +578,9 @@ mod tests {
 
     #[tokio::test]
     async fn delete() {
-        let user_db = Arc::new(RwLock::new(HashMapUserDB::default()));
-        let project_db = Arc::new(RwLock::new(HashMapProjectDB::default()));
+        let ctx = DefaultContext::default();
 
-        user_db
+        ctx.user_db()
             .write()
             .await
             .register(
@@ -604,7 +594,8 @@ mod tests {
             )
             .unwrap();
 
-        let session = user_db
+        let session = ctx
+            .user_db()
             .write()
             .await
             .login(UserCredentials {
@@ -613,7 +604,7 @@ mod tests {
             })
             .unwrap();
 
-        let project = project_db.write().await.create(
+        let project = ctx.project_db().write().await.create(
             session.user,
             CreateProject {
                 name: "Test".to_string(),
@@ -631,12 +622,13 @@ mod tests {
             .header("Content-Length", "0")
             .header("Authorization", session.token.to_string())
             .json(&project)
-            .reply(&delete_project_handler(user_db.clone(), project_db.clone()))
+            .reply(&delete_project_handler(ctx.clone()))
             .await;
 
         assert_eq!(res.status(), 200);
 
-        assert!(project_db
+        assert!(ctx
+            .project_db()
             .read()
             .await
             .load_latest(session.user, project)
@@ -648,7 +640,7 @@ mod tests {
             .header("Content-Length", "0")
             .header("Authorization", session.token.to_string())
             .json(&project)
-            .reply(&delete_project_handler(user_db.clone(), project_db.clone()))
+            .reply(&delete_project_handler(ctx))
             .await;
 
         assert_eq!(res.status(), 500);
@@ -656,10 +648,9 @@ mod tests {
 
     #[tokio::test]
     async fn versions() {
-        let user_db = Arc::new(RwLock::new(HashMapUserDB::default()));
-        let project_db = Arc::new(RwLock::new(HashMapProjectDB::default()));
+        let ctx = DefaultContext::default();
 
-        user_db
+        ctx.user_db()
             .write()
             .await
             .register(
@@ -673,7 +664,8 @@ mod tests {
             )
             .unwrap();
 
-        let session = user_db
+        let session = ctx
+            .user_db()
             .write()
             .await
             .login(UserCredentials {
@@ -682,7 +674,7 @@ mod tests {
             })
             .unwrap();
 
-        let project = project_db.write().await.create(
+        let project = ctx.project_db().write().await.create(
             session.user,
             CreateProject {
                 name: "Test".to_string(),
@@ -694,7 +686,7 @@ mod tests {
             .unwrap(),
         );
 
-        let _ = project_db.write().await.update(
+        let _ = ctx.project_db().write().await.update(
             session.user,
             UpdateProject {
                 id: project,
@@ -714,10 +706,7 @@ mod tests {
             .header("Content-Length", "0")
             .header("Authorization", session.token.to_string())
             .json(&project)
-            .reply(&project_versions_handler(
-                user_db.clone(),
-                project_db.clone(),
-            ))
+            .reply(&project_versions_handler(ctx))
             .await;
 
         assert_eq!(res.status(), 200);
@@ -728,10 +717,9 @@ mod tests {
 
     #[tokio::test]
     async fn add_permission() {
-        let user_db = Arc::new(RwLock::new(HashMapUserDB::default()));
-        let project_db = Arc::new(RwLock::new(HashMapProjectDB::default()));
+        let ctx = DefaultContext::default();
 
-        user_db
+        ctx.user_db()
             .write()
             .await
             .register(
@@ -745,7 +733,8 @@ mod tests {
             )
             .unwrap();
 
-        let target_user = user_db
+        let target_user = ctx
+            .user_db()
             .write()
             .await
             .register(
@@ -759,7 +748,8 @@ mod tests {
             )
             .unwrap();
 
-        let session = user_db
+        let session = ctx
+            .user_db()
             .write()
             .await
             .login(UserCredentials {
@@ -768,7 +758,7 @@ mod tests {
             })
             .unwrap();
 
-        let project = project_db.write().await.create(
+        let project = ctx.project_db().write().await.create(
             session.user,
             CreateProject {
                 name: "Test".to_string(),
@@ -792,12 +782,13 @@ mod tests {
             .header("Content-Length", "0")
             .header("Authorization", session.token.to_string())
             .json(&permission)
-            .reply(&add_permission_handler(user_db.clone(), project_db.clone()))
+            .reply(&add_permission_handler(ctx.clone()))
             .await;
 
         assert_eq!(res.status(), 200);
 
-        assert!(project_db
+        assert!(ctx
+            .project_db()
             .write()
             .await
             .load_latest(target_user, project)
@@ -806,10 +797,9 @@ mod tests {
 
     #[tokio::test]
     async fn remove_permission() {
-        let user_db = Arc::new(RwLock::new(HashMapUserDB::default()));
-        let project_db = Arc::new(RwLock::new(HashMapProjectDB::default()));
+        let ctx = DefaultContext::default();
 
-        user_db
+        ctx.user_db()
             .write()
             .await
             .register(
@@ -823,7 +813,8 @@ mod tests {
             )
             .unwrap();
 
-        let target_user = user_db
+        let target_user = ctx
+            .user_db()
             .write()
             .await
             .register(
@@ -837,7 +828,8 @@ mod tests {
             )
             .unwrap();
 
-        let session = user_db
+        let session = ctx
+            .user_db()
             .write()
             .await
             .login(UserCredentials {
@@ -846,7 +838,7 @@ mod tests {
             })
             .unwrap();
 
-        let project = project_db.write().await.create(
+        let project = ctx.project_db().write().await.create(
             session.user,
             CreateProject {
                 name: "Test".to_string(),
@@ -864,7 +856,7 @@ mod tests {
             permission: ProjectPermission::Read,
         };
 
-        project_db
+        ctx.project_db()
             .write()
             .await
             .add_permission(session.user, permission.clone())
@@ -876,15 +868,13 @@ mod tests {
             .header("Content-Length", "0")
             .header("Authorization", session.token.to_string())
             .json(&permission)
-            .reply(&remove_permission_handler(
-                user_db.clone(),
-                project_db.clone(),
-            ))
+            .reply(&remove_permission_handler(ctx.clone()))
             .await;
 
         assert_eq!(res.status(), 200);
 
-        assert!(project_db
+        assert!(ctx
+            .project_db()
             .write()
             .await
             .load_latest(target_user, project)
@@ -893,10 +883,9 @@ mod tests {
 
     #[tokio::test]
     async fn list_permissions() {
-        let user_db = Arc::new(RwLock::new(HashMapUserDB::default()));
-        let project_db = Arc::new(RwLock::new(HashMapProjectDB::default()));
+        let ctx = DefaultContext::default();
 
-        user_db
+        ctx.user_db()
             .write()
             .await
             .register(
@@ -910,7 +899,8 @@ mod tests {
             )
             .unwrap();
 
-        let target_user = user_db
+        let target_user = ctx
+            .user_db()
             .write()
             .await
             .register(
@@ -924,7 +914,8 @@ mod tests {
             )
             .unwrap();
 
-        let session = user_db
+        let session = ctx
+            .user_db()
             .write()
             .await
             .login(UserCredentials {
@@ -933,7 +924,7 @@ mod tests {
             })
             .unwrap();
 
-        let project = project_db.write().await.create(
+        let project = ctx.project_db().write().await.create(
             session.user,
             CreateProject {
                 name: "Test".to_string(),
@@ -951,7 +942,7 @@ mod tests {
             permission: ProjectPermission::Read,
         };
 
-        project_db
+        ctx.project_db()
             .write()
             .await
             .add_permission(session.user, permission.clone())
@@ -963,10 +954,7 @@ mod tests {
             .header("Content-Length", "0")
             .header("Authorization", session.token.to_string())
             .json(&project)
-            .reply(&list_permissions_handler(
-                user_db.clone(),
-                project_db.clone(),
-            ))
+            .reply(&list_permissions_handler(ctx))
             .await;
 
         assert_eq!(res.status(), 200);
