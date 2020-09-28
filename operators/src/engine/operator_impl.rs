@@ -37,7 +37,6 @@ impl<P, R, S> InitializedOperatorImpl<P, R, S> {
             params,
             raster_sources,
             vector_sources,
-            // context,
             result_descriptor,
             state,
         }
