@@ -13,8 +13,11 @@ use crate::util::identifiers::Identifier;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use futures::StreamExt;
-use geoengine_datatypes::collections::{FeatureCollection, MultiPointCollection};
 use geoengine_datatypes::primitives::{FeatureData, MultiPoint, TimeInstance, TimeInterval};
+use geoengine_datatypes::{
+    collections::{FeatureCollection, MultiPointCollection},
+    primitives::SpatialResolution,
+};
 use geoengine_operators::engine::{
     ExecutionContext, QueryContext, QueryRectangle, TypedVectorQueryProcessor, VectorQueryProcessor,
 };
@@ -176,9 +179,9 @@ async fn get_feature<T: WorkflowRegistry>(
 
     let operator = workflow.operator.get_vector().context(error::Operator)?;
 
-    let execution_context = ExecutionContext;
+    let execution_context = ExecutionContext::mock_empty();
     let initialized = operator
-        .initialize(execution_context)
+        .initialize(&execution_context)
         .context(error::Operator)?;
 
     let processor = initialized.query_processor().context(error::Operator)?;
@@ -189,6 +192,7 @@ async fn get_feature<T: WorkflowRegistry>(
             let time = TimeInstance::from(chrono::offset::Utc::now());
             TimeInterval::new_unchecked(time, time)
         }),
+        spatial_resolution: SpatialResolution::zero_point_one(),
     };
     let query_ctx = QueryContext {
         // TODO: use production config and test config sizes here

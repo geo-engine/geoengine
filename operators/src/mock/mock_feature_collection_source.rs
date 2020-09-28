@@ -69,7 +69,7 @@ macro_rules! impl_mock_feature_collection_source {
         impl VectorOperator for $newtype {
             fn initialize(
                 self: Box<Self>,
-                context: ExecutionContext,
+                context: &ExecutionContext,
             ) -> Result<Box<InitializedVectorOperator>> {
                 InitializedOperatorImpl::create(
                     self.params,
@@ -116,8 +116,8 @@ impl_mock_feature_collection_source!(MultiPolygon, MultiPolygon);
 mod tests {
     use super::*;
     use futures::executor::block_on_stream;
-    use geoengine_datatypes::collections::MultiPointCollection;
     use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, FeatureData, TimeInterval};
+    use geoengine_datatypes::{collections::MultiPointCollection, primitives::SpatialResolution};
 
     #[test]
     fn serde() {
@@ -237,7 +237,7 @@ mod tests {
         }
         .boxed();
 
-        let source = source.initialize(ExecutionContext).unwrap();
+        let source = source.initialize(&ExecutionContext::mock_empty()).unwrap();
 
         let processor =
             if let Ok(TypedVectorQueryProcessor::MultiPoint(p)) = source.query_processor() {
@@ -249,6 +249,7 @@ mod tests {
         let query_rectangle = QueryRectangle {
             bbox: BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
             time_interval: TimeInterval::default(),
+            spatial_resolution: SpatialResolution::zero_point_one(),
         };
         let ctx = QueryContext {
             chunk_byte_size: 2 * std::mem::size_of::<Coordinate2D>(),

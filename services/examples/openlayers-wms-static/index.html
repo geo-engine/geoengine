@@ -1,11 +1,14 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <title>WMS Example</title>
     <link rel="stylesheet" href="ol.css" type="text/css">
     <style>
-        html, body, .map {
+        html,
+        body,
+        .map {
             margin: 0;
             padding: 0;
             width: 100%;
@@ -14,59 +17,59 @@
     </style>
     <script src="ol.js"></script>
 </head>
+
 <body>
-<div id="map" class="map"></div>
-<script type="text/javascript">
-    const map = new ol.Map({
-        layers: [
-            new ol.layer.Tile({
-                source: new ol.source.OSM(),
-            }),
-        ],
-        target: 'map',
-        view: new ol.View({
-            center: [0, 0],
-            zoom: 4,
-        }),
-    });
-
-    const workflow = {
-        "type": "Raster",
-        "operator": {
-            "type": "GdalSource",
-            "params": {
-                "dataset_id": "test",
-            }
-        }
-    };
-
-    fetch('/workflow/register', {
-        method: 'POST',
-        body: JSON.stringify(workflow),
-        headers: {
-            'Content-type': 'application/json; charset=UTF-8'
-        }
-    }).then(
-        response => response.json()
-    ).then(json => {
-        const workflow_id = json.id;
-
-        console.log("Creating layer with workflow id:", workflow_id);
-
-        // TODO: use real layer
-        console.log("Using `test` workflow instead");
-
-        const layer = new ol.layer.Image({
-            extent: [-13884991, 2870341, -7455066, 6338219],
-            source: new ol.source.ImageWMS({
-                url: '/wms',
-                params: {'LAYERS': 'test' /*workflow_id*/},
-                ratio: 1,
+    <div id="map" class="map"></div>
+    <script type="text/javascript">
+        const map = new ol.Map({
+            layers: [
+                new ol.layer.Tile({
+                    source: new ol.source.OSM(),
+                }),
+            ],
+            target: 'map',
+            view: new ol.View({
+                projection: 'EPSG:4326',
+                center: [0, 0],
+                zoom: 4,
             }),
         });
 
-        map.addLayer(layer);
-    });
-</script>
+        const workflow = {
+            "type": "Raster",
+            "operator": {
+                "type": "GdalSource",
+                "params": {
+                    "dataset_id": "test",
+                }
+            }
+        };
+
+        fetch('/workflow/register', {
+            method: 'POST',
+            body: JSON.stringify(workflow),
+            headers: {
+                'Content-type': 'application/json; charset=UTF-8'
+            }
+        }).then(
+            response => response.json()
+        ).then(json => {
+            const workflow_id = json.id;
+
+            console.log("Creating layer with workflow id:", workflow_id);
+
+            const layer = new ol.layer.Image({
+                extent: [-180, -90, 180, 90],
+                source: new ol.source.ImageWMS({
+                    url: '/wms',
+                    params: { 'LAYERS': workflow_id },
+                    ratio: 1,
+                }),
+            });
+
+            map.addLayer(layer);
+        });
+    </script>
 </body>
+
 </html>

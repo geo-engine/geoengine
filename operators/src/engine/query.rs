@@ -1,10 +1,11 @@
-use geoengine_datatypes::primitives::{BoundingBox2D, TimeInterval};
+use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution, TimeInterval};
 
 /// A spatio-temporal rectangle for querying data
 #[derive(Copy, Clone, Debug)]
 pub struct QueryRectangle {
     pub bbox: BoundingBox2D,
     pub time_interval: TimeInterval,
+    pub spatial_resolution: SpatialResolution,
 }
 
 /// A collection of meta data for processing a query

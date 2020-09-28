@@ -146,7 +146,7 @@ pub type CsvSource = SourceOperator<CsvSourceParameters>;
 impl VectorOperator for CsvSource {
     fn initialize(
         self: Box<Self>,
-        context: crate::engine::ExecutionContext,
+        context: &crate::engine::ExecutionContext,
     ) -> Result<Box<InitializedVectorOperator>> {
         InitializedOperatorImpl::create(
             self.params,
@@ -394,6 +394,8 @@ struct ParsedRow {
 mod tests {
     use std::io::{Seek, SeekFrom, Write};
 
+    use geoengine_datatypes::primitives::SpatialResolution;
+
     use super::*;
 
     #[tokio::test]
@@ -534,6 +536,7 @@ x,y
                 Coordinate2D::new(3., 3.),
             ),
             time_interval: TimeInterval::new_unchecked(0, 1),
+            spatial_resolution: SpatialResolution::zero_point_one(),
         };
         let ctx = QueryContext {
             chunk_byte_size: 10 * 8 * 2,

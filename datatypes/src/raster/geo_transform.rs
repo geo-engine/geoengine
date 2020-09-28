@@ -83,10 +83,10 @@ impl GeoTransform {
     /// use geoengine_datatypes::primitives::{Coordinate2D};
     ///
     /// let geo_transform = GeoTransform::new_with_coordinate_x_y(0.0, 1.0, 0.0, -1.0);
-    /// assert_eq!(geo_transform.coordinate_2d_to_grid_2d(&(0.0, 0.0).into()), (0, 0))
+    /// assert_eq!(geo_transform.coordinate_2d_to_grid_2d((0.0, 0.0).into()), (0, 0))
     /// ```
     ///
-    pub fn coordinate_2d_to_grid_2d(&self, coord: &Coordinate2D) -> (usize, usize) {
+    pub fn coordinate_2d_to_grid_2d(&self, coord: Coordinate2D) -> (usize, usize) {
         let grid_x_index = ((coord.x - self.upper_left_coordinate.x) / self.x_pixel_size) as usize;
         let grid_y_index = ((coord.y - self.upper_left_coordinate.y) / self.y_pixel_size) as usize;
         (grid_y_index, grid_x_index)
@@ -171,15 +171,15 @@ mod tests {
     fn geo_transform_coordinate_2d_to_grid_2d() {
         let geo_transform = GeoTransform::new_with_coordinate_x_y(5.0, 1.0, 5.0, -1.0);
         assert_eq!(
-            geo_transform.coordinate_2d_to_grid_2d(&(5.0, 5.0).into()),
+            geo_transform.coordinate_2d_to_grid_2d((5.0, 5.0).into()),
             (0, 0)
         );
         assert_eq!(
-            geo_transform.coordinate_2d_to_grid_2d(&(6.0, 4.0).into()),
+            geo_transform.coordinate_2d_to_grid_2d((6.0, 4.0).into()),
             (1, 1)
         );
         assert_eq!(
-            geo_transform.coordinate_2d_to_grid_2d(&(7.0, 3.0).into()),
+            geo_transform.coordinate_2d_to_grid_2d((7.0, 3.0).into()),
             (2, 2)
         );
     }

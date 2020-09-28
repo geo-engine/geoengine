@@ -1,12 +1,12 @@
-use super::{BaseRaster, Dim, GeoTransform, GridDimension, Ix, Raster};
+use super::{BaseRaster, Dim2D, Dim3D, GeoTransform, GridDimension, Raster};
 use crate::primitives::{BoundingBox2D, SpatialBounded, TemporalBounded, TimeInterval};
 use crate::raster::data_type::FromPrimitive;
 use crate::raster::Pixel;
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 
-pub type RasterTile2D<T> = RasterTile<Dim<[Ix; 2]>, T>;
-pub type RasterTile3D<T> = RasterTile<Dim<[Ix; 3]>, T>;
+pub type RasterTile2D<T> = RasterTile<Dim2D, T>;
+pub type RasterTile3D<T> = RasterTile<Dim3D, T>;
 
 /// A `RasterTile2D` is the main type used to iterate over tiles of 2D raster data
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -42,50 +42,72 @@ where
 /// The `TileInformation` is used to represent the spatial position of each tile
 #[derive(PartialEq, Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct TileInformation {
-    pub global_size_in_tiles: Dim<[Ix; 2]>,
-    pub global_tile_position: Dim<[Ix; 2]>,
-    pub global_pixel_position: Dim<[Ix; 2]>,
-    pub tile_size_in_pixels: Dim<[Ix; 2]>,
-    pub geo_transform: GeoTransform,
+    pub global_size_in_tiles: Dim2D,
+    pub global_tile_position: Dim2D,
+    pub global_pixel_position: Dim2D,
+    pub tile_size_in_pixels: Dim2D,
+    pub global_geo_transform: GeoTransform,
 }
 
 impl TileInformation {
     pub fn new(
-        global_size_in_tiles: Dim<[Ix; 2]>,
-        global_tile_position: Dim<[Ix; 2]>,
-        global_pixel_position: Dim<[Ix; 2]>,
-        tile_size_in_pixels: Dim<[Ix; 2]>,
-        geo_transform: GeoTransform,
+        global_size_in_tiles: Dim2D,
+        global_tile_position: Dim2D,
+        global_pixel_position: Dim2D,
+        tile_size_in_pixels: Dim2D,
+        global_geo_transform: GeoTransform,
     ) -> Self {
         Self {
             global_size_in_tiles,
             global_tile_position,
             global_pixel_position,
             tile_size_in_pixels,
-            geo_transform,
+            global_geo_transform,
         }
     }
-    pub fn global_size_in_tiles(&self) -> Dim<[Ix; 2]> {
+    pub fn global_size_in_tiles(&self) -> Dim2D {
         self.global_size_in_tiles
     }
-    pub fn global_tile_position(&self) -> Dim<[Ix; 2]> {
+    pub fn global_tile_position(&self) -> Dim2D {
         self.global_tile_position
     }
-    pub fn global_pixel_position(&self) -> Dim<[Ix; 2]> {
+    pub fn global_pixel_position_upper_left(&self) -> Dim2D {
         self.global_pixel_position
     }
-    pub fn tile_size_in_pixels(&self) -> Dim<[Ix; 2]> {
+
+    pub fn global_pixel_position_lower_right(&self) -> Dim2D {
+        self.global_pixel_position_upper_left() + self.tile_size_in_pixels
+    }
+
+    pub fn tile_size_in_pixels(&self) -> Dim2D {
         self.tile_size_in_pixels
+    }
+
+    pub fn tile_pixel_position_to_global(&self, local_pixel_position: Dim2D) -> Dim2D {
+        self.global_pixel_position_upper_left() + local_pixel_position
+    }
+
+    pub fn tile_geo_transform(&self) -> GeoTransform {
+        let tile_upper_left_coord = self
+            .global_geo_transform
+            .grid_2d_to_coordinate_2d(self.global_pixel_position.as_pattern());
+
+        GeoTransform::new(
+            tile_upper_left_coord,
+            self.global_geo_transform.x_pixel_size,
+            self.global_geo_transform.y_pixel_size,
+        )
     }
 }
 
 impl SpatialBounded for TileInformation {
     fn spatial_bounds(&self) -> BoundingBox2D {
-        let top_left_coord = self.geo_transform.grid_2d_to_coordinate_2d((0, 0));
-        let (.., tile_y_size, tile_x_size) = self.tile_size_in_pixels.as_pattern();
+        let top_left_coord = self
+            .global_geo_transform
+            .grid_2d_to_coordinate_2d(self.global_pixel_position_upper_left().as_pattern());
         let lower_right_coord = self
-            .geo_transform
-            .grid_2d_to_coordinate_2d((tile_y_size, tile_x_size));
+            .global_geo_transform
+            .grid_2d_to_coordinate_2d(self.global_pixel_position_lower_right().as_pattern());
         BoundingBox2D::new_upper_left_lower_right_unchecked(top_left_coord, lower_right_coord)
     }
 }
@@ -123,6 +145,6 @@ where
         self.data.data_container()
     }
     fn geo_transform(&self) -> &GeoTransform {
-        &self.tile.geo_transform
+        &self.tile.global_geo_transform
     }
 }
