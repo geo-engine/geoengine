@@ -60,7 +60,6 @@ impl ExecutionContext {
 
 pub trait InitializedOperatorBase {
     type Descriptor: ResultDescriptor + Clone;
-    // fn execution_context(&self) -> &ExecutionContext;
 
     /// Get the result descriptor of the `Operator`
     fn result_descriptor(&self) -> Self::Descriptor;
