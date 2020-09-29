@@ -221,7 +221,7 @@ async fn list_permissions<C: Context>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::handlers::DefaultContext;
+    use crate::handlers::InMemoryContext;
     use crate::projects::project::{
         Layer, LayerInfo, OrderBy, Project, ProjectFilter, ProjectId, ProjectListing,
         ProjectPermission, ProjectVersion, RasterInfo, STRectangle, UpdateProject,
@@ -234,7 +234,7 @@ mod tests {
 
     #[tokio::test]
     async fn create() {
-        let ctx = DefaultContext::default();
+        let ctx = InMemoryContext::default();
 
         ctx.user_db()
             .write()
@@ -284,7 +284,7 @@ mod tests {
 
     #[tokio::test]
     async fn list() {
-        let ctx = DefaultContext::default();
+        let ctx = InMemoryContext::default();
 
         ctx.user_db()
             .write()
@@ -353,7 +353,7 @@ mod tests {
 
     #[tokio::test]
     async fn load() {
-        let ctx = DefaultContext::default();
+        let ctx = InMemoryContext::default();
 
         ctx.user_db()
             .write()
@@ -408,7 +408,7 @@ mod tests {
 
     #[tokio::test]
     async fn load_version() {
-        let ctx = DefaultContext::default();
+        let ctx = InMemoryContext::default();
 
         ctx.user_db()
             .write()
@@ -502,7 +502,7 @@ mod tests {
 
     #[tokio::test]
     async fn update() {
-        let ctx = DefaultContext::default();
+        let ctx = InMemoryContext::default();
 
         ctx.user_db()
             .write()
@@ -578,7 +578,7 @@ mod tests {
 
     #[tokio::test]
     async fn delete() {
-        let ctx = DefaultContext::default();
+        let ctx = InMemoryContext::default();
 
         ctx.user_db()
             .write()
@@ -648,7 +648,7 @@ mod tests {
 
     #[tokio::test]
     async fn versions() {
-        let ctx = DefaultContext::default();
+        let ctx = InMemoryContext::default();
 
         ctx.user_db()
             .write()
@@ -717,7 +717,7 @@ mod tests {
 
     #[tokio::test]
     async fn add_permission() {
-        let ctx = DefaultContext::default();
+        let ctx = InMemoryContext::default();
 
         ctx.user_db()
             .write()
@@ -797,7 +797,7 @@ mod tests {
 
     #[tokio::test]
     async fn remove_permission() {
-        let ctx = DefaultContext::default();
+        let ctx = InMemoryContext::default();
 
         ctx.user_db()
             .write()
@@ -883,7 +883,7 @@ mod tests {
 
     #[tokio::test]
     async fn list_permissions() {
-        let ctx = DefaultContext::default();
+        let ctx = InMemoryContext::default();
 
         ctx.user_db()
             .write()

@@ -67,7 +67,7 @@ async fn logout<C: Context>(ctx: C) -> Result<impl warp::Reply, warp::Rejection>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::handlers::{handle_rejection, DefaultContext};
+    use crate::handlers::{handle_rejection, InMemoryContext};
     use crate::users::session::Session;
     use crate::users::user::UserId;
     use crate::users::userdb::UserDB;
@@ -75,7 +75,7 @@ mod tests {
 
     #[tokio::test]
     async fn register() {
-        let ctx = DefaultContext::default();
+        let ctx = InMemoryContext::default();
 
         let user = UserRegistration {
             email: "foo@bar.de".to_string(),
@@ -100,7 +100,7 @@ mod tests {
 
     #[tokio::test]
     async fn register_fail() {
-        let ctx = DefaultContext::default();
+        let ctx = InMemoryContext::default();
 
         let user = UserRegistration {
             email: "notanemail".to_string(),
@@ -122,7 +122,7 @@ mod tests {
 
     #[tokio::test]
     async fn login() {
-        let ctx = DefaultContext::default();
+        let ctx = InMemoryContext::default();
 
         let user = Validated {
             user_input: UserRegistration {
@@ -155,7 +155,7 @@ mod tests {
 
     #[tokio::test]
     async fn login_fail() {
-        let ctx = DefaultContext::default();
+        let ctx = InMemoryContext::default();
 
         let user = Validated {
             user_input: UserRegistration {
@@ -185,7 +185,7 @@ mod tests {
 
     #[tokio::test]
     async fn logout() {
-        let ctx = DefaultContext::default();
+        let ctx = InMemoryContext::default();
 
         let user = Validated {
             user_input: UserRegistration {
@@ -217,7 +217,7 @@ mod tests {
 
     #[tokio::test]
     async fn logout_missing_header() {
-        let ctx = DefaultContext::default();
+        let ctx = InMemoryContext::default();
 
         let res = warp::test::request()
             .method("POST")
@@ -231,7 +231,7 @@ mod tests {
 
     #[tokio::test]
     async fn logout_wrong_token() {
-        let ctx = DefaultContext::default();
+        let ctx = InMemoryContext::default();
 
         let res = warp::test::request()
             .method("POST")
@@ -246,7 +246,7 @@ mod tests {
 
     #[tokio::test]
     async fn logout_invalid_token() {
-        let ctx = DefaultContext::default();
+        let ctx = InMemoryContext::default();
 
         let res = warp::test::request()
             .method("POST")

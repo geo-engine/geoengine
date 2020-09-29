@@ -48,14 +48,14 @@ async fn load_workflow<C: Context>(id: Uuid, ctx: C) -> Result<impl warp::Reply,
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::handlers::DefaultContext;
+    use crate::handlers::InMemoryContext;
     use crate::workflows::registry::WorkflowRegistry;
     use geoengine_operators::engine::VectorOperator;
     use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
 
     #[tokio::test]
     async fn register() {
-        let ctx = DefaultContext::default();
+        let ctx = InMemoryContext::default();
 
         let workflow = Workflow {
             operator: MockPointSource {
@@ -84,7 +84,7 @@ mod tests {
 
     #[tokio::test]
     async fn load() {
-        let ctx = DefaultContext::default();
+        let ctx = InMemoryContext::default();
 
         let workflow = Workflow {
             operator: MockPointSource {
@@ -115,7 +115,7 @@ mod tests {
 
     #[tokio::test]
     async fn load_not_exist() {
-        let ctx = DefaultContext::default();
+        let ctx = InMemoryContext::default();
 
         let res = warp::test::request()
             .method("GET")

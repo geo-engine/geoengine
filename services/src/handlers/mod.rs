@@ -55,6 +55,8 @@ fn authenticate<C: Context>(
         .and_then(do_authenticate)
 }
 
+/// A context bundles access to shared resources like databases and session specific information
+/// about the user to pass to the services handlers.
 pub trait Context: 'static + Send + Sync + Clone {
     type UserDB: UserDB;
     type ProjectDB: ProjectDB;
@@ -68,15 +70,16 @@ pub trait Context: 'static + Send + Sync + Clone {
     fn set_session(&mut self, session: Session);
 }
 
+/// A context with references to in-memory versions of the individual databases.
 #[derive(Clone, Default)]
-pub struct DefaultContext {
+pub struct InMemoryContext {
     user_db: DB<HashMapUserDB>,
     project_db: DB<HashMapProjectDB>,
     workflow_registry: DB<HashMapRegistry>,
     session: Option<Session>,
 }
 
-impl Context for DefaultContext {
+impl Context for InMemoryContext {
     type UserDB = HashMapUserDB;
     type ProjectDB = HashMapProjectDB;
     type WorkflowRegistry = HashMapRegistry;

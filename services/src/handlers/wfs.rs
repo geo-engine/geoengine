@@ -308,7 +308,7 @@ mod tests {
     use geoengine_operators::source::CsvSourceParameters;
 
     use super::*;
-    use crate::handlers::DefaultContext;
+    use crate::handlers::InMemoryContext;
     use crate::workflows::workflow::Workflow;
     use geoengine_operators::engine::TypedOperator;
     use geoengine_operators::source::csv::{
@@ -320,7 +320,7 @@ mod tests {
 
     #[tokio::test]
     async fn mock_test() {
-        let ctx = DefaultContext::default();
+        let ctx = InMemoryContext::default();
 
         let res = warp::test::request()
             .method("GET")
@@ -413,7 +413,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_capabilities() {
-        let ctx = DefaultContext::default();
+        let ctx = InMemoryContext::default();
 
         let res = warp::test::request()
             .method("GET")
@@ -446,7 +446,7 @@ x;y
         .unwrap();
         temp_file.seek(SeekFrom::Start(0)).unwrap();
 
-        let ctx = DefaultContext::default();
+        let ctx = InMemoryContext::default();
 
         let workflow = Workflow {
             operator: TypedOperator::Vector(Box::new(CsvSource {
@@ -537,7 +537,7 @@ x;y
         .unwrap();
         temp_file.seek(SeekFrom::Start(0)).unwrap();
 
-        let ctx = DefaultContext::default();
+        let ctx = InMemoryContext::default();
 
         let workflow = Workflow {
             operator: TypedOperator::Vector(Box::new(CsvSource {

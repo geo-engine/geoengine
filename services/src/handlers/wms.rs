@@ -293,14 +293,14 @@ mod tests {
     };
 
     use super::*;
-    use crate::handlers::DefaultContext;
+    use crate::handlers::InMemoryContext;
     use crate::ogc::wms::request::GetMapFormat;
     use crate::workflows::workflow::Workflow;
     use xml::ParserConfig;
 
     #[tokio::test]
     async fn test() {
-        let ctx = DefaultContext::default();
+        let ctx = InMemoryContext::default();
 
         let res = warp::test::request()
             .method("GET")
@@ -316,7 +316,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_capabilities() {
-        let ctx = DefaultContext::default();
+        let ctx = InMemoryContext::default();
 
         let res = warp::test::request()
             .method("GET")
@@ -435,7 +435,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_map() {
-        let ctx = DefaultContext::default();
+        let ctx = InMemoryContext::default();
 
         let workflow = Workflow {
             operator: TypedOperator::Raster(
@@ -470,7 +470,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_map_uppercase() {
-        let ctx = DefaultContext::default();
+        let ctx = InMemoryContext::default();
 
         let workflow = Workflow {
             operator: TypedOperator::Raster(

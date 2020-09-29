@@ -3,7 +3,7 @@ use warp::{Filter, Rejection};
 use crate::error;
 use crate::error::{Error, Result};
 use crate::handlers;
-use crate::handlers::{handle_rejection, DefaultContext};
+use crate::handlers::{handle_rejection, InMemoryContext};
 use snafu::ResultExt;
 use std::path::PathBuf;
 use tokio::signal;
@@ -14,7 +14,7 @@ pub async fn start_server(
     shutdown_rx: Option<Receiver<()>>,
     static_files_dir: Option<PathBuf>,
 ) -> Result<()> {
-    let ctx = DefaultContext::default();
+    let ctx = InMemoryContext::default();
 
     // TODO: hierarchical filters workflow -> (register, load), user -> (register, login, ...)
     let handler = handlers::workflows::register_workflow_handler(ctx.clone())
