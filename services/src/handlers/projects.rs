@@ -260,6 +260,7 @@ mod tests {
                 .validated()
                 .unwrap(),
             )
+            .await
             .unwrap();
 
         let session = user_db
@@ -269,6 +270,7 @@ mod tests {
                 email: "foo@bar.de".to_string(),
                 password: "secret123".to_string(),
             })
+            .await
             .unwrap();
 
         let create = CreateProject {
@@ -310,6 +312,7 @@ mod tests {
                 .validated()
                 .unwrap(),
             )
+            .await
             .unwrap();
 
         let session = user_db
@@ -319,6 +322,7 @@ mod tests {
                 email: "foo@bar.de".to_string(),
                 password: "secret123".to_string(),
             })
+            .await
             .unwrap();
 
         for i in 0..10 {
@@ -379,6 +383,7 @@ mod tests {
                 .validated()
                 .unwrap(),
             )
+            .await
             .unwrap();
 
         let session = user_db
@@ -388,6 +393,7 @@ mod tests {
                 email: "foo@bar.de".to_string(),
                 password: "secret123".to_string(),
             })
+            .await
             .unwrap();
 
         let project = project_db.write().await.create(
@@ -434,6 +440,7 @@ mod tests {
                 .validated()
                 .unwrap(),
             )
+            .await
             .unwrap();
 
         let session = user_db
@@ -443,6 +450,7 @@ mod tests {
                 email: "foo@bar.de".to_string(),
                 password: "secret123".to_string(),
             })
+            .await
             .unwrap();
 
         let project = project_db.write().await.create(
@@ -527,6 +535,7 @@ mod tests {
                 .validated()
                 .unwrap(),
             )
+            .await
             .unwrap();
 
         let session = user_db
@@ -536,6 +545,7 @@ mod tests {
                 email: "foo@bar.de".to_string(),
                 password: "secret123".to_string(),
             })
+            .await
             .unwrap();
 
         let project = project_db.write().await.create(
@@ -602,6 +612,7 @@ mod tests {
                 .validated()
                 .unwrap(),
             )
+            .await
             .unwrap();
 
         let session = user_db
@@ -611,6 +622,7 @@ mod tests {
                 email: "foo@bar.de".to_string(),
                 password: "secret123".to_string(),
             })
+            .await
             .unwrap();
 
         let project = project_db.write().await.create(
@@ -671,6 +683,7 @@ mod tests {
                 .validated()
                 .unwrap(),
             )
+            .await
             .unwrap();
 
         let session = user_db
@@ -680,6 +693,7 @@ mod tests {
                 email: "foo@bar.de".to_string(),
                 password: "secret123".to_string(),
             })
+            .await
             .unwrap();
 
         let project = project_db.write().await.create(
@@ -743,6 +757,7 @@ mod tests {
                 .validated()
                 .unwrap(),
             )
+            .await
             .unwrap();
 
         let target_user = user_db
@@ -757,6 +772,7 @@ mod tests {
                 .validated()
                 .unwrap(),
             )
+            .await
             .unwrap();
 
         let session = user_db
@@ -766,6 +782,7 @@ mod tests {
                 email: "foo@bar.de".to_string(),
                 password: "secret123".to_string(),
             })
+            .await
             .unwrap();
 
         let project = project_db.write().await.create(
@@ -821,6 +838,7 @@ mod tests {
                 .validated()
                 .unwrap(),
             )
+            .await
             .unwrap();
 
         let target_user = user_db
@@ -835,6 +853,7 @@ mod tests {
                 .validated()
                 .unwrap(),
             )
+            .await
             .unwrap();
 
         let session = user_db
@@ -844,6 +863,7 @@ mod tests {
                 email: "foo@bar.de".to_string(),
                 password: "secret123".to_string(),
             })
+            .await
             .unwrap();
 
         let project = project_db.write().await.create(
@@ -908,6 +928,7 @@ mod tests {
                 .validated()
                 .unwrap(),
             )
+            .await
             .unwrap();
 
         let target_user = user_db
@@ -922,6 +943,7 @@ mod tests {
                 .validated()
                 .unwrap(),
             )
+            .await
             .unwrap();
 
         let session = user_db
@@ -931,6 +953,7 @@ mod tests {
                 email: "foo@bar.de".to_string(),
                 password: "secret123".to_string(),
             })
+            .await
             .unwrap();
 
         let project = project_db.write().await.create(

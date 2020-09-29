@@ -41,7 +41,7 @@ pub fn authenticate<T: UserDB>(
     ) -> Result<Session, warp::Rejection> {
         let token = SessionToken::from_str(&token).map_err(|_| warp::reject())?;
         let db = user_db.read().await;
-        db.session(token).map_err(|_| warp::reject())
+        db.session(token).await.map_err(|_| warp::reject())
     }
 
     warp::any()

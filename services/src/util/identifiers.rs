@@ -4,6 +4,9 @@ pub trait Identifier {
 
     /// Create identifier from given `id`
     fn from_uuid(id: uuid::Uuid) -> Self;
+
+    /// Get the internal uuid
+    fn uuid(&self) -> uuid::Uuid;
 }
 
 #[macro_export]
@@ -23,6 +26,10 @@ macro_rules! identifier {
                 Self {
                     id: uuid::Uuid::new_v4(),
                 }
+            }
+
+            fn uuid(&self) -> uuid::Uuid {
+                self.id
             }
         }
 

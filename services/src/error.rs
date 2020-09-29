@@ -60,6 +60,12 @@ pub enum Error {
     InvalidWFSTypeNames,
 
     NoWorkflowForGivenId,
+
+    BB8,
+
+    TokioPostgres {
+        source: bb8_postgres::tokio_postgres::Error,
+    },
 }
 
 impl Reject for Error {}

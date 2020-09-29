@@ -22,6 +22,8 @@ pwhash = "0.3"
 serde_urlencoded = "0.6"
 futures = "0.3"
 image = "0.23"
+bb8-postgres = { version = "0.4", features = ["with-uuid-0_8"] }
+async-trait = "0.1"
 
 [dev-dependencies]
 clap = "3.0.0-beta.1"

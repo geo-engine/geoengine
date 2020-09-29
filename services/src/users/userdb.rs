@@ -2,7 +2,9 @@ use crate::error::Result;
 use crate::users::session::{Session, SessionToken};
 use crate::users::user::{UserCredentials, UserId, UserRegistration};
 use crate::util::user_input::Validated;
+use async_trait::async_trait;
 
+#[async_trait]
 pub trait UserDB: Send + Sync {
     /// Registers a user by providing `UserRegistration` parameters
     ///
@@ -10,7 +12,7 @@ pub trait UserDB: Send + Sync {
     ///
     /// This call fails if the `UserRegistration` is invalid.
     ///
-    fn register(&mut self, user: Validated<UserRegistration>) -> Result<UserId>;
+    async fn register(&mut self, user: Validated<UserRegistration>) -> Result<UserId>;
 
     /// Creates a `Session` by providing `UserCredentials`
     ///
@@ -18,7 +20,7 @@ pub trait UserDB: Send + Sync {
     ///
     /// This call fails if the `UserCredentials` are invalid.
     ///
-    fn login(&mut self, user: UserCredentials) -> Result<Session>;
+    async fn login(&mut self, user: UserCredentials) -> Result<Session>;
 
     /// Removes a session from the `UserDB`
     ///
@@ -26,7 +28,7 @@ pub trait UserDB: Send + Sync {
     ///
     /// This call fails if the token is invalid.
     ///
-    fn logout(&mut self, session: SessionToken) -> Result<()>;
+    async fn logout(&mut self, session: SessionToken) -> Result<()>;
 
     /// Creates a new `UserDB` session
     ///
@@ -34,5 +36,5 @@ pub trait UserDB: Send + Sync {
     ///
     /// This call fails if the token is invalid.
     ///
-    fn session(&self, token: SessionToken) -> Result<Session>;
+    async fn session(&self, token: SessionToken) -> Result<Session>;
 }

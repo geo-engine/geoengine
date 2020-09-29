@@ -24,7 +24,7 @@ async fn register_user<T: UserDB>(
     user_db: DB<T>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let user = user.validated()?;
-    let id = user_db.write().await.register(user)?;
+    let id = user_db.write().await.register(user).await?;
     Ok(warp::reply::json(&id))
 }
 
@@ -44,7 +44,7 @@ async fn login<T: UserDB>(
     user_db: DB<T>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let mut db = user_db.write().await;
-    match db.login(user) {
+    match db.login(user).await {
         Ok(id) => Ok(warp::reply::json(&id).into_response()),
         Err(_) => Ok(warp::http::StatusCode::UNAUTHORIZED.into_response()),
     }
@@ -66,7 +66,7 @@ async fn logout<T: UserDB>(
     user_db: DB<T>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let mut db = user_db.write().await;
-    match db.logout(session.token) {
+    match db.logout(session.token).await {
         Ok(_) => Ok(warp::reply().into_response()),
         Err(_) => Ok(warp::http::StatusCode::UNAUTHORIZED.into_response()),
     }
@@ -141,7 +141,7 @@ mod tests {
             },
         };
 
-        user_db.write().await.register(user).unwrap();
+        user_db.write().await.register(user).await.unwrap();
 
         let credentials = UserCredentials {
             email: "foo@bar.de".to_string(),
@@ -174,7 +174,7 @@ mod tests {
             },
         };
 
-        user_db.write().await.register(user).unwrap();
+        user_db.write().await.register(user).await.unwrap();
 
         let credentials = UserCredentials {
             email: "foo@bar.de".to_string(),
@@ -204,14 +204,14 @@ mod tests {
             },
         };
 
-        user_db.write().await.register(user).unwrap();
+        user_db.write().await.register(user).await.unwrap();
 
         let credentials = UserCredentials {
             email: "foo@bar.de".to_string(),
             password: "secret123".to_string(),
         };
 
-        let session = user_db.write().await.login(credentials).unwrap();
+        let session = user_db.write().await.login(credentials).await.unwrap();
 
         let res = warp::test::request()
             .method("POST")
