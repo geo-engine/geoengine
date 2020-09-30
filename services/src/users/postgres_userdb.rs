@@ -25,8 +25,7 @@ impl PostgresUserDB {
     }
 
     async fn schema_version(&self) -> Result<i32> {
-        // TODO: handle if version table not exists
-        let conn = self.conn_pool.get().await.map_err(|_| error::Error::BB8)?; // TODO: error reporting
+        let conn = self.conn_pool.get().await?;
 
         let stmt = match conn.prepare("SELECT version from version").await {
             Ok(stmt) => stmt,
@@ -42,10 +41,7 @@ impl PostgresUserDB {
             }
         };
 
-        let row = conn
-            .query_one(&stmt, &[])
-            .await
-            .context(error::TokioPostgres)?;
+        let row = conn.query_one(&stmt, &[]).await?;
 
         Ok(row.get::<usize, i32>(0))
     }
@@ -53,7 +49,7 @@ impl PostgresUserDB {
     async fn update_schema(&self) -> Result<()> {
         let mut version = self.schema_version().await?;
 
-        let conn = self.conn_pool.get().await.map_err(|_| error::Error::BB8)?; // TODO: error reporting
+        let conn = self.conn_pool.get().await?;
         loop {
             match version {
                 0 => {
@@ -72,11 +68,9 @@ impl PostgresUserDB {
                         );
                         ",
                     )
-                    .await
-                    .context(error::TokioPostgres)?;
-                    version += 1;
+                    .await?;
                     // TODO log
-                    println!("Updated user database to schema version {}", version);
+                    println!("Updated user database to schema version {}", version + 1);
                 }
                 1 => {
                     conn.batch_execute(
@@ -86,14 +80,13 @@ impl PostgresUserDB {
                         UPDATE version SET version = 2;\
                         ",
                     )
-                    .await
-                    .context(error::TokioPostgres)?;
-                    version += 1;
+                    .await?;
                     // TODO log
-                    println!("Updated user database to schema version {}", version);
+                    println!("Updated user database to schema version {}", version + 1);
                 }
                 _ => return Ok(()),
             }
+            version += 1;
         }
     }
 }
@@ -101,7 +94,7 @@ impl PostgresUserDB {
 #[async_trait]
 impl UserDB for PostgresUserDB {
     async fn register(&mut self, user: Validated<UserRegistration>) -> Result<UserId> {
-        let conn = self.conn_pool.get().await.map_err(|_| error::Error::BB8)?; // TODO: error reporting
+        let conn = self.conn_pool.get().await?;
         let stmt = conn
             .prepare(
                 "INSERT INTO users (id, email, password_hash, real_name, active) VALUES ($1, $2, $3, $4, $5);",
@@ -120,8 +113,7 @@ impl UserDB for PostgresUserDB {
                 &user.active,
             ],
         )
-        .await
-        .context(error::TokioPostgres)?;
+        .await?;
 
         Ok(user.id)
     }
