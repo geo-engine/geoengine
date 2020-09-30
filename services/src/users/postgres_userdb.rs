@@ -1,6 +1,6 @@
 use crate::error;
 use crate::error::Result;
-use crate::users::session::{Session, SessionToken};
+use crate::users::session::{Session, SessionId};
 use crate::users::user::User;
 use crate::users::user::{UserCredentials, UserId, UserRegistration};
 use crate::users::userdb::UserDB;
@@ -11,14 +11,15 @@ use bb8_postgres::bb8::Pool;
 use bb8_postgres::tokio_postgres::error::SqlState;
 use bb8_postgres::tokio_postgres::NoTls;
 use bb8_postgres::PostgresConnectionManager;
-use snafu::ResultExt;
+use pwhash::bcrypt;
+use uuid::Uuid;
 
-struct PostgresUserDB {
+pub struct PostgresUserDB {
     conn_pool: Pool<PostgresConnectionManager<NoTls>>, // TODO: support Tls connection as well
 }
 
 impl PostgresUserDB {
-    async fn new(conn_pool: Pool<PostgresConnectionManager<NoTls>>) -> Result<Self> {
+    pub async fn new(conn_pool: Pool<PostgresConnectionManager<NoTls>>) -> Result<Self> {
         let a = Self { conn_pool };
         a.update_schema().await?;
         Ok(a)
@@ -66,6 +67,11 @@ impl PostgresUserDB {
                             password_hash character varying (256),
                             real_name character varying (256)
                         );
+
+                        CREATE TABLE sessions (
+                            id UUID PRIMARY KEY,
+                            user_id UUID REFERENCES users(id)
+                        );
                         ",
                     )
                     .await?;
@@ -93,14 +99,15 @@ impl PostgresUserDB {
 
 #[async_trait]
 impl UserDB for PostgresUserDB {
+    // TODO: clean up expired sessions?
+
     async fn register(&mut self, user: Validated<UserRegistration>) -> Result<UserId> {
         let conn = self.conn_pool.get().await?;
         let stmt = conn
             .prepare(
                 "INSERT INTO users (id, email, password_hash, real_name, active) VALUES ($1, $2, $3, $4, $5);",
             )
-            .await
-            .context(error::TokioPostgres)?;
+            .await?;
 
         let user = User::from(user.user_input);
         conn.execute(
@@ -118,16 +125,61 @@ impl UserDB for PostgresUserDB {
         Ok(user.id)
     }
 
-    async fn login(&mut self, user: UserCredentials) -> Result<Session> {
-        todo!()
+    async fn login(&mut self, user_credentials: UserCredentials) -> Result<Session> {
+        let conn = self.conn_pool.get().await?;
+        let stmt = conn
+            .prepare("SELECT id, password_hash FROM users WHERE email = $1;")
+            .await?;
+
+        let row = conn
+            .query_one(&stmt, &[&user_credentials.email])
+            .await
+            .map_err(|_| error::Error::LoginFailed)?;
+
+        let user_id = UserId::from_uuid(row.get::<usize, Uuid>(0));
+        let password_hash = row.get::<usize, &str>(1);
+
+        if bcrypt::verify(user_credentials.password, password_hash) {
+            let session = Session::from_user_id(user_id);
+
+            let stmt = conn
+                .prepare("INSERT INTO sessions (id, user_id) VALUES ($1, $2);")
+                .await?;
+
+            conn.execute(&stmt, &[&session.id.uuid(), &user_id.uuid()])
+                .await?;
+            Ok(session)
+        } else {
+            Err(error::Error::LoginFailed)
+        }
     }
 
-    async fn logout(&mut self, session: SessionToken) -> Result<()> {
-        todo!()
+    async fn logout(&mut self, session: SessionId) -> Result<()> {
+        let conn = self.conn_pool.get().await?;
+        let stmt = conn
+            .prepare("DELETE FROM sessions WHERE id = $1;") // TODO: only invalidate session?
+            .await?;
+
+        conn.execute(&stmt, &[&session.uuid()])
+            .await
+            .map_err(|_| error::Error::LogoutFailed)?;
+        Ok(())
     }
 
-    async fn session(&self, token: SessionToken) -> Result<Session> {
-        todo!()
+    async fn session(&self, session: SessionId) -> Result<Session> {
+        let conn = self.conn_pool.get().await?;
+        let stmt = conn
+            .prepare("SELECT user_id FROM sessions WHERE id = $1;") // TODO: check session is still valid
+            .await?;
+
+        let row = conn
+            .query_one(&stmt, &[&session.uuid()])
+            .await
+            .map_err(|_| error::Error::SessionDoesNotExist)?;
+
+        let user_id = UserId::from_uuid(row.get::<usize, Uuid>(0));
+
+        Ok(Session::from_fields(user_id, session))
     }
 }
 
@@ -140,6 +192,7 @@ mod tests {
     use std::str::FromStr;
 
     #[tokio::test]
+    #[ignore]
     async fn test() {
         // TODO: load from test config
         // TODO: add postgres to ci
@@ -163,5 +216,21 @@ mod tests {
         .unwrap();
 
         assert!(db.register(user_registration).await.is_ok());
+
+        let credentials = UserCredentials {
+            email: "foo@bar.de".into(),
+            password: "secret123".into(),
+        };
+
+        let result = db.login(credentials).await;
+        assert!(result.is_ok());
+
+        let session = result.unwrap();
+
+        assert!(db.session(session.id).await.is_ok());
+
+        assert!(db.logout(session.id).await.is_ok());
+
+        assert!(db.session(session.id).await.is_err());
     }
 }

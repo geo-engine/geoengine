@@ -284,7 +284,7 @@ mod tests {
             .method("POST")
             .path("/project/create")
             .header("Content-Length", "0")
-            .header("Authorization", session.token.to_string())
+            .header("Authorization", session.id.to_string())
             .json(&create)
             .reply(&create_project_handler(user_db.clone(), project_db.clone()))
             .await;
@@ -353,7 +353,7 @@ mod tests {
             .method("POST")
             .path("/project/list")
             .header("Content-Length", "0")
-            .header("Authorization", session.token.to_string())
+            .header("Authorization", session.id.to_string())
             .json(&options)
             .reply(&list_projects_handler(user_db.clone(), project_db.clone()))
             .await;
@@ -412,7 +412,7 @@ mod tests {
             .method("POST")
             .path("/project/load")
             .header("Content-Length", "0")
-            .header("Authorization", session.token.to_string())
+            .header("Authorization", session.id.to_string())
             .json(&project)
             .reply(&load_project_handler(user_db.clone(), project_db.clone()))
             .await;
@@ -483,7 +483,7 @@ mod tests {
             .method("POST")
             .path("/project/load")
             .header("Content-Length", "0")
-            .header("Authorization", session.token.to_string())
+            .header("Authorization", session.id.to_string())
             .json(&project)
             .reply(&load_project_handler(user_db.clone(), project_db.clone()))
             .await;
@@ -507,7 +507,7 @@ mod tests {
             .method("POST")
             .path(&format!("/project/load/{}", version_id.to_string()))
             .header("Content-Length", "0")
-            .header("Authorization", session.token.to_string())
+            .header("Authorization", session.id.to_string())
             .json(&project)
             .reply(&load_project_handler(user_db.clone(), project_db.clone()))
             .await;
@@ -579,7 +579,7 @@ mod tests {
             .method("POST")
             .path("/project/update")
             .header("Content-Length", "0")
-            .header("Authorization", session.token.to_string())
+            .header("Authorization", session.id.to_string())
             .json(&update)
             .reply(&update_project_handler(user_db.clone(), project_db.clone()))
             .await;
@@ -641,7 +641,7 @@ mod tests {
             .method("POST")
             .path("/project/delete")
             .header("Content-Length", "0")
-            .header("Authorization", session.token.to_string())
+            .header("Authorization", session.id.to_string())
             .json(&project)
             .reply(&delete_project_handler(user_db.clone(), project_db.clone()))
             .await;
@@ -658,7 +658,7 @@ mod tests {
             .method("POST")
             .path("/project/delete")
             .header("Content-Length", "0")
-            .header("Authorization", session.token.to_string())
+            .header("Authorization", session.id.to_string())
             .json(&project)
             .reply(&delete_project_handler(user_db.clone(), project_db.clone()))
             .await;
@@ -726,7 +726,7 @@ mod tests {
             .method("GET")
             .path("/project/versions")
             .header("Content-Length", "0")
-            .header("Authorization", session.token.to_string())
+            .header("Authorization", session.id.to_string())
             .json(&project)
             .reply(&project_versions_handler(
                 user_db.clone(),
@@ -807,7 +807,7 @@ mod tests {
             .method("POST")
             .path("/project/permission/add")
             .header("Content-Length", "0")
-            .header("Authorization", session.token.to_string())
+            .header("Authorization", session.id.to_string())
             .json(&permission)
             .reply(&add_permission_handler(user_db.clone(), project_db.clone()))
             .await;
@@ -894,7 +894,7 @@ mod tests {
             .method("POST")
             .path("/project/permission/remove")
             .header("Content-Length", "0")
-            .header("Authorization", session.token.to_string())
+            .header("Authorization", session.id.to_string())
             .json(&permission)
             .reply(&remove_permission_handler(
                 user_db.clone(),
@@ -984,7 +984,7 @@ mod tests {
             .method("POST")
             .path("/project/permission/list")
             .header("Content-Length", "0")
-            .header("Authorization", session.token.to_string())
+            .header("Authorization", session.id.to_string())
             .json(&project)
             .reply(&list_permissions_handler(
                 user_db.clone(),

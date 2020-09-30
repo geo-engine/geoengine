@@ -1,5 +1,5 @@
 use crate::error::Result;
-use crate::users::session::{Session, SessionToken};
+use crate::users::session::{Session, SessionId};
 use crate::users::user::{UserCredentials, UserId, UserRegistration};
 use crate::util::user_input::Validated;
 use async_trait::async_trait;
@@ -26,15 +26,15 @@ pub trait UserDB: Send + Sync {
     ///
     /// # Errors
     ///
-    /// This call fails if the token is invalid.
+    /// This call fails if the session is invalid.
     ///
-    async fn logout(&mut self, session: SessionToken) -> Result<()>;
+    async fn logout(&mut self, session: SessionId) -> Result<()>;
 
     /// Creates a new `UserDB` session
     ///
     /// # Errors
     ///
-    /// This call fails if the token is invalid.
+    /// This call fails if the session is invalid.
     ///
-    async fn session(&self, token: SessionToken) -> Result<Session>;
+    async fn session(&self, session: SessionId) -> Result<Session>;
 }

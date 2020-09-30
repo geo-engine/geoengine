@@ -5,7 +5,7 @@ use snafu::ensure;
 
 use crate::error;
 use crate::error::Result;
-use crate::users::session::{Session, SessionToken};
+use crate::users::session::{Session, SessionId};
 use crate::users::user::{User, UserCredentials, UserId, UserRegistration};
 use crate::users::userdb::UserDB;
 use crate::util::user_input::Validated;
@@ -14,7 +14,7 @@ use async_trait::async_trait;
 #[derive(Default)]
 pub struct HashMapUserDB {
     users: HashMap<String, User>,
-    sessions: HashMap<SessionToken, Session>,
+    sessions: HashMap<SessionId, Session>,
 }
 
 #[async_trait]
@@ -40,7 +40,7 @@ impl UserDB for HashMapUserDB {
         match self.users.get(&user_credentials.email) {
             Some(user) if bcrypt::verify(user_credentials.password, &user.password_hash) => {
                 let session = Session::new(user);
-                self.sessions.insert(session.token.clone(), session.clone());
+                self.sessions.insert(session.id, session.clone());
                 Ok(session)
             }
             _ => Err(error::Error::LoginFailed),
@@ -48,16 +48,16 @@ impl UserDB for HashMapUserDB {
     }
 
     /// Log user out
-    async fn logout(&mut self, token: SessionToken) -> Result<()> {
-        match self.sessions.remove(&token) {
+    async fn logout(&mut self, session: SessionId) -> Result<()> {
+        match self.sessions.remove(&session) {
             Some(_) => Ok(()),
             None => Err(error::Error::LogoutFailed),
         }
     }
 
-    /// Get session for token
-    async fn session(&self, token: SessionToken) -> Result<Session> {
-        match self.sessions.get(&token) {
+    /// Get session
+    async fn session(&self, session: SessionId) -> Result<Session> {
+        match self.sessions.get(&session) {
             Some(session) => Ok(session.clone()),
             None => Err(error::Error::SessionDoesNotExist),
         }
@@ -127,7 +127,7 @@ mod tests {
 
         let session = user_db.login(user_credentials).await.unwrap();
 
-        assert!(user_db.logout(session.token).await.is_ok());
+        assert!(user_db.logout(session.id).await.is_ok());
     }
 
     #[tokio::test]
@@ -151,6 +151,6 @@ mod tests {
 
         let session = user_db.login(user_credentials).await.unwrap();
 
-        assert!(user_db.session(session.token).await.is_ok());
+        assert!(user_db.session(session.id).await.is_ok());
     }
 }

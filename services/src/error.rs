@@ -47,7 +47,7 @@ pub enum Error {
     LoginFailed,
     LogoutFailed,
     SessionDoesNotExist,
-    InvalidSessionToken,
+    InvalidSession,
 
     ProjectCreateFailed,
     ProjectListFailed,
@@ -67,6 +67,8 @@ pub enum Error {
     },
 
     TokioPostgresTimeout,
+
+    InvalidUuid,
 }
 
 impl Reject for Error {}

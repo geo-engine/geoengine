@@ -1,7 +1,7 @@
 use crate::error::Error;
-use crate::users::session::{Session, SessionToken};
+use crate::users::session::{Session, SessionId};
 use crate::users::userdb::UserDB;
-use std::str::FromStr;
+use crate::util::identifiers::Identifier;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use warp::Filter;
@@ -37,11 +37,11 @@ pub fn authenticate<T: UserDB>(
 ) -> impl warp::Filter<Extract = (Session,), Error = warp::Rejection> + Clone {
     async fn do_authenticate<T: UserDB>(
         user_db: DB<T>,
-        token: String,
+        session_id: String,
     ) -> Result<Session, warp::Rejection> {
-        let token = SessionToken::from_str(&token).map_err(|_| warp::reject())?;
+        let session = SessionId::from_uuid_str(&session_id).map_err(|_| warp::reject())?;
         let db = user_db.read().await;
-        db.session(token).await.map_err(|_| warp::reject())
+        db.session(session).await.map_err(|_| warp::reject())
     }
 
     warp::any()

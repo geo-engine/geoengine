@@ -66,7 +66,7 @@ async fn logout<T: UserDB>(
     user_db: DB<T>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let mut db = user_db.write().await;
-    match db.logout(session.token).await {
+    match db.logout(session.id).await {
         Ok(_) => Ok(warp::reply().into_response()),
         Err(_) => Ok(warp::http::StatusCode::UNAUTHORIZED.into_response()),
     }
@@ -216,7 +216,7 @@ mod tests {
         let res = warp::test::request()
             .method("POST")
             .path("/user/logout")
-            .header("Authorization", session.token.to_string())
+            .header("Authorization", session.id.to_string())
             .reply(&logout_handler(user_db.clone()))
             .await;
 
@@ -239,7 +239,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn logout_wrong_token() {
+    async fn logout_wrong_session_id() {
         let user_db = Arc::new(RwLock::new(HashMapUserDB::default()));
 
         let res = warp::test::request()
@@ -254,7 +254,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn logout_invalid_token() {
+    async fn logout_invalid_session_id() {
         let user_db = Arc::new(RwLock::new(HashMapUserDB::default()));
 
         let res = warp::test::request()

@@ -1,9 +1,20 @@
-pub trait Identifier {
+use crate::error;
+use crate::error::Result;
+use std::str::FromStr;
+
+pub trait Identifier: Sized {
     /// Create a new (random) identifier
     fn new() -> Self;
 
     /// Create identifier from given `id`
     fn from_uuid(id: uuid::Uuid) -> Self;
+
+    /// Create identifier from given `id`
+    fn from_uuid_str(uuid_str: &str) -> Result<Self> {
+        Ok(Self::from_uuid(
+            uuid::Uuid::from_str(uuid_str).map_err(|_| error::Error::InvalidUuid)?,
+        ))
+    }
 
     /// Get the internal uuid
     fn uuid(&self) -> uuid::Uuid;
