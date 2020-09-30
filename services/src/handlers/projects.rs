@@ -24,8 +24,7 @@ async fn create_project<C: Context>(
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let create = create.validated()?;
     let id = ctx
-        .project_db()
-        .write()
+        .project_db_ref_mut()
         .await
         .create(ctx.session()?.user, create);
     Ok(warp::reply::json(&id))
@@ -48,8 +47,7 @@ async fn list_projects<C: Context>(
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let options = options.validated()?;
     let listing = ctx
-        .project_db()
-        .read()
+        .project_db_ref()
         .await
         .list(ctx.session()?.user, options);
     Ok(warp::reply::json(&listing))
@@ -76,8 +74,7 @@ async fn load_project<C: Context>(
     project: ProjectId,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let id = ctx
-        .project_db()
-        .read()
+        .project_db_ref()
         .await
         .load(ctx.session()?.user, project, version)?;
     Ok(warp::reply::json(&id))
@@ -99,8 +96,7 @@ async fn update_project<C: Context>(
     update: UpdateProject,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let update = update.validated()?;
-    ctx.project_db()
-        .write()
+    ctx.project_db_ref_mut()
         .await
         .update(ctx.session()?.user, update)?;
     Ok(warp::reply())
@@ -121,8 +117,7 @@ async fn delete_project<C: Context>(
     ctx: C,
     project: ProjectId,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    ctx.project_db()
-        .write()
+    ctx.project_db_ref_mut()
         .await
         .delete(ctx.session()?.user, project)?;
     Ok(warp::reply())
@@ -144,8 +139,7 @@ async fn project_versions<C: Context>(
     project: ProjectId,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let versions = ctx
-        .project_db()
-        .write()
+        .project_db_ref_mut()
         .await
         .versions(ctx.session()?.user, project)?;
     Ok(warp::reply::json(&versions))
@@ -166,8 +160,7 @@ async fn add_permission<C: Context>(
     ctx: C,
     permission: UserProjectPermission,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    ctx.project_db()
-        .write()
+    ctx.project_db_ref_mut()
         .await
         .add_permission(ctx.session()?.user, permission)?;
     Ok(warp::reply())
@@ -188,8 +181,7 @@ async fn remove_permission<C: Context>(
     ctx: C,
     permission: UserProjectPermission,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    ctx.project_db()
-        .write()
+    ctx.project_db_ref_mut()
         .await
         .remove_permission(ctx.session()?.user, permission)?;
     Ok(warp::reply())
@@ -211,8 +203,7 @@ async fn list_permissions<C: Context>(
     project: ProjectId,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let permissions = ctx
-        .project_db()
-        .write()
+        .project_db_ref_mut()
         .await
         .list_permissions(ctx.session()?.user, project)?;
     Ok(warp::reply::json(&permissions))

@@ -7,9 +7,10 @@ use crate::users::hashmap_userdb::HashMapUserDB;
 use crate::users::session::{Session, SessionToken};
 use crate::users::userdb::UserDB;
 use crate::workflows::registry::{HashMapRegistry, WorkflowRegistry};
+use async_trait::async_trait;
 use std::str::FromStr;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use warp::Filter;
 use warp::{Rejection, Reply};
 
@@ -43,9 +44,12 @@ fn authenticate<C: Context>(
 ) -> impl warp::Filter<Extract = (C,), Error = warp::Rejection> + Clone {
     async fn do_authenticate<C: Context>(mut ctx: C, token: String) -> Result<C, warp::Rejection> {
         let token = SessionToken::from_str(&token).map_err(|_| warp::reject())?;
-        let user_db = ctx.user_db();
-        let db = user_db.read().await;
-        ctx.set_session(db.session(token).map_err(|_| warp::reject())?);
+        let session = ctx
+            .user_db_ref()
+            .await
+            .session(token)
+            .map_err(|_| warp::reject())?;
+        ctx.set_session(session);
         Ok(ctx)
     }
 
@@ -57,14 +61,24 @@ fn authenticate<C: Context>(
 
 /// A context bundles access to shared resources like databases and session specific information
 /// about the user to pass to the services handlers.
+#[async_trait]
 pub trait Context: 'static + Send + Sync + Clone {
     type UserDB: UserDB;
     type ProjectDB: ProjectDB;
     type WorkflowRegistry: WorkflowRegistry;
 
     fn user_db(&self) -> DB<Self::UserDB>;
+    async fn user_db_ref(&self) -> RwLockReadGuard<Self::UserDB>;
+    async fn user_db_ref_mut(&self) -> RwLockWriteGuard<Self::UserDB>;
+
     fn project_db(&self) -> DB<Self::ProjectDB>;
+    async fn project_db_ref(&self) -> RwLockReadGuard<Self::ProjectDB>;
+    async fn project_db_ref_mut(&self) -> RwLockWriteGuard<Self::ProjectDB>;
+
     fn workflow_registry(&self) -> DB<Self::WorkflowRegistry>;
+    async fn workflow_registry_ref(&self) -> RwLockReadGuard<Self::WorkflowRegistry>;
+    async fn workflow_registry_ref_mut(&self) -> RwLockWriteGuard<Self::WorkflowRegistry>;
+
     fn session(&self) -> Result<&Session>;
 
     fn set_session(&mut self, session: Session);
@@ -72,6 +86,7 @@ pub trait Context: 'static + Send + Sync + Clone {
 
 /// A context with references to in-memory versions of the individual databases.
 #[derive(Clone, Default)]
+
 pub struct InMemoryContext {
     user_db: DB<HashMapUserDB>,
     project_db: DB<HashMapProjectDB>,
@@ -79,6 +94,7 @@ pub struct InMemoryContext {
     session: Option<Session>,
 }
 
+#[async_trait]
 impl Context for InMemoryContext {
     type UserDB = HashMapUserDB;
     type ProjectDB = HashMapProjectDB;
@@ -87,13 +103,31 @@ impl Context for InMemoryContext {
     fn user_db(&self) -> DB<Self::UserDB> {
         self.user_db.clone()
     }
+    async fn user_db_ref(&self) -> RwLockReadGuard<'_, Self::UserDB> {
+        self.user_db.read().await
+    }
+    async fn user_db_ref_mut(&self) -> RwLockWriteGuard<'_, Self::UserDB> {
+        self.user_db.write().await
+    }
 
     fn project_db(&self) -> DB<Self::ProjectDB> {
         self.project_db.clone()
     }
+    async fn project_db_ref(&self) -> RwLockReadGuard<'_, Self::ProjectDB> {
+        self.project_db.read().await
+    }
+    async fn project_db_ref_mut(&self) -> RwLockWriteGuard<'_, Self::ProjectDB> {
+        self.project_db.write().await
+    }
 
     fn workflow_registry(&self) -> DB<Self::WorkflowRegistry> {
         self.workflow_registry.clone()
+    }
+    async fn workflow_registry_ref(&self) -> RwLockReadGuard<'_, Self::WorkflowRegistry> {
+        self.workflow_registry.read().await
+    }
+    async fn workflow_registry_ref_mut(&self) -> RwLockWriteGuard<'_, Self::WorkflowRegistry> {
+        self.workflow_registry.write().await
     }
 
     fn session(&self) -> Result<&Session, Error> {

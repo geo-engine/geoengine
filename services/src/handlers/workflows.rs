@@ -32,14 +32,13 @@ async fn register_workflow<C: Context>(
     workflow: Workflow,
     ctx: C,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    let id = ctx.workflow_registry().write().await.register(workflow)?;
+    let id = ctx.workflow_registry_ref_mut().await.register(workflow)?;
     Ok(warp::reply::json(&id))
 }
 
 async fn load_workflow<C: Context>(id: Uuid, ctx: C) -> Result<impl warp::Reply, warp::Rejection> {
     let wf = ctx
-        .workflow_registry()
-        .read()
+        .workflow_registry_ref()
         .await
         .load(&WorkflowId::from_uuid(id))?;
     Ok(warp::reply::json(&wf).into_response())

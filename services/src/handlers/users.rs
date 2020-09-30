@@ -22,7 +22,7 @@ async fn register_user<C: Context>(
     ctx: C,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let user = user.validated()?;
-    let id = ctx.user_db().write().await.register(user)?;
+    let id = ctx.user_db_ref_mut().await.register(user)?;
     Ok(warp::reply::json(&id))
 }
 
@@ -41,7 +41,7 @@ async fn login<C: Context>(
     user: UserCredentials,
     ctx: C,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    match ctx.user_db().write().await.login(user) {
+    match ctx.user_db_ref_mut().await.login(user) {
         Ok(id) => Ok(warp::reply::json(&id).into_response()),
         Err(_) => Ok(warp::http::StatusCode::UNAUTHORIZED.into_response()),
     }
@@ -58,7 +58,7 @@ pub fn logout_handler<C: Context>(
 
 // TODO: move into handler once async closures are available?
 async fn logout<C: Context>(ctx: C) -> Result<impl warp::Reply, warp::Rejection> {
-    match ctx.user_db().write().await.logout(ctx.session()?.token) {
+    match ctx.user_db_ref_mut().await.logout(ctx.session()?.token) {
         Ok(_) => Ok(warp::reply().into_response()),
         Err(_) => Ok(warp::http::StatusCode::UNAUTHORIZED.into_response()),
     }

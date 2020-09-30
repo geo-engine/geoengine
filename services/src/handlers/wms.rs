@@ -132,8 +132,7 @@ async fn get_map<C: Context>(
     }
 
     let workflow = ctx
-        .workflow_registry()
-        .read()
+        .workflow_registry_ref()
         .await
         .load(&WorkflowId::from_uuid(
             Uuid::parse_str(&request.layers).context(error::Uuid)?,
