@@ -60,6 +60,8 @@ pub enum Error {
     InvalidWFSTypeNames,
 
     NoWorkflowForGivenId,
+
+    SessionNotInitialized,
 }
 
 impl Reject for Error {}

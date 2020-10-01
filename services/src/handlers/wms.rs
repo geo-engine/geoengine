@@ -1,7 +1,4 @@
-use std::sync::Arc;
-
 use snafu::ResultExt;
-use tokio::sync::RwLock;
 use uuid::Uuid;
 use warp::reply::Reply;
 use warp::{http::Response, Filter, Rejection};
@@ -17,6 +14,7 @@ use geoengine_datatypes::{
 
 use crate::error;
 use crate::error::Result;
+use crate::handlers::Context;
 use crate::ogc::wms::request::{GetCapabilities, GetLegendGraphic, GetMap, WMSRequest};
 use crate::util::identifiers::Identifier;
 use crate::workflows::registry::WorkflowRegistry;
@@ -28,10 +26,8 @@ use geoengine_operators::engine::{
     ExecutionContext, QueryContext, QueryRectangle, RasterQueryProcessor,
 };
 
-type WR<T> = Arc<RwLock<T>>;
-
-pub fn wms_handler<T: WorkflowRegistry>(
-    workflow_registry: WR<T>,
+pub fn wms_handler<C: Context>(
+    ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::get()
         .and(warp::path!("wms"))
@@ -46,21 +42,21 @@ pub fn wms_handler<T: WorkflowRegistry>(
             }),
         )
         // .and(warp::query::<WMSRequest>())
-        .and(warp::any().map(move || Arc::clone(&workflow_registry)))
+        .and(warp::any().map(move || ctx.clone()))
         .and_then(wms)
 }
 
 // TODO: move into handler once async closures are available?
-async fn wms<T: WorkflowRegistry>(
+async fn wms<C: Context>(
     request: WMSRequest,
-    workflow_registry: WR<T>,
+    ctx: C,
 ) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
     // TODO: authentication
     // TODO: more useful error output than "invalid query string"
     match request {
         WMSRequest::GetCapabilities(request) => get_capabilities(&request),
-        WMSRequest::GetMap(request) => get_map(&request, &workflow_registry).await,
-        WMSRequest::GetLegendGraphic(request) => get_legend_graphic(&request, &workflow_registry),
+        WMSRequest::GetMap(request) => get_map(&request, &ctx).await,
+        WMSRequest::GetLegendGraphic(request) => get_legend_graphic(&request, &ctx),
         _ => Ok(Box::new(
             warp::http::StatusCode::NOT_IMPLEMENTED.into_response(),
         )),
@@ -126,18 +122,21 @@ fn get_capabilities(_request: &GetCapabilities) -> Result<Box<dyn warp::Reply>, 
     Ok(Box::new(warp::reply::html(mock)))
 }
 
-async fn get_map<T: WorkflowRegistry>(
+async fn get_map<C: Context>(
     request: &GetMap,
-    workflow_registry: &WR<T>,
+    ctx: &C,
 ) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
     // TODO: validate request?
     if request.layers == "mock_raster" {
         return get_map_mock(request);
     }
 
-    let workflow = workflow_registry.read().await.load(&WorkflowId::from_uuid(
-        Uuid::parse_str(&request.layers).context(error::Uuid)?,
-    ))?;
+    let workflow = ctx
+        .workflow_registry_ref()
+        .await
+        .load(&WorkflowId::from_uuid(
+            Uuid::parse_str(&request.layers).context(error::Uuid)?,
+        ))?;
 
     let operator = workflow.operator.get_raster().context(error::Operator)?;
 
@@ -244,9 +243,9 @@ where
     Ok(output_raster.to_png(request.width, request.height, &colorizer)?)
 }
 
-fn get_legend_graphic<T: WorkflowRegistry>(
+fn get_legend_graphic<C: Context>(
     _request: &GetLegendGraphic,
-    _workflow_registry: &WR<T>,
+    _ctx: &C,
 ) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
     // TODO: implement
     Ok(Box::new(
@@ -292,21 +291,20 @@ mod tests {
         gdal_source::GdalSourceProcessor, GdalSource, GdalSourceParameters,
     };
 
-    use crate::workflows::registry::HashMapRegistry;
-
     use super::*;
+    use crate::handlers::InMemoryContext;
     use crate::ogc::wms::request::GetMapFormat;
     use crate::workflows::workflow::Workflow;
     use xml::ParserConfig;
 
     #[tokio::test]
     async fn test() {
-        let workflow_registry = Arc::new(RwLock::new(HashMapRegistry::default()));
+        let ctx = InMemoryContext::default();
 
         let res = warp::test::request()
             .method("GET")
             .path("/wms?request=GetMap&service=WMS&version=1.3.0&layers=mock_raster&bbox=1,2,3,4&width=100&height=100&crs=foo&styles=ssss&format=image/png")
-            .reply(&wms_handler(workflow_registry))
+            .reply(&wms_handler(ctx))
             .await;
         assert_eq!(res.status(), 200);
         assert_eq!(
@@ -317,12 +315,12 @@ mod tests {
 
     #[tokio::test]
     async fn get_capabilities() {
-        let workflow_registry = Arc::new(RwLock::new(HashMapRegistry::default()));
+        let ctx = InMemoryContext::default();
 
         let res = warp::test::request()
             .method("GET")
             .path("/wms?request=GetCapabilities&service=WMS")
-            .reply(&wms_handler(workflow_registry))
+            .reply(&wms_handler(ctx))
             .await;
         assert_eq!(res.status(), 200);
 
@@ -436,7 +434,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_map() {
-        let workflow_registry = Arc::new(RwLock::new(HashMapRegistry::default()));
+        let ctx = InMemoryContext::default();
 
         let workflow = Workflow {
             operator: TypedOperator::Raster(
@@ -450,7 +448,8 @@ mod tests {
             ),
         };
 
-        let id = workflow_registry
+        let id = ctx
+            .workflow_registry()
             .write()
             .await
             .register(workflow.clone())
@@ -459,7 +458,7 @@ mod tests {
         let res = warp::test::request()
             .method("GET")
             .path(&format!("/wms?request=GetMap&service=WMS&version=1.3.0&layers={}&bbox=20,-10,80,50&width=600&height=600&crs=foo&styles=ssss&format=image/png", id.to_string()))
-            .reply(&wms_handler(workflow_registry))
+            .reply(&wms_handler(ctx))
             .await;
         assert_eq!(res.status(), 200);
         assert_eq!(
@@ -470,7 +469,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_map_uppercase() {
-        let workflow_registry = Arc::new(RwLock::new(HashMapRegistry::default()));
+        let ctx = InMemoryContext::default();
 
         let workflow = Workflow {
             operator: TypedOperator::Raster(
@@ -484,7 +483,8 @@ mod tests {
             ),
         };
 
-        let id = workflow_registry
+        let id = ctx
+            .workflow_registry()
             .write()
             .await
             .register(workflow.clone())
@@ -493,7 +493,7 @@ mod tests {
         let res = warp::test::request()
             .method("GET")
             .path(&format!("/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS={}&CRS=EPSG%3A3857&STYLES=&WIDTH=600&HEIGHT=600&BBOX=20,-10,80,50", id.to_string()))
-            .reply(&wms_handler(workflow_registry))
+            .reply(&wms_handler(ctx))
             .await;
 
         assert_eq!(res.status(), 200);
