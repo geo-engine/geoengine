@@ -10,8 +10,8 @@ pub type Ix1 = Ix;
 pub type Ix2 = (Ix, Ix);
 pub type Ix3 = (Ix, Ix, Ix);
 
-use std::fmt::Debug;
-use std::ops::{Index, IndexMut};
+use std::ops::{Div, Index, IndexMut, Mul, Sub};
+use std::{fmt::Debug, ops::Add};
 pub trait GridDimension:
     Clone
     + Eq
@@ -71,32 +71,36 @@ where
 }
 
 // impl GridIndex for usize, (usize, usize) and (usize, usize, usize).
-impl GridIndex<Dim<[Ix; 1]>> for Ix1 {
-    fn grid_index_to_1d_index_unchecked(&self, dim: &Dim<[Ix; 1]>) -> usize {
+impl GridIndex<Dim1D> for Ix1 {
+    fn grid_index_to_1d_index_unchecked(&self, dim: &Dim1D) -> usize {
         Dim::<[Ix; 1]>::stride_offset(&Dim::from(*self), &dim.strides())
     }
-    fn grid_index_to_1d_index(&self, dim: &Dim<[Ix; 1]>) -> Result<usize> {
+    fn grid_index_to_1d_index(&self, dim: &Dim1D) -> Result<usize> {
         Dim::<[Ix; 1]>::from(*self).grid_index_to_1d_index(dim)
     }
 }
 
-impl GridIndex<Dim<[Ix; 2]>> for Ix2 {
-    fn grid_index_to_1d_index_unchecked(&self, dim: &Dim<[Ix; 2]>) -> usize {
+impl GridIndex<Dim2D> for Ix2 {
+    fn grid_index_to_1d_index_unchecked(&self, dim: &Dim2D) -> usize {
         Dim::<[Ix; 2]>::stride_offset(&Dim::from(*self), &dim.strides())
     }
-    fn grid_index_to_1d_index(&self, dim: &Dim<[Ix; 2]>) -> Result<usize> {
+    fn grid_index_to_1d_index(&self, dim: &Dim2D) -> Result<usize> {
         Dim::<[Ix; 2]>::from(*self).grid_index_to_1d_index(dim)
     }
 }
 
-impl GridIndex<Dim<[Ix; 3]>> for Ix3 {
-    fn grid_index_to_1d_index_unchecked(&self, dim: &Dim<[Ix; 3]>) -> usize {
+impl GridIndex<Dim3D> for Ix3 {
+    fn grid_index_to_1d_index_unchecked(&self, dim: &Dim3D) -> usize {
         Dim::<[Ix; 3]>::stride_offset(&Dim::from(*self), &dim.strides())
     }
-    fn grid_index_to_1d_index(&self, dim: &Dim<[Ix; 3]>) -> Result<usize> {
+    fn grid_index_to_1d_index(&self, dim: &Dim3D) -> Result<usize> {
         Dim::<[Ix; 3]>::from(*self).grid_index_to_1d_index(dim)
     }
 }
+
+pub type Dim1D = Dim<[Ix; 1]>;
+pub type Dim2D = Dim<[Ix; 2]>;
+pub type Dim3D = Dim<[Ix; 3]>;
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Default, Debug, Serialize, Deserialize)]
 pub struct Dim<I> {
@@ -124,37 +128,37 @@ where
     }
 }
 
-impl From<Ix> for Dim<[Ix; 1]> {
+impl From<Ix> for Dim1D {
     fn from(size_1d: Ix1) -> Self {
         Self::new([size_1d])
     }
 }
 
-impl From<Ix2> for Dim<[Ix; 2]> {
+impl From<Ix2> for Dim2D {
     fn from(size_2d: Ix2) -> Self {
         Self::new([size_2d.0, size_2d.1])
     }
 }
 
-impl From<Ix3> for Dim<[Ix; 3]> {
+impl From<Ix3> for Dim3D {
     fn from(size_3d: Ix3) -> Self {
         Self::new([size_3d.0, size_3d.1, size_3d.2])
     }
 }
 
-impl From<[Ix; 2]> for Dim<[Ix; 2]> {
+impl From<[Ix; 2]> for Dim2D {
     fn from(size_2d: [Ix; 2]) -> Self {
         Self::new(size_2d)
     }
 }
 
-impl From<[Ix; 3]> for Dim<[Ix; 3]> {
+impl From<[Ix; 3]> for Dim3D {
     fn from(size_3d: [Ix; 3]) -> Self {
         Self::new(size_3d)
     }
 }
 
-impl GridDimension for Dim<[Ix; 1]> {
+impl GridDimension for Dim1D {
     type IndexPattern = Ix;
     const NDIM: usize = 1;
     fn number_of_dimensions(&self) -> usize {
@@ -186,20 +190,58 @@ impl GridDimension for Dim<[Ix; 1]> {
     }
 }
 
-impl Index<usize> for Dim<[Ix; 1]> {
+impl Index<usize> for Dim1D {
     type Output = usize;
     fn index(&self, index: usize) -> &Self::Output {
         &self.dimension_size()[index]
     }
 }
 
-impl IndexMut<usize> for Dim<[Ix; 1]> {
+impl IndexMut<usize> for Dim1D {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         &mut self.dimension_size_mut()[index]
     }
 }
 
-impl GridDimension for Dim<[Ix; 2]> {
+impl Add for Dim1D {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        let [x] = self.dimension_size;
+        let [other_x] = rhs.dimension_size;
+        Dim::new([x + other_x])
+    }
+}
+
+impl Sub for Dim1D {
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        let [x] = self.dimension_size;
+        let [other_x] = rhs.dimension_size;
+        Dim::new([x - other_x])
+    }
+}
+
+impl Mul<Ix> for Dim1D {
+    type Output = Self;
+
+    fn mul(self, rhs: Ix) -> Self::Output {
+        let [x] = self.dimension_size;
+        Dim::new([x * rhs])
+    }
+}
+
+impl Div<Ix> for Dim1D {
+    type Output = Self;
+
+    fn div(self, rhs: Ix) -> Self::Output {
+        let [x] = self.dimension_size;
+        Dim::new([x / rhs])
+    }
+}
+
+impl GridDimension for Dim2D {
     type IndexPattern = Ix2;
     const NDIM: usize = 2;
     fn number_of_dimensions(&self) -> usize {
@@ -231,20 +273,58 @@ impl GridDimension for Dim<[Ix; 2]> {
     }
 }
 
-impl Index<usize> for Dim<[Ix; 2]> {
+impl Index<usize> for Dim2D {
     type Output = usize;
     fn index(&self, index: usize) -> &Self::Output {
         &self.dimension_size()[index]
     }
 }
 
-impl IndexMut<usize> for Dim<[Ix; 2]> {
+impl IndexMut<usize> for Dim2D {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         &mut self.dimension_size_mut()[index]
     }
 }
 
-impl GridDimension for Dim<[Ix; 3]> {
+impl Add for Dim2D {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        let [y, x] = self.dimension_size;
+        let [other_y, other_x] = rhs.dimension_size;
+        Dim::new([y + other_y, x + other_x])
+    }
+}
+
+impl Sub for Dim2D {
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        let [y, x] = self.dimension_size;
+        let [other_y, other_x] = rhs.dimension_size;
+        Dim::new([y - other_y, x - other_x])
+    }
+}
+
+impl Mul<Ix> for Dim2D {
+    type Output = Self;
+
+    fn mul(self, rhs: Ix) -> Self::Output {
+        let [y, x] = self.dimension_size;
+        Dim::new([y * rhs, x * rhs])
+    }
+}
+
+impl Div<Ix> for Dim2D {
+    type Output = Self;
+
+    fn div(self, rhs: Ix) -> Self::Output {
+        let [y, x] = self.dimension_size;
+        Dim::new([y / rhs, x / rhs])
+    }
+}
+
+impl GridDimension for Dim3D {
     type IndexPattern = Ix3;
     const NDIM: usize = 3;
     fn number_of_dimensions(&self) -> usize {
@@ -284,16 +364,54 @@ impl GridDimension for Dim<[Ix; 3]> {
     }
 }
 
-impl Index<usize> for Dim<[Ix; 3]> {
+impl Index<usize> for Dim3D {
     type Output = usize;
     fn index(&self, index: usize) -> &Self::Output {
         &self.dimension_size()[index]
     }
 }
 
-impl IndexMut<usize> for Dim<[Ix; 3]> {
+impl IndexMut<usize> for Dim3D {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         &mut self.dimension_size_mut()[index]
+    }
+}
+
+impl Add for Dim3D {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        let [z, y, x] = self.dimension_size;
+        let [other_z, other_y, other_x] = rhs.dimension_size;
+        Dim::new([z + other_z, y + other_y, x + other_x])
+    }
+}
+
+impl Sub for Dim3D {
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        let [z, y, x] = self.dimension_size;
+        let [other_z, other_y, other_x] = rhs.dimension_size;
+        Dim::new([z - other_z, y - other_y, x - other_x])
+    }
+}
+
+impl Mul<Ix> for Dim3D {
+    type Output = Self;
+
+    fn mul(self, rhs: Ix) -> Self::Output {
+        let [z, y, x] = self.dimension_size;
+        Dim::new([z * rhs, y * rhs, x * rhs])
+    }
+}
+
+impl Div<Ix> for Dim3D {
+    type Output = Self;
+
+    fn div(self, rhs: Ix) -> Self::Output {
+        let [z, y, x] = self.dimension_size;
+        Dim::new([z / rhs, y / rhs, x / rhs])
     }
 }
 

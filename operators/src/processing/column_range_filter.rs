@@ -30,7 +30,7 @@ pub type ColumnRangeFilter = Operator<ColumnRangeFilterParams>;
 impl VectorOperator for ColumnRangeFilter {
     fn initialize(
         self: Box<Self>,
-        context: ExecutionContext,
+        context: &ExecutionContext,
     ) -> Result<Box<InitializedVectorOperator>> {
         // TODO: create generic validate util
         ensure!(
@@ -177,10 +177,10 @@ where
 mod tests {
     use super::*;
     use crate::mock::{MockFeatureCollectionSource, MockFeatureCollectionSourceParams};
-    use geoengine_datatypes::collections::MultiPointCollection;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, FeatureData, MultiPoint, TimeInterval,
     };
+    use geoengine_datatypes::{collections::MultiPointCollection, primitives::SpatialResolution};
 
     #[test]
     fn serde() {
@@ -252,7 +252,7 @@ mod tests {
         }
         .boxed();
 
-        let initialized = filter.initialize(ExecutionContext).unwrap();
+        let initialized = filter.initialize(&ExecutionContext::mock_empty()).unwrap();
 
         let point_processor = match initialized.query_processor() {
             Ok(TypedVectorQueryProcessor::MultiPoint(processor)) => processor,
@@ -262,6 +262,7 @@ mod tests {
         let query_rectangle = QueryRectangle {
             bbox: BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
             time_interval: TimeInterval::default(),
+            spatial_resolution: SpatialResolution::zero_point_one(),
         };
         let ctx = QueryContext {
             chunk_byte_size: 2 * std::mem::size_of::<Coordinate2D>(),

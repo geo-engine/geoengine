@@ -53,7 +53,7 @@ pub type MockRasterSource = SourceOperator<MockRasterSourceParams>;
 impl RasterOperator for MockRasterSource {
     fn initialize(
         self: Box<Self>,
-        context: crate::engine::ExecutionContext,
+        context: &crate::engine::ExecutionContext,
     ) -> Result<Box<InitializedRasterOperator>> {
         InitializedOperatorImpl::create(
             self.params,
@@ -118,7 +118,7 @@ mod tests {
         let raster_tile = RasterTile2D {
             time: TimeInterval::default(),
             tile: TileInformation {
-                geo_transform: Default::default(),
+                global_geo_transform: Default::default(),
                 global_pixel_position: [0, 0].into(),
                 global_size_in_tiles: [1, 2].into(),
                 global_tile_position: [0, 0].into(),
@@ -161,7 +161,7 @@ mod tests {
                         "tile_size_in_pixels": {
                             "dimension_size": [3, 2]
                         },
-                        "geo_transform": {
+                        "global_geo_transform": {
                             "upper_left_coordinate": {
                                 "x": 0.0,
                                 "y": 0.0
@@ -201,9 +201,9 @@ mod tests {
 
         let deserialized: Box<dyn RasterOperator> = serde_json::from_str(&serialized).unwrap();
 
-        let execution_context = ExecutionContext;
+        let execution_context = ExecutionContext::mock_empty();
 
-        let initialized = deserialized.initialize(execution_context).unwrap();
+        let initialized = deserialized.initialize(&execution_context).unwrap();
 
         match initialized.query_processor().unwrap() {
             crate::engine::TypedRasterQueryProcessor::U8(..) => {}

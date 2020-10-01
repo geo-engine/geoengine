@@ -6,8 +6,14 @@ use uuid::Uuid;
 use warp::reply::Reply;
 use warp::{http::Response, Filter, Rejection};
 
-use geoengine_datatypes::operations::image::{Colorizer, ToPng};
-use geoengine_datatypes::raster::{Blit, GeoTransform, Pixel, Raster2D};
+use geoengine_datatypes::{
+    operations::image::{Colorizer, ToPng},
+    primitives::SpatialResolution,
+};
+use geoengine_datatypes::{
+    primitives::BoundingBox2D,
+    raster::{Blit, GeoTransform, Pixel, Raster2D},
+};
 
 use crate::error;
 use crate::error::Result;
@@ -125,7 +131,7 @@ async fn get_map<T: WorkflowRegistry>(
     workflow_registry: &WR<T>,
 ) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
     // TODO: validate request?
-    if request.layers == "test" {
+    if request.layers == "mock_raster" {
         return get_map_mock(request);
     }
 
@@ -135,20 +141,36 @@ async fn get_map<T: WorkflowRegistry>(
 
     let operator = workflow.operator.get_raster().context(error::Operator)?;
 
-    let execution_context = ExecutionContext;
+    let execution_context = ExecutionContext {
+        raster_data_root: "../operators/test-data/raster".into(), // ./ is the crate root when run as example from the multi crate root... doh
+    };
+
     let initialized = operator
-        .initialize(execution_context)
+        .initialize(&execution_context)
         .context(error::Operator)?;
 
     let processor = initialized.query_processor().context(error::Operator)?;
 
+    let query_bbox = BoundingBox2D::new(
+        (request.bbox.lower_left().y, request.bbox.lower_left().x).into(),
+        (request.bbox.upper_right().y, request.bbox.upper_right().x).into(),
+    )
+    .context(error::DataType)?; // FIXME: handle WGS84 reverse order axes
+    let x_query_resolution = query_bbox.size_x() / f64::from(request.width);
+    let y_query_resolution = query_bbox.size_y() / f64::from(request.height);
+
     let query_rect = QueryRectangle {
-        bbox: request.bbox,
+        bbox: query_bbox,
         time_interval: request.time.unwrap_or_else(|| {
             let time = TimeInstance::from(chrono::offset::Utc::now());
             TimeInterval::new_unchecked(time, time)
         }),
+        spatial_resolution: SpatialResolution::new_unchecked(
+            x_query_resolution,
+            y_query_resolution,
+        ),
     };
+
     let query_ctx = QueryContext {
         // TODO: define meaningful query context
         chunk_byte_size: 1024,
@@ -178,13 +200,16 @@ where
 {
     let tile_stream = processor.raster_query(query_rect, query_ctx);
 
+    let x_query_resolution = query_rect.bbox.size_x() / f64::from(request.width);
+    let y_query_resolution = query_rect.bbox.size_y() / f64::from(request.height);
+
     // build png
     let dim = [request.height as usize, request.width as usize];
     let data: Vec<T> = vec![T::zero(); dim[0] * dim[1]];
     let query_geo_transform = GeoTransform::new(
         query_rect.bbox.upper_left(),
-        query_rect.bbox.size_x() / f64::from(request.width),
-        -query_rect.bbox.size_y() / f64::from(request.height), // TODO: negative, s.t. geo transform fits...
+        x_query_resolution,
+        -y_query_resolution, // TODO: negative, s.t. geo transform fits...
     );
 
     let output_raster: Result<Raster2D<T>> = Raster2D::new(
@@ -259,6 +284,8 @@ fn get_map_mock(request: &GetMap) -> Result<Box<dyn warp::Reply>, warp::Rejectio
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use geoengine_datatypes::primitives::{BoundingBox2D, TimeInterval};
     use geoengine_operators::engine::{RasterOperator, TypedOperator};
     use geoengine_operators::source::{
@@ -278,7 +305,7 @@ mod tests {
 
         let res = warp::test::request()
             .method("GET")
-            .path("/wms?request=GetMap&service=WMS&version=1.3.0&layers=test&bbox=1,2,3,4&width=100&height=100&crs=foo&styles=ssss&format=image/png")
+            .path("/wms?request=GetMap&service=WMS&version=1.3.0&layers=mock_raster&bbox=1,2,3,4&width=100&height=100&crs=foo&styles=ssss&format=image/png")
             .reply(&wms_handler(workflow_registry))
             .await;
         assert_eq!(res.status(), 200);
@@ -314,8 +341,11 @@ mod tests {
             channel: None,
         };
 
-        let gdal_source =
-            GdalSourceProcessor::<_, u8>::from_params_with_json_provider(gdal_params).unwrap();
+        let gdal_source = GdalSourceProcessor::<_, u8>::from_params_with_json_provider(
+            gdal_params,
+            &PathBuf::from("../operators/test-data/raster"),
+        )
+        .unwrap();
 
         let query_bbox = BoundingBox2D::new((-10., 20.).into(), (50., 80.).into()).unwrap();
 
@@ -324,6 +354,7 @@ mod tests {
             QueryRectangle {
                 bbox: query_bbox,
                 time_interval: TimeInterval::default(),
+                spatial_resolution: SpatialResolution::zero_point_one(),
             },
             QueryContext { chunk_byte_size: 0 },
             &GetMap {
@@ -354,6 +385,56 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn png_from_stream_non_full() {
+        let gdal_params = GdalSourceParameters {
+            dataset_id: "test".to_owned(),
+            channel: None,
+        };
+
+        let gdal_source = GdalSourceProcessor::<_, u8>::from_params_with_json_provider(
+            gdal_params,
+            PathBuf::from("../operators/test-data/raster").as_ref(),
+        )
+        .unwrap();
+
+        let query_bbox = BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap();
+
+        let image_bytes = raster_stream_to_png_bytes(
+            gdal_source.boxed(),
+            QueryRectangle {
+                bbox: query_bbox,
+                time_interval: TimeInterval::default(),
+                spatial_resolution: SpatialResolution::new_unchecked(1.0, 1.0),
+            },
+            QueryContext { chunk_byte_size: 0 },
+            &GetMap {
+                version: "".to_string(),
+                width: 360,
+                height: 180,
+                bbox: query_bbox,
+                format: GetMapFormat::ImagePng,
+                layers: "".to_string(),
+                crs: "".to_string(),
+                styles: "".to_string(),
+                time: None,
+                transparent: None,
+                bgcolor: None,
+                sld: None,
+                sld_body: None,
+                elevation: None,
+                exceptions: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            include_bytes!("../../../services/test-data/wms/raster_small.png") as &[u8],
+            image_bytes.as_slice()
+        );
+    }
+
+    #[tokio::test]
     async fn get_map() {
         let workflow_registry = Arc::new(RwLock::new(HashMapRegistry::default()));
 
@@ -377,7 +458,7 @@ mod tests {
 
         let res = warp::test::request()
             .method("GET")
-            .path(&format!("/wms?request=GetMap&service=WMS&version=1.3.0&layers={}&bbox=-10,20,50,80&width=600&height=600&crs=foo&styles=ssss&format=image/png", id.to_string()))
+            .path(&format!("/wms?request=GetMap&service=WMS&version=1.3.0&layers={}&bbox=20,-10,80,50&width=600&height=600&crs=foo&styles=ssss&format=image/png", id.to_string()))
             .reply(&wms_handler(workflow_registry))
             .await;
         assert_eq!(res.status(), 200);
@@ -411,7 +492,7 @@ mod tests {
 
         let res = warp::test::request()
             .method("GET")
-            .path(&format!("/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS={}&CRS=EPSG%3A3857&STYLES=&WIDTH=600&HEIGHT=600&BBOX=-10,20,50,80", id.to_string()))
+            .path(&format!("/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS={}&CRS=EPSG%3A3857&STYLES=&WIDTH=600&HEIGHT=600&BBOX=20,-10,80,50", id.to_string()))
             .reply(&wms_handler(workflow_registry))
             .await;
 
