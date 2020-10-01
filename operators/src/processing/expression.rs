@@ -52,7 +52,7 @@ impl Expression {
 impl RasterOperator for Expression {
     fn initialize(
         self: Box<Self>,
-        context: crate::engine::ExecutionContext,
+        context: &crate::engine::ExecutionContext,
     ) -> Result<Box<InitializedRasterOperator>> {
         ensure!(
             Self::is_allowed_expression(&self.params.expression),
@@ -237,7 +237,7 @@ mod tests {
     use super::*;
     use crate::engine::ExecutionContext;
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
-    use geoengine_datatypes::primitives::{BoundingBox2D, TimeInterval};
+    use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution, TimeInterval};
     use geoengine_datatypes::raster::TileInformation;
     use geoengine_datatypes::spatial_reference::SpatialReference;
 
@@ -255,7 +255,9 @@ mod tests {
             vector_sources: vec![],
         }
         .boxed()
-        .initialize(ExecutionContext {})
+        .initialize(&ExecutionContext {
+            raster_data_root: Default::default(),
+        })
         .unwrap();
 
         let p = o.query_processor().unwrap().get_i8().unwrap();
@@ -264,6 +266,7 @@ mod tests {
             QueryRectangle {
                 bbox: BoundingBox2D::new_unchecked((1., 2.).into(), (3., 4.).into()),
                 time_interval: Default::default(),
+                spatial_resolution: SpatialResolution::one(),
             },
             QueryContext { chunk_byte_size: 1 },
         );
@@ -298,11 +301,11 @@ mod tests {
         let raster_tile = RasterTile2D {
             time: TimeInterval::default(),
             tile: TileInformation {
-                geo_transform: Default::default(),
                 global_pixel_position: [0, 0].into(),
                 global_size_in_tiles: [1, 2].into(),
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
+                global_geo_transform: Default::default(),
             },
             data: raster,
         };
