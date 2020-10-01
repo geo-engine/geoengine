@@ -38,6 +38,7 @@ pub enum IterationType {
     VectorCoordinates, // 1d kernel width = number of coordinates
 }
 
+/// Specification of raster argument for a `CLProgram`
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub struct RasterArgument {
     pub data_type: RasterDataType,
@@ -49,6 +50,7 @@ impl RasterArgument {
     }
 }
 
+/// Specification of vector argument for a `CLProgram`
 #[derive(PartialEq, Clone, Debug)]
 pub struct VectorArgument {
     pub vector_type: VectorDataType,
@@ -77,7 +79,7 @@ impl VectorArgument {
     }
 }
 
-/// Specifies in and output types of CL program and compiles the source into a reusable `CompiledCLProgram`
+/// Specifies input and output types of CL program and compiles the source into a reusable `CompiledCLProgram`
 pub struct CLProgram {
     input_rasters: Vec<RasterArgument>,
     output_rasters: Vec<RasterArgument>,
@@ -116,7 +118,7 @@ impl CLProgram {
     fn create_type_definitions(&self) -> String {
         let mut s = String::new();
 
-        if self.input_rasters.len() + self.output_rasters.len() == 0 {
+        if self.input_rasters.is_empty() && self.output_rasters.is_empty() {
             return s;
         }
 
@@ -254,6 +256,9 @@ struct FeatureOutputBuffers {
     // TODO: time
 }
 
+/// This struct accepts concrete raster and vector data that correspond to the specified arguments.
+/// It can be executed by the `CompiledCLProgram`s `run` method, holds the output buffers and
+/// is consumed once the kernel execution is completed
 pub struct CLProgramRunnable<'a> {
     input_raster_types: Vec<RasterArgument>,
     output_raster_types: Vec<RasterArgument>,

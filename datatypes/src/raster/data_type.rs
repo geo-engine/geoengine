@@ -154,7 +154,7 @@ where
 }
 
 impl RasterDataType {
-    pub fn ocl_type(self) -> String {
+    pub fn ocl_type(self) -> &'static str {
         match self {
             RasterDataType::U8 => "uchar",
             RasterDataType::U16 => "ushort",
@@ -167,6 +167,5 @@ impl RasterDataType {
             RasterDataType::F32 => "float",
             RasterDataType::F64 => "double",
         }
-        .into()
     }
 }

@@ -3,7 +3,7 @@ use crate::engine::{
     QueryContext, QueryProcessor, QueryRectangle, RasterOperator, RasterQueryProcessor,
     RasterResultDescriptor, TypedRasterQueryProcessor,
 };
-use crate::opencl::cl_program::{CLProgram, CompiledCLProgram, IterationType, RasterArgument};
+use crate::opencl::{CLProgram, CompiledCLProgram, IterationType, RasterArgument};
 use crate::util::Result;
 use crate::{call_bi_generic_processor, call_generic_raster_processor};
 use futures::stream::BoxStream;
@@ -16,6 +16,8 @@ use std::collections::HashSet;
 use std::convert::TryFrom;
 use std::marker::PhantomData;
 
+/// Parameters for the `Expression` operator. The `expression` must only contain simple arithmetic
+/// calculations. `output_type` is the data type of the produced raster tiles.
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct ExpressionParams {
     pub expression: String,
@@ -27,6 +29,8 @@ struct SafeExpression {
     expression: String,
 }
 
+/// The `Expression` operator calculates an expression for all pixels of the input rasters and
+/// produces raster tiles of a given output type
 pub type Expression = Operator<ExpressionParams>;
 
 impl Expression {
@@ -53,6 +57,13 @@ impl RasterOperator for Expression {
         ensure!(
             Self::is_allowed_expression(&self.params.expression),
             crate::error::InvalidExpression
+        );
+        ensure!(
+            self.vector_sources.is_empty(),
+            crate::error::InvalidNumberOfVectorInputs {
+                expected: 0..0,
+                found: self.vector_sources.len()
+            }
         );
 
         InitializedOperatorImpl::create(
@@ -185,17 +196,7 @@ where
         query: QueryRectangle,
         ctx: QueryContext,
     ) -> BoxStream<Result<RasterTile2D<TO>>> {
-        // TODO: remove if zip-map approach suffices
-        // ExpressionStream {
-        //     stream: self
-        //         .source_a
-        //         .query(query, ctx)
-        //         .zip(self.source_b.query(query, ctx)),
-        //     phantom: Default::default(),
-        // }
-        // .boxed()
-
-        // TODO: validate that tiles actually fit together, otherwise we need a different approach
+        // TODO: validate that tiles actually fit together
         let mut cl_program = self.cl_program.clone();
         self.source_a
             .query(query, ctx)
@@ -230,47 +231,6 @@ where
             .boxed()
     }
 }
-
-// TODO: remove the following template if simple zip-map suffices for the operator
-
-// #[pin_project(project = ExpressionStreamProjection)]
-// pub struct ExpressionStream<St, T1, T2, TO>
-// where
-//     St: Stream<Item = (Result<RasterTile2D<T1>>, Result<RasterTile2D<T2>>)>,
-//     T1: Pixel,
-//     T2: Pixel,
-//     TO: Pixel,
-// {
-//     #[pin]
-//     stream: St,
-//     phantom: PhantomData<TO>,
-// }
-//
-// impl<St, T1, T2, TO> Stream for ExpressionStream<St, T1, T2, TO>
-// where
-//     St: Stream<Item = (Result<RasterTile2D<T1>>, Result<RasterTile2D<T2>>)>,
-//     T1: Pixel,
-//     T2: Pixel,
-//     TO: Pixel,
-// {
-//     type Item = Result<RasterTile2D<TO>>;
-//
-//     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-//         let ExpressionStreamProjection {
-//             mut stream,
-//             phantom,
-//         } = self.as_mut().project();
-//
-//         let next = ready!(stream.as_mut().poll_next(cx));
-//
-//         if let Some(raster) = next {
-//             // TODO: actually calculate the expression
-//             Poll::Ready(Some(raster.0))
-//         } else {
-//             Poll::Ready(None)
-//         }
-//     }
-// }
 
 #[cfg(test)]
 mod tests {

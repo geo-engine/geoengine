@@ -13,6 +13,7 @@ pub struct Coordinate2D {
     pub y: f64,
 }
 
+// Make coordinates transferable to OpenCl devices
 unsafe impl OclPrm for Coordinate2D {}
 
 impl Coordinate2D {
