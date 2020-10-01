@@ -29,7 +29,11 @@ pub trait ProjectDB: Send + Sync {
     }
 
     /// Create a new `project` for the `user`
-    async fn create(&mut self, user: UserId, project: Validated<CreateProject>) -> ProjectId;
+    async fn create(
+        &mut self,
+        user: UserId,
+        project: Validated<CreateProject>,
+    ) -> Result<ProjectId>;
 
     /// Update a `project` for the `user`. A new version is created
     async fn update(&mut self, user: UserId, project: Validated<UpdateProject>) -> Result<()>;

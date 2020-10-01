@@ -26,6 +26,7 @@ impl PostgresUserDB {
     }
 
     async fn schema_version(&self) -> Result<i32> {
+        // TODO: move to central place where all tables/schemata are managed
         let conn = self.conn_pool.get().await?;
 
         let stmt = match conn.prepare("SELECT version from version").await {
@@ -48,6 +49,7 @@ impl PostgresUserDB {
     }
 
     async fn update_schema(&self) -> Result<()> {
+        // TODO: move to central place where all tables/schemata are managed
         let mut version = self.schema_version().await?;
 
         let conn = self.conn_pool.get().await?;
@@ -56,6 +58,8 @@ impl PostgresUserDB {
                 0 => {
                     conn.batch_execute(
                         "\
+                        -- CREATE EXTENSION postgis;
+
                         CREATE TABLE version (\
                             version INT\
                         );\
@@ -63,33 +67,74 @@ impl PostgresUserDB {
 
                         CREATE TABLE users (
                             id UUID PRIMARY KEY,
-                            email character varying (256) UNIQUE,
-                            password_hash character varying (256),
-                            real_name character varying (256)
+                            email character varying (256) UNIQUE NOT NULL,
+                            password_hash character varying (256) NOT NULL,
+                            real_name character varying (256) NOT NULL,
+                            active boolean NOT NULL
                         );
 
                         CREATE TABLE sessions (
                             id UUID PRIMARY KEY,
                             user_id UUID REFERENCES users(id)
                         );
-                        ",
-                    )
-                    .await?;
-                    // TODO log
-                    println!("Updated user database to schema version {}", version + 1);
-                }
-                1 => {
-                    conn.batch_execute(
-                        "\
-                        ALTER TABLE users ADD COLUMN active boolean;
 
-                        UPDATE version SET version = 2;\
+                        CREATE TABLE projects (
+                            id UUID PRIMARY KEY
+                        );
+
+                        CREATE TABLE project_versions (
+                            id UUID PRIMARY KEY,
+                            project_id UUID REFERENCES projects(id) NOT NULL,
+                            name character varying (256) NOT NULL,
+                            description text NOT NULL,
+                            view_ll_x double precision NOT NULL,
+                            view_ll_y double precision NOT NULL,
+                            view_ur_x double precision NOT NULL,
+                            view_ur_y double precision NOT NULL,
+                            view_t1 timestamp without time zone NOT NULL,
+                            view_t2 timestamp without time zone  NOT NULL,
+                            bounds_ll_x double precision NOT NULL,
+                            bounds_ll_y double precision NOT NULL,
+                            bounds_ur_x double precision NOT NULL,
+                            bounds_ur_y double precision NOT NULL,
+                            bounds_t1 timestamp without time zone NOT NULL,
+                            bounds_t2 timestamp without time zone  NOT NULL,
+                            time timestamp without time zone,
+                            author_user_id UUID REFERENCES users(id) NOT NULL
+                            -- TODO: latest boolean, with index for faster access
+                        );
+
+                        CREATE TYPE layer_type AS ENUM ('raster', 'vector'); -- TODO: distinguish points/lines/polygons
+
+                        CREATE TABLE project_layers (
+                            id UUID PRIMARY KEY,
+                            project_id UUID REFERENCES projects(id) NOT NULL,
+                            project_version_id UUID REFERENCES project_versions(id) NOT NULL,
+                            layer_type layer_type NOT NULL,
+                            name character varying (256) NOT NULL,
+                            workflow_id UUID NOT NULL, -- TODO: REFERENCES workflows(id)
+                            raster_colorizer json                       
+                        );
+
+                        -- TODO: indexes
                         ",
                     )
                     .await?;
                     // TODO log
                     println!("Updated user database to schema version {}", version + 1);
                 }
+                // 1 => {
+                // next version
+                // conn.batch_execute(
+                //     "\
+                //     ALTER TABLE users ...
+                //
+                //     UPDATE version SET version = 2;\
+                //     ",
+                // )
+                // .await?;
+                // println!("Updated user database to schema version {}", version + 1);
+                // }
                 _ => return Ok(()),
             }
             version += 1;

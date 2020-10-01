@@ -88,7 +88,11 @@ impl ProjectDB for HashMapProjectDB {
     }
 
     /// Create a project
-    async fn create(&mut self, user: UserId, create: Validated<CreateProject>) -> ProjectId {
+    async fn create(
+        &mut self,
+        user: UserId,
+        create: Validated<CreateProject>,
+    ) -> Result<ProjectId> {
         let project: Project = Project::from_create_project(create.user_input, user);
         let id = project.id;
         self.projects.insert(id, vec![project]);
@@ -97,7 +101,7 @@ impl ProjectDB for HashMapProjectDB {
             project: id,
             permission: ProjectPermission::Owner,
         });
-        id
+        Ok(id)
     }
 
     /// Update a project
@@ -266,7 +270,7 @@ mod test {
         .validated()
         .unwrap();
 
-        let _ = project_db.create(user, create).await;
+        let _ = project_db.create(user, create).await.unwrap();
 
         let create = CreateProject {
             name: "User2's".into(),
@@ -277,7 +281,7 @@ mod test {
         .validated()
         .unwrap();
 
-        let project2 = project_db.create(user2, create).await;
+        let project2 = project_db.create(user2, create).await.unwrap();
 
         let create = CreateProject {
             name: "User3's".into(),
@@ -288,7 +292,7 @@ mod test {
         .validated()
         .unwrap();
 
-        let project3 = project_db.create(user3, create).await;
+        let project3 = project_db.create(user3, create).await.unwrap();
 
         let permission1 = UserProjectPermission {
             user,
@@ -353,7 +357,7 @@ mod test {
             }
             .validated()
             .unwrap();
-            project_db.create(user, create).await;
+            project_db.create(user, create).await.unwrap();
         }
         let options = ProjectListOptions {
             permissions: vec![
@@ -389,11 +393,11 @@ mod test {
         .validated()
         .unwrap();
 
-        let id = project_db.create(user, create.clone()).await;
+        let id = project_db.create(user, create.clone()).await.unwrap();
         assert!(project_db.load_latest(user, id).await.is_ok());
 
         let user2 = UserId::new();
-        let id = project_db.create(user2, create).await;
+        let id = project_db.create(user2, create).await.unwrap();
         assert!(project_db.load_latest(user, id).await.is_err());
 
         assert!(project_db
@@ -416,7 +420,7 @@ mod test {
         .validated()
         .unwrap();
 
-        let id = project_db.create(user, create).await;
+        let id = project_db.create(user, create).await.unwrap();
 
         assert!(project_db.load_latest(user, id).await.is_ok())
     }
@@ -435,7 +439,7 @@ mod test {
         .validated()
         .unwrap();
 
-        let id = project_db.create(user, create).await;
+        let id = project_db.create(user, create).await.unwrap();
 
         let update = UpdateProject {
             id,
@@ -467,7 +471,7 @@ mod test {
         .validated()
         .unwrap();
 
-        let id = project_db.create(user, create).await;
+        let id = project_db.create(user, create).await.unwrap();
 
         assert!(project_db.delete(user, id).await.is_ok());
     }
@@ -486,7 +490,7 @@ mod test {
         .validated()
         .unwrap();
 
-        let id = project_db.create(user, create).await;
+        let id = project_db.create(user, create).await.unwrap();
 
         thread::sleep(time::Duration::from_millis(10));
 
@@ -523,7 +527,7 @@ mod test {
         .validated()
         .unwrap();
 
-        let project = project_db.create(user, create).await;
+        let project = project_db.create(user, create).await.unwrap();
 
         let user2 = UserId::new();
         let user3 = UserId::new();
@@ -567,7 +571,7 @@ mod test {
         .validated()
         .unwrap();
 
-        let project = project_db.create(user, create).await;
+        let project = project_db.create(user, create).await.unwrap();
 
         let user2 = UserId::new();
         let user3 = UserId::new();
@@ -611,7 +615,7 @@ mod test {
         .validated()
         .unwrap();
 
-        let project = project_db.create(user, create).await;
+        let project = project_db.create(user, create).await.unwrap();
 
         let user2 = UserId::new();
         let user3 = UserId::new();

@@ -29,7 +29,11 @@ async fn create_project<T: ProjectDB>(
     project_db: DB<T>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let create = create.validated()?;
-    let id = project_db.write().await.create(session.user, create).await;
+    let id = project_db
+        .write()
+        .await
+        .create(session.user, create)
+        .await?;
     Ok(warp::reply::json(&id))
 }
 
@@ -350,7 +354,12 @@ mod tests {
             }
             .validated()
             .unwrap();
-            let _ = project_db.write().await.create(session.user, create).await;
+            project_db
+                .write()
+                .await
+                .create(session.user, create)
+                .await
+                .unwrap();
         }
 
         let options = ProjectListOptions {
@@ -426,7 +435,8 @@ mod tests {
                 .validated()
                 .unwrap(),
             )
-            .await;
+            .await
+            .unwrap();
 
         let res = warp::test::request()
             .method("POST")
@@ -487,7 +497,8 @@ mod tests {
                 .validated()
                 .unwrap(),
             )
-            .await;
+            .await
+            .unwrap();
 
         let _ = project_db
             .write()
@@ -591,7 +602,8 @@ mod tests {
                 .validated()
                 .unwrap(),
             )
-            .await;
+            .await
+            .unwrap();
 
         let update = UpdateProject {
             id: project,
@@ -673,7 +685,8 @@ mod tests {
                 .validated()
                 .unwrap(),
             )
-            .await;
+            .await
+            .unwrap();
 
         let res = warp::test::request()
             .method("POST")
@@ -749,7 +762,8 @@ mod tests {
                 .validated()
                 .unwrap(),
             )
-            .await;
+            .await
+            .unwrap();
 
         let _ = project_db.write().await.update(
             session.user,
@@ -842,7 +856,8 @@ mod tests {
                 .validated()
                 .unwrap(),
             )
-            .await;
+            .await
+            .unwrap();
 
         let permission = UserProjectPermission {
             user: target_user,
@@ -928,7 +943,8 @@ mod tests {
                 .validated()
                 .unwrap(),
             )
-            .await;
+            .await
+            .unwrap();
 
         let permission = UserProjectPermission {
             user: target_user,
@@ -1024,7 +1040,8 @@ mod tests {
                 .validated()
                 .unwrap(),
             )
-            .await;
+            .await
+            .unwrap();
 
         let permission = UserProjectPermission {
             user: target_user,

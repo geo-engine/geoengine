@@ -187,7 +187,7 @@ pub struct CreateProject {
 impl UserInput for CreateProject {
     fn validate(&self) -> Result<(), Error> {
         ensure!(
-            !(self.name.is_empty() || self.description.is_empty()),
+            !(self.name.is_empty() || self.name.len() > 256 || self.description.is_empty()),
             error::ProjectCreateFailed
         );
 
