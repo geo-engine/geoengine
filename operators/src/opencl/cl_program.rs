@@ -54,25 +54,34 @@ impl RasterArgument {
 #[derive(PartialEq, Clone, Debug)]
 pub struct VectorArgument {
     pub vector_type: VectorDataType,
-    // TODO: merge columns and types into one type
-    pub columns: Vec<String>,
-    pub column_types: Vec<FeatureDataType>,
+    pub columns: Vec<ColumnArgument>,
     pub include_geo: bool,
     pub include_time: bool,
+}
+
+// Specification of a column of a feature collection
+#[derive(PartialEq, Clone, Debug)]
+pub struct ColumnArgument {
+    pub name: String,
+    pub data_type: FeatureDataType,
+}
+
+impl ColumnArgument {
+    pub fn new(name: String, data_type: FeatureDataType) -> Self {
+        Self { name, data_type }
+    }
 }
 
 impl VectorArgument {
     pub fn new(
         vector_type: VectorDataType,
-        columns: Vec<String>,
-        column_types: Vec<FeatureDataType>,
+        columns: Vec<ColumnArgument>,
         include_geo: bool,
         include_time: bool,
     ) -> Self {
         Self {
             vector_type,
             columns,
-            column_types,
             include_geo,
             include_time,
         }
@@ -339,11 +348,9 @@ impl<'a> CLProgramRunnable<'a> {
             error::CLProgramInvalidVectorDataType
         );
 
-        let mut iter = self.input_feature_types[idx]
+        let columns_ok = call_generic_features!(features, f =>  self.input_feature_types[idx]
             .columns
-            .iter()
-            .zip(self.input_feature_types[idx].column_types.iter());
-        let columns_ok = call_generic_features!(features, f => iter.all(|(n, t)| f.column_type(n).map_or(false, |to| to == *t)));
+            .iter().all(|c| f.column_type(&c.name).map_or(false, |to| to == c.data_type)));
         ensure!(columns_ok, error::CLProgramInvalidColumn);
 
         self.input_features[idx] = Some(features);
@@ -366,14 +373,10 @@ impl<'a> CLProgramRunnable<'a> {
 
         let input_types = features.column_types();
         ensure!(
-            self.output_feature_types[idx]
-                .columns
-                .iter()
-                .zip(self.output_feature_types[idx].column_types.iter())
-                .all(|(column, column_type)| {
+            self.output_feature_types[idx].columns.iter().all(|column| {
                     input_types
-                        .get(column)
-                        .map_or(false, |input_type| input_type == column_type)
+                    .get(&column.name)
+                    .map_or(false, |input_type| input_type == &column.data_type)
                 }),
             error::CLProgramInvalidColumn
         );
@@ -519,13 +522,13 @@ impl<'a> CLProgramRunnable<'a> {
 
             let mut numbers = Vec::new();
             let mut decimals = Vec::new();
-            for (column, column_type) in argument.columns.iter().zip(argument.column_types.iter()) {
-                match column_type {
+            for column in argument.columns.iter() {
+                match column.data_type {
                     FeatureDataType::Number => Self::set_feature_column_output_argument::<f64>(
                         &mut numbers,
                         kernel,
                         idx,
-                        column,
+                        &column.name,
                         features.num_features(),
                         false,
                     ),
@@ -534,7 +537,7 @@ impl<'a> CLProgramRunnable<'a> {
                             &mut numbers,
                             kernel,
                             idx,
-                            column,
+                            &column.name,
                             features.num_features(),
                             true,
                         )
@@ -543,7 +546,7 @@ impl<'a> CLProgramRunnable<'a> {
                         &mut decimals,
                         kernel,
                         idx,
-                        column,
+                        &column.name,
                         features.num_features(),
                         false,
                     ),
@@ -552,12 +555,12 @@ impl<'a> CLProgramRunnable<'a> {
                             &mut decimals,
                             kernel,
                             idx,
-                            column,
+                            &column.name,
                             features.num_features(),
                             true,
                         )
                     }
-                    _ => todo!(), // strings, categories
+                    _ => todo!(), // TODO: strings, categories
                 }?;
             }
 
@@ -1029,10 +1032,15 @@ impl CompiledCLProgram {
                 }
             }
 
-            for (column, column_type) in features.columns.iter().zip(features.column_types.iter()) {
-                let name = format!("IN_POINT{}_COLUMN_{}", idx, column);
-                let null_name = format!("IN_POINT{}_NULLS_{}", idx, column);
-                Self::set_column_argument_placeholder(&mut kernel, *column_type, name, null_name)
+            for column in features.columns.iter() {
+                let name = format!("IN_POINT{}_COLUMN_{}", idx, column.name);
+                let null_name = format!("IN_POINT{}_NULLS_{}", idx, column.name);
+                Self::set_column_argument_placeholder(
+                    &mut kernel,
+                    column.data_type,
+                    name,
+                    null_name,
+                )
             }
 
             if features.include_time {
@@ -1057,10 +1065,15 @@ impl CompiledCLProgram {
                 }
             }
 
-            for (column, column_type) in features.columns.iter().zip(features.column_types.iter()) {
-                let name = format!("OUT_POINT{}_COLUMN_{}", idx, column);
-                let null_name = format!("OUT_POINT{}_NULLS_{}", idx, column);
-                Self::set_column_argument_placeholder(&mut kernel, *column_type, name, null_name)
+            for column in features.columns.iter() {
+                let name = format!("OUT_POINT{}_COLUMN_{}", idx, column.name);
+                let null_name = format!("OUT_POINT{}_NULLS_{}", idx, column.name);
+                Self::set_column_argument_placeholder(
+                    &mut kernel,
+                    column.data_type,
+                    name,
+                    null_name,
+                )
             }
 
             if features.include_time {
@@ -1515,13 +1528,11 @@ __kernel void points(
         cl_program.add_input_features(VectorArgument::new(
             input.vector_data_type(),
             vec![],
-            vec![],
             true,
             false,
         ));
         cl_program.add_output_features(VectorArgument::new(
             VectorDataType::MultiPoint,
-            vec![],
             vec![],
             true,
             false,
@@ -1643,15 +1654,13 @@ __kernel void columns(
         let mut cl_program = CLProgram::new(IterationType::VectorFeatures);
         cl_program.add_input_features(VectorArgument::new(
             input.vector_data_type(),
-            vec!["foo".into()],
-            vec![FeatureDataType::Number],
+            vec![ColumnArgument::new("foo".into(), FeatureDataType::Number)],
             false,
             false,
         ));
         cl_program.add_output_features(VectorArgument::new(
             VectorDataType::Data,
-            vec!["foo".into()],
-            vec![FeatureDataType::Number],
+            vec![ColumnArgument::new("foo".into(), FeatureDataType::Number)],
             false,
             false,
         ));
@@ -1717,15 +1726,19 @@ __kernel void columns(
         let mut cl_program = CLProgram::new(IterationType::VectorFeatures);
         cl_program.add_input_features(VectorArgument::new(
             input.vector_data_type(),
-            vec!["foo".into()],
-            vec![FeatureDataType::NullableNumber],
+            vec![ColumnArgument::new(
+                "foo".into(),
+                FeatureDataType::NullableNumber,
+            )],
             false,
             false,
         ));
         cl_program.add_output_features(VectorArgument::new(
             VectorDataType::Data,
-            vec!["foo".into()],
-            vec![FeatureDataType::NullableNumber],
+            vec![ColumnArgument::new(
+                "foo".into(),
+                FeatureDataType::NullableNumber,
+            )],
             false,
             false,
         ));
