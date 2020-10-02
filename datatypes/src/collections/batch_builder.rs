@@ -139,11 +139,12 @@ impl FeatureCollectionBatchBuilder {
         let mut time_intervals_builder = TimeInterval::arrow_builder(self.num_features);
 
         let default = TimeInterval::default();
+        let start = default.start().inner();
+        let end = default.end().inner();
         for _ in 0..self.num_features {
             let date_builder = time_intervals_builder.values();
-            date_builder.append_value(default.start().inner())?;
-            date_builder.append_value(default.end().inner())?;
-
+            date_builder.append_value(start)?;
+            date_builder.append_value(end)?;
             time_intervals_builder.append(true)?;
         }
 
