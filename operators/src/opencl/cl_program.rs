@@ -1568,23 +1568,41 @@ __kernel void nop(__global int* buffer) {
 
         let len = 4;
 
-        let pro_que = ProQue::builder()
-            .device(*DEVICE)
-            .src(src)
-            .dims(len)
+        let platform = Platform::default(); // TODO: make configurable
+
+        // the following fails for concurrent access, see <https://github.com/cogciprocate/ocl/issues/189>
+        // let device = Device::first(platform)?;
+        let device = *DEVICE;
+
+        let ctx = Context::builder()
+            .platform(platform)
+            .devices(device)
             .build()
             .unwrap();
 
-        let ocl_buffer = pro_que.create_buffer::<i32>().unwrap();
+        let program = ProgramBuilder::new().src(src).build(&ctx).unwrap();
 
-        let kernel = pro_que
-            .kernel_builder("nop")
-            .arg(&ocl_buffer)
+        let queue = Queue::new(&ctx, ctx.devices()[0], None).unwrap();
+
+        let kernel = Kernel::builder()
+            .queue(queue)
+            .name("nop")
+            .program(&program)
+            .arg(None::<&Buffer<i32>>)
             .build()
             .unwrap();
+
+        let ocl_buffer = Buffer::builder()
+            .queue(kernel.default_queue().expect("expect").clone())
+            .len(len)
+            .fill_val(0)
+            .build()
+            .unwrap();
+
+        kernel.set_arg(0, &ocl_buffer).unwrap();
 
         unsafe {
-            kernel.enq().unwrap();
+            kernel.cmd().global_work_size(len).enq().unwrap();
         }
 
         let mut vec = vec![0; ocl_buffer.len()];
