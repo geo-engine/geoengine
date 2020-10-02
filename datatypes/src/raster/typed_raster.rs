@@ -1,5 +1,5 @@
 use super::{BaseRaster, Dim, DynamicRasterDataType, GridDimension, RasterDataType};
-use crate::raster::{Ix, Pixel, Raster2D};
+use crate::raster::{Pixel, Raster2D};
 use std::convert::TryFrom;
 
 pub type TypedRaster2D = TypedRasterNDim<Dim<[usize; 2]>>;
@@ -327,22 +327,22 @@ where
 //     }
 // }
 //
-impl<T> Into<TypedRasterNDim<Dim<[Ix; 2]>>> for BaseRaster<Dim<[Ix; 2]>, T, Vec<T>>
+impl<T> Into<TypedRaster2D> for Raster2D<T>
 where
     T: Pixel,
 {
-    fn into(self) -> TypedRasterNDim<Dim<[Ix; 2]>> {
+    fn into(self) -> TypedRaster2D {
         T::get_typed_raster(self)
     }
 }
 
-impl<T> TryFrom<TypedRasterNDim<Dim<[Ix; 2]>>> for BaseRaster<Dim<[Ix; 2]>, T, Vec<T>>
+impl<T> TryFrom<TypedRaster2D> for Raster2D<T>
 where
     T: Pixel,
 {
     type Error = crate::error::Error;
 
-    fn try_from(raster: TypedRasterNDim<Dim<[Ix; 2]>>) -> Result<Self, Self::Error> {
+    fn try_from(raster: TypedRaster2D) -> Result<Self, Self::Error> {
         T::get_raster(raster).ok_or(crate::error::Error::InvalidTypedRasterConversion)
     }
 }
@@ -374,10 +374,7 @@ pub trait TypedRasterConversion {
 
     fn get_typed_raster(_raster: Raster2D<Self>) -> TypedRaster2D
     where
-        Self: Pixel,
-    {
-        unimplemented!()
-    }
+        Self: Pixel;
 }
 
 impl TypedRasterConversion for i8 {
@@ -403,6 +400,13 @@ impl TypedRasterConversion for i16 {
     {
         raster.get_i16()
     }
+
+    fn get_typed_raster(raster: Raster2D<Self>) -> TypedRaster2D
+    where
+        Self: Pixel,
+    {
+        TypedRaster2D::I16(raster)
+    }
 }
 
 impl TypedRasterConversion for i32 {
@@ -411,6 +415,13 @@ impl TypedRasterConversion for i32 {
         Self: Pixel,
     {
         raster.get_i32()
+    }
+
+    fn get_typed_raster(raster: Raster2D<Self>) -> TypedRaster2D
+    where
+        Self: Pixel,
+    {
+        TypedRaster2D::I32(raster)
     }
 }
 
@@ -421,6 +432,13 @@ impl TypedRasterConversion for i64 {
     {
         raster.get_i64()
     }
+
+    fn get_typed_raster(raster: Raster2D<Self>) -> TypedRaster2D
+    where
+        Self: Pixel,
+    {
+        TypedRaster2D::I64(raster)
+    }
 }
 
 impl TypedRasterConversion for u8 {
@@ -429,6 +447,13 @@ impl TypedRasterConversion for u8 {
         Self: Pixel,
     {
         raster.get_u8()
+    }
+
+    fn get_typed_raster(raster: Raster2D<Self>) -> TypedRaster2D
+    where
+        Self: Pixel,
+    {
+        TypedRaster2D::U8(raster)
     }
 }
 
@@ -439,6 +464,13 @@ impl TypedRasterConversion for u16 {
     {
         raster.get_u16()
     }
+
+    fn get_typed_raster(raster: Raster2D<Self>) -> TypedRaster2D
+    where
+        Self: Pixel,
+    {
+        TypedRaster2D::U16(raster)
+    }
 }
 
 impl TypedRasterConversion for u32 {
@@ -447,6 +479,13 @@ impl TypedRasterConversion for u32 {
         Self: Pixel,
     {
         raster.get_u32()
+    }
+
+    fn get_typed_raster(raster: Raster2D<Self>) -> TypedRaster2D
+    where
+        Self: Pixel,
+    {
+        TypedRaster2D::U32(raster)
     }
 }
 
@@ -457,6 +496,13 @@ impl TypedRasterConversion for u64 {
     {
         raster.get_u64()
     }
+
+    fn get_typed_raster(raster: Raster2D<Self>) -> TypedRaster2D
+    where
+        Self: Pixel,
+    {
+        TypedRaster2D::U64(raster)
+    }
 }
 
 impl TypedRasterConversion for f32 {
@@ -466,6 +512,13 @@ impl TypedRasterConversion for f32 {
     {
         raster.get_f32()
     }
+
+    fn get_typed_raster(raster: Raster2D<Self>) -> TypedRaster2D
+    where
+        Self: Pixel,
+    {
+        TypedRaster2D::F32(raster)
+    }
 }
 
 impl TypedRasterConversion for f64 {
@@ -474,5 +527,12 @@ impl TypedRasterConversion for f64 {
         Self: Pixel,
     {
         raster.get_f64()
+    }
+
+    fn get_typed_raster(raster: Raster2D<Self>) -> TypedRaster2D
+    where
+        Self: Pixel,
+    {
+        TypedRaster2D::F64(raster)
     }
 }

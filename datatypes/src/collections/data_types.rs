@@ -31,10 +31,23 @@ impl TypedFeatureCollection {
         }
     }
 
-    // TODO: other types
     pub fn get_points(self) -> Option<MultiPointCollection> {
         if let TypedFeatureCollection::MultiPoint(points) = self {
             return Some(points);
+        }
+        None
+    }
+
+    pub fn get_lines(self) -> Option<MultiLineStringCollection> {
+        if let TypedFeatureCollection::MultiLineString(lines) = self {
+            return Some(lines);
+        }
+        None
+    }
+
+    pub fn get_polygons(self) -> Option<MultiPolygonCollection> {
+        if let TypedFeatureCollection::MultiPolygon(polygons) = self {
+            return Some(polygons);
         }
         None
     }
