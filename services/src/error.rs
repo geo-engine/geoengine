@@ -69,6 +69,7 @@ pub enum Error {
     TokioPostgresTimeout,
 
     InvalidUuid,
+    SessionNotInitialized,
 }
 
 impl Reject for Error {}
