@@ -168,15 +168,16 @@ typedef struct {
     }
 
     pub fn compile(self, source: &str, kernel_name: &str) -> Result<CompiledCLProgram> {
-        ensure!(
-            ((self.iteration_type == IterationType::VectorFeatures
-                || self.iteration_type == IterationType::VectorCoordinates)
-                && (!self.input_features.is_empty() && !self.output_features.is_empty()))
-                || (self.iteration_type == IterationType::Raster
-                    && !self.input_rasters.is_empty()
-                    && !self.output_rasters.is_empty()),
-            error::CLInvalidInputsForIterationType
-        );
+        match self.iteration_type {
+            IterationType::Raster => ensure!(
+                !self.input_rasters.is_empty() && !self.output_rasters.is_empty(),
+                error::CLInvalidInputsForIterationType,
+            ),
+            IterationType::VectorFeatures | IterationType::VectorCoordinates => ensure!(
+                !self.input_features.is_empty() && !self.output_features.is_empty(),
+                error::CLInvalidInputsForIterationType
+            ),
+        }
 
         let typedefs = self.create_type_definitions();
 
