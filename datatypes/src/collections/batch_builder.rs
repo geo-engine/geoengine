@@ -332,7 +332,7 @@ mod tests {
         builder
             .add_column("foo".into(), FeatureDataType::NullableNumber)
             .unwrap();
-        let mut builder = builder.batch_builder(VectorDataType::Data, 4, 0);
+        let mut builder = builder.batch_builder(4, 0);
         builder.set_default_time_intervals().unwrap();
 
         let numbers = vec![1., 2., 3., 4.];
@@ -379,8 +379,7 @@ mod tests {
 
     #[test]
     fn point_coords_to_array() {
-        let mut builder =
-            MultiPointCollection::builder().batch_builder(VectorDataType::MultiPoint, 3, 8);
+        let mut builder = MultiPointCollection::builder().batch_builder(3, 8);
         builder.set_default_time_intervals().unwrap();
 
         let coords: Vec<f64> = vec![0.0, 0.0, 1.1, 1.1, 2.2, 2.2, 3.3, 3.3];

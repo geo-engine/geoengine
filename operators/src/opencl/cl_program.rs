@@ -1507,11 +1507,7 @@ __kernel void gid(
             .unwrap(),
         );
 
-        let mut out = FeatureCollection::<MultiPoint>::builder().batch_builder(
-            VectorDataType::MultiPoint,
-            3,
-            4,
-        );
+        let mut out = FeatureCollection::<MultiPoint>::builder().batch_builder(3, 4);
 
         let kernel = r#"
 __kernel void points( 
@@ -1638,11 +1634,11 @@ __kernel void nop(__global int* buffer) {
             .unwrap(),
         );
 
-        let mut builder = FeatureCollection::<MultiPoint>::builder();
+        let mut builder = FeatureCollection::<NoGeometry>::builder();
         builder
             .add_column("foo".into(), FeatureDataType::Number)
             .unwrap();
-        let mut out = builder.batch_builder(VectorDataType::Data, 3, 4);
+        let mut out = builder.batch_builder(3, 4);
 
         let kernel = r#"
 __kernel void columns( 
@@ -1702,11 +1698,11 @@ __kernel void columns(
             .unwrap(),
         );
 
-        let mut builder = FeatureCollection::<MultiPoint>::builder();
+        let mut builder = FeatureCollection::<NoGeometry>::builder();
         builder
             .add_column("foo".into(), FeatureDataType::NullableNumber)
             .unwrap();
-        let mut out = builder.batch_builder(VectorDataType::Data, 3, 4);
+        let mut out = builder.batch_builder(3, 4);
 
         let kernel = r#"
 __kernel void columns( 
