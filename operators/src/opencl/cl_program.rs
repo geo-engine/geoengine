@@ -6,9 +6,7 @@ use arrow::util::bit_util;
 use geoengine_datatypes::collections::{
     FeatureCollectionBatchBuilder, TypedFeatureCollection, VectorDataType,
 };
-use geoengine_datatypes::primitives::{
-    Coordinate2D, FeatureDataRef, FeatureDataType, NullableDataRef,
-};
+use geoengine_datatypes::primitives::{FeatureDataRef, FeatureDataType, NullableDataRef};
 use geoengine_datatypes::raster::Raster;
 use geoengine_datatypes::raster::{
     DynamicRasterDataType, GridDimension, Pixel, Raster2D, RasterDataType, TypedRaster2D,
@@ -19,7 +17,7 @@ use geoengine_datatypes::{
 use lazy_static::lazy_static;
 use num_traits::AsPrimitive;
 use ocl::builders::{KernelBuilder, ProgramBuilder};
-use ocl::prm::{cl_double, cl_uint, cl_ushort};
+use ocl::prm::{cl_double, cl_uint, cl_ushort, Double2};
 use ocl::{
     Buffer, Context, Device, Kernel, MemFlags, OclPrm, Platform, Program, Queue, SpatialDims,
 };
@@ -234,18 +232,18 @@ enum FeatureGeoOutputBuffer {
 }
 
 struct PointBuffers {
-    coords: Buffer<Coordinate2D>,
+    coords: Buffer<Double2>,
     offsets: Buffer<i32>,
 }
 
 struct LineBuffers {
-    _coords: Buffer<Coordinate2D>,
+    _coords: Buffer<Double2>,
     _line_offsets: Buffer<i32>,
     _feature_offsets: Buffer<i32>,
 }
 
 struct PolygonBuffers {
-    _coords: Buffer<Coordinate2D>,
+    _coords: Buffer<Double2>,
     _ring_offsets: Buffer<i32>,
     _polygon_offsets: Buffer<i32>,
     _feature_offets: Buffer<i32>,
@@ -374,10 +372,10 @@ impl<'a> CLProgramRunnable<'a> {
         let input_types = features.column_types();
         ensure!(
             self.output_feature_types[idx].columns.iter().all(|column| {
-                    input_types
+                input_types
                     .get(&column.name)
                     .map_or(false, |input_type| input_type == &column.data_type)
-                }),
+            }),
             error::CLProgramInvalidColumn
         );
 
@@ -406,10 +404,15 @@ impl<'a> CLProgramRunnable<'a> {
                     }
                     TypedFeatureCollection::MultiPoint(points) => {
                         let coordinates = points.coordinates();
-                        let buffer = Buffer::builder()
+                        let buffer = Buffer::<Double2>::builder()
                             .queue(kernel.default_queue().expect("expect").clone())
                             .len(coordinates.len())
-                            .copy_host_slice(coordinates)
+                            .copy_host_slice(unsafe {
+                                std::slice::from_raw_parts(
+                                    coordinates.as_ptr() as *const Double2,
+                                    coordinates.len(),
+                                )
+                            })
                             .build()?;
 
                         kernel.set_arg(format!("IN_POINT_COORDS{}", idx), &buffer)?;
@@ -500,7 +503,7 @@ impl<'a> CLProgramRunnable<'a> {
             let geo_buffers = if argument.include_geo {
                 Some(match features.output_type {
                     VectorDataType::MultiPoint => {
-                        let coords = Buffer::<Coordinate2D>::builder()
+                        let coords = Buffer::<Double2>::builder()
                             .queue(kernel.default_queue().expect("expect").clone())
                             .len(features.num_coords())
                             .build()?;
@@ -1022,10 +1025,8 @@ impl CompiledCLProgram {
                         // no geo
                     }
                     VectorDataType::MultiPoint => {
-                        kernel.arg_named(
-                            format!("IN_POINT_COORDS{}", idx),
-                            None::<&Buffer<Coordinate2D>>,
-                        );
+                        kernel
+                            .arg_named(format!("IN_POINT_COORDS{}", idx), None::<&Buffer<Double2>>);
                         kernel.arg_named(format!("IN_POINT_OFFSETS{}", idx), None::<&Buffer<i32>>);
                     }
                     VectorDataType::MultiLineString | VectorDataType::MultiPolygon => todo!(),
@@ -1057,7 +1058,7 @@ impl CompiledCLProgram {
                     VectorDataType::MultiPoint => {
                         kernel.arg_named(
                             format!("OUT_POINT_COORDS{}", idx),
-                            None::<&Buffer<Coordinate2D>>,
+                            None::<&Buffer<Double2>>,
                         );
                         kernel.arg_named(format!("OUT_POINT_OFFSETS{}", idx), None::<&Buffer<i32>>);
                     }
