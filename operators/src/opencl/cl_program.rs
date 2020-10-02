@@ -1122,7 +1122,6 @@ mod tests {
     };
     use geoengine_datatypes::primitives::{FeatureData, MultiPoint, NoGeometry, TimeInterval};
     use geoengine_datatypes::raster::Raster2D;
-    use ocl::ProQue;
     use std::collections::HashMap;
     use std::sync::Arc;
 
