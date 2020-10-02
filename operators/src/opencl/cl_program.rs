@@ -525,7 +525,7 @@ impl<'a> CLProgramRunnable<'a> {
 
             let mut numbers = Vec::new();
             let mut decimals = Vec::new();
-            for column in argument.columns.iter() {
+            for column in &argument.columns {
                 match column.data_type {
                     FeatureDataType::Number => Self::set_feature_column_output_argument::<f64>(
                         &mut numbers,
@@ -1033,7 +1033,7 @@ impl CompiledCLProgram {
                 }
             }
 
-            for column in features.columns.iter() {
+            for column in &features.columns {
                 let name = format!("IN_POINT{}_COLUMN_{}", idx, column.name);
                 let null_name = format!("IN_POINT{}_NULLS_{}", idx, column.name);
                 Self::set_column_argument_placeholder(
@@ -1066,7 +1066,7 @@ impl CompiledCLProgram {
                 }
             }
 
-            for column in features.columns.iter() {
+            for column in &features.columns {
                 let name = format!("OUT_POINT{}_COLUMN_{}", idx, column.name);
                 let null_name = format!("OUT_POINT{}_NULLS_{}", idx, column.name);
                 Self::set_column_argument_placeholder(
