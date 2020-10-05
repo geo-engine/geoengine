@@ -70,6 +70,10 @@ pub enum Error {
     UnknownDataset {
         name: String,
     },
+
+    WorkerThread {
+        reason: String,
+    },
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {
