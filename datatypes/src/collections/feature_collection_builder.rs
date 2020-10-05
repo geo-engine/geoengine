@@ -42,7 +42,7 @@ where
 }
 
 /// A default implementation of a feature collection builder
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FeatureCollectionBuilder<CollectionType>
 where
     CollectionType: Geometry + ArrowTyped,
