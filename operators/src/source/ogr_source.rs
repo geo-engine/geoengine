@@ -35,7 +35,6 @@ use crate::engine::{
 };
 use crate::error::Error;
 use crate::util::Result;
-use failure::_core::convert::TryFrom;
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct OgrSourceParameters {
@@ -203,7 +202,7 @@ impl OgrSourceColumnSpec {
     pub fn project_columns(&self, attribute_projection: &Option<Vec<String>>) -> Self {
         let attributes: HashSet<&String> =
             if let Some(attribute_projection) = attribute_projection.as_ref() {
-                attribute_projection.into_iter().collect()
+                attribute_projection.iter().collect()
             } else {
                 return self.clone();
             };
@@ -334,17 +333,17 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
         // TODO: simplify with macro
         Ok(match self.result_descriptor.data_type {
-            VectorDataType::Data => TypedVectorQueryProcessor::Data(
-                OgrSourceProcessor::new(self.params.clone(), self.state.clone()).boxed(),
-            ),
+            VectorDataType::Data => {
+                TypedVectorQueryProcessor::Data(OgrSourceProcessor::new(self.state.clone()).boxed())
+            }
             VectorDataType::MultiPoint => TypedVectorQueryProcessor::MultiPoint(
-                OgrSourceProcessor::new(self.params.clone(), self.state.clone()).boxed(),
+                OgrSourceProcessor::new(self.state.clone()).boxed(),
             ),
             VectorDataType::MultiLineString => TypedVectorQueryProcessor::MultiLineString(
-                OgrSourceProcessor::new(self.params.clone(), self.state.clone()).boxed(),
+                OgrSourceProcessor::new(self.state.clone()).boxed(),
             ),
             VectorDataType::MultiPolygon => TypedVectorQueryProcessor::MultiPolygon(
-                OgrSourceProcessor::new(self.params.clone(), self.state.clone()).boxed(),
+                OgrSourceProcessor::new(self.state.clone()).boxed(),
             ),
         })
     }
@@ -354,7 +353,6 @@ pub struct OgrSourceProcessor<G>
 where
     G: Geometry + ArrowTyped,
 {
-    params: OgrSourceParameters,
     dataset_information: OgrSourceDataset, // TODO: use `Arc<…>`?
     _collection_type: PhantomData<FeatureCollection<G>>,
 }
@@ -363,9 +361,8 @@ impl<G> OgrSourceProcessor<G>
 where
     G: Geometry + ArrowTyped,
 {
-    pub fn new(params: OgrSourceParameters, dataset_information: OgrSourceDataset) -> Self {
+    pub fn new(dataset_information: OgrSourceDataset) -> Self {
         Self {
-            params,
             dataset_information,
             _collection_type: Default::default(),
         }
@@ -546,7 +543,7 @@ where
                         builder.push_data(
                             &column,
                             FeatureDataValue::NullableDecimal(field.into_int().map(|v| {
-                                v as i64 // TODO: PR for allowing i64 in OGR?
+                                i64::from(v) // TODO: PR for allowing i64 in OGR?
                             })),
                         )?;
                     }
