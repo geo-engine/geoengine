@@ -76,27 +76,8 @@ where
     /// assert_eq!(pc.len(), 0);
     /// ```
     pub fn empty() -> Self {
-        let time_field = Field::new(
-            Self::TIME_COLUMN_NAME,
-            TimeInterval::arrow_data_type(),
-            false,
-        );
-
-        let columns = if CollectionType::IS_GEOMETRY {
-            let feature_field = Field::new(
-                Self::GEOMETRY_COLUMN_NAME,
-                CollectionType::arrow_data_type(),
-                false,
-            );
-            vec![feature_field, time_field]
-        } else {
-            vec![time_field]
-        };
-
-        Self::new_from_internals(
-            StructArray::from(ArrayData::builder(DataType::Struct(columns)).len(0).build()),
-            Default::default(),
-        )
+        Self::from_data(vec![], vec![], Default::default())
+            .expect("does not fail for empty collection")
     }
 
     /// Create a `FeatureCollection` from data
@@ -817,7 +798,10 @@ impl<CollectionType> Clone for FeatureCollection<CollectionType> {
     }
 }
 
-impl<CollectionType> PartialEq for FeatureCollection<CollectionType> {
+impl<CollectionType> PartialEq for FeatureCollection<CollectionType>
+where
+    CollectionType: Geometry,
+{
     fn eq(&self, other: &Self) -> bool {
         /// compares two `f64` typed columns
         /// treats `f64::NAN` values as if they are equal
@@ -864,10 +848,13 @@ impl<CollectionType> PartialEq for FeatureCollection<CollectionType> {
             return false;
         }
 
-        for key in self.types.keys().chain(&[
-            Self::GEOMETRY_COLUMN_NAME.to_string(),
-            Self::TIME_COLUMN_NAME.to_string(),
-        ]) {
+        let mandatory_keys = if CollectionType::IS_GEOMETRY {
+            vec![Self::GEOMETRY_COLUMN_NAME, Self::TIME_COLUMN_NAME]
+        } else {
+            vec![Self::TIME_COLUMN_NAME]
+        };
+
+        for key in self.types.keys().map(String::as_str).chain(mandatory_keys) {
             let c1 = self.table.column_by_name(key).expect("column must exist");
             let c2 = other.table.column_by_name(key).expect("column must exist");
 
