@@ -55,6 +55,7 @@ pub enum Error {
     ProjectUpdateFailed,
     ProjectDeleteFailed,
     PermissionFailed,
+    ProjectDBUnauthorized,
 
     InvalidNamespace,
 

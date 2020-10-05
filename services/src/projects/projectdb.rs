@@ -17,7 +17,7 @@ pub trait ProjectDB: Send + Sync {
         &self,
         user: UserId,
         options: Validated<ProjectListOptions>,
-    ) -> Vec<ProjectListing>;
+    ) -> Result<Vec<ProjectListing>>;
 
     /// Load the the `version` of the `project` for the `user`
     async fn load(&self, user: UserId, project: ProjectId, version: LoadVersion)

@@ -1,3 +1,4 @@
+use crate::error;
 use crate::error::Result;
 use crate::projects::project::{
     CreateProject, LoadVersion, Project, ProjectId, ProjectListOptions, ProjectListing,
@@ -7,10 +8,19 @@ use crate::projects::projectdb::ProjectDB;
 use crate::users::user::UserId;
 use crate::util::identifiers::Identifier;
 use crate::util::user_input::Validated;
+use crate::workflows::workflow::WorkflowId;
 use async_trait::async_trait;
 use bb8_postgres::bb8::Pool;
 use bb8_postgres::tokio_postgres::NoTls;
 use bb8_postgres::PostgresConnectionManager;
+use chrono::{TimeZone, Utc};
+use serde_json::Value;
+use snafu::ResultExt;
+use uuid::Uuid;
+
+use super::project::{
+    Layer, LayerInfo, LayerType, ProjectPermission, RasterInfo, STRectangle, VectorInfo,
+};
 
 pub struct PostgresProjectDB {
     conn_pool: Pool<PostgresConnectionManager<NoTls>>, // TODO: support Tls connection as well
@@ -20,6 +30,30 @@ impl PostgresProjectDB {
     pub fn new(conn_pool: Pool<PostgresConnectionManager<NoTls>>) -> Self {
         Self { conn_pool }
     }
+
+    async fn check_user_project_permission(
+        &self,
+        user: UserId,
+        project: ProjectId,
+        permissions: &[ProjectPermission],
+    ) -> Result<()> {
+        let conn = self.conn_pool.get().await?;
+
+        let stmt = conn
+            .prepare(
+                "
+                SELECT TRUE
+                FROM user_project_permissions
+                WHERE user_id = $1 AND project_id = $2 AND permission = ANY ($3);",
+            )
+            .await?;
+
+        conn.query_one(&stmt, &[&user.uuid(), &project.uuid(), &permissions])
+            .await
+            .map_err(|_| error::Error::ProjectDBUnauthorized)?;
+
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -28,17 +62,228 @@ impl ProjectDB for PostgresProjectDB {
         &self,
         user: UserId,
         options: Validated<ProjectListOptions>,
-    ) -> Vec<ProjectListing> {
-        todo!()
+    ) -> Result<Vec<ProjectListing>> {
+        // TODO: project filters
+        let options = options.user_input;
+
+        let conn = self.conn_pool.get().await?;
+
+        let stmt = conn
+            .prepare(&format!(
+                "
+        SELECT p.id, p.project_id, p.name, p.description, p.time 
+        FROM user_project_permissions u JOIN project_versions p ON (u.project_id = p.project_id)
+        WHERE u.user_id = $1 AND u.permission = ANY ($2) AND latest IS TRUE
+        ORDER BY p.{}
+        LIMIT $3
+        OFFSET $4;",
+                options.order.to_sql_string()
+            ))
+            .await?;
+
+        let project_rows = conn
+            .query(
+                &stmt,
+                &[
+                    &user.uuid(),
+                    &options.permissions,
+                    &i64::from(options.limit),
+                    &i64::from(options.offset),
+                ],
+            )
+            .await?;
+
+        let mut project_listings = vec![];
+        for project_row in project_rows {
+            let project_version_id = ProjectVersionId::from_uuid(project_row.get::<usize, Uuid>(0));
+            let project_id = ProjectId::from_uuid(project_row.get::<usize, Uuid>(1));
+            let name = project_row.get::<usize, String>(2);
+            let description = project_row.get::<usize, String>(3);
+            let time = Utc
+                .from_local_datetime(&project_row.get::<usize, chrono::NaiveDateTime>(4))
+                .unwrap();
+
+            let stmt = conn
+                .prepare(
+                    "
+                    SELECT name
+                    FROM project_version_layers
+                    WHERE project_version_id = $1;",
+                )
+                .await?;
+
+            let layer_rows = conn.query(&stmt, &[&project_version_id.uuid()]).await?;
+            let layer_names = layer_rows
+                .iter()
+                .map(|row| row.get::<usize, String>(0))
+                .collect();
+
+            project_listings.push(ProjectListing {
+                id: project_id,
+                name,
+                description,
+                layer_names,
+                changed: time,
+            });
+        }
+        Ok(project_listings)
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn load(
         &self,
         user: UserId,
         project: ProjectId,
         version: LoadVersion,
     ) -> Result<Project> {
-        todo!()
+        self.check_user_project_permission(
+            user,
+            project,
+            &[
+                ProjectPermission::Read,
+                ProjectPermission::Write,
+                ProjectPermission::Owner,
+            ],
+        )
+        .await?;
+
+        let conn = self.conn_pool.get().await?;
+
+        let row = if let LoadVersion::Version(version) = version {
+            let stmt = conn
+                .prepare(
+                    "
+        SELECT 
+            p.project_id, 
+            p.id, 
+            p.name, 
+            p.description, 
+            p.view_ll_x,
+            p.view_ll_y,
+            p.view_ur_x,
+            p.view_ur_y,
+            p.view_t1,
+            p.view_t2,
+            p.bounds_ll_x,
+            p.bounds_ll_y,
+            p.bounds_ur_x,
+            p.bounds_ur_y,
+            p.bounds_t1,
+            p.bounds_t2,
+            p.time,
+            p.author_user_id
+        FROM user_project_permissions u JOIN project_versions p ON (u.project_id = p.project_id)
+        WHERE u.user_id = $1 AND u.project_id = $2 AND p.project_version = $3",
+                )
+                .await?;
+
+            conn.query_one(&stmt, &[&user.uuid(), &project.uuid(), &version.uuid()])
+                .await?
+        } else {
+            let stmt = conn
+                .prepare(
+                    "
+        SELECT  
+            p.project_id, 
+            p.id, 
+            p.name, 
+            p.description, 
+            p.view_ll_x,
+            p.view_ll_y,
+            p.view_ur_x,
+            p.view_ur_y,
+            p.view_t1,
+            p.view_t2,
+            p.bounds_ll_x,
+            p.bounds_ll_y,
+            p.bounds_ur_x,
+            p.bounds_ur_y,
+            p.bounds_t1,
+            p.bounds_t2,
+            p.time,
+            p.author_user_id
+        FROM user_project_permissions u JOIN project_versions p ON (u.project_id = p.project_id)
+        WHERE u.user_id = $1 AND u.project_id = $2 AND latest IS TRUE",
+                )
+                .await?;
+
+            conn.query_one(&stmt, &[&user.uuid(), &project.uuid()])
+                .await?
+        };
+
+        let project_id = ProjectId::from_uuid(row.get::<usize, Uuid>(0));
+        let version_id = ProjectVersionId::from_uuid(row.get::<usize, Uuid>(1));
+        let name = row.get::<usize, String>(2);
+        let description = row.get::<usize, String>(3);
+        let view = STRectangle::new_unchecked(
+            row.get::<usize, f64>(4),
+            row.get::<usize, f64>(5),
+            row.get::<usize, f64>(6),
+            row.get::<usize, f64>(7),
+            Utc.from_local_datetime(&row.get::<usize, chrono::NaiveDateTime>(8))
+                .unwrap(),
+            Utc.from_local_datetime(&row.get::<usize, chrono::NaiveDateTime>(9))
+                .unwrap(),
+        );
+        let bounds = STRectangle::new_unchecked(
+            row.get::<usize, f64>(10),
+            row.get::<usize, f64>(11),
+            row.get::<usize, f64>(12),
+            row.get::<usize, f64>(13),
+            Utc.from_local_datetime(&row.get::<usize, chrono::NaiveDateTime>(14))
+                .unwrap(),
+            Utc.from_local_datetime(&row.get::<usize, chrono::NaiveDateTime>(15))
+                .unwrap(),
+        );
+        let time = Utc
+            .from_local_datetime(&row.get::<usize, chrono::NaiveDateTime>(16))
+            .unwrap();
+        let author_id = UserId::from_uuid(row.get::<usize, Uuid>(17));
+
+        let stmt = conn
+            .prepare(
+                "
+        SELECT  
+            layer_type, name, workflow_id, raster_colorizer
+        FROM project_version_layers
+        WHERE project_version_id = $1
+        ORDER BY layer_index ASC",
+            )
+            .await?;
+
+        let rows = conn.query(&stmt, &[&version_id.uuid()]).await?;
+
+        let mut layers = vec![];
+        for row in rows {
+            let layer_type = row.get::<usize, LayerType>(1);
+            let info = match layer_type {
+                LayerType::Raster => LayerInfo::Raster(RasterInfo {
+                    colorizer: serde_json::from_value(row.get::<usize, Value>(4))
+                        .context(error::SerdeJson)?, // TODO: default serializer on error?
+                }),
+                LayerType::Vector => LayerInfo::Vector(VectorInfo {}),
+            };
+
+            layers.push(Layer {
+                workflow: WorkflowId::from_uuid(row.get::<usize, Uuid>(3)),
+                name: row.get::<usize, String>(1),
+                info,
+            });
+        }
+
+        Ok(Project {
+            id: project_id,
+            version: ProjectVersion {
+                id: version_id,
+                changed: time,
+                author: author_id,
+            },
+            name,
+            description,
+            layers,
+            view,
+            bounds,
+        })
     }
 
     async fn create(
@@ -46,6 +291,7 @@ impl ProjectDB for PostgresProjectDB {
         user: UserId,
         create: Validated<CreateProject>,
     ) -> Result<ProjectId> {
+        // TODO: transaction
         let conn = self.conn_pool.get().await?;
 
         let project: Project = Project::from_create_project(create.user_input, user);
@@ -58,27 +304,28 @@ impl ProjectDB for PostgresProjectDB {
 
         let stmt = conn
             .prepare(
-                "INSERT INTO project_versions (\
-                    id, \
-                    project_id, \
-                    name, \
-                    description, \
-                    view_ll_x, \
-                    view_ll_y, \
-                    view_ur_x, \
-                    view_ur_y, \
-                    view_t1, \
-                    view_t2, \
-                    bounds_ll_x, \
-                    bounds_ll_y, \
-                    bounds_ur_x, \
-                    bounds_ur_y, \
-                    bounds_t1, \
-                    bounds_t2, \
-                    author_user_id, \
-                    time) \
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, \
-                            $11, $12, $13, $14, $15, $16, $17, CURRENT_TIMESTAMP);",
+                "INSERT INTO project_versions (
+                    id,
+                    project_id,
+                    name,
+                    description,
+                    view_ll_x,
+                    view_ll_y,
+                    view_ur_x,
+                    view_ur_y,
+                    view_t1,
+                    view_t2,
+                    bounds_ll_x,
+                    bounds_ll_y,
+                    bounds_ur_x,
+                    bounds_ur_y,
+                    bounds_t1,
+                    bounds_t2,
+                    author_user_id,
+                    time,
+                    latest)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+                            $11, $12, $13, $14, $15, $16, $17, CURRENT_TIMESTAMP, TRUE);",
             )
             .await?;
 
@@ -106,55 +353,226 @@ impl ProjectDB for PostgresProjectDB {
         )
         .await?;
 
+        let stmt = conn
+            .prepare(
+                "INSERT INTO user_project_permissions (user_id, project_id, permission) VALUES ($1, $2, $3);",
+            )
+            .await?;
+
+        conn.execute(
+            &stmt,
+            &[&user.uuid(), &project.id.uuid(), &ProjectPermission::Owner],
+        )
+        .await?;
+
         Ok(project.id)
     }
 
-    async fn update(&mut self, user: UserId, project: Validated<UpdateProject>) -> Result<()> {
-        todo!()
+    #[allow(clippy::too_many_lines)]
+    async fn update(&mut self, user: UserId, update: Validated<UpdateProject>) -> Result<()> {
+        let update = update.user_input;
+
+        self.check_user_project_permission(
+            user,
+            update.id,
+            &[ProjectPermission::Write, ProjectPermission::Owner],
+        )
+        .await?;
+
+        // TODO: transaction
+        let conn = self.conn_pool.get().await?;
+
+        let project = self.load_latest(user, update.id).await?;
+
+        let stmt = conn
+            .prepare("UPDATE project_versions SET latest = FALSE WHERE project_id = $1 AND latest IS TRUE;")
+            .await?;
+        conn.execute(&stmt, &[&project.id.uuid()]).await?;
+
+        let project = project.update_project(update, user);
+
+        let stmt = conn
+            .prepare(
+                "
+                INSERT INTO project_versions (
+                    id,
+                    project_id,
+                    name,
+                    description,
+                    view_ll_x,
+                    view_ll_y,
+                    view_ur_x,
+                    view_ur_y,
+                    view_t1,
+                    view_t2,
+                    bounds_ll_x,
+                    bounds_ll_y,
+                    bounds_ur_x,
+                    bounds_ur_y,
+                    bounds_t1,
+                    bounds_t2,
+                    author_user_id,
+                    time,
+                    latest)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+                        $11, $12, $13, $14, $15, $16, $17, CURRENT_TIMESTAMP, TRUE);",
+            )
+            .await?;
+
+        conn.execute(
+            &stmt,
+            &[
+                &project.version.id.uuid(),
+                &project.id.uuid(),
+                &project.name,
+                &project.description,
+                &project.view.bounding_box.lower_left().x,
+                &project.view.bounding_box.lower_left().y,
+                &project.view.bounding_box.upper_right().x,
+                &project.view.bounding_box.upper_right().x,
+                &project.view.time_interval.start().as_naive_date_time(),
+                &project.view.time_interval.end().as_naive_date_time(),
+                &project.bounds.bounding_box.lower_left().x,
+                &project.bounds.bounding_box.lower_left().y,
+                &project.bounds.bounding_box.upper_right().x,
+                &project.bounds.bounding_box.upper_right().x,
+                &project.bounds.time_interval.start().as_naive_date_time(),
+                &project.bounds.time_interval.end().as_naive_date_time(),
+                &user.uuid(),
+            ],
+        )
+        .await?;
+
+        for (idx, layer) in project.layers.iter().enumerate() {
+            let stmt = conn
+                .prepare(
+                    "
+                INSERT INTO project_version_layers (
+                    project_id,
+                    project_version_id,
+                    layer_index,
+                    layer_type,
+                    name,
+                    workflow_id,
+                    raster_colorizer)
+                VALUES ($1, $2, $3, $4, $5, $6, $7);",
+                )
+                .await?;
+
+            let raster_colorizer = if let LayerInfo::Raster(info) = &layer.info {
+                Some(serde_json::to_value(&info.colorizer).context(error::SerdeJson)?)
+            } else {
+                None
+            };
+
+            conn.execute(
+                &stmt,
+                &[
+                    &project.id.uuid(),
+                    &project.version.id.uuid(),
+                    &(idx as i32),
+                    &layer.layer_type(),
+                    &layer.name,
+                    &layer.workflow.uuid(),
+                    &raster_colorizer,
+                ],
+            )
+            .await?;
+        }
+
+        Ok(())
     }
 
     async fn delete(&mut self, user: UserId, project: ProjectId) -> Result<()> {
-        todo!()
+        self.check_user_project_permission(user, project, &[ProjectPermission::Owner])
+            .await?;
+
+        let conn = self.conn_pool.get().await?;
+
+        let stmt = conn.prepare("DELETE FROM projects WHERE id = $1;").await?;
+
+        conn.execute(&stmt, &[&project.uuid()]).await?;
+
+        Ok(())
     }
 
     async fn versions(&self, user: UserId, project: ProjectId) -> Result<Vec<ProjectVersion>> {
-        todo!()
+        self.check_user_project_permission(
+            user,
+            project,
+            &[
+                ProjectPermission::Read,
+                ProjectPermission::Write,
+                ProjectPermission::Owner,
+            ],
+        )
+        .await?;
+
+        let conn = self.conn_pool.get().await?;
+        let stmt = conn
+            .prepare(
+                "SELECT id, time, author_user_id FROM project_versions WHERE project_id = $1 ORDER BY time DESC",
+            )
+            .await?;
+
+        let rows = conn.query(&stmt, &[&project.uuid()]).await?;
+
+        Ok(rows
+            .iter()
+            .map(|row| ProjectVersion {
+                id: ProjectVersionId::from_uuid(row.get(0)),
+                changed: Utc.from_local_datetime(&row.get(1)).unwrap(),
+                author: UserId::from_uuid(row.get(2)),
+            })
+            .collect())
     }
 
     async fn list_permissions(
         &mut self,
-        user: UserId,
-        project: ProjectId,
+        _user: UserId,
+        _project: ProjectId,
     ) -> Result<Vec<UserProjectPermission>> {
         todo!()
     }
 
     async fn add_permission(
         &mut self,
-        user: UserId,
-        permission: UserProjectPermission,
+        _user: UserId,
+        _permission: UserProjectPermission,
     ) -> Result<()> {
         todo!()
     }
 
     async fn remove_permission(
         &mut self,
-        user: UserId,
-        permission: UserProjectPermission,
+        _user: UserId,
+        _permission: UserProjectPermission,
     ) -> Result<()> {
         todo!()
+    }
+
+    async fn load_latest(&self, user: UserId, project: ProjectId) -> Result<Project> {
+        self.load(user, project, LoadVersion::Latest).await
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::projects::project::STRectangle;
-    use crate::users::postgres_userdb::PostgresUserDB;
-    use crate::users::user::UserRegistration;
     use crate::users::userdb::UserDB;
     use crate::util::user_input::UserInput;
+    use crate::{
+        projects::project::{OrderBy, ProjectFilter, ProjectPermission, STRectangle},
+        workflows::postgres_workflow_registry::PostgresWorkflowRegistry,
+    };
+    use crate::{users::postgres_userdb::PostgresUserDB, workflows::workflow::Workflow};
+    use crate::{users::user::UserRegistration, workflows::registry::WorkflowRegistry};
     use bb8_postgres::tokio_postgres;
+    use geoengine_datatypes::primitives::Coordinate2D;
+    use geoengine_operators::{
+        engine::TypedOperator, engine::VectorOperator, mock::MockPointSource,
+        mock::MockPointSourceParams,
+    };
     use std::str::FromStr;
 
     #[ignore]
@@ -172,6 +590,8 @@ mod tests {
         let pool = Pool::builder().build(pg_mgr).await.unwrap();
 
         let mut user_db = PostgresUserDB::new(pool.clone()).await.unwrap();
+        let mut project_db = PostgresProjectDB::new(pool.clone());
+        let mut workflow_registry = PostgresWorkflowRegistry::new(pool.clone());
 
         let user_registration = UserRegistration {
             email: "foo@bar.de".into(),
@@ -182,20 +602,82 @@ mod tests {
         .unwrap();
 
         let result = user_db.register(user_registration).await;
-        assert!(result.is_ok());
         let user_id = result.unwrap();
 
-        let mut project_db = PostgresProjectDB::new(pool.clone());
+        for i in 0..10 {
+            let create = CreateProject {
+                name: format!("Test{}", i),
+                description: format!("Test{}", 10 - i),
+                view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+                bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+            }
+            .validated()
+            .unwrap();
+            project_db.create(user_id, create).await.unwrap();
+        }
 
-        let create = CreateProject {
-            name: "Test".into(),
-            description: "Text".into(),
-            view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
-            bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+        let options = ProjectListOptions {
+            permissions: vec![
+                ProjectPermission::Owner,
+                ProjectPermission::Write,
+                ProjectPermission::Read,
+            ],
+            filter: ProjectFilter::None,
+            order: OrderBy::NameDesc,
+            offset: 0,
+            limit: 2,
         }
         .validated()
         .unwrap();
+        let projects = project_db.list(user_id, options).await.unwrap();
 
-        project_db.create(user_id, create).await.unwrap();
+        assert_eq!(projects.len(), 2);
+        assert_eq!(projects[0].name, "Test9");
+        assert_eq!(projects[1].name, "Test8");
+
+        let project_id = projects[0].id;
+
+        let project = project_db
+            .load(user_id, project_id, LoadVersion::Latest)
+            .await
+            .unwrap();
+
+        let workflow_id = workflow_registry
+            .register(Workflow {
+                operator: TypedOperator::Vector(
+                    MockPointSource {
+                        params: MockPointSourceParams {
+                            points: vec![Coordinate2D::new(1., 2.); 3],
+                        },
+                    }
+                    .boxed(),
+                ),
+            })
+            .await
+            .unwrap();
+
+        let update = UpdateProject {
+            id: project.id,
+            name: Some("Test9 Updated".into()),
+            description: None,
+            layers: Some(vec![Some(Layer {
+                workflow: workflow_id,
+                name: "TestLayer".into(),
+                info: LayerInfo::Vector(VectorInfo {}),
+            })]),
+            view: None,
+            bounds: None,
+        };
+        project_db
+            .update(user_id, update.validated().unwrap())
+            .await
+            .unwrap();
+
+        let versions = project_db.versions(user_id, project_id).await.unwrap();
+        assert_eq!(versions.len(), 2);
+
+        project_db.delete(user_id, project_id).await.unwrap();
+
+        assert!(project_db.load_latest(user_id, project_id).await.is_err());
     }
 }

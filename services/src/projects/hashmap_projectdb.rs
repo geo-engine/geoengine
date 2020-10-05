@@ -24,7 +24,7 @@ impl ProjectDB for HashMapProjectDB {
         &self,
         user: UserId,
         options: Validated<ProjectListOptions>,
-    ) -> Vec<ProjectListing> {
+    ) -> Result<Vec<ProjectListing>> {
         let ProjectListOptions {
             permissions,
             filter,
@@ -53,7 +53,11 @@ impl ProjectDB for HashMapProjectDB {
             OrderBy::NameDesc => projects.sort_by(|a, b| b.name.cmp(&a.name)),
         }
 
-        projects.into_iter().skip(offset).take(limit).collect()
+        Ok(projects
+            .into_iter()
+            .skip(offset as usize)
+            .take(limit as usize)
+            .collect())
     }
 
     /// Load a project
@@ -322,7 +326,7 @@ mod test {
         .validated()
         .unwrap();
 
-        let projects = project_db.list(user, options).await;
+        let projects = project_db.list(user, options).await.unwrap();
 
         assert!(projects.iter().any(|p| p.name == "Own"));
         assert!(projects.iter().any(|p| p.name == "User2's"));
@@ -338,7 +342,7 @@ mod test {
         .validated()
         .unwrap();
 
-        let projects = project_db.list(user, options).await;
+        let projects = project_db.list(user, options).await.unwrap();
         assert!(projects[0].name == "Own");
         assert_eq!(projects.len(), 1);
     }
@@ -372,7 +376,7 @@ mod test {
         }
         .validated()
         .unwrap();
-        let projects = project_db.list(user, options).await;
+        let projects = project_db.list(user, options).await.unwrap();
 
         assert_eq!(projects.len(), 2);
         assert_eq!(projects[0].name, "Test9");

@@ -51,7 +51,7 @@ async fn list_projects<C: Context>(
         .project_db_ref()
         .await
         .list(ctx.session()?.user, options)
-        .await;
+        .await?;
     Ok(warp::reply::json(&listing))
 }
 

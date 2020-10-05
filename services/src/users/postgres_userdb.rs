@@ -60,10 +60,10 @@ impl PostgresUserDB {
                         "\
                         -- CREATE EXTENSION postgis;
 
-                        CREATE TABLE version (\
-                            version INT\
-                        );\
-                        INSERT INTO version VALUES (1);\
+                        CREATE TABLE version (
+                            version INT
+                        );
+                        INSERT INTO version VALUES (1);
 
                         CREATE TABLE users (
                             id UUID PRIMARY KEY,
@@ -84,7 +84,7 @@ impl PostgresUserDB {
 
                         CREATE TABLE project_versions (
                             id UUID PRIMARY KEY,
-                            project_id UUID REFERENCES projects(id) NOT NULL,
+                            project_id UUID REFERENCES projects(id) ON DELETE CASCADE NOT NULL,
                             name character varying (256) NOT NULL,
                             description text NOT NULL,
                             view_ll_x double precision NOT NULL,
@@ -100,20 +100,39 @@ impl PostgresUserDB {
                             bounds_t1 timestamp without time zone NOT NULL,
                             bounds_t2 timestamp without time zone  NOT NULL,
                             time timestamp without time zone,
-                            author_user_id UUID REFERENCES users(id) NOT NULL
-                            -- TODO: latest boolean, with index for faster access
+                            author_user_id UUID REFERENCES users(id) NOT NULL,
+                            latest boolean
                         );
+
+                        -- TODO: unique constraint poject_id, lates = true?
+                        -- TODO: index on latest
+
 
                         CREATE TYPE layer_type AS ENUM ('raster', 'vector'); -- TODO: distinguish points/lines/polygons
 
-                        CREATE TABLE project_layers (
-                            id UUID PRIMARY KEY,
-                            project_id UUID REFERENCES projects(id) NOT NULL,
-                            project_version_id UUID REFERENCES project_versions(id) NOT NULL,
+                        CREATE TABLE project_version_layers (
+                            layer_index integer NOT NULL,
+                            project_id UUID REFERENCES projects(id) ON DELETE CASCADE NOT NULL,
+                            project_version_id UUID REFERENCES project_versions(id) ON DELETE CASCADE NOT NULL,                            
                             layer_type layer_type NOT NULL,
                             name character varying (256) NOT NULL,
                             workflow_id UUID NOT NULL, -- TODO: REFERENCES workflows(id)
-                            raster_colorizer json                       
+                            raster_colorizer json,
+                            PRIMARY KEY (project_id, layer_index)            
+                        );
+
+                        CREATE TYPE project_permission AS ENUM ('read', 'write', 'owner');
+
+                        CREATE TABLE user_project_permissions (
+                            user_id UUID REFERENCES users(id) NOT NULL,
+                            project_id UUID REFERENCES projects(id) ON DELETE CASCADE NOT NULL,
+                            permission project_permission NOT NULL,
+                            PRIMARY KEY (user_id, project_id)
+                        );
+
+                        CREATE TABLE workflows (
+                            id UUID PRIMARY KEY,
+                            workflow json NOT NULL
                         );
 
                         -- TODO: indexes

@@ -136,7 +136,8 @@ async fn get_map<C: Context>(
         .await
         .load(&WorkflowId::from_uuid(
             Uuid::parse_str(&request.layers).context(error::Uuid)?,
-        ))?;
+        ))
+        .await?;
 
     let operator = workflow.operator.get_raster().context(error::Operator)?;
 
@@ -453,6 +454,7 @@ mod tests {
             .write()
             .await
             .register(workflow.clone())
+            .await
             .unwrap();
 
         let res = warp::test::request()
@@ -488,6 +490,7 @@ mod tests {
             .write()
             .await
             .register(workflow.clone())
+            .await
             .unwrap();
 
         let res = warp::test::request()
