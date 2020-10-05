@@ -185,3 +185,43 @@ pub enum TypedVectorQueryProcessor {
     MultiLineString(Box<dyn VectorQueryProcessor<VectorType = MultiLineStringCollection>>),
     MultiPolygon(Box<dyn VectorQueryProcessor<VectorType = MultiPolygonCollection>>),
 }
+
+impl TypedVectorQueryProcessor {
+    pub fn data(self) -> Option<Box<dyn VectorQueryProcessor<VectorType = DataCollection>>> {
+        if let TypedVectorQueryProcessor::Data(p) = self {
+            Some(p)
+        } else {
+            None
+        }
+    }
+
+    pub fn multi_point(
+        self,
+    ) -> Option<Box<dyn VectorQueryProcessor<VectorType = MultiPointCollection>>> {
+        if let TypedVectorQueryProcessor::MultiPoint(p) = self {
+            Some(p)
+        } else {
+            None
+        }
+    }
+
+    pub fn multi_line_string(
+        self,
+    ) -> Option<Box<dyn VectorQueryProcessor<VectorType = MultiLineStringCollection>>> {
+        if let TypedVectorQueryProcessor::MultiLineString(p) = self {
+            Some(p)
+        } else {
+            None
+        }
+    }
+
+    pub fn multi_polygon(
+        self,
+    ) -> Option<Box<dyn VectorQueryProcessor<VectorType = MultiPolygonCollection>>> {
+        if let TypedVectorQueryProcessor::MultiPolygon(p) = self {
+            Some(p)
+        } else {
+            None
+        }
+    }
+}
