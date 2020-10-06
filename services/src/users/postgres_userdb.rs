@@ -12,7 +12,6 @@ use bb8_postgres::tokio_postgres::error::SqlState;
 use bb8_postgres::tokio_postgres::NoTls;
 use bb8_postgres::PostgresConnectionManager;
 use pwhash::bcrypt;
-use uuid::Uuid;
 
 pub struct PostgresUserDB {
     conn_pool: Pool<PostgresConnectionManager<NoTls>>, // TODO: support Tls connection as well
@@ -45,7 +44,7 @@ impl PostgresUserDB {
 
         let row = conn.query_one(&stmt, &[]).await?;
 
-        Ok(row.get::<usize, i32>(0))
+        Ok(row.get(0))
     }
 
     async fn update_schema(&self) -> Result<()> {
@@ -200,8 +199,8 @@ impl UserDB for PostgresUserDB {
             .await
             .map_err(|_| error::Error::LoginFailed)?;
 
-        let user_id = UserId::from_uuid(row.get::<usize, Uuid>(0));
-        let password_hash = row.get::<usize, &str>(1);
+        let user_id = UserId::from_uuid(row.get(0));
+        let password_hash = row.get(1);
 
         if bcrypt::verify(user_credentials.password, password_hash) {
             let session = Session::from_user_id(user_id);
@@ -241,7 +240,7 @@ impl UserDB for PostgresUserDB {
             .await
             .map_err(|_| error::Error::SessionDoesNotExist)?;
 
-        let user_id = UserId::from_uuid(row.get::<usize, Uuid>(0));
+        let user_id = UserId::from_uuid(row.get(0));
 
         Ok(Session::from_fields(user_id, session))
     }

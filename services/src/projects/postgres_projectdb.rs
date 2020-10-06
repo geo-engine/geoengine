@@ -14,9 +14,7 @@ use bb8_postgres::bb8::Pool;
 use bb8_postgres::tokio_postgres::NoTls;
 use bb8_postgres::PostgresConnectionManager;
 use chrono::{TimeZone, Utc};
-use serde_json::Value;
 use snafu::ResultExt;
-use uuid::Uuid;
 
 use super::project::{
     Layer, LayerInfo, LayerType, ProjectPermission, RasterInfo, STRectangle, VectorInfo,
@@ -95,13 +93,11 @@ impl ProjectDB for PostgresProjectDB {
 
         let mut project_listings = vec![];
         for project_row in project_rows {
-            let project_version_id = ProjectVersionId::from_uuid(project_row.get::<usize, Uuid>(0));
-            let project_id = ProjectId::from_uuid(project_row.get::<usize, Uuid>(1));
-            let name = project_row.get::<usize, String>(2);
-            let description = project_row.get::<usize, String>(3);
-            let time = Utc
-                .from_local_datetime(&project_row.get::<usize, chrono::NaiveDateTime>(4))
-                .unwrap();
+            let project_version_id = ProjectVersionId::from_uuid(project_row.get(0));
+            let project_id = ProjectId::from_uuid(project_row.get(1));
+            let name = project_row.get(2);
+            let description = project_row.get(3);
+            let time = Utc.from_local_datetime(&project_row.get(4)).unwrap();
 
             let stmt = conn
                 .prepare(
@@ -113,10 +109,7 @@ impl ProjectDB for PostgresProjectDB {
                 .await?;
 
             let layer_rows = conn.query(&stmt, &[&project_version_id.uuid()]).await?;
-            let layer_names = layer_rows
-                .iter()
-                .map(|row| row.get::<usize, String>(0))
-                .collect();
+            let layer_names = layer_rows.iter().map(|row| row.get(0)).collect();
 
             project_listings.push(ProjectListing {
                 id: project_id,
@@ -211,34 +204,28 @@ impl ProjectDB for PostgresProjectDB {
                 .await?
         };
 
-        let project_id = ProjectId::from_uuid(row.get::<usize, Uuid>(0));
-        let version_id = ProjectVersionId::from_uuid(row.get::<usize, Uuid>(1));
-        let name = row.get::<usize, String>(2);
-        let description = row.get::<usize, String>(3);
+        let project_id = ProjectId::from_uuid(row.get(0));
+        let version_id = ProjectVersionId::from_uuid(row.get(1));
+        let name = row.get(2);
+        let description = row.get(3);
         let view = STRectangle::new_unchecked(
-            row.get::<usize, f64>(4),
-            row.get::<usize, f64>(5),
-            row.get::<usize, f64>(6),
-            row.get::<usize, f64>(7),
-            Utc.from_local_datetime(&row.get::<usize, chrono::NaiveDateTime>(8))
-                .unwrap(),
-            Utc.from_local_datetime(&row.get::<usize, chrono::NaiveDateTime>(9))
-                .unwrap(),
+            row.get(4),
+            row.get(5),
+            row.get(6),
+            row.get(7),
+            Utc.from_local_datetime(&row.get(8)).unwrap(),
+            Utc.from_local_datetime(&row.get(9)).unwrap(),
         );
         let bounds = STRectangle::new_unchecked(
-            row.get::<usize, f64>(10),
-            row.get::<usize, f64>(11),
-            row.get::<usize, f64>(12),
-            row.get::<usize, f64>(13),
-            Utc.from_local_datetime(&row.get::<usize, chrono::NaiveDateTime>(14))
-                .unwrap(),
-            Utc.from_local_datetime(&row.get::<usize, chrono::NaiveDateTime>(15))
-                .unwrap(),
+            row.get(10),
+            row.get(11),
+            row.get(12),
+            row.get(13),
+            Utc.from_local_datetime(&row.get(14)).unwrap(),
+            Utc.from_local_datetime(&row.get(15)).unwrap(),
         );
-        let time = Utc
-            .from_local_datetime(&row.get::<usize, chrono::NaiveDateTime>(16))
-            .unwrap();
-        let author_id = UserId::from_uuid(row.get::<usize, Uuid>(17));
+        let time = Utc.from_local_datetime(&row.get(16)).unwrap();
+        let author_id = UserId::from_uuid(row.get(17));
 
         let stmt = conn
             .prepare(
@@ -255,18 +242,17 @@ impl ProjectDB for PostgresProjectDB {
 
         let mut layers = vec![];
         for row in rows {
-            let layer_type = row.get::<usize, LayerType>(1);
+            let layer_type = row.get(1);
             let info = match layer_type {
                 LayerType::Raster => LayerInfo::Raster(RasterInfo {
-                    colorizer: serde_json::from_value(row.get::<usize, Value>(4))
-                        .context(error::SerdeJson)?, // TODO: default serializer on error?
+                    colorizer: serde_json::from_value(row.get(4)).context(error::SerdeJson)?, // TODO: default serializer on error?
                 }),
                 LayerType::Vector => LayerInfo::Vector(VectorInfo {}),
             };
 
             layers.push(Layer {
-                workflow: WorkflowId::from_uuid(row.get::<usize, Uuid>(3)),
-                name: row.get::<usize, String>(1),
+                workflow: WorkflowId::from_uuid(row.get(3)),
+                name: row.get(1),
                 info,
             });
         }
