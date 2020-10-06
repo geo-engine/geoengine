@@ -534,7 +534,7 @@ where
     }
 
     async fn list_permissions(
-        &mut self,
+        &self,
         user: UserId,
         project: ProjectId,
     ) -> Result<Vec<UserProjectPermission>> {
@@ -636,13 +636,11 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::users::userdb::UserDB;
+    use crate::contexts::Context;
+    use crate::projects::project::{OrderBy, ProjectFilter, ProjectPermission, STRectangle};
     use crate::util::user_input::UserInput;
-    use crate::{
-        projects::project::{OrderBy, ProjectFilter, ProjectPermission, STRectangle},
-        workflows::postgres_workflow_registry::PostgresWorkflowRegistry,
-    };
-    use crate::{users::postgres_userdb::PostgresUserDB, workflows::workflow::Workflow};
+    use crate::workflows::workflow::Workflow;
+    use crate::{contexts::PostgresContext, users::userdb::UserDB};
     use crate::{users::user::UserRegistration, workflows::registry::WorkflowRegistry};
     use bb8_postgres::tokio_postgres;
     use geoengine_datatypes::primitives::Coordinate2D;
@@ -662,13 +660,10 @@ mod tests {
             "postgresql://geoengine:geoengine@localhost:5432",
         )
         .unwrap();
-        let pg_mgr = PostgresConnectionManager::new(config, tokio_postgres::NoTls);
 
-        let pool = Pool::builder().build(pg_mgr).await.unwrap();
-
-        let mut user_db = PostgresUserDB::new(pool.clone()).await.unwrap();
-        let mut project_db = PostgresProjectDB::new(pool.clone());
-        let mut workflow_registry = PostgresWorkflowRegistry::new(pool.clone());
+        let ctx = PostgresContext::new(config, tokio_postgres::NoTls)
+            .await
+            .unwrap();
 
         let user_registration = UserRegistration {
             email: "foo@bar.de".into(),
@@ -678,7 +673,11 @@ mod tests {
         .validated()
         .unwrap();
 
-        let result = user_db.register(user_registration).await;
+        let result = ctx
+            .user_db_ref_mut()
+            .await
+            .register(user_registration)
+            .await;
         let user_id = result.unwrap();
 
         for i in 0..10 {
@@ -690,7 +689,11 @@ mod tests {
             }
             .validated()
             .unwrap();
-            project_db.create(user_id, create).await.unwrap();
+            ctx.project_db_ref_mut()
+                .await
+                .create(user_id, create)
+                .await
+                .unwrap();
         }
 
         let options = ProjectListOptions {
@@ -706,7 +709,12 @@ mod tests {
         }
         .validated()
         .unwrap();
-        let projects = project_db.list(user_id, options).await.unwrap();
+        let projects = ctx
+            .project_db_ref_mut()
+            .await
+            .list(user_id, options)
+            .await
+            .unwrap();
 
         assert_eq!(projects.len(), 2);
         assert_eq!(projects[0].name, "Test9");
@@ -714,12 +722,16 @@ mod tests {
 
         let project_id = projects[0].id;
 
-        let project = project_db
+        let project = ctx
+            .project_db_ref_mut()
+            .await
             .load(user_id, project_id, LoadVersion::Latest)
             .await
             .unwrap();
 
-        let workflow_id = workflow_registry
+        let workflow_id = ctx
+            .workflow_registry_ref_mut()
+            .await
             .register(Workflow {
                 operator: TypedOperator::Vector(
                     MockPointSource {
@@ -745,16 +757,23 @@ mod tests {
             view: None,
             bounds: None,
         };
-        project_db
+        ctx.project_db_ref_mut()
+            .await
             .update(user_id, update.validated().unwrap())
             .await
             .unwrap();
 
-        let versions = project_db.versions(user_id, project_id).await.unwrap();
+        let versions = ctx
+            .project_db_ref()
+            .await
+            .versions(user_id, project_id)
+            .await
+            .unwrap();
         assert_eq!(versions.len(), 2);
 
         assert_eq!(
-            project_db
+            ctx.project_db_ref()
+                .await
                 .list_permissions(user_id, project_id)
                 .await
                 .unwrap()
@@ -762,7 +781,9 @@ mod tests {
             1
         );
 
-        let user2 = user_db
+        let user2 = ctx
+            .user_db_ref_mut()
+            .await
             .register(
                 UserRegistration {
                     email: "user2@example.com".into(),
@@ -775,7 +796,8 @@ mod tests {
             .await
             .unwrap();
 
-        project_db
+        ctx.project_db_ref_mut()
+            .await
             .add_permission(
                 user_id,
                 UserProjectPermission {
@@ -788,7 +810,8 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            project_db
+            ctx.project_db_ref()
+                .await
                 .list_permissions(user_id, project_id)
                 .await
                 .unwrap()
@@ -796,8 +819,17 @@ mod tests {
             2
         );
 
-        project_db.delete(user_id, project_id).await.unwrap();
+        ctx.project_db_ref_mut()
+            .await
+            .delete(user_id, project_id)
+            .await
+            .unwrap();
 
-        assert!(project_db.load_latest(user_id, project_id).await.is_err());
+        assert!(ctx
+            .project_db_ref()
+            .await
+            .load_latest(user_id, project_id)
+            .await
+            .is_err());
     }
 }

@@ -176,7 +176,7 @@ impl ProjectDB for HashMapProjectDB {
 
     /// List all permissions on a project
     async fn list_permissions(
-        &mut self,
+        &self,
         user: UserId,
         project: ProjectId,
     ) -> Result<Vec<UserProjectPermission>> {

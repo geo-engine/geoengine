@@ -8,8 +8,10 @@ use std::sync::Arc;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 mod in_memory;
+mod postgres;
 
 pub use in_memory::InMemoryContext;
+pub use postgres::PostgresContext;
 
 type DB<T> = Arc<RwLock<T>>;
 

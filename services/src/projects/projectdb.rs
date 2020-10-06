@@ -46,7 +46,7 @@ pub trait ProjectDB: Send + Sync {
 
     /// List all permissions of users for the `project` if the `user` is an owner
     async fn list_permissions(
-        &mut self,
+        &self,
         user: UserId,
         project: ProjectId,
     ) -> Result<Vec<UserProjectPermission>>;

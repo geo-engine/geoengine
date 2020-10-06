@@ -15,6 +15,7 @@ pub async fn start_server(
     shutdown_rx: Option<Receiver<()>>,
     static_files_dir: Option<PathBuf>,
 ) -> Result<()> {
+    // TODO: make configurable
     let ctx = InMemoryContext::default();
 
     // TODO: hierarchical filters workflow -> (register, load), user -> (register, login, ...)
