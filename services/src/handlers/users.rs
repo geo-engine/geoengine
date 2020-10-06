@@ -67,11 +67,11 @@ async fn logout<C: Context>(ctx: C) -> Result<impl warp::Reply, warp::Rejection>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::handlers::{handle_rejection, InMemoryContext};
     use crate::users::session::Session;
     use crate::users::user::UserId;
     use crate::users::userdb::UserDB;
     use crate::util::user_input::Validated;
+    use crate::{contexts::InMemoryContext, handlers::handle_rejection};
 
     #[tokio::test]
     async fn register() {

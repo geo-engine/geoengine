@@ -221,15 +221,17 @@ async fn list_permissions<C: Context>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::handlers::InMemoryContext;
-    use crate::projects::project::{
-        Layer, LayerInfo, OrderBy, Project, ProjectFilter, ProjectId, ProjectListing,
-        ProjectPermission, ProjectVersion, RasterInfo, STRectangle, UpdateProject,
-    };
     use crate::users::user::{UserCredentials, UserRegistration};
     use crate::users::userdb::UserDB;
     use crate::util::identifiers::Identifier;
     use crate::workflows::workflow::WorkflowId;
+    use crate::{
+        contexts::InMemoryContext,
+        projects::project::{
+            Layer, LayerInfo, OrderBy, Project, ProjectFilter, ProjectId, ProjectListing,
+            ProjectPermission, ProjectVersion, RasterInfo, STRectangle, UpdateProject,
+        },
+    };
     use geoengine_datatypes::operations::image::Colorizer;
 
     #[tokio::test]

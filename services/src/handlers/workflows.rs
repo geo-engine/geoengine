@@ -52,8 +52,7 @@ async fn load_workflow<C: Context>(id: Uuid, ctx: C) -> Result<impl warp::Reply,
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::handlers::InMemoryContext;
-    use crate::workflows::registry::WorkflowRegistry;
+    use crate::{contexts::InMemoryContext, workflows::registry::WorkflowRegistry};
     use geoengine_operators::engine::VectorOperator;
     use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
 

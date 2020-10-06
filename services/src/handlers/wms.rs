@@ -293,9 +293,8 @@ mod tests {
     };
 
     use super::*;
-    use crate::handlers::InMemoryContext;
-    use crate::ogc::wms::request::GetMapFormat;
     use crate::workflows::workflow::Workflow;
+    use crate::{contexts::InMemoryContext, ogc::wms::request::GetMapFormat};
     use xml::ParserConfig;
 
     #[tokio::test]

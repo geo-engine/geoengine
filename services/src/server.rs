@@ -1,9 +1,10 @@
 use warp::{Filter, Rejection};
 
+use crate::contexts::InMemoryContext;
 use crate::error;
 use crate::error::{Error, Result};
 use crate::handlers;
-use crate::handlers::{handle_rejection, InMemoryContext};
+use crate::handlers::handle_rejection;
 use snafu::ResultExt;
 use std::path::PathBuf;
 use tokio::signal;

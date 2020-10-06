@@ -309,8 +309,7 @@ mod tests {
     use geoengine_operators::source::CsvSourceParameters;
 
     use super::*;
-    use crate::handlers::InMemoryContext;
-    use crate::workflows::workflow::Workflow;
+    use crate::{contexts::InMemoryContext, workflows::workflow::Workflow};
     use geoengine_operators::engine::TypedOperator;
     use geoengine_operators::source::csv::{
         CsvGeometrySpecification, CsvSource, CsvTimeSpecification,
