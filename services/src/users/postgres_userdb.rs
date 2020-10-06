@@ -7,18 +7,32 @@ use crate::users::userdb::UserDB;
 use crate::util::identifiers::Identifier;
 use crate::util::user_input::Validated;
 use async_trait::async_trait;
-use bb8_postgres::bb8::Pool;
 use bb8_postgres::tokio_postgres::error::SqlState;
-use bb8_postgres::tokio_postgres::NoTls;
 use bb8_postgres::PostgresConnectionManager;
+use bb8_postgres::{
+    bb8::Pool, tokio_postgres::tls::MakeTlsConnect, tokio_postgres::tls::TlsConnect,
+    tokio_postgres::Socket,
+};
 use pwhash::bcrypt;
 
-pub struct PostgresUserDB {
-    conn_pool: Pool<PostgresConnectionManager<NoTls>>, // TODO: support Tls connection as well
+pub struct PostgresUserDB<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    conn_pool: Pool<PostgresConnectionManager<Tls>>, // TODO: support Tls connection as well
 }
 
-impl PostgresUserDB {
-    pub async fn new(conn_pool: Pool<PostgresConnectionManager<NoTls>>) -> Result<Self> {
+impl<Tls> PostgresUserDB<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    pub async fn new(conn_pool: Pool<PostgresConnectionManager<Tls>>) -> Result<Self> {
         let a = Self { conn_pool };
         a.update_schema().await?;
         Ok(a)
@@ -161,7 +175,13 @@ impl PostgresUserDB {
 }
 
 #[async_trait]
-impl UserDB for PostgresUserDB {
+impl<Tls> UserDB for PostgresUserDB<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
     // TODO: clean up expired sessions?
 
     async fn register(&mut self, user: Validated<UserRegistration>) -> Result<UserId> {

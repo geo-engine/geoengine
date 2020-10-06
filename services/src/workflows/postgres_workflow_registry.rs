@@ -2,23 +2,44 @@ use crate::error;
 use crate::workflows::workflow::WorkflowId;
 use crate::{error::Result, util::identifiers::Identifier};
 use async_trait::async_trait;
-use bb8_postgres::{bb8::Pool, tokio_postgres::NoTls, PostgresConnectionManager};
+use bb8_postgres::{
+    bb8::Pool, tokio_postgres::tls::MakeTlsConnect, tokio_postgres::tls::TlsConnect,
+    tokio_postgres::Socket, PostgresConnectionManager,
+};
 use snafu::ResultExt;
 
 use super::{registry::WorkflowRegistry, workflow::Workflow};
 
-pub struct PostgresWorkflowRegistry {
-    conn_pool: Pool<PostgresConnectionManager<NoTls>>, // TODO: support Tls connection as well
+pub struct PostgresWorkflowRegistry<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    conn_pool: Pool<PostgresConnectionManager<Tls>>, // TODO: support Tls connection as well
 }
 
-impl PostgresWorkflowRegistry {
-    pub fn new(conn_pool: Pool<PostgresConnectionManager<NoTls>>) -> Self {
+impl<Tls> PostgresWorkflowRegistry<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    pub fn new(conn_pool: Pool<PostgresConnectionManager<Tls>>) -> Self {
         Self { conn_pool }
     }
 }
 
 #[async_trait]
-impl WorkflowRegistry for PostgresWorkflowRegistry {
+impl<Tls> WorkflowRegistry for PostgresWorkflowRegistry<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
     async fn register(&mut self, workflow: Workflow) -> Result<WorkflowId> {
         let conn = self.conn_pool.get().await?;
         let stmt = conn

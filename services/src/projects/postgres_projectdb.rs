@@ -10,9 +10,11 @@ use crate::util::identifiers::Identifier;
 use crate::util::user_input::Validated;
 use crate::workflows::workflow::WorkflowId;
 use async_trait::async_trait;
-use bb8_postgres::bb8::Pool;
-use bb8_postgres::tokio_postgres::NoTls;
 use bb8_postgres::PostgresConnectionManager;
+use bb8_postgres::{
+    bb8::Pool, tokio_postgres::tls::MakeTlsConnect, tokio_postgres::tls::TlsConnect,
+    tokio_postgres::Socket,
+};
 use chrono::{TimeZone, Utc};
 use snafu::ResultExt;
 
@@ -20,12 +22,24 @@ use super::project::{
     Layer, LayerInfo, LayerType, ProjectPermission, RasterInfo, STRectangle, VectorInfo,
 };
 
-pub struct PostgresProjectDB {
-    conn_pool: Pool<PostgresConnectionManager<NoTls>>, // TODO: support Tls connection as well
+pub struct PostgresProjectDB<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    conn_pool: Pool<PostgresConnectionManager<Tls>>, // TODO: support Tls connection as well
 }
 
-impl PostgresProjectDB {
-    pub fn new(conn_pool: Pool<PostgresConnectionManager<NoTls>>) -> Self {
+impl<Tls> PostgresProjectDB<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    pub fn new(conn_pool: Pool<PostgresConnectionManager<Tls>>) -> Self {
         Self { conn_pool }
     }
 
@@ -55,7 +69,13 @@ impl PostgresProjectDB {
 }
 
 #[async_trait]
-impl ProjectDB for PostgresProjectDB {
+impl<Tls> ProjectDB for PostgresProjectDB<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
     async fn list(
         &self,
         user: UserId,
