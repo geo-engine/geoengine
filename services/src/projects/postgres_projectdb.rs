@@ -529,30 +529,101 @@ impl ProjectDB for PostgresProjectDB {
 
     async fn list_permissions(
         &mut self,
-        _user: UserId,
-        _project: ProjectId,
+        user: UserId,
+        project: ProjectId,
     ) -> Result<Vec<UserProjectPermission>> {
-        todo!()
+        self.check_user_project_permission(
+            user,
+            project,
+            &[
+                ProjectPermission::Read,
+                ProjectPermission::Write,
+                ProjectPermission::Owner,
+            ],
+        )
+        .await?;
+
+        let conn = self.conn_pool.get().await?;
+
+        let stmt = conn
+            .prepare(
+                "
+        SELECT user_id, project_id, permission FROM user_project_permissions WHERE project_id = $1;",
+            )
+            .await?;
+
+        let rows = conn.query(&stmt, &[&project.uuid()]).await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|row| UserProjectPermission {
+                user: UserId::from_uuid(row.get(0)),
+                project: ProjectId::from_uuid(row.get(1)),
+                permission: row.get(2),
+            })
+            .collect())
     }
 
     async fn add_permission(
         &mut self,
-        _user: UserId,
-        _permission: UserProjectPermission,
+        user: UserId,
+        permission: UserProjectPermission,
     ) -> Result<()> {
-        todo!()
+        self.check_user_project_permission(user, permission.project, &[ProjectPermission::Owner])
+            .await?;
+
+        let conn = self.conn_pool.get().await?;
+
+        let stmt = conn
+            .prepare(
+                "
+        INSERT INTO user_project_permissions (user_id, project_id, permission)
+        VALUES ($1, $2, $3);",
+            )
+            .await?;
+
+        conn.execute(
+            &stmt,
+            &[
+                &permission.user.uuid(),
+                &permission.project.uuid(),
+                &permission.permission,
+            ],
+        )
+        .await?;
+
+        Ok(())
     }
 
     async fn remove_permission(
         &mut self,
-        _user: UserId,
-        _permission: UserProjectPermission,
+        user: UserId,
+        permission: UserProjectPermission,
     ) -> Result<()> {
-        todo!()
-    }
+        self.check_user_project_permission(user, permission.project, &[ProjectPermission::Owner])
+            .await?;
 
-    async fn load_latest(&self, user: UserId, project: ProjectId) -> Result<Project> {
-        self.load(user, project, LoadVersion::Latest).await
+        let conn = self.conn_pool.get().await?;
+
+        let stmt = conn
+            .prepare(
+                "
+            DELETE FROM user_project_permissions 
+            WHERE user_id = $1 AND project_id = $2 AND permission = $3;",
+            )
+            .await?;
+
+        conn.execute(
+            &stmt,
+            &[
+                &user.uuid(),
+                &permission.project.uuid(),
+                &permission.permission,
+            ],
+        )
+        .await?;
+
+        Ok(())
     }
 }
 
@@ -675,6 +746,49 @@ mod tests {
 
         let versions = project_db.versions(user_id, project_id).await.unwrap();
         assert_eq!(versions.len(), 2);
+
+        assert_eq!(
+            project_db
+                .list_permissions(user_id, project_id)
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
+
+        let user2 = user_db
+            .register(
+                UserRegistration {
+                    email: "user2@example.com".into(),
+                    password: "12345678".into(),
+                    real_name: "User2".into(),
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        project_db
+            .add_permission(
+                user_id,
+                UserProjectPermission {
+                    user: user2,
+                    project: project_id,
+                    permission: ProjectPermission::Read,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            project_db
+                .list_permissions(user_id, project_id)
+                .await
+                .unwrap()
+                .len(),
+            2
+        );
 
         project_db.delete(user_id, project_id).await.unwrap();
 

@@ -202,7 +202,13 @@ mod tests {
             password: "secret123".to_string(),
         };
 
-        let session = ctx.user_db().write().await.login(credentials).await.unwrap();
+        let session = ctx
+            .user_db()
+            .write()
+            .await
+            .login(credentials)
+            .await
+            .unwrap();
 
         let res = warp::test::request()
             .method("POST")
