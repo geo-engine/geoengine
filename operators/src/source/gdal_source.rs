@@ -94,7 +94,7 @@ pub struct JsonDatasetInformation {
 }
 
 impl JsonDatasetInformationProvider {
-    const DEFINTION_SUBPATH: &'static str = "./dataset_defs/";
+    const DEFINITION_SUBPATH: &'static str = "dataset_defs";
 
     // TODO: provide the base path from config?
     pub fn root_path(&self) -> &Path {
@@ -103,7 +103,7 @@ impl JsonDatasetInformationProvider {
 
     pub fn write_to_file(&self, id: &str, raster_data_root: &Path) -> Result<()> {
         let mut dataset_information_path: PathBuf = PathBuf::from(raster_data_root)
-            .join(Self::DEFINTION_SUBPATH)
+            .join(Self::DEFINITION_SUBPATH)
             .join(id);
         dataset_information_path.set_extension("json");
 
@@ -121,7 +121,7 @@ impl GdalDatasetInformation for JsonDatasetInformationProvider {
     fn with_dataset_id(id: &str, raster_data_root: &Path) -> Result<Self> {
         let raster_data_root_buf = PathBuf::from(raster_data_root);
         let mut dataset_information_path: PathBuf =
-            raster_data_root_buf.join(Self::DEFINTION_SUBPATH).join(id);
+            raster_data_root_buf.join(Self::DEFINITION_SUBPATH).join(id);
         dataset_information_path.set_extension("json");
         let file = std::fs::File::open(dataset_information_path)?;
         let mut buffered_reader = BufReader::new(file);
@@ -149,7 +149,7 @@ impl GdalDatasetInformation for JsonDatasetInformationProvider {
     fn dataset_path(&self) -> PathBuf {
         self.raster_data_root
             .clone()
-            .join(Self::DEFINTION_SUBPATH)
+            .join(Self::DEFINITION_SUBPATH)
             .join(&self.dataset_information.base_path)
     }
     fn data_type(&self) -> RasterDataType {

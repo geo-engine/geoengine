@@ -13,6 +13,8 @@ Please provide tests with all new features and run
 `cargo test`
 before creating a pull request.
 
+Edit `Settings-test.toml` for environment specific test parameters.
+
 ## Benchmarks
 For performance-critical features, we aim to provide benchmarks in the `benches` directory.
 If you plan on optimizing a feature of Geo Engine, please confirm it this way.

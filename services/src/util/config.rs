@@ -6,11 +6,32 @@ use config::{Config, File};
 use lazy_static::lazy_static;
 use serde::Deserialize;
 use snafu::ResultExt;
+use std::path::Path;
 
 lazy_static! {
     static ref SETTINGS: RwLock<Config> = RwLock::new({
         let mut settings = Config::default();
-        settings.merge(File::with_name("Settings.toml")).unwrap();
+        // test may run in subdirectory
+        #[cfg(test)]
+        let paths = [
+            "../Settings-default.toml",
+            "Settings-default.toml",
+            "../Settings-test.toml",
+            "Settings-test.toml",
+        ];
+
+        #[cfg(not(test))]
+        let paths = ["Settings-default.toml", "Settings.toml"];
+
+        #[allow(clippy::filter_map)]
+        let files: Vec<File<_>> = paths
+            .iter()
+            .map(Path::new)
+            .filter(|p| p.exists())
+            .map(File::from)
+            .collect();
+
+        settings.merge(files).unwrap();
 
         settings
     });
@@ -42,7 +63,7 @@ pub trait ConfigElement {
     const KEY: &'static str;
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct Web {
     pub bind_address: String,
     pub external_address: Option<String>,
@@ -52,7 +73,7 @@ impl ConfigElement for Web {
     const KEY: &'static str = "web";
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub enum Backend {
     InMemory,
     Postgres,
@@ -62,7 +83,7 @@ impl ConfigElement for Backend {
     const KEY: &'static str = "backend";
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct Postgres {
     pub config: String,
 }
@@ -71,11 +92,20 @@ impl ConfigElement for Postgres {
     const KEY: &'static str = "postgres";
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct ProjectService {
     pub list_limit: usize,
 }
 
 impl ConfigElement for ProjectService {
     const KEY: &'static str = "project_service";
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GdalSource {
+    pub raster_data_root_path: String, // TODO: Path?
+}
+
+impl ConfigElement for GdalSource {
+    const KEY: &'static str = "operators.gdal_source";
 }
