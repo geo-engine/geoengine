@@ -354,7 +354,8 @@ pub struct OgrSourceProcessor<G>
 where
     G: Geometry + ArrowTyped,
 {
-    dataset_information: OgrSourceDataset, // TODO: use `Arc<…>`?
+    dataset_information: OgrSourceDataset,
+    // TODO: use `Arc<…>`?
     _collection_type: PhantomData<FeatureCollection<G>>,
 }
 
@@ -953,6 +954,66 @@ mod tests {
         .unwrap();
 
         assert_eq!(deserialized_spec, spec);
+    }
+
+    #[tokio::test]
+    async fn ne_10m_ports_bbox_filter() -> Result<()> {
+        let source = OgrSource {
+            params: OgrSourceParameters {
+                layer_name: "ne_10m_ports".to_string(),
+                attribute_projection: None,
+            },
+        }
+        .boxed()
+        .initialize(ExecutionContext)?;
+
+        assert_eq!(
+            source.result_descriptor().data_type,
+            VectorDataType::MultiPoint
+        );
+        assert_eq!(
+            source.result_descriptor().spatial_reference,
+            SpatialReference::wgs84().into()
+        );
+
+        let query_processor = source.query_processor()?.multi_point().unwrap();
+
+        let query = query_processor.query(
+            QueryRectangle {
+                bbox: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
+                time_interval: Default::default(),
+            },
+            QueryContext { chunk_byte_size: 0 },
+        );
+
+        let result: Vec<MultiPointCollection> = query.try_collect().await?;
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].len(), 10);
+
+        let coordinates = MultiPoint::many(vec![
+            (2.933_686_69, 51.23),
+            (3.204_593_64_f64, 51.336_388_89),
+            (4.651_413_428, 51.805_833_33),
+            (4.11, 51.95),
+            (4.386_160_188, 50.886_111_11),
+            (3.767_373_38, 51.114_444_44),
+            (4.293_757_362, 51.297_777_78),
+            (1.850_176_678, 50.965_833_33),
+            (2.170_906_949, 51.021_666_67),
+            (4.292_873_969, 51.927_222_22),
+        ])?;
+
+        assert_eq!(
+            result[0],
+            MultiPointCollection::from_data(
+                coordinates,
+                vec![Default::default(); 10],
+                HashMap::new(),
+            )?
+        );
+
+        Ok(())
     }
 
     #[tokio::test]
@@ -2079,7 +2140,7 @@ mod tests {
             MultiPointCollection::from_data(
                 coordinates,
                 vec![Default::default(); 1081],
-                HashMap::new()
+                HashMap::new(),
             )?
         );
 
