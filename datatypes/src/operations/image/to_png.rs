@@ -16,7 +16,7 @@ where
     fn to_png(&self, width: u32, height: u32, colorizer: &Colorizer) -> Result<Vec<u8>> {
         // TODO: use PNG color palette once it is available
 
-        let (.., raster_y_size, raster_x_size) = self.dimension().as_pattern();
+        let [.., raster_y_size, raster_x_size] = self.dimension().size_as_index();
         let scale_x = (raster_x_size as f64) / f64::from(width);
         let scale_y = (raster_y_size as f64) / f64::from(height);
 
@@ -24,7 +24,7 @@ where
 
         let image_buffer: RgbaImage = RgbaImage::from_fn(width, height, |x, y| {
             let (grid_pixel_x, grid_pixel_y) = image_pixel_to_raster_pixel(x, y, scale_x, scale_y);
-            if let Ok(pixel_value) = self.pixel_value_at_grid_index(&(grid_pixel_y, grid_pixel_x)) {
+            if let Ok(pixel_value) = self.pixel_value_at_grid_index(&[grid_pixel_y, grid_pixel_x]) {
                 color_mapper.call(pixel_value)
             } else {
                 colorizer.no_data_color()
@@ -100,8 +100,8 @@ mod tests {
         )
         .unwrap();
 
-        raster.set_pixel_value_at_grid_index(&(0, 0), 255).unwrap();
-        raster.set_pixel_value_at_grid_index(&(1, 0), 100).unwrap();
+        raster.set_pixel_value_at_grid_index(&[0, 0], 255).unwrap();
+        raster.set_pixel_value_at_grid_index(&[1, 0], 100).unwrap();
 
         let colorizer = Colorizer::linear_gradient(
             vec![
@@ -132,8 +132,8 @@ mod tests {
         )
         .unwrap();
 
-        raster.set_pixel_value_at_grid_index(&(0, 0), 10).unwrap();
-        raster.set_pixel_value_at_grid_index(&(1, 0), 5).unwrap();
+        raster.set_pixel_value_at_grid_index(&[0, 0], 10).unwrap();
+        raster.set_pixel_value_at_grid_index(&[1, 0], 5).unwrap();
 
         let colorizer = Colorizer::logarithmic_gradient(
             vec![
@@ -164,8 +164,8 @@ mod tests {
         )
         .unwrap();
 
-        raster.set_pixel_value_at_grid_index(&(0, 0), 2).unwrap();
-        raster.set_pixel_value_at_grid_index(&(1, 0), 1).unwrap();
+        raster.set_pixel_value_at_grid_index(&[0, 0], 2).unwrap();
+        raster.set_pixel_value_at_grid_index(&[1, 0], 1).unwrap();
 
         let colorizer = Colorizer::palette(
             [
@@ -200,10 +200,10 @@ mod tests {
         .unwrap();
 
         raster
-            .set_pixel_value_at_grid_index(&(0, 0), 0xFF00_00FF_u32)
+            .set_pixel_value_at_grid_index(&[0, 0], 0xFF00_00FF_u32)
             .unwrap();
         raster
-            .set_pixel_value_at_grid_index(&(1, 0), 0x00FF_00FF_u32)
+            .set_pixel_value_at_grid_index(&[1, 0], 0x00FF_00FF_u32)
             .unwrap();
 
         let colorizer = Colorizer::rgba();

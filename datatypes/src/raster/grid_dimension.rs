@@ -5,13 +5,27 @@ use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
 // Index types for 1,2,3 dimensional grids
-pub type Ix = usize;
-pub type Ix1 = Ix;
-pub type Ix2 = (Ix, Ix);
-pub type Ix3 = (Ix, Ix, Ix);
+pub type Idx = usize;
+pub type SignedIdx = isize;
 
-use std::ops::{Div, Index, IndexMut, Mul, Sub};
-use std::{fmt::Debug, ops::Add};
+pub type GridIdx1D = [Idx; 1];
+pub type GridIdx2D = [Idx; 2];
+pub type GridIdx3D = [Idx; 3];
+
+pub type SignedGridIdx1D = [SignedIdx; 1];
+pub type SignedGridIdx2D = [SignedIdx; 2];
+pub type SignedGridIdx3D = [SignedIdx; 3];
+
+pub type Dim1D = Dim<[Idx; 1]>;
+pub type Dim2D = Dim<[Idx; 2]>;
+pub type Dim3D = Dim<[Idx; 3]>;
+
+pub type OffsetDim1D = OffsetDim<Dim<GridIdx1D>, SignedGridIdx1D>;
+pub type OffsetDim2D = OffsetDim<Dim<GridIdx2D>, SignedGridIdx2D>;
+pub type OffsetDim3D = OffsetDim<Dim<GridIdx3D>, SignedGridIdx3D>;
+
+use std::fmt::Debug;
+use std::ops::{Index, IndexMut};
 pub trait GridDimension:
     Clone
     + Eq
@@ -23,84 +37,65 @@ pub trait GridDimension:
     + Index<usize, Output = usize>
     + Capacity
 {
-    type IndexPattern;
-    const NDIM: usize;
+    /// This is the type used as index for the dimension, e.g. a tuple of (y,x) for a 2D dimension.
+    // type IndexPattern;
+    type IndexType: GridIndex;
+    /// The number of axis of the dimension.
     fn number_of_dimensions(&self) -> usize;
-    fn as_pattern(&self) -> Self::IndexPattern;
+    /// The index of the dimension. Note: this is max index +1 on each axis and therefore out of bounds!
+    fn size_as_index(&self) -> Self::IndexType;
+    /// The number of elements the dimension can hold. This is bounded by size(usize).
     fn number_of_elements(&self) -> usize;
-    fn strides(&self) -> Self;
-    fn slice(&self) -> &[Ix];
-    fn stride_offset(index: &Self, strides: &Self) -> usize;
+    /// Strides indicate how many linear space elements the next element in the same dimension is away.
+    fn strides(&self) -> Self::IndexType;
+    /// The size of each axis
+    fn slice(&self) -> &[Idx];
+    /// Calculate the zero based linear space location of an index in a dimension.
+    fn linear_space_index_unchecked(&self, index: &Self::IndexType) -> usize;
+    /// Calculate the zero based linear space location of an index in a dimension.
+    /// # Errors
+    /// This method fails if the grid index is out of bounds.
+    fn linear_space_index(&self, index: &Self::IndexType) -> Result<usize> {
+        ensure!(
+            self.index_inside_dimension(index),
+            error::GridIndexOutOfBounds {
+                index: Vec::from(index.as_ref()),
+                dimension: Vec::from(self.size_as_index().as_ref()),
+            }
+        );
+        Ok(self.linear_space_index_unchecked(index))
+    }
+    /// Size of the x-axis
     fn size_of_x_axis(&self) -> usize;
+    /// Size of the y-axis
     fn size_of_y_axis(&self) -> usize;
-    fn index_inside_dimension(index: &Self, dimension: &Self) -> bool;
+    /// Check if a dimension contains a given index
+    fn index_inside_dimension(&self, index: &Self::IndexType) -> bool;
 }
 
-pub trait GridIndex<D>: Debug {
-    fn grid_index_to_1d_index_unchecked(&self, dim: &D) -> usize;
-
+pub trait GridIndex: Debug + Sized + AsRef<[Idx]> {
+    /// Calculate the zero based linear space location of an index in a dimension.
+    fn linear_space_index_unchecked<D: GridDimension<IndexType = Self>>(&self, dim: &D) -> usize {
+        dim.linear_space_index_unchecked(self)
+    }
+    /// Check if a dimension contains this index
+    fn inside_dimension<D: GridDimension<IndexType = Self>>(&self, dim: &D) -> bool {
+        dim.index_inside_dimension(self)
+    }
+    /// Calculate the zero based linear space location of an index in a dimension.
     /// # Errors
     /// This method fails if the grid index is out of bounds.
     ///
-    fn grid_index_to_1d_index(&self, dim: &D) -> Result<usize>;
-}
-
-impl<D> GridIndex<D> for D
-where
-    D: GridDimension,
-{
-    fn grid_index_to_1d_index_unchecked(&self, dim: &D) -> usize {
-        D::stride_offset(self, &dim.strides())
-    }
-    fn grid_index_to_1d_index(&self, dim: &D) -> Result<usize> {
-        for (dim_id, (&dim_index, &dim_size)) in
-            self.slice().iter().zip(dim.slice().iter()).enumerate()
-        {
-            ensure!(
-                dim_index < dim_size,
-                error::GridIndexOutOfBounds {
-                    index: dim_index,
-                    dimension: dim_id,
-                    dimension_size: dim_size
-                }
-            );
-        }
-
-        Ok(D::stride_offset(self, &dim.strides()))
+    fn linear_space_index<D: GridDimension<IndexType = Self>>(&self, dim: &D) -> Result<usize> {
+        dim.linear_space_index(self)
     }
 }
 
-// impl GridIndex for usize, (usize, usize) and (usize, usize, usize).
-impl GridIndex<Dim1D> for Ix1 {
-    fn grid_index_to_1d_index_unchecked(&self, dim: &Dim1D) -> usize {
-        Dim::<[Ix; 1]>::stride_offset(&Dim::from(*self), &dim.strides())
-    }
-    fn grid_index_to_1d_index(&self, dim: &Dim1D) -> Result<usize> {
-        Dim::<[Ix; 1]>::from(*self).grid_index_to_1d_index(dim)
-    }
-}
+impl GridIndex for GridIdx1D {}
 
-impl GridIndex<Dim2D> for Ix2 {
-    fn grid_index_to_1d_index_unchecked(&self, dim: &Dim2D) -> usize {
-        Dim::<[Ix; 2]>::stride_offset(&Dim::from(*self), &dim.strides())
-    }
-    fn grid_index_to_1d_index(&self, dim: &Dim2D) -> Result<usize> {
-        Dim::<[Ix; 2]>::from(*self).grid_index_to_1d_index(dim)
-    }
-}
+impl GridIndex for GridIdx2D {}
 
-impl GridIndex<Dim3D> for Ix3 {
-    fn grid_index_to_1d_index_unchecked(&self, dim: &Dim3D) -> usize {
-        Dim::<[Ix; 3]>::stride_offset(&Dim::from(*self), &dim.strides())
-    }
-    fn grid_index_to_1d_index(&self, dim: &Dim3D) -> Result<usize> {
-        Dim::<[Ix; 3]>::from(*self).grid_index_to_1d_index(dim)
-    }
-}
-
-pub type Dim1D = Dim<[Ix; 1]>;
-pub type Dim2D = Dim<[Ix; 2]>;
-pub type Dim3D = Dim<[Ix; 3]>;
+impl GridIndex for GridIdx3D {}
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Default, Debug, Serialize, Deserialize)]
 pub struct Dim<I> {
@@ -111,9 +106,11 @@ impl<I> Dim<I> {
     pub fn new(dimension_size: I) -> Dim<I> {
         Dim { dimension_size }
     }
+    #[inline]
     pub fn dimension_size(&self) -> &I {
         &self.dimension_size
     }
+    #[inline]
     pub fn dimension_size_mut(&mut self) -> &mut I {
         &mut self.dimension_size
     }
@@ -123,301 +120,514 @@ impl<D> Capacity for D
 where
     D: GridDimension,
 {
+    #[inline]
     fn capacity(&self) -> usize {
         self.number_of_elements()
     }
 }
 
-impl From<Ix> for Dim1D {
-    fn from(size_1d: Ix1) -> Self {
-        Self::new([size_1d])
-    }
-}
-
-impl From<Ix2> for Dim2D {
-    fn from(size_2d: Ix2) -> Self {
-        Self::new([size_2d.0, size_2d.1])
-    }
-}
-
-impl From<Ix3> for Dim3D {
-    fn from(size_3d: Ix3) -> Self {
-        Self::new([size_3d.0, size_3d.1, size_3d.2])
-    }
-}
-
-impl From<[Ix; 2]> for Dim2D {
-    fn from(size_2d: [Ix; 2]) -> Self {
-        Self::new(size_2d)
-    }
-}
-
-impl From<[Ix; 3]> for Dim3D {
-    fn from(size_3d: [Ix; 3]) -> Self {
-        Self::new(size_3d)
-    }
-}
-
 impl GridDimension for Dim1D {
-    type IndexPattern = Ix;
-    const NDIM: usize = 1;
+    type IndexType = GridIdx1D;
+
+    // const NDIM: usize = 1;
+    #[inline]
     fn number_of_dimensions(&self) -> usize {
         1
     }
+
+    #[inline]
     fn number_of_elements(&self) -> usize {
         self.dimension_size()[0]
     }
-    fn as_pattern(&self) -> Self::IndexPattern {
-        self.dimension_size[0]
+
+    #[inline]
+    fn size_as_index(&self) -> Self::IndexType {
+        self.dimension_size
     }
-    fn strides(&self) -> Self {
-        Dim::new([1])
+
+    #[inline]
+    fn strides(&self) -> Self::IndexType {
+        [1]
     }
-    fn slice(&self) -> &[Ix] {
+
+    #[inline]
+    fn slice(&self) -> &[Idx] {
         &self.dimension_size
     }
-    fn stride_offset(index: &Self, strides: &Self) -> usize {
-        index[0] * strides[0]
-    }
+
+    #[inline]
     fn size_of_x_axis(&self) -> usize {
         self.dimension_size[0]
     }
+
+    #[inline]
     fn size_of_y_axis(&self) -> usize {
         1
     }
-    fn index_inside_dimension(index: &Self, dimension: &Self) -> bool {
-        index[0] < dimension[0]
+
+    #[inline]
+    fn index_inside_dimension(&self, index: &Self::IndexType) -> bool {
+        index[0] < self.dimension_size[0]
+    }
+
+    #[inline]
+    fn linear_space_index_unchecked(&self, index: &Self::IndexType) -> usize {
+        let strides = self.strides();
+        index[0] * strides[0]
+    }
+}
+
+impl From<[usize; 1]> for Dim1D {
+    #[inline]
+    fn from(dimension_size: [usize; 1]) -> Self {
+        Dim1D::new(dimension_size)
     }
 }
 
 impl Index<usize> for Dim1D {
     type Output = usize;
+    #[inline]
     fn index(&self, index: usize) -> &Self::Output {
         &self.dimension_size()[index]
     }
 }
 
 impl IndexMut<usize> for Dim1D {
+    #[inline]
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         &mut self.dimension_size_mut()[index]
     }
 }
 
-impl Add for Dim1D {
-    type Output = Self;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        let [x] = self.dimension_size;
-        let [other_x] = rhs.dimension_size;
-        Dim::new([x + other_x])
-    }
-}
-
-impl Sub for Dim1D {
-    type Output = Self;
-
-    fn sub(self, rhs: Self) -> Self::Output {
-        let [x] = self.dimension_size;
-        let [other_x] = rhs.dimension_size;
-        Dim::new([x - other_x])
-    }
-}
-
-impl Mul<Ix> for Dim1D {
-    type Output = Self;
-
-    fn mul(self, rhs: Ix) -> Self::Output {
-        let [x] = self.dimension_size;
-        Dim::new([x * rhs])
-    }
-}
-
-impl Div<Ix> for Dim1D {
-    type Output = Self;
-
-    fn div(self, rhs: Ix) -> Self::Output {
-        let [x] = self.dimension_size;
-        Dim::new([x / rhs])
-    }
-}
-
 impl GridDimension for Dim2D {
-    type IndexPattern = Ix2;
-    const NDIM: usize = 2;
+    type IndexType = GridIdx2D;
+    // const NDIM: usize = 2;
+    #[inline]
     fn number_of_dimensions(&self) -> usize {
         2
     }
+
+    #[inline]
     fn number_of_elements(&self) -> usize {
         self.dimension_size()[0] * self.dimension_size()[1]
     }
-    fn as_pattern(&self) -> Self::IndexPattern {
-        (self.dimension_size()[0], self.dimension_size()[1])
+
+    #[inline]
+    fn strides(&self) -> Self::IndexType {
+        [self.dimension_size[1], 1]
     }
-    fn strides(&self) -> Self {
-        Dim::new([self.dimension_size()[1], 1])
-    }
-    fn slice(&self) -> &[Ix] {
+
+    #[inline]
+    fn slice(&self) -> &[Idx] {
         &self.dimension_size
     }
-    fn stride_offset(index: &Self, strides: &Self) -> usize {
-        index[1] * strides[1] + index[0] * strides[0]
-    }
+
+    #[inline]
     fn size_of_x_axis(&self) -> usize {
         self.dimension_size[1]
     }
+
+    #[inline]
     fn size_of_y_axis(&self) -> usize {
         self.dimension_size[0]
     }
-    fn index_inside_dimension(index: &Self, dimension: &Self) -> bool {
-        index[0] < dimension[0] && index[1] < dimension[1]
+
+    #[inline]
+    fn index_inside_dimension(&self, index: &Self::IndexType) -> bool {
+        index[0] < self.dimension_size[0] && index[1] < self.dimension_size[1]
+    }
+
+    #[inline]
+    fn size_as_index(&self) -> Self::IndexType {
+        self.dimension_size
+    }
+
+    #[inline]
+    fn linear_space_index_unchecked(&self, index: &Self::IndexType) -> usize {
+        let strides = self.strides();
+        index[1] * strides[1] + index[0] * strides[0]
+    }
+}
+
+impl From<[usize; 2]> for Dim2D {
+    #[inline]
+    fn from(dimension_size: [usize; 2]) -> Self {
+        Dim2D::new(dimension_size)
     }
 }
 
 impl Index<usize> for Dim2D {
     type Output = usize;
+    #[inline]
     fn index(&self, index: usize) -> &Self::Output {
         &self.dimension_size()[index]
     }
 }
 
 impl IndexMut<usize> for Dim2D {
+    #[inline]
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         &mut self.dimension_size_mut()[index]
     }
 }
 
-impl Add for Dim2D {
-    type Output = Self;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        let [y, x] = self.dimension_size;
-        let [other_y, other_x] = rhs.dimension_size;
-        Dim::new([y + other_y, x + other_x])
-    }
-}
-
-impl Sub for Dim2D {
-    type Output = Self;
-
-    fn sub(self, rhs: Self) -> Self::Output {
-        let [y, x] = self.dimension_size;
-        let [other_y, other_x] = rhs.dimension_size;
-        Dim::new([y - other_y, x - other_x])
-    }
-}
-
-impl Mul<Ix> for Dim2D {
-    type Output = Self;
-
-    fn mul(self, rhs: Ix) -> Self::Output {
-        let [y, x] = self.dimension_size;
-        Dim::new([y * rhs, x * rhs])
-    }
-}
-
-impl Div<Ix> for Dim2D {
-    type Output = Self;
-
-    fn div(self, rhs: Ix) -> Self::Output {
-        let [y, x] = self.dimension_size;
-        Dim::new([y / rhs, x / rhs])
-    }
-}
-
 impl GridDimension for Dim3D {
-    type IndexPattern = Ix3;
-    const NDIM: usize = 3;
+    type IndexType = GridIdx3D;
+
+    // const NDIM: usize = 3;
+    #[inline]
     fn number_of_dimensions(&self) -> usize {
         3
     }
+    #[inline]
     fn number_of_elements(&self) -> usize {
         self.dimension_size()[2] * self.dimension_size()[1] * self.dimension_size()[0]
     }
-    fn as_pattern(&self) -> Self::IndexPattern {
-        (
-            self.dimension_size()[0],
-            self.dimension_size()[1],
-            self.dimension_size()[2],
-        )
-    }
-    fn strides(&self) -> Self {
-        Dim::new([
+
+    #[inline]
+    fn strides(&self) -> Self::IndexType {
+        [
             self.dimension_size()[1] * self.dimension_size()[2],
             self.dimension_size()[2],
             1,
-        ])
+        ]
     }
-    fn slice(&self) -> &[Ix] {
+
+    #[inline]
+    fn slice(&self) -> &[Idx] {
         &self.dimension_size
     }
-    fn stride_offset(index: &Self, strides: &Self) -> usize {
-        index[0] * strides[0] + index[1] * strides[1] + index[2] * strides[2]
-    }
+
+    #[inline]
     fn size_of_x_axis(&self) -> usize {
         self.dimension_size[2]
     }
+
+    #[inline]
     fn size_of_y_axis(&self) -> usize {
         self.dimension_size[1]
     }
-    fn index_inside_dimension(index: &Self, dimension: &Self) -> bool {
-        index[0] < dimension[0] && index[1] < dimension[1] && index[2] < dimension[2]
+
+    #[inline]
+    fn index_inside_dimension(&self, index: &Self::IndexType) -> bool {
+        index[0] < self.dimension_size[0]
+            && index[1] < self.dimension_size[1]
+            && index[2] < self.dimension_size[2]
+    }
+
+    #[inline]
+    fn size_as_index(&self) -> Self::IndexType {
+        self.dimension_size
+    }
+
+    #[inline]
+    fn linear_space_index_unchecked(&self, index: &Self::IndexType) -> usize {
+        let strides = self.strides();
+        index[0] * strides[0] + index[1] * strides[1] + index[2] * strides[2]
+    }
+}
+
+impl From<[usize; 3]> for Dim3D {
+    #[inline]
+    fn from(dimension_size: [usize; 3]) -> Self {
+        Dim3D::new(dimension_size)
     }
 }
 
 impl Index<usize> for Dim3D {
     type Output = usize;
+    #[inline]
     fn index(&self, index: usize) -> &Self::Output {
         &self.dimension_size()[index]
     }
 }
 
 impl IndexMut<usize> for Dim3D {
+    #[inline]
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         &mut self.dimension_size_mut()[index]
     }
 }
 
-impl Add for Dim3D {
-    type Output = Self;
+pub trait SignedGridIndex: Debug + Sized + AsRef<[SignedIdx]> {
+    type UnsignedIndex: GridIndex;
 
-    fn add(self, rhs: Self) -> Self::Output {
-        let [z, y, x] = self.dimension_size;
-        let [other_z, other_y, other_x] = rhs.dimension_size;
-        Dim::new([z + other_z, y + other_y, x + other_x])
+    /// # Errors
+    /// This method fails if the grid index is out of bounds.
+    ///
+    fn signed_index_to_zero_based<D: OffsetDimension<SignedIndexType = Self>>(
+        &self,
+        dim: &D,
+    ) -> Result<D::IndexType> {
+        dim.offset_index_to_zero_based(self)
+    }
+
+    fn signed_index_to_zero_based_unchecked<D: OffsetDimension<SignedIndexType = Self>>(
+        &self,
+        dim: &D,
+    ) -> D::IndexType {
+        dim.offset_index_to_zero_based_unchecked(self)
+    }
+    fn inside_offset_dimension<D: OffsetDimension<SignedIndexType = Self>>(&self, dim: &D) -> bool {
+        dim.offset_index_inside_dimension(self)
+    }
+
+    /// converts an offset index directly into a zero based linear space index
+    fn linear_space_index<D: OffsetDimension<SignedIndexType = Self>>(
+        &self,
+        dim: &D,
+    ) -> Result<usize> {
+        dim.offset_index_to_linear_space_index(self)
+    }
+
+    /// converts an offset index directly into a zero based linear space index
+    fn linear_space_index_unchecked<D: OffsetDimension<SignedIndexType = Self>>(
+        &self,
+        dim: &D,
+    ) -> usize {
+        dim.offset_index_to_linear_space_index_unchecked(self)
     }
 }
 
-impl Sub for Dim3D {
-    type Output = Self;
+pub trait OffsetDimension: GridDimension {
+    type SignedIndexType: SignedGridIndex;
 
-    fn sub(self, rhs: Self) -> Self::Output {
-        let [z, y, x] = self.dimension_size;
-        let [other_z, other_y, other_x] = rhs.dimension_size;
-        Dim::new([z - other_z, y - other_y, x - other_x])
+    /// The offsets for the dimension axis
+    fn offsets_as_slice(&self) -> &[SignedIdx];
+
+    /// This returns the offsets as index which are the min values of each axis. The values are INSIDE the bouds of the axis.
+    fn offsets_as_index(&self) -> Self::SignedIndexType;
+
+    /// converts an offset index to a zero based by shifting the origin of each axis to zero.
+    fn offset_index_to_zero_based_unchecked(
+        &self,
+        index: &Self::SignedIndexType,
+    ) -> Self::IndexType;
+
+    /// converts an offset index to a zero based by shifting the origin of each axis to zero
+    fn offset_index_to_zero_based(&self, index: &Self::SignedIndexType) -> Result<Self::IndexType> {
+        ensure!(
+            self.offset_index_inside_dimension(index),
+            error::GridSignedIndexOutOfBounds {
+                index: Vec::from(index.as_ref()),
+                dimension: Vec::from(self.slice()),
+                offsets: Vec::from(self.offsets_as_slice())
+            }
+        );
+        Ok(self.offset_index_to_zero_based_unchecked(index))
+    }
+
+    /// converts an offset index directly into a zero based linear space index
+    fn offset_index_to_linear_space_index(&self, index: &Self::SignedIndexType) -> Result<usize> {
+        let zero_based = self.offset_index_to_zero_based(index)?;
+        Ok(self.linear_space_index_unchecked(&zero_based))
+    }
+
+    /// converts an offset index directly into a zero based linear space index
+    fn offset_index_to_linear_space_index_unchecked(&self, index: &Self::SignedIndexType) -> usize {
+        let zero_based = self.offset_index_to_zero_based_unchecked(index);
+        self.linear_space_index_unchecked(&zero_based)
+    }
+
+    /// Check if a dimension contains a given index
+    fn offset_index_inside_dimension(&self, index: &Self::SignedIndexType) -> bool;
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Default, Debug, Serialize, Deserialize)]
+pub struct OffsetDim<D, O> {
+    dimension: D,
+    offsets: O,
+}
+
+impl<D: GridDimension, O> OffsetDim<D, O> {
+    pub fn new(dimension: D, offsets: O) -> OffsetDim<D, O> {
+        OffsetDim { dimension, offsets }
     }
 }
 
-impl Mul<Ix> for Dim3D {
-    type Output = Self;
+impl<D, O> GridDimension for OffsetDim<D, O>
+where
+    D: GridDimension,
+    O: Sync + Debug + Send + std::default::Default + Eq + Clone,
+{
+    type IndexType = D::IndexType;
 
-    fn mul(self, rhs: Ix) -> Self::Output {
-        let [z, y, x] = self.dimension_size;
-        Dim::new([z * rhs, y * rhs, x * rhs])
+    #[inline]
+    fn number_of_dimensions(&self) -> usize {
+        self.dimension.number_of_dimensions()
+    }
+
+    #[inline]
+    fn size_as_index(&self) -> Self::IndexType {
+        self.dimension.size_as_index()
+    }
+
+    #[inline]
+    fn number_of_elements(&self) -> usize {
+        self.dimension.number_of_elements()
+    }
+
+    #[inline]
+    fn strides(&self) -> Self::IndexType {
+        self.dimension.strides()
+    }
+
+    #[inline]
+    fn slice(&self) -> &[Idx] {
+        self.dimension.slice()
+    }
+
+    #[inline]
+    fn linear_space_index_unchecked(&self, index: &D::IndexType) -> usize {
+        self.dimension.linear_space_index_unchecked(index)
+    }
+
+    #[inline]
+    fn size_of_x_axis(&self) -> usize {
+        self.dimension.size_of_x_axis()
+    }
+
+    #[inline]
+    fn size_of_y_axis(&self) -> usize {
+        self.dimension.size_of_y_axis()
+    }
+
+    #[inline]
+    fn index_inside_dimension(&self, index: &D::IndexType) -> bool {
+        self.dimension.index_inside_dimension(index)
     }
 }
 
-impl Div<Ix> for Dim3D {
-    type Output = Self;
-
-    fn div(self, rhs: Ix) -> Self::Output {
-        let [z, y, x] = self.dimension_size;
-        Dim::new([z / rhs, y / rhs, x / rhs])
+impl<D, O> Index<usize> for OffsetDim<D, O>
+where
+    D: GridDimension,
+{
+    type Output = usize;
+    #[inline]
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.dimension[index]
     }
+}
+
+impl<D, O> IndexMut<usize> for OffsetDim<D, O>
+where
+    D: GridDimension,
+{
+    #[inline]
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.dimension[index]
+    }
+}
+
+impl OffsetDimension for OffsetDim<Dim<[usize; 1]>, [isize; 1]> {
+    type SignedIndexType = SignedGridIdx1D;
+
+    #[inline]
+    fn offsets_as_index(&self) -> Self::SignedIndexType {
+        self.offsets
+    }
+
+    #[inline]
+    fn offset_index_to_zero_based_unchecked(
+        &self,
+        index: &Self::SignedIndexType,
+    ) -> Self::IndexType {
+        [(index[0] - self.offsets[0]) as usize]
+    }
+
+    #[inline]
+    fn offset_index_inside_dimension(&self, index: &Self::SignedIndexType) -> bool {
+        {
+            let zero_based = self.offset_index_to_zero_based_unchecked(index);
+            self.index_inside_dimension(&zero_based)
+        }
+    }
+
+    fn offsets_as_slice(&self) -> &[SignedIdx] {
+        &self.offsets
+    }
+}
+
+impl OffsetDimension for OffsetDim<Dim<[usize; 2]>, [isize; 2]> {
+    type SignedIndexType = SignedGridIdx2D;
+
+    #[inline]
+    fn offsets_as_index(&self) -> Self::SignedIndexType {
+        self.offsets
+    }
+
+    #[inline]
+    fn offset_index_to_zero_based_unchecked(
+        &self,
+        index: &Self::SignedIndexType,
+    ) -> Self::IndexType {
+        [
+            (index[0] - self.offsets[0]) as usize,
+            (index[1] - self.offsets[1]) as usize,
+        ]
+    }
+
+    #[inline]
+    fn offset_index_inside_dimension(&self, index: &Self::SignedIndexType) -> bool {
+        {
+            let zero_based = self.offset_index_to_zero_based_unchecked(index);
+            self.index_inside_dimension(&zero_based)
+        }
+    }
+
+    fn offsets_as_slice(&self) -> &[SignedIdx] {
+        &self.offsets
+    }
+}
+
+impl OffsetDimension for OffsetDim<Dim<[usize; 3]>, [isize; 3]> {
+    type SignedIndexType = SignedGridIdx3D;
+
+    #[inline]
+    fn offsets_as_index(&self) -> Self::SignedIndexType {
+        self.offsets
+    }
+
+    #[inline]
+    fn offset_index_to_zero_based_unchecked(
+        &self,
+        index: &Self::SignedIndexType,
+    ) -> Self::IndexType {
+        [
+            (index[0] - self.offsets[0]) as usize,
+            (index[1] - self.offsets[1]) as usize,
+            (index[2] - self.offsets[2]) as usize,
+        ]
+    }
+
+    #[inline]
+    fn offset_index_inside_dimension(&self, index: &Self::SignedIndexType) -> bool {
+        {
+            let zero_based = self.offset_index_to_zero_based_unchecked(index);
+            self.index_inside_dimension(&zero_based)
+        }
+    }
+
+    fn offsets_as_slice(&self) -> &[SignedIdx] {
+        &self.offsets
+    }
+}
+
+impl SignedGridIndex for SignedGridIdx1D {
+    type UnsignedIndex = GridIdx1D;
+}
+
+impl SignedGridIndex for SignedGridIdx2D {
+    type UnsignedIndex = GridIdx2D;
+}
+
+impl SignedGridIndex for SignedGridIdx3D {
+    type UnsignedIndex = GridIdx3D;
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Dim, GridDimension};
+    use super::{Dim, GridDimension, OffsetDim, OffsetDimension};
     const TEST_1D_DIM_ARR: [usize; 1] = [8];
     #[test]
     fn dim_1d() {
@@ -428,8 +638,7 @@ mod tests {
     #[test]
     fn dim_1d_strides() {
         let dim_1d = Dim::new(TEST_1D_DIM_ARR);
-        assert_eq!(dim_1d.strides(), Dim::new([1]));
-        assert_eq!(dim_1d.strides().slice(), &[1]);
+        assert_eq!(dim_1d.strides(), [1]);
     }
     #[test]
     fn dim_1d_index() {
@@ -439,20 +648,17 @@ mod tests {
     #[test]
     fn dim_1d_stride_offset() {
         let dim_1d = Dim::new(TEST_1D_DIM_ARR);
-        let dim_1d_used_as_index = Dim::new([5]);
-        assert_eq!(
-            GridDimension::stride_offset(&dim_1d.strides(), &dim_1d_used_as_index),
-            5
-        );
+        let dim_1d_index = [5];
+        assert_eq!(dim_1d.linear_space_index_unchecked(&dim_1d_index), 5);
     }
     #[test]
     fn dim_1d_ix_index() {
         use super::GridIndex;
         let dim_1d = Dim::new(TEST_1D_DIM_ARR);
-        let dim_1d_used_as_index = Dim::new([5]);
+        let dim_1d_index = [5];
         assert_eq!(
-            dim_1d_used_as_index.grid_index_to_1d_index_unchecked(&dim_1d),
-            5.grid_index_to_1d_index_unchecked(&dim_1d)
+            dim_1d_index.linear_space_index_unchecked(&dim_1d),
+            [5].linear_space_index_unchecked(&dim_1d)
         )
     }
 
@@ -466,8 +672,7 @@ mod tests {
     #[test]
     fn dim_2d_strides() {
         let dim_2d = Dim::new(TEST_2D_DIM_ARR);
-        assert_eq!(dim_2d.strides(), Dim::new([3, 1]));
-        assert_eq!(dim_2d.strides().slice(), &[3, 1]);
+        assert_eq!(dim_2d.strides(), [3, 1]);
     }
     #[test]
     fn dim_2d_index() {
@@ -478,20 +683,17 @@ mod tests {
     #[test]
     fn dim_2d_stride_offset() {
         let dim_2d = Dim::new(TEST_2D_DIM_ARR);
-        let dim_2d_used_as_index = Dim::new([2, 2]);
-        assert_eq!(
-            GridDimension::stride_offset(&dim_2d.strides(), &dim_2d_used_as_index),
-            8
-        );
+        let dim_2d_index = [2, 2];
+        assert_eq!(dim_2d.linear_space_index_unchecked(&dim_2d_index), 8);
     }
     #[test]
     fn dim_2d_ix_index() {
         use super::GridIndex;
         let dim_2d = Dim::new(TEST_2D_DIM_ARR);
-        let dim_2d_used_as_index = Dim::new([2, 2]);
+        let dim_2d_index = [2, 2];
         assert_eq!(
-            dim_2d_used_as_index.grid_index_to_1d_index_unchecked(&dim_2d),
-            (2, 2).grid_index_to_1d_index_unchecked(&dim_2d)
+            dim_2d_index.linear_space_index_unchecked(&dim_2d),
+            [2, 2].linear_space_index_unchecked(&dim_2d)
         )
     }
 
@@ -505,8 +707,7 @@ mod tests {
     #[test]
     fn dim_3d_strides() {
         let dim_3d = Dim::new(TEST_3D_DIM_ARR);
-        assert_eq!(dim_3d.strides(), Dim::new([8 * 3, 3, 1]));
-        assert_eq!(dim_3d.strides().slice(), &[8 * 3, 3, 1]);
+        assert_eq!(dim_3d.strides(), [8 * 3, 3, 1]);
     }
     #[test]
     fn dim_3d_index() {
@@ -519,9 +720,9 @@ mod tests {
     #[allow(clippy::identity_op)]
     fn dim_3d_stride_offset() {
         let dim_3d = Dim::new(TEST_3D_DIM_ARR);
-        let dim_3d_used_as_index = Dim::new([2, 2, 2]);
+        let dim_3d_index = [2, 2, 2];
         assert_eq!(
-            GridDimension::stride_offset(&dim_3d.strides(), &dim_3d_used_as_index),
+            dim_3d.linear_space_index_unchecked(&dim_3d_index),
             2 * 8 * 3 + 2 * 3 + 2 * 1
         );
     }
@@ -529,10 +730,188 @@ mod tests {
     fn dim_3d_ix_index() {
         use super::GridIndex;
         let dim_3d = Dim::new(TEST_3D_DIM_ARR);
-        let dim_3d_used_as_index = Dim::new([2, 2, 2]);
+        let dim_3d_index = [2, 2, 2];
         assert_eq!(
-            dim_3d_used_as_index.grid_index_to_1d_index_unchecked(&dim_3d),
-            (2, 2, 2).grid_index_to_1d_index_unchecked(&dim_3d)
+            dim_3d_index.linear_space_index_unchecked(&dim_3d),
+            [2, 2, 2].linear_space_index_unchecked(&dim_3d)
         )
+    }
+
+    #[test]
+    fn offset_dim_1d() {
+        let dim_1d = Dim::new(TEST_1D_DIM_ARR);
+        let off_dim_1d = OffsetDim::new(dim_1d, [-5]);
+        assert_eq!(off_dim_1d[0], 8);
+        assert_eq!(off_dim_1d.offsets[0], -5);
+        assert_eq!(off_dim_1d.offset_index_to_zero_based_unchecked(&[-5]), [0]);
+        assert_eq!(off_dim_1d.offset_index_to_zero_based_unchecked(&[0]), [5]);
+        assert_eq!(off_dim_1d.offset_index_to_zero_based_unchecked(&[2]), [7]);
+        assert_eq!(off_dim_1d.offset_index_to_zero_based_unchecked(&[3]), [8]);
+
+        assert_eq!(off_dim_1d.offset_index_to_zero_based(&[-5]).unwrap(), [0]);
+        assert_eq!(off_dim_1d.offset_index_to_zero_based(&[0]).unwrap(), [5]);
+        assert_eq!(off_dim_1d.offset_index_to_zero_based(&[2]).unwrap(), [7]);
+        assert!(off_dim_1d.offset_index_to_zero_based(&[3]).is_err());
+
+        assert_eq!(
+            off_dim_1d.offset_index_to_linear_space_index_unchecked(&[-5]),
+            0
+        );
+        assert_eq!(
+            off_dim_1d.offset_index_to_linear_space_index_unchecked(&[0]),
+            5
+        );
+
+        assert!(off_dim_1d
+            .offset_index_to_linear_space_index(&[-6])
+            .is_err());
+        assert_eq!(
+            off_dim_1d
+                .offset_index_to_linear_space_index(&[-5])
+                .unwrap(),
+            0
+        );
+        assert_eq!(
+            off_dim_1d.offset_index_to_linear_space_index(&[0]).unwrap(),
+            5
+        );
+        assert!(off_dim_1d.offset_index_to_linear_space_index(&[4]).is_err());
+    }
+
+    #[test]
+    fn offset_dim_2d() {
+        let dim_2d = Dim::new(TEST_2D_DIM_ARR);
+        let off_dim_2d = OffsetDim::new(dim_2d, [-5, -5]);
+        assert_eq!(off_dim_2d[0], 8);
+        assert_eq!(off_dim_2d.offsets[0], -5);
+        assert_eq!(off_dim_2d.offsets[1], -5);
+        assert_eq!(
+            off_dim_2d.offset_index_to_zero_based_unchecked(&[-5, -5]),
+            [0, 0]
+        );
+        assert_eq!(
+            off_dim_2d.offset_index_to_zero_based_unchecked(&[0, 0]),
+            [5, 5]
+        );
+        assert_eq!(
+            off_dim_2d.offset_index_to_zero_based_unchecked(&[2, 2]),
+            [7, 7]
+        );
+        assert_eq!(
+            off_dim_2d.offset_index_to_zero_based_unchecked(&[3, 3]),
+            [8, 8]
+        );
+
+        assert_eq!(
+            off_dim_2d.offset_index_to_zero_based(&[-5, -5]).unwrap(),
+            [0, 0]
+        );
+        assert_eq!(
+            off_dim_2d.offset_index_to_zero_based(&[0, -3]).unwrap(),
+            [5, 2]
+        );
+        assert_eq!(
+            off_dim_2d.offset_index_to_zero_based(&[2, -3]).unwrap(),
+            [7, 2]
+        );
+        assert!(off_dim_2d.offset_index_to_zero_based(&[3, 3]).is_err());
+
+        assert_eq!(
+            off_dim_2d.offset_index_to_linear_space_index_unchecked(&[-5, -5]),
+            0
+        );
+        assert_eq!(
+            off_dim_2d.offset_index_to_linear_space_index_unchecked(&[-5, 0]),
+            5
+        );
+
+        assert!(off_dim_2d
+            .offset_index_to_linear_space_index(&[-6, 0])
+            .is_err());
+        assert_eq!(
+            off_dim_2d
+                .offset_index_to_linear_space_index(&[-5, -3])
+                .unwrap(),
+            2
+        );
+        assert_eq!(
+            off_dim_2d
+                .offset_index_to_linear_space_index(&[-3, -4])
+                .unwrap(),
+            7
+        );
+        assert!(off_dim_2d
+            .offset_index_to_linear_space_index(&[4, 4])
+            .is_err());
+    }
+
+    #[test]
+    fn offset_dim_3d() {
+        let dim_3d = Dim::new(TEST_3D_DIM_ARR);
+        let off_dim_3d = OffsetDim::new(dim_3d, [-5, -5, -5]);
+        assert_eq!(off_dim_3d[0], 13);
+        assert_eq!(off_dim_3d.offsets[0], -5);
+        assert_eq!(off_dim_3d.offsets[1], -5);
+        assert_eq!(off_dim_3d.offsets[2], -5);
+        assert_eq!(
+            off_dim_3d.offset_index_to_zero_based_unchecked(&[-5, -5, -5]),
+            [0, 0, 0]
+        );
+        assert_eq!(
+            off_dim_3d.offset_index_to_zero_based_unchecked(&[0, 0, 0]),
+            [5, 5, 5]
+        );
+        assert_eq!(
+            off_dim_3d.offset_index_to_zero_based_unchecked(&[2, 2, 2]),
+            [7, 7, 7]
+        );
+        assert_eq!(
+            off_dim_3d.offset_index_to_zero_based_unchecked(&[3, 3, 3]),
+            [8, 8, 8]
+        );
+
+        assert_eq!(
+            off_dim_3d
+                .offset_index_to_zero_based(&[-5, -5, -5])
+                .unwrap(),
+            [0, 0, 0]
+        );
+        assert_eq!(
+            off_dim_3d.offset_index_to_zero_based(&[-3, 0, -3]).unwrap(),
+            [2, 5, 2]
+        );
+        assert_eq!(
+            off_dim_3d.offset_index_to_zero_based(&[-3, 2, -3]).unwrap(),
+            [2, 7, 2]
+        );
+        assert!(off_dim_3d.offset_index_to_zero_based(&[-6, 3, 3]).is_err());
+
+        assert_eq!(
+            off_dim_3d.offset_index_to_linear_space_index_unchecked(&[-5, -5, -5]),
+            0
+        );
+        assert_eq!(
+            off_dim_3d.offset_index_to_linear_space_index_unchecked(&[-5, -4, -3]),
+            5
+        );
+
+        assert!(off_dim_3d
+            .offset_index_to_linear_space_index(&[-4, -6, 0])
+            .is_err());
+        assert_eq!(
+            off_dim_3d
+                .offset_index_to_linear_space_index(&[-5, -5, -3])
+                .unwrap(),
+            2
+        );
+        assert_eq!(
+            off_dim_3d
+                .offset_index_to_linear_space_index(&[-4, -3, -4])
+                .unwrap(),
+            31
+        );
+        assert!(off_dim_3d
+            .offset_index_to_linear_space_index(&[4, 4, 4])
+            .is_err());
     }
 }

@@ -24,12 +24,10 @@ use futures::stream::{self, BoxStream, StreamExt};
 
 use geoengine_datatypes::{
     primitives::{BoundingBox2D, Coordinate2D, SpatialBounded, SpatialResolution, TimeInterval},
-    raster::Dim2D,
+    raster::GridIdx2D,
 };
 use geoengine_datatypes::{
-    raster::{
-        GeoTransform, GridDimension, Pixel, Raster2D, RasterDataType, RasterTile2D, TileInformation,
-    },
+    raster::{GeoTransform, Pixel, Raster2D, RasterDataType, RasterTile2D, TileInformation},
     spatial_reference::SpatialReference,
 };
 
@@ -168,11 +166,46 @@ impl TimeIntervalInformation {
     }
 }
 
+pub struct CentralSplitTileingStrategy {
+    central_split_point: Coordinate2D,
+    geo_transorm: GeoTransform,
+    global_bounds: BoundingBox2D,
+    global_size_in_pixels: [usize; 2],
+    tile_size_in_pixels: [usize; 2],
+}
+
+impl CentralSplitTileingStrategy {
+    pub fn central_split_pixel(&self) -> GridIdx2D {
+        self.geo_transorm
+            .coordinate_2d_to_grid_2d(self.central_split_point)
+    }
+
+    pub fn tiles(&self) -> () {
+        let [central_split_point_y, central_split_point_x] = self.central_split_pixel();
+        let [upper_left_y, upper_left_x] = self
+            .geo_transorm
+            .coordinate_2d_to_grid_2d(self.global_bounds.upper_left());
+        let [lower_right_y, lower_right_x] = self
+            .geo_transorm
+            .coordinate_2d_to_grid_2d(self.global_bounds.upper_left());
+
+        let pixels_left = central_split_point_y - upper_left_y;
+        let pixels_right = central_split_point_y - lower_right_y;
+        dbg!(pixels_left);
+        dbg!(pixels_right);
+
+        let pixels_top = central_split_point_x - upper_left_x;
+        let pixels_down = central_split_point_x - lower_right_x;
+        dbg!(pixels_top);
+        dbg!(pixels_down);
+    }
+}
+
 /// A provider of tile (size) information for a raster/grid
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct TilingInformation {
-    pub global_pixel_size: Dim2D,
-    pub tile_pixel_size: Dim2D,
+    pub global_pixel_size: [usize; 2],
+    pub tile_pixel_size: [usize; 2],
     pub geo_transform: GeoTransform,
 }
 
@@ -183,13 +216,13 @@ impl TilingInformation {
 
     fn lower_right_coordinate(&self) -> Coordinate2D {
         self.geo_transform
-            .grid_2d_to_coordinate_2d(self.global_pixel_size.as_pattern())
+            .grid_2d_to_coordinate_2d(self.global_pixel_size)
     }
 
     /// generates a vec with `TileInformation` for each tile
     fn tile_informations(&self) -> Vec<TileInformation> {
-        let &[.., y_pixels_global, x_pixels_global] = self.global_pixel_size.dimension_size();
-        let &[.., y_pixels_tile, x_pixels_tile] = self.tile_pixel_size.dimension_size();
+        let [.., y_pixels_global, x_pixels_global] = self.global_pixel_size;
+        let [.., y_pixels_tile, x_pixels_tile] = self.tile_pixel_size;
         let x_tiles = (x_pixels_global as f32 / x_pixels_tile as f32).ceil() as usize;
         let y_tiles = (y_pixels_global as f32 / y_pixels_tile as f32).ceil() as usize;
 
@@ -203,10 +236,10 @@ impl TilingInformation {
                 let current_tile_pixels_y = min(y_pixels_tile, y_pixels_global - y);
 
                 tile_information.push(TileInformation::new(
-                    (y_tiles, x_tiles).into(),
-                    (yi, xi).into(),
-                    (y, x).into(),
-                    (current_tile_pixels_y, current_tile_pixels_x).into(),
+                    [y_tiles, x_tiles],
+                    [yi, xi],
+                    [y, x],
+                    [current_tile_pixels_y, current_tile_pixels_x],
                     self.geo_transform,
                 ))
             }
@@ -304,7 +337,7 @@ where
         // build a new tiling information for the dataset with the pixel size of the query
         let query_tile_information = TilingInformation {
             geo_transform: query_scale_geo_transform,
-            tile_pixel_size: (600, 600).into(),
+            tile_pixel_size: [600, 600],
             global_pixel_size: query_scale_global_lower_right_pixel.into(),
         };
 
@@ -392,27 +425,21 @@ where
         // transform the tile bounds to coordinates
         let tile_geo_transform = tile_information.global_geo_transform;
 
-        let tile_upper_left_coord = tile_geo_transform.grid_2d_to_coordinate_2d(
-            tile_information
-                .global_pixel_position_upper_left()
-                .as_pattern(),
-        );
+        let tile_upper_left_coord = tile_geo_transform
+            .grid_2d_to_coordinate_2d(tile_information.global_pixel_position_upper_left());
 
-        let tile_lower_right_coord = tile_geo_transform.grid_2d_to_coordinate_2d(
-            tile_information
-                .global_pixel_position_lower_right()
-                .as_pattern(),
-        );
+        let tile_lower_right_coord = tile_geo_transform
+            .grid_2d_to_coordinate_2d(tile_information.global_pixel_position_lower_right());
 
         // transform the tile bound into original pixels
         let native_geo_transform = gdal_dataset_information
             .native_tiling_information()
             .geo_transform;
 
-        let (.., y_pixel_position_ul, x_pixel_position_ul) =
+        let [.., y_pixel_position_ul, x_pixel_position_ul] =
             native_geo_transform.coordinate_2d_to_grid_2d(tile_upper_left_coord);
 
-        let (.., y_pixel_position_lr, x_pixel_position_lr) =
+        let [.., y_pixel_position_lr, x_pixel_position_lr] =
             native_geo_transform.coordinate_2d_to_grid_2d(tile_lower_right_coord);
 
         let native_pixel_origin = (x_pixel_position_ul as isize, y_pixel_position_ul as isize);
@@ -422,8 +449,7 @@ where
             y_pixel_position_lr - y_pixel_position_ul,
         );
 
-        let (query_tile_size_y, query_tile_size_x) =
-            tile_information.tile_size_in_pixels().as_pattern();
+        let [query_tile_size_y, query_tile_size_x] = tile_information.tile_size_in_pixels();
 
         let query_pixel_size = (query_tile_size_x, query_tile_size_y);
 
@@ -434,7 +460,7 @@ where
             query_pixel_size,    /* requested raster size */
         )?;
         let raster_result = Raster2D::new(
-            tile_information.tile_size_in_pixels,
+            tile_information.tile_size_in_pixels.into(),
             buffer.data,
             None,
             time_interval,
@@ -592,10 +618,34 @@ mod tests {
     use geoengine_datatypes::raster::GridPixelAccess;
 
     #[test]
+    fn tile_generation_relative_to_center_coordinate() {
+        let global_size_in_pixels = [1800, 3600];
+        let tile_size_in_pixels = [600, 600];
+        let dataset_upper_right_coord = (-180.0, 90.0).into();
+        let dataset_x_pixel_size = 0.1;
+        let dataset_y_pixel_size = -0.1;
+        let dataset_geo_transform = GeoTransform::new(
+            dataset_upper_right_coord,
+            dataset_x_pixel_size,
+            dataset_y_pixel_size,
+        );
+
+        let my_central_split_tileing_strategy = CentralSplitTileingStrategy {
+            central_split_point: (0.0, 0.0).into(),
+            geo_transorm: dataset_geo_transform,
+            global_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+            global_size_in_pixels: global_size_in_pixels,
+            tile_size_in_pixels: tile_size_in_pixels,
+        };
+
+        my_central_split_tileing_strategy.tiles();
+    }
+
+    #[test]
     fn tile_informations() {
-        let global_size_in_pixels = (1800, 3600);
-        let tile_size_in_pixels = (600, 600);
-        let global_size_in_tiles = (3, 6);
+        let global_size_in_pixels = [1800, 3600];
+        let tile_size_in_pixels = [600, 600];
+        let global_size_in_tiles = [3, 6];
         let dataset_upper_right_coord = (-180.0, 90.0).into();
         let dataset_x_pixel_size = 0.1;
         let dataset_y_pixel_size = -0.1;
@@ -606,8 +656,8 @@ mod tests {
         );
 
         let grid_tile_provider = TilingInformation {
-            global_pixel_size: global_size_in_pixels.into(),
-            tile_pixel_size: tile_size_in_pixels.into(),
+            global_pixel_size: global_size_in_pixels,
+            tile_pixel_size: tile_size_in_pixels,
             geo_transform: dataset_geo_transform,
         };
 
@@ -617,8 +667,8 @@ mod tests {
             vres[0],
             TileInformation::new(
                 global_size_in_tiles.into(),
-                (0, 0).into(),
-                (0, 0).into(),
+                [0, 0],
+                [0, 0],
                 tile_size_in_pixels.into(),
                 dataset_geo_transform
             )
@@ -627,8 +677,8 @@ mod tests {
             vres[1],
             TileInformation::new(
                 global_size_in_tiles.into(),
-                (0, 1).into(),
-                (0, 600).into(),
+                [0, 1],
+                [0, 600],
                 tile_size_in_pixels.into(),
                 dataset_geo_transform
             )
@@ -637,8 +687,8 @@ mod tests {
             vres[6],
             TileInformation::new(
                 global_size_in_tiles.into(),
-                (1, 0).into(),
-                (600, 0).into(),
+                [1, 0],
+                [600, 0],
                 tile_size_in_pixels.into(),
                 dataset_geo_transform
             )
@@ -647,8 +697,8 @@ mod tests {
             vres[7],
             TileInformation::new(
                 global_size_in_tiles.into(),
-                (1, 1).into(),
-                (600, 600).into(),
+                [1, 1],
+                [600, 600],
                 tile_size_in_pixels.into(),
                 dataset_geo_transform
             )
@@ -657,8 +707,8 @@ mod tests {
             vres[10],
             TileInformation::new(
                 global_size_in_tiles.into(),
-                (1, 4).into(),
-                (600, 2400).into(),
+                [1, 4],
+                [600, 2400],
                 tile_size_in_pixels.into(),
                 dataset_geo_transform
             )
@@ -667,8 +717,8 @@ mod tests {
             vres[16],
             TileInformation::new(
                 global_size_in_tiles.into(),
-                (2, 4).into(),
-                (1200, 2400).into(),
+                [2, 4],
+                [1200, 2400],
                 tile_size_in_pixels.into(),
                 dataset_geo_transform
             )
@@ -678,9 +728,9 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     #[test]
     fn test_time_tile_iter() {
-        let global_size_in_pixels = (1800, 3600);
-        let tile_size_in_pixels = (600, 600);
-        let global_size_in_tiles = (3, 6);
+        let global_size_in_pixels = [1800, 3600];
+        let tile_size_in_pixels = [600, 600];
+        let global_size_in_tiles = [3, 6];
         let dataset_upper_right_coord = (-180.0, 90.0).into();
         let dataset_x_pixel_size = 0.1;
         let dataset_y_pixel_size = -0.1;
@@ -691,8 +741,8 @@ mod tests {
         );
 
         let grid_tile_provider = TilingInformation {
-            global_pixel_size: global_size_in_pixels.into(),
-            tile_pixel_size: tile_size_in_pixels.into(),
+            global_pixel_size: global_size_in_pixels,
+            tile_pixel_size: tile_size_in_pixels,
             geo_transform: dataset_geo_transform,
         };
 
@@ -741,8 +791,8 @@ mod tests {
                 TimeInterval::new_unchecked(1, 2),
                 TileInformation::new(
                     global_size_in_tiles.into(),
-                    (0, 0).into(),
-                    (0, 0).into(),
+                    [0, 0],
+                    [0, 0],
                     tile_size_in_pixels.into(),
                     dataset_geo_transform
                 )
@@ -754,8 +804,8 @@ mod tests {
                 TimeInterval::new_unchecked(1, 2),
                 TileInformation::new(
                     global_size_in_tiles.into(),
-                    (0, 1).into(),
-                    (0, 600).into(),
+                    [0, 1],
+                    [0, 600],
                     tile_size_in_pixels.into(),
                     dataset_geo_transform
                 )
@@ -767,8 +817,8 @@ mod tests {
                 TimeInterval::new_unchecked(1, 2),
                 TileInformation::new(
                     global_size_in_tiles.into(),
-                    (1, 0).into(),
-                    (600, 0).into(),
+                    [1, 0],
+                    [600, 0],
                     tile_size_in_pixels.into(),
                     dataset_geo_transform
                 )
@@ -780,8 +830,8 @@ mod tests {
                 TimeInterval::new_unchecked(1, 2),
                 TileInformation::new(
                     global_size_in_tiles.into(),
-                    (1, 1).into(),
-                    (600, 600).into(),
+                    [1, 1],
+                    [600, 600],
                     tile_size_in_pixels.into(),
                     dataset_geo_transform
                 )
@@ -793,8 +843,8 @@ mod tests {
                 TimeInterval::new_unchecked(1, 2),
                 TileInformation::new(
                     global_size_in_tiles.into(),
-                    (1, 4).into(),
-                    (600, 2400).into(),
+                    [1, 4],
+                    [600, 2400],
                     tile_size_in_pixels.into(),
                     dataset_geo_transform
                 )
@@ -806,8 +856,8 @@ mod tests {
                 TimeInterval::new_unchecked(1, 2),
                 TileInformation::new(
                     global_size_in_tiles.into(),
-                    (2, 4).into(),
-                    (1200, 2400).into(),
+                    [2, 4],
+                    [1200, 2400],
                     tile_size_in_pixels.into(),
                     dataset_geo_transform
                 )
@@ -818,9 +868,9 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     #[test]
     fn test_time_tile_iter_change_resolutions() {
-        let global_size_in_pixels = (1800, 3600);
-        let tile_size_in_pixels = (600, 600);
-        let _global_size_in_tiles = (3, 6);
+        let global_size_in_pixels = [1800, 3600];
+        let tile_size_in_pixels = [600, 600];
+        let _global_size_in_tiles = [3, 6];
         let dataset_upper_right_coord = (-180.0, 90.0).into();
         let dataset_x_pixel_size = 0.1;
         let dataset_y_pixel_size = -0.1;
@@ -831,8 +881,8 @@ mod tests {
         );
 
         let grid_tile_provider = TilingInformation {
-            global_pixel_size: global_size_in_pixels.into(),
-            tile_pixel_size: tile_size_in_pixels.into(),
+            global_pixel_size: global_size_in_pixels,
+            tile_pixel_size: tile_size_in_pixels,
             geo_transform: dataset_geo_transform,
         };
 
@@ -869,7 +919,7 @@ mod tests {
         };
 
         let result_geo_transform = GeoTransform::new(dataset_upper_right_coord, 0.5, -0.5);
-        let result_size_in_tiles = (1, 2);
+        let result_size_in_tiles = [1, 2];
 
         let vres: Vec<_> = gdal_source
             .time_tile_iter(
@@ -883,10 +933,10 @@ mod tests {
             (
                 TimeInterval::new_unchecked(1, 2),
                 TileInformation::new(
-                    result_size_in_tiles.into(),
-                    (0, 0).into(),
-                    (0, 0).into(),
-                    (360, 600).into(), // TODO: change when source blits into full tile
+                    result_size_in_tiles,
+                    [0, 0],
+                    [0, 0],
+                    [360, 600], // TODO: change when source blits into full tile
                     result_geo_transform
                 )
             )
@@ -896,10 +946,10 @@ mod tests {
             (
                 TimeInterval::new_unchecked(1, 2),
                 TileInformation::new(
-                    result_size_in_tiles.into(),
-                    (0, 1).into(),
-                    (0, 600).into(),
-                    (360, 120).into(), // TODO: change when source blits into full tile
+                    result_size_in_tiles,
+                    [0, 1],
+                    [0, 600],
+                    [360, 120], // TODO: change when source blits into full tile
                     result_geo_transform
                 )
             )
@@ -908,9 +958,9 @@ mod tests {
 
     #[test]
     fn test_load_tile_data() {
-        let global_size_in_pixels = (1800, 3600);
-        let tile_size_in_pixels = (600, 600);
-        let global_size_in_tiles = (3, 6);
+        let global_size_in_pixels = [1800, 3600];
+        let tile_size_in_pixels = [600, 600];
+        let global_size_in_tiles = [3, 6];
         let dataset_upper_right_coord = (-180.0, 90.0).into();
         let dataset_x_pixel_size = 0.1;
         let dataset_y_pixel_size = -0.1;
@@ -921,8 +971,8 @@ mod tests {
         );
 
         let grid_tile_provider = TilingInformation {
-            global_pixel_size: global_size_in_pixels.into(),
-            tile_pixel_size: tile_size_in_pixels.into(),
+            global_pixel_size: global_size_in_pixels,
+            tile_pixel_size: tile_size_in_pixels,
             geo_transform: dataset_geo_transform,
         };
         let time_interval_provider = TimeIntervalInformation {
@@ -955,10 +1005,10 @@ mod tests {
         };
 
         let tile_information = TileInformation::new(
-            global_size_in_tiles.into(),
-            (0, 0).into(),
-            (0, 0).into(),
-            tile_size_in_pixels.into(),
+            global_size_in_tiles,
+            [0, 0],
+            [0, 0],
+            tile_size_in_pixels,
             dataset_geo_transform,
         );
         let time_interval = TimeInterval::new_unchecked(0, 1);
@@ -973,8 +1023,8 @@ mod tests {
 
     #[test]
     fn test_iter_and_load_tile_data() {
-        let global_size_in_pixels = (1800, 3600);
-        let tile_size_in_pixels = (600, 600);
+        let global_size_in_pixels = [1800, 3600];
+        let tile_size_in_pixels = [600, 600];
         let dataset_upper_right_coord = (-180.0, 90.0).into();
         let dataset_x_pixel_size = 0.1;
         let dataset_y_pixel_size = -0.1;
@@ -985,8 +1035,8 @@ mod tests {
         );
 
         let grid_tile_provider = TilingInformation {
-            global_pixel_size: global_size_in_pixels.into(),
-            tile_pixel_size: tile_size_in_pixels.into(),
+            global_pixel_size: global_size_in_pixels,
+            tile_pixel_size: tile_size_in_pixels,
             geo_transform: dataset_geo_transform,
         };
 
@@ -1035,10 +1085,10 @@ mod tests {
                 let raster_tile = t.unwrap();
                 raster_tile
                     .data
-                    .pixel_value_at_grid_index(&(
-                        tile_size_in_pixels.1 / 2,
-                        tile_size_in_pixels.0 / 2,
-                    ))
+                    .pixel_value_at_grid_index(&[
+                        tile_size_in_pixels[1] / 2,
+                        tile_size_in_pixels[0] / 2,
+                    ])
                     .unwrap() // pixel
             })
             .collect();
@@ -1052,8 +1102,8 @@ mod tests {
 
     #[test]
     fn test_iter_and_load_tile_data_bbox() {
-        let global_size_in_pixels = (1800, 3600);
-        let tile_size_in_pixels = (600, 600);
+        let global_size_in_pixels = [1800, 3600];
+        let tile_size_in_pixels = [600, 600];
         let dataset_upper_right_coord = (-180.0, 90.0).into();
         let dataset_x_pixel_size = 0.1;
         let dataset_y_pixel_size = -0.1;
@@ -1064,8 +1114,8 @@ mod tests {
         );
 
         let grid_tile_provider = TilingInformation {
-            global_pixel_size: global_size_in_pixels.into(),
-            tile_pixel_size: tile_size_in_pixels.into(),
+            global_pixel_size: global_size_in_pixels,
+            tile_pixel_size: tile_size_in_pixels,
             geo_transform: dataset_geo_transform,
         };
 
@@ -1114,10 +1164,10 @@ mod tests {
 
                 raster_tile
                     .data
-                    .pixel_value_at_grid_index(&(
-                        tile_size_in_pixels.1 / 2,
-                        tile_size_in_pixels.0 / 2,
-                    ))
+                    .pixel_value_at_grid_index(&[
+                        tile_size_in_pixels[1] / 2,
+                        tile_size_in_pixels[0] / 2,
+                    ])
                     .unwrap() // pixel
             })
             .collect();
@@ -1129,8 +1179,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_tile_stream_len() {
-        let global_size_in_pixels = (1800, 3600);
-        let tile_size_in_pixels = (600, 600);
+        let global_size_in_pixels = [1800, 3600];
+        let tile_size_in_pixels = [600, 600];
         let dataset_upper_right_coord = (-180.0, 90.0).into();
         let dataset_x_pixel_size = 0.1;
         let dataset_y_pixel_size = -0.1;
@@ -1189,7 +1239,10 @@ mod tests {
 
             let cp = tile
                 .data
-                .pixel_value_at_grid_index(&(tile_size_in_pixels.1 / 2, tile_size_in_pixels.0 / 2))
+                .pixel_value_at_grid_index(&[
+                    tile_size_in_pixels[1] / 2,
+                    tile_size_in_pixels[0] / 2,
+                ])
                 .unwrap();
 
             assert_eq!(p, cp);
@@ -1200,9 +1253,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_load_tile_data_async() {
-        let global_size_in_pixels = (1800, 3600);
-        let tile_size_in_pixels = (600, 600);
-        let global_size_in_tiles = (3, 6);
+        let global_size_in_pixels = [1800, 3600];
+        let tile_size_in_pixels = [600, 600];
+        let global_size_in_tiles = [3, 6];
         let dataset_upper_right_coord = (-180.0, 90.0).into();
         let dataset_x_pixel_size = 0.1;
         let dataset_y_pixel_size = -0.1;
@@ -1214,10 +1267,10 @@ mod tests {
         let time_interval = TimeInterval::new_unchecked(1, 2);
 
         let tile_information = TileInformation::new(
-            global_size_in_tiles.into(),
-            (0, 0).into(),
-            (0, 0).into(),
-            tile_size_in_pixels.into(),
+            global_size_in_tiles,
+            [0, 0],
+            [0, 0],
+            tile_size_in_pixels,
             dataset_geo_transform,
         );
 
@@ -1263,7 +1316,7 @@ mod tests {
         assert_eq!(x.time, time_interval);
         let center_pixel = x
             .data
-            .pixel_value_at_grid_index(&(tile_size_in_pixels.1 / 2, tile_size_in_pixels.0 / 2))
+            .pixel_value_at_grid_index(&[tile_size_in_pixels[1] / 2, tile_size_in_pixels[0] / 2])
             .unwrap();
         assert_eq!(center_pixel, 19);
     }

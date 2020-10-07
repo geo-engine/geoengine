@@ -30,14 +30,14 @@ impl<T: Pixel> Blit<Raster2D<T>> for Raster2D<T> {
                 details: "No overlapping region".into(),
             })?;
 
-        let (start_y, start_x) = self
+        let [start_y, start_x] = self
             .geo_transform()
             .coordinate_2d_to_grid_2d(intersection.upper_left());
-        let (stop_y, stop_x) = self
+        let [stop_y, stop_x] = self
             .geo_transform()
             .coordinate_2d_to_grid_2d(intersection.lower_right());
 
-        let (start_source_y, start_source_x) = source
+        let [start_source_y, start_source_x] = source
             .geo_transform()
             .coordinate_2d_to_grid_2d(intersection.upper_left());
 
@@ -46,9 +46,9 @@ impl<T: Pixel> Blit<Raster2D<T>> for Raster2D<T> {
 
         for y in 0..stop_y - start_y {
             // TODO: assure that we are in the bounds
-            let index = (start_y + y, start_x).grid_index_to_1d_index_unchecked(&self.dimension());
-            let index_source = (start_source_y + y, start_source_x)
-                .grid_index_to_1d_index_unchecked(&source.dimension());
+            let index = [start_y + y, start_x].linear_space_index_unchecked(self.dimension());
+            let index_source = [start_source_y + y, start_source_x]
+                .linear_space_index_unchecked(source.dimension());
 
             self.data_container.as_mut_slice()[index..index + width].copy_from_slice(
                 &source.data_container().as_slice()[index_source..index_source + width],

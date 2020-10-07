@@ -114,11 +114,11 @@ where
     T: Pixel,
 {
     fn spatial_bounds(&self) -> BoundingBox2D {
-        let top_left_coord = self.geo_transform.grid_2d_to_coordinate_2d((0, 0));
-        let lower_right_coord = self.geo_transform.grid_2d_to_coordinate_2d((
+        let top_left_coord = self.geo_transform.grid_2d_to_coordinate_2d([0, 0]);
+        let lower_right_coord = self.geo_transform.grid_2d_to_coordinate_2d([
             self.grid_dimension.size_of_y_axis(),
             self.grid_dimension.size_of_x_axis(),
-        ));
+        ]);
         BoundingBox2D::new_upper_left_lower_right_unchecked(top_left_coord, lower_right_coord)
     }
 }
@@ -145,26 +145,26 @@ where
 
 impl<D, T, C, I> GridPixelAccess<T, I> for BaseRaster<D, T, C>
 where
-    D: GridDimension,
-    I: GridIndex<D>,
+    D: GridDimension<IndexType = I>,
+    I: GridIndex,
     C: AsRef<[T]> + Capacity,
     T: Pixel,
 {
     fn pixel_value_at_grid_index(&self, grid_index: &I) -> Result<T> {
-        let index = grid_index.grid_index_to_1d_index(&self.grid_dimension)?;
+        let index = grid_index.linear_space_index(&self.grid_dimension)?;
         Ok(self.data_container.as_ref()[index])
     }
 }
 
 impl<D, T, C, I> GridPixelAccessMut<T, I> for BaseRaster<D, T, C>
 where
-    D: GridDimension,
-    I: GridIndex<D>,
+    D: GridDimension<IndexType = I>,
+    I: GridIndex,
     C: AsMut<[T]> + Capacity,
     T: Pixel,
 {
     fn set_pixel_value_at_grid_index(&mut self, grid_index: &I, value: T) -> Result<()> {
-        let index = grid_index.grid_index_to_1d_index(&self.grid_dimension)?;
+        let index = grid_index.linear_space_index(&self.grid_dimension)?;
         self.data_container.as_mut()[index] = value;
         Ok(())
     }
@@ -184,7 +184,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::{Dim, GridPixelAccess, GridPixelAccessMut, Raster2D, TimeInterval};
+    use super::{GridPixelAccess, GridPixelAccessMut, Raster2D, TimeInterval};
 
     #[test]
     fn simple_raster_2d() {
@@ -204,7 +204,7 @@ mod tests {
 
     #[test]
     fn simple_raster_2d_at_tuple() {
-        let tuple_index = (1, 1);
+        let tuple_index = [1, 1];
 
         let dim = [3, 2];
         let data = vec![1, 2, 3, 4, 5, 6];
@@ -223,7 +223,7 @@ mod tests {
 
     #[test]
     fn simple_raster_2d_at_arr() {
-        let dim_index = Dim::from([1, 1]);
+        let index = [1, 1];
 
         let dim = [3, 2];
         let data = vec![1, 2, 3, 4, 5, 6];
@@ -237,13 +237,13 @@ mod tests {
             geo_transform.into(),
         )
         .unwrap();
-        let value = raster2d.pixel_value_at_grid_index(&dim_index).unwrap();
+        let value = raster2d.pixel_value_at_grid_index(&index).unwrap();
         assert_eq!(value, 4);
     }
 
     #[test]
     fn simple_raster_2d_set_at_tuple() {
-        let tuple_index = (1, 1);
+        let tuple_index = [1, 1];
 
         let dim = [3, 2];
         let data = vec![1, 2, 3, 4, 5, 6];

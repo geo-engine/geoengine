@@ -1,6 +1,8 @@
 use crate::primitives::Coordinate2D;
 use serde::{Deserialize, Serialize};
 
+use super::GridIdx2D;
+
 /// This is a typedef for the `GDAL GeoTransform`. It represents an affine transformation matrix.
 pub type GdalGeoTransform = [f64; 6];
 
@@ -67,8 +69,8 @@ impl GeoTransform {
     /// assert_eq!(geo_transform.grid_2d_to_coordinate_2d((0, 0)), (0.0, 0.0).into())
     /// ```
     ///
-    pub fn grid_2d_to_coordinate_2d(&self, grid_index: (usize, usize)) -> Coordinate2D {
-        let (grid_index_y, grid_index_x) = grid_index;
+    pub fn grid_2d_to_coordinate_2d(&self, grid_index: GridIdx2D) -> Coordinate2D {
+        let [grid_index_y, grid_index_x] = grid_index;
         let coord_x = self.upper_left_coordinate.x + (grid_index_x as f64) * self.x_pixel_size;
         let coord_y = self.upper_left_coordinate.y + (grid_index_y as f64) * self.y_pixel_size;
         Coordinate2D::new(coord_x, coord_y)
@@ -86,10 +88,10 @@ impl GeoTransform {
     /// assert_eq!(geo_transform.coordinate_2d_to_grid_2d((0.0, 0.0).into()), (0, 0))
     /// ```
     ///
-    pub fn coordinate_2d_to_grid_2d(&self, coord: Coordinate2D) -> (usize, usize) {
+    pub fn coordinate_2d_to_grid_2d(&self, coord: Coordinate2D) -> GridIdx2D {
         let grid_x_index = ((coord.x - self.upper_left_coordinate.x) / self.x_pixel_size) as usize;
         let grid_y_index = ((coord.y - self.upper_left_coordinate.y) / self.y_pixel_size) as usize;
-        (grid_y_index, grid_x_index)
+        [grid_y_index, grid_x_index]
     }
 }
 
@@ -154,15 +156,15 @@ mod tests {
     fn geo_transform_grid_2d_to_coordinate_2d() {
         let geo_transform = GeoTransform::new_with_coordinate_x_y(5.0, 1.0, 5.0, -1.0);
         assert_eq!(
-            geo_transform.grid_2d_to_coordinate_2d((0, 0)),
+            geo_transform.grid_2d_to_coordinate_2d([0, 0]),
             (5.0, 5.0).into()
         );
         assert_eq!(
-            geo_transform.grid_2d_to_coordinate_2d((1, 1)),
+            geo_transform.grid_2d_to_coordinate_2d([1, 1]),
             (6.0, 4.0).into()
         );
         assert_eq!(
-            geo_transform.grid_2d_to_coordinate_2d((2, 2)),
+            geo_transform.grid_2d_to_coordinate_2d([2, 2]),
             (7.0, 3.0).into()
         );
     }
@@ -172,15 +174,15 @@ mod tests {
         let geo_transform = GeoTransform::new_with_coordinate_x_y(5.0, 1.0, 5.0, -1.0);
         assert_eq!(
             geo_transform.coordinate_2d_to_grid_2d((5.0, 5.0).into()),
-            (0, 0)
+            [0, 0]
         );
         assert_eq!(
             geo_transform.coordinate_2d_to_grid_2d((6.0, 4.0).into()),
-            (1, 1)
+            [1, 1]
         );
         assert_eq!(
             geo_transform.coordinate_2d_to_grid_2d((7.0, 3.0).into()),
-            (2, 2)
+            [2, 2]
         );
     }
 }

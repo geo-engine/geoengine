@@ -245,7 +245,7 @@ mod tests {
     #[test]
     fn call_generic_raster2d() {
         fn first_pixel<T: Pixel>(raster: &Raster2D<T>) -> i64 {
-            raster.pixel_value_at_grid_index(&(0, 0)).unwrap().as_()
+            raster.pixel_value_at_grid_index(&[0, 0]).unwrap().as_()
         }
 
         let typed_raster = TypedRaster2D::U32(
@@ -310,8 +310,8 @@ mod tests {
     #[test]
     fn call_bi_generic_raster2d() {
         fn first_pixel_add<T: Pixel, U: Pixel>(a: &Raster2D<T>, b: &Raster2D<U>) -> i64 {
-            let pixel_a: i64 = a.pixel_value_at_grid_index(&(0, 0)).unwrap().as_();
-            let pixel_b: i64 = b.pixel_value_at_grid_index(&(0, 0)).unwrap().as_();
+            let pixel_a: i64 = a.pixel_value_at_grid_index(&[0, 0]).unwrap().as_();
+            let pixel_b: i64 = b.pixel_value_at_grid_index(&[0, 0]).unwrap().as_();
             pixel_a + pixel_b
         }
 
@@ -348,8 +348,8 @@ mod tests {
     #[test]
     fn call_bi_generic_raster2d_same() {
         fn first_pixel_add<T: Pixel>(a: &Raster2D<T>, b: &Raster2D<T>) -> i64 {
-            let pixel_a = a.pixel_value_at_grid_index(&(0, 0)).unwrap();
-            let pixel_b = b.pixel_value_at_grid_index(&(0, 0)).unwrap();
+            let pixel_a = a.pixel_value_at_grid_index(&[0, 0]).unwrap();
+            let pixel_b = b.pixel_value_at_grid_index(&[0, 0]).unwrap();
             (pixel_a + pixel_b).as_()
         }
 
@@ -399,8 +399,8 @@ mod tests {
     #[test]
     fn call_bi_generic_raster2d_staircase() {
         fn first_pixel_add<T: Pixel, U: Pixel + Into<T>>(a: &Raster2D<T>, b: &Raster2D<U>) -> i64 {
-            let pixel_a: T = a.pixel_value_at_grid_index(&(0, 0)).unwrap();
-            let pixel_b: T = b.pixel_value_at_grid_index(&(0, 0)).unwrap().into();
+            let pixel_a: T = a.pixel_value_at_grid_index(&[0, 0]).unwrap();
+            let pixel_b: T = b.pixel_value_at_grid_index(&[0, 0]).unwrap().into();
             (pixel_a + pixel_b).as_()
         }
 

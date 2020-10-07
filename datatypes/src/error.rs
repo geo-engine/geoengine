@@ -36,16 +36,22 @@ pub enum Error {
         i2: TimeInterval,
     },
 
+    #[snafu(display("{:?} is not a valid index in the dimension {:?}", index, dimension,))]
+    GridIndexOutOfBounds {
+        index: Vec<usize>,
+        dimension: Vec<usize>,
+    },
+
     #[snafu(display(
-        "{} is not a valid index in the dimension {} with size {}",
+        "{:?} is not a valid index in the dimension {:?} with offsets {:?}",
         index,
         dimension,
-        dimension_size
+        offsets,
     ))]
-    GridIndexOutOfBounds {
-        index: usize,
-        dimension: usize,
-        dimension_size: usize,
+    GridSignedIndexOutOfBounds {
+        index: Vec<isize>,
+        dimension: Vec<usize>,
+        offsets: Vec<isize>,
     },
 
     #[snafu(display(
