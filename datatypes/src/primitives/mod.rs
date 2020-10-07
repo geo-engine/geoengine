@@ -40,6 +40,9 @@ pub trait Geometry: Clone + Debug + Send + Sync {
 
     // move to primitives module?
     const DATA_TYPE: VectorDataType;
+
+    /// Is the geometry overlapping the `BoundingBox2D`?
+    fn intersects_bbox(&self, bbox: BoundingBox2D) -> bool;
 }
 
 pub trait GeometryRef: Into<geojson::Geometry> {}

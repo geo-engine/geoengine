@@ -7,11 +7,12 @@ use std::str::FromStr;
 use std::sync::mpsc::{self, Receiver, SyncSender, TryRecvError, TrySendError};
 use std::task::Poll;
 
+use chrono::DateTime;
 use futures::stream::BoxStream;
 use futures::task::{Context, Waker};
 use futures::Stream;
 use futures::StreamExt;
-use gdal::vector::{Dataset, FeatureIterator, OGRwkbGeometryType};
+use gdal::vector::{Dataset, Feature, FeatureIterator, OGRwkbGeometryType};
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use tokio::task::spawn_blocking;
@@ -22,7 +23,7 @@ use geoengine_datatypes::collections::{
 };
 use geoengine_datatypes::primitives::{
     Coordinate2D, FeatureDataType, FeatureDataValue, Geometry, MultiLineString, MultiPoint,
-    MultiPolygon, NoGeometry,
+    MultiPolygon, NoGeometry, TimeInstance, TimeInterval,
 };
 use geoengine_datatypes::provenance::ProvenanceInformation;
 use geoengine_datatypes::spatial_reference::SpatialReference;
@@ -384,8 +385,6 @@ pub struct OgrSourceQuery<G>
 where
     G: Geometry + ArrowTyped,
 {
-    query_rectangle: QueryRectangle,
-    chunk_byte_size: usize,
     worker_thread_is_idle: bool,
     worker_thread_terminated: bool,
     poll_result_receiver: Receiver<Option<Result<FeatureCollection<G>>>>,
@@ -411,16 +410,26 @@ where
         let (work_query_sender, work_query_receiver) = mpsc::sync_channel(1);
 
         spawn_blocking(move || {
-            Self::compute_thread(
+            let mut work_query = match work_query_receiver.recv() {
+                Ok(work_query) => work_query,
+                Err(_) => return, // sender disconnected, so there will be no new work
+            };
+
+            if let Err(error) = Self::compute_thread(
+                &mut work_query,
                 &dataset_information,
                 &work_query_receiver,
                 &poll_result_sender,
-            )
+                &query_rectangle,
+                chunk_byte_size,
+            ) {
+                poll_result_sender.send(Some(Err(error))).unwrap();
+                poll_result_sender.send(None).unwrap();
+                work_query.waker.wake();
+            };
         });
 
         Self {
-            query_rectangle,
-            chunk_byte_size,
             worker_thread_is_idle: true,
             worker_thread_terminated: false,
             poll_result_receiver,
@@ -430,34 +439,182 @@ where
     }
 
     fn compute_thread(
+        work_query: &mut WorkQuery,
         dataset_information: &OgrSourceDataset,
         work_query_receiver: &Receiver<WorkQuery>,
         poll_result_sender: &SyncSender<Option<Result<FeatureCollection<G>>>>,
+        query_rectangle: &QueryRectangle,
+        _chunk_byte_size: usize,
+    ) -> Result<()> {
+        let mut dataset = Dataset::open(&dataset_information.filename)?;
+        let layer = dataset.layer_by_name(&dataset_information.layer_name)?;
+
+        let (data_types, feature_collection_builder) =
+            Self::initialize_types_and_builder(dataset_information);
+
+        let time_extractor = Self::initialize_time_extractors(dataset_information)?;
+
+        let mut features = layer.features().peekable();
+
+        while features.peek().is_some() {
+            let batch_result = Self::compute_batch(
+                &mut features,
+                feature_collection_builder.clone(),
+                dataset_information,
+                &data_types,
+                query_rectangle,
+                &time_extractor,
+            );
+
+            match poll_result_sender.send(Some(batch_result)) {
+                Ok(_) => work_query.waker.wake_by_ref(),
+                Err(_) => return Ok(()), // receiver disconnected, so this thread can abort
+            };
+
+            *work_query = match work_query_receiver.recv() {
+                Ok(work_query) => work_query,
+                Err(_) => return Ok(()), // sender disconnected, so there will be no new work
+            };
+        }
+
+        poll_result_sender.send(None).unwrap();
+        work_query.waker.wake_by_ref();
+
+        Ok(())
+    }
+
+    fn create_time_parser(
+        time_format: &Option<OgrSourceTimeFormat>,
+    ) -> Box<dyn Fn(&str) -> Result<TimeInstance> + '_> {
+        match time_format {
+            None | Some(OgrSourceTimeFormat::Iso) => Box::new(move |date: &str| {
+                let date_time = DateTime::parse_from_rfc3339(date)?;
+                Ok(date_time.timestamp_millis().into())
+            }),
+            Some(OgrSourceTimeFormat::Custom { custom_format }) => Box::new(move |date: &str| {
+                let date_time = DateTime::parse_from_str(date, &custom_format)?;
+                Ok(date_time.timestamp_millis().into())
+            }),
+            Some(OgrSourceTimeFormat::Seconds) => Box::new(move |date: &str| {
+                let date_time = DateTime::parse_from_str(date, "%C")?;
+                Ok(date_time.timestamp_millis().into())
+            }),
+        }
+    }
+
+    fn initialize_time_extractors(
+        dataset_information: &OgrSourceDataset,
+    ) -> Result<Box<dyn Fn(&Feature) -> Result<TimeInterval> + '_>> {
+        Ok(match dataset_information.time {
+            OgrSourceDatasetTimeType::None => {
+                Box::new(move |_feature: &Feature| Ok(TimeInterval::default()))
+            }
+            OgrSourceDatasetTimeType::Start => {
+                let time_start_column_name = dataset_information
+                    .columns
+                    .as_ref()
+                    .and_then(|c| c.time1.as_ref())
+                    .ok_or(Error::TimeIntervalColumnNameMissing)?;
+
+                let time_start_parser = Self::create_time_parser(&dataset_information.time1_format);
+
+                // TODO: use end of time if not present instead of throwing an error?
+                let duration = dataset_information
+                    .duration
+                    .ok_or(Error::TimeIntervalDurationMissing)?
+                    as i64;
+
+                Box::new(move |feature: &Feature| {
+                    // TODO: try to get time_t if GDAL OGR wrapper supports time type
+
+                    let field_value = feature
+                        .field(&time_start_column_name)?
+                        .into_string()
+                        .ok_or(Error::TimeIntervalColumnNameMissing)?;
+
+                    let time_start = time_start_parser(&field_value)?;
+
+                    TimeInterval::new(time_start, time_start + duration).map_err(Into::into)
+                })
+            }
+            OgrSourceDatasetTimeType::StartEnd => {
+                let time_start_column_name = dataset_information
+                    .columns
+                    .as_ref()
+                    .and_then(|c| c.time1.as_ref())
+                    .ok_or(Error::TimeIntervalColumnNameMissing)?;
+                let time_end_column_name = dataset_information
+                    .columns
+                    .as_ref()
+                    .and_then(|c| c.time2.as_ref())
+                    .ok_or(Error::TimeIntervalColumnNameMissing)?;
+
+                let time_start_parser = Self::create_time_parser(&dataset_information.time1_format);
+                let time_end_parser = Self::create_time_parser(&dataset_information.time2_format);
+
+                Box::new(move |feature: &Feature| {
+                    // TODO: try to get time_t if GDAL OGR wrapper supports time type
+
+                    let start_field_value = feature
+                        .field(&time_start_column_name)?
+                        .into_string()
+                        .ok_or(Error::TimeIntervalColumnNameMissing)?;
+
+                    let time_start = time_start_parser(&start_field_value)?;
+
+                    let end_field_value = feature
+                        .field(&time_end_column_name)?
+                        .into_string()
+                        .ok_or(Error::TimeIntervalColumnNameMissing)?;
+
+                    let time_end = time_end_parser(&end_field_value)?;
+
+                    TimeInterval::new(time_start, time_end).map_err(Into::into)
+                })
+            }
+            OgrSourceDatasetTimeType::StartDuration => {
+                let time_start_column_name = dataset_information
+                    .columns
+                    .as_ref()
+                    .and_then(|c| c.time1.as_ref())
+                    .ok_or(Error::TimeIntervalColumnNameMissing)?;
+                let duration_column_name = dataset_information
+                    .columns
+                    .as_ref()
+                    .and_then(|c| c.time2.as_ref())
+                    .ok_or(Error::TimeIntervalColumnNameMissing)?;
+
+                let time_start_parser = Self::create_time_parser(&dataset_information.time1_format);
+
+                Box::new(move |feature: &Feature| {
+                    // TODO: try to get time_t if GDAL OGR wrapper supports time type
+
+                    let start_field_value = feature
+                        .field(&time_start_column_name)?
+                        .into_string()
+                        .ok_or(Error::TimeIntervalColumnNameMissing)?;
+
+                    let time_start = time_start_parser(&start_field_value)?;
+
+                    let duration = i64::from(
+                        feature
+                            .field(&duration_column_name)?
+                            .into_int()
+                            .ok_or(Error::TimeIntervalColumnNameMissing)?,
+                    );
+
+                    TimeInterval::new(time_start, time_start + duration).map_err(Into::into)
+                })
+            }
+        })
+    }
+
+    fn initialize_types_and_builder(
+        dataset_information: &OgrSourceDataset,
+    ) -> (
+        HashMap<String, FeatureDataType>,
+        FeatureCollectionBuilder<G>,
     ) {
-        let mut work_query = match work_query_receiver.recv() {
-            Ok(work_query) => work_query,
-            Err(_) => return, // sender disconnected, so there will be no new work
-        };
-
-        let mut dataset = match Dataset::open(&dataset_information.filename) {
-            Ok(dataset) => dataset,
-            Err(error) => {
-                poll_result_sender.send(Some(Err(error.into()))).unwrap();
-                poll_result_sender.send(None).unwrap();
-                work_query.waker.wake();
-                return;
-            }
-        };
-        let layer = match dataset.layer_by_name(&dataset_information.layer_name) {
-            Ok(layer) => layer,
-            Err(error) => {
-                poll_result_sender.send(Some(Err(error.into()))).unwrap();
-                poll_result_sender.send(None).unwrap();
-                work_query.waker.wake();
-                return;
-            }
-        };
-
         let mut data_types = HashMap::new();
         let mut feature_collection_builder = FeatureCollection::<G>::builder();
         // TODO: what to do if there is nothing specified?
@@ -482,46 +639,37 @@ where
                     .unwrap();
             }
         }
-
-        let mut features = layer.features().peekable();
-
-        while features.peek().is_some() {
-            let batch_result = Self::compute_batch(
-                &mut features,
-                feature_collection_builder.clone(),
-                &data_types,
-            );
-
-            match poll_result_sender.send(Some(batch_result)) {
-                Ok(_) => work_query.waker.wake(),
-                Err(_) => return, // receiver disconnected, so this thread can abort
-            };
-
-            work_query = match work_query_receiver.recv() {
-                Ok(work_query) => work_query,
-                Err(_) => return, // sender disconnected, so there will be no new work
-            };
-        }
-
-        poll_result_sender.send(None).unwrap();
-        work_query.waker.wake();
+        (data_types, feature_collection_builder)
     }
 
     pub fn compute_batch(
         feature_iterator: &mut Peekable<FeatureIterator<'_>>,
         feature_collection_builder: FeatureCollectionBuilder<G>,
+        _dataset_information: &OgrSourceDataset,
         data_types: &HashMap<String, FeatureDataType>,
+        query_rectangle: &QueryRectangle,
+        time_extractor: &dyn Fn(&Feature) -> Result<TimeInterval>,
     ) -> Result<FeatureCollection<G>> {
         let mut builder = feature_collection_builder.finish_header();
 
         for feature in feature_iterator {
             let geometry = G::try_from(feature.geometry())?;
 
-            // TODO: filter by BBox
+            // filter out geometries that are not contained in the query's bounding box
+            if !geometry.intersects_bbox(query_rectangle.bbox) {
+                continue;
+            }
 
             builder.push_generic_geometry(geometry)?;
 
-            builder.push_time_interval(Default::default())?; // TODO: get from data
+            let time_interval = time_extractor(&feature)?;
+
+            // filter out data items not in the query time interval
+            if !time_interval.intersects(&query_rectangle.time_interval) {
+                continue;
+            }
+
+            builder.push_time_interval(time_interval)?;
 
             for (column, data_type) in data_types {
                 let field = feature.field(&column)?;
@@ -588,7 +736,7 @@ where
                     reason: "Channel on worker thread died".to_string(),
                 })));
             }
-        }
+        };
 
         if self.worker_thread_is_idle {
             let work_query = WorkQuery {
@@ -611,7 +759,7 @@ where
                         reason: "Channel on worker thread died".to_string(),
                     })));
                 }
-            }
+            };
         }
 
         Poll::Pending
@@ -831,7 +979,7 @@ mod tests {
 
         let query = query_processor.query(
             QueryRectangle {
-                bbox: BoundingBox2D::new((0.0, 0.0).into(), (1.0, 1.0).into())?,
+                bbox: BoundingBox2D::new((-180.0, -90.0).into(), (180.0, 90.0).into())?,
                 time_interval: Default::default(),
             },
             QueryContext { chunk_byte_size: 0 },

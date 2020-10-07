@@ -1,5 +1,5 @@
 use crate::collections::VectorDataType;
-use crate::primitives::{Geometry, GeometryRef};
+use crate::primitives::{BoundingBox2D, Geometry, GeometryRef};
 use crate::util::arrow::ArrowTyped;
 use arrow::array::{
     Array, ArrayBuilder, ArrayDataRef, ArrayEqual, ArrayRef, BooleanArray, JsonEqual,
@@ -18,6 +18,10 @@ pub struct NoGeometry;
 impl Geometry for NoGeometry {
     const IS_GEOMETRY: bool = false;
     const DATA_TYPE: VectorDataType = VectorDataType::Data;
+
+    fn intersects_bbox(&self, _bbox: BoundingBox2D) -> bool {
+        true
+    }
 }
 
 impl GeometryRef for NoGeometry {}

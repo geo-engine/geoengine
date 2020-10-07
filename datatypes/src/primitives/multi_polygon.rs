@@ -1,5 +1,5 @@
 use crate::collections::VectorDataType;
-use crate::primitives::{error, GeometryRef};
+use crate::primitives::{error, BoundingBox2D, GeometryRef};
 use crate::primitives::{Coordinate2D, Geometry};
 use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::Result;
@@ -77,6 +77,10 @@ impl MultiPolygonAccess<Polygon, Ring> for MultiPolygon {
 
 impl Geometry for MultiPolygon {
     const DATA_TYPE: VectorDataType = VectorDataType::MultiPolygon;
+
+    fn intersects_bbox(&self, _bbox: BoundingBox2D) -> bool {
+        todo!("implement")
+    }
 }
 
 impl AsRef<[Polygon]> for MultiPolygon {

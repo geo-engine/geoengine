@@ -1,3 +1,4 @@
+use chrono::ParseError;
 use failure::Fail; // TODO: replace failure in gdal and then remove
 use snafu::Snafu;
 use std::ops::Range;
@@ -74,6 +75,14 @@ pub enum Error {
     WorkerThread {
         reason: String,
     },
+
+    TimeIntervalColumnNameMissing,
+
+    TimeIntervalDurationMissing,
+
+    TimeParse {
+        source: chrono::format::ParseError,
+    },
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {
@@ -103,5 +112,11 @@ impl From<serde_json::Error> for Error {
         Self::SerdeJson {
             source: serde_json_error,
         }
+    }
+}
+
+impl From<chrono::format::ParseError> for Error {
+    fn from(source: ParseError) -> Self {
+        Self::TimeParse { source }
     }
 }

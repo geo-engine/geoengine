@@ -1,5 +1,5 @@
 use crate::collections::VectorDataType;
-use crate::primitives::{error, GeometryRef};
+use crate::primitives::{error, BoundingBox2D, GeometryRef};
 use crate::primitives::{Coordinate2D, Geometry};
 use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::Result;
@@ -53,6 +53,10 @@ impl MultiPointAccess for MultiPoint {
 
 impl Geometry for MultiPoint {
     const DATA_TYPE: VectorDataType = VectorDataType::MultiPoint;
+
+    fn intersects_bbox(&self, bbox: BoundingBox2D) -> bool {
+        self.coordinates.iter().all(|c| bbox.contains_coordinate(c))
+    }
 }
 
 impl AsRef<[Coordinate2D]> for MultiPoint {
