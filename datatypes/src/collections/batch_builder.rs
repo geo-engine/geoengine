@@ -15,7 +15,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 /// A feature collection builder that accepts arrow `Buffer`s filled with data. This allows to build
-/// a collection without copying data e.g. when the feature data is read from an `OpenCl` device
+/// a collection without copying data e.g. when the feature data is read from an Open CL device
 /// directly into an arrow buffer
 #[derive(Debug)]
 pub struct FeatureCollectionBatchBuilder {

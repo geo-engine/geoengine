@@ -77,7 +77,7 @@ impl RasterOperator for Expression {
                 })
             },
             self.raster_sources,
-            vec![], // TODO: is it ok to omit them?
+            vec![],
         )
         .map(InitializedOperatorImpl::boxed)
     }

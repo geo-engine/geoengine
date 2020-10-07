@@ -86,7 +86,7 @@ impl VectorArgument {
     }
 }
 
-/// Specifies input and output types of CL program and compiles the source into a reusable `CompiledCLProgram`
+/// Specifies input and output types of an Open CL program and compiles the source into a reusable `CompiledCLProgram`
 pub struct CLProgram {
     input_rasters: Vec<RasterArgument>,
     output_rasters: Vec<RasterArgument>,
