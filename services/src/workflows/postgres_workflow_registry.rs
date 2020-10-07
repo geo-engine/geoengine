@@ -17,7 +17,7 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    conn_pool: Pool<PostgresConnectionManager<Tls>>, // TODO: support Tls connection as well
+    conn_pool: Pool<PostgresConnectionManager<Tls>>,
 }
 
 impl<Tls> PostgresWorkflowRegistry<Tls>

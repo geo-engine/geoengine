@@ -77,7 +77,6 @@ where
     async fn update_schema(
         conn: PooledConnection<'_, PostgresConnectionManager<Tls>>,
     ) -> Result<()> {
-        // TODO: move to central place where all tables/schemata are managed
         let mut version = Self::schema_version(&conn).await?;
 
         loop {

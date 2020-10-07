@@ -29,7 +29,7 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    conn_pool: Pool<PostgresConnectionManager<Tls>>, // TODO: support Tls connection as well
+    conn_pool: Pool<PostgresConnectionManager<Tls>>,
 }
 
 impl<Tls> PostgresProjectDB<Tls>
@@ -297,18 +297,19 @@ where
         user: UserId,
         create: Validated<CreateProject>,
     ) -> Result<ProjectId> {
-        // TODO: transaction
-        let conn = self.conn_pool.get().await?;
+        let mut conn = self.conn_pool.get().await?;
 
         let project: Project = Project::from_create_project(create.user_input, user);
 
-        let stmt = conn
+        let trans = conn.build_transaction().start().await?;
+
+        let stmt = trans
             .prepare("INSERT INTO projects (id) VALUES ($1);")
             .await?;
 
-        conn.execute(&stmt, &[&project.id.uuid()]).await?;
+        trans.execute(&stmt, &[&project.id.uuid()]).await?;
 
-        let stmt = conn
+        let stmt = trans
             .prepare(
                 "INSERT INTO project_versions (
                     id,
@@ -335,41 +336,45 @@ where
             )
             .await?;
 
-        conn.execute(
-            &stmt,
-            &[
-                &ProjectVersionId::new().uuid(),
-                &project.id.uuid(),
-                &project.name,
-                &project.description,
-                &project.view.bounding_box.lower_left().x,
-                &project.view.bounding_box.lower_left().y,
-                &project.view.bounding_box.upper_right().x,
-                &project.view.bounding_box.upper_right().x,
-                &project.view.time_interval.start().as_naive_date_time(),
-                &project.view.time_interval.end().as_naive_date_time(),
-                &project.bounds.bounding_box.lower_left().x,
-                &project.bounds.bounding_box.lower_left().y,
-                &project.bounds.bounding_box.upper_right().x,
-                &project.bounds.bounding_box.upper_right().x,
-                &project.bounds.time_interval.start().as_naive_date_time(),
-                &project.bounds.time_interval.end().as_naive_date_time(),
-                &user.uuid(),
-            ],
-        )
-        .await?;
+        trans
+            .execute(
+                &stmt,
+                &[
+                    &ProjectVersionId::new().uuid(),
+                    &project.id.uuid(),
+                    &project.name,
+                    &project.description,
+                    &project.view.bounding_box.lower_left().x,
+                    &project.view.bounding_box.lower_left().y,
+                    &project.view.bounding_box.upper_right().x,
+                    &project.view.bounding_box.upper_right().x,
+                    &project.view.time_interval.start().as_naive_date_time(),
+                    &project.view.time_interval.end().as_naive_date_time(),
+                    &project.bounds.bounding_box.lower_left().x,
+                    &project.bounds.bounding_box.lower_left().y,
+                    &project.bounds.bounding_box.upper_right().x,
+                    &project.bounds.bounding_box.upper_right().x,
+                    &project.bounds.time_interval.start().as_naive_date_time(),
+                    &project.bounds.time_interval.end().as_naive_date_time(),
+                    &user.uuid(),
+                ],
+            )
+            .await?;
 
-        let stmt = conn
+        let stmt = trans
             .prepare(
                 "INSERT INTO user_project_permissions (user_id, project_id, permission) VALUES ($1, $2, $3);",
             )
             .await?;
 
-        conn.execute(
-            &stmt,
-            &[&user.uuid(), &project.id.uuid(), &ProjectPermission::Owner],
-        )
-        .await?;
+        trans
+            .execute(
+                &stmt,
+                &[&user.uuid(), &project.id.uuid(), &ProjectPermission::Owner],
+            )
+            .await?;
+
+        trans.commit().await?;
 
         Ok(project.id)
     }
@@ -385,19 +390,20 @@ where
         )
         .await?;
 
-        // TODO: transaction
-        let conn = self.conn_pool.get().await?;
+        let mut conn = self.conn_pool.get().await?;
 
-        let project = self.load_latest(user, update.id).await?;
+        let trans = conn.build_transaction().start().await?;
 
-        let stmt = conn
+        let project = self.load_latest(user, update.id).await?; // TODO: move inside transaction?
+
+        let stmt = trans
             .prepare("UPDATE project_versions SET latest = FALSE WHERE project_id = $1 AND latest IS TRUE;")
             .await?;
-        conn.execute(&stmt, &[&project.id.uuid()]).await?;
+        trans.execute(&stmt, &[&project.id.uuid()]).await?;
 
         let project = project.update_project(update, user);
 
-        let stmt = conn
+        let stmt = trans
             .prepare(
                 "
                 INSERT INTO project_versions (
@@ -425,32 +431,33 @@ where
             )
             .await?;
 
-        conn.execute(
-            &stmt,
-            &[
-                &project.version.id.uuid(),
-                &project.id.uuid(),
-                &project.name,
-                &project.description,
-                &project.view.bounding_box.lower_left().x,
-                &project.view.bounding_box.lower_left().y,
-                &project.view.bounding_box.upper_right().x,
-                &project.view.bounding_box.upper_right().x,
-                &project.view.time_interval.start().as_naive_date_time(),
-                &project.view.time_interval.end().as_naive_date_time(),
-                &project.bounds.bounding_box.lower_left().x,
-                &project.bounds.bounding_box.lower_left().y,
-                &project.bounds.bounding_box.upper_right().x,
-                &project.bounds.bounding_box.upper_right().x,
-                &project.bounds.time_interval.start().as_naive_date_time(),
-                &project.bounds.time_interval.end().as_naive_date_time(),
-                &user.uuid(),
-            ],
-        )
-        .await?;
+        trans
+            .execute(
+                &stmt,
+                &[
+                    &project.version.id.uuid(),
+                    &project.id.uuid(),
+                    &project.name,
+                    &project.description,
+                    &project.view.bounding_box.lower_left().x,
+                    &project.view.bounding_box.lower_left().y,
+                    &project.view.bounding_box.upper_right().x,
+                    &project.view.bounding_box.upper_right().x,
+                    &project.view.time_interval.start().as_naive_date_time(),
+                    &project.view.time_interval.end().as_naive_date_time(),
+                    &project.bounds.bounding_box.lower_left().x,
+                    &project.bounds.bounding_box.lower_left().y,
+                    &project.bounds.bounding_box.upper_right().x,
+                    &project.bounds.bounding_box.upper_right().x,
+                    &project.bounds.time_interval.start().as_naive_date_time(),
+                    &project.bounds.time_interval.end().as_naive_date_time(),
+                    &user.uuid(),
+                ],
+            )
+            .await?;
 
         for (idx, layer) in project.layers.iter().enumerate() {
-            let stmt = conn
+            let stmt = trans
                 .prepare(
                     "
                 INSERT INTO project_version_layers (
@@ -471,20 +478,23 @@ where
                 None
             };
 
-            conn.execute(
-                &stmt,
-                &[
-                    &project.id.uuid(),
-                    &project.version.id.uuid(),
-                    &(idx as i32),
-                    &layer.layer_type(),
-                    &layer.name,
-                    &layer.workflow.uuid(),
-                    &raster_colorizer,
-                ],
-            )
-            .await?;
+            trans
+                .execute(
+                    &stmt,
+                    &[
+                        &project.id.uuid(),
+                        &project.version.id.uuid(),
+                        &(idx as i32),
+                        &layer.layer_type(),
+                        &layer.name,
+                        &layer.workflow.uuid(),
+                        &raster_colorizer,
+                    ],
+                )
+                .await?;
         }
+
+        trans.commit().await?;
 
         Ok(())
     }
