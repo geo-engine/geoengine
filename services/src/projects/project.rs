@@ -1,10 +1,11 @@
-use crate::error;
 use crate::error::Error;
 use crate::error::Result;
 use crate::users::user::UserId;
+use crate::util::config::ProjectService;
 use crate::util::identifiers::Identifier;
 use crate::util::user_input::UserInput;
 use crate::workflows::workflow::WorkflowId;
+use crate::{error, util::config::get_config_element};
 use chrono::{DateTime, Utc};
 use geoengine_datatypes::operations::image::Colorizer;
 use geoengine_datatypes::primitives::{
@@ -247,7 +248,7 @@ pub struct ProjectListOptions {
 impl UserInput for ProjectListOptions {
     fn validate(&self) -> Result<(), Error> {
         ensure!(
-            self.limit <= 20, // TODO: configuration
+            self.limit <= get_config_element::<ProjectService>()?.list_limit,
             error::ProjectListFailed
         );
 

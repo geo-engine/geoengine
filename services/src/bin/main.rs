@@ -4,11 +4,6 @@ use tokio::sync::oneshot;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    // TODO: make configurable
-    let base_url = "http://localhost:3030/".to_string();
-
-    eprintln!("Starting server… {}", base_url);
-
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
 
     let (server, interrupt_success) = tokio::join!(

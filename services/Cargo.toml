@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = [
     "Christian Beilschmidt <beilschmidt@mathematik.uni-marburg.de>",
     "Johannes Drönner <droenner@mathematik.uni-marburg.de>",
-    "Michael Mattig <mattig@mathematik.uni-marburg.de>"
+    "Michael Mattig <mattig@mathematik.uni-marburg.de>",
 ]
 edition = "2018"
 
@@ -23,6 +23,8 @@ serde_urlencoded = "0.6"
 futures = "0.3"
 image = "0.23"
 async-trait = "0.1"
+config = "0.10"
+lazy_static = "1.4"
 
 [dev-dependencies]
 clap = "3.0.0-beta.1"

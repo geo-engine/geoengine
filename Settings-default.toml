@@ -1,0 +1,6 @@
+[web]
+bind_address = "127.0.0.1:3030"
+# external_address = "http://www.example.com"
+
+[postgres]
+config = "postgresql://geoengine:geoengine@localhost:5432"

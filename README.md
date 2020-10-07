@@ -16,3 +16,6 @@ before creating a pull request.
 ## Benchmarks
 For performance-critical features, we aim to provide benchmarks in the `benches` directory.
 If you plan on optimizing a feature of Geo Engine, please confirm it this way.
+
+## Running
+Copy `Settings-default.toml` to `Settings.toml` and edit per your requirements.

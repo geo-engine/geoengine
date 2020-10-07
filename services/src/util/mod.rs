@@ -2,6 +2,7 @@ use serde::de::Error;
 
 #[macro_use]
 pub mod identifiers;
+pub mod config;
 pub mod user_input;
 
 /// Serde deserializer <https://docs.rs/serde_qs/0.6.0/serde_qs/index.html#flatten-workaround>

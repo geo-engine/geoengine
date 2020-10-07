@@ -62,6 +62,16 @@ pub enum Error {
     NoWorkflowForGivenId,
 
     SessionNotInitialized,
+
+    ConfigLockFailed,
+
+    Config {
+        source: config::ConfigError,
+    },
+
+    AddrParse {
+        source: std::net::AddrParseError,
+    },
 }
 
 impl Reject for Error {}

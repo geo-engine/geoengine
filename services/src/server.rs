@@ -4,7 +4,10 @@ use crate::error;
 use crate::error::{Error, Result};
 use crate::handlers;
 use crate::handlers::{handle_rejection, InMemoryContext};
+use crate::util::config;
+use crate::util::config::get_config_element;
 use snafu::ResultExt;
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use tokio::signal;
 use tokio::sync::oneshot::{Receiver, Sender};
@@ -14,6 +17,22 @@ pub async fn start_server(
     shutdown_rx: Option<Receiver<()>>,
     static_files_dir: Option<PathBuf>,
 ) -> Result<()> {
+    let web_config: config::Web = get_config_element()?;
+    let bind_address = web_config
+        .bind_address
+        .parse::<SocketAddr>()
+        .context(error::AddrParse)?;
+
+    eprintln!(
+        "Starting server… {}",
+        format!(
+            "http://{}/",
+            web_config
+                .external_address
+                .unwrap_or(web_config.bind_address)
+        )
+    );
+
     let ctx = InMemoryContext::default();
 
     // TODO: hierarchical filters workflow -> (register, load), user -> (register, login, ...)
@@ -36,13 +55,12 @@ pub async fn start_server(
         .recover(handle_rejection);
 
     let task = if let Some(receiver) = shutdown_rx {
-        let (_, server) =
-            warp::serve(handler).bind_with_graceful_shutdown(([127, 0, 0, 1], 3030), async {
-                receiver.await.ok();
-            });
+        let (_, server) = warp::serve(handler).bind_with_graceful_shutdown(bind_address, async {
+            receiver.await.ok();
+        });
         tokio::task::spawn(server)
     } else {
-        let server = warp::serve(handler).bind(([127, 0, 0, 1], 3030));
+        let server = warp::serve(handler).bind(bind_address);
         tokio::task::spawn(server)
     };
 
