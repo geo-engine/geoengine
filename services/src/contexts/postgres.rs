@@ -61,7 +61,7 @@ where
                 if let Some(code) = e.code() {
                     if *code == SqlState::UNDEFINED_TABLE {
                         // TODO: log
-                        println!("UserDB: Uninitialized schema");
+                        eprintln!("UserDB: Uninitialized schema");
                         return Ok(0);
                     }
                 }
@@ -166,7 +166,7 @@ where
                     )
                     .await?;
                     // TODO log
-                    println!("Updated user database to schema version {}", version + 1);
+                    eprintln!("Updated user database to schema version {}", version + 1);
                 }
                 // 1 => {
                 // next version
@@ -178,7 +178,7 @@ where
                 //     ",
                 // )
                 // .await?;
-                // println!("Updated user database to schema version {}", version + 1);
+                // eprintln!("Updated user database to schema version {}", version + 1);
                 // }
                 _ => return Ok(()),
             }
