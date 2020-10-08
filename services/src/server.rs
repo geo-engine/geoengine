@@ -4,7 +4,7 @@ use crate::contexts::InMemoryContext;
 use crate::error;
 use crate::error::{Error, Result};
 use crate::handlers;
-use crate::handlers::{handle_rejection, InMemoryContext};
+use crate::handlers::handle_rejection;
 use crate::util::config;
 use crate::util::config::get_config_element;
 use snafu::ResultExt;

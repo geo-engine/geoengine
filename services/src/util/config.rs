@@ -94,7 +94,7 @@ impl ConfigElement for Postgres {
 
 #[derive(Debug, Deserialize)]
 pub struct ProjectService {
-    pub list_limit: usize,
+    pub list_limit: u32,
 }
 
 impl ConfigElement for ProjectService {
