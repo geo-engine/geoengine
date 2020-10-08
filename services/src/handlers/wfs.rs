@@ -159,12 +159,14 @@ async fn get_feature<C: Context>(
     }
 
     let workflow: Workflow = match request.type_names.namespace.as_deref() {
-        Some("registry") => ctx
-            .workflow_registry_ref()
-            .await
-            .load(&WorkflowId::from_uuid(
-                Uuid::parse_str(&request.type_names.feature_type).context(error::Uuid)?,
-            ))?,
+        Some("registry") => {
+            ctx.workflow_registry_ref()
+                .await
+                .load(&WorkflowId::from_uuid(
+                    Uuid::parse_str(&request.type_names.feature_type).context(error::Uuid)?,
+                ))
+                .await?
+        }
         Some("json") => {
             serde_json::from_str(&request.type_names.feature_type).context(error::SerdeJson)?
         }
@@ -307,8 +309,7 @@ mod tests {
     use geoengine_operators::source::CsvSourceParameters;
 
     use super::*;
-    use crate::handlers::InMemoryContext;
-    use crate::workflows::workflow::Workflow;
+    use crate::{contexts::InMemoryContext, workflows::workflow::Workflow};
     use geoengine_operators::engine::TypedOperator;
     use geoengine_operators::source::csv::{
         CsvGeometrySpecification, CsvSource, CsvTimeSpecification,
@@ -466,6 +467,7 @@ x;y
             .write()
             .await
             .register(workflow.clone())
+            .await
             .unwrap();
 
         let res = warp::test::request()

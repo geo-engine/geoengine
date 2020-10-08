@@ -26,7 +26,8 @@ async fn create_project<C: Context>(
     let id = ctx
         .project_db_ref_mut()
         .await
-        .create(ctx.session()?.user, create);
+        .create(ctx.session()?.user, create)
+        .await?;
     Ok(warp::reply::json(&id))
 }
 
@@ -49,7 +50,8 @@ async fn list_projects<C: Context>(
     let listing = ctx
         .project_db_ref()
         .await
-        .list(ctx.session()?.user, options);
+        .list(ctx.session()?.user, options)
+        .await?;
     Ok(warp::reply::json(&listing))
 }
 
@@ -76,7 +78,8 @@ async fn load_project<C: Context>(
     let id = ctx
         .project_db_ref()
         .await
-        .load(ctx.session()?.user, project, version)?;
+        .load(ctx.session()?.user, project, version)
+        .await?;
     Ok(warp::reply::json(&id))
 }
 
@@ -98,7 +101,8 @@ async fn update_project<C: Context>(
     let update = update.validated()?;
     ctx.project_db_ref_mut()
         .await
-        .update(ctx.session()?.user, update)?;
+        .update(ctx.session()?.user, update)
+        .await?;
     Ok(warp::reply())
 }
 
@@ -119,7 +123,8 @@ async fn delete_project<C: Context>(
 ) -> Result<impl warp::Reply, warp::Rejection> {
     ctx.project_db_ref_mut()
         .await
-        .delete(ctx.session()?.user, project)?;
+        .delete(ctx.session()?.user, project)
+        .await?;
     Ok(warp::reply())
 }
 
@@ -141,7 +146,8 @@ async fn project_versions<C: Context>(
     let versions = ctx
         .project_db_ref_mut()
         .await
-        .versions(ctx.session()?.user, project)?;
+        .versions(ctx.session()?.user, project)
+        .await?;
     Ok(warp::reply::json(&versions))
 }
 
@@ -162,7 +168,8 @@ async fn add_permission<C: Context>(
 ) -> Result<impl warp::Reply, warp::Rejection> {
     ctx.project_db_ref_mut()
         .await
-        .add_permission(ctx.session()?.user, permission)?;
+        .add_permission(ctx.session()?.user, permission)
+        .await?;
     Ok(warp::reply())
 }
 
@@ -183,7 +190,8 @@ async fn remove_permission<C: Context>(
 ) -> Result<impl warp::Reply, warp::Rejection> {
     ctx.project_db_ref_mut()
         .await
-        .remove_permission(ctx.session()?.user, permission)?;
+        .remove_permission(ctx.session()?.user, permission)
+        .await?;
     Ok(warp::reply())
 }
 
@@ -205,22 +213,25 @@ async fn list_permissions<C: Context>(
     let permissions = ctx
         .project_db_ref_mut()
         .await
-        .list_permissions(ctx.session()?.user, project)?;
+        .list_permissions(ctx.session()?.user, project)
+        .await?;
     Ok(warp::reply::json(&permissions))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::handlers::InMemoryContext;
-    use crate::projects::project::{
-        Layer, LayerInfo, OrderBy, Project, ProjectFilter, ProjectId, ProjectListing,
-        ProjectPermission, ProjectVersion, RasterInfo, STRectangle, UpdateProject,
-    };
     use crate::users::user::{UserCredentials, UserRegistration};
     use crate::users::userdb::UserDB;
     use crate::util::identifiers::Identifier;
     use crate::workflows::workflow::WorkflowId;
+    use crate::{
+        contexts::InMemoryContext,
+        projects::project::{
+            Layer, LayerInfo, OrderBy, Project, ProjectFilter, ProjectId, ProjectListing,
+            ProjectPermission, ProjectVersion, RasterInfo, STRectangle, UpdateProject,
+        },
+    };
     use geoengine_datatypes::operations::image::Colorizer;
 
     #[tokio::test]
@@ -239,6 +250,7 @@ mod tests {
                 .validated()
                 .unwrap(),
             )
+            .await
             .unwrap();
 
         let session = ctx
@@ -249,6 +261,7 @@ mod tests {
                 email: "foo@bar.de".to_string(),
                 password: "secret123".to_string(),
             })
+            .await
             .unwrap();
 
         let create = CreateProject {
@@ -262,7 +275,7 @@ mod tests {
             .method("POST")
             .path("/project/create")
             .header("Content-Length", "0")
-            .header("Authorization", session.token.to_string())
+            .header("Authorization", session.id.to_string())
             .json(&create)
             .reply(&create_project_handler(ctx))
             .await;
@@ -289,6 +302,7 @@ mod tests {
                 .validated()
                 .unwrap(),
             )
+            .await
             .unwrap();
 
         let session = ctx
@@ -299,6 +313,7 @@ mod tests {
                 email: "foo@bar.de".to_string(),
                 password: "secret123".to_string(),
             })
+            .await
             .unwrap();
 
         for i in 0..10 {
@@ -310,7 +325,12 @@ mod tests {
             }
             .validated()
             .unwrap();
-            ctx.project_db().write().await.create(session.user, create);
+            ctx.project_db()
+                .write()
+                .await
+                .create(session.user, create)
+                .await
+                .unwrap();
         }
 
         let options = ProjectListOptions {
@@ -329,7 +349,7 @@ mod tests {
             .method("POST")
             .path("/project/list")
             .header("Content-Length", "0")
-            .header("Authorization", session.token.to_string())
+            .header("Authorization", session.id.to_string())
             .json(&options)
             .reply(&list_projects_handler(ctx))
             .await;
@@ -358,6 +378,7 @@ mod tests {
                 .validated()
                 .unwrap(),
             )
+            .await
             .unwrap();
 
         let session = ctx
@@ -368,25 +389,32 @@ mod tests {
                 email: "foo@bar.de".to_string(),
                 password: "secret123".to_string(),
             })
+            .await
             .unwrap();
 
-        let project = ctx.project_db().write().await.create(
-            session.user,
-            CreateProject {
-                name: "Test".to_string(),
-                description: "Foo".to_string(),
-                view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
-                bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
-            }
-            .validated()
-            .unwrap(),
-        );
+        let project = ctx
+            .project_db()
+            .write()
+            .await
+            .create(
+                session.user,
+                CreateProject {
+                    name: "Test".to_string(),
+                    description: "Foo".to_string(),
+                    view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+                    bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
 
         let res = warp::test::request()
             .method("POST")
             .path("/project/load")
             .header("Content-Length", "0")
-            .header("Authorization", session.token.to_string())
+            .header("Authorization", session.id.to_string())
             .json(&project)
             .reply(&load_project_handler(ctx))
             .await;
@@ -413,6 +441,7 @@ mod tests {
                 .validated()
                 .unwrap(),
             )
+            .await
             .unwrap();
 
         let session = ctx
@@ -423,39 +452,51 @@ mod tests {
                 email: "foo@bar.de".to_string(),
                 password: "secret123".to_string(),
             })
+            .await
             .unwrap();
 
-        let project = ctx.project_db().write().await.create(
-            session.user,
-            CreateProject {
-                name: "Test".to_string(),
-                description: "Foo".to_string(),
-                view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
-                bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
-            }
-            .validated()
-            .unwrap(),
-        );
+        let project = ctx
+            .project_db()
+            .write()
+            .await
+            .create(
+                session.user,
+                CreateProject {
+                    name: "Test".to_string(),
+                    description: "Foo".to_string(),
+                    view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+                    bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
 
-        let _ = ctx.project_db().write().await.update(
-            session.user,
-            UpdateProject {
-                id: project,
-                name: Some("TestUpdate".to_string()),
-                description: None,
-                layers: None,
-                view: None,
-                bounds: None,
-            }
-            .validated()
-            .unwrap(),
-        );
+        ctx.project_db()
+            .write()
+            .await
+            .update(
+                session.user,
+                UpdateProject {
+                    id: project,
+                    name: Some("TestUpdate".to_string()),
+                    description: None,
+                    layers: None,
+                    view: None,
+                    bounds: None,
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
 
         let res = warp::test::request()
             .method("POST")
             .path("/project/load")
             .header("Content-Length", "0")
-            .header("Authorization", session.token.to_string())
+            .header("Authorization", session.id.to_string())
             .json(&project)
             .reply(&load_project_handler(ctx.clone()))
             .await;
@@ -473,6 +514,7 @@ mod tests {
             .read()
             .await
             .versions(session.user, project)
+            .await
             .unwrap();
         let version_id = versions.first().unwrap().id;
 
@@ -480,7 +522,7 @@ mod tests {
             .method("POST")
             .path(&format!("/project/load/{}", version_id.to_string()))
             .header("Content-Length", "0")
-            .header("Authorization", session.token.to_string())
+            .header("Authorization", session.id.to_string())
             .json(&project)
             .reply(&load_project_handler(ctx))
             .await;
@@ -507,6 +549,7 @@ mod tests {
                 .validated()
                 .unwrap(),
             )
+            .await
             .unwrap();
 
         let session = ctx
@@ -517,19 +560,26 @@ mod tests {
                 email: "foo@bar.de".to_string(),
                 password: "secret123".to_string(),
             })
+            .await
             .unwrap();
 
-        let project = ctx.project_db().write().await.create(
-            session.user,
-            CreateProject {
-                name: "Test".to_string(),
-                description: "Foo".to_string(),
-                view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
-                bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
-            }
-            .validated()
-            .unwrap(),
-        );
+        let project = ctx
+            .project_db()
+            .write()
+            .await
+            .create(
+                session.user,
+                CreateProject {
+                    name: "Test".to_string(),
+                    description: "Foo".to_string(),
+                    view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+                    bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
 
         let update = UpdateProject {
             id: project,
@@ -550,7 +600,7 @@ mod tests {
             .method("POST")
             .path("/project/update")
             .header("Content-Length", "0")
-            .header("Authorization", session.token.to_string())
+            .header("Authorization", session.id.to_string())
             .json(&update)
             .reply(&update_project_handler(ctx.clone()))
             .await;
@@ -562,6 +612,7 @@ mod tests {
             .read()
             .await
             .load_latest(session.user, project)
+            .await
             .unwrap();
         assert_eq!(loaded.name, "TestUpdate");
         assert_eq!(loaded.layers.len(), 1);
@@ -583,6 +634,7 @@ mod tests {
                 .validated()
                 .unwrap(),
             )
+            .await
             .unwrap();
 
         let session = ctx
@@ -593,25 +645,32 @@ mod tests {
                 email: "foo@bar.de".to_string(),
                 password: "secret123".to_string(),
             })
+            .await
             .unwrap();
 
-        let project = ctx.project_db().write().await.create(
-            session.user,
-            CreateProject {
-                name: "Test".to_string(),
-                description: "Foo".to_string(),
-                view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
-                bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
-            }
-            .validated()
-            .unwrap(),
-        );
+        let project = ctx
+            .project_db()
+            .write()
+            .await
+            .create(
+                session.user,
+                CreateProject {
+                    name: "Test".to_string(),
+                    description: "Foo".to_string(),
+                    view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+                    bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
 
         let res = warp::test::request()
             .method("POST")
             .path("/project/delete")
             .header("Content-Length", "0")
-            .header("Authorization", session.token.to_string())
+            .header("Authorization", session.id.to_string())
             .json(&project)
             .reply(&delete_project_handler(ctx.clone()))
             .await;
@@ -623,13 +682,14 @@ mod tests {
             .read()
             .await
             .load_latest(session.user, project)
+            .await
             .is_err());
 
         let res = warp::test::request()
             .method("POST")
             .path("/project/delete")
             .header("Content-Length", "0")
-            .header("Authorization", session.token.to_string())
+            .header("Authorization", session.id.to_string())
             .json(&project)
             .reply(&delete_project_handler(ctx))
             .await;
@@ -653,6 +713,7 @@ mod tests {
                 .validated()
                 .unwrap(),
             )
+            .await
             .unwrap();
 
         let session = ctx
@@ -663,19 +724,26 @@ mod tests {
                 email: "foo@bar.de".to_string(),
                 password: "secret123".to_string(),
             })
+            .await
             .unwrap();
 
-        let project = ctx.project_db().write().await.create(
-            session.user,
-            CreateProject {
-                name: "Test".to_string(),
-                description: "Foo".to_string(),
-                view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
-                bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
-            }
-            .validated()
-            .unwrap(),
-        );
+        let project = ctx
+            .project_db()
+            .write()
+            .await
+            .create(
+                session.user,
+                CreateProject {
+                    name: "Test".to_string(),
+                    description: "Foo".to_string(),
+                    view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+                    bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
 
         let _ = ctx.project_db().write().await.update(
             session.user,
@@ -695,7 +763,7 @@ mod tests {
             .method("GET")
             .path("/project/versions")
             .header("Content-Length", "0")
-            .header("Authorization", session.token.to_string())
+            .header("Authorization", session.id.to_string())
             .json(&project)
             .reply(&project_versions_handler(ctx))
             .await;
@@ -722,6 +790,7 @@ mod tests {
                 .validated()
                 .unwrap(),
             )
+            .await
             .unwrap();
 
         let target_user = ctx
@@ -737,6 +806,7 @@ mod tests {
                 .validated()
                 .unwrap(),
             )
+            .await
             .unwrap();
 
         let session = ctx
@@ -747,19 +817,26 @@ mod tests {
                 email: "foo@bar.de".to_string(),
                 password: "secret123".to_string(),
             })
+            .await
             .unwrap();
 
-        let project = ctx.project_db().write().await.create(
-            session.user,
-            CreateProject {
-                name: "Test".to_string(),
-                description: "Foo".to_string(),
-                view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
-                bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
-            }
-            .validated()
-            .unwrap(),
-        );
+        let project = ctx
+            .project_db()
+            .write()
+            .await
+            .create(
+                session.user,
+                CreateProject {
+                    name: "Test".to_string(),
+                    description: "Foo".to_string(),
+                    view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+                    bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
 
         let permission = UserProjectPermission {
             user: target_user,
@@ -771,7 +848,7 @@ mod tests {
             .method("POST")
             .path("/project/permission/add")
             .header("Content-Length", "0")
-            .header("Authorization", session.token.to_string())
+            .header("Authorization", session.id.to_string())
             .json(&permission)
             .reply(&add_permission_handler(ctx.clone()))
             .await;
@@ -783,6 +860,7 @@ mod tests {
             .write()
             .await
             .load_latest(target_user, project)
+            .await
             .is_ok());
     }
 
@@ -802,6 +880,7 @@ mod tests {
                 .validated()
                 .unwrap(),
             )
+            .await
             .unwrap();
 
         let target_user = ctx
@@ -817,6 +896,7 @@ mod tests {
                 .validated()
                 .unwrap(),
             )
+            .await
             .unwrap();
 
         let session = ctx
@@ -827,19 +907,26 @@ mod tests {
                 email: "foo@bar.de".to_string(),
                 password: "secret123".to_string(),
             })
+            .await
             .unwrap();
 
-        let project = ctx.project_db().write().await.create(
-            session.user,
-            CreateProject {
-                name: "Test".to_string(),
-                description: "Foo".to_string(),
-                view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
-                bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
-            }
-            .validated()
-            .unwrap(),
-        );
+        let project = ctx
+            .project_db()
+            .write()
+            .await
+            .create(
+                session.user,
+                CreateProject {
+                    name: "Test".to_string(),
+                    description: "Foo".to_string(),
+                    view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+                    bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
 
         let permission = UserProjectPermission {
             user: target_user,
@@ -851,13 +938,14 @@ mod tests {
             .write()
             .await
             .add_permission(session.user, permission.clone())
+            .await
             .unwrap();
 
         let res = warp::test::request()
             .method("POST")
             .path("/project/permission/remove")
             .header("Content-Length", "0")
-            .header("Authorization", session.token.to_string())
+            .header("Authorization", session.id.to_string())
             .json(&permission)
             .reply(&remove_permission_handler(ctx.clone()))
             .await;
@@ -869,6 +957,7 @@ mod tests {
             .write()
             .await
             .load_latest(target_user, project)
+            .await
             .is_err());
     }
 
@@ -888,6 +977,7 @@ mod tests {
                 .validated()
                 .unwrap(),
             )
+            .await
             .unwrap();
 
         let target_user = ctx
@@ -903,6 +993,7 @@ mod tests {
                 .validated()
                 .unwrap(),
             )
+            .await
             .unwrap();
 
         let session = ctx
@@ -913,19 +1004,26 @@ mod tests {
                 email: "foo@bar.de".to_string(),
                 password: "secret123".to_string(),
             })
+            .await
             .unwrap();
 
-        let project = ctx.project_db().write().await.create(
-            session.user,
-            CreateProject {
-                name: "Test".to_string(),
-                description: "Foo".to_string(),
-                view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
-                bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
-            }
-            .validated()
-            .unwrap(),
-        );
+        let project = ctx
+            .project_db()
+            .write()
+            .await
+            .create(
+                session.user,
+                CreateProject {
+                    name: "Test".to_string(),
+                    description: "Foo".to_string(),
+                    view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+                    bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
 
         let permission = UserProjectPermission {
             user: target_user,
@@ -937,13 +1035,14 @@ mod tests {
             .write()
             .await
             .add_permission(session.user, permission.clone())
+            .await
             .unwrap();
 
         let res = warp::test::request()
             .method("POST")
             .path("/project/permission/list")
             .header("Content-Length", "0")
-            .header("Authorization", session.token.to_string())
+            .header("Authorization", session.id.to_string())
             .json(&project)
             .reply(&list_permissions_handler(ctx))
             .await;
