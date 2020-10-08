@@ -32,7 +32,11 @@ async fn register_workflow<C: Context>(
     workflow: Workflow,
     ctx: C,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    let id = ctx.workflow_registry_ref_mut().await.register(workflow)?;
+    let id = ctx
+        .workflow_registry_ref_mut()
+        .await
+        .register(workflow)
+        .await?;
     Ok(warp::reply::json(&id))
 }
 
@@ -40,15 +44,15 @@ async fn load_workflow<C: Context>(id: Uuid, ctx: C) -> Result<impl warp::Reply,
     let wf = ctx
         .workflow_registry_ref()
         .await
-        .load(&WorkflowId::from_uuid(id))?;
+        .load(&WorkflowId::from_uuid(id))
+        .await?;
     Ok(warp::reply::json(&wf).into_response())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::handlers::InMemoryContext;
-    use crate::workflows::registry::WorkflowRegistry;
+    use crate::{contexts::InMemoryContext, workflows::registry::WorkflowRegistry};
     use geoengine_operators::engine::VectorOperator;
     use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
 
@@ -100,6 +104,7 @@ mod tests {
             .write()
             .await
             .register(workflow.clone())
+            .await
             .unwrap();
 
         let res = warp::test::request()

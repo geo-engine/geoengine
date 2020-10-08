@@ -22,7 +22,7 @@ async fn register_user<C: Context>(
     ctx: C,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let user = user.validated()?;
-    let id = ctx.user_db_ref_mut().await.register(user)?;
+    let id = ctx.user_db_ref_mut().await.register(user).await?;
     Ok(warp::reply::json(&id))
 }
 
@@ -41,7 +41,7 @@ async fn login<C: Context>(
     user: UserCredentials,
     ctx: C,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    match ctx.user_db_ref_mut().await.login(user) {
+    match ctx.user_db_ref_mut().await.login(user).await {
         Ok(id) => Ok(warp::reply::json(&id).into_response()),
         Err(_) => Ok(warp::http::StatusCode::UNAUTHORIZED.into_response()),
     }
@@ -58,7 +58,7 @@ pub fn logout_handler<C: Context>(
 
 // TODO: move into handler once async closures are available?
 async fn logout<C: Context>(ctx: C) -> Result<impl warp::Reply, warp::Rejection> {
-    match ctx.user_db_ref_mut().await.logout(ctx.session()?.token) {
+    match ctx.user_db_ref_mut().await.logout(ctx.session()?.id).await {
         Ok(_) => Ok(warp::reply().into_response()),
         Err(_) => Ok(warp::http::StatusCode::UNAUTHORIZED.into_response()),
     }
@@ -67,11 +67,11 @@ async fn logout<C: Context>(ctx: C) -> Result<impl warp::Reply, warp::Rejection>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::handlers::{handle_rejection, InMemoryContext};
     use crate::users::session::Session;
     use crate::users::user::UserId;
     use crate::users::userdb::UserDB;
     use crate::util::user_input::Validated;
+    use crate::{contexts::InMemoryContext, handlers::handle_rejection};
 
     #[tokio::test]
     async fn register() {
@@ -132,7 +132,7 @@ mod tests {
             },
         };
 
-        ctx.user_db().write().await.register(user).unwrap();
+        ctx.user_db().write().await.register(user).await.unwrap();
 
         let credentials = UserCredentials {
             email: "foo@bar.de".to_string(),
@@ -165,7 +165,7 @@ mod tests {
             },
         };
 
-        ctx.user_db().write().await.register(user).unwrap();
+        ctx.user_db().write().await.register(user).await.unwrap();
 
         let credentials = UserCredentials {
             email: "foo@bar.de".to_string(),
@@ -195,19 +195,25 @@ mod tests {
             },
         };
 
-        ctx.user_db().write().await.register(user).unwrap();
+        ctx.user_db().write().await.register(user).await.unwrap();
 
         let credentials = UserCredentials {
             email: "foo@bar.de".to_string(),
             password: "secret123".to_string(),
         };
 
-        let session = ctx.user_db().write().await.login(credentials).unwrap();
+        let session = ctx
+            .user_db()
+            .write()
+            .await
+            .login(credentials)
+            .await
+            .unwrap();
 
         let res = warp::test::request()
             .method("POST")
             .path("/user/logout")
-            .header("Authorization", session.token.to_string())
+            .header("Authorization", session.id.to_string())
             .reply(&logout_handler(ctx))
             .await;
 
