@@ -1,5 +1,6 @@
 use warp::{Filter, Rejection};
 
+use crate::contexts::InMemoryContext;
 use crate::error;
 use crate::error::{Error, Result};
 use crate::handlers;
@@ -33,6 +34,7 @@ pub async fn start_server(
         )
     );
 
+    // TODO: make configurable
     let ctx = InMemoryContext::default();
 
     // TODO: hierarchical filters workflow -> (register, load), user -> (register, login, ...)

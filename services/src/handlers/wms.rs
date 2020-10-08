@@ -138,7 +138,8 @@ async fn get_map<C: Context>(
         .await
         .load(&WorkflowId::from_uuid(
             Uuid::parse_str(&request.layers).context(error::Uuid)?,
-        ))?;
+        ))
+        .await?;
 
     let operator = workflow.operator.get_raster().context(error::Operator)?;
 
@@ -296,9 +297,8 @@ mod tests {
     };
 
     use super::*;
-    use crate::handlers::InMemoryContext;
-    use crate::ogc::wms::request::GetMapFormat;
     use crate::workflows::workflow::Workflow;
+    use crate::{contexts::InMemoryContext, ogc::wms::request::GetMapFormat};
     use xml::ParserConfig;
 
     #[tokio::test]
@@ -457,6 +457,7 @@ mod tests {
             .write()
             .await
             .register(workflow.clone())
+            .await
             .unwrap();
 
         let res = warp::test::request()
@@ -492,6 +493,7 @@ mod tests {
             .write()
             .await
             .register(workflow.clone())
+            .await
             .unwrap();
 
         let res = warp::test::request()
