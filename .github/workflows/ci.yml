@@ -13,12 +13,13 @@ jobs:
 
     services:
       postgres:
-        image: postgres:11.6-alpine
+        image: postgres
         env:
-          POSTGRES_PASSWORD: password
+          POSTGRES_USER: geoengine
+          POSTGRES_PASSWORD: geoengine
+          POSTGRES_DB: geoengine
         ports:
           - 5432:5432
-        # needed because the postgres container does not provide a healthcheck
         options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
 
     strategy:
@@ -27,6 +28,48 @@ jobs:
           - ubuntu-18.04
 
     steps:
-      - name: Check psq
+      - name: Checkout code
+        uses: actions/checkout@v1
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly-2020-09-14
+          components: clippy, rustfmt
+          override: true
+      - name: Install OpenCL
         run: |
-          PGPASSWORD=password psql -U postgres -h localhost -c "SELECT version();"
+          sudo apt-get update
+          sudo apt-get install ocl-icd-opencl-dev pocl-opencl-icd
+          sudo ln -s /usr/lib/llvm-6.0/lib/clang/6.0.1 /usr/lib/llvm-6.0/lib/clang/6.0.0
+      - name: Install GDAL
+        run: |
+          sudo apt-get update
+          sudo apt-get install libgdal-dev gdal-bin build-essential
+          export C_INCLUDE_PATH=/usr/include/gdal:$C_INCLUDE_PATH
+          export CPLUS_INCLUDE_PATH=/usr/include/gdal:$CPLUS_INCLUDE_PATH
+          sudo ldconfig
+      - name: Setup building
+        run: |
+          export CC="clang-9"
+          export CXX="clang++-9"
+      - name: Check with Rustfmt
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --all -- --check
+      - name: Check with Clippy
+        uses: actions-rs/clippy-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --all-targets --all-features -- -D warnings
+      - name: Build
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --all-features --verbose
+      - name: Run tests
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --all-features --verbose
