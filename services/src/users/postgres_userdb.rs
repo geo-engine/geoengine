@@ -137,7 +137,6 @@ mod tests {
     use std::str::FromStr;
 
     #[tokio::test]
-    #[ignore]
     async fn test() {
         // TODO: load from test config
         // TODO: add postgres to ci
