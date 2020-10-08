@@ -29,4 +29,4 @@ jobs:
     steps:
       - name: Check psq
         run: |
-          psql -h localhost -c "SELECT version();"
+          PGPASSWORD=password psql -U postgres -h localhost -c "SELECT version();"
