@@ -1,12 +1,37 @@
-services:
-  postgres:
-    image: postgresql
-    ports:
-      - 5432/tcp
-    options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+name: Rust
 
-addons:
-  postgresql
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
 
-script:
-  - psql -c "SELECT version();"
+jobs:
+  build:
+
+    runs-on: ${{matrix.os}}
+
+    services:
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_USER: geoengine
+          POSTGRES_PASSWORD: geoengine
+          POSTGRES_DB: geoengine
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432/tcp
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+
+    addons:
+      postgresql
+
+    strategy:
+      matrix:
+        os:
+          - ubuntu-18.04
+
+    steps:
+      - name: Check psq
+        run: |
+          psql -c "SELECT version();"
