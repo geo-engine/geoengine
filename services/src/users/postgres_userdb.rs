@@ -140,7 +140,7 @@ mod tests {
     async fn test() {
         // TODO: load from test config
         let config = tokio_postgres::config::Config::from_str(
-            "postgresql://geoengine:geoengine@postgres:5432",
+            "postgresql://geoengine:geoengine@localhost:5432",
         )
         .unwrap();
 
