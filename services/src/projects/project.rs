@@ -13,7 +13,6 @@ use geoengine_datatypes::{operations::image::Colorizer, primitives::TimeInstance
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
-use std::cmp::Ordering;
 use uuid::Uuid;
 
 identifier!(ProjectId);
@@ -331,12 +330,6 @@ impl ProjectVersion {
             changed: chrono::offset::Utc::now(),
             author: user,
         }
-    }
-}
-
-impl PartialOrd for ProjectVersion {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.changed.partial_cmp(&other.changed)
     }
 }
 
