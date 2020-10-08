@@ -25,6 +25,8 @@ use crate::engine::{
 };
 use crate::error;
 use crate::util::Result;
+use failure::_core::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 
 /// Parameters for the CSV Source Operator
 ///
@@ -131,13 +133,10 @@ pub struct CsvSourceStream {
     parameters: CsvSourceParameters,
     bbox: BoundingBox2D,
     chunk_size: usize,
-    state: Arc<Mutex<CsvSourceStreamState>>,
-}
-
-pub struct CsvSourceStreamState {
-    csv_reader: ReaderState,
+    reader_state: Arc<Mutex<ReaderState>>,
+    thread_is_computing: Arc<AtomicBool>,
     #[allow(clippy::option_option)]
-    poll_result: Option<Option<Result<MultiPointCollection>>>,
+    poll_result: Arc<Mutex<Option<Option<Result<MultiPointCollection>>>>>,
 }
 
 pub type CsvSource = SourceOperator<CsvSourceParameters>;
@@ -200,16 +199,15 @@ impl CsvSourceStream {
         );
 
         Ok(Self {
-            state: Arc::new(Mutex::new(CsvSourceStreamState {
-                poll_result: None,
-                csv_reader: ReaderState::Untouched(
-                    csv::ReaderBuilder::new()
-                        .delimiter(parameters.field_separator as u8)
-                        .has_headers(true)
-                        .from_path(parameters.file_path.as_path())
-                        .context(error::CsvSourceReader {})?,
-                ),
-            })),
+            reader_state: Arc::new(Mutex::new(ReaderState::Untouched(
+                csv::ReaderBuilder::new()
+                    .delimiter(parameters.field_separator as u8)
+                    .has_headers(true)
+                    .from_path(parameters.file_path.as_path())
+                    .context(error::CsvSourceReader {})?,
+            ))),
+            thread_is_computing: Arc::new(AtomicBool::new(false)),
+            poll_result: Arc::new(Mutex::new(None)),
             parameters,
             bbox,
             chunk_size,
@@ -286,26 +284,37 @@ impl Stream for CsvSourceStream {
     type Item = Result<MultiPointCollection>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let mut state = self.state.lock().unwrap(); // TODO: handle lock poisoning
-        if state.poll_result.is_some() {
-            let x = state.poll_result.take().unwrap();
+        // TODO: handle lock on multiple occasions
+
+        if self.thread_is_computing.load(Ordering::Relaxed) {
+            return Poll::Pending;
+        }
+
+        let mut poll_result = self.poll_result.lock().unwrap();
+        if poll_result.is_some() {
+            let x = poll_result.take().unwrap();
             return Poll::Ready(x);
         }
-        drop(state);
 
-        let state_ref = self.state.clone();
+        self.thread_is_computing.store(true, Ordering::Relaxed);
+
+        let is_working = self.thread_is_computing.clone();
+        let reader_state = self.reader_state.clone();
+        let poll_result = self.poll_result.clone();
+
         let bbox = self.bbox;
         let chunk_size = self.chunk_size;
         let parameters = self.parameters.clone();
         let waker = cx.waker().clone();
-        tokio::spawn(async move {
-            let mut state = state_ref.lock().unwrap(); // TODO
+
+        tokio::task::spawn_blocking(move || {
+            let mut csv_reader = reader_state.lock().unwrap();
             let computation_result = || -> Result<Option<MultiPointCollection>> {
                 // TODO: is clone necessary?
                 let geometry_specification = parameters.geometry.clone();
-                state.csv_reader.setup_once(geometry_specification)?;
+                csv_reader.setup_once(geometry_specification)?;
 
-                let (header, records) = match &mut state.csv_reader {
+                let (header, records) = match &mut *csv_reader {
                     ReaderState::OnGoing { header, records } => (header, records),
                     ReaderState::Error => return Ok(None),
                     _ => unreachable!(),
@@ -342,12 +351,12 @@ impl Stream for CsvSourceStream {
                 }
             }();
 
-            // TODO
-            state.poll_result = Some(match computation_result {
+            *poll_result.lock().unwrap() = Some(match computation_result {
                 Ok(Some(collection)) => Some(Ok(collection)),
                 Ok(None) => None,
                 Err(e) => Some(Err(e)),
             });
+            is_working.store(false, Ordering::Relaxed);
 
             waker.wake();
         });
