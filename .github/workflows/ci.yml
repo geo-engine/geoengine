@@ -13,7 +13,7 @@ jobs:
 
     services:
       postgres:
-        image: postgresql
+        image: postgres
         env:
           POSTGRES_USER: geoengine
           POSTGRES_PASSWORD: geoengine
@@ -31,4 +31,4 @@ jobs:
     steps:
       - name: Check psq
         run: |
-          psql -c "SELECT version();"
+          psql -h localhost -c "SELECT version();"
