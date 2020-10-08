@@ -18,7 +18,7 @@ use std::sync::Arc;
 /// a collection without copying data e.g. when the feature data is read from an Open CL device
 /// directly into an arrow buffer
 #[derive(Debug)]
-pub struct FeatureCollectionBatchBuilder {
+pub struct RawFeatureCollectionBuilder {
     types: HashMap<String, FeatureDataType>,
     column_arrays: HashMap<String, ArrayRef>,
     time_array: Option<ArrayRef>,
@@ -32,7 +32,7 @@ pub struct FeatureCollectionBatchBuilder {
     pub output_type: VectorDataType,
 }
 
-impl FeatureCollectionBatchBuilder {
+impl RawFeatureCollectionBuilder {
     pub fn new(
         output_type: VectorDataType,
         types: HashMap<String, FeatureDataType>,

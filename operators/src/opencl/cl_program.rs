@@ -4,7 +4,7 @@ use arrow::buffer::MutableBuffer;
 use arrow::datatypes::{Float64Type, Int64Type};
 use arrow::util::bit_util;
 use geoengine_datatypes::collections::{
-    FeatureCollectionBatchBuilder, TypedFeatureCollection, VectorDataType,
+    RawFeatureCollectionBuilder, TypedFeatureCollection, VectorDataType,
 };
 use geoengine_datatypes::primitives::{FeatureDataRef, FeatureDataType, NullableDataRef};
 use geoengine_datatypes::raster::Raster;
@@ -275,7 +275,7 @@ pub struct CLProgramRunnable<'a> {
     input_feature_types: Vec<VectorArgument>,
     output_feature_types: Vec<VectorArgument>,
     input_features: Vec<Option<&'a TypedFeatureCollection>>,
-    output_features: Vec<Option<&'a mut FeatureCollectionBatchBuilder>>,
+    output_features: Vec<Option<&'a mut RawFeatureCollectionBuilder>>,
     raster_output_buffers: Vec<RasterOutputBuffer>,
     feature_output_buffers: Vec<FeatureOutputBuffers>,
 }
@@ -359,7 +359,7 @@ impl<'a> CLProgramRunnable<'a> {
     pub fn set_output_features(
         &mut self,
         idx: usize,
-        features: &'a mut FeatureCollectionBatchBuilder,
+        features: &'a mut RawFeatureCollectionBuilder,
     ) -> Result<()> {
         ensure!(
             idx < self.output_feature_types.len(),

@@ -807,7 +807,7 @@ where
     }
 
     /// Return the names of the columns of this type
-    pub fn column_names(&self, column_type: FeatureDataType) -> Vec<String> {
+    pub fn column_names_of_type(&self, column_type: FeatureDataType) -> Vec<String> {
         self.types
             .iter()
             .filter_map(|(k, v)| {
