@@ -1,25 +1,12 @@
-name: Rust
+services:
+  postgres:
+    image: postgresql
+    ports:
+      - 5432/tcp
+    options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
 
-on:
-  push:
-    branches: [ master ]
-  pull_request:
-    branches: [ master ]
+addons:
+  postgresql
 
-jobs:
-  build:
-
-    runs-on: ${{matrix.os}}
-
-    services:
-      postgres:
-        image: postgresql
-        ports:
-          - 5432/tcp
-        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
-
-    addons:
-      postgresql
-
-    script:
-      - psql -c "SELECT version();"
+script:
+  - psql -c "SELECT version();"
