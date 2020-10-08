@@ -29,4 +29,4 @@ jobs:
     steps:
       - name: Check psq
         run: |
-          psql -c -h localhost "SELECT version();"
+          psql -h localhost -c "SELECT version();"
