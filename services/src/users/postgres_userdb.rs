@@ -139,10 +139,8 @@ mod tests {
     #[tokio::test]
     async fn test() {
         // TODO: load from test config
-        // TODO: add postgres to ci
-        // TODO: clear database
         let config = tokio_postgres::config::Config::from_str(
-            "postgresql://geoengine:geoengine@localhost:5432",
+            "postgresql://geoengine:geoengine@postgres:5432",
         )
         .unwrap();
 
