@@ -130,9 +130,8 @@ where
                             latest boolean
                         );
 
-                        -- TODO: unique constraint poject_id, lates = true?
-                        -- TODO: index on latest
-
+                        CREATE INDEX project_version_latest_idx 
+                        ON project_versions (project_id, latest DESC, time DESC, author_user_id DESC);
 
                         CREATE TYPE layer_type AS ENUM ('raster', 'vector'); -- TODO: distinguish points/lines/polygons
 
@@ -160,8 +159,6 @@ where
                             id UUID PRIMARY KEY,
                             workflow json NOT NULL
                         );
-
-                        -- TODO: indexes
                         ",
                     )
                     .await?;
