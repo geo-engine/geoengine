@@ -46,7 +46,7 @@ impl MultiLineStringAccess<Vec<Coordinate2D>> for MultiLineString {
 impl Geometry for MultiLineString {
     const DATA_TYPE: VectorDataType = VectorDataType::MultiLineString;
 
-    fn intersects_bbox(&self, _bbox: BoundingBox2D) -> bool {
+    fn intersects_bbox(&self, _bbox: &BoundingBox2D) -> bool {
         todo!("implement")
     }
 }

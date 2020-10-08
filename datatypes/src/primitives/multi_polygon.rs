@@ -78,7 +78,7 @@ impl MultiPolygonAccess<Polygon, Ring> for MultiPolygon {
 impl Geometry for MultiPolygon {
     const DATA_TYPE: VectorDataType = VectorDataType::MultiPolygon;
 
-    fn intersects_bbox(&self, _bbox: BoundingBox2D) -> bool {
+    fn intersects_bbox(&self, _bbox: &BoundingBox2D) -> bool {
         todo!("implement")
     }
 }

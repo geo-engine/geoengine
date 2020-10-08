@@ -657,7 +657,7 @@ where
             let geometry = G::try_from(feature.geometry())?;
 
             // filter out geometries that are not contained in the query's bounding box
-            if !geometry.intersects_bbox(query_rectangle.bbox) {
+            if !geometry.intersects_bbox(&query_rectangle.bbox) {
                 continue;
             }
 

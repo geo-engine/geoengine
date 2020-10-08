@@ -54,8 +54,8 @@ impl MultiPointAccess for MultiPoint {
 impl Geometry for MultiPoint {
     const DATA_TYPE: VectorDataType = VectorDataType::MultiPoint;
 
-    fn intersects_bbox(&self, bbox: BoundingBox2D) -> bool {
-        self.coordinates.iter().all(|c| bbox.contains_coordinate(c))
+    fn intersects_bbox(&self, bbox: &BoundingBox2D) -> bool {
+        self.coordinates.iter().any(|c| bbox.contains_coordinate(c))
     }
 }
 
@@ -258,5 +258,20 @@ mod tests {
         float_cmp::approx_eq!(f64, x, 1.0);
         float_cmp::approx_eq!(f64, y, 1.2);
         assert_eq!(aggregate(&multi_point), aggregate(&multi_point_ref));
+    }
+
+    #[test]
+    fn intersects_bbox() -> Result<()> {
+        let bbox = BoundingBox2D::new((0.0, 0.0).into(), (1.0, 1.0).into())?;
+
+        assert!(MultiPoint::new(vec![(0.5, 0.5).into()])?.intersects_bbox(&bbox));
+        assert!(MultiPoint::new(vec![(1.0, 1.0).into()])?.intersects_bbox(&bbox));
+        assert!(MultiPoint::new(vec![(0.5, 0.5).into(), (1.5, 1.5).into()])?.intersects_bbox(&bbox));
+        assert!(!MultiPoint::new(vec![(1.1, 1.1).into()])?.intersects_bbox(&bbox));
+        assert!(
+            !MultiPoint::new(vec![(-0.1, -0.1).into(), (1.1, 1.1).into()])?.intersects_bbox(&bbox)
+        );
+
+        Ok(())
     }
 }

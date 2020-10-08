@@ -19,7 +19,7 @@ impl Geometry for NoGeometry {
     const IS_GEOMETRY: bool = false;
     const DATA_TYPE: VectorDataType = VectorDataType::Data;
 
-    fn intersects_bbox(&self, _bbox: BoundingBox2D) -> bool {
+    fn intersects_bbox(&self, _bbox: &BoundingBox2D) -> bool {
         true
     }
 }
