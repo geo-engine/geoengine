@@ -67,6 +67,7 @@ pub trait ConfigElement {
 pub struct Web {
     pub bind_address: String,
     pub external_address: Option<String>,
+    pub backend: Backend,
 }
 
 impl ConfigElement for Web {
@@ -74,6 +75,7 @@ impl ConfigElement for Web {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Backend {
     InMemory,
     Postgres,
@@ -85,7 +87,7 @@ impl ConfigElement for Backend {
 
 #[derive(Debug, Deserialize)]
 pub struct Postgres {
-    pub config: String,
+    pub config_string: String,
 }
 
 impl ConfigElement for Postgres {
