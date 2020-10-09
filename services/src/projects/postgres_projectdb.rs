@@ -527,7 +527,10 @@ where
         let conn = self.conn_pool.get().await?;
         let stmt = conn
             .prepare(
-                "SELECT id, time, author_user_id FROM project_versions WHERE project_id = $1 ORDER BY time DESC",
+                "
+                SELECT id, time, author_user_id
+                FROM project_versions WHERE project_id = $1 
+                ORDER BY latest DESC, time DESC, author_user_id DESC",
             )
             .await?;
 

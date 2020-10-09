@@ -130,11 +130,6 @@ impl ProjectDB for HashMapProjectDB {
 
         let project_update = project.update_project(update, user);
 
-        ensure!(
-            project_update.version > project.version,
-            error::ProjectUpdateFailed
-        );
-
         project_versions.push(project_update);
 
         Ok(())
