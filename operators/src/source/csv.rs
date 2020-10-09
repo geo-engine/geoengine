@@ -284,7 +284,7 @@ impl Stream for CsvSourceStream {
     type Item = Result<MultiPointCollection>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        // TODO: handle lock on multiple occasions
+        // TODO: handle lock poisoning on multiple occasions
 
         if self.thread_is_computing.load(Ordering::Relaxed) {
             return Poll::Pending;
