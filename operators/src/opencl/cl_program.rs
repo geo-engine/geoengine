@@ -384,7 +384,7 @@ impl<'a> CLProgramRunnable<'a> {
         Ok(())
     }
 
-    fn set_feature_input_arguments(&mut self, kernel: &Kernel) -> Result<()> {
+    fn set_feature_input_arguments(&mut self, kernel: &Kernel, queue: &Queue) -> Result<()> {
         ensure!(
             self.input_features.iter().all(Option::is_some),
             error::CLProgramUnspecifiedFeatures
@@ -406,7 +406,7 @@ impl<'a> CLProgramRunnable<'a> {
                     TypedFeatureCollection::MultiPoint(points) => {
                         let coordinates = points.coordinates();
                         let buffer = Buffer::<Double2>::builder()
-                            .queue(kernel.default_queue().expect("expect").clone())
+                            .queue(queue.clone())
                             .len(coordinates.len())
                             .copy_host_slice(unsafe {
                                 std::slice::from_raw_parts(
@@ -420,7 +420,7 @@ impl<'a> CLProgramRunnable<'a> {
 
                         let coordinates_offsets = points.multipoint_offsets();
                         let buffer = Buffer::builder()
-                            .queue(kernel.default_queue().expect("expect").clone())
+                            .queue(queue.clone())
                             .len(coordinates_offsets.len())
                             .copy_host_slice(coordinates_offsets)
                             .build()?;
@@ -448,6 +448,7 @@ impl<'a> CLProgramRunnable<'a> {
                     FeatureDataRef::NullableNumber(numbers) => {
                         Self::set_feature_column_input_argument(
                             kernel,
+                            queue,
                             idx,
                             &column,
                             len,
@@ -457,6 +458,7 @@ impl<'a> CLProgramRunnable<'a> {
                     }
                     FeatureDataRef::Number(numbers) => Self::set_feature_column_input_argument(
                         kernel,
+                        queue,
                         idx,
                         &column,
                         len,
@@ -465,6 +467,7 @@ impl<'a> CLProgramRunnable<'a> {
                     )?,
                     FeatureDataRef::Decimal(decimals) => Self::set_feature_column_input_argument(
                         kernel,
+                        queue,
                         idx,
                         &column,
                         len,
@@ -474,6 +477,7 @@ impl<'a> CLProgramRunnable<'a> {
                     FeatureDataRef::NullableDecimal(decimals) => {
                         Self::set_feature_column_input_argument(
                             kernel,
+                            queue,
                             idx,
                             &column,
                             len,
@@ -492,7 +496,7 @@ impl<'a> CLProgramRunnable<'a> {
         Ok(())
     }
 
-    fn set_feature_output_arguments(&mut self, kernel: &Kernel) -> Result<()> {
+    fn set_feature_output_arguments(&mut self, kernel: &Kernel, queue: &Queue) -> Result<()> {
         for (idx, (builder, argument)) in self
             .output_features
             .iter()
@@ -505,13 +509,13 @@ impl<'a> CLProgramRunnable<'a> {
                 Some(match features.output_type {
                     VectorDataType::MultiPoint => {
                         let coords = Buffer::<Double2>::builder()
-                            .queue(kernel.default_queue().expect("expect").clone())
+                            .queue(queue.clone())
                             .len(features.num_coords())
                             .build()?;
                         kernel.set_arg(format!("OUT_POINT_COORDS{}", idx), &coords)?;
 
                         let offsets = Buffer::<i32>::builder()
-                            .queue(kernel.default_queue().expect("expect").clone())
+                            .queue(queue.clone())
                             .len(features.num_features() + 1)
                             .build()?;
                         kernel.set_arg(format!("OUT_POINT_OFFSETS{}", idx), &offsets)?;
@@ -531,6 +535,7 @@ impl<'a> CLProgramRunnable<'a> {
                     FeatureDataType::Number => Self::set_feature_column_output_argument::<f64>(
                         &mut numbers,
                         kernel,
+                        queue,
                         idx,
                         &column.name,
                         features.num_features(),
@@ -540,6 +545,7 @@ impl<'a> CLProgramRunnable<'a> {
                         Self::set_feature_column_output_argument::<f64>(
                             &mut numbers,
                             kernel,
+                            queue,
                             idx,
                             &column.name,
                             features.num_features(),
@@ -549,6 +555,7 @@ impl<'a> CLProgramRunnable<'a> {
                     FeatureDataType::Decimal => Self::set_feature_column_output_argument::<i64>(
                         &mut decimals,
                         kernel,
+                        queue,
                         idx,
                         &column.name,
                         features.num_features(),
@@ -558,6 +565,7 @@ impl<'a> CLProgramRunnable<'a> {
                         Self::set_feature_column_output_argument::<i64>(
                             &mut decimals,
                             kernel,
+                            queue,
                             idx,
                             &column.name,
                             features.num_features(),
@@ -582,6 +590,7 @@ impl<'a> CLProgramRunnable<'a> {
 
     fn set_feature_column_input_argument<T: OclPrm>(
         kernel: &Kernel,
+        queue: &Queue,
         idx: usize,
         column: &str,
         len: usize,
@@ -589,7 +598,7 @@ impl<'a> CLProgramRunnable<'a> {
         nulls: Option<&[bool]>,
     ) -> Result<()> {
         let buffer = Buffer::<T>::builder()
-            .queue(kernel.default_queue().expect("expect").clone())
+            .queue(queue.clone())
             .len(len)
             .copy_host_slice(data)
             .build()?;
@@ -599,7 +608,7 @@ impl<'a> CLProgramRunnable<'a> {
             // TODO: convert booleans to i32 for host device transfer more efficiently
             let nulls: Vec<i32> = nulls.iter().map(|n| n.as_()).collect();
             let buffer = Buffer::<i32>::builder()
-                .queue(kernel.default_queue().expect("expect").clone())
+                .queue(queue.clone())
                 .len(len)
                 .copy_host_slice(nulls.as_slice())
                 .build()?;
@@ -612,20 +621,21 @@ impl<'a> CLProgramRunnable<'a> {
     fn set_feature_column_output_argument<T: OclPrm>(
         buffers: &mut Vec<ColumnBuffer<T>>,
         kernel: &Kernel,
+        queue: &Queue,
         idx: usize,
         column: &str,
         len: usize,
         nullable: bool,
     ) -> Result<()> {
         let values = Buffer::<T>::builder()
-            .queue(kernel.default_queue().expect("expect").clone())
+            .queue(queue.clone())
             .len(len)
             .build()?;
         kernel.set_arg(format!("OUT_POINT{}_COLUMN_{}", idx, column), &values)?;
 
         let nulls = if nullable {
             let buffer = Buffer::<i32>::builder()
-                .queue(kernel.default_queue().expect("expect").clone())
+                .queue(queue.clone())
                 .len(len)
                 .build()?;
             kernel.set_arg(format!("OUT_POINT{}_NULLS_{}", idx, column), &buffer)?;
@@ -643,7 +653,7 @@ impl<'a> CLProgramRunnable<'a> {
         Ok(())
     }
 
-    fn set_raster_arguments(&mut self, kernel: &Kernel) -> Result<()> {
+    fn set_raster_arguments(&mut self, kernel: &Kernel, queue: &Queue) -> Result<()> {
         ensure!(
             self.input_rasters.iter().all(Option::is_some),
             error::CLProgramUnspecifiedRaster
@@ -653,7 +663,7 @@ impl<'a> CLProgramRunnable<'a> {
             let raster = raster.expect("checked");
             call_generic_raster2d!(raster, raster => {
                 let data_buffer = Buffer::builder()
-                .queue(kernel.default_queue().expect("checked").clone())
+                .queue(queue.clone())
                 .flags(MemFlags::new().read_only())
                 .len(raster.data_container.len())
                 .copy_host_slice(&raster.data_container)
@@ -661,7 +671,7 @@ impl<'a> CLProgramRunnable<'a> {
                 kernel.set_arg(format!("IN{}",idx), data_buffer)?;
 
                 let info_buffer = Buffer::builder()
-                .queue(kernel.default_queue().expect("checked").clone())
+                .queue(queue.clone())
                 .flags(MemFlags::new().read_only())
                 .len(1)
                 .copy_host_slice(&[RasterInfo::from_raster(&raster)])
@@ -674,7 +684,7 @@ impl<'a> CLProgramRunnable<'a> {
             let raster = raster.as_ref().expect("checked");
             call_generic_raster2d_ext!(raster, RasterOutputBuffer, (raster, e) => {
                 let buffer = Buffer::builder()
-                    .queue(kernel.default_queue().expect("expect").clone())
+                    .queue(queue.clone())
                     .len(raster.data_container.len())
                     .build()?;
 
@@ -683,7 +693,7 @@ impl<'a> CLProgramRunnable<'a> {
                 self.raster_output_buffers.push(e(buffer));
 
                 let info_buffer = Buffer::builder()
-                    .queue(kernel.default_queue().expect("checked").clone())
+                    .queue(queue.clone())
                     .flags(MemFlags::new().read_only())
                     .len(1)
                     .copy_host_slice(&[RasterInfo::from_raster(&raster)])
@@ -983,7 +993,7 @@ impl CompiledCLProgram {
         let mut kernel = Kernel::builder();
         let program = self.program.clone();
         kernel
-            .queue(queue)
+            .queue(queue.clone())
             .program(&program)
             .name(&self.kernel_name);
 
@@ -992,10 +1002,10 @@ impl CompiledCLProgram {
 
         let kernel = kernel.build()?;
 
-        runnable.set_raster_arguments(&kernel)?;
+        runnable.set_raster_arguments(&kernel, &queue)?;
 
-        runnable.set_feature_input_arguments(&kernel)?;
-        runnable.set_feature_output_arguments(&kernel)?;
+        runnable.set_feature_input_arguments(&kernel, &queue)?;
+        runnable.set_feature_output_arguments(&kernel, &queue)?;
 
         let dims = self.work_size(&runnable);
         unsafe {
@@ -1584,7 +1594,7 @@ __kernel void nop(__global int* buffer) {
         let queue = Queue::new(&ctx, ctx.devices()[0], None).unwrap();
 
         let kernel = Kernel::builder()
-            .queue(queue)
+            .queue(queue.clone())
             .name("nop")
             .program(&program)
             .arg(None::<&Buffer<i32>>)
@@ -1592,7 +1602,7 @@ __kernel void nop(__global int* buffer) {
             .unwrap();
 
         let ocl_buffer = Buffer::builder()
-            .queue(kernel.default_queue().expect("expect").clone())
+            .queue(queue.clone())
             .len(len)
             .fill_val(0)
             .build()
