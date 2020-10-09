@@ -43,7 +43,10 @@ where
     async fn register(&mut self, workflow: Workflow) -> Result<WorkflowId> {
         let conn = self.conn_pool.get().await?;
         let stmt = conn
-            .prepare("INSERT INTO workflows (id, workflow) VALUES ($1, $2);")
+            .prepare(
+                "INSERT INTO workflows (id, workflow) VALUES ($1, $2) 
+            ON CONFLICT DO NOTHING;",
+            )
             .await?;
 
         let workflow_id = WorkflowId::from_hash(&workflow);
@@ -64,11 +67,11 @@ where
         // TODO: authorization
         let conn = self.conn_pool.get().await?;
         let stmt = conn
-            .prepare("SELECT id, workflow FROM workflows WHERE id = $1")
+            .prepare("SELECT workflow FROM workflows WHERE id = $1")
             .await?;
 
         let row = conn.query_one(&stmt, &[&id.uuid()]).await?;
 
-        Ok(serde_json::from_str(&row.get::<usize, String>(0)).context(error::SerdeJson)?)
+        Ok(serde_json::from_value(row.get(0)).context(error::SerdeJson)?)
     }
 }

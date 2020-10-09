@@ -374,6 +374,13 @@ mod tests {
             .await
             .unwrap();
 
+        assert!(ctx
+            .workflow_registry_ref()
+            .await
+            .load(&workflow_id)
+            .await
+            .is_ok());
+
         let update = UpdateProject {
             id: project.id,
             name: Some("Test9 Updated".into()),
