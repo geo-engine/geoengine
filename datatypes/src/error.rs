@@ -125,6 +125,7 @@ pub enum Error {
         source: <u32 as std::str::FromStr>::Err,
     },
     InvalidTypedRasterConversion,
+    InvalidTypedValueConversion,
 }
 
 impl From<arrow::error::ArrowError> for Error {

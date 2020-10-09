@@ -8,20 +8,27 @@ use crate::util::Result;
 use crate::{call_bi_generic_processor, call_generic_raster_processor};
 use futures::stream::BoxStream;
 use futures::StreamExt;
-use geoengine_datatypes::raster::{Pixel, Raster, Raster2D, RasterDataType, RasterTile2D};
+use geoengine_datatypes::raster::{
+    Pixel, Raster, Raster2D, RasterDataType, RasterTile2D, TypedValue,
+};
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::collections::HashSet;
 use std::convert::TryFrom;
+use std::convert::TryInto;
 use std::marker::PhantomData;
 
-/// Parameters for the `Expression` operator. The `expression` must only contain simple arithmetic
-/// calculations. `output_type` is the data type of the produced raster tiles.
+/// Parameters for the `Expression` operator.
+/// * The `expression` must only contain simple arithmetic
+///     calculations.
+/// * `output_type` is the data type of the produced raster tiles.
+/// * `output_no_data_value` is the no data value of the output raster
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct ExpressionParams {
     pub expression: String,
     pub output_type: RasterDataType,
+    pub output_no_data_value: TypedValue,
 }
 
 // TODO: custom type or simple string?
@@ -101,6 +108,7 @@ impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
                                 },
                                 p_a,
                                 p_b,
+                                self.params.output_no_data_value.try_into()?
                             )
                             .boxed());
                     Ok(res)
@@ -121,6 +129,7 @@ where
     pub source_b: Box<dyn RasterQueryProcessor<RasterType = T2>>,
     pub phantom_data: PhantomData<TO>,
     pub cl_program: CompiledCLProgram,
+    pub no_data_value: TO,
 }
 
 impl<T1, T2, TO> ExpressionQueryProcessor<T1, T2, TO>
@@ -133,12 +142,14 @@ where
         expression: &SafeExpression,
         source_a: Box<dyn RasterQueryProcessor<RasterType = T1>>,
         source_b: Box<dyn RasterQueryProcessor<RasterType = T2>>,
+        no_data_value: TO,
     ) -> Self {
         Self {
             source_a,
             source_b,
             cl_program: Self::create_cl_program(&expression),
             phantom_data: PhantomData::default(),
+            no_data_value,
         }
     }
 
@@ -206,7 +217,7 @@ where
                     let mut out = Raster2D::new(
                         *a.dimension(),
                         vec![TO::zero(); a.data.data_container.len()], // TODO: correct output size; initialization required?
-                        None,                                          // TODO
+                        Some(self.no_data_value),                      // TODO
                         Default::default(),                            // TODO
                         Default::default(),                            // TODO
                     )
@@ -250,6 +261,7 @@ mod tests {
             params: ExpressionParams {
                 expression: "A+B".to_string(),
                 output_type: RasterDataType::I8,
+                output_no_data_value: TypedValue::I8(42),
             },
             raster_sources: vec![a, b],
             vector_sources: vec![],
@@ -280,7 +292,7 @@ mod tests {
             Raster2D::new(
                 [3, 2].into(),
                 vec![2, 4, 6, 8, 10, 12],
-                None,
+                Some(42),
                 Default::default(),
                 Default::default(),
             )
