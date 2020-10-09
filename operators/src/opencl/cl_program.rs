@@ -17,7 +17,7 @@ use geoengine_datatypes::{
 use lazy_static::lazy_static;
 use num_traits::AsPrimitive;
 use ocl::builders::{KernelBuilder, ProgramBuilder};
-use ocl::prm::{cl_double, cl_uint, cl_ushort, Double2};
+use ocl::prm::{cl_char, cl_double, cl_uint, cl_ushort, Double2};
 use ocl::{
     Buffer, Context, Device, Kernel, MemFlags, OclPrm, Platform, Program, Queue, SpatialDims,
 };
@@ -137,7 +137,7 @@ typedef struct {
 	double scale[3];
 	double min, max, no_data;
 	ushort crs_code;
-	ushort has_no_data;
+	char has_no_data;
 } RasterInfo;
 
 #define R(t,x,y) t ## _data[y * t ## _info->size[0] + x]
@@ -253,7 +253,7 @@ struct PolygonBuffers {
 struct ColumnBuffer<T: OclPrm> {
     column_name: String,
     values: Buffer<T>,
-    nulls: Option<Buffer<i32>>, // OpenCl does not support bool for host device transfer
+    nulls: Option<Buffer<i8>>, // OpenCl does not support bool for host device transfer
 }
 
 struct FeatureOutputBuffers {
@@ -605,9 +605,9 @@ impl<'a> CLProgramRunnable<'a> {
         kernel.set_arg(format!("IN_POINT{}_COLUMN_{}", idx, column), &buffer)?;
 
         if let Some(nulls) = nulls {
-            // TODO: convert booleans to i32 for host device transfer more efficiently
-            let nulls: Vec<i32> = nulls.iter().map(|n| n.as_()).collect();
-            let buffer = Buffer::<i32>::builder()
+            // TODO: convert booleans to i32 for host device transfer, more efficiently
+            let nulls: Vec<i8> = nulls.iter().map(|n| n.as_()).collect();
+            let buffer = Buffer::<i8>::builder()
                 .queue(queue.clone())
                 .len(len)
                 .copy_host_slice(nulls.as_slice())
@@ -634,7 +634,7 @@ impl<'a> CLProgramRunnable<'a> {
         kernel.set_arg(format!("OUT_POINT{}_COLUMN_{}", idx, column), &values)?;
 
         let nulls = if nullable {
-            let buffer = Buffer::<i32>::builder()
+            let buffer = Buffer::<i8>::builder()
                 .queue(queue.clone())
                 .len(len)
                 .build()?;
@@ -776,8 +776,8 @@ impl<'a> CLProgramRunnable<'a> {
                     Self::read_ocl_to_arrow_buffer(&column_buffer.values, builder.num_features())?;
 
                 let nulls_buffer = if let Some(nulls_buffer) = column_buffer.nulls {
-                    // TODO: read i32 into null buffers as bool more efficiently
-                    let mut nulls = vec![0_i32; builder.num_features()];
+                    // TODO: read i8 into null buffers as bool, more efficiently
+                    let mut nulls = vec![0_i8; builder.num_features()];
                     nulls_buffer.read(&mut nulls).enq()?;
 
                     let num_bytes = bit_util::ceil(nulls.len(), 8);
@@ -807,8 +807,8 @@ impl<'a> CLProgramRunnable<'a> {
                     Self::read_ocl_to_arrow_buffer(&column_buffer.values, builder.num_features())?;
 
                 let nulls_buffer = if let Some(nulls_buffer) = column_buffer.nulls {
-                    // TODO: read i32 into null buffers as bool more efficiently
-                    let mut nulls = vec![0_i32; builder.num_features()];
+                    // TODO: read i32 into null buffers as bool, more efficiently
+                    let mut nulls = vec![0_i8; builder.num_features()];
                     nulls_buffer.read(&mut nulls).enq()?;
 
                     let num_bytes = bit_util::ceil(nulls.len(), 8);
@@ -872,7 +872,7 @@ struct RasterInfo {
     pub no_data: cl_double,
 
     pub crs_code: cl_ushort,
-    pub has_no_data: cl_ushort,
+    pub has_no_data: cl_char,
 }
 
 unsafe impl Send for RasterInfo {}
@@ -894,7 +894,7 @@ impl RasterInfo {
             max: 0.,
             no_data: raster.no_data_value.map_or(0., AsPrimitive::as_),
             crs_code: 0,
-            has_no_data: u16::from(raster.no_data_value.is_some()),
+            has_no_data: i8::from(raster.no_data_value.is_some()),
         }
     }
 }
@@ -1106,14 +1106,14 @@ impl CompiledCLProgram {
             }
             FeatureDataType::NullableNumber => {
                 kernel.arg_named(name, None::<&Buffer<f64>>);
-                kernel.arg_named(null_name, None::<&Buffer<i32>>);
+                kernel.arg_named(null_name, None::<&Buffer<i8>>);
             }
             FeatureDataType::Decimal => {
                 kernel.arg_named(name, None::<&Buffer<i64>>);
             }
             FeatureDataType::NullableDecimal => {
                 kernel.arg_named(name, None::<&Buffer<i64>>);
-                kernel.arg_named(null_name, None::<&Buffer<i32>>);
+                kernel.arg_named(null_name, None::<&Buffer<i8>>);
             }
 
             _ => todo!(), // TODO strings, categories
@@ -1734,9 +1734,9 @@ __kernel void columns(
         let kernel = r#"
 __kernel void columns( 
             __global const double *IN_POINT0_COLUMN_foo,
-            __global const int *IN_POINT0_NULLS_foo,
+            __global const char *IN_POINT0_NULLS_foo,
             __global double *OUT_POINT0_COLUMN_foo,
-            __global int *OUT_POINT0_NULLS_foo)            
+            __global char *OUT_POINT0_NULLS_foo)            
 {
     int idx = get_global_id(0);
     if (IN_POINT0_NULLS_foo[idx]) {
