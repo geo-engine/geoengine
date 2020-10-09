@@ -1602,7 +1602,7 @@ __kernel void nop(__global int* buffer) {
             .unwrap();
 
         let ocl_buffer = Buffer::builder()
-            .queue(queue.clone())
+            .queue(queue)
             .len(len)
             .fill_val(0)
             .build()
