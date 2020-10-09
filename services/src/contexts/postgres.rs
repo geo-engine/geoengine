@@ -236,3 +236,246 @@ where
         self.session = Some(session)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::projects::project::{
+        CreateProject, Layer, LayerInfo, LoadVersion, OrderBy, ProjectFilter, ProjectId,
+        ProjectListOptions, ProjectListing, ProjectPermission, STRectangle, UpdateProject,
+        UserProjectPermission, VectorInfo,
+    };
+    use crate::projects::projectdb::ProjectDB;
+    use crate::users::user::{UserCredentials, UserId, UserRegistration};
+    use crate::users::userdb::UserDB;
+    use crate::util::user_input::UserInput;
+    use crate::workflows::registry::WorkflowRegistry;
+    use crate::workflows::workflow::Workflow;
+    use bb8_postgres::tokio_postgres;
+    use bb8_postgres::tokio_postgres::NoTls;
+    use geoengine_datatypes::primitives::Coordinate2D;
+    use geoengine_operators::engine::{TypedOperator, VectorOperator};
+    use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
+    use std::str::FromStr;
+
+    #[tokio::test]
+    async fn test() {
+        // TODO: load from test config
+        let config = tokio_postgres::config::Config::from_str(
+            "postgresql://geoengine:geoengine@localhost:5432",
+        )
+        .unwrap();
+
+        let ctx = PostgresContext::new(config, tokio_postgres::NoTls)
+            .await
+            .unwrap();
+
+        let user_id = user_reg_login(&ctx).await;
+
+        create_projects(&ctx, user_id).await;
+
+        let projects = list_projects(&ctx, user_id).await;
+
+        let project_id = projects[0].id;
+
+        update_projects(&ctx, user_id, project_id).await;
+
+        add_permission(&ctx, user_id, project_id).await;
+
+        delete_project(ctx, user_id, project_id).await;
+    }
+
+    async fn delete_project(ctx: PostgresContext<NoTls>, user_id: UserId, project_id: ProjectId) {
+        ctx.project_db_ref_mut()
+            .await
+            .delete(user_id, project_id)
+            .await
+            .unwrap();
+
+        assert!(ctx
+            .project_db_ref()
+            .await
+            .load_latest(user_id, project_id)
+            .await
+            .is_err());
+    }
+
+    async fn add_permission(ctx: &PostgresContext<NoTls>, user_id: UserId, project_id: ProjectId) {
+        assert_eq!(
+            ctx.project_db_ref()
+                .await
+                .list_permissions(user_id, project_id)
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
+
+        let user2 = ctx
+            .user_db_ref_mut()
+            .await
+            .register(
+                UserRegistration {
+                    email: "user2@example.com".into(),
+                    password: "12345678".into(),
+                    real_name: "User2".into(),
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        ctx.project_db_ref_mut()
+            .await
+            .add_permission(
+                user_id,
+                UserProjectPermission {
+                    user: user2,
+                    project: project_id,
+                    permission: ProjectPermission::Read,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            ctx.project_db_ref()
+                .await
+                .list_permissions(user_id, project_id)
+                .await
+                .unwrap()
+                .len(),
+            2
+        );
+    }
+
+    async fn update_projects(ctx: &PostgresContext<NoTls>, user_id: UserId, project_id: ProjectId) {
+        let project = ctx
+            .project_db_ref_mut()
+            .await
+            .load(user_id, project_id, LoadVersion::Latest)
+            .await
+            .unwrap();
+
+        let workflow_id = ctx
+            .workflow_registry_ref_mut()
+            .await
+            .register(Workflow {
+                operator: TypedOperator::Vector(
+                    MockPointSource {
+                        params: MockPointSourceParams {
+                            points: vec![Coordinate2D::new(1., 2.); 3],
+                        },
+                    }
+                    .boxed(),
+                ),
+            })
+            .await
+            .unwrap();
+
+        let update = UpdateProject {
+            id: project.id,
+            name: Some("Test9 Updated".into()),
+            description: None,
+            layers: Some(vec![Some(Layer {
+                workflow: workflow_id,
+                name: "TestLayer".into(),
+                info: LayerInfo::Vector(VectorInfo {}),
+            })]),
+            view: None,
+            bounds: None,
+        };
+        ctx.project_db_ref_mut()
+            .await
+            .update(user_id, update.validated().unwrap())
+            .await
+            .unwrap();
+
+        let versions = ctx
+            .project_db_ref()
+            .await
+            .versions(user_id, project_id)
+            .await
+            .unwrap();
+        assert_eq!(versions.len(), 2);
+    }
+
+    async fn list_projects(ctx: &PostgresContext<NoTls>, user_id: UserId) -> Vec<ProjectListing> {
+        let options = ProjectListOptions {
+            permissions: vec![
+                ProjectPermission::Owner,
+                ProjectPermission::Write,
+                ProjectPermission::Read,
+            ],
+            filter: ProjectFilter::None,
+            order: OrderBy::NameDesc,
+            offset: 0,
+            limit: 2,
+        }
+        .validated()
+        .unwrap();
+        let projects = ctx
+            .project_db_ref_mut()
+            .await
+            .list(user_id, options)
+            .await
+            .unwrap();
+
+        assert_eq!(projects.len(), 2);
+        assert_eq!(projects[0].name, "Test9");
+        assert_eq!(projects[1].name, "Test8");
+        projects
+    }
+
+    async fn create_projects(ctx: &PostgresContext<NoTls>, user_id: UserId) {
+        for i in 0..10 {
+            let create = CreateProject {
+                name: format!("Test{}", i),
+                description: format!("Test{}", 10 - i),
+                view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+                bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+            }
+            .validated()
+            .unwrap();
+            ctx.project_db_ref_mut()
+                .await
+                .create(user_id, create)
+                .await
+                .unwrap();
+        }
+    }
+
+    async fn user_reg_login(ctx: &PostgresContext<NoTls>) -> UserId {
+        let user_db = ctx.user_db();
+        let mut db = user_db.write().await;
+
+        let user_registration = UserRegistration {
+            email: "foo@bar.de".into(),
+            password: "secret123".into(),
+            real_name: "Foo Bar".into(),
+        }
+        .validated()
+        .unwrap();
+
+        let user_id = db.register(user_registration).await.unwrap();
+
+        let credentials = UserCredentials {
+            email: "foo@bar.de".into(),
+            password: "secret123".into(),
+        };
+
+        let result = db.login(credentials).await;
+        assert!(result.is_ok());
+
+        let session = result.unwrap();
+
+        assert!(db.session(session.id).await.is_ok());
+
+        assert!(db.logout(session.id).await.is_ok());
+
+        assert!(db.session(session.id).await.is_err());
+
+        user_id
+    }
+}
