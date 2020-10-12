@@ -13,8 +13,8 @@ use std::fmt::{Debug, Display};
 #[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[repr(C)]
 pub struct TimeInterval {
-    start: TimeInstance,
-    end: TimeInstance,
+    pub start: TimeInstance,
+    pub end: TimeInstance,
 }
 
 impl Default for TimeInterval {
