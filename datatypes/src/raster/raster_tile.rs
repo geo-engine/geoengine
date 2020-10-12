@@ -1,4 +1,7 @@
-use super::{BaseRaster, Dim2D, Dim3D, GeoTransform, GridDimension, GridIdx2D, Raster};
+use super::{
+    BaseRaster, Dim2D, Dim3D, GeoTransform, GridDimension, GridIdx2D, OffsetDim2D, Raster,
+    SignedGridIdx2D,
+};
 use crate::primitives::{BoundingBox2D, SpatialBounded, TemporalBounded, TimeInterval};
 use crate::raster::data_type::FromPrimitive;
 use crate::raster::Pixel;
@@ -42,59 +45,63 @@ where
 /// The `TileInformation` is used to represent the spatial position of each tile
 #[derive(PartialEq, Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct TileInformation {
-    pub global_size_in_tiles: GridIdx2D,
-    pub global_tile_position: GridIdx2D,
-    pub global_pixel_position: GridIdx2D,
-    pub tile_size_in_pixels: GridIdx2D,
+    pub global_tile_position: SignedGridIdx2D,
     pub global_geo_transform: GeoTransform,
+    pub tile_size_in_pixels: GridIdx2D,
 }
 
 impl TileInformation {
     pub fn new(
-        global_size_in_tiles: GridIdx2D,
-        global_tile_position: GridIdx2D,
-        global_pixel_position: GridIdx2D,
+        global_tile_position: SignedGridIdx2D,
         tile_size_in_pixels: GridIdx2D,
         global_geo_transform: GeoTransform,
     ) -> Self {
         Self {
-            global_size_in_tiles,
             global_tile_position,
-            global_pixel_position,
             tile_size_in_pixels,
             global_geo_transform,
         }
     }
-    pub fn global_size_in_tiles(&self) -> GridIdx2D {
-        self.global_size_in_tiles
-    }
-    pub fn global_tile_position(&self) -> GridIdx2D {
+
+    #[inline]
+    pub fn global_tile_position(&self) -> SignedGridIdx2D {
         self.global_tile_position
     }
-    pub fn global_pixel_position_upper_left(&self) -> GridIdx2D {
-        self.global_pixel_position
+
+    #[inline]
+    pub fn global_pixel_position_upper_left(&self) -> SignedGridIdx2D {
+        let [tile_y, tile_x] = self.global_tile_position;
+        let [tile_size_y, tile_size_x] = self.tile_size_in_pixels;
+        [tile_y * tile_size_y as isize, tile_x * tile_size_x as isize]
     }
 
-    pub fn global_pixel_position_lower_right(&self) -> GridIdx2D {
+    #[inline]
+    pub fn global_pixel_position_lower_right(&self) -> SignedGridIdx2D {
         let [up_left_y, up_left_x] = self.global_pixel_position_upper_left();
         let [size_y, size_x] = self.tile_size_in_pixels;
-        [up_left_y + size_y, up_left_x + size_x]
+        [up_left_y + (size_y as isize), up_left_x + (size_x as isize)]
     }
 
+    #[inline]
     pub fn tile_size_in_pixels(&self) -> GridIdx2D {
         self.tile_size_in_pixels
     }
 
-    pub fn tile_pixel_position_to_global(&self, local_pixel_position: GridIdx2D) -> GridIdx2D {
+    #[inline]
+    pub fn tile_pixel_position_to_global(
+        &self,
+        local_pixel_position: GridIdx2D,
+    ) -> SignedGridIdx2D {
         let [up_left_y, up_left_x] = self.global_pixel_position_upper_left();
         let [pos_y, pos_x] = local_pixel_position;
-        [up_left_y + pos_y, up_left_x + pos_x]
+        [up_left_y + (pos_y as isize), up_left_x + (pos_x as isize)]
     }
 
+    #[inline]
     pub fn tile_geo_transform(&self) -> GeoTransform {
         let tile_upper_left_coord = self
             .global_geo_transform
-            .grid_2d_to_coordinate_2d(self.global_pixel_position);
+            .signed_grid_idx_to_coordinate_2d(self.global_pixel_position_upper_left());
 
         GeoTransform::new(
             tile_upper_left_coord,
@@ -108,10 +115,10 @@ impl SpatialBounded for TileInformation {
     fn spatial_bounds(&self) -> BoundingBox2D {
         let top_left_coord = self
             .global_geo_transform
-            .grid_2d_to_coordinate_2d(self.global_pixel_position_upper_left());
+            .signed_grid_idx_to_coordinate_2d(self.global_pixel_position_upper_left());
         let lower_right_coord = self
             .global_geo_transform
-            .grid_2d_to_coordinate_2d(self.global_pixel_position_lower_right());
+            .signed_grid_idx_to_coordinate_2d(self.global_pixel_position_lower_right());
         BoundingBox2D::new_upper_left_lower_right_unchecked(top_left_coord, lower_right_coord)
     }
 }

@@ -114,8 +114,8 @@ where
     T: Pixel,
 {
     fn spatial_bounds(&self) -> BoundingBox2D {
-        let top_left_coord = self.geo_transform.grid_2d_to_coordinate_2d([0, 0]);
-        let lower_right_coord = self.geo_transform.grid_2d_to_coordinate_2d([
+        let top_left_coord = self.geo_transform.grid_idx_to_coordinate_2d([0, 0]);
+        let lower_right_coord = self.geo_transform.grid_idx_to_coordinate_2d([
             self.grid_dimension.size_of_y_axis(),
             self.grid_dimension.size_of_x_axis(),
         ]);

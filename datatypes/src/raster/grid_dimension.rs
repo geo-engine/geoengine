@@ -398,6 +398,9 @@ pub trait OffsetDimension: GridDimension {
     /// This returns the offsets as index which are the min values of each axis. The values are INSIDE the bouds of the axis.
     fn offsets_as_index(&self) -> Self::SignedIndexType;
 
+    /// This returns the max index of each axis. The values are INSIDE the bouds of the axis.
+    fn offsets_max_index(&self) -> Self::SignedIndexType;
+
     /// converts an offset index to a zero based by shifting the origin of each axis to zero.
     fn offset_index_to_zero_based_unchecked(
         &self,
@@ -546,6 +549,12 @@ impl OffsetDimension for OffsetDim<Dim<[usize; 1]>, [isize; 1]> {
     fn offsets_as_slice(&self) -> &[SignedIdx] {
         &self.offsets
     }
+
+    fn offsets_max_index(&self) -> Self::SignedIndexType {
+        let [min_x] = self.offsets_as_index();
+        let [size_x] = self.size_as_index();
+        [min_x + size_x as isize - 1]
+    }
 }
 
 impl OffsetDimension for OffsetDim<Dim<[usize; 2]>, [isize; 2]> {
@@ -577,6 +586,12 @@ impl OffsetDimension for OffsetDim<Dim<[usize; 2]>, [isize; 2]> {
 
     fn offsets_as_slice(&self) -> &[SignedIdx] {
         &self.offsets
+    }
+
+    fn offsets_max_index(&self) -> Self::SignedIndexType {
+        let [min_y, min_x] = self.offsets_as_index();
+        let [size_y, size_x] = self.size_as_index();
+        [min_y + size_y as isize - 1, min_x + size_x as isize - 1]
     }
 }
 
@@ -610,6 +625,16 @@ impl OffsetDimension for OffsetDim<Dim<[usize; 3]>, [isize; 3]> {
 
     fn offsets_as_slice(&self) -> &[SignedIdx] {
         &self.offsets
+    }
+
+    fn offsets_max_index(&self) -> Self::SignedIndexType {
+        let [min_z, min_y, min_x] = self.offsets_as_index();
+        let [size_z, size_y, size_x] = self.size_as_index();
+        [
+            min_z + size_z as isize - 1,
+            min_y + size_y as isize - 1,
+            min_x + size_x as isize - 1,
+        ]
     }
 }
 

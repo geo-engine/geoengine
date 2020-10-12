@@ -170,8 +170,6 @@ mod tests {
             time: TimeInterval::default(),
             tile: TileInformation {
                 global_geo_transform: Default::default(),
-                global_pixel_position: [0, 0].into(),
-                global_size_in_tiles: [1, 2].into(),
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
@@ -304,8 +302,6 @@ mod tests {
             time: TimeInterval::default(),
             tile: TileInformation {
                 global_geo_transform: Default::default(),
-                global_pixel_position: [0, 0].into(),
-                global_size_in_tiles: [1, 2].into(),
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
