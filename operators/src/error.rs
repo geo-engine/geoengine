@@ -60,6 +60,18 @@ pub enum Error {
     SerdeJson {
         source: serde_json::Error,
     },
+    OCL {
+        ocl_error: ocl::error::Error,
+    },
+    CLProgramInvalidRasterIndex,
+    CLProgramInvalidRasterDataType,
+    CLProgramInvalidFeaturesIndex,
+    CLProgramInvalidVectorDataType,
+    CLProgramUnspecifiedRaster,
+    CLProgramUnspecifiedFeatures,
+    CLProgramInvalidColumn,
+    CLInvalidInputsForIterationType,
+    InvalidExpression,
 
     InvalidType {
         expected: String,
@@ -95,5 +107,11 @@ impl From<serde_json::Error> for Error {
         Self::SerdeJson {
             source: serde_json_error,
         }
+    }
+}
+
+impl From<ocl::Error> for Error {
+    fn from(ocl_error: ocl::Error) -> Self {
+        Self::OCL { ocl_error }
     }
 }

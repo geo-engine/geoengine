@@ -2,15 +2,19 @@ use crate::util::arrow::ArrowTyped;
 use arrow::array::{BooleanArray, Float64Builder};
 use arrow::datatypes::DataType;
 use arrow::error::ArrowError;
+use ocl::OclPrm;
 use serde::{Deserialize, Serialize};
 use std::{fmt, slice};
 
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, PartialOrd, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, PartialOrd, Serialize, Default)]
 #[repr(C)]
 pub struct Coordinate2D {
     pub x: f64,
     pub y: f64,
 }
+
+// Make coordinates transferable to OpenCl devices
+unsafe impl OclPrm for Coordinate2D {}
 
 impl Coordinate2D {
     /// Creates a new coordinate

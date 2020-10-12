@@ -9,6 +9,7 @@ authors = [
 edition = "2018"
 
 [dependencies]
+arrow = {version = "1.0", features = ["simd"] }
 chrono = "0.4"
 csv = "1.1"
 geoengine-datatypes = { path = "../datatypes" }
@@ -27,6 +28,7 @@ typetag = "0.1"
 snafu = "0.6"
 tokio = { version = "0.2", features = ["macros", "blocking"] }
 warp = "0.2" # TODO: remove and get tokio test to work without it
+lazy_static = "1.4.0"
 
 [dev-dependencies]
 criterion = "0.3"
