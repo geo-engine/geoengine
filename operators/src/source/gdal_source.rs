@@ -322,23 +322,40 @@ where
         })
     }
 
-    fn create_no_data_tile(
+    fn create_tile(
         tile_information: TileInformation,
         time_interval: TimeInterval,
+        data: Vec<T>,
+        no_data: Option<T>,
     ) -> RasterTile2D<T> {
         let grid_dimension = Dim2D::new(tile_information.tile_size_in_pixels);
-        let empty_container = vec![T::zero(); grid_dimension.number_of_elements()];
         RasterTile2D::new(
             time_interval,
             tile_information,
             Raster2D::new(
                 grid_dimension,
-                empty_container,
-                Some(T::zero()),
+                data,
+                no_data,
                 time_interval,
                 tile_information.tile_geo_transform(),
             )
             .expect("creates a new raster without IO"),
+        )
+    }
+
+    fn read_tile(
+        rasterband: &GdalRasterBand,
+        dataset_idx_ul: GridIdx2D,
+        dataset_idx_lr: GridIdx2D,
+        tile_size: GridIdx2D,
+    ) -> Result<Buffer<T>> {
+        let [ul_y, ul_x] = dataset_idx_ul;
+        let [lr_y, lr_x] = dataset_idx_lr;
+        let [tile_y_size, tile_x_size] = tile_size;
+        rasterband.read_as::<T>(
+            (ul_x as isize, ul_y as isize), // pixelspace origin
+            (lr_x - ul_x, lr_y - ul_y),     // pixelspace size
+            (tile_x_size, tile_y_size),     // requested raster size
         )
     }
 
@@ -439,81 +456,50 @@ where
             .bounding_box()
             .intersects_bbox(&tile_information.spatial_bounds());
 
-        match (dataset_contains_tile, dataset_intersects_tile) {
+        let result_raster = match (dataset_contains_tile, dataset_intersects_tile) {
             (_, false) => {
-                return Ok(GdalSourceProcessor::create_no_data_tile(tile_information, time_interval));
+                let empty_container = vec![T::zero(); grid_dimension.number_of_elements()];
+                GdalSourceProcessor::create_tile(
+                    tile_information,
+                    time_interval,
+                    empty_container,
+                    Some(T::zero()),
+                )
             }
             (true, true) => {
-                return GdalSourceProcessor::
+                let dataset_idx_ul = gdal_dataset_information
+                    .geo_transform()
+                    .coordinate_2d_to_grid_2d(tile_information.spatial_bounds().upper_left());
+                let dataset_idx_lr = gdal_dataset_information
+                    .geo_transform()
+                    .coordinate_2d_to_grid_2d(tile_information.spatial_bounds().lower_right());
+
+                // TODO: debug_assert idx is in grid
+
+                let data = GdalSourceProcessor::read_tile(
+                    rasterband,
+                    dataset_idx_ul,
+                    dataset_idx_lr,
+                    tile_information.tile_size_in_pixels,
+                )?;
+                GdalSourceProcessor::create_tile(
+                    tile_information,
+                    time_interval,
+                    data,
+                    Some(T::zero()),
+                )
             }
-        }
-
-        // calculate the pixel offset between raster origin and tiling origin by transforming the raster origin into an index in the tiling geotransform
-        let [offset_y, offset_x] = gdal_dataset_information
-            .geo_transform()
-            .coordinate_2d_to_signed_grid_2d(
-                tile_information.global_geo_transform.origin_coordinate,
-            );
-
-        // the offset dimension translates between tiling pixels and gdal pixels in dataset resolution
-        let offset_grid_dataset_resolution = OffsetDim2D {
-            dimension: Dim2D::new(gdal_dataset_information.pixel_dimension_size()),
-            offsets: [-offset_y, -offset_x],
+            (false, true) => {
+                // TODO: create a result raster, read the availble data for the tile, blit tile in result raster.
+                let empty_container = vec![T::zero(); grid_dimension.number_of_elements()];
+                GdalSourceProcessor::create_tile(
+                    tile_information,
+                    time_interval,
+                    empty_container,
+                    Some(T::zero()),
+                )
+            }
         };
-
-        // get offset bounds of the dataset in dataset resolution
-        let [dataset_min_y, dataset_min_x] = offset_grid_dataset_resolution.offsets_as_index();
-        let [dataset_max_y, dataset_max_x] = offset_grid_dataset_resolution.offsets_max_index();
-
-        //TODO: assert tile geotransform and offset geotransform have the same origin!
-
-        // get the dataset resolution pixel index for the tile bounds
-        let [tile_min_y, tile_min_x] = gdal_dataset_information
-            .geo_transform()
-            .coordinate_2d_to_signed_grid_2d(
-                tile_information
-                    .global_geo_transform
-                    .signed_grid_idx_to_coordinate_2d(
-                        tile_information.global_pixel_position_upper_left(),
-                    ),
-            );
-
-        let [tile_max_y, tile_max_x] = gdal_dataset_information
-            .geo_transform()
-            .coordinate_2d_to_signed_grid_2d(
-                tile_information
-                    .global_geo_transform
-                    .signed_grid_idx_to_coordinate_2d(
-                        tile_information.global_pixel_position_lower_right(),
-                    ),
-            );
-
-        let request_width = tile_max_x - tile_min_x;
-        let request_height = tile_max_y - tile_min_y;
-
-        let overflow_left = min(0, dataset_min_x - tile_min_x);
-        let overflow_top = min(0, dataset_min_y - tile_min_y);
-        let overflow_right = min(0, tile_max_x - dataset_max_x);
-        let overflow_bottom = min(0, tile_max_y - dataset_max_y);
-
-        let request_width = tile_max_x - tile_min_x - (overflow_left + overflow_right);
-        let request_height = tile_max_y - tile_min_y - (overflow_top + overflow_bottom);
-
-        let [query_tile_size_y, query_tile_size_x] = tile_information.tile_size_in_pixels();
-
-        // read the data from the rasterband
-        let buffer = rasterband.read_as::<T>(
-            native_pixel_origin, // pixelspace origin
-            native_pixel_size,   // pixelspace size
-            query_pixel_size,    /* requested raster size */
-        )?;
-        let raster_result = Raster2D::new(
-            tile_information.tile_size_in_pixels.into(),
-            buffer.data,
-            None,
-            time_interval,
-            tile_information.tile_geo_transform(),
-        )?;
 
         Ok(RasterTile2D::new(
             time_interval,
