@@ -868,15 +868,15 @@ impl FeatureCollectionBuilderGeometryHandler<NoGeometry>
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     use futures::TryStreamExt;
     use serde_json::json;
 
     use geoengine_datatypes::collections::MultiPointCollection;
-    use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution};
+    use geoengine_datatypes::primitives::{BoundingBox2D, FeatureData, SpatialResolution};
 
     use crate::engine::ExecutionContext;
-
-    use super::*;
 
     #[test]
     fn specification_serde() {
@@ -1037,6 +1037,137 @@ mod tests {
                 coordinates,
                 vec![Default::default(); 10],
                 HashMap::new(),
+            )?
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn ne_10m_ports_columns() -> Result<()> {
+        let source = OgrSource {
+            params: OgrSourceParameters {
+                layer_name: "ne_10m_ports_2".to_string(),
+                attribute_projection: None,
+            },
+        }
+        .boxed()
+        .initialize(&ExecutionContext {
+            raster_data_root: Default::default(),
+        })?;
+
+        assert_eq!(
+            source.result_descriptor().data_type,
+            VectorDataType::MultiPoint
+        );
+        assert_eq!(
+            source.result_descriptor().spatial_reference,
+            SpatialReference::wgs84().into()
+        );
+
+        let query_processor = source.query_processor()?.multi_point().unwrap();
+
+        let query = query_processor.query(
+            QueryRectangle {
+                bbox: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
+                time_interval: Default::default(),
+                spatial_resolution: SpatialResolution::new(1., 1.)?,
+            },
+            QueryContext { chunk_byte_size: 0 },
+        );
+
+        let result: Vec<MultiPointCollection> = query.try_collect().await?;
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].len(), 10);
+
+        let coordinates = MultiPoint::many(vec![
+            (2.933_686_69, 51.23),
+            (3.204_593_64_f64, 51.336_388_89),
+            (4.651_413_428, 51.805_833_33),
+            (4.11, 51.95),
+            (4.386_160_188, 50.886_111_11),
+            (3.767_373_38, 51.114_444_44),
+            (4.293_757_362, 51.297_777_78),
+            (1.850_176_678, 50.965_833_33),
+            (2.170_906_949, 51.021_666_67),
+            (4.292_873_969, 51.927_222_22),
+        ])?;
+
+        let natlscale = FeatureData::NullableNumber(
+            [5.0_f64, 5.0, 5.0, 10.0, 20.0, 20.0, 30.0, 30.0, 30.0, 30.0]
+                .iter()
+                .map(|v| Some(*v))
+                .collect(),
+        );
+
+        let scalerank = FeatureData::NullableDecimal(
+            [8, 8, 8, 7, 6, 6, 5, 5, 5, 5]
+                .iter()
+                .map(|v| Some(*v))
+                .collect(),
+        );
+
+        let featurecla = FeatureData::NullableText(
+            [
+                "Port", "Port", "Port", "Port", "Port", "Port", "Port", "Port", "Port", "Port",
+            ]
+            .iter()
+            .map(|&v| Some(v.to_string()))
+            .collect(),
+        );
+
+        let website = FeatureData::NullableText(
+            [
+                "www.portofoostende.be",
+                "www.zeebruggeport.be",
+                "",
+                "",
+                "www.portdebruxelles.irisnet.be",
+                "www.havengent.be",
+                "www.portofantwerp.be",
+                "www.calais-port.com",
+                "www.portdedunkerque.fr",
+                "www.portofrotterdam.com",
+            ]
+            .iter()
+            .map(|&v| Some(v.to_string()))
+            .collect(),
+        );
+
+        let name = FeatureData::NullableText(
+            [
+                "Oostende (Ostend)",
+                "Zeebrugge",
+                "Dordrecht",
+                "Europoort",
+                "Brussel (Bruxelles)",
+                "Gent (Ghent)",
+                "Antwerpen",
+                "Calais",
+                "Dunkerque",
+                "Rotterdam",
+            ]
+            .iter()
+            .map(|&v| Some(v.to_string()))
+            .collect(),
+        );
+
+        assert_eq!(
+            result[0],
+            MultiPointCollection::from_data(
+                coordinates,
+                vec![Default::default(); 10],
+                [
+                    ("natlscale".to_string(), natlscale),
+                    ("scalerank".to_string(), scalerank),
+                    ("featurecla".to_string(), featurecla),
+                    ("website".to_string(), website),
+                    ("name".to_string(), name),
+                ]
+                .iter()
+                .cloned()
+                .collect(),
             )?
         );
 
