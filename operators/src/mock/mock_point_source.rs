@@ -51,7 +51,7 @@ pub type MockPointSource = SourceOperator<MockPointSourceParams>;
 impl VectorOperator for MockPointSource {
     fn initialize(
         self: Box<Self>,
-        context: ExecutionContext,
+        context: &ExecutionContext,
     ) -> Result<Box<InitializedVectorOperator>> {
         InitializedOperatorImpl::create(
             self.params,
@@ -87,7 +87,7 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
 mod tests {
     use super::*;
     use futures::executor::block_on_stream;
-    use geoengine_datatypes::primitives::BoundingBox2D;
+    use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution};
 
     #[test]
     fn serde() {
@@ -106,14 +106,14 @@ mod tests {
 
     #[test]
     fn execute() {
-        let execution_context = ExecutionContext;
+        let execution_context = ExecutionContext::mock_empty();
         let points = vec![Coordinate2D::new(1., 2.); 3];
 
         let mps = MockPointSource {
             params: MockPointSourceParams { points },
         }
         .boxed();
-        let initialized = mps.initialize(execution_context).unwrap();
+        let initialized = mps.initialize(&execution_context).unwrap();
 
         let typed_processor = initialized.query_processor();
         let point_processor = match typed_processor {
@@ -124,6 +124,7 @@ mod tests {
         let query_rectangle = QueryRectangle {
             bbox: BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
             time_interval: TimeInterval::default(),
+            spatial_resolution: SpatialResolution::zero_point_one(),
         };
         let ctx = QueryContext {
             chunk_byte_size: 2 * std::mem::size_of::<Coordinate2D>(),

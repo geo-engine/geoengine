@@ -1,3 +1,4 @@
+use crate::collections::batch_builder::RawFeatureCollectionBuilder;
 use crate::collections::{error, FeatureCollection, FeatureCollectionError};
 use crate::primitives::{FeatureDataType, FeatureDataValue, Geometry, TimeInterval};
 use crate::util::arrow::{downcast_mut_array, ArrowTyped};
@@ -96,6 +97,19 @@ where
             rows: 0,
             _collection_type: PhantomData,
         }
+    }
+
+    pub fn batch_builder(
+        self,
+        num_features: usize,
+        num_coords: usize,
+    ) -> RawFeatureCollectionBuilder {
+        RawFeatureCollectionBuilder::new(
+            CollectionType::DATA_TYPE,
+            self.types,
+            num_features,
+            num_coords,
+        )
     }
 }
 

@@ -6,13 +6,13 @@ use crate::util::identifiers::Identifier;
 use crate::util::user_input::UserInput;
 use crate::workflows::workflow::WorkflowId;
 use chrono::{DateTime, Utc};
-use geoengine_datatypes::operations::image::Colorizer;
 use geoengine_datatypes::primitives::{
     BoundingBox2D, Coordinate2D, SpatialBounded, TemporalBounded, TimeInterval,
 };
+use geoengine_datatypes::{operations::image::Colorizer, primitives::TimeInstance};
+use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
-use std::cmp::Ordering;
 use uuid::Uuid;
 
 identifier!(ProjectId);
@@ -85,14 +85,18 @@ pub struct STRectangle {
 }
 
 impl STRectangle {
-    pub fn new(
+    pub fn new<A, B>(
         lower_left_x: f64,
         lower_left_y: f64,
         upper_left_x: f64,
         upper_left_y: f64,
-        time_start: i64,
-        time_stop: i64,
-    ) -> Result<Self> {
+        time_start: A,
+        time_stop: B,
+    ) -> Result<Self>
+    where
+        A: Into<TimeInstance>,
+        B: Into<TimeInstance>,
+    {
         Ok(Self {
             bounding_box: BoundingBox2D::new(
                 Coordinate2D::new(lower_left_x, lower_left_y),
@@ -101,6 +105,27 @@ impl STRectangle {
             .context(error::DataType)?,
             time_interval: TimeInterval::new(time_start, time_stop).context(error::DataType {})?,
         })
+    }
+
+    pub fn new_unchecked<A, B>(
+        lower_left_x: f64,
+        lower_left_y: f64,
+        upper_left_x: f64,
+        upper_left_y: f64,
+        time_start: A,
+        time_stop: B,
+    ) -> Self
+    where
+        A: Into<TimeInstance>,
+        B: Into<TimeInstance>,
+    {
+        Self {
+            bounding_box: BoundingBox2D::new_unchecked(
+                Coordinate2D::new(lower_left_x, lower_left_y),
+                Coordinate2D::new(upper_left_x, upper_left_y),
+            ),
+            time_interval: TimeInterval::new_unchecked(time_start, time_stop),
+        }
     }
 }
 
@@ -119,9 +144,28 @@ impl TemporalBounded for STRectangle {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Layer {
     // TODO: check that workflow/operator output type fits to the type of LayerInfo
+    // TODO: LayerId?
     pub workflow: WorkflowId,
     pub name: String,
     pub info: LayerInfo,
+}
+
+impl Layer {
+    pub fn layer_type(&self) -> LayerType {
+        match self.info {
+            LayerInfo::Raster(_) => LayerType::Raster,
+            LayerInfo::Vector(_) => LayerType::Vector,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, ToSql, FromSql)]
+#[postgres(name = "layer_type")]
+pub enum LayerType {
+    #[postgres(name = "raster")]
+    Raster,
+    #[postgres(name = "vector")]
+    Vector,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -146,6 +190,17 @@ pub enum OrderBy {
     DateDesc,
     NameAsc,
     NameDesc,
+}
+
+impl OrderBy {
+    pub fn to_sql_string(&self) -> &'static str {
+        match self {
+            OrderBy::DateAsc => "time ASC",
+            OrderBy::DateDesc => "time DESC",
+            OrderBy::NameAsc => "name ASC",
+            OrderBy::NameDesc => "name DESC",
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
@@ -187,7 +242,7 @@ pub struct CreateProject {
 impl UserInput for CreateProject {
     fn validate(&self) -> Result<(), Error> {
         ensure!(
-            !(self.name.is_empty() || self.description.is_empty()),
+            !(self.name.is_empty() || self.name.len() > 256 || self.description.is_empty()),
             error::ProjectCreateFailed
         );
 
@@ -221,10 +276,14 @@ impl UserInput for UpdateProject {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, ToSql, FromSql)]
+#[postgres(name = "project_permission")]
 pub enum ProjectPermission {
+    #[postgres(name = "read")]
     Read,
+    #[postgres(name = "write")]
     Write,
+    #[postgres(name = "owner")]
     Owner,
 }
 
@@ -240,8 +299,8 @@ pub struct ProjectListOptions {
     pub permissions: Vec<ProjectPermission>,
     pub filter: ProjectFilter,
     pub order: OrderBy,
-    pub offset: usize,
-    pub limit: usize,
+    pub offset: u32,
+    pub limit: u32,
 }
 
 impl UserInput for ProjectListOptions {
@@ -271,12 +330,6 @@ impl ProjectVersion {
             changed: chrono::offset::Utc::now(),
             author: user,
         }
-    }
-}
-
-impl PartialOrd for ProjectVersion {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.changed.partial_cmp(&other.changed)
     }
 }
 

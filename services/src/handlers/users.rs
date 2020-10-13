@@ -1,72 +1,64 @@
 use crate::error::Result;
-use crate::handlers::{authenticate, DB};
-use crate::users::session::Session;
+use crate::handlers::{authenticate, Context};
 use crate::users::user::{UserCredentials, UserRegistration};
 use crate::users::userdb::UserDB;
 use crate::util::user_input::UserInput;
-use std::sync::Arc;
 use warp::reply::Reply;
 use warp::Filter;
 
-pub fn register_user_handler<T: UserDB>(
-    user_db: DB<T>,
+pub fn register_user_handler<C: Context>(
+    ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::post()
         .and(warp::path!("user" / "register"))
         .and(warp::body::json())
-        .and(warp::any().map(move || Arc::clone(&user_db)))
+        .and(warp::any().map(move || ctx.clone()))
         .and_then(register_user)
 }
 
 // TODO: move into handler once async closures are available?
-async fn register_user<T: UserDB>(
+async fn register_user<C: Context>(
     user: UserRegistration,
-    user_db: DB<T>,
+    ctx: C,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let user = user.validated()?;
-    let id = user_db.write().await.register(user)?;
+    let id = ctx.user_db_ref_mut().await.register(user).await?;
     Ok(warp::reply::json(&id))
 }
 
-pub fn login_handler<T: UserDB>(
-    user_db: DB<T>,
+pub fn login_handler<C: Context>(
+    ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::post()
         .and(warp::path!("user" / "login"))
         .and(warp::body::json())
-        .and(warp::any().map(move || Arc::clone(&user_db.clone())))
+        .and(warp::any().map(move || ctx.clone()))
         .and_then(login)
 }
 
 // TODO: move into handler once async closures are available?
-async fn login<T: UserDB>(
+async fn login<C: Context>(
     user: UserCredentials,
-    user_db: DB<T>,
+    ctx: C,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    let mut db = user_db.write().await;
-    match db.login(user) {
+    match ctx.user_db_ref_mut().await.login(user).await {
         Ok(id) => Ok(warp::reply::json(&id).into_response()),
         Err(_) => Ok(warp::http::StatusCode::UNAUTHORIZED.into_response()),
     }
 }
 
-pub fn logout_handler<T: UserDB>(
-    user_db: DB<T>,
+pub fn logout_handler<C: Context>(
+    ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::post()
         .and(warp::path!("user" / "logout"))
-        .and(authenticate(user_db.clone()))
-        .and(warp::any().map(move || Arc::clone(&user_db.clone())))
+        .and(authenticate(ctx))
         .and_then(logout)
 }
 
 // TODO: move into handler once async closures are available?
-async fn logout<T: UserDB>(
-    session: Session,
-    user_db: DB<T>,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    let mut db = user_db.write().await;
-    match db.logout(session.token) {
+async fn logout<C: Context>(ctx: C) -> Result<impl warp::Reply, warp::Rejection> {
+    match ctx.user_db_ref_mut().await.logout(ctx.session()?.id).await {
         Ok(_) => Ok(warp::reply().into_response()),
         Err(_) => Ok(warp::http::StatusCode::UNAUTHORIZED.into_response()),
     }
@@ -75,16 +67,15 @@ async fn logout<T: UserDB>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::handlers::handle_rejection;
-    use crate::users::hashmap_userdb::HashMapUserDB;
+    use crate::users::session::Session;
     use crate::users::user::UserId;
     use crate::users::userdb::UserDB;
     use crate::util::user_input::Validated;
-    use tokio::sync::RwLock;
+    use crate::{contexts::InMemoryContext, handlers::handle_rejection};
 
     #[tokio::test]
     async fn register() {
-        let user_db = Arc::new(RwLock::new(HashMapUserDB::default()));
+        let ctx = InMemoryContext::default();
 
         let user = UserRegistration {
             email: "foo@bar.de".to_string(),
@@ -98,7 +89,7 @@ mod tests {
             .path("/user/register")
             .header("Content-Length", "0")
             .json(&user)
-            .reply(&register_user_handler(user_db.clone()))
+            .reply(&register_user_handler(ctx))
             .await;
 
         assert_eq!(res.status(), 200);
@@ -109,7 +100,7 @@ mod tests {
 
     #[tokio::test]
     async fn register_fail() {
-        let user_db = Arc::new(RwLock::new(HashMapUserDB::default()));
+        let ctx = InMemoryContext::default();
 
         let user = UserRegistration {
             email: "notanemail".to_string(),
@@ -123,7 +114,7 @@ mod tests {
             .path("/user/register")
             .header("Content-Length", "0")
             .json(&user)
-            .reply(&register_user_handler(user_db.clone()).recover(handle_rejection))
+            .reply(&register_user_handler(ctx).recover(handle_rejection))
             .await;
 
         assert_eq!(res.status(), 400);
@@ -131,7 +122,7 @@ mod tests {
 
     #[tokio::test]
     async fn login() {
-        let user_db = Arc::new(RwLock::new(HashMapUserDB::default()));
+        let ctx = InMemoryContext::default();
 
         let user = Validated {
             user_input: UserRegistration {
@@ -141,7 +132,7 @@ mod tests {
             },
         };
 
-        user_db.write().await.register(user).unwrap();
+        ctx.user_db().write().await.register(user).await.unwrap();
 
         let credentials = UserCredentials {
             email: "foo@bar.de".to_string(),
@@ -153,7 +144,7 @@ mod tests {
             .path("/user/login")
             .header("Content-Length", "0")
             .json(&credentials)
-            .reply(&login_handler(user_db.clone()))
+            .reply(&login_handler(ctx))
             .await;
 
         assert_eq!(res.status(), 200);
@@ -164,7 +155,7 @@ mod tests {
 
     #[tokio::test]
     async fn login_fail() {
-        let user_db = Arc::new(RwLock::new(HashMapUserDB::default()));
+        let ctx = InMemoryContext::default();
 
         let user = Validated {
             user_input: UserRegistration {
@@ -174,7 +165,7 @@ mod tests {
             },
         };
 
-        user_db.write().await.register(user).unwrap();
+        ctx.user_db().write().await.register(user).await.unwrap();
 
         let credentials = UserCredentials {
             email: "foo@bar.de".to_string(),
@@ -186,7 +177,7 @@ mod tests {
             .path("/user/login")
             .header("Content-Length", "0")
             .json(&credentials)
-            .reply(&login_handler(user_db.clone()))
+            .reply(&login_handler(ctx))
             .await;
 
         assert_eq!(res.status(), 401);
@@ -194,7 +185,7 @@ mod tests {
 
     #[tokio::test]
     async fn logout() {
-        let user_db = Arc::new(RwLock::new(HashMapUserDB::default()));
+        let ctx = InMemoryContext::default();
 
         let user = Validated {
             user_input: UserRegistration {
@@ -204,20 +195,26 @@ mod tests {
             },
         };
 
-        user_db.write().await.register(user).unwrap();
+        ctx.user_db().write().await.register(user).await.unwrap();
 
         let credentials = UserCredentials {
             email: "foo@bar.de".to_string(),
             password: "secret123".to_string(),
         };
 
-        let session = user_db.write().await.login(credentials).unwrap();
+        let session = ctx
+            .user_db()
+            .write()
+            .await
+            .login(credentials)
+            .await
+            .unwrap();
 
         let res = warp::test::request()
             .method("POST")
             .path("/user/logout")
-            .header("Authorization", session.token.to_string())
-            .reply(&logout_handler(user_db.clone()))
+            .header("Authorization", session.id.to_string())
+            .reply(&logout_handler(ctx))
             .await;
 
         assert_eq!(res.status(), 200);
@@ -226,12 +223,12 @@ mod tests {
 
     #[tokio::test]
     async fn logout_missing_header() {
-        let user_db = Arc::new(RwLock::new(HashMapUserDB::default()));
+        let ctx = InMemoryContext::default();
 
         let res = warp::test::request()
             .method("POST")
             .path("/user/logout")
-            .reply(&logout_handler(user_db.clone()))
+            .reply(&logout_handler(ctx))
             .await;
 
         assert_eq!(res.status(), 400);
@@ -240,13 +237,13 @@ mod tests {
 
     #[tokio::test]
     async fn logout_wrong_token() {
-        let user_db = Arc::new(RwLock::new(HashMapUserDB::default()));
+        let ctx = InMemoryContext::default();
 
         let res = warp::test::request()
             .method("POST")
             .path("/user/logout")
             .header("Authorization", "7e855f3c-b0cd-46d1-b5b3-19e6e3f9ea5")
-            .reply(&logout_handler(user_db.clone()))
+            .reply(&logout_handler(ctx))
             .await;
 
         assert_eq!(res.status(), 404); // TODO: 401?
@@ -255,13 +252,13 @@ mod tests {
 
     #[tokio::test]
     async fn logout_invalid_token() {
-        let user_db = Arc::new(RwLock::new(HashMapUserDB::default()));
+        let ctx = InMemoryContext::default();
 
         let res = warp::test::request()
             .method("POST")
             .path("/user/logout")
             .header("Authorization", "no uuid")
-            .reply(&logout_handler(user_db.clone()))
+            .reply(&logout_handler(ctx))
             .await;
 
         assert_eq!(res.status(), 404); // TODO: 400?

@@ -1,3 +1,4 @@
+use bb8_postgres::bb8::{ManageConnection, RunError};
 use snafu::Snafu;
 use warp::reject::Reject;
 
@@ -46,7 +47,7 @@ pub enum Error {
     LoginFailed,
     LogoutFailed,
     SessionDoesNotExist,
-    InvalidSessionToken,
+    InvalidSession,
 
     ProjectCreateFailed,
     ProjectListFailed,
@@ -54,12 +55,22 @@ pub enum Error {
     ProjectUpdateFailed,
     ProjectDeleteFailed,
     PermissionFailed,
+    ProjectDBUnauthorized,
 
     InvalidNamespace,
 
     InvalidWFSTypeNames,
 
     NoWorkflowForGivenId,
+
+    TokioPostgres {
+        source: bb8_postgres::tokio_postgres::Error,
+    },
+
+    TokioPostgresTimeout,
+
+    InvalidUuid,
+    SessionNotInitialized,
 }
 
 impl Reject for Error {}
@@ -79,5 +90,20 @@ impl From<geoengine_operators::error::Error> for Error {
 impl From<Error> for warp::Rejection {
     fn from(e: Error) -> Self {
         warp::reject::custom(e)
+    }
+}
+
+impl From<RunError<<bb8_postgres::PostgresConnectionManager<bb8_postgres::tokio_postgres::NoTls> as ManageConnection>::Error>> for Error {
+    fn from(e: RunError<<bb8_postgres::PostgresConnectionManager<bb8_postgres::tokio_postgres::NoTls> as ManageConnection>::Error>) -> Self {
+        match e {
+            RunError::User(e) => Self::TokioPostgres { source: e },
+            RunError::TimedOut => Self::TokioPostgresTimeout,
+        }
+    }
+}
+
+impl From<bb8_postgres::tokio_postgres::error::Error> for Error {
+    fn from(e: bb8_postgres::tokio_postgres::error::Error) -> Self {
+        Self::TokioPostgres { source: e }
     }
 }

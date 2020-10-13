@@ -4,7 +4,7 @@ use tokio::sync::oneshot;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    // TODO: use special config for port etc. for starting the server and connecting to it
+    // TODO: make configurable
     let base_url = "http://localhost:3030/".to_string();
 
     eprintln!("Starting server… {}", base_url);

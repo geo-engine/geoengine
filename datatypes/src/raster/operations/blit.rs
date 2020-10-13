@@ -14,6 +14,7 @@ impl<T: Pixel> Blit<Raster2D<T>> for Raster2D<T> {
         // TODO: same crs
         // TODO: allow approximately equal pixel sizes?
         // TODO: ensure pixels are aligned
+
         ensure!(
             (self.geo_transform().x_pixel_size == source.geo_transform().x_pixel_size)
                 && (self.geo_transform().y_pixel_size == source.geo_transform().y_pixel_size),
@@ -31,19 +32,20 @@ impl<T: Pixel> Blit<Raster2D<T>> for Raster2D<T> {
 
         let (start_y, start_x) = self
             .geo_transform()
-            .coordinate_2d_to_grid_2d(&intersection.upper_left());
+            .coordinate_2d_to_grid_2d(intersection.upper_left());
         let (stop_y, stop_x) = self
             .geo_transform()
-            .coordinate_2d_to_grid_2d(&intersection.lower_right());
+            .coordinate_2d_to_grid_2d(intersection.lower_right());
 
         let (start_source_y, start_source_x) = source
             .geo_transform()
-            .coordinate_2d_to_grid_2d(&intersection.upper_left());
+            .coordinate_2d_to_grid_2d(intersection.upper_left());
 
         // TODO: check if dimension of self and source fit?
         let width = stop_x - start_x;
 
         for y in 0..stop_y - start_y {
+            // TODO: assure that we are in the bounds
             let index = (start_y + y, start_x).grid_index_to_1d_index_unchecked(&self.dimension());
             let index_source = (start_source_y + y, start_source_x)
                 .grid_index_to_1d_index_unchecked(&source.dimension());

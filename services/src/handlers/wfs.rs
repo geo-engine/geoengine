@@ -1,47 +1,46 @@
-use std::sync::Arc;
-
 use snafu::ResultExt;
-use tokio::sync::RwLock;
 use uuid::Uuid;
 use warp::reply::Reply;
 use warp::{http::Response, Filter};
 
 use crate::error;
 use crate::error::Result;
+use crate::handlers::Context;
 use crate::ogc::wfs::request::{GetCapabilities, GetFeature, TypeNames, WFSRequest};
 use crate::util::identifiers::Identifier;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use futures::StreamExt;
-use geoengine_datatypes::collections::{FeatureCollection, MultiPointCollection};
 use geoengine_datatypes::primitives::{FeatureData, MultiPoint, TimeInstance, TimeInterval};
+use geoengine_datatypes::{
+    collections::{FeatureCollection, MultiPointCollection},
+    primitives::SpatialResolution,
+};
 use geoengine_operators::engine::{
     ExecutionContext, QueryContext, QueryRectangle, TypedVectorQueryProcessor, VectorQueryProcessor,
 };
 use serde_json::json;
 
-type WR<T> = Arc<RwLock<T>>;
-
-pub fn wfs_handler<T: WorkflowRegistry>(
-    workflow_registry: WR<T>,
+pub fn wfs_handler<C: Context>(
+    ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::get()
         .and(warp::path!("wfs"))
         .and(warp::query::<WFSRequest>())
-        .and(warp::any().map(move || Arc::clone(&workflow_registry)))
+        .and(warp::any().map(move || ctx.clone()))
         .and_then(wfs)
 }
 
 // TODO: move into handler once async closures are available?
-async fn wfs<T: WorkflowRegistry>(
+async fn wfs<C: Context>(
     request: WFSRequest,
-    workflow_registry: WR<T>,
+    ctx: C,
 ) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
     // TODO: authentication
     // TODO: more useful error output than "invalid query string"
     match request {
         WFSRequest::GetCapabilities(request) => get_capabilities(&request),
-        WFSRequest::GetFeature(request) => get_feature(&request, &workflow_registry).await,
+        WFSRequest::GetFeature(request) => get_feature(&request, &ctx).await,
         _ => Ok(Box::new(
             warp::http::StatusCode::NOT_IMPLEMENTED.into_response(),
         )),
@@ -145,9 +144,9 @@ fn get_capabilities(_request: &GetCapabilities) -> Result<Box<dyn warp::Reply>, 
     Ok(Box::new(warp::reply::html(mock)))
 }
 
-async fn get_feature<T: WorkflowRegistry>(
+async fn get_feature<C: Context>(
     request: &GetFeature,
-    workflow_registry: &WR<T>,
+    ctx: &C,
 ) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
     // TODO: validate request?
     if request.type_names
@@ -160,9 +159,14 @@ async fn get_feature<T: WorkflowRegistry>(
     }
 
     let workflow: Workflow = match request.type_names.namespace.as_deref() {
-        Some("registry") => workflow_registry.read().await.load(&WorkflowId::from_uuid(
-            Uuid::parse_str(&request.type_names.feature_type).context(error::Uuid)?,
-        ))?,
+        Some("registry") => {
+            ctx.workflow_registry_ref()
+                .await
+                .load(&WorkflowId::from_uuid(
+                    Uuid::parse_str(&request.type_names.feature_type).context(error::Uuid)?,
+                ))
+                .await?
+        }
         Some("json") => {
             serde_json::from_str(&request.type_names.feature_type).context(error::SerdeJson)?
         }
@@ -176,9 +180,9 @@ async fn get_feature<T: WorkflowRegistry>(
 
     let operator = workflow.operator.get_vector().context(error::Operator)?;
 
-    let execution_context = ExecutionContext;
+    let execution_context = ExecutionContext::mock_empty();
     let initialized = operator
-        .initialize(execution_context)
+        .initialize(&execution_context)
         .context(error::Operator)?;
 
     let processor = initialized.query_processor().context(error::Operator)?;
@@ -189,6 +193,7 @@ async fn get_feature<T: WorkflowRegistry>(
             let time = TimeInstance::from(chrono::offset::Utc::now());
             TimeInterval::new_unchecked(time, time)
         }),
+        spatial_resolution: SpatialResolution::zero_point_one(),
     };
     let query_ctx = QueryContext {
         // TODO: use production config and test config sizes here
@@ -303,10 +308,8 @@ fn get_feature_mock(_request: &GetFeature) -> Result<Box<dyn warp::Reply>, warp:
 mod tests {
     use geoengine_operators::source::CsvSourceParameters;
 
-    use crate::workflows::registry::HashMapRegistry;
-
     use super::*;
-    use crate::workflows::workflow::Workflow;
+    use crate::{contexts::InMemoryContext, workflows::workflow::Workflow};
     use geoengine_operators::engine::TypedOperator;
     use geoengine_operators::source::{CsvGeometrySpecification, CsvSource, CsvTimeSpecification};
     use serde_json::json;
@@ -315,12 +318,12 @@ mod tests {
 
     #[tokio::test]
     async fn mock_test() {
-        let workflow_registry = Arc::new(RwLock::new(HashMapRegistry::default()));
+        let ctx = InMemoryContext::default();
 
         let res = warp::test::request()
             .method("GET")
             .path("/wfs?request=GetFeature&service=WFS&version=2.0.0&typeNames=test&bbox=1,2,3,4")
-            .reply(&wfs_handler(workflow_registry))
+            .reply(&wfs_handler(ctx))
             .await;
         assert_eq!(res.status(), 200);
         let body: String = String::from_utf8(res.body().to_vec()).unwrap();
@@ -408,12 +411,12 @@ mod tests {
 
     #[tokio::test]
     async fn get_capabilities() {
-        let workflow_registry = Arc::new(RwLock::new(HashMapRegistry::default()));
+        let ctx = InMemoryContext::default();
 
         let res = warp::test::request()
             .method("GET")
             .path("/wfs?request=GetCapabilities&service=WFS")
-            .reply(&wfs_handler(workflow_registry))
+            .reply(&wfs_handler(ctx))
             .await;
 
         assert_eq!(res.status(), 200);
@@ -441,7 +444,7 @@ x;y
         .unwrap();
         temp_file.seek(SeekFrom::Start(0)).unwrap();
 
-        let workflow_registry = Arc::new(RwLock::new(HashMapRegistry::default()));
+        let ctx = InMemoryContext::default();
 
         let workflow = Workflow {
             operator: TypedOperator::Vector(Box::new(CsvSource {
@@ -457,16 +460,18 @@ x;y
             })),
         };
 
-        let id = workflow_registry
+        let id = ctx
+            .workflow_registry()
             .write()
             .await
             .register(workflow.clone())
+            .await
             .unwrap();
 
         let res = warp::test::request()
             .method("GET")
             .path(&format!("/wfs?request=GetFeature&service=WFS&version=2.0.0&typeNames=registry:{}&bbox=-90,-180,90,180&crs=EPSG:4326", id.to_string()))
-            .reply(&wfs_handler(workflow_registry))
+            .reply(&wfs_handler(ctx))
             .await;
         let body: String = String::from_utf8(res.body().to_vec()).unwrap();
         assert_eq!(
@@ -531,7 +536,7 @@ x;y
         .unwrap();
         temp_file.seek(SeekFrom::Start(0)).unwrap();
 
-        let workflow_registry = Arc::new(RwLock::new(HashMapRegistry::default()));
+        let ctx = InMemoryContext::default();
 
         let workflow = Workflow {
             operator: TypedOperator::Vector(Box::new(CsvSource {
@@ -561,7 +566,7 @@ x;y
         let res = warp::test::request()
             .method("GET")
             .path(&url)
-            .reply(&wfs_handler(workflow_registry))
+            .reply(&wfs_handler(ctx))
             .await;
         let body: String = String::from_utf8(res.body().to_vec()).unwrap();
         assert_eq!(

@@ -41,6 +41,11 @@ pub enum FeatureCollectionError {
     },
 
     WrongDataType,
+
+    MissingColumnArray,
+
+    MissingTime,
+    MissingGeo,
 }
 
 impl From<FeatureCollectionError> for Error {

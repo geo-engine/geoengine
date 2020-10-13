@@ -137,8 +137,11 @@ mod tests {
         MockPointSourceParams,
     };
     use futures::{StreamExt, TryStreamExt};
-    use geoengine_datatypes::collections::{DataCollection, MultiPointCollection};
     use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, MultiPoint, TimeInterval};
+    use geoengine_datatypes::{
+        collections::{DataCollection, MultiPointCollection},
+        primitives::SpatialResolution,
+    };
 
     #[tokio::test]
     async fn simple() {
@@ -153,7 +156,10 @@ mod tests {
             },
         };
 
-        let source = source.boxed().initialize(ExecutionContext).unwrap();
+        let source = source
+            .boxed()
+            .initialize(&ExecutionContext::mock_empty())
+            .unwrap();
 
         let processor =
             if let TypedVectorQueryProcessor::MultiPoint(p) = source.query_processor().unwrap() {
@@ -165,6 +171,7 @@ mod tests {
         let qrect = QueryRectangle {
             bbox: BoundingBox2D::new((0.0, 0.0).into(), (10.0, 10.0).into()).unwrap(),
             time_interval: Default::default(),
+            spatial_resolution: SpatialResolution::zero_point_one(),
         };
         let cx = QueryContext {
             chunk_byte_size: std::mem::size_of::<Coordinate2D>() * 2,
@@ -226,7 +233,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(ExecutionContext)
+        .initialize(&ExecutionContext::mock_empty())
         .unwrap();
 
         let processor =
@@ -239,6 +246,7 @@ mod tests {
         let qrect = QueryRectangle {
             bbox: BoundingBox2D::new((0.0, 0.0).into(), (0.0, 0.0).into()).unwrap(),
             time_interval: Default::default(),
+            spatial_resolution: SpatialResolution::zero_point_one(),
         };
         let cx = QueryContext { chunk_byte_size: 0 };
 

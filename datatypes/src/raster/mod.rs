@@ -12,7 +12,7 @@ pub use self::data_type::{
     DynamicRasterDataType, FromPrimitive, Pixel, RasterDataType, StaticRasterDataType, TypedValue,
 };
 pub use self::geo_transform::{GdalGeoTransform, GeoTransform};
-pub use self::grid_dimension::{Dim, GridDimension, GridIndex, Ix};
+pub use self::grid_dimension::{Dim, Dim1D, Dim2D, Dim3D, GridDimension, GridIndex, Ix};
 pub use self::operations::blit::Blit;
 pub use self::typed_raster::{TypedRaster2D, TypedRaster3D};
 use super::primitives::{SpatialBounded, TemporalBounded};

@@ -87,7 +87,7 @@ pub type MockRasterPointJoinOperator = Operator<MockRasterPointJoinParams>;
 impl VectorOperator for MockRasterPointJoinOperator {
     fn initialize(
         self: Box<Self>,
-        context: crate::engine::ExecutionContext,
+        context: &crate::engine::ExecutionContext,
     ) -> Result<Box<crate::engine::InitializedVectorOperator>> {
         InitializedOperatorImpl::create(
             self.params,
@@ -142,6 +142,7 @@ mod tests {
     };
     use futures::executor::block_on_stream;
     use geoengine_datatypes::{
+        primitives::SpatialResolution,
         primitives::{BoundingBox2D, Coordinate2D, FeatureDataRef, TimeInterval},
         raster::{Raster2D, RasterDataType, TileInformation},
         spatial_reference::SpatialReference,
@@ -168,7 +169,7 @@ mod tests {
         let raster_tile = RasterTile2D {
             time: TimeInterval::default(),
             tile: TileInformation {
-                geo_transform: Default::default(),
+                global_geo_transform: Default::default(),
                 global_pixel_position: [0, 0].into(),
                 global_size_in_tiles: [1, 2].into(),
                 global_tile_position: [0, 0].into(),
@@ -225,7 +226,7 @@ mod tests {
                             "tile_size_in_pixels": {
                                 "dimension_size": [3, 2]
                             },
-                            "geo_transform": {
+                            "global_geo_transform": {
                                 "upper_left_coordinate": {
                                     "x": 0.0,
                                     "y": 0.0
@@ -302,7 +303,7 @@ mod tests {
         let raster_tile = RasterTile2D {
             time: TimeInterval::default(),
             tile: TileInformation {
-                geo_transform: Default::default(),
+                global_geo_transform: Default::default(),
                 global_pixel_position: [0, 0].into(),
                 global_size_in_tiles: [1, 2].into(),
                 global_tile_position: [0, 0].into(),
@@ -332,9 +333,9 @@ mod tests {
         }
         .boxed();
 
-        let execution_context = ExecutionContext;
+        let execution_context = ExecutionContext::mock_empty();
 
-        let initialized = op.initialize(execution_context).unwrap();
+        let initialized = op.initialize(&execution_context).unwrap();
 
         let point_processor = match initialized.query_processor() {
             Ok(TypedVectorQueryProcessor::MultiPoint(processor)) => processor,
@@ -344,6 +345,7 @@ mod tests {
         let query_rectangle = QueryRectangle {
             bbox: BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
             time_interval: TimeInterval::default(),
+            spatial_resolution: SpatialResolution::zero_point_one(),
         };
         let ctx = QueryContext {
             chunk_byte_size: 2 * std::mem::size_of::<Coordinate2D>(),

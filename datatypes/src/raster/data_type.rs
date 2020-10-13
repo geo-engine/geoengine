@@ -1,6 +1,10 @@
+use crate::error;
 use crate::operations::image::RgbaTransmutable;
+use crate::raster::typed_raster::TypedRasterConversion;
+use crate::raster::Dim;
 use num_traits::{AsPrimitive, Num};
 use serde::{Deserialize, Serialize};
+use std::convert::TryFrom;
 
 /// A collection of required traits for a pixel type
 pub trait Pixel:
@@ -35,6 +39,8 @@ pub trait Pixel:
     + FromPrimitive<Self>
     + StaticRasterDataType
     + RgbaTransmutable
+    + TypedRasterConversion<Dim<[usize; 2]>>
+    + TypedRasterConversion<Dim<[usize; 3]>>
 {
 }
 
@@ -80,6 +86,7 @@ pub enum RasterDataType {
     F64,
 }
 
+#[derive(Debug, PartialEq, Deserialize, Serialize, Copy, Clone)]
 pub enum TypedValue {
     U8(u8),
     U16(u16),
@@ -91,6 +98,116 @@ pub enum TypedValue {
     I64(i64),
     F32(f32),
     F64(f64),
+}
+
+impl TryFrom<TypedValue> for u8 {
+    type Error = crate::error::Error;
+
+    fn try_from(value: TypedValue) -> Result<Self, Self::Error> {
+        if let TypedValue::U8(v) = value {
+            return Ok(v);
+        }
+        Err(error::Error::InvalidTypedValueConversion)
+    }
+}
+
+impl TryFrom<TypedValue> for u16 {
+    type Error = crate::error::Error;
+
+    fn try_from(value: TypedValue) -> Result<Self, Self::Error> {
+        if let TypedValue::U16(v) = value {
+            return Ok(v);
+        }
+        Err(error::Error::InvalidTypedValueConversion)
+    }
+}
+
+impl TryFrom<TypedValue> for u32 {
+    type Error = crate::error::Error;
+
+    fn try_from(value: TypedValue) -> Result<Self, Self::Error> {
+        if let TypedValue::U32(v) = value {
+            return Ok(v);
+        }
+        Err(error::Error::InvalidTypedValueConversion)
+    }
+}
+
+impl TryFrom<TypedValue> for u64 {
+    type Error = crate::error::Error;
+
+    fn try_from(value: TypedValue) -> Result<Self, Self::Error> {
+        if let TypedValue::U64(v) = value {
+            return Ok(v);
+        }
+        Err(error::Error::InvalidTypedValueConversion)
+    }
+}
+
+impl TryFrom<TypedValue> for i8 {
+    type Error = crate::error::Error;
+
+    fn try_from(value: TypedValue) -> Result<Self, Self::Error> {
+        if let TypedValue::I8(v) = value {
+            return Ok(v);
+        }
+        Err(error::Error::InvalidTypedValueConversion)
+    }
+}
+
+impl TryFrom<TypedValue> for i16 {
+    type Error = crate::error::Error;
+
+    fn try_from(value: TypedValue) -> Result<Self, Self::Error> {
+        if let TypedValue::I16(v) = value {
+            return Ok(v);
+        }
+        Err(error::Error::InvalidTypedValueConversion)
+    }
+}
+
+impl TryFrom<TypedValue> for i32 {
+    type Error = crate::error::Error;
+
+    fn try_from(value: TypedValue) -> Result<Self, Self::Error> {
+        if let TypedValue::I32(v) = value {
+            return Ok(v);
+        }
+        Err(error::Error::InvalidTypedValueConversion)
+    }
+}
+
+impl TryFrom<TypedValue> for i64 {
+    type Error = crate::error::Error;
+
+    fn try_from(value: TypedValue) -> Result<Self, Self::Error> {
+        if let TypedValue::I64(v) = value {
+            return Ok(v);
+        }
+        Err(error::Error::InvalidTypedValueConversion)
+    }
+}
+
+impl TryFrom<TypedValue> for f32 {
+    type Error = crate::error::Error;
+
+    fn try_from(value: TypedValue) -> Result<Self, Self::Error> {
+        if let TypedValue::F32(v) = value {
+            return Ok(v);
+        }
+        Err(error::Error::InvalidTypedValueConversion)
+    }
+}
+
+impl TryFrom<TypedValue> for f64 {
+    type Error = crate::error::Error;
+
+    fn try_from(value: TypedValue) -> Result<Self, Self::Error> {
+        if let TypedValue::F64(v) = value {
+            return Ok(v);
+        }
+        Err(error::Error::InvalidTypedValueConversion)
+    }
 }
 
 // TODO: use a macro?
@@ -148,5 +265,22 @@ where
 {
     fn raster_data_type(&self) -> RasterDataType {
         R::TYPE
+    }
+}
+
+impl RasterDataType {
+    pub fn ocl_type(self) -> &'static str {
+        match self {
+            RasterDataType::U8 => "uchar",
+            RasterDataType::U16 => "ushort",
+            RasterDataType::U32 => "uint",
+            RasterDataType::U64 => "ulong",
+            RasterDataType::I8 => "char",
+            RasterDataType::I16 => "short",
+            RasterDataType::I32 => "int",
+            RasterDataType::I64 => "long",
+            RasterDataType::F32 => "float",
+            RasterDataType::F64 => "double",
+        }
     }
 }
