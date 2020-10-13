@@ -82,7 +82,7 @@ lazy_static! {
         map.insert(
             "ne_10m_ports".to_string(),
             OgrSourceDataset {
-                filename: "/home/beilschmidt/CLionProjects/geoengine/operators/test-data/vector/ne_10m_ports/ne_10m_ports.shp".into(),
+                filename: "test-data/vector/ne_10m_ports/ne_10m_ports.shp".into(),
                 layer_name: "ne_10m_ports".to_string(),
                 data_type: None,
                 time: OgrSourceDatasetTimeType::None,
@@ -99,7 +99,7 @@ lazy_static! {
         map.insert(
             "ne_10m_ports_2".to_string(),
             OgrSourceDataset {
-                filename: "/home/beilschmidt/CLionProjects/geoengine/operators/test-data/vector/ne_10m_ports/ne_10m_ports.shp".into(),
+                filename: "test-data/vector/ne_10m_ports/ne_10m_ports.shp".into(),
                 layer_name: "ne_10m_ports".to_string(),
                 data_type: None,
                 time: OgrSourceDatasetTimeType::None,
@@ -113,7 +113,11 @@ lazy_static! {
                     time2: None,
                     numeric: vec!["natlscale".to_string()],
                     decimal: vec!["scalerank".to_string()],
-                    textual: vec!["featurecla".to_string(), "name".to_string(), "website".to_string()],
+                    textual: vec![
+                        "featurecla".to_string(),
+                        "name".to_string(),
+                        "website".to_string(),
+                    ],
                 }),
                 default: None,
                 force_ogr_time_filter: false,
@@ -431,7 +435,7 @@ where
         query_rectangle: QueryRectangle,
         chunk_byte_size: usize,
     ) -> Self {
-        let (poll_result_sender, poll_result_receiver) = mpsc::sync_channel(1);
+        let (poll_result_sender, poll_result_receiver) = mpsc::sync_channel(2);
         let (work_query_sender, work_query_receiver) = mpsc::sync_channel(1);
 
         spawn_blocking(move || {
@@ -481,6 +485,25 @@ where
 
         let mut features = layer.features().peekable();
 
+        if features.peek().is_none() {
+            // emit empty dataset and finish
+
+            let empty_collection = feature_collection_builder
+                .finish_header()
+                .build()
+                .map_err(Into::into);
+
+            if poll_result_sender
+                .send(Some(empty_collection))
+                .and_then(|_| poll_result_sender.send(None))
+                .is_ok()
+            {
+                work_query.waker.wake_by_ref();
+            }
+
+            return Ok(());
+        }
+
         while features.peek().is_some() {
             let batch_result = Self::compute_batch(
                 &mut features,
@@ -502,8 +525,9 @@ where
             };
         }
 
-        poll_result_sender.send(None).unwrap();
-        work_query.waker.wake_by_ref();
+        if poll_result_sender.send(None).is_ok() {
+            work_query.waker.wake_by_ref();
+        }
 
         Ok(())
     }
@@ -978,6 +1002,74 @@ mod tests {
         .unwrap();
 
         assert_eq!(deserialized_spec, spec);
+    }
+
+    #[tokio::test]
+    async fn empty_geojson() -> Result<()> {
+        let query_processor = OgrSourceProcessor::<MultiPoint>::new(OgrSourceDataset {
+            filename: "test-data/vector/empty.json".into(),
+            layer_name: "empty".to_string(),
+            data_type: None,
+            time: OgrSourceDatasetTimeType::None,
+            duration: None,
+            time1_format: None,
+            time2_format: None,
+            columns: None,
+            default: None,
+            force_ogr_time_filter: false,
+            on_error: OgrSourceErrorSpec::Skip,
+            provenance: None,
+        });
+
+        let query = query_processor.query(
+            QueryRectangle {
+                bbox: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
+                time_interval: Default::default(),
+                spatial_resolution: SpatialResolution::new(1., 1.)?,
+            },
+            QueryContext { chunk_byte_size: 0 },
+        );
+
+        let result: Vec<MultiPointCollection> = query.try_collect().await?;
+
+        assert_eq!(result.len(), 1);
+        assert!(result[0].is_empty());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn error() -> Result<()> {
+        let query_processor = OgrSourceProcessor::<MultiPoint>::new(OgrSourceDataset {
+            filename: "".into(),
+            layer_name: "".to_string(),
+            data_type: None,
+            time: OgrSourceDatasetTimeType::None,
+            duration: None,
+            time1_format: None,
+            time2_format: None,
+            columns: None,
+            default: None,
+            force_ogr_time_filter: false,
+            on_error: OgrSourceErrorSpec::Skip,
+            provenance: None,
+        });
+
+        let query = query_processor.query(
+            QueryRectangle {
+                bbox: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
+                time_interval: Default::default(),
+                spatial_resolution: SpatialResolution::new(1., 1.)?,
+            },
+            QueryContext { chunk_byte_size: 0 },
+        );
+
+        let result: Vec<Result<MultiPointCollection>> = query.collect().await;
+
+        assert_eq!(result.len(), 1);
+        assert!(result[0].is_err());
+
+        Ok(())
     }
 
     #[tokio::test]
