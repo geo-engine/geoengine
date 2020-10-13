@@ -171,7 +171,7 @@ typedef struct {
         match self.iteration_type {
             IterationType::Raster => ensure!(
                 !self.input_rasters.is_empty() && !self.output_rasters.is_empty(),
-                error::CLInvalidInputsForIterationType,
+                error::CLInvalidInputsForIterationType
             ),
             IterationType::VectorFeatures | IterationType::VectorCoordinates => ensure!(
                 !self.input_features.is_empty() && !self.output_features.is_empty(),

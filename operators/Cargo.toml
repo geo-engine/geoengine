@@ -9,15 +9,15 @@ authors = [
 edition = "2018"
 
 [dependencies]
-arrow = {version = "1.0", features = ["simd"] }
+arrow = { version = "1.0", features = ["simd"] }
 chrono = "0.4"
 csv = "1.1"
-geoengine-datatypes = { path = "../datatypes" }
+failure = "0.1" # TODO: remove this!
 float-cmp = "0.6"
 futures = "0.3"
-failure = "0.1" # TODO: remove this!
 gdal = { version = "0.6", features = ["gdal_2_2"] }
 geo = "0.12"
+geoengine-datatypes = { path = "../datatypes" }
 lazy_static = "1.4"
 num-traits = "0.2"
 ocl = "0.19"
@@ -25,11 +25,10 @@ paste = "1.0" # TODO remove, once https://doc.rust-lang.org/core/macro.concat_id
 pin-project = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-typetag = "0.1"
 snafu = "0.6"
 tokio = { version = "0.2", features = ["macros", "blocking"] }
+typetag = "0.1"
 warp = "0.2" # TODO: remove and get tokio test to work without it
-lazy_static = "1.4.0"
 
 [dev-dependencies]
 criterion = "0.3"

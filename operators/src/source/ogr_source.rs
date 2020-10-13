@@ -96,6 +96,31 @@ lazy_static! {
                 provenance: None,
             },
         );
+        map.insert(
+            "ne_10m_ports_2".to_string(),
+            OgrSourceDataset {
+                filename: "/home/beilschmidt/CLionProjects/geoengine/operators/test-data/vector/ne_10m_ports/ne_10m_ports.shp".into(),
+                layer_name: "ne_10m_ports".to_string(),
+                data_type: None,
+                time: OgrSourceDatasetTimeType::None,
+                duration: None,
+                time1_format: None,
+                time2_format: None,
+                columns: Some(OgrSourceColumnSpec {
+                    x: "".to_string(),
+                    y: None,
+                    time1: None,
+                    time2: None,
+                    numeric: vec!["natlscale".to_string()],
+                    decimal: vec!["scalerank".to_string()],
+                    textual: vec!["featurecla".to_string(), "name".to_string(), "website".to_string()],
+                }),
+                default: None,
+                force_ogr_time_filter: false,
+                on_error: OgrSourceErrorSpec::Skip,
+                provenance: None,
+            },
+        );
 
         map
     };
@@ -254,7 +279,7 @@ pub type InitializedOgrSource =
 impl VectorOperator for OgrSource {
     fn initialize(
         self: Box<Self>,
-        context: crate::engine::ExecutionContext,
+        _context: &crate::engine::ExecutionContext,
     ) -> Result<Box<crate::engine::InitializedVectorOperator>> {
         let dataset_information = DATASET_INFORMATION_PROVIDER
             .get(&self.params.layer_name)
@@ -318,7 +343,6 @@ impl VectorOperator for OgrSource {
 
         Ok(InitializedOgrSource::new(
             self.params,
-            context,
             result_descriptor,
             vec![],
             vec![],
@@ -848,7 +872,7 @@ mod tests {
     use serde_json::json;
 
     use geoengine_datatypes::collections::MultiPointCollection;
-    use geoengine_datatypes::primitives::BoundingBox2D;
+    use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution};
 
     use crate::engine::ExecutionContext;
 
@@ -965,7 +989,9 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(ExecutionContext)?;
+        .initialize(&ExecutionContext {
+            raster_data_root: Default::default(),
+        })?;
 
         assert_eq!(
             source.result_descriptor().data_type,
@@ -982,6 +1008,7 @@ mod tests {
             QueryRectangle {
                 bbox: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                 time_interval: Default::default(),
+                spatial_resolution: SpatialResolution::new(1., 1.)?,
             },
             QueryContext { chunk_byte_size: 0 },
         );
@@ -1025,7 +1052,9 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(ExecutionContext)?;
+        .initialize(&ExecutionContext {
+            raster_data_root: Default::default(),
+        })?;
 
         assert_eq!(
             source.result_descriptor().data_type,
@@ -1042,6 +1071,7 @@ mod tests {
             QueryRectangle {
                 bbox: BoundingBox2D::new((-180.0, -90.0).into(), (180.0, 90.0).into())?,
                 time_interval: Default::default(),
+                spatial_resolution: SpatialResolution::new(1., 1.)?,
             },
             QueryContext { chunk_byte_size: 0 },
         );

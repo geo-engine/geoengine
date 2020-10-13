@@ -35,7 +35,7 @@ use std::sync::atomic::Ordering;
 /// ```rust
 /// use serde_json::{Result, Value};
 /// use geoengine_operators::source::{CsvSourceParameters, CsvSource};
-/// use geoengine_operators::source::csv::{CsvGeometrySpecification, CsvTimeSpecification};
+/// use geoengine_operators::source::{CsvGeometrySpecification, CsvTimeSpecification};
 ///
 /// let json_string = r#"
 ///     {
