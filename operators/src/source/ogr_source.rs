@@ -36,6 +36,8 @@ use crate::engine::{
 };
 use crate::error::Error;
 use crate::util::Result;
+use failure::_core::fmt::Formatter;
+use std::fmt::Debug;
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct OgrSourceParameters {
@@ -69,7 +71,7 @@ lazy_static! {
                     decimal: vec!["dec1".to_string(), "dec2".to_string()],
                     textual: vec!["text".to_string()],
                 }),
-                default: Some("POINT(0, 0)".to_string()),
+                default: Some("POINT(0 0)".to_string()),
                 force_ogr_time_filter: false,
                 on_error: OgrSourceErrorSpec::Skip,
                 provenance: Some(ProvenanceInformation {
@@ -276,8 +278,26 @@ pub enum OgrSourceErrorSpec {
     Keep,
 }
 
+#[derive(Clone, Debug)]
+pub struct OgrSourceState {
+    dataset_information: OgrSourceDataset,
+    default_geometry: OgrSourceDefaultGeometry,
+}
+
+#[derive(Clone)]
+pub struct OgrSourceDefaultGeometry(Option<gdal::vector::Geometry>);
+
+impl Debug for OgrSourceDefaultGeometry {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.0.as_ref().and_then(|g| g.wkt().ok()).fmt(f)
+    }
+}
+
+unsafe impl Send for OgrSourceDefaultGeometry {}
+unsafe impl Sync for OgrSourceDefaultGeometry {}
+
 pub type InitializedOgrSource =
-    InitializedOperatorImpl<OgrSourceParameters, VectorResultDescriptor, OgrSourceDataset>;
+    InitializedOperatorImpl<OgrSourceParameters, VectorResultDescriptor, OgrSourceState>;
 
 #[typetag::serde]
 impl VectorOperator for OgrSource {
@@ -323,20 +343,7 @@ impl VectorOperator for OgrSource {
                 .features()
                 .next()
                 .map_or(VectorDataType::Data, |feature| {
-                    match feature.geometry().geometry_type() {
-                        OGRwkbGeometryType::wkbPoint | OGRwkbGeometryType::wkbMultiPoint => {
-                            VectorDataType::MultiPoint
-                        }
-                        OGRwkbGeometryType::wkbLineString
-                        | OGRwkbGeometryType::wkbMultiLineString => VectorDataType::MultiLineString,
-                        OGRwkbGeometryType::wkbPolygon | OGRwkbGeometryType::wkbMultiPolygon => {
-                            VectorDataType::MultiPolygon
-                        }
-                        _ => {
-                            // TODO: is *data* a reasonable fallback type? or throw an error?
-                            VectorDataType::Data
-                        }
-                    }
+                    Self::ogr_geometry_type(feature.geometry())
                 })
         };
 
@@ -345,14 +352,62 @@ impl VectorOperator for OgrSource {
             data_type,
         };
 
+        let default_geometry = Self::parse_default_geometry(&dataset_information, data_type)?;
+
         Ok(InitializedOgrSource::new(
             self.params,
             result_descriptor,
             vec![],
             vec![],
-            dataset_information,
+            OgrSourceState {
+                dataset_information,
+                default_geometry,
+            },
         )
         .boxed())
+    }
+}
+
+impl OgrSource {
+    fn ogr_geometry_type(geometry: &gdal::vector::Geometry) -> VectorDataType {
+        match geometry.geometry_type() {
+            OGRwkbGeometryType::wkbPoint | OGRwkbGeometryType::wkbMultiPoint => {
+                VectorDataType::MultiPoint
+            }
+            OGRwkbGeometryType::wkbLineString | OGRwkbGeometryType::wkbMultiLineString => {
+                VectorDataType::MultiLineString
+            }
+            OGRwkbGeometryType::wkbPolygon | OGRwkbGeometryType::wkbMultiPolygon => {
+                VectorDataType::MultiPolygon
+            }
+            _ => {
+                // TODO: is *data* a reasonable fallback type? or throw an error?
+                VectorDataType::Data
+            }
+        }
+    }
+
+    fn parse_default_geometry(
+        dataset_information: &OgrSourceDataset,
+        expected_data_type: VectorDataType,
+    ) -> Result<OgrSourceDefaultGeometry> {
+        let wkt_string = if let Some(wkt_string) = &dataset_information.default {
+            wkt_string
+        } else {
+            return Ok(OgrSourceDefaultGeometry(None));
+        };
+
+        let geometry = gdal::vector::Geometry::from_wkt(&wkt_string)?;
+
+        let geometry_type = Self::ogr_geometry_type(&geometry);
+        if geometry_type != expected_data_type {
+            return Err(Error::InvalidType {
+                expected: format!("{:?}", expected_data_type),
+                found: format!("{:?}", geometry_type),
+            });
+        }
+
+        Ok(OgrSourceDefaultGeometry(Some(geometry)))
     }
 }
 
@@ -382,8 +437,9 @@ pub struct OgrSourceProcessor<G>
 where
     G: Geometry + ArrowTyped,
 {
-    dataset_information: OgrSourceDataset,
     // TODO: use `Arc<…>`?
+    dataset_information: OgrSourceDataset,
+    default_geometry: OgrSourceDefaultGeometry,
     _collection_type: PhantomData<FeatureCollection<G>>,
 }
 
@@ -391,9 +447,10 @@ impl<G> OgrSourceProcessor<G>
 where
     G: Geometry + ArrowTyped,
 {
-    pub fn new(dataset_information: OgrSourceDataset) -> Self {
+    pub fn new(ogr_source_state: OgrSourceState) -> Self {
         Self {
-            dataset_information,
+            dataset_information: ogr_source_state.dataset_information,
+            default_geometry: ogr_source_state.default_geometry,
             _collection_type: Default::default(),
         }
     }
@@ -406,7 +463,13 @@ where
 {
     type Output = FeatureCollection<G>;
     fn query(&self, query: QueryRectangle, ctx: QueryContext) -> BoxStream<Result<Self::Output>> {
-        OgrSourceQuery::new(self.dataset_information.clone(), query, ctx.chunk_byte_size).boxed()
+        OgrSourceQuery::new(
+            self.dataset_information.clone(),
+            self.default_geometry.clone(),
+            query,
+            ctx.chunk_byte_size,
+        )
+        .boxed()
     }
 }
 
@@ -432,6 +495,7 @@ where
 {
     pub fn new(
         dataset_information: OgrSourceDataset,
+        default_geometry: OgrSourceDefaultGeometry,
         query_rectangle: QueryRectangle,
         chunk_byte_size: usize,
     ) -> Self {
@@ -447,6 +511,7 @@ where
             if let Err(error) = Self::compute_thread(
                 &mut work_query,
                 &dataset_information,
+                &default_geometry,
                 &work_query_receiver,
                 &poll_result_sender,
                 &query_rectangle,
@@ -470,6 +535,7 @@ where
     fn compute_thread(
         work_query: &mut WorkQuery,
         dataset_information: &OgrSourceDataset,
+        _default_geometry: &OgrSourceDefaultGeometry,
         work_query_receiver: &Receiver<WorkQuery>,
         poll_result_sender: &SyncSender<Option<Result<FeatureCollection<G>>>>,
         query_rectangle: &QueryRectangle,
@@ -1006,7 +1072,7 @@ mod tests {
 
     #[tokio::test]
     async fn empty_geojson() -> Result<()> {
-        let query_processor = OgrSourceProcessor::<MultiPoint>::new(OgrSourceDataset {
+        let dataset_information = OgrSourceDataset {
             filename: "test-data/vector/empty.json".into(),
             layer_name: "empty".to_string(),
             data_type: None,
@@ -1019,6 +1085,13 @@ mod tests {
             force_ogr_time_filter: false,
             on_error: OgrSourceErrorSpec::Skip,
             provenance: None,
+        };
+        let default_geometry =
+            OgrSource::parse_default_geometry(&dataset_information, VectorDataType::MultiPoint)?;
+
+        let query_processor = OgrSourceProcessor::<MultiPoint>::new(OgrSourceState {
+            dataset_information,
+            default_geometry,
         });
 
         let query = query_processor.query(
@@ -1040,7 +1113,7 @@ mod tests {
 
     #[tokio::test]
     async fn error() -> Result<()> {
-        let query_processor = OgrSourceProcessor::<MultiPoint>::new(OgrSourceDataset {
+        let dataset_information = OgrSourceDataset {
             filename: "".into(),
             layer_name: "".to_string(),
             data_type: None,
@@ -1053,6 +1126,13 @@ mod tests {
             force_ogr_time_filter: false,
             on_error: OgrSourceErrorSpec::Skip,
             provenance: None,
+        };
+        let default_geometry =
+            OgrSource::parse_default_geometry(&dataset_information, VectorDataType::MultiPoint)?;
+
+        let query_processor = OgrSourceProcessor::<MultiPoint>::new(OgrSourceState {
+            dataset_information,
+            default_geometry,
         });
 
         let query = query_processor.query(
@@ -1068,6 +1148,34 @@ mod tests {
 
         assert_eq!(result.len(), 1);
         assert!(result[0].is_err());
+
+        Ok(())
+    }
+
+    #[test]
+    fn parse_wkt_geometry() -> Result<()> {
+        let dataset_information = OgrSourceDataset {
+            filename: "".into(),
+            layer_name: "".to_string(),
+            data_type: None,
+            time: OgrSourceDatasetTimeType::None,
+            duration: None,
+            time1_format: None,
+            time2_format: None,
+            columns: None,
+            default: Some("POINT(0 1)".to_string()),
+            force_ogr_time_filter: false,
+            on_error: OgrSourceErrorSpec::Skip,
+            provenance: None,
+        };
+
+        let default_geometry =
+            OgrSource::parse_default_geometry(&dataset_information, VectorDataType::MultiPoint)?;
+
+        assert_eq!(
+            default_geometry.0.unwrap().get_point_vec(),
+            vec![(0.0, 1.0, 0.0)]
+        );
 
         Ok(())
     }
