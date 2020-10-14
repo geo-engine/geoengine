@@ -1326,6 +1326,59 @@ mod tests {
         Ok(())
     }
 
+    #[tokio::test]
+    async fn on_error_keep() -> Result<()> {
+        let dataset_information = OgrSourceDataset {
+            filename: "test-data/vector/missing_geo.json".into(),
+            layer_name: "missing_geo".to_string(),
+            data_type: None,
+            time: OgrSourceDatasetTimeType::None,
+            duration: None,
+            time1_format: None,
+            time2_format: None,
+            columns: None,
+            default: Some("POINT (4.0 4.1)".to_string()),
+            force_ogr_time_filter: false,
+            on_error: OgrSourceErrorSpec::Keep,
+            provenance: None,
+        };
+        let default_geometry =
+            OgrSource::parse_default_geometry(&dataset_information, VectorDataType::MultiPoint)?;
+
+        let query_processor = OgrSourceProcessor::<MultiPoint>::new(
+            dataset_information,
+            default_geometry.try_into_geometry()?,
+        );
+
+        let query = query_processor.query(
+            QueryRectangle {
+                bbox: BoundingBox2D::new((0., 0.).into(), (5., 5.).into())?,
+                time_interval: Default::default(),
+                spatial_resolution: SpatialResolution::new(1., 1.)?,
+            },
+            QueryContext { chunk_byte_size: 0 },
+        );
+
+        let result: Vec<MultiPointCollection> = query.try_collect().await?;
+
+        assert_eq!(result.len(), 1);
+
+        assert_eq!(
+            result[0],
+            MultiPointCollection::from_data(
+                MultiPoint::many(vec![
+                    vec![(0.0, 0.1)],
+                    vec![(1.0, 1.1), (2.0, 2.1)],
+                    vec![(4.0, 4.1)]
+                ])?,
+                vec![Default::default(); 3],
+                HashMap::new(),
+            )?
+        );
+
+        Ok(())
+    }
+
     #[test]
     fn parse_wkt_geometry() -> Result<()> {
         let dataset_information = OgrSourceDataset {
