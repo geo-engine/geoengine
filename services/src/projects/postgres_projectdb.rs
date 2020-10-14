@@ -15,12 +15,10 @@ use bb8_postgres::{
     bb8::Pool, tokio_postgres::tls::MakeTlsConnect, tokio_postgres::tls::TlsConnect,
     tokio_postgres::Socket,
 };
-use chrono::{TimeZone, Utc};
 use snafu::ResultExt;
 
-use super::project::{
-    Layer, LayerInfo, LayerType, ProjectPermission, RasterInfo, STRectangle, VectorInfo,
-};
+use super::project::{Layer, LayerInfo, LayerType, ProjectPermission, RasterInfo, VectorInfo};
+use crate::contexts::PostgresContext;
 
 pub struct PostgresProjectDB<Tls>
 where
@@ -41,30 +39,6 @@ where
 {
     pub fn new(conn_pool: Pool<PostgresConnectionManager<Tls>>) -> Self {
         Self { conn_pool }
-    }
-
-    async fn check_user_project_permission(
-        &self,
-        user: UserId,
-        project: ProjectId,
-        permissions: &[ProjectPermission],
-    ) -> Result<()> {
-        let conn = self.conn_pool.get().await?;
-
-        let stmt = conn
-            .prepare(
-                "
-                SELECT TRUE
-                FROM user_project_permissions
-                WHERE user_id = $1 AND project_id = $2 AND permission = ANY ($3);",
-            )
-            .await?;
-
-        conn.query_one(&stmt, &[&user.uuid(), &project.uuid(), &permissions])
-            .await
-            .map_err(|_| error::Error::ProjectDBUnauthorized)?;
-
-        Ok(())
     }
 }
 
@@ -89,7 +63,7 @@ where
         let stmt = conn
             .prepare(&format!(
                 "
-        SELECT p.id, p.project_id, p.name, p.description, p.time 
+        SELECT p.id, p.project_id, p.name, p.description, p.changed 
         FROM user_project_permissions u JOIN project_versions p ON (u.project_id = p.project_id)
         WHERE u.user_id = $1 AND u.permission = ANY ($2) AND latest IS TRUE
         ORDER BY p.{}
@@ -117,7 +91,7 @@ where
             let project_id = ProjectId::from_uuid(project_row.get(1));
             let name = project_row.get(2);
             let description = project_row.get(3);
-            let time = Utc.from_local_datetime(&project_row.get(4)).unwrap();
+            let changed = project_row.get(4);
 
             let stmt = conn
                 .prepare(
@@ -136,7 +110,7 @@ where
                 name,
                 description,
                 layer_names,
-                changed: time,
+                changed,
             });
         }
         Ok(project_listings)
@@ -149,7 +123,10 @@ where
         project: ProjectId,
         version: LoadVersion,
     ) -> Result<Project> {
-        self.check_user_project_permission(
+        let conn = self.conn_pool.get().await?;
+
+        PostgresContext::check_user_project_permission(
+            &conn,
             user,
             project,
             &[
@@ -160,8 +137,6 @@ where
         )
         .await?;
 
-        let conn = self.conn_pool.get().await?;
-
         let row = if let LoadVersion::Version(version) = version {
             let stmt = conn
                 .prepare(
@@ -170,20 +145,9 @@ where
             p.project_id, 
             p.id, 
             p.name, 
-            p.description, 
-            p.view_ll_x,
-            p.view_ll_y,
-            p.view_ur_x,
-            p.view_ur_y,
-            p.view_t1,
-            p.view_t2,
-            p.bounds_ll_x,
-            p.bounds_ll_y,
-            p.bounds_ur_x,
-            p.bounds_ur_y,
-            p.bounds_t1,
-            p.bounds_t2,
-            p.time,
+            p.description,
+            p.bounds,
+            p.changed,
             p.author_user_id
         FROM user_project_permissions u JOIN project_versions p ON (u.project_id = p.project_id)
         WHERE u.user_id = $1 AND u.project_id = $2 AND p.project_version = $3",
@@ -200,20 +164,9 @@ where
             p.project_id, 
             p.id, 
             p.name, 
-            p.description, 
-            p.view_ll_x,
-            p.view_ll_y,
-            p.view_ur_x,
-            p.view_ur_y,
-            p.view_t1,
-            p.view_t2,
-            p.bounds_ll_x,
-            p.bounds_ll_y,
-            p.bounds_ur_x,
-            p.bounds_ur_y,
-            p.bounds_t1,
-            p.bounds_t2,
-            p.time,
+            p.description,
+            p.bounds,
+            p.changed,
             p.author_user_id
         FROM user_project_permissions u JOIN project_versions p ON (u.project_id = p.project_id)
         WHERE u.user_id = $1 AND u.project_id = $2 AND latest IS TRUE",
@@ -228,24 +181,9 @@ where
         let version_id = ProjectVersionId::from_uuid(row.get(1));
         let name = row.get(2);
         let description = row.get(3);
-        let view = STRectangle::new_unchecked(
-            row.get(4),
-            row.get(5),
-            row.get(6),
-            row.get(7),
-            Utc.from_local_datetime(&row.get(8)).unwrap(),
-            Utc.from_local_datetime(&row.get(9)).unwrap(),
-        );
-        let bounds = STRectangle::new_unchecked(
-            row.get(10),
-            row.get(11),
-            row.get(12),
-            row.get(13),
-            Utc.from_local_datetime(&row.get(14)).unwrap(),
-            Utc.from_local_datetime(&row.get(15)).unwrap(),
-        );
-        let time = Utc.from_local_datetime(&row.get(16)).unwrap();
-        let author_id = UserId::from_uuid(row.get(17));
+        let bounds = row.get(4);
+        let changed = row.get(5);
+        let author_id = UserId::from_uuid(row.get(6));
 
         let stmt = conn
             .prepare(
@@ -281,13 +219,12 @@ where
             id: project_id,
             version: ProjectVersion {
                 id: version_id,
-                changed: time,
+                changed,
                 author: author_id,
             },
             name,
             description,
             layers,
-            view,
             bounds,
         })
     }
@@ -316,23 +253,11 @@ where
                     project_id,
                     name,
                     description,
-                    view_ll_x,
-                    view_ll_y,
-                    view_ur_x,
-                    view_ur_y,
-                    view_t1,
-                    view_t2,
-                    bounds_ll_x,
-                    bounds_ll_y,
-                    bounds_ur_x,
-                    bounds_ur_y,
-                    bounds_t1,
-                    bounds_t2,
+                    bounds,
                     author_user_id,
-                    time,
+                    changed,
                     latest)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-                            $11, $12, $13, $14, $15, $16, $17, CURRENT_TIMESTAMP, TRUE);",
+                    VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, TRUE);",
             )
             .await?;
 
@@ -344,18 +269,7 @@ where
                     &project.id.uuid(),
                     &project.name,
                     &project.description,
-                    &project.view.bounding_box.lower_left().x,
-                    &project.view.bounding_box.lower_left().y,
-                    &project.view.bounding_box.upper_right().x,
-                    &project.view.bounding_box.upper_right().x,
-                    &project.view.time_interval.start().as_naive_date_time(),
-                    &project.view.time_interval.end().as_naive_date_time(),
-                    &project.bounds.bounding_box.lower_left().x,
-                    &project.bounds.bounding_box.lower_left().y,
-                    &project.bounds.bounding_box.upper_right().x,
-                    &project.bounds.bounding_box.upper_right().x,
-                    &project.bounds.time_interval.start().as_naive_date_time(),
-                    &project.bounds.time_interval.end().as_naive_date_time(),
+                    &project.bounds,
                     &user.uuid(),
                 ],
             )
@@ -383,14 +297,15 @@ where
     async fn update(&mut self, user: UserId, update: Validated<UpdateProject>) -> Result<()> {
         let update = update.user_input;
 
-        self.check_user_project_permission(
+        let mut conn = self.conn_pool.get().await?;
+
+        PostgresContext::check_user_project_permission(
+            &conn,
             user,
             update.id,
             &[ProjectPermission::Write, ProjectPermission::Owner],
         )
         .await?;
-
-        let mut conn = self.conn_pool.get().await?;
 
         let trans = conn.build_transaction().start().await?;
 
@@ -411,23 +326,11 @@ where
                     project_id,
                     name,
                     description,
-                    view_ll_x,
-                    view_ll_y,
-                    view_ur_x,
-                    view_ur_y,
-                    view_t1,
-                    view_t2,
-                    bounds_ll_x,
-                    bounds_ll_y,
-                    bounds_ur_x,
-                    bounds_ur_y,
-                    bounds_t1,
-                    bounds_t2,
+                    bounds,
                     author_user_id,
-                    time,
+                    changed,
                     latest)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-                        $11, $12, $13, $14, $15, $16, $17, CURRENT_TIMESTAMP, TRUE);",
+                VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, TRUE);",
             )
             .await?;
 
@@ -439,18 +342,7 @@ where
                     &project.id.uuid(),
                     &project.name,
                     &project.description,
-                    &project.view.bounding_box.lower_left().x,
-                    &project.view.bounding_box.lower_left().y,
-                    &project.view.bounding_box.upper_right().x,
-                    &project.view.bounding_box.upper_right().x,
-                    &project.view.time_interval.start().as_naive_date_time(),
-                    &project.view.time_interval.end().as_naive_date_time(),
-                    &project.bounds.bounding_box.lower_left().x,
-                    &project.bounds.bounding_box.lower_left().y,
-                    &project.bounds.bounding_box.upper_right().x,
-                    &project.bounds.bounding_box.upper_right().x,
-                    &project.bounds.time_interval.start().as_naive_date_time(),
-                    &project.bounds.time_interval.end().as_naive_date_time(),
+                    &project.bounds,
                     &user.uuid(),
                 ],
             )
@@ -500,10 +392,15 @@ where
     }
 
     async fn delete(&mut self, user: UserId, project: ProjectId) -> Result<()> {
-        self.check_user_project_permission(user, project, &[ProjectPermission::Owner])
-            .await?;
-
         let conn = self.conn_pool.get().await?;
+
+        PostgresContext::check_user_project_permission(
+            &conn,
+            user,
+            project,
+            &[ProjectPermission::Owner],
+        )
+        .await?;
 
         let stmt = conn.prepare("DELETE FROM projects WHERE id = $1;").await?;
 
@@ -513,7 +410,10 @@ where
     }
 
     async fn versions(&self, user: UserId, project: ProjectId) -> Result<Vec<ProjectVersion>> {
-        self.check_user_project_permission(
+        let conn = self.conn_pool.get().await?;
+
+        PostgresContext::check_user_project_permission(
+            &conn,
             user,
             project,
             &[
@@ -524,13 +424,12 @@ where
         )
         .await?;
 
-        let conn = self.conn_pool.get().await?;
         let stmt = conn
             .prepare(
                 "
-                SELECT id, time, author_user_id
+                SELECT id, changed, author_user_id
                 FROM project_versions WHERE project_id = $1 
-                ORDER BY latest DESC, time DESC, author_user_id DESC",
+                ORDER BY latest DESC, changed DESC, author_user_id DESC",
             )
             .await?;
 
@@ -540,7 +439,7 @@ where
             .iter()
             .map(|row| ProjectVersion {
                 id: ProjectVersionId::from_uuid(row.get(0)),
-                changed: Utc.from_local_datetime(&row.get(1)).unwrap(),
+                changed: row.get(1),
                 author: UserId::from_uuid(row.get(2)),
             })
             .collect())
@@ -551,7 +450,10 @@ where
         user: UserId,
         project: ProjectId,
     ) -> Result<Vec<UserProjectPermission>> {
-        self.check_user_project_permission(
+        let conn = self.conn_pool.get().await?;
+
+        PostgresContext::check_user_project_permission(
+            &conn,
             user,
             project,
             &[
@@ -561,8 +463,6 @@ where
             ],
         )
         .await?;
-
-        let conn = self.conn_pool.get().await?;
 
         let stmt = conn
             .prepare(
@@ -588,10 +488,15 @@ where
         user: UserId,
         permission: UserProjectPermission,
     ) -> Result<()> {
-        self.check_user_project_permission(user, permission.project, &[ProjectPermission::Owner])
-            .await?;
-
         let conn = self.conn_pool.get().await?;
+
+        PostgresContext::check_user_project_permission(
+            &conn,
+            user,
+            permission.project,
+            &[ProjectPermission::Owner],
+        )
+        .await?;
 
         let stmt = conn
             .prepare(
@@ -619,10 +524,15 @@ where
         user: UserId,
         permission: UserProjectPermission,
     ) -> Result<()> {
-        self.check_user_project_permission(user, permission.project, &[ProjectPermission::Owner])
-            .await?;
-
         let conn = self.conn_pool.get().await?;
+
+        PostgresContext::check_user_project_permission(
+            &conn,
+            user,
+            permission.project,
+            &[ProjectPermission::Owner],
+        )
+        .await?;
 
         let stmt = conn
             .prepare(

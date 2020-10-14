@@ -1,33 +1,17 @@
 use serde::{Deserialize, Serialize};
 
-use crate::users::user::{User, UserId};
-use crate::util::identifiers::Identifier;
+use crate::projects::project::{ProjectId, STRectangle};
+use crate::users::user::UserId;
+use chrono::{DateTime, Utc};
 
 identifier!(SessionId);
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct Session {
     pub id: SessionId,
     pub user: UserId,
-    // TODO: session creation time/validity
-}
-
-impl Session {
-    pub fn new(user: &User) -> Self {
-        Self {
-            id: SessionId::new(),
-            user: user.id,
-        }
-    }
-
-    pub fn from_user_id(user_id: UserId) -> Self {
-        Self {
-            id: SessionId::new(),
-            user: user_id,
-        }
-    }
-
-    pub fn from_fields(user: UserId, session: SessionId) -> Self {
-        Self { id: session, user }
-    }
+    pub created: DateTime<Utc>,
+    pub valid_until: DateTime<Utc>,
+    pub project: Option<ProjectId>,
+    pub view: Option<STRectangle>,
 }

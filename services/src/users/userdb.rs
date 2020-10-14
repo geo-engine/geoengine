@@ -1,4 +1,5 @@
 use crate::error::Result;
+use crate::projects::project::{ProjectId, STRectangle};
 use crate::users::session::{Session, SessionId};
 use crate::users::user::{UserCredentials, UserId, UserRegistration};
 use crate::util::user_input::Validated;
@@ -37,4 +38,20 @@ pub trait UserDB: Send + Sync {
     /// This call fails if the session is invalid.
     ///
     async fn session(&self, session: SessionId) -> Result<Session>;
+
+    /// Sets the session project
+    ///
+    /// # Errors
+    ///
+    /// This call fails if the session is invalid
+    ///
+    async fn set_session_project(&mut self, session: &Session, project: ProjectId) -> Result<()>;
+
+    /// Sets the session view
+    ///
+    /// # Errors
+    ///
+    /// This call fails if the session is invalid
+    ///
+    async fn set_session_view(&mut self, session: &Session, view: STRectangle) -> Result<()>;
 }

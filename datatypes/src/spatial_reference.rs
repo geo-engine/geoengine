@@ -1,4 +1,5 @@
 use crate::error;
+use postgres_types::{FromSql, ToSql};
 use serde::de::Visitor;
 use serde::export::Formatter;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -6,7 +7,9 @@ use snafu::ResultExt;
 use std::str::FromStr;
 
 /// A spatial reference authority that is part of a spatial reference definition
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[derive(
+    Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, ToSql, FromSql,
+)]
 #[serde(rename_all = "SCREAMING-KEBAB-CASE")]
 pub enum SpatialReferenceAuthority {
     Epsg,
@@ -31,7 +34,7 @@ impl std::fmt::Display for SpatialReferenceAuthority {
 }
 
 /// A spatial reference consists of an authority and a code
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, ToSql, FromSql)]
 pub struct SpatialReference {
     authority: SpatialReferenceAuthority,
     code: u32,

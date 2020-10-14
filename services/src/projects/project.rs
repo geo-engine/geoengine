@@ -9,6 +9,7 @@ use chrono::{DateTime, Utc};
 use geoengine_datatypes::primitives::{
     BoundingBox2D, Coordinate2D, SpatialBounded, TemporalBounded, TimeInterval,
 };
+use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::{operations::image::Colorizer, primitives::TimeInstance};
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
@@ -24,9 +25,7 @@ pub struct Project {
     pub name: String,
     pub description: String,
     pub layers: Vec<Layer>,
-    pub view: STRectangle,
     pub bounds: STRectangle,
-    // TODO: spatial reference system, must be either stored in the rectangle/bbox or globally for project
 }
 
 impl Project {
@@ -37,7 +36,6 @@ impl Project {
             name: create.name,
             description: create.description,
             layers: vec![],
-            view: create.view,
             bounds: create.bounds,
         }
     }
@@ -66,10 +64,6 @@ impl Project {
             }
         }
 
-        if let Some(view) = update.view {
-            project.view = view;
-        }
-
         if let Some(bounds) = update.bounds {
             project.bounds = bounds;
         }
@@ -78,14 +72,16 @@ impl Project {
     }
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, ToSql, FromSql)]
 pub struct STRectangle {
+    pub spatial_reference: SpatialReference,
     pub bounding_box: BoundingBox2D,
     pub time_interval: TimeInterval,
 }
 
 impl STRectangle {
     pub fn new<A, B>(
+        spatial_reference: SpatialReference,
         lower_left_x: f64,
         lower_left_y: f64,
         upper_left_x: f64,
@@ -98,6 +94,7 @@ impl STRectangle {
         B: Into<TimeInstance>,
     {
         Ok(Self {
+            spatial_reference,
             bounding_box: BoundingBox2D::new(
                 Coordinate2D::new(lower_left_x, lower_left_y),
                 Coordinate2D::new(upper_left_x, upper_left_y),
@@ -108,6 +105,7 @@ impl STRectangle {
     }
 
     pub fn new_unchecked<A, B>(
+        spatial_reference: SpatialReference,
         lower_left_x: f64,
         lower_left_y: f64,
         upper_left_x: f64,
@@ -120,6 +118,7 @@ impl STRectangle {
         B: Into<TimeInstance>,
     {
         Self {
+            spatial_reference,
             bounding_box: BoundingBox2D::new_unchecked(
                 Coordinate2D::new(lower_left_x, lower_left_y),
                 Coordinate2D::new(upper_left_x, upper_left_y),
@@ -160,11 +159,8 @@ impl Layer {
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, ToSql, FromSql)]
-#[postgres(name = "layer_type")]
 pub enum LayerType {
-    #[postgres(name = "raster")]
     Raster,
-    #[postgres(name = "vector")]
     Vector,
 }
 
@@ -235,7 +231,6 @@ pub enum ProjectFilter {
 pub struct CreateProject {
     pub name: String,
     pub description: String,
-    pub view: STRectangle,
     pub bounds: STRectangle,
 }
 
@@ -256,7 +251,6 @@ pub struct UpdateProject {
     pub name: Option<String>,
     pub description: Option<String>,
     pub layers: Option<Vec<Option<Layer>>>,
-    pub view: Option<STRectangle>,
     pub bounds: Option<STRectangle>,
 }
 
@@ -277,13 +271,9 @@ impl UserInput for UpdateProject {
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, ToSql, FromSql)]
-#[postgres(name = "project_permission")]
 pub enum ProjectPermission {
-    #[postgres(name = "read")]
     Read,
-    #[postgres(name = "write")]
     Write,
-    #[postgres(name = "owner")]
     Owner,
 }
 

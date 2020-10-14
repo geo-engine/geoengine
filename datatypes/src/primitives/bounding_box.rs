@@ -1,10 +1,11 @@
 use super::Coordinate2D;
 use crate::error;
 use crate::util::Result;
+use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
-#[derive(Copy, Clone, Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Copy, Clone, Serialize, Deserialize, PartialEq, Debug, ToSql, FromSql)]
 #[repr(C)]
 /// The bounding box of a geometry.
 /// Note: may degenerate to a point!
