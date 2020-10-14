@@ -42,7 +42,7 @@ use geoengine_datatypes::{
 ///     {
 ///         "type": "GdalSource",
 ///         "params": {
-///                     "dataset_id": "test",
+///                     "dataset_id": "modis_ndvi",
 ///                     "channel": 1
 ///         }
 ///     }"#;
@@ -51,7 +51,7 @@ use geoengine_datatypes::{
 ///
 /// assert_eq!(operator, GdalSource {
 ///     params: GdalSourceParameters {
-///         dataset_id: "test".to_owned(),
+///         dataset_id: "modis_ndvi".to_owned(),
 ///         channel: Some(1),
 ///     },
 /// });
@@ -103,10 +103,9 @@ impl JsonDatasetInformationProvider {
         &self.raster_data_root
     }
 
-    pub fn write_to_file(&self, id: &str, raster_data_root: &Path) -> Result<()> {
-        let mut dataset_information_path: PathBuf = PathBuf::from(raster_data_root)
-            .join(Self::DEFINTION_SUBPATH)
-            .join(id);
+    pub fn write_to_file(&self, id: &str) -> Result<()> {
+        let mut dataset_information_path: PathBuf =
+            self.raster_data_root.join(Self::DEFINTION_SUBPATH).join(id);
         dataset_information_path.set_extension("json");
 
         let file = std::fs::File::create(dataset_information_path)?;
@@ -860,7 +859,7 @@ mod tests {
         };
 
         let gdal_params = GdalSourceParameters {
-            dataset_id: "test".to_owned(),
+            dataset_id: "modis_ndvi".to_owned(),
             channel: None,
         };
 
@@ -938,7 +937,7 @@ mod tests {
         };
 
         let gdal_params = GdalSourceParameters {
-            dataset_id: "test".to_owned(),
+            dataset_id: "modis_ndvi".to_owned(),
             channel: None,
         };
 
@@ -1000,7 +999,7 @@ mod tests {
         };
 
         let gdal_params = GdalSourceParameters {
-            dataset_id: "test".to_owned(),
+            dataset_id: "modis_ndvi".to_owned(),
             channel: None,
         };
 
@@ -1072,7 +1071,7 @@ mod tests {
         };
 
         let gdal_params = GdalSourceParameters {
-            dataset_id: "test".to_owned(),
+            dataset_id: "modis_ndvi".to_owned(),
             channel: None,
         };
 
@@ -1151,7 +1150,7 @@ mod tests {
         };
 
         let gdal_params = GdalSourceParameters {
-            dataset_id: "test".to_owned(),
+            dataset_id: "modis_ndvi".to_owned(),
             channel: None,
         };
 
@@ -1227,7 +1226,7 @@ mod tests {
         };
 
         let gdal_params = GdalSourceParameters {
-            dataset_id: "test".to_owned(),
+            dataset_id: "modis_ndvi".to_owned(),
             channel: None,
         };
 

@@ -147,26 +147,16 @@ mod tests {
                         "end": 9_223_372_036_854_775_807_i64
                     },
                     "tile": {
-                        "global_size_in_tiles": {
-                            "dimension_size": [1, 2]
-                        },
-                        "global_tile_position": {
-                            "dimension_size": [0, 0]
-                        },
-                        "global_pixel_position": {
-                            "dimension_size": [0, 0]
-                        },
-                        "tile_size_in_pixels": {
-                            "dimension_size": [3, 2]
-                        },
+                        "global_tile_position":  [0, 0],
                         "global_geo_transform": {
-                            "upper_left_coordinate": {
+                            "origin_coordinate": {
                                 "x": 0.0,
                                 "y": 0.0
                             },
                             "x_pixel_size": 1.0,
                             "y_pixel_size": -1.0
-                        }
+                        },
+                        "tile_size_in_pixels": [3, 2]
                     },
                     "data": {
                         "grid_dimension": {
@@ -175,7 +165,7 @@ mod tests {
                         "data_container": [1, 2, 3, 4, 5, 6],
                         "no_data_value": null,
                         "geo_transform": {
-                            "upper_left_coordinate": {
+                            "origin_coordinate": {
                                 "x": 0.0,
                                 "y": 0.0
                             },

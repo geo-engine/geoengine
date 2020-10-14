@@ -337,7 +337,7 @@ mod tests {
     #[tokio::test]
     async fn png_from_stream() {
         let gdal_params = GdalSourceParameters {
-            dataset_id: "test".to_owned(),
+            dataset_id: "modis_ndvi".to_owned(),
             channel: None,
         };
 
@@ -387,7 +387,7 @@ mod tests {
     #[tokio::test]
     async fn png_from_stream_non_full() {
         let gdal_params = GdalSourceParameters {
-            dataset_id: "test".to_owned(),
+            dataset_id: "modis_ndvi".to_owned(),
             channel: None,
         };
 
@@ -442,7 +442,7 @@ mod tests {
             operator: TypedOperator::Raster(
                 GdalSource {
                     params: GdalSourceParameters {
-                        dataset_id: "test".to_owned(),
+                        dataset_id: "modis_ndvi".to_owned(),
                         channel: None,
                     },
                 }
@@ -476,7 +476,7 @@ mod tests {
             operator: TypedOperator::Raster(
                 GdalSource {
                     params: GdalSourceParameters {
-                        dataset_id: "test".to_owned(),
+                        dataset_id: "modis_ndvi".to_owned(),
                         channel: None,
                     },
                 }
