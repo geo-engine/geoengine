@@ -77,7 +77,7 @@ where
             .query(
                 &stmt,
                 &[
-                    &user.uuid(),
+                    &user,
                     &options.permissions,
                     &i64::from(options.limit),
                     &i64::from(options.offset),
@@ -102,7 +102,7 @@ where
                 )
                 .await?;
 
-            let layer_rows = conn.query(&stmt, &[&project_version_id.uuid()]).await?;
+            let layer_rows = conn.query(&stmt, &[&project_version_id]).await?;
             let layer_names = layer_rows.iter().map(|row| row.get(0)).collect();
 
             project_listings.push(ProjectListing {
@@ -154,8 +154,7 @@ where
                 )
                 .await?;
 
-            conn.query_one(&stmt, &[&user.uuid(), &project.uuid(), &version.uuid()])
-                .await?
+            conn.query_one(&stmt, &[&user, &project, &version]).await?
         } else {
             let stmt = conn
                 .prepare(
@@ -173,8 +172,7 @@ where
                 )
                 .await?;
 
-            conn.query_one(&stmt, &[&user.uuid(), &project.uuid()])
-                .await?
+            conn.query_one(&stmt, &[&user, &project]).await?
         };
 
         let project_id = ProjectId::from_uuid(row.get(0));
@@ -196,7 +194,7 @@ where
             )
             .await?;
 
-        let rows = conn.query(&stmt, &[&version_id.uuid()]).await?;
+        let rows = conn.query(&stmt, &[&version_id]).await?;
 
         let mut layers = vec![];
         for row in rows {
@@ -244,7 +242,7 @@ where
             .prepare("INSERT INTO projects (id) VALUES ($1);")
             .await?;
 
-        trans.execute(&stmt, &[&project.id.uuid()]).await?;
+        trans.execute(&stmt, &[&project.id]).await?;
 
         let stmt = trans
             .prepare(
@@ -265,12 +263,12 @@ where
             .execute(
                 &stmt,
                 &[
-                    &ProjectVersionId::new().uuid(),
-                    &project.id.uuid(),
+                    &ProjectVersionId::new(),
+                    &project.id,
                     &project.name,
                     &project.description,
                     &project.bounds,
-                    &user.uuid(),
+                    &user,
                 ],
             )
             .await?;
@@ -282,10 +280,7 @@ where
             .await?;
 
         trans
-            .execute(
-                &stmt,
-                &[&user.uuid(), &project.id.uuid(), &ProjectPermission::Owner],
-            )
+            .execute(&stmt, &[&user, &project.id, &ProjectPermission::Owner])
             .await?;
 
         trans.commit().await?;
@@ -314,7 +309,7 @@ where
         let stmt = trans
             .prepare("UPDATE project_versions SET latest = FALSE WHERE project_id = $1 AND latest IS TRUE;")
             .await?;
-        trans.execute(&stmt, &[&project.id.uuid()]).await?;
+        trans.execute(&stmt, &[&project.id]).await?;
 
         let project = project.update_project(update, user);
 
@@ -338,12 +333,12 @@ where
             .execute(
                 &stmt,
                 &[
-                    &project.version.id.uuid(),
-                    &project.id.uuid(),
+                    &project.version.id,
+                    &project.id,
                     &project.name,
                     &project.description,
                     &project.bounds,
-                    &user.uuid(),
+                    &user,
                 ],
             )
             .await?;
@@ -374,12 +369,12 @@ where
                 .execute(
                     &stmt,
                     &[
-                        &project.id.uuid(),
-                        &project.version.id.uuid(),
+                        &project.id,
+                        &project.version.id,
                         &(idx as i32),
                         &layer.layer_type(),
                         &layer.name,
-                        &layer.workflow.uuid(),
+                        &layer.workflow,
                         &raster_colorizer,
                     ],
                 )
@@ -404,7 +399,7 @@ where
 
         let stmt = conn.prepare("DELETE FROM projects WHERE id = $1;").await?;
 
-        conn.execute(&stmt, &[&project.uuid()]).await?;
+        conn.execute(&stmt, &[&project]).await?;
 
         Ok(())
     }
@@ -433,7 +428,7 @@ where
             )
             .await?;
 
-        let rows = conn.query(&stmt, &[&project.uuid()]).await?;
+        let rows = conn.query(&stmt, &[&project]).await?;
 
         Ok(rows
             .iter()
@@ -471,7 +466,7 @@ where
             )
             .await?;
 
-        let rows = conn.query(&stmt, &[&project.uuid()]).await?;
+        let rows = conn.query(&stmt, &[&project]).await?;
 
         Ok(rows
             .into_iter()
@@ -509,8 +504,8 @@ where
         conn.execute(
             &stmt,
             &[
-                &permission.user.uuid(),
-                &permission.project.uuid(),
+                &permission.user,
+                &permission.project,
                 &permission.permission,
             ],
         )
@@ -542,15 +537,8 @@ where
             )
             .await?;
 
-        conn.execute(
-            &stmt,
-            &[
-                &user.uuid(),
-                &permission.project.uuid(),
-                &permission.permission,
-            ],
-        )
-        .await?;
+        conn.execute(&stmt, &[&user, &permission.project, &permission.permission])
+            .await?;
 
         Ok(())
     }

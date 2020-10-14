@@ -49,5 +49,46 @@ macro_rules! identifier {
                 write!(f, "{}", self.id)
             }
         }
+
+        impl<'a> postgres_types::FromSql<'a> for $id_name {
+            fn from_sql(
+                ty: &postgres_types::Type,
+                raw: &'a [u8],
+            ) -> Result<Self, Box<dyn std::error::Error + Sync + Send>> {
+                uuid::Uuid::from_sql(ty, raw).map(|id| Self { id })
+            }
+
+            fn accepts(ty: &postgres_types::Type) -> bool {
+                <uuid::Uuid as postgres_types::FromSql>::accepts(ty)
+            }
+        }
+
+        impl postgres_types::ToSql for $id_name {
+            fn to_sql(
+                &self,
+                ty: &postgres_types::Type,
+                out: &mut postgres_types::private::BytesMut,
+            ) -> Result<postgres_types::IsNull, Box<dyn std::error::Error + Sync + Send>>
+            where
+                Self: Sized,
+            {
+                self.id.to_sql(ty, out)
+            }
+
+            fn accepts(ty: &postgres_types::Type) -> bool
+            where
+                Self: Sized,
+            {
+                <uuid::Uuid as postgres_types::ToSql>::accepts(ty)
+            }
+
+            fn to_sql_checked(
+                &self,
+                ty: &postgres_types::Type,
+                out: &mut postgres_types::private::BytesMut,
+            ) -> Result<postgres_types::IsNull, Box<dyn std::error::Error + Sync + Send>> {
+                self.id.to_sql_checked(ty, out)
+            }
+        }
     };
 }

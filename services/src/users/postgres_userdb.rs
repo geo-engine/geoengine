@@ -61,7 +61,7 @@ where
         conn.execute(
             &stmt,
             &[
-                &user.id.uuid(),
+                &user.id,
                 &user.email,
                 &user.password_hash,
                 &user.real_name,
@@ -104,8 +104,8 @@ where
                 .query_one(
                     &stmt,
                     &[
-                        &session_id.uuid(),
-                        &user_id.uuid(),
+                        &session_id,
+                        &user_id,
                         &(session_duration.num_seconds() as f64),
                     ],
                 )
@@ -129,7 +129,7 @@ where
             .prepare("DELETE FROM sessions WHERE id = $1;") // TODO: only invalidate session?
             .await?;
 
-        conn.execute(&stmt, &[&session.uuid()])
+        conn.execute(&stmt, &[&session])
             .await
             .map_err(|_| error::Error::LogoutFailed)?;
         Ok(())
@@ -152,7 +152,7 @@ where
             .await?;
 
         let row = conn
-            .query_one(&stmt, &[&session.uuid()])
+            .query_one(&stmt, &[&session])
             .await
             .map_err(|_| error::Error::SessionDoesNotExist)?;
 
@@ -185,8 +185,7 @@ where
             .prepare("UPDATE sessions SET project_id = $1 WHERE id = $2;")
             .await?;
 
-        conn.execute(&stmt, &[&project.uuid(), &session.id.uuid()])
-            .await?;
+        conn.execute(&stmt, &[&project, &session.id]).await?;
 
         Ok(())
     }
@@ -197,7 +196,7 @@ where
             .prepare("UPDATE sessions SET view = $1 WHERE id = $2;")
             .await?;
 
-        conn.execute(&stmt, &[&view, &session.id.uuid()]).await?;
+        conn.execute(&stmt, &[&view, &session.id]).await?;
 
         Ok(())
     }

@@ -1,6 +1,6 @@
 use crate::error;
+use crate::error::Result;
 use crate::workflows::workflow::WorkflowId;
-use crate::{error::Result, util::identifiers::Identifier};
 use async_trait::async_trait;
 use bb8_postgres::{
     bb8::Pool, tokio_postgres::tls::MakeTlsConnect, tokio_postgres::tls::TlsConnect,
@@ -54,7 +54,7 @@ where
         conn.execute(
             &stmt,
             &[
-                &workflow_id.uuid(),
+                &workflow_id,
                 &serde_json::to_value(&workflow).context(error::SerdeJson)?,
             ],
         )
@@ -70,7 +70,7 @@ where
             .prepare("SELECT workflow FROM workflows WHERE id = $1")
             .await?;
 
-        let row = conn.query_one(&stmt, &[&id.uuid()]).await?;
+        let row = conn.query_one(&stmt, &[&id]).await?;
 
         Ok(serde_json::from_value(row.get(0)).context(error::SerdeJson)?)
     }

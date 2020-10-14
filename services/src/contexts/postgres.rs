@@ -16,7 +16,6 @@ use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use super::{Context, DB};
 use crate::projects::project::{ProjectId, ProjectPermission};
 use crate::users::user::UserId;
-use crate::util::identifiers::Identifier;
 
 /// A contex with references to Postgres backends of the dbs. Automatically migrates schema on instantiation
 #[derive(Clone)]
@@ -222,7 +221,7 @@ where
             )
             .await?;
 
-        conn.query_one(&stmt, &[&user.uuid(), &project.uuid(), &permissions])
+        conn.query_one(&stmt, &[&user, &project, &permissions])
             .await
             .map_err(|_| error::Error::ProjectDBUnauthorized)?;
 
