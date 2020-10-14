@@ -1,5 +1,6 @@
 use crate::collections::VectorDataType;
-use crate::primitives::{error, BoundingBox2D, GeometryRef};
+use crate::error::Error;
+use crate::primitives::{error, BoundingBox2D, GeometryRef, PrimitivesError, TypedGeometry};
 use crate::primitives::{Coordinate2D, Geometry};
 use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::Result;
@@ -7,6 +8,7 @@ use arrow::array::BooleanArray;
 use arrow::error::ArrowError;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
+use std::convert::TryFrom;
 
 /// A trait that allows a common access to lines of `MultiLineString`s and its references
 pub trait MultiLineStringAccess<L>
@@ -48,6 +50,18 @@ impl Geometry for MultiLineString {
 
     fn intersects_bbox(&self, _bbox: &BoundingBox2D) -> bool {
         todo!("implement")
+    }
+}
+
+impl TryFrom<TypedGeometry> for MultiLineString {
+    type Error = Error;
+
+    fn try_from(value: TypedGeometry) -> Result<Self, Self::Error> {
+        if let TypedGeometry::MultiLineString(geometry) = value {
+            Ok(geometry)
+        } else {
+            Err(PrimitivesError::InvalidConversion.into())
+        }
     }
 }
 

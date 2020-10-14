@@ -1,5 +1,6 @@
 use crate::collections::VectorDataType;
-use crate::primitives::{BoundingBox2D, Geometry, GeometryRef};
+use crate::error::Error;
+use crate::primitives::{BoundingBox2D, Geometry, GeometryRef, PrimitivesError, TypedGeometry};
 use crate::util::arrow::ArrowTyped;
 use arrow::array::{
     Array, ArrayBuilder, ArrayDataRef, ArrayEqual, ArrayRef, BooleanArray, JsonEqual,
@@ -9,6 +10,7 @@ use arrow::error::ArrowError;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::any::Any;
+use std::convert::TryFrom;
 
 /// A zero-sized placeholder struct for situations where a geometry is necessary.
 /// Currently, this is only required for `FeatureCollection` implementations.
@@ -25,6 +27,18 @@ impl Geometry for NoGeometry {
 }
 
 impl GeometryRef for NoGeometry {}
+
+impl TryFrom<TypedGeometry> for NoGeometry {
+    type Error = Error;
+
+    fn try_from(value: TypedGeometry) -> Result<Self, Self::Error> {
+        if let TypedGeometry::Data(geometry) = value {
+            Ok(geometry)
+        } else {
+            Err(PrimitivesError::InvalidConversion.into())
+        }
+    }
+}
 
 impl ArrowTyped for NoGeometry {
     type ArrowArray = NoArrowArray;

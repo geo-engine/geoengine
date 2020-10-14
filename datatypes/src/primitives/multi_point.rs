@@ -1,5 +1,6 @@
 use crate::collections::VectorDataType;
-use crate::primitives::{error, BoundingBox2D, GeometryRef};
+use crate::error::Error;
+use crate::primitives::{error, BoundingBox2D, GeometryRef, PrimitivesError, TypedGeometry};
 use crate::primitives::{Coordinate2D, Geometry};
 use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::Result;
@@ -56,6 +57,18 @@ impl Geometry for MultiPoint {
 
     fn intersects_bbox(&self, bbox: &BoundingBox2D) -> bool {
         self.coordinates.iter().any(|c| bbox.contains_coordinate(c))
+    }
+}
+
+impl TryFrom<TypedGeometry> for MultiPoint {
+    type Error = Error;
+
+    fn try_from(value: TypedGeometry) -> Result<Self, Self::Error> {
+        if let TypedGeometry::MultiPoint(geometry) = value {
+            Ok(geometry)
+        } else {
+            Err(PrimitivesError::InvalidConversion.into())
+        }
     }
 }
 

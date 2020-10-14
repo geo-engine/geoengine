@@ -32,6 +32,10 @@ pub enum Error {
         found: geoengine_datatypes::spatial_reference::SpatialReferenceOption,
     },
 
+    InvalidOperatorSpec {
+        reason: String,
+    },
+
     // TODO: use something more general than `Range`, e.g. `dyn RangeBounds` that can, however not be made into an object
     #[snafu(display(
         "InvalidNumberOfRasterInputsError: expected \"[{} .. {}]\" found \"{}\"",

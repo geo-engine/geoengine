@@ -23,7 +23,7 @@ use geoengine_datatypes::collections::{
 };
 use geoengine_datatypes::primitives::{
     Coordinate2D, FeatureDataType, FeatureDataValue, Geometry, MultiLineString, MultiPoint,
-    MultiPolygon, NoGeometry, TimeInstance, TimeInterval,
+    MultiPolygon, NoGeometry, TimeInstance, TimeInterval, TypedGeometry,
 };
 use geoengine_datatypes::provenance::ProvenanceInformation;
 use geoengine_datatypes::spatial_reference::SpatialReference;
@@ -36,7 +36,6 @@ use crate::engine::{
 };
 use crate::error::Error;
 use crate::util::Result;
-use failure::_core::fmt::Formatter;
 use std::fmt::Debug;
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
@@ -284,17 +283,21 @@ pub struct OgrSourceState {
     default_geometry: OgrSourceDefaultGeometry,
 }
 
-#[derive(Clone)]
-pub struct OgrSourceDefaultGeometry(Option<gdal::vector::Geometry>);
+#[derive(Clone, Debug)]
+pub struct OgrSourceDefaultGeometry(Option<TypedGeometry>);
 
-impl Debug for OgrSourceDefaultGeometry {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        self.0.as_ref().and_then(|g| g.wkt().ok()).fmt(f)
+impl OgrSourceDefaultGeometry {
+    pub fn try_into_geometry<G>(&self) -> Result<Option<G>>
+    where
+        G: Geometry,
+    {
+        if let Some(v) = self.0.clone() {
+            Ok(Some(G::try_from(v)?))
+        } else {
+            Ok(None)
+        }
     }
 }
-
-unsafe impl Send for OgrSourceDefaultGeometry {}
-unsafe impl Sync for OgrSourceDefaultGeometry {}
 
 pub type InitializedOgrSource =
     InitializedOperatorImpl<OgrSourceParameters, VectorResultDescriptor, OgrSourceState>;
@@ -354,6 +357,13 @@ impl VectorOperator for OgrSource {
 
         let default_geometry = Self::parse_default_geometry(&dataset_information, data_type)?;
 
+        if default_geometry.0.is_some() && dataset_information.on_error != OgrSourceErrorSpec::Keep
+        {
+            return Err(Error::InvalidOperatorSpec {
+                reason: "Default geometry must only be specified on error type `keep`".to_string(),
+            });
+        }
+
         Ok(InitializedOgrSource::new(
             self.params,
             result_descriptor,
@@ -407,7 +417,18 @@ impl OgrSource {
             });
         }
 
-        Ok(OgrSourceDefaultGeometry(Some(geometry)))
+        Ok(OgrSourceDefaultGeometry(Some(match geometry_type {
+            VectorDataType::Data => TypedGeometry::Data(NoGeometry::try_from(&geometry)?),
+            VectorDataType::MultiPoint => {
+                TypedGeometry::MultiPoint(MultiPoint::try_from(&geometry)?)
+            }
+            VectorDataType::MultiLineString => {
+                TypedGeometry::MultiLineString(MultiLineString::try_from(&geometry)?)
+            }
+            VectorDataType::MultiPolygon => {
+                TypedGeometry::MultiPolygon(MultiPolygon::try_from(&geometry)?)
+            }
+        })))
     }
 }
 
@@ -417,17 +438,33 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
         // TODO: simplify with macro
         Ok(match self.result_descriptor.data_type {
-            VectorDataType::Data => {
-                TypedVectorQueryProcessor::Data(OgrSourceProcessor::new(self.state.clone()).boxed())
-            }
+            VectorDataType::Data => TypedVectorQueryProcessor::Data(
+                OgrSourceProcessor::new(
+                    self.state.dataset_information.clone(),
+                    self.state.default_geometry.try_into_geometry()?,
+                )
+                .boxed(),
+            ),
             VectorDataType::MultiPoint => TypedVectorQueryProcessor::MultiPoint(
-                OgrSourceProcessor::new(self.state.clone()).boxed(),
+                OgrSourceProcessor::new(
+                    self.state.dataset_information.clone(),
+                    self.state.default_geometry.try_into_geometry()?,
+                )
+                .boxed(),
             ),
             VectorDataType::MultiLineString => TypedVectorQueryProcessor::MultiLineString(
-                OgrSourceProcessor::new(self.state.clone()).boxed(),
+                OgrSourceProcessor::new(
+                    self.state.dataset_information.clone(),
+                    self.state.default_geometry.try_into_geometry()?,
+                )
+                .boxed(),
             ),
             VectorDataType::MultiPolygon => TypedVectorQueryProcessor::MultiPolygon(
-                OgrSourceProcessor::new(self.state.clone()).boxed(),
+                OgrSourceProcessor::new(
+                    self.state.dataset_information.clone(),
+                    self.state.default_geometry.try_into_geometry()?,
+                )
+                .boxed(),
             ),
         })
     }
@@ -439,7 +476,7 @@ where
 {
     // TODO: use `Arc<…>`?
     dataset_information: OgrSourceDataset,
-    default_geometry: OgrSourceDefaultGeometry,
+    default_geometry: Option<G>,
     _collection_type: PhantomData<FeatureCollection<G>>,
 }
 
@@ -447,10 +484,10 @@ impl<G> OgrSourceProcessor<G>
 where
     G: Geometry + ArrowTyped,
 {
-    pub fn new(ogr_source_state: OgrSourceState) -> Self {
+    pub fn new(dataset_information: OgrSourceDataset, default_geometry: Option<G>) -> Self {
         Self {
-            dataset_information: ogr_source_state.dataset_information,
-            default_geometry: ogr_source_state.default_geometry,
+            dataset_information,
+            default_geometry,
             _collection_type: Default::default(),
         }
     }
@@ -495,7 +532,7 @@ where
 {
     pub fn new(
         dataset_information: OgrSourceDataset,
-        default_geometry: OgrSourceDefaultGeometry,
+        default_geometry: Option<G>,
         query_rectangle: QueryRectangle,
         chunk_byte_size: usize,
     ) -> Self {
@@ -535,7 +572,7 @@ where
     fn compute_thread(
         work_query: &mut WorkQuery,
         dataset_information: &OgrSourceDataset,
-        _default_geometry: &OgrSourceDefaultGeometry,
+        default_geometry: &Option<G>,
         work_query_receiver: &Receiver<WorkQuery>,
         poll_result_sender: &SyncSender<Option<Result<FeatureCollection<G>>>>,
         query_rectangle: &QueryRectangle,
@@ -575,6 +612,7 @@ where
                 &mut features,
                 feature_collection_builder.clone(),
                 dataset_information,
+                &default_geometry,
                 &data_types,
                 query_rectangle,
                 &time_extractor,
@@ -757,10 +795,11 @@ where
         (data_types, feature_collection_builder)
     }
 
-    pub fn compute_batch(
+    fn compute_batch(
         feature_iterator: &mut Peekable<FeatureIterator<'_>>,
         feature_collection_builder: FeatureCollectionBuilder<G>,
-        _dataset_information: &OgrSourceDataset,
+        dataset_information: &OgrSourceDataset,
+        default_geometry: &Option<G>,
         data_types: &HashMap<String, FeatureDataType>,
         query_rectangle: &QueryRectangle,
         time_extractor: &dyn Fn(&Feature) -> Result<TimeInterval>,
@@ -768,58 +807,86 @@ where
         let mut builder = feature_collection_builder.finish_header();
 
         for feature in feature_iterator {
-            let geometry = G::try_from(feature.geometry())?;
-
-            // filter out geometries that are not contained in the query's bounding box
-            if !geometry.intersects_bbox(&query_rectangle.bbox) {
-                continue;
-            }
-
-            builder.push_generic_geometry(geometry)?;
-
-            let time_interval = time_extractor(&feature)?;
-
-            // filter out data items not in the query time interval
-            if !time_interval.intersects(&query_rectangle.time_interval) {
-                continue;
-            }
-
-            builder.push_time_interval(time_interval)?;
-
-            for (column, data_type) in data_types {
-                let field = feature.field(&column)?;
-
-                match data_type {
-                    FeatureDataType::Text | FeatureDataType::NullableText => {
-                        builder.push_data(
-                            &column,
-                            FeatureDataValue::NullableText(field.into_string()),
-                        )?;
-                    }
-                    FeatureDataType::Number | FeatureDataType::NullableNumber => {
-                        builder.push_data(
-                            &column,
-                            FeatureDataValue::NullableNumber(field.into_real()),
-                        )?;
-                    }
-                    FeatureDataType::Decimal | FeatureDataType::NullableDecimal => {
-                        builder.push_data(
-                            &column,
-                            FeatureDataValue::NullableDecimal(field.into_int().map(|v| {
-                                i64::from(v) // TODO: PR for allowing i64 in OGR?
-                            })),
-                        )?;
-                    }
-                    FeatureDataType::Categorical | FeatureDataType::NullableCategorical => {
-                        todo!("implement")
-                    }
+            if let Err(error) = Self::add_feature_to_batch(
+                default_geometry,
+                data_types,
+                &query_rectangle,
+                time_extractor,
+                &mut builder,
+                &feature,
+            ) {
+                match dataset_information.on_error {
+                    OgrSourceErrorSpec::Skip | OgrSourceErrorSpec::Keep => continue,
+                    OgrSourceErrorSpec::Abort => return Err(error),
                 }
             }
-
-            builder.finish_row();
         }
 
         builder.build().map_err(Into::into)
+    }
+
+    fn add_feature_to_batch(
+        default_geometry: &Option<G>,
+        data_types: &HashMap<String, FeatureDataType>,
+        query_rectangle: &QueryRectangle,
+        time_extractor: &dyn Fn(&Feature) -> Result<TimeInterval, Error>,
+        builder: &mut FeatureCollectionRowBuilder<G>,
+        feature: &Feature,
+    ) -> Result<()> {
+        let geometry: G = match (
+            <G as TryFromOgrGeometry>::try_from(feature.geometry()),
+            default_geometry,
+        ) {
+            (Ok(g), _) => g,
+            (Err(_), Some(g)) => g.clone(),
+            (Err(error), _) => return Err(error),
+        };
+
+        // filter out geometries that are not contained in the query's bounding box
+        if !geometry.intersects_bbox(&query_rectangle.bbox) {
+            return Ok(());
+        }
+
+        builder.push_generic_geometry(geometry)?;
+
+        let time_interval = time_extractor(&feature)?;
+
+        // filter out data items not in the query time interval
+        if !time_interval.intersects(&query_rectangle.time_interval) {
+            return Ok(());
+        }
+
+        builder.push_time_interval(time_interval)?;
+
+        for (column, data_type) in data_types {
+            let field = feature.field(&column)?;
+
+            match data_type {
+                FeatureDataType::Text | FeatureDataType::NullableText => {
+                    builder
+                        .push_data(&column, FeatureDataValue::NullableText(field.into_string()))?;
+                }
+                FeatureDataType::Number | FeatureDataType::NullableNumber => {
+                    builder
+                        .push_data(&column, FeatureDataValue::NullableNumber(field.into_real()))?;
+                }
+                FeatureDataType::Decimal | FeatureDataType::NullableDecimal => {
+                    builder.push_data(
+                        &column,
+                        FeatureDataValue::NullableDecimal(field.into_int().map(|v| {
+                            i64::from(v) // TODO: PR for allowing i64 in OGR?
+                        })),
+                    )?;
+                }
+                FeatureDataType::Categorical | FeatureDataType::NullableCategorical => {
+                    todo!("implement")
+                }
+            }
+        }
+
+        builder.finish_row();
+
+        Ok(())
     }
 }
 
@@ -888,14 +955,48 @@ pub trait TryFromOgrGeometry: Sized {
 
 impl TryFromOgrGeometry for MultiPoint {
     fn try_from(geometry: &gdal::vector::Geometry) -> Result<Self> {
-        MultiPoint::new(
-            geometry
-                .get_point_vec()
-                .into_iter()
-                .map(|(x, y, _z)| Coordinate2D::new(x, y))
-                .collect(),
-        )
-        .map_err(Into::into)
+        dbg!(geometry.geometry_type());
+        match geometry.geometry_type() {
+            OGRwkbGeometryType::wkbPoint => {
+                let (x, y, _) = geometry.get_point(0);
+                dbg!(
+                    "wkbPoint",
+                    x,
+                    y,
+                    geometry.geometry_count(),
+                    geometry.get_point_vec()
+                );
+                Ok(MultiPoint::new(vec![(x, y).into()])?)
+            }
+            OGRwkbGeometryType::wkbMultiPoint => {
+                dbg!(
+                    "wkbMultiPoint",
+                    geometry.get_point_vec(),
+                    geometry.geometry_count(),
+                    geometry.get_point(0),
+                    geometry.get_point(1),
+                );
+                Ok(MultiPoint::new(
+                    (0..geometry.geometry_count())
+                        .map(|i| {
+                            let (x, y, _) = geometry.get_point(i as i32);
+                            Coordinate2D::new(x, y)
+                        })
+                        .collect(),
+                )?)
+                // Ok(MultiPoint::new(
+                //     geometry
+                //         .get_point_vec()
+                //         .into_iter()
+                //         .map(|(x, y, _z)| Coordinate2D::new(x, y))
+                //         .collect(),
+                // )?)
+            }
+            _ => Err(Error::InvalidType {
+                expected: format!("{:?}", VectorDataType::MultiPoint),
+                found: format!("{:?}", OgrSource::ogr_geometry_type(geometry)),
+            }),
+        }
     }
 }
 
@@ -1089,10 +1190,10 @@ mod tests {
         let default_geometry =
             OgrSource::parse_default_geometry(&dataset_information, VectorDataType::MultiPoint)?;
 
-        let query_processor = OgrSourceProcessor::<MultiPoint>::new(OgrSourceState {
+        let query_processor = OgrSourceProcessor::<MultiPoint>::new(
             dataset_information,
-            default_geometry,
-        });
+            default_geometry.try_into_geometry()?,
+        );
 
         let query = query_processor.query(
             QueryRectangle {
@@ -1130,10 +1231,10 @@ mod tests {
         let default_geometry =
             OgrSource::parse_default_geometry(&dataset_information, VectorDataType::MultiPoint)?;
 
-        let query_processor = OgrSourceProcessor::<MultiPoint>::new(OgrSourceState {
+        let query_processor = OgrSourceProcessor::<MultiPoint>::new(
             dataset_information,
-            default_geometry,
-        });
+            default_geometry.try_into_geometry()?,
+        );
 
         let query = query_processor.query(
             QueryRectangle {
@@ -1148,6 +1249,47 @@ mod tests {
 
         assert_eq!(result.len(), 1);
         assert!(result[0].is_err());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn on_error_skip() -> Result<()> {
+        let dataset_information = OgrSourceDataset {
+            filename: "test-data/vector/missing_geo.json".into(),
+            layer_name: "missing_geo".to_string(),
+            data_type: None,
+            time: OgrSourceDatasetTimeType::None,
+            duration: None,
+            time1_format: None,
+            time2_format: None,
+            columns: None,
+            default: None,
+            force_ogr_time_filter: false,
+            on_error: OgrSourceErrorSpec::Skip,
+            provenance: None,
+        };
+        let default_geometry =
+            OgrSource::parse_default_geometry(&dataset_information, VectorDataType::MultiPoint)?;
+
+        let query_processor = OgrSourceProcessor::<MultiPoint>::new(
+            dataset_information,
+            default_geometry.try_into_geometry()?,
+        );
+
+        let query = query_processor.query(
+            QueryRectangle {
+                bbox: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
+                time_interval: Default::default(),
+                spatial_resolution: SpatialResolution::new(1., 1.)?,
+            },
+            QueryContext { chunk_byte_size: 0 },
+        );
+
+        let result: Vec<MultiPointCollection> = query.try_collect().await?;
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].len(), 2);
 
         Ok(())
     }
@@ -1172,10 +1314,14 @@ mod tests {
         let default_geometry =
             OgrSource::parse_default_geometry(&dataset_information, VectorDataType::MultiPoint)?;
 
-        assert_eq!(
-            default_geometry.0.unwrap().get_point_vec(),
-            vec![(0.0, 1.0, 0.0)]
-        );
+        let default_geometry =
+            if let TypedGeometry::MultiPoint(multi_point) = default_geometry.0.unwrap() {
+                multi_point
+            } else {
+                panic!("invalid geometry type");
+            };
+
+        assert_eq!(default_geometry, MultiPoint::new(vec![(0.0, 1.0).into()])?);
 
         Ok(())
     }
