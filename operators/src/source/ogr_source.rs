@@ -12,7 +12,7 @@ use futures::stream::BoxStream;
 use futures::task::{Context, Waker};
 use futures::Stream;
 use futures::StreamExt;
-use gdal::vector::{Dataset, Feature, FeatureIterator, OGRwkbGeometryType};
+use gdal::vector::{Dataset, Feature, FeatureIterator, FieldValue, OGRwkbGeometryType};
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use tokio::task::spawn_blocking;
@@ -346,7 +346,10 @@ impl VectorOperator for OgrSource {
                 .features()
                 .next()
                 .map_or(VectorDataType::Data, |feature| {
-                    Self::ogr_geometry_type(feature.geometry())
+                    feature
+                        .geometry_by_index(0)
+                        .map(Self::ogr_geometry_type)
+                        .unwrap_or(VectorDataType::Data)
                 })
         };
 
@@ -418,15 +421,15 @@ impl OgrSource {
         }
 
         Ok(OgrSourceDefaultGeometry(Some(match geometry_type {
-            VectorDataType::Data => TypedGeometry::Data(NoGeometry::try_from(&geometry)?),
+            VectorDataType::Data => TypedGeometry::Data(NoGeometry::try_from(Ok(&geometry))?),
             VectorDataType::MultiPoint => {
-                TypedGeometry::MultiPoint(MultiPoint::try_from(&geometry)?)
+                TypedGeometry::MultiPoint(MultiPoint::try_from(Ok(&geometry))?)
             }
             VectorDataType::MultiLineString => {
-                TypedGeometry::MultiLineString(MultiLineString::try_from(&geometry)?)
+                TypedGeometry::MultiLineString(MultiLineString::try_from(Ok(&geometry))?)
             }
             VectorDataType::MultiPolygon => {
-                TypedGeometry::MultiPolygon(MultiPolygon::try_from(&geometry)?)
+                TypedGeometry::MultiPolygon(MultiPolygon::try_from(Ok(&geometry))?)
             }
         })))
     }
@@ -834,7 +837,7 @@ where
         feature: &Feature,
     ) -> Result<()> {
         let geometry: G = match (
-            <G as TryFromOgrGeometry>::try_from(feature.geometry()),
+            <G as TryFromOgrGeometry>::try_from(feature.geometry_by_index(0).map_err(Into::into)),
             default_geometry,
         ) {
             (Ok(g), _) => g,
@@ -858,24 +861,39 @@ where
         builder.push_time_interval(time_interval)?;
 
         for (column, data_type) in data_types {
-            let field = feature.field(&column)?;
+            let field = feature.field(&column);
 
             match data_type {
                 FeatureDataType::Text | FeatureDataType::NullableText => {
-                    builder
-                        .push_data(&column, FeatureDataValue::NullableText(field.into_string()))?;
+                    let text_option = match field {
+                        Ok(FieldValue::IntegerValue(v)) => Some(v.to_string()),
+                        Ok(FieldValue::StringValue(s)) => Some(s),
+                        Ok(FieldValue::RealValue(v)) => Some(v.to_string()),
+                        Err(_) => None, // TODO: log error
+                    };
+
+                    builder.push_data(&column, FeatureDataValue::NullableText(text_option))?;
                 }
                 FeatureDataType::Number | FeatureDataType::NullableNumber => {
-                    builder
-                        .push_data(&column, FeatureDataValue::NullableNumber(field.into_real()))?;
+                    let number_option = match field {
+                        Ok(FieldValue::IntegerValue(v)) => Some(f64::from(v)),
+                        Ok(FieldValue::StringValue(s)) => f64::from_str(&s).ok(),
+                        Ok(FieldValue::RealValue(v)) => Some(v),
+                        Err(_) => None, // TODO: log error
+                    };
+
+                    builder.push_data(&column, FeatureDataValue::NullableNumber(number_option))?;
                 }
                 FeatureDataType::Decimal | FeatureDataType::NullableDecimal => {
-                    builder.push_data(
-                        &column,
-                        FeatureDataValue::NullableDecimal(field.into_int().map(|v| {
-                            i64::from(v) // TODO: PR for allowing i64 in OGR?
-                        })),
-                    )?;
+                    let decimal_option = match field {
+                        Ok(FieldValue::IntegerValue(v)) => Some(i64::from(v)), // TODO: PR for allowing i64 in OGR?
+                        Ok(FieldValue::StringValue(s)) => i64::from_str(&s).ok(),
+                        Ok(FieldValue::RealValue(v)) => Some(v as i64),
+                        Err(_) => None, // TODO: log error
+                    };
+
+                    builder
+                        .push_data(&column, FeatureDataValue::NullableDecimal(decimal_option))?;
                 }
                 FeatureDataType::Categorical | FeatureDataType::NullableCategorical => {
                     todo!("implement")
@@ -949,17 +967,19 @@ where
 
 // use `TryFrom` in `datatypes` if this is used on more than one occasion
 pub trait TryFromOgrGeometry: Sized {
-    fn try_from(geometry: &gdal::vector::Geometry) -> Result<Self>;
+    fn try_from(geometry: Result<&gdal::vector::Geometry>) -> Result<Self>;
 }
 
 /// Implement direct conversions from OGR geometries to our geometries
 /// Unfortunately, we cannot convert to `geo`'s geometries since the implementation panics on unknown types.
 impl TryFromOgrGeometry for MultiPoint {
-    fn try_from(geometry: &gdal::vector::Geometry) -> Result<Self> {
+    fn try_from(geometry: Result<&gdal::vector::Geometry>) -> Result<Self> {
         fn coordinate(geometry: &gdal::vector::Geometry) -> Coordinate2D {
             let (x, y, _) = geometry.get_point(0);
             Coordinate2D::new(x, y)
         }
+
+        let geometry = geometry?;
 
         match geometry.geometry_type() {
             OGRwkbGeometryType::wkbPoint => Ok(MultiPoint::new(vec![coordinate(geometry)])?),
@@ -979,7 +999,7 @@ impl TryFromOgrGeometry for MultiPoint {
 }
 
 impl TryFromOgrGeometry for MultiLineString {
-    fn try_from(geometry: &gdal::vector::Geometry) -> Result<Self> {
+    fn try_from(geometry: Result<&gdal::vector::Geometry>) -> Result<Self> {
         fn coordinates(geometry: &gdal::vector::Geometry) -> Vec<Coordinate2D> {
             geometry
                 .get_point_vec()
@@ -987,6 +1007,8 @@ impl TryFromOgrGeometry for MultiLineString {
                 .map(|(x, y, _z)| Coordinate2D::new(x, y))
                 .collect()
         }
+
+        let geometry = geometry?;
 
         match geometry.geometry_type() {
             OGRwkbGeometryType::wkbLineString => {
@@ -1006,7 +1028,7 @@ impl TryFromOgrGeometry for MultiLineString {
 }
 
 impl TryFromOgrGeometry for MultiPolygon {
-    fn try_from(geometry: &gdal::vector::Geometry) -> Result<Self> {
+    fn try_from(geometry: Result<&gdal::vector::Geometry>) -> Result<Self> {
         fn coordinates(geometry: &gdal::vector::Geometry) -> Vec<Coordinate2D> {
             geometry
                 .get_point_vec()
@@ -1020,6 +1042,8 @@ impl TryFromOgrGeometry for MultiPolygon {
                 .map(|i| coordinates(&unsafe { geometry._get_geometry(i) }))
                 .collect()
         }
+
+        let geometry = geometry?;
 
         match geometry.geometry_type() {
             OGRwkbGeometryType::wkbPolygon => Ok(MultiPolygon::new(vec![rings(geometry)])?),
@@ -1037,7 +1061,7 @@ impl TryFromOgrGeometry for MultiPolygon {
 }
 
 impl TryFromOgrGeometry for NoGeometry {
-    fn try_from(_geometry: &gdal::vector::Geometry) -> Result<Self> {
+    fn try_from(_geometry: Result<&gdal::vector::Geometry>) -> Result<Self> {
         Ok(NoGeometry)
     }
 }
@@ -1088,7 +1112,7 @@ mod tests {
     use futures::TryStreamExt;
     use serde_json::json;
 
-    use geoengine_datatypes::collections::MultiPointCollection;
+    use geoengine_datatypes::collections::{DataCollection, MultiPointCollection};
     use geoengine_datatypes::primitives::{BoundingBox2D, FeatureData, SpatialResolution};
 
     use crate::engine::ExecutionContext;
@@ -2733,6 +2757,77 @@ mod tests {
                 coordinates,
                 vec![Default::default(); 1081],
                 HashMap::new(),
+            )?
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn plain_data() -> Result<()> {
+        let dataset_information = OgrSourceDataset {
+            filename: "test-data/vector/plain_data.csv".into(),
+            layer_name: "plain_data".to_string(),
+            data_type: None,
+            time: OgrSourceDatasetTimeType::None,
+            duration: None,
+            time1_format: None,
+            time2_format: None,
+            columns: Some(OgrSourceColumnSpec {
+                x: "".to_string(),
+                y: None,
+                time1: None,
+                time2: None,
+                decimal: vec!["a".to_string()],
+                numeric: vec!["b".to_string()],
+                textual: vec!["c".to_string()],
+            }),
+            default: None,
+            force_ogr_time_filter: false,
+            on_error: OgrSourceErrorSpec::Skip,
+            provenance: None,
+        };
+
+        let query_processor = OgrSourceProcessor::<NoGeometry>::new(dataset_information, None);
+
+        let query = query_processor.query(
+            QueryRectangle {
+                bbox: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
+                time_interval: Default::default(),
+                spatial_resolution: SpatialResolution::new(1., 1.)?,
+            },
+            QueryContext { chunk_byte_size: 0 },
+        );
+
+        let result: Vec<DataCollection> = query.try_collect().await?;
+
+        assert_eq!(result.len(), 1);
+
+        assert_eq!(
+            result[0],
+            DataCollection::from_data(
+                vec![],
+                vec![Default::default(); 2],
+                [
+                    (
+                        "a".to_string(),
+                        FeatureData::NullableDecimal(vec![Some(1), Some(2)])
+                    ),
+                    (
+                        "b".to_string(),
+                        FeatureData::NullableNumber(vec![Some(5.4), None])
+                    ),
+                    (
+                        "c".to_string(),
+                        FeatureData::NullableText(vec![
+                            Some("foo".to_string()),
+                            Some("bar".to_string())
+                        ])
+                    ),
+                ]
+                .iter()
+                .cloned()
+                .collect(),
             )?
         );
 
