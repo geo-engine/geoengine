@@ -1,7 +1,7 @@
 use crate::primitives::Coordinate2D;
 use serde::{Deserialize, Serialize};
 
-use super::{GridIdx2D, GridIndex, SignedGridIdx2D, SignedGridIndex};
+use super::{GridIdx2D, SignedGridIdx2D};
 
 /// This is a typedef for the `GDAL GeoTransform`. It represents an affine transformation matrix.
 pub type GdalGeoTransform = [f64; 6];

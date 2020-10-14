@@ -1,6 +1,5 @@
 use super::{
-    BaseRaster, Dim2D, Dim3D, GeoTransform, GridDimension, GridIdx2D, OffsetDim2D, Raster,
-    SignedGridIdx2D,
+    BaseRaster, Dim2D, Dim3D, GeoTransform, GridDimension, GridIdx2D, Raster, SignedGridIdx2D,
 };
 use crate::primitives::{BoundingBox2D, SpatialBounded, TemporalBounded, TimeInterval};
 use crate::raster::data_type::FromPrimitive;
