@@ -847,8 +847,6 @@ where
             return Ok(());
         }
 
-        builder.push_generic_geometry(geometry)?;
-
         let time_interval = time_extractor(&feature)?;
 
         // filter out data items not in the query time interval
@@ -856,6 +854,7 @@ where
             return Ok(());
         }
 
+        builder.push_generic_geometry(geometry)?;
         builder.push_time_interval(time_interval)?;
 
         for (column, data_type) in data_types {
@@ -953,44 +952,23 @@ pub trait TryFromOgrGeometry: Sized {
     fn try_from(geometry: &gdal::vector::Geometry) -> Result<Self>;
 }
 
+/// Implement direct conversions from OGR geometries to our geometries
+/// Unfortunately, we cannot convert to `geo`'s geometries since the implementation panics on unknown types.
 impl TryFromOgrGeometry for MultiPoint {
     fn try_from(geometry: &gdal::vector::Geometry) -> Result<Self> {
-        dbg!(geometry.geometry_type());
+        fn coordinate(geometry: &gdal::vector::Geometry) -> Coordinate2D {
+            let (x, y, _) = geometry.get_point(0);
+            Coordinate2D::new(x, y)
+        }
+
         match geometry.geometry_type() {
-            OGRwkbGeometryType::wkbPoint => {
-                let (x, y, _) = geometry.get_point(0);
-                dbg!(
-                    "wkbPoint",
-                    x,
-                    y,
-                    geometry.geometry_count(),
-                    geometry.get_point_vec()
-                );
-                Ok(MultiPoint::new(vec![(x, y).into()])?)
-            }
+            OGRwkbGeometryType::wkbPoint => Ok(MultiPoint::new(vec![coordinate(geometry)])?),
             OGRwkbGeometryType::wkbMultiPoint => {
-                dbg!(
-                    "wkbMultiPoint",
-                    geometry.get_point_vec(),
-                    geometry.geometry_count(),
-                    geometry.get_point(0),
-                    geometry.get_point(1),
-                );
-                Ok(MultiPoint::new(
-                    (0..geometry.geometry_count())
-                        .map(|i| {
-                            let (x, y, _) = geometry.get_point(i as i32);
-                            Coordinate2D::new(x, y)
-                        })
-                        .collect(),
-                )?)
-                // Ok(MultiPoint::new(
-                //     geometry
-                //         .get_point_vec()
-                //         .into_iter()
-                //         .map(|(x, y, _z)| Coordinate2D::new(x, y))
-                //         .collect(),
-                // )?)
+                let coordinates = (0..geometry.geometry_count())
+                    .map(|i| coordinate(&unsafe { geometry._get_geometry(i) }))
+                    .collect();
+
+                Ok(MultiPoint::new(coordinates)?)
             }
             _ => Err(Error::InvalidType {
                 expected: format!("{:?}", VectorDataType::MultiPoint),
@@ -1001,14 +979,60 @@ impl TryFromOgrGeometry for MultiPoint {
 }
 
 impl TryFromOgrGeometry for MultiLineString {
-    fn try_from(_geometry: &gdal::vector::Geometry) -> Result<Self> {
-        todo!("implement")
+    fn try_from(geometry: &gdal::vector::Geometry) -> Result<Self> {
+        fn coordinates(geometry: &gdal::vector::Geometry) -> Vec<Coordinate2D> {
+            geometry
+                .get_point_vec()
+                .into_iter()
+                .map(|(x, y, _z)| Coordinate2D::new(x, y))
+                .collect()
+        }
+
+        match geometry.geometry_type() {
+            OGRwkbGeometryType::wkbLineString => {
+                Ok(MultiLineString::new(vec![coordinates(geometry)])?)
+            }
+            OGRwkbGeometryType::wkbMultiLineString => Ok(MultiLineString::new(
+                (0..geometry.geometry_count())
+                    .map(|i| coordinates(&unsafe { geometry._get_geometry(i) }))
+                    .collect(),
+            )?),
+            _ => Err(Error::InvalidType {
+                expected: format!("{:?}", VectorDataType::MultiPoint),
+                found: format!("{:?}", OgrSource::ogr_geometry_type(geometry)),
+            }),
+        }
     }
 }
 
 impl TryFromOgrGeometry for MultiPolygon {
-    fn try_from(_geometry: &gdal::vector::Geometry) -> Result<Self> {
-        todo!("implement")
+    fn try_from(geometry: &gdal::vector::Geometry) -> Result<Self> {
+        fn coordinates(geometry: &gdal::vector::Geometry) -> Vec<Coordinate2D> {
+            geometry
+                .get_point_vec()
+                .into_iter()
+                .map(|(x, y, _z)| Coordinate2D::new(x, y))
+                .collect()
+        }
+        fn rings(geometry: &gdal::vector::Geometry) -> Vec<Vec<Coordinate2D>> {
+            let ring_count = geometry.geometry_count();
+            (0..ring_count)
+                .map(|i| coordinates(&unsafe { geometry._get_geometry(i) }))
+                .collect()
+        }
+
+        match geometry.geometry_type() {
+            OGRwkbGeometryType::wkbPolygon => Ok(MultiPolygon::new(vec![rings(geometry)])?),
+            OGRwkbGeometryType::wkbMultiPolygon => Ok(MultiPolygon::new(
+                (0..geometry.geometry_count())
+                    .map(|i| rings(&unsafe { geometry._get_geometry(i) }))
+                    .collect(),
+            )?),
+            _ => Err(Error::InvalidType {
+                expected: format!("{:?}", VectorDataType::MultiPoint),
+                found: format!("{:?}", OgrSource::ogr_geometry_type(geometry)),
+            }),
+        }
     }
 }
 
@@ -1279,7 +1303,7 @@ mod tests {
 
         let query = query_processor.query(
             QueryRectangle {
-                bbox: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
+                bbox: BoundingBox2D::new((0., 0.).into(), (5., 5.).into())?,
                 time_interval: Default::default(),
                 spatial_resolution: SpatialResolution::new(1., 1.)?,
             },
@@ -1289,7 +1313,15 @@ mod tests {
         let result: Vec<MultiPointCollection> = query.try_collect().await?;
 
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].len(), 2);
+
+        assert_eq!(
+            result[0],
+            MultiPointCollection::from_data(
+                MultiPoint::many(vec![vec![(0.0, 0.1)], vec![(1.0, 1.1), (2.0, 2.1)]])?,
+                vec![Default::default(); 2],
+                HashMap::new(),
+            )?
+        );
 
         Ok(())
     }

@@ -1,14 +1,17 @@
+use std::convert::TryFrom;
+
+use arrow::array::BooleanArray;
+use arrow::error::ArrowError;
+use geo::algorithm::intersects::Intersects;
+use serde::{Deserialize, Serialize};
+use snafu::ensure;
+
 use crate::collections::VectorDataType;
 use crate::error::Error;
 use crate::primitives::{error, BoundingBox2D, GeometryRef, PrimitivesError, TypedGeometry};
 use crate::primitives::{Coordinate2D, Geometry};
 use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::Result;
-use arrow::array::BooleanArray;
-use arrow::error::ArrowError;
-use serde::{Deserialize, Serialize};
-use snafu::ensure;
-use std::convert::TryFrom;
 
 /// A trait that allows a common access to lines of `MultiLineString`s and its references
 pub trait MultiLineStringAccess<L>
@@ -48,8 +51,36 @@ impl MultiLineStringAccess<Vec<Coordinate2D>> for MultiLineString {
 impl Geometry for MultiLineString {
     const DATA_TYPE: VectorDataType = VectorDataType::MultiLineString;
 
-    fn intersects_bbox(&self, _bbox: &BoundingBox2D) -> bool {
-        todo!("implement")
+    fn intersects_bbox(&self, bbox: &BoundingBox2D) -> bool {
+        let geo::MultiLineString::<f64>(geo_line_strings) = self.into();
+        let geo_rect: geo::Rect<f64> = bbox.into();
+
+        for line_string in geo_line_strings {
+            for line in line_string.lines() {
+                if geo_rect.intersects(&line) {
+                    return true;
+                }
+                if line.intersects(&geo_rect) {
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
+}
+
+impl Into<geo::MultiLineString<f64>> for &MultiLineString {
+    fn into(self) -> geo::MultiLineString<f64> {
+        let line_strings = self
+            .coordinates
+            .iter()
+            .map(|coordinates| {
+                let geo_coordinates = coordinates.iter().map(Into::into).collect();
+                geo::LineString(geo_coordinates)
+            })
+            .collect();
+        geo::MultiLineString(line_strings)
     }
 }
 

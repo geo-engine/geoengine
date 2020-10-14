@@ -2,6 +2,7 @@ use crate::util::arrow::ArrowTyped;
 use arrow::array::{BooleanArray, Float64Builder};
 use arrow::datatypes::DataType;
 use arrow::error::ArrowError;
+use geo::Coordinate;
 use ocl::OclPrm;
 use serde::{Deserialize, Serialize};
 use std::{fmt, slice};
@@ -115,6 +116,18 @@ impl Into<[f64; 2]> for Coordinate2D {
 impl<'c> Into<&'c [f64]> for &'c Coordinate2D {
     fn into(self) -> &'c [f64] {
         unsafe { slice::from_raw_parts(self as *const Coordinate2D as *const f64, 2) }
+    }
+}
+
+impl Into<geo::Coordinate<f64>> for Coordinate2D {
+    fn into(self) -> Coordinate<f64> {
+        geo::Coordinate::from((self.x, self.y))
+    }
+}
+
+impl Into<geo::Coordinate<f64>> for &Coordinate2D {
+    fn into(self) -> Coordinate<f64> {
+        geo::Coordinate::from((self.x, self.y))
     }
 }
 
