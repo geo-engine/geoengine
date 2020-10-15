@@ -1,5 +1,5 @@
 use crate::util::arrow::ArrowTyped;
-use arrow::array::{BooleanArray, Float64Builder};
+use arrow::array::{ArrayBuilder, BooleanArray, Float64Builder};
 use arrow::datatypes::DataType;
 use arrow::error::ArrowError;
 use geo::Coordinate;
@@ -137,6 +137,10 @@ impl ArrowTyped for Coordinate2D {
 
     fn arrow_data_type() -> DataType {
         arrow::datatypes::DataType::FixedSizeList(Box::new(arrow::datatypes::DataType::Float64), 2)
+    }
+
+    fn builder_byte_size(builder: &mut Self::ArrowBuilder) -> usize {
+        builder.values().len() * std::mem::size_of::<f64>()
     }
 
     fn arrow_builder(capacity: usize) -> Self::ArrowBuilder {

@@ -579,7 +579,7 @@ where
         work_query_receiver: &Receiver<WorkQuery>,
         poll_result_sender: &SyncSender<Option<Result<FeatureCollection<G>>>>,
         query_rectangle: &QueryRectangle,
-        _chunk_byte_size: usize,
+        chunk_byte_size: usize,
     ) -> Result<()> {
         let mut dataset = Dataset::open(&dataset_information.filename)?;
         let layer = dataset.layer_by_name(&dataset_information.layer_name)?;
@@ -619,6 +619,7 @@ where
                 &data_types,
                 query_rectangle,
                 &time_extractor,
+                chunk_byte_size,
             );
 
             match poll_result_sender.send(Some(batch_result)) {
@@ -798,6 +799,7 @@ where
         (data_types, feature_collection_builder)
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn compute_batch(
         feature_iterator: &mut Peekable<FeatureIterator<'_>>,
         feature_collection_builder: FeatureCollectionBuilder<G>,
@@ -806,6 +808,7 @@ where
         data_types: &HashMap<String, FeatureDataType>,
         query_rectangle: &QueryRectangle,
         time_extractor: &dyn Fn(&Feature) -> Result<TimeInterval>,
+        chunk_byte_size: usize,
     ) -> Result<FeatureCollection<G>> {
         let mut builder = feature_collection_builder.finish_header();
 
@@ -822,6 +825,10 @@ where
                     OgrSourceErrorSpec::Skip | OgrSourceErrorSpec::Keep => continue,
                     OgrSourceErrorSpec::Abort => return Err(error),
                 }
+            }
+
+            if builder.byte_size() >= chunk_byte_size {
+                break;
             }
         }
 
@@ -1249,7 +1256,9 @@ mod tests {
                 time_interval: Default::default(),
                 spatial_resolution: SpatialResolution::new(1., 1.)?,
             },
-            QueryContext { chunk_byte_size: 0 },
+            QueryContext {
+                chunk_byte_size: usize::MAX,
+            },
         );
 
         let result: Vec<MultiPointCollection> = query.try_collect().await?;
@@ -1290,7 +1299,9 @@ mod tests {
                 time_interval: Default::default(),
                 spatial_resolution: SpatialResolution::new(1., 1.)?,
             },
-            QueryContext { chunk_byte_size: 0 },
+            QueryContext {
+                chunk_byte_size: usize::MAX,
+            },
         );
 
         let result: Vec<Result<MultiPointCollection>> = query.collect().await;
@@ -1331,7 +1342,9 @@ mod tests {
                 time_interval: Default::default(),
                 spatial_resolution: SpatialResolution::new(1., 1.)?,
             },
-            QueryContext { chunk_byte_size: 0 },
+            QueryContext {
+                chunk_byte_size: usize::MAX,
+            },
         );
 
         let result: Vec<MultiPointCollection> = query.try_collect().await?;
@@ -1380,7 +1393,9 @@ mod tests {
                 time_interval: Default::default(),
                 spatial_resolution: SpatialResolution::new(1., 1.)?,
             },
-            QueryContext { chunk_byte_size: 0 },
+            QueryContext {
+                chunk_byte_size: usize::MAX,
+            },
         );
 
         let result: Vec<MultiPointCollection> = query.try_collect().await?;
@@ -1465,7 +1480,9 @@ mod tests {
                 time_interval: Default::default(),
                 spatial_resolution: SpatialResolution::new(1., 1.)?,
             },
-            QueryContext { chunk_byte_size: 0 },
+            QueryContext {
+                chunk_byte_size: usize::MAX,
+            },
         );
 
         let result: Vec<MultiPointCollection> = query.try_collect().await?;
@@ -1528,7 +1545,9 @@ mod tests {
                 time_interval: Default::default(),
                 spatial_resolution: SpatialResolution::new(1., 1.)?,
             },
-            QueryContext { chunk_byte_size: 0 },
+            QueryContext {
+                chunk_byte_size: usize::MAX,
+            },
         );
 
         let result: Vec<MultiPointCollection> = query.try_collect().await?;
@@ -1659,7 +1678,9 @@ mod tests {
                 time_interval: Default::default(),
                 spatial_resolution: SpatialResolution::new(1., 1.)?,
             },
-            QueryContext { chunk_byte_size: 0 },
+            QueryContext {
+                chunk_byte_size: usize::MAX,
+            },
         );
 
         let result: Vec<MultiPointCollection> = query.try_collect().await?;
@@ -2796,7 +2817,9 @@ mod tests {
                 time_interval: Default::default(),
                 spatial_resolution: SpatialResolution::new(1., 1.)?,
             },
-            QueryContext { chunk_byte_size: 0 },
+            QueryContext {
+                chunk_byte_size: usize::MAX,
+            },
         );
 
         let result: Vec<DataCollection> = query.try_collect().await?;
@@ -2830,6 +2853,63 @@ mod tests {
                 .collect(),
             )?
         );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn chunked() -> Result<()> {
+        let source = OgrSource {
+            params: OgrSourceParameters {
+                layer_name: "ne_10m_ports".to_string(),
+                attribute_projection: None,
+            },
+        }
+        .boxed()
+        .initialize(&ExecutionContext {
+            raster_data_root: Default::default(),
+        })?;
+
+        assert_eq!(
+            source.result_descriptor().data_type,
+            VectorDataType::MultiPoint
+        );
+        assert_eq!(
+            source.result_descriptor().spatial_reference,
+            SpatialReference::wgs84().into()
+        );
+
+        let query_processor = source.query_processor()?.multi_point().unwrap();
+
+        let query = query_processor.query(
+            QueryRectangle {
+                bbox: BoundingBox2D::new((-180.0, -90.0).into(), (180.0, 90.0).into())?,
+                time_interval: Default::default(),
+                spatial_resolution: SpatialResolution::new(1., 1.)?,
+            },
+            QueryContext { chunk_byte_size: 0 },
+        );
+
+        let result: Vec<MultiPointCollection> = query.try_collect().await?;
+
+        assert_eq!(result.len(), 1081);
+        assert_eq!(result[0].len(), 1);
+
+        let query = query_processor.query(
+            QueryRectangle {
+                bbox: BoundingBox2D::new((-180.0, -90.0).into(), (180.0, 90.0).into())?,
+                time_interval: Default::default(),
+                spatial_resolution: SpatialResolution::new(1., 1.)?,
+            },
+            QueryContext {
+                chunk_byte_size: 1_000,
+            },
+        );
+
+        let result: Vec<MultiPointCollection> = query.try_collect().await?;
+
+        assert_eq!(result.len(), 52);
+        assert_eq!(result[0].len(), 21);
 
         Ok(())
     }

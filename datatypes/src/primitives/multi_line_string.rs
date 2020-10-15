@@ -1,6 +1,6 @@
 use std::convert::TryFrom;
 
-use arrow::array::BooleanArray;
+use arrow::array::{ArrayBuilder, BooleanArray};
 use arrow::error::ArrowError;
 use geo::algorithm::intersects::Intersects;
 use serde::{Deserialize, Serialize};
@@ -112,6 +112,20 @@ impl ArrowTyped for MultiLineString {
         arrow::datatypes::DataType::List(
             arrow::datatypes::DataType::List(Coordinate2D::arrow_data_type().into()).into(),
         )
+    }
+
+    fn builder_byte_size(builder: &mut Self::ArrowBuilder) -> usize {
+        let multi_line_indices_size = builder.len() * std::mem::size_of::<u64>();
+
+        let line_builder = builder.values();
+        let line_indices_size = line_builder.len() * std::mem::size_of::<u64>();
+
+        let point_builder = line_builder.values();
+        let point_indices_size = point_builder.len() * std::mem::size_of::<u64>();
+
+        let coordinates_size = Coordinate2D::builder_byte_size(point_builder);
+
+        multi_line_indices_size + line_indices_size + point_indices_size + coordinates_size
     }
 
     fn arrow_builder(capacity: usize) -> Self::ArrowBuilder {

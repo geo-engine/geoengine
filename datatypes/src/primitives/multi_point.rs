@@ -4,7 +4,7 @@ use crate::primitives::{error, BoundingBox2D, GeometryRef, PrimitivesError, Type
 use crate::primitives::{Coordinate2D, Geometry};
 use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::Result;
-use arrow::array::BooleanArray;
+use arrow::array::{ArrayBuilder, BooleanArray};
 use arrow::error::ArrowError;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
@@ -115,6 +115,17 @@ impl ArrowTyped for MultiPoint {
 
     fn arrow_data_type() -> arrow::datatypes::DataType {
         arrow::datatypes::DataType::List(Box::new(Coordinate2D::arrow_data_type()))
+    }
+
+    fn builder_byte_size(builder: &mut Self::ArrowBuilder) -> usize {
+        let multi_point_indices_size = builder.len() * std::mem::size_of::<u64>();
+
+        let point_builder = builder.values();
+        let point_indices_size = point_builder.len() * std::mem::size_of::<u64>();
+
+        let coordinates_size = Coordinate2D::builder_byte_size(point_builder);
+
+        multi_point_indices_size + point_indices_size + coordinates_size
     }
 
     fn arrow_builder(capacity: usize) -> Self::ArrowBuilder {
