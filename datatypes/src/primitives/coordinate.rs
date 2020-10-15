@@ -121,7 +121,7 @@ impl<'c> Into<&'c [f64]> for &'c Coordinate2D {
 
 impl Into<geo::Coordinate<f64>> for Coordinate2D {
     fn into(self) -> Coordinate<f64> {
-        geo::Coordinate::from((self.x, self.y))
+        (&self).into()
     }
 }
 

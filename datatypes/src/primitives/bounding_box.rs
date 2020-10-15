@@ -388,7 +388,7 @@ impl BoundingBox2D {
 
 impl Into<geo::Rect<f64>> for BoundingBox2D {
     fn into(self) -> Rect<f64> {
-        geo::Rect::new(self.lower_left_coordinate, self.upper_right_coordinate)
+        (&self).into()
     }
 }
 

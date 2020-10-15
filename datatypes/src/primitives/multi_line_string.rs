@@ -57,9 +57,6 @@ impl Geometry for MultiLineString {
 
         for line_string in geo_line_strings {
             for line in line_string.lines() {
-                if geo_rect.intersects(&line) {
-                    return true;
-                }
                 if line.intersects(&geo_rect) {
                     return true;
                 }
