@@ -37,6 +37,7 @@ use crate::engine::{
 use crate::error::Error;
 use crate::util::Result;
 use std::fmt::Debug;
+use std::sync::Arc;
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct OgrSourceParameters {
@@ -279,7 +280,7 @@ pub enum OgrSourceErrorSpec {
 
 #[derive(Clone, Debug)]
 pub struct OgrSourceState {
-    dataset_information: OgrSourceDataset,
+    dataset_information: Arc<OgrSourceDataset>,
     default_geometry: OgrSourceDefaultGeometry,
 }
 
@@ -373,7 +374,7 @@ impl VectorOperator for OgrSource {
             vec![],
             vec![],
             OgrSourceState {
-                dataset_information,
+                dataset_information: Arc::new(dataset_information),
                 default_geometry,
             },
         )
@@ -477,8 +478,7 @@ pub struct OgrSourceProcessor<G>
 where
     G: Geometry + ArrowTyped,
 {
-    // TODO: use `Arc<…>`?
-    dataset_information: OgrSourceDataset,
+    dataset_information: Arc<OgrSourceDataset>,
     default_geometry: Option<G>,
     _collection_type: PhantomData<FeatureCollection<G>>,
 }
@@ -487,7 +487,7 @@ impl<G> OgrSourceProcessor<G>
 where
     G: Geometry + ArrowTyped,
 {
-    pub fn new(dataset_information: OgrSourceDataset, default_geometry: Option<G>) -> Self {
+    pub fn new(dataset_information: Arc<OgrSourceDataset>, default_geometry: Option<G>) -> Self {
         Self {
             dataset_information,
             default_geometry,
@@ -534,7 +534,7 @@ where
     FeatureCollectionRowBuilder<G>: FeatureCollectionBuilderGeometryHandler<G>,
 {
     pub fn new(
-        dataset_information: OgrSourceDataset,
+        dataset_information: Arc<OgrSourceDataset>,
         default_geometry: Option<G>,
         query_rectangle: QueryRectangle,
         chunk_byte_size: usize,
@@ -1246,7 +1246,7 @@ mod tests {
             OgrSource::parse_default_geometry(&dataset_information, VectorDataType::MultiPoint)?;
 
         let query_processor = OgrSourceProcessor::<MultiPoint>::new(
-            dataset_information,
+            Arc::new(dataset_information),
             default_geometry.try_into_geometry()?,
         );
 
@@ -1289,7 +1289,7 @@ mod tests {
             OgrSource::parse_default_geometry(&dataset_information, VectorDataType::MultiPoint)?;
 
         let query_processor = OgrSourceProcessor::<MultiPoint>::new(
-            dataset_information,
+            Arc::new(dataset_information),
             default_geometry.try_into_geometry()?,
         );
 
@@ -1332,7 +1332,7 @@ mod tests {
             OgrSource::parse_default_geometry(&dataset_information, VectorDataType::MultiPoint)?;
 
         let query_processor = OgrSourceProcessor::<MultiPoint>::new(
-            dataset_information,
+            Arc::new(dataset_information),
             default_geometry.try_into_geometry()?,
         );
 
@@ -1383,7 +1383,7 @@ mod tests {
             OgrSource::parse_default_geometry(&dataset_information, VectorDataType::MultiPoint)?;
 
         let query_processor = OgrSourceProcessor::<MultiPoint>::new(
-            dataset_information,
+            Arc::new(dataset_information),
             default_geometry.try_into_geometry()?,
         );
 
@@ -2809,7 +2809,8 @@ mod tests {
             provenance: None,
         };
 
-        let query_processor = OgrSourceProcessor::<NoGeometry>::new(dataset_information, None);
+        let query_processor =
+            OgrSourceProcessor::<NoGeometry>::new(Arc::new(dataset_information), None);
 
         let query = query_processor.query(
             QueryRectangle {
