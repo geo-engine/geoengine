@@ -1,10 +1,13 @@
 use std::collections::{HashMap, HashSet};
+use std::fmt::Debug;
+use std::fs::File;
 use std::iter::Peekable;
 use std::marker::PhantomData;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::mpsc::{self, Receiver, SyncSender, TryRecvError, TrySendError};
+use std::sync::Arc;
 use std::task::Poll;
 
 use chrono::DateTime;
@@ -13,7 +16,6 @@ use futures::task::{Context, Waker};
 use futures::Stream;
 use futures::StreamExt;
 use gdal::vector::{Dataset, Feature, FeatureIterator, FieldValue, OGRwkbGeometryType};
-use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use tokio::task::spawn_blocking;
 
@@ -36,8 +38,6 @@ use crate::engine::{
 };
 use crate::error::Error;
 use crate::util::Result;
-use std::fmt::Debug;
-use std::sync::Arc;
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct OgrSourceParameters {
@@ -46,91 +46,6 @@ pub struct OgrSourceParameters {
 }
 
 pub type OgrSource = SourceOperator<OgrSourceParameters>;
-
-lazy_static! {
-    static ref DATASET_INFORMATION_PROVIDER: HashMap<String, OgrSourceDataset> = {
-        let mut map = HashMap::new();
-        map.insert(
-            "foo".to_string(),
-            OgrSourceDataset {
-                filename: "foobar.csv".into(),
-                layer_name: "foobar".to_string(),
-                data_type: None,
-                time: OgrSourceDatasetTimeType::StartDuration,
-                duration: Some(42),
-                time1_format: Some(OgrSourceTimeFormat::Custom {
-                    custom_format: "YYYY-MM-DD".to_string(),
-                }),
-                time2_format: None,
-                columns: Some(OgrSourceColumnSpec {
-                    x: "x".to_string(),
-                    y: Some("y".to_string()),
-                    time1: Some("start".to_string()),
-                    time2: None,
-                    numeric: vec!["num".to_string()],
-                    decimal: vec!["dec1".to_string(), "dec2".to_string()],
-                    textual: vec!["text".to_string()],
-                }),
-                default: Some("POINT(0 0)".to_string()),
-                force_ogr_time_filter: false,
-                on_error: OgrSourceErrorSpec::Skip,
-                provenance: Some(ProvenanceInformation {
-                    citation: "Foo Bar".to_string(),
-                    license: "CC".to_string(),
-                    uri: "foo:bar".to_string(),
-                }),
-            },
-        );
-        map.insert(
-            "ne_10m_ports".to_string(),
-            OgrSourceDataset {
-                filename: "test-data/vector/ne_10m_ports/ne_10m_ports.shp".into(),
-                layer_name: "ne_10m_ports".to_string(),
-                data_type: None,
-                time: OgrSourceDatasetTimeType::None,
-                duration: None,
-                time1_format: None,
-                time2_format: None,
-                columns: None,
-                default: None,
-                force_ogr_time_filter: false,
-                on_error: OgrSourceErrorSpec::Skip,
-                provenance: None,
-            },
-        );
-        map.insert(
-            "ne_10m_ports_2".to_string(),
-            OgrSourceDataset {
-                filename: "test-data/vector/ne_10m_ports/ne_10m_ports.shp".into(),
-                layer_name: "ne_10m_ports".to_string(),
-                data_type: None,
-                time: OgrSourceDatasetTimeType::None,
-                duration: None,
-                time1_format: None,
-                time2_format: None,
-                columns: Some(OgrSourceColumnSpec {
-                    x: "".to_string(),
-                    y: None,
-                    time1: None,
-                    time2: None,
-                    numeric: vec!["natlscale".to_string()],
-                    decimal: vec!["scalerank".to_string()],
-                    textual: vec![
-                        "featurecla".to_string(),
-                        "name".to_string(),
-                        "website".to_string(),
-                    ],
-                }),
-                default: None,
-                force_ogr_time_filter: false,
-                on_error: OgrSourceErrorSpec::Skip,
-                provenance: None,
-            },
-        );
-
-        map
-    };
-}
 
 ///  - `filename`: path to the input file
 ///  - `layer_name`: name of the layer to load
@@ -149,18 +64,39 @@ pub struct OgrSourceDataset {
     filename: PathBuf,
     layer_name: String,
     data_type: Option<VectorDataType>,
+    #[serde(default)]
     time: OgrSourceDatasetTimeType,
     duration: Option<u64>,
     time1_format: Option<OgrSourceTimeFormat>,
     time2_format: Option<OgrSourceTimeFormat>,
     columns: Option<OgrSourceColumnSpec>,
     default: Option<String>,
+    #[serde(default)]
     force_ogr_time_filter: bool,
     on_error: OgrSourceErrorSpec,
     provenance: Option<ProvenanceInformation>,
 }
 
 impl OgrSourceDataset {
+    fn load_dataset(name: &str) -> Result<Self> {
+        // TODO: load dir from config
+        let dataset_dir =
+            PathBuf::from_str("test-data/vector/").expect("dataset directory does not exist");
+        let path = dataset_dir.join(name).with_extension("json");
+
+        let file = File::open(path).map_err(|source| Error::UnknownDataset {
+            name: name.to_string(),
+            source,
+        })?;
+        let dataset_information =
+            serde_json::from_reader(file).map_err(|source| Error::InvalidDatasetSpec {
+                name: name.to_string(),
+                source,
+            })?;
+
+        Ok(dataset_information)
+    }
+
     pub fn project_columns(&self, attribute_projection: &Option<Vec<String>>) -> Self {
         Self {
             filename: self.filename.clone(),
@@ -196,6 +132,13 @@ pub enum OgrSourceDatasetTimeType {
     StartEnd,
     #[serde(rename = "start+duration")]
     StartDuration,
+}
+
+/// If no time is specified, expect to parse none
+impl Default for OgrSourceDatasetTimeType {
+    fn default() -> Self {
+        Self::None
+    }
 }
 
 ///  A mapping for a column to the start time [if time != "none"]
@@ -309,11 +252,7 @@ impl VectorOperator for OgrSource {
         self: Box<Self>,
         _context: &crate::engine::ExecutionContext,
     ) -> Result<Box<crate::engine::InitializedVectorOperator>> {
-        let dataset_information = DATASET_INFORMATION_PROVIDER
-            .get(&self.params.layer_name)
-            .ok_or_else(|| Error::UnknownDataset {
-                name: self.params.layer_name.clone(),
-            })?
+        let dataset_information = OgrSourceDataset::load_dataset(&self.params.layer_name)?
             .project_columns(&self.params.attribute_projection);
 
         // TODO: get metadata
@@ -1114,8 +1053,6 @@ impl FeatureCollectionBuilderGeometryHandler<NoGeometry>
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use futures::TryStreamExt;
     use serde_json::json;
 
@@ -1123,6 +1060,8 @@ mod tests {
     use geoengine_datatypes::primitives::{BoundingBox2D, FeatureData, SpatialResolution};
 
     use crate::engine::ExecutionContext;
+
+    use super::*;
 
     #[test]
     fn specification_serde() {
@@ -1229,7 +1168,7 @@ mod tests {
     #[tokio::test]
     async fn empty_geojson() -> Result<()> {
         let dataset_information = OgrSourceDataset {
-            filename: "test-data/vector/empty.json".into(),
+            filename: "test-data/vector/data/empty.json".into(),
             layer_name: "empty".to_string(),
             data_type: None,
             time: OgrSourceDatasetTimeType::None,
@@ -1315,7 +1254,7 @@ mod tests {
     #[tokio::test]
     async fn on_error_skip() -> Result<()> {
         let dataset_information = OgrSourceDataset {
-            filename: "test-data/vector/missing_geo.json".into(),
+            filename: "test-data/vector/data/missing_geo.json".into(),
             layer_name: "missing_geo".to_string(),
             data_type: None,
             time: OgrSourceDatasetTimeType::None,
@@ -1366,7 +1305,7 @@ mod tests {
     #[tokio::test]
     async fn on_error_keep() -> Result<()> {
         let dataset_information = OgrSourceDataset {
-            filename: "test-data/vector/missing_geo.json".into(),
+            filename: "test-data/vector/data/missing_geo.json".into(),
             layer_name: "missing_geo".to_string(),
             data_type: None,
             time: OgrSourceDatasetTimeType::None,
@@ -1519,7 +1458,7 @@ mod tests {
     async fn ne_10m_ports_columns() -> Result<()> {
         let source = OgrSource {
             params: OgrSourceParameters {
-                layer_name: "ne_10m_ports_2".to_string(),
+                layer_name: "ne_10m_ports_with_columns".to_string(),
                 attribute_projection: None,
             },
         }
@@ -2787,7 +2726,7 @@ mod tests {
     #[tokio::test]
     async fn plain_data() -> Result<()> {
         let dataset_information = OgrSourceDataset {
-            filename: "test-data/vector/plain_data.csv".into(),
+            filename: "test-data/vector/data/plain_data.csv".into(),
             layer_name: "plain_data".to_string(),
             data_type: None,
             time: OgrSourceDatasetTimeType::None,

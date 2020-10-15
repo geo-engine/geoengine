@@ -103,6 +103,12 @@ pub enum Error {
 
     UnknownDataset {
         name: String,
+        source: std::io::Error,
+    },
+
+    InvalidDatasetSpec {
+        name: String,
+        source: serde_json::Error,
     },
 
     WorkerThread {
