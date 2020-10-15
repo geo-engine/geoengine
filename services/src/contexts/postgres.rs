@@ -258,6 +258,7 @@ mod tests {
     use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
     use std::str::FromStr;
 
+    #[ignore]
     #[tokio::test]
     async fn test() {
         // TODO: load from test config

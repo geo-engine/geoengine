@@ -17,9 +17,8 @@ pub use bounding_box::BoundingBox2D;
 pub use coordinate::Coordinate2D;
 pub(crate) use error::PrimitivesError;
 pub use feature_data::{
-    CategoricalDataRef, DecimalDataRef, FeatureData, FeatureDataRef, FeatureDataType,
-    FeatureDataValue, NullableCategoricalDataRef, NullableDataRef, NullableDecimalDataRef,
-    NullableNumberDataRef, NullableTextDataRef, NumberDataRef, TextDataRef,
+    CategoricalDataRef, DataRef, DecimalDataRef, FeatureData, FeatureDataRef, FeatureDataType,
+    FeatureDataValue, NumberDataRef, TextDataRef,
 };
 pub use measurement::Measurement;
 pub use multi_line_string::{MultiLineString, MultiLineStringAccess, MultiLineStringRef};

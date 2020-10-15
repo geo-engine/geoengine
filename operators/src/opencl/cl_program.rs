@@ -6,7 +6,7 @@ use arrow::util::bit_util;
 use geoengine_datatypes::collections::{
     RawFeatureCollectionBuilder, TypedFeatureCollection, VectorDataType,
 };
-use geoengine_datatypes::primitives::{FeatureDataRef, FeatureDataType, NullableDataRef};
+use geoengine_datatypes::primitives::{DataRef, FeatureDataRef, FeatureDataType};
 use geoengine_datatypes::raster::Raster;
 use geoengine_datatypes::raster::{
     DynamicRasterDataType, GridDimension, Pixel, Raster2D, RasterDataType, TypedRaster2D,
@@ -171,7 +171,7 @@ typedef struct {
         match self.iteration_type {
             IterationType::Raster => ensure!(
                 !self.input_rasters.is_empty() && !self.output_rasters.is_empty(),
-                error::CLInvalidInputsForIterationType,
+                error::CLInvalidInputsForIterationType
             ),
             IterationType::VectorFeatures | IterationType::VectorCoordinates => ensure!(
                 !self.input_features.is_empty() && !self.output_features.is_empty(),
@@ -445,17 +445,6 @@ impl<'a> CLProgramRunnable<'a> {
                     features.data(&column)?
                 });
                 match data {
-                    FeatureDataRef::NullableNumber(numbers) => {
-                        Self::set_feature_column_input_argument(
-                            kernel,
-                            queue,
-                            idx,
-                            &column,
-                            len,
-                            numbers.as_ref(),
-                            Some(numbers.nulls().as_ref()),
-                        )?
-                    }
                     FeatureDataRef::Number(numbers) => Self::set_feature_column_input_argument(
                         kernel,
                         queue,
@@ -463,7 +452,7 @@ impl<'a> CLProgramRunnable<'a> {
                         &column,
                         len,
                         numbers.as_ref(),
-                        None,
+                        Some(numbers.nulls().as_ref()),
                     )?,
                     FeatureDataRef::Decimal(decimals) => Self::set_feature_column_input_argument(
                         kernel,
@@ -472,19 +461,8 @@ impl<'a> CLProgramRunnable<'a> {
                         &column,
                         len,
                         decimals.as_ref(),
-                        None,
+                        Some(decimals.nulls().as_ref()),
                     )?,
-                    FeatureDataRef::NullableDecimal(decimals) => {
-                        Self::set_feature_column_input_argument(
-                            kernel,
-                            queue,
-                            idx,
-                            &column,
-                            len,
-                            decimals.as_ref(),
-                            Some(decimals.nulls().as_ref()),
-                        )?
-                    }
                     _ => todo!(), // TODO: strings, categories
                 }
             }
@@ -539,19 +517,8 @@ impl<'a> CLProgramRunnable<'a> {
                         idx,
                         &column.name,
                         features.num_features(),
-                        false,
+                        true,
                     ),
-                    FeatureDataType::NullableNumber => {
-                        Self::set_feature_column_output_argument::<f64>(
-                            &mut numbers,
-                            kernel,
-                            queue,
-                            idx,
-                            &column.name,
-                            features.num_features(),
-                            true,
-                        )
-                    }
                     FeatureDataType::Decimal => Self::set_feature_column_output_argument::<i64>(
                         &mut decimals,
                         kernel,
@@ -559,19 +526,8 @@ impl<'a> CLProgramRunnable<'a> {
                         idx,
                         &column.name,
                         features.num_features(),
-                        false,
+                        true,
                     ),
-                    FeatureDataType::NullableDecimal => {
-                        Self::set_feature_column_output_argument::<i64>(
-                            &mut decimals,
-                            kernel,
-                            queue,
-                            idx,
-                            &column.name,
-                            features.num_features(),
-                            true,
-                        )
-                    }
                     _ => todo!(), // TODO: strings, categories
                 }?;
             }
@@ -1103,15 +1059,9 @@ impl CompiledCLProgram {
         match column_type {
             FeatureDataType::Number => {
                 kernel.arg_named(name, None::<&Buffer<f64>>);
-            }
-            FeatureDataType::NullableNumber => {
-                kernel.arg_named(name, None::<&Buffer<f64>>);
                 kernel.arg_named(null_name, None::<&Buffer<i8>>);
             }
             FeatureDataType::Decimal => {
-                kernel.arg_named(name, None::<&Buffer<i64>>);
-            }
-            FeatureDataType::NullableDecimal => {
                 kernel.arg_named(name, None::<&Buffer<i64>>);
                 kernel.arg_named(null_name, None::<&Buffer<i8>>);
             }
@@ -1669,11 +1619,14 @@ __kernel void nop(__global int* buffer) {
 
         let kernel = r#"
 __kernel void columns( 
-            __global const double *IN_POINT0_COLUMN_foo,
-            __global double *OUT_POINT0_COLUMN_foo)            
-{
+            constant const double *IN_POINT0_COLUMN_foo,
+            constant const char *IN_POINT0_NULLS_foo,
+            global double *OUT_POINT0_COLUMN_foo,
+            global char *OUT_POINT0_NULLS_foo
+) {
     int idx = get_global_id(0);
     OUT_POINT0_COLUMN_foo[idx] = IN_POINT0_COLUMN_foo[idx] + 1;
+    OUT_POINT0_NULLS_foo[idx] = IN_POINT0_NULLS_foo[idx];
 }"#;
 
         let mut cl_program = CLProgram::new(IterationType::VectorFeatures);
@@ -1727,7 +1680,7 @@ __kernel void columns(
 
         let mut builder = FeatureCollection::<NoGeometry>::builder();
         builder
-            .add_column("foo".into(), FeatureDataType::NullableNumber)
+            .add_column("foo".into(), FeatureDataType::Number)
             .unwrap();
         let mut out = builder.batch_builder(3, 4);
 
@@ -1751,19 +1704,13 @@ __kernel void columns(
         let mut cl_program = CLProgram::new(IterationType::VectorFeatures);
         cl_program.add_input_features(VectorArgument::new(
             input.vector_data_type(),
-            vec![ColumnArgument::new(
-                "foo".into(),
-                FeatureDataType::NullableNumber,
-            )],
+            vec![ColumnArgument::new("foo".into(), FeatureDataType::Number)],
             false,
             false,
         ));
         cl_program.add_output_features(VectorArgument::new(
             VectorDataType::Data,
-            vec![ColumnArgument::new(
-                "foo".into(),
-                FeatureDataType::NullableNumber,
-            )],
+            vec![ColumnArgument::new("foo".into(), FeatureDataType::Number)],
             false,
             false,
         ));
@@ -1776,7 +1723,7 @@ __kernel void columns(
         compiled.run(runnable).unwrap();
 
         match out.output.unwrap().get_data().unwrap().data("foo").unwrap() {
-            FeatureDataRef::NullableNumber(numbers) => {
+            FeatureDataRef::Number(numbers) => {
                 assert_eq!(numbers.as_ref(), &[0., 1337., 0.]);
                 assert_eq!(numbers.nulls().as_slice(), &[true, false, true])
             }

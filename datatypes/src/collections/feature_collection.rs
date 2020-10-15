@@ -18,8 +18,7 @@ use crate::collections::{FeatureCollectionError, IntoGeometryOptionsIterator};
 use crate::json_map;
 use crate::primitives::{
     CategoricalDataRef, DecimalDataRef, FeatureData, FeatureDataRef, FeatureDataType,
-    FeatureDataValue, Geometry, NullableCategoricalDataRef, NullableDecimalDataRef,
-    NullableNumberDataRef, NullableTextDataRef, NumberDataRef, TextDataRef, TimeInterval,
+    FeatureDataValue, Geometry, NumberDataRef, TextDataRef, TimeInterval,
 };
 use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::helpers::SomeIter;
@@ -279,38 +278,24 @@ where
             match self.types.get(column_name).expect("previously checked") {
                 FeatureDataType::Number => {
                     let array: &arrow::array::Float64Array = downcast_array(column);
-                    NumberDataRef::new(array.values()).into()
-                }
-                FeatureDataType::NullableNumber => {
-                    let array: &arrow::array::Float64Array = downcast_array(column);
-                    NullableNumberDataRef::new(array.values(), array.data_ref().null_bitmap())
-                        .into()
+                    NumberDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
                 }
                 FeatureDataType::Text => {
                     let array: &arrow::array::StringArray = downcast_array(column);
-                    TextDataRef::new(array.value_data(), array.value_offsets()).into()
-                }
-                FeatureDataType::NullableText => {
-                    let array: &arrow::array::StringArray = downcast_array(column);
-                    NullableTextDataRef::new(array.value_data(), array.value_offsets()).into()
+                    TextDataRef::new(
+                        array.value_data(),
+                        array.value_offsets(),
+                        array.data_ref().null_bitmap(),
+                    )
+                    .into()
                 }
                 FeatureDataType::Decimal => {
                     let array: &arrow::array::Int64Array = downcast_array(column);
-                    DecimalDataRef::new(array.values()).into()
-                }
-                FeatureDataType::NullableDecimal => {
-                    let array: &arrow::array::Int64Array = downcast_array(column);
-                    NullableDecimalDataRef::new(array.values(), array.data_ref().null_bitmap())
-                        .into()
+                    DecimalDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
                 }
                 FeatureDataType::Categorical => {
                     let array: &arrow::array::UInt8Array = downcast_array(column);
-                    CategoricalDataRef::new(array.values()).into()
-                }
-                FeatureDataType::NullableCategorical => {
-                    let array: &arrow::array::UInt8Array = downcast_array(column);
-                    NullableCategoricalDataRef::new(array.values(), array.data_ref().null_bitmap())
-                        .into()
+                    CategoricalDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
                 }
             },
         )
@@ -632,7 +617,7 @@ where
         let mut filter_array = None;
 
         match column_type {
-            FeatureDataType::Number | FeatureDataType::NullableNumber => {
+            FeatureDataType::Number => {
                 apply_filters(
                     as_primitive_array::<Float64Type>(column),
                     &mut filter_array,
@@ -643,7 +628,7 @@ where
                     arrow::compute::lt_scalar,
                 )?;
             }
-            FeatureDataType::Decimal | FeatureDataType::NullableDecimal => {
+            FeatureDataType::Decimal => {
                 apply_filters(
                     as_primitive_array::<Int64Type>(column),
                     &mut filter_array,
@@ -654,7 +639,7 @@ where
                     arrow::compute::lt_scalar,
                 )?;
             }
-            FeatureDataType::Text | FeatureDataType::NullableText => {
+            FeatureDataType::Text => {
                 apply_filters(
                     as_string_array(column),
                     &mut filter_array,
@@ -665,7 +650,7 @@ where
                     arrow::compute::lt_utf8_scalar,
                 )?;
             }
-            FeatureDataType::Categorical | FeatureDataType::NullableCategorical => {
+            FeatureDataType::Categorical => {
                 return Err(error::FeatureCollectionError::WrongDataType.into());
             }
         }

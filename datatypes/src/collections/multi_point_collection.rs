@@ -145,8 +145,8 @@ mod tests {
 
     use crate::collections::BuilderProvider;
     use crate::primitives::{
-        FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue, MultiPointAccess,
-        NullableDataRef, TimeInterval,
+        DataRef, FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue, MultiPointAccess,
+        TimeInterval,
     };
     use serde_json::{from_str, json};
     use std::collections::HashMap;
@@ -190,7 +190,7 @@ mod tests {
             unreachable!();
         }
 
-        if let FeatureDataRef::NullableNumber(numbers) = pc.data("number_nulls").unwrap() {
+        if let FeatureDataRef::Number(numbers) = pc.data("number_nulls").unwrap() {
             assert_eq!(numbers.as_ref()[0], 0.);
             assert_eq!(numbers.as_ref()[2], 2.);
             assert_eq!(numbers.nulls(), vec![false, true, false]);
@@ -417,11 +417,11 @@ mod tests {
         }
 
         if let Ok(FeatureDataRef::Text(data_ref)) = collection_c.data("bar") {
-            assert_eq!(data_ref.text_at(0).unwrap(), "a");
-            assert_eq!(data_ref.text_at(1).unwrap(), "b");
-            assert_eq!(data_ref.text_at(2).unwrap(), "c");
-            assert_eq!(data_ref.text_at(3).unwrap(), "d");
-            assert_eq!(data_ref.text_at(4).unwrap(), "e");
+            assert_eq!(data_ref.text_at(0).unwrap().unwrap(), "a");
+            assert_eq!(data_ref.text_at(1).unwrap().unwrap(), "b");
+            assert_eq!(data_ref.text_at(2).unwrap().unwrap(), "c");
+            assert_eq!(data_ref.text_at(3).unwrap().unwrap(), "d");
+            assert_eq!(data_ref.text_at(4).unwrap().unwrap(), "e");
         } else {
             panic!("wrong data type");
         }
@@ -436,7 +436,7 @@ mod tests {
                 .add_column("foo".into(), FeatureDataType::Number)
                 .unwrap();
             builder
-                .add_column("bar".into(), FeatureDataType::NullableText)
+                .add_column("bar".into(), FeatureDataType::Text)
                 .unwrap();
             let mut builder = builder.finish_header();
 
@@ -675,7 +675,7 @@ mod tests {
         let collection = {
             let mut builder = MultiPointCollection::builder();
             builder
-                .add_column("number".into(), FeatureDataType::NullableNumber)
+                .add_column("number".into(), FeatureDataType::Number)
                 .unwrap();
             let mut builder = builder.finish_header();
 
