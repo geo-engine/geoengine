@@ -445,6 +445,7 @@ where
         let (poll_result_sender, poll_result_receiver) = mpsc::sync_channel(2);
         let (work_query_sender, work_query_receiver) = mpsc::sync_channel(1);
 
+        // This stream spawns a thread early since GDAL's data types are not `Send` and we need to create everything inside this thread.
         spawn_blocking(move || {
             let mut work_query = match work_query_receiver.recv() {
                 Ok(work_query) => work_query,
