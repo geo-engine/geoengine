@@ -485,6 +485,8 @@ where
         query_rectangle: &QueryRectangle,
         chunk_byte_size: usize,
     ) -> Result<()> {
+        // TODO: add opening options, e.g. for CSV
+        // TODO: add OGR time filter if forced
         let mut dataset = Dataset::open(&dataset_information.filename)?;
         let layer = dataset.layer_by_name(&dataset_information.layer_name)?;
 
