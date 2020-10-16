@@ -223,7 +223,6 @@ impl VectorOperator for OgrSource {
         let mut dataset_information = OgrSourceDataset::load_dataset(&self.params.layer_name)?;
         dataset_information.project_columns(&self.params.attribute_projection);
 
-        // TODO: get metadata
         let mut dataset = Dataset::open(&dataset_information.filename)?;
         let layer = dataset.layer_by_name(&dataset_information.layer_name)?;
 
