@@ -58,6 +58,24 @@ impl<'f> FeatureDataRef<'f> {
             FeatureDataRef::Categorical(data_ref) => data_ref.json_values(),
         }
     }
+
+    pub fn nulls(&self) -> Vec<bool> {
+        match self {
+            FeatureDataRef::Text(data_ref) => data_ref.nulls(),
+            FeatureDataRef::Number(data_ref) => data_ref.nulls(),
+            FeatureDataRef::Decimal(data_ref) => data_ref.nulls(),
+            FeatureDataRef::Categorical(data_ref) => data_ref.nulls(),
+        }
+    }
+
+    pub fn has_nulls(&self) -> bool {
+        match self {
+            FeatureDataRef::Text(data_ref) => data_ref.has_nulls(),
+            FeatureDataRef::Number(data_ref) => data_ref.has_nulls(),
+            FeatureDataRef::Decimal(data_ref) => data_ref.has_nulls(),
+            FeatureDataRef::Categorical(data_ref) => data_ref.has_nulls(),
+        }
+    }
 }
 
 pub trait DataRef<'r, T>: AsRef<[T]> + Into<FeatureDataRef<'r>>

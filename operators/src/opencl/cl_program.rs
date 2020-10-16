@@ -6,7 +6,7 @@ use arrow::util::bit_util;
 use geoengine_datatypes::collections::{
     RawFeatureCollectionBuilder, TypedFeatureCollection, VectorDataType,
 };
-use geoengine_datatypes::primitives::{DataRef, FeatureDataRef, FeatureDataType};
+use geoengine_datatypes::primitives::{FeatureDataRef, FeatureDataType};
 use geoengine_datatypes::raster::Raster;
 use geoengine_datatypes::raster::{
     DynamicRasterDataType, GridDimension, Pixel, Raster2D, RasterDataType, TypedRaster2D,
@@ -444,6 +444,11 @@ impl<'a> CLProgramRunnable<'a> {
                 let data = call_generic_features!(features, features => {
                     features.data(&column)?
                 });
+                let nulls = if data.has_nulls() {
+                    Some(data.nulls())
+                } else {
+                    None
+                };
                 match data {
                     FeatureDataRef::Number(numbers) => Self::set_feature_column_input_argument(
                         kernel,
@@ -452,7 +457,7 @@ impl<'a> CLProgramRunnable<'a> {
                         &column,
                         len,
                         numbers.as_ref(),
-                        Some(numbers.nulls().as_ref()),
+                        nulls.as_ref().map(AsRef::as_ref),
                     )?,
                     FeatureDataRef::Decimal(decimals) => Self::set_feature_column_input_argument(
                         kernel,
@@ -461,7 +466,7 @@ impl<'a> CLProgramRunnable<'a> {
                         &column,
                         len,
                         decimals.as_ref(),
-                        Some(decimals.nulls().as_ref()),
+                        nulls.as_ref().map(AsRef::as_ref),
                     )?,
                     _ => todo!(), // TODO: strings, categories
                 }
@@ -569,6 +574,15 @@ impl<'a> CLProgramRunnable<'a> {
                 .copy_host_slice(nulls.as_slice())
                 .build()?;
             kernel.set_arg(format!("IN_POINT{}_NULLS_{}", idx, column), &buffer)?;
+        } else {
+            kernel.set_arg(
+                format!("IN_POINT{}_NULLS_{}", idx, column),
+                Buffer::<i8>::builder()
+                    .queue(queue.clone())
+                    .len(len)
+                    .fill_val(false as i8)
+                    .build()?,
+            )?;
         }
 
         Ok(())
@@ -1080,7 +1094,9 @@ mod tests {
     use geoengine_datatypes::collections::{
         BuilderProvider, DataCollection, FeatureCollection, MultiPointCollection,
     };
-    use geoengine_datatypes::primitives::{FeatureData, MultiPoint, NoGeometry, TimeInterval};
+    use geoengine_datatypes::primitives::{
+        DataRef, FeatureData, MultiPoint, NoGeometry, TimeInterval,
+    };
     use geoengine_datatypes::raster::Raster2D;
     use std::collections::HashMap;
     use std::sync::Arc;
