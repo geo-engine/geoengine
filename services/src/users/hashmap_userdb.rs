@@ -45,6 +45,7 @@ impl UserDB for HashMapUserDB {
                     id: SessionId::new(),
                     user: user.id,
                     created: chrono::Utc::now(),
+                    // TODO: make session length configurable
                     valid_until: chrono::Utc::now() + chrono::Duration::minutes(60),
                     project: None,
                     view: None,
