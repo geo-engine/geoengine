@@ -107,7 +107,7 @@ impl<'f> DataRef<'f, f64> for NumberDataRef<'f> {
     }
 
     fn nulls(&self) -> Vec<bool> {
-        null_bitmap_to_bools(self.as_ref(), self.valid_bitmap)
+        null_bitmap_to_bools(self.valid_bitmap, self.as_ref().len())
     }
 
     fn valid_bitmap(&self) -> Option<&[u8]> {
@@ -171,7 +171,7 @@ impl<'f> DataRef<'f, i64> for DecimalDataRef<'f> {
     }
 
     fn nulls(&self) -> Vec<bool> {
-        null_bitmap_to_bools(self.as_ref(), self.valid_bitmap)
+        null_bitmap_to_bools(self.valid_bitmap, self.as_ref().len())
     }
 
     fn valid_bitmap(&self) -> Option<&[u8]> {
@@ -199,11 +199,11 @@ impl<'f> Into<FeatureDataRef<'f>> for DecimalDataRef<'f> {
     }
 }
 
-fn null_bitmap_to_bools<T>(data: &[T], null_bitmap: &Option<Bitmap>) -> Vec<bool> {
+fn null_bitmap_to_bools(null_bitmap: &Option<Bitmap>, len: usize) -> Vec<bool> {
     if let Some(nulls) = null_bitmap {
-        (0..data.len()).map(|i| !nulls.is_set(i)).collect()
+        (0..len).map(|i| !nulls.is_set(i)).collect()
     } else {
-        vec![false; data.len()]
+        vec![false; len]
     }
 }
 
@@ -214,12 +214,12 @@ pub struct CategoricalDataRef<'f> {
 }
 
 impl<'f> DataRef<'f, u8> for CategoricalDataRef<'f> {
-    fn nulls(&self) -> Vec<bool> {
-        null_bitmap_to_bools(self.as_ref(), self.valid_bitmap)
-    }
-
     fn json_value(value: &u8) -> serde_json::Value {
         (*value).into()
+    }
+
+    fn nulls(&self) -> Vec<bool> {
+        null_bitmap_to_bools(self.valid_bitmap, self.as_ref().len())
     }
 
     fn valid_bitmap(&self) -> Option<&[u8]> {
