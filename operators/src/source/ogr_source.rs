@@ -50,9 +50,6 @@ pub type OgrSource = SourceOperator<OgrSourceParameters>;
 ///  - `file_name`: path to the input file
 ///  - `layer_name`: name of the layer to load
 ///  - `time`: the type of the time attribute(s)
-///  - `duration`: the duration of the time validity for all features in the file [if time == "duration"]
-///  - `time1_format`: a mapping of a column to the start time (cf. `OgrSourceDatasetTimeType`) [if time != "none"]
-///  - `time2_format`: a mapping of a column to the end time (cf. `time1_format`) [if time == "start+end" || "start+duration"]
 ///  - `columns`: a mapping of the columns to data, time, space. Columns that are not listed are skipped when parsing.
 ///  - `default`: wkt definition of the default point/line/polygon as a string [optional]
 ///  - `force_ogr_time_filter`: bool. force external time filter via ogr layer, even though data types don't match. Might not work
@@ -106,6 +103,11 @@ impl OgrSourceDataset {
 ///  - "start": only start information is mapped. duration has to specified in the duration attribute
 ///  - "start+end": start and end information is mapped
 ///  - "start+duration": start and duration information is mapped
+///
+/// There are different options within these variants:
+///  - `start_property` and `end_property`: the name of the property that contains time information
+///  - `start_format` and `start_format`: a mapping of a property type to a time value (cf. `OgrSourceDatasetTimeType`)
+///  - `duration`: the duration of the time validity for all features in the file
 #[serde(rename_all = "lowercase")]
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub enum OgrSourceDatasetTimeType {
@@ -160,9 +162,8 @@ impl Default for OgrSourceTimeFormat {
 /// A mapping of the columns to data, time, space. Columns that are not listed are skipped when parsing.
 ///  - x: the name of the column containing the x coordinate (or the wkt string) [if CSV file]
 ///  - y: the name of the column containing the y coordinate [if CSV file with y column]
-///  - time1: the name of the first time column [if time != "none"]
-///  - time2: the name of the second time column [if time == "start+end" || "start+duration"]
 ///  - numeric: an array of column names containing numeric values
+///  - decimal: an array of column names containing decimal values
 ///  - textual: an array of column names containing alpha-numeric values
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct OgrSourceColumnSpec {
