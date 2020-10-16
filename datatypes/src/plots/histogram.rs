@@ -1,19 +1,21 @@
-use crate::error;
-use crate::plots::{Plot, PlotData};
-use crate::primitives::{FeatureDataRef, Measurement, NullableDataRef};
-use crate::util::Result;
+use std::cmp;
+use std::collections::HashMap;
+use std::iter::FromIterator;
+
 use float_cmp::*;
 use ndarray::{stack, Array, Array1, Axis};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
-use std::cmp;
-use std::collections::HashMap;
-use std::iter::FromIterator;
 use vega_lite_3::{
     BinEnum, EncodingBuilder, Mark, Padding, SelectionDefBuilder, SelectionDefType,
     SingleDefUnitChannel, StandardType, VegaliteBuilder, X2ClassBuilder, XClassBuilder,
     YClassBuilder,
 };
+
+use crate::error;
+use crate::plots::{Plot, PlotData};
+use crate::primitives::{DataRef, FeatureDataRef, Measurement};
+use crate::util::Result;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Histogram {
@@ -119,22 +121,22 @@ impl Histogram {
     pub fn add_feature_data(&mut self, data: FeatureDataRef) -> Result<()> {
         // TODO: implement efficiently OpenCL version
         match data {
-            FeatureDataRef::Number(number_ref) => {
+            FeatureDataRef::Number(number_ref) if !number_ref.has_nulls() => {
                 for &value in number_ref.as_ref() {
                     self.handle_data_item(value, false);
                 }
             }
-            FeatureDataRef::NullableNumber(number_ref) => {
+            FeatureDataRef::Number(number_ref) => {
                 for (&value, is_null) in number_ref.as_ref().iter().zip(number_ref.nulls()) {
                     self.handle_data_item(value, is_null);
                 }
             }
-            FeatureDataRef::Decimal(decimal_ref) => {
+            FeatureDataRef::Decimal(decimal_ref) if !decimal_ref.has_nulls() => {
                 for value in decimal_ref.as_ref().iter().map(|&v| v as f64) {
                     self.handle_data_item(value, false);
                 }
             }
-            FeatureDataRef::NullableDecimal(decimal_ref) => {
+            FeatureDataRef::Decimal(decimal_ref) => {
                 for (value, is_null) in decimal_ref
                     .as_ref()
                     .iter()
@@ -144,12 +146,12 @@ impl Histogram {
                     self.handle_data_item(value, is_null);
                 }
             }
-            FeatureDataRef::Categorical(categorical_ref) => {
+            FeatureDataRef::Categorical(categorical_ref) if !categorical_ref.has_nulls() => {
                 for value in categorical_ref.as_ref().iter().map(|&v| f64::from(v)) {
                     self.handle_data_item(value, false);
                 }
             }
-            FeatureDataRef::NullableCategorical(categorical_ref) => {
+            FeatureDataRef::Categorical(categorical_ref) => {
                 for (value, is_null) in categorical_ref
                     .as_ref()
                     .iter()
@@ -159,7 +161,7 @@ impl Histogram {
                     self.handle_data_item(value, is_null);
                 }
             }
-            _ => {
+            FeatureDataRef::Text(..) => {
                 return error::Plot {
                     details: "Cannot add non-numerical data to the histogram.",
                 }
@@ -206,7 +208,7 @@ impl Plot for Histogram {
     /// use geoengine_datatypes::plots::{Histogram, Plot, PlotData};
     /// use geoengine_datatypes::plots::histogram::EmbeddingMetaData;
     /// use geoengine_datatypes::primitives::{Measurement, FeatureDataRef, NumberDataRef};
-    /// use arrow::array::Float64Builder;
+    /// use arrow::array::{Float64Builder, Array};
     ///
     /// let mut histogram = Histogram::builder(2, 0., 1., Measurement::Unitless).build().unwrap();
     ///
@@ -217,7 +219,7 @@ impl Plot for Histogram {
     /// };
     ///
     /// histogram
-    ///     .add_feature_data(FeatureDataRef::Number(NumberDataRef::new(data.values())))
+    ///     .add_feature_data(FeatureDataRef::Number(NumberDataRef::new(data.values(), data.data_ref().null_bitmap())))
     ///     .unwrap();
     ///
     /// assert_eq!(
@@ -387,11 +389,11 @@ impl HistogramBuilder {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::primitives::{
-        CategoricalDataRef, DecimalDataRef, NullableNumberDataRef, NumberDataRef,
-    };
     use arrow::array::{Array, Float64Builder, Int64Builder, UInt8Builder};
+
+    use crate::primitives::{CategoricalDataRef, DecimalDataRef, NumberDataRef};
+
+    use super::*;
 
     #[test]
     fn bucket_for_value() {
@@ -418,7 +420,10 @@ mod tests {
         };
 
         histogram
-            .add_feature_data(FeatureDataRef::Number(NumberDataRef::new(data.values())))
+            .add_feature_data(FeatureDataRef::Number(NumberDataRef::new(
+                data.values(),
+                data.data().null_bitmap(),
+            )))
             .unwrap();
 
         assert_eq!(histogram.counts[0], 2);
@@ -441,7 +446,7 @@ mod tests {
         };
 
         histogram
-            .add_feature_data(FeatureDataRef::NullableNumber(NullableNumberDataRef::new(
+            .add_feature_data(FeatureDataRef::Number(NumberDataRef::new(
                 data.values(),
                 data.data_ref().null_bitmap(),
             )))
@@ -465,7 +470,10 @@ mod tests {
         };
 
         histogram
-            .add_feature_data(FeatureDataRef::Decimal(DecimalDataRef::new(data.values())))
+            .add_feature_data(FeatureDataRef::Decimal(DecimalDataRef::new(
+                data.values(),
+                data.data().null_bitmap(),
+            )))
             .unwrap();
 
         assert_eq!(histogram.counts[0], 2);
@@ -487,6 +495,7 @@ mod tests {
         histogram
             .add_feature_data(FeatureDataRef::Categorical(CategoricalDataRef::new(
                 data.values(),
+                data.data().null_bitmap(),
             )))
             .unwrap();
 
@@ -507,7 +516,10 @@ mod tests {
         };
 
         histogram
-            .add_feature_data(FeatureDataRef::Decimal(DecimalDataRef::new(data.values())))
+            .add_feature_data(FeatureDataRef::Decimal(DecimalDataRef::new(
+                data.values(),
+                data.data().null_bitmap(),
+            )))
             .unwrap();
 
         assert_eq!(histogram.nodata_count, 0);
