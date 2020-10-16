@@ -405,7 +405,7 @@ where
 {
     type Output = FeatureCollection<G>;
     fn query(&self, query: QueryRectangle, ctx: QueryContext) -> BoxStream<Result<Self::Output>> {
-        OgrSourceQuery::new(
+        OgrSourceStream::new(
             self.dataset_information.clone(),
             self.default_geometry.clone(),
             query,
@@ -415,7 +415,7 @@ where
     }
 }
 
-pub struct OgrSourceQuery<G>
+pub struct OgrSourceStream<G>
 where
     G: Geometry + ArrowTyped,
 {
@@ -430,7 +430,7 @@ struct WorkQuery {
     waker: Waker,
 }
 
-impl<G> OgrSourceQuery<G>
+impl<G> OgrSourceStream<G>
 where
     G: Geometry + ArrowTyped + 'static + TryFromOgrGeometry,
     FeatureCollectionRowBuilder<G>: FeatureCollectionBuilderGeometryHandler<G>,
@@ -817,7 +817,7 @@ where
     }
 }
 
-impl<G> Stream for OgrSourceQuery<G>
+impl<G> Stream for OgrSourceStream<G>
 where
     G: Geometry + ArrowTyped + 'static + std::marker::Unpin,
 {
