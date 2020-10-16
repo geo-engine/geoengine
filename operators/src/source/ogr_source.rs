@@ -97,23 +97,9 @@ impl OgrSourceDataset {
         Ok(dataset_information)
     }
 
-    pub fn project_columns(&self, attribute_projection: &Option<Vec<String>>) -> Self {
-        Self {
-            filename: self.filename.clone(),
-            layer_name: self.layer_name.clone(),
-            data_type: self.data_type,
-            time: self.time.clone(),
-            duration: self.duration,
-            time1_format: self.time1_format.clone(),
-            time2_format: self.time2_format.clone(),
-            columns: self
-                .columns
-                .as_ref()
-                .map(|c| c.project_columns(attribute_projection)),
-            default: self.default.clone(),
-            force_ogr_time_filter: self.force_ogr_time_filter,
-            on_error: self.on_error.clone(),
-            provenance: self.provenance.clone(),
+    pub fn project_columns(&mut self, attribute_projection: &Option<Vec<String>>) {
+        if let Some(columns) = self.columns.as_mut() {
+            columns.project_columns(attribute_projection);
         }
     }
 }
@@ -174,38 +160,20 @@ pub struct OgrSourceColumnSpec {
 }
 
 impl OgrSourceColumnSpec {
-    pub fn project_columns(&self, attribute_projection: &Option<Vec<String>>) -> Self {
+    pub fn project_columns(&mut self, attribute_projection: &Option<Vec<String>>) {
         let attributes: HashSet<&String> =
             if let Some(attribute_projection) = attribute_projection.as_ref() {
                 attribute_projection.iter().collect()
             } else {
-                return self.clone();
+                return;
             };
 
-        Self {
-            x: self.x.clone(),
-            y: self.y.clone(),
-            time1: self.time1.clone(),
-            time2: self.time2.clone(),
-            numeric: self
-                .numeric
-                .iter()
-                .filter(|attribute| attributes.contains(attribute))
-                .cloned()
-                .collect(),
-            decimal: self
-                .decimal
-                .iter()
-                .filter(|attribute| attributes.contains(attribute))
-                .cloned()
-                .collect(),
-            textual: self
-                .textual
-                .iter()
-                .filter(|attribute| attributes.contains(attribute))
-                .cloned()
-                .collect(),
-        }
+        self.numeric
+            .retain(|attribute| attributes.contains(attribute));
+        self.decimal
+            .retain(|attribute| attributes.contains(attribute));
+        self.textual
+            .retain(|attribute| attributes.contains(attribute));
     }
 }
 
@@ -252,8 +220,8 @@ impl VectorOperator for OgrSource {
         self: Box<Self>,
         _context: &crate::engine::ExecutionContext,
     ) -> Result<Box<crate::engine::InitializedVectorOperator>> {
-        let dataset_information = OgrSourceDataset::load_dataset(&self.params.layer_name)?
-            .project_columns(&self.params.attribute_projection);
+        let mut dataset_information = OgrSourceDataset::load_dataset(&self.params.layer_name)?;
+        dataset_information.project_columns(&self.params.attribute_projection);
 
         // TODO: get metadata
         let mut dataset = Dataset::open(&dataset_information.filename)?;
