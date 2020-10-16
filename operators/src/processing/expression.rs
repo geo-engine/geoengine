@@ -80,7 +80,7 @@ impl RasterOperator for Expression {
             |params, _, _, _, _| {
                 Ok(RasterResultDescriptor {
                     data_type: params.output_type,
-                    spatial_reference: SpatialReferenceOption::None, // TODO
+                    spatial_reference: SpatialReferenceOption::Unreferenced, // TODO
                 })
             },
             self.raster_sources,

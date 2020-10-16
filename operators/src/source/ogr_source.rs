@@ -28,7 +28,7 @@ use geoengine_datatypes::primitives::{
     MultiPolygon, NoGeometry, TimeInstance, TimeInterval, TypedGeometry,
 };
 use geoengine_datatypes::provenance::ProvenanceInformation;
-use geoengine_datatypes::spatial_reference::SpatialReference;
+use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 
 use crate::engine::{
@@ -231,13 +231,9 @@ impl VectorOperator for OgrSource {
             .spatial_reference()
             .and_then(|gdal_srs| gdal_srs.authority())
         {
-            Ok(authority) => SpatialReference::from_str(&authority)?,
-            Err(_) => {
-                // TODO: is this a reasonable fallback type?
-                SpatialReference::wgs84()
-            }
-        }
-        .into();
+            Ok(authority) => SpatialReference::from_str(&authority)?.into(),
+            Err(_) => SpatialReferenceOption::Unreferenced,
+        };
 
         let data_type = if let Some(data_type) = dataset_information.data_type {
             data_type
