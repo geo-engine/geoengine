@@ -1,5 +1,6 @@
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
+use std::ops::Add;
 
 #[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Debug)]
 #[repr(C)]
@@ -59,5 +60,13 @@ impl Into<TimeInstance> for i64 {
 impl Into<i64> for TimeInstance {
     fn into(self) -> i64 {
         self.inner()
+    }
+}
+
+impl Add<i64> for TimeInstance {
+    type Output = Self;
+
+    fn add(self, rhs: i64) -> Self::Output {
+        (self.0 + rhs).into()
     }
 }

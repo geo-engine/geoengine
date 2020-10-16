@@ -33,6 +33,9 @@ pub trait ArrowTyped {
     /// Return the specific arrow data type
     fn arrow_data_type() -> DataType;
 
+    /// Computes the byte size of the builder
+    fn builder_byte_size(builder: &mut Self::ArrowBuilder) -> usize;
+
     /// Return a builder for the arrow data type
     fn arrow_builder(capacity: usize) -> Self::ArrowBuilder;
 

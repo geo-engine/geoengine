@@ -260,6 +260,7 @@ mod tests {
 
     #[ignore]
     #[tokio::test]
+    #[ignore] // TODO: remove if postgres if configurable
     async fn test() {
         // TODO: load from test config
         let config = tokio_postgres::config::Config::from_str(

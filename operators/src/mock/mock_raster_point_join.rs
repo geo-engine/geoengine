@@ -96,7 +96,7 @@ impl VectorOperator for MockRasterPointJoinOperator {
             |_, _, _, _, vs| {
                 Ok(VectorResultDescriptor {
                     spatial_reference: vs.get(0).map_or_else(
-                        || SpatialReferenceOption::None,
+                        || SpatialReferenceOption::Unreferenced,
                         |o| o.result_descriptor().spatial_reference,
                     ),
                     data_type: VectorDataType::MultiPoint,
