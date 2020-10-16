@@ -1068,7 +1068,7 @@ mod tests {
         assert_eq!(
             serialized_spec,
             json!({
-                "filename": "foobar.csv",
+                "file_name": "foobar.csv",
                 "layer_name": "foobar",
                 "data_type": "MultiPoint",
                 "time": "start+duration",
@@ -1101,7 +1101,7 @@ mod tests {
 
         let deserialized_spec: OgrSourceDataset = serde_json::from_str(
             &json!({
-                "filename": "foobar.csv",
+                "file_name": "foobar.csv",
                 "layer_name": "foobar",
                 "data_type": "MultiPoint",
                 "time": "start+duration",
