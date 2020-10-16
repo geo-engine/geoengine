@@ -115,7 +115,7 @@ pub enum OgrSourceDatasetTimeType {
     Start {
         start_property: String,
         start_format: OgrSourceTimeFormat,
-        duration: u64,
+        duration: u32,
     },
     #[serde(rename = "start+end")]
     StartEnd {
@@ -607,7 +607,7 @@ where
                 start_format,
                 duration,
             } => {
-                let duration = *duration as i64;
+                let duration = i64::from(*duration);
                 let time_start_parser = Self::create_time_parser(start_format);
 
                 Box::new(move |feature: &Feature| {
