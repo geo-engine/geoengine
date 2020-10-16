@@ -144,9 +144,7 @@ async fn get_map<C: Context>(
     let operator = workflow.operator.get_raster().context(error::Operator)?;
 
     let execution_context = ExecutionContext {
-        raster_data_root: get_config_element::<config::GdalSource>()?
-            .raster_data_root_path
-            .into(),
+        raster_data_root: get_config_element::<config::GdalSource>()?.raster_data_root_path,
     };
 
     let initialized = operator

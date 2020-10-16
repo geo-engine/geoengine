@@ -6,7 +6,7 @@ use config::{Config, File};
 use lazy_static::lazy_static;
 use serde::Deserialize;
 use snafu::ResultExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 lazy_static! {
     static ref SETTINGS: RwLock<Config> = RwLock::new({
@@ -105,7 +105,7 @@ impl ConfigElement for ProjectService {
 
 #[derive(Debug, Deserialize)]
 pub struct GdalSource {
-    pub raster_data_root_path: String, // TODO: Path?
+    pub raster_data_root_path: PathBuf,
 }
 
 impl ConfigElement for GdalSource {
