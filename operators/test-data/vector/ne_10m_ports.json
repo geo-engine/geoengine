@@ -1,5 +1,5 @@
 {
-    "filename": "test-data/vector/data/ne_10m_ports/ne_10m_ports.shp",
+    "file_name": "test-data/vector/data/ne_10m_ports/ne_10m_ports.shp",
     "layer_name": "ne_10m_ports",
     "on_error": "skip"
 }

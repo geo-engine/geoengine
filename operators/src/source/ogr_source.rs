@@ -47,7 +47,7 @@ pub struct OgrSourceParameters {
 
 pub type OgrSource = SourceOperator<OgrSourceParameters>;
 
-///  - `filename`: path to the input file
+///  - `file_name`: path to the input file
 ///  - `layer_name`: name of the layer to load
 ///  - `time`: the type of the time attribute(s)
 ///  - `duration`: the duration of the time validity for all features in the file [if time == "duration"]
@@ -61,7 +61,7 @@ pub type OgrSource = SourceOperator<OgrSourceParameters>;
 ///  - `provenance`: specify the provenance of a file
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct OgrSourceDataset {
-    filename: PathBuf,
+    file_name: PathBuf,
     layer_name: String,
     data_type: Option<VectorDataType>,
     #[serde(default)]
@@ -223,7 +223,7 @@ impl VectorOperator for OgrSource {
         let mut dataset_information = OgrSourceDataset::load_dataset(&self.params.layer_name)?;
         dataset_information.project_columns(&self.params.attribute_projection);
 
-        let mut dataset = Dataset::open(&dataset_information.filename)?;
+        let mut dataset = Dataset::open(&dataset_information.file_name)?;
         let layer = dataset.layer_by_name(&dataset_information.layer_name)?;
 
         let spatial_reference = match layer
@@ -487,7 +487,7 @@ where
     ) -> Result<()> {
         // TODO: add opening options, e.g. for CSV
         // TODO: add OGR time filter if forced
-        let mut dataset = Dataset::open(&dataset_information.filename)?;
+        let mut dataset = Dataset::open(&dataset_information.file_name)?;
         let layer = dataset.layer_by_name(&dataset_information.layer_name)?;
 
         let (data_types, feature_collection_builder) =
@@ -1035,7 +1035,7 @@ mod tests {
     #[test]
     fn specification_serde() {
         let spec = OgrSourceDataset {
-            filename: "foobar.csv".into(),
+            file_name: "foobar.csv".into(),
             layer_name: "foobar".to_string(),
             data_type: Some(VectorDataType::MultiPoint),
             time: OgrSourceDatasetTimeType::StartDuration,
@@ -1137,7 +1137,7 @@ mod tests {
     #[tokio::test]
     async fn empty_geojson() -> Result<()> {
         let dataset_information = OgrSourceDataset {
-            filename: "test-data/vector/data/empty.json".into(),
+            file_name: "test-data/vector/data/empty.json".into(),
             layer_name: "empty".to_string(),
             data_type: None,
             time: OgrSourceDatasetTimeType::None,
@@ -1180,7 +1180,7 @@ mod tests {
     #[tokio::test]
     async fn error() -> Result<()> {
         let dataset_information = OgrSourceDataset {
-            filename: "".into(),
+            file_name: "".into(),
             layer_name: "".to_string(),
             data_type: None,
             time: OgrSourceDatasetTimeType::None,
@@ -1223,7 +1223,7 @@ mod tests {
     #[tokio::test]
     async fn on_error_skip() -> Result<()> {
         let dataset_information = OgrSourceDataset {
-            filename: "test-data/vector/data/missing_geo.json".into(),
+            file_name: "test-data/vector/data/missing_geo.json".into(),
             layer_name: "missing_geo".to_string(),
             data_type: None,
             time: OgrSourceDatasetTimeType::None,
@@ -1274,7 +1274,7 @@ mod tests {
     #[tokio::test]
     async fn on_error_keep() -> Result<()> {
         let dataset_information = OgrSourceDataset {
-            filename: "test-data/vector/data/missing_geo.json".into(),
+            file_name: "test-data/vector/data/missing_geo.json".into(),
             layer_name: "missing_geo".to_string(),
             data_type: None,
             time: OgrSourceDatasetTimeType::None,
@@ -1329,7 +1329,7 @@ mod tests {
     #[test]
     fn parse_wkt_geometry() -> Result<()> {
         let dataset_information = OgrSourceDataset {
-            filename: "".into(),
+            file_name: "".into(),
             layer_name: "".to_string(),
             data_type: None,
             time: OgrSourceDatasetTimeType::None,
@@ -2695,7 +2695,7 @@ mod tests {
     #[tokio::test]
     async fn plain_data() -> Result<()> {
         let dataset_information = OgrSourceDataset {
-            filename: "test-data/vector/data/plain_data.csv".into(),
+            file_name: "test-data/vector/data/plain_data.csv".into(),
             layer_name: "plain_data".to_string(),
             data_type: None,
             time: OgrSourceDatasetTimeType::None,
