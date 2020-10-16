@@ -14,6 +14,7 @@ pub enum PrimitivesError {
     ArrowInternal {
         source: ArrowError,
     },
+    InvalidConversion,
 }
 
 impl From<PrimitivesError> for Error {

@@ -132,14 +132,14 @@ impl FromStr for SpatialReference {
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub enum SpatialReferenceOption {
     SpatialReference(SpatialReference),
-    None,
+    Unreferenced,
 }
 
 impl std::fmt::Display for SpatialReferenceOption {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             SpatialReferenceOption::SpatialReference(p) => write!(f, "{}", p),
-            SpatialReferenceOption::None => Ok(()),
+            SpatialReferenceOption::Unreferenced => Ok(()),
         }
     }
 }
@@ -154,7 +154,7 @@ impl From<Option<SpatialReference>> for SpatialReferenceOption {
     fn from(option: Option<SpatialReference>) -> Self {
         match option {
             Some(p) => SpatialReferenceOption::SpatialReference(p),
-            None => SpatialReferenceOption::None,
+            None => SpatialReferenceOption::Unreferenced,
         }
     }
 }
@@ -183,7 +183,7 @@ impl<'de> Visitor<'de> for SpatialReferenceOptionDeserializeVisitor {
         E: serde::de::Error,
     {
         if v.is_empty() {
-            return Ok(SpatialReferenceOption::None);
+            return Ok(SpatialReferenceOption::Unreferenced);
         }
 
         let spatial_reference: SpatialReference = v.parse().map_err(serde::de::Error::custom)?;
@@ -293,7 +293,7 @@ mod tests {
         );
 
         assert_eq!(
-            serde_json::to_string(&SpatialReferenceOption::None).unwrap(),
+            serde_json::to_string(&SpatialReferenceOption::Unreferenced).unwrap(),
             "\"\""
         );
 
@@ -306,7 +306,7 @@ mod tests {
         );
 
         assert_eq!(
-            SpatialReferenceOption::None,
+            SpatialReferenceOption::Unreferenced,
             serde_json::from_str("\"\"").unwrap()
         );
 

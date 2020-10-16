@@ -1,9 +1,10 @@
 use crate::collections::VectorDataType;
-use crate::primitives::{error, GeometryRef};
+use crate::error::Error;
+use crate::primitives::{error, BoundingBox2D, GeometryRef, PrimitivesError, TypedGeometry};
 use crate::primitives::{Coordinate2D, Geometry};
 use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::Result;
-use arrow::array::BooleanArray;
+use arrow::array::{ArrayBuilder, BooleanArray};
 use arrow::error::ArrowError;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
@@ -53,6 +54,22 @@ impl MultiPointAccess for MultiPoint {
 
 impl Geometry for MultiPoint {
     const DATA_TYPE: VectorDataType = VectorDataType::MultiPoint;
+
+    fn intersects_bbox(&self, bbox: &BoundingBox2D) -> bool {
+        self.coordinates.iter().any(|c| bbox.contains_coordinate(c))
+    }
+}
+
+impl TryFrom<TypedGeometry> for MultiPoint {
+    type Error = Error;
+
+    fn try_from(value: TypedGeometry) -> Result<Self, Self::Error> {
+        if let TypedGeometry::MultiPoint(geometry) = value {
+            Ok(geometry)
+        } else {
+            Err(PrimitivesError::InvalidConversion.into())
+        }
+    }
 }
 
 impl AsRef<[Coordinate2D]> for MultiPoint {
@@ -98,6 +115,17 @@ impl ArrowTyped for MultiPoint {
 
     fn arrow_data_type() -> arrow::datatypes::DataType {
         arrow::datatypes::DataType::List(Box::new(Coordinate2D::arrow_data_type()))
+    }
+
+    fn builder_byte_size(builder: &mut Self::ArrowBuilder) -> usize {
+        let multi_point_indices_size = builder.len() * std::mem::size_of::<i32>();
+
+        let point_builder = builder.values();
+        let point_indices_size = point_builder.len() * std::mem::size_of::<i32>();
+
+        let coordinates_size = Coordinate2D::builder_byte_size(point_builder);
+
+        multi_point_indices_size + point_indices_size + coordinates_size
     }
 
     fn arrow_builder(capacity: usize) -> Self::ArrowBuilder {
@@ -254,5 +282,20 @@ mod tests {
         float_cmp::approx_eq!(f64, x, 1.0);
         float_cmp::approx_eq!(f64, y, 1.2);
         assert_eq!(aggregate(&multi_point), aggregate(&multi_point_ref));
+    }
+
+    #[test]
+    fn intersects_bbox() -> Result<()> {
+        let bbox = BoundingBox2D::new((0.0, 0.0).into(), (1.0, 1.0).into())?;
+
+        assert!(MultiPoint::new(vec![(0.5, 0.5).into()])?.intersects_bbox(&bbox));
+        assert!(MultiPoint::new(vec![(1.0, 1.0).into()])?.intersects_bbox(&bbox));
+        assert!(MultiPoint::new(vec![(0.5, 0.5).into(), (1.5, 1.5).into()])?.intersects_bbox(&bbox));
+        assert!(!MultiPoint::new(vec![(1.1, 1.1).into()])?.intersects_bbox(&bbox));
+        assert!(
+            !MultiPoint::new(vec![(-0.1, -0.1).into(), (1.1, 1.1).into()])?.intersects_bbox(&bbox)
+        );
+
+        Ok(())
     }
 }

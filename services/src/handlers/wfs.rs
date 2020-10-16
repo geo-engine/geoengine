@@ -311,9 +311,7 @@ mod tests {
     use super::*;
     use crate::{contexts::InMemoryContext, workflows::workflow::Workflow};
     use geoengine_operators::engine::TypedOperator;
-    use geoengine_operators::source::csv::{
-        CsvGeometrySpecification, CsvSource, CsvTimeSpecification,
-    };
+    use geoengine_operators::source::{CsvGeometrySpecification, CsvSource, CsvTimeSpecification};
     use serde_json::json;
     use std::io::{Seek, SeekFrom, Write};
     use xml::ParserConfig;
@@ -340,7 +338,7 @@ mod tests {
                             "coordinates": [0.0, 0.1]
                         },
                         "properties": {
-                            "foo": null
+                            "foo": 0
                         },
                         "when": {
                             "start": "1970-01-01T00:00:00+00:00",
@@ -355,7 +353,7 @@ mod tests {
                             "coordinates": [1.0, 1.1]
                         },
                         "properties": {
-                            "foo": 0
+                            "foo": null
                         },
                         "when": {
                             "start": "1970-01-01T00:00:00+00:00",
@@ -369,7 +367,7 @@ mod tests {
                             "coordinates": [2.0, 3.1]
                         },
                         "properties": {
-                            "foo": null
+                            "foo": 2
                         },
                         "when": {
                             "start": "1970-01-01T00:00:00+00:00",
@@ -383,7 +381,7 @@ mod tests {
                             "coordinates": [3.0, 3.1]
                         },
                         "properties": {
-                            "foo": null
+                            "foo": 3
                         },
                         "when": {
                             "start": "1970-01-01T00:00:00+00:00",
@@ -397,7 +395,7 @@ mod tests {
                             "coordinates": [4.0, 4.1]
                         },
                         "properties": {
-                            "foo": null
+                            "foo": 4
                         },
                         "when": {
                             "start": "1970-01-01T00:00:00+00:00",

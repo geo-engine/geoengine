@@ -2,6 +2,7 @@ use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use postgres_types::private::BytesMut;
 use postgres_types::{FromSql, IsNull, ToSql, Type};
 use serde::{Deserialize, Serialize};
+use std::ops::Add;
 use snafu::Error;
 
 #[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Debug)]
@@ -96,5 +97,13 @@ impl<'a> FromSql<'a> for TimeInstance {
 
     fn accepts(ty: &Type) -> bool {
         <DateTime<Utc> as FromSql>::accepts(ty)
+    }
+}
+
+impl Add<i64> for TimeInstance {
+    type Output = Self;
+
+    fn add(self, rhs: i64) -> Self::Output {
+        (self.0 + rhs).into()
     }
 }

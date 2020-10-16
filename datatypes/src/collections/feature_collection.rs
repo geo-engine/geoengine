@@ -18,8 +18,7 @@ use crate::collections::{FeatureCollectionError, IntoGeometryOptionsIterator};
 use crate::json_map;
 use crate::primitives::{
     CategoricalDataRef, DecimalDataRef, FeatureData, FeatureDataRef, FeatureDataType,
-    FeatureDataValue, Geometry, NullableCategoricalDataRef, NullableDecimalDataRef,
-    NullableNumberDataRef, NullableTextDataRef, NumberDataRef, TextDataRef, TimeInterval,
+    FeatureDataValue, Geometry, NumberDataRef, TextDataRef, TimeInterval,
 };
 use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::helpers::SomeIter;
@@ -76,27 +75,8 @@ where
     /// assert_eq!(pc.len(), 0);
     /// ```
     pub fn empty() -> Self {
-        let time_field = Field::new(
-            Self::TIME_COLUMN_NAME,
-            TimeInterval::arrow_data_type(),
-            false,
-        );
-
-        let columns = if CollectionType::IS_GEOMETRY {
-            let feature_field = Field::new(
-                Self::GEOMETRY_COLUMN_NAME,
-                CollectionType::arrow_data_type(),
-                false,
-            );
-            vec![feature_field, time_field]
-        } else {
-            vec![time_field]
-        };
-
-        Self::new_from_internals(
-            StructArray::from(ArrayData::builder(DataType::Struct(columns)).len(0).build()),
-            Default::default(),
-        )
+        Self::from_data(vec![], vec![], Default::default())
+            .expect("does not fail for empty collection")
     }
 
     /// Create a `FeatureCollection` from data
@@ -279,38 +259,24 @@ where
             match self.types.get(column_name).expect("previously checked") {
                 FeatureDataType::Number => {
                     let array: &arrow::array::Float64Array = downcast_array(column);
-                    NumberDataRef::new(array.values()).into()
-                }
-                FeatureDataType::NullableNumber => {
-                    let array: &arrow::array::Float64Array = downcast_array(column);
-                    NullableNumberDataRef::new(array.values(), array.data_ref().null_bitmap())
-                        .into()
+                    NumberDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
                 }
                 FeatureDataType::Text => {
                     let array: &arrow::array::StringArray = downcast_array(column);
-                    TextDataRef::new(array.value_data(), array.value_offsets()).into()
-                }
-                FeatureDataType::NullableText => {
-                    let array: &arrow::array::StringArray = downcast_array(column);
-                    NullableTextDataRef::new(array.value_data(), array.value_offsets()).into()
+                    TextDataRef::new(
+                        array.value_data(),
+                        array.value_offsets(),
+                        array.data_ref().null_bitmap(),
+                    )
+                    .into()
                 }
                 FeatureDataType::Decimal => {
                     let array: &arrow::array::Int64Array = downcast_array(column);
-                    DecimalDataRef::new(array.values()).into()
-                }
-                FeatureDataType::NullableDecimal => {
-                    let array: &arrow::array::Int64Array = downcast_array(column);
-                    NullableDecimalDataRef::new(array.values(), array.data_ref().null_bitmap())
-                        .into()
+                    DecimalDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
                 }
                 FeatureDataType::Categorical => {
                     let array: &arrow::array::UInt8Array = downcast_array(column);
-                    CategoricalDataRef::new(array.values()).into()
-                }
-                FeatureDataType::NullableCategorical => {
-                    let array: &arrow::array::UInt8Array = downcast_array(column);
-                    NullableCategoricalDataRef::new(array.values(), array.data_ref().null_bitmap())
-                        .into()
+                    CategoricalDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
                 }
             },
         )
@@ -632,7 +598,7 @@ where
         let mut filter_array = None;
 
         match column_type {
-            FeatureDataType::Number | FeatureDataType::NullableNumber => {
+            FeatureDataType::Number => {
                 apply_filters(
                     as_primitive_array::<Float64Type>(column),
                     &mut filter_array,
@@ -643,7 +609,7 @@ where
                     arrow::compute::lt_scalar,
                 )?;
             }
-            FeatureDataType::Decimal | FeatureDataType::NullableDecimal => {
+            FeatureDataType::Decimal => {
                 apply_filters(
                     as_primitive_array::<Int64Type>(column),
                     &mut filter_array,
@@ -654,7 +620,7 @@ where
                     arrow::compute::lt_scalar,
                 )?;
             }
-            FeatureDataType::Text | FeatureDataType::NullableText => {
+            FeatureDataType::Text => {
                 apply_filters(
                     as_string_array(column),
                     &mut filter_array,
@@ -665,7 +631,7 @@ where
                     arrow::compute::lt_utf8_scalar,
                 )?;
             }
-            FeatureDataType::Categorical | FeatureDataType::NullableCategorical => {
+            FeatureDataType::Categorical => {
                 return Err(error::FeatureCollectionError::WrongDataType.into());
             }
         }
@@ -835,7 +801,10 @@ impl<CollectionType> Clone for FeatureCollection<CollectionType> {
     }
 }
 
-impl<CollectionType> PartialEq for FeatureCollection<CollectionType> {
+impl<CollectionType> PartialEq for FeatureCollection<CollectionType>
+where
+    CollectionType: Geometry,
+{
     fn eq(&self, other: &Self) -> bool {
         /// compares two `f64` typed columns
         /// treats `f64::NAN` values as if they are equal
@@ -882,10 +851,13 @@ impl<CollectionType> PartialEq for FeatureCollection<CollectionType> {
             return false;
         }
 
-        for key in self.types.keys().chain(&[
-            Self::GEOMETRY_COLUMN_NAME.to_string(),
-            Self::TIME_COLUMN_NAME.to_string(),
-        ]) {
+        let mandatory_keys = if CollectionType::IS_GEOMETRY {
+            vec![Self::GEOMETRY_COLUMN_NAME, Self::TIME_COLUMN_NAME]
+        } else {
+            vec![Self::TIME_COLUMN_NAME]
+        };
+
+        for key in self.types.keys().map(String::as_str).chain(mandatory_keys) {
             let c1 = self.table.column_by_name(key).expect("column must exist");
             let c2 = other.table.column_by_name(key).expect("column must exist");
 

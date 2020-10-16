@@ -1,23 +1,76 @@
-use warp::{Filter, Rejection};
-
-use crate::contexts::InMemoryContext;
+use crate::contexts::{Context, InMemoryContext, PostgresContext};
 use crate::error;
 use crate::error::{Error, Result};
 use crate::handlers;
 use crate::handlers::handle_rejection;
+use crate::util::config;
+use crate::util::config::{get_config_element, Backend};
+use bb8_postgres::tokio_postgres;
+use bb8_postgres::tokio_postgres::NoTls;
 use snafu::ResultExt;
+use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::str::FromStr;
 use tokio::signal;
 use tokio::sync::oneshot::{Receiver, Sender};
 use warp::fs::File;
+use warp::{Filter, Rejection};
 
 pub async fn start_server(
     shutdown_rx: Option<Receiver<()>>,
     static_files_dir: Option<PathBuf>,
 ) -> Result<()> {
-    // TODO: make configurable
-    let ctx = InMemoryContext::default();
+    let web_config: config::Web = get_config_element()?;
+    let bind_address = web_config
+        .bind_address
+        .parse::<SocketAddr>()
+        .context(error::AddrParse)?;
 
+    eprintln!(
+        "Starting server… {}",
+        format!(
+            "http://{}/",
+            web_config
+                .external_address
+                .unwrap_or(web_config.bind_address)
+        )
+    );
+
+    match web_config.backend {
+        Backend::InMemory => {
+            eprintln!("Using in memory backend"); // TODO: log
+            start(
+                shutdown_rx,
+                static_files_dir,
+                bind_address,
+                InMemoryContext::default(),
+            )
+            .await
+        }
+        Backend::Postgres => {
+            eprintln!("Using Postgres backend"); // TODO: log
+            let ctx = PostgresContext::new(
+                tokio_postgres::config::Config::from_str(
+                    &get_config_element::<config::Postgres>()?.config_string,
+                )?,
+                NoTls,
+            )
+            .await?;
+
+            start(shutdown_rx, static_files_dir, bind_address, ctx).await
+        }
+    }
+}
+
+async fn start<C>(
+    shutdown_rx: Option<Receiver<()>>,
+    static_files_dir: Option<PathBuf>,
+    bind_address: SocketAddr,
+    ctx: C,
+) -> Result<(), Error>
+where
+    C: Context,
+{
     // TODO: hierarchical filters workflow -> (register, load), user -> (register, login, ...)
     let handler = handlers::workflows::register_workflow_handler(ctx.clone())
         .or(handlers::workflows::load_workflow_handler(ctx.clone()))
@@ -40,13 +93,12 @@ pub async fn start_server(
         .recover(handle_rejection);
 
     let task = if let Some(receiver) = shutdown_rx {
-        let (_, server) =
-            warp::serve(handler).bind_with_graceful_shutdown(([127, 0, 0, 1], 3030), async {
-                receiver.await.ok();
-            });
+        let (_, server) = warp::serve(handler).bind_with_graceful_shutdown(bind_address, async {
+            receiver.await.ok();
+        });
         tokio::task::spawn(server)
     } else {
-        let server = warp::serve(handler).bind(([127, 0, 0, 1], 3030));
+        let server = warp::serve(handler).bind(bind_address);
         tokio::task::spawn(server)
     };
 

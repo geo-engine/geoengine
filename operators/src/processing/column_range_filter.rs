@@ -138,27 +138,25 @@ where
             // TODO: do transformation work only once
             let ranges: Result<Vec<RangeInclusive<FeatureDataValue>>> =
                 match collection.column_type(&column_name)? {
-                    FeatureDataType::Text | FeatureDataType::NullableText => ranges
+                    FeatureDataType::Text => ranges
                         .iter()
                         .cloned()
                         .map(|range| range.into_string_range().map(Into::into))
                         .collect(),
-                    FeatureDataType::Number | FeatureDataType::NullableNumber => ranges
+                    FeatureDataType::Number => ranges
                         .iter()
                         .cloned()
                         .map(|range| range.into_number_range().map(Into::into))
                         .collect(),
-                    FeatureDataType::Decimal | FeatureDataType::NullableDecimal => ranges
+                    FeatureDataType::Decimal => ranges
                         .iter()
                         .cloned()
                         .map(|range| range.into_decimal_range().map(Into::into))
                         .collect(),
-                    FeatureDataType::Categorical | FeatureDataType::NullableCategorical => {
-                        Err(error::Error::InvalidType {
-                            expected: "text, number, or decimal".to_string(),
-                            found: "categorical".to_string(),
-                        })
-                    }
+                    FeatureDataType::Categorical => Err(error::Error::InvalidType {
+                        expected: "text, number, or decimal".to_string(),
+                        found: "categorical".to_string(),
+                    }),
                 };
 
             collection
