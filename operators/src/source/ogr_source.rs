@@ -441,6 +441,7 @@ where
         query_rectangle: QueryRectangle,
         chunk_byte_size: usize,
     ) -> Self {
+        // We need two slots for the channel in case of an error: first output `Err`, then output `None` to close the `Stream`
         let (poll_result_sender, poll_result_receiver) = mpsc::sync_channel(2);
         let (work_query_sender, work_query_receiver) = mpsc::sync_channel(1);
 
