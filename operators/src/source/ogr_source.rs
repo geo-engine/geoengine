@@ -105,30 +105,30 @@ impl OgrSourceDataset {
 ///  - "start+duration": start and duration information is mapped
 ///
 /// There are different options within these variants:
-///  - `start_property` and `end_property`: the name of the property that contains time information
-///  - `start_format` and `start_format`: a mapping of a property type to a time value (cf. `OgrSourceDatasetTimeType`)
+///  - `start_field` and `end_field`: the name of the field that contains time information
+///  - `start_format` and `start_format`: a mapping of a field type to a time value (cf. `OgrSourceDatasetTimeType`)
 ///  - `duration`: the duration of the time validity for all features in the file
 #[serde(rename_all = "lowercase")]
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub enum OgrSourceDatasetTimeType {
     None,
     Start {
-        start_property: String,
+        start_field: String,
         start_format: OgrSourceTimeFormat,
         duration: u32,
     },
     #[serde(rename = "start+end")]
     StartEnd {
-        start_property: String,
+        start_field: String,
         start_format: OgrSourceTimeFormat,
-        end_property: String,
+        end_field: String,
         end_format: OgrSourceTimeFormat,
     },
     #[serde(rename = "start+duration")]
     StartDuration {
-        start_property: String,
+        start_field: String,
         start_format: OgrSourceTimeFormat,
-        duration_property: String,
+        duration_field: String,
     },
 }
 
@@ -603,7 +603,7 @@ where
                 Box::new(move |_feature: &Feature| Ok(TimeInterval::default()))
             }
             OgrSourceDatasetTimeType::Start {
-                start_property,
+                start_field,
                 start_format,
                 duration,
             } => {
@@ -612,7 +612,7 @@ where
 
                 Box::new(move |feature: &Feature| {
                     let field_value = feature
-                        .field(&start_property)?
+                        .field(&start_field)?
                         .into_string()
                         .ok_or(Error::TimeIntervalColumnNameMissing)?;
 
@@ -622,9 +622,9 @@ where
                 })
             }
             OgrSourceDatasetTimeType::StartEnd {
-                start_property,
+                start_field,
                 start_format,
-                end_property,
+                end_field,
                 end_format,
             } => {
                 let time_start_parser = Self::create_time_parser(start_format);
@@ -632,14 +632,14 @@ where
 
                 Box::new(move |feature: &Feature| {
                     let start_field_value = feature
-                        .field(&start_property)?
+                        .field(&start_field)?
                         .into_string()
                         .ok_or(Error::TimeIntervalColumnNameMissing)?;
 
                     let time_start = time_start_parser(&start_field_value)?;
 
                     let end_field_value = feature
-                        .field(&end_property)?
+                        .field(&end_field)?
                         .into_string()
                         .ok_or(Error::TimeIntervalColumnNameMissing)?;
 
@@ -649,15 +649,15 @@ where
                 })
             }
             OgrSourceDatasetTimeType::StartDuration {
-                start_property,
+                start_field,
                 start_format,
-                duration_property,
+                duration_field,
             } => {
                 let time_start_parser = Self::create_time_parser(start_format);
 
                 Box::new(move |feature: &Feature| {
                     let start_field_value = feature
-                        .field(&start_property)?
+                        .field(&start_field)?
                         .into_string()
                         .ok_or(Error::TimeIntervalColumnNameMissing)?;
 
@@ -665,7 +665,7 @@ where
 
                     let duration = i64::from(
                         feature
-                            .field(&duration_property)?
+                            .field(&duration_field)?
                             .into_int()
                             .ok_or(Error::TimeIntervalColumnNameMissing)?,
                     );
@@ -1044,7 +1044,7 @@ mod tests {
             layer_name: "foobar".to_string(),
             data_type: Some(VectorDataType::MultiPoint),
             time: OgrSourceDatasetTimeType::Start {
-                start_property: "start".to_string(),
+                start_field: "start".to_string(),
                 start_format: OgrSourceTimeFormat::Custom {
                     custom_format: "YYYY-MM-DD".to_string(),
                 },
@@ -1077,7 +1077,7 @@ mod tests {
                 "data_type": "MultiPoint",
                 "time": {
                     "start": {
-                        "start_property": "start",
+                        "start_field": "start",
                         "start_format": {
                             "format": "custom",
                             "custom_format": "YYYY-MM-DD"
@@ -1111,7 +1111,7 @@ mod tests {
                 "data_type": "MultiPoint",
                 "time": {
                     "start": {
-                        "start_property": "start",
+                        "start_field": "start",
                         "start_format": {
                             "format": "custom",
                             "custom_format": "YYYY-MM-DD"
