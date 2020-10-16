@@ -52,7 +52,7 @@ pub type OgrSource = SourceOperator<OgrSourceParameters>;
 ///  - `time`: the type of the time attribute(s)
 ///  - `duration`: the duration of the time validity for all features in the file [if time == "duration"]
 ///  - `time1_format`: a mapping of a column to the start time (cf. `OgrSourceDatasetTimeType`) [if time != "none"]
-///  - `time2_format`: a mapping of a columns to the end time (cf. `time1_format`) [if time == "start+end" || "start+duration"]
+///  - `time2_format`: a mapping of a column to the end time (cf. `time1_format`) [if time == "start+end" || "start+duration"]
 ///  - `columns`: a mapping of the columns to data, time, space. Columns that are not listed are skipped when parsing.
 ///  - `default`: wkt definition of the default point/line/polygon as a string [optional]
 ///  - `force_ogr_time_filter`: bool. force external time filter via ogr layer, even though data types don't match. Might not work
