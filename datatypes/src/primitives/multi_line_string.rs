@@ -112,13 +112,13 @@ impl ArrowTyped for MultiLineString {
     }
 
     fn builder_byte_size(builder: &mut Self::ArrowBuilder) -> usize {
-        let multi_line_indices_size = builder.len() * std::mem::size_of::<u64>();
+        let multi_line_indices_size = builder.len() * std::mem::size_of::<i32>();
 
         let line_builder = builder.values();
-        let line_indices_size = line_builder.len() * std::mem::size_of::<u64>();
+        let line_indices_size = line_builder.len() * std::mem::size_of::<i32>();
 
         let point_builder = line_builder.values();
-        let point_indices_size = point_builder.len() * std::mem::size_of::<u64>();
+        let point_indices_size = point_builder.len() * std::mem::size_of::<i32>();
 
         let coordinates_size = Coordinate2D::builder_byte_size(point_builder);
 

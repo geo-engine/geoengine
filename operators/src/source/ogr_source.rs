@@ -2828,8 +2828,8 @@ mod tests {
 
         let result: Vec<MultiPointCollection> = query.try_collect().await?;
 
-        assert_eq!(result.len(), 52);
-        assert_eq!(result[0].len(), 21);
+        assert_eq!(result.len(), 44);
+        assert_eq!(result[0].len(), 25);
 
         assert_eq!(
             result[0],
@@ -2856,6 +2856,10 @@ mod tests {
                     (-48.635_453_47, -26.238_055_56),
                     (-65.467_726_74, 47.034_444_44),
                     (-53.956_890_46, 48.163_333_33),
+                    (-124.924_440_5, 49.670_833_33),
+                    (-123.434_393_4, 48.436_388_89),
+                    (-55.751_060_07, 47.100_277_78),
+                    (-60.239_340_4, 46.208_888_89),
                 ])?,
                 vec![Default::default(); result[0].len()],
                 Default::default(),

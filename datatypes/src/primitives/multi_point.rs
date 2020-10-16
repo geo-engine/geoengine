@@ -118,10 +118,10 @@ impl ArrowTyped for MultiPoint {
     }
 
     fn builder_byte_size(builder: &mut Self::ArrowBuilder) -> usize {
-        let multi_point_indices_size = builder.len() * std::mem::size_of::<u64>();
+        let multi_point_indices_size = builder.len() * std::mem::size_of::<i32>();
 
         let point_builder = builder.values();
-        let point_indices_size = point_builder.len() * std::mem::size_of::<u64>();
+        let point_indices_size = point_builder.len() * std::mem::size_of::<i32>();
 
         let coordinates_size = Coordinate2D::builder_byte_size(point_builder);
 
