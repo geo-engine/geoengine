@@ -190,20 +190,20 @@ impl OgrSourceColumnSpec {
             numeric: self
                 .numeric
                 .iter()
-                .cloned()
                 .filter(|attribute| attributes.contains(attribute))
+                .cloned()
                 .collect(),
             decimal: self
                 .decimal
                 .iter()
-                .cloned()
                 .filter(|attribute| attributes.contains(attribute))
+                .cloned()
                 .collect(),
             textual: self
                 .textual
                 .iter()
-                .cloned()
                 .filter(|attribute| attributes.contains(attribute))
+                .cloned()
                 .collect(),
         }
     }
