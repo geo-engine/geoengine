@@ -16,6 +16,8 @@ use crate::error;
 use crate::error::Result;
 use crate::handlers::Context;
 use crate::ogc::wms::request::{GetCapabilities, GetLegendGraphic, GetMap, WMSRequest};
+use crate::util::config;
+use crate::util::config::get_config_element;
 use crate::util::identifiers::Identifier;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
@@ -142,7 +144,7 @@ async fn get_map<C: Context>(
     let operator = workflow.operator.get_raster().context(error::Operator)?;
 
     let execution_context = ExecutionContext {
-        raster_data_root: "../operators/test-data/raster".into(), // ./ is the crate root when run as example from the multi crate root... doh
+        raster_data_root: get_config_element::<config::GdalSource>()?.raster_data_root_path,
     };
 
     let initialized = operator
