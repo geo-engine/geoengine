@@ -688,21 +688,21 @@ where
         if let Some(ref column_spec) = dataset_information.columns {
             // TODO: error handling instead of unwrap
             for attribute in &column_spec.numeric {
-                data_types.insert(attribute.clone(), FeatureDataType::NullableNumber);
+                data_types.insert(attribute.clone(), FeatureDataType::Number);
                 feature_collection_builder
-                    .add_column(attribute.clone(), FeatureDataType::NullableNumber)
+                    .add_column(attribute.clone(), FeatureDataType::Number)
                     .unwrap();
             }
             for attribute in &column_spec.decimal {
-                data_types.insert(attribute.clone(), FeatureDataType::NullableDecimal);
+                data_types.insert(attribute.clone(), FeatureDataType::Decimal);
                 feature_collection_builder
-                    .add_column(attribute.clone(), FeatureDataType::NullableDecimal)
+                    .add_column(attribute.clone(), FeatureDataType::Decimal)
                     .unwrap();
             }
             for attribute in &column_spec.textual {
-                data_types.insert(attribute.clone(), FeatureDataType::NullableText);
+                data_types.insert(attribute.clone(), FeatureDataType::Text);
                 feature_collection_builder
-                    .add_column(attribute.clone(), FeatureDataType::NullableText)
+                    .add_column(attribute.clone(), FeatureDataType::Text)
                     .unwrap();
             }
         }
@@ -784,7 +784,7 @@ where
             let field = feature.field(&column);
 
             match data_type {
-                FeatureDataType::Text | FeatureDataType::NullableText => {
+                FeatureDataType::Text => {
                     let text_option = match field {
                         Ok(FieldValue::IntegerValue(v)) => Some(v.to_string()),
                         Ok(FieldValue::StringValue(s)) => Some(s),
@@ -794,7 +794,7 @@ where
 
                     builder.push_data(&column, FeatureDataValue::NullableText(text_option))?;
                 }
-                FeatureDataType::Number | FeatureDataType::NullableNumber => {
+                FeatureDataType::Number => {
                     let number_option = match field {
                         Ok(FieldValue::IntegerValue(v)) => Some(f64::from(v)),
                         Ok(FieldValue::StringValue(s)) => f64::from_str(&s).ok(),
@@ -804,7 +804,7 @@ where
 
                     builder.push_data(&column, FeatureDataValue::NullableNumber(number_option))?;
                 }
-                FeatureDataType::Decimal | FeatureDataType::NullableDecimal => {
+                FeatureDataType::Decimal => {
                     let decimal_option = match field {
                         Ok(FieldValue::IntegerValue(v)) => Some(i64::from(v)), // TODO: PR for allowing i64 in OGR?
                         Ok(FieldValue::StringValue(s)) => i64::from_str(&s).ok(),
@@ -815,9 +815,7 @@ where
                     builder
                         .push_data(&column, FeatureDataValue::NullableDecimal(decimal_option))?;
                 }
-                FeatureDataType::Categorical | FeatureDataType::NullableCategorical => {
-                    todo!("implement")
-                }
+                FeatureDataType::Categorical => todo!("implement"),
             }
         }
 

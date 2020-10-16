@@ -258,9 +258,8 @@ mod tests {
     use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
     use std::str::FromStr;
 
-    #[ignore]
-    #[tokio::test]
     #[ignore] // TODO: remove if postgres if configurable
+    #[tokio::test]
     async fn test() {
         // TODO: load from test config
         let config = tokio_postgres::config::Config::from_str(
