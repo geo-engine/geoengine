@@ -66,9 +66,6 @@ pub struct OgrSourceDataset {
     data_type: Option<VectorDataType>,
     #[serde(default)]
     time: OgrSourceDatasetTimeType,
-    duration: Option<u64>,
-    time1_format: Option<OgrSourceTimeFormat>,
-    time2_format: Option<OgrSourceTimeFormat>,
     columns: Option<OgrSourceColumnSpec>,
     default: Option<String>,
     #[serde(default)]
@@ -113,11 +110,24 @@ impl OgrSourceDataset {
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub enum OgrSourceDatasetTimeType {
     None,
-    Start,
+    Start {
+        start_property: String,
+        start_format: OgrSourceTimeFormat,
+        duration: u64,
+    },
     #[serde(rename = "start+end")]
-    StartEnd,
+    StartEnd {
+        start_property: String,
+        start_format: OgrSourceTimeFormat,
+        end_property: String,
+        end_format: OgrSourceTimeFormat,
+    },
     #[serde(rename = "start+duration")]
-    StartDuration,
+    StartDuration {
+        start_property: String,
+        start_format: OgrSourceTimeFormat,
+        duration_property: String,
+    },
 }
 
 /// If no time is specified, expect to parse none
@@ -141,6 +151,12 @@ pub enum OgrSourceTimeFormat {
     Iso,
 }
 
+impl Default for OgrSourceTimeFormat {
+    fn default() -> Self {
+        Self::Iso
+    }
+}
+
 /// A mapping of the columns to data, time, space. Columns that are not listed are skipped when parsing.
 ///  - x: the name of the column containing the x coordinate (or the wkt string) [if CSV file]
 ///  - y: the name of the column containing the y coordinate [if CSV file with y column]
@@ -152,8 +168,6 @@ pub enum OgrSourceTimeFormat {
 pub struct OgrSourceColumnSpec {
     x: String,
     y: Option<String>,
-    time1: Option<String>,
-    time2: Option<String>,
     numeric: Vec<String>,
     decimal: Vec<String>,
     textual: Vec<String>,
@@ -547,18 +561,18 @@ where
     }
 
     fn create_time_parser(
-        time_format: &Option<OgrSourceTimeFormat>,
+        time_format: &OgrSourceTimeFormat,
     ) -> Box<dyn Fn(&str) -> Result<TimeInstance> + '_> {
         match time_format {
-            None | Some(OgrSourceTimeFormat::Iso) => Box::new(move |date: &str| {
+            OgrSourceTimeFormat::Iso => Box::new(move |date: &str| {
                 let date_time = DateTime::parse_from_rfc3339(date)?;
                 Ok(date_time.timestamp_millis().into())
             }),
-            Some(OgrSourceTimeFormat::Custom { custom_format }) => Box::new(move |date: &str| {
+            OgrSourceTimeFormat::Custom { custom_format } => Box::new(move |date: &str| {
                 let date_time = DateTime::parse_from_str(date, &custom_format)?;
                 Ok(date_time.timestamp_millis().into())
             }),
-            Some(OgrSourceTimeFormat::Seconds) => Box::new(move |date: &str| {
+            OgrSourceTimeFormat::Seconds => Box::new(move |date: &str| {
                 let date_time = DateTime::parse_from_str(date, "%C")?;
                 Ok(date_time.timestamp_millis().into())
             }),
@@ -568,30 +582,23 @@ where
     fn initialize_time_extractors(
         dataset_information: &OgrSourceDataset,
     ) -> Result<Box<dyn Fn(&Feature) -> Result<TimeInterval> + '_>> {
-        Ok(match dataset_information.time {
+        // TODO: exploit rust-gdal `datetime` feature
+
+        Ok(match &dataset_information.time {
             OgrSourceDatasetTimeType::None => {
                 Box::new(move |_feature: &Feature| Ok(TimeInterval::default()))
             }
-            OgrSourceDatasetTimeType::Start => {
-                let time_start_column_name = dataset_information
-                    .columns
-                    .as_ref()
-                    .and_then(|c| c.time1.as_ref())
-                    .ok_or(Error::TimeIntervalColumnNameMissing)?;
-
-                let time_start_parser = Self::create_time_parser(&dataset_information.time1_format);
-
-                // TODO: use end of time if not present instead of throwing an error?
-                let duration = dataset_information
-                    .duration
-                    .ok_or(Error::TimeIntervalDurationMissing)?
-                    as i64;
+            OgrSourceDatasetTimeType::Start {
+                start_property,
+                start_format,
+                duration,
+            } => {
+                let duration = *duration as i64;
+                let time_start_parser = Self::create_time_parser(start_format);
 
                 Box::new(move |feature: &Feature| {
-                    // TODO: try to get time_t if GDAL OGR wrapper supports time type
-
                     let field_value = feature
-                        .field(&time_start_column_name)?
+                        .field(&start_property)?
                         .into_string()
                         .ok_or(Error::TimeIntervalColumnNameMissing)?;
 
@@ -600,33 +607,25 @@ where
                     TimeInterval::new(time_start, time_start + duration).map_err(Into::into)
                 })
             }
-            OgrSourceDatasetTimeType::StartEnd => {
-                let time_start_column_name = dataset_information
-                    .columns
-                    .as_ref()
-                    .and_then(|c| c.time1.as_ref())
-                    .ok_or(Error::TimeIntervalColumnNameMissing)?;
-                let time_end_column_name = dataset_information
-                    .columns
-                    .as_ref()
-                    .and_then(|c| c.time2.as_ref())
-                    .ok_or(Error::TimeIntervalColumnNameMissing)?;
-
-                let time_start_parser = Self::create_time_parser(&dataset_information.time1_format);
-                let time_end_parser = Self::create_time_parser(&dataset_information.time2_format);
+            OgrSourceDatasetTimeType::StartEnd {
+                start_property,
+                start_format,
+                end_property,
+                end_format,
+            } => {
+                let time_start_parser = Self::create_time_parser(start_format);
+                let time_end_parser = Self::create_time_parser(end_format);
 
                 Box::new(move |feature: &Feature| {
-                    // TODO: try to get time_t if GDAL OGR wrapper supports time type
-
                     let start_field_value = feature
-                        .field(&time_start_column_name)?
+                        .field(&start_property)?
                         .into_string()
                         .ok_or(Error::TimeIntervalColumnNameMissing)?;
 
                     let time_start = time_start_parser(&start_field_value)?;
 
                     let end_field_value = feature
-                        .field(&time_end_column_name)?
+                        .field(&end_property)?
                         .into_string()
                         .ok_or(Error::TimeIntervalColumnNameMissing)?;
 
@@ -635,25 +634,16 @@ where
                     TimeInterval::new(time_start, time_end).map_err(Into::into)
                 })
             }
-            OgrSourceDatasetTimeType::StartDuration => {
-                let time_start_column_name = dataset_information
-                    .columns
-                    .as_ref()
-                    .and_then(|c| c.time1.as_ref())
-                    .ok_or(Error::TimeIntervalColumnNameMissing)?;
-                let duration_column_name = dataset_information
-                    .columns
-                    .as_ref()
-                    .and_then(|c| c.time2.as_ref())
-                    .ok_or(Error::TimeIntervalColumnNameMissing)?;
-
-                let time_start_parser = Self::create_time_parser(&dataset_information.time1_format);
+            OgrSourceDatasetTimeType::StartDuration {
+                start_property,
+                start_format,
+                duration_property,
+            } => {
+                let time_start_parser = Self::create_time_parser(start_format);
 
                 Box::new(move |feature: &Feature| {
-                    // TODO: try to get time_t if GDAL OGR wrapper supports time type
-
                     let start_field_value = feature
-                        .field(&time_start_column_name)?
+                        .field(&start_property)?
                         .into_string()
                         .ok_or(Error::TimeIntervalColumnNameMissing)?;
 
@@ -661,7 +651,7 @@ where
 
                     let duration = i64::from(
                         feature
-                            .field(&duration_column_name)?
+                            .field(&duration_property)?
                             .into_int()
                             .ok_or(Error::TimeIntervalColumnNameMissing)?,
                     );
@@ -1038,17 +1028,16 @@ mod tests {
             file_name: "foobar.csv".into(),
             layer_name: "foobar".to_string(),
             data_type: Some(VectorDataType::MultiPoint),
-            time: OgrSourceDatasetTimeType::StartDuration,
-            duration: Some(42),
-            time1_format: Some(OgrSourceTimeFormat::Custom {
-                custom_format: "YYYY-MM-DD".to_string(),
-            }),
-            time2_format: None,
+            time: OgrSourceDatasetTimeType::Start {
+                start_property: "start".to_string(),
+                start_format: OgrSourceTimeFormat::Custom {
+                    custom_format: "YYYY-MM-DD".to_string(),
+                },
+                duration: 42,
+            },
             columns: Some(OgrSourceColumnSpec {
                 x: "x".to_string(),
                 y: Some("y".to_string()),
-                time1: Some("start".to_string()),
-                time2: None,
                 numeric: vec!["num".to_string()],
                 decimal: vec!["dec1".to_string(), "dec2".to_string()],
                 textual: vec!["text".to_string()],
@@ -1071,18 +1060,19 @@ mod tests {
                 "file_name": "foobar.csv",
                 "layer_name": "foobar",
                 "data_type": "MultiPoint",
-                "time": "start+duration",
-                "duration": 42,
-                "time1_format": {
-                    "format": "custom",
-                    "custom_format": "YYYY-MM-DD"
+                "time": {
+                    "start": {
+                        "start_property": "start",
+                        "start_format": {
+                            "format": "custom",
+                            "custom_format": "YYYY-MM-DD"
+                        },
+                        "duration": 42
+                    }
                 },
-                "time2_format": null,
                 "columns": {
                     "x": "x",
                     "y": "y",
-                    "time1": "start",
-                    "time2": null,
                     "numeric": ["num"],
                     "decimal": ["dec1", "dec2"],
                     "textual": ["text"]
@@ -1104,16 +1094,19 @@ mod tests {
                 "file_name": "foobar.csv",
                 "layer_name": "foobar",
                 "data_type": "MultiPoint",
-                "time": "start+duration",
-                "duration": 42,
-                "time1_format": {
-                    "format": "custom",
-                    "custom_format": "YYYY-MM-DD"
+                "time": {
+                    "start": {
+                        "start_property": "start",
+                        "start_format": {
+                            "format": "custom",
+                            "custom_format": "YYYY-MM-DD"
+                        },
+                        "duration": 42
+                    }
                 },
                 "columns": {
                     "x": "x",
                     "y": "y",
-                    "time1": "start",
                     "numeric": ["num"],
                     "decimal": ["dec1", "dec2"],
                     "textual": ["text"]
@@ -1141,9 +1134,6 @@ mod tests {
             layer_name: "empty".to_string(),
             data_type: None,
             time: OgrSourceDatasetTimeType::None,
-            duration: None,
-            time1_format: None,
-            time2_format: None,
             columns: None,
             default: None,
             force_ogr_time_filter: false,
@@ -1184,9 +1174,6 @@ mod tests {
             layer_name: "".to_string(),
             data_type: None,
             time: OgrSourceDatasetTimeType::None,
-            duration: None,
-            time1_format: None,
-            time2_format: None,
             columns: None,
             default: None,
             force_ogr_time_filter: false,
@@ -1227,9 +1214,6 @@ mod tests {
             layer_name: "missing_geo".to_string(),
             data_type: None,
             time: OgrSourceDatasetTimeType::None,
-            duration: None,
-            time1_format: None,
-            time2_format: None,
             columns: None,
             default: None,
             force_ogr_time_filter: false,
@@ -1278,9 +1262,6 @@ mod tests {
             layer_name: "missing_geo".to_string(),
             data_type: None,
             time: OgrSourceDatasetTimeType::None,
-            duration: None,
-            time1_format: None,
-            time2_format: None,
             columns: None,
             default: Some("POINT (4.0 4.1)".to_string()),
             force_ogr_time_filter: false,
@@ -1333,9 +1314,6 @@ mod tests {
             layer_name: "".to_string(),
             data_type: None,
             time: OgrSourceDatasetTimeType::None,
-            duration: None,
-            time1_format: None,
-            time2_format: None,
             columns: None,
             default: Some("POINT(0 1)".to_string()),
             force_ogr_time_filter: false,
@@ -2699,14 +2677,9 @@ mod tests {
             layer_name: "plain_data".to_string(),
             data_type: None,
             time: OgrSourceDatasetTimeType::None,
-            duration: None,
-            time1_format: None,
-            time2_format: None,
             columns: Some(OgrSourceColumnSpec {
                 x: "".to_string(),
                 y: None,
-                time1: None,
-                time2: None,
                 decimal: vec!["a".to_string()],
                 numeric: vec!["b".to_string()],
                 textual: vec!["c".to_string()],
