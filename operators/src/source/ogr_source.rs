@@ -723,6 +723,7 @@ where
                 time_extractor,
                 &mut builder,
                 &feature,
+                dataset_information.force_ogr_time_filter,
             ) {
                 match dataset_information.on_error {
                     OgrSourceErrorSpec::Skip | OgrSourceErrorSpec::Keep => continue,
@@ -745,7 +746,15 @@ where
         time_extractor: &dyn Fn(&Feature) -> Result<TimeInterval, Error>,
         builder: &mut FeatureCollectionRowBuilder<G>,
         feature: &Feature,
+        was_time_filtered_by_ogr: bool,
     ) -> Result<()> {
+        let time_interval = time_extractor(&feature)?;
+
+        // filter out data items not in the query time interval
+        if !was_time_filtered_by_ogr && !time_interval.intersects(&query_rectangle.time_interval) {
+            return Ok(());
+        }
+
         let geometry: G = match (
             <G as TryFromOgrGeometry>::try_from(feature.geometry_by_index(0).map_err(Into::into)),
             default_geometry,
@@ -757,13 +766,6 @@ where
 
         // filter out geometries that are not contained in the query's bounding box
         if !geometry.intersects_bbox(&query_rectangle.bbox) {
-            return Ok(());
-        }
-
-        let time_interval = time_extractor(&feature)?;
-
-        // filter out data items not in the query time interval
-        if !time_interval.intersects(&query_rectangle.time_interval) {
             return Ok(());
         }
 
