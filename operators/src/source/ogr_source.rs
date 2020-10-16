@@ -531,6 +531,8 @@ where
             return Ok(());
         }
 
+        let mut emitted_non_empty_collections = false;
+
         while features.peek().is_some() {
             let batch_result = Self::compute_batch(
                 &mut features,
@@ -542,6 +544,17 @@ where
                 &time_extractor,
                 chunk_byte_size,
             );
+
+            let is_empty = batch_result
+                .as_ref()
+                .map_or(false, FeatureCollection::is_empty);
+
+            // don't emit an empty collection if there were non-empty results previously
+            if is_empty && emitted_non_empty_collections {
+                break;
+            } else {
+                emitted_non_empty_collections = true;
+            }
 
             match poll_result_sender.send(Some(batch_result)) {
                 Ok(_) => work_query.waker.wake_by_ref(),
@@ -720,12 +733,13 @@ where
                 dataset_information.force_ogr_time_filter,
             ) {
                 match dataset_information.on_error {
-                    OgrSourceErrorSpec::Skip | OgrSourceErrorSpec::Keep => continue,
+                    OgrSourceErrorSpec::Skip => continue,
+                    OgrSourceErrorSpec::Keep => (),
                     OgrSourceErrorSpec::Abort => return Err(error),
                 }
             }
 
-            if builder.byte_size() >= chunk_byte_size {
+            if !builder.is_empty() && builder.byte_size() >= chunk_byte_size {
                 break;
             }
         }
@@ -2764,9 +2778,113 @@ mod tests {
 
         let query_processor = source.query_processor()?.multi_point().unwrap();
 
+        let query_bbox = BoundingBox2D::new((-9.45, 47.64).into(), (10.00, 63.43).into())?;
+
+        let expected_multipoints = MultiPoint::many(vec![
+            (2.933_686_69, 51.23),
+            (3.204_593_64_f64, 51.336_388_89),
+            (8.707_243_816, 53.864_722_22),
+            (9.835_806_832, 54.473_611_11),
+            (8.489_517_079, 53.4875),
+            (7.368_963_486, 53.096_388_89),
+            (9.504_416_961, 55.251_111_11),
+            (9.868_433_451, 55.854_166_67),
+            (9.493_404_005, 55.492_777_78),
+            (9.551_943_463, 55.705_555_56),
+            (0.073_380_448, 49.365_833_33),
+            (0.369_493_522, 49.761_944_44),
+            (-2.022_850_412, 48.644_444_44),
+            (-4.756_713_781, 55.954_722_22),
+            (-1.986_513_545, 50.714_444_44),
+            (-5.053_533_569, 50.152_777_78),
+            (-3.171_790_342, 55.9825),
+            (-2.467_903_416, 56.704_444_44),
+            (-2.984_746_761, 51.558_888_89),
+            (-1.356_183_746, 54.906_944_44),
+            (-1.157_067_138, 54.608_055_56),
+            (-8.471_260_306, 54.271_666_67),
+            (4.783_686_69, 52.958_055_56),
+            (4.651_413_428, 51.805_833_33),
+            (6.955_477_032, 53.320_555_56),
+            (8.757_420_495, 58.454_166_67),
+            (1.73, 52.61),
+            (-2.96, 56.46),
+            (-3.83, 57.83),
+            (-3.08, 58.43),
+            (-5.46, 56.41),
+            (-4.46, 54.15),
+            (-7.31, 55.),
+            (-3.4, 54.86),
+            (7.891_283_863, 54.1775),
+            (8.692_167_256, 56.952_777_78),
+            (-1.620_376_914, 49.646_388_89),
+            (-0.326_383_981, 49.190_555_56),
+            (-4.108_127_208, 47.989_444_44),
+            (-2.756_360_424, 47.643_888_89),
+            (-2.707_773_852, 51.498_888_89),
+            (-0.285_100_118, 53.743_611_11),
+            (-1.590_930_506, 54.965),
+            (-1.440_930_506, 54.994_444_44),
+            (0.685_806_832, 51.434_722_22),
+            (-6.456_183_746, 52.341_111_11),
+            (6.586_866_902, 53.218_333_33),
+            (6.789_870_436, 58.088_611_11),
+            (5.002_826_855, 61.597_777_78),
+            (7.986_336_867, 58.141_944_44),
+            (5.501_413_428, 59.78),
+            (4.11, 51.95),
+            (-6.36, 58.18),
+            (4.386_160_188, 50.886_111_11),
+            (3.767_373_38, 51.114_444_44),
+            (7.192_873_969, 53.346_111_11),
+            (9.436_866_902, 54.803_333_33),
+            (8.122_143_698, 53.53),
+            (8.433_863_369, 55.465_555_56),
+            (9.776_737_338, 54.906_944_44),
+            (1.575_500_589, 50.723_611_11),
+            (-4.471_436_985, 48.380_555_56),
+            (-1.617_550_059, 49.652_222_22),
+            (1.085_983_51, 49.926_388_89),
+            (-1.601_060_071, 48.834_722_22),
+            (-3.352_120_141, 47.734_166_67),
+            (-3.834_923_439, 48.585_277_78),
+            (-2.074_617_197, 57.142_222_22),
+            (-3.007_243_816, 53.436_388_89),
+            (-4.154_063_604, 50.364_722_22),
+            (-1.1, 50.8075),
+            (-8.424_440_518, 51.901_111_11),
+            (-9.043_757_362, 53.27),
+            (6.171_613_663, 62.4725),
+            (5.255_653_71, 59.412_222_22),
+            (7.733_333_333, 63.115),
+            (7.157_420_495, 62.736_388_89),
+            (5.737_220_259, 58.978_888_89),
+            (4.293_757_362, 51.297_777_78),
+            (8.751_060_071, 53.0975),
+            (9.958_480_565, 53.524_722_22),
+            (9.740_577_15, 55.558_055_56),
+            (1.850_176_678, 50.965_833_33),
+            (2.170_906_949, 51.021_666_67),
+            (0.235_100_118, 49.422_222_22),
+            (-5.891_107_185, 54.620_555_56),
+            (1.322_143_698, 51.120_833_33),
+            (-4.234_746_761, 57.486_666_67),
+            (-8.633_333_333, 52.662_777_78),
+            (4.292_873_969, 51.927_222_22),
+            (5.319_670_2, 60.396_944_44),
+            (-4.303_180_212, 55.863_055_56),
+            (-1.424_440_518, 50.9025),
+            (-6.206_007_067, 53.344_444_44),
+            (-7.118_786_808, 52.266_388_89),
+            (8.553_003_534, 53.563_611_11),
+            (0.173_733_804, 49.466_944_44),
+            (-0.067_196_702, 51.502_777_78),
+            (4.824_087_161, 52.413_055_56),
+        ])?;
+
         let query = query_processor.query(
             QueryRectangle {
-                bbox: BoundingBox2D::new((-180.0, -90.0).into(), (180.0, 90.0).into())?,
+                bbox: query_bbox,
                 time_interval: Default::default(),
                 spatial_resolution: SpatialResolution::new(1., 1.)?,
             },
@@ -2775,23 +2893,29 @@ mod tests {
 
         let result: Vec<MultiPointCollection> = query.try_collect().await?;
 
-        assert_eq!(result.len(), 1081);
-        assert_eq!(result[0].len(), 1);
+        assert_eq!(result.len(), 99);
 
-        assert_eq!(
-            result[0],
-            MultiPointCollection::from_data(
-                MultiPoint::many(vec![(-69.923_557_13, 12.4375)])?,
-                vec![Default::default(); result[0].len()],
-                Default::default(),
-            )?
-        );
+        for (collection, expected_multi_point) in
+            result.iter().zip(expected_multipoints.iter().cloned())
+        {
+            assert_eq!(collection.len(), 1);
+            assert_eq!(
+                collection,
+                &MultiPointCollection::from_data(
+                    vec![expected_multi_point],
+                    vec![Default::default(); 1],
+                    Default::default(),
+                )?
+            );
+        }
+
+        assert!(!result.last().unwrap().is_empty());
 
         // LARGER CHUNK
 
         let query = query_processor.query(
             QueryRectangle {
-                bbox: BoundingBox2D::new((-180.0, -90.0).into(), (180.0, 90.0).into())?,
+                bbox: query_bbox,
                 time_interval: Default::default(),
                 spatial_resolution: SpatialResolution::new(1., 1.)?,
             },
@@ -2802,40 +2926,41 @@ mod tests {
 
         let result: Vec<MultiPointCollection> = query.try_collect().await?;
 
-        assert_eq!(result.len(), 44);
+        assert_eq!(result.len(), 4);
         assert_eq!(result[0].len(), 25);
+        assert_eq!(result[1].len(), 25);
+        assert_eq!(result[2].len(), 25);
+        assert_eq!(result[3].len(), 24);
 
         assert_eq!(
             result[0],
             MultiPointCollection::from_data(
-                MultiPoint::many(vec![
-                    (-69.923_557_13, 12.4375),
-                    (-58.951_413_43, -34.153_333_33),
-                    (-59.004_947, -34.098_888_89),
-                    (-62.100_883_39, -38.894_444_44),
-                    (-62.300_530_04, -38.783_055_56),
-                    (-62.259_893_99, -38.791_944_44),
-                    (-61.852_296_82, 17.122_777_78),
-                    (115.738_103_7, -32.0475),
-                    (151.209_540_6, -33.973_055_56),
-                    (151.284_216_7, -23.851_111_11),
-                    (2.933_686_69, 51.23),
-                    (3.204_593_64_f64, 51.336_388_89),
-                    (27.458_303_89, 42.47),
-                    (50.607_597_17, 26.198_611_11),
-                    (50.658_833_92, 26.158_611_11),
-                    (-64.673_027_09, 32.379_444_44),
-                    (-38.473_203_77, -3.7075),
-                    (-43.124_617_2, -22.879_166_67),
-                    (-48.635_453_47, -26.238_055_56),
-                    (-65.467_726_74, 47.034_444_44),
-                    (-53.956_890_46, 48.163_333_33),
-                    (-124.924_440_5, 49.670_833_33),
-                    (-123.434_393_4, 48.436_388_89),
-                    (-55.751_060_07, 47.100_277_78),
-                    (-60.239_340_4, 46.208_888_89),
-                ])?,
+                expected_multipoints[0..25].to_vec(),
                 vec![Default::default(); result[0].len()],
+                Default::default(),
+            )?
+        );
+        assert_eq!(
+            result[1],
+            MultiPointCollection::from_data(
+                expected_multipoints[25..50].to_vec(),
+                vec![Default::default(); result[1].len()],
+                Default::default(),
+            )?
+        );
+        assert_eq!(
+            result[2],
+            MultiPointCollection::from_data(
+                expected_multipoints[50..75].to_vec(),
+                vec![Default::default(); result[2].len()],
+                Default::default(),
+            )?
+        );
+        assert_eq!(
+            result[3],
+            MultiPointCollection::from_data(
+                expected_multipoints[75..99].to_vec(),
+                vec![Default::default(); result[3].len()],
                 Default::default(),
             )?
         );
