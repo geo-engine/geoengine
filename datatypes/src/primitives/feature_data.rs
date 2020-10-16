@@ -50,6 +50,7 @@ pub enum FeatureDataRef<'f> {
 }
 
 impl<'f> FeatureDataRef<'f> {
+    /// Computes JSON value lists for data elements
     pub fn json_values(&self) -> Box<dyn Iterator<Item = serde_json::Value> + '_> {
         match self {
             FeatureDataRef::Text(data_ref) => data_ref.json_values(),
@@ -59,6 +60,7 @@ impl<'f> FeatureDataRef<'f> {
         }
     }
 
+    /// Computes a vector of null flags.
     pub fn nulls(&self) -> Vec<bool> {
         match self {
             FeatureDataRef::Text(data_ref) => data_ref.nulls(),
@@ -68,6 +70,7 @@ impl<'f> FeatureDataRef<'f> {
         }
     }
 
+    /// Is any of the data elements null?
     pub fn has_nulls(&self) -> bool {
         match self {
             FeatureDataRef::Text(data_ref) => data_ref.has_nulls(),
@@ -78,10 +81,12 @@ impl<'f> FeatureDataRef<'f> {
     }
 }
 
+/// Common methods for feature data references
 pub trait DataRef<'r, T>: AsRef<[T]> + Into<FeatureDataRef<'r>>
 where
     T: 'r,
 {
+    /// Computes JSON value lists for data elements
     fn json_values(&'r self) -> Box<dyn Iterator<Item = serde_json::Value> + 'r> {
         if self.has_nulls() {
             Box::new(self.as_ref().iter().enumerate().map(move |(i, v)| {
@@ -96,21 +101,24 @@ where
         }
     }
 
+    /// Creates a JSON value out of the owned type
     fn json_value(value: &T) -> serde_json::Value;
 
+    /// Computes a vector of null flags.
     fn nulls(&self) -> Vec<bool>;
 
-    fn valid_bitmap(&self) -> Option<&[u8]>;
-
+    /// Is the `i`th value null?
+    /// This method panics if `i` is too large.
     fn is_null(&self, i: usize) -> bool {
         !self.is_valid(i)
     }
 
+    /// Is the `i`th value valid, i.e., not null?
+    /// This method panics if `i` is too large.
     fn is_valid(&self, i: usize) -> bool;
 
-    fn has_nulls(&self) -> bool {
-        self.valid_bitmap().is_some()
-    }
+    /// Is any of the data elements null?
+    fn has_nulls(&self) -> bool;
 }
 
 #[derive(Clone, Debug)]
@@ -128,16 +136,14 @@ impl<'f> DataRef<'f, f64> for NumberDataRef<'f> {
         null_bitmap_to_bools(self.valid_bitmap, self.as_ref().len())
     }
 
-    fn valid_bitmap(&self) -> Option<&[u8]> {
-        self.valid_bitmap
-            .as_ref()
-            .map(|bitmap| bitmap.buffer_ref().data())
-    }
-
     fn is_valid(&self, i: usize) -> bool {
         self.valid_bitmap
             .as_ref()
             .map_or(true, |bitmap| bitmap.is_set(i))
+    }
+
+    fn has_nulls(&self) -> bool {
+        self.valid_bitmap.is_some()
     }
 }
 
@@ -192,16 +198,14 @@ impl<'f> DataRef<'f, i64> for DecimalDataRef<'f> {
         null_bitmap_to_bools(self.valid_bitmap, self.as_ref().len())
     }
 
-    fn valid_bitmap(&self) -> Option<&[u8]> {
-        self.valid_bitmap
-            .as_ref()
-            .map(|bitmap| bitmap.buffer_ref().data())
-    }
-
     fn is_valid(&self, i: usize) -> bool {
         self.valid_bitmap
             .as_ref()
             .map_or(true, |bitmap| bitmap.is_set(i))
+    }
+
+    fn has_nulls(&self) -> bool {
+        self.valid_bitmap.is_some()
     }
 }
 
@@ -240,16 +244,14 @@ impl<'f> DataRef<'f, u8> for CategoricalDataRef<'f> {
         null_bitmap_to_bools(self.valid_bitmap, self.as_ref().len())
     }
 
-    fn valid_bitmap(&self) -> Option<&[u8]> {
-        self.valid_bitmap
-            .as_ref()
-            .map(|bitmap| bitmap.buffer_ref().data())
-    }
-
     fn is_valid(&self, i: usize) -> bool {
         self.valid_bitmap
             .as_ref()
             .map_or(true, |bitmap| bitmap.is_set(i))
+    }
+
+    fn has_nulls(&self) -> bool {
+        self.valid_bitmap.is_some()
     }
 }
 
@@ -384,16 +386,14 @@ impl<'r> DataRef<'r, u8> for TextDataRef<'r> {
         nulls
     }
 
-    fn valid_bitmap(&self) -> Option<&[u8]> {
-        self.valid_bitmap
-            .as_ref()
-            .map(|bitmap| bitmap.buffer_ref().data())
-    }
-
     fn is_valid(&self, i: usize) -> bool {
         self.valid_bitmap
             .as_ref()
             .map_or(true, |bitmap| bitmap.is_set(i))
+    }
+
+    fn has_nulls(&self) -> bool {
+        self.valid_bitmap.is_some()
     }
 }
 
