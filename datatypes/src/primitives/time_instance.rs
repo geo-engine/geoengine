@@ -2,8 +2,8 @@ use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use postgres_types::private::BytesMut;
 use postgres_types::{FromSql, IsNull, ToSql, Type};
 use serde::{Deserialize, Serialize};
-use std::ops::Add;
 use snafu::Error;
+use std::ops::Add;
 
 #[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Debug)]
 #[repr(C)]

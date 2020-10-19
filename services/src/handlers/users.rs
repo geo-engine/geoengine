@@ -122,7 +122,7 @@ mod tests {
     use crate::users::userdb::UserDB;
     use crate::util::user_input::Validated;
     use crate::{contexts::InMemoryContext, handlers::handle_rejection};
-    use geoengine_datatypes::spatial_reference::SpatialReference;
+    use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 
     #[tokio::test]
     async fn register() {
@@ -352,8 +352,16 @@ mod tests {
                 CreateProject {
                     name: "Test".to_string(),
                     description: "Foo".to_string(),
-                    bounds: STRectangle::new(SpatialReference::wgs84(), 0., 0., 1., 1., 0, 1)
-                        .unwrap(),
+                    bounds: STRectangle::new(
+                        SpatialReferenceOption::Unreferenced,
+                        0.,
+                        0.,
+                        1.,
+                        1.,
+                        0,
+                        1,
+                    )
+                    .unwrap(),
                 }
                 .validated()
                 .unwrap(),
@@ -381,7 +389,8 @@ mod tests {
             Some(project)
         );
 
-        let rect = STRectangle::new_unchecked(SpatialReference::wgs84(), 0., 0., 1., 1., 0, 1);
+        let rect =
+            STRectangle::new_unchecked(SpatialReferenceOption::Unreferenced, 0., 0., 1., 1., 0, 1);
         let res = warp::test::request()
             .method("POST")
             .header("Content-Length", "0")

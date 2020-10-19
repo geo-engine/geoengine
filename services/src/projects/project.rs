@@ -10,7 +10,7 @@ use chrono::{DateTime, Utc};
 use geoengine_datatypes::primitives::{
     BoundingBox2D, Coordinate2D, SpatialBounded, TemporalBounded, TimeInterval,
 };
-use geoengine_datatypes::spatial_reference::SpatialReference;
+use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use geoengine_datatypes::{operations::image::Colorizer, primitives::TimeInstance};
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
@@ -75,14 +75,14 @@ impl Project {
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone, ToSql, FromSql)]
 pub struct STRectangle {
-    pub spatial_reference: SpatialReference,
+    pub spatial_reference: SpatialReferenceOption,
     pub bounding_box: BoundingBox2D,
     pub time_interval: TimeInterval,
 }
 
 impl STRectangle {
     pub fn new<A, B>(
-        spatial_reference: SpatialReference,
+        spatial_reference: SpatialReferenceOption,
         lower_left_x: f64,
         lower_left_y: f64,
         upper_left_x: f64,
@@ -106,7 +106,7 @@ impl STRectangle {
     }
 
     pub fn new_unchecked<A, B>(
-        spatial_reference: SpatialReference,
+        spatial_reference: SpatialReferenceOption,
         lower_left_x: f64,
         lower_left_y: f64,
         upper_left_x: f64,

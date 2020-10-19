@@ -1,8 +1,8 @@
 use super::Coordinate2D;
 use crate::error;
 use crate::util::Result;
-use postgres_types::{FromSql, ToSql};
 use geo::Rect;
+use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 

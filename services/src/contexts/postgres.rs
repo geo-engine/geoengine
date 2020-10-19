@@ -299,7 +299,7 @@ mod tests {
     use bb8_postgres::tokio_postgres;
     use bb8_postgres::tokio_postgres::NoTls;
     use geoengine_datatypes::primitives::Coordinate2D;
-    use geoengine_datatypes::spatial_reference::SpatialReference;
+    use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
     use geoengine_operators::engine::{TypedOperator, VectorOperator};
     use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
     use std::str::FromStr;
@@ -362,7 +362,8 @@ mod tests {
             Some(projects[0].id)
         );
 
-        let rect = STRectangle::new_unchecked(SpatialReference::wgs84(), 0., 1., 2., 3., 1, 2);
+        let rect =
+            STRectangle::new_unchecked(SpatialReference::wgs84().into(), 0., 1., 2., 3., 1, 2);
         ctx.user_db_ref_mut()
             .await
             .set_session_view(&session, rect.clone())
@@ -533,7 +534,16 @@ mod tests {
             let create = CreateProject {
                 name: format!("Test{}", i),
                 description: format!("Test{}", 10 - i),
-                bounds: STRectangle::new(SpatialReference::wgs84(), 0., 0., 1., 1., 0, 1).unwrap(),
+                bounds: STRectangle::new(
+                    SpatialReferenceOption::Unreferenced,
+                    0.,
+                    0.,
+                    1.,
+                    1.,
+                    0,
+                    1,
+                )
+                .unwrap(),
             }
             .validated()
             .unwrap();

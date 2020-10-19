@@ -233,7 +233,7 @@ mod tests {
         },
     };
     use geoengine_datatypes::operations::image::Colorizer;
-    use geoengine_datatypes::spatial_reference::SpatialReference;
+    use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
 
     #[tokio::test]
     async fn create() {
@@ -268,7 +268,8 @@ mod tests {
         let create = CreateProject {
             name: "Test".to_string(),
             description: "Foo".to_string(),
-            bounds: STRectangle::new(SpatialReference::wgs84(), 0., 0., 1., 1., 0, 1).unwrap(),
+            bounds: STRectangle::new(SpatialReference::wgs84().into(), 0., 0., 1., 1., 0, 1)
+                .unwrap(),
         };
 
         let res = warp::test::request()
@@ -320,7 +321,16 @@ mod tests {
             let create = CreateProject {
                 name: format!("Test{}", i),
                 description: format!("Test{}", 10 - i),
-                bounds: STRectangle::new(SpatialReference::wgs84(), 0., 0., 1., 1., 0, 1).unwrap(),
+                bounds: STRectangle::new(
+                    SpatialReferenceOption::Unreferenced,
+                    0.,
+                    0.,
+                    1.,
+                    1.,
+                    0,
+                    1,
+                )
+                .unwrap(),
             }
             .validated()
             .unwrap();
@@ -400,8 +410,16 @@ mod tests {
                 CreateProject {
                     name: "Test".to_string(),
                     description: "Foo".to_string(),
-                    bounds: STRectangle::new(SpatialReference::wgs84(), 0., 0., 1., 1., 0, 1)
-                        .unwrap(),
+                    bounds: STRectangle::new(
+                        SpatialReferenceOption::Unreferenced,
+                        0.,
+                        0.,
+                        1.,
+                        1.,
+                        0,
+                        1,
+                    )
+                    .unwrap(),
                 }
                 .validated()
                 .unwrap(),
@@ -463,8 +481,16 @@ mod tests {
                 CreateProject {
                     name: "Test".to_string(),
                     description: "Foo".to_string(),
-                    bounds: STRectangle::new(SpatialReference::wgs84(), 0., 0., 1., 1., 0, 1)
-                        .unwrap(),
+                    bounds: STRectangle::new(
+                        SpatialReferenceOption::Unreferenced,
+                        0.,
+                        0.,
+                        1.,
+                        1.,
+                        0,
+                        1,
+                    )
+                    .unwrap(),
                 }
                 .validated()
                 .unwrap(),
@@ -570,8 +596,16 @@ mod tests {
                 CreateProject {
                     name: "Test".to_string(),
                     description: "Foo".to_string(),
-                    bounds: STRectangle::new(SpatialReference::wgs84(), 0., 0., 1., 1., 0, 1)
-                        .unwrap(),
+                    bounds: STRectangle::new(
+                        SpatialReferenceOption::Unreferenced,
+                        0.,
+                        0.,
+                        1.,
+                        1.,
+                        0,
+                        1,
+                    )
+                    .unwrap(),
                 }
                 .validated()
                 .unwrap(),
@@ -654,8 +688,16 @@ mod tests {
                 CreateProject {
                     name: "Test".to_string(),
                     description: "Foo".to_string(),
-                    bounds: STRectangle::new(SpatialReference::wgs84(), 0., 0., 1., 1., 0, 1)
-                        .unwrap(),
+                    bounds: STRectangle::new(
+                        SpatialReferenceOption::Unreferenced,
+                        0.,
+                        0.,
+                        1.,
+                        1.,
+                        0,
+                        1,
+                    )
+                    .unwrap(),
                 }
                 .validated()
                 .unwrap(),
@@ -733,8 +775,16 @@ mod tests {
                 CreateProject {
                     name: "Test".to_string(),
                     description: "Foo".to_string(),
-                    bounds: STRectangle::new(SpatialReference::wgs84(), 0., 0., 1., 1., 0, 1)
-                        .unwrap(),
+                    bounds: STRectangle::new(
+                        SpatialReferenceOption::Unreferenced,
+                        0.,
+                        0.,
+                        1.,
+                        1.,
+                        0,
+                        1,
+                    )
+                    .unwrap(),
                 }
                 .validated()
                 .unwrap(),
@@ -825,8 +875,16 @@ mod tests {
                 CreateProject {
                     name: "Test".to_string(),
                     description: "Foo".to_string(),
-                    bounds: STRectangle::new(SpatialReference::wgs84(), 0., 0., 1., 1., 0, 1)
-                        .unwrap(),
+                    bounds: STRectangle::new(
+                        SpatialReferenceOption::Unreferenced,
+                        0.,
+                        0.,
+                        1.,
+                        1.,
+                        0,
+                        1,
+                    )
+                    .unwrap(),
                 }
                 .validated()
                 .unwrap(),
@@ -915,8 +973,16 @@ mod tests {
                 CreateProject {
                     name: "Test".to_string(),
                     description: "Foo".to_string(),
-                    bounds: STRectangle::new(SpatialReference::wgs84(), 0., 0., 1., 1., 0, 1)
-                        .unwrap(),
+                    bounds: STRectangle::new(
+                        SpatialReferenceOption::Unreferenced,
+                        0.,
+                        0.,
+                        1.,
+                        1.,
+                        0,
+                        1,
+                    )
+                    .unwrap(),
                 }
                 .validated()
                 .unwrap(),
@@ -1012,8 +1078,16 @@ mod tests {
                 CreateProject {
                     name: "Test".to_string(),
                     description: "Foo".to_string(),
-                    bounds: STRectangle::new(SpatialReference::wgs84(), 0., 0., 1., 1., 0, 1)
-                        .unwrap(),
+                    bounds: STRectangle::new(
+                        SpatialReferenceOption::Unreferenced,
+                        0.,
+                        0.,
+                        1.,
+                        1.,
+                        0,
+                        1,
+                    )
+                    .unwrap(),
                 }
                 .validated()
                 .unwrap(),
