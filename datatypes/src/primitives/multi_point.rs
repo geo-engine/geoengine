@@ -1,14 +1,16 @@
+use std::convert::{TryFrom, TryInto};
+
+use arrow::array::{ArrayBuilder, BooleanArray, PrimitiveArrayOps};
+use arrow::error::ArrowError;
+use serde::{Deserialize, Serialize};
+use snafu::ensure;
+
 use crate::collections::VectorDataType;
 use crate::error::Error;
 use crate::primitives::{error, BoundingBox2D, GeometryRef, PrimitivesError, TypedGeometry};
 use crate::primitives::{Coordinate2D, Geometry};
 use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::Result;
-use arrow::array::{ArrayBuilder, BooleanArray};
-use arrow::error::ArrowError;
-use serde::{Deserialize, Serialize};
-use snafu::ensure;
-use std::convert::{TryFrom, TryInto};
 
 /// A trait that allows a common access to points of `MultiPoint`s and its references
 pub trait MultiPointAccess {

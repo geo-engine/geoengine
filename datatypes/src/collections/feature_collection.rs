@@ -1,12 +1,13 @@
 use std::collections::{HashMap, HashSet};
 use std::convert::{TryFrom, TryInto};
 use std::marker::PhantomData;
+use std::mem;
 use std::ops::{Bound, RangeBounds};
 use std::sync::Arc;
 
 use arrow::array::{
     as_primitive_array, as_string_array, Array, ArrayData, ArrayRef, BooleanArray, Float64Array,
-    ListArray, StructArray,
+    ListArray, PrimitiveArrayOps, StructArray,
 };
 use arrow::datatypes::{DataType, Field, Float64Type, Int64Type};
 use arrow::error::ArrowError;
@@ -23,7 +24,6 @@ use crate::primitives::{
 use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::helpers::SomeIter;
 use crate::util::Result;
-use std::mem;
 
 #[allow(clippy::unsafe_derive_deserialize)]
 #[derive(Debug, Deserialize, Serialize)]
@@ -1024,14 +1024,15 @@ pub fn get_array_memory_size(data: &ArrayData) -> usize {
 
 /// Custom serializer for Arrow's `StructArray`
 mod struct_serde {
-    use super::*;
+    use std::fmt::Formatter;
+    use std::io::Cursor;
 
     use arrow::record_batch::{RecordBatch, RecordBatchReader};
     use serde::de::{SeqAccess, Visitor};
     use serde::ser::Error;
     use serde::{Deserializer, Serializer};
-    use std::fmt::Formatter;
-    use std::io::Cursor;
+
+    use super::*;
 
     pub fn serialize<S>(struct_array: &StructArray, serializer: S) -> Result<S::Ok, S::Error>
     where

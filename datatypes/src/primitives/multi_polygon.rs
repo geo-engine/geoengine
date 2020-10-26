@@ -1,15 +1,17 @@
+use std::convert::TryFrom;
+
+use arrow::array::{ArrayBuilder, BooleanArray, PrimitiveArrayOps};
+use arrow::error::ArrowError;
+use geo::intersects::Intersects;
+use serde::{Deserialize, Serialize};
+use snafu::ensure;
+
 use crate::collections::VectorDataType;
 use crate::error::Error;
 use crate::primitives::{error, BoundingBox2D, GeometryRef, PrimitivesError, TypedGeometry};
 use crate::primitives::{Coordinate2D, Geometry};
 use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::Result;
-use arrow::array::{ArrayBuilder, BooleanArray};
-use arrow::error::ArrowError;
-use geo::intersects::Intersects;
-use serde::{Deserialize, Serialize};
-use snafu::ensure;
-use std::convert::TryFrom;
 
 /// A trait that allows a common access to polygons of `MultiPolygon`s and its references
 pub trait MultiPolygonAccess<R, L>
