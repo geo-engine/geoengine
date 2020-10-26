@@ -7,7 +7,7 @@ use crate::{
     util::Result,
 };
 
-use gdal::raster::{dataset::Dataset as GdalDataset, Buffer};
+use gdal::raster::dataset::Dataset as GdalDataset;
 use gdal::raster::{rasterband::RasterBand as GdalRasterBand, types::GdalType};
 use std::{
     io::{BufReader, BufWriter, Read},
@@ -23,7 +23,9 @@ use futures::stream::{self, BoxStream, StreamExt};
 
 use geoengine_datatypes::{
     primitives::{BoundingBox2D, SpatialBounded, SpatialResolution, TimeInterval},
-    raster::{Dim2D, GridDimension, GridIdx2D, OffsetDim2D, SignedGridIdx2D},
+    raster::{
+        Dim2D, GridCopyFrom, GridIdx2D, GridIndex, OffsetDim2D, SignedGridIdx2D, SignedGridIndex,
+    },
 };
 use geoengine_datatypes::{
     raster::{GeoTransform, Pixel, Raster2D, RasterDataType, RasterTile2D, TileInformation},
@@ -433,13 +435,8 @@ where
 
         let result_raster = match (dataset_contains_tile, dataset_intersects_tile) {
             (_, false) => {
-                let empty_container = vec![T::zero(); tile_grid.number_of_elements()];
-                create_tile(
-                    tile_information,
-                    time_interval,
-                    empty_container,
-                    Some(T::zero()),
-                )
+                // TODO: refactor tile to hold an Option<GridData> and this will be empty in this case
+                Raster2D::new_filled(tile_grid, T::zero(), None)
             }
             (true, true) => {
                 let dataset_idx_ul = gdal_dataset_information
@@ -451,30 +448,63 @@ where
 
                 // TODO: debug_assert idx is in grid
 
-                let data = read_tile_into_buffer(
+                read_as_raster(
                     &rasterband,
                     dataset_idx_ul,
                     dataset_idx_lr,
                     tile_information.tile_size_in_pixels,
-                )?;
-                create_tile(tile_information, time_interval, data.data, Some(T::zero()))
+                )?
             }
             (false, true) => {
-                // TODO: create a result raster, read the availble data for the tile, blit tile in result raster.
-                let empty_container = vec![T::zero(); tile_grid.number_of_elements()];
-                create_tile(
-                    tile_information,
-                    time_interval,
-                    empty_container,
-                    Some(T::zero()),
-                )
+                let intersecting_area = gdal_dataset_information
+                    .bounding_box()
+                    .intersection(&tile_information.spatial_bounds())
+                    .expect("checked intersection earlier");
+
+                let dataset_idx_ul = gdal_dataset_information
+                    .geo_transform()
+                    .coordinate_2d_to_grid_2d(intersecting_area.upper_left());
+
+                let dataset_idx_lr = gdal_dataset_information
+                    .geo_transform()
+                    .coordinate_2d_to_grid_2d(intersecting_area.lower_right());
+
+                let tile_idx_ul = tile_information
+                    .tile_geo_transform()
+                    .coordinate_2d_to_grid_2d(intersecting_area.upper_left());
+
+                let tile_idx_lr = tile_information
+                    .tile_geo_transform()
+                    .coordinate_2d_to_grid_2d(intersecting_area.lower_right());
+
+                let partial_tile_size = tile_idx_lr.sub(&tile_idx_ul);
+                let dataset_raster = read_as_raster(
+                    &rasterband,
+                    dataset_idx_ul,
+                    dataset_idx_lr,
+                    partial_tile_size,
+                )?;
+
+                let dataset_idx_ul_tile_scale = tile_information
+                    .global_geo_transform
+                    .coordinate_2d_to_signed_grid_2d(
+                        gdal_dataset_information.bounding_box().upper_left(),
+                    );
+
+                let tile_idx_ul_tile_scale = tile_information.global_pixel_position_upper_left();
+
+                let offset = dataset_idx_ul_tile_scale.sub(&tile_idx_ul_tile_scale);
+
+                let mut tile_raster = Raster2D::new_filled(tile_grid, T::zero(), None);
+                tile_raster.grid_copy_from(dataset_raster, offset)?;
+                tile_raster
             }
         };
 
-        Ok(RasterTile2D::new(
+        Ok(RasterTile2D::new_with_tile_info(
             time_interval,
             tile_information,
-            result_raster?,
+            result_raster,
         ))
     }
 
@@ -644,46 +674,25 @@ impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
     }
 }
 
-fn create_tile<T>(
-    tile_information: TileInformation,
-    time_interval: TimeInterval,
-    data: Vec<T>,
-    no_data: Option<T>,
-) -> Result<Raster2D<T>>
-where
-    T: Pixel,
-{
-    let grid_dimension = Dim2D::new(tile_information.tile_size_in_pixels);
-
-    Raster2D::new(
-        grid_dimension,
-        data,
-        no_data,
-        time_interval,
-        tile_information.tile_geo_transform(),
-    )
-    .map_err(Into::into)
-}
-
-fn read_tile_into_buffer<T>(
+fn read_as_raster<T>(
     rasterband: &GdalRasterBand,
     dataset_idx_ul: GridIdx2D,
     dataset_idx_lr: GridIdx2D,
     tile_size: GridIdx2D,
-) -> Result<Buffer<T>>
+) -> Result<Raster2D<T>>
 where
     T: Pixel + GdalType,
 {
     let [ul_y, ul_x] = dataset_idx_ul;
     let [lr_y, lr_x] = dataset_idx_lr;
     let [tile_y_size, tile_x_size] = tile_size;
-    rasterband
-        .read_as::<T>(
-            (ul_x as isize, ul_y as isize), // pixelspace origin
-            (lr_x - ul_x, lr_y - ul_y),     // pixelspace size
-            (tile_x_size, tile_y_size),     // requested raster size
-        )
-        .map_err(Into::into)
+    let buffer = rasterband.read_as::<T>(
+        (ul_x as isize, ul_y as isize), // pixelspace origin
+        (lr_x - ul_x, lr_y - ul_y),     // pixelspace size
+        (tile_x_size, tile_y_size),     // requested raster size
+    )?;
+    let dim = Dim2D::new([buffer.size.1, buffer.size.0]);
+    Raster2D::new(dim, buffer.data, None).map_err(Into::into)
 }
 
 #[cfg(test)]
@@ -692,7 +701,10 @@ mod tests {
     use crate::error::Error;
     use crate::util::Result;
     use futures::executor::block_on_stream;
-    use geoengine_datatypes::raster::{GridPixelAccess, OffsetDimension};
+    use geoengine_datatypes::{
+        primitives::Coordinate2D,
+        raster::{GridDimension, GridPixelAccess, OffsetDimension},
+    };
 
     #[test]
     fn tiling_strategy_origin() {
@@ -719,7 +731,7 @@ mod tests {
         );
 
         let tile_grid = origin_split_tileing_strategy.tile_grid();
-        assert_eq!(tile_grid.size_as_index(), [3, 6]);
+        assert_eq!(tile_grid.grid_dimension().size_as_index(), [3, 6]);
         assert_eq!(tile_grid.offsets_as_index(), [0, 0]);
         assert_eq!(tile_grid.offsets_max_index(), [2, 5]);
     }
@@ -752,7 +764,7 @@ mod tests {
         );
 
         let tile_grid = origin_split_tileing_strategy.tile_grid();
-        assert_eq!(tile_grid.size_as_index(), [4, 6]);
+        assert_eq!(tile_grid.grid_dimension().size_as_index(), [4, 6]);
         assert_eq!(tile_grid.offsets_as_index(), [-2, -3]);
         assert_eq!(tile_grid.offsets_max_index(), [1, 2]);
     }
@@ -971,7 +983,72 @@ mod tests {
             .load_tile_data(time_interval, tile_information)
             .unwrap();
 
-        assert_eq!(x.tile, tile_information);
+        assert_eq!(x.tile_information(), tile_information);
+        assert_eq!(x.time, time_interval);
+    }
+
+    #[test]
+    fn test_load_tile_data_overlaps_dataset_bounds() {
+        let global_size_in_pixels = [1800, 3600];
+        let tile_size_in_pixels = [600, 600];
+        let dataset_upper_right_coord = (-180.0, 90.0).into();
+        let dataset_x_pixel_size = 0.1;
+        let dataset_y_pixel_size = -0.1;
+        let dataset_geo_transform = GeoTransform::new(
+            dataset_upper_right_coord,
+            dataset_x_pixel_size,
+            dataset_y_pixel_size,
+        );
+
+        let time_interval_provider = TimeIntervalInformation {
+            time_intervals: vec![TimeInterval::new_unchecked(0, 1)],
+        };
+
+        let gdal_params = GdalSourceParameters {
+            dataset_id: "modis_ndvi".to_owned(),
+            channel: None,
+        };
+
+        let dataset_information = JsonDatasetInformation {
+            time: time_interval_provider,
+            tile: None,
+            file_name_with_time_placeholder: "MOD13A2_M_NDVI_2014-01-01.TIFF".into(),
+            time_format: "".into(),
+            base_path: "../modis_ndvi".into(),
+            data_type: RasterDataType::U8,
+            geo_transform: dataset_geo_transform,
+            pixel_dimension_size: global_size_in_pixels,
+        };
+
+        let dataset_information_provider = JsonDatasetInformationProvider {
+            dataset_information,
+            raster_data_root: "../operators/test-data/raster".into(),
+        };
+
+        let gdal_source = GdalSourceProcessor::<_, u8> {
+            dataset_information: dataset_information_provider,
+            gdal_params,
+            phantom_data: PhantomData,
+        };
+
+        let tile_geo_transform = GeoTransform::new(
+            Coordinate2D::new(0., 0.),
+            dataset_x_pixel_size,
+            dataset_y_pixel_size,
+        );
+
+        // let x_tiles = 3600 / 600; // 6 => min tile position = -3
+        // let y_tiles = 1800 / 600; // 3 -> a split at 0,0 forces 4 tiles on the y-axis. => min tile position = -2
+
+        let tile_information =
+            TileInformation::new([-2, -3], tile_size_in_pixels, tile_geo_transform);
+        let time_interval = TimeInterval::new_unchecked(0, 1);
+
+        let x = gdal_source
+            .load_tile_data(time_interval, tile_information)
+            .unwrap();
+
+        assert_eq!(x.tile_information(), tile_information);
         assert_eq!(x.time, time_interval);
     }
 
@@ -1048,6 +1125,91 @@ mod tests {
 
         let ndvi_center_pixel_values = vec![
             19, 255, 255, 43, 76, 17, 255, 255, 255, 145, 255, 255, 255, 255, 255, 255, 255, 255,
+        ];
+
+        assert_eq!(upper_left_pixels, ndvi_center_pixel_values);
+    }
+
+    #[test]
+    fn test_iter_and_load_tile_data_center_split() {
+        let global_size_in_pixels = [1800, 3600];
+        let tile_size_in_pixels = [600, 600];
+        let dataset_upper_right_coord = (-180.0, 90.0).into();
+        let dataset_x_pixel_size = 0.1;
+        let dataset_y_pixel_size = -0.1;
+        let dataset_geo_transform = GeoTransform::new(
+            dataset_upper_right_coord,
+            dataset_x_pixel_size,
+            dataset_y_pixel_size,
+        );
+
+        let center_geo_transform = GeoTransform::new(
+            Coordinate2D::new(0.0, 0.0),
+            dataset_x_pixel_size,
+            dataset_y_pixel_size,
+        );
+
+        let origin_split_tileing_strategy = TilingStrategy {
+            bounding_box: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+            tile_pixel_size: tile_size_in_pixels,
+            geo_transform: center_geo_transform,
+        };
+
+        let time_interval_provider = TimeIntervalInformation {
+            time_intervals: vec![TimeInterval::new_unchecked(1, 2)],
+        };
+
+        let gdal_params = GdalSourceParameters {
+            dataset_id: "modis_ndvi".to_owned(),
+            channel: None,
+        };
+
+        let dataset_information = JsonDatasetInformation {
+            time: time_interval_provider,
+            tile: None,
+            file_name_with_time_placeholder: "MOD13A2_M_NDVI_2014-01-01.TIFF".into(),
+            time_format: "".into(),
+            base_path: "../modis_ndvi".into(),
+            data_type: RasterDataType::U8,
+            geo_transform: dataset_geo_transform,
+            pixel_dimension_size: global_size_in_pixels,
+        };
+
+        let dataset_information_provider = JsonDatasetInformationProvider {
+            dataset_information,
+            raster_data_root: "../operators/test-data/raster".into(),
+        };
+
+        let gdal_source = GdalSourceProcessor {
+            dataset_information: dataset_information_provider,
+            gdal_params,
+            phantom_data: PhantomData,
+        };
+
+        let vres: Vec<Result<RasterTile2D<u8>, Error>> = gdal_source
+            .time_tile_iter(origin_split_tileing_strategy)
+            .map(|(time_interval, tile_information)| {
+                gdal_source.load_tile_data(time_interval, tile_information)
+            })
+            .collect();
+        assert_eq!(vres.len(), 6 * 4);
+        let upper_left_pixels: Vec<_> = vres
+            .into_iter()
+            .map(|t| {
+                let raster_tile = t.unwrap();
+                raster_tile
+                    .data
+                    .pixel_value_at_grid_index(&[
+                        tile_size_in_pixels[1] / 2,
+                        tile_size_in_pixels[0] / 2,
+                    ])
+                    .unwrap() // pixel
+            })
+            .collect();
+
+        let ndvi_center_pixel_values = vec![
+            255, 0, 0, 0, 0, 0, 255, 116, 255, 54, 34, 255, 255, 255, 255, 212, 255, 145, 0, 0, 0,
+            0, 0, 0,
         ];
 
         assert_eq!(upper_left_pixels, ndvi_center_pixel_values);
@@ -1183,8 +1345,8 @@ mod tests {
         ));
 
         let ndvi_center_pixel_values: Vec<u8> = vec![
-            0, 0, 0, 0, 0, 0, 255, 116, 255, 54, 34, 255, 255, 255, 255, 212, 255, 145, 0, 0, 0, 0,
-            0, 0,
+            255, 0, 0, 0, 0, 0, 255, 116, 255, 54, 34, 255, 255, 255, 255, 212, 255, 145, 0, 0, 0,
+            0, 0, 0,
         ];
 
         for p in ndvi_center_pixel_values {
@@ -1254,7 +1416,7 @@ mod tests {
         .await;
         let x = x_r.expect("GDAL Error");
 
-        assert_eq!(x.tile, tile_information);
+        assert_eq!(x.tile_information(), tile_information);
         assert_eq!(x.time, time_interval);
         let center_pixel = x
             .data
