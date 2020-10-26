@@ -1,5 +1,5 @@
 use crate::raster::{
-    typed_raster_tile::TypedRasterTile, DynamicRasterDataType, GridCopyFrom, Pixel, Raster,
+    typed_raster_tile::TypedRasterTile, DynamicRasterDataType, GridBlit, Pixel, Raster,
     RasterTile2D, TypedRasterTile2D,
 };
 use crate::util::Result;
@@ -37,7 +37,7 @@ impl<T: Pixel> Blit<RasterTile2D<T>> for RasterTile2D<T> {
             .global_geo_transform
             .coordinate_2d_to_signed_grid_2d(source.spatial_bounds().upper_left());
 
-        self.data.grid_copy_from(source.data, offset)?;
+        self.data.grid_blit_from(source.data, offset)?;
         Ok(())
     }
 }

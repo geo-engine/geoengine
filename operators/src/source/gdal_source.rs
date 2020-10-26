@@ -24,7 +24,7 @@ use futures::stream::{self, BoxStream, StreamExt};
 use geoengine_datatypes::{
     primitives::{BoundingBox2D, SpatialBounded, SpatialResolution, TimeInterval},
     raster::{
-        Dim2D, GridCopyFrom, GridIdx2D, GridIndex, OffsetDim2D, SignedGridIdx2D, SignedGridIndex,
+        Dim2D, GridBlit, GridIdx2D, GridIndex, OffsetDim2D, SignedGridIdx2D, SignedGridIndex,
     },
 };
 use geoengine_datatypes::{
@@ -496,7 +496,7 @@ where
                 let offset = dataset_idx_ul_tile_scale.sub(&tile_idx_ul_tile_scale);
 
                 let mut tile_raster = Raster2D::new_filled(tile_grid, T::zero(), None);
-                tile_raster.grid_copy_from(dataset_raster, offset)?;
+                tile_raster.grid_blit_from(dataset_raster, offset)?;
                 tile_raster
             }
         };

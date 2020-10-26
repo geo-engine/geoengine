@@ -17,7 +17,7 @@ pub use self::grid_dimension::{
     OffsetDim, OffsetDim1D, OffsetDim2D, OffsetDim3D, OffsetDimension, SignedGridIdx1D,
     SignedGridIdx2D, SignedGridIdx3D, SignedGridIndex, SignedIdx,
 };
-pub use self::operations::{blit::Blit, grid_blit::GridCopyFrom};
+pub use self::operations::{blit::Blit, grid_blit::GridBlit};
 pub use self::typed_raster_tile::{TypedRasterTile2D, TypedRasterTile3D};
 use super::primitives::{SpatialBounded, TemporalBounded};
 use crate::util::Result;

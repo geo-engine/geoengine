@@ -5,25 +5,25 @@ use crate::raster::{
 };
 use crate::util::Result;
 
-pub trait GridCopyFrom<OD, C, T>
+pub trait GridBlit<OD, C, T>
 where
     OD: OffsetDimension,
     C: AsRef<[T]>,
     T: Pixel,
 {
-    fn grid_copy_from(
+    fn grid_blit_from(
         &mut self,
         other: BaseRaster<OD::DimensionType, T, C>,
         start_index: OD::SignedIndexType,
     ) -> Result<()>;
 }
 
-impl<C, T> GridCopyFrom<OffsetDim1D, C, T> for Raster1D<T>
+impl<C, T> GridBlit<OffsetDim1D, C, T> for Raster1D<T>
 where
     C: AsRef<[T]>,
     T: Pixel + Sized,
 {
-    fn grid_copy_from(
+    fn grid_blit_from(
         &mut self,
         other: BaseRaster<Dim1D, T, C>,
         start_index: SignedGridIdx1D,
@@ -49,12 +49,12 @@ where
     }
 }
 
-impl<C, T> GridCopyFrom<OffsetDim2D, C, T> for Raster2D<T>
+impl<C, T> GridBlit<OffsetDim2D, C, T> for Raster2D<T>
 where
     C: AsRef<[T]>,
     T: Pixel + Sized,
 {
-    fn grid_copy_from(
+    fn grid_blit_from(
         &mut self,
         other: BaseRaster<Dim2D, T, C>,
         start_index: SignedGridIdx2D,
@@ -87,12 +87,12 @@ where
     }
 }
 
-impl<C, T> GridCopyFrom<OffsetDim3D, C, T> for Raster3D<T>
+impl<C, T> GridBlit<OffsetDim3D, C, T> for Raster3D<T>
 where
     C: AsRef<[T]>,
     T: Pixel + Sized,
 {
-    fn grid_copy_from(
+    fn grid_blit_from(
         &mut self,
         other: BaseRaster<Dim3D, T, C>,
         start_index: SignedGridIdx3D,
@@ -129,10 +129,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::raster::{GridCopyFrom, Raster2D};
+    use crate::raster::{GridBlit, Raster2D};
 
     #[test]
-    fn grid_copy_from_2d_0_0() {
+    fn grid_blit_from_2d_0_0() {
         let dim = [4, 4];
         let data = vec![0; 16];
 
@@ -142,13 +142,13 @@ mod tests {
 
         let r2 = Raster2D::new(dim.into(), data, None).unwrap();
 
-        r1.grid_copy_from(r2, [0, 0]).unwrap();
+        r1.grid_blit_from(r2, [0, 0]).unwrap();
 
         assert_eq!(r1.data_container, vec![7; 16]);
     }
 
     #[test]
-    fn grid_copy_from_2d_2_2() {
+    fn grid_blit_from_2d_2_2() {
         let dim = [4, 4];
         let data = vec![0; 16];
 
@@ -158,7 +158,7 @@ mod tests {
 
         let r2 = Raster2D::new(dim.into(), data, None).unwrap();
 
-        r1.grid_copy_from(r2, [2, 2]).unwrap();
+        r1.grid_blit_from(r2, [2, 2]).unwrap();
 
         assert_eq!(
             r1.data_container,
@@ -167,7 +167,7 @@ mod tests {
     }
 
     #[test]
-    fn grid_copy_from_2d_n2_n2() {
+    fn grid_blit_from_2d_n2_n2() {
         let dim = [4, 4];
         let data = vec![0; 16];
 
@@ -177,7 +177,7 @@ mod tests {
 
         let r2 = Raster2D::new(dim.into(), data, None).unwrap();
 
-        r1.grid_copy_from(r2, [-2, -2]).unwrap();
+        r1.grid_blit_from(r2, [-2, -2]).unwrap();
 
         assert_eq!(
             r1.data_container,
