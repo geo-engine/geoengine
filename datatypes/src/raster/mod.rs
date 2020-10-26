@@ -50,10 +50,8 @@ where
     ///    [3, 2].into(),
     ///    vec![1,2,3,4,5,6],
     ///    None,
-    ///    TimeInterval::default(),
-    ///    [1.0, 1.0, 0.0, 1.0, 0.0, 1.0].into(),
     /// ).unwrap();
-    /// let value = raster2d.pixel_value_at_grid_index(&(1, 1)).unwrap();
+    /// let value = raster2d.pixel_value_at_grid_index(&[1, 1]).unwrap();
     /// assert_eq!(value, 4);
     /// ```
     ///
@@ -80,11 +78,9 @@ where
     ///    [3, 2].into(),
     ///    vec![1,2,3,4,5,6],
     ///    None,
-    ///    TimeInterval::default(),
-    ///    [1.0, 1.0, 0.0, 1.0, 0.0, 1.0].into(),
     /// ).unwrap();
-    /// raster2d.set_pixel_value_at_grid_index(&(1, 1), 9).unwrap();
-    /// assert_eq!(raster2d.data_container(), &[1,2,3,9,5,6]);
+    /// raster2d.set_pixel_value_at_grid_index(&[1, 1], 9).unwrap();
+    /// assert_eq!(raster2d.data_container, &[1,2,3,9,5,6]);
     /// ```
     ///
     /// # Errors
