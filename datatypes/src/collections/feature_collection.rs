@@ -759,7 +759,7 @@ where
 
     /// Returns the byte-size of this collection
     pub fn byte_size(&self) -> usize {
-        let table_size = get_array_memory_size(&self.table.data()) + mem::size_of_val(&self.table);
+        let table_size = self.table.get_array_memory_size();
 
         // TODO: store information? avoid re-calculation?
         let map_size = mem::size_of_val(&self.types)
@@ -997,31 +997,6 @@ where
     Ok(())
 }
 
-/// Taken from <https://github.com/apache/arrow/blob/master/rust/arrow/src/array/data.rs>
-/// TODO: replace with existing call on next version
-pub fn get_array_memory_size(data: &ArrayData) -> usize {
-    let mut size = 0;
-    // Calculate size of the fields that don't have [get_array_memory_size] method internally.
-    size += mem::size_of_val(data)
-        - mem::size_of_val(&data.buffers())
-        - mem::size_of_val(&data.null_bitmap())
-        - mem::size_of_val(&data.child_data());
-
-    // Calculate rest of the fields top down which contain actual data
-    for buffer in data.buffers() {
-        size += mem::size_of_val(&buffer);
-        size += buffer.capacity();
-    }
-    if let Some(bitmap) = data.null_bitmap() {
-        size += bitmap.buffer_ref().capacity() + mem::size_of_val(bitmap);
-    }
-    for child in data.child_data() {
-        size += get_array_memory_size(child);
-    }
-
-    size
-}
-
 /// Custom serializer for Arrow's `StructArray`
 mod struct_serde {
     use std::fmt::Formatter;
@@ -1162,7 +1137,7 @@ mod tests {
         for i in 0..10 {
             assert_eq!(
                 gen_collection(i).byte_size(),
-                empty_hash_map_size + struct_stack_size + 264 + time_interval_size(i)
+                empty_hash_map_size + struct_stack_size + 192 + time_interval_size(i)
             );
         }
 
