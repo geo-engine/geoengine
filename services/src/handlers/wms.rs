@@ -9,6 +9,7 @@ use warp::{http::Response, Filter, Rejection};
 use geoengine_datatypes::{
     operations::image::{Colorizer, ToPng},
     primitives::SpatialResolution,
+    raster::RasterTile2D,
 };
 use geoengine_datatypes::{
     primitives::BoundingBox2D,
@@ -205,26 +206,23 @@ where
 
     // build png
     let dim = [request.height as usize, request.width as usize];
-    let data: Vec<T> = vec![T::zero(); dim[0] * dim[1]];
     let query_geo_transform = GeoTransform::new(
         query_rect.bbox.upper_left(),
         x_query_resolution,
         -y_query_resolution, // TODO: negative, s.t. geo transform fits...
     );
 
-    let output_raster: Result<Raster2D<T>> = Raster2D::new(
-        dim.into(),
-        data,
-        None,
+    let output_raster = Raster2D::new_filled(dim.into(), T::zero(), None);
+    let output_tile = Ok(RasterTile2D::new_without_offset(
         request.time.unwrap_or_default(),
         query_geo_transform,
-    )
-    .context(error::DataType);
+        output_raster,
+    ));
 
-    let output_raster = tile_stream
-        .fold(output_raster, |raster2d, tile| {
-            let result: Result<Raster2D<T>> = match (raster2d, tile) {
-                (Ok(mut raster2d), Ok(tile)) => match raster2d.blit(tile.data) {
+    let output_tile = tile_stream
+        .fold(output_tile, |raster2d, tile| {
+            let result: Result<RasterTile2D<T>> = match (raster2d, tile) {
+                (Ok(mut raster2d), Ok(tile)) => match raster2d.blit(tile) {
                     Ok(_) => Ok(raster2d),
                     Err(error) => Err(error.into()),
                 },
@@ -241,7 +239,7 @@ where
 
     let colorizer = Colorizer::rgba(); // TODO: create colorizer from request
 
-    Ok(output_raster.to_png(request.width, request.height, &colorizer)?)
+    Ok(output_tile.to_png(request.width, request.height, &colorizer)?)
 }
 
 fn get_legend_graphic<T: WorkflowRegistry>(
@@ -264,8 +262,6 @@ fn get_map_mock(request: &GetMap) -> Result<Box<dyn warp::Reply>, warp::Rejectio
             0x0000_00FF_u32,
         ],
         None,
-        Default::default(),
-        Default::default(),
     )
     .context(error::DataType)?;
 

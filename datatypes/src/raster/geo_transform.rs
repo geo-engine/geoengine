@@ -25,9 +25,9 @@ impl GeoTransform {
     /// let geo_transform = GeoTransform::new((0.0, 0.0).into(), 1.0, -1.0);
     /// ```
     ///
-    pub fn new(upper_left_coordinate: Coordinate2D, x_pixel_size: f64, y_pixel_size: f64) -> Self {
+    pub fn new(origin_coordinate: Coordinate2D, x_pixel_size: f64, y_pixel_size: f64) -> Self {
         Self {
-            origin_coordinate: upper_left_coordinate,
+            origin_coordinate,
             x_pixel_size,
             y_pixel_size,
         }
@@ -44,13 +44,13 @@ impl GeoTransform {
     /// ```
     ///
     pub fn new_with_coordinate_x_y(
-        upper_left_x_coordinate: f64,
+        origin_coordinate_x: f64,
         x_pixel_size: f64,
-        upper_left_y_coordinate: f64,
+        origin_coordinate_y: f64,
         y_pixel_size: f64,
     ) -> Self {
         Self {
-            origin_coordinate: (upper_left_x_coordinate, upper_left_y_coordinate).into(),
+            origin_coordinate: (origin_coordinate_x, origin_coordinate_y).into(),
             x_pixel_size,
             y_pixel_size,
         }

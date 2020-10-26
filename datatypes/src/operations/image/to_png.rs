@@ -1,6 +1,8 @@
 use crate::error;
 use crate::operations::image::{Colorizer, RgbaTransmutable};
-use crate::raster::{GridDimension, GridPixelAccess, Pixel, Raster, Raster2D, TypedRaster2D};
+use crate::raster::{
+    GridDimension, GridPixelAccess, Pixel, Raster2D, RasterTile2D, TypedRasterTile2D,
+};
 use crate::util::Result;
 use image::{DynamicImage, ImageFormat, RgbaImage};
 
@@ -16,7 +18,7 @@ where
     fn to_png(&self, width: u32, height: u32, colorizer: &Colorizer) -> Result<Vec<u8>> {
         // TODO: use PNG color palette once it is available
 
-        let [.., raster_y_size, raster_x_size] = self.dimension().size_as_index();
+        let [.., raster_y_size, raster_x_size] = self.grid_dimension.size_as_index();
         let scale_x = (raster_x_size as f64) / f64::from(width);
         let scale_y = (raster_y_size as f64) / f64::from(height);
 
@@ -44,19 +46,25 @@ where
     }
 }
 
-impl ToPng for TypedRaster2D {
+impl<T: Pixel> ToPng for RasterTile2D<T> {
+    fn to_png(&self, width: u32, height: u32, colorizer: &Colorizer) -> Result<Vec<u8>> {
+        self.data.to_png(width, height, colorizer)
+    }
+}
+
+impl ToPng for TypedRasterTile2D {
     fn to_png(&self, width: u32, height: u32, colorizer: &Colorizer) -> Result<Vec<u8>> {
         match self {
-            TypedRaster2D::U8(r) => r.to_png(width, height, colorizer),
-            TypedRaster2D::U16(r) => r.to_png(width, height, colorizer),
-            TypedRaster2D::U32(r) => r.to_png(width, height, colorizer),
-            TypedRaster2D::U64(r) => r.to_png(width, height, colorizer),
-            TypedRaster2D::I8(r) => r.to_png(width, height, colorizer),
-            TypedRaster2D::I16(r) => r.to_png(width, height, colorizer),
-            TypedRaster2D::I32(r) => r.to_png(width, height, colorizer),
-            TypedRaster2D::I64(r) => r.to_png(width, height, colorizer),
-            TypedRaster2D::F32(r) => r.to_png(width, height, colorizer),
-            TypedRaster2D::F64(r) => r.to_png(width, height, colorizer),
+            TypedRasterTile2D::U8(r) => r.to_png(width, height, colorizer),
+            TypedRasterTile2D::U16(r) => r.to_png(width, height, colorizer),
+            TypedRasterTile2D::U32(r) => r.to_png(width, height, colorizer),
+            TypedRasterTile2D::U64(r) => r.to_png(width, height, colorizer),
+            TypedRasterTile2D::I8(r) => r.to_png(width, height, colorizer),
+            TypedRasterTile2D::I16(r) => r.to_png(width, height, colorizer),
+            TypedRasterTile2D::I32(r) => r.to_png(width, height, colorizer),
+            TypedRasterTile2D::I64(r) => r.to_png(width, height, colorizer),
+            TypedRasterTile2D::F32(r) => r.to_png(width, height, colorizer),
+            TypedRasterTile2D::F64(r) => r.to_png(width, height, colorizer),
         }
     }
 }
@@ -91,14 +99,7 @@ mod tests {
 
     #[test]
     fn linear_gradient() {
-        let mut raster = Raster2D::new(
-            [2, 2].into(),
-            vec![0; 4],
-            None,
-            Default::default(),
-            Default::default(),
-        )
-        .unwrap();
+        let mut raster = Raster2D::new([2, 2].into(), vec![0; 4], None).unwrap();
 
         raster.set_pixel_value_at_grid_index(&[0, 0], 255).unwrap();
         raster.set_pixel_value_at_grid_index(&[1, 0], 100).unwrap();
@@ -123,14 +124,7 @@ mod tests {
 
     #[test]
     fn logarithmic_gradient() {
-        let mut raster = Raster2D::new(
-            [2, 2].into(),
-            vec![1; 4],
-            None,
-            Default::default(),
-            Default::default(),
-        )
-        .unwrap();
+        let mut raster = Raster2D::new([2, 2].into(), vec![1; 4], None).unwrap();
 
         raster.set_pixel_value_at_grid_index(&[0, 0], 10).unwrap();
         raster.set_pixel_value_at_grid_index(&[1, 0], 5).unwrap();
@@ -155,14 +149,7 @@ mod tests {
 
     #[test]
     fn palette() {
-        let mut raster = Raster2D::new(
-            [2, 2].into(),
-            vec![0; 4],
-            None,
-            Default::default(),
-            Default::default(),
-        )
-        .unwrap();
+        let mut raster = Raster2D::new([2, 2].into(), vec![0; 4], None).unwrap();
 
         raster.set_pixel_value_at_grid_index(&[0, 0], 2).unwrap();
         raster.set_pixel_value_at_grid_index(&[1, 0], 1).unwrap();
@@ -190,14 +177,7 @@ mod tests {
 
     #[test]
     fn rgba() {
-        let mut raster = Raster2D::new(
-            [2, 2].into(),
-            vec![0x0000_00FF_u32; 4],
-            None,
-            Default::default(),
-            Default::default(),
-        )
-        .unwrap();
+        let mut raster = Raster2D::new([2, 2].into(), vec![0x0000_00FF_u32; 4], None).unwrap();
 
         raster
             .set_pixel_value_at_grid_index(&[0, 0], 0xFF00_00FF_u32)

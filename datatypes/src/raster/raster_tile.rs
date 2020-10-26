@@ -1,9 +1,11 @@
 use super::{
-    BaseRaster, Dim2D, Dim3D, GeoTransform, GridDimension, GridIdx2D, Raster, SignedGridIdx2D,
+    BaseRaster, Dim2D, Dim3D, GeoTransform, GridDimension, GridIdx2D, GridIndex, GridPixelAccess,
+    GridPixelAccessMut, Raster, SignedGridIdx2D,
 };
 use crate::primitives::{BoundingBox2D, SpatialBounded, TemporalBounded, TimeInterval};
 use crate::raster::data_type::FromPrimitive;
 use crate::raster::Pixel;
+use crate::util::Result;
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 
@@ -17,17 +19,58 @@ where
     T: Pixel,
 {
     pub time: TimeInterval,
-    pub tile: TileInformation,
+    pub tile_position: SignedGridIdx2D,
+    pub global_geo_transform: GeoTransform,
     pub data: BaseRaster<D, T, Vec<T>>,
 }
 
 impl<D, T> RasterTile<D, T>
 where
     T: Pixel,
+    D: GridDimension,
 {
-    /// create a new `RasterTile2D`
-    pub fn new(time: TimeInterval, tile: TileInformation, data: BaseRaster<D, T, Vec<T>>) -> Self {
-        Self { time, tile, data }
+    /// create a new `RasterTile`
+    pub fn new_with_tile_info(
+        time: TimeInterval,
+        tile_info: TileInformation,
+        data: BaseRaster<D, T, Vec<T>>,
+    ) -> Self {
+        // TODO: assert, tile information xy size equals the data xy size
+        Self {
+            time,
+            tile_position: tile_info.global_tile_position,
+            global_geo_transform: tile_info.global_geo_transform,
+            data,
+        }
+    }
+
+    /// create a new `RasterTile`
+    pub fn new(
+        time: TimeInterval,
+        tile_position: SignedGridIdx2D,
+        global_geo_transform: GeoTransform,
+        data: BaseRaster<D, T, Vec<T>>,
+    ) -> Self {
+        Self {
+            time,
+            tile_position,
+            global_geo_transform,
+            data,
+        }
+    }
+
+    /// create a new `RasterTile`
+    pub fn new_without_offset(
+        time: TimeInterval,
+        global_geo_transform: GeoTransform,
+        data: BaseRaster<D, T, Vec<T>>,
+    ) -> Self {
+        Self {
+            time,
+            tile_position: [0, 0],
+            global_geo_transform,
+            data,
+        }
     }
 
     /// Converts the data type of the raster tile by converting its inner raster
@@ -37,16 +80,40 @@ where
         To: Pixel + FromPrimitive<T>,
         T: AsPrimitive<To>,
     {
-        RasterTile::new(self.time, self.tile, self.data.convert())
+        RasterTile::new(
+            self.time,
+            self.tile_position,
+            self.global_geo_transform,
+            self.data.convert(),
+        )
+    }
+
+    pub fn grid_dimension(&self) -> D {
+        self.data.grid_dimension.clone()
+    }
+
+    pub fn tile_offset(&self) -> SignedGridIdx2D {
+        self.tile_position
+    }
+
+    pub fn tile_information(&self) -> TileInformation {
+        TileInformation::new(
+            self.tile_position,
+            [
+                self.grid_dimension().size_of_y_axis(),
+                self.grid_dimension().size_of_x_axis(),
+            ],
+            self.global_geo_transform,
+        )
     }
 }
 
 /// The `TileInformation` is used to represent the spatial position of each tile
 #[derive(PartialEq, Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct TileInformation {
+    pub tile_size_in_pixels: GridIdx2D,
     pub global_tile_position: SignedGridIdx2D,
     pub global_geo_transform: GeoTransform,
-    pub tile_size_in_pixels: GridIdx2D,
 }
 
 impl TileInformation {
@@ -134,9 +201,10 @@ where
 impl<D, T> SpatialBounded for RasterTile<D, T>
 where
     T: Pixel,
+    D: GridDimension,
 {
     fn spatial_bounds(&self) -> BoundingBox2D {
-        self.tile.spatial_bounds()
+        self.tile_information().spatial_bounds()
     }
 }
 
@@ -145,16 +213,38 @@ where
     D: GridDimension,
     T: Pixel,
 {
-    fn dimension(&self) -> &D {
-        self.data.dimension()
+    fn dimension(&self) -> D {
+        self.data.grid_dimension.clone()
     }
     fn no_data_value(&self) -> Option<T> {
-        self.data.no_data_value()
+        self.data.no_data_value
     }
     fn data_container(&self) -> &Vec<T> {
-        self.data.data_container()
+        &self.data.data_container
     }
-    fn geo_transform(&self) -> &GeoTransform {
-        &self.tile.global_geo_transform
+    fn geo_transform(&self) -> GeoTransform {
+        self.tile_information().global_geo_transform
+    }
+}
+
+impl<D, T, I> GridPixelAccess<T, I> for RasterTile<D, T>
+where
+    D: GridDimension<IndexType = I>,
+    I: GridIndex,
+    T: Pixel,
+{
+    fn pixel_value_at_grid_index(&self, grid_index: &I) -> Result<T> {
+        self.data.pixel_value_at_grid_index(grid_index)
+    }
+}
+
+impl<D, T, I> GridPixelAccessMut<T, I> for RasterTile<D, T>
+where
+    D: GridDimension<IndexType = I>,
+    I: GridIndex,
+    T: Pixel,
+{
+    fn set_pixel_value_at_grid_index(&mut self, grid_index: &I, value: T) -> Result<()> {
+        self.data.set_pixel_value_at_grid_index(grid_index, value)
     }
 }

@@ -54,6 +54,17 @@ pub enum Error {
         offsets: Vec<isize>,
     },
 
+    #[snafu(display("Invalid GridIndex ({:?}), reason: \"{}\".", grid_index, description))]
+    InvalidGridIndex {
+        grid_index: Vec<usize>,
+        description: &'static str,
+    },
+
+    #[snafu(display("Invalid raster operation. Reason: \"{}\".", description))]
+    InvalidRasterOperation {
+        description: &'static str,
+    },
+
     #[snafu(display(
         "Dimension capacity  ≠ data capacity ({} ≠ {})",
         dimension_cap,

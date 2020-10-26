@@ -5,7 +5,7 @@ mod grid_dimension;
 mod helpers;
 mod operations;
 mod raster_tile;
-mod typed_raster;
+mod typed_raster_tile;
 
 pub use self::base_raster::{BaseRaster, Raster2D, Raster3D};
 pub use self::data_type::{
@@ -14,30 +14,24 @@ pub use self::data_type::{
 pub use self::geo_transform::{GdalGeoTransform, GeoTransform};
 pub use self::grid_dimension::{
     Dim, Dim1D, Dim2D, Dim3D, GridDimension, GridIdx1D, GridIdx2D, GridIdx3D, GridIndex, Idx,
-    OffsetDim, OffsetDimension, SignedGridIdx1D, SignedGridIdx2D, SignedGridIdx3D, SignedGridIndex,
-    SignedIdx, OffsetDim1D, OffsetDim2D, OffsetDim3D
+    OffsetDim, OffsetDim1D, OffsetDim2D, OffsetDim3D, OffsetDimension, SignedGridIdx1D,
+    SignedGridIdx2D, SignedGridIdx3D, SignedGridIndex, SignedIdx,
 };
-pub use self::operations::blit::Blit;
-pub use self::typed_raster::{TypedRaster2D, TypedRaster3D};
+pub use self::operations::{blit::Blit, grid_blit::GridCopyFrom};
+pub use self::typed_raster_tile::{TypedRasterTile2D, TypedRasterTile3D};
 use super::primitives::{SpatialBounded, TemporalBounded};
 use crate::util::Result;
 pub use raster_tile::*;
-use std::fmt::Debug;
-
-pub trait GenericRaster: Send + Debug {
-    // TODO: make data accessible
-    fn get(&self);
-}
 
 pub trait Raster<D: GridDimension, T: Pixel, C>: SpatialBounded + TemporalBounded {
     /// returns the grid dimension object of type D: `GridDimension`
-    fn dimension(&self) -> &D;
+    fn dimension(&self) -> D;
     /// returns the optional  no-data value used for the raster
     fn no_data_value(&self) -> Option<T>;
     /// returns a reference to the data container used to hold the pixels / cells of the raster
     fn data_container(&self) -> &C;
     /// returns a reference to the geo transform describing the origin of the raster and the pixel size
-    fn geo_transform(&self) -> &GeoTransform;
+    fn geo_transform(&self) -> GeoTransform;
 }
 
 pub trait GridPixelAccess<T, I>

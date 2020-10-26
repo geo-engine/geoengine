@@ -12,8 +12,8 @@ macro_rules! map_generic_raster2d {
     (@variants $input_raster:expr, $raster:ident => $function_call:expr, $($variant:tt),+) => {
         match $input_raster {
             $(
-                $crate::raster::TypedRaster2D::$variant($raster) => {
-                    $crate::raster::TypedRaster2D::$variant($function_call)
+                $crate::raster::TypedRasterTile2D::$variant($raster) => {
+                    $crate::raster::TypedRasterTile2D::$variant($function_call)
                 }
             )+
         }
@@ -34,7 +34,7 @@ macro_rules! call_generic_raster2d {
     (@variants $input_raster:expr, $raster:ident => $function_call:expr, $($variant:tt),+) => {
         match $input_raster {
             $(
-                $crate::raster::TypedRaster2D::$variant($raster) => $function_call,
+                $crate::raster::TypedRasterTile2D::$variant($raster) => $function_call,
             )+
         }
     };
@@ -74,8 +74,8 @@ macro_rules! call_bi_generic_raster2d {
         match ($input_a, $input_b) {
             $(
                 (
-                    $crate::raster::TypedRaster2D::$variant_a($raster_a),
-                    $crate::raster::TypedRaster2D::$variant_b($raster_b),
+                    $crate::raster::TypedRasterTile2D::$variant_a($raster_a),
+                    $crate::raster::TypedRasterTile2D::$variant_b($raster_b),
                 ) => $function_call,
             )+
         }
@@ -124,8 +124,8 @@ macro_rules! call_bi_generic_raster2d_same {
         match ($input_a, $input_b) {
             $(
                 (
-                    $crate::raster::TypedRaster2D::$variant($raster_a),
-                    $crate::raster::TypedRaster2D::$variant($raster_b)
+                    $crate::raster::TypedRasterTile2D::$variant($raster_a),
+                    $crate::raster::TypedRasterTile2D::$variant($raster_b)
                 ) => $function_call,
             )+
             _ => $on_error
@@ -183,8 +183,8 @@ macro_rules! call_bi_generic_raster2d_staircase {
         match ($input_a, $input_b) {
             $(
                 (
-                    $crate::raster::TypedRaster2D::$variant_a($raster_a),
-                    $crate::raster::TypedRaster2D::$variant_b($raster_b)
+                    $crate::raster::TypedRasterTile2D::$variant_a($raster_a),
+                    $crate::raster::TypedRasterTile2D::$variant_b($raster_b)
                 ) => $function_call,
             )+
             _ => $on_error
@@ -207,7 +207,7 @@ macro_rules! generate_generic_raster2d {
         match $type_enum {
             $(
                 $crate::raster::RasterDataType::$variant => {
-                    crate::raster::TypedRaster2D::$variant($function_call)
+                    crate::raster::TypedRasterTile2D::$variant($function_call)
                 }
             )+
         }
@@ -216,25 +216,25 @@ macro_rules! generate_generic_raster2d {
 
 #[cfg(test)]
 mod tests {
-    use crate::raster::{GridPixelAccess, Pixel, Raster2D, RasterDataType, TypedRaster2D};
     use crate::util::test::catch_unwind_silent;
+    use crate::{
+        primitives::TimeInterval,
+        raster::{
+            GeoTransform, GridPixelAccess, Pixel, Raster2D, RasterDataType, RasterTile2D,
+            TypedRasterTile2D,
+        },
+    };
 
     #[test]
     fn map_generic_raster2d() {
-        fn map<T: Pixel>(raster: Raster2D<T>) -> Raster2D<T> {
+        fn map<T: Pixel>(raster: RasterTile2D<T>) -> RasterTile2D<T> {
             raster
         }
 
-        let typed_raster = TypedRaster2D::U32(
-            Raster2D::new(
-                [3, 2].into(),
-                vec![1, 2, 3, 4, 5, 6],
-                None,
-                Default::default(),
-                [1.0, 1.0, 0.0, 1.0, 0.0, 1.0].into(),
-            )
-            .unwrap(),
-        );
+        let r = Raster2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap();
+        let t =
+            RasterTile2D::new_without_offset(TimeInterval::default(), GeoTransform::default(), r);
+        let typed_raster = TypedRasterTile2D::U32(t);
 
         assert_eq!(
             typed_raster,
@@ -244,20 +244,14 @@ mod tests {
 
     #[test]
     fn call_generic_raster2d() {
-        fn first_pixel<T: Pixel>(raster: &Raster2D<T>) -> i64 {
+        fn first_pixel<T: Pixel>(raster: &RasterTile2D<T>) -> i64 {
             raster.pixel_value_at_grid_index(&[0, 0]).unwrap().as_()
         }
 
-        let typed_raster = TypedRaster2D::U32(
-            Raster2D::new(
-                [3, 2].into(),
-                vec![1, 2, 3, 4, 5, 6],
-                None,
-                Default::default(),
-                [1.0, 1.0, 0.0, 1.0, 0.0, 1.0].into(),
-            )
-            .unwrap(),
-        );
+        let r = Raster2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap();
+        let t =
+            RasterTile2D::new_without_offset(TimeInterval::default(), GeoTransform::default(), r);
+        let typed_raster = TypedRasterTile2D::U32(t);
 
         assert_eq!(
             call_generic_raster2d!(typed_raster.clone(), _raster => 2),
@@ -272,7 +266,7 @@ mod tests {
 
     #[test]
     fn generate_generic_raster2d() {
-        fn generate<T: Pixel>() -> Raster2D<T> {
+        fn generate<T: Pixel>() -> RasterTile2D<T> {
             let data: Vec<T> = vec![
                 T::from_(1),
                 T::from_(2),
@@ -282,59 +276,37 @@ mod tests {
                 T::from_(6),
             ];
 
-            Raster2D::new(
-                [3, 2].into(),
-                data,
-                None,
-                Default::default(),
-                [1.0, 1.0, 0.0, 1.0, 0.0, 1.0].into(),
-            )
-            .unwrap()
+            let r = Raster2D::new([3, 2].into(), data, None).unwrap();
+            RasterTile2D::new_without_offset(TimeInterval::default(), GeoTransform::default(), r)
         }
 
         assert_eq!(
             generate_generic_raster2d!(RasterDataType::U8, generate()),
-            TypedRaster2D::U8(
-                Raster2D::new(
-                    [3, 2].into(),
-                    vec![1, 2, 3, 4, 5, 6],
-                    None,
-                    Default::default(),
-                    [1.0, 1.0, 0.0, 1.0, 0.0, 1.0].into(),
-                )
-                .unwrap(),
-            )
+            TypedRasterTile2D::U8(RasterTile2D::new_without_offset(
+                TimeInterval::default(),
+                GeoTransform::default(),
+                Raster2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None,).unwrap()
+            ),)
         );
     }
 
     #[test]
     fn call_bi_generic_raster2d() {
-        fn first_pixel_add<T: Pixel, U: Pixel>(a: &Raster2D<T>, b: &Raster2D<U>) -> i64 {
+        fn first_pixel_add<T: Pixel, U: Pixel>(a: &RasterTile2D<T>, b: &RasterTile2D<U>) -> i64 {
             let pixel_a: i64 = a.pixel_value_at_grid_index(&[0, 0]).unwrap().as_();
             let pixel_b: i64 = b.pixel_value_at_grid_index(&[0, 0]).unwrap().as_();
             pixel_a + pixel_b
         }
 
-        let typed_raster_a = TypedRaster2D::U32(
-            Raster2D::new(
-                [3, 2].into(),
-                vec![1, 2, 3, 4, 5, 6],
-                None,
-                Default::default(),
-                [1.0, 1.0, 0.0, 1.0, 0.0, 1.0].into(),
-            )
-            .unwrap(),
-        );
-        let typed_raster_b = TypedRaster2D::U16(
-            Raster2D::new(
-                [3, 2].into(),
-                vec![1, 2, 3, 4, 5, 6],
-                None,
-                Default::default(),
-                [1.0, 1.0, 0.0, 1.0, 0.0, 1.0].into(),
-            )
-            .unwrap(),
-        );
+        let r = Raster2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap();
+        let t =
+            RasterTile2D::new_without_offset(TimeInterval::default(), GeoTransform::default(), r);
+        let typed_raster_a = TypedRasterTile2D::U32(t);
+
+        let r = Raster2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap();
+        let t =
+            RasterTile2D::new_without_offset(TimeInterval::default(), GeoTransform::default(), r);
+        let typed_raster_b = TypedRasterTile2D::U16(t);
 
         assert_eq!(
             call_bi_generic_raster2d!(
@@ -347,32 +319,21 @@ mod tests {
 
     #[test]
     fn call_bi_generic_raster2d_same() {
-        fn first_pixel_add<T: Pixel>(a: &Raster2D<T>, b: &Raster2D<T>) -> i64 {
+        fn first_pixel_add<T: Pixel>(a: &RasterTile2D<T>, b: &RasterTile2D<T>) -> i64 {
             let pixel_a = a.pixel_value_at_grid_index(&[0, 0]).unwrap();
             let pixel_b = b.pixel_value_at_grid_index(&[0, 0]).unwrap();
             (pixel_a + pixel_b).as_()
         }
 
-        let typed_raster_a = TypedRaster2D::U32(
-            Raster2D::new(
-                [3, 2].into(),
-                vec![1, 2, 3, 4, 5, 6],
-                None,
-                Default::default(),
-                [1.0, 1.0, 0.0, 1.0, 0.0, 1.0].into(),
-            )
-            .unwrap(),
-        );
-        let typed_raster_b = TypedRaster2D::U16(
-            Raster2D::new(
-                [3, 2].into(),
-                vec![1, 2, 3, 4, 5, 6],
-                None,
-                Default::default(),
-                [1.0, 1.0, 0.0, 1.0, 0.0, 1.0].into(),
-            )
-            .unwrap(),
-        );
+        let r = Raster2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap();
+        let t =
+            RasterTile2D::new_without_offset(TimeInterval::default(), GeoTransform::default(), r);
+        let typed_raster_a = TypedRasterTile2D::U32(t);
+
+        let r = Raster2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap();
+        let t =
+            RasterTile2D::new_without_offset(TimeInterval::default(), GeoTransform::default(), r);
+        let typed_raster_b = TypedRasterTile2D::U16(t);
 
         assert_eq!(
             call_bi_generic_raster2d_same!(
@@ -398,32 +359,24 @@ mod tests {
 
     #[test]
     fn call_bi_generic_raster2d_staircase() {
-        fn first_pixel_add<T: Pixel, U: Pixel + Into<T>>(a: &Raster2D<T>, b: &Raster2D<U>) -> i64 {
+        fn first_pixel_add<T: Pixel, U: Pixel + Into<T>>(
+            a: &RasterTile2D<T>,
+            b: &RasterTile2D<U>,
+        ) -> i64 {
             let pixel_a: T = a.pixel_value_at_grid_index(&[0, 0]).unwrap();
             let pixel_b: T = b.pixel_value_at_grid_index(&[0, 0]).unwrap().into();
             (pixel_a + pixel_b).as_()
         }
 
-        let typed_raster_a = TypedRaster2D::U32(
-            Raster2D::new(
-                [3, 2].into(),
-                vec![1, 2, 3, 4, 5, 6],
-                None,
-                Default::default(),
-                [1.0, 1.0, 0.0, 1.0, 0.0, 1.0].into(),
-            )
-            .unwrap(),
-        );
-        let typed_raster_b = TypedRaster2D::U16(
-            Raster2D::new(
-                [3, 2].into(),
-                vec![1, 2, 3, 4, 5, 6],
-                None,
-                Default::default(),
-                [1.0, 1.0, 0.0, 1.0, 0.0, 1.0].into(),
-            )
-            .unwrap(),
-        );
+        let r = Raster2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap();
+        let t =
+            RasterTile2D::new_without_offset(TimeInterval::default(), GeoTransform::default(), r);
+        let typed_raster_a = TypedRasterTile2D::U32(t);
+
+        let r = Raster2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap();
+        let t =
+            RasterTile2D::new_without_offset(TimeInterval::default(), GeoTransform::default(), r);
+        let typed_raster_b = TypedRasterTile2D::U16(t);
 
         assert_eq!(
             call_bi_generic_raster2d_staircase!(
