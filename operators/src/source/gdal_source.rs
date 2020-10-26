@@ -487,9 +487,7 @@ where
 
                 let dataset_idx_ul_tile_scale = tile_information
                     .global_geo_transform
-                    .coordinate_2d_to_signed_grid_2d(
-                        gdal_dataset_information.bounding_box().upper_left(),
-                    );
+                    .coordinate_2d_to_signed_grid_2d(intersecting_area.upper_left());
 
                 let tile_idx_ul_tile_scale = tile_information.global_pixel_position_upper_left();
 
@@ -1208,8 +1206,8 @@ mod tests {
             .collect();
 
         let ndvi_center_pixel_values = vec![
-            255, 0, 0, 0, 0, 0, 255, 116, 255, 54, 34, 255, 255, 255, 255, 212, 255, 145, 0, 0, 0,
-            0, 0, 0,
+            255, 255, 255, 255, 255, 255, 255, 116, 255, 54, 34, 255, 255, 255, 255, 212, 255, 145,
+            0, 0, 0, 0, 0, 0,
         ];
 
         assert_eq!(upper_left_pixels, ndvi_center_pixel_values);
@@ -1345,8 +1343,8 @@ mod tests {
         ));
 
         let ndvi_center_pixel_values: Vec<u8> = vec![
-            255, 0, 0, 0, 0, 0, 255, 116, 255, 54, 34, 255, 255, 255, 255, 212, 255, 145, 0, 0, 0,
-            0, 0, 0,
+            255, 255, 255, 255, 255, 255, 255, 116, 255, 54, 34, 255, 255, 255, 255, 212, 255, 145,
+            0, 0, 0, 0, 0, 0,
         ];
 
         for p in ndvi_center_pixel_values {
