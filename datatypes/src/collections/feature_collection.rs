@@ -1027,7 +1027,7 @@ mod struct_serde {
     use std::fmt::Formatter;
     use std::io::Cursor;
 
-    use arrow::record_batch::{RecordBatch, RecordBatchReader};
+    use arrow::record_batch::RecordBatch;
     use serde::de::{SeqAccess, Visitor};
     use serde::ser::Error;
     use serde::{Deserializer, Serializer};
@@ -1091,9 +1091,9 @@ mod struct_serde {
             }
 
             let batch = reader
-                .next_batch()
-                .map_err(|error| E::custom(error.to_string()))?
-                .expect("checked");
+                .next()
+                .expect("checked")
+                .map_err(|error| E::custom(error.to_string()))?;
 
             Ok(batch.into())
         }

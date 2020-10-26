@@ -12,7 +12,7 @@ pub trait Identifier: Sized {
     /// Create identifier from given `id`
     fn from_uuid_str(uuid_str: &str) -> Result<Self> {
         Ok(Self::from_uuid(
-            uuid::Uuid::from_str(uuid_str).map_err(|_| error::Error::InvalidUuid)?,
+            uuid::Uuid::from_str(uuid_str).map_err(|_error| error::Error::InvalidUuid)?,
         ))
     }
 

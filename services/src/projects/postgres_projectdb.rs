@@ -62,7 +62,7 @@ where
 
         conn.query_one(&stmt, &[&user.uuid(), &project.uuid(), &permissions])
             .await
-            .map_err(|_| error::Error::ProjectDBUnauthorized)?;
+            .map_err(|_error| error::Error::ProjectDBUnauthorized)?;
 
         Ok(())
     }

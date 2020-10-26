@@ -33,13 +33,13 @@ fn authenticate<C: Context>(
     ctx: C,
 ) -> impl warp::Filter<Extract = (C,), Error = warp::Rejection> + Clone {
     async fn do_authenticate<C: Context>(mut ctx: C, token: String) -> Result<C, warp::Rejection> {
-        let token = SessionId::from_uuid_str(&token).map_err(|_| warp::reject())?;
+        let token = SessionId::from_uuid_str(&token).map_err(|_error| warp::reject())?;
         let session = ctx
             .user_db_ref()
             .await
             .session(token)
             .await
-            .map_err(|_| warp::reject())?;
+            .map_err(|_error| warp::reject())?;
         ctx.set_session(session);
         Ok(ctx)
     }
