@@ -820,19 +820,19 @@ mod tests {
         assert_eq!(vres.len(), 4 * 6);
         assert_eq!(
             vres[0],
-            TileInformation::new([-2, -3], tile_size_in_pixels.into(), central_geo_transform)
+            TileInformation::new([-2, -3], tile_size_in_pixels, central_geo_transform)
         );
         assert_eq!(
             vres[1],
-            TileInformation::new([-2, -2], tile_size_in_pixels.into(), central_geo_transform)
+            TileInformation::new([-2, -2], tile_size_in_pixels, central_geo_transform)
         );
         assert_eq!(
             vres[12],
-            TileInformation::new([0, -3], tile_size_in_pixels.into(), central_geo_transform)
+            TileInformation::new([0, -3], tile_size_in_pixels, central_geo_transform)
         );
         assert_eq!(
             vres[23],
-            TileInformation::new([1, 2], tile_size_in_pixels.into(), central_geo_transform)
+            TileInformation::new([1, 2], tile_size_in_pixels, central_geo_transform)
         );
     }
 
@@ -904,28 +904,28 @@ mod tests {
             vres[0],
             (
                 TimeInterval::new_unchecked(1, 2),
-                TileInformation::new([-2, -3], tile_size_in_pixels.into(), central_geo_transform)
+                TileInformation::new([-2, -3], tile_size_in_pixels, central_geo_transform)
             )
         );
         assert_eq!(
             vres[1],
             (
                 TimeInterval::new_unchecked(1, 2),
-                TileInformation::new([-2, -2], tile_size_in_pixels.into(), central_geo_transform)
+                TileInformation::new([-2, -2], tile_size_in_pixels, central_geo_transform)
             )
         );
         assert_eq!(
             vres[12],
             (
                 TimeInterval::new_unchecked(1, 2),
-                TileInformation::new([0, -3], tile_size_in_pixels.into(), central_geo_transform)
+                TileInformation::new([0, -3], tile_size_in_pixels, central_geo_transform)
             )
         );
         assert_eq!(
             vres[23],
             (
                 TimeInterval::new_unchecked(1, 2),
-                TileInformation::new([1, 2], tile_size_in_pixels.into(), central_geo_transform)
+                TileInformation::new([1, 2], tile_size_in_pixels, central_geo_transform)
             )
         );
     }

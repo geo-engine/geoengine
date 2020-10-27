@@ -300,8 +300,8 @@ mod tests {
         let raster_tile = RasterTile2D::new_with_tile_info(
             TimeInterval::default(),
             TileInformation {
-                global_tile_position: [0, 0].into(),
-                tile_size_in_pixels: [3, 2].into(),
+                global_tile_position: [0, 0],
+                tile_size_in_pixels: [3, 2],
                 global_geo_transform: Default::default(),
             },
             raster,
