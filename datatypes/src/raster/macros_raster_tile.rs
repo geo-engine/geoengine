@@ -451,7 +451,7 @@ mod tests {
 
         let typed_raster_a = TypedRasterTile2D::U32(RasterTile2D::new(
             TimeInterval::default(),
-            [0, 0].into(),
+            [0, 0],
             [1.0, 1.0, 0.0, 1.0, 0.0, 1.0].into(),
             Raster2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap(),
         ));
