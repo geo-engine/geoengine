@@ -5,40 +5,22 @@ use snafu::ensure;
 
 use crate::error;
 use crate::error::Result;
-use crate::users::session::{Session, SessionToken};
+use crate::users::session::{Session, SessionId};
 use crate::users::user::{User, UserCredentials, UserId, UserRegistration};
 use crate::users::userdb::UserDB;
 use crate::util::user_input::Validated;
+use async_trait::async_trait;
 
 #[derive(Default)]
 pub struct HashMapUserDB {
     users: HashMap<String, User>,
-    sessions: HashMap<SessionToken, Session>,
+    sessions: HashMap<SessionId, Session>,
 }
 
+#[async_trait]
 impl UserDB for HashMapUserDB {
     /// Register a user
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use geoengine_services::users::user::UserRegistration;
-    /// use geoengine_services::users::userdb::UserDB;
-    /// use geoengine_services::users::hashmap_userdb::HashMapUserDB;
-    /// use geoengine_services::util::user_input::UserInput;
-    /// use geoengine_services::users::user::UserId;
-    ///
-    /// let mut user_db = HashMapUserDB::default();
-    ///
-    /// let user_registration = UserRegistration {
-    ///     email: "foo@bar.de".into(),
-    ///     password: "secret123".into(),
-    ///     real_name: "Foo Bar".into()
-    /// }.validated().unwrap();
-    ///
-    /// assert!(user_db.register(user_registration).is_ok());
-    /// ```
-    fn register(&mut self, user_registration: Validated<UserRegistration>) -> Result<UserId> {
+    async fn register(&mut self, user_registration: Validated<UserRegistration>) -> Result<UserId> {
         let user_registration = user_registration.user_input;
         ensure!(
             !self.users.contains_key(&user_registration.email),
@@ -54,37 +36,11 @@ impl UserDB for HashMapUserDB {
     }
 
     /// Log user in
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use geoengine_services::users::user::{UserRegistration, UserCredentials};
-    /// use geoengine_services::users::userdb::UserDB;
-    /// use geoengine_services::users::hashmap_userdb::HashMapUserDB;
-    /// use geoengine_services::util::user_input::UserInput;
-    ///
-    /// let mut user_db = HashMapUserDB::default();
-    ///
-    /// let user_registration = UserRegistration {
-    ///     email: "foo@bar.de".into(),
-    ///     password: "secret123".into(),
-    ///     real_name: "Foo Bar".into()
-    /// }.validated().unwrap();
-    ///
-    /// assert!(user_db.register(user_registration).is_ok());
-    ///
-    /// let user_credentials = UserCredentials {
-    ///     email: "foo@bar.de".into(),
-    ///     password: "secret123".into()
-    /// };
-    ///
-    /// assert!(user_db.login(user_credentials).is_ok());
-    /// ```
-    fn login(&mut self, user_credentials: UserCredentials) -> Result<Session> {
+    async fn login(&mut self, user_credentials: UserCredentials) -> Result<Session> {
         match self.users.get(&user_credentials.email) {
             Some(user) if bcrypt::verify(user_credentials.password, &user.password_hash) => {
                 let session = Session::new(user);
-                self.sessions.insert(session.token.clone(), session.clone());
+                self.sessions.insert(session.id, session.clone());
                 Ok(session)
             }
             _ => Err(error::Error::LoginFailed),
@@ -92,74 +48,109 @@ impl UserDB for HashMapUserDB {
     }
 
     /// Log user out
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use geoengine_services::users::user::{UserRegistration, UserCredentials};
-    /// use geoengine_services::users::userdb::UserDB;
-    /// use geoengine_services::users::hashmap_userdb::HashMapUserDB;
-    /// use geoengine_services::util::user_input::UserInput;
-    ///
-    /// let mut user_db = HashMapUserDB::default();
-    ///
-    /// let user_registration = UserRegistration {
-    ///     email: "foo@bar.de".into(),
-    ///     password: "secret123".into(),
-    ///     real_name: "Foo Bar".into()
-    /// }.validated().unwrap();
-    ///
-    /// assert!(user_db.register(user_registration).is_ok());
-    ///
-    /// let user_credentials = UserCredentials {
-    ///     email: "foo@bar.de".into(),
-    ///     password: "secret123".into()
-    /// };
-    ///
-    /// let session = user_db.login(user_credentials).unwrap();
-    ///
-    /// assert!(user_db.logout(session.token).is_ok());
-    /// ```
-    fn logout(&mut self, token: SessionToken) -> Result<()> {
-        match self.sessions.remove(&token) {
+    async fn logout(&mut self, session: SessionId) -> Result<()> {
+        match self.sessions.remove(&session) {
             Some(_) => Ok(()),
             None => Err(error::Error::LogoutFailed),
         }
     }
 
-    /// Get session for token
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use geoengine_services::users::user::{UserRegistration, UserCredentials};
-    /// use geoengine_services::users::userdb::UserDB;
-    /// use geoengine_services::users::hashmap_userdb::HashMapUserDB;
-    /// use geoengine_services::util::user_input::UserInput;
-    ///
-    /// let mut user_db = HashMapUserDB::default();
-    ///
-    /// let user_registration = UserRegistration {
-    ///     email: "foo@bar.de".into(),
-    ///     password: "secret123".into(),
-    ///     real_name: "Foo Bar".into()
-    /// }.validated().unwrap();
-    ///
-    /// assert!(user_db.register(user_registration).is_ok());
-    ///
-    /// let user_credentials = UserCredentials {
-    ///     email: "foo@bar.de".into(),
-    ///     password: "secret123".into()
-    /// };
-    ///
-    /// let session = user_db.login(user_credentials).unwrap();
-    ///
-    /// assert!(user_db.session(session.token).is_ok());
-    /// ```
-    fn session(&self, token: SessionToken) -> Result<Session> {
-        match self.sessions.get(&token) {
+    /// Get session
+    async fn session(&self, session: SessionId) -> Result<Session> {
+        match self.sessions.get(&session) {
             Some(session) => Ok(session.clone()),
             None => Err(error::Error::SessionDoesNotExist),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::util::user_input::UserInput;
+
+    #[tokio::test]
+    async fn register() {
+        let mut user_db = HashMapUserDB::default();
+
+        let user_registration = UserRegistration {
+            email: "foo@bar.de".into(),
+            password: "secret123".into(),
+            real_name: "Foo Bar".into(),
+        }
+        .validated()
+        .unwrap();
+
+        assert!(user_db.register(user_registration).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn login() {
+        let mut user_db = HashMapUserDB::default();
+
+        let user_registration = UserRegistration {
+            email: "foo@bar.de".into(),
+            password: "secret123".into(),
+            real_name: "Foo Bar".into(),
+        }
+        .validated()
+        .unwrap();
+
+        assert!(user_db.register(user_registration).await.is_ok());
+
+        let user_credentials = UserCredentials {
+            email: "foo@bar.de".into(),
+            password: "secret123".into(),
+        };
+
+        assert!(user_db.login(user_credentials).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn logout() {
+        let mut user_db = HashMapUserDB::default();
+
+        let user_registration = UserRegistration {
+            email: "foo@bar.de".into(),
+            password: "secret123".into(),
+            real_name: "Foo Bar".into(),
+        }
+        .validated()
+        .unwrap();
+
+        assert!(user_db.register(user_registration).await.is_ok());
+
+        let user_credentials = UserCredentials {
+            email: "foo@bar.de".into(),
+            password: "secret123".into(),
+        };
+
+        let session = user_db.login(user_credentials).await.unwrap();
+
+        assert!(user_db.logout(session.id).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn session() {
+        let mut user_db = HashMapUserDB::default();
+
+        let user_registration = UserRegistration {
+            email: "foo@bar.de".into(),
+            password: "secret123".into(),
+            real_name: "Foo Bar".into(),
+        }
+        .validated()
+        .unwrap();
+
+        assert!(user_db.register(user_registration).await.is_ok());
+
+        let user_credentials = UserCredentials {
+            email: "foo@bar.de".into(),
+            password: "secret123".into(),
+        };
+
+        let session = user_db.login(user_credentials).await.unwrap();
+
+        assert!(user_db.session(session.id).await.is_ok());
     }
 }

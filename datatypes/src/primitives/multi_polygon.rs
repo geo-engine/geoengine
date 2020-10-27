@@ -1,12 +1,15 @@
 use crate::collections::VectorDataType;
-use crate::primitives::{error, GeometryRef};
+use crate::error::Error;
+use crate::primitives::{error, BoundingBox2D, GeometryRef, PrimitivesError, TypedGeometry};
 use crate::primitives::{Coordinate2D, Geometry};
 use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::Result;
-use arrow::array::BooleanArray;
+use arrow::array::{ArrayBuilder, BooleanArray};
 use arrow::error::ArrowError;
+use geo::intersects::Intersects;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
+use std::convert::TryFrom;
 
 /// A trait that allows a common access to polygons of `MultiPolygon`s and its references
 pub trait MultiPolygonAccess<R, L>
@@ -77,6 +80,51 @@ impl MultiPolygonAccess<Polygon, Ring> for MultiPolygon {
 
 impl Geometry for MultiPolygon {
     const DATA_TYPE: VectorDataType = VectorDataType::MultiPolygon;
+
+    fn intersects_bbox(&self, bbox: &BoundingBox2D) -> bool {
+        let geo_multi_polygon: geo::MultiPolygon<f64> = self.into();
+        let geo_rect: geo::Rect<f64> = bbox.into();
+
+        for polygon in geo_multi_polygon {
+            if polygon.intersects(&geo_rect) {
+                return true;
+            }
+        }
+
+        false
+    }
+}
+
+impl Into<geo::MultiPolygon<f64>> for &MultiPolygon {
+    fn into(self) -> geo::MultiPolygon<f64> {
+        let polygons: Vec<geo::Polygon<f64>> = self
+            .polygons()
+            .iter()
+            .map(|polygon| {
+                let mut line_strings: Vec<geo::LineString<f64>> = polygon
+                    .iter()
+                    .map(|ring| geo::LineString(ring.iter().map(Into::into).collect()))
+                    .collect();
+
+                let exterior = line_strings.remove(0);
+
+                geo::Polygon::new(exterior, line_strings)
+            })
+            .collect();
+        geo::MultiPolygon(polygons)
+    }
+}
+
+impl TryFrom<TypedGeometry> for MultiPolygon {
+    type Error = Error;
+
+    fn try_from(value: TypedGeometry) -> Result<Self, Self::Error> {
+        if let TypedGeometry::MultiPolygon(geometry) = value {
+            Ok(geometry)
+        } else {
+            Err(PrimitivesError::InvalidConversion.into())
+        }
+    }
 }
 
 impl AsRef<[Polygon]> for MultiPolygon {
@@ -100,6 +148,27 @@ impl ArrowTyped for MultiPolygon {
             )
             .into(),
         )
+    }
+
+    fn builder_byte_size(builder: &mut Self::ArrowBuilder) -> usize {
+        let multi_polygon_indices_size = builder.len() * std::mem::size_of::<i32>();
+
+        let ring_builder = builder.values();
+        let ring_indices_size = ring_builder.len() * std::mem::size_of::<i32>();
+
+        let line_builder = ring_builder.values();
+        let line_indices_size = line_builder.len() * std::mem::size_of::<i32>();
+
+        let point_builder = line_builder.values();
+        let point_indices_size = point_builder.len() * std::mem::size_of::<i32>();
+
+        let coordinates_size = Coordinate2D::builder_byte_size(point_builder);
+
+        multi_polygon_indices_size
+            + ring_indices_size
+            + line_indices_size
+            + point_indices_size
+            + coordinates_size
     }
 
     fn arrow_builder(_capacity: usize) -> Self::ArrowBuilder {

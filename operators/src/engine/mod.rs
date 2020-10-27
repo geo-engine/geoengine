@@ -77,3 +77,46 @@ macro_rules! call_on_generic_raster_processor {
         }
     };
 }
+
+/// Calls a function on two `TypedRQueryProcessor`s by calling it on their variant combination.
+/// Call via `call_bi_generic_processor!(input_a, input_b, (processor_a, processor_b) => function)`.
+#[macro_export]
+macro_rules! call_bi_generic_processor {
+    (
+        $input_a:expr, $input_b:expr,
+        ( $processor_a:ident, $processor_b:ident ) => $function_call:expr
+    ) => {
+        // TODO: this should be automated, but it seems like this requires a procedural macro
+        call_bi_generic_processor!(
+            @variants
+            $input_a, $input_b,
+            ( $processor_a, $processor_b ) => $function_call,
+            (U8, U8), (U8, U16), (U8, U32), (U8, U64), (U8, I8), (U8, I16), (U8, I32), (U8, I64), (U8, F32), (U8, F64),
+            (U16, U8), (U16, U16), (U16, U32), (U16, U64), (U16, I8), (U16, I16), (U16, I32), (U16, I64), (U16, F32), (U16, F64),
+            (U32, U8), (U32, U16), (U32, U32), (U32, U64), (U32, I8), (U32, I16), (U32, I32), (U32, I64), (U32, F32), (U32, F64),
+            (U64, U8), (U64, U16), (U64, U32), (U64, U64), (U64, I8), (U64, I16), (U64, I32), (U64, I64), (U64, F32), (U64, F64),
+            (I8, U8), (I8, U16), (I8, U32), (I8, U64), (I8, I8), (I8, I16), (I8, I32), (I8, I64), (I8, F32), (I8, F64),
+            (I16, U8), (I16, U16), (I16, U32), (I16, U64), (I16, I8), (I16, I16), (I16, I32), (I16, I64), (I16, F32), (I16, F64),
+            (I32, U8), (I32, U16), (I32, U32), (I32, U64), (I32, I8), (I32, I16), (I32, I32), (I32, I64), (I32, F32), (I32, F64),
+            (I64, U8), (I64, U16), (I64, U32), (I64, U64), (I64, I8), (I64, I16), (I64, I32), (I64, I64), (I64, F32), (I64, F64),
+            (F32, U8), (F32, U16), (F32, U32), (F32, U64), (F32, I8), (F32, I16), (F32, I32), (F32, I64), (F32, F32), (F32, F64),
+            (F64, U8), (F64, U16), (F64, U32), (F64, U64), (F64, I8), (F64, I16), (F64, I32), (F64, I64), (F64, F32), (F64, F64)
+        )
+    };
+
+    (@variants
+        $input_a:expr, $input_b:expr,
+        ( $processor_a:ident, $processor_b:ident ) => $function_call:expr,
+        $(($variant_a:tt,$variant_b:tt)),+
+    ) => {
+        match ($input_a, $input_b) {
+            $(
+                (
+                    $crate::engine::TypedRasterQueryProcessor::$variant_a($processor_a),
+                    $crate::engine::TypedRasterQueryProcessor::$variant_b($processor_b),
+                ) => $function_call,
+            )+
+        }
+    };
+
+}

@@ -145,6 +145,12 @@ impl TypedRasterQueryProcessor {
             _ => None,
         }
     }
+    pub fn get_i8(self) -> Option<Box<dyn RasterQueryProcessor<RasterType = i8>>> {
+        match self {
+            Self::I8(r) => Some(r),
+            _ => None,
+        }
+    }
     pub fn get_i16(self) -> Option<Box<dyn RasterQueryProcessor<RasterType = i16>>> {
         match self {
             Self::I16(r) => Some(r),
@@ -184,4 +190,44 @@ pub enum TypedVectorQueryProcessor {
     MultiPoint(Box<dyn VectorQueryProcessor<VectorType = MultiPointCollection>>),
     MultiLineString(Box<dyn VectorQueryProcessor<VectorType = MultiLineStringCollection>>),
     MultiPolygon(Box<dyn VectorQueryProcessor<VectorType = MultiPolygonCollection>>),
+}
+
+impl TypedVectorQueryProcessor {
+    pub fn data(self) -> Option<Box<dyn VectorQueryProcessor<VectorType = DataCollection>>> {
+        if let TypedVectorQueryProcessor::Data(p) = self {
+            Some(p)
+        } else {
+            None
+        }
+    }
+
+    pub fn multi_point(
+        self,
+    ) -> Option<Box<dyn VectorQueryProcessor<VectorType = MultiPointCollection>>> {
+        if let TypedVectorQueryProcessor::MultiPoint(p) = self {
+            Some(p)
+        } else {
+            None
+        }
+    }
+
+    pub fn multi_line_string(
+        self,
+    ) -> Option<Box<dyn VectorQueryProcessor<VectorType = MultiLineStringCollection>>> {
+        if let TypedVectorQueryProcessor::MultiLineString(p) = self {
+            Some(p)
+        } else {
+            None
+        }
+    }
+
+    pub fn multi_polygon(
+        self,
+    ) -> Option<Box<dyn VectorQueryProcessor<VectorType = MultiPolygonCollection>>> {
+        if let TypedVectorQueryProcessor::MultiPolygon(p) = self {
+            Some(p)
+        } else {
+            None
+        }
+    }
 }

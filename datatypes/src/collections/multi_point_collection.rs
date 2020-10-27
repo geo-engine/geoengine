@@ -100,14 +100,53 @@ impl GeoFeatureCollectionRowBuilder<MultiPoint> for FeatureCollectionRowBuilder<
     }
 }
 
+impl MultiPointCollection {
+    pub fn coordinates(&self) -> &[Coordinate2D] {
+        let geometries_ref = self
+            .table
+            .column_by_name(Self::GEOMETRY_COLUMN_NAME)
+            .expect("There must exist a geometry column");
+        let geometries: &ListArray = downcast_array(geometries_ref);
+
+        let coordinates_ref = geometries.values();
+        let coordinates: &FixedSizeListArray = downcast_array(&coordinates_ref);
+
+        let number_of_coordinates = coordinates.data().len();
+
+        let floats_ref = coordinates.values();
+        let floats: &Float64Array = downcast_array(&floats_ref);
+
+        unsafe {
+            slice::from_raw_parts(
+                floats.raw_values() as *const Coordinate2D,
+                number_of_coordinates,
+            )
+        }
+    }
+
+    #[allow(clippy::cast_ptr_alignment)]
+    pub fn multipoint_offsets(&self) -> &[i32] {
+        let geometries_ref = self
+            .table
+            .column_by_name(Self::GEOMETRY_COLUMN_NAME)
+            .expect("There must exist a geometry column");
+        let geometries: &ListArray = downcast_array(geometries_ref);
+
+        let data = geometries.data();
+        let buffer = &data.buffers()[0];
+
+        unsafe { slice::from_raw_parts(buffer.raw_data() as *const i32, geometries.len() + 1) }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     use crate::collections::BuilderProvider;
     use crate::primitives::{
-        FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue, MultiPointAccess,
-        NullableDataRef, TimeInterval,
+        DataRef, FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue, MultiPointAccess,
+        TimeInterval,
     };
     use serde_json::{from_str, json};
     use std::collections::HashMap;
@@ -151,7 +190,7 @@ mod tests {
             unreachable!();
         }
 
-        if let FeatureDataRef::NullableNumber(numbers) = pc.data("number_nulls").unwrap() {
+        if let FeatureDataRef::Number(numbers) = pc.data("number_nulls").unwrap() {
             assert_eq!(numbers.as_ref()[0], 0.);
             assert_eq!(numbers.as_ref()[2], 2.);
             assert_eq!(numbers.nulls(), vec![false, true, false]);
@@ -378,11 +417,11 @@ mod tests {
         }
 
         if let Ok(FeatureDataRef::Text(data_ref)) = collection_c.data("bar") {
-            assert_eq!(data_ref.text_at(0).unwrap(), "a");
-            assert_eq!(data_ref.text_at(1).unwrap(), "b");
-            assert_eq!(data_ref.text_at(2).unwrap(), "c");
-            assert_eq!(data_ref.text_at(3).unwrap(), "d");
-            assert_eq!(data_ref.text_at(4).unwrap(), "e");
+            assert_eq!(data_ref.text_at(0).unwrap().unwrap(), "a");
+            assert_eq!(data_ref.text_at(1).unwrap().unwrap(), "b");
+            assert_eq!(data_ref.text_at(2).unwrap().unwrap(), "c");
+            assert_eq!(data_ref.text_at(3).unwrap().unwrap(), "d");
+            assert_eq!(data_ref.text_at(4).unwrap().unwrap(), "e");
         } else {
             panic!("wrong data type");
         }
@@ -397,7 +436,7 @@ mod tests {
                 .add_column("foo".into(), FeatureDataType::Number)
                 .unwrap();
             builder
-                .add_column("bar".into(), FeatureDataType::NullableText)
+                .add_column("bar".into(), FeatureDataType::Text)
                 .unwrap();
             let mut builder = builder.finish_header();
 
@@ -636,7 +675,7 @@ mod tests {
         let collection = {
             let mut builder = MultiPointCollection::builder();
             builder
-                .add_column("number".into(), FeatureDataType::NullableNumber)
+                .add_column("number".into(), FeatureDataType::Number)
                 .unwrap();
             let mut builder = builder.finish_header();
 
@@ -863,5 +902,48 @@ mod tests {
         let deserialized: MultiPointCollection = serde_json::from_str(&serialized).unwrap();
 
         assert_eq!(collection, deserialized);
+    }
+
+    #[test]
+    fn coordinates() {
+        let pc = MultiPointCollection::from_data(
+            MultiPoint::many(vec![
+                vec![(0., 0.)],
+                vec![(1., 1.), (1.1, 1.1)],
+                vec![(2., 2.)],
+            ])
+            .unwrap(),
+            vec![
+                TimeInterval::new_unchecked(0, 1),
+                TimeInterval::new_unchecked(1, 2),
+                TimeInterval::new_unchecked(2, 3),
+            ],
+            {
+                let mut map = HashMap::new();
+                map.insert("numbers".into(), FeatureData::Number(vec![0., 1., 2.]));
+                map.insert(
+                    "number_nulls".into(),
+                    FeatureData::NullableNumber(vec![Some(0.), None, Some(2.)]),
+                );
+                map
+            },
+        )
+        .unwrap();
+
+        let coords = pc.coordinates();
+        assert_eq!(coords.len(), 4);
+        assert_eq!(
+            coords,
+            &[
+                [0., 0.].into(),
+                [1., 1.].into(),
+                [1.1, 1.1].into(),
+                [2., 2.].into(),
+            ]
+        );
+
+        let offsets = pc.multipoint_offsets();
+        assert_eq!(offsets.len(), 4);
+        assert_eq!(offsets, &[0, 1, 3, 4]);
     }
 }

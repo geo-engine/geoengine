@@ -204,7 +204,7 @@ mod tests {
                     "collection": {
                         "table": collection_bytes,
                         "types": {
-                            "foobar": "NullableDecimal"
+                            "foobar": "Decimal"
                         },
                     }
                 }

@@ -1,13 +1,11 @@
-use std::sync::Arc;
-
 use snafu::ResultExt;
-use tokio::sync::RwLock;
 use uuid::Uuid;
 use warp::reply::Reply;
 use warp::{http::Response, Filter};
 
 use crate::error;
 use crate::error::Result;
+use crate::handlers::Context;
 use crate::ogc::wfs::request::{GetCapabilities, GetFeature, TypeNames, WFSRequest};
 use crate::util::identifiers::Identifier;
 use crate::workflows::registry::WorkflowRegistry;
@@ -23,28 +21,26 @@ use geoengine_operators::engine::{
 };
 use serde_json::json;
 
-type WR<T> = Arc<RwLock<T>>;
-
-pub fn wfs_handler<T: WorkflowRegistry>(
-    workflow_registry: WR<T>,
+pub fn wfs_handler<C: Context>(
+    ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::get()
         .and(warp::path!("wfs"))
         .and(warp::query::<WFSRequest>())
-        .and(warp::any().map(move || Arc::clone(&workflow_registry)))
+        .and(warp::any().map(move || ctx.clone()))
         .and_then(wfs)
 }
 
 // TODO: move into handler once async closures are available?
-async fn wfs<T: WorkflowRegistry>(
+async fn wfs<C: Context>(
     request: WFSRequest,
-    workflow_registry: WR<T>,
+    ctx: C,
 ) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
     // TODO: authentication
     // TODO: more useful error output than "invalid query string"
     match request {
         WFSRequest::GetCapabilities(request) => get_capabilities(&request),
-        WFSRequest::GetFeature(request) => get_feature(&request, &workflow_registry).await,
+        WFSRequest::GetFeature(request) => get_feature(&request, &ctx).await,
         _ => Ok(Box::new(
             warp::http::StatusCode::NOT_IMPLEMENTED.into_response(),
         )),
@@ -148,9 +144,9 @@ fn get_capabilities(_request: &GetCapabilities) -> Result<Box<dyn warp::Reply>, 
     Ok(Box::new(warp::reply::html(mock)))
 }
 
-async fn get_feature<T: WorkflowRegistry>(
+async fn get_feature<C: Context>(
     request: &GetFeature,
-    workflow_registry: &WR<T>,
+    ctx: &C,
 ) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
     // TODO: validate request?
     if request.type_names
@@ -163,9 +159,14 @@ async fn get_feature<T: WorkflowRegistry>(
     }
 
     let workflow: Workflow = match request.type_names.namespace.as_deref() {
-        Some("registry") => workflow_registry.read().await.load(&WorkflowId::from_uuid(
-            Uuid::parse_str(&request.type_names.feature_type).context(error::Uuid)?,
-        ))?,
+        Some("registry") => {
+            ctx.workflow_registry_ref()
+                .await
+                .load(&WorkflowId::from_uuid(
+                    Uuid::parse_str(&request.type_names.feature_type).context(error::Uuid)?,
+                ))
+                .await?
+        }
         Some("json") => {
             serde_json::from_str(&request.type_names.feature_type).context(error::SerdeJson)?
         }
@@ -307,26 +308,22 @@ fn get_feature_mock(_request: &GetFeature) -> Result<Box<dyn warp::Reply>, warp:
 mod tests {
     use geoengine_operators::source::CsvSourceParameters;
 
-    use crate::workflows::registry::HashMapRegistry;
-
     use super::*;
-    use crate::workflows::workflow::Workflow;
+    use crate::{contexts::InMemoryContext, workflows::workflow::Workflow};
     use geoengine_operators::engine::TypedOperator;
-    use geoengine_operators::source::csv::{
-        CsvGeometrySpecification, CsvSource, CsvTimeSpecification,
-    };
+    use geoengine_operators::source::{CsvGeometrySpecification, CsvSource, CsvTimeSpecification};
     use serde_json::json;
     use std::io::{Seek, SeekFrom, Write};
     use xml::ParserConfig;
 
     #[tokio::test]
     async fn mock_test() {
-        let workflow_registry = Arc::new(RwLock::new(HashMapRegistry::default()));
+        let ctx = InMemoryContext::default();
 
         let res = warp::test::request()
             .method("GET")
             .path("/wfs?request=GetFeature&service=WFS&version=2.0.0&typeNames=test&bbox=1,2,3,4")
-            .reply(&wfs_handler(workflow_registry))
+            .reply(&wfs_handler(ctx))
             .await;
         assert_eq!(res.status(), 200);
         let body: String = String::from_utf8(res.body().to_vec()).unwrap();
@@ -341,7 +338,7 @@ mod tests {
                             "coordinates": [0.0, 0.1]
                         },
                         "properties": {
-                            "foo": null
+                            "foo": 0
                         },
                         "when": {
                             "start": "1970-01-01T00:00:00+00:00",
@@ -356,7 +353,7 @@ mod tests {
                             "coordinates": [1.0, 1.1]
                         },
                         "properties": {
-                            "foo": 0
+                            "foo": null
                         },
                         "when": {
                             "start": "1970-01-01T00:00:00+00:00",
@@ -370,7 +367,7 @@ mod tests {
                             "coordinates": [2.0, 3.1]
                         },
                         "properties": {
-                            "foo": null
+                            "foo": 2
                         },
                         "when": {
                             "start": "1970-01-01T00:00:00+00:00",
@@ -384,7 +381,7 @@ mod tests {
                             "coordinates": [3.0, 3.1]
                         },
                         "properties": {
-                            "foo": null
+                            "foo": 3
                         },
                         "when": {
                             "start": "1970-01-01T00:00:00+00:00",
@@ -398,7 +395,7 @@ mod tests {
                             "coordinates": [4.0, 4.1]
                         },
                         "properties": {
-                            "foo": null
+                            "foo": 4
                         },
                         "when": {
                             "start": "1970-01-01T00:00:00+00:00",
@@ -414,12 +411,12 @@ mod tests {
 
     #[tokio::test]
     async fn get_capabilities() {
-        let workflow_registry = Arc::new(RwLock::new(HashMapRegistry::default()));
+        let ctx = InMemoryContext::default();
 
         let res = warp::test::request()
             .method("GET")
             .path("/wfs?request=GetCapabilities&service=WFS")
-            .reply(&wfs_handler(workflow_registry))
+            .reply(&wfs_handler(ctx))
             .await;
 
         assert_eq!(res.status(), 200);
@@ -447,7 +444,7 @@ x;y
         .unwrap();
         temp_file.seek(SeekFrom::Start(0)).unwrap();
 
-        let workflow_registry = Arc::new(RwLock::new(HashMapRegistry::default()));
+        let ctx = InMemoryContext::default();
 
         let workflow = Workflow {
             operator: TypedOperator::Vector(Box::new(CsvSource {
@@ -463,16 +460,18 @@ x;y
             })),
         };
 
-        let id = workflow_registry
+        let id = ctx
+            .workflow_registry()
             .write()
             .await
             .register(workflow.clone())
+            .await
             .unwrap();
 
         let res = warp::test::request()
             .method("GET")
             .path(&format!("/wfs?request=GetFeature&service=WFS&version=2.0.0&typeNames=registry:{}&bbox=-90,-180,90,180&crs=EPSG:4326", id.to_string()))
-            .reply(&wfs_handler(workflow_registry))
+            .reply(&wfs_handler(ctx))
             .await;
         let body: String = String::from_utf8(res.body().to_vec()).unwrap();
         assert_eq!(
@@ -537,7 +536,7 @@ x;y
         .unwrap();
         temp_file.seek(SeekFrom::Start(0)).unwrap();
 
-        let workflow_registry = Arc::new(RwLock::new(HashMapRegistry::default()));
+        let ctx = InMemoryContext::default();
 
         let workflow = Workflow {
             operator: TypedOperator::Vector(Box::new(CsvSource {
@@ -567,7 +566,7 @@ x;y
         let res = warp::test::request()
             .method("GET")
             .path(&url)
-            .reply(&wfs_handler(workflow_registry))
+            .reply(&wfs_handler(ctx))
             .await;
         let body: String = String::from_utf8(res.body().to_vec()).unwrap();
         assert_eq!(

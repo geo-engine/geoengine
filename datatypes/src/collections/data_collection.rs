@@ -19,8 +19,7 @@ mod tests {
 
     use crate::collections::BuilderProvider;
     use crate::primitives::{
-        FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue, NullableDataRef,
-        TimeInterval,
+        DataRef, FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue, TimeInterval,
     };
 
     #[test]
@@ -79,7 +78,7 @@ mod tests {
     fn columns() {
         let mut builder = DataCollection::builder();
         builder
-            .add_column("a".into(), FeatureDataType::NullableDecimal)
+            .add_column("a".into(), FeatureDataType::Decimal)
             .unwrap();
         let mut builder = builder.finish_header();
 
@@ -110,7 +109,7 @@ mod tests {
 
         assert_eq!(collection.len(), 3);
 
-        if let FeatureDataRef::NullableDecimal(a_column) = collection.data("a").unwrap() {
+        if let FeatureDataRef::Decimal(a_column) = collection.data("a").unwrap() {
             assert_eq!(a_column.as_ref()[0], 42);
             assert_eq!(a_column.nulls()[1], true);
             assert_eq!(a_column.as_ref()[2], 1337);
@@ -131,9 +130,9 @@ mod tests {
         assert!(collection.remove_column("a").is_err());
 
         if let FeatureDataRef::Text(b_column) = collection.data("b").unwrap() {
-            assert_eq!(b_column.text_at(0).unwrap(), "this");
-            assert_eq!(b_column.text_at(1).unwrap(), "is");
-            assert_eq!(b_column.text_at(2).unwrap(), "magic");
+            assert_eq!(b_column.text_at(0).unwrap().unwrap(), "this");
+            assert_eq!(b_column.text_at(1).unwrap().unwrap(), "is");
+            assert_eq!(b_column.text_at(2).unwrap().unwrap(), "magic");
         } else {
             panic!("wrong type");
         }

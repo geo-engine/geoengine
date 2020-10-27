@@ -1,16 +1,21 @@
 use crate::util::arrow::ArrowTyped;
-use arrow::array::{BooleanArray, Float64Builder};
+use arrow::array::{ArrayBuilder, BooleanArray, Float64Builder};
 use arrow::datatypes::DataType;
 use arrow::error::ArrowError;
+use geo::Coordinate;
+use ocl::OclPrm;
 use serde::{Deserialize, Serialize};
 use std::{fmt, slice};
 
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, PartialOrd, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, PartialOrd, Serialize, Default)]
 #[repr(C)]
 pub struct Coordinate2D {
     pub x: f64,
     pub y: f64,
 }
+
+// Make coordinates transferable to OpenCl devices
+unsafe impl OclPrm for Coordinate2D {}
 
 impl Coordinate2D {
     /// Creates a new coordinate
@@ -114,12 +119,28 @@ impl<'c> Into<&'c [f64]> for &'c Coordinate2D {
     }
 }
 
+impl Into<geo::Coordinate<f64>> for Coordinate2D {
+    fn into(self) -> Coordinate<f64> {
+        (&self).into()
+    }
+}
+
+impl Into<geo::Coordinate<f64>> for &Coordinate2D {
+    fn into(self) -> Coordinate<f64> {
+        geo::Coordinate::from((self.x, self.y))
+    }
+}
+
 impl ArrowTyped for Coordinate2D {
     type ArrowArray = arrow::array::FixedSizeListArray;
     type ArrowBuilder = arrow::array::FixedSizeListBuilder<Float64Builder>;
 
     fn arrow_data_type() -> DataType {
         arrow::datatypes::DataType::FixedSizeList(Box::new(arrow::datatypes::DataType::Float64), 2)
+    }
+
+    fn builder_byte_size(builder: &mut Self::ArrowBuilder) -> usize {
+        builder.values().len() * std::mem::size_of::<f64>()
     }
 
     fn arrow_builder(capacity: usize) -> Self::ArrowBuilder {

@@ -1,53 +1,33 @@
-use core::fmt;
-use std::str::FromStr;
-
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
-use crate::error;
-use crate::error::Result;
 use crate::users::user::{User, UserId};
+use crate::util::identifiers::Identifier;
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
-pub struct SessionToken {
-    token: Uuid,
-}
-
-impl FromStr for SessionToken {
-    type Err = error::Error;
-
-    fn from_str(token: &str) -> Result<Self> {
-        Uuid::parse_str(token)
-            .map(|id| Self { token: id })
-            .map_err(|_| error::Error::InvalidSessionToken)
-    }
-}
-
-impl Default for SessionToken {
-    fn default() -> Self {
-        Self {
-            token: Uuid::new_v4(),
-        }
-    }
-}
-
-impl fmt::Display for SessionToken {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.token)
-    }
-}
+identifier!(SessionId);
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
 pub struct Session {
+    pub id: SessionId,
     pub user: UserId,
-    pub token: SessionToken,
+    // TODO: session creation time/validity
 }
 
 impl Session {
-    pub fn new(user: &User) -> Session {
+    pub fn new(user: &User) -> Self {
         Self {
+            id: SessionId::new(),
             user: user.id,
-            token: SessionToken::default(),
         }
+    }
+
+    pub fn from_user_id(user_id: UserId) -> Self {
+        Self {
+            id: SessionId::new(),
+            user: user_id,
+        }
+    }
+
+    pub fn from_fields(user: UserId, session: SessionId) -> Self {
+        Self { id: session, user }
     }
 }

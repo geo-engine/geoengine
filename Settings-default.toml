@@ -1,0 +1,13 @@
+[web]
+bind_address = "127.0.0.1:3030"
+# external_address = "http://www.example.com"
+backend = "in_memory"
+
+[project_service]
+list_limit = 20
+
+[postgres]
+config_string = "postgresql://geoengine:geoengine@localhost:5432"
+
+[operators.gdal_source]
+raster_data_root_path = "operators/test-data/raster"

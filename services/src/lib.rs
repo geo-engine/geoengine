@@ -21,6 +21,7 @@
 
 #[macro_use]
 pub mod util;
+pub mod contexts;
 pub mod error;
 pub mod handlers;
 pub mod ogc;
