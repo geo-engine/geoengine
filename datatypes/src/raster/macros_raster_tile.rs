@@ -1,9 +1,9 @@
-/// Maps a `TypedRaster2D` to another `TypedRaster2D` by calling a function on its variant.
-/// Call via `map_generic_raster2d!(input, raster => function)`.
+/// Maps a `TypedRasterTile2D` to another `TypedRasterTile2D` by calling a function on its variant.
+/// Call via `map_generic_raster_tile_2d!(input, raster => function)`.
 #[macro_export]
-macro_rules! map_generic_raster2d {
+macro_rules! map_generic_raster_tile_2d {
     ($input_raster:expr, $raster:ident => $function_call:expr) => {
-        map_generic_raster2d!(
+        map_generic_raster_tile_2d!(
             @variants $input_raster, $raster => $function_call,
             U8, U16, U32, U64, I8, I16, I32, I64, F32, F64
         )
@@ -20,12 +20,12 @@ macro_rules! map_generic_raster2d {
     };
 }
 
-/// Calls a function on a `TypedRaster2D` by calling it on its variant.
-/// Call via `call_generic_raster2d!(input, raster => function)`.
+/// Calls a function on a `TypedRasterTile2D` by calling it on its variant.
+/// Call via `call_generic_raster_tile_2d!(input, raster => function)`.
 #[macro_export]
-macro_rules! call_generic_raster2d {
+macro_rules! call_generic_raster_tile_2d {
     ($input_raster:expr, $raster:ident => $function_call:expr) => {
-        call_generic_raster2d!(
+        call_generic_raster_tile_2d!(
             @variants $input_raster, $raster => $function_call,
             U8, U16, U32, U64, I8, I16, I32, I64, F32, F64
         )
@@ -40,16 +40,16 @@ macro_rules! call_generic_raster2d {
     };
 }
 
-/// Calls a function on two `TypedRaster2D`s by calling it on their variant combination.
-/// Call via `call_bi_generic_raster2d!(input_a, input_b, (raster_a, raster_b) => function)`.
+/// Calls a function on two `TypedRasterTile2D`s by calling it on their variant combination.
+/// Call via `call_bi_generic_raster_tile_2d!(input_a, input_b, (raster_a, raster_b) => function)`.
 #[macro_export]
-macro_rules! call_bi_generic_raster2d {
+macro_rules! call_bi_generic_raster_tile_2d {
     (
         $input_a:expr, $input_b:expr,
         ( $raster_a:ident, $raster_b:ident ) => $function_call:expr
     ) => {
         // TODO: this should be automated, but it seems like this requires a procedural macro
-        call_bi_generic_raster2d!(
+        call_bi_generic_raster_tile_2d!(
             @variants
             $input_a, $input_b,
             ( $raster_a, $raster_b ) => $function_call,
@@ -83,17 +83,17 @@ macro_rules! call_bi_generic_raster2d {
 
 }
 
-/// Calls a function on two `TypedRaster2D`s by calling it on their variant combination.
-/// Call via `call_bi_generic_raster2d_same!(input_a, input_b, (raster_a, raster_b) => function)`.
+/// Calls a function on two `TypedRasterTile2D`s by calling it on their variant combination.
+/// Call via `call_bi_generic_raster_tile_2d_same!(input_a, input_b, (raster_a, raster_b) => function)`.
 /// The resulting call requires the rasters to be of the same type.
 /// Otherwise, the last optional parameter is a catch-all function (or it just panics).
 #[macro_export]
-macro_rules! call_bi_generic_raster2d_same {
+macro_rules! call_bi_generic_raster_tile_2d_same {
     (
         $input_a:expr, $input_b:expr,
         ( $raster_a:ident, $raster_b:ident ) => $function_call:expr
     ) => {
-        call_bi_generic_raster2d_same!(
+        call_bi_generic_raster_tile_2d_same!(
             $input_a, $input_b,
             ( $raster_a, $raster_b ) => $function_call,
             panic!("this method must not be called on rasters with varying types")
@@ -105,7 +105,7 @@ macro_rules! call_bi_generic_raster2d_same {
         ( $raster_a:ident, $raster_b:ident ) => $function_call:expr,
         $on_error:expr
     ) => {
-        call_bi_generic_raster2d_same!(
+        call_bi_generic_raster_tile_2d_same!(
             @variants
             $input_a, $input_b,
             ( $raster_a, $raster_b ) => $function_call,
@@ -133,17 +133,17 @@ macro_rules! call_bi_generic_raster2d_same {
     };
 }
 
-/// Calls a function on two `TypedRaster2D`s by calling it on their variant combination.
-/// Call via `call_bi_generic_raster2d_staircase!(input_a, input_b, (raster_a, raster_b) => function)`.
+/// Calls a function on two `TypedRasterTile2D`s by calling it on their variant combination.
+/// Call via `call_bi_generic_raster_tile_2d_staircase!(input_a, input_b, (raster_a, raster_b) => function)`.
 /// This macro requires the first raster type to be greater or equal to the second one.
 /// Otherwise, the last optional parameter is a catch-all function (or it just panics).
 #[macro_export]
-macro_rules! call_bi_generic_raster2d_staircase {
+macro_rules! call_bi_generic_raster_tile_2d_staircase {
     (
         $input_a:expr, $input_b:expr,
         ( $raster_a:ident, $raster_b:ident ) => $function_call:expr
     ) => {
-        call_bi_generic_raster2d_staircase!(
+        call_bi_generic_raster_tile_2d_staircase!(
             $input_a, $input_b,
             ( $raster_a, $raster_b ) => $function_call,
             panic!("this method must not be called on rasters with incompatible types")
@@ -155,7 +155,7 @@ macro_rules! call_bi_generic_raster2d_staircase {
         ( $raster_a:ident, $raster_b:ident ) => $function_call:expr,
         $on_error:expr
     ) => {
-        call_bi_generic_raster2d_staircase!(
+        call_bi_generic_raster_tile_2d_staircase!(
             @variants
             $input_a, $input_b,
             ( $raster_a, $raster_b ) => $function_call,
@@ -192,12 +192,12 @@ macro_rules! call_bi_generic_raster2d_staircase {
     };
 }
 
-/// Generates a a `TypedRaster2D` by calling a function with the specified data type variant.
-/// Call via `generate_generic_raster2d!(type, function)`.
+/// Generates a a `TypedRasterTile2D` by calling a function with the specified data type variant.
+/// Call via `generate_generic_raster_tile_2d!(type, function)`.
 #[macro_export]
-macro_rules! generate_generic_raster2d {
+macro_rules! generate_generic_raster_tile_2d {
     ($type_enum:expr, $function_call:expr) => {
-        generate_generic_raster2d!(
+        generate_generic_raster_tile_2d!(
             @variants $type_enum, $function_call,
             U8, U16, U32, U64, I8, I16, I32, I64, F32, F64
         )
@@ -214,13 +214,13 @@ macro_rules! generate_generic_raster2d {
     };
 }
 
-/// Calls a function on a `TypedRaster2D` and some `RasterDataType`-like enum, effectively matching
+/// Calls a function on a `TypedRasterTile2D` and some `RasterDataType`-like enum, effectively matching
 /// the raster with the corresponding enum value of the other enum.
-/// Call via `call_generic_raster2d_ext!(input, (raster, e) => function)`.
+/// Call via `call_generic_raster_tile_2d_ext!(input, (raster, e) => function)`.
 #[macro_export]
-macro_rules! call_generic_raster2d_ext {
+macro_rules! call_generic_raster_tile_2d_ext {
     ($input_raster:expr, $other_enum:ty, ($raster:ident, $enum:ident) => $func:expr) => {
-        call_generic_raster2d_ext!(
+        call_generic_raster_tile_2d_ext!(
             @variants $input_raster, $other_enum, ($raster, $enum) => $func,
             U8, U16, U32, U64, I8, I16, I32, I64, F32, F64
         )
@@ -240,14 +240,11 @@ macro_rules! call_generic_raster2d_ext {
 
 #[cfg(test)]
 mod tests {
-    use crate::util::test::catch_unwind_silent;
     use crate::{
         primitives::TimeInterval,
-        raster::{
-            GeoTransform, GridPixelAccess, Pixel, Raster2D, RasterDataType, RasterTile2D,
-            TypedRasterTile2D,
-        },
+        raster::{GeoTransform, GridPixelAccess, Pixel, Raster2D, RasterTile2D, TypedRasterTile2D},
     };
+    use crate::{raster::RasterDataType, util::test::catch_unwind_silent};
     use serde::export::PhantomData;
 
     #[test]
@@ -263,7 +260,7 @@ mod tests {
 
         assert_eq!(
             typed_raster,
-            map_generic_raster2d!(typed_raster.clone(), raster => map(raster))
+            map_generic_raster_tile_2d!(typed_raster.clone(), raster => map(raster))
         );
     }
 
@@ -279,12 +276,12 @@ mod tests {
         let typed_raster = TypedRasterTile2D::U32(t);
 
         assert_eq!(
-            call_generic_raster2d!(typed_raster.clone(), _raster => 2),
+            call_generic_raster_tile_2d!(typed_raster.clone(), _raster => 2),
             2
         );
 
         assert_eq!(
-            call_generic_raster2d!(typed_raster, raster => first_pixel(&raster)),
+            call_generic_raster_tile_2d!(typed_raster, raster => first_pixel(&raster)),
             1
         );
     }
@@ -306,7 +303,7 @@ mod tests {
         }
 
         assert_eq!(
-            generate_generic_raster2d!(RasterDataType::U8, generate()),
+            generate_generic_raster_tile_2d!(RasterDataType::U8, generate()),
             TypedRasterTile2D::U8(RasterTile2D::new_without_offset(
                 TimeInterval::default(),
                 GeoTransform::default(),
@@ -316,7 +313,7 @@ mod tests {
     }
 
     #[test]
-    fn call_bi_generic_raster2d() {
+    fn call_bi_generic_raster_tile_2d() {
         fn first_pixel_add<T: Pixel, U: Pixel>(a: &RasterTile2D<T>, b: &RasterTile2D<U>) -> i64 {
             let pixel_a: i64 = a.pixel_value_at_grid_index(&[0, 0]).unwrap().as_();
             let pixel_b: i64 = b.pixel_value_at_grid_index(&[0, 0]).unwrap().as_();
@@ -334,7 +331,7 @@ mod tests {
         let typed_raster_b = TypedRasterTile2D::U16(t);
 
         assert_eq!(
-            call_bi_generic_raster2d!(
+            call_bi_generic_raster_tile_2d!(
                 typed_raster_a, typed_raster_b,
                 (a, b) => first_pixel_add(&a, &b)
             ),
@@ -343,7 +340,7 @@ mod tests {
     }
 
     #[test]
-    fn call_bi_generic_raster2d_same() {
+    fn call_bi_generic_raster_tile_2d_same() {
         fn first_pixel_add<T: Pixel>(a: &RasterTile2D<T>, b: &RasterTile2D<T>) -> i64 {
             let pixel_a = a.pixel_value_at_grid_index(&[0, 0]).unwrap();
             let pixel_b = b.pixel_value_at_grid_index(&[0, 0]).unwrap();
@@ -361,21 +358,21 @@ mod tests {
         let typed_raster_b = TypedRasterTile2D::U16(t);
 
         assert_eq!(
-            call_bi_generic_raster2d_same!(
+            call_bi_generic_raster_tile_2d_same!(
                 &typed_raster_a, &typed_raster_a,
                 (a, b) => first_pixel_add(a, b)
             ),
             2
         );
 
-        assert!(call_bi_generic_raster2d_same!(
+        assert!(call_bi_generic_raster_tile_2d_same!(
             &typed_raster_a, &typed_raster_b,
             (a, b) => Ok(first_pixel_add(a, b)),
             Err(())
         )
         .is_err());
 
-        assert!(catch_unwind_silent(|| call_bi_generic_raster2d_same!(
+        assert!(catch_unwind_silent(|| call_bi_generic_raster_tile_2d_same!(
             &typed_raster_a, &typed_raster_b,
             (a, b) => first_pixel_add(a, b)
         ))
@@ -404,25 +401,27 @@ mod tests {
         let typed_raster_b = TypedRasterTile2D::U16(t);
 
         assert_eq!(
-            call_bi_generic_raster2d_staircase!(
+            call_bi_generic_raster_tile_2d_staircase!(
                 &typed_raster_a, &typed_raster_b,
                 (a, b) => first_pixel_add(a, b)
             ),
             2
         );
 
-        assert!(call_bi_generic_raster2d_staircase!(
+        assert!(call_bi_generic_raster_tile_2d_staircase!(
             &typed_raster_b, &typed_raster_a,
             (a, b) => Ok(first_pixel_add(a, b)),
             Err(())
         )
         .is_err());
 
-        assert!(catch_unwind_silent(|| call_bi_generic_raster2d_staircase!(
-            &typed_raster_b, &typed_raster_a,
-            (a, b) => first_pixel_add(a, b)
-        ))
-        .is_err());
+        assert!(
+            catch_unwind_silent(|| call_bi_generic_raster_tile_2d_staircase!(
+                &typed_raster_b, &typed_raster_a,
+                (a, b) => first_pixel_add(a, b)
+            ))
+            .is_err()
+        );
     }
 
     #[test]
@@ -450,18 +449,14 @@ mod tests {
         {
         }
 
-        let typed_raster_a = TypedRasterTile2D::U32(
-            RasterTile2D::new(
-                [3, 2].into(),
-                vec![1, 2, 3, 4, 5, 6],
-                None,
-                Default::default(),
-                [1.0, 1.0, 0.0, 1.0, 0.0, 1.0].into(),
-            )
-            .unwrap(),
-        );
+        let typed_raster_a = TypedRasterTile2D::U32(RasterTile2D::new(
+            TimeInterval::default(),
+            [0, 0].into(),
+            [1.0, 1.0, 0.0, 1.0, 0.0, 1.0].into(),
+            Raster2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap(),
+        ));
 
-        call_generic_raster2d_ext!(typed_raster_a, Foo, (raster, e) => {
+        call_generic_raster_tile_2d_ext!(typed_raster_a, Foo, (raster, e) => {
             foo(e, &raster)
         });
     }

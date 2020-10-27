@@ -8,9 +8,7 @@ use crate::util::Result;
 use crate::{call_bi_generic_processor, call_generic_raster_processor};
 use futures::stream::BoxStream;
 use futures::StreamExt;
-use geoengine_datatypes::raster::{
-    Pixel, Raster, Raster2D, RasterDataType, RasterTile2D, TypedValue,
-};
+use geoengine_datatypes::raster::{Pixel, Raster2D, RasterDataType, RasterTile2D, TypedValue};
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
@@ -215,11 +213,9 @@ where
             .map(move |(a, b)| match (a, b) {
                 (Ok(a), Ok(b)) => {
                     let mut out = Raster2D::new(
-                        *a.dimension(),
+                        a.grid_dimension(),
                         vec![TO::zero(); a.data.data_container.len()], // TODO: correct output size; initialization required?
                         Some(self.no_data_value),                      // TODO
-                        Default::default(),                            // TODO
-                        Default::default(),                            // TODO
                     )
                     .expect("raster creation must succeed")
                     .into();
@@ -235,7 +231,12 @@ where
 
                     let raster = Raster2D::<TO>::try_from(out).expect("must be correct");
 
-                    Ok(RasterTile2D::new(raster.temporal_bounds, a.tile, raster))
+                    Ok(RasterTile2D::new(
+                        a.time,
+                        a.tile_position,
+                        a.global_geo_transform,
+                        raster,
+                    ))
                 }
                 _ => unimplemented!(),
             })
@@ -289,38 +290,22 @@ mod tests {
 
         assert_eq!(
             c[0].as_ref().unwrap().data,
-            Raster2D::new(
-                [3, 2].into(),
-                vec![2, 4, 6, 8, 10, 12],
-                Some(42),
-                Default::default(),
-                Default::default(),
-            )
-            .unwrap()
+            Raster2D::new([3, 2].into(), vec![2, 4, 6, 8, 10, 12], Some(42),).unwrap()
         );
     }
 
     fn make_raster() -> Box<dyn RasterOperator> {
-        let raster = Raster2D::new(
-            [3, 2].into(),
-            vec![1, 2, 3, 4, 5, 6],
-            None,
-            Default::default(),
-            Default::default(),
-        )
-        .unwrap();
+        let raster = Raster2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap();
 
-        let raster_tile = RasterTile2D {
-            time: TimeInterval::default(),
-            tile: TileInformation {
-                global_pixel_position: [0, 0].into(),
-                global_size_in_tiles: [1, 2].into(),
+        let raster_tile = RasterTile2D::new_with_tile_info(
+            TimeInterval::default(),
+            TileInformation {
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
                 global_geo_transform: Default::default(),
             },
-            data: raster,
-        };
+            raster,
+        );
 
         MockRasterSource {
             params: MockRasterSourceParams {

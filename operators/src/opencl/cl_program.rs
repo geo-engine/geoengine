@@ -3,16 +3,16 @@ use crate::util::Result;
 use arrow::buffer::MutableBuffer;
 use arrow::datatypes::{Float64Type, Int64Type};
 use arrow::util::bit_util;
-use geoengine_datatypes::collections::{
-    RawFeatureCollectionBuilder, TypedFeatureCollection, VectorDataType,
-};
 use geoengine_datatypes::primitives::{FeatureDataRef, FeatureDataType};
-use geoengine_datatypes::raster::Raster;
 use geoengine_datatypes::raster::{
-    DynamicRasterDataType, GridDimension, Pixel, Raster2D, RasterDataType, TypedRaster2D,
+    DynamicRasterDataType, GridDimension, Pixel, Raster2D, RasterDataType,
 };
 use geoengine_datatypes::{
-    call_generic_features, call_generic_raster2d, call_generic_raster2d_ext,
+    call_generic_features, call_generic_raster_2d, call_generic_raster_2d_ext,
+};
+use geoengine_datatypes::{
+    collections::{RawFeatureCollectionBuilder, TypedFeatureCollection, VectorDataType},
+    raster::TypedRaster2D,
 };
 use lazy_static::lazy_static;
 use num_traits::AsPrimitive;
@@ -631,7 +631,7 @@ impl<'a> CLProgramRunnable<'a> {
 
         for (idx, raster) in self.input_rasters.iter().enumerate() {
             let raster = raster.expect("checked");
-            call_generic_raster2d!(raster, raster => {
+            call_generic_raster_2d!(raster, raster => {
                 let data_buffer = Buffer::builder()
                 .queue(queue.clone())
                 .flags(MemFlags::new().read_only())
@@ -652,7 +652,7 @@ impl<'a> CLProgramRunnable<'a> {
 
         for (idx, raster) in self.output_rasters.iter().enumerate() {
             let raster = raster.as_ref().expect("checked");
-            call_generic_raster2d_ext!(raster, RasterOutputBuffer, (raster, e) => {
+            call_generic_raster_2d_ext!(raster, RasterOutputBuffer, (raster, e) => {
                 let buffer = Buffer::builder()
                     .queue(queue.clone())
                     .len(raster.data_container.len())
@@ -854,8 +854,8 @@ impl RasterInfo {
         // TODO: extract missing information from raster
         Self {
             size: [
-                raster.dimension().size_of_x_axis().as_(),
-                raster.dimension().size_of_y_axis().as_(),
+                raster.grid_dimension.size_of_x_axis().as_(),
+                raster.grid_dimension.size_of_y_axis().as_(),
                 1, // TODO
             ],
             origin: [0., 0., 0.],
@@ -938,8 +938,8 @@ impl CompiledCLProgram {
 
     fn work_size(&self, runnable: &CLProgramRunnable) -> SpatialDims {
         match self.iteration_type {
-            IterationType::Raster => call_generic_raster2d!(runnable.output_rasters[0].as_ref()
-                .expect("checked"), raster => SpatialDims::Two(raster.dimension().size_of_x_axis(), raster.dimension().size_of_y_axis())),
+            IterationType::Raster => call_generic_raster_2d!(runnable.output_rasters[0].as_ref()
+                .expect("checked"), raster => SpatialDims::Two(raster.grid_dimension.size_of_x_axis(), raster.grid_dimension.size_of_y_axis())),
             IterationType::VectorFeatures => SpatialDims::One(
                 runnable.output_features[0]
                     .as_ref()
@@ -1103,37 +1103,15 @@ mod tests {
 
     #[test]
     fn kernel_reuse() {
-        let in0 = TypedRaster2D::I32(
-            Raster2D::new(
-                [3, 2].into(),
-                vec![1, 2, 3, 4, 5, 6],
-                None,
-                Default::default(),
-                Default::default(),
-            )
-            .unwrap(),
-        );
+        let in0 =
+            TypedRaster2D::I32(Raster2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap());
 
         let in1 = TypedRaster2D::I32(
-            Raster2D::new(
-                [3, 2].into(),
-                vec![7, 8, 9, 10, 11, 12],
-                None,
-                Default::default(),
-                Default::default(),
-            )
-            .unwrap(),
+            Raster2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12], None).unwrap(),
         );
 
         let mut out = TypedRaster2D::I32(
-            Raster2D::new(
-                [3, 2].into(),
-                vec![-1, -1, -1, -1, -1, -1],
-                None,
-                Default::default(),
-                Default::default(),
-            )
-            .unwrap(),
+            Raster2D::new([3, 2].into(), vec![-1, -1, -1, -1, -1, -1], None).unwrap(),
         );
 
         let kernel = r#"
@@ -1181,37 +1159,15 @@ __kernel void add(
 
     #[test]
     fn mixed_types() {
-        let in0 = TypedRaster2D::I32(
-            Raster2D::new(
-                [3, 2].into(),
-                vec![1, 2, 3, 4, 5, 6],
-                None,
-                Default::default(),
-                Default::default(),
-            )
-            .unwrap(),
-        );
+        let in0 =
+            TypedRaster2D::I32(Raster2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap());
 
         let in1 = TypedRaster2D::U16(
-            Raster2D::new(
-                [3, 2].into(),
-                vec![7, 8, 9, 10, 11, 12],
-                None,
-                Default::default(),
-                Default::default(),
-            )
-            .unwrap(),
+            Raster2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12], None).unwrap(),
         );
 
         let mut out = TypedRaster2D::I64(
-            Raster2D::new(
-                [3, 2].into(),
-                vec![-1, -1, -1, -1, -1, -1],
-                None,
-                Default::default(),
-                Default::default(),
-            )
-            .unwrap(),
+            Raster2D::new([3, 2].into(), vec![-1, -1, -1, -1, -1, -1], None).unwrap(),
         );
 
         let kernel = r#"
@@ -1249,25 +1205,11 @@ __kernel void add(
     #[test]
     fn raster_info() {
         let in0 = TypedRaster2D::I32(
-            Raster2D::new(
-                [3, 2].into(),
-                vec![1, 2, 3, 4, 5, 6],
-                Some(1337),
-                Default::default(),
-                Default::default(),
-            )
-            .unwrap(),
+            Raster2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], Some(1337)).unwrap(),
         );
 
         let mut out = TypedRaster2D::I64(
-            Raster2D::new(
-                [3, 2].into(),
-                vec![-1, -1, -1, -1, -1, -1],
-                None,
-                Default::default(),
-                Default::default(),
-            )
-            .unwrap(),
+            Raster2D::new([3, 2].into(), vec![-1, -1, -1, -1, -1, -1], None).unwrap(),
         );
 
         let kernel = r#"
@@ -1301,25 +1243,11 @@ __kernel void no_data(
     #[test]
     fn no_data() {
         let in0 = TypedRaster2D::I32(
-            Raster2D::new(
-                [3, 2].into(),
-                vec![1, 1337, 3, 4, 5, 6],
-                Some(1337),
-                Default::default(),
-                Default::default(),
-            )
-            .unwrap(),
+            Raster2D::new([3, 2].into(), vec![1, 1337, 3, 4, 5, 6], Some(1337)).unwrap(),
         );
 
         let mut out = TypedRaster2D::I64(
-            Raster2D::new(
-                [3, 2].into(),
-                vec![-1, -1, -1, -1, -1, -1],
-                None,
-                Default::default(),
-                Default::default(),
-            )
-            .unwrap(),
+            Raster2D::new([3, 2].into(), vec![-1, -1, -1, -1, -1, -1], None).unwrap(),
         );
 
         let kernel = r#"
@@ -1361,21 +1289,12 @@ __kernel void no_data(
                 [3, 2].into(),
                 vec![1., 1337., f32::NAN, 4., 5., 6.],
                 Some(1337.),
-                Default::default(),
-                Default::default(),
             )
             .unwrap(),
         );
 
         let mut out = TypedRaster2D::I64(
-            Raster2D::new(
-                [3, 2].into(),
-                vec![-1, -1, -1, -1, -1, -1],
-                None,
-                Default::default(),
-                Default::default(),
-            )
-            .unwrap(),
+            Raster2D::new([3, 2].into(), vec![-1, -1, -1, -1, -1, -1], None).unwrap(),
         );
 
         let kernel = r#"
@@ -1412,27 +1331,9 @@ __kernel void no_data(
 
     #[test]
     fn gid_calculation() {
-        let in0 = TypedRaster2D::I32(
-            Raster2D::new(
-                [3, 2].into(),
-                vec![0; 6],
-                None,
-                Default::default(),
-                Default::default(),
-            )
-            .unwrap(),
-        );
+        let in0 = TypedRaster2D::I32(Raster2D::new([3, 2].into(), vec![0; 6], None).unwrap());
 
-        let mut out = TypedRaster2D::I32(
-            Raster2D::new(
-                [3, 2].into(),
-                vec![0; 6],
-                None,
-                Default::default(),
-                Default::default(),
-            )
-            .unwrap(),
-        );
+        let mut out = TypedRaster2D::I32(Raster2D::new([3, 2].into(), vec![0; 6], None).unwrap());
 
         let kernel = r#"
 __kernel void gid( 

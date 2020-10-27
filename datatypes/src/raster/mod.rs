@@ -2,9 +2,12 @@ mod base_raster;
 mod data_type;
 mod geo_transform;
 mod grid_dimension;
-mod helpers;
+mod macros_raster;
+mod macros_raster_tile;
 mod operations;
 mod raster_tile;
+mod typed_raster;
+mod typed_raster_conversion;
 mod typed_raster_tile;
 
 pub use self::base_raster::{BaseRaster, Raster2D, Raster3D};
@@ -18,6 +21,8 @@ pub use self::grid_dimension::{
     SignedGridIdx2D, SignedGridIdx3D, SignedGridIndex, SignedIdx,
 };
 pub use self::operations::{blit::Blit, grid_blit::GridBlit};
+pub use self::typed_raster::{TypedRaster, TypedRaster2D, TypedRaster3D};
+pub use self::typed_raster_conversion::TypedRasterConversion;
 pub use self::typed_raster_tile::{TypedRasterTile2D, TypedRasterTile3D};
 use super::primitives::{SpatialBounded, TemporalBounded};
 use crate::util::Result;
