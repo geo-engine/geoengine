@@ -1134,13 +1134,16 @@ mod tests {
         let struct_stack_size = 32;
         assert_eq!(mem::size_of::<StructArray>(), struct_stack_size);
 
+        let arrow_overhead_bytes = 192;
+
         for i in 0..10 {
             assert_eq!(
                 gen_collection(i).byte_size(),
-                empty_hash_map_size + struct_stack_size + 192 + time_interval_size(i)
+                empty_hash_map_size
+                    + struct_stack_size
+                    + arrow_overhead_bytes
+                    + time_interval_size(i)
             );
         }
-
-        // TODO: rely on numbers once the arrow library provides this feature
     }
 }
