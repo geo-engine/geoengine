@@ -260,7 +260,7 @@ impl CsvSourceStream {
                 details: "Cannot find x index key",
             })?
             .parse()
-            .map_err(|_| error::Error::CsvSource {
+            .map_err(|_error| error::Error::CsvSource {
                 details: "Cannot parse x coordinate".to_string(),
             })?;
         let y: f64 = row
@@ -269,7 +269,7 @@ impl CsvSourceStream {
                 details: "Cannot find y index key",
             })?
             .parse()
-            .map_err(|_| error::Error::CsvSource {
+            .map_err(|_error| error::Error::CsvSource {
                 details: "Cannot parse y coordinate".to_string(),
             })?;
 

@@ -79,7 +79,7 @@ where
         let row = conn
             .query_one(&stmt, &[&user_credentials.email])
             .await
-            .map_err(|_| error::Error::LoginFailed)?;
+            .map_err(|_error| error::Error::LoginFailed)?;
 
         let user_id = UserId::from_uuid(row.get(0));
         let password_hash = row.get(1);
@@ -107,7 +107,7 @@ where
 
         conn.execute(&stmt, &[&session.uuid()])
             .await
-            .map_err(|_| error::Error::LogoutFailed)?;
+            .map_err(|_error| error::Error::LogoutFailed)?;
         Ok(())
     }
 
@@ -120,7 +120,7 @@ where
         let row = conn
             .query_one(&stmt, &[&session.uuid()])
             .await
-            .map_err(|_| error::Error::SessionDoesNotExist)?;
+            .map_err(|_error| error::Error::SessionDoesNotExist)?;
 
         let user_id = UserId::from_uuid(row.get(0));
 

@@ -202,45 +202,6 @@ pub struct EmbeddingMetaData {
 impl Plot for Histogram {
     type PlotDataMetadataType = EmbeddingMetaData;
 
-    /// Embeddable histogram
-    ///
-    /// ```rust
-    /// use geoengine_datatypes::plots::{Histogram, Plot, PlotData};
-    /// use geoengine_datatypes::plots::histogram::EmbeddingMetaData;
-    /// use geoengine_datatypes::primitives::{Measurement, FeatureDataRef, NumberDataRef};
-    /// use arrow::array::{Float64Builder, Array};
-    ///
-    /// let mut histogram = Histogram::builder(2, 0., 1., Measurement::Unitless).build().unwrap();
-    ///
-    /// let data = {
-    ///     let mut builder = Float64Builder::new(4);
-    ///     builder.append_slice(&[0., 0.49, 0.5, 1.0]).unwrap();
-    ///     builder.finish()
-    /// };
-    ///
-    /// histogram
-    ///     .add_feature_data(FeatureDataRef::Number(NumberDataRef::new(data.values(), data.data_ref().null_bitmap())))
-    ///     .unwrap();
-    ///
-    /// assert_eq!(
-    ///     histogram.to_vega_embeddable(false).unwrap(),
-    ///     PlotData {
-    ///         vega_string: r#"{"$schema":"https://vega.github.io/schema/vega-lite/v3.4.0.json","data":{"values":[{"v":1,"dim":[3],"data":[2.0,0.0,0.5]},{"v":1,"dim":[3],"data":[2.0,0.5,1.0]}]},"encoding":{"x":{"bin":"binned","field":"data.0","title":"","type":"quantitative"},"x2":{"field":"data.1"},"y":{"field":"data.2","title":"Frequency","type":"quantitative"}},"mark":"bar","padding":5.0}"#.to_string(),
-    ///         metadata: EmbeddingMetaData {
-    ///             selection_name: None,
-    ///         }
-    ///     }
-    /// );
-    /// assert_eq!(
-    ///     histogram.to_vega_embeddable(true).unwrap(),
-    ///     PlotData {
-    ///         vega_string: r#"{"$schema":"https://vega.github.io/schema/vega-lite/v3.4.0.json","data":{"values":[{"v":1,"dim":[3],"data":[2.0,0.0,0.5]},{"v":1,"dim":[3],"data":[2.0,0.5,1.0]}]},"encoding":{"x":{"bin":"binned","field":"data.0","title":"","type":"quantitative"},"x2":{"field":"data.1"},"y":{"field":"data.2","title":"Frequency","type":"quantitative"}},"mark":"bar","padding":5.0,"selection":{"range_selection":{"encodings":["x"],"type":"interval"}}}"#.to_string(),
-    ///         metadata: EmbeddingMetaData {
-    ///             selection_name: Some("range_selection".to_string()),
-    ///         }
-    ///     }
-    /// );
-    /// ```
     fn to_vega_embeddable(
         &self,
         allow_interactions: bool,
@@ -389,7 +350,7 @@ impl HistogramBuilder {
 
 #[cfg(test)]
 mod tests {
-    use arrow::array::{Array, Float64Builder, Int64Builder, UInt8Builder};
+    use arrow::array::{Array, Float64Builder, Int64Builder, PrimitiveArrayOps, UInt8Builder};
 
     use crate::primitives::{CategoricalDataRef, DecimalDataRef, NumberDataRef};
 
@@ -525,5 +486,44 @@ mod tests {
         assert_eq!(histogram.nodata_count, 0);
         assert_eq!(histogram.counts[0], 1);
         assert_eq!(histogram.counts[1], 2);
+    }
+
+    #[test]
+    fn to_vega_embeddable() {
+        let mut histogram = Histogram::builder(2, 0., 1., Measurement::Unitless)
+            .build()
+            .unwrap();
+
+        let data = {
+            let mut builder = Float64Builder::new(4);
+            builder.append_slice(&[0., 0.49, 0.5, 1.0]).unwrap();
+            builder.finish()
+        };
+
+        histogram
+            .add_feature_data(FeatureDataRef::Number(NumberDataRef::new(
+                data.values(),
+                data.data_ref().null_bitmap(),
+            )))
+            .unwrap();
+
+        assert_eq!(
+        histogram.to_vega_embeddable(false).unwrap(),
+        PlotData {
+            vega_string: r#"{"$schema":"https://vega.github.io/schema/vega-lite/v3.4.0.json","data":{"values":[{"v":1,"dim":[3],"data":[2.0,0.0,0.5]},{"v":1,"dim":[3],"data":[2.0,0.5,1.0]}]},"encoding":{"x":{"bin":"binned","field":"data.0","title":"","type":"quantitative"},"x2":{"field":"data.1"},"y":{"field":"data.2","title":"Frequency","type":"quantitative"}},"mark":"bar","padding":5.0}"#.to_string(),
+            metadata: EmbeddingMetaData {
+                selection_name: None,
+            }
+        }
+    );
+        assert_eq!(
+        histogram.to_vega_embeddable(true).unwrap(),
+        PlotData {
+            vega_string: r#"{"$schema":"https://vega.github.io/schema/vega-lite/v3.4.0.json","data":{"values":[{"v":1,"dim":[3],"data":[2.0,0.0,0.5]},{"v":1,"dim":[3],"data":[2.0,0.5,1.0]}]},"encoding":{"x":{"bin":"binned","field":"data.0","title":"","type":"quantitative"},"x2":{"field":"data.1"},"y":{"field":"data.2","title":"Frequency","type":"quantitative"}},"mark":"bar","padding":5.0,"selection":{"range_selection":{"encodings":["x"],"type":"interval"}}}"#.to_string(),
+            metadata: EmbeddingMetaData {
+                selection_name: Some("range_selection".to_string()),
+            }
+        }
+    );
     }
 }

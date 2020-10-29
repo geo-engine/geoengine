@@ -12,7 +12,7 @@ where
     S: std::str::FromStr,
 {
     let s = <&str as serde::Deserialize>::deserialize(deserializer)?;
-    S::from_str(&s).map_err(|_| D::Error::custom("could not parse string"))
+    S::from_str(&s).map_err(|_error| D::Error::custom("could not parse string"))
 }
 
 /// Serde deserializer <https://docs.rs/serde_qs/0.6.0/serde_qs/index.html#flatten-workaround>
@@ -27,6 +27,6 @@ where
     } else {
         S::from_str(&s)
             .map(Some)
-            .map_err(|_| D::Error::custom("could not parse string"))
+            .map_err(|_error| D::Error::custom("could not parse string"))
     }
 }

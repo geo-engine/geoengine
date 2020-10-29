@@ -1,7 +1,6 @@
-use crate::collections::VectorDataType;
-use crate::error::Error;
-use crate::primitives::{BoundingBox2D, Geometry, GeometryRef, PrimitivesError, TypedGeometry};
-use crate::util::arrow::ArrowTyped;
+use std::any::Any;
+use std::convert::TryFrom;
+
 use arrow::array::{
     Array, ArrayBuilder, ArrayDataRef, ArrayEqual, ArrayRef, BooleanArray, JsonEqual,
 };
@@ -9,8 +8,11 @@ use arrow::datatypes::DataType;
 use arrow::error::ArrowError;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::any::Any;
-use std::convert::TryFrom;
+
+use crate::collections::VectorDataType;
+use crate::error::Error;
+use crate::primitives::{BoundingBox2D, Geometry, GeometryRef, PrimitivesError, TypedGeometry};
+use crate::util::arrow::ArrowTyped;
 
 /// A zero-sized placeholder struct for situations where a geometry is necessary.
 /// Currently, this is only required for `FeatureCollection` implementations.
@@ -99,6 +101,14 @@ impl Array for NoArrowArray {
 
     fn data_ref(&self) -> &ArrayDataRef {
         unreachable!("There is no implementation since there is no geometry")
+    }
+
+    fn get_buffer_memory_size(&self) -> usize {
+        0
+    }
+
+    fn get_array_memory_size(&self) -> usize {
+        0
     }
 }
 

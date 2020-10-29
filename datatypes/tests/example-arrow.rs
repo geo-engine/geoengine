@@ -1,7 +1,8 @@
 use arrow::array::{
     Array, ArrayData, Date64Array, Date64Builder, FixedSizeBinaryBuilder, FixedSizeListArray,
     FixedSizeListBuilder, Float64Array, Float64Builder, Int32Array, Int32Builder, ListArray,
-    ListBuilder, StringArray, StringBuilder, StructBuilder, UInt64Array, UInt64Builder,
+    ListBuilder, PrimitiveArrayOps, StringArray, StringBuilder, StructBuilder, UInt64Array,
+    UInt64Builder,
 };
 use arrow::buffer::{Buffer, MutableBuffer};
 use arrow::compute::kernels::filter::filter;

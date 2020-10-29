@@ -127,5 +127,7 @@ pub async fn interrupt_handler(shutdown_tx: Sender<()>, callback: Option<fn()>) 
         callback();
     }
 
-    shutdown_tx.send(()).map_err(|_| Error::TokioChannelSend)
+    shutdown_tx
+        .send(())
+        .map_err(|_error| Error::TokioChannelSend)
 }
