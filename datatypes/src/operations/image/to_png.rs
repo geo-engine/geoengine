@@ -1,9 +1,9 @@
-use crate::error;
 use crate::operations::image::{Colorizer, RgbaTransmutable};
 use crate::raster::{
     GridDimension, GridPixelAccess, Pixel, Raster2D, RasterTile2D, TypedRasterTile2D,
 };
 use crate::util::Result;
+use crate::{error, raster::GridIndex};
 use image::{DynamicImage, ImageFormat, RgbaImage};
 
 pub trait ToPng {
@@ -18,7 +18,8 @@ where
     fn to_png(&self, width: u32, height: u32, colorizer: &Colorizer) -> Result<Vec<u8>> {
         // TODO: use PNG color palette once it is available
 
-        let [.., raster_y_size, raster_x_size] = self.grid_dimension.size_as_index();
+        let [.., raster_y_size, raster_x_size] =
+            self.grid_dimension.size_as_index().as_index_array();
         let scale_x = (raster_x_size as f64) / f64::from(width);
         let scale_y = (raster_y_size as f64) / f64::from(height);
 
@@ -26,7 +27,9 @@ where
 
         let image_buffer: RgbaImage = RgbaImage::from_fn(width, height, |x, y| {
             let (grid_pixel_x, grid_pixel_y) = image_pixel_to_raster_pixel(x, y, scale_x, scale_y);
-            if let Ok(pixel_value) = self.pixel_value_at_grid_index(&[grid_pixel_y, grid_pixel_x]) {
+            if let Ok(pixel_value) =
+                self.pixel_value_at_grid_index(&[grid_pixel_y, grid_pixel_x].into())
+            {
                 color_mapper.call(pixel_value)
             } else {
                 colorizer.no_data_color()
@@ -101,8 +104,12 @@ mod tests {
     fn linear_gradient() {
         let mut raster = Raster2D::new([2, 2].into(), vec![0; 4], None).unwrap();
 
-        raster.set_pixel_value_at_grid_index(&[0, 0], 255).unwrap();
-        raster.set_pixel_value_at_grid_index(&[1, 0], 100).unwrap();
+        raster
+            .set_pixel_value_at_grid_index(&[0, 0].into(), 255)
+            .unwrap();
+        raster
+            .set_pixel_value_at_grid_index(&[1, 0].into(), 100)
+            .unwrap();
 
         let colorizer = Colorizer::linear_gradient(
             vec![
@@ -126,8 +133,12 @@ mod tests {
     fn logarithmic_gradient() {
         let mut raster = Raster2D::new([2, 2].into(), vec![1; 4], None).unwrap();
 
-        raster.set_pixel_value_at_grid_index(&[0, 0], 10).unwrap();
-        raster.set_pixel_value_at_grid_index(&[1, 0], 5).unwrap();
+        raster
+            .set_pixel_value_at_grid_index(&[0, 0].into(), 10)
+            .unwrap();
+        raster
+            .set_pixel_value_at_grid_index(&[1, 0].into(), 5)
+            .unwrap();
 
         let colorizer = Colorizer::logarithmic_gradient(
             vec![
@@ -151,8 +162,12 @@ mod tests {
     fn palette() {
         let mut raster = Raster2D::new([2, 2].into(), vec![0; 4], None).unwrap();
 
-        raster.set_pixel_value_at_grid_index(&[0, 0], 2).unwrap();
-        raster.set_pixel_value_at_grid_index(&[1, 0], 1).unwrap();
+        raster
+            .set_pixel_value_at_grid_index(&[0, 0].into(), 2)
+            .unwrap();
+        raster
+            .set_pixel_value_at_grid_index(&[1, 0].into(), 1)
+            .unwrap();
 
         let colorizer = Colorizer::palette(
             [
@@ -180,10 +195,10 @@ mod tests {
         let mut raster = Raster2D::new([2, 2].into(), vec![0x0000_00FF_u32; 4], None).unwrap();
 
         raster
-            .set_pixel_value_at_grid_index(&[0, 0], 0xFF00_00FF_u32)
+            .set_pixel_value_at_grid_index(&[0, 0].into(), 0xFF00_00FF_u32)
             .unwrap();
         raster
-            .set_pixel_value_at_grid_index(&[1, 0], 0x00FF_00FF_u32)
+            .set_pixel_value_at_grid_index(&[1, 0].into(), 0x00FF_00FF_u32)
             .unwrap();
 
         let colorizer = Colorizer::rgba();

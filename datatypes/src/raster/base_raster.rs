@@ -97,12 +97,12 @@ impl<D: GridDimension, T: Pixel> BaseRaster<D, T, Vec<T>> {
 impl<D, T, C, I> GridPixelAccess<T, I> for BaseRaster<D, T, C>
 where
     D: GridDimension<IndexType = I>,
-    I: GridIndex,
+    I: GridIndex<D>,
     C: AsRef<[T]> + Capacity,
     T: Pixel,
 {
     fn pixel_value_at_grid_index(&self, grid_index: &I) -> Result<T> {
-        let index = grid_index.linear_space_index(&self.grid_dimension)?;
+        let index = grid_index.linear_index_in_dim(&self.grid_dimension)?;
         Ok(self.data_container.as_ref()[index])
     }
 }
@@ -110,12 +110,12 @@ where
 impl<D, T, C, I> GridPixelAccessMut<T, I> for BaseRaster<D, T, C>
 where
     D: GridDimension<IndexType = I>,
-    I: GridIndex,
+    I: GridIndex<D>,
     C: AsMut<[T]> + Capacity,
     T: Pixel,
 {
     fn set_pixel_value_at_grid_index(&mut self, grid_index: &I, value: T) -> Result<()> {
-        let index = grid_index.linear_space_index(&self.grid_dimension)?;
+        let index = grid_index.linear_index_in_dim(&self.grid_dimension)?;
         self.data_container.as_mut()[index] = value;
         Ok(())
     }
@@ -134,37 +134,35 @@ mod tests {
 
     #[test]
     fn simple_raster_2d_at_tuple() {
-        let tuple_index = [1, 1];
+        let index = [1, 1].into();
 
-        let dim = [3, 2];
+        let dim = [3, 2].into();
         let data = vec![1, 2, 3, 4, 5, 6];
-        let raster2d = Raster2D::new(dim.into(), data, None).unwrap();
-        assert_eq!(raster2d.pixel_value_at_grid_index(&tuple_index).unwrap(), 4);
+        let raster2d = Raster2D::new(dim, data, None).unwrap();
+        assert_eq!(raster2d.pixel_value_at_grid_index(&index).unwrap(), 4);
     }
 
     #[test]
     fn simple_raster_2d_at_arr() {
-        let index = [1, 1];
+        let index = [1, 1].into();
 
-        let dim = [3, 2];
+        let dim = [3, 2].into();
         let data = vec![1, 2, 3, 4, 5, 6];
-        let raster2d = Raster2D::new(dim.into(), data, None).unwrap();
+        let raster2d = Raster2D::new(dim, data, None).unwrap();
         let value = raster2d.pixel_value_at_grid_index(&index).unwrap();
         assert_eq!(value, 4);
     }
 
     #[test]
     fn simple_raster_2d_set_at_tuple() {
-        let tuple_index = [1, 1];
+        let index = [1, 1].into();
 
-        let dim = [3, 2];
+        let dim = [3, 2].into();
         let data = vec![1, 2, 3, 4, 5, 6];
-        let mut raster2d = Raster2D::new(dim.into(), data, None).unwrap();
+        let mut raster2d = Raster2D::new(dim, data, None).unwrap();
 
-        raster2d
-            .set_pixel_value_at_grid_index(&tuple_index, 9)
-            .unwrap();
-        let value = raster2d.pixel_value_at_grid_index(&tuple_index).unwrap();
+        raster2d.set_pixel_value_at_grid_index(&index, 9).unwrap();
+        let value = raster2d.pixel_value_at_grid_index(&index).unwrap();
         assert_eq!(value, 9);
         assert_eq!(raster2d.data_container, [1, 2, 3, 9, 5, 6]);
     }

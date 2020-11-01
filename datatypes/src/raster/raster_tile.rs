@@ -1,6 +1,6 @@
 use super::{
     BaseRaster, Dim2D, Dim3D, GeoTransform, GridDimension, GridIdx2D, GridIndex, GridPixelAccess,
-    GridPixelAccessMut, Raster, SignedGridIdx2D,
+    GridPixelAccessMut, Raster, SignedGridIdx2D, SignedGridIndex,
 };
 use crate::primitives::{BoundingBox2D, SpatialBounded, TemporalBounded, TimeInterval};
 use crate::raster::data_type::FromPrimitive;
@@ -67,7 +67,7 @@ where
     ) -> Self {
         Self {
             time,
-            tile_position: [0, 0],
+            tile_position: [0, 0].into(),
             global_geo_transform,
             data,
         }
@@ -102,7 +102,8 @@ where
             [
                 self.grid_dimension().size_of_y_axis(),
                 self.grid_dimension().size_of_x_axis(),
-            ],
+            ]
+            .into(),
             self.global_geo_transform,
         )
     }
@@ -129,38 +130,33 @@ impl TileInformation {
         }
     }
 
-    #[inline]
     pub fn global_tile_position(&self) -> SignedGridIdx2D {
         self.global_tile_position
     }
 
-    #[inline]
     pub fn global_pixel_position_upper_left(&self) -> SignedGridIdx2D {
-        let [tile_y, tile_x] = self.global_tile_position;
-        let [tile_size_y, tile_size_x] = self.tile_size_in_pixels;
-        [tile_y * tile_size_y as isize, tile_x * tile_size_x as isize]
+        let [tile_y, tile_x] = self.global_tile_position.as_index_array();
+        let [tile_size_y, tile_size_x] = self.tile_size_in_pixels.as_index_array();
+        [tile_y * tile_size_y as isize, tile_x * tile_size_x as isize].into()
     }
 
-    #[inline]
     pub fn global_pixel_position_lower_right(&self) -> SignedGridIdx2D {
-        let [up_left_y, up_left_x] = self.global_pixel_position_upper_left();
-        let [size_y, size_x] = self.tile_size_in_pixels;
-        [up_left_y + (size_y as isize), up_left_x + (size_x as isize)]
+        let [up_left_y, up_left_x] = self.global_pixel_position_upper_left().as_index_array();
+        let [size_y, size_x] = self.tile_size_in_pixels.as_index_array();
+        [up_left_y + (size_y as isize), up_left_x + (size_x as isize)].into()
     }
 
-    #[inline]
     pub fn tile_size_in_pixels(&self) -> GridIdx2D {
         self.tile_size_in_pixels
     }
 
-    #[inline]
     pub fn tile_pixel_position_to_global(
         &self,
         local_pixel_position: GridIdx2D,
     ) -> SignedGridIdx2D {
-        let [up_left_y, up_left_x] = self.global_pixel_position_upper_left();
-        let [pos_y, pos_x] = local_pixel_position;
-        [up_left_y + (pos_y as isize), up_left_x + (pos_x as isize)]
+        let [up_left_y, up_left_x] = self.global_pixel_position_upper_left().as_index_array();
+        let [pos_y, pos_x] = local_pixel_position.as_index_array();
+        [up_left_y + (pos_y as isize), up_left_x + (pos_x as isize)].into()
     }
 
     #[inline]
@@ -230,7 +226,7 @@ where
 impl<D, T, I> GridPixelAccess<T, I> for RasterTile<D, T>
 where
     D: GridDimension<IndexType = I>,
-    I: GridIndex,
+    I: GridIndex<D>,
     T: Pixel,
 {
     fn pixel_value_at_grid_index(&self, grid_index: &I) -> Result<T> {
@@ -241,7 +237,7 @@ where
 impl<D, T, I> GridPixelAccessMut<T, I> for RasterTile<D, T>
 where
     D: GridDimension<IndexType = I>,
-    I: GridIndex,
+    I: GridIndex<D>,
     T: Pixel,
 {
     fn set_pixel_value_at_grid_index(&mut self, grid_index: &I, value: T) -> Result<()> {

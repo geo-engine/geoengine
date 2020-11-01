@@ -1,7 +1,7 @@
 use crate::raster::{
-    base_raster::Raster1D, BaseRaster, Dim1D, Dim2D, Dim3D, GridDimension, OffsetDim1D,
+    base_raster::Raster1D, BaseRaster, Dim1D, Dim2D, Dim3D, GridDimension, GridIndex, OffsetDim1D,
     OffsetDim2D, OffsetDim3D, OffsetDimension, Pixel, Raster2D, Raster3D, SignedGridIdx1D,
-    SignedGridIdx2D, SignedGridIdx3D,
+    SignedGridIdx2D, SignedGridIdx3D, SignedGridIndex,
 };
 use crate::util::Result;
 
@@ -28,17 +28,20 @@ where
         other: BaseRaster<Dim1D, T, C>,
         start_index: SignedGridIdx1D,
     ) -> Result<()> {
-        let other_offset_dim = OffsetDim1D::new(other.grid_dimension, start_index);
-        let offset_dim = OffsetDim1D::new(self.grid_dimension, [0]);
+        let other_offset_dim = OffsetDim1D::new_with_dim(other.grid_dimension, start_index);
+        let offset_dim = OffsetDim1D::new_with_dim(self.grid_dimension, [0]);
         if let Some(intersection_offset_dim) = offset_dim.intersection(&other_offset_dim) {
-            let [overlap_offset] = intersection_offset_dim.offsets_as_index();
-            let [overlap_size] = intersection_offset_dim.grid_dimension().size_as_index();
+            let [overlap_offset] = intersection_offset_dim.offsets_as_index().as_index_array();
+            let [overlap_size] = intersection_offset_dim
+                .grid_dimension()
+                .size_as_index()
+                .as_index_array();
 
             let self_start_x =
-                offset_dim.offset_index_to_linear_space_index_unchecked(&[overlap_offset]);
+                offset_dim.offset_index_to_linear_space_index_unchecked(&[overlap_offset].into());
 
-            let other_start_x =
-                other_offset_dim.offset_index_to_linear_space_index_unchecked(&[overlap_offset]);
+            let other_start_x = other_offset_dim
+                .offset_index_to_linear_space_index_unchecked(&[overlap_offset].into());
 
             self.data_container.as_mut_slice()[self_start_x..self_start_x + overlap_size]
                 .copy_from_slice(
@@ -60,21 +63,24 @@ where
         start_index: SignedGridIdx2D,
     ) -> Result<()> {
         // a shifted grid for the other grid
-        let other_offset_dim = OffsetDim2D::new(other.grid_dimension, start_index);
+        let other_offset_dim = OffsetDim2D::new_with_dim(other.grid_dimension, start_index);
         // a shifted grid for the self grid
-        let offset_dim = OffsetDim2D::new(self.grid_dimension, [0, 0]);
+        let offset_dim = OffsetDim2D::new_with_dim(self.grid_dimension, [0, 0]);
         // if there is an intersection ...
         if let Some(intersection_offset_dim) = offset_dim.intersection(&other_offset_dim) {
-            let [overlap_y_offset, overlap_x_offset] = intersection_offset_dim.offsets_as_index();
-            let [overlap_y_size, overlap_x_size] =
-                intersection_offset_dim.grid_dimension().size_as_index();
+            let [overlap_y_offset, overlap_x_offset] =
+                intersection_offset_dim.offsets_as_index().as_index_array();
+            let [overlap_y_size, overlap_x_size] = intersection_offset_dim
+                .grid_dimension()
+                .size_as_index()
+                .as_index_array();
 
             for y in overlap_y_offset..overlap_y_offset + overlap_y_size as isize {
                 let other_start_x = other_offset_dim
-                    .offset_index_to_linear_space_index_unchecked(&[y, overlap_x_offset]);
+                    .offset_index_to_linear_space_index_unchecked(&[y, overlap_x_offset].into());
 
-                let self_start_x =
-                    offset_dim.offset_index_to_linear_space_index_unchecked(&[y, overlap_x_offset]);
+                let self_start_x = offset_dim
+                    .offset_index_to_linear_space_index_unchecked(&[y, overlap_x_offset].into());
 
                 self.data_container.as_mut_slice()[self_start_x..self_start_x + overlap_x_size]
                     .copy_from_slice(
@@ -97,23 +103,25 @@ where
         other: BaseRaster<Dim3D, T, C>,
         start_index: SignedGridIdx3D,
     ) -> Result<()> {
-        let other_offset_dim = OffsetDim3D::new(other.grid_dimension, start_index);
-        let offset_dim = OffsetDim3D::new(self.grid_dimension, [0, 0, 0]);
+        let other_offset_dim = OffsetDim3D::new_with_dim(other.grid_dimension, start_index);
+        let offset_dim = OffsetDim3D::new_with_dim(self.grid_dimension, [0, 0, 0]);
         if let Some(intersection_offset_dim) = offset_dim.intersection(&other_offset_dim) {
             let [overlap_z_offset, overlap_y_offset, overlap_x_offset] =
-                intersection_offset_dim.offsets_as_index();
-            let [overlap_z_size, overlap_y_size, overlap_x_size] =
-                intersection_offset_dim.grid_dimension().size_as_index();
+                intersection_offset_dim.offsets_as_index().as_index_array();
+            let [overlap_z_size, overlap_y_size, overlap_x_size] = intersection_offset_dim
+                .grid_dimension()
+                .size_as_index()
+                .as_index_array();
 
             for z in overlap_z_offset..overlap_z_offset + overlap_z_size as isize {
                 for y in overlap_y_offset..overlap_y_offset + overlap_y_size as isize {
-                    let self_start_x = offset_dim.offset_index_to_linear_space_index_unchecked(&[
-                        z,
-                        y,
-                        overlap_x_offset,
-                    ]);
+                    let self_start_x = offset_dim.offset_index_to_linear_space_index_unchecked(
+                        &[z, y, overlap_x_offset].into(),
+                    );
                     let other_start_x = other_offset_dim
-                        .offset_index_to_linear_space_index_unchecked(&[z, y, overlap_x_offset]);
+                        .offset_index_to_linear_space_index_unchecked(
+                            &[z, y, overlap_x_offset].into(),
+                        );
 
                     self.data_container.as_mut_slice()[self_start_x..self_start_x + overlap_x_size]
                         .copy_from_slice(
@@ -142,7 +150,7 @@ mod tests {
 
         let r2 = Raster2D::new(dim.into(), data, None).unwrap();
 
-        r1.grid_blit_from(r2, [0, 0]).unwrap();
+        r1.grid_blit_from(r2, [0, 0].into()).unwrap();
 
         assert_eq!(r1.data_container, vec![7; 16]);
     }
@@ -158,7 +166,7 @@ mod tests {
 
         let r2 = Raster2D::new(dim.into(), data, None).unwrap();
 
-        r1.grid_blit_from(r2, [2, 2]).unwrap();
+        r1.grid_blit_from(r2, [2, 2].into()).unwrap();
 
         assert_eq!(
             r1.data_container,
@@ -177,7 +185,7 @@ mod tests {
 
         let r2 = Raster2D::new(dim.into(), data, None).unwrap();
 
-        r1.grid_blit_from(r2, [-2, -2]).unwrap();
+        r1.grid_blit_from(r2, [-2, -2].into()).unwrap();
 
         assert_eq!(
             r1.data_container,

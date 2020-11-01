@@ -6,6 +6,7 @@ mod macros_raster;
 mod macros_raster_tile;
 mod operations;
 mod raster_tile;
+mod signed_grid_dimension;
 mod typed_raster;
 mod typed_raster_conversion;
 mod typed_raster_tile;
@@ -17,10 +18,12 @@ pub use self::data_type::{
 pub use self::geo_transform::{GdalGeoTransform, GeoTransform};
 pub use self::grid_dimension::{
     Dim, Dim1D, Dim2D, Dim3D, GridDimension, GridIdx1D, GridIdx2D, GridIdx3D, GridIndex, Idx,
+};
+pub use self::operations::{blit::Blit, grid_blit::GridBlit};
+pub use self::signed_grid_dimension::{
     OffsetDim, OffsetDim1D, OffsetDim2D, OffsetDim3D, OffsetDimension, SignedGridIdx1D,
     SignedGridIdx2D, SignedGridIdx3D, SignedGridIndex, SignedIdx,
 };
-pub use self::operations::{blit::Blit, grid_blit::GridBlit};
 pub use self::typed_raster::{TypedRaster, TypedRaster2D, TypedRaster3D};
 pub use self::typed_raster_conversion::TypedRasterConversion;
 pub use self::typed_raster_tile::{TypedRasterTile2D, TypedRasterTile3D};
@@ -56,7 +59,7 @@ where
     ///    vec![1,2,3,4,5,6],
     ///    None,
     /// ).unwrap();
-    /// let value = raster2d.pixel_value_at_grid_index(&[1, 1]).unwrap();
+    /// let value = raster2d.pixel_value_at_grid_index(&[1, 1].into()).unwrap();
     /// assert_eq!(value, 4);
     /// ```
     ///
@@ -84,7 +87,7 @@ where
     ///    vec![1,2,3,4,5,6],
     ///    None,
     /// ).unwrap();
-    /// raster2d.set_pixel_value_at_grid_index(&[1, 1], 9).unwrap();
+    /// raster2d.set_pixel_value_at_grid_index(&[1, 1].into(), 9).unwrap();
     /// assert_eq!(raster2d.data_container, &[1,2,3,9,5,6]);
     /// ```
     ///

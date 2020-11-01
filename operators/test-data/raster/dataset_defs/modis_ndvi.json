@@ -20,8 +20,10 @@
         "x_pixel_size": 0.1,
         "y_pixel_size": -0.1
     },
-    "pixel_dimension_size": [
-        1800,
-        3600
-    ]
+    "pixel_dimension_size": {
+        "dim_array": [
+            1800,
+            3600
+        ]
+    }
 }

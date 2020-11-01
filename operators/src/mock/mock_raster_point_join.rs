@@ -50,7 +50,7 @@ where
                 let raster_future = raster_stream.next().await;
                 let raster_tile: RasterTile2D<T> =
                     raster_future.ok_or(crate::error::Error::QueryProcessor)??;
-                let pixel: T = raster_tile.data.pixel_value_at_grid_index(&[0, 0])?;
+                let pixel: T = raster_tile.data.pixel_value_at_grid_index(&[0, 0].into())?;
                 let pixel: f64 = pixel.as_();
                 let collection = collection.add_column(
                     &self.feature_name,
@@ -163,8 +163,8 @@ mod tests {
             TimeInterval::default(),
             TileInformation {
                 global_geo_transform: Default::default(),
-                global_tile_position: [0, 0],
-                tile_size_in_pixels: [3, 2],
+                global_tile_position: [0, 0].into(),
+                tile_size_in_pixels: [3, 2].into(),
             },
             raster,
         );
@@ -204,7 +204,9 @@ mod tests {
                             "start": -9_223_372_036_854_775_808_i64,
                             "end": 9_223_372_036_854_775_807_i64
                         },
-                        "tile_position": [0, 0],
+                        "tile_position": {
+                            "dim_array":[0, 0]
+                        },
                         "global_geo_transform": {
                             "origin_coordinate": {
                                 "x": 0.0,
@@ -215,7 +217,7 @@ mod tests {
                         },
                         "data": {
                             "grid_dimension": {
-                                "dimension_size": [3, 2]
+                                "dim_array": [3, 2]
                             },
                             "data_container": [1, 2, 3, 4, 5, 6],
                             "no_data_value": null
@@ -263,8 +265,8 @@ mod tests {
             TimeInterval::default(),
             TileInformation {
                 global_geo_transform: Default::default(),
-                global_tile_position: [0, 0],
-                tile_size_in_pixels: [3, 2],
+                global_tile_position: [0, 0].into(),
+                tile_size_in_pixels: [3, 2].into(),
             },
             raster,
         );

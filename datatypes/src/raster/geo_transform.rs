@@ -1,7 +1,7 @@
 use crate::primitives::Coordinate2D;
 use serde::{Deserialize, Serialize};
 
-use super::{GridIdx2D, SignedGridIdx2D};
+use super::{Dim, GridIdx2D, GridIndex, SignedGridIdx2D, SignedGridIndex};
 
 /// This is a typedef for the `GDAL GeoTransform`. It represents an affine transformation matrix.
 pub type GdalGeoTransform = [f64; 6];
@@ -66,12 +66,11 @@ impl GeoTransform {
     /// use geoengine_datatypes::primitives::{Coordinate2D};
     ///
     /// let geo_transform = GeoTransform::new_with_coordinate_x_y(0.0, 1.0, 0.0, -1.0);
-    /// assert_eq!(geo_transform.grid_idx_to_coordinate_2d([0, 0]), (0.0, 0.0).into())
+    /// assert_eq!(geo_transform.grid_idx_to_coordinate_2d([0, 0].into()), (0.0, 0.0).into())
     /// ```
     ///
-    #[inline]
     pub fn grid_idx_to_coordinate_2d(&self, grid_index: GridIdx2D) -> Coordinate2D {
-        let [.., grid_index_y, grid_index_x] = grid_index;
+        let [.., grid_index_y, grid_index_x] = grid_index.as_index_array();
         let coord_x = self.origin_coordinate.x + (grid_index_x as f64) * self.x_pixel_size;
         let coord_y = self.origin_coordinate.y + (grid_index_y as f64) * self.y_pixel_size;
         Coordinate2D::new(coord_x, coord_y)
@@ -79,9 +78,8 @@ impl GeoTransform {
 
     /// Transforms a grid coordinate (row, column) ~ (y, x) into a SRS coordinate (x,y)
     /// This method allows the index to have negative values.
-    #[inline]
     pub fn signed_grid_idx_to_coordinate_2d(&self, grid_index: SignedGridIdx2D) -> Coordinate2D {
-        let [.., grid_index_y, grid_index_x] = grid_index;
+        let [.., grid_index_y, grid_index_x] = grid_index.as_index_array();
         let coord_x = self.origin_coordinate.x + (grid_index_x as f64) * self.x_pixel_size;
         let coord_y = self.origin_coordinate.y + (grid_index_y as f64) * self.y_pixel_size;
         Coordinate2D::new(coord_x, coord_y)
@@ -96,22 +94,20 @@ impl GeoTransform {
     /// use geoengine_datatypes::primitives::{Coordinate2D};
     ///
     /// let geo_transform = GeoTransform::new_with_coordinate_x_y(0.0, 1.0, 0.0, -1.0);
-    /// assert_eq!(geo_transform.coordinate_2d_to_grid_2d((0.0, 0.0).into()), [0, 0])
+    /// assert_eq!(geo_transform.coordinate_2d_to_grid_2d((0.0, 0.0).into()), [0, 0].into())
     /// ```
     ///
-    #[inline]
     pub fn coordinate_2d_to_grid_2d(&self, coord: Coordinate2D) -> GridIdx2D {
         let grid_x_index = ((coord.x - self.origin_coordinate.x) / self.x_pixel_size) as usize;
         let grid_y_index = ((coord.y - self.origin_coordinate.y) / self.y_pixel_size) as usize;
-        [grid_y_index, grid_x_index]
+        [grid_y_index, grid_x_index].into()
     }
 
     /// Transforms an SRS coordinate (x,y) into a signed grid coordinate (row, column) ~ (y, x). This allows negative values.
-    #[inline]
     pub fn coordinate_2d_to_signed_grid_2d(&self, coord: Coordinate2D) -> SignedGridIdx2D {
         let grid_x_index = ((coord.x - self.origin_coordinate.x) / self.x_pixel_size) as isize;
         let grid_y_index = ((coord.y - self.origin_coordinate.y) / self.y_pixel_size) as isize;
-        [grid_y_index, grid_x_index]
+        Dim::new([grid_y_index, grid_x_index])
     }
 }
 
@@ -150,7 +146,7 @@ impl Into<GdalGeoTransform> for GeoTransform {
 #[cfg(test)]
 mod tests {
 
-    use crate::raster::GeoTransform;
+    use crate::raster::{Dim, GeoTransform};
 
     #[test]
     #[allow(clippy::float_cmp)]
@@ -176,15 +172,15 @@ mod tests {
     fn geo_transform_grid_2d_to_coordinate_2d() {
         let geo_transform = GeoTransform::new_with_coordinate_x_y(5.0, 1.0, 5.0, -1.0);
         assert_eq!(
-            geo_transform.grid_idx_to_coordinate_2d([0, 0]),
+            geo_transform.grid_idx_to_coordinate_2d(Dim::new([0, 0])),
             (5.0, 5.0).into()
         );
         assert_eq!(
-            geo_transform.grid_idx_to_coordinate_2d([1, 1]),
+            geo_transform.grid_idx_to_coordinate_2d(Dim::new([1, 1])),
             (6.0, 4.0).into()
         );
         assert_eq!(
-            geo_transform.grid_idx_to_coordinate_2d([2, 2]),
+            geo_transform.grid_idx_to_coordinate_2d(Dim::new([2, 2])),
             (7.0, 3.0).into()
         );
     }
@@ -194,15 +190,15 @@ mod tests {
         let geo_transform = GeoTransform::new_with_coordinate_x_y(5.0, 1.0, 5.0, -1.0);
         assert_eq!(
             geo_transform.coordinate_2d_to_grid_2d((5.0, 5.0).into()),
-            [0, 0]
+            Dim::new([0, 0])
         );
         assert_eq!(
             geo_transform.coordinate_2d_to_grid_2d((6.0, 4.0).into()),
-            [1, 1]
+            Dim::new([1, 1])
         );
         assert_eq!(
             geo_transform.coordinate_2d_to_grid_2d((7.0, 3.0).into()),
-            [2, 2]
+            Dim::new([2, 2])
         );
     }
 }

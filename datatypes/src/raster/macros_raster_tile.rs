@@ -267,7 +267,10 @@ mod tests {
     #[test]
     fn call_generic_raster2d() {
         fn first_pixel<T: Pixel>(raster: &RasterTile2D<T>) -> i64 {
-            raster.pixel_value_at_grid_index(&[0, 0]).unwrap().as_()
+            raster
+                .pixel_value_at_grid_index(&[0, 0].into())
+                .unwrap()
+                .as_()
         }
 
         let r = Raster2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap();
@@ -315,8 +318,8 @@ mod tests {
     #[test]
     fn call_bi_generic_raster_tile_2d() {
         fn first_pixel_add<T: Pixel, U: Pixel>(a: &RasterTile2D<T>, b: &RasterTile2D<U>) -> i64 {
-            let pixel_a: i64 = a.pixel_value_at_grid_index(&[0, 0]).unwrap().as_();
-            let pixel_b: i64 = b.pixel_value_at_grid_index(&[0, 0]).unwrap().as_();
+            let pixel_a: i64 = a.pixel_value_at_grid_index(&[0, 0].into()).unwrap().as_();
+            let pixel_b: i64 = b.pixel_value_at_grid_index(&[0, 0].into()).unwrap().as_();
             pixel_a + pixel_b
         }
 
@@ -342,8 +345,8 @@ mod tests {
     #[test]
     fn call_bi_generic_raster_tile_2d_same() {
         fn first_pixel_add<T: Pixel>(a: &RasterTile2D<T>, b: &RasterTile2D<T>) -> i64 {
-            let pixel_a = a.pixel_value_at_grid_index(&[0, 0]).unwrap();
-            let pixel_b = b.pixel_value_at_grid_index(&[0, 0]).unwrap();
+            let pixel_a = a.pixel_value_at_grid_index(&[0, 0].into()).unwrap();
+            let pixel_b = b.pixel_value_at_grid_index(&[0, 0].into()).unwrap();
             (pixel_a + pixel_b).as_()
         }
 
@@ -385,8 +388,8 @@ mod tests {
             a: &RasterTile2D<T>,
             b: &RasterTile2D<U>,
         ) -> i64 {
-            let pixel_a: T = a.pixel_value_at_grid_index(&[0, 0]).unwrap();
-            let pixel_b: T = b.pixel_value_at_grid_index(&[0, 0]).unwrap().into();
+            let pixel_a: T = a.pixel_value_at_grid_index(&[0, 0].into()).unwrap();
+            let pixel_b: T = b.pixel_value_at_grid_index(&[0, 0].into()).unwrap().into();
             (pixel_a + pixel_b).as_()
         }
 
@@ -451,7 +454,7 @@ mod tests {
 
         let typed_raster_a = TypedRasterTile2D::U32(RasterTile2D::new(
             TimeInterval::default(),
-            [0, 0],
+            [0, 0].into(),
             [1.0, 1.0, 0.0, 1.0, 0.0, 1.0].into(),
             Raster2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap(),
         ));
