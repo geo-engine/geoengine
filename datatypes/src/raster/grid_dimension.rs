@@ -22,7 +22,11 @@ pub trait GridDimension: Clone + Eq + Debug + Send + Sync + Default + Capacity {
     // type IndexPattern;
     type IndexType: GridIndex<Self>;
     /// The number of axis of the dimension.
-    fn number_of_dimensions(&self) -> usize;
+    const NDIM: usize;
+    /// The number of axis of the dimension.
+    fn number_of_dimensions(&self) -> usize {
+        Self::NDIM
+    }
     /// The index of the dimension. Note: this is max index +1 on each axis and therefore out of bounds!
     fn size_as_index(&self) -> Self::IndexType;
     /// The number of elements the dimension can hold. This is bounded by size(usize).
@@ -146,11 +150,7 @@ where
 impl GridDimension for Dim1D {
     type IndexType = Self;
 
-    // const NDIM: usize = 1;
-
-    fn number_of_dimensions(&self) -> usize {
-        1
-    }
+    const NDIM: usize = 1;
 
     fn number_of_elements(&self) -> usize {
         self.dim_array()[0]
@@ -261,11 +261,7 @@ where
 
 impl GridDimension for Dim2D {
     type IndexType = GridIdx2D;
-    // const NDIM: usize = 2;
-
-    fn number_of_dimensions(&self) -> usize {
-        2
-    }
+    const NDIM: usize = 2;
 
     fn number_of_elements(&self) -> usize {
         self.dim_array()[0] * self.dim_array()[1]
@@ -404,11 +400,7 @@ where
 impl GridDimension for Dim3D {
     type IndexType = GridIdx3D;
 
-    // const NDIM: usize = 3;
-
-    fn number_of_dimensions(&self) -> usize {
-        3
-    }
+    const NDIM: usize = 3;
 
     fn number_of_elements(&self) -> usize {
         self.dim_array()[2] * self.dim_array()[1] * self.dim_array()[0]

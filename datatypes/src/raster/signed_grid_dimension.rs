@@ -20,10 +20,20 @@ pub type OffsetDim1D = OffsetDim<[usize; 1], [isize; 1]>;
 pub type OffsetDim2D = OffsetDim<[usize; 2], [isize; 2]>;
 pub type OffsetDim3D = OffsetDim<[usize; 3], [isize; 3]>;
 
+/// This trait allows to address cells in a grid relative to a origin which differs from the upper left pixel.
+/// An example for this is a grid wich is anchored at a geographical coordinate (0,0) but the upper left pixel is at (-180, 90).
 pub trait OffsetDimension: Sized {
     type SignedIndexType: SignedGridIndex<Self>;
     type DimensionType: GridDimension<IndexType = Self::UnsignedIndexType>;
     type UnsignedIndexType: GridIndex<Self::DimensionType>;
+
+    /// The number of axis of the dimension.
+    const NDIM: usize;
+
+    /// The number of axis of the dimension.
+    fn number_of_dimensions(&self) -> usize {
+        Self::NDIM
+    }
 
     /// The offsets for the dimension axis
     fn offsets_as_slice(&self) -> &[SignedIdx];
@@ -296,6 +306,8 @@ impl OffsetDimension for OffsetDim1D {
     type DimensionType = Dim1D;
     type UnsignedIndexType = Dim1D;
 
+    const NDIM: usize = 1;
+
     fn offsets_as_index(&self) -> Self::SignedIndexType {
         Dim::new(self.offsets)
     }
@@ -355,6 +367,8 @@ impl OffsetDimension for OffsetDim2D {
         Dim::new(self.offsets)
     }
 
+    const NDIM: usize = 2;
+
     fn offset_index_to_zero_based_unchecked(
         &self,
         index: &Self::SignedIndexType,
@@ -412,6 +426,8 @@ impl OffsetDimension for OffsetDim3D {
     type SignedIndexType = SignedGridIdx3D;
     type DimensionType = Dim3D;
     type UnsignedIndexType = GridIdx3D;
+
+    const NDIM: usize = 3;
 
     fn offsets_as_index(&self) -> Self::SignedIndexType {
         Dim::new(self.offsets)
