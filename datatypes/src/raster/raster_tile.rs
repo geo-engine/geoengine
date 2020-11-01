@@ -159,7 +159,6 @@ impl TileInformation {
         [up_left_y + (pos_y as isize), up_left_x + (pos_x as isize)].into()
     }
 
-    #[inline]
     pub fn tile_geo_transform(&self) -> GeoTransform {
         let tile_upper_left_coord = self
             .global_geo_transform

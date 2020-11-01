@@ -221,7 +221,6 @@ impl TilingStrategy {
         [lower_right_y - 1, lower_right_x - 1].into()
     }
 
-    #[inline]
     pub fn pixel_idx_to_tile_idx(&self, pixel_idx: SignedGridIdx2D) -> SignedGridIdx2D {
         let [y_pixel_idx, x_pixel_idx] = pixel_idx.as_index_array();
         let [y_tile_size, x_tile_size] = self.tile_pixel_size.as_index_array();
@@ -230,7 +229,6 @@ impl TilingStrategy {
         [y_tile_idx, x_tile_idx].into()
     }
 
-    #[inline]
     pub fn pixel_idx_to_next_tile_idx(&self, pixel_idx: SignedGridIdx2D) -> SignedGridIdx2D {
         let [y_pixel_idx, x_pixel_idx] = pixel_idx.as_index_array();
         let [y_tile_size, x_tile_size] = self.tile_pixel_size.as_index_array();
