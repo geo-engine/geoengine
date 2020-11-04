@@ -81,8 +81,8 @@ pub struct STRectangle {
 }
 
 impl STRectangle {
-    pub fn new<A, B>(
-        spatial_reference: SpatialReferenceOption,
+    pub fn new<A, B, S>(
+        spatial_reference: S,
         lower_left_x: f64,
         lower_left_y: f64,
         upper_left_x: f64,
@@ -93,9 +93,10 @@ impl STRectangle {
     where
         A: Into<TimeInstance>,
         B: Into<TimeInstance>,
+        S: Into<SpatialReferenceOption>,
     {
         Ok(Self {
-            spatial_reference,
+            spatial_reference: spatial_reference.into(),
             bounding_box: BoundingBox2D::new(
                 Coordinate2D::new(lower_left_x, lower_left_y),
                 Coordinate2D::new(upper_left_x, upper_left_y),
@@ -105,8 +106,8 @@ impl STRectangle {
         })
     }
 
-    pub fn new_unchecked<A, B>(
-        spatial_reference: SpatialReferenceOption,
+    pub fn new_unchecked<A, B, S>(
+        spatial_reference: S,
         lower_left_x: f64,
         lower_left_y: f64,
         upper_left_x: f64,
@@ -117,9 +118,10 @@ impl STRectangle {
     where
         A: Into<TimeInstance>,
         B: Into<TimeInstance>,
+        S: Into<SpatialReferenceOption>,
     {
         Self {
-            spatial_reference,
+            spatial_reference: spatial_reference.into(),
             bounding_box: BoundingBox2D::new_unchecked(
                 Coordinate2D::new(lower_left_x, lower_left_y),
                 Coordinate2D::new(upper_left_x, upper_left_y),

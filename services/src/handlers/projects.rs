@@ -268,8 +268,7 @@ mod tests {
         let create = CreateProject {
             name: "Test".to_string(),
             description: "Foo".to_string(),
-            bounds: STRectangle::new(SpatialReference::wgs84().into(), 0., 0., 1., 1., 0, 1)
-                .unwrap(),
+            bounds: STRectangle::new(SpatialReference::wgs84(), 0., 0., 1., 1., 0, 1).unwrap(),
         };
 
         let res = warp::test::request()

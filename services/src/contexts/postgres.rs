@@ -362,8 +362,7 @@ mod tests {
             Some(projects[0].id)
         );
 
-        let rect =
-            STRectangle::new_unchecked(SpatialReference::wgs84().into(), 0., 1., 2., 3., 1, 2);
+        let rect = STRectangle::new_unchecked(SpatialReference::wgs84(), 0., 1., 2., 3., 1, 2);
         ctx.user_db_ref_mut()
             .await
             .set_session_view(&session, rect.clone())
