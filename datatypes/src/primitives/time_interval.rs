@@ -2,7 +2,7 @@ use crate::error;
 use crate::primitives::TimeInstance;
 use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::Result;
-use arrow::array::{Array, ArrayBuilder, BooleanArray};
+use arrow::array::{Array, ArrayBuilder, BooleanArray, PrimitiveArrayOps};
 use arrow::error::ArrowError;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};

@@ -43,7 +43,7 @@ where
 {
     SETTINGS
         .read()
-        .map_err(|_| error::Error::ConfigLockFailed)?
+        .map_err(|_error| error::Error::ConfigLockFailed)?
         .get::<T>(key)
         .context(error::Config)
 }
@@ -54,7 +54,7 @@ where
 {
     SETTINGS
         .read()
-        .map_err(|_| error::Error::ConfigLockFailed)?
+        .map_err(|_error| error::Error::ConfigLockFailed)?
         .get::<T>(T::KEY)
         .context(error::Config)
 }

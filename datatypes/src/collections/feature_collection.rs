@@ -1,12 +1,13 @@
 use std::collections::{HashMap, HashSet};
 use std::convert::{TryFrom, TryInto};
 use std::marker::PhantomData;
+use std::mem;
 use std::ops::{Bound, RangeBounds};
 use std::sync::Arc;
 
 use arrow::array::{
     as_primitive_array, as_string_array, Array, ArrayData, ArrayRef, BooleanArray, Float64Array,
-    ListArray, StructArray,
+    ListArray, PrimitiveArrayOps, StructArray,
 };
 use arrow::datatypes::{DataType, Field, Float64Type, Int64Type};
 use arrow::error::ArrowError;
@@ -23,7 +24,6 @@ use crate::primitives::{
 use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::helpers::SomeIter;
 use crate::util::Result;
-use std::mem;
 
 #[allow(clippy::unsafe_derive_deserialize)]
 #[derive(Debug, Deserialize, Serialize)]
@@ -759,7 +759,7 @@ where
 
     /// Returns the byte-size of this collection
     pub fn byte_size(&self) -> usize {
-        let table_size = get_array_memory_size(&self.table.data()) + mem::size_of_val(&self.table);
+        let table_size = self.table.get_array_memory_size();
 
         // TODO: store information? avoid re-calculation?
         let map_size = mem::size_of_val(&self.types)
@@ -997,41 +997,17 @@ where
     Ok(())
 }
 
-/// Taken from <https://github.com/apache/arrow/blob/master/rust/arrow/src/array/data.rs>
-/// TODO: replace with existing call on next version
-pub fn get_array_memory_size(data: &ArrayData) -> usize {
-    let mut size = 0;
-    // Calculate size of the fields that don't have [get_array_memory_size] method internally.
-    size += mem::size_of_val(data)
-        - mem::size_of_val(&data.buffers())
-        - mem::size_of_val(&data.null_bitmap())
-        - mem::size_of_val(&data.child_data());
-
-    // Calculate rest of the fields top down which contain actual data
-    for buffer in data.buffers() {
-        size += mem::size_of_val(&buffer);
-        size += buffer.capacity();
-    }
-    if let Some(bitmap) = data.null_bitmap() {
-        size += bitmap.buffer_ref().capacity() + mem::size_of_val(bitmap);
-    }
-    for child in data.child_data() {
-        size += get_array_memory_size(child);
-    }
-
-    size
-}
-
 /// Custom serializer for Arrow's `StructArray`
 mod struct_serde {
-    use super::*;
+    use std::fmt::Formatter;
+    use std::io::Cursor;
 
-    use arrow::record_batch::{RecordBatch, RecordBatchReader};
+    use arrow::record_batch::RecordBatch;
     use serde::de::{SeqAccess, Visitor};
     use serde::ser::Error;
     use serde::{Deserializer, Serializer};
-    use std::fmt::Formatter;
-    use std::io::Cursor;
+
+    use super::*;
 
     pub fn serialize<S>(struct_array: &StructArray, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -1090,9 +1066,9 @@ mod struct_serde {
             }
 
             let batch = reader
-                .next_batch()
-                .map_err(|error| E::custom(error.to_string()))?
-                .expect("checked");
+                .next()
+                .expect("checked")
+                .map_err(|error| E::custom(error.to_string()))?;
 
             Ok(batch.into())
         }
@@ -1158,13 +1134,16 @@ mod tests {
         let struct_stack_size = 32;
         assert_eq!(mem::size_of::<StructArray>(), struct_stack_size);
 
+        let arrow_overhead_bytes = 192;
+
         for i in 0..10 {
             assert_eq!(
                 gen_collection(i).byte_size(),
-                empty_hash_map_size + struct_stack_size + 264 + time_interval_size(i)
+                empty_hash_map_size
+                    + struct_stack_size
+                    + arrow_overhead_bytes
+                    + time_interval_size(i)
             );
         }
-
-        // TODO: rely on numbers once the arrow library provides this feature
     }
 }
