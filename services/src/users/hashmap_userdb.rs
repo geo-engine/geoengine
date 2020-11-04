@@ -5,9 +5,11 @@ use snafu::ensure;
 
 use crate::error;
 use crate::error::Result;
+use crate::projects::project::{ProjectId, STRectangle};
 use crate::users::session::{Session, SessionId};
 use crate::users::user::{User, UserCredentials, UserId, UserRegistration};
 use crate::users::userdb::UserDB;
+use crate::util::identifiers::Identifier;
 use crate::util::user_input::Validated;
 use async_trait::async_trait;
 
@@ -39,7 +41,15 @@ impl UserDB for HashMapUserDB {
     async fn login(&mut self, user_credentials: UserCredentials) -> Result<Session> {
         match self.users.get(&user_credentials.email) {
             Some(user) if bcrypt::verify(user_credentials.password, &user.password_hash) => {
-                let session = Session::new(user);
+                let session = Session {
+                    id: SessionId::new(),
+                    user: user.id,
+                    created: chrono::Utc::now(),
+                    // TODO: make session length configurable
+                    valid_until: chrono::Utc::now() + chrono::Duration::minutes(60),
+                    project: None,
+                    view: None,
+                };
                 self.sessions.insert(session.id, session.clone());
                 Ok(session)
             }
@@ -59,6 +69,27 @@ impl UserDB for HashMapUserDB {
     async fn session(&self, session: SessionId) -> Result<Session> {
         match self.sessions.get(&session) {
             Some(session) => Ok(session.clone()),
+            None => Err(error::Error::SessionDoesNotExist),
+        }
+    }
+
+    async fn set_session_project(&mut self, session: &Session, project: ProjectId) -> Result<()> {
+        // TODO: check project exists
+        match self.sessions.get_mut(&session.id) {
+            Some(session) => {
+                session.project = Some(project);
+                Ok(())
+            }
+            None => Err(error::Error::SessionDoesNotExist),
+        }
+    }
+
+    async fn set_session_view(&mut self, session: &Session, view: STRectangle) -> Result<()> {
+        match self.sessions.get_mut(&session.id) {
+            Some(session) => {
+                session.view = Some(view);
+                Ok(())
+            }
             None => Err(error::Error::SessionDoesNotExist),
         }
     }

@@ -4,10 +4,13 @@ use arrow::datatypes::DataType;
 use arrow::error::ArrowError;
 use geo::Coordinate;
 use ocl::OclPrm;
+use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use std::{fmt, slice};
 
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, PartialOrd, Serialize, Default)]
+#[derive(
+    Clone, Copy, Debug, Deserialize, PartialEq, PartialOrd, Serialize, Default, ToSql, FromSql,
+)]
 #[repr(C)]
 pub struct Coordinate2D {
     pub x: f64,

@@ -1,12 +1,16 @@
 use crate::error;
+use postgres_types::private::BytesMut;
+use postgres_types::{FromSql, IsNull, ToSql, Type};
 use serde::de::Visitor;
 use serde::export::Formatter;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use snafu::ResultExt;
+use snafu::{Error, ResultExt};
 use std::str::FromStr;
 
 /// A spatial reference authority that is part of a spatial reference definition
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[derive(
+    Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, ToSql, FromSql,
+)]
 #[serde(rename_all = "SCREAMING-KEBAB-CASE")]
 pub enum SpatialReferenceAuthority {
     Epsg,
@@ -31,7 +35,7 @@ impl std::fmt::Display for SpatialReferenceAuthority {
 }
 
 /// A spatial reference consists of an authority and a code
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, ToSql, FromSql)]
 pub struct SpatialReference {
     authority: SpatialReferenceAuthority,
     code: u32,
@@ -130,6 +134,52 @@ impl FromStr for SpatialReference {
 pub enum SpatialReferenceOption {
     SpatialReference(SpatialReference),
     Unreferenced,
+}
+
+impl ToSql for SpatialReferenceOption {
+    fn to_sql(&self, ty: &Type, out: &mut BytesMut) -> Result<IsNull, Box<dyn Error + Sync + Send>>
+    where
+        Self: Sized,
+    {
+        match self {
+            SpatialReferenceOption::SpatialReference(sref) => sref.to_sql(ty, out),
+            SpatialReferenceOption::Unreferenced => Ok(IsNull::Yes),
+        }
+    }
+
+    fn accepts(ty: &Type) -> bool
+    where
+        Self: Sized,
+    {
+        <SpatialReference as ToSql>::accepts(ty)
+    }
+
+    fn to_sql_checked(
+        &self,
+        ty: &Type,
+        out: &mut BytesMut,
+    ) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
+        match self {
+            SpatialReferenceOption::SpatialReference(sref) => sref.to_sql_checked(ty, out),
+            SpatialReferenceOption::Unreferenced => Ok(IsNull::Yes),
+        }
+    }
+}
+
+impl<'a> FromSql<'a> for SpatialReferenceOption {
+    fn from_sql(ty: &Type, raw: &'a [u8]) -> Result<Self, Box<dyn Error + Sync + Send>> {
+        Ok(SpatialReferenceOption::SpatialReference(
+            SpatialReference::from_sql(ty, raw)?,
+        ))
+    }
+
+    fn from_sql_null(_: &Type) -> Result<Self, Box<dyn Error + Sync + Send>> {
+        Ok(SpatialReferenceOption::Unreferenced)
+    }
+
+    fn accepts(ty: &Type) -> bool {
+        <SpatialReference as FromSql>::accepts(ty)
+    }
 }
 
 impl std::fmt::Display for SpatialReferenceOption {

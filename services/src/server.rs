@@ -77,6 +77,8 @@ where
         .or(handlers::users::register_user_handler(ctx.clone()))
         .or(handlers::users::login_handler(ctx.clone()))
         .or(handlers::users::logout_handler(ctx.clone()))
+        .or(handlers::users::session_project_handler(ctx.clone()))
+        .or(handlers::users::session_view_handler(ctx.clone()))
         .or(handlers::projects::create_project_handler(ctx.clone()))
         .or(handlers::projects::list_projects_handler(ctx.clone()))
         .or(handlers::projects::update_project_handler(ctx.clone()))
