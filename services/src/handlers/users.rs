@@ -71,19 +71,19 @@ pub fn session_project_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::post()
-        .and(warp::path!("session" / "project" / Uuid))
+        .and(warp::path!("session" / "project" / Uuid).map(ProjectId::from_uuid))
         .and(authenticate(ctx))
         .and_then(session_project)
 }
 
 // TODO: move into handler once async closures are available?
 async fn session_project<C: Context>(
-    project: Uuid,
+    project: ProjectId,
     ctx: C,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     ctx.user_db_ref_mut()
         .await
-        .set_session_project(ctx.session()?, ProjectId::from_uuid(project))
+        .set_session_project(ctx.session()?, project)
         .await?;
 
     Ok(warp::reply())
