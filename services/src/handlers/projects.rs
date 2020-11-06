@@ -3,8 +3,8 @@ use crate::projects::project::{
     CreateProject, LoadVersion, ProjectId, ProjectListOptions, UpdateProject, UserProjectPermission,
 };
 use crate::projects::projectdb::ProjectDB;
+use crate::util::identifiers::IdResponse;
 use crate::util::user_input::UserInput;
-use serde_json::json;
 use uuid::Uuid;
 use warp::Filter;
 
@@ -29,7 +29,7 @@ async fn create_project<C: Context>(
         .await
         .create(ctx.session()?.user, create)
         .await?;
-    Ok(warp::reply::json(&json!({ "id": id })))
+    Ok(warp::reply::json(&IdResponse::from_id(id)))
 }
 
 pub fn list_projects_handler<C: Context>(
@@ -285,7 +285,7 @@ mod tests {
         assert_eq!(res.status(), 200);
 
         let body: String = String::from_utf8(res.body().to_vec()).unwrap();
-        assert!(serde_json::from_str::<ProjectId>(&body).is_ok());
+        assert!(serde_json::from_str::<IdResponse<ProjectId>>(&body).is_ok());
     }
 
     #[tokio::test]

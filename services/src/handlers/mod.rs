@@ -2,7 +2,10 @@ use crate::error::Result;
 use crate::users::session::SessionId;
 use crate::users::userdb::UserDB;
 use crate::{contexts::Context, error::Error};
+use serde_json::json;
+use std::error::Error as StdError;
 use std::str::FromStr;
+use warp::http::StatusCode;
 use warp::Filter;
 use warp::{Rejection, Reply};
 
@@ -13,20 +16,26 @@ pub mod wms;
 pub mod workflows;
 
 /// A handler for custom rejections
-///
-/// # Errors
-///
-/// Fails if the rejection is not custom
-///
-pub async fn handle_rejection(error: Rejection) -> Result<impl Reply, Rejection> {
-    // TODO: handle/report serde deserialization error when e.g. a json attribute is missing/malformed
-    error.find::<Error>().map_or(Err(warp::reject()), |err| {
-        let json = warp::reply::json(&err.to_string());
-        Ok(warp::reply::with_status(
-            json,
-            warp::http::StatusCode::BAD_REQUEST,
-        ))
-    })
+pub async fn handle_rejection(err: Rejection) -> Result<impl Reply, Rejection> {
+    let (code, message) = if err.is_not_found() {
+        (StatusCode::NOT_FOUND, "Not Found".to_string())
+    } else if let Some(e) = err.find::<Error>() {
+        // TODO: distinguish between client/server/temporary/permanent errors
+        (StatusCode::BAD_REQUEST, e.to_string())
+    } else if let Some(e) = err.find::<warp::filters::body::BodyDeserializeError>() {
+        (
+            StatusCode::BAD_REQUEST,
+            e.source()
+                .map_or("Bad Request".to_string(), ToString::to_string),
+        )
+    } else {
+        return Err(warp::reject());
+    };
+
+    let json = warp::reply::json(&json!( {
+        "message": message,
+    }));
+    Ok(warp::reply::with_status(json, code))
 }
 
 fn authenticate<C: Context>(

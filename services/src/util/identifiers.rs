@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 pub trait Identifier: Sized {
     /// Create a new (random) identifier
     fn new() -> Self;
@@ -42,4 +44,18 @@ macro_rules! identifier {
             }
         }
     };
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+pub struct IdResponse<T: Identifier> {
+    pub id: T,
+}
+
+impl<T> IdResponse<T>
+where
+    T: Identifier,
+{
+    pub fn from_id(id: T) -> Self {
+        Self { id }
+    }
 }

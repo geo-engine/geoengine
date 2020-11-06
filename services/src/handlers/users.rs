@@ -3,8 +3,8 @@ use crate::handlers::{authenticate, Context};
 use crate::projects::project::{ProjectId, STRectangle};
 use crate::users::user::{UserCredentials, UserRegistration};
 use crate::users::userdb::UserDB;
+use crate::util::identifiers::IdResponse;
 use crate::util::user_input::UserInput;
-use serde_json::json;
 use uuid::Uuid;
 use warp::reply::Reply;
 use warp::Filter;
@@ -26,7 +26,7 @@ async fn register_user<C: Context>(
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let user = user.validated()?;
     let id = ctx.user_db_ref_mut().await.register(user).await?;
-    Ok(warp::reply::json(&json!({ "id": id })))
+    Ok(warp::reply::json(&IdResponse::from_id(id)))
 }
 
 pub fn login_handler<C: Context>(
@@ -123,6 +123,7 @@ mod tests {
     use crate::util::user_input::Validated;
     use crate::{contexts::InMemoryContext, handlers::handle_rejection};
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
+    use serde_json::json;
 
     #[tokio::test]
     async fn register() {
@@ -146,7 +147,34 @@ mod tests {
         assert_eq!(res.status(), 200);
 
         let body: String = String::from_utf8(res.body().to_vec()).unwrap();
-        assert!(serde_json::from_str::<UserId>(&body).is_ok());
+        assert!(serde_json::from_str::<IdResponse<UserId>>(&body).is_ok());
+    }
+
+    #[tokio::test]
+    async fn register_invalid_body() {
+        let ctx = InMemoryContext::default();
+
+        let user = json!({
+            "password": "secret123",
+            "real_name": " Foo Bar",
+        });
+
+        // register user
+        let res = warp::test::request()
+            .method("POST")
+            .path("/user")
+            .header("Content-Length", "0")
+            .json(&user)
+            .reply(&register_user_handler(ctx))
+            .await;
+
+        assert_eq!(res.status(), 400);
+
+        let body: String = String::from_utf8(res.body().to_vec()).unwrap();
+        assert_eq!(
+            body,
+            "Request body deserialize error: missing field `email` at line 1 column 47"
+        );
     }
 
     #[tokio::test]

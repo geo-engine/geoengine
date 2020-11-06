@@ -54,6 +54,7 @@ mod tests {
     use super::*;
     use crate::users::user::{UserCredentials, UserRegistration};
     use crate::users::userdb::UserDB;
+    use crate::util::identifiers::IdResponse;
     use crate::util::user_input::UserInput;
     use crate::{contexts::InMemoryContext, workflows::registry::WorkflowRegistry};
     use geoengine_operators::engine::VectorOperator;
@@ -112,7 +113,7 @@ mod tests {
         assert_eq!(res.status(), 200);
 
         let body: String = String::from_utf8(res.body().to_vec()).unwrap();
-        let _id: WorkflowId = serde_json::from_str(&body).unwrap();
+        let _id: IdResponse<WorkflowId> = serde_json::from_str(&body).unwrap();
     }
 
     #[tokio::test]
