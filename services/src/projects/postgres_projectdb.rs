@@ -87,8 +87,8 @@ where
 
         let mut project_listings = vec![];
         for project_row in project_rows {
-            let project_version_id = ProjectVersionId::from_uuid(project_row.get(0));
-            let project_id = ProjectId::from_uuid(project_row.get(1));
+            let project_version_id = ProjectVersionId(project_row.get(0));
+            let project_id = ProjectId(project_row.get(1));
             let name = project_row.get(2);
             let description = project_row.get(3);
             let changed = project_row.get(4);
@@ -175,13 +175,13 @@ where
             conn.query_one(&stmt, &[&user, &project]).await?
         };
 
-        let project_id = ProjectId::from_uuid(row.get(0));
-        let version_id = ProjectVersionId::from_uuid(row.get(1));
+        let project_id = ProjectId(row.get(0));
+        let version_id = ProjectVersionId(row.get(1));
         let name = row.get(2);
         let description = row.get(3);
         let bounds = row.get(4);
         let changed = row.get(5);
-        let author_id = UserId::from_uuid(row.get(6));
+        let author_id = UserId(row.get(6));
 
         let stmt = conn
             .prepare(
@@ -207,7 +207,7 @@ where
             };
 
             layers.push(Layer {
-                workflow: WorkflowId::from_uuid(row.get(3)),
+                workflow: WorkflowId(row.get(3)),
                 name: row.get(1),
                 info,
             });
@@ -433,9 +433,9 @@ where
         Ok(rows
             .iter()
             .map(|row| ProjectVersion {
-                id: ProjectVersionId::from_uuid(row.get(0)),
+                id: ProjectVersionId(row.get(0)),
                 changed: row.get(1),
-                author: UserId::from_uuid(row.get(2)),
+                author: UserId(row.get(2)),
             })
             .collect())
     }
@@ -471,8 +471,8 @@ where
         Ok(rows
             .into_iter()
             .map(|row| UserProjectPermission {
-                user: UserId::from_uuid(row.get(0)),
-                project: ProjectId::from_uuid(row.get(1)),
+                user: UserId(row.get(0)),
+                project: ProjectId(row.get(1)),
                 permission: row.get(2),
             })
             .collect())

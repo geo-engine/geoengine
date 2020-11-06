@@ -84,7 +84,7 @@ where
             .await
             .map_err(|_error| error::Error::LoginFailed)?;
 
-        let user_id = UserId::from_uuid(row.get(0));
+        let user_id = UserId(row.get(0));
         let password_hash = row.get(1);
 
         if bcrypt::verify(user_credentials.password, password_hash) {
@@ -158,10 +158,10 @@ where
 
         Ok(Session {
             id: session,
-            user: UserId::from_uuid(row.get(0)),
+            user: UserId(row.get(0)),
             created: row.get(1),
             valid_until: row.get(2),
-            project: row.get::<usize, Option<Uuid>>(3).map(ProjectId::from_uuid),
+            project: row.get::<usize, Option<Uuid>>(3).map(ProjectId),
             view: row.get(4),
         })
     }

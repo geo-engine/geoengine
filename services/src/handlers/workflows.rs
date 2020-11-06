@@ -1,9 +1,9 @@
+use serde_json::json;
 use uuid::Uuid;
 use warp::reply::Reply;
 use warp::Filter;
 
 use crate::handlers::{authenticate, Context};
-use crate::util::identifiers::Identifier;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 
@@ -27,7 +27,7 @@ async fn register_workflow<C: Context>(
         .await
         .register(workflow)
         .await?;
-    Ok(warp::reply::json(&id))
+    Ok(warp::reply::json(&json!({ "id": id })))
 }
 
 pub fn load_workflow_handler<C: Context>(
@@ -44,7 +44,7 @@ async fn load_workflow<C: Context>(id: Uuid, ctx: C) -> Result<impl warp::Reply,
     let wf = ctx
         .workflow_registry_ref()
         .await
-        .load(&WorkflowId::from_uuid(id))
+        .load(&WorkflowId(id))
         .await?;
     Ok(warp::reply::json(&wf).into_response())
 }

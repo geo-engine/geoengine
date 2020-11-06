@@ -1,8 +1,8 @@
 use crate::error::Result;
 use crate::users::session::SessionId;
 use crate::users::userdb::UserDB;
-use crate::util::identifiers::Identifier;
 use crate::{contexts::Context, error::Error};
+use std::str::FromStr;
 use warp::Filter;
 use warp::{Rejection, Reply};
 
@@ -33,7 +33,7 @@ fn authenticate<C: Context>(
     ctx: C,
 ) -> impl warp::Filter<Extract = (C,), Error = warp::Rejection> + Clone {
     async fn do_authenticate<C: Context>(mut ctx: C, token: String) -> Result<C, warp::Rejection> {
-        let token = SessionId::from_uuid_str(&token).map_err(|_error| warp::reject())?;
+        let token = SessionId::from_str(&token).map_err(|_error| warp::reject())?;
         let session = ctx
             .user_db_ref()
             .await

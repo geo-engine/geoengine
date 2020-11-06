@@ -3,8 +3,8 @@ use crate::handlers::{authenticate, Context};
 use crate::projects::project::{ProjectId, STRectangle};
 use crate::users::user::{UserCredentials, UserRegistration};
 use crate::users::userdb::UserDB;
-use crate::util::identifiers::Identifier;
 use crate::util::user_input::UserInput;
+use serde_json::json;
 use uuid::Uuid;
 use warp::reply::Reply;
 use warp::Filter;
@@ -26,7 +26,7 @@ async fn register_user<C: Context>(
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let user = user.validated()?;
     let id = ctx.user_db_ref_mut().await.register(user).await?;
-    Ok(warp::reply::json(&id))
+    Ok(warp::reply::json(&json!({ "id": id })))
 }
 
 pub fn login_handler<C: Context>(
@@ -71,7 +71,7 @@ pub fn session_project_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::post()
-        .and(warp::path!("session" / "project" / Uuid).map(ProjectId::from_uuid))
+        .and(warp::path!("session" / "project" / Uuid).map(ProjectId))
         .and(authenticate(ctx))
         .and_then(session_project)
 }
