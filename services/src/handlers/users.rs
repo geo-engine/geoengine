@@ -13,7 +13,7 @@ pub fn register_user_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::post()
-        .and(warp::path!("user" / "register"))
+        .and(warp::path("user"))
         .and(warp::body::json())
         .and(warp::any().map(move || ctx.clone()))
         .and_then(register_user)
@@ -33,7 +33,7 @@ pub fn login_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::post()
-        .and(warp::path!("user" / "login"))
+        .and(warp::path("login"))
         .and(warp::body::json())
         .and(warp::any().map(move || ctx.clone()))
         .and_then(login)
@@ -54,7 +54,7 @@ pub fn logout_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::post()
-        .and(warp::path!("user" / "logout"))
+        .and(warp::path("logout"))
         .and(authenticate(ctx))
         .and_then(logout)
 }
@@ -137,7 +137,7 @@ mod tests {
         // register user
         let res = warp::test::request()
             .method("POST")
-            .path("/user/register")
+            .path("/user")
             .header("Content-Length", "0")
             .json(&user)
             .reply(&register_user_handler(ctx))
@@ -162,7 +162,7 @@ mod tests {
         // register user
         let res = warp::test::request()
             .method("POST")
-            .path("/user/register")
+            .path("/user")
             .header("Content-Length", "0")
             .json(&user)
             .reply(&register_user_handler(ctx).recover(handle_rejection))
@@ -192,7 +192,7 @@ mod tests {
 
         let res = warp::test::request()
             .method("POST")
-            .path("/user/login")
+            .path("/login")
             .header("Content-Length", "0")
             .json(&credentials)
             .reply(&login_handler(ctx))
@@ -225,7 +225,7 @@ mod tests {
 
         let res = warp::test::request()
             .method("POST")
-            .path("/user/login")
+            .path("/login")
             .header("Content-Length", "0")
             .json(&credentials)
             .reply(&login_handler(ctx))
@@ -263,7 +263,7 @@ mod tests {
 
         let res = warp::test::request()
             .method("POST")
-            .path("/user/logout")
+            .path("/logout")
             .header("Authorization", session.id.to_string())
             .reply(&logout_handler(ctx))
             .await;
@@ -278,7 +278,7 @@ mod tests {
 
         let res = warp::test::request()
             .method("POST")
-            .path("/user/logout")
+            .path("/logout")
             .reply(&logout_handler(ctx))
             .await;
 
@@ -292,7 +292,7 @@ mod tests {
 
         let res = warp::test::request()
             .method("POST")
-            .path("/user/logout")
+            .path("/logout")
             .header("Authorization", "7e855f3c-b0cd-46d1-b5b3-19e6e3f9ea5")
             .reply(&logout_handler(ctx))
             .await;
@@ -307,7 +307,7 @@ mod tests {
 
         let res = warp::test::request()
             .method("POST")
-            .path("/user/logout")
+            .path("/logout")
             .header("Authorization", "no uuid")
             .reply(&logout_handler(ctx))
             .await;
