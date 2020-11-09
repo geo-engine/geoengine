@@ -1,8 +1,10 @@
+use crate::error;
 use crate::error::Result;
 use crate::users::session::SessionId;
 use crate::users::userdb::UserDB;
 use crate::{contexts::Context, error::Error};
 use serde_json::json;
+use snafu::ResultExt;
 use std::error::Error as StdError;
 use std::str::FromStr;
 use warp::http::StatusCode;
@@ -17,22 +19,46 @@ pub mod workflows;
 
 /// A handler for custom rejections
 pub async fn handle_rejection(err: Rejection) -> Result<impl Reply, Rejection> {
-    let (code, message) = if err.is_not_found() {
-        (StatusCode::NOT_FOUND, "Not Found".to_string())
-    } else if let Some(e) = err.find::<Error>() {
+    let (code, error, message) = if let Some(e) = err.find::<Error>() {
+        // custom errors
+
         // TODO: distinguish between client/server/temporary/permanent errors
-        (StatusCode::BAD_REQUEST, e.to_string())
+        if let error::Error::Authorization { source: e } = e {
+            let error_name: &'static str = e.as_ref().into();
+            (
+                StatusCode::UNAUTHORIZED,
+                error_name.to_string(),
+                e.to_string(),
+            )
+        } else {
+            let error_name: &'static str = e.into();
+            (
+                StatusCode::BAD_REQUEST,
+                error_name.to_string(),
+                e.to_string(),
+            )
+        }
     } else if let Some(e) = err.find::<warp::filters::body::BodyDeserializeError>() {
+        // serde_json deserialization errors
+
         (
             StatusCode::BAD_REQUEST,
+            "BodyDeserializeError".to_string(),
             e.source()
                 .map_or("Bad Request".to_string(), ToString::to_string),
         )
     } else {
-        return Err(warp::reject());
+        // no matching filter
+
+        (
+            StatusCode::NOT_FOUND,
+            "NotFound".to_string(),
+            "Not Found".to_string(),
+        )
     };
 
     let json = warp::reply::json(&json!( {
+        "error": error,
         "message": message,
     }));
     Ok(warp::reply::with_status(json, code))
@@ -41,20 +67,31 @@ pub async fn handle_rejection(err: Rejection) -> Result<impl Reply, Rejection> {
 fn authenticate<C: Context>(
     ctx: C,
 ) -> impl warp::Filter<Extract = (C,), Error = warp::Rejection> + Clone {
-    async fn do_authenticate<C: Context>(mut ctx: C, token: String) -> Result<C, warp::Rejection> {
-        let token = SessionId::from_str(&token).map_err(|_error| warp::reject())?;
-        let session = ctx
-            .user_db_ref()
-            .await
-            .session(token)
-            .await
-            .map_err(|_error| warp::reject())?;
-        ctx.set_session(session);
-        Ok(ctx)
+    async fn do_authenticate<C: Context>(
+        mut ctx: C,
+        token: Option<String>,
+    ) -> Result<C, warp::Rejection> {
+        if let Some(token) = token {
+            let token = SessionId::from_str(&token)?;
+            let session = ctx
+                .user_db_ref()
+                .await
+                .session(token)
+                .await
+                .map_err(Box::new)
+                .context(error::Authorization)?;
+            ctx.set_session(session);
+            Ok(ctx)
+        } else {
+            Err(Error::Authorization {
+                source: Box::new(Error::MissingAuthorizationHeader),
+            }
+            .into())
+        }
     }
 
     warp::any()
         .and(warp::any().map(move || ctx.clone()))
-        .and(warp::header::<String>("authorization"))
+        .and(warp::header::optional::<String>("authorization"))
         .and_then(do_authenticate)
 }

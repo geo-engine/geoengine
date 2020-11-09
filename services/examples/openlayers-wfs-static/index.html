@@ -68,15 +68,18 @@
         headers: {
             'Content-type': 'application/json; charset=UTF-8'
         }
-    }).then(response =>
-        fetch('/login', {
+    }).then(response => {
+        if (!response.ok) {
+            response.json().then(console.log);
+        }
+        return fetch('/login', {
             method: 'POST',
             body: JSON.stringify(user_login),
             headers: {
                 'Content-type': 'application/json; charset=UTF-8'
             }
         })
-    ).then(
+    }).then(
         response => response.json()
     ).then(json =>
         fetch('/workflow', {
