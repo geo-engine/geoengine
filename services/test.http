@@ -36,13 +36,13 @@ Content-Type: application/json
 ###
 
 POST http://localhost:3030/logout
-Authorization: 6ecff667-258e-4108-9dc9-93cb8c64793c
+Authorization: Bearer 6cb2191f-0a4d-4ac9-8f92-738e7bed443b
 Content-Type: application/json
 
 ###
 
 POST http://localhost:3030/project
-Authorization: 6d69326e-8694-4ae5-815a-b4b1ef02a8f6
+Authorization: Bearer 6cb2191f-0a4d-4ac9-8f92-738e7bed443b
 Content-Type: application/json
 
 {
@@ -70,7 +70,7 @@ Content-Type: application/json
 ###
 
 GET http://localhost:3030/projects
-Authorization: 6d69326e-8694-4ae5-815a-b4b1ef02a8f6
+Authorization: Bearer 6d69326e-8694-4ae5-815a-b4b1ef02a8f6
 Content-Type: application/json
 
 {
@@ -86,7 +86,7 @@ Content-Type: application/json
 ###
 
 POST http://localhost:3030/workflow
-Authorization: 6d69326e-8694-4ae5-815a-b4b1ef02a8f6
+Authorization: Bearer 6d69326e-8694-4ae5-815a-b4b1ef02a8f6
 Content-Type: application/json
 
 {
@@ -115,7 +115,7 @@ Content-Type: application/json
 ###
 
 GET http://localhost:3030/workflow/9cd4605c-2217-5dda-a286-6c6e0de3468c
-Authorization: 6d69326e-8694-4ae5-815a-b4b1ef02a8f6
+Authorization: Bearer 6d69326e-8694-4ae5-815a-b4b1ef02a8f6
 Accept: application/json
 
 ###

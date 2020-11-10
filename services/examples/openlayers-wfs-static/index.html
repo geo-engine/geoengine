@@ -87,7 +87,7 @@
             body: JSON.stringify(workflow),
             headers: {
                 'Content-type': 'application/json; charset=UTF-8',
-                'Authorization': json.id
+                'Authorization': 'Bearer ' + json.id
             }
         })
     ).then(

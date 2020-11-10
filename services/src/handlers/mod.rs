@@ -72,7 +72,16 @@ fn authenticate<C: Context>(
         token: Option<String>,
     ) -> Result<C, warp::Rejection> {
         if let Some(token) = token {
-            let token = SessionId::from_str(&token)?;
+            if !token.starts_with("Bearer ") {
+                return Err(Error::Authorization {
+                    source: Box::new(Error::InvalidAuthorizationScheme),
+                }
+                .into());
+            }
+
+            let token = SessionId::from_str(&token["Bearer ".len()..])
+                .map_err(Box::new)
+                .context(error::Authorization)?;
             let session = ctx
                 .user_db_ref()
                 .await

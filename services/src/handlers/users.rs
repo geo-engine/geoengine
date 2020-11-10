@@ -299,7 +299,10 @@ mod tests {
         let res = warp::test::request()
             .method("POST")
             .path("/logout")
-            .header("Authorization", session.id.to_string())
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
             .reply(&logout_handler(ctx).recover(handle_rejection))
             .await;
 
@@ -318,11 +321,36 @@ mod tests {
             .await;
 
         assert_eq!(res.status(), 401);
-        assert_eq!(res.body(), "Missing request header \"authorization\"");
+        assert_eq!(
+            res.body(),
+            &json!({"error":"MissingAuthorizationHeader","message":"MissingAuthorizationHeader"})
+                .to_string()
+        );
     }
 
     #[tokio::test]
     async fn logout_wrong_token() {
+        let ctx = InMemoryContext::default();
+
+        let res = warp::test::request()
+            .method("POST")
+            .path("/logout")
+            .header(
+                "Authorization",
+                format!("Bearer {}", "6ecff667-258e-4108-9dc9-93cb8c64793c"),
+            )
+            .reply(&logout_handler(ctx).recover(handle_rejection))
+            .await;
+
+        assert_eq!(res.status(), 401);
+        assert_eq!(
+            res.body(),
+            &json!({"error":"SessionDoesNotExist","message":"SessionDoesNotExist"}).to_string()
+        );
+    }
+
+    #[tokio::test]
+    async fn logout_wrong_scheme() {
         let ctx = InMemoryContext::default();
 
         let res = warp::test::request()
@@ -333,7 +361,11 @@ mod tests {
             .await;
 
         assert_eq!(res.status(), 401);
-        assert_eq!(res.body(), "");
+        assert_eq!(
+            res.body(),
+            &json!({"error":"InvalidAuthorizationScheme","message":"InvalidAuthorizationScheme"})
+                .to_string()
+        );
     }
 
     #[tokio::test]
@@ -343,12 +375,14 @@ mod tests {
         let res = warp::test::request()
             .method("POST")
             .path("/logout")
-            .header("Authorization", "no uuid")
+            .header("Authorization", format!("Bearer {}", "no uuid"))
             .reply(&logout_handler(ctx).recover(handle_rejection))
             .await;
-
         assert_eq!(res.status(), 401);
-        assert_eq!(res.body(), "");
+        assert_eq!(
+            res.body(),
+            &json!({"error":"InvalidUuid","message":"InvalidUuid"}).to_string()
+        );
     }
 
     #[tokio::test]
@@ -407,7 +441,10 @@ mod tests {
         let res = warp::test::request()
             .method("POST")
             .path(&format!("/session/project/{}", project.to_string()))
-            .header("Authorization", session.id.to_string())
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
             .reply(&session_project_handler(ctx.clone()).recover(handle_rejection))
             .await;
 
@@ -430,7 +467,10 @@ mod tests {
             .method("POST")
             .header("Content-Length", "0")
             .path("/session/view")
-            .header("Authorization", session.id.to_string())
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
             .json(&rect)
             .reply(&session_view_handler(ctx.clone()).recover(handle_rejection))
             .await;

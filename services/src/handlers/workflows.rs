@@ -105,7 +105,10 @@ mod tests {
             .method("POST")
             .path("/workflow")
             .header("Content-Length", "0")
-            .header("Authorization", session.id.to_string())
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
             .json(&workflow)
             .reply(&register_workflow_handler(ctx))
             .await;
@@ -167,7 +170,10 @@ mod tests {
         let res = warp::test::request()
             .method("GET")
             .path(&format!("/workflow/{}", id.to_string()))
-            .header("Authorization", session.id.to_string())
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
             .reply(&load_workflow_handler(ctx))
             .await;
 

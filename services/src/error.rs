@@ -50,6 +50,7 @@ pub enum Error {
     SessionDoesNotExist,
     InvalidSession,
     MissingAuthorizationHeader,
+    InvalidAuthorizationScheme,
 
     #[snafu(display("Authorization error {:?}", source))]
     Authorization {

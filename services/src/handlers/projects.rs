@@ -277,7 +277,10 @@ mod tests {
             .method("POST")
             .path("/project/create")
             .header("Content-Length", "0")
-            .header("Authorization", session.id.to_string())
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
             .json(&create)
             .reply(&create_project_handler(ctx))
             .await;
@@ -359,7 +362,10 @@ mod tests {
             .method("GET")
             .path("/projects")
             .header("Content-Length", "0")
-            .header("Authorization", session.id.to_string())
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
             .json(&options)
             .reply(&list_projects_handler(ctx))
             .await;
@@ -432,7 +438,10 @@ mod tests {
             .method("GET")
             .path(&format!("/project/{}", project.to_string()))
             .header("Content-Length", "0")
-            .header("Authorization", session.id.to_string())
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
             .reply(&load_project_handler(ctx))
             .await;
 
@@ -520,7 +529,10 @@ mod tests {
             .method("GET")
             .path(&format!("/project/{}", project.to_string()))
             .header("Content-Length", "0")
-            .header("Authorization", session.id.to_string())
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
             .reply(&load_project_handler(ctx.clone()))
             .await;
 
@@ -549,7 +561,10 @@ mod tests {
                 version_id.to_string()
             ))
             .header("Content-Length", "0")
-            .header("Authorization", session.id.to_string())
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
             .reply(&load_project_handler(ctx))
             .await;
 
@@ -633,7 +648,10 @@ mod tests {
             .method("PATCH")
             .path(&format!("/project/{}", project.to_string()))
             .header("Content-Length", "0")
-            .header("Authorization", session.id.to_string())
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
             .json(&update)
             .reply(&update_project_handler(ctx.clone()))
             .await;
@@ -711,7 +729,10 @@ mod tests {
             .method("DELETE")
             .path(&format!("/project/{}", project.to_string()))
             .header("Content-Length", "0")
-            .header("Authorization", session.id.to_string())
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
             .reply(&delete_project_handler(ctx.clone()))
             .await;
 
@@ -729,7 +750,10 @@ mod tests {
             .method("DELETE")
             .path(&format!("/project/{}", project.to_string()))
             .header("Content-Length", "0")
-            .header("Authorization", session.id.to_string())
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
             .reply(&delete_project_handler(ctx))
             .await;
 
@@ -809,7 +833,10 @@ mod tests {
             .method("GET")
             .path("/project/versions")
             .header("Content-Length", "0")
-            .header("Authorization", session.id.to_string())
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
             .json(&project)
             .reply(&project_versions_handler(ctx))
             .await;
@@ -902,7 +929,10 @@ mod tests {
             .method("POST")
             .path("/project/permission/add")
             .header("Content-Length", "0")
-            .header("Authorization", session.id.to_string())
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
             .json(&permission)
             .reply(&add_permission_handler(ctx.clone()))
             .await;
@@ -1007,7 +1037,10 @@ mod tests {
             .method("DELETE")
             .path("/project/permission")
             .header("Content-Length", "0")
-            .header("Authorization", session.id.to_string())
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
             .json(&permission)
             .reply(&remove_permission_handler(ctx.clone()))
             .await;
@@ -1112,7 +1145,10 @@ mod tests {
             .method("GET")
             .path(&format!("/project/{}/permissions", project.to_string()))
             .header("Content-Length", "0")
-            .header("Authorization", session.id.to_string())
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
             .reply(&list_permissions_handler(ctx))
             .await;
 
