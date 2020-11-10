@@ -11,6 +11,88 @@ use std::slice;
 /// This collection contains temporal multi polygons and miscellaneous data.
 pub type MultiPolygonCollection = FeatureCollection<MultiPolygon>;
 
+impl MultiPolygonCollection {
+    #[allow(clippy::cast_ptr_alignment)]
+    pub fn multi_polygon_offsets(&self) -> &[i32] {
+        let geometries_ref = self
+            .table
+            .column_by_name(Self::GEOMETRY_COLUMN_NAME)
+            .expect("There must exist a geometry column");
+        let geometries: &ListArray = downcast_array(geometries_ref);
+
+        let data = geometries.data();
+        let buffer = &data.buffers()[0];
+
+        unsafe { slice::from_raw_parts(buffer.raw_data() as *const i32, geometries.len() + 1) }
+    }
+
+    #[allow(clippy::cast_ptr_alignment)]
+    pub fn polygon_offsets(&self) -> &[i32] {
+        let geometries_ref = self
+            .table
+            .column_by_name(Self::GEOMETRY_COLUMN_NAME)
+            .expect("There must exist a geometry column");
+        let geometries: &ListArray = downcast_array(geometries_ref);
+
+        let polygons_ref = geometries.values();
+        let polygons: &ListArray = downcast_array(&polygons_ref);
+
+        let data = polygons.data();
+        let buffer = &data.buffers()[0];
+
+        unsafe { slice::from_raw_parts(buffer.raw_data() as *const i32, polygons.len() + 1) }
+    }
+
+    #[allow(clippy::cast_ptr_alignment)]
+    pub fn ring_offsets(&self) -> &[i32] {
+        let geometries_ref = self
+            .table
+            .column_by_name(Self::GEOMETRY_COLUMN_NAME)
+            .expect("There must exist a geometry column");
+        let geometries: &ListArray = downcast_array(geometries_ref);
+
+        let polygons_ref = geometries.values();
+        let polygons: &ListArray = downcast_array(&polygons_ref);
+
+        let rings_ref = polygons.values();
+        let rings: &ListArray = downcast_array(&rings_ref);
+
+        let data = rings.data();
+        let buffer = &data.buffers()[0];
+
+        unsafe { slice::from_raw_parts(buffer.raw_data() as *const i32, rings.len() + 1) }
+    }
+
+    pub fn coordinates(&self) -> &[Coordinate2D] {
+        let geometries_ref = self
+            .table
+            .column_by_name(Self::GEOMETRY_COLUMN_NAME)
+            .expect("There must exist a geometry column");
+        let geometries: &ListArray = downcast_array(geometries_ref);
+
+        let polygons_ref = geometries.values();
+        let polygons: &ListArray = downcast_array(&polygons_ref);
+
+        let rings_ref = polygons.values();
+        let rings: &ListArray = downcast_array(&rings_ref);
+
+        let coordinates_ref = rings.values();
+        let coordinates: &FixedSizeListArray = downcast_array(&coordinates_ref);
+
+        let number_of_coordinates = coordinates.data().len();
+
+        let floats_ref = coordinates.values();
+        let floats: &Float64Array = downcast_array(&floats_ref);
+
+        unsafe {
+            slice::from_raw_parts(
+                floats.raw_values() as *const Coordinate2D,
+                number_of_coordinates,
+            )
+        }
+    }
+}
+
 impl<'l> IntoGeometryIterator<'l> for MultiPolygonCollection {
     type GeometryIterator = MultiPolygonIterator<'l>;
     type GeometryType = MultiPolygonRef<'l>;
@@ -306,6 +388,64 @@ mod tests {
             ]]
         );
         assert!(geometry_iter.next().is_none());
+    }
+
+    #[test]
+    fn equals() {
+        let mut builder = MultiPolygonCollection::builder().finish_header();
+
+        builder
+            .push_geometry(
+                MultiPolygon::new(vec![
+                    vec![vec![
+                        (0.0, 0.1).into(),
+                        (0.0, 1.1).into(),
+                        (1.0, 0.1).into(),
+                        (0.0, 0.1).into(),
+                    ]],
+                    vec![vec![
+                        (2.0, 2.1).into(),
+                        (2.0, 3.1).into(),
+                        (3.0, 2.1).into(),
+                        (2.0, 2.1).into(),
+                    ]],
+                ])
+                .unwrap(),
+            )
+            .unwrap();
+        builder
+            .push_geometry(
+                MultiPolygon::new(vec![vec![
+                    vec![
+                        (4.0, 4.1).into(),
+                        (4.0, 8.1).into(),
+                        (8.0, 8.1).into(),
+                        (8.0, 4.1).into(),
+                        (4.0, 4.1).into(),
+                    ],
+                    vec![
+                        (5.0, 5.1).into(),
+                        (5.0, 7.1).into(),
+                        (7.0, 7.1).into(),
+                        (7.0, 5.1).into(),
+                        (5.0, 5.1).into(),
+                    ],
+                ]])
+                .unwrap(),
+            )
+            .unwrap();
+
+        for _ in 0..2 {
+            builder.push_time_interval(TimeInterval::default()).unwrap();
+
+            builder.finish_row();
+        }
+
+        let collection = builder.build().unwrap();
+
+        assert_eq!(collection, collection);
+
+        assert_ne!(collection, collection.filter(vec![true, false]).unwrap());
     }
 
     #[test]

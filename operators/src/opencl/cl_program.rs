@@ -6,7 +6,7 @@ use arrow::util::bit_util;
 use geoengine_datatypes::collections::{
     RawFeatureCollectionBuilder, TypedFeatureCollection, VectorDataType,
 };
-use geoengine_datatypes::primitives::{FeatureDataRef, FeatureDataType};
+use geoengine_datatypes::primitives::{Coordinate2D, FeatureDataRef, FeatureDataType};
 use geoengine_datatypes::raster::Raster;
 use geoengine_datatypes::raster::{
     DynamicRasterDataType, GridDimension, Pixel, Raster2D, RasterDataType, TypedRaster2D,
@@ -15,7 +15,7 @@ use geoengine_datatypes::{
     call_generic_features, call_generic_raster2d, call_generic_raster2d_ext,
 };
 use lazy_static::lazy_static;
-use num_traits::AsPrimitive;
+use num_traits::{AsPrimitive, Zero};
 use ocl::builders::{KernelBuilder, ProgramBuilder};
 use ocl::prm::{cl_char, cl_double, cl_uint, cl_ushort, Double2};
 use ocl::{
@@ -228,8 +228,8 @@ enum RasterOutputBuffer {
 
 enum FeatureGeoOutputBuffer {
     Points(PointBuffers),
-    _Lines(LineBuffers),
-    _Polygons(PolygonBuffers),
+    Lines(LineBuffers),
+    Polygons(PolygonBuffers),
 }
 
 struct PointBuffers {
@@ -238,16 +238,16 @@ struct PointBuffers {
 }
 
 struct LineBuffers {
-    _coords: Buffer<Double2>,
-    _line_offsets: Buffer<i32>,
-    _feature_offsets: Buffer<i32>,
+    coords: Buffer<Double2>,
+    line_offsets: Buffer<i32>,
+    feature_offsets: Buffer<i32>,
 }
 
 struct PolygonBuffers {
-    _coords: Buffer<Double2>,
-    _ring_offsets: Buffer<i32>,
-    _polygon_offsets: Buffer<i32>,
-    _feature_offets: Buffer<i32>,
+    coords: Buffer<Double2>,
+    ring_offsets: Buffer<i32>,
+    polygon_offsets: Buffer<i32>,
+    feature_offsets: Buffer<i32>,
 }
 
 struct ColumnBuffer<T: OclPrm> {
@@ -384,7 +384,32 @@ impl<'a> CLProgramRunnable<'a> {
         Ok(())
     }
 
+    #[allow(clippy::too_many_lines)] // TODO: split function into parts
     fn set_feature_input_arguments(&mut self, kernel: &Kernel, queue: &Queue) -> Result<()> {
+        fn create_coordinate_buffer(
+            queue: &Queue,
+            coordinates: &[Coordinate2D],
+        ) -> ocl::error::Result<Buffer<Double2>> {
+            Buffer::builder()
+                .queue(queue.clone())
+                .len(coordinates.len())
+                .copy_host_slice(unsafe {
+                    std::slice::from_raw_parts(
+                        coordinates.as_ptr() as *const Double2,
+                        coordinates.len(),
+                    )
+                })
+                .build()
+        }
+
+        fn create_offset_buffer(queue: &Queue, offsets: &[i32]) -> ocl::error::Result<Buffer<i32>> {
+            Buffer::builder()
+                .queue(queue.clone())
+                .len(offsets.len())
+                .copy_host_slice(offsets)
+                .build()
+        }
+
         ensure!(
             self.input_features.iter().all(Option::is_some),
             error::CLProgramUnspecifiedFeatures
@@ -404,31 +429,61 @@ impl<'a> CLProgramRunnable<'a> {
                         // no geo
                     }
                     TypedFeatureCollection::MultiPoint(points) => {
-                        let coordinates = points.coordinates();
-                        let buffer = Buffer::<Double2>::builder()
-                            .queue(queue.clone())
-                            .len(coordinates.len())
-                            .copy_host_slice(unsafe {
-                                std::slice::from_raw_parts(
-                                    coordinates.as_ptr() as *const Double2,
-                                    coordinates.len(),
-                                )
-                            })
-                            .build()?;
+                        kernel.set_arg(
+                            format!("IN_FEATURE{}_COORDS", idx),
+                            &create_coordinate_buffer(queue, points.coordinates())?,
+                        )?;
 
-                        kernel.set_arg(format!("IN_POINT_COORDS{}", idx), &buffer)?;
+                        kernel.set_arg(
+                            format!("IN_FEATURE{}_OFFSETS", idx),
+                            &create_offset_buffer(queue, points.multipoint_offsets())?,
+                        )?;
 
-                        let coordinates_offsets = points.multipoint_offsets();
-                        let buffer = Buffer::builder()
-                            .queue(queue.clone())
-                            .len(coordinates_offsets.len())
-                            .copy_host_slice(coordinates_offsets)
-                            .build()?;
-
-                        kernel.set_arg(format!("IN_POINT_OFFSETS{}", idx), &buffer)?;
+                        kernel.set_arg(format!("IN_FEATURE{}_LEN", idx), points.len() as i32)?;
                     }
-                    TypedFeatureCollection::MultiLineString(_)
-                    | TypedFeatureCollection::MultiPolygon(_) => todo!(), // TODO: lines, polygons
+                    TypedFeatureCollection::MultiLineString(multi_lines) => {
+                        kernel.set_arg(
+                            format!("IN_FEATURE{}_COORDS", idx),
+                            &create_coordinate_buffer(queue, multi_lines.coordinates())?,
+                        )?;
+
+                        kernel.set_arg(
+                            format!("IN_FEATURE{}_OFFSETS", idx),
+                            &create_offset_buffer(queue, multi_lines.multi_line_string_offsets())?,
+                        )?;
+                        kernel
+                            .set_arg(format!("IN_FEATURE{}_LEN", idx), multi_lines.len() as i32)?;
+
+                        kernel.set_arg(
+                            format!("IN_FEATURE{}_LINE_OFFSETS", idx),
+                            &create_offset_buffer(queue, multi_lines.line_string_offsets())?,
+                        )?;
+                    }
+                    TypedFeatureCollection::MultiPolygon(multi_polygons) => {
+                        kernel.set_arg(
+                            format!("IN_FEATURE{}_COORDS", idx),
+                            &create_coordinate_buffer(queue, multi_polygons.coordinates())?,
+                        )?;
+
+                        kernel.set_arg(
+                            format!("IN_FEATURE{}_OFFSETS", idx),
+                            &create_offset_buffer(queue, multi_polygons.multi_polygon_offsets())?,
+                        )?;
+                        kernel.set_arg(
+                            format!("IN_FEATURE{}_LEN", idx),
+                            multi_polygons.len() as i32,
+                        )?;
+
+                        kernel.set_arg(
+                            format!("IN_FEATURE{}_POLYGON_OFFSETS", idx),
+                            &create_offset_buffer(queue, multi_polygons.polygon_offsets())?,
+                        )?;
+
+                        kernel.set_arg(
+                            format!("IN_FEATURE{}_RING_OFFSETS", idx),
+                            &create_offset_buffer(queue, multi_polygons.ring_offsets())?,
+                        )?;
+                    }
                 }
             }
 
@@ -480,6 +535,13 @@ impl<'a> CLProgramRunnable<'a> {
     }
 
     fn set_feature_output_arguments(&mut self, kernel: &Kernel, queue: &Queue) -> Result<()> {
+        fn create_buffer<T: OclPrm>(queue: &Queue, length: usize) -> ocl::error::Result<Buffer<T>> {
+            Buffer::<T>::builder()
+                .queue(queue.clone())
+                .len(length)
+                .build()
+        }
+
         for (idx, (builder, argument)) in self
             .output_features
             .iter()
@@ -491,21 +553,63 @@ impl<'a> CLProgramRunnable<'a> {
             let geo_buffers = if argument.include_geo {
                 Some(match features.output_type {
                     VectorDataType::MultiPoint => {
-                        let coords = Buffer::<Double2>::builder()
-                            .queue(queue.clone())
-                            .len(features.num_coords())
-                            .build()?;
-                        kernel.set_arg(format!("OUT_POINT_COORDS{}", idx), &coords)?;
+                        let coords = create_buffer::<Double2>(queue, features.num_coords())?;
+                        kernel.set_arg(format!("OUT_FEATURE{}_COORDS", idx), &coords)?;
 
-                        let offsets = Buffer::<i32>::builder()
-                            .queue(queue.clone())
-                            .len(features.num_features() + 1)
-                            .build()?;
-                        kernel.set_arg(format!("OUT_POINT_OFFSETS{}", idx), &offsets)?;
+                        let feature_offsets =
+                            create_buffer::<i32>(queue, features.num_features() + 1)?;
+                        kernel.set_arg(format!("OUT_FEATURE{}_OFFSETS", idx), &feature_offsets)?;
 
-                        FeatureGeoOutputBuffer::Points(PointBuffers { coords, offsets })
+                        FeatureGeoOutputBuffer::Points(PointBuffers {
+                            coords,
+                            offsets: feature_offsets,
+                        })
                     }
-                    _ => todo!(), // TODO: lines, polygons
+                    VectorDataType::MultiLineString => {
+                        let coords = create_buffer::<Double2>(queue, features.num_coords())?;
+                        kernel.set_arg(format!("OUT_FEATURE{}_COORDS", idx), &coords)?;
+
+                        let feature_offsets =
+                            create_buffer::<i32>(queue, features.num_features() + 1)?;
+                        kernel.set_arg(format!("OUT_FEATURE{}_OFFSETS", idx), &feature_offsets)?;
+
+                        let line_offsets = create_buffer::<i32>(queue, features.num_lines()? + 1)?;
+                        kernel
+                            .set_arg(format!("OUT_FEATURE{}_LINE_OFFSETS", idx), &line_offsets)?;
+
+                        FeatureGeoOutputBuffer::Lines(LineBuffers {
+                            coords,
+                            line_offsets,
+                            feature_offsets,
+                        })
+                    }
+                    VectorDataType::MultiPolygon => {
+                        let coords = create_buffer::<Double2>(queue, features.num_coords())?;
+                        kernel.set_arg(format!("OUT_FEATURE{}_COORDS", idx), &coords)?;
+
+                        let feature_offsets =
+                            create_buffer::<i32>(queue, features.num_features() + 1)?;
+                        kernel.set_arg(format!("OUT_FEATURE{}_OFFSETS", idx), &feature_offsets)?;
+
+                        let polygon_offsets =
+                            create_buffer::<i32>(queue, features.num_polygons()? + 1)?;
+                        kernel.set_arg(
+                            format!("OUT_FEATURE{}_POLYGON_OFFSETS", idx),
+                            &polygon_offsets,
+                        )?;
+
+                        let ring_offsets = create_buffer::<i32>(queue, features.num_rings()? + 1)?;
+                        kernel
+                            .set_arg(format!("OUT_FEATURE{}_RING_OFFSETS", idx), &ring_offsets)?;
+
+                        FeatureGeoOutputBuffer::Polygons(PolygonBuffers {
+                            coords,
+                            ring_offsets,
+                            polygon_offsets,
+                            feature_offsets,
+                        })
+                    }
+                    VectorDataType::Data => unreachable!("`Data` is no geo type"),
                 })
             } else {
                 None
@@ -563,7 +667,7 @@ impl<'a> CLProgramRunnable<'a> {
             .len(len)
             .copy_host_slice(data)
             .build()?;
-        kernel.set_arg(format!("IN_POINT{}_COLUMN_{}", idx, column), &buffer)?;
+        kernel.set_arg(format!("IN_FEATURE{}_COLUMN_{}", idx, column), &buffer)?;
 
         if let Some(nulls) = nulls {
             // TODO: convert booleans to i32 for host device transfer, more efficiently
@@ -573,10 +677,10 @@ impl<'a> CLProgramRunnable<'a> {
                 .len(len)
                 .copy_host_slice(nulls.as_slice())
                 .build()?;
-            kernel.set_arg(format!("IN_POINT{}_NULLS_{}", idx, column), &buffer)?;
+            kernel.set_arg(format!("IN_FEATURE{}_NULLS_{}", idx, column), &buffer)?;
         } else {
             kernel.set_arg(
-                format!("IN_POINT{}_NULLS_{}", idx, column),
+                format!("IN_FEATURE{}_NULLS_{}", idx, column),
                 Buffer::<i8>::builder()
                     .queue(queue.clone())
                     .len(len)
@@ -601,14 +705,14 @@ impl<'a> CLProgramRunnable<'a> {
             .queue(queue.clone())
             .len(len)
             .build()?;
-        kernel.set_arg(format!("OUT_POINT{}_COLUMN_{}", idx, column), &values)?;
+        kernel.set_arg(format!("OUT_FEATURE{}_COLUMN_{}", idx, column), &values)?;
 
         let nulls = if nullable {
             let buffer = Buffer::<i8>::builder()
                 .queue(queue.clone())
                 .len(len)
                 .build()?;
-            kernel.set_arg(format!("OUT_POINT{}_NULLS_{}", idx, column), &buffer)?;
+            kernel.set_arg(format!("OUT_FEATURE{}_NULLS_{}", idx, column), &buffer)?;
 
             Some(buffer)
         } else {
@@ -719,6 +823,7 @@ impl<'a> CLProgramRunnable<'a> {
         Ok(())
     }
 
+    #[allow(clippy::too_many_lines)] // TODO: split function into parts
     fn read_feature_output_buffers(&mut self) -> Result<()> {
         for (output_buffers, builder) in self
             .feature_output_buffers
@@ -738,7 +843,45 @@ impl<'a> CLProgramRunnable<'a> {
                     builder.set_points(coords_buffer, offsets_buffer)?;
                 }
                 None => {}
-                Some(_) => todo!(), // TODO: lines, polygons
+                Some(FeatureGeoOutputBuffer::Lines(buffers)) => {
+                    let feature_offsets_buffer = Self::read_ocl_to_arrow_buffer(
+                        &buffers.feature_offsets,
+                        builder.num_features() + 1,
+                    )?;
+                    let line_offsets_buffer = Self::read_ocl_to_arrow_buffer(
+                        &buffers.line_offsets,
+                        builder.num_lines()? + 1,
+                    )?;
+                    let coords_buffer =
+                        Self::read_ocl_to_arrow_buffer(&buffers.coords, builder.num_coords())?;
+                    builder.set_lines(
+                        coords_buffer,
+                        line_offsets_buffer,
+                        feature_offsets_buffer,
+                    )?;
+                }
+                Some(FeatureGeoOutputBuffer::Polygons(buffers)) => {
+                    let feature_offsets_buffer = Self::read_ocl_to_arrow_buffer(
+                        &buffers.feature_offsets,
+                        builder.num_features() + 1,
+                    )?;
+                    let polygon_offsets_buffer = Self::read_ocl_to_arrow_buffer(
+                        &buffers.polygon_offsets,
+                        builder.num_polygons()? + 1,
+                    )?;
+                    let ring_offsets_buffer = Self::read_ocl_to_arrow_buffer(
+                        &buffers.ring_offsets,
+                        builder.num_rings()? + 1,
+                    )?;
+                    let coords_buffer =
+                        Self::read_ocl_to_arrow_buffer(&buffers.coords, builder.num_coords())?;
+                    builder.set_polygons(
+                        coords_buffer,
+                        ring_offsets_buffer,
+                        polygon_offsets_buffer,
+                        feature_offsets_buffer,
+                    )?;
+                }
             }
 
             for column_buffer in output_buffers.numbers {
@@ -988,6 +1131,7 @@ impl CompiledCLProgram {
         Ok(())
     }
 
+    #[allow(clippy::too_many_lines)] // TODO: split function into parts
     fn set_argument_placeholders(&mut self, mut kernel: &mut KernelBuilder) {
         for (idx, raster) in self.input_raster_types.iter().enumerate() {
             Self::add_data_buffer_placeholder(&mut kernel, format!("IN{}", idx), raster.data_type);
@@ -1006,17 +1150,56 @@ impl CompiledCLProgram {
                         // no geo
                     }
                     VectorDataType::MultiPoint => {
+                        kernel.arg_named(
+                            format!("IN_FEATURE{}_COORDS", idx),
+                            None::<&Buffer<Double2>>,
+                        );
+
+                        kernel.arg_named(format!("IN_FEATURE{}_LEN", idx), i32::zero());
                         kernel
-                            .arg_named(format!("IN_POINT_COORDS{}", idx), None::<&Buffer<Double2>>);
-                        kernel.arg_named(format!("IN_POINT_OFFSETS{}", idx), None::<&Buffer<i32>>);
+                            .arg_named(format!("IN_FEATURE{}_OFFSETS", idx), None::<&Buffer<i32>>);
                     }
-                    VectorDataType::MultiLineString | VectorDataType::MultiPolygon => todo!(),
+                    VectorDataType::MultiLineString => {
+                        kernel.arg_named(
+                            format!("IN_FEATURE{}_COORDS", idx),
+                            None::<&Buffer<Double2>>,
+                        );
+
+                        kernel.arg_named(format!("IN_FEATURE{}_LEN", idx), i32::zero());
+                        kernel
+                            .arg_named(format!("IN_FEATURE{}_OFFSETS", idx), None::<&Buffer<i32>>);
+
+                        kernel.arg_named(
+                            format!("IN_FEATURE{}_LINE_OFFSETS", idx),
+                            None::<&Buffer<i32>>,
+                        );
+                    }
+                    VectorDataType::MultiPolygon => {
+                        kernel.arg_named(
+                            format!("IN_FEATURE{}_COORDS", idx),
+                            None::<&Buffer<Double2>>,
+                        );
+
+                        kernel.arg_named(format!("IN_FEATURE{}_LEN", idx), i32::zero());
+                        kernel
+                            .arg_named(format!("IN_FEATURE{}_OFFSETS", idx), None::<&Buffer<i32>>);
+
+                        kernel.arg_named(
+                            format!("IN_FEATURE{}_POLYGON_OFFSETS", idx),
+                            None::<&Buffer<i32>>,
+                        );
+
+                        kernel.arg_named(
+                            format!("IN_FEATURE{}_RING_OFFSETS", idx),
+                            None::<&Buffer<i32>>,
+                        );
+                    }
                 }
             }
 
             for column in &features.columns {
-                let name = format!("IN_POINT{}_COLUMN_{}", idx, column.name);
-                let null_name = format!("IN_POINT{}_NULLS_{}", idx, column.name);
+                let name = format!("IN_FEATURE{}_COLUMN_{}", idx, column.name);
+                let null_name = format!("IN_FEATURE{}_NULLS_{}", idx, column.name);
                 Self::set_column_argument_placeholder(
                     &mut kernel,
                     column.data_type,
@@ -1038,18 +1221,46 @@ impl CompiledCLProgram {
                     }
                     VectorDataType::MultiPoint => {
                         kernel.arg_named(
-                            format!("OUT_POINT_COORDS{}", idx),
+                            format!("OUT_FEATURE{}_COORDS", idx),
                             None::<&Buffer<Double2>>,
                         );
-                        kernel.arg_named(format!("OUT_POINT_OFFSETS{}", idx), None::<&Buffer<i32>>);
+                        kernel
+                            .arg_named(format!("OUT_FEATURE{}_OFFSETS", idx), None::<&Buffer<i32>>);
                     }
-                    VectorDataType::MultiLineString | VectorDataType::MultiPolygon => todo!(),
+                    VectorDataType::MultiLineString => {
+                        kernel.arg_named(
+                            format!("OUT_FEATURE{}_COORDS", idx),
+                            None::<&Buffer<Double2>>,
+                        );
+                        kernel
+                            .arg_named(format!("OUT_FEATURE{}_OFFSETS", idx), None::<&Buffer<i32>>);
+                        kernel.arg_named(
+                            format!("OUT_FEATURE{}_LINE_OFFSETS", idx),
+                            None::<&Buffer<i32>>,
+                        );
+                    }
+                    VectorDataType::MultiPolygon => {
+                        kernel.arg_named(
+                            format!("OUT_FEATURE{}_COORDS", idx),
+                            None::<&Buffer<Double2>>,
+                        );
+                        kernel
+                            .arg_named(format!("OUT_FEATURE{}_OFFSETS", idx), None::<&Buffer<i32>>);
+                        kernel.arg_named(
+                            format!("OUT_FEATURE{}_POLYGON_OFFSETS", idx),
+                            None::<&Buffer<i32>>,
+                        );
+                        kernel.arg_named(
+                            format!("OUT_FEATURE{}_RING_OFFSETS", idx),
+                            None::<&Buffer<i32>>,
+                        );
+                    }
                 }
             }
 
             for column in &features.columns {
-                let name = format!("OUT_POINT{}_COLUMN_{}", idx, column.name);
-                let null_name = format!("OUT_POINT{}_NULLS_{}", idx, column.name);
+                let name = format!("OUT_FEATURE{}_COLUMN_{}", idx, column.name);
+                let null_name = format!("OUT_FEATURE{}_NULLS_{}", idx, column.name);
                 Self::set_column_argument_placeholder(
                     &mut kernel,
                     column.data_type,
@@ -1092,10 +1303,11 @@ mod tests {
     use arrow::buffer::MutableBuffer;
     use arrow::datatypes::{DataType, Int32Type};
     use geoengine_datatypes::collections::{
-        BuilderProvider, DataCollection, FeatureCollection, MultiPointCollection,
+        BuilderProvider, DataCollection, FeatureCollection, MultiLineStringCollection,
+        MultiPointCollection, MultiPolygonCollection,
     };
     use geoengine_datatypes::primitives::{
-        DataRef, FeatureData, MultiPoint, NoGeometry, TimeInterval,
+        DataRef, FeatureData, MultiLineString, MultiPoint, MultiPolygon, NoGeometry, TimeInterval,
     };
     use geoengine_datatypes::raster::Raster2D;
     use std::collections::HashMap;
@@ -1485,17 +1697,22 @@ __kernel void gid(
         let mut out = FeatureCollection::<MultiPoint>::builder().batch_builder(3, 4);
 
         let kernel = r#"
-__kernel void points( 
-            __global const double2 *IN_POINT_COORDS0,
-            __global const int *IN_POINT_OFFSETS0,
-            __global double2 *OUT_POINT_COORDS0,
-            __global int *OUT_POINT_OFFSETS0)            
-{
-    int idx = get_global_id(0);
-    OUT_POINT_COORDS0[idx].x = IN_POINT_COORDS0[idx].x;
-    OUT_POINT_COORDS0[idx].y = IN_POINT_COORDS0[idx].y + 1;
-    OUT_POINT_OFFSETS0[idx] = IN_POINT_OFFSETS0[idx];
-}"#;
+            __kernel void points( 
+                        __constant const double2 *IN_FEATURE0_COORDS,
+                        const int IN_FEATURE0_LEN,
+                        __constant const int *IN_FEATURE0_OFFSETS,
+                        __global double2 *OUT_FEATURE0_COORDS,
+                        __global int *OUT_FEATURE0_OFFSETS)            
+            {
+                int idx = get_global_id(0);
+                
+                OUT_FEATURE0_COORDS[idx].x = IN_FEATURE0_COORDS[idx].x;
+                OUT_FEATURE0_COORDS[idx].y = IN_FEATURE0_COORDS[idx].y + 1;
+                
+                if (idx <= IN_FEATURE0_LEN) {
+                    OUT_FEATURE0_OFFSETS[idx] = IN_FEATURE0_OFFSETS[idx];
+                }
+            }"#;
 
         let mut cl_program = CLProgram::new(IterationType::VectorCoordinates);
         cl_program.add_input_features(VectorArgument::new(
@@ -1530,6 +1747,271 @@ __kernel void points(
         );
 
         assert_eq!(collection.multipoint_offsets(), &[0, 1, 3, 4]);
+    }
+
+    #[test]
+    fn lines_to_points() {
+        let input = TypedFeatureCollection::MultiLineString(
+            MultiLineStringCollection::from_data(
+                vec![
+                    MultiLineString::new(vec![
+                        vec![(0.0, 0.1).into(), (1.0, 1.1).into()],
+                        vec![(2.0, 2.1).into(), (3.0, 3.1).into(), (4.0, 4.1).into()],
+                    ])
+                    .unwrap(),
+                    MultiLineString::new(vec![vec![(5.0, 5.1).into(), (6.0, 6.1).into()]]).unwrap(),
+                ],
+                vec![
+                    TimeInterval::new_unchecked(0, 1),
+                    TimeInterval::new_unchecked(1, 2),
+                ],
+                HashMap::new(),
+            )
+            .unwrap(),
+        );
+
+        let mut out = FeatureCollection::<MultiPoint>::builder().batch_builder(2, 7);
+
+        let kernel = r#"
+            __kernel void lines_to_points( 
+                    __constant const double2 *IN_FEATURE0_COORDS,
+                    const int IN_FEATURE0_LEN,
+                    __constant const int *IN_FEATURE0_OFFSETS,
+                    __constant const int *IN_FEATURE0_LINE_OFFSETS,
+                    __global double2 *OUT_FEATURE0_COORDS,
+                    __global int *OUT_FEATURE0_OFFSETS
+            ) {
+                int idx = get_global_id(0);
+                
+                OUT_FEATURE0_COORDS[idx].x = IN_FEATURE0_COORDS[idx].x;
+                OUT_FEATURE0_COORDS[idx].y = IN_FEATURE0_COORDS[idx].y + 0.1;
+                
+                if (idx <= IN_FEATURE0_LEN) {
+                    int feature_idx = IN_FEATURE0_OFFSETS[idx];
+                    
+                    OUT_FEATURE0_OFFSETS[idx] = IN_FEATURE0_LINE_OFFSETS[feature_idx];
+                }
+            }"#;
+
+        let mut cl_program = CLProgram::new(IterationType::VectorCoordinates);
+        cl_program.add_input_features(VectorArgument::new(
+            input.vector_data_type(),
+            vec![],
+            true,
+            false,
+        ));
+        cl_program.add_output_features(VectorArgument::new(
+            VectorDataType::MultiPoint,
+            vec![],
+            true,
+            false,
+        ));
+
+        let mut compiled = cl_program.compile(kernel, "lines_to_points").unwrap();
+
+        let mut runnable = compiled.runnable();
+        runnable.set_input_features(0, &input).unwrap();
+        runnable.set_output_features(0, &mut out).unwrap();
+        compiled.run(runnable).unwrap();
+
+        let collection = out.output.unwrap().get_points().unwrap();
+        assert_eq!(
+            collection,
+            MultiPointCollection::from_data(
+                MultiPoint::many(vec![
+                    vec![
+                        (0.0, 0.1 + 0.1),
+                        (1.0, 1.1 + 0.1),
+                        (2.0, 2.1 + 0.1),
+                        (3.0, 3.1 + 0.1),
+                        (4.0, 4.1 + 0.1),
+                    ],
+                    vec![(5.0, 5.1 + 0.1), (6.0, 6.1 + 0.1)]
+                ])
+                .unwrap(),
+                vec![TimeInterval::default(); 2],
+                Default::default(),
+            )
+            .unwrap()
+        );
+    }
+
+    #[test]
+    fn lines_identity() {
+        let collection = MultiLineStringCollection::from_data(
+            vec![
+                MultiLineString::new(vec![
+                    vec![(0.0, 0.1).into(), (1.0, 1.1).into()],
+                    vec![(2.0, 2.1).into(), (3.0, 3.1).into(), (4.0, 4.1).into()],
+                ])
+                .unwrap(),
+                MultiLineString::new(vec![vec![(5.0, 5.1).into(), (6.0, 6.1).into()]]).unwrap(),
+            ],
+            vec![Default::default(); 2],
+            HashMap::new(),
+        )
+        .unwrap();
+
+        let input = TypedFeatureCollection::MultiLineString(collection.clone());
+
+        let mut output_builder = RawFeatureCollectionBuilder::lines(
+            Default::default(),
+            collection.len(),
+            collection.line_string_offsets().len() - 1,
+            collection.coordinates().len(),
+        );
+
+        let kernel = r#"
+            __kernel void lines_identity( 
+                __constant const double2 *IN_FEATURE0_COORDS,
+                const int IN_FEATURE0_LEN,
+                __constant const int *IN_FEATURE0_OFFSETS,
+                __constant const int *IN_FEATURE0_LINE_OFFSETS,
+                __global double2 *OUT_FEATURE0_COORDS,
+                __global int *OUT_FEATURE0_OFFSETS,
+                __global int *OUT_FEATURE0_LINE_OFFSETS
+            ) {
+                const int idx = get_global_id(0);
+                const int IN_FEATURE0_LINE_LEN = IN_FEATURE0_OFFSETS[IN_FEATURE0_LEN];
+                
+                OUT_FEATURE0_COORDS[idx] = IN_FEATURE0_COORDS[idx];
+                
+                if (idx <= IN_FEATURE0_LEN) {
+                    OUT_FEATURE0_OFFSETS[idx] = IN_FEATURE0_OFFSETS[idx];
+                }
+                
+                if (idx <= IN_FEATURE0_LINE_LEN) {
+                    OUT_FEATURE0_LINE_OFFSETS[idx] = IN_FEATURE0_LINE_OFFSETS[idx];
+                }
+            }"#;
+
+        let mut cl_program = CLProgram::new(IterationType::VectorCoordinates);
+        cl_program.add_input_features(VectorArgument::new(
+            input.vector_data_type(),
+            vec![],
+            true,
+            false,
+        ));
+        cl_program.add_output_features(VectorArgument::new(
+            VectorDataType::MultiLineString,
+            vec![],
+            true,
+            false,
+        ));
+
+        let mut compiled = cl_program.compile(kernel, "lines_identity").unwrap();
+
+        let mut runnable = compiled.runnable();
+        runnable.set_input_features(0, &input).unwrap();
+        runnable
+            .set_output_features(0, &mut output_builder)
+            .unwrap();
+        compiled.run(runnable).unwrap();
+
+        let output = output_builder.output.unwrap().get_lines().unwrap();
+
+        assert_eq!(collection, output);
+    }
+
+    #[test]
+    fn polygons_identity() {
+        let collection = MultiPolygonCollection::from_data(
+            vec![
+                MultiPolygon::new(vec![vec![
+                    vec![
+                        (0.0, 0.1).into(),
+                        (10.0, 10.1).into(),
+                        (0.0, 10.1).into(),
+                        (0.0, 0.1).into(),
+                    ],
+                    vec![
+                        (2.0, 2.1).into(),
+                        (3.0, 3.1).into(),
+                        (2.0, 3.1).into(),
+                        (2.0, 2.1).into(),
+                    ],
+                ]])
+                .unwrap(),
+                MultiPolygon::new(vec![vec![vec![
+                    (5.0, 5.1).into(),
+                    (6.0, 6.1).into(),
+                    (5.0, 6.1).into(),
+                    (5.0, 5.1).into(),
+                ]]])
+                .unwrap(),
+            ],
+            vec![Default::default(); 2],
+            HashMap::new(),
+        )
+        .unwrap();
+
+        let input = TypedFeatureCollection::MultiPolygon(collection.clone());
+
+        let mut output_builder = RawFeatureCollectionBuilder::polygons(
+            Default::default(),
+            collection.len(),
+            collection.polygon_offsets().len() - 1,
+            collection.ring_offsets().len() - 1,
+            collection.coordinates().len(),
+        );
+
+        let kernel = r#"
+            __kernel void polygons_identity( 
+                __constant const double2 *IN_FEATURE0_COORDS,
+                const int IN_FEATURE0_LEN,
+                __constant const int *IN_FEATURE0_OFFSETS,
+                __constant const int *IN_FEATURE0_POLYGON_OFFSETS,
+                __constant const int *IN_FEATURE0_RING_OFFSETS,
+                __global double2 *OUT_FEATURE0_COORDS,
+                __global int *OUT_FEATURE0_OFFSETS,
+                __global int *OUT_FEATURE0_POLYGON_OFFSETS,
+                __global int *OUT_FEATURE0_RING_OFFSETS
+            ) {
+                const int idx = get_global_id(0);
+                const int IN_FEATURE0_POLYGON_LEN = IN_FEATURE0_OFFSETS[IN_FEATURE0_LEN];
+                const int IN_FEATURE0_RING_LEN = IN_FEATURE0_POLYGON_OFFSETS[IN_FEATURE0_POLYGON_LEN];
+                
+                OUT_FEATURE0_COORDS[idx] = IN_FEATURE0_COORDS[idx];
+                
+                if (idx <= IN_FEATURE0_LEN) {
+                    OUT_FEATURE0_OFFSETS[idx] = IN_FEATURE0_OFFSETS[idx];
+                }
+                
+                if (idx <= IN_FEATURE0_POLYGON_LEN) {
+                    OUT_FEATURE0_POLYGON_OFFSETS[idx] = IN_FEATURE0_POLYGON_OFFSETS[idx];
+                }
+                
+                if (idx <= IN_FEATURE0_RING_LEN) {
+                    OUT_FEATURE0_RING_OFFSETS[idx] = IN_FEATURE0_RING_OFFSETS[idx];
+                }
+            }"#;
+
+        let mut cl_program = CLProgram::new(IterationType::VectorCoordinates);
+        cl_program.add_input_features(VectorArgument::new(
+            input.vector_data_type(),
+            vec![],
+            true,
+            false,
+        ));
+        cl_program.add_output_features(VectorArgument::new(
+            VectorDataType::MultiPolygon,
+            vec![],
+            true,
+            false,
+        ));
+
+        let mut compiled = cl_program.compile(kernel, "polygons_identity").unwrap();
+
+        let mut runnable = compiled.runnable();
+        runnable.set_input_features(0, &input).unwrap();
+        runnable
+            .set_output_features(0, &mut output_builder)
+            .unwrap();
+        compiled.run(runnable).unwrap();
+
+        let output = output_builder.output.unwrap().get_polygons().unwrap();
+
+        assert_eq!(collection, output);
     }
 
     #[test]
@@ -1635,14 +2117,14 @@ __kernel void nop(__global int* buffer) {
 
         let kernel = r#"
 __kernel void columns( 
-            constant const double *IN_POINT0_COLUMN_foo,
-            constant const char *IN_POINT0_NULLS_foo,
-            global double *OUT_POINT0_COLUMN_foo,
-            global char *OUT_POINT0_NULLS_foo
+            constant const double *IN_FEATURE0_COLUMN_foo,
+            constant const char *IN_FEATURE0_NULLS_foo,
+            global double *OUT_FEATURE0_COLUMN_foo,
+            global char *OUT_FEATURE0_NULLS_foo
 ) {
     int idx = get_global_id(0);
-    OUT_POINT0_COLUMN_foo[idx] = IN_POINT0_COLUMN_foo[idx] + 1;
-    OUT_POINT0_NULLS_foo[idx] = IN_POINT0_NULLS_foo[idx];
+    OUT_FEATURE0_COLUMN_foo[idx] = IN_FEATURE0_COLUMN_foo[idx] + 1;
+    OUT_FEATURE0_NULLS_foo[idx] = IN_FEATURE0_NULLS_foo[idx];
 }"#;
 
         let mut cl_program = CLProgram::new(IterationType::VectorFeatures);
@@ -1702,18 +2184,18 @@ __kernel void columns(
 
         let kernel = r#"
 __kernel void columns( 
-            __global const double *IN_POINT0_COLUMN_foo,
-            __global const char *IN_POINT0_NULLS_foo,
-            __global double *OUT_POINT0_COLUMN_foo,
-            __global char *OUT_POINT0_NULLS_foo)            
+            __global const double *IN_FEATURE0_COLUMN_foo,
+            __global const char *IN_FEATURE0_NULLS_foo,
+            __global double *OUT_FEATURE0_COLUMN_foo,
+            __global char *OUT_FEATURE0_NULLS_foo)            
 {
     int idx = get_global_id(0);
-    if (IN_POINT0_NULLS_foo[idx]) {
-        OUT_POINT0_COLUMN_foo[idx] = 1337;
-        OUT_POINT0_NULLS_foo[idx] = -1;
+    if (IN_FEATURE0_NULLS_foo[idx]) {
+        OUT_FEATURE0_COLUMN_foo[idx] = 1337;
+        OUT_FEATURE0_NULLS_foo[idx] = -1;
     } else {
-        OUT_POINT0_COLUMN_foo[idx] = 0;
-        OUT_POINT0_NULLS_foo[idx] = 0;
+        OUT_FEATURE0_COLUMN_foo[idx] = 0;
+        OUT_FEATURE0_NULLS_foo[idx] = 0;
     }
 }"#;
 
