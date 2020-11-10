@@ -1,6 +1,5 @@
 use std::cmp;
 use std::collections::HashMap;
-use std::iter::FromIterator;
 
 use float_cmp::*;
 use ndarray::{stack, Array, Array1, Axis};
@@ -206,7 +205,7 @@ impl Plot for Histogram {
         &self,
         allow_interactions: bool,
     ) -> Result<PlotData<Self::PlotDataMetadataType>> {
-        let bucket_counts = Array1::<f64>::from_iter(self.counts.iter().map(|&v| v as f64));
+        let bucket_counts: Array1<f64> = self.counts.iter().map(|&v| v as f64).collect();
 
         let step = (self.max - self.min) / (self.counts.len() as f64);
 
