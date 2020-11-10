@@ -334,7 +334,54 @@ pub enum LoadVersion {
 impl From<Option<Uuid>> for LoadVersion {
     fn from(id: Option<Uuid>) -> Self {
         id.map_or(LoadVersion::Latest, |id| {
-            LoadVersion::Version(ProjectVersionId::from_uuid(id))
+            LoadVersion::Version(ProjectVersionId(id))
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn strectangle_serialization() {
+        assert!(serde_json::from_str::<STRectangle>(
+            &json!({
+                "spatial_reference": "EPSG:4326",
+                "bounding_box": {
+                  "lower_left_coordinate": {
+                    "x": -180,
+                    "y": -90
+                  },
+                  "upper_right_coordinate": {
+                    "x": 180,
+                    "y": 90
+                  }
+                },
+                "time_interval": {
+                  "start": 0,
+                  "end": 0
+                }
+              }
+            )
+            .to_string(),
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn list_options_serialization() {
+        serde_json::from_str::<ProjectListOptions>(
+            &json!({
+                "permissions": [ "Owner" ],
+                "filter": "None",
+                "order": "NameAsc",
+                "offset": 0,
+                "limit": 1
+            })
+            .to_string(),
+        )
+        .unwrap();
     }
 }

@@ -1,9 +1,10 @@
 use bb8_postgres::bb8::{ManageConnection, RunError};
 use snafu::Snafu;
+use strum::IntoStaticStr;
 use warp::reject::Reject;
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
-#[derive(Debug, Snafu)]
+#[derive(Debug, Snafu, IntoStaticStr)]
 #[snafu(visibility = "pub(crate)")]
 pub enum Error {
     DataType {
@@ -48,6 +49,13 @@ pub enum Error {
     LogoutFailed,
     SessionDoesNotExist,
     InvalidSession,
+    MissingAuthorizationHeader,
+    InvalidAuthorizationScheme,
+
+    #[snafu(display("Authorization error {:?}", source))]
+    Authorization {
+        source: Box<Error>,
+    },
 
     ProjectCreateFailed,
     ProjectListFailed,

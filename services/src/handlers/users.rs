@@ -1,10 +1,12 @@
+use crate::error;
 use crate::error::Result;
 use crate::handlers::{authenticate, Context};
 use crate::projects::project::{ProjectId, STRectangle};
 use crate::users::user::{UserCredentials, UserRegistration};
 use crate::users::userdb::UserDB;
-use crate::util::identifiers::Identifier;
+use crate::util::identifiers::IdResponse;
 use crate::util::user_input::UserInput;
+use snafu::ResultExt;
 use uuid::Uuid;
 use warp::reply::Reply;
 use warp::Filter;
@@ -13,7 +15,7 @@ pub fn register_user_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::post()
-        .and(warp::path!("user" / "register"))
+        .and(warp::path("user"))
         .and(warp::body::json())
         .and(warp::any().map(move || ctx.clone()))
         .and_then(register_user)
@@ -26,14 +28,14 @@ async fn register_user<C: Context>(
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let user = user.validated()?;
     let id = ctx.user_db_ref_mut().await.register(user).await?;
-    Ok(warp::reply::json(&id))
+    Ok(warp::reply::json(&IdResponse::from_id(id)))
 }
 
 pub fn login_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::post()
-        .and(warp::path!("user" / "login"))
+        .and(warp::path("login"))
         .and(warp::body::json())
         .and(warp::any().map(move || ctx.clone()))
         .and_then(login)
@@ -44,46 +46,51 @@ async fn login<C: Context>(
     user: UserCredentials,
     ctx: C,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    match ctx.user_db_ref_mut().await.login(user).await {
-        Ok(id) => Ok(warp::reply::json(&id).into_response()),
-        Err(_) => Ok(warp::http::StatusCode::UNAUTHORIZED.into_response()),
-    }
+    let session = ctx
+        .user_db_ref_mut()
+        .await
+        .login(user)
+        .await
+        .map_err(Box::new)
+        .context(error::Authorization)?;
+    Ok(warp::reply::json(&session).into_response())
 }
 
 pub fn logout_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::post()
-        .and(warp::path!("user" / "logout"))
+        .and(warp::path("logout"))
         .and(authenticate(ctx))
         .and_then(logout)
 }
 
 // TODO: move into handler once async closures are available?
 async fn logout<C: Context>(ctx: C) -> Result<impl warp::Reply, warp::Rejection> {
-    match ctx.user_db_ref_mut().await.logout(ctx.session()?.id).await {
-        Ok(_) => Ok(warp::reply().into_response()),
-        Err(_) => Ok(warp::http::StatusCode::UNAUTHORIZED.into_response()),
-    }
+    ctx.user_db_ref_mut()
+        .await
+        .logout(ctx.session()?.id)
+        .await?;
+    Ok(warp::reply().into_response())
 }
 
 pub fn session_project_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::post()
-        .and(warp::path!("session" / "project" / Uuid))
+        .and(warp::path!("session" / "project" / Uuid).map(ProjectId))
         .and(authenticate(ctx))
         .and_then(session_project)
 }
 
 // TODO: move into handler once async closures are available?
 async fn session_project<C: Context>(
-    project: Uuid,
+    project: ProjectId,
     ctx: C,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     ctx.user_db_ref_mut()
         .await
-        .set_session_project(ctx.session()?, ProjectId::from_uuid(project))
+        .set_session_project(ctx.session()?, project)
         .await?;
 
     Ok(warp::reply())
@@ -123,6 +130,7 @@ mod tests {
     use crate::util::user_input::Validated;
     use crate::{contexts::InMemoryContext, handlers::handle_rejection};
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
+    use serde_json::json;
 
     #[tokio::test]
     async fn register() {
@@ -137,7 +145,7 @@ mod tests {
         // register user
         let res = warp::test::request()
             .method("POST")
-            .path("/user/register")
+            .path("/user")
             .header("Content-Length", "0")
             .json(&user)
             .reply(&register_user_handler(ctx))
@@ -146,7 +154,34 @@ mod tests {
         assert_eq!(res.status(), 200);
 
         let body: String = String::from_utf8(res.body().to_vec()).unwrap();
-        assert!(serde_json::from_str::<UserId>(&body).is_ok());
+        assert!(serde_json::from_str::<IdResponse<UserId>>(&body).is_ok());
+    }
+
+    #[tokio::test]
+    async fn register_invalid_body() {
+        let ctx = InMemoryContext::default();
+
+        let user = json!({
+            "password": "secret123",
+            "real_name": " Foo Bar",
+        });
+
+        // register user
+        let res = warp::test::request()
+            .method("POST")
+            .path("/user")
+            .header("Content-Length", "0")
+            .json(&user)
+            .reply(&register_user_handler(ctx))
+            .await;
+
+        assert_eq!(res.status(), 400);
+
+        let body: String = String::from_utf8(res.body().to_vec()).unwrap();
+        assert_eq!(
+            body,
+            "Request body deserialize error: missing field `email` at line 1 column 47"
+        );
     }
 
     #[tokio::test]
@@ -162,7 +197,7 @@ mod tests {
         // register user
         let res = warp::test::request()
             .method("POST")
-            .path("/user/register")
+            .path("/user")
             .header("Content-Length", "0")
             .json(&user)
             .reply(&register_user_handler(ctx).recover(handle_rejection))
@@ -192,10 +227,10 @@ mod tests {
 
         let res = warp::test::request()
             .method("POST")
-            .path("/user/login")
+            .path("/login")
             .header("Content-Length", "0")
             .json(&credentials)
-            .reply(&login_handler(ctx))
+            .reply(&login_handler(ctx).recover(handle_rejection))
             .await;
 
         assert_eq!(res.status(), 200);
@@ -212,7 +247,7 @@ mod tests {
             user_input: UserRegistration {
                 email: "foo@bar.de".to_string(),
                 password: "secret123".to_string(),
-                real_name: " Foo Bar".to_string(),
+                real_name: "Foo Bar".to_string(),
             },
         };
 
@@ -225,12 +260,12 @@ mod tests {
 
         let res = warp::test::request()
             .method("POST")
-            .path("/user/login")
+            .path("/login")
             .header("Content-Length", "0")
             .json(&credentials)
-            .reply(&login_handler(ctx))
+            .reply(&login_handler(ctx).recover(handle_rejection))
             .await;
-
+        eprintln!("{:?}", res);
         assert_eq!(res.status(), 401);
     }
 
@@ -263,9 +298,12 @@ mod tests {
 
         let res = warp::test::request()
             .method("POST")
-            .path("/user/logout")
-            .header("Authorization", session.id.to_string())
-            .reply(&logout_handler(ctx))
+            .path("/logout")
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
+            .reply(&logout_handler(ctx).recover(handle_rejection))
             .await;
 
         assert_eq!(res.status(), 200);
@@ -278,12 +316,16 @@ mod tests {
 
         let res = warp::test::request()
             .method("POST")
-            .path("/user/logout")
-            .reply(&logout_handler(ctx))
+            .path("/logout")
+            .reply(&logout_handler(ctx).recover(handle_rejection))
             .await;
 
-        assert_eq!(res.status(), 400);
-        assert_eq!(res.body(), "Missing request header \"authorization\"");
+        assert_eq!(res.status(), 401);
+        assert_eq!(
+            res.body(),
+            &json!({"error":"MissingAuthorizationHeader","message":"MissingAuthorizationHeader"})
+                .to_string()
+        );
     }
 
     #[tokio::test]
@@ -292,13 +334,38 @@ mod tests {
 
         let res = warp::test::request()
             .method("POST")
-            .path("/user/logout")
-            .header("Authorization", "7e855f3c-b0cd-46d1-b5b3-19e6e3f9ea5")
-            .reply(&logout_handler(ctx))
+            .path("/logout")
+            .header(
+                "Authorization",
+                format!("Bearer {}", "6ecff667-258e-4108-9dc9-93cb8c64793c"),
+            )
+            .reply(&logout_handler(ctx).recover(handle_rejection))
             .await;
 
-        assert_eq!(res.status(), 404); // TODO: 401?
-        assert_eq!(res.body(), "");
+        assert_eq!(res.status(), 401);
+        assert_eq!(
+            res.body(),
+            &json!({"error":"SessionDoesNotExist","message":"SessionDoesNotExist"}).to_string()
+        );
+    }
+
+    #[tokio::test]
+    async fn logout_wrong_scheme() {
+        let ctx = InMemoryContext::default();
+
+        let res = warp::test::request()
+            .method("POST")
+            .path("/logout")
+            .header("Authorization", "7e855f3c-b0cd-46d1-b5b3-19e6e3f9ea5")
+            .reply(&logout_handler(ctx).recover(handle_rejection))
+            .await;
+
+        assert_eq!(res.status(), 401);
+        assert_eq!(
+            res.body(),
+            &json!({"error":"InvalidAuthorizationScheme","message":"InvalidAuthorizationScheme"})
+                .to_string()
+        );
     }
 
     #[tokio::test]
@@ -307,13 +374,15 @@ mod tests {
 
         let res = warp::test::request()
             .method("POST")
-            .path("/user/logout")
-            .header("Authorization", "no uuid")
-            .reply(&logout_handler(ctx))
+            .path("/logout")
+            .header("Authorization", format!("Bearer {}", "no uuid"))
+            .reply(&logout_handler(ctx).recover(handle_rejection))
             .await;
-
-        assert_eq!(res.status(), 404); // TODO: 400?
-        assert_eq!(res.body(), "");
+        assert_eq!(res.status(), 401);
+        assert_eq!(
+            res.body(),
+            &json!({"error":"InvalidUuid","message":"InvalidUuid"}).to_string()
+        );
     }
 
     #[tokio::test]
@@ -372,8 +441,11 @@ mod tests {
         let res = warp::test::request()
             .method("POST")
             .path(&format!("/session/project/{}", project.to_string()))
-            .header("Authorization", session.id.to_string())
-            .reply(&session_project_handler(ctx.clone()))
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
+            .reply(&session_project_handler(ctx.clone()).recover(handle_rejection))
             .await;
 
         assert_eq!(res.status(), 200);
@@ -395,9 +467,12 @@ mod tests {
             .method("POST")
             .header("Content-Length", "0")
             .path("/session/view")
-            .header("Authorization", session.id.to_string())
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
             .json(&rect)
-            .reply(&session_view_handler(ctx.clone()))
+            .reply(&session_view_handler(ctx.clone()).recover(handle_rejection))
             .await;
 
         assert_eq!(res.status(), 200);
