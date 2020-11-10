@@ -9,3 +9,4 @@ Cargo.lock
 /.idea
 /.vscode
 Settings.toml
+Settings-test.toml
