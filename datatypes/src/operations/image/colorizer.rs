@@ -461,7 +461,7 @@ impl RgbaColor {
     /// ```
     #[allow(unstable_name_collisions)]
     pub fn factor_add(self, other: Self, factor: f64) -> Self {
-        debug_assert!(factor >= 0. && factor <= 1.0);
+        debug_assert!((0.0..=1.0).contains(&factor));
 
         let [r, g, b, a] = self.0;
         let [r2, g2, b2, a2] = other.0;
