@@ -391,6 +391,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::eq_op)]
     fn equals() {
         let mut builder = MultiPolygonCollection::builder().finish_header();
 
