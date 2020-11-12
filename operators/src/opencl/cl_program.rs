@@ -1975,7 +1975,7 @@ __kernel void gid(
                     OUT_COLLECTION0_POLYGON_OFFSETS[idx] = IN_COLLECTION0_POLYGON_OFFSETS[idx];
                 }
                 
-                if (idx < IN_COLLECTION0_FEATURE_OFFSETS) {
+                if (idx < IN_COLLECTION0_FEATURE_OFFSETS_LEN) {
                     OUT_COLLECTION0_FEATURE_OFFSETS[idx] = IN_COLLECTION0_FEATURE_OFFSETS[idx];
                 }
             }"#;
