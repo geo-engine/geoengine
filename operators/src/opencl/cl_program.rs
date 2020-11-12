@@ -530,6 +530,7 @@ impl<'a> CLProgramRunnable<'a> {
         Ok(())
     }
 
+    #[allow(clippy::too_many_lines)] // TODO: split function into parts
     fn set_feature_output_arguments(&mut self, kernel: &Kernel, queue: &Queue) -> Result<()> {
         fn create_buffer<T: OclPrm>(queue: &Queue, length: usize) -> ocl::error::Result<Buffer<T>> {
             Buffer::<T>::builder()
@@ -547,15 +548,17 @@ impl<'a> CLProgramRunnable<'a> {
             let features = builder.as_ref().expect("checked");
 
             let geo_buffers = if argument.include_geo {
+                let coords = create_buffer::<Double2>(queue, features.num_coords())?;
+                kernel.set_arg(format!("OUT_COLLECTION{}_COORDS", idx), &coords)?;
+
+                let feature_offsets = create_buffer::<i32>(queue, features.num_features() + 1)?;
+
                 Some(match features.output_type {
                     VectorDataType::MultiPoint => {
-                        let coords = create_buffer::<Double2>(queue, features.num_coords())?;
-                        kernel.set_arg(format!("OUT_COLLECTION{}_COORDS", idx), &coords)?;
-
-                        let feature_offsets =
-                            create_buffer::<i32>(queue, features.num_features() + 1)?;
-                        kernel
-                            .set_arg(format!("OUT_COLLECTION{}_OFFSETS", idx), &feature_offsets)?;
+                        kernel.set_arg(
+                            format!("OUT_COLLECTION{}_FEATURE_OFFSETS", idx),
+                            &feature_offsets,
+                        )?;
 
                         FeatureGeoOutputBuffer::Points(PointBuffers {
                             coords,
@@ -563,18 +566,15 @@ impl<'a> CLProgramRunnable<'a> {
                         })
                     }
                     VectorDataType::MultiLineString => {
-                        let coords = create_buffer::<Double2>(queue, features.num_coords())?;
-                        kernel.set_arg(format!("OUT_COLLECTION{}_COORDS", idx), &coords)?;
-
-                        let feature_offsets =
-                            create_buffer::<i32>(queue, features.num_features() + 1)?;
-                        kernel
-                            .set_arg(format!("OUT_COLLECTION{}_OFFSETS", idx), &feature_offsets)?;
-
                         let line_offsets = create_buffer::<i32>(queue, features.num_lines()? + 1)?;
                         kernel.set_arg(
                             format!("OUT_COLLECTION{}_LINE_OFFSETS", idx),
                             &line_offsets,
+                        )?;
+
+                        kernel.set_arg(
+                            format!("OUT_COLLECTION{}_FEATURE_OFFSETS", idx),
+                            &feature_offsets,
                         )?;
 
                         FeatureGeoOutputBuffer::Lines(LineBuffers {
@@ -584,13 +584,11 @@ impl<'a> CLProgramRunnable<'a> {
                         })
                     }
                     VectorDataType::MultiPolygon => {
-                        let coords = create_buffer::<Double2>(queue, features.num_coords())?;
-                        kernel.set_arg(format!("OUT_COLLECTION{}_COORDS", idx), &coords)?;
-
-                        let feature_offsets =
-                            create_buffer::<i32>(queue, features.num_features() + 1)?;
-                        kernel
-                            .set_arg(format!("OUT_COLLECTION{}_OFFSETS", idx), &feature_offsets)?;
+                        let ring_offsets = create_buffer::<i32>(queue, features.num_rings()? + 1)?;
+                        kernel.set_arg(
+                            format!("OUT_COLLECTION{}_RING_OFFSETS", idx),
+                            &ring_offsets,
+                        )?;
 
                         let polygon_offsets =
                             create_buffer::<i32>(queue, features.num_polygons()? + 1)?;
@@ -599,10 +597,9 @@ impl<'a> CLProgramRunnable<'a> {
                             &polygon_offsets,
                         )?;
 
-                        let ring_offsets = create_buffer::<i32>(queue, features.num_rings()? + 1)?;
                         kernel.set_arg(
-                            format!("OUT_COLLECTION{}_RING_OFFSETS", idx),
-                            &ring_offsets,
+                            format!("OUT_COLLECTION{}_FEATURE_OFFSETS", idx),
+                            &feature_offsets,
                         )?;
 
                         FeatureGeoOutputBuffer::Polygons(PolygonBuffers {
@@ -1217,29 +1214,16 @@ impl CompiledCLProgram {
 
         for (idx, features) in self.output_feature_types.iter().enumerate() {
             if features.include_geo {
+                kernel.arg_named(
+                    format!("OUT_COLLECTION{}_COORDS", idx),
+                    None::<&Buffer<Double2>>,
+                );
+
                 match features.vector_type {
-                    VectorDataType::Data => {
-                        // no geo
-                    }
-                    VectorDataType::MultiPoint => {
-                        kernel.arg_named(
-                            format!("OUT_COLLECTION{}_COORDS", idx),
-                            None::<&Buffer<Double2>>,
-                        );
-                        kernel.arg_named(
-                            format!("OUT_COLLECTION{}_OFFSETS", idx),
-                            None::<&Buffer<i32>>,
-                        );
+                    VectorDataType::Data | VectorDataType::MultiPoint => {
+                        // no geo or nothing to add
                     }
                     VectorDataType::MultiLineString => {
-                        kernel.arg_named(
-                            format!("OUT_COLLECTION{}_COORDS", idx),
-                            None::<&Buffer<Double2>>,
-                        );
-                        kernel.arg_named(
-                            format!("OUT_COLLECTION{}_OFFSETS", idx),
-                            None::<&Buffer<i32>>,
-                        );
                         kernel.arg_named(
                             format!("OUT_COLLECTION{}_LINE_OFFSETS", idx),
                             None::<&Buffer<i32>>,
@@ -1247,23 +1231,20 @@ impl CompiledCLProgram {
                     }
                     VectorDataType::MultiPolygon => {
                         kernel.arg_named(
-                            format!("OUT_COLLECTION{}_COORDS", idx),
-                            None::<&Buffer<Double2>>,
-                        );
-                        kernel.arg_named(
-                            format!("OUT_COLLECTION{}_OFFSETS", idx),
+                            format!("OUT_COLLECTION{}_RING_OFFSETS", idx),
                             None::<&Buffer<i32>>,
                         );
                         kernel.arg_named(
                             format!("OUT_COLLECTION{}_POLYGON_OFFSETS", idx),
                             None::<&Buffer<i32>>,
                         );
-                        kernel.arg_named(
-                            format!("OUT_COLLECTION{}_RING_OFFSETS", idx),
-                            None::<&Buffer<i32>>,
-                        );
                     }
                 }
+
+                kernel.arg_named(
+                    format!("OUT_COLLECTION{}_FEATURE_OFFSETS", idx),
+                    None::<&Buffer<i32>>,
+                );
             }
 
             for column in &features.columns {
@@ -1711,7 +1692,7 @@ __kernel void gid(
                 __constant const int *IN_COLLECTION0_FEATURE_OFFSETS,
                 const int IN_COLLECTION0_FEATURE_OFFSETS_LEN,
                 __global double2 *OUT_COLLECTION0_COORDS,
-                __global int *OUT_COLLECTION0_OFFSETS)            
+                __global int *OUT_COLLECTION0_FEATURE_OFFSETS)            
             {
                 int idx = get_global_id(0);
                 
@@ -1719,7 +1700,7 @@ __kernel void gid(
                 OUT_COLLECTION0_COORDS[idx].y = IN_COLLECTION0_COORDS[idx].y + 1;
                 
                 if (idx < IN_COLLECTION0_FEATURE_OFFSETS_LEN) {
-                    OUT_COLLECTION0_OFFSETS[idx] = IN_COLLECTION0_FEATURE_OFFSETS[idx];
+                    OUT_COLLECTION0_FEATURE_OFFSETS[idx] = IN_COLLECTION0_FEATURE_OFFSETS[idx];
                 }
             }"#;
 
@@ -1881,15 +1862,15 @@ __kernel void gid(
                 __constant const int *IN_COLLECTION0_FEATURE_OFFSETS,
                 const int IN_COLLECTION0_FEATURE_OFFSETS_LEN,
                 __global double2 *OUT_COLLECTION0_COORDS,
-                __global int *OUT_COLLECTION0_OFFSETS,
-                __global int *OUT_COLLECTION0_LINE_OFFSETS
+                __global int *OUT_COLLECTION0_LINE_OFFSETS,
+                __global int *OUT_COLLECTION0_FEATURE_OFFSETS
             ) {
                 const int idx = get_global_id(0);
                 
                 OUT_COLLECTION0_COORDS[idx] = IN_COLLECTION0_COORDS[idx];
                 
                 if (idx < IN_COLLECTION0_FEATURE_OFFSETS_LEN) {
-                    OUT_COLLECTION0_OFFSETS[idx] = IN_COLLECTION0_FEATURE_OFFSETS[idx];
+                    OUT_COLLECTION0_FEATURE_OFFSETS[idx] = IN_COLLECTION0_FEATURE_OFFSETS[idx];
                 }
                 
                 if (idx < IN_COLLECTION0_LINE_OFFSETS_LEN) {
@@ -1978,9 +1959,9 @@ __kernel void gid(
                 __constant const int *IN_COLLECTION0_FEATURE_OFFSETS,
                 const int IN_COLLECTION0_FEATURE_OFFSETS_LEN,
                 __global double2 *OUT_COLLECTION0_COORDS,
-                __global int *OUT_COLLECTION0_OFFSETS,
+                __global int *OUT_COLLECTION0_RING_OFFSETS,
                 __global int *OUT_COLLECTION0_POLYGON_OFFSETS,
-                __global int *OUT_COLLECTION0_RING_OFFSETS
+                __global int *OUT_COLLECTION0_FEATURE_OFFSETS
             ) {
                 const int idx = get_global_id(0);
                 
@@ -1995,7 +1976,7 @@ __kernel void gid(
                 }
                 
                 if (idx < IN_COLLECTION0_FEATURE_OFFSETS) {
-                    OUT_COLLECTION0_OFFSETS[idx] = IN_COLLECTION0_FEATURE_OFFSETS[idx];
+                    OUT_COLLECTION0_FEATURE_OFFSETS[idx] = IN_COLLECTION0_FEATURE_OFFSETS[idx];
                 }
             }"#;
 
