@@ -626,4 +626,102 @@ mod tests {
             .to_string()
         );
     }
+
+    #[test]
+    fn polygon_builder() {
+        let mut builder = RawFeatureCollectionBuilder::polygons(Default::default(), 2, 3, 4, 0);
+        builder.set_default_time_intervals().unwrap();
+
+        let ring0_coords = [0.0, 0.1, 10.0, 10.1, 0.0, 10.1, 0.0, 0.1];
+        let ring1_coords = [2.0, 2.1, 3.0, 3.1, 2.0, 3.1, 2.0, 2.1];
+        let ring3_coords = [4.0, 4.1, 6.0, 6.1, 4.0, 6.1, 4.0, 4.1];
+        let ring4_coords = [5.0, 5.1, 6.0, 6.1, 5.0, 6.1, 5.0, 5.1];
+        let coords: Vec<f64> = [ring0_coords, ring1_coords, ring3_coords, ring4_coords]
+            .concat()
+            .to_vec();
+        let ring_offsets: Vec<i32> = vec![0, 4, 8, 12, 16];
+        let polygon_offsets: Vec<i32> = vec![0, 2, 3, 4];
+        let feature_offsets: Vec<i32> = vec![0, 2, 3];
+
+        let coords_buffer = Buffer::from(coords.as_slice().to_byte_slice());
+        let ring_offsets_buffer = Buffer::from(ring_offsets.to_byte_slice());
+        let polygon_offsets_buffer = Buffer::from(polygon_offsets.to_byte_slice());
+        let feature_offsets_buffer = Buffer::from(feature_offsets.to_byte_slice());
+
+        builder
+            .set_polygons(
+                coords_buffer,
+                ring_offsets_buffer,
+                polygon_offsets_buffer,
+                feature_offsets_buffer,
+            )
+            .unwrap();
+
+        builder.finish().unwrap();
+
+        let collection = builder.output.unwrap().get_polygons().unwrap();
+
+        assert_eq!(
+            collection.to_geo_json(),
+            json!({
+                "type": "FeatureCollection",
+                "features": [{
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "MultiPolygon",
+                        "coordinates": [
+                            [
+                                [
+                                    [0.0, 0.1],
+                                    [10.0, 10.1],
+                                    [0.0, 10.1],
+                                    [0.0, 0.1]
+                                ],
+                                [
+                                    [2.0, 2.1],
+                                    [3.0, 3.1],
+                                    [2.0, 3.1],
+                                    [2.0, 2.1]
+                                ]
+                            ],
+                            [
+                                [
+                                    [4.0, 4.1],
+                                    [6.0, 6.1],
+                                    [4.0, 6.1],
+                                    [4.0, 4.1]
+                                ]
+                            ]
+                        ]
+                    },
+                    "properties": {},
+                    "when": {
+                        "start": "-262144-01-01T00:00:00+00:00",
+                        "end": "+262143-12-31T23:59:59.999+00:00",
+                        "type": "Interval"
+                    }
+                }, {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Polygon",
+                        "coordinates": [
+                            [
+                                [5.0, 5.1],
+                                [6.0, 6.1],
+                                [5.0, 6.1],
+                                [5.0, 5.1]
+                            ]
+                        ]
+                    },
+                    "properties": {},
+                    "when": {
+                        "start": "-262144-01-01T00:00:00+00:00",
+                        "end": "+262143-12-31T23:59:59.999+00:00",
+                        "type": "Interval"
+                    }
+                }]
+            })
+            .to_string()
+        );
+    }
 }
