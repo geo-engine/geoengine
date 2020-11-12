@@ -555,4 +555,75 @@ mod tests {
             .to_string()
         );
     }
+
+    #[test]
+    fn line_builder() {
+        let mut builder = RawFeatureCollectionBuilder::lines(Default::default(), 2, 3, 7);
+        builder.set_default_time_intervals().unwrap();
+
+        let coords: Vec<f64> = vec![
+            0.0, 0.1, 1.0, 1.1, 2.0, 2.1, 3.0, 3.1, 4.0, 4.1, 5.0, 5.1, 6.0, 6.1, 7.0, 7.1,
+        ];
+        let line_offsets: Vec<i32> = vec![0, 2, 5, 8];
+        let feature_offsets: Vec<i32> = vec![0, 2, 3];
+
+        let coords_buffer = Buffer::from(coords.as_slice().to_byte_slice());
+        let line_offsets_buffer = Buffer::from(line_offsets.to_byte_slice());
+        let feature_offsets_buffer = Buffer::from(feature_offsets.to_byte_slice());
+
+        builder
+            .set_lines(coords_buffer, line_offsets_buffer, feature_offsets_buffer)
+            .unwrap();
+
+        builder.finish().unwrap();
+
+        let collection = builder.output.unwrap().get_lines().unwrap();
+
+        assert_eq!(
+            collection.to_geo_json(),
+            json!({
+                "type": "FeatureCollection",
+                "features": [{
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "MultiLineString",
+                        "coordinates": [
+                            [
+                                [0.0, 0.1],
+                                [1.0, 1.1]
+                            ],
+                            [
+                                [2.0, 2.1],
+                                [3.0, 3.1],
+                                [4.0, 4.1]
+                            ]
+                        ]
+                    },
+                    "properties": {},
+                    "when": {
+                        "start": "-262144-01-01T00:00:00+00:00",
+                        "end": "+262143-12-31T23:59:59.999+00:00",
+                        "type": "Interval"
+                    }
+                }, {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "LineString",
+                        "coordinates": [
+                            [5.0, 5.1],
+                            [6.0, 6.1],
+                            [7.0, 7.1]
+                        ]
+                    },
+                    "properties": {},
+                    "when": {
+                        "start": "-262144-01-01T00:00:00+00:00",
+                        "end": "+262143-12-31T23:59:59.999+00:00",
+                        "type": "Interval"
+                    }
+                }]
+            })
+            .to_string()
+        );
+    }
 }
