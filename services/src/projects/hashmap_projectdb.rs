@@ -243,10 +243,12 @@ mod test {
     use crate::util::identifiers::Identifier;
     use crate::util::user_input::UserInput;
     use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, TimeInterval};
+    use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
     use std::{thread, time};
 
     fn strect() -> STRectangle {
         STRectangle {
+            spatial_reference: SpatialReferenceOption::Unreferenced,
             bounding_box: BoundingBox2D::new(Coordinate2D::new(0., 0.), Coordinate2D::new(1., 1.))
                 .unwrap(),
             time_interval: TimeInterval::new(0, 1).unwrap(),
@@ -263,7 +265,6 @@ mod test {
         let create = CreateProject {
             name: "Own".into(),
             description: "Text".into(),
-            view: strect(),
             bounds: strect(),
         }
         .validated()
@@ -274,7 +275,6 @@ mod test {
         let create = CreateProject {
             name: "User2's".into(),
             description: "Text".into(),
-            view: strect(),
             bounds: strect(),
         }
         .validated()
@@ -285,7 +285,6 @@ mod test {
         let create = CreateProject {
             name: "User3's".into(),
             description: "Text".into(),
-            view: strect(),
             bounds: strect(),
         }
         .validated()
@@ -351,8 +350,16 @@ mod test {
             let create = CreateProject {
                 name: format!("Test{}", i),
                 description: format!("Test{}", 10 - i),
-                view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
-                bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+                bounds: STRectangle::new(
+                    SpatialReferenceOption::Unreferenced,
+                    0.,
+                    0.,
+                    1.,
+                    1.,
+                    0,
+                    1,
+                )
+                .unwrap(),
             }
             .validated()
             .unwrap();
@@ -386,8 +393,8 @@ mod test {
         let create = CreateProject {
             name: "Test".into(),
             description: "Text".into(),
-            view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
-            bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+            bounds: STRectangle::new(SpatialReferenceOption::Unreferenced, 0., 0., 1., 1., 0, 1)
+                .unwrap(),
         }
         .validated()
         .unwrap();
@@ -413,8 +420,8 @@ mod test {
         let create = CreateProject {
             name: "Test".into(),
             description: "Text".into(),
-            view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
-            bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+            bounds: STRectangle::new(SpatialReferenceOption::Unreferenced, 0., 0., 1., 1., 0, 1)
+                .unwrap(),
         }
         .validated()
         .unwrap();
@@ -432,8 +439,8 @@ mod test {
         let create = CreateProject {
             name: "Test".into(),
             description: "Text".into(),
-            view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
-            bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+            bounds: STRectangle::new(SpatialReferenceOption::Unreferenced, 0., 0., 1., 1., 0, 1)
+                .unwrap(),
         }
         .validated()
         .unwrap();
@@ -445,7 +452,6 @@ mod test {
             name: Some("Foo".into()),
             description: None,
             layers: None,
-            view: None,
             bounds: None,
         }
         .validated()
@@ -464,8 +470,8 @@ mod test {
         let create = CreateProject {
             name: "Test".into(),
             description: "Text".into(),
-            view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
-            bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+            bounds: STRectangle::new(SpatialReferenceOption::Unreferenced, 0., 0., 1., 1., 0, 1)
+                .unwrap(),
         }
         .validated()
         .unwrap();
@@ -483,8 +489,8 @@ mod test {
         let create = CreateProject {
             name: "Test".into(),
             description: "Text".into(),
-            view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
-            bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+            bounds: STRectangle::new(SpatialReferenceOption::Unreferenced, 0., 0., 1., 1., 0, 1)
+                .unwrap(),
         }
         .validated()
         .unwrap();
@@ -498,7 +504,6 @@ mod test {
             name: Some("Foo".into()),
             description: None,
             layers: None,
-            view: None,
             bounds: None,
         }
         .validated()
@@ -520,8 +525,8 @@ mod test {
         let create = CreateProject {
             name: "Test".into(),
             description: "Text".into(),
-            view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
-            bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+            bounds: STRectangle::new(SpatialReferenceOption::Unreferenced, 0., 0., 1., 1., 0, 1)
+                .unwrap(),
         }
         .validated()
         .unwrap();
@@ -564,8 +569,8 @@ mod test {
         let create = CreateProject {
             name: "Test".into(),
             description: "Text".into(),
-            view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
-            bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+            bounds: STRectangle::new(SpatialReferenceOption::Unreferenced, 0., 0., 1., 1., 0, 1)
+                .unwrap(),
         }
         .validated()
         .unwrap();
@@ -608,8 +613,8 @@ mod test {
         let create = CreateProject {
             name: "Test".into(),
             description: "Text".into(),
-            view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
-            bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+            bounds: STRectangle::new(SpatialReferenceOption::Unreferenced, 0., 0., 1., 1., 0, 1)
+                .unwrap(),
         }
         .validated()
         .unwrap();

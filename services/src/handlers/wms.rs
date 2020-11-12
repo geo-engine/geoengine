@@ -1,5 +1,4 @@
 use snafu::ResultExt;
-use uuid::Uuid;
 use warp::reply::Reply;
 use warp::{http::Response, Filter, Rejection};
 
@@ -16,7 +15,8 @@ use crate::error;
 use crate::error::Result;
 use crate::handlers::Context;
 use crate::ogc::wms::request::{GetCapabilities, GetLegendGraphic, GetMap, WMSRequest};
-use crate::util::identifiers::Identifier;
+use crate::util::config;
+use crate::util::config::get_config_element;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 use futures::StreamExt;
@@ -25,6 +25,7 @@ use geoengine_operators::call_on_generic_raster_processor;
 use geoengine_operators::engine::{
     ExecutionContext, QueryContext, QueryRectangle, RasterQueryProcessor,
 };
+use std::str::FromStr;
 
 pub fn wms_handler<C: Context>(
     ctx: C,
@@ -134,15 +135,13 @@ async fn get_map<C: Context>(
     let workflow = ctx
         .workflow_registry_ref()
         .await
-        .load(&WorkflowId::from_uuid(
-            Uuid::parse_str(&request.layers).context(error::Uuid)?,
-        ))
+        .load(&WorkflowId::from_str(&request.layers)?)
         .await?;
 
     let operator = workflow.operator.get_raster().context(error::Operator)?;
 
     let execution_context = ExecutionContext {
-        raster_data_root: "../operators/test-data/raster".into(), // ./ is the crate root when run as example from the multi crate root... doh
+        raster_data_root: get_config_element::<config::GdalSource>()?.raster_data_root_path,
     };
 
     let initialized = operator
@@ -288,9 +287,7 @@ mod tests {
 
     use geoengine_datatypes::primitives::{BoundingBox2D, TimeInterval};
     use geoengine_operators::engine::{RasterOperator, TypedOperator};
-    use geoengine_operators::source::{
-        gdal_source::GdalSourceProcessor, GdalSource, GdalSourceParameters,
-    };
+    use geoengine_operators::source::{GdalSource, GdalSourceParameters, GdalSourceProcessor};
 
     use super::*;
     use crate::workflows::workflow::Workflow;

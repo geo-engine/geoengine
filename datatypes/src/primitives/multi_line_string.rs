@@ -1,12 +1,17 @@
+use std::convert::TryFrom;
+
+use arrow::array::{ArrayBuilder, BooleanArray, PrimitiveArrayOps};
+use arrow::error::ArrowError;
+use geo::algorithm::intersects::Intersects;
+use serde::{Deserialize, Serialize};
+use snafu::ensure;
+
 use crate::collections::VectorDataType;
-use crate::primitives::{error, GeometryRef};
+use crate::error::Error;
+use crate::primitives::{error, BoundingBox2D, GeometryRef, PrimitivesError, TypedGeometry};
 use crate::primitives::{Coordinate2D, Geometry};
 use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::Result;
-use arrow::array::BooleanArray;
-use arrow::error::ArrowError;
-use serde::{Deserialize, Serialize};
-use snafu::ensure;
 
 /// A trait that allows a common access to lines of `MultiLineString`s and its references
 pub trait MultiLineStringAccess<L>
@@ -45,6 +50,47 @@ impl MultiLineStringAccess<Vec<Coordinate2D>> for MultiLineString {
 
 impl Geometry for MultiLineString {
     const DATA_TYPE: VectorDataType = VectorDataType::MultiLineString;
+
+    fn intersects_bbox(&self, bbox: &BoundingBox2D) -> bool {
+        let geo::MultiLineString::<f64>(geo_line_strings) = self.into();
+        let geo_rect: geo::Rect<f64> = bbox.into();
+
+        for line_string in geo_line_strings {
+            for line in line_string.lines() {
+                if line.intersects(&geo_rect) {
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
+}
+
+impl Into<geo::MultiLineString<f64>> for &MultiLineString {
+    fn into(self) -> geo::MultiLineString<f64> {
+        let line_strings = self
+            .coordinates
+            .iter()
+            .map(|coordinates| {
+                let geo_coordinates = coordinates.iter().map(Into::into).collect();
+                geo::LineString(geo_coordinates)
+            })
+            .collect();
+        geo::MultiLineString(line_strings)
+    }
+}
+
+impl TryFrom<TypedGeometry> for MultiLineString {
+    type Error = Error;
+
+    fn try_from(value: TypedGeometry) -> Result<Self, Self::Error> {
+        if let TypedGeometry::MultiLineString(geometry) = value {
+            Ok(geometry)
+        } else {
+            Err(PrimitivesError::InvalidConversion.into())
+        }
+    }
 }
 
 impl AsRef<[Vec<Coordinate2D>]> for MultiLineString {
@@ -63,6 +109,20 @@ impl ArrowTyped for MultiLineString {
         arrow::datatypes::DataType::List(
             arrow::datatypes::DataType::List(Coordinate2D::arrow_data_type().into()).into(),
         )
+    }
+
+    fn builder_byte_size(builder: &mut Self::ArrowBuilder) -> usize {
+        let multi_line_indices_size = builder.len() * std::mem::size_of::<i32>();
+
+        let line_builder = builder.values();
+        let line_indices_size = line_builder.len() * std::mem::size_of::<i32>();
+
+        let point_builder = line_builder.values();
+        let point_indices_size = point_builder.len() * std::mem::size_of::<i32>();
+
+        let coordinates_size = Coordinate2D::builder_byte_size(point_builder);
+
+        multi_line_indices_size + line_indices_size + point_indices_size + coordinates_size
     }
 
     fn arrow_builder(capacity: usize) -> Self::ArrowBuilder {

@@ -2,15 +2,16 @@ use crate::error;
 use crate::primitives::TimeInstance;
 use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::Result;
-use arrow::array::{Array, BooleanArray};
+use arrow::array::{Array, ArrayBuilder, BooleanArray, PrimitiveArrayOps};
 use arrow::error::ArrowError;
+use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::cmp::Ordering;
 use std::fmt::{Debug, Display};
 
 /// Stores time intervals in ms in close-open semantic [start, end)
-#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, ToSql, FromSql)]
 #[repr(C)]
 pub struct TimeInterval {
     pub start: TimeInstance,
@@ -335,6 +336,10 @@ impl ArrowTyped for TimeInterval {
         // )
 
         arrow::datatypes::DataType::FixedSizeList(arrow::datatypes::DataType::Int64.into(), 2)
+    }
+
+    fn builder_byte_size(builder: &mut Self::ArrowBuilder) -> usize {
+        builder.values().len() * std::mem::size_of::<i64>()
     }
 
     fn arrow_builder(capacity: usize) -> Self::ArrowBuilder {

@@ -1,12 +1,13 @@
 use std::collections::{HashMap, HashSet};
 use std::convert::{TryFrom, TryInto};
 use std::marker::PhantomData;
+use std::mem;
 use std::ops::{Bound, RangeBounds};
 use std::sync::Arc;
 
 use arrow::array::{
     as_primitive_array, as_string_array, Array, ArrayData, ArrayRef, BooleanArray, Float64Array,
-    ListArray, StructArray,
+    ListArray, PrimitiveArrayOps, StructArray,
 };
 use arrow::datatypes::{DataType, Field, Float64Type, Int64Type};
 use arrow::error::ArrowError;
@@ -18,13 +19,11 @@ use crate::collections::{FeatureCollectionError, IntoGeometryOptionsIterator};
 use crate::json_map;
 use crate::primitives::{
     CategoricalDataRef, DecimalDataRef, FeatureData, FeatureDataRef, FeatureDataType,
-    FeatureDataValue, Geometry, NullableCategoricalDataRef, NullableDecimalDataRef,
-    NullableNumberDataRef, NullableTextDataRef, NumberDataRef, TextDataRef, TimeInterval,
+    FeatureDataValue, Geometry, NumberDataRef, TextDataRef, TimeInterval,
 };
 use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::helpers::SomeIter;
 use crate::util::Result;
-use std::mem;
 
 #[allow(clippy::unsafe_derive_deserialize)]
 #[derive(Debug, Deserialize, Serialize)]
@@ -76,27 +75,8 @@ where
     /// assert_eq!(pc.len(), 0);
     /// ```
     pub fn empty() -> Self {
-        let time_field = Field::new(
-            Self::TIME_COLUMN_NAME,
-            TimeInterval::arrow_data_type(),
-            false,
-        );
-
-        let columns = if CollectionType::IS_GEOMETRY {
-            let feature_field = Field::new(
-                Self::GEOMETRY_COLUMN_NAME,
-                CollectionType::arrow_data_type(),
-                false,
-            );
-            vec![feature_field, time_field]
-        } else {
-            vec![time_field]
-        };
-
-        Self::new_from_internals(
-            StructArray::from(ArrayData::builder(DataType::Struct(columns)).len(0).build()),
-            Default::default(),
-        )
+        Self::from_data(vec![], vec![], Default::default())
+            .expect("does not fail for empty collection")
     }
 
     /// Create a `FeatureCollection` from data
@@ -279,38 +259,24 @@ where
             match self.types.get(column_name).expect("previously checked") {
                 FeatureDataType::Number => {
                     let array: &arrow::array::Float64Array = downcast_array(column);
-                    NumberDataRef::new(array.values()).into()
-                }
-                FeatureDataType::NullableNumber => {
-                    let array: &arrow::array::Float64Array = downcast_array(column);
-                    NullableNumberDataRef::new(array.values(), array.data_ref().null_bitmap())
-                        .into()
+                    NumberDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
                 }
                 FeatureDataType::Text => {
                     let array: &arrow::array::StringArray = downcast_array(column);
-                    TextDataRef::new(array.value_data(), array.value_offsets()).into()
-                }
-                FeatureDataType::NullableText => {
-                    let array: &arrow::array::StringArray = downcast_array(column);
-                    NullableTextDataRef::new(array.value_data(), array.value_offsets()).into()
+                    TextDataRef::new(
+                        array.value_data(),
+                        array.value_offsets(),
+                        array.data_ref().null_bitmap(),
+                    )
+                    .into()
                 }
                 FeatureDataType::Decimal => {
                     let array: &arrow::array::Int64Array = downcast_array(column);
-                    DecimalDataRef::new(array.values()).into()
-                }
-                FeatureDataType::NullableDecimal => {
-                    let array: &arrow::array::Int64Array = downcast_array(column);
-                    NullableDecimalDataRef::new(array.values(), array.data_ref().null_bitmap())
-                        .into()
+                    DecimalDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
                 }
                 FeatureDataType::Categorical => {
                     let array: &arrow::array::UInt8Array = downcast_array(column);
-                    CategoricalDataRef::new(array.values()).into()
-                }
-                FeatureDataType::NullableCategorical => {
-                    let array: &arrow::array::UInt8Array = downcast_array(column);
-                    NullableCategoricalDataRef::new(array.values(), array.data_ref().null_bitmap())
-                        .into()
+                    CategoricalDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
                 }
             },
         )
@@ -632,7 +598,7 @@ where
         let mut filter_array = None;
 
         match column_type {
-            FeatureDataType::Number | FeatureDataType::NullableNumber => {
+            FeatureDataType::Number => {
                 apply_filters(
                     as_primitive_array::<Float64Type>(column),
                     &mut filter_array,
@@ -643,7 +609,7 @@ where
                     arrow::compute::lt_scalar,
                 )?;
             }
-            FeatureDataType::Decimal | FeatureDataType::NullableDecimal => {
+            FeatureDataType::Decimal => {
                 apply_filters(
                     as_primitive_array::<Int64Type>(column),
                     &mut filter_array,
@@ -654,7 +620,7 @@ where
                     arrow::compute::lt_scalar,
                 )?;
             }
-            FeatureDataType::Text | FeatureDataType::NullableText => {
+            FeatureDataType::Text => {
                 apply_filters(
                     as_string_array(column),
                     &mut filter_array,
@@ -665,7 +631,7 @@ where
                     arrow::compute::lt_utf8_scalar,
                 )?;
             }
-            FeatureDataType::Categorical | FeatureDataType::NullableCategorical => {
+            FeatureDataType::Categorical => {
                 return Err(error::FeatureCollectionError::WrongDataType.into());
             }
         }
@@ -793,7 +759,7 @@ where
 
     /// Returns the byte-size of this collection
     pub fn byte_size(&self) -> usize {
-        let table_size = get_array_memory_size(&self.table.data()) + mem::size_of_val(&self.table);
+        let table_size = self.table.get_array_memory_size();
 
         // TODO: store information? avoid re-calculation?
         let map_size = mem::size_of_val(&self.types)
@@ -835,7 +801,10 @@ impl<CollectionType> Clone for FeatureCollection<CollectionType> {
     }
 }
 
-impl<CollectionType> PartialEq for FeatureCollection<CollectionType> {
+impl<CollectionType> PartialEq for FeatureCollection<CollectionType>
+where
+    CollectionType: Geometry,
+{
     fn eq(&self, other: &Self) -> bool {
         /// compares two `f64` typed columns
         /// treats `f64::NAN` values as if they are equal
@@ -882,10 +851,13 @@ impl<CollectionType> PartialEq for FeatureCollection<CollectionType> {
             return false;
         }
 
-        for key in self.types.keys().chain(&[
-            Self::GEOMETRY_COLUMN_NAME.to_string(),
-            Self::TIME_COLUMN_NAME.to_string(),
-        ]) {
+        let mandatory_keys = if CollectionType::IS_GEOMETRY {
+            vec![Self::GEOMETRY_COLUMN_NAME, Self::TIME_COLUMN_NAME]
+        } else {
+            vec![Self::TIME_COLUMN_NAME]
+        };
+
+        for key in self.types.keys().map(String::as_str).chain(mandatory_keys) {
             let c1 = self.table.column_by_name(key).expect("column must exist");
             let c2 = other.table.column_by_name(key).expect("column must exist");
 
@@ -1025,41 +997,17 @@ where
     Ok(())
 }
 
-/// Taken from <https://github.com/apache/arrow/blob/master/rust/arrow/src/array/data.rs>
-/// TODO: replace with existing call on next version
-pub fn get_array_memory_size(data: &ArrayData) -> usize {
-    let mut size = 0;
-    // Calculate size of the fields that don't have [get_array_memory_size] method internally.
-    size += mem::size_of_val(data)
-        - mem::size_of_val(&data.buffers())
-        - mem::size_of_val(&data.null_bitmap())
-        - mem::size_of_val(&data.child_data());
-
-    // Calculate rest of the fields top down which contain actual data
-    for buffer in data.buffers() {
-        size += mem::size_of_val(&buffer);
-        size += buffer.capacity();
-    }
-    if let Some(bitmap) = data.null_bitmap() {
-        size += bitmap.buffer_ref().capacity() + mem::size_of_val(bitmap);
-    }
-    for child in data.child_data() {
-        size += get_array_memory_size(child);
-    }
-
-    size
-}
-
 /// Custom serializer for Arrow's `StructArray`
 mod struct_serde {
-    use super::*;
+    use std::fmt::Formatter;
+    use std::io::Cursor;
 
-    use arrow::record_batch::{RecordBatch, RecordBatchReader};
+    use arrow::record_batch::RecordBatch;
     use serde::de::{SeqAccess, Visitor};
     use serde::ser::Error;
     use serde::{Deserializer, Serializer};
-    use std::fmt::Formatter;
-    use std::io::Cursor;
+
+    use super::*;
 
     pub fn serialize<S>(struct_array: &StructArray, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -1118,9 +1066,9 @@ mod struct_serde {
             }
 
             let batch = reader
-                .next_batch()
-                .map_err(|error| E::custom(error.to_string()))?
-                .expect("checked");
+                .next()
+                .expect("checked")
+                .map_err(|error| E::custom(error.to_string()))?;
 
             Ok(batch.into())
         }
@@ -1186,13 +1134,16 @@ mod tests {
         let struct_stack_size = 32;
         assert_eq!(mem::size_of::<StructArray>(), struct_stack_size);
 
+        let arrow_overhead_bytes = 192;
+
         for i in 0..10 {
             assert_eq!(
                 gen_collection(i).byte_size(),
-                empty_hash_map_size + struct_stack_size + 264 + time_interval_size(i)
+                empty_hash_map_size
+                    + struct_stack_size
+                    + arrow_overhead_bytes
+                    + time_interval_size(i)
             );
         }
-
-        // TODO: rely on numbers once the arrow library provides this feature
     }
 }

@@ -1,6 +1,6 @@
 use crate::error;
+use crate::error::Result;
 use crate::workflows::workflow::WorkflowId;
-use crate::{error::Result, util::identifiers::Identifier};
 use async_trait::async_trait;
 use bb8_postgres::{
     bb8::Pool, tokio_postgres::tls::MakeTlsConnect, tokio_postgres::tls::TlsConnect,
@@ -43,7 +43,10 @@ where
     async fn register(&mut self, workflow: Workflow) -> Result<WorkflowId> {
         let conn = self.conn_pool.get().await?;
         let stmt = conn
-            .prepare("INSERT INTO workflows (id, workflow) VALUES ($1, $2);")
+            .prepare(
+                "INSERT INTO workflows (id, workflow) VALUES ($1, $2) 
+            ON CONFLICT DO NOTHING;",
+            )
             .await?;
 
         let workflow_id = WorkflowId::from_hash(&workflow);
@@ -51,7 +54,7 @@ where
         conn.execute(
             &stmt,
             &[
-                &workflow_id.uuid(),
+                &workflow_id,
                 &serde_json::to_value(&workflow).context(error::SerdeJson)?,
             ],
         )
@@ -64,11 +67,11 @@ where
         // TODO: authorization
         let conn = self.conn_pool.get().await?;
         let stmt = conn
-            .prepare("SELECT id, workflow FROM workflows WHERE id = $1")
+            .prepare("SELECT workflow FROM workflows WHERE id = $1")
             .await?;
 
-        let row = conn.query_one(&stmt, &[&id.uuid()]).await?;
+        let row = conn.query_one(&stmt, &[&id]).await?;
 
-        Ok(serde_json::from_str(&row.get::<usize, String>(0)).context(error::SerdeJson)?)
+        Ok(serde_json::from_value(row.get(0)).context(error::SerdeJson)?)
     }
 }

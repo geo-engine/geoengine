@@ -320,7 +320,7 @@ impl RawFeatureCollectionBuilder {
 mod tests {
     use super::*;
     use crate::collections::{BuilderProvider, DataCollection, MultiPointCollection};
-    use crate::primitives::{FeatureDataRef, NullableDataRef};
+    use crate::primitives::{DataRef, FeatureDataRef};
     use arrow::buffer::MutableBuffer;
     use arrow::datatypes::{Float64Type, ToByteSlice};
     use arrow::util::bit_util;
@@ -331,7 +331,7 @@ mod tests {
     fn no_geo() {
         let mut builder = DataCollection::builder();
         builder
-            .add_column("foo".into(), FeatureDataType::NullableNumber)
+            .add_column("foo".into(), FeatureDataType::Number)
             .unwrap();
         let mut builder = builder.batch_builder(4, 0);
         builder.set_default_time_intervals().unwrap();
@@ -363,7 +363,7 @@ mod tests {
         assert_eq!(collection.len(), 4);
 
         match collection.data("foo").unwrap() {
-            FeatureDataRef::NullableNumber(n) => {
+            FeatureDataRef::Number(n) => {
                 assert_eq!(n.as_ref()[0], 1.);
                 assert_eq!(n.as_ref()[1], 2.);
                 assert_eq!(n.as_ref()[2], 3.);

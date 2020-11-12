@@ -1,19 +1,20 @@
-use crate::error;
-use crate::plots::{Plot, PlotData};
-use crate::primitives::{FeatureDataRef, Measurement, NullableDataRef};
-use crate::util::Result;
+use std::cmp;
+use std::collections::HashMap;
+
 use float_cmp::*;
 use ndarray::{stack, Array, Array1, Axis};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
-use std::cmp;
-use std::collections::HashMap;
-use std::iter::FromIterator;
 use vega_lite_3::{
     BinEnum, EncodingBuilder, Mark, Padding, SelectionDefBuilder, SelectionDefType,
     SingleDefUnitChannel, StandardType, VegaliteBuilder, X2ClassBuilder, XClassBuilder,
     YClassBuilder,
 };
+
+use crate::error;
+use crate::plots::{Plot, PlotData};
+use crate::primitives::{DataRef, FeatureDataRef, Measurement};
+use crate::util::Result;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Histogram {
@@ -119,22 +120,22 @@ impl Histogram {
     pub fn add_feature_data(&mut self, data: FeatureDataRef) -> Result<()> {
         // TODO: implement efficiently OpenCL version
         match data {
-            FeatureDataRef::Number(number_ref) => {
+            FeatureDataRef::Number(number_ref) if !number_ref.has_nulls() => {
                 for &value in number_ref.as_ref() {
                     self.handle_data_item(value, false);
                 }
             }
-            FeatureDataRef::NullableNumber(number_ref) => {
+            FeatureDataRef::Number(number_ref) => {
                 for (&value, is_null) in number_ref.as_ref().iter().zip(number_ref.nulls()) {
                     self.handle_data_item(value, is_null);
                 }
             }
-            FeatureDataRef::Decimal(decimal_ref) => {
+            FeatureDataRef::Decimal(decimal_ref) if !decimal_ref.has_nulls() => {
                 for value in decimal_ref.as_ref().iter().map(|&v| v as f64) {
                     self.handle_data_item(value, false);
                 }
             }
-            FeatureDataRef::NullableDecimal(decimal_ref) => {
+            FeatureDataRef::Decimal(decimal_ref) => {
                 for (value, is_null) in decimal_ref
                     .as_ref()
                     .iter()
@@ -144,12 +145,12 @@ impl Histogram {
                     self.handle_data_item(value, is_null);
                 }
             }
-            FeatureDataRef::Categorical(categorical_ref) => {
+            FeatureDataRef::Categorical(categorical_ref) if !categorical_ref.has_nulls() => {
                 for value in categorical_ref.as_ref().iter().map(|&v| f64::from(v)) {
                     self.handle_data_item(value, false);
                 }
             }
-            FeatureDataRef::NullableCategorical(categorical_ref) => {
+            FeatureDataRef::Categorical(categorical_ref) => {
                 for (value, is_null) in categorical_ref
                     .as_ref()
                     .iter()
@@ -159,7 +160,7 @@ impl Histogram {
                     self.handle_data_item(value, is_null);
                 }
             }
-            _ => {
+            FeatureDataRef::Text(..) => {
                 return error::Plot {
                     details: "Cannot add non-numerical data to the histogram.",
                 }
@@ -200,50 +201,11 @@ pub struct EmbeddingMetaData {
 impl Plot for Histogram {
     type PlotDataMetadataType = EmbeddingMetaData;
 
-    /// Embeddable histogram
-    ///
-    /// ```rust
-    /// use geoengine_datatypes::plots::{Histogram, Plot, PlotData};
-    /// use geoengine_datatypes::plots::histogram::EmbeddingMetaData;
-    /// use geoengine_datatypes::primitives::{Measurement, FeatureDataRef, NumberDataRef};
-    /// use arrow::array::Float64Builder;
-    ///
-    /// let mut histogram = Histogram::builder(2, 0., 1., Measurement::Unitless).build().unwrap();
-    ///
-    /// let data = {
-    ///     let mut builder = Float64Builder::new(4);
-    ///     builder.append_slice(&[0., 0.49, 0.5, 1.0]).unwrap();
-    ///     builder.finish()
-    /// };
-    ///
-    /// histogram
-    ///     .add_feature_data(FeatureDataRef::Number(NumberDataRef::new(data.values())))
-    ///     .unwrap();
-    ///
-    /// assert_eq!(
-    ///     histogram.to_vega_embeddable(false).unwrap(),
-    ///     PlotData {
-    ///         vega_string: r#"{"$schema":"https://vega.github.io/schema/vega-lite/v3.4.0.json","data":{"values":[{"v":1,"dim":[3],"data":[2.0,0.0,0.5]},{"v":1,"dim":[3],"data":[2.0,0.5,1.0]}]},"encoding":{"x":{"bin":"binned","field":"data.0","title":"","type":"quantitative"},"x2":{"field":"data.1"},"y":{"field":"data.2","title":"Frequency","type":"quantitative"}},"mark":"bar","padding":5.0}"#.to_string(),
-    ///         metadata: EmbeddingMetaData {
-    ///             selection_name: None,
-    ///         }
-    ///     }
-    /// );
-    /// assert_eq!(
-    ///     histogram.to_vega_embeddable(true).unwrap(),
-    ///     PlotData {
-    ///         vega_string: r#"{"$schema":"https://vega.github.io/schema/vega-lite/v3.4.0.json","data":{"values":[{"v":1,"dim":[3],"data":[2.0,0.0,0.5]},{"v":1,"dim":[3],"data":[2.0,0.5,1.0]}]},"encoding":{"x":{"bin":"binned","field":"data.0","title":"","type":"quantitative"},"x2":{"field":"data.1"},"y":{"field":"data.2","title":"Frequency","type":"quantitative"}},"mark":"bar","padding":5.0,"selection":{"range_selection":{"encodings":["x"],"type":"interval"}}}"#.to_string(),
-    ///         metadata: EmbeddingMetaData {
-    ///             selection_name: Some("range_selection".to_string()),
-    ///         }
-    ///     }
-    /// );
-    /// ```
     fn to_vega_embeddable(
         &self,
         allow_interactions: bool,
     ) -> Result<PlotData<Self::PlotDataMetadataType>> {
-        let bucket_counts = Array1::<f64>::from_iter(self.counts.iter().map(|&v| v as f64));
+        let bucket_counts: Array1<f64> = self.counts.iter().map(|&v| v as f64).collect();
 
         let step = (self.max - self.min) / (self.counts.len() as f64);
 
@@ -387,11 +349,11 @@ impl HistogramBuilder {
 
 #[cfg(test)]
 mod tests {
+    use arrow::array::{Array, Float64Builder, Int64Builder, PrimitiveArrayOps, UInt8Builder};
+
+    use crate::primitives::{CategoricalDataRef, DecimalDataRef, NumberDataRef};
+
     use super::*;
-    use crate::primitives::{
-        CategoricalDataRef, DecimalDataRef, NullableNumberDataRef, NumberDataRef,
-    };
-    use arrow::array::{Array, Float64Builder, Int64Builder, UInt8Builder};
 
     #[test]
     fn bucket_for_value() {
@@ -418,7 +380,10 @@ mod tests {
         };
 
         histogram
-            .add_feature_data(FeatureDataRef::Number(NumberDataRef::new(data.values())))
+            .add_feature_data(FeatureDataRef::Number(NumberDataRef::new(
+                data.values(),
+                data.data().null_bitmap(),
+            )))
             .unwrap();
 
         assert_eq!(histogram.counts[0], 2);
@@ -441,7 +406,7 @@ mod tests {
         };
 
         histogram
-            .add_feature_data(FeatureDataRef::NullableNumber(NullableNumberDataRef::new(
+            .add_feature_data(FeatureDataRef::Number(NumberDataRef::new(
                 data.values(),
                 data.data_ref().null_bitmap(),
             )))
@@ -465,7 +430,10 @@ mod tests {
         };
 
         histogram
-            .add_feature_data(FeatureDataRef::Decimal(DecimalDataRef::new(data.values())))
+            .add_feature_data(FeatureDataRef::Decimal(DecimalDataRef::new(
+                data.values(),
+                data.data().null_bitmap(),
+            )))
             .unwrap();
 
         assert_eq!(histogram.counts[0], 2);
@@ -487,6 +455,7 @@ mod tests {
         histogram
             .add_feature_data(FeatureDataRef::Categorical(CategoricalDataRef::new(
                 data.values(),
+                data.data().null_bitmap(),
             )))
             .unwrap();
 
@@ -507,11 +476,53 @@ mod tests {
         };
 
         histogram
-            .add_feature_data(FeatureDataRef::Decimal(DecimalDataRef::new(data.values())))
+            .add_feature_data(FeatureDataRef::Decimal(DecimalDataRef::new(
+                data.values(),
+                data.data().null_bitmap(),
+            )))
             .unwrap();
 
         assert_eq!(histogram.nodata_count, 0);
         assert_eq!(histogram.counts[0], 1);
         assert_eq!(histogram.counts[1], 2);
+    }
+
+    #[test]
+    fn to_vega_embeddable() {
+        let mut histogram = Histogram::builder(2, 0., 1., Measurement::Unitless)
+            .build()
+            .unwrap();
+
+        let data = {
+            let mut builder = Float64Builder::new(4);
+            builder.append_slice(&[0., 0.49, 0.5, 1.0]).unwrap();
+            builder.finish()
+        };
+
+        histogram
+            .add_feature_data(FeatureDataRef::Number(NumberDataRef::new(
+                data.values(),
+                data.data_ref().null_bitmap(),
+            )))
+            .unwrap();
+
+        assert_eq!(
+        histogram.to_vega_embeddable(false).unwrap(),
+        PlotData {
+            vega_string: r#"{"$schema":"https://vega.github.io/schema/vega-lite/v3.4.0.json","data":{"values":[{"v":1,"dim":[3],"data":[2.0,0.0,0.5]},{"v":1,"dim":[3],"data":[2.0,0.5,1.0]}]},"encoding":{"x":{"bin":"binned","field":"data.0","title":"","type":"quantitative"},"x2":{"field":"data.1"},"y":{"field":"data.2","title":"Frequency","type":"quantitative"}},"mark":"bar","padding":5.0}"#.to_string(),
+            metadata: EmbeddingMetaData {
+                selection_name: None,
+            }
+        }
+    );
+        assert_eq!(
+        histogram.to_vega_embeddable(true).unwrap(),
+        PlotData {
+            vega_string: r#"{"$schema":"https://vega.github.io/schema/vega-lite/v3.4.0.json","data":{"values":[{"v":1,"dim":[3],"data":[2.0,0.0,0.5]},{"v":1,"dim":[3],"data":[2.0,0.5,1.0]}]},"encoding":{"x":{"bin":"binned","field":"data.0","title":"","type":"quantitative"},"x2":{"field":"data.1"},"y":{"field":"data.2","title":"Frequency","type":"quantitative"}},"mark":"bar","padding":5.0,"selection":{"range_selection":{"encodings":["x"],"type":"interval"}}}"#.to_string(),
+            metadata: EmbeddingMetaData {
+                selection_name: Some("range_selection".to_string()),
+            }
+        }
+    );
     }
 }

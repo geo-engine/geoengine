@@ -1,4 +1,5 @@
-use geoengine_services::server;
+use geoengine_services::error::Result;
+use geoengine_services::{server, util::config::get_config_element, util::config::Web};
 use std::{thread, time};
 use tokio::sync::oneshot;
 use tokio::sync::oneshot::Sender;
@@ -9,31 +10,40 @@ async fn main() {
     // TODO: use special config for port etc. for starting the server and connecting to it
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
 
-    let (server, success) = tokio::join!(
+    let (server, result) = tokio::join!(
         server::start_server(Some(shutdown_rx), None),
         queries(shutdown_tx),
     );
     server.expect("server run");
 
-    if success {
-        std::process::exit(0)
+    if let Ok(result) = result {
+        if result {
+            std::process::exit(0)
+        } else {
+            std::process::exit(1)
+        }
     } else {
         std::process::exit(1)
     }
 }
 
-async fn queries(shutdown_tx: Sender<()>) -> bool {
-    // TODO: use special config for port etc. for starting the server and connecting to it
-    let base_url = "http://localhost:3030/".to_string();
+async fn queries(shutdown_tx: Sender<()>) -> Result<bool> {
+    let web_config: Web = get_config_element()?;
+    let url = format!(
+        "http://{}/",
+        web_config
+            .external_address
+            .unwrap_or(web_config.bind_address)
+    );
 
     let mut success = false;
-    if wait_for_server(&base_url).await {
-        success = issue_queries(&base_url).await.is_ok();
+    if wait_for_server(&url).await {
+        success = issue_queries(&url).await.is_ok();
     }
 
     shutdown_tx.send(()).expect("shutdown webserver");
 
-    success
+    Ok(success)
 }
 
 async fn issue_queries(base_url: &str) -> Result<(), reqwest::Error> {

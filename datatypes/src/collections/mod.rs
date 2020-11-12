@@ -1,11 +1,11 @@
+mod batch_builder;
+mod data_types;
 pub(self) mod error;
 mod feature_collection;
 #[macro_use]
-mod geo_feature_collection;
-#[macro_use]
-mod data_types;
-mod batch_builder;
 mod feature_collection_builder;
+#[macro_use]
+mod geo_feature_collection;
 
 mod data_collection;
 mod multi_line_string_collection;

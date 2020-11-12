@@ -1,5 +1,4 @@
 use snafu::ResultExt;
-use uuid::Uuid;
 use warp::reply::Reply;
 use warp::{http::Response, Filter};
 
@@ -7,7 +6,6 @@ use crate::error;
 use crate::error::Result;
 use crate::handlers::Context;
 use crate::ogc::wfs::request::{GetCapabilities, GetFeature, TypeNames, WFSRequest};
-use crate::util::identifiers::Identifier;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use futures::StreamExt;
@@ -20,6 +18,7 @@ use geoengine_operators::engine::{
     ExecutionContext, QueryContext, QueryRectangle, TypedVectorQueryProcessor, VectorQueryProcessor,
 };
 use serde_json::json;
+use std::str::FromStr;
 
 pub fn wfs_handler<C: Context>(
     ctx: C,
@@ -162,9 +161,7 @@ async fn get_feature<C: Context>(
         Some("registry") => {
             ctx.workflow_registry_ref()
                 .await
-                .load(&WorkflowId::from_uuid(
-                    Uuid::parse_str(&request.type_names.feature_type).context(error::Uuid)?,
-                ))
+                .load(&WorkflowId::from_str(&request.type_names.feature_type)?)
                 .await?
         }
         Some("json") => {
@@ -311,9 +308,7 @@ mod tests {
     use super::*;
     use crate::{contexts::InMemoryContext, workflows::workflow::Workflow};
     use geoengine_operators::engine::TypedOperator;
-    use geoengine_operators::source::csv::{
-        CsvGeometrySpecification, CsvSource, CsvTimeSpecification,
-    };
+    use geoengine_operators::source::{CsvGeometrySpecification, CsvSource, CsvTimeSpecification};
     use serde_json::json;
     use std::io::{Seek, SeekFrom, Write};
     use xml::ParserConfig;
@@ -340,7 +335,7 @@ mod tests {
                             "coordinates": [0.0, 0.1]
                         },
                         "properties": {
-                            "foo": null
+                            "foo": 0
                         },
                         "when": {
                             "start": "1970-01-01T00:00:00+00:00",
@@ -355,7 +350,7 @@ mod tests {
                             "coordinates": [1.0, 1.1]
                         },
                         "properties": {
-                            "foo": 0
+                            "foo": null
                         },
                         "when": {
                             "start": "1970-01-01T00:00:00+00:00",
@@ -369,7 +364,7 @@ mod tests {
                             "coordinates": [2.0, 3.1]
                         },
                         "properties": {
-                            "foo": null
+                            "foo": 2
                         },
                         "when": {
                             "start": "1970-01-01T00:00:00+00:00",
@@ -383,7 +378,7 @@ mod tests {
                             "coordinates": [3.0, 3.1]
                         },
                         "properties": {
-                            "foo": null
+                            "foo": 3
                         },
                         "when": {
                             "start": "1970-01-01T00:00:00+00:00",
@@ -397,7 +392,7 @@ mod tests {
                             "coordinates": [4.0, 4.1]
                         },
                         "properties": {
-                            "foo": null
+                            "foo": 4
                         },
                         "when": {
                             "start": "1970-01-01T00:00:00+00:00",
