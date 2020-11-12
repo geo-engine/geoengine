@@ -842,7 +842,6 @@ impl<'a> CLProgramRunnable<'a> {
                         Self::read_ocl_to_arrow_buffer(&buffers.coords, builder.num_coords())?;
                     builder.set_points(coords_buffer, offsets_buffer)?;
                 }
-                None => {}
                 Some(FeatureGeoOutputBuffer::Lines(buffers)) => {
                     let feature_offsets_buffer = Self::read_ocl_to_arrow_buffer(
                         &buffers.feature_offsets,
@@ -882,6 +881,7 @@ impl<'a> CLProgramRunnable<'a> {
                         feature_offsets_buffer,
                     )?;
                 }
+                None => {}
             }
 
             for column_buffer in output_buffers.numbers {
