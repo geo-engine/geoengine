@@ -95,6 +95,28 @@ impl RawFeatureCollectionBuilder {
         }
     }
 
+    pub fn polygons(
+        types: HashMap<String, FeatureDataType>,
+        num_features: usize,
+        num_polygons: usize,
+        num_rings: usize,
+        num_coords: usize,
+    ) -> Self {
+        Self {
+            types,
+            column_arrays: HashMap::new(),
+            time_array: None,
+            geo_array: None,
+            num_features,
+            num_coords,
+            num_lines: None,
+            num_polygons: Some(num_polygons),
+            num_rings: Some(num_rings),
+            output: None,
+            output_type: VectorDataType::MultiPolygon,
+        }
+    }
+
     pub fn num_features(&self) -> usize {
         self.num_features
     }
@@ -185,7 +207,97 @@ impl RawFeatureCollectionBuilder {
         Ok(())
     }
 
-    // TODO: set lines/polygons
+    pub fn set_lines(
+        &mut self,
+        coords: Buffer,
+        line_offsets: Buffer,
+        feature_offsets: Buffer,
+    ) -> Result<()> {
+        let num_features = (feature_offsets.len() / std::mem::size_of::<i32>()) - 1;
+        let num_lines = (line_offsets.len() / std::mem::size_of::<i32>()) - 1;
+        let num_coords = coords.len() / std::mem::size_of::<Coordinate2D>();
+        let num_floats = num_coords * 2;
+        let data = ArrayData::builder(MultiLineString::arrow_data_type())
+            .len(num_features)
+            .add_buffer(feature_offsets)
+            .add_child_data(
+                ArrayData::builder(arrow::datatypes::DataType::List(
+                    Coordinate2D::arrow_data_type().into(),
+                ))
+                .len(num_lines)
+                .add_buffer(line_offsets)
+                .add_child_data(
+                    ArrayData::builder(Coordinate2D::arrow_data_type())
+                        .len(num_coords)
+                        .add_child_data(
+                            ArrayData::builder(DataType::Float64)
+                                .len(num_floats)
+                                .add_buffer(coords)
+                                .build(),
+                        )
+                        .build(),
+                )
+                .build(),
+            )
+            .build();
+
+        let array = Arc::new(ListArray::from(data)) as ArrayRef;
+
+        self.geo_array = Some(array);
+
+        Ok(())
+    }
+
+    pub fn set_polygons(
+        &mut self,
+        coords: Buffer,
+        ring_offsets: Buffer,
+        polygon_offsets: Buffer,
+        feature_offsets: Buffer,
+    ) -> Result<()> {
+        let num_features = feature_offsets.len() / std::mem::size_of::<i32>() - 1;
+        let num_polygons = polygon_offsets.len() / std::mem::size_of::<i32>() - 1;
+        let num_rings = ring_offsets.len() / std::mem::size_of::<i32>() - 1;
+        let num_coords = coords.len() / std::mem::size_of::<Coordinate2D>();
+        let num_floats = num_coords * 2;
+        let data = ArrayData::builder(MultiPolygon::arrow_data_type())
+            .len(num_features)
+            .add_buffer(feature_offsets)
+            .add_child_data(
+                ArrayData::builder(arrow::datatypes::DataType::List(
+                    arrow::datatypes::DataType::List(Coordinate2D::arrow_data_type().into()).into(),
+                ))
+                .len(num_polygons)
+                .add_buffer(polygon_offsets)
+                .add_child_data(
+                    ArrayData::builder(arrow::datatypes::DataType::List(
+                        Coordinate2D::arrow_data_type().into(),
+                    ))
+                    .len(num_rings)
+                    .add_buffer(ring_offsets)
+                    .add_child_data(
+                        ArrayData::builder(Coordinate2D::arrow_data_type())
+                            .len(num_coords)
+                            .add_child_data(
+                                ArrayData::builder(DataType::Float64)
+                                    .len(num_floats)
+                                    .add_buffer(coords)
+                                    .build(),
+                            )
+                            .build(),
+                    )
+                    .build(),
+                )
+                .build(),
+            )
+            .build();
+
+        let array = Arc::new(ListArray::from(data)) as ArrayRef;
+
+        self.geo_array = Some(array);
+
+        Ok(())
+    }
 
     /// Set the column values for the given column from the given buffers.
     /// `values_buffer` buffer with data of values for construction of primitive array
@@ -431,6 +543,175 @@ mod tests {
                     "geometry": {
                         "type": "Point",
                         "coordinates": [3.3, 3.3]
+                    },
+                    "properties": {},
+                    "when": {
+                        "start": "-262144-01-01T00:00:00+00:00",
+                        "end": "+262143-12-31T23:59:59.999+00:00",
+                        "type": "Interval"
+                    }
+                }]
+            })
+            .to_string()
+        );
+    }
+
+    #[test]
+    fn line_builder() {
+        let mut builder = RawFeatureCollectionBuilder::lines(Default::default(), 2, 3, 7);
+        builder.set_default_time_intervals().unwrap();
+
+        let coords: Vec<f64> = vec![
+            0.0, 0.1, 1.0, 1.1, 2.0, 2.1, 3.0, 3.1, 4.0, 4.1, 5.0, 5.1, 6.0, 6.1, 7.0, 7.1,
+        ];
+        let line_offsets: Vec<i32> = vec![0, 2, 5, 8];
+        let feature_offsets: Vec<i32> = vec![0, 2, 3];
+
+        let coords_buffer = Buffer::from(coords.as_slice().to_byte_slice());
+        let line_offsets_buffer = Buffer::from(line_offsets.to_byte_slice());
+        let feature_offsets_buffer = Buffer::from(feature_offsets.to_byte_slice());
+
+        builder
+            .set_lines(coords_buffer, line_offsets_buffer, feature_offsets_buffer)
+            .unwrap();
+
+        builder.finish().unwrap();
+
+        let collection = builder.output.unwrap().get_lines().unwrap();
+
+        assert_eq!(
+            collection.to_geo_json(),
+            json!({
+                "type": "FeatureCollection",
+                "features": [{
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "MultiLineString",
+                        "coordinates": [
+                            [
+                                [0.0, 0.1],
+                                [1.0, 1.1]
+                            ],
+                            [
+                                [2.0, 2.1],
+                                [3.0, 3.1],
+                                [4.0, 4.1]
+                            ]
+                        ]
+                    },
+                    "properties": {},
+                    "when": {
+                        "start": "-262144-01-01T00:00:00+00:00",
+                        "end": "+262143-12-31T23:59:59.999+00:00",
+                        "type": "Interval"
+                    }
+                }, {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "LineString",
+                        "coordinates": [
+                            [5.0, 5.1],
+                            [6.0, 6.1],
+                            [7.0, 7.1]
+                        ]
+                    },
+                    "properties": {},
+                    "when": {
+                        "start": "-262144-01-01T00:00:00+00:00",
+                        "end": "+262143-12-31T23:59:59.999+00:00",
+                        "type": "Interval"
+                    }
+                }]
+            })
+            .to_string()
+        );
+    }
+
+    #[test]
+    fn polygon_builder() {
+        let mut builder = RawFeatureCollectionBuilder::polygons(Default::default(), 2, 3, 4, 16);
+        builder.set_default_time_intervals().unwrap();
+
+        let ring0_coords = [0.0, 0.1, 10.0, 10.1, 0.0, 10.1, 0.0, 0.1];
+        let ring1_coords = [2.0, 2.1, 3.0, 3.1, 2.0, 3.1, 2.0, 2.1];
+        let ring3_coords = [4.0, 4.1, 6.0, 6.1, 4.0, 6.1, 4.0, 4.1];
+        let ring4_coords = [5.0, 5.1, 6.0, 6.1, 5.0, 6.1, 5.0, 5.1];
+        let coords: Vec<f64> = [ring0_coords, ring1_coords, ring3_coords, ring4_coords]
+            .concat()
+            .to_vec();
+        let ring_offsets: Vec<i32> = vec![0, 4, 8, 12, 16];
+        let polygon_offsets: Vec<i32> = vec![0, 2, 3, 4];
+        let feature_offsets: Vec<i32> = vec![0, 2, 3];
+
+        let coords_buffer = Buffer::from(coords.as_slice().to_byte_slice());
+        let ring_offsets_buffer = Buffer::from(ring_offsets.to_byte_slice());
+        let polygon_offsets_buffer = Buffer::from(polygon_offsets.to_byte_slice());
+        let feature_offsets_buffer = Buffer::from(feature_offsets.to_byte_slice());
+
+        builder
+            .set_polygons(
+                coords_buffer,
+                ring_offsets_buffer,
+                polygon_offsets_buffer,
+                feature_offsets_buffer,
+            )
+            .unwrap();
+
+        builder.finish().unwrap();
+
+        let collection = builder.output.unwrap().get_polygons().unwrap();
+
+        assert_eq!(
+            collection.to_geo_json(),
+            json!({
+                "type": "FeatureCollection",
+                "features": [{
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "MultiPolygon",
+                        "coordinates": [
+                            [
+                                [
+                                    [0.0, 0.1],
+                                    [10.0, 10.1],
+                                    [0.0, 10.1],
+                                    [0.0, 0.1]
+                                ],
+                                [
+                                    [2.0, 2.1],
+                                    [3.0, 3.1],
+                                    [2.0, 3.1],
+                                    [2.0, 2.1]
+                                ]
+                            ],
+                            [
+                                [
+                                    [4.0, 4.1],
+                                    [6.0, 6.1],
+                                    [4.0, 6.1],
+                                    [4.0, 4.1]
+                                ]
+                            ]
+                        ]
+                    },
+                    "properties": {},
+                    "when": {
+                        "start": "-262144-01-01T00:00:00+00:00",
+                        "end": "+262143-12-31T23:59:59.999+00:00",
+                        "type": "Interval"
+                    }
+                }, {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Polygon",
+                        "coordinates": [
+                            [
+                                [5.0, 5.1],
+                                [6.0, 6.1],
+                                [5.0, 6.1],
+                                [5.0, 5.1]
+                            ]
+                        ]
                     },
                     "properties": {},
                     "when": {

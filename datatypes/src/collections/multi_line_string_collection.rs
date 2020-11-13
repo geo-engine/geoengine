@@ -11,6 +11,65 @@ use std::slice;
 /// This collection contains temporal `MultiLineString`s and miscellaneous data.
 pub type MultiLineStringCollection = FeatureCollection<MultiLineString>;
 
+impl MultiLineStringCollection {
+    #[allow(clippy::cast_ptr_alignment)]
+    pub fn multi_line_string_offsets(&self) -> &[i32] {
+        let geometries_ref = self
+            .table
+            .column_by_name(Self::GEOMETRY_COLUMN_NAME)
+            .expect("There must exist a geometry column");
+        let geometries: &ListArray = downcast_array(geometries_ref);
+
+        let data = geometries.data();
+        let buffer = &data.buffers()[0];
+
+        unsafe { slice::from_raw_parts(buffer.raw_data() as *const i32, geometries.len() + 1) }
+    }
+
+    #[allow(clippy::cast_ptr_alignment)]
+    pub fn line_string_offsets(&self) -> &[i32] {
+        let geometries_ref = self
+            .table
+            .column_by_name(Self::GEOMETRY_COLUMN_NAME)
+            .expect("There must exist a geometry column");
+        let geometries: &ListArray = downcast_array(geometries_ref);
+
+        let line_strings_ref = geometries.values();
+        let line_strings: &ListArray = downcast_array(&line_strings_ref);
+
+        let data = line_strings.data();
+        let buffer = &data.buffers()[0];
+
+        unsafe { slice::from_raw_parts(buffer.raw_data() as *const i32, line_strings.len() + 1) }
+    }
+
+    pub fn coordinates(&self) -> &[Coordinate2D] {
+        let geometries_ref = self
+            .table
+            .column_by_name(Self::GEOMETRY_COLUMN_NAME)
+            .expect("There must exist a geometry column");
+        let geometries: &ListArray = downcast_array(geometries_ref);
+
+        let line_strings_ref = geometries.values();
+        let line_strings: &ListArray = downcast_array(&line_strings_ref);
+
+        let coordinates_ref = line_strings.values();
+        let coordinates: &FixedSizeListArray = downcast_array(&coordinates_ref);
+
+        let number_of_coordinates = coordinates.data().len();
+
+        let floats_ref = coordinates.values();
+        let floats: &Float64Array = downcast_array(&floats_ref);
+
+        unsafe {
+            slice::from_raw_parts(
+                floats.raw_values() as *const Coordinate2D,
+                number_of_coordinates,
+            )
+        }
+    }
+}
+
 impl<'l> IntoGeometryIterator<'l> for MultiLineStringCollection {
     type GeometryIterator = MultiLineStringIterator<'l>;
     type GeometryType = MultiLineStringRef<'l>;
@@ -220,6 +279,39 @@ mod tests {
             ]
         );
         assert!(geometry_iter.next().is_none());
+    }
+
+    #[test]
+    #[allow(clippy::eq_op)]
+    fn equals() {
+        let mut builder = MultiLineStringCollection::builder().finish_header();
+
+        builder
+            .push_geometry(
+                MultiLineString::new(vec![vec![(0.0, 0.1).into(), (1.0, 1.1).into()]]).unwrap(),
+            )
+            .unwrap();
+        builder
+            .push_geometry(
+                MultiLineString::new(vec![
+                    vec![(4.0, 4.1).into(), (5.0, 5.1).into(), (6.0, 6.1).into()],
+                    vec![(7.0, 7.1).into(), (8.0, 8.1).into(), (9.0, 9.1).into()],
+                ])
+                .unwrap(),
+            )
+            .unwrap();
+
+        for _ in 0..2 {
+            builder.push_time_interval(TimeInterval::default()).unwrap();
+
+            builder.finish_row();
+        }
+
+        let collection = builder.build().unwrap();
+
+        assert_eq!(collection, collection);
+
+        assert_ne!(collection, collection.filter(vec![true, false]).unwrap());
     }
 
     #[test]
