@@ -629,7 +629,7 @@ mod tests {
 
     #[test]
     fn polygon_builder() {
-        let mut builder = RawFeatureCollectionBuilder::polygons(Default::default(), 2, 3, 4, 0);
+        let mut builder = RawFeatureCollectionBuilder::polygons(Default::default(), 2, 3, 4, 16);
         builder.set_default_time_intervals().unwrap();
 
         let ring0_coords = [0.0, 0.1, 10.0, 10.1, 0.0, 10.1, 0.0, 0.1];
