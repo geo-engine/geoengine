@@ -14,7 +14,7 @@ use arrow::error::ArrowError;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
-use crate::collections::{error, IntoGeometryIterator};
+use crate::collections::{error, IntoGeometryIterator, VectorDataType};
 use crate::collections::{FeatureCollectionError, IntoGeometryOptionsIterator};
 use crate::json_map;
 use crate::primitives::{
@@ -803,8 +803,9 @@ impl<CollectionType> Clone for FeatureCollection<CollectionType> {
 
 impl<CollectionType> PartialEq for FeatureCollection<CollectionType>
 where
-    CollectionType: Geometry,
+    CollectionType: Geometry + ArrowTyped,
 {
+    #[allow(clippy::too_many_lines)] // TODO: split function
     fn eq(&self, other: &Self) -> bool {
         /// compares two `f64` typed columns
         /// treats `f64::NAN` values as if they are equal
@@ -865,6 +866,111 @@ where
                 (DataType::Float64, DataType::Float64) => {
                     if !f64_column_equals(downcast_array(c1), downcast_array(c2)) {
                         return false;
+                    }
+                }
+                (DataType::List(_), DataType::List(_)) => {
+                    // TODO: remove special treatment for geometry types on next arrow version
+
+                    match CollectionType::DATA_TYPE {
+                        VectorDataType::Data => {}
+                        VectorDataType::MultiPoint => {
+                            if !c1.equals(c2.as_ref()) {
+                                return false;
+                            }
+                        }
+                        VectorDataType::MultiLineString => {
+                            let c1_feature_offsets = c1.data();
+                            let c2_feature_offsets = c2.data();
+                            let c1_lines_offsets = c1_feature_offsets.child_data().first().unwrap();
+                            let c2_lines_offsets = c2_feature_offsets.child_data().first().unwrap();
+                            let c1_coordinates = c1_lines_offsets
+                                .child_data()
+                                .first()
+                                .unwrap()
+                                .child_data()
+                                .first()
+                                .unwrap();
+                            let c2_coordinates = c2_lines_offsets
+                                .child_data()
+                                .first()
+                                .unwrap()
+                                .child_data()
+                                .first()
+                                .unwrap();
+
+                            let feature_offsets_eq = || {
+                                c1_feature_offsets.buffers()[0].data()
+                                    == c2_feature_offsets.buffers()[0].data()
+                            };
+
+                            let lines_offsets_eq = || {
+                                c1_lines_offsets.buffers()[0].data()
+                                    == c2_lines_offsets.buffers()[0].data()
+                            };
+
+                            let coordinates_eq = || {
+                                c1_coordinates.buffers()[0].data()
+                                    == c2_coordinates.buffers()[0].data()
+                            };
+
+                            if !feature_offsets_eq() || !lines_offsets_eq() || !coordinates_eq() {
+                                return false;
+                            }
+                        }
+                        VectorDataType::MultiPolygon => {
+                            let c1_feature_offsets = c1.data();
+                            let c2_feature_offsets = c2.data();
+                            let c1_polygons_offsets =
+                                c1_feature_offsets.child_data().first().unwrap();
+                            let c2_polygons_offsets =
+                                c2_feature_offsets.child_data().first().unwrap();
+                            let c1_rings_offsets =
+                                c1_polygons_offsets.child_data().first().unwrap();
+                            let c2_rings_offsets =
+                                c2_polygons_offsets.child_data().first().unwrap();
+                            let c1_coordinates = c1_rings_offsets
+                                .child_data()
+                                .first()
+                                .unwrap()
+                                .child_data()
+                                .first()
+                                .unwrap();
+                            let c2_coordinates = c2_rings_offsets
+                                .child_data()
+                                .first()
+                                .unwrap()
+                                .child_data()
+                                .first()
+                                .unwrap();
+
+                            let feature_offsets_eq = || {
+                                c1_feature_offsets.buffers()[0].data()
+                                    == c2_feature_offsets.buffers()[0].data()
+                            };
+
+                            let polygons_offsets_eq = || {
+                                c1_polygons_offsets.buffers()[0].data()
+                                    == c2_polygons_offsets.buffers()[0].data()
+                            };
+
+                            let rings_offsets_eq = || {
+                                c1_rings_offsets.buffers()[0].data()
+                                    == c2_rings_offsets.buffers()[0].data()
+                            };
+
+                            let coordinates_eq = || {
+                                c1_coordinates.buffers()[0].data()
+                                    == c2_coordinates.buffers()[0].data()
+                            };
+
+                            if !feature_offsets_eq()
+                                || !polygons_offsets_eq()
+                                || !rings_offsets_eq()
+                                || !coordinates_eq()
+                            {
+                                return false;
+                            }
+                        }
                     }
                 }
                 _ => {
