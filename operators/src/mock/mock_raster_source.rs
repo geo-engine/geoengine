@@ -34,10 +34,18 @@ where
     type Output = RasterTile2D<T>;
     fn query(
         &self,
-        _query: crate::engine::QueryRectangle,
+        query: crate::engine::QueryRectangle,
         _ctx: crate::engine::QueryContext,
     ) -> futures::stream::BoxStream<crate::util::Result<Self::Output>> {
-        stream::iter(self.data.iter().cloned().map(Result::Ok)).boxed()
+        // TODO: filter spatially w.r.t. query rectangle
+        stream::iter(
+            self.data
+                .iter()
+                .filter(move |t| t.time.intersects(&query.time_interval))
+                .cloned()
+                .map(Result::Ok),
+        )
+        .boxed()
     }
 }
 
