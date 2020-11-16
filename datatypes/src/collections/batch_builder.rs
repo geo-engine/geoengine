@@ -147,7 +147,12 @@ impl RawFeatureCollectionBuilder {
     pub fn set_time_intervals(&mut self, values_buffer: Buffer) -> Result<()> {
         let data = ArrayData::builder(TimeInterval::arrow_data_type())
             .len(self.num_features)
-            .add_buffer(values_buffer)
+            .add_child_data(
+                ArrayData::builder(arrow::datatypes::DataType::Int64)
+                    .len(self.num_features * 2)
+                    .add_buffer(values_buffer)
+                    .build(),
+            )
             .build();
 
         let array = Arc::new(FixedSizeListArray::from(data)) as ArrayRef;
