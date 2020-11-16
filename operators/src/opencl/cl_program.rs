@@ -1,4 +1,7 @@
 use crate::error;
+use crate::opencl::{
+    GenericSliceType, SliceDataType, SliceOutputBuffer, TypedSliceMut, TypedSliceRef,
+};
 use crate::util::Result;
 use arrow::buffer::MutableBuffer;
 use arrow::datatypes::{Float64Type, Int64Type};
@@ -34,6 +37,7 @@ pub enum IterationType {
     Raster,            // 2D Kernel, width x height
     VectorFeatures,    // 1d kernel width = number of features
     VectorCoordinates, // 1d kernel width = number of coordinates
+    Generic(usize),
 }
 
 /// Specification of raster argument for a `CLProgram`
@@ -57,7 +61,7 @@ pub struct VectorArgument {
     pub include_time: bool,
 }
 
-// Specification of a column of a feature collection
+/// Specification of a column of a feature collection
 #[derive(PartialEq, Clone, Debug)]
 pub struct ColumnArgument {
     pub name: String,
@@ -86,12 +90,27 @@ impl VectorArgument {
     }
 }
 
+/// Specification of a generic buffer argument
+#[derive(PartialEq, Clone, Debug)]
+pub struct BufferArgument {
+    pub data_type: SliceDataType,
+}
+
+impl BufferArgument {
+    pub fn new<T: GenericSliceType>() -> Self {
+        Self { data_type: T::TYPE }
+    }
+}
+
 /// Specifies input and output types of an Open CL program and compiles the source into a reusable `CompiledCLProgram`
 pub struct CLProgram {
     input_rasters: Vec<RasterArgument>,
     output_rasters: Vec<RasterArgument>,
     input_features: Vec<VectorArgument>,
     output_features: Vec<VectorArgument>,
+    generic_input: Vec<BufferArgument>,
+    generic_working_memory: Vec<BufferArgument>,
+    generic_output: Vec<BufferArgument>,
     iteration_type: IterationType,
 }
 
@@ -102,6 +121,9 @@ impl CLProgram {
             output_rasters: vec![],
             input_features: vec![],
             output_features: vec![],
+            generic_input: vec![],
+            generic_working_memory: vec![],
+            generic_output: vec![],
             iteration_type,
         }
     }
@@ -120,6 +142,18 @@ impl CLProgram {
 
     pub fn add_output_features(&mut self, vector_type: VectorArgument) {
         self.output_features.push(vector_type);
+    }
+
+    pub fn add_generic_input<T: GenericSliceType>(&mut self) {
+        self.generic_input.push(BufferArgument::new::<T>());
+    }
+
+    pub fn add_generic_working_memory<T: GenericSliceType>(&mut self) {
+        self.generic_working_memory.push(BufferArgument::new::<T>());
+    }
+
+    pub fn add_generic_output<T: GenericSliceType>(&mut self) {
+        self.generic_output.push(BufferArgument::new::<T>());
     }
 
     fn create_type_definitions(&self) -> String {
@@ -177,6 +211,9 @@ typedef struct {
                 !self.input_features.is_empty() && !self.output_features.is_empty(),
                 error::CLInvalidInputsForIterationType
             ),
+            IterationType::Generic(_) => {
+                // nothing to check
+            }
         }
 
         let typedefs = self.create_type_definitions();
@@ -208,6 +245,9 @@ typedef struct {
             self.output_rasters,
             self.input_features,
             self.output_features,
+            self.generic_input,
+            self.generic_working_memory,
+            self.generic_output,
         ))
     }
 }
@@ -276,8 +316,15 @@ pub struct CLProgramRunnable<'a> {
     output_feature_types: Vec<VectorArgument>,
     input_features: Vec<Option<&'a TypedFeatureCollection>>,
     output_features: Vec<Option<&'a mut RawFeatureCollectionBuilder>>,
+    generic_input_types: Vec<BufferArgument>,
+    generic_working_memory_types: Vec<BufferArgument>,
+    generic_output_types: Vec<BufferArgument>,
+    generic_input: Vec<Option<TypedSliceRef<'a>>>,
+    generic_working_memory_lengths: Vec<Option<usize>>,
+    generic_output: Vec<Option<TypedSliceMut<'a>>>,
     raster_output_buffers: Vec<RasterOutputBuffer>,
     feature_output_buffers: Vec<FeatureOutputBuffers>,
+    generic_output_buffers: Vec<SliceOutputBuffer>,
 }
 
 impl<'a> CLProgramRunnable<'a> {
@@ -286,6 +333,9 @@ impl<'a> CLProgramRunnable<'a> {
         output_raster_types: Vec<RasterArgument>,
         input_feature_types: Vec<VectorArgument>,
         output_feature_types: Vec<VectorArgument>,
+        generic_input_types: Vec<BufferArgument>,
+        generic_working_memory_types: Vec<BufferArgument>,
+        generic_output_types: Vec<BufferArgument>,
     ) -> Self {
         let mut output_rasters = Vec::new();
         output_rasters.resize_with(output_raster_types.len(), || None);
@@ -293,17 +343,27 @@ impl<'a> CLProgramRunnable<'a> {
         let mut output_features = Vec::new();
         output_features.resize_with(output_feature_types.len(), || None);
 
+        let mut generic_output = Vec::new();
+        generic_output.resize_with(generic_output_types.len(), || None);
+
         Self {
             input_rasters: vec![None; input_raster_types.len()],
             input_features: vec![None; input_feature_types.len()],
-            output_rasters,
+            generic_input: vec![None; generic_input_types.len()],
+            generic_working_memory_lengths: vec![None; generic_working_memory_types.len()],
             input_raster_types,
             output_raster_types,
+            output_rasters,
             input_feature_types,
             output_feature_types,
             output_features,
+            generic_output,
+            generic_input_types,
+            generic_working_memory_types,
+            generic_output_types,
             raster_output_buffers: vec![],
             feature_output_buffers: vec![],
+            generic_output_buffers: vec![],
         }
     }
 
@@ -330,6 +390,51 @@ impl<'a> CLProgramRunnable<'a> {
             error::CLProgramInvalidRasterDataType
         );
         self.output_rasters[idx] = Some(raster);
+        Ok(())
+    }
+
+    pub fn set_generic_input<T: GenericSliceType>(
+        &mut self,
+        idx: usize,
+        data: &'a [T],
+    ) -> Result<()> {
+        ensure!(
+            idx < self.generic_input_types.len(),
+            error::CLProgramInvalidGenericIndex
+        );
+        ensure!(
+            T::TYPE == self.generic_input_types[idx].data_type,
+            error::CLProgramInvalidGenericDataType
+        );
+
+        self.generic_input[idx] = Some(T::create_typed_slice_ref(data));
+        Ok(())
+    }
+
+    pub fn set_generic_working_memory_len(&mut self, idx: usize, len: usize) -> Result<()> {
+        ensure!(
+            idx < self.generic_working_memory_types.len(),
+            error::CLProgramInvalidGenericIndex
+        );
+
+        self.generic_working_memory_lengths[idx] = Some(len);
+        Ok(())
+    }
+
+    pub fn set_generic_output<T: GenericSliceType>(
+        &mut self,
+        idx: usize,
+        data: &'a mut [T],
+    ) -> Result<()> {
+        ensure!(
+            idx < self.generic_output_types.len(),
+            error::CLProgramInvalidGenericIndex
+        );
+        ensure!(
+            T::TYPE == self.generic_output_types[idx].data_type,
+            error::CLProgramInvalidGenericDataType
+        );
+        self.generic_output[idx] = Some(T::create_typed_slice_mut(data));
         Ok(())
     }
 
@@ -851,6 +956,120 @@ impl<'a> CLProgramRunnable<'a> {
         Ok(())
     }
 
+    fn set_generic_arguments(&mut self, kernel: &Kernel, queue: &Queue) -> Result<()> {
+        ensure!(
+            self.generic_input.iter().all(Option::is_some),
+            error::CLProgramUnspecifiedGenericBuffer
+        );
+        ensure!(
+            self.generic_working_memory_lengths
+                .iter()
+                .all(Option::is_some),
+            error::CLProgramUnspecifiedGenericBuffer
+        );
+        ensure!(
+            self.generic_output.iter().all(Option::is_some),
+            error::CLProgramUnspecifiedGenericBuffer
+        );
+
+        for (idx, data) in self.generic_input.iter().enumerate() {
+            let typed_data = data.as_ref().expect("checked");
+
+            match_generic_slice_ref!(typed_data, data => {
+                let data_buffer = Buffer::builder()
+                        .queue(queue.clone())
+                        .flags(MemFlags::new().read_only())
+                        .len(data.len())
+                        .copy_host_slice(data)
+                        .build()?;
+                kernel.set_arg(format!("IN_GENERIC{}", idx), data_buffer)?;
+                kernel.set_arg(format!("IN_GENERIC{}_LEN", idx), data.len() as i32)?;
+            });
+        }
+
+        for (idx, (len, buffer_argument)) in self
+            .generic_working_memory_lengths
+            .iter()
+            .zip(&self.generic_working_memory_types)
+            .enumerate()
+        {
+            let len = len.expect("checked");
+            let data_type = buffer_argument.data_type;
+
+            match_slice_data_type!(data_type, T => {
+                let data_buffer = Buffer::<T>::builder()
+                        .queue(queue.clone())
+                        .flags(MemFlags::new().read_write())
+                        .len(len)
+                        .build()?;
+                kernel.set_arg(format!("WORKING_GENERIC{}", idx), data_buffer)?;
+                kernel.set_arg(format!("WORKING_GENERIC{}_LEN", idx), len as i32)?;
+            });
+        }
+
+        for (idx, data) in self.generic_output.iter().enumerate() {
+            let typed_data = data.as_ref().expect("checked");
+
+            match_generic_slice_mut!(typed_data, (data, T) => {
+                let buffer = Buffer::<T>::builder()
+                        .queue(queue.clone())
+                        .len(data.len())
+                        .build()?;
+
+                    kernel.set_arg(format!("OUT_GENERIC{}", idx), &buffer)?;
+                    kernel.set_arg(format!("OUT_GENERIC{}_LEN", idx), buffer.len() as i32)?;
+
+                    self.generic_output_buffers.push(buffer.into());
+            });
+        }
+
+        Ok(())
+    }
+
+    fn read_generic_output_buffers(&mut self) -> Result<()> {
+        for (output_buffer, generic_output) in self
+            .generic_output_buffers
+            .drain(..)
+            .zip(self.generic_output.iter_mut())
+        {
+            match (output_buffer, generic_output) {
+                (SliceOutputBuffer::U8(ref buffer), Some(TypedSliceMut::U8(data))) => {
+                    buffer.read(data as &mut [u8]).enq()?;
+                }
+                (SliceOutputBuffer::U16(ref buffer), Some(TypedSliceMut::U16(data))) => {
+                    buffer.read(data as &mut [u16]).enq()?;
+                }
+                (SliceOutputBuffer::U32(ref buffer), Some(TypedSliceMut::U32(data))) => {
+                    buffer.read(data as &mut [u32]).enq()?;
+                }
+                (SliceOutputBuffer::U64(ref buffer), Some(TypedSliceMut::U64(data))) => {
+                    buffer.read(data as &mut [u64]).enq()?;
+                }
+                (SliceOutputBuffer::I8(ref buffer), Some(TypedSliceMut::I8(data))) => {
+                    buffer.read(data as &mut [i8]).enq()?;
+                }
+                (SliceOutputBuffer::I16(ref buffer), Some(TypedSliceMut::I16(data))) => {
+                    buffer.read(data as &mut [i16]).enq()?;
+                }
+                (SliceOutputBuffer::I32(ref buffer), Some(TypedSliceMut::I32(data))) => {
+                    buffer.read(data as &mut [i32]).enq()?;
+                }
+                (SliceOutputBuffer::I64(ref buffer), Some(TypedSliceMut::I64(data))) => {
+                    buffer.read(data as &mut [i64]).enq()?;
+                }
+                (SliceOutputBuffer::F32(ref buffer), Some(TypedSliceMut::F32(data))) => {
+                    buffer.read(data as &mut [f32]).enq()?;
+                }
+                (SliceOutputBuffer::F64(ref buffer), Some(TypedSliceMut::F64(data))) => {
+                    buffer.read(data as &mut [f64]).enq()?;
+                }
+                _ => unreachable!(),
+            };
+        }
+
+        Ok(())
+    }
+
     #[allow(clippy::too_many_lines)] // TODO: split function into parts
     fn read_feature_output_buffers(&mut self) -> Result<()> {
         for (output_buffers, builder) in self
@@ -1051,6 +1270,9 @@ pub struct CompiledCLProgram {
     output_raster_types: Vec<RasterArgument>,
     input_feature_types: Vec<VectorArgument>,
     output_feature_types: Vec<VectorArgument>,
+    generic_input_types: Vec<BufferArgument>,
+    generic_working_memory_types: Vec<BufferArgument>,
+    generic_output_types: Vec<BufferArgument>,
 }
 
 unsafe impl Send for CompiledCLProgram {}
@@ -1066,6 +1288,9 @@ impl CompiledCLProgram {
         output_raster_types: Vec<RasterArgument>,
         input_feature_types: Vec<VectorArgument>,
         output_feature_types: Vec<VectorArgument>,
+        generic_input_types: Vec<BufferArgument>,
+        generic_working_memory_types: Vec<BufferArgument>,
+        generic_output_types: Vec<BufferArgument>,
     ) -> Self {
         Self {
             ctx,
@@ -1076,6 +1301,9 @@ impl CompiledCLProgram {
             output_raster_types,
             input_feature_types,
             output_feature_types,
+            generic_input_types,
+            generic_working_memory_types,
+            generic_output_types,
         }
     }
 
@@ -1085,25 +1313,28 @@ impl CompiledCLProgram {
             self.output_raster_types.clone(),
             self.input_feature_types.clone(),
             self.output_feature_types.clone(),
+            self.generic_input_types.clone(),
+            self.generic_working_memory_types.clone(),
+            self.generic_output_types.clone(),
         )
     }
 
-    fn add_data_buffer_placeholder(
+    fn add_data_buffer_placeholder<D: Into<SliceDataType>>(
         kernel: &mut KernelBuilder,
         arg_name: String,
-        data_type: RasterDataType,
+        data_type: D,
     ) {
-        match data_type {
-            RasterDataType::U8 => kernel.arg_named(arg_name, None::<&Buffer<u8>>),
-            RasterDataType::U16 => kernel.arg_named(arg_name, None::<&Buffer<u16>>),
-            RasterDataType::U32 => kernel.arg_named(arg_name, None::<&Buffer<u32>>),
-            RasterDataType::U64 => kernel.arg_named(arg_name, None::<&Buffer<u64>>),
-            RasterDataType::I8 => kernel.arg_named(arg_name, None::<&Buffer<i8>>),
-            RasterDataType::I16 => kernel.arg_named(arg_name, None::<&Buffer<i16>>),
-            RasterDataType::I32 => kernel.arg_named(arg_name, None::<&Buffer<i32>>),
-            RasterDataType::I64 => kernel.arg_named(arg_name, None::<&Buffer<i64>>),
-            RasterDataType::F32 => kernel.arg_named(arg_name, None::<&Buffer<f32>>),
-            RasterDataType::F64 => kernel.arg_named(arg_name, None::<&Buffer<f64>>),
+        match data_type.into() {
+            SliceDataType::U8 => kernel.arg_named(arg_name, None::<&Buffer<u8>>),
+            SliceDataType::U16 => kernel.arg_named(arg_name, None::<&Buffer<u16>>),
+            SliceDataType::U32 => kernel.arg_named(arg_name, None::<&Buffer<u32>>),
+            SliceDataType::U64 => kernel.arg_named(arg_name, None::<&Buffer<u64>>),
+            SliceDataType::I8 => kernel.arg_named(arg_name, None::<&Buffer<i8>>),
+            SliceDataType::I16 => kernel.arg_named(arg_name, None::<&Buffer<i16>>),
+            SliceDataType::I32 => kernel.arg_named(arg_name, None::<&Buffer<i32>>),
+            SliceDataType::I64 => kernel.arg_named(arg_name, None::<&Buffer<i64>>),
+            SliceDataType::F32 => kernel.arg_named(arg_name, None::<&Buffer<f32>>),
+            SliceDataType::F64 => kernel.arg_named(arg_name, None::<&Buffer<f64>>),
         };
     }
 
@@ -1123,6 +1354,7 @@ impl CompiledCLProgram {
                     .expect("checked")
                     .num_coords(),
             ),
+            IterationType::Generic(dim) => SpatialDims::One(dim),
         }
     }
 
@@ -1148,6 +1380,8 @@ impl CompiledCLProgram {
         runnable.set_feature_input_arguments(&kernel, &queue)?;
         runnable.set_feature_output_arguments(&kernel, &queue)?;
 
+        runnable.set_generic_arguments(&kernel, &queue)?;
+
         let dims = self.work_size(&runnable);
         unsafe {
             kernel.cmd().global_work_size(dims).enq()?;
@@ -1155,12 +1389,21 @@ impl CompiledCLProgram {
 
         runnable.read_raster_output_buffers()?;
         runnable.read_feature_output_buffers()?;
+        runnable.read_generic_output_buffers()?;
 
         Ok(())
     }
 
-    #[allow(clippy::too_many_lines)] // TODO: split function into parts
-    fn set_argument_placeholders(&mut self, mut kernel: &mut KernelBuilder) {
+    fn set_argument_placeholders(&mut self, kernel: &mut KernelBuilder) {
+        self.set_raster_argument_placeholders(kernel);
+
+        self.set_input_vector_argument_placeholders(kernel);
+        self.set_output_vector_argument_placeholders(kernel);
+
+        self.set_generic_argument_placeholders(kernel);
+    }
+
+    fn set_raster_argument_placeholders(&mut self, mut kernel: &mut KernelBuilder) {
         for (idx, raster) in self.input_raster_types.iter().enumerate() {
             Self::add_data_buffer_placeholder(&mut kernel, format!("IN{}", idx), raster.data_type);
             kernel.arg_named(format!("IN_INFO{}", idx), None::<&Buffer<RasterInfo>>);
@@ -1170,7 +1413,9 @@ impl CompiledCLProgram {
             Self::add_data_buffer_placeholder(&mut kernel, format!("OUT{}", idx), raster.data_type);
             kernel.arg_named(format!("OUT_INFO{}", idx), None::<&Buffer<RasterInfo>>);
         }
+    }
 
+    fn set_input_vector_argument_placeholders(&mut self, mut kernel: &mut KernelBuilder) {
         for (idx, features) in self.input_feature_types.iter().enumerate() {
             if features.include_geo {
                 kernel.arg_named(
@@ -1239,7 +1484,9 @@ impl CompiledCLProgram {
                 // TODO time
             }
         }
+    }
 
+    fn set_output_vector_argument_placeholders(&mut self, mut kernel: &mut KernelBuilder) {
         for (idx, features) in self.output_feature_types.iter().enumerate() {
             if features.include_geo {
                 kernel.arg_named(
@@ -1307,6 +1554,35 @@ impl CompiledCLProgram {
             if features.include_time {
                 // TODO: time
             }
+        }
+    }
+
+    fn set_generic_argument_placeholders(&mut self, mut kernel: &mut KernelBuilder) {
+        for (idx, argument) in self.generic_input_types.iter().enumerate() {
+            Self::add_data_buffer_placeholder(
+                &mut kernel,
+                format!("IN_GENERIC{}", idx),
+                argument.data_type,
+            );
+            kernel.arg_named(format!("IN_GENERIC{}_LEN", idx), i32::zero());
+        }
+
+        for (idx, argument) in self.generic_working_memory_types.iter().enumerate() {
+            Self::add_data_buffer_placeholder(
+                &mut kernel,
+                format!("WORKING_GENERIC{}", idx),
+                argument.data_type,
+            );
+            kernel.arg_named(format!("WORKING_GENERIC{}_LEN", idx), i32::zero());
+        }
+
+        for (idx, raster) in self.generic_output_types.iter().enumerate() {
+            Self::add_data_buffer_placeholder(
+                &mut kernel,
+                format!("OUT_GENERIC{}", idx),
+                raster.data_type,
+            );
+            kernel.arg_named(format!("OUT_GENERIC{}_LEN", idx), i32::zero());
         }
     }
 
@@ -2063,6 +2339,80 @@ __kernel void gid(
         let output = output_builder.output.unwrap().get_polygons().unwrap();
 
         assert_eq!(collection, output);
+    }
+
+    #[test]
+    fn generic_buffer() {
+        let input = vec![1, 2, 3, 4, 5, 6];
+
+        let mut output = vec![0; 6];
+
+        let kernel = r#"
+            __kernel void double_all_values( 
+                __constant const int *IN_GENERIC0,
+                const int IN_GENERIC0_LEN,
+                __global int *OUT_GENERIC0,
+                const int OUT_GENERIC0_LEN
+            ) {
+                int idx = get_global_id(0);
+                
+                OUT_GENERIC0[idx] = IN_GENERIC0[idx] * 2;
+            }"#;
+
+        let mut cl_program = CLProgram::new(IterationType::Generic(6));
+        cl_program.add_generic_input::<i32>();
+        cl_program.add_generic_output::<i32>();
+
+        let mut compiled = cl_program.compile(kernel, "double_all_values").unwrap();
+
+        let mut runnable = compiled.runnable();
+        runnable.set_generic_input(0, &input).unwrap();
+        runnable.set_generic_output(0, &mut output).unwrap();
+        compiled.run(runnable).unwrap();
+
+        assert_eq!(output, vec![2, 4, 6, 8, 10, 12]);
+    }
+
+    #[test]
+    fn generic_working_buffer() {
+        let input = vec![1, 2, 3, 4, 5, 6];
+
+        let mut output = vec![0; 6];
+
+        let kernel = r#"
+            __kernel void double_all_values( 
+                __constant const int *IN_GENERIC0,
+                const int IN_GENERIC0_LEN,
+                __global long *WORKING_GENERIC0,
+                const int WORKING_GENERIC0_LEN,
+                __global int *OUT_GENERIC0,
+                const int OUT_GENERIC0_LEN
+            ) {
+                int idx = get_global_id(0);
+                
+                if (idx < IN_GENERIC0_LEN && idx < WORKING_GENERIC0_LEN) {
+                    WORKING_GENERIC0[idx] = IN_GENERIC0[idx] * 2;
+                }
+                
+                if (idx < OUT_GENERIC0_LEN && idx < WORKING_GENERIC0_LEN) {
+                    OUT_GENERIC0[idx] = WORKING_GENERIC0[idx];
+                }
+            }"#;
+
+        let mut cl_program = CLProgram::new(IterationType::Generic(6));
+        cl_program.add_generic_input::<i32>();
+        cl_program.add_generic_working_memory::<i64>();
+        cl_program.add_generic_output::<i32>();
+
+        let mut compiled = cl_program.compile(kernel, "double_all_values").unwrap();
+
+        let mut runnable = compiled.runnable();
+        runnable.set_generic_input(0, &input).unwrap();
+        runnable.set_generic_working_memory_len(0, 6).unwrap();
+        runnable.set_generic_output(0, &mut output).unwrap();
+        compiled.run(runnable).unwrap();
+
+        assert_eq!(output, vec![2, 4, 6, 8, 10, 12]);
     }
 
     #[test]
