@@ -20,7 +20,7 @@ use geoengine_datatypes::{
 use lazy_static::lazy_static;
 use num_traits::{AsPrimitive, Zero};
 use ocl::builders::{KernelBuilder, ProgramBuilder};
-use ocl::prm::{cl_char, cl_double, cl_uint, cl_ushort, Double2};
+use ocl::prm::{cl_char, cl_double, cl_uint, cl_ushort, Double2, Long2};
 use ocl::{
     Buffer, Context, Device, Kernel, MemFlags, OclPrm, Platform, Program, Queue, SpatialDims,
 };
@@ -301,7 +301,7 @@ struct FeatureOutputBuffers {
     numbers: Vec<ColumnBuffer<f64>>,
     decimals: Vec<ColumnBuffer<i64>>,
     // TODO: categories, strings
-    // TODO: time
+    time: Option<Buffer<Long2>>,
 }
 
 /// This struct accepts concrete raster and vector data that correspond to the specified arguments.
@@ -588,6 +588,25 @@ impl<'a> CLProgramRunnable<'a> {
                 )?;
             }
 
+            if argument.include_time {
+                let time_intervals = features.time_intervals();
+                let buffer = Buffer::builder()
+                    .queue(queue.clone())
+                    .len(time_intervals.len())
+                    .copy_host_slice(unsafe {
+                        std::slice::from_raw_parts(
+                            time_intervals.as_ptr() as *const Long2,
+                            time_intervals.len(),
+                        )
+                    })
+                    .build()?;
+                kernel.set_arg(format!("IN_COLLECTION{}_TIME", idx), buffer)?;
+                kernel.set_arg(
+                    format!("IN_COLLECTION{}_TIME_LEN", idx),
+                    time_intervals.len() as i32,
+                )?;
+            }
+
             let column_types = call_generic_features!(features, features => {
                 features.column_types()
             });
@@ -626,10 +645,6 @@ impl<'a> CLProgramRunnable<'a> {
                     )?,
                     _ => todo!(), // TODO: strings, categories
                 }
-            }
-
-            if argument.include_time {
-                // TODO time
             }
         }
         Ok(())
@@ -748,6 +763,18 @@ impl<'a> CLProgramRunnable<'a> {
                 None
             };
 
+            let time = if argument.include_time {
+                let buffer = create_buffer::<Long2>(queue, features.num_coords())?;
+                kernel.set_arg(format!("OUT_COLLECTION{}_TIME", idx), &buffer)?;
+                kernel.set_arg(
+                    format!("OUT_COLLECTION{}_TIME_LEN", idx),
+                    buffer.len() as i32,
+                )?;
+                Some(buffer)
+            } else {
+                None
+            };
+
             let mut numbers = Vec::new();
             let mut decimals = Vec::new();
             for column in &argument.columns {
@@ -774,12 +801,11 @@ impl<'a> CLProgramRunnable<'a> {
                 }?;
             }
 
-            // TODO: time buffer
-
             self.feature_output_buffers.push(FeatureOutputBuffers {
                 geo: geo_buffers,
                 numbers,
                 decimals,
+                time,
             })
         }
 
@@ -1131,6 +1157,13 @@ impl<'a> CLProgramRunnable<'a> {
                 None => {}
             }
 
+            if let Some(buffer) = output_buffers.time {
+                let time_buffer = Self::read_ocl_to_arrow_buffer(&buffer, builder.num_features())?;
+                builder.set_time_intervals(time_buffer)?;
+            } else {
+                builder.set_default_time_intervals()?;
+            }
+
             for column_buffer in output_buffers.numbers {
                 let values_buffer =
                     Self::read_ocl_to_arrow_buffer(&column_buffer.values, builder.num_features())?;
@@ -1194,9 +1227,6 @@ impl<'a> CLProgramRunnable<'a> {
             }
 
             // TODO: string, category columns
-
-            // TODO: time
-            builder.set_default_time_intervals()?;
 
             builder.finish()?;
         }
@@ -1469,6 +1499,11 @@ impl CompiledCLProgram {
                 );
             }
 
+            if features.include_time {
+                kernel.arg_named(format!("IN_COLLECTION{}_TIME", idx), None::<&Buffer<Long2>>);
+                kernel.arg_named(format!("IN_COLLECTION{}_TIME_LEN", idx), i32::zero());
+            }
+
             for column in &features.columns {
                 let name = format!("IN_COLLECTION{}_COLUMN_{}", idx, column.name);
                 let null_name = format!("IN_COLLECTION{}_NULLS_{}", idx, column.name);
@@ -1478,10 +1513,6 @@ impl CompiledCLProgram {
                     name,
                     null_name,
                 )
-            }
-
-            if features.include_time {
-                // TODO time
             }
         }
     }
@@ -1540,6 +1571,14 @@ impl CompiledCLProgram {
                 );
             }
 
+            if features.include_time {
+                kernel.arg_named(
+                    format!("OUT_COLLECTION{}_TIME", idx),
+                    None::<&Buffer<Long2>>,
+                );
+                kernel.arg_named(format!("OUT_COLLECTION{}_TIME_LEN", idx), i32::zero());
+            }
+
             for column in &features.columns {
                 let name = format!("OUT_COLLECTION{}_COLUMN_{}", idx, column.name);
                 let null_name = format!("OUT_COLLECTION{}_NULLS_{}", idx, column.name);
@@ -1549,10 +1588,6 @@ impl CompiledCLProgram {
                     name,
                     null_name,
                 )
-            }
-
-            if features.include_time {
-                // TODO: time
             }
         }
     }
@@ -2061,6 +2096,79 @@ __kernel void gid(
         );
 
         assert_eq!(collection.multipoint_offsets(), &[0, 1, 3, 4]);
+    }
+
+    #[test]
+    fn points_identity_with_time() {
+        let input = MultiPointCollection::from_data(
+            MultiPoint::many(vec![
+                vec![(0., 0.)],
+                vec![(1., 1.), (2., 2.)],
+                vec![(3., 3.)],
+            ])
+            .unwrap(),
+            vec![
+                TimeInterval::new_unchecked(0, 1),
+                TimeInterval::new_unchecked(1, 2),
+                TimeInterval::new_unchecked(2, 3),
+            ],
+            HashMap::new(),
+        )
+        .unwrap();
+        let typed_input = TypedFeatureCollection::MultiPoint(input.clone());
+
+        let mut out = FeatureCollection::<MultiPoint>::builder().batch_builder(3, 4);
+
+        let kernel = r#"
+            __kernel void points( 
+                __constant const double2 *IN_COLLECTION0_COORDS,
+                const int IN_COLLECTION0_COORDS_LEN,
+                __constant const int *IN_COLLECTION0_FEATURE_OFFSETS,
+                const int IN_COLLECTION0_FEATURE_OFFSETS_LEN,
+                __constant const long2 *IN_COLLECTION0_TIME,
+                const int IN_COLLECTION0_TIME_LEN,
+                __global double2 *OUT_COLLECTION0_COORDS,
+                const int OUT_COLLECTION0_COORDS_LEN,
+                __global int *OUT_COLLECTION0_FEATURE_OFFSETS,
+                const int OUT_COLLECTION0_FEATURE_OFFSETS_LEN,
+                __global long2 *OUT_COLLECTION0_TIME,
+                const int OUT_COLLECTION0_TIME_LEN
+            ) {
+                int idx = get_global_id(0);
+                
+                OUT_COLLECTION0_COORDS[idx] = IN_COLLECTION0_COORDS[idx];
+                
+                OUT_COLLECTION0_TIME[idx] = IN_COLLECTION0_TIME[idx];
+                
+                if (idx < IN_COLLECTION0_FEATURE_OFFSETS_LEN) {
+                    OUT_COLLECTION0_FEATURE_OFFSETS[idx] = IN_COLLECTION0_FEATURE_OFFSETS[idx];
+                }
+            }"#;
+
+        let mut cl_program = CLProgram::new(IterationType::VectorCoordinates);
+        cl_program.add_input_features(VectorArgument::new(
+            VectorDataType::MultiPoint,
+            vec![],
+            true,
+            true,
+        ));
+        cl_program.add_output_features(VectorArgument::new(
+            VectorDataType::MultiPoint,
+            vec![],
+            true,
+            true,
+        ));
+
+        let mut compiled = cl_program.compile(kernel, "points").unwrap();
+
+        let mut runnable = compiled.runnable();
+        runnable.set_input_features(0, &typed_input).unwrap();
+        runnable.set_output_features(0, &mut out).unwrap();
+        compiled.run(runnable).unwrap();
+
+        let result = out.output.unwrap().get_points().unwrap();
+
+        assert_eq!(result, input);
     }
 
     #[test]
