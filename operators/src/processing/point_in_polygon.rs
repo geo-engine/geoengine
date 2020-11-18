@@ -3,10 +3,9 @@ use futures::{StreamExt, TryStreamExt};
 use snafu::ensure;
 
 use geoengine_datatypes::collections::{
-    BuilderProvider, DataCollection, MultiPointCollection, MultiPolygonCollection,
-    TypedFeatureCollection, VectorDataType,
+    MultiPointCollection, MultiPolygonCollection, VectorDataType,
 };
-use geoengine_datatypes::primitives::{Coordinate2D, FeatureDataRef, FeatureDataType};
+use geoengine_datatypes::primitives::Coordinate2D;
 
 use crate::engine::{
     ExecutionContext, InitializedOperator, InitializedOperatorImpl, InitializedVectorOperator,
@@ -14,10 +13,9 @@ use crate::engine::{
     VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::error;
-use crate::opencl::{CLProgram, ColumnArgument, CompiledCLProgram, IterationType, VectorArgument};
 use crate::util::Result;
+use arrow::array::BooleanArray;
 use itertools::Itertools;
-use std::sync::{Arc, Mutex};
 
 pub type PointInPolygonFilter = Operator<()>;
 
@@ -116,43 +114,32 @@ impl PointInPolygonFilterProcessor {
     }
 
     fn filter_points(
-        points: &TypedFeatureCollection,
-        polygons: &TypedFeatureCollection,
-        initial_filter: &[bool],
-        cl_program: &mut CompiledCLProgram,
-    ) -> Result<Vec<bool>> {
-        let mut runnable = cl_program.runnable();
+        points: &MultiPointCollection,
+        polygons: &MultiPolygonCollection,
+        initial_filter: &BooleanArray,
+    ) -> Result<BooleanArray> {
+        let mut filter = Vec::with_capacity(points.len());
 
-        runnable.set_input_features(0, points)?;
-        runnable.set_input_features(1, polygons)?;
+        let tester = PointInPolygonTester::new(polygons);
 
-        let mut filter_builder = DataCollection::builder();
-        filter_builder.add_column("filter".to_string(), FeatureDataType::Decimal)?;
-        let mut filter_builder = filter_builder.batch_builder(initial_filter.len(), 0);
+        let coordinates = points.coordinates();
+        for (&coordinates_start_index, &coordinates_end_index) in
+            points.multipoint_offsets().iter().tuple_windows()
+        {
+            let (coordinates_start_index, coordinates_end_index) = (
+                coordinates_start_index as usize,
+                coordinates_end_index as usize,
+            );
 
-        runnable.set_output_features(0, &mut filter_builder)?;
+            let is_multi_point_in_polygon_collection = coordinates
+                [coordinates_start_index..coordinates_end_index]
+                .iter()
+                .any(|coordinate| tester.is_coordinate_in_collection(coordinate));
 
-        cl_program.run(runnable)?;
+            filter.push(is_multi_point_in_polygon_collection);
+        }
 
-        filter_builder.finish_data()?;
-        let filter_collection = filter_builder
-            .output
-            .expect("must exist")
-            .get_data()
-            .expect("must be a data collection");
-
-        let filter_column = filter_collection.data("filter")?;
-        let filter = match &filter_column {
-            FeatureDataRef::Decimal(f) => f.as_ref(),
-            _ => unreachable!("must be of decimal type"),
-        };
-
-        // TODO: use arrow directly?
-        Ok(initial_filter
-            .iter()
-            .zip(filter.iter().map(|&b| b != 0))
-            .map(|(&a, b)| a || b)
-            .collect())
+        arrow::compute::or(initial_filter, &filter.into()).map_err(Into::into)
     }
 }
 
@@ -164,41 +151,12 @@ impl VectorQueryProcessor for PointInPolygonFilterProcessor {
         query: QueryRectangle,
         ctx: QueryContext,
     ) -> BoxStream<'_, Result<Self::VectorType>> {
-        let mut cl_program = CLProgram::new(IterationType::VectorCoordinates);
-        cl_program.add_input_features(VectorArgument::new(
-            VectorDataType::MultiPoint,
-            vec![],
-            true,
-            true,
-        ));
-        cl_program.add_input_features(VectorArgument::new(
-            VectorDataType::MultiPolygon,
-            vec![],
-            true,
-            true,
-        ));
-        cl_program.add_output_features(VectorArgument::new(
-            VectorDataType::Data,
-            vec![ColumnArgument::new(
-                "filter".to_string(),
-                FeatureDataType::Decimal,
-            )],
-            false,
-            false,
-        ));
-
-        let cl_program =
-            match cl_program.compile(include_str!("point_in_polygon.cl"), "point_in_polygon") {
-                Ok(cl_program) => Arc::new(Mutex::new(cl_program)),
-                Err(error) => return futures::stream::once(async { Err(error) }).boxed(),
-            };
+        // TODO: multi-threading
 
         self.points
             .query(query, ctx)
-            .map(move |points| points.map(|p| (p, cl_program.clone())))
-            .and_then(move |(points, cl_program)| async move {
-                let initial_filter = vec![false; points.len()];
-                let points = TypedFeatureCollection::MultiPoint(points);
+            .and_then(move |points| async move {
+                let initial_filter = BooleanArray::from(vec![false; points.len()]);
 
                 let filter = self
                     .polygons
@@ -210,17 +168,10 @@ impl VectorQueryProcessor for PointInPolygonFilterProcessor {
                             return filter;
                         }
 
-                        let polygons = TypedFeatureCollection::MultiPolygon(polygons);
-                        Self::filter_points(
-                            &points,
-                            &polygons,
-                            &filter?,
-                            &mut cl_program.lock().unwrap(),
-                        )
+                        Self::filter_points(&points, &polygons, &filter?)
                     })
                     .await?;
 
-                let points = points.get_points().expect("unpack");
                 points.filter(filter).map_err(Into::into)
             })
             .boxed()
@@ -287,7 +238,7 @@ impl<'p> PointInPolygonTester<'p> {
 
     fn is_coordinate_in_ring(
         &self,
-        coordinate: Coordinate2D,
+        coordinate: &Coordinate2D,
         ring_index_start: usize,
         ring_index_stop: usize,
     ) -> bool {
@@ -318,7 +269,15 @@ impl<'p> PointInPolygonTester<'p> {
     }
 
     /// Is the coordinate contained in any polygon of the collection?
-    pub fn is_coordinate_in_collection(&self, coordinate: Coordinate2D) -> bool {
+    ///
+    /// The function returns `true` if the `Coordinate2D` is inside the multi polygon, or
+    /// `false` if it is not. If the point is exactly on the edge of the polygon,
+    /// then the function may return `true` or `false`.
+    ///
+    /// TODO: check boundary conditions separately
+    ///
+    // TODO: check time validity
+    pub fn is_coordinate_in_collection(&self, coordinate: &Coordinate2D) -> bool {
         let ring_offsets = self.polygons.ring_offsets();
 
         for (&polygon_start_index, &polygon_end_index) in
@@ -358,7 +317,9 @@ impl<'p> PointInPolygonTester<'p> {
         false
     }
 
-    pub fn multi_polygons_containing_coordinate(&self, coordinate: Coordinate2D) -> Vec<bool> {
+    // TODO: check time validity
+    #[allow(dead_code)]
+    pub fn multi_polygons_containing_coordinate(&self, coordinate: &Coordinate2D) -> Vec<bool> {
         let mut result = Vec::with_capacity(self.polygons.len());
 
         let polygon_offsets = self.polygons.polygon_offsets();
@@ -466,31 +427,68 @@ mod tests {
 
         let tester = PointInPolygonTester::new(&collection);
 
-        assert!(!tester.is_coordinate_in_ring(Coordinate2D::new(4., 5.), 0, 5));
-        assert!(tester.is_coordinate_in_ring(Coordinate2D::new(4., 5.), 5, 10));
-        assert!(!tester.is_coordinate_in_ring(Coordinate2D::new(4., 5.), 10, 19));
+        assert!(!tester.is_coordinate_in_ring(&Coordinate2D::new(4., 5.), 0, 5));
+        assert!(tester.is_coordinate_in_ring(&Coordinate2D::new(4., 5.), 5, 10));
+        assert!(!tester.is_coordinate_in_ring(&Coordinate2D::new(4., 5.), 10, 19));
 
-        assert!(!tester.is_coordinate_in_ring(Coordinate2D::new(4., 2.), 0, 5));
-        assert!(tester.is_coordinate_in_ring(Coordinate2D::new(4., 2.), 5, 10));
-        assert!(tester.is_coordinate_in_ring(Coordinate2D::new(4., 2.), 10, 19));
+        assert!(!tester.is_coordinate_in_ring(&Coordinate2D::new(4., 2.), 0, 5));
+        assert!(tester.is_coordinate_in_ring(&Coordinate2D::new(4., 2.), 5, 10));
+        assert!(tester.is_coordinate_in_ring(&Coordinate2D::new(4., 2.), 10, 19));
 
-        assert!(tester.is_coordinate_in_collection(Coordinate2D::new(4., 5.)));
-        assert!(!tester.is_coordinate_in_collection(Coordinate2D::new(4., 2.)));
+        assert!(tester.is_coordinate_in_collection(&Coordinate2D::new(4., 5.)));
+        assert!(!tester.is_coordinate_in_collection(&Coordinate2D::new(4., 2.)));
 
         assert_eq!(
-            tester.multi_polygons_containing_coordinate(Coordinate2D::new(4., 5.)),
+            tester.multi_polygons_containing_coordinate(&Coordinate2D::new(4., 5.)),
             vec![true]
         );
         assert_eq!(
-            tester.multi_polygons_containing_coordinate(Coordinate2D::new(4., 2.)),
+            tester.multi_polygons_containing_coordinate(&Coordinate2D::new(4., 2.)),
             vec![false]
         );
+    }
+
+    #[test]
+    fn point_in_polygon_boundary_conditions() {
+        let collection = MultiPolygonCollection::from_data(
+            vec![MultiPolygon::new(vec![vec![vec![
+                (0.0, 0.0).into(),
+                (10.0, 0.0).into(),
+                (10.0, 10.0).into(),
+                (0.0, 10.0).into(),
+                (0.0, 0.0).into(),
+            ]]])
+            .unwrap()],
+            vec![Default::default(); 1],
+            Default::default(),
+        )
+        .unwrap();
+
+        let tester = PointInPolygonTester::new(&collection);
+
+        // the algorithm is not stable for boundary cases directly on the edges
+
+        assert!(tester.is_coordinate_in_collection(&Coordinate2D::new(0.000_001, 0.000_001)));
+        assert!(tester.is_coordinate_in_collection(&Coordinate2D::new(0.000_001, 0.1)));
+        assert!(tester.is_coordinate_in_collection(&Coordinate2D::new(0.1, 0.000_001)));
+
+        assert!(tester.is_coordinate_in_collection(&Coordinate2D::new(9.9, 9.9)));
+        assert!(tester.is_coordinate_in_collection(&Coordinate2D::new(10.0, 9.9)));
+        assert!(tester.is_coordinate_in_collection(&Coordinate2D::new(9.9, 10.0)));
+
+        assert!(!tester.is_coordinate_in_collection(&Coordinate2D::new(-0.1, -0.1)));
+        assert!(!tester.is_coordinate_in_collection(&Coordinate2D::new(0.0, -0.1)));
+        assert!(!tester.is_coordinate_in_collection(&Coordinate2D::new(-0.1, 0.0)));
+
+        assert!(!tester.is_coordinate_in_collection(&Coordinate2D::new(10.1, 10.1)));
+        assert!(!tester.is_coordinate_in_collection(&Coordinate2D::new(10.1, 9.9)));
+        assert!(!tester.is_coordinate_in_collection(&Coordinate2D::new(9.9, 10.1)));
     }
 
     #[tokio::test]
     async fn all() -> Result<()> {
         let points = MultiPointCollection::from_data(
-            MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1), (2.0, 3.1)]).unwrap(),
+            MultiPoint::many(vec![(0.001, 0.1), (1.0, 1.1), (2.0, 3.1)]).unwrap(),
             vec![TimeInterval::new_unchecked(0, 1); 3],
             Default::default(),
         )?;
@@ -507,9 +505,9 @@ mod tests {
                 collection: MultiPolygonCollection::from_data(
                     vec![MultiPolygon::new(vec![vec![vec![
                         (0.0, 0.0).into(),
-                        (0.0, 10.0).into(),
-                        (10.0, 10.0).into(),
                         (10.0, 0.0).into(),
+                        (10.0, 10.0).into(),
+                        (0.0, 10.0).into(),
                         (0.0, 0.0).into(),
                     ]]])?],
                     vec![TimeInterval::new_unchecked(0, 1); 1],
