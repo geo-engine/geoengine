@@ -65,6 +65,13 @@ impl TypedFeatureCollection {
         None
     }
 
+    pub fn get_polygons_ref(&self) -> Option<&MultiPolygonCollection> {
+        if let TypedFeatureCollection::MultiPolygon(polygons) = self {
+            return Some(polygons);
+        }
+        None
+    }
+
     pub fn get_data(self) -> Option<DataCollection> {
         if let TypedFeatureCollection::Data(data) = self {
             return Some(data);

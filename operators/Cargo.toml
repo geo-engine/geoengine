@@ -18,6 +18,7 @@ futures = "0.3"
 gdal = { version = "0.6", features = ["gdal_2_2"] }
 geo = "0.15"
 geoengine-datatypes = { path = "../datatypes" }
+itertools = "0.9"
 lazy_static = "1.4"
 num-traits = "0.2"
 ocl = "0.19"

@@ -6,7 +6,7 @@ use geoengine_datatypes::collections::{
     BuilderProvider, DataCollection, MultiPointCollection, MultiPolygonCollection,
     TypedFeatureCollection, VectorDataType,
 };
-use geoengine_datatypes::primitives::{FeatureDataRef, FeatureDataType};
+use geoengine_datatypes::primitives::{Coordinate2D, FeatureDataRef, FeatureDataType};
 
 use crate::engine::{
     ExecutionContext, InitializedOperator, InitializedOperatorImpl, InitializedVectorOperator,
@@ -16,6 +16,7 @@ use crate::engine::{
 use crate::error;
 use crate::opencl::{CLProgram, ColumnArgument, CompiledCLProgram, IterationType, VectorArgument};
 use crate::util::Result;
+use itertools::Itertools;
 use std::sync::{Arc, Mutex};
 
 pub type PointInPolygonFilter = Operator<()>;
@@ -226,6 +227,195 @@ impl VectorQueryProcessor for PointInPolygonFilterProcessor {
     }
 }
 
+/// Creates a context to check points against polygons
+///
+/// The algorithm is taken from <http://alienryderflex.com/polygon/>
+///
+struct PointInPolygonTester<'p> {
+    polygons: &'p MultiPolygonCollection,
+    constants: Vec<f64>,
+    multiples: Vec<f64>,
+}
+
+impl<'p> PointInPolygonTester<'p> {
+    pub fn new(polygons: &'p MultiPolygonCollection) -> Self {
+        let number_of_coordinates = polygons.coordinates().len();
+
+        let mut tester = Self {
+            polygons,
+            constants: vec![0.; number_of_coordinates],
+            multiples: vec![0.; number_of_coordinates],
+        };
+
+        tester.precalculate_polygons();
+
+        tester
+    }
+
+    fn precalculate_polygons(&mut self) {
+        for (&ring_start_index, &ring_end_index) in
+            self.polygons.ring_offsets().iter().tuple_windows()
+        {
+            self.precalculate_ring(ring_start_index as usize, ring_end_index as usize);
+        }
+    }
+
+    fn precalculate_ring(&mut self, ring_start_index: usize, ring_end_index: usize) {
+        let number_of_corners = ring_end_index - ring_start_index - 1;
+        let mut j = number_of_corners - 1;
+
+        let polygon_coordinates = self.polygons.coordinates();
+
+        for i in 0..number_of_corners {
+            let c_i = polygon_coordinates[ring_start_index + i];
+            let c_j = polygon_coordinates[ring_start_index + j];
+
+            let helper_array_index = ring_start_index + i;
+
+            if float_cmp::approx_eq!(f64, c_j.y, c_i.y) {
+                self.constants[helper_array_index] = c_i.x;
+                self.multiples[helper_array_index] = 0.0;
+            } else {
+                self.constants[helper_array_index] =
+                    c_i.x - (c_i.y * c_j.x) / (c_j.y - c_i.y) + (c_i.y * c_i.x) / (c_j.y - c_i.y);
+                self.multiples[helper_array_index] = (c_j.x - c_i.x) / (c_j.y - c_i.y);
+            }
+
+            j = i;
+        }
+    }
+
+    fn is_coordinate_in_ring(
+        &self,
+        coordinate: Coordinate2D,
+        ring_index_start: usize,
+        ring_index_stop: usize,
+    ) -> bool {
+        let number_of_corners = ring_index_stop - ring_index_start - 1;
+        let mut j = number_of_corners - 1;
+        let mut odd_nodes = false;
+
+        let polygon_coordinates = self.polygons.coordinates();
+
+        for i in 0..number_of_corners {
+            let c_i = polygon_coordinates[ring_index_start + i];
+            let c_j = polygon_coordinates[ring_index_start + j];
+
+            if (c_i.y < coordinate.y && c_j.y >= coordinate.y)
+                || (c_j.y < coordinate.y && c_i.y >= coordinate.y)
+            {
+                let coordinate_index = ring_index_start + i;
+
+                odd_nodes ^= coordinate.y * self.multiples[coordinate_index]
+                    + self.constants[coordinate_index]
+                    < coordinate.x;
+            }
+
+            j = i;
+        }
+
+        odd_nodes
+    }
+
+    /// Is the coordinate contained in any polygon of the collection?
+    pub fn is_coordinate_in_collection(&self, coordinate: Coordinate2D) -> bool {
+        let ring_offsets = self.polygons.ring_offsets();
+
+        for (&polygon_start_index, &polygon_end_index) in
+            self.polygons.polygon_offsets().iter().tuple_windows()
+        {
+            let polygon_start_index = polygon_start_index as usize;
+            let polygon_end_index = polygon_end_index as usize;
+
+            let mut is_coordinate_in_polygon = true;
+
+            for (ring_number, (&ring_start_index, &ring_end_index)) in ring_offsets
+                [polygon_start_index..=polygon_end_index]
+                .iter()
+                .tuple_windows()
+                .enumerate()
+            {
+                let is_coordinate_in_ring = self.is_coordinate_in_ring(
+                    coordinate,
+                    ring_start_index as usize,
+                    ring_end_index as usize,
+                );
+
+                if (ring_number == 0 && !is_coordinate_in_ring)
+                    || (ring_number > 0 && is_coordinate_in_ring)
+                {
+                    // coordinate is either "not in outer ring" or "in inner ring"
+                    is_coordinate_in_polygon = false;
+                    break;
+                }
+            }
+
+            if is_coordinate_in_polygon {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    pub fn multi_polygons_containing_coordinate(&self, coordinate: Coordinate2D) -> Vec<bool> {
+        let mut result = Vec::with_capacity(self.polygons.len());
+
+        let polygon_offsets = self.polygons.polygon_offsets();
+        let ring_offsets = self.polygons.ring_offsets();
+
+        for (&multi_polygon_start_index, &multi_polygon_end_index) in
+            self.polygons.multi_polygon_offsets().iter().tuple_windows()
+        {
+            let multi_polygon_start_index = multi_polygon_start_index as usize;
+            let multi_polygon_end_index = multi_polygon_end_index as usize;
+
+            let mut is_coordinate_in_multi_polygon = false;
+
+            for (&polygon_start_index, &polygon_end_index) in polygon_offsets
+                [multi_polygon_start_index..=multi_polygon_end_index]
+                .iter()
+                .tuple_windows()
+            {
+                let polygon_start_index = polygon_start_index as usize;
+                let polygon_end_index = polygon_end_index as usize;
+
+                let mut is_coordinate_in_polygon = true;
+
+                for (ring_number, (&ring_start_index, &ring_end_index)) in ring_offsets
+                    [polygon_start_index..=polygon_end_index]
+                    .iter()
+                    .tuple_windows()
+                    .enumerate()
+                {
+                    let is_coordinate_in_ring = self.is_coordinate_in_ring(
+                        coordinate,
+                        ring_start_index as usize,
+                        ring_end_index as usize,
+                    );
+
+                    if (ring_number == 0 && !is_coordinate_in_ring)
+                        || (ring_number > 0 && is_coordinate_in_ring)
+                    {
+                        // coordinate is either "not in outer ring" or "in inner ring"
+                        is_coordinate_in_polygon = false;
+                        break;
+                    }
+                }
+
+                if is_coordinate_in_polygon {
+                    is_coordinate_in_multi_polygon = true;
+                    break;
+                }
+            }
+
+            result.push(is_coordinate_in_multi_polygon);
+        }
+
+        result
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::primitives::{
@@ -235,6 +425,67 @@ mod tests {
     use crate::mock::{MockFeatureCollectionSource, MockFeatureCollectionSourceParams};
 
     use super::*;
+
+    #[test]
+    fn point_in_polygon_tester() {
+        let collection = MultiPolygonCollection::from_data(
+            vec![MultiPolygon::new(vec![
+                vec![vec![
+                    Coordinate2D::new(20., 20.),
+                    Coordinate2D::new(30., 20.),
+                    Coordinate2D::new(30., 30.),
+                    Coordinate2D::new(20., 30.),
+                    Coordinate2D::new(20., 20.),
+                ]],
+                vec![
+                    vec![
+                        Coordinate2D::new(0., 0.),
+                        Coordinate2D::new(10., 0.),
+                        Coordinate2D::new(10., 10.),
+                        Coordinate2D::new(0., 10.),
+                        Coordinate2D::new(0., 0.),
+                    ],
+                    vec![
+                        Coordinate2D::new(1., 5.),
+                        Coordinate2D::new(3., 3.),
+                        Coordinate2D::new(5., 3.),
+                        Coordinate2D::new(6., 5.),
+                        Coordinate2D::new(7., 1.5),
+                        Coordinate2D::new(4., 0.),
+                        Coordinate2D::new(2., 1.),
+                        Coordinate2D::new(1., 3.),
+                        Coordinate2D::new(1., 5.),
+                    ],
+                ],
+            ])
+            .unwrap()],
+            vec![Default::default(); 1],
+            Default::default(),
+        )
+        .unwrap();
+
+        let tester = PointInPolygonTester::new(&collection);
+
+        assert!(!tester.is_coordinate_in_ring(Coordinate2D::new(4., 5.), 0, 5));
+        assert!(tester.is_coordinate_in_ring(Coordinate2D::new(4., 5.), 5, 10));
+        assert!(!tester.is_coordinate_in_ring(Coordinate2D::new(4., 5.), 10, 19));
+
+        assert!(!tester.is_coordinate_in_ring(Coordinate2D::new(4., 2.), 0, 5));
+        assert!(tester.is_coordinate_in_ring(Coordinate2D::new(4., 2.), 5, 10));
+        assert!(tester.is_coordinate_in_ring(Coordinate2D::new(4., 2.), 10, 19));
+
+        assert!(tester.is_coordinate_in_collection(Coordinate2D::new(4., 5.)));
+        assert!(!tester.is_coordinate_in_collection(Coordinate2D::new(4., 2.)));
+
+        assert_eq!(
+            tester.multi_polygons_containing_coordinate(Coordinate2D::new(4., 5.)),
+            vec![true]
+        );
+        assert_eq!(
+            tester.multi_polygons_containing_coordinate(Coordinate2D::new(4., 2.)),
+            vec![false]
+        );
+    }
 
     #[tokio::test]
     async fn all() -> Result<()> {
