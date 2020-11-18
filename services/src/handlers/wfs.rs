@@ -1,5 +1,4 @@
 use snafu::ResultExt;
-use uuid::Uuid;
 use warp::reply::Reply;
 use warp::{http::Response, Filter};
 
@@ -7,7 +6,6 @@ use crate::error;
 use crate::error::Result;
 use crate::handlers::Context;
 use crate::ogc::wfs::request::{GetCapabilities, GetFeature, TypeNames, WFSRequest};
-use crate::util::identifiers::Identifier;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use futures::StreamExt;
@@ -20,6 +18,7 @@ use geoengine_operators::engine::{
     ExecutionContext, QueryContext, QueryRectangle, TypedVectorQueryProcessor, VectorQueryProcessor,
 };
 use serde_json::json;
+use std::str::FromStr;
 
 pub fn wfs_handler<C: Context>(
     ctx: C,
@@ -162,9 +161,7 @@ async fn get_feature<C: Context>(
         Some("registry") => {
             ctx.workflow_registry_ref()
                 .await
-                .load(&WorkflowId::from_uuid(
-                    Uuid::parse_str(&request.type_names.feature_type).context(error::Uuid)?,
-                ))
+                .load(&WorkflowId::from_str(&request.type_names.feature_type)?)
                 .await?
         }
         Some("json") => {
