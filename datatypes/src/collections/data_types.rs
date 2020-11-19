@@ -1,8 +1,8 @@
 use crate::collections::{
-    DataCollection, FeatureCollection, FeatureCollectionOperations, MultiLineStringCollection,
-    MultiPointCollection, MultiPolygonCollection,
+    DataCollection, FeatureCollectionOperations, MultiLineStringCollection, MultiPointCollection,
+    MultiPolygonCollection,
 };
-use crate::primitives::{Coordinate2D, FeatureDataRef, FeatureDataType, Geometry, TimeInterval};
+use crate::primitives::{Coordinate2D, FeatureDataRef, FeatureDataType, TimeInterval};
 use crate::util::Result;
 use serde::{Deserialize, Serialize};
 
