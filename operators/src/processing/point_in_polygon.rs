@@ -7,6 +7,7 @@ use geoengine_datatypes::collections::{
 };
 use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval};
 
+use crate::adapters::FeatureCollectionChunkMerger;
 use crate::engine::{
     ExecutionContext, InitializedOperator, InitializedOperatorImpl, InitializedVectorOperator,
     Operator, QueryContext, QueryProcessor, QueryRectangle, TypedVectorQueryProcessor,
@@ -157,7 +158,8 @@ impl VectorQueryProcessor for PointInPolygonFilterProcessor {
     ) -> BoxStream<'_, Result<Self::VectorType>> {
         // TODO: multi-threading
 
-        self.points
+        let filtered_stream = self
+            .points
             .query(query, ctx)
             .and_then(move |points| async move {
                 let initial_filter = BooleanArray::from(vec![false; points.len()]);
@@ -177,8 +179,9 @@ impl VectorQueryProcessor for PointInPolygonFilterProcessor {
                     .await?;
 
                 points.filter(filter).map_err(Into::into)
-            })
-            .boxed()
+            });
+
+        FeatureCollectionChunkMerger::new(filtered_stream.fuse(), ctx.chunk_byte_size).boxed()
     }
 }
 
@@ -678,75 +681,97 @@ mod tests {
         Ok(())
     }
 
-    // #[tokio::test]
-    // async fn time() -> Result<()> {
-    //     let points1 = MultiPointCollection::from_data(
-    //         MultiPoint::many(vec![(1.0, 1.1), (2.0, 2.1), (3.0, 3.1)]).unwrap(),
-    //         vec![Default::default(); 1],
-    //         Default::default(),
-    //     )?;
-    //     let points2 = MultiPointCollection::from_data(
-    //         MultiPoint::many(vec![(1.0, 1.1), (2.0, 2.1), (3.0, 3.1)]).unwrap(),
-    //         vec![Default::default(); 1],
-    //         Default::default(),
-    //     )?;
-    //
-    //     let point_source = MockFeatureCollectionSource {
-    //         params: MockFeatureCollectionSourceParams {
-    //             collections: points.clone(),
-    //         },
-    //     }
-    //     .boxed();
-    //
-    //     let polygon = MultiPolygon::new(vec![vec![vec![
-    //         (0.0, 0.0).into(),
-    //         (10.0, 0.0).into(),
-    //         (10.0, 10.0).into(),
-    //         (0.0, 10.0).into(),
-    //         (0.0, 0.0).into(),
-    //     ]]])?;
-    //
-    //     let polygon_source = MockFeatureCollectionSource {
-    //         params: MockFeatureCollectionSourceParams {
-    //             collections: MultiPolygonCollection::from_data(
-    //                 vec![polygon.clone(), polygon],
-    //                 vec![TimeInterval::new(0, 1)?, TimeInterval::new(1, 2)?],
-    //                 Default::default(),
-    //             )?,
-    //         },
-    //     }
-    //     .boxed();
-    //
-    //     let operator = PointInPolygonFilter {
-    //         vector_sources: vec![point_source, polygon_source],
-    //         raster_sources: vec![],
-    //         params: (),
-    //     }
-    //     .boxed()
-    //     .initialize(&ExecutionContext::mock_empty())?;
-    //
-    //     let query_processor = operator.query_processor()?.multi_point().unwrap();
-    //
-    //     let query_rectangle = QueryRectangle {
-    //         bbox: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
-    //         time_interval: TimeInterval::default(),
-    //         spatial_resolution: SpatialResolution::zero_point_one(),
-    //     };
-    //     let ctx = QueryContext {
-    //         chunk_byte_size: usize::MAX,
-    //     };
-    //
-    //     let query = query_processor.query(query_rectangle, ctx);
-    //
-    //     let result = query
-    //         .map(Result::unwrap)
-    //         .collect::<Vec<MultiPointCollection>>()
-    //         .await;
-    //
-    //     assert_eq!(result.len(), 1);
-    //
-    //     assert_eq!(result[0], points.filter(vec![true, false, true])?);
-    //
-    //     Ok(())
-    // }
+    #[tokio::test]
+    async fn multiple_inputs() -> Result<()> {
+        let points1 = MultiPointCollection::from_data(
+            MultiPoint::many(vec![(5.0, 5.1), (15.0, 15.1)]).unwrap(),
+            vec![TimeInterval::new(0, 1)?; 2],
+            Default::default(),
+        )?;
+        let points2 = MultiPointCollection::from_data(
+            MultiPoint::many(vec![(6.0, 6.1), (16.0, 16.1)]).unwrap(),
+            vec![TimeInterval::new(1, 2)?; 2],
+            Default::default(),
+        )?;
+
+        let point_source =
+            MockFeatureCollectionSource::multiple(vec![points1.clone(), points2.clone()]).boxed();
+
+        let polygon1 = MultiPolygon::new(vec![vec![vec![
+            (0.0, 0.0).into(),
+            (10.0, 0.0).into(),
+            (10.0, 10.0).into(),
+            (0.0, 10.0).into(),
+            (0.0, 0.0).into(),
+        ]]])?;
+        let polygon2 = MultiPolygon::new(vec![vec![vec![
+            (10.0, 10.0).into(),
+            (20.0, 10.0).into(),
+            (20.0, 20.0).into(),
+            (10.0, 20.0).into(),
+            (10.0, 10.0).into(),
+        ]]])?;
+
+        let polygon_source = MockFeatureCollectionSource::multiple(vec![
+            MultiPolygonCollection::from_data(
+                vec![polygon1.clone()],
+                vec![TimeInterval::new(0, 1)?],
+                Default::default(),
+            )?,
+            MultiPolygonCollection::from_data(
+                vec![polygon1, polygon2],
+                vec![TimeInterval::new(1, 2)?, TimeInterval::new(1, 2)?],
+                Default::default(),
+            )?,
+        ])
+        .boxed();
+
+        let operator = PointInPolygonFilter {
+            vector_sources: vec![point_source, polygon_source],
+            raster_sources: vec![],
+            params: (),
+        }
+        .boxed()
+        .initialize(&ExecutionContext::mock_empty())?;
+
+        let query_processor = operator.query_processor()?.multi_point().unwrap();
+
+        let query_rectangle = QueryRectangle {
+            bbox: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
+            time_interval: TimeInterval::default(),
+            spatial_resolution: SpatialResolution::zero_point_one(),
+        };
+        let ctx_one_chunk = QueryContext {
+            chunk_byte_size: usize::MAX,
+        };
+        let ctx_minimal_chunks = QueryContext { chunk_byte_size: 0 };
+
+        let query = query_processor.query(query_rectangle, ctx_minimal_chunks);
+
+        let result = query
+            .map(Result::unwrap)
+            .collect::<Vec<MultiPointCollection>>()
+            .await;
+
+        assert_eq!(result.len(), 2);
+
+        assert_eq!(result[0], points1.filter(vec![true, false])?);
+        assert_eq!(result[1], points2);
+
+        let query = query_processor.query(query_rectangle, ctx_one_chunk);
+
+        let result = query
+            .map(Result::unwrap)
+            .collect::<Vec<MultiPointCollection>>()
+            .await;
+
+        assert_eq!(result.len(), 1);
+
+        assert_eq!(
+            result[0],
+            points1.filter(vec![true, false])?.append(&points2)?
+        );
+
+        Ok(())
+    }
 }
