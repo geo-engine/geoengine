@@ -379,7 +379,7 @@ mod tests {
         BoundingBox2D, MultiPoint, MultiPolygon, SpatialResolution, TimeInterval,
     };
 
-    use crate::mock::{MockFeatureCollectionSource, MockFeatureCollectionSourceParams};
+    use crate::mock::MockFeatureCollectionSource;
 
     use super::*;
 
@@ -518,29 +518,21 @@ mod tests {
             Default::default(),
         )?;
 
-        let point_source = MockFeatureCollectionSource {
-            params: MockFeatureCollectionSourceParams {
-                collection: points.clone(),
-            },
-        }
-        .boxed();
+        let point_source = MockFeatureCollectionSource::single(points.clone()).boxed();
 
-        let polygon_source = MockFeatureCollectionSource {
-            params: MockFeatureCollectionSourceParams {
-                collection: MultiPolygonCollection::from_data(
-                    vec![MultiPolygon::new(vec![vec![vec![
-                        (0.0, 0.0).into(),
-                        (10.0, 0.0).into(),
-                        (10.0, 10.0).into(),
-                        (0.0, 10.0).into(),
-                        (0.0, 0.0).into(),
-                    ]]])?],
-                    vec![TimeInterval::new_unchecked(0, 1); 1],
-                    Default::default(),
-                )?,
-            },
-        }
-        .boxed();
+        let polygon_source =
+            MockFeatureCollectionSource::single(MultiPolygonCollection::from_data(
+                vec![MultiPolygon::new(vec![vec![vec![
+                    (0.0, 0.0).into(),
+                    (10.0, 0.0).into(),
+                    (10.0, 10.0).into(),
+                    (0.0, 10.0).into(),
+                    (0.0, 0.0).into(),
+                ]]])?],
+                vec![TimeInterval::new_unchecked(0, 1); 1],
+                Default::default(),
+            )?)
+            .boxed();
 
         let operator = PointInPolygonFilter {
             vector_sources: vec![point_source, polygon_source],
@@ -583,18 +575,11 @@ mod tests {
             Default::default(),
         )?;
 
-        let point_source = MockFeatureCollectionSource {
-            params: MockFeatureCollectionSourceParams {
-                collection: points.clone(),
-            },
-        }
-        .boxed();
+        let point_source = MockFeatureCollectionSource::single(points.clone()).boxed();
 
-        let polygon_source = MockFeatureCollectionSource {
-            params: MockFeatureCollectionSourceParams {
-                collection: MultiPolygonCollection::from_data(vec![], vec![], Default::default())?,
-            },
-        }
+        let polygon_source = MockFeatureCollectionSource::single(
+            MultiPolygonCollection::from_data(vec![], vec![], Default::default())?,
+        )
         .boxed();
 
         let operator = PointInPolygonFilter {
@@ -642,12 +627,7 @@ mod tests {
             Default::default(),
         )?;
 
-        let point_source = MockFeatureCollectionSource {
-            params: MockFeatureCollectionSourceParams {
-                collection: points.clone(),
-            },
-        }
-        .boxed();
+        let point_source = MockFeatureCollectionSource::single(points.clone()).boxed();
 
         let polygon = MultiPolygon::new(vec![vec![vec![
             (0.0, 0.0).into(),
@@ -657,16 +637,13 @@ mod tests {
             (0.0, 0.0).into(),
         ]]])?;
 
-        let polygon_source = MockFeatureCollectionSource {
-            params: MockFeatureCollectionSourceParams {
-                collection: MultiPolygonCollection::from_data(
-                    vec![polygon.clone(), polygon],
-                    vec![TimeInterval::new(0, 1)?, TimeInterval::new(1, 2)?],
-                    Default::default(),
-                )?,
-            },
-        }
-        .boxed();
+        let polygon_source =
+            MockFeatureCollectionSource::single(MultiPolygonCollection::from_data(
+                vec![polygon.clone(), polygon],
+                vec![TimeInterval::new(0, 1)?, TimeInterval::new(1, 2)?],
+                Default::default(),
+            )?)
+            .boxed();
 
         let operator = PointInPolygonFilter {
             vector_sources: vec![point_source, polygon_source],
@@ -701,75 +678,75 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn time() -> Result<()> {
-        let points1 = MultiPointCollection::from_data(
-            MultiPoint::many(vec![(1.0, 1.1), (2.0, 2.1), (3.0, 3.1)]).unwrap(),
-            vec![Default::default(); 1],
-            Default::default(),
-        )?;
-        let points2 = MultiPointCollection::from_data(
-            MultiPoint::many(vec![(1.0, 1.1), (2.0, 2.1), (3.0, 3.1)]).unwrap(),
-            vec![Default::default(); 1],
-            Default::default(),
-        )?;
-
-        let point_source = MockFeatureCollectionSource {
-            params: MockFeatureCollectionSourceParams {
-                collection: points.clone(),
-            },
-        }
-        .boxed();
-
-        let polygon = MultiPolygon::new(vec![vec![vec![
-            (0.0, 0.0).into(),
-            (10.0, 0.0).into(),
-            (10.0, 10.0).into(),
-            (0.0, 10.0).into(),
-            (0.0, 0.0).into(),
-        ]]])?;
-
-        let polygon_source = MockFeatureCollectionSource {
-            params: MockFeatureCollectionSourceParams {
-                collection: MultiPolygonCollection::from_data(
-                    vec![polygon.clone(), polygon],
-                    vec![TimeInterval::new(0, 1)?, TimeInterval::new(1, 2)?],
-                    Default::default(),
-                )?,
-            },
-        }
-        .boxed();
-
-        let operator = PointInPolygonFilter {
-            vector_sources: vec![point_source, polygon_source],
-            raster_sources: vec![],
-            params: (),
-        }
-        .boxed()
-        .initialize(&ExecutionContext::mock_empty())?;
-
-        let query_processor = operator.query_processor()?.multi_point().unwrap();
-
-        let query_rectangle = QueryRectangle {
-            bbox: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-        };
-        let ctx = QueryContext {
-            chunk_byte_size: usize::MAX,
-        };
-
-        let query = query_processor.query(query_rectangle, ctx);
-
-        let result = query
-            .map(Result::unwrap)
-            .collect::<Vec<MultiPointCollection>>()
-            .await;
-
-        assert_eq!(result.len(), 1);
-
-        assert_eq!(result[0], points.filter(vec![true, false, true])?);
-
-        Ok(())
-    }
+    // #[tokio::test]
+    // async fn time() -> Result<()> {
+    //     let points1 = MultiPointCollection::from_data(
+    //         MultiPoint::many(vec![(1.0, 1.1), (2.0, 2.1), (3.0, 3.1)]).unwrap(),
+    //         vec![Default::default(); 1],
+    //         Default::default(),
+    //     )?;
+    //     let points2 = MultiPointCollection::from_data(
+    //         MultiPoint::many(vec![(1.0, 1.1), (2.0, 2.1), (3.0, 3.1)]).unwrap(),
+    //         vec![Default::default(); 1],
+    //         Default::default(),
+    //     )?;
+    //
+    //     let point_source = MockFeatureCollectionSource {
+    //         params: MockFeatureCollectionSourceParams {
+    //             collections: points.clone(),
+    //         },
+    //     }
+    //     .boxed();
+    //
+    //     let polygon = MultiPolygon::new(vec![vec![vec![
+    //         (0.0, 0.0).into(),
+    //         (10.0, 0.0).into(),
+    //         (10.0, 10.0).into(),
+    //         (0.0, 10.0).into(),
+    //         (0.0, 0.0).into(),
+    //     ]]])?;
+    //
+    //     let polygon_source = MockFeatureCollectionSource {
+    //         params: MockFeatureCollectionSourceParams {
+    //             collections: MultiPolygonCollection::from_data(
+    //                 vec![polygon.clone(), polygon],
+    //                 vec![TimeInterval::new(0, 1)?, TimeInterval::new(1, 2)?],
+    //                 Default::default(),
+    //             )?,
+    //         },
+    //     }
+    //     .boxed();
+    //
+    //     let operator = PointInPolygonFilter {
+    //         vector_sources: vec![point_source, polygon_source],
+    //         raster_sources: vec![],
+    //         params: (),
+    //     }
+    //     .boxed()
+    //     .initialize(&ExecutionContext::mock_empty())?;
+    //
+    //     let query_processor = operator.query_processor()?.multi_point().unwrap();
+    //
+    //     let query_rectangle = QueryRectangle {
+    //         bbox: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
+    //         time_interval: TimeInterval::default(),
+    //         spatial_resolution: SpatialResolution::zero_point_one(),
+    //     };
+    //     let ctx = QueryContext {
+    //         chunk_byte_size: usize::MAX,
+    //     };
+    //
+    //     let query = query_processor.query(query_rectangle, ctx);
+    //
+    //     let result = query
+    //         .map(Result::unwrap)
+    //         .collect::<Vec<MultiPointCollection>>()
+    //         .await;
+    //
+    //     assert_eq!(result.len(), 1);
+    //
+    //     assert_eq!(result[0], points.filter(vec![true, false, true])?);
+    //
+    //     Ok(())
+    // }
 }
