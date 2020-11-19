@@ -2,7 +2,7 @@ use crate::util::Result;
 use futures::ready;
 use futures::stream::FusedStream;
 use futures::Stream;
-use geoengine_datatypes::collections::FeatureCollection;
+use geoengine_datatypes::collections::{FeatureCollection, FeatureCollectionOperations};
 use geoengine_datatypes::primitives::Geometry;
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use pin_project::pin_project;

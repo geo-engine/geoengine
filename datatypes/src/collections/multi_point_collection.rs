@@ -1,8 +1,8 @@
 use arrow::array::{Array, FixedSizeListArray, Float64Array, ListArray};
 
 use crate::collections::{
-    FeatureCollection, FeatureCollectionRowBuilder, GeoFeatureCollectionRowBuilder,
-    IntoGeometryIterator,
+    FeatureCollection, FeatureCollectionOperations, FeatureCollectionRowBuilder,
+    GeoFeatureCollectionRowBuilder, IntoGeometryIterator,
 };
 use crate::primitives::{Coordinate2D, MultiPoint, MultiPointRef};
 use crate::util::arrow::downcast_array;

@@ -436,7 +436,9 @@ impl RawFeatureCollectionBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::collections::{BuilderProvider, DataCollection, MultiPointCollection};
+    use crate::collections::{
+        BuilderProvider, DataCollection, FeatureCollectionOperations, MultiPointCollection,
+    };
     use crate::primitives::{DataRef, FeatureDataRef};
     use arrow::buffer::MutableBuffer;
     use arrow::datatypes::{Float64Type, ToByteSlice};

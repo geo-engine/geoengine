@@ -7,7 +7,8 @@ use arrow::buffer::MutableBuffer;
 use arrow::datatypes::{Float64Type, Int64Type};
 use arrow::util::bit_util;
 use geoengine_datatypes::collections::{
-    RawFeatureCollectionBuilder, TypedFeatureCollection, VectorDataType,
+    FeatureCollectionOperations, RawFeatureCollectionBuilder, TypedFeatureCollection,
+    VectorDataType,
 };
 use geoengine_datatypes::primitives::{Coordinate2D, FeatureDataRef, FeatureDataType};
 use geoengine_datatypes::raster::Raster;

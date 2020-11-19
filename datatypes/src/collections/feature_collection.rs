@@ -59,6 +59,146 @@ impl<CollectionType> FeatureCollection<CollectionType> {
     }
 }
 
+/// A trait for common feature collection operations
+pub trait FeatureCollectionOperations {
+    /// Returns the number of features
+    fn len(&self) -> usize;
+
+    /// Returns whether the feature collection contains no features
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Returns whether this feature collection is simple, i.e., contains no multi-types
+    fn is_simple(&self) -> bool;
+
+    /// Retrieves the column's `FeatureDataType`
+    ///
+    /// # Errors
+    ///
+    /// This method fails if there is no `column_name` with that name
+    ///
+    fn column_type(&self, column_name: &str) -> Result<FeatureDataType>;
+
+    /// Retrieve column data
+    ///
+    /// # Errors
+    ///
+    /// This method fails if there is no `column_name` with that name
+    ///
+    fn data(&self, column_name: &str) -> Result<FeatureDataRef>;
+
+    /// Retrieve time intervals
+    fn time_intervals(&self) -> &[TimeInterval];
+}
+
+impl<CollectionType> FeatureCollectionOperations for FeatureCollection<CollectionType>
+where
+    CollectionType: Geometry + ArrowTyped,
+{
+    fn len(&self) -> usize {
+        self.table.len()
+    }
+
+    fn is_simple(&self) -> bool {
+        if !CollectionType::IS_GEOMETRY {
+            return true; // a `FeatureCollection` without geometry column is simple by default
+        }
+
+        let array_ref = self
+            .table
+            .column_by_name(Self::GEOMETRY_COLUMN_NAME)
+            .expect("must be there for collections with geometry");
+
+        let features_array: &ListArray = downcast_array(array_ref);
+
+        // TODO: assumes multi features, could be moved to `Geometry`
+        let multi_geometry_array_ref = features_array.values();
+        let multi_geometry_array: &ListArray = downcast_array(&multi_geometry_array_ref);
+
+        multi_geometry_array.len() == features_array.len()
+    }
+
+    fn column_type(&self, column_name: &str) -> Result<FeatureDataType> {
+        ensure!(
+            !Self::is_reserved_name(column_name),
+            error::CannotAccessReservedColumn {
+                name: column_name.to_string(),
+            }
+        );
+
+        if let Some(feature_data_type) = self.types.get(column_name) {
+            Ok(*feature_data_type)
+        } else {
+            Err(error::FeatureCollectionError::ColumnDoesNotExist {
+                name: column_name.to_string(),
+            }
+            .into())
+        }
+    }
+
+    fn data(&self, column_name: &str) -> Result<FeatureDataRef> {
+        ensure!(
+            !Self::is_reserved_name(column_name),
+            error::CannotAccessReservedColumn {
+                name: column_name.to_string(),
+            }
+        );
+
+        let column = self.table.column_by_name(column_name).ok_or_else(|| {
+            FeatureCollectionError::ColumnDoesNotExist {
+                name: column_name.to_string(),
+            }
+        })?;
+
+        Ok(
+            match self.types.get(column_name).expect("previously checked") {
+                FeatureDataType::Number => {
+                    let array: &arrow::array::Float64Array = downcast_array(column);
+                    NumberDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
+                }
+                FeatureDataType::Text => {
+                    let array: &arrow::array::StringArray = downcast_array(column);
+                    TextDataRef::new(
+                        array.value_data(),
+                        array.value_offsets(),
+                        array.data_ref().null_bitmap(),
+                    )
+                    .into()
+                }
+                FeatureDataType::Decimal => {
+                    let array: &arrow::array::Int64Array = downcast_array(column);
+                    DecimalDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
+                }
+                FeatureDataType::Categorical => {
+                    let array: &arrow::array::UInt8Array = downcast_array(column);
+                    CategoricalDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
+                }
+            },
+        )
+    }
+
+    fn time_intervals(&self) -> &[TimeInterval] {
+        let features_ref = self
+            .table
+            .column_by_name(Self::TIME_COLUMN_NAME)
+            .expect("Time interval column must exist");
+        let features: &<TimeInterval as ArrowTyped>::ArrowArray = downcast_array(features_ref);
+
+        let number_of_time_intervals = self.len();
+
+        let timestamps_ref = features.values();
+        let timestamps: &arrow::array::Int64Array = downcast_array(&timestamps_ref);
+
+        unsafe {
+            std::slice::from_raw_parts(
+                timestamps.raw_values() as *const crate::primitives::TimeInterval,
+                number_of_time_intervals,
+            )
+        }
+    }
+}
+
 impl<CollectionType> FeatureCollection<CollectionType>
 where
     CollectionType: Geometry + ArrowTyped,
@@ -175,132 +315,9 @@ where
         ))
     }
 
-    /// Returns the number of features
-    pub fn len(&self) -> usize {
-        self.table.len()
-    }
-
-    /// Returns whether the feature collection contains no features
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
-    /// Returns whether this feature collection is simple, i.e., contains no multi-types
-    pub fn is_simple(&self) -> bool {
-        if !CollectionType::IS_GEOMETRY {
-            return true; // a `FeatureCollection` without geometry column is simple by default
-        }
-
-        let array_ref = self
-            .table
-            .column_by_name(Self::GEOMETRY_COLUMN_NAME)
-            .expect("must be there for collections with geometry");
-
-        let features_array: &ListArray = downcast_array(array_ref);
-
-        // TODO: assumes multi features, could be moved to `Geometry`
-        let multi_geometry_array_ref = features_array.values();
-        let multi_geometry_array: &ListArray = downcast_array(&multi_geometry_array_ref);
-
-        multi_geometry_array.len() == features_array.len()
-    }
-
     /// Checks for name conflicts with reserved names
     pub(super) fn is_reserved_name(name: &str) -> bool {
         name == Self::GEOMETRY_COLUMN_NAME || name == Self::TIME_COLUMN_NAME
-    }
-
-    /// Retrieves the column's `FeatureDataType`
-    ///
-    /// # Errors
-    ///
-    /// This method fails if there is no `column_name` with that name
-    ///
-    #[allow(clippy::option_if_let_else)]
-    pub fn column_type(&self, column_name: &str) -> Result<FeatureDataType> {
-        ensure!(
-            !Self::is_reserved_name(column_name),
-            error::CannotAccessReservedColumn {
-                name: column_name.to_string(),
-            }
-        );
-
-        if let Some(feature_data_type) = self.types.get(column_name) {
-            Ok(*feature_data_type)
-        } else {
-            Err(error::FeatureCollectionError::ColumnDoesNotExist {
-                name: column_name.to_string(),
-            }
-            .into())
-        }
-    }
-
-    /// Retrieve column data
-    ///
-    /// # Errors
-    ///
-    /// This method fails if there is no `column_name` with that name
-    ///
-    pub fn data(&self, column_name: &str) -> Result<FeatureDataRef> {
-        ensure!(
-            !Self::is_reserved_name(column_name),
-            error::CannotAccessReservedColumn {
-                name: column_name.to_string(),
-            }
-        );
-
-        let column = self.table.column_by_name(column_name).ok_or_else(|| {
-            FeatureCollectionError::ColumnDoesNotExist {
-                name: column_name.to_string(),
-            }
-        })?;
-
-        Ok(
-            match self.types.get(column_name).expect("previously checked") {
-                FeatureDataType::Number => {
-                    let array: &arrow::array::Float64Array = downcast_array(column);
-                    NumberDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
-                }
-                FeatureDataType::Text => {
-                    let array: &arrow::array::StringArray = downcast_array(column);
-                    TextDataRef::new(
-                        array.value_data(),
-                        array.value_offsets(),
-                        array.data_ref().null_bitmap(),
-                    )
-                    .into()
-                }
-                FeatureDataType::Decimal => {
-                    let array: &arrow::array::Int64Array = downcast_array(column);
-                    DecimalDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
-                }
-                FeatureDataType::Categorical => {
-                    let array: &arrow::array::UInt8Array = downcast_array(column);
-                    CategoricalDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
-                }
-            },
-        )
-    }
-
-    /// Retrieve time intervals
-    pub fn time_intervals(&self) -> &[TimeInterval] {
-        let features_ref = self
-            .table
-            .column_by_name(Self::TIME_COLUMN_NAME)
-            .expect("Time interval column must exist");
-        let features: &<TimeInterval as ArrowTyped>::ArrowArray = downcast_array(features_ref);
-
-        let number_of_time_intervals = self.len();
-
-        let timestamps_ref = features.values();
-        let timestamps: &arrow::array::Int64Array = downcast_array(&timestamps_ref);
-
-        unsafe {
-            std::slice::from_raw_parts(
-                timestamps.raw_values() as *const crate::primitives::TimeInterval,
-                number_of_time_intervals,
-            )
-        }
     }
 
     /// Creates a copy of the collection with an additional column

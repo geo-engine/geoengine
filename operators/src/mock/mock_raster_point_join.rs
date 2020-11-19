@@ -4,7 +4,7 @@ use crate::engine::{
 };
 use crate::util::Result;
 use futures::StreamExt;
-use geoengine_datatypes::collections::VectorDataType;
+use geoengine_datatypes::collections::{FeatureCollectionOperations, VectorDataType};
 use geoengine_datatypes::raster::Pixel;
 use geoengine_datatypes::{
     collections::MultiPointCollection,

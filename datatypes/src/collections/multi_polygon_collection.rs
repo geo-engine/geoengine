@@ -1,6 +1,6 @@
 use crate::collections::{
-    FeatureCollection, FeatureCollectionRowBuilder, GeoFeatureCollectionRowBuilder,
-    IntoGeometryIterator,
+    FeatureCollection, FeatureCollectionOperations, FeatureCollectionRowBuilder,
+    GeoFeatureCollectionRowBuilder, IntoGeometryIterator,
 };
 use crate::primitives::{Coordinate2D, MultiPolygon, MultiPolygonAccess, MultiPolygonRef};
 use crate::util::arrow::downcast_array;
