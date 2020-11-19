@@ -611,9 +611,7 @@ mod tests {
             .collect::<Vec<MultiPointCollection>>()
             .await;
 
-        assert_eq!(result.len(), 1);
-
-        assert_eq!(result[0], MultiPointCollection::empty());
+        assert_eq!(result.len(), 0);
 
         Ok(())
     }
