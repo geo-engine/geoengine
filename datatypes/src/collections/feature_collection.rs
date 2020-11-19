@@ -208,7 +208,7 @@ where
     /// # Examples
     ///
     /// ```rust
-    /// use geoengine_datatypes::collections::{MultiPointCollection, FeatureCollection};
+    /// use geoengine_datatypes::collections::{MultiPointCollection, FeatureCollection, FeatureCollectionOperations};
     ///
     /// let pc = MultiPointCollection::empty();
     ///
@@ -224,7 +224,7 @@ where
     /// # Examples
     ///
     /// ```rust
-    /// use geoengine_datatypes::collections::{MultiPointCollection, FeatureCollection};
+    /// use geoengine_datatypes::collections::{MultiPointCollection, FeatureCollection, FeatureCollectionOperations};
     /// use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval, FeatureData, MultiPoint};
     /// use std::collections::HashMap;
     ///
