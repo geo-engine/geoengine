@@ -118,14 +118,10 @@ impl PointInPolygonFilterProcessor {
 
         let coordinates = points.coordinates();
 
-        for ((&coordinates_start_index, &coordinates_end_index), time_interval) in
-            two_tuple_windows(points.multipoint_offsets().iter()).zip(points.time_intervals())
+        for ((coordinates_start_index, coordinates_end_index), time_interval) in
+            two_tuple_windows(points.multipoint_offsets().iter().map(|&c| c as usize))
+                .zip(points.time_intervals())
         {
-            let (coordinates_start_index, coordinates_end_index) = (
-                coordinates_start_index as usize,
-                coordinates_end_index as usize,
-            );
-
             let is_multi_point_in_polygon_collection = coordinates
                 [coordinates_start_index..coordinates_end_index]
                 .iter()
@@ -201,10 +197,10 @@ impl<'p> PointInPolygonTester<'p> {
     }
 
     fn precalculate_polygons(&mut self) {
-        for (&ring_start_index, &ring_end_index) in
-            two_tuple_windows(self.polygons.ring_offsets().iter())
+        for (ring_start_index, ring_end_index) in
+            two_tuple_windows(self.polygons.ring_offsets().iter().map(|&c| c as usize))
         {
-            self.precalculate_ring(ring_start_index as usize, ring_end_index as usize);
+            self.precalculate_ring(ring_start_index, ring_end_index);
         }
     }
 
@@ -275,62 +271,62 @@ impl<'p> PointInPolygonTester<'p> {
 
         let time_intervals = self.polygons.time_intervals();
 
-        two_tuple_windows(self.polygons.multi_polygon_offsets().iter())
-            .zip(time_intervals)
-            .map(
-                move |(
-                    (&multi_polygon_start_index, &multi_polygon_end_index),
-                    multi_polygon_time_interval,
-                )| {
-                    if !multi_polygon_time_interval.intersects(time_interval) {
-                        return false;
-                    }
+        two_tuple_windows(
+            self.polygons
+                .multi_polygon_offsets()
+                .iter()
+                .map(|&c| c as usize),
+        )
+        .zip(time_intervals)
+        .map(
+            move |(
+                (multi_polygon_start_index, multi_polygon_end_index),
+                multi_polygon_time_interval,
+            )| {
+                if !multi_polygon_time_interval.intersects(time_interval) {
+                    return false;
+                }
 
-                    let (multi_polygon_start_index, multi_polygon_end_index) = (
-                        multi_polygon_start_index as usize,
-                        multi_polygon_end_index as usize,
-                    );
+                let mut is_coordinate_in_multi_polygon = false;
 
-                    let mut is_coordinate_in_multi_polygon = false;
+                for (polygon_start_index, polygon_end_index) in two_tuple_windows(
+                    polygon_offsets[multi_polygon_start_index..=multi_polygon_end_index]
+                        .iter()
+                        .map(|&c| c as usize),
+                ) {
+                    let mut is_coordinate_in_polygon = true;
 
-                    for (&polygon_start_index, &polygon_end_index) in two_tuple_windows(
-                        polygon_offsets[multi_polygon_start_index..=multi_polygon_end_index].iter(),
-                    ) {
-                        let polygon_start_index = polygon_start_index as usize;
-                        let polygon_end_index = polygon_end_index as usize;
+                    for (ring_number, (ring_start_index, ring_end_index)) in two_tuple_windows(
+                        ring_offsets[polygon_start_index..=polygon_end_index]
+                            .iter()
+                            .map(|&c| c as usize),
+                    )
+                    .enumerate()
+                    {
+                        let is_coordinate_in_ring = self.is_coordinate_in_ring(
+                            coordinate,
+                            ring_start_index,
+                            ring_end_index,
+                        );
 
-                        let mut is_coordinate_in_polygon = true;
-
-                        for (ring_number, (&ring_start_index, &ring_end_index)) in
-                            two_tuple_windows(
-                                ring_offsets[polygon_start_index..=polygon_end_index].iter(),
-                            )
-                            .enumerate()
+                        if (ring_number == 0 && !is_coordinate_in_ring)
+                            || (ring_number > 0 && is_coordinate_in_ring)
                         {
-                            let is_coordinate_in_ring = self.is_coordinate_in_ring(
-                                coordinate,
-                                ring_start_index as usize,
-                                ring_end_index as usize,
-                            );
-
-                            if (ring_number == 0 && !is_coordinate_in_ring)
-                                || (ring_number > 0 && is_coordinate_in_ring)
-                            {
-                                // coordinate is either "not in outer ring" or "in inner ring"
-                                is_coordinate_in_polygon = false;
-                                break;
-                            }
-                        }
-
-                        if is_coordinate_in_polygon {
-                            is_coordinate_in_multi_polygon = true;
+                            // coordinate is either "not in outer ring" or "in inner ring"
+                            is_coordinate_in_polygon = false;
                             break;
                         }
                     }
 
-                    is_coordinate_in_multi_polygon
-                },
-            )
+                    if is_coordinate_in_polygon {
+                        is_coordinate_in_multi_polygon = true;
+                        break;
+                    }
+                }
+
+                is_coordinate_in_multi_polygon
+            },
+        )
     }
 
     /// Is the coordinate contained in any polygon of the collection?
