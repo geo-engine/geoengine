@@ -125,7 +125,7 @@ impl PointInPolygonFilterProcessor {
             let is_multi_point_in_polygon_collection = coordinates
                 [coordinates_start_index..coordinates_end_index]
                 .iter()
-                .any(|coordinate| tester.is_coordinate_in_collection(coordinate, time_interval));
+                .any(|coordinate| tester.is_coordinate_in_any_polygon(coordinate, time_interval));
 
             filter.push(is_multi_point_in_polygon_collection);
         }
@@ -337,7 +337,7 @@ impl<'p> PointInPolygonTester<'p> {
     ///
     /// TODO: check boundary conditions separately
     ///
-    pub fn is_coordinate_in_collection(
+    pub fn is_coordinate_in_any_polygon(
         &self,
         coordinate: &Coordinate2D,
         time_interval: &'p TimeInterval,
@@ -431,9 +431,11 @@ mod tests {
         assert!(tester.is_coordinate_in_ring(&Coordinate2D::new(4., 2.), 5, 10));
         assert!(tester.is_coordinate_in_ring(&Coordinate2D::new(4., 2.), 10, 19));
 
-        assert!(tester.is_coordinate_in_collection(&Coordinate2D::new(4., 5.), &Default::default()));
         assert!(
-            !tester.is_coordinate_in_collection(&Coordinate2D::new(4., 2.), &Default::default()),
+            tester.is_coordinate_in_any_polygon(&Coordinate2D::new(4., 5.), &Default::default())
+        );
+        assert!(
+            !tester.is_coordinate_in_any_polygon(&Coordinate2D::new(4., 2.), &Default::default()),
         );
 
         assert_eq!(
@@ -472,42 +474,38 @@ mod tests {
 
         // the algorithm is not stable for boundary cases directly on the edges
 
-        assert!(tester.is_coordinate_in_collection(
+        assert!(tester.is_coordinate_in_any_polygon(
             &Coordinate2D::new(0.000_001, 0.000_001),
             &Default::default()
         ),);
         assert!(tester
-            .is_coordinate_in_collection(&Coordinate2D::new(0.000_001, 0.1), &Default::default()),);
+            .is_coordinate_in_any_polygon(&Coordinate2D::new(0.000_001, 0.1), &Default::default()),);
         assert!(tester
-            .is_coordinate_in_collection(&Coordinate2D::new(0.1, 0.000_001), &Default::default()),);
+            .is_coordinate_in_any_polygon(&Coordinate2D::new(0.1, 0.000_001), &Default::default()),);
 
         assert!(
-            tester.is_coordinate_in_collection(&Coordinate2D::new(9.9, 9.9), &Default::default()),
+            tester.is_coordinate_in_any_polygon(&Coordinate2D::new(9.9, 9.9), &Default::default()),
         );
         assert!(
-            tester.is_coordinate_in_collection(&Coordinate2D::new(10.0, 9.9), &Default::default()),
+            tester.is_coordinate_in_any_polygon(&Coordinate2D::new(10.0, 9.9), &Default::default()),
         );
         assert!(
-            tester.is_coordinate_in_collection(&Coordinate2D::new(9.9, 10.0), &Default::default()),
-        );
-
-        assert!(!tester
-            .is_coordinate_in_collection(&Coordinate2D::new(-0.1, -0.1), &Default::default()),);
-        assert!(
-            !tester.is_coordinate_in_collection(&Coordinate2D::new(0.0, -0.1), &Default::default()),
-        );
-        assert!(
-            !tester.is_coordinate_in_collection(&Coordinate2D::new(-0.1, 0.0), &Default::default()),
+            tester.is_coordinate_in_any_polygon(&Coordinate2D::new(9.9, 10.0), &Default::default()),
         );
 
         assert!(!tester
-            .is_coordinate_in_collection(&Coordinate2D::new(10.1, 10.1), &Default::default()),);
-        assert!(
-            !tester.is_coordinate_in_collection(&Coordinate2D::new(10.1, 9.9), &Default::default()),
-        );
-        assert!(
-            !tester.is_coordinate_in_collection(&Coordinate2D::new(9.9, 10.1), &Default::default()),
-        );
+            .is_coordinate_in_any_polygon(&Coordinate2D::new(-0.1, -0.1), &Default::default()),);
+        assert!(!tester
+            .is_coordinate_in_any_polygon(&Coordinate2D::new(0.0, -0.1), &Default::default()),);
+        assert!(!tester
+            .is_coordinate_in_any_polygon(&Coordinate2D::new(-0.1, 0.0), &Default::default()),);
+
+        assert!(!tester
+            .is_coordinate_in_any_polygon(&Coordinate2D::new(10.1, 10.1), &Default::default()),);
+        assert!(!tester
+            .is_coordinate_in_any_polygon(&Coordinate2D::new(10.1, 9.9), &Default::default()),);
+        assert!(!tester
+            .is_coordinate_in_any_polygon(&Coordinate2D::new(9.9, 10.1), &Default::default()),);
     }
 
     #[tokio::test]
