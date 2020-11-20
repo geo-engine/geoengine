@@ -79,21 +79,15 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
     for InitializedPointInPolygonFilter
 {
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
-        let point_processor = if let TypedVectorQueryProcessor::MultiPoint(point_processor) =
-            self.vector_sources[0].query_processor()?
-        {
-            point_processor
-        } else {
-            unreachable!("checked in `PointInPolygonFilter` constructor");
-        };
+        let point_processor = self.vector_sources[0]
+            .query_processor()?
+            .multi_point()
+            .expect("checked in `PointInPolygonFilter` constructor");
 
-        let polygon_processor = if let TypedVectorQueryProcessor::MultiPolygon(polygon_processor) =
-            self.vector_sources[1].query_processor()?
-        {
-            polygon_processor
-        } else {
-            unreachable!("checked in `PointInPolygonFilter` constructor");
-        };
+        let polygon_processor = self.vector_sources[1]
+            .query_processor()?
+            .multi_polygon()
+            .expect("checked in `PointInPolygonFilter` constructor");
 
         Ok(TypedVectorQueryProcessor::MultiPoint(
             PointInPolygonFilterProcessor::new(point_processor, polygon_processor).boxed(),
