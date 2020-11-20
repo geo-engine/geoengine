@@ -16,7 +16,6 @@ use crate::engine::{
 use crate::error;
 use crate::util::Result;
 use arrow::array::BooleanArray;
-use itertools::Itertools;
 
 pub type PointInPolygonFilter = Operator<()>;
 
@@ -119,11 +118,8 @@ impl PointInPolygonFilterProcessor {
 
         let coordinates = points.coordinates();
 
-        for ((&coordinates_start_index, &coordinates_end_index), time_interval) in points
-            .multipoint_offsets()
-            .iter()
-            .tuple_windows()
-            .zip(points.time_intervals())
+        for ((&coordinates_start_index, &coordinates_end_index), time_interval) in
+            two_tuple_windows(points.multipoint_offsets().iter()).zip(points.time_intervals())
         {
             let (coordinates_start_index, coordinates_end_index) = (
                 coordinates_start_index as usize,
@@ -206,7 +202,7 @@ impl<'p> PointInPolygonTester<'p> {
 
     fn precalculate_polygons(&mut self) {
         for (&ring_start_index, &ring_end_index) in
-            self.polygons.ring_offsets().iter().tuple_windows()
+            two_tuple_windows(self.polygons.ring_offsets().iter())
         {
             self.precalculate_ring(ring_start_index as usize, ring_end_index as usize);
         }
@@ -279,10 +275,7 @@ impl<'p> PointInPolygonTester<'p> {
 
         let time_intervals = self.polygons.time_intervals();
 
-        self.polygons
-            .multi_polygon_offsets()
-            .iter()
-            .tuple_windows()
+        two_tuple_windows(self.polygons.multi_polygon_offsets().iter())
             .zip(time_intervals)
             .map(
                 move |(
@@ -300,20 +293,18 @@ impl<'p> PointInPolygonTester<'p> {
 
                     let mut is_coordinate_in_multi_polygon = false;
 
-                    for (&polygon_start_index, &polygon_end_index) in polygon_offsets
-                        [multi_polygon_start_index..=multi_polygon_end_index]
-                        .iter()
-                        .tuple_windows()
-                    {
+                    for (&polygon_start_index, &polygon_end_index) in two_tuple_windows(
+                        polygon_offsets[multi_polygon_start_index..=multi_polygon_end_index].iter(),
+                    ) {
                         let polygon_start_index = polygon_start_index as usize;
                         let polygon_end_index = polygon_end_index as usize;
 
                         let mut is_coordinate_in_polygon = true;
 
-                        for (ring_number, (&ring_start_index, &ring_end_index)) in ring_offsets
-                            [polygon_start_index..=polygon_end_index]
-                            .iter()
-                            .tuple_windows()
+                        for (ring_number, (&ring_start_index, &ring_end_index)) in
+                            two_tuple_windows(
+                                ring_offsets[polygon_start_index..=polygon_end_index].iter(),
+                            )
                             .enumerate()
                         {
                             let is_coordinate_in_ring = self.is_coordinate_in_ring(
@@ -368,6 +359,22 @@ impl<'p> PointInPolygonTester<'p> {
         self.coordinate_in_multi_polygon_iter(coordinate, time_interval)
             .collect()
     }
+}
+
+/// Loop through an iterator by yielding the current and previous tuple. Starts with the
+/// (first, second) item, so the iterator must have more than one item to create an output.
+fn two_tuple_windows<I, T>(mut iter: I) -> impl Iterator<Item = (T, T)>
+where
+    I: Iterator<Item = T>,
+    T: Copy,
+{
+    let mut last = iter.next();
+
+    iter.map(move |item| {
+        let output = (last.unwrap(), item);
+        last = Some(item);
+        output
+    })
 }
 
 #[cfg(test)]
