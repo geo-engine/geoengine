@@ -2,7 +2,6 @@ use crate::collections::{
     DataCollection, MultiLineStringCollection, MultiPointCollection, MultiPolygonCollection,
 };
 use crate::primitives::{Coordinate2D, TimeInterval};
-use serde::export::Formatter;
 use serde::{Deserialize, Serialize};
 
 /// An enum that contains all possible vector data types
@@ -16,13 +15,8 @@ pub enum VectorDataType {
 }
 
 impl std::fmt::Display for VectorDataType {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            VectorDataType::Data => write!(f, "Data"),
-            VectorDataType::MultiPoint => write!(f, "MultiPoint"),
-            VectorDataType::MultiLineString => write!(f, "MultiLineString"),
-            VectorDataType::MultiPolygon => write!(f, "MultiPolygon"),
-        }
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{:?}", self)
     }
 }
 
