@@ -51,13 +51,46 @@
         }
     };
 
-    fetch('/workflow/register', {
+    const user_reg = {
+        "email": "foo@bar.de",
+        "password": "secret123",
+        "real_name": "Foo Bar"
+    };
+
+    const user_login = {
+        "email": "foo@bar.de",
+        "password": "secret123",
+    };
+
+    fetch('/user', {
         method: 'POST',
-        body: JSON.stringify(workflow),
+        body: JSON.stringify(user_reg),
         headers: {
             'Content-type': 'application/json; charset=UTF-8'
         }
+    }).then(response => {
+        if (!response.ok) {
+            response.json().then(console.log);
+        }
+        return fetch('/login', {
+            method: 'POST',
+            body: JSON.stringify(user_login),
+            headers: {
+                'Content-type': 'application/json; charset=UTF-8'
+            }
+        })
     }).then(
+        response => response.json()
+    ).then(json =>
+        fetch('/workflow', {
+            method: 'POST',
+            body: JSON.stringify(workflow),
+            headers: {
+                'Content-type': 'application/json; charset=UTF-8',
+                'Authorization': 'Bearer ' + json.id
+            }
+        })
+    ).then(
         response => response.json()
     ).then(json => {
         const workflow_id = json.id;

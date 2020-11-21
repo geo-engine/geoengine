@@ -10,7 +10,7 @@ edition = "2018"
 
 [dependencies]
 # simd compiles with nightly only, allow default features to build with arrow-flight once it is possible
-arrow = {version = "1.0", features = ["simd"] }
+arrow = {version = "2.0", features = ["simd"] }
 chrono = "0.4"
 float-cmp = "0.6"
 geo = "0.15"
@@ -24,6 +24,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 snafu = "0.6"
 vega_lite_3 = { version = "0.2.4", features = ["ndarray", "show_vega"]} # upgrade to 4 if published
+postgres-types = { version = "0.1", features = ["derive", "with-chrono-0_4"] }
 
 [dev-dependencies]
 criterion = "0.3"

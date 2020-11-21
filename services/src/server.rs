@@ -77,6 +77,8 @@ where
         .or(handlers::users::register_user_handler(ctx.clone()))
         .or(handlers::users::login_handler(ctx.clone()))
         .or(handlers::users::logout_handler(ctx.clone()))
+        .or(handlers::users::session_project_handler(ctx.clone()))
+        .or(handlers::users::session_view_handler(ctx.clone()))
         .or(handlers::projects::create_project_handler(ctx.clone()))
         .or(handlers::projects::list_projects_handler(ctx.clone()))
         .or(handlers::projects::update_project_handler(ctx.clone()))
@@ -127,5 +129,7 @@ pub async fn interrupt_handler(shutdown_tx: Sender<()>, callback: Option<fn()>) 
         callback();
     }
 
-    shutdown_tx.send(()).map_err(|_| Error::TokioChannelSend)
+    shutdown_tx
+        .send(())
+        .map_err(|_error| Error::TokioChannelSend)
 }

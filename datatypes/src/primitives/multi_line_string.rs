@@ -1,6 +1,6 @@
 use std::convert::TryFrom;
 
-use arrow::array::{ArrayBuilder, BooleanArray};
+use arrow::array::{ArrayBuilder, BooleanArray, PrimitiveArrayOps};
 use arrow::error::ArrowError;
 use geo::algorithm::intersects::Intersects;
 use serde::{Deserialize, Serialize};

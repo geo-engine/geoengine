@@ -2,20 +2,32 @@ use uuid::Uuid;
 use warp::reply::Reply;
 use warp::Filter;
 
-use crate::handlers::Context;
-use crate::util::identifiers::Identifier;
+use crate::handlers::{authenticate, Context};
+use crate::util::identifiers::IdResponse;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 
-// TODO: require authorized access
 pub fn register_workflow_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::post()
-        .and(warp::path!("workflow" / "register"))
+        .and(warp::path!("workflow"))
+        .and(authenticate(ctx))
         .and(warp::body::json())
-        .and(warp::any().map(move || ctx.clone()))
         .and_then(register_workflow)
+}
+
+// TODO: move into handler once async closures are available?
+async fn register_workflow<C: Context>(
+    ctx: C,
+    workflow: Workflow,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let id = ctx
+        .workflow_registry_ref_mut()
+        .await
+        .register(workflow)
+        .await?;
+    Ok(warp::reply::json(&IdResponse::from_id(id)))
 }
 
 pub fn load_workflow_handler<C: Context>(
@@ -23,28 +35,16 @@ pub fn load_workflow_handler<C: Context>(
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::get()
         .and(warp::path!("workflow" / Uuid))
-        .and(warp::any().map(move || ctx.clone()))
+        .and(authenticate(ctx))
         .and_then(load_workflow)
 }
 
 // TODO: move into handler once async closures are available?
-async fn register_workflow<C: Context>(
-    workflow: Workflow,
-    ctx: C,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    let id = ctx
-        .workflow_registry_ref_mut()
-        .await
-        .register(workflow)
-        .await?;
-    Ok(warp::reply::json(&id))
-}
-
 async fn load_workflow<C: Context>(id: Uuid, ctx: C) -> Result<impl warp::Reply, warp::Rejection> {
     let wf = ctx
         .workflow_registry_ref()
         .await
-        .load(&WorkflowId::from_uuid(id))
+        .load(&WorkflowId(id))
         .await?;
     Ok(warp::reply::json(&wf).into_response())
 }
@@ -52,6 +52,10 @@ async fn load_workflow<C: Context>(id: Uuid, ctx: C) -> Result<impl warp::Reply,
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::users::user::{UserCredentials, UserRegistration};
+    use crate::users::userdb::UserDB;
+    use crate::util::identifiers::IdResponse;
+    use crate::util::user_input::UserInput;
     use crate::{contexts::InMemoryContext, workflows::registry::WorkflowRegistry};
     use geoengine_operators::engine::VectorOperator;
     use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
@@ -59,6 +63,32 @@ mod tests {
     #[tokio::test]
     async fn register() {
         let ctx = InMemoryContext::default();
+
+        ctx.user_db()
+            .write()
+            .await
+            .register(
+                UserRegistration {
+                    email: "foo@bar.de".to_string(),
+                    password: "secret123".to_string(),
+                    real_name: "Foo Bar".to_string(),
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let session = ctx
+            .user_db()
+            .write()
+            .await
+            .login(UserCredentials {
+                email: "foo@bar.de".to_string(),
+                password: "secret123".to_string(),
+            })
+            .await
+            .unwrap();
 
         let workflow = Workflow {
             operator: MockPointSource {
@@ -73,8 +103,12 @@ mod tests {
         // insert workflow
         let res = warp::test::request()
             .method("POST")
-            .path("/workflow/register")
+            .path("/workflow")
             .header("Content-Length", "0")
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
             .json(&workflow)
             .reply(&register_workflow_handler(ctx))
             .await;
@@ -82,12 +116,38 @@ mod tests {
         assert_eq!(res.status(), 200);
 
         let body: String = String::from_utf8(res.body().to_vec()).unwrap();
-        let _id: WorkflowId = serde_json::from_str(&body).unwrap();
+        let _id: IdResponse<WorkflowId> = serde_json::from_str(&body).unwrap();
     }
 
     #[tokio::test]
     async fn load() {
         let ctx = InMemoryContext::default();
+
+        ctx.user_db()
+            .write()
+            .await
+            .register(
+                UserRegistration {
+                    email: "foo@bar.de".to_string(),
+                    password: "secret123".to_string(),
+                    real_name: "Foo Bar".to_string(),
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let session = ctx
+            .user_db()
+            .write()
+            .await
+            .login(UserCredentials {
+                email: "foo@bar.de".to_string(),
+                password: "secret123".to_string(),
+            })
+            .await
+            .unwrap();
 
         let workflow = Workflow {
             operator: MockPointSource {
@@ -110,6 +170,10 @@ mod tests {
         let res = warp::test::request()
             .method("GET")
             .path(&format!("/workflow/{}", id.to_string()))
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
             .reply(&load_workflow_handler(ctx))
             .await;
 

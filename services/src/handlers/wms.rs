@@ -1,5 +1,4 @@
 use snafu::ResultExt;
-use uuid::Uuid;
 use warp::reply::Reply;
 use warp::{http::Response, Filter, Rejection};
 
@@ -20,7 +19,6 @@ use crate::handlers::Context;
 use crate::ogc::wms::request::{GetCapabilities, GetLegendGraphic, GetMap, WMSRequest};
 use crate::util::config;
 use crate::util::config::get_config_element;
-use crate::util::identifiers::Identifier;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 use futures::StreamExt;
@@ -29,6 +27,7 @@ use geoengine_operators::call_on_generic_raster_processor;
 use geoengine_operators::engine::{
     ExecutionContext, QueryContext, QueryRectangle, RasterQueryProcessor,
 };
+use std::str::FromStr;
 
 pub fn wms_handler<C: Context>(
     ctx: C,
@@ -138,9 +137,7 @@ async fn get_map<C: Context>(
     let workflow = ctx
         .workflow_registry_ref()
         .await
-        .load(&WorkflowId::from_uuid(
-            Uuid::parse_str(&request.layers).context(error::Uuid)?,
-        ))
+        .load(&WorkflowId::from_str(&request.layers)?)
         .await?;
 
     let operator = workflow.operator.get_raster().context(error::Operator)?;

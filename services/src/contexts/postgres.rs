@@ -14,6 +14,8 @@ use std::sync::Arc;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use super::{Context, DB};
+use crate::projects::project::{ProjectId, ProjectPermission};
+use crate::users::user::UserId;
 
 /// A contex with references to Postgres backends of the dbs. Automatically migrates schema on instantiation
 #[derive(Clone)]
@@ -83,9 +85,7 @@ where
             match version {
                 0 => {
                     conn.batch_execute(
-                        "\
-                        -- CREATE EXTENSION postgis;
-
+                        r#"
                         CREATE TABLE version (
                             version INT
                         );
@@ -99,59 +99,82 @@ where
                             active boolean NOT NULL
                         );
 
-                        CREATE TABLE sessions (
-                            id UUID PRIMARY KEY,
-                            user_id UUID REFERENCES users(id)
+                        CREATE TYPE "SpatialReferenceAuthority" AS ENUM (
+                            'Epsg', 'SrOrg', 'Iau2000', 'Esri'
+                        );
+
+                        CREATE TYPE "SpatialReference" AS (
+                            authority "SpatialReferenceAuthority", 
+                            code OID
+                        );
+
+                        CREATE TYPE "Coordinate2D" AS (
+                            x double precision, 
+                            y double precision
+                        );
+
+                        CREATE TYPE "BoundingBox2D" AS (
+                            lower_left_coordinate "Coordinate2D", 
+                            upper_right_coordinate "Coordinate2D"
+                        );
+
+                        CREATE TYPE "TimeInterval" AS (                                                      
+                            start timestamp with time zone,
+                            "end" timestamp with time zone
+                        );
+
+                        CREATE TYPE "STRectangle" AS (
+                            spatial_reference "SpatialReference",
+                            bounding_box "BoundingBox2D",
+                            time_interval "TimeInterval"
                         );
 
                         CREATE TABLE projects (
                             id UUID PRIMARY KEY
-                        );
+                        );        
+                        
+                        CREATE TABLE sessions (
+                            id UUID PRIMARY KEY,
+                            user_id UUID REFERENCES users(id),
+                            created timestamp with time zone NOT NULL,
+                            valid_until timestamp with time zone NOT NULL,
+                            project_id UUID REFERENCES projects(id) ON DELETE SET NULL,
+                            view "STRectangle"
+                        );                
 
                         CREATE TABLE project_versions (
                             id UUID PRIMARY KEY,
                             project_id UUID REFERENCES projects(id) ON DELETE CASCADE NOT NULL,
                             name character varying (256) NOT NULL,
                             description text NOT NULL,
-                            view_ll_x double precision NOT NULL,
-                            view_ll_y double precision NOT NULL,
-                            view_ur_x double precision NOT NULL,
-                            view_ur_y double precision NOT NULL,
-                            view_t1 timestamp without time zone NOT NULL,
-                            view_t2 timestamp without time zone  NOT NULL,
-                            bounds_ll_x double precision NOT NULL,
-                            bounds_ll_y double precision NOT NULL,
-                            bounds_ur_x double precision NOT NULL,
-                            bounds_ur_y double precision NOT NULL,
-                            bounds_t1 timestamp without time zone NOT NULL,
-                            bounds_t2 timestamp without time zone  NOT NULL,
-                            time timestamp without time zone,
+                            bounds "STRectangle" NOT NULL,
+                            changed timestamp with time zone,
                             author_user_id UUID REFERENCES users(id) NOT NULL,
                             latest boolean
                         );
 
                         CREATE INDEX project_version_latest_idx 
-                        ON project_versions (project_id, latest DESC, time DESC, author_user_id DESC);
+                        ON project_versions (project_id, latest DESC, changed DESC, author_user_id DESC);
 
-                        CREATE TYPE layer_type AS ENUM ('raster', 'vector'); -- TODO: distinguish points/lines/polygons
+                        CREATE TYPE "LayerType" AS ENUM ('Raster', 'Vector');
 
                         CREATE TABLE project_version_layers (
                             layer_index integer NOT NULL,
                             project_id UUID REFERENCES projects(id) ON DELETE CASCADE NOT NULL,
                             project_version_id UUID REFERENCES project_versions(id) ON DELETE CASCADE NOT NULL,                            
-                            layer_type layer_type NOT NULL,
+                            layer_type "LayerType" NOT NULL,
                             name character varying (256) NOT NULL,
                             workflow_id UUID NOT NULL, -- TODO: REFERENCES workflows(id)
                             raster_colorizer json,
                             PRIMARY KEY (project_id, layer_index)            
                         );
 
-                        CREATE TYPE project_permission AS ENUM ('read', 'write', 'owner');
+                        CREATE TYPE "ProjectPermission" AS ENUM ('Read', 'Write', 'Owner');
 
                         CREATE TABLE user_project_permissions (
                             user_id UUID REFERENCES users(id) NOT NULL,
                             project_id UUID REFERENCES projects(id) ON DELETE CASCADE NOT NULL,
-                            permission project_permission NOT NULL,
+                            permission "ProjectPermission" NOT NULL,
                             PRIMARY KEY (user_id, project_id)
                         );
 
@@ -159,7 +182,7 @@ where
                             id UUID PRIMARY KEY,
                             workflow json NOT NULL
                         );
-                        ",
+                        "#,
                     )
                     .await?;
                     // TODO log
@@ -181,6 +204,28 @@ where
             }
             version += 1;
         }
+    }
+
+    pub(crate) async fn check_user_project_permission(
+        conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
+        user: UserId,
+        project: ProjectId,
+        permissions: &[ProjectPermission],
+    ) -> Result<()> {
+        let stmt = conn
+            .prepare(
+                "
+                SELECT TRUE
+                FROM user_project_permissions
+                WHERE user_id = $1 AND project_id = $2 AND permission = ANY ($3);",
+            )
+            .await?;
+
+        conn.query_one(&stmt, &[&user, &project, &permissions])
+            .await
+            .map_err(|_error| error::Error::ProjectDBUnauthorized)?;
+
+        Ok(())
     }
 }
 
@@ -254,6 +299,7 @@ mod tests {
     use bb8_postgres::tokio_postgres;
     use bb8_postgres::tokio_postgres::NoTls;
     use geoengine_datatypes::primitives::Coordinate2D;
+    use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
     use geoengine_operators::engine::{TypedOperator, VectorOperator};
     use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
     use std::str::FromStr;
@@ -277,6 +323,8 @@ mod tests {
 
         let projects = list_projects(&ctx, user_id).await;
 
+        set_session(&ctx, &projects).await;
+
         let project_id = projects[0].id;
 
         update_projects(&ctx, user_id, project_id).await;
@@ -284,6 +332,51 @@ mod tests {
         add_permission(&ctx, user_id, project_id).await;
 
         delete_project(ctx, user_id, project_id).await;
+    }
+
+    async fn set_session(ctx: &PostgresContext<NoTls>, projects: &[ProjectListing]) {
+        let credentials = UserCredentials {
+            email: "foo@bar.de".into(),
+            password: "secret123".into(),
+        };
+
+        let session = ctx
+            .user_db_ref_mut()
+            .await
+            .login(credentials)
+            .await
+            .unwrap();
+
+        ctx.user_db_ref_mut()
+            .await
+            .set_session_project(&session, projects[0].id)
+            .await
+            .unwrap();
+        assert_eq!(
+            ctx.user_db_ref()
+                .await
+                .session(session.id)
+                .await
+                .unwrap()
+                .project,
+            Some(projects[0].id)
+        );
+
+        let rect = STRectangle::new_unchecked(SpatialReference::wgs84(), 0., 1., 2., 3., 1, 2);
+        ctx.user_db_ref_mut()
+            .await
+            .set_session_view(&session, rect.clone())
+            .await
+            .unwrap();
+        assert_eq!(
+            ctx.user_db_ref()
+                .await
+                .session(session.id)
+                .await
+                .unwrap()
+                .view,
+            Some(rect)
+        );
     }
 
     async fn delete_project(ctx: PostgresContext<NoTls>, user_id: UserId, project_id: ProjectId) {
@@ -391,7 +484,6 @@ mod tests {
                 name: "TestLayer".into(),
                 info: LayerInfo::Vector(VectorInfo {}),
             })]),
-            view: None,
             bounds: None,
         };
         ctx.project_db_ref_mut()
@@ -441,8 +533,16 @@ mod tests {
             let create = CreateProject {
                 name: format!("Test{}", i),
                 description: format!("Test{}", 10 - i),
-                view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
-                bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+                bounds: STRectangle::new(
+                    SpatialReferenceOption::Unreferenced,
+                    0.,
+                    0.,
+                    1.,
+                    1.,
+                    0,
+                    1,
+                )
+                .unwrap(),
             }
             .validated()
             .unwrap();
@@ -473,14 +573,11 @@ mod tests {
             password: "secret123".into(),
         };
 
-        let result = db.login(credentials).await;
-        assert!(result.is_ok());
+        let session = db.login(credentials).await.unwrap();
 
-        let session = result.unwrap();
+        db.session(session.id).await.unwrap();
 
-        assert!(db.session(session.id).await.is_ok());
-
-        assert!(db.logout(session.id).await.is_ok());
+        db.logout(session.id).await.unwrap();
 
         assert!(db.session(session.id).await.is_err());
 

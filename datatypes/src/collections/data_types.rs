@@ -1,6 +1,7 @@
 use crate::collections::{
     DataCollection, MultiLineStringCollection, MultiPointCollection, MultiPolygonCollection,
 };
+use crate::primitives::{Coordinate2D, TimeInterval};
 use serde::{Deserialize, Serialize};
 
 /// An enum that contains all possible vector data types
@@ -57,5 +58,46 @@ impl TypedFeatureCollection {
             return Some(data);
         }
         None
+    }
+
+    pub fn coordinates(&self) -> &[Coordinate2D] {
+        match self {
+            TypedFeatureCollection::Data(_) => &[],
+            TypedFeatureCollection::MultiPoint(c) => c.coordinates(),
+            TypedFeatureCollection::MultiLineString(c) => c.coordinates(),
+            TypedFeatureCollection::MultiPolygon(c) => c.coordinates(),
+        }
+    }
+
+    pub fn feature_offsets(&self) -> &[i32] {
+        match self {
+            TypedFeatureCollection::Data(_) => &[],
+            TypedFeatureCollection::MultiPoint(c) => c.multipoint_offsets(),
+            TypedFeatureCollection::MultiLineString(c) => c.multi_line_string_offsets(),
+            TypedFeatureCollection::MultiPolygon(c) => c.multi_polygon_offsets(),
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        match self {
+            TypedFeatureCollection::Data(c) => c.len(),
+            TypedFeatureCollection::MultiPoint(c) => c.len(),
+            TypedFeatureCollection::MultiLineString(c) => c.len(),
+            TypedFeatureCollection::MultiPolygon(c) => c.len(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    // TODO: create common interface between typed and non-typed collection
+    pub fn time_intervals(&self) -> &[TimeInterval] {
+        match self {
+            TypedFeatureCollection::Data(c) => c.time_intervals(),
+            TypedFeatureCollection::MultiPoint(c) => c.time_intervals(),
+            TypedFeatureCollection::MultiLineString(c) => c.time_intervals(),
+            TypedFeatureCollection::MultiPolygon(c) => c.time_intervals(),
+        }
     }
 }

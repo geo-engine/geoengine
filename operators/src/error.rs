@@ -85,9 +85,15 @@ pub enum Error {
 
     CLProgramInvalidVectorDataType,
 
+    CLProgramInvalidGenericIndex,
+
+    CLProgramInvalidGenericDataType,
+
     CLProgramUnspecifiedRaster,
 
     CLProgramUnspecifiedFeatures,
+
+    CLProgramUnspecifiedGenericBuffer,
 
     CLProgramInvalidColumn,
 

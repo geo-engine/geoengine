@@ -1,100 +1,126 @@
-POST http://localhost:3030/workflow/register
+POST http://localhost:3030/user
 Content-Type: application/json
 
 {
-    "type": "Vector",
-    "operator": {
-        "type": "MockPointSource",
-        "params": {
-            "points": [{
-                "x": 1.0,
-                "y": 2.0
-            }, {
-                "x": 1.0,
-                "y": 2.0
-            }, {
-                "x": 1.0,
-                "y": 2.0
-            }]
-        }
-    }
+  "email": "foo@bar.de",
+  "password": "secret123",
+  "real_name": "Foo Bar"
 }
 
 ###
 
-GET http://localhost:3030/workflow/9d120587-d7ac-5725-b38c-bda953411c3a
+POST http://localhost:3030/login
+Content-Type: application/json
+
+{
+  "email": "foo@bar.de",
+  "password": "secret123"
+}
+
+###
+
+POST http://localhost:3030/login
+Content-Type: application/json
+
+{
+  "email": "foo@bar.de",
+  "password": "wrong"
+}
+
+###
+
+POST http://localhost:3030/logout
+Content-Type: application/json
+
+
+###
+
+POST http://localhost:3030/logout
+Authorization: Bearer 6cb2191f-0a4d-4ac9-8f92-738e7bed443b
+Content-Type: application/json
+
+###
+
+POST http://localhost:3030/project
+Authorization: Bearer 6cb2191f-0a4d-4ac9-8f92-738e7bed443b
+Content-Type: application/json
+
+{
+  "name": "Test",
+  "description": "Foobar",
+  "bounds": {
+    "spatial_reference": "EPSG:4326",
+    "bounding_box": {
+      "lower_left_coordinate": {
+        "x": -180,
+        "y": -90
+      },
+      "upper_right_coordinate": {
+        "x": 180,
+        "y": 90
+      }
+    },
+    "time_interval": {
+      "start": 0,
+      "end": 0
+    }
+  }
+}
+
+###
+
+GET http://localhost:3030/projects
+Authorization: Bearer 6d69326e-8694-4ae5-815a-b4b1ef02a8f6
+Content-Type: application/json
+
+{
+  "permissions": [
+    "Owner"
+  ],
+  "filter": "None",
+  "order": "NameAsc",
+  "offset": 0,
+  "limit": 1
+}
+
+###
+
+POST http://localhost:3030/workflow
+Authorization: Bearer 6d69326e-8694-4ae5-815a-b4b1ef02a8f6
+Content-Type: application/json
+
+{
+  "type": "Vector",
+  "operator": {
+    "type": "MockPointSource",
+    "params": {
+      "points": [
+        {
+          "x": 1.0,
+          "y": 2.0
+        },
+        {
+          "x": 1.0,
+          "y": 2.0
+        },
+        {
+          "x": 1.0,
+          "y": 2.0
+        }
+      ]
+    }
+  }
+}
+
+###
+
+GET http://localhost:3030/workflow/9cd4605c-2217-5dda-a286-6c6e0de3468c
+Authorization: Bearer 6d69326e-8694-4ae5-815a-b4b1ef02a8f6
 Accept: application/json
 
 ###
 
 GET http://localhost:3030/workflow/1
 Accept: application/json
-
-###
-
-POST http://localhost:3030/user/register
-Content-Type: application/json
-
-{
-    "email": "foo@bar.de",
-    "password": "secret123",
-    "real_name": "Foo Bar"
-}
-
-###
-
-POST http://localhost:3030/user/login
-Content-Type: application/json
-
-{
-    "email": "foo@bar.de",
-    "password": "secret123"
-}
-
-###
-
-POST http://localhost:3030/user/login
-Content-Type: application/json
-
-{
-    "email": "foo@bar.de",
-    "password": "wrong"
-}
-
-###
-
-POST http://localhost:3030/user/logout
-Content-Type: application/json
-
-
-###
-
-POST http://localhost:3030/user/logout
-Authorization: 7e855f3c-b0cd-46d1-b5b3-19e6e3f9ea5
-Content-Type: application/json
-
-###
-
-POST http://localhost:3030/project/create
-Authorization: 9bf9fdb9-e5cd-45c2-8782-9907f088f56b
-Content-Type: application/json
-
-{
-    "name": "Test",
-    "description": "Foobar"
-}
-
-###
-
-POST http://localhost:3030/project/list
-Authorization: 9bf9fdb9-e5cd-45c2-8782-9907f088f56b
-Content-Type: application/json
-
-{
-    "owner": "any",
-    "filter": "none",
-    "offset": 0,
-    "limit": 1
-}
 
 ###

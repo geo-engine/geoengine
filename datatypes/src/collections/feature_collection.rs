@@ -1,19 +1,20 @@
 use std::collections::{HashMap, HashSet};
 use std::convert::{TryFrom, TryInto};
 use std::marker::PhantomData;
+use std::mem;
 use std::ops::{Bound, RangeBounds};
 use std::sync::Arc;
 
 use arrow::array::{
     as_primitive_array, as_string_array, Array, ArrayData, ArrayRef, BooleanArray, Float64Array,
-    ListArray, StructArray,
+    ListArray, PrimitiveArrayOps, StructArray,
 };
 use arrow::datatypes::{DataType, Field, Float64Type, Int64Type};
 use arrow::error::ArrowError;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
-use crate::collections::{error, IntoGeometryIterator};
+use crate::collections::{error, IntoGeometryIterator, VectorDataType};
 use crate::collections::{FeatureCollectionError, IntoGeometryOptionsIterator};
 use crate::json_map;
 use crate::primitives::{
@@ -23,7 +24,6 @@ use crate::primitives::{
 use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::helpers::SomeIter;
 use crate::util::Result;
-use std::mem;
 
 #[allow(clippy::unsafe_derive_deserialize)]
 #[derive(Debug, Deserialize, Serialize)]
@@ -759,7 +759,7 @@ where
 
     /// Returns the byte-size of this collection
     pub fn byte_size(&self) -> usize {
-        let table_size = get_array_memory_size(&self.table.data()) + mem::size_of_val(&self.table);
+        let table_size = self.table.get_array_memory_size();
 
         // TODO: store information? avoid re-calculation?
         let map_size = mem::size_of_val(&self.types)
@@ -803,8 +803,9 @@ impl<CollectionType> Clone for FeatureCollection<CollectionType> {
 
 impl<CollectionType> PartialEq for FeatureCollection<CollectionType>
 where
-    CollectionType: Geometry,
+    CollectionType: Geometry + ArrowTyped,
 {
+    #[allow(clippy::too_many_lines)] // TODO: split function
     fn eq(&self, other: &Self) -> bool {
         /// compares two `f64` typed columns
         /// treats `f64::NAN` values as if they are equal
@@ -865,6 +866,111 @@ where
                 (DataType::Float64, DataType::Float64) => {
                     if !f64_column_equals(downcast_array(c1), downcast_array(c2)) {
                         return false;
+                    }
+                }
+                (DataType::List(_), DataType::List(_)) => {
+                    // TODO: remove special treatment for geometry types on next arrow version
+
+                    match CollectionType::DATA_TYPE {
+                        VectorDataType::Data => {}
+                        VectorDataType::MultiPoint => {
+                            if !c1.equals(c2.as_ref()) {
+                                return false;
+                            }
+                        }
+                        VectorDataType::MultiLineString => {
+                            let c1_feature_offsets = c1.data();
+                            let c2_feature_offsets = c2.data();
+                            let c1_lines_offsets = c1_feature_offsets.child_data().first().unwrap();
+                            let c2_lines_offsets = c2_feature_offsets.child_data().first().unwrap();
+                            let c1_coordinates = c1_lines_offsets
+                                .child_data()
+                                .first()
+                                .unwrap()
+                                .child_data()
+                                .first()
+                                .unwrap();
+                            let c2_coordinates = c2_lines_offsets
+                                .child_data()
+                                .first()
+                                .unwrap()
+                                .child_data()
+                                .first()
+                                .unwrap();
+
+                            let feature_offsets_eq = || {
+                                c1_feature_offsets.buffers()[0].data()
+                                    == c2_feature_offsets.buffers()[0].data()
+                            };
+
+                            let lines_offsets_eq = || {
+                                c1_lines_offsets.buffers()[0].data()
+                                    == c2_lines_offsets.buffers()[0].data()
+                            };
+
+                            let coordinates_eq = || {
+                                c1_coordinates.buffers()[0].data()
+                                    == c2_coordinates.buffers()[0].data()
+                            };
+
+                            if !feature_offsets_eq() || !lines_offsets_eq() || !coordinates_eq() {
+                                return false;
+                            }
+                        }
+                        VectorDataType::MultiPolygon => {
+                            let c1_feature_offsets = c1.data();
+                            let c2_feature_offsets = c2.data();
+                            let c1_polygons_offsets =
+                                c1_feature_offsets.child_data().first().unwrap();
+                            let c2_polygons_offsets =
+                                c2_feature_offsets.child_data().first().unwrap();
+                            let c1_rings_offsets =
+                                c1_polygons_offsets.child_data().first().unwrap();
+                            let c2_rings_offsets =
+                                c2_polygons_offsets.child_data().first().unwrap();
+                            let c1_coordinates = c1_rings_offsets
+                                .child_data()
+                                .first()
+                                .unwrap()
+                                .child_data()
+                                .first()
+                                .unwrap();
+                            let c2_coordinates = c2_rings_offsets
+                                .child_data()
+                                .first()
+                                .unwrap()
+                                .child_data()
+                                .first()
+                                .unwrap();
+
+                            let feature_offsets_eq = || {
+                                c1_feature_offsets.buffers()[0].data()
+                                    == c2_feature_offsets.buffers()[0].data()
+                            };
+
+                            let polygons_offsets_eq = || {
+                                c1_polygons_offsets.buffers()[0].data()
+                                    == c2_polygons_offsets.buffers()[0].data()
+                            };
+
+                            let rings_offsets_eq = || {
+                                c1_rings_offsets.buffers()[0].data()
+                                    == c2_rings_offsets.buffers()[0].data()
+                            };
+
+                            let coordinates_eq = || {
+                                c1_coordinates.buffers()[0].data()
+                                    == c2_coordinates.buffers()[0].data()
+                            };
+
+                            if !feature_offsets_eq()
+                                || !polygons_offsets_eq()
+                                || !rings_offsets_eq()
+                                || !coordinates_eq()
+                            {
+                                return false;
+                            }
+                        }
                     }
                 }
                 _ => {
@@ -997,41 +1103,17 @@ where
     Ok(())
 }
 
-/// Taken from <https://github.com/apache/arrow/blob/master/rust/arrow/src/array/data.rs>
-/// TODO: replace with existing call on next version
-pub fn get_array_memory_size(data: &ArrayData) -> usize {
-    let mut size = 0;
-    // Calculate size of the fields that don't have [get_array_memory_size] method internally.
-    size += mem::size_of_val(data)
-        - mem::size_of_val(&data.buffers())
-        - mem::size_of_val(&data.null_bitmap())
-        - mem::size_of_val(&data.child_data());
-
-    // Calculate rest of the fields top down which contain actual data
-    for buffer in data.buffers() {
-        size += mem::size_of_val(&buffer);
-        size += buffer.capacity();
-    }
-    if let Some(bitmap) = data.null_bitmap() {
-        size += bitmap.buffer_ref().capacity() + mem::size_of_val(bitmap);
-    }
-    for child in data.child_data() {
-        size += get_array_memory_size(child);
-    }
-
-    size
-}
-
 /// Custom serializer for Arrow's `StructArray`
 mod struct_serde {
-    use super::*;
+    use std::fmt::Formatter;
+    use std::io::Cursor;
 
-    use arrow::record_batch::{RecordBatch, RecordBatchReader};
+    use arrow::record_batch::RecordBatch;
     use serde::de::{SeqAccess, Visitor};
     use serde::ser::Error;
     use serde::{Deserializer, Serializer};
-    use std::fmt::Formatter;
-    use std::io::Cursor;
+
+    use super::*;
 
     pub fn serialize<S>(struct_array: &StructArray, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -1090,9 +1172,9 @@ mod struct_serde {
             }
 
             let batch = reader
-                .next_batch()
-                .map_err(|error| E::custom(error.to_string()))?
-                .expect("checked");
+                .next()
+                .expect("checked")
+                .map_err(|error| E::custom(error.to_string()))?;
 
             Ok(batch.into())
         }
@@ -1158,13 +1240,16 @@ mod tests {
         let struct_stack_size = 32;
         assert_eq!(mem::size_of::<StructArray>(), struct_stack_size);
 
+        let arrow_overhead_bytes = 192;
+
         for i in 0..10 {
             assert_eq!(
                 gen_collection(i).byte_size(),
-                empty_hash_map_size + struct_stack_size + 264 + time_interval_size(i)
+                empty_hash_map_size
+                    + struct_stack_size
+                    + arrow_overhead_bytes
+                    + time_interval_size(i)
             );
         }
-
-        // TODO: rely on numbers once the arrow library provides this feature
     }
 }

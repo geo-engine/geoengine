@@ -3,6 +3,7 @@ use crate::projects::project::{
     CreateProject, LoadVersion, ProjectId, ProjectListOptions, UpdateProject, UserProjectPermission,
 };
 use crate::projects::projectdb::ProjectDB;
+use crate::util::identifiers::IdResponse;
 use crate::util::user_input::UserInput;
 use uuid::Uuid;
 use warp::Filter;
@@ -11,7 +12,7 @@ pub fn create_project_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::post()
-        .and(warp::path!("project" / "create"))
+        .and(warp::path("project"))
         .and(authenticate(ctx))
         .and(warp::body::json())
         .and_then(create_project)
@@ -28,14 +29,14 @@ async fn create_project<C: Context>(
         .await
         .create(ctx.session()?.user, create)
         .await?;
-    Ok(warp::reply::json(&id))
+    Ok(warp::reply::json(&IdResponse::from_id(id)))
 }
 
 pub fn list_projects_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    warp::post()
-        .and(warp::path!("project" / "list"))
+    warp::get()
+        .and(warp::path("projects"))
         .and(authenticate(ctx))
         .and(warp::body::json())
         .and_then(list_projects)
@@ -58,27 +59,28 @@ async fn list_projects<C: Context>(
 pub fn load_project_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    warp::post()
+    warp::get()
         .and(
-            (warp::path!("project" / "load" / Uuid).map(|id: Uuid| LoadVersion::from(Some(id))))
-                .or(warp::path!("project" / "load").map(|| LoadVersion::Latest))
-                .unify(),
+            (warp::path!("project" / Uuid / Uuid).map(|project_id: Uuid, version_id: Uuid| {
+                (ProjectId(project_id), LoadVersion::from(Some(version_id)))
+            }))
+            .or(warp::path!("project" / Uuid)
+                .map(|project_id| (ProjectId(project_id), LoadVersion::Latest)))
+            .unify(),
         )
         .and(authenticate(ctx))
-        .and(warp::body::json())
         .and_then(load_project)
 }
 
 // TODO: move into handler once async closures are available?
 async fn load_project<C: Context>(
-    version: LoadVersion,
+    project: (ProjectId, LoadVersion),
     ctx: C,
-    project: ProjectId,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let id = ctx
         .project_db_ref()
         .await
-        .load(ctx.session()?.user, project, version)
+        .load(ctx.session()?.user, project.0, project.1)
         .await?;
     Ok(warp::reply::json(&id))
 }
@@ -86,8 +88,8 @@ async fn load_project<C: Context>(
 pub fn update_project_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    warp::post()
-        .and(warp::path!("project" / "update"))
+    warp::patch()
+        .and(warp::path!("project" / Uuid).map(ProjectId))
         .and(authenticate(ctx))
         .and(warp::body::json())
         .and_then(update_project)
@@ -95,9 +97,11 @@ pub fn update_project_handler<C: Context>(
 
 // TODO: move into handler once async closures are available?
 async fn update_project<C: Context>(
+    project: ProjectId,
     ctx: C,
-    update: UpdateProject,
+    mut update: UpdateProject,
 ) -> Result<impl warp::Reply, warp::Rejection> {
+    update.id = project; // TODO: avoid passing project id in path AND body
     let update = update.validated()?;
     ctx.project_db_ref_mut()
         .await
@@ -109,17 +113,16 @@ async fn update_project<C: Context>(
 pub fn delete_project_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    warp::post()
-        .and(warp::path!("project" / "delete"))
+    warp::delete()
+        .and(warp::path!("project" / Uuid).map(ProjectId))
         .and(authenticate(ctx))
-        .and(warp::body::json())
         .and_then(delete_project)
 }
 
 // TODO: move into handler once async closures are available?
 async fn delete_project<C: Context>(
-    ctx: C,
     project: ProjectId,
+    ctx: C,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     ctx.project_db_ref_mut()
         .await
@@ -176,8 +179,8 @@ async fn add_permission<C: Context>(
 pub fn remove_permission_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    warp::post()
-        .and(warp::path!("project" / "permission" / "remove"))
+    warp::delete()
+        .and(warp::path!("project" / "permission"))
         .and(authenticate(ctx))
         .and(warp::body::json())
         .and_then(remove_permission)
@@ -198,17 +201,16 @@ async fn remove_permission<C: Context>(
 pub fn list_permissions_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    warp::post()
-        .and(warp::path!("project" / "permission" / "list"))
+    warp::get()
+        .and(warp::path!("project" / Uuid / "permissions").map(ProjectId))
         .and(authenticate(ctx))
-        .and(warp::body::json())
         .and_then(list_permissions)
 }
 
 // TODO: move into handler once async closures are available?
 async fn list_permissions<C: Context>(
-    ctx: C,
     project: ProjectId,
+    ctx: C,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let permissions = ctx
         .project_db_ref_mut()
@@ -233,6 +235,7 @@ mod tests {
         },
     };
     use geoengine_datatypes::operations::image::Colorizer;
+    use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
 
     #[tokio::test]
     async fn create() {
@@ -267,15 +270,17 @@ mod tests {
         let create = CreateProject {
             name: "Test".to_string(),
             description: "Foo".to_string(),
-            view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
-            bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+            bounds: STRectangle::new(SpatialReference::wgs84(), 0., 0., 1., 1., 0, 1).unwrap(),
         };
 
         let res = warp::test::request()
             .method("POST")
             .path("/project/create")
             .header("Content-Length", "0")
-            .header("Authorization", session.id.to_string())
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
             .json(&create)
             .reply(&create_project_handler(ctx))
             .await;
@@ -283,7 +288,7 @@ mod tests {
         assert_eq!(res.status(), 200);
 
         let body: String = String::from_utf8(res.body().to_vec()).unwrap();
-        assert!(serde_json::from_str::<ProjectId>(&body).is_ok());
+        assert!(serde_json::from_str::<IdResponse<ProjectId>>(&body).is_ok());
     }
 
     #[tokio::test]
@@ -320,8 +325,16 @@ mod tests {
             let create = CreateProject {
                 name: format!("Test{}", i),
                 description: format!("Test{}", 10 - i),
-                view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
-                bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+                bounds: STRectangle::new(
+                    SpatialReferenceOption::Unreferenced,
+                    0.,
+                    0.,
+                    1.,
+                    1.,
+                    0,
+                    1,
+                )
+                .unwrap(),
             }
             .validated()
             .unwrap();
@@ -346,10 +359,13 @@ mod tests {
         };
 
         let res = warp::test::request()
-            .method("POST")
-            .path("/project/list")
+            .method("GET")
+            .path("/projects")
             .header("Content-Length", "0")
-            .header("Authorization", session.id.to_string())
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
             .json(&options)
             .reply(&list_projects_handler(ctx))
             .await;
@@ -401,8 +417,16 @@ mod tests {
                 CreateProject {
                     name: "Test".to_string(),
                     description: "Foo".to_string(),
-                    view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
-                    bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+                    bounds: STRectangle::new(
+                        SpatialReferenceOption::Unreferenced,
+                        0.,
+                        0.,
+                        1.,
+                        1.,
+                        0,
+                        1,
+                    )
+                    .unwrap(),
                 }
                 .validated()
                 .unwrap(),
@@ -411,11 +435,13 @@ mod tests {
             .unwrap();
 
         let res = warp::test::request()
-            .method("POST")
-            .path("/project/load")
+            .method("GET")
+            .path(&format!("/project/{}", project.to_string()))
             .header("Content-Length", "0")
-            .header("Authorization", session.id.to_string())
-            .json(&project)
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
             .reply(&load_project_handler(ctx))
             .await;
 
@@ -464,8 +490,16 @@ mod tests {
                 CreateProject {
                     name: "Test".to_string(),
                     description: "Foo".to_string(),
-                    view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
-                    bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+                    bounds: STRectangle::new(
+                        SpatialReferenceOption::Unreferenced,
+                        0.,
+                        0.,
+                        1.,
+                        1.,
+                        0,
+                        1,
+                    )
+                    .unwrap(),
                 }
                 .validated()
                 .unwrap(),
@@ -483,7 +517,6 @@ mod tests {
                     name: Some("TestUpdate".to_string()),
                     description: None,
                     layers: None,
-                    view: None,
                     bounds: None,
                 }
                 .validated()
@@ -493,11 +526,13 @@ mod tests {
             .unwrap();
 
         let res = warp::test::request()
-            .method("POST")
-            .path("/project/load")
+            .method("GET")
+            .path(&format!("/project/{}", project.to_string()))
             .header("Content-Length", "0")
-            .header("Authorization", session.id.to_string())
-            .json(&project)
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
             .reply(&load_project_handler(ctx.clone()))
             .await;
 
@@ -519,11 +554,17 @@ mod tests {
         let version_id = versions.first().unwrap().id;
 
         let res = warp::test::request()
-            .method("POST")
-            .path(&format!("/project/load/{}", version_id.to_string()))
+            .method("GET")
+            .path(&format!(
+                "/project/{}/{}",
+                project.to_string(),
+                version_id.to_string()
+            ))
             .header("Content-Length", "0")
-            .header("Authorization", session.id.to_string())
-            .json(&project)
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
             .reply(&load_project_handler(ctx))
             .await;
 
@@ -572,8 +613,16 @@ mod tests {
                 CreateProject {
                     name: "Test".to_string(),
                     description: "Foo".to_string(),
-                    view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
-                    bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+                    bounds: STRectangle::new(
+                        SpatialReferenceOption::Unreferenced,
+                        0.,
+                        0.,
+                        1.,
+                        1.,
+                        0,
+                        1,
+                    )
+                    .unwrap(),
                 }
                 .validated()
                 .unwrap(),
@@ -592,15 +641,17 @@ mod tests {
                     colorizer: Colorizer::Rgba,
                 }),
             })]),
-            view: None,
             bounds: None,
         };
 
         let res = warp::test::request()
-            .method("POST")
-            .path("/project/update")
+            .method("PATCH")
+            .path(&format!("/project/{}", project.to_string()))
             .header("Content-Length", "0")
-            .header("Authorization", session.id.to_string())
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
             .json(&update)
             .reply(&update_project_handler(ctx.clone()))
             .await;
@@ -657,8 +708,16 @@ mod tests {
                 CreateProject {
                     name: "Test".to_string(),
                     description: "Foo".to_string(),
-                    view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
-                    bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+                    bounds: STRectangle::new(
+                        SpatialReferenceOption::Unreferenced,
+                        0.,
+                        0.,
+                        1.,
+                        1.,
+                        0,
+                        1,
+                    )
+                    .unwrap(),
                 }
                 .validated()
                 .unwrap(),
@@ -667,11 +726,13 @@ mod tests {
             .unwrap();
 
         let res = warp::test::request()
-            .method("POST")
-            .path("/project/delete")
+            .method("DELETE")
+            .path(&format!("/project/{}", project.to_string()))
             .header("Content-Length", "0")
-            .header("Authorization", session.id.to_string())
-            .json(&project)
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
             .reply(&delete_project_handler(ctx.clone()))
             .await;
 
@@ -686,11 +747,13 @@ mod tests {
             .is_err());
 
         let res = warp::test::request()
-            .method("POST")
-            .path("/project/delete")
+            .method("DELETE")
+            .path(&format!("/project/{}", project.to_string()))
             .header("Content-Length", "0")
-            .header("Authorization", session.id.to_string())
-            .json(&project)
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
             .reply(&delete_project_handler(ctx))
             .await;
 
@@ -736,8 +799,16 @@ mod tests {
                 CreateProject {
                     name: "Test".to_string(),
                     description: "Foo".to_string(),
-                    view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
-                    bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+                    bounds: STRectangle::new(
+                        SpatialReferenceOption::Unreferenced,
+                        0.,
+                        0.,
+                        1.,
+                        1.,
+                        0,
+                        1,
+                    )
+                    .unwrap(),
                 }
                 .validated()
                 .unwrap(),
@@ -752,7 +823,6 @@ mod tests {
                 name: Some("TestUpdate".to_string()),
                 description: None,
                 layers: None,
-                view: None,
                 bounds: None,
             }
             .validated()
@@ -763,7 +833,10 @@ mod tests {
             .method("GET")
             .path("/project/versions")
             .header("Content-Length", "0")
-            .header("Authorization", session.id.to_string())
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
             .json(&project)
             .reply(&project_versions_handler(ctx))
             .await;
@@ -829,8 +902,16 @@ mod tests {
                 CreateProject {
                     name: "Test".to_string(),
                     description: "Foo".to_string(),
-                    view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
-                    bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+                    bounds: STRectangle::new(
+                        SpatialReferenceOption::Unreferenced,
+                        0.,
+                        0.,
+                        1.,
+                        1.,
+                        0,
+                        1,
+                    )
+                    .unwrap(),
                 }
                 .validated()
                 .unwrap(),
@@ -848,7 +929,10 @@ mod tests {
             .method("POST")
             .path("/project/permission/add")
             .header("Content-Length", "0")
-            .header("Authorization", session.id.to_string())
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
             .json(&permission)
             .reply(&add_permission_handler(ctx.clone()))
             .await;
@@ -919,8 +1003,16 @@ mod tests {
                 CreateProject {
                     name: "Test".to_string(),
                     description: "Foo".to_string(),
-                    view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
-                    bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+                    bounds: STRectangle::new(
+                        SpatialReferenceOption::Unreferenced,
+                        0.,
+                        0.,
+                        1.,
+                        1.,
+                        0,
+                        1,
+                    )
+                    .unwrap(),
                 }
                 .validated()
                 .unwrap(),
@@ -942,10 +1034,13 @@ mod tests {
             .unwrap();
 
         let res = warp::test::request()
-            .method("POST")
-            .path("/project/permission/remove")
+            .method("DELETE")
+            .path("/project/permission")
             .header("Content-Length", "0")
-            .header("Authorization", session.id.to_string())
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
             .json(&permission)
             .reply(&remove_permission_handler(ctx.clone()))
             .await;
@@ -1016,8 +1111,16 @@ mod tests {
                 CreateProject {
                     name: "Test".to_string(),
                     description: "Foo".to_string(),
-                    view: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
-                    bounds: STRectangle::new(0., 0., 1., 1., 0, 1).unwrap(),
+                    bounds: STRectangle::new(
+                        SpatialReferenceOption::Unreferenced,
+                        0.,
+                        0.,
+                        1.,
+                        1.,
+                        0,
+                        1,
+                    )
+                    .unwrap(),
                 }
                 .validated()
                 .unwrap(),
@@ -1039,11 +1142,13 @@ mod tests {
             .unwrap();
 
         let res = warp::test::request()
-            .method("POST")
-            .path("/project/permission/list")
+            .method("GET")
+            .path(&format!("/project/{}/permissions", project.to_string()))
             .header("Content-Length", "0")
-            .header("Authorization", session.id.to_string())
-            .json(&project)
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
             .reply(&list_permissions_handler(ctx))
             .await;
 

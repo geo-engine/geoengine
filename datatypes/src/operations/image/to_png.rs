@@ -36,8 +36,8 @@ where
 
         DynamicImage::ImageRgba8(image_buffer)
             .write_to(&mut buffer, ImageFormat::Png)
-            .map_err(|_| error::Error::Colorizer {
-                details: "encoding PNG failed".into(),
+            .map_err(|error| error::Error::Colorizer {
+                details: format!("encoding PNG failed: {}", error),
             })?;
 
         Ok(buffer)

@@ -1,5 +1,8 @@
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
+use postgres_types::private::BytesMut;
+use postgres_types::{FromSql, IsNull, ToSql, Type};
 use serde::{Deserialize, Serialize};
+use snafu::Error;
 use std::ops::Add;
 
 #[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Debug)]
@@ -60,6 +63,40 @@ impl Into<TimeInstance> for i64 {
 impl Into<i64> for TimeInstance {
     fn into(self) -> i64 {
         self.inner()
+    }
+}
+
+impl ToSql for TimeInstance {
+    fn to_sql(&self, ty: &Type, out: &mut BytesMut) -> Result<IsNull, Box<dyn Error + Sync + Send>>
+    where
+        Self: Sized,
+    {
+        self.as_utc_date_time().unwrap().to_sql(ty, out)
+    }
+
+    fn accepts(ty: &Type) -> bool
+    where
+        Self: Sized,
+    {
+        <DateTime<Utc> as ToSql>::accepts(ty)
+    }
+
+    fn to_sql_checked(
+        &self,
+        ty: &Type,
+        out: &mut BytesMut,
+    ) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
+        self.as_utc_date_time().unwrap().to_sql_checked(ty, out)
+    }
+}
+
+impl<'a> FromSql<'a> for TimeInstance {
+    fn from_sql(ty: &Type, raw: &'a [u8]) -> Result<Self, Box<dyn Error + Sync + Send>> {
+        DateTime::<Utc>::from_sql(ty, raw).map(Into::into)
+    }
+
+    fn accepts(ty: &Type) -> bool {
+        <DateTime<Utc> as FromSql>::accepts(ty)
     }
 }
 
