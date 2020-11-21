@@ -100,13 +100,13 @@ mod tests {
     use geoengine_datatypes::raster::RasterDataType;
     use geoengine_datatypes::{
         primitives::TimeInterval,
-        raster::{Raster2D, TileInformation},
+        raster::{GridArray2D, TileInformation},
         spatial_reference::SpatialReference,
     };
 
     #[test]
     fn serde() {
-        let raster = Raster2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap();
+        let raster = GridArray2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap();
 
         let raster_tile = RasterTile2D::new_with_tile_info(
             TimeInterval::default(),
@@ -139,9 +139,7 @@ mod tests {
                         "start": -9_223_372_036_854_775_808_i64,
                         "end": 9_223_372_036_854_775_807_i64
                     },
-                    "tile_position": {
-                        "dim_array": [0, 0]
-                    },
+                    "tile_position": [0, 0],
                     "global_geo_transform": {
                         "origin_coordinate": {
                             "x": 0.0,
@@ -150,11 +148,11 @@ mod tests {
                         "x_pixel_size": 1.0,
                         "y_pixel_size": -1.0
                     },
-                    "data": {
-                        "grid_dimension": {
-                            "dim_array": [3, 2]
+                    "grid_array": {
+                        "shape": {
+                            "shape_array": [3, 2]
                         },
-                        "data_container": [1, 2, 3, 4, 5, 6],
+                        "data": [1, 2, 3, 4, 5, 6],
                         "no_data_value": null
                     }
                 }],

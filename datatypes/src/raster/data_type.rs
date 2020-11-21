@@ -5,7 +5,7 @@ use num_traits::{AsPrimitive, Num};
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 
-use super::{Dim2D, Dim3D};
+use super::{ArrayShape2D, ArrayShape3D};
 
 /// A collection of required traits for a pixel type
 pub trait Pixel:
@@ -40,8 +40,8 @@ pub trait Pixel:
     + FromPrimitive<Self>
     + StaticRasterDataType
     + RgbaTransmutable
-    + TypedRasterConversion<Dim2D>
-    + TypedRasterConversion<Dim3D>
+    + TypedRasterConversion<ArrayShape2D>
+    + TypedRasterConversion<ArrayShape3D>
 {
 }
 

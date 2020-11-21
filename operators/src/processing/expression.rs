@@ -8,7 +8,7 @@ use crate::util::Result;
 use crate::{call_bi_generic_processor, call_generic_raster_processor};
 use futures::stream::BoxStream;
 use futures::StreamExt;
-use geoengine_datatypes::raster::{Pixel, Raster2D, RasterDataType, RasterTile2D, TypedValue};
+use geoengine_datatypes::raster::{GridArray2D, Pixel, RasterDataType, RasterTile2D, TypedValue};
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
@@ -212,16 +212,16 @@ where
             .zip(self.source_b.query(query, ctx))
             .map(move |(a, b)| match (a, b) {
                 (Ok(a), Ok(b)) => {
-                    let mut out = Raster2D::new(
+                    let mut out = GridArray2D::new(
                         a.grid_dimension(),
-                        vec![TO::zero(); a.data.data_container.len()], // TODO: correct output size; initialization required?
-                        Some(self.no_data_value),                      // TODO
+                        vec![TO::zero(); a.grid_array.data.len()], // TODO: correct output size; initialization required?
+                        Some(self.no_data_value),                  // TODO
                     )
                     .expect("raster creation must succeed")
                     .into();
 
-                    let a_typed = a.data.into();
-                    let b_typed = b.data.into();
+                    let a_typed = a.grid_array.into();
+                    let b_typed = b.grid_array.into();
                     let mut params = cl_program.runnable();
 
                     params.set_input_raster(0, &a_typed).unwrap();
@@ -229,7 +229,7 @@ where
                     params.set_output_raster(0, &mut out).unwrap();
                     cl_program.run(params).unwrap();
 
-                    let raster = Raster2D::<TO>::try_from(out).expect("must be correct");
+                    let raster = GridArray2D::<TO>::try_from(out).expect("must be correct");
 
                     Ok(RasterTile2D::new(
                         a.time,
@@ -289,13 +289,13 @@ mod tests {
         assert_eq!(c.len(), 1);
 
         assert_eq!(
-            c[0].as_ref().unwrap().data,
-            Raster2D::new([3, 2].into(), vec![2, 4, 6, 8, 10, 12], Some(42),).unwrap()
+            c[0].as_ref().unwrap().grid_array,
+            GridArray2D::new([3, 2].into(), vec![2, 4, 6, 8, 10, 12], Some(42),).unwrap()
         );
     }
 
     fn make_raster() -> Box<dyn RasterOperator> {
-        let raster = Raster2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap();
+        let raster = GridArray2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap();
 
         let raster_tile = RasterTile2D::new_with_tile_info(
             TimeInterval::default(),

@@ -1,10 +1,13 @@
-use super::{Dim2D, Dim3D, DynamicRasterDataType, GridDimension, RasterDataType, RasterTile};
+use super::{
+    ArrayShape2D, ArrayShape3D, DynamicRasterDataType, GridSize, GridSpaceToLinearSpace,
+    RasterDataType, RasterTile,
+};
 
-pub type TypedRasterTile2D = TypedRasterTile<Dim2D>;
-pub type TypedRasterTile3D = TypedRasterTile<Dim3D>;
+pub type TypedRasterTile2D = TypedRasterTile<ArrayShape2D>;
+pub type TypedRasterTile3D = TypedRasterTile<ArrayShape3D>;
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum TypedRasterTile<D: GridDimension> {
+pub enum TypedRasterTile<D: GridSize + GridSpaceToLinearSpace> {
     U8(RasterTile<D, u8>),
     U16(RasterTile<D, u16>),
     U32(RasterTile<D, u32>),
@@ -20,7 +23,7 @@ pub enum TypedRasterTile<D: GridDimension> {
 // TODO: use a macro?
 impl<D> TypedRasterTile<D>
 where
-    D: GridDimension,
+    D: GridSize + GridSpaceToLinearSpace,
 {
     pub fn get_u8(self) -> Option<RasterTile<D, u8>> {
         if let TypedRasterTile::U8(r) = self {
@@ -96,7 +99,7 @@ where
 // TODO: use a macro?
 impl<D> Into<TypedRasterTile<D>> for RasterTile<D, u8>
 where
-    D: GridDimension,
+    D: GridSize + GridSpaceToLinearSpace,
 {
     fn into(self) -> TypedRasterTile<D> {
         TypedRasterTile::U8(self)
@@ -105,7 +108,7 @@ where
 
 impl<D> Into<TypedRasterTile<D>> for RasterTile<D, u16>
 where
-    D: GridDimension,
+    D: GridSize + GridSpaceToLinearSpace,
 {
     fn into(self) -> TypedRasterTile<D> {
         TypedRasterTile::U16(self)
@@ -114,7 +117,7 @@ where
 
 impl<D> Into<TypedRasterTile<D>> for RasterTile<D, u32>
 where
-    D: GridDimension,
+    D: GridSize + GridSpaceToLinearSpace,
 {
     fn into(self) -> TypedRasterTile<D> {
         TypedRasterTile::U32(self)
@@ -123,7 +126,7 @@ where
 
 impl<D> Into<TypedRasterTile<D>> for RasterTile<D, u64>
 where
-    D: GridDimension,
+    D: GridSize + GridSpaceToLinearSpace,
 {
     fn into(self) -> TypedRasterTile<D> {
         TypedRasterTile::U64(self)
@@ -132,7 +135,7 @@ where
 
 impl<D> Into<TypedRasterTile<D>> for RasterTile<D, i8>
 where
-    D: GridDimension,
+    D: GridSize + GridSpaceToLinearSpace,
 {
     fn into(self) -> TypedRasterTile<D> {
         TypedRasterTile::I8(self)
@@ -141,7 +144,7 @@ where
 
 impl<D> Into<TypedRasterTile<D>> for RasterTile<D, i16>
 where
-    D: GridDimension,
+    D: GridSize + GridSpaceToLinearSpace,
 {
     fn into(self) -> TypedRasterTile<D> {
         TypedRasterTile::I16(self)
@@ -150,7 +153,7 @@ where
 
 impl<D> Into<TypedRasterTile<D>> for RasterTile<D, i32>
 where
-    D: GridDimension,
+    D: GridSize + GridSpaceToLinearSpace,
 {
     fn into(self) -> TypedRasterTile<D> {
         TypedRasterTile::I32(self)
@@ -159,7 +162,7 @@ where
 
 impl<D> Into<TypedRasterTile<D>> for RasterTile<D, i64>
 where
-    D: GridDimension,
+    D: GridSize + GridSpaceToLinearSpace,
 {
     fn into(self) -> TypedRasterTile<D> {
         TypedRasterTile::I64(self)
@@ -168,7 +171,7 @@ where
 
 impl<D> Into<TypedRasterTile<D>> for RasterTile<D, f32>
 where
-    D: GridDimension,
+    D: GridSize + GridSpaceToLinearSpace,
 {
     fn into(self) -> TypedRasterTile<D> {
         TypedRasterTile::F32(self)
@@ -177,7 +180,7 @@ where
 
 impl<D> Into<TypedRasterTile<D>> for RasterTile<D, f64>
 where
-    D: GridDimension,
+    D: GridSize + GridSpaceToLinearSpace,
 {
     fn into(self) -> TypedRasterTile<D> {
         TypedRasterTile::F64(self)
@@ -186,7 +189,7 @@ where
 
 impl<D> DynamicRasterDataType for TypedRasterTile<D>
 where
-    D: GridDimension,
+    D: GridSize + GridSpaceToLinearSpace,
 {
     fn raster_data_type(&self) -> RasterDataType {
         match self {

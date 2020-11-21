@@ -3,16 +3,17 @@ use crate::util::Result;
 use arrow::buffer::MutableBuffer;
 use arrow::datatypes::{Float64Type, Int64Type};
 use arrow::util::bit_util;
-use geoengine_datatypes::primitives::{FeatureDataRef, FeatureDataType};
-use geoengine_datatypes::raster::{
-    DynamicRasterDataType, GridDimension, Pixel, Raster2D, RasterDataType,
-};
+use geoengine_datatypes::raster::{DynamicRasterDataType, GridArray2D, Pixel, RasterDataType};
 use geoengine_datatypes::{
     call_generic_features, call_generic_raster_2d, call_generic_raster_2d_ext,
 };
 use geoengine_datatypes::{
     collections::{RawFeatureCollectionBuilder, TypedFeatureCollection, VectorDataType},
-    raster::TypedRaster2D,
+    raster::TypedGridArray2D,
+};
+use geoengine_datatypes::{
+    primitives::{FeatureDataRef, FeatureDataType},
+    raster::GridSize,
 };
 use lazy_static::lazy_static;
 use num_traits::AsPrimitive;
@@ -270,8 +271,8 @@ struct FeatureOutputBuffers {
 pub struct CLProgramRunnable<'a> {
     input_raster_types: Vec<RasterArgument>,
     output_raster_types: Vec<RasterArgument>,
-    input_rasters: Vec<Option<&'a TypedRaster2D>>,
-    output_rasters: Vec<Option<&'a mut TypedRaster2D>>,
+    input_rasters: Vec<Option<&'a TypedGridArray2D>>,
+    output_rasters: Vec<Option<&'a mut TypedGridArray2D>>,
     input_feature_types: Vec<VectorArgument>,
     output_feature_types: Vec<VectorArgument>,
     input_features: Vec<Option<&'a TypedFeatureCollection>>,
@@ -307,7 +308,7 @@ impl<'a> CLProgramRunnable<'a> {
         }
     }
 
-    pub fn set_input_raster(&mut self, idx: usize, raster: &'a TypedRaster2D) -> Result<()> {
+    pub fn set_input_raster(&mut self, idx: usize, raster: &'a TypedGridArray2D) -> Result<()> {
         ensure!(
             idx < self.input_raster_types.len(),
             error::CLProgramInvalidRasterIndex
@@ -320,7 +321,11 @@ impl<'a> CLProgramRunnable<'a> {
         Ok(())
     }
 
-    pub fn set_output_raster(&mut self, idx: usize, raster: &'a mut TypedRaster2D) -> Result<()> {
+    pub fn set_output_raster(
+        &mut self,
+        idx: usize,
+        raster: &'a mut TypedGridArray2D,
+    ) -> Result<()> {
         ensure!(
             idx < self.input_raster_types.len(),
             error::CLProgramInvalidRasterIndex
@@ -635,8 +640,8 @@ impl<'a> CLProgramRunnable<'a> {
                 let data_buffer = Buffer::builder()
                 .queue(queue.clone())
                 .flags(MemFlags::new().read_only())
-                .len(raster.data_container.len())
-                .copy_host_slice(&raster.data_container)
+                .len(raster.data.len())
+                .copy_host_slice(&raster.data)
                 .build()?;
                 kernel.set_arg(format!("IN{}",idx), data_buffer)?;
 
@@ -655,7 +660,7 @@ impl<'a> CLProgramRunnable<'a> {
             call_generic_raster_2d_ext!(raster, RasterOutputBuffer, (raster, e) => {
                 let buffer = Buffer::builder()
                     .queue(queue.clone())
-                    .len(raster.data_container.len())
+                    .len(raster.data.len())
                     .build()?;
 
                 kernel.set_arg(format!("OUT{}", idx), &buffer)?;
@@ -682,35 +687,35 @@ impl<'a> CLProgramRunnable<'a> {
             .zip(self.output_rasters.iter_mut())
         {
             match (output_buffer, output_raster) {
-                (RasterOutputBuffer::U8(ref buffer), Some(TypedRaster2D::U8(raster))) => {
-                    buffer.read(raster.data_container.as_mut_slice()).enq()?;
+                (RasterOutputBuffer::U8(ref buffer), Some(TypedGridArray2D::U8(raster))) => {
+                    buffer.read(raster.data.as_mut_slice()).enq()?;
                 }
-                (RasterOutputBuffer::U16(ref buffer), Some(TypedRaster2D::U16(raster))) => {
-                    buffer.read(raster.data_container.as_mut_slice()).enq()?;
+                (RasterOutputBuffer::U16(ref buffer), Some(TypedGridArray2D::U16(raster))) => {
+                    buffer.read(raster.data.as_mut_slice()).enq()?;
                 }
-                (RasterOutputBuffer::U32(ref buffer), Some(TypedRaster2D::U32(raster))) => {
-                    buffer.read(raster.data_container.as_mut_slice()).enq()?;
+                (RasterOutputBuffer::U32(ref buffer), Some(TypedGridArray2D::U32(raster))) => {
+                    buffer.read(raster.data.as_mut_slice()).enq()?;
                 }
-                (RasterOutputBuffer::U64(ref buffer), Some(TypedRaster2D::U64(raster))) => {
-                    buffer.read(raster.data_container.as_mut_slice()).enq()?;
+                (RasterOutputBuffer::U64(ref buffer), Some(TypedGridArray2D::U64(raster))) => {
+                    buffer.read(raster.data.as_mut_slice()).enq()?;
                 }
-                (RasterOutputBuffer::I8(ref buffer), Some(TypedRaster2D::I8(raster))) => {
-                    buffer.read(raster.data_container.as_mut_slice()).enq()?;
+                (RasterOutputBuffer::I8(ref buffer), Some(TypedGridArray2D::I8(raster))) => {
+                    buffer.read(raster.data.as_mut_slice()).enq()?;
                 }
-                (RasterOutputBuffer::I16(ref buffer), Some(TypedRaster2D::I16(raster))) => {
-                    buffer.read(raster.data_container.as_mut_slice()).enq()?;
+                (RasterOutputBuffer::I16(ref buffer), Some(TypedGridArray2D::I16(raster))) => {
+                    buffer.read(raster.data.as_mut_slice()).enq()?;
                 }
-                (RasterOutputBuffer::I32(ref buffer), Some(TypedRaster2D::I32(raster))) => {
-                    buffer.read(raster.data_container.as_mut_slice()).enq()?;
+                (RasterOutputBuffer::I32(ref buffer), Some(TypedGridArray2D::I32(raster))) => {
+                    buffer.read(raster.data.as_mut_slice()).enq()?;
                 }
-                (RasterOutputBuffer::I64(ref buffer), Some(TypedRaster2D::I64(raster))) => {
-                    buffer.read(raster.data_container.as_mut_slice()).enq()?;
+                (RasterOutputBuffer::I64(ref buffer), Some(TypedGridArray2D::I64(raster))) => {
+                    buffer.read(raster.data.as_mut_slice()).enq()?;
                 }
-                (RasterOutputBuffer::F32(ref buffer), Some(TypedRaster2D::F32(raster))) => {
-                    buffer.read(raster.data_container.as_mut_slice()).enq()?;
+                (RasterOutputBuffer::F32(ref buffer), Some(TypedGridArray2D::F32(raster))) => {
+                    buffer.read(raster.data.as_mut_slice()).enq()?;
                 }
-                (RasterOutputBuffer::F64(ref buffer), Some(TypedRaster2D::F64(raster))) => {
-                    buffer.read(raster.data_container.as_mut_slice()).enq()?;
+                (RasterOutputBuffer::F64(ref buffer), Some(TypedGridArray2D::F64(raster))) => {
+                    buffer.read(raster.data.as_mut_slice()).enq()?;
                 }
                 _ => unreachable!(),
             };
@@ -850,12 +855,12 @@ unsafe impl Sync for RasterInfo {}
 unsafe impl OclPrm for RasterInfo {}
 
 impl RasterInfo {
-    pub fn from_raster<T: Pixel>(raster: &Raster2D<T>) -> Self {
+    pub fn from_raster<T: Pixel>(raster: &GridArray2D<T>) -> Self {
         // TODO: extract missing information from raster
         Self {
             size: [
-                raster.grid_dimension.size_of_x_axis().as_(),
-                raster.grid_dimension.size_of_y_axis().as_(),
+                raster.shape.axis_size_x().as_(),
+                raster.shape.axis_size_y().as_(),
                 1, // TODO
             ],
             origin: [0., 0., 0.],
@@ -939,7 +944,7 @@ impl CompiledCLProgram {
     fn work_size(&self, runnable: &CLProgramRunnable) -> SpatialDims {
         match self.iteration_type {
             IterationType::Raster => call_generic_raster_2d!(runnable.output_rasters[0].as_ref()
-                .expect("checked"), raster => SpatialDims::Two(raster.grid_dimension.size_of_x_axis(), raster.grid_dimension.size_of_y_axis())),
+                .expect("checked"), raster => SpatialDims::Two(raster.shape.axis_size_x(), raster.shape.axis_size_y())),
             IterationType::VectorFeatures => SpatialDims::One(
                 runnable.output_features[0]
                     .as_ref()
@@ -1097,21 +1102,22 @@ mod tests {
     use geoengine_datatypes::primitives::{
         DataRef, FeatureData, MultiPoint, NoGeometry, TimeInterval,
     };
-    use geoengine_datatypes::raster::Raster2D;
+    use geoengine_datatypes::raster::GridArray2D;
     use std::collections::HashMap;
     use std::sync::Arc;
 
     #[test]
     fn kernel_reuse() {
-        let in0 =
-            TypedRaster2D::I32(Raster2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap());
-
-        let in1 = TypedRaster2D::I32(
-            Raster2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12], None).unwrap(),
+        let in0 = TypedGridArray2D::I32(
+            GridArray2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap(),
         );
 
-        let mut out = TypedRaster2D::I32(
-            Raster2D::new([3, 2].into(), vec![-1, -1, -1, -1, -1, -1], None).unwrap(),
+        let in1 = TypedGridArray2D::I32(
+            GridArray2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12], None).unwrap(),
+        );
+
+        let mut out = TypedGridArray2D::I32(
+            GridArray2D::new([3, 2].into(), vec![-1, -1, -1, -1, -1, -1], None).unwrap(),
         );
 
         let kernel = r#"
@@ -1140,10 +1146,7 @@ __kernel void add(
         runnable.set_output_raster(0, &mut out).unwrap();
         compiled.run(runnable).unwrap();
 
-        assert_eq!(
-            out.get_i32_ref().unwrap().data_container,
-            vec![8, 10, 12, 14, 16, 18]
-        );
+        assert_eq!(out.get_i32_ref().unwrap().data, vec![8, 10, 12, 14, 16, 18]);
 
         let mut runnable = compiled.runnable();
         runnable.set_input_raster(0, &in0).unwrap();
@@ -1151,23 +1154,21 @@ __kernel void add(
         runnable.set_output_raster(0, &mut out).unwrap();
         compiled.run(runnable).unwrap();
 
-        assert_eq!(
-            out.get_i32().unwrap().data_container,
-            vec![2, 4, 6, 8, 10, 12]
-        );
+        assert_eq!(out.get_i32().unwrap().data, vec![2, 4, 6, 8, 10, 12]);
     }
 
     #[test]
     fn mixed_types() {
-        let in0 =
-            TypedRaster2D::I32(Raster2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap());
-
-        let in1 = TypedRaster2D::U16(
-            Raster2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12], None).unwrap(),
+        let in0 = TypedGridArray2D::I32(
+            GridArray2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap(),
         );
 
-        let mut out = TypedRaster2D::I64(
-            Raster2D::new([3, 2].into(), vec![-1, -1, -1, -1, -1, -1], None).unwrap(),
+        let in1 = TypedGridArray2D::U16(
+            GridArray2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12], None).unwrap(),
+        );
+
+        let mut out = TypedGridArray2D::I64(
+            GridArray2D::new([3, 2].into(), vec![-1, -1, -1, -1, -1, -1], None).unwrap(),
         );
 
         let kernel = r#"
@@ -1196,20 +1197,17 @@ __kernel void add(
         runnable.set_output_raster(0, &mut out).unwrap();
         compiled.run(runnable).unwrap();
 
-        assert_eq!(
-            out.get_i64_ref().unwrap().data_container,
-            vec![8, 10, 12, 14, 16, 18]
-        );
+        assert_eq!(out.get_i64_ref().unwrap().data, vec![8, 10, 12, 14, 16, 18]);
     }
 
     #[test]
     fn raster_info() {
-        let in0 = TypedRaster2D::I32(
-            Raster2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], Some(1337)).unwrap(),
+        let in0 = TypedGridArray2D::I32(
+            GridArray2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], Some(1337)).unwrap(),
         );
 
-        let mut out = TypedRaster2D::I64(
-            Raster2D::new([3, 2].into(), vec![-1, -1, -1, -1, -1, -1], None).unwrap(),
+        let mut out = TypedGridArray2D::I64(
+            GridArray2D::new([3, 2].into(), vec![-1, -1, -1, -1, -1, -1], None).unwrap(),
         );
 
         let kernel = r#"
@@ -1235,19 +1233,19 @@ __kernel void no_data(
         compiled.run(runnable).unwrap();
 
         assert_eq!(
-            out.get_i64_ref().unwrap().data_container,
+            out.get_i64_ref().unwrap().data,
             vec![1337, 1337, 1337, 1337, 1337, 1337]
         );
     }
 
     #[test]
     fn no_data() {
-        let in0 = TypedRaster2D::I32(
-            Raster2D::new([3, 2].into(), vec![1, 1337, 3, 4, 5, 6], Some(1337)).unwrap(),
+        let in0 = TypedGridArray2D::I32(
+            GridArray2D::new([3, 2].into(), vec![1, 1337, 3, 4, 5, 6], Some(1337)).unwrap(),
         );
 
-        let mut out = TypedRaster2D::I64(
-            Raster2D::new([3, 2].into(), vec![-1, -1, -1, -1, -1, -1], None).unwrap(),
+        let mut out = TypedGridArray2D::I64(
+            GridArray2D::new([3, 2].into(), vec![-1, -1, -1, -1, -1, -1], None).unwrap(),
         );
 
         let kernel = r#"
@@ -1276,16 +1274,13 @@ __kernel void no_data(
         runnable.set_output_raster(0, &mut out).unwrap();
         compiled.run(runnable).unwrap();
 
-        assert_eq!(
-            out.get_i64_ref().unwrap().data_container,
-            vec![0, 1, 0, 0, 0, 0]
-        );
+        assert_eq!(out.get_i64_ref().unwrap().data, vec![0, 1, 0, 0, 0, 0]);
     }
 
     #[test]
     fn no_data_float() {
-        let in0 = TypedRaster2D::F32(
-            Raster2D::new(
+        let in0 = TypedGridArray2D::F32(
+            GridArray2D::new(
                 [3, 2].into(),
                 vec![1., 1337., f32::NAN, 4., 5., 6.],
                 Some(1337.),
@@ -1293,8 +1288,8 @@ __kernel void no_data(
             .unwrap(),
         );
 
-        let mut out = TypedRaster2D::I64(
-            Raster2D::new([3, 2].into(), vec![-1, -1, -1, -1, -1, -1], None).unwrap(),
+        let mut out = TypedGridArray2D::I64(
+            GridArray2D::new([3, 2].into(), vec![-1, -1, -1, -1, -1, -1], None).unwrap(),
         );
 
         let kernel = r#"
@@ -1323,17 +1318,15 @@ __kernel void no_data(
         runnable.set_output_raster(0, &mut out).unwrap();
         compiled.run(runnable).unwrap();
 
-        assert_eq!(
-            out.get_i64_ref().unwrap().data_container,
-            vec![0, 1, 1, 0, 0, 0]
-        );
+        assert_eq!(out.get_i64_ref().unwrap().data, vec![0, 1, 1, 0, 0, 0]);
     }
 
     #[test]
     fn gid_calculation() {
-        let in0 = TypedRaster2D::I32(Raster2D::new([3, 2].into(), vec![0; 6], None).unwrap());
+        let in0 = TypedGridArray2D::I32(GridArray2D::new([3, 2].into(), vec![0; 6], None).unwrap());
 
-        let mut out = TypedRaster2D::I32(Raster2D::new([3, 2].into(), vec![0; 6], None).unwrap());
+        let mut out =
+            TypedGridArray2D::I32(GridArray2D::new([3, 2].into(), vec![0; 6], None).unwrap());
 
         let kernel = r#"
 __kernel void gid( 
@@ -1357,10 +1350,7 @@ __kernel void gid(
         runnable.set_output_raster(0, &mut out).unwrap();
         compiled.run(runnable).unwrap();
 
-        assert_eq!(
-            out.get_i32_ref().unwrap().data_container,
-            vec![0, 1, 2, 3, 4, 5]
-        );
+        assert_eq!(out.get_i32_ref().unwrap().data, vec![0, 1, 2, 3, 4, 5]);
     }
 
     #[test]

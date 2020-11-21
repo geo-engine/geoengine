@@ -36,22 +36,16 @@ pub enum Error {
         i2: TimeInterval,
     },
 
-    #[snafu(display("{:?} is not a valid index in the dimension {:?}", index, dimension,))]
-    GridIndexOutOfBounds {
-        index: Vec<usize>,
-        dimension: Vec<usize>,
-    },
-
     #[snafu(display(
-        "{:?} is not a valid index in the dimension {:?} with offsets {:?}",
+        "{:?} is not a valid index in the bounds {:?}, {:?} ",
         index,
-        dimension,
-        offsets,
+        min_index,
+        max_index,
     ))]
-    GridSignedIndexOutOfBounds {
+    GridIndexOutOfBounds {
         index: Vec<isize>,
-        dimension: Vec<usize>,
-        offsets: Vec<isize>,
+        min_index: Vec<isize>,
+        max_index: Vec<isize>,
     },
 
     #[snafu(display("Invalid GridIndex ({:?}), reason: \"{}\".", grid_index, description))]
@@ -141,7 +135,7 @@ pub enum Error {
     ParseU32 {
         source: <u32 as std::str::FromStr>::Err,
     },
-    InvalidTypedRasterConversion,
+    InvalidTypedGridArrayConversion,
     InvalidTypedValueConversion,
 }
 
