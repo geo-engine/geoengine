@@ -440,7 +440,7 @@ where
 
                 read_as_raster(
                     &rasterband,
-                    GridBoundingBox2D::new(dataset_idx_ul, dataset_idx_lr)?,
+                    &GridBoundingBox2D::new(dataset_idx_ul, dataset_idx_lr)?,
                     tile_information.tile_size_in_pixels,
                 )?
             }
@@ -470,7 +470,7 @@ where
 
                 let dataset_raster = read_as_raster(
                     &rasterband,
-                    GridBoundingBox2D::new(dataset_idx_ul, dataset_idx_lr)?,
+                    &GridBoundingBox2D::new(dataset_idx_ul, dataset_idx_lr)?,
                     GridBoundingBox2D::new(tile_idx_ul, tile_idx_lr)?,
                 )?;
 
@@ -658,7 +658,7 @@ fn read_as_raster<
     D: GridSize<ShapeArray = [usize; 2]> + GridSpaceToLinearSpace<IndexArray = [isize; 2]>,
 >(
     rasterband: &GdalRasterBand,
-    dataset_grid_box: GridBoundingBox2D,
+    dataset_grid_box: &GridBoundingBox2D,
     tile_grid: D,
 ) -> Result<GridArray<D, T>>
 where

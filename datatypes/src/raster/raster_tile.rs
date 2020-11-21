@@ -131,6 +131,7 @@ impl TileInformation {
         }
     }
 
+    #[allow(clippy::unused_self)]
     pub fn local_upper_left_idx(&self) -> GridIdx2D {
         [0, 0].into()
     }
