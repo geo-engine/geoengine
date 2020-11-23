@@ -211,13 +211,13 @@ pub struct TilingStrategy {
 impl TilingStrategy {
     pub fn upper_left_pixel_idx(&self) -> GridIdx2D {
         self.geo_transform
-            .coordinate_2d_to_grid_2d(self.bounding_box.upper_left())
+            .coordinate_to_grid_idx_2d(self.bounding_box.upper_left())
     }
 
     pub fn lower_right_pixel_idx(&self) -> GridIdx2D {
         let lr_idx = self
             .geo_transform
-            .coordinate_2d_to_grid_2d(self.bounding_box.lower_right());
+            .coordinate_to_grid_idx_2d(self.bounding_box.lower_right());
 
         lr_idx - 1
     }
@@ -431,11 +431,11 @@ where
             (true, true) => {
                 let dataset_idx_ul = gdal_dataset_information
                     .geo_transform()
-                    .coordinate_2d_to_grid_2d(tile_information.spatial_bounds().upper_left());
+                    .coordinate_to_grid_idx_2d(tile_information.spatial_bounds().upper_left());
 
                 let dataset_idx_lr = gdal_dataset_information
                     .geo_transform()
-                    .coordinate_2d_to_grid_2d(tile_information.spatial_bounds().lower_right())
+                    .coordinate_to_grid_idx_2d(tile_information.spatial_bounds().lower_right())
                     - 1; // the lr coordinate is the first pixel of the next tile so sub 1 from all axis.
 
                 read_as_raster(
@@ -452,20 +452,20 @@ where
 
                 let dataset_idx_ul = gdal_dataset_information
                     .geo_transform()
-                    .coordinate_2d_to_grid_2d(intersecting_area.upper_left());
+                    .coordinate_to_grid_idx_2d(intersecting_area.upper_left());
 
                 let dataset_idx_lr = gdal_dataset_information
                     .geo_transform()
-                    .coordinate_2d_to_grid_2d(intersecting_area.lower_right())
+                    .coordinate_to_grid_idx_2d(intersecting_area.lower_right())
                     - 1;
 
                 let tile_idx_ul = tile_information
                     .tile_geo_transform()
-                    .coordinate_2d_to_grid_2d(intersecting_area.upper_left());
+                    .coordinate_to_grid_idx_2d(intersecting_area.upper_left());
 
                 let tile_idx_lr = tile_information
                     .tile_geo_transform()
-                    .coordinate_2d_to_grid_2d(intersecting_area.lower_right())
+                    .coordinate_to_grid_idx_2d(intersecting_area.lower_right())
                     - 1;
 
                 let dataset_raster = read_as_raster(
