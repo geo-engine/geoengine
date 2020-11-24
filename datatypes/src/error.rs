@@ -126,6 +126,8 @@ pub enum Error {
     },
     InvalidTypedRasterConversion,
     InvalidTypedValueConversion,
+
+    InvalidUuid,
 }
 
 impl From<arrow::error::ArrowError> for Error {

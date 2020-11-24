@@ -32,11 +32,11 @@ where
     T: Pixel,
 {
     type Output = RasterTile2D<T>;
-    fn query(
-        &self,
+    fn query<'a>(
+        &'a self,
         _query: crate::engine::QueryRectangle,
-        _ctx: crate::engine::QueryContext,
-    ) -> futures::stream::BoxStream<crate::util::Result<Self::Output>> {
+        _ctx: &'a dyn crate::engine::QueryContext,
+    ) -> futures::stream::BoxStream<'a, crate::util::Result<Self::Output>> {
         stream::iter(self.data.iter().cloned().map(Result::Ok)).boxed()
     }
 }

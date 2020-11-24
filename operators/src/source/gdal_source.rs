@@ -478,11 +478,11 @@ where
     T: Pixel + gdal::raster::types::GdalType,
 {
     type Output = RasterTile2D<T>;
-    fn query(
-        &self,
+    fn query<'a>(
+        &'a self,
         query: crate::engine::QueryRectangle,
-        _ctx: crate::engine::QueryContext,
-    ) -> BoxStream<Result<RasterTile2D<T>>> {
+        _ctx: &'a dyn crate::engine::QueryContext,
+    ) -> BoxStream<'a, Result<RasterTile2D<T>>> {
         self.tile_stream(query.bbox, query.spatial_resolution)
             .boxed() // TODO: handle query, ctx, remove one boxed
     }

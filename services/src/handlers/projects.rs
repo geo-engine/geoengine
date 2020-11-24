@@ -225,7 +225,6 @@ mod tests {
     use super::*;
     use crate::users::user::{UserCredentials, UserRegistration};
     use crate::users::userdb::UserDB;
-    use crate::util::identifiers::Identifier;
     use crate::workflows::workflow::WorkflowId;
     use crate::{
         contexts::InMemoryContext,
@@ -234,6 +233,7 @@ mod tests {
             ProjectPermission, ProjectVersion, RasterInfo, STRectangle, UpdateProject,
         },
     };
+    use geoengine_datatypes::identifiers::Identifier;
     use geoengine_datatypes::operations::image::Colorizer;
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
 

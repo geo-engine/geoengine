@@ -202,11 +202,11 @@ where
 {
     type Output = RasterTile2D<TO>;
 
-    fn query(
-        &self,
+    fn query<'b>(
+        &'b self,
         query: QueryRectangle,
-        ctx: QueryContext,
-    ) -> BoxStream<Result<RasterTile2D<TO>>> {
+        ctx: &'b dyn QueryContext,
+    ) -> BoxStream<'b, Result<RasterTile2D<TO>>> {
         // TODO: validate that tiles actually fit together
         let mut cl_program = self.cl_program.clone();
         self.source_a
@@ -246,7 +246,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::ExecutionContext;
+    use crate::engine::{ExecutionContext, MockQueryContext};
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution, TimeInterval};
     use geoengine_datatypes::raster::TileInformation;
@@ -274,13 +274,14 @@ mod tests {
 
         let p = o.query_processor().unwrap().get_i8().unwrap();
 
+        let ctx = MockQueryContext::new(1);
         let q = p.query(
             QueryRectangle {
                 bbox: BoundingBox2D::new_unchecked((1., 2.).into(), (3., 4.).into()),
                 time_interval: Default::default(),
                 spatial_resolution: SpatialResolution::one(),
             },
-            QueryContext { chunk_byte_size: 1 },
+            &ctx,
         );
 
         let c: Vec<Result<RasterTile2D<i8>>> = q.collect().await;

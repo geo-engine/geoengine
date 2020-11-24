@@ -14,6 +14,8 @@ use std::sync::Arc;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use super::{Context, DB};
+use crate::contexts::QueryContextImpl;
+use crate::datasets::postgres::PostgresDataSetDB;
 use crate::projects::project::{ProjectId, ProjectPermission};
 use crate::users::user::UserId;
 
@@ -240,6 +242,8 @@ where
     type UserDB = PostgresUserDB<Tls>;
     type ProjectDB = PostgresProjectDB<Tls>;
     type WorkflowRegistry = PostgresWorkflowRegistry<Tls>;
+    type DataSetDB = PostgresDataSetDB;
+    type QueryContext = QueryContextImpl<PostgresDataSetDB>;
 
     fn user_db(&self) -> DB<Self::UserDB> {
         self.user_db.clone()
@@ -271,6 +275,18 @@ where
         self.workflow_registry.write().await
     }
 
+    fn data_set_db(&self) -> DB<Self::DataSetDB> {
+        todo!()
+    }
+
+    async fn data_set_db_ref(&self) -> RwLockReadGuard<'_, Self::DataSetDB> {
+        todo!()
+    }
+
+    async fn data_set_db_ref_mut(&self) -> RwLockWriteGuard<'_, Self::DataSetDB> {
+        todo!()
+    }
+
     fn session(&self) -> Result<&Session> {
         self.session
             .as_ref()
@@ -279,6 +295,10 @@ where
 
     fn set_session(&mut self, session: Session) {
         self.session = Some(session)
+    }
+
+    fn query_context(&self) -> Self::QueryContext {
+        todo!()
     }
 }
 

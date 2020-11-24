@@ -23,12 +23,12 @@ pub struct MockPointSourceProcessor {
 
 impl QueryProcessor for MockPointSourceProcessor {
     type Output = MultiPointCollection;
-    fn query(
-        &self,
+    fn query<'a>(
+        &'a self,
         _query: QueryRectangle,
-        ctx: QueryContext,
-    ) -> BoxStream<Result<MultiPointCollection>> {
-        let chunk_size = ctx.chunk_byte_size / std::mem::size_of::<Coordinate2D>();
+        ctx: &'a dyn QueryContext,
+    ) -> BoxStream<'a, Result<MultiPointCollection>> {
+        let chunk_size = ctx.chunk_byte_size() / std::mem::size_of::<Coordinate2D>();
         stream::iter(self.points.chunks(chunk_size).map(|chunk| {
             Ok(MultiPointCollection::from_data(
                 chunk.iter().map(Into::into).collect(),
@@ -86,6 +86,7 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::MockQueryContext;
     use futures::executor::block_on_stream;
     use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution};
 
@@ -126,10 +127,9 @@ mod tests {
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
-        let ctx = QueryContext {
-            chunk_byte_size: 2 * std::mem::size_of::<Coordinate2D>(),
-        };
-        let stream = point_processor.vector_query(query_rectangle, ctx);
+        let ctx = MockQueryContext::new(2 * std::mem::size_of::<Coordinate2D>());
+
+        let stream = point_processor.vector_query(query_rectangle, &ctx);
 
         let blocking_stream = block_on_stream(stream);
         let collections: Vec<MultiPointCollection> = blocking_stream.map(Result::unwrap).collect();

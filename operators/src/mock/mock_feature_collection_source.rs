@@ -23,11 +23,15 @@ where
 
 impl<G> QueryProcessor for MockFeatureCollectionSourceProcessor<G>
 where
-    G: Geometry + ArrowTyped + Send + Sync,
+    G: Geometry + ArrowTyped + Send + Sync + 'static,
 {
     type Output = FeatureCollection<G>;
 
-    fn query(&self, _query: QueryRectangle, _ctx: QueryContext) -> BoxStream<Result<Self::Output>> {
+    fn query<'a>(
+        &self,
+        _query: QueryRectangle,
+        _ctx: &'a dyn QueryContext,
+    ) -> BoxStream<'a, Result<Self::Output>> {
         // TODO: chunk it up
         // let chunk_size = ctx.chunk_byte_size / std::mem::size_of::<Coordinate2D>();
 
@@ -115,6 +119,7 @@ impl_mock_feature_collection_source!(MultiPolygon, MultiPolygon);
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::MockQueryContext;
     use futures::executor::block_on_stream;
     use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, FeatureData, TimeInterval};
     use geoengine_datatypes::{collections::MultiPointCollection, primitives::SpatialResolution};
@@ -251,11 +256,9 @@ mod tests {
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
-        let ctx = QueryContext {
-            chunk_byte_size: 2 * std::mem::size_of::<Coordinate2D>(),
-        };
+        let ctx = MockQueryContext::new(2 * std::mem::size_of::<Coordinate2D>());
 
-        let stream = processor.vector_query(query_rectangle, ctx);
+        let stream = processor.vector_query(query_rectangle, &ctx);
 
         let blocking_stream = block_on_stream(stream);
 

@@ -240,8 +240,8 @@ impl ProjectDB for HashMapProjectDB {
 mod test {
     use super::*;
     use crate::projects::project::STRectangle;
-    use crate::util::identifiers::Identifier;
     use crate::util::user_input::UserInput;
+    use geoengine_datatypes::identifiers::Identifier;
     use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, TimeInterval};
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
     use std::{thread, time};

@@ -128,6 +128,10 @@ pub enum Error {
     TimeParse {
         source: chrono::format::ParseError,
     },
+
+    LoadingInfo {
+        reason: String, // cannot nest error because it's from service crate
+    },
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {

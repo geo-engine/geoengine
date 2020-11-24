@@ -170,10 +170,7 @@ async fn get_map<C: Context>(
         ),
     };
 
-    let query_ctx = QueryContext {
-        // TODO: define meaningful query context
-        chunk_byte_size: 1024,
-    };
+    let query_ctx = ctx.query_context();
 
     let image_bytes = call_on_generic_raster_processor!(
         processor,
@@ -188,16 +185,16 @@ async fn get_map<C: Context>(
     ))
 }
 
-async fn raster_stream_to_png_bytes<T>(
+async fn raster_stream_to_png_bytes<T, C: QueryContext>(
     processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
     query_rect: QueryRectangle,
-    query_ctx: QueryContext,
+    query_ctx: C,
     request: &GetMap,
 ) -> Result<Vec<u8>>
 where
     T: Pixel,
 {
-    let tile_stream = processor.raster_query(query_rect, query_ctx);
+    let tile_stream = processor.raster_query(query_rect, &query_ctx);
 
     let x_query_resolution = query_rect.bbox.size_x() / f64::from(request.width);
     let y_query_resolution = query_rect.bbox.size_y() / f64::from(request.height);
@@ -286,10 +283,13 @@ mod tests {
     use std::path::PathBuf;
 
     use geoengine_datatypes::primitives::{BoundingBox2D, TimeInterval};
-    use geoengine_operators::engine::{RasterOperator, TypedOperator};
+    use geoengine_operators::engine::{MockQueryContext, RasterOperator, TypedOperator};
     use geoengine_operators::source::{GdalSource, GdalSourceParameters, GdalSourceProcessor};
 
     use super::*;
+    use crate::users::user::{UserCredentials, UserRegistration};
+    use crate::users::userdb::UserDB;
+    use crate::util::user_input::UserInput;
     use crate::workflows::workflow::Workflow;
     use crate::{contexts::InMemoryContext, ogc::wms::request::GetMapFormat};
     use xml::ParserConfig;
@@ -344,6 +344,7 @@ mod tests {
 
         let query_bbox = BoundingBox2D::new((-10., 20.).into(), (50., 80.).into()).unwrap();
 
+        let context = MockQueryContext::new(0);
         let image_bytes = raster_stream_to_png_bytes(
             gdal_source.boxed(),
             QueryRectangle {
@@ -351,7 +352,7 @@ mod tests {
                 time_interval: TimeInterval::default(),
                 spatial_resolution: SpatialResolution::zero_point_one(),
             },
-            QueryContext { chunk_byte_size: 0 },
+            context,
             &GetMap {
                 version: "".to_string(),
                 width: 600,
@@ -394,6 +395,7 @@ mod tests {
 
         let query_bbox = BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap();
 
+        let context = MockQueryContext::new(0);
         let image_bytes = raster_stream_to_png_bytes(
             gdal_source.boxed(),
             QueryRectangle {
@@ -401,7 +403,7 @@ mod tests {
                 time_interval: TimeInterval::default(),
                 spatial_resolution: SpatialResolution::new_unchecked(1.0, 1.0),
             },
-            QueryContext { chunk_byte_size: 0 },
+            context,
             &GetMap {
                 version: "".to_string(),
                 width: 360,
@@ -431,7 +433,31 @@ mod tests {
 
     #[tokio::test]
     async fn get_map() {
-        let ctx = InMemoryContext::default();
+        let mut ctx = InMemoryContext::default();
+        ctx.user_db_ref_mut()
+            .await
+            .register(
+                UserRegistration {
+                    email: "foo@bar.de".to_string(),
+                    password: "secret123".to_string(),
+                    real_name: "Foo Bar".to_string(),
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        let session = ctx
+            .user_db_ref_mut()
+            .await
+            .login(UserCredentials {
+                email: "foo@bar.de".to_string(),
+                password: "secret123".to_string(),
+            })
+            .await
+            .unwrap();
+
+        ctx.set_session(session);
 
         let workflow = Workflow {
             operator: TypedOperator::Raster(
@@ -467,7 +493,31 @@ mod tests {
 
     #[tokio::test]
     async fn get_map_uppercase() {
-        let ctx = InMemoryContext::default();
+        let mut ctx = InMemoryContext::default();
+        ctx.user_db_ref_mut()
+            .await
+            .register(
+                UserRegistration {
+                    email: "foo@bar.de".to_string(),
+                    password: "secret123".to_string(),
+                    real_name: "Foo Bar".to_string(),
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        let session = ctx
+            .user_db_ref_mut()
+            .await
+            .login(UserCredentials {
+                email: "foo@bar.de".to_string(),
+                password: "secret123".to_string(),
+            })
+            .await
+            .unwrap();
+
+        ctx.set_session(session);
 
         let workflow = Workflow {
             operator: TypedOperator::Raster(

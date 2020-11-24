@@ -192,10 +192,7 @@ async fn get_feature<C: Context>(
         }),
         spatial_resolution: SpatialResolution::zero_point_one(),
     };
-    let query_ctx = QueryContext {
-        // TODO: use production config and test config sizes here
-        chunk_byte_size: 1024,
-    };
+    let query_ctx = ctx.query_context();
 
     // TODO: support geojson output for types other than multipoints
     let json = match processor {
@@ -203,7 +200,7 @@ async fn get_feature<C: Context>(
         //     vector_stream_to_geojson(p, query_rect, query_ctx).await
         // }
         TypedVectorQueryProcessor::MultiPoint(p) => {
-            point_stream_to_geojson(p, query_rect, query_ctx).await
+            point_stream_to_geojson(p, query_rect, &query_ctx).await
         }
         // TypedVectorQueryProcessor::MultiLineString(p) => {
         //     vector_stream_to_geojson(p, query_rect, query_ctx).await
@@ -232,7 +229,7 @@ async fn get_feature<C: Context>(
 async fn point_stream_to_geojson(
     processor: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<MultiPoint>>>,
     query_rect: QueryRectangle,
-    query_ctx: QueryContext,
+    query_ctx: &dyn QueryContext,
 ) -> Result<serde_json::Value> {
     let features: Vec<serde_json::Value> = Vec::new();
 
@@ -306,6 +303,9 @@ mod tests {
     use geoengine_operators::source::CsvSourceParameters;
 
     use super::*;
+    use crate::users::user::{UserCredentials, UserRegistration};
+    use crate::users::userdb::UserDB;
+    use crate::util::user_input::UserInput;
     use crate::{contexts::InMemoryContext, workflows::workflow::Workflow};
     use geoengine_operators::engine::TypedOperator;
     use geoengine_operators::source::{CsvGeometrySpecification, CsvSource, CsvTimeSpecification};
@@ -441,7 +441,31 @@ x;y
         .unwrap();
         temp_file.seek(SeekFrom::Start(0)).unwrap();
 
-        let ctx = InMemoryContext::default();
+        let mut ctx = InMemoryContext::default();
+        ctx.user_db_ref_mut()
+            .await
+            .register(
+                UserRegistration {
+                    email: "foo@bar.de".to_string(),
+                    password: "secret123".to_string(),
+                    real_name: "Foo Bar".to_string(),
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        let session = ctx
+            .user_db_ref_mut()
+            .await
+            .login(UserCredentials {
+                email: "foo@bar.de".to_string(),
+                password: "secret123".to_string(),
+            })
+            .await
+            .unwrap();
+
+        ctx.set_session(session);
 
         let workflow = Workflow {
             operator: TypedOperator::Vector(Box::new(CsvSource {
@@ -533,7 +557,31 @@ x;y
         .unwrap();
         temp_file.seek(SeekFrom::Start(0)).unwrap();
 
-        let ctx = InMemoryContext::default();
+        let mut ctx = InMemoryContext::default();
+        ctx.user_db_ref_mut()
+            .await
+            .register(
+                UserRegistration {
+                    email: "foo@bar.de".to_string(),
+                    password: "secret123".to_string(),
+                    real_name: "Foo Bar".to_string(),
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        let session = ctx
+            .user_db_ref_mut()
+            .await
+            .login(UserCredentials {
+                email: "foo@bar.de".to_string(),
+                password: "secret123".to_string(),
+            })
+            .await
+            .unwrap();
+
+        ctx.set_session(session);
 
         let workflow = Workflow {
             operator: TypedOperator::Vector(Box::new(CsvSource {

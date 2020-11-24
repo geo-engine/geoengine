@@ -20,6 +20,7 @@
 )]
 
 pub mod collections;
+pub mod dataset;
 pub mod error;
 pub mod operations;
 pub mod plots;
@@ -28,3 +29,5 @@ pub mod provenance;
 pub mod raster;
 pub mod spatial_reference;
 pub mod util;
+#[macro_use]
+pub mod identifiers;

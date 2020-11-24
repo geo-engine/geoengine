@@ -123,11 +123,11 @@ where
 {
     type VectorType = FeatureCollection<G>;
 
-    fn vector_query(
-        &self,
+    fn vector_query<'a>(
+        &'a self,
         query: QueryRectangle,
-        ctx: QueryContext,
-    ) -> BoxStream<Result<Self::VectorType>> {
+        ctx: &'a dyn QueryContext,
+    ) -> BoxStream<'a, Result<Self::VectorType>> {
         let column_name = self.column.clone();
         let ranges = self.ranges.clone();
         let keep_nulls = self.keep_nulls;
@@ -165,7 +165,7 @@ where
         });
 
         let merged_chunks_stream =
-            FeatureCollectionChunkMerger::new(filter_stream.fuse(), ctx.chunk_byte_size);
+            FeatureCollectionChunkMerger::new(filter_stream.fuse(), ctx.chunk_byte_size());
 
         merged_chunks_stream.boxed()
     }
@@ -174,6 +174,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::MockQueryContext;
     use crate::mock::{MockFeatureCollectionSource, MockFeatureCollectionSourceParams};
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, FeatureData, MultiPoint, TimeInterval,
@@ -262,10 +263,10 @@ mod tests {
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
-        let ctx = QueryContext {
-            chunk_byte_size: 2 * std::mem::size_of::<Coordinate2D>(),
-        };
-        let stream = point_processor.vector_query(query_rectangle, ctx);
+
+        let ctx = MockQueryContext::new(2 * std::mem::size_of::<Coordinate2D>());
+
+        let stream = point_processor.vector_query(query_rectangle, &ctx);
 
         let collections: Vec<MultiPointCollection> = stream.map(Result::unwrap).collect().await;
 

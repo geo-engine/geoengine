@@ -9,9 +9,9 @@ use crate::projects::project::{ProjectId, STRectangle};
 use crate::users::session::{Session, SessionId};
 use crate::users::user::{User, UserCredentials, UserId, UserRegistration};
 use crate::users::userdb::UserDB;
-use crate::util::identifiers::Identifier;
 use crate::util::user_input::Validated;
 use async_trait::async_trait;
+use geoengine_datatypes::identifiers::Identifier;
 
 #[derive(Default)]
 pub struct HashMapUserDB {

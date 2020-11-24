@@ -6,7 +6,6 @@ use crate::users::session::{Session, SessionId};
 use crate::users::user::User;
 use crate::users::user::{UserCredentials, UserId, UserRegistration};
 use crate::users::userdb::UserDB;
-use crate::util::identifiers::Identifier;
 use crate::util::user_input::Validated;
 use async_trait::async_trait;
 use bb8_postgres::PostgresConnectionManager;
@@ -14,6 +13,7 @@ use bb8_postgres::{
     bb8::Pool, tokio_postgres::tls::MakeTlsConnect, tokio_postgres::tls::TlsConnect,
     tokio_postgres::Socket,
 };
+use geoengine_datatypes::identifiers::Identifier;
 use pwhash::bcrypt;
 use uuid::Uuid;
 

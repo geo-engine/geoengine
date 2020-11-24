@@ -419,12 +419,16 @@ where
     FeatureCollectionRowBuilder<G>: FeatureCollectionBuilderGeometryHandler<G>,
 {
     type Output = FeatureCollection<G>;
-    fn query(&self, query: QueryRectangle, ctx: QueryContext) -> BoxStream<Result<Self::Output>> {
+    fn query<'a>(
+        &'a self,
+        query: QueryRectangle,
+        ctx: &'a dyn QueryContext,
+    ) -> BoxStream<'a, Result<Self::Output>> {
         OgrSourceStream::new(
             self.dataset_information.clone(),
             self.default_geometry.clone(),
             query,
-            ctx.chunk_byte_size,
+            ctx.chunk_byte_size(),
         )
         .boxed()
     }
@@ -1031,7 +1035,7 @@ mod tests {
     use geoengine_datatypes::collections::{DataCollection, MultiPointCollection};
     use geoengine_datatypes::primitives::{BoundingBox2D, FeatureData, SpatialResolution};
 
-    use crate::engine::ExecutionContext;
+    use crate::engine::{ExecutionContext, MockQueryContext};
 
     use super::*;
 
@@ -1161,15 +1165,14 @@ mod tests {
             default_geometry.try_into_geometry()?,
         );
 
+        let context = MockQueryContext::new(usize::MAX);
         let query = query_processor.query(
             QueryRectangle {
                 bbox: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                 time_interval: Default::default(),
                 spatial_resolution: SpatialResolution::new(1., 1.)?,
             },
-            QueryContext {
-                chunk_byte_size: usize::MAX,
-            },
+            &context,
         );
 
         let result: Vec<MultiPointCollection> = query.try_collect().await?;
@@ -1201,15 +1204,14 @@ mod tests {
             default_geometry.try_into_geometry()?,
         );
 
+        let context = MockQueryContext::new(usize::MAX);
         let query = query_processor.query(
             QueryRectangle {
                 bbox: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                 time_interval: Default::default(),
                 spatial_resolution: SpatialResolution::new(1., 1.)?,
             },
-            QueryContext {
-                chunk_byte_size: usize::MAX,
-            },
+            &context,
         );
 
         let result: Vec<Result<MultiPointCollection>> = query.collect().await;
@@ -1241,15 +1243,14 @@ mod tests {
             default_geometry.try_into_geometry()?,
         );
 
+        let context = MockQueryContext::new(usize::MAX);
         let query = query_processor.query(
             QueryRectangle {
                 bbox: BoundingBox2D::new((0., 0.).into(), (5., 5.).into())?,
                 time_interval: Default::default(),
                 spatial_resolution: SpatialResolution::new(1., 1.)?,
             },
-            QueryContext {
-                chunk_byte_size: usize::MAX,
-            },
+            &context,
         );
 
         let result: Vec<MultiPointCollection> = query.try_collect().await?;
@@ -1289,15 +1290,14 @@ mod tests {
             default_geometry.try_into_geometry()?,
         );
 
+        let context = MockQueryContext::new(usize::MAX);
         let query = query_processor.query(
             QueryRectangle {
                 bbox: BoundingBox2D::new((0., 0.).into(), (5., 5.).into())?,
                 time_interval: Default::default(),
                 spatial_resolution: SpatialResolution::new(1., 1.)?,
             },
-            QueryContext {
-                chunk_byte_size: usize::MAX,
-            },
+            &context,
         );
 
         let result: Vec<MultiPointCollection> = query.try_collect().await?;
@@ -1373,15 +1373,14 @@ mod tests {
 
         let query_processor = source.query_processor()?.multi_point().unwrap();
 
+        let context = MockQueryContext::new(usize::MAX);
         let query = query_processor.query(
             QueryRectangle {
                 bbox: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                 time_interval: Default::default(),
                 spatial_resolution: SpatialResolution::new(1., 1.)?,
             },
-            QueryContext {
-                chunk_byte_size: usize::MAX,
-            },
+            &context,
         );
 
         let result: Vec<MultiPointCollection> = query.try_collect().await?;
@@ -1438,15 +1437,14 @@ mod tests {
 
         let query_processor = source.query_processor()?.multi_point().unwrap();
 
+        let context = MockQueryContext::new(usize::MAX);
         let query = query_processor.query(
             QueryRectangle {
                 bbox: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                 time_interval: Default::default(),
                 spatial_resolution: SpatialResolution::new(1., 1.)?,
             },
-            QueryContext {
-                chunk_byte_size: usize::MAX,
-            },
+            &context,
         );
 
         let result: Vec<MultiPointCollection> = query.try_collect().await?;
@@ -1571,15 +1569,14 @@ mod tests {
 
         let query_processor = source.query_processor()?.multi_point().unwrap();
 
+        let context = MockQueryContext::new(usize::MAX);
         let query = query_processor.query(
             QueryRectangle {
                 bbox: BoundingBox2D::new((-180.0, -90.0).into(), (180.0, 90.0).into())?,
                 time_interval: Default::default(),
                 spatial_resolution: SpatialResolution::new(1., 1.)?,
             },
-            QueryContext {
-                chunk_byte_size: usize::MAX,
-            },
+            &context,
         );
 
         let result: Vec<MultiPointCollection> = query.try_collect().await?;
@@ -2706,15 +2703,14 @@ mod tests {
         let query_processor =
             OgrSourceProcessor::<NoGeometry>::new(Arc::new(dataset_information), None);
 
+        let context = MockQueryContext::new(usize::MAX);
         let query = query_processor.query(
             QueryRectangle {
                 bbox: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                 time_interval: Default::default(),
                 spatial_resolution: SpatialResolution::new(1., 1.)?,
             },
-            QueryContext {
-                chunk_byte_size: usize::MAX,
-            },
+            &context,
         );
 
         let result: Vec<DataCollection> = query.try_collect().await?;
@@ -2880,13 +2876,14 @@ mod tests {
             (4.824_087_161, 52.413_055_56),
         ])?;
 
+        let context1 = MockQueryContext::new(0);
         let query = query_processor.query(
             QueryRectangle {
                 bbox: query_bbox,
                 time_interval: Default::default(),
                 spatial_resolution: SpatialResolution::new(1., 1.)?,
             },
-            QueryContext { chunk_byte_size: 0 },
+            &context1,
         );
 
         let result: Vec<MultiPointCollection> = query.try_collect().await?;
@@ -2910,16 +2907,14 @@ mod tests {
         assert!(!result.last().unwrap().is_empty());
 
         // LARGER CHUNK
-
+        let context = MockQueryContext::new(1_000);
         let query = query_processor.query(
             QueryRectangle {
                 bbox: query_bbox,
                 time_interval: Default::default(),
                 spatial_resolution: SpatialResolution::new(1., 1.)?,
             },
-            QueryContext {
-                chunk_byte_size: 1_000,
-            },
+            &context,
         );
 
         let result: Vec<MultiPointCollection> = query.try_collect().await?;

@@ -373,11 +373,11 @@ struct CsvSourceProcessor {
 impl QueryProcessor for CsvSourceProcessor {
     type Output = MultiPointCollection;
 
-    fn query(
+    fn query<'a>(
         &self,
         query: QueryRectangle,
-        _ctx: QueryContext,
-    ) -> BoxStream<'_, Result<Self::Output>> {
+        _ctx: &'a dyn QueryContext,
+    ) -> BoxStream<'a, Result<Self::Output>> {
         // TODO: properly propagate error
         // TODO: properly handle chunk_size
         CsvSourceStream::new(self.params.clone(), query.bbox, 10)
@@ -406,6 +406,7 @@ mod tests {
     use geoengine_datatypes::primitives::SpatialResolution;
 
     use super::*;
+    use crate::engine::MockQueryContext;
 
     #[tokio::test]
     async fn read_points() {
@@ -547,11 +548,9 @@ x,y
             time_interval: TimeInterval::new_unchecked(0, 1),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
-        let ctx = QueryContext {
-            chunk_byte_size: 10 * 8 * 2,
-        };
+        let ctx = MockQueryContext::new(10 * 8 * 2);
 
-        let r: Vec<Result<MultiPointCollection>> = p.query(query, ctx).collect().await;
+        let r: Vec<Result<MultiPointCollection>> = p.query(query, &ctx).collect().await;
 
         assert_eq!(r.len(), 1);
 

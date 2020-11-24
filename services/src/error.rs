@@ -65,6 +65,9 @@ pub enum Error {
     PermissionFailed,
     ProjectDBUnauthorized,
 
+    DataSetListingProviderUnauthorized,
+    UnknownDataSetProviderId,
+
     InvalidNamespace,
 
     InvalidWFSTypeNames,

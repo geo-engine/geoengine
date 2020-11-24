@@ -15,7 +15,7 @@ pub use clonable_operator::{
     CloneableInitializedVectorOperator, CloneableRasterOperator, CloneableVectorOperator,
 };
 pub use operator_impl::{InitializedOperatorImpl, Operator, SourceOperator};
-pub use query::{QueryContext, QueryRectangle};
+pub use query::{LoadingInfo, MockQueryContext, QueryContext, QueryRectangle};
 pub use query_processor::{
     QueryProcessor, RasterQueryProcessor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
     VectorQueryProcessor,
