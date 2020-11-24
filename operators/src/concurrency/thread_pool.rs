@@ -83,6 +83,8 @@ impl ThreadPool {
     {
         self.global_queue.push(Box::new(task));
     }
+
+    // TODO: scope for threads
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -109,6 +111,10 @@ impl<'pool> ThreadPoolContext<'pool> {
             task_group_id: TaskGroupId::new(),
             thread_pool,
         }
+    }
+
+    fn degree_of_parallelism(&self) -> usize {
+        self.thread_pool.degree_of_parallelism
     }
 
     pub fn compute<F>(&self, task: F)
@@ -184,6 +190,26 @@ mod tests {
 
         let backoff = Backoff::new();
         while foo.load(Ordering::SeqCst) != 42 {
+            backoff.snooze();
+        }
+    }
+
+    #[test]
+    fn lots_of_tasks() {
+        let thread_pool = ThreadPool::new(2);
+
+        let number_of_tasks = 1_000_000;
+        let tasks_completed = Arc::new(AtomicI32::new(0));
+
+        for _ in 0..number_of_tasks {
+            let tasks_completed = tasks_completed.clone();
+            thread_pool.compute(TaskGroupId::new(), move || {
+                tasks_completed.fetch_add(1, Ordering::SeqCst);
+            });
+        }
+
+        let backoff = Backoff::new();
+        while tasks_completed.load(Ordering::SeqCst) != number_of_tasks {
             backoff.snooze();
         }
     }
