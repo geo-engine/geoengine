@@ -11,6 +11,7 @@ edition = "2018"
 [dependencies]
 arrow = { version = "2.0", features = ["simd"] }
 chrono = "0.4"
+crossbeam = "0.8"
 csv = "1.1"
 failure = "0.1" # TODO: remove this!
 float-cmp = "0.6"
