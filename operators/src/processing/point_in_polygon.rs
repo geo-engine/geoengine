@@ -17,6 +17,10 @@ use crate::error;
 use crate::util::Result;
 use arrow::array::BooleanArray;
 
+/// The point in polygon filter requires two inputs in the following order:
+/// 1. a `MultiPointCollection` source
+/// 2. a `MultiPolygonCollection` source
+/// Then, it filters the `MultiPolygonCollection`s so that only those features are retained that are in any polygon.
 pub type PointInPolygonFilter = Operator<()>;
 
 #[typetag::serde]
