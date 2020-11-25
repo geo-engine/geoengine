@@ -406,7 +406,7 @@ mod tests {
     use geoengine_datatypes::primitives::SpatialResolution;
 
     use super::*;
-    use geoengine_datatypes::collections::FeatureCollectionInfos;
+    use geoengine_datatypes::collections::{FeatureCollectionInfos, ToGeoJson};
 
     #[tokio::test]
     async fn read_points() {

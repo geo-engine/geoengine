@@ -437,7 +437,7 @@ impl RawFeatureCollectionBuilder {
 mod tests {
     use super::*;
     use crate::collections::{
-        BuilderProvider, DataCollection, FeatureCollectionInfos, MultiPointCollection,
+        BuilderProvider, DataCollection, FeatureCollectionInfos, MultiPointCollection, ToGeoJson,
     };
     use crate::primitives::{DataRef, FeatureDataRef};
     use arrow::buffer::MutableBuffer;

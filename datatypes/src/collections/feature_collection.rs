@@ -59,6 +59,445 @@ impl<CollectionType> FeatureCollection<CollectionType> {
     }
 }
 
+/// A trait for common feature collection modifications that are independent of the geometry type
+pub trait FeatureCollectionModifications {
+    type Output;
+
+    /// Filters the feature collection by copying the data into a new feature collection
+    ///
+    /// # Errors
+    ///
+    /// This method fails if the `mask`'s length does not equal the length of the feature collection
+    ///
+    fn filter<M>(&self, mask: M) -> Result<Self::Output>
+    where
+        M: FilterArray;
+
+    /// Creates a copy of the collection with an additional column
+    ///
+    /// # Errors
+    ///
+    /// Adding a column fails if the column does already exist or the length does not match the length of the collection
+    ///
+    fn add_column(&self, new_column_name: &str, data: FeatureData) -> Result<Self::Output> {
+        self.add_columns(&[(new_column_name, data)])
+    }
+
+    /// Creates a copy of the collection with additional columns
+    ///
+    /// # Errors
+    ///
+    /// Adding columns fails if any column does already exist or the lengths do not match the length of the collection
+    ///
+    fn add_columns(&self, new_columns: &[(&str, FeatureData)]) -> Result<Self::Output>;
+
+    /// Removes a column and returns an updated collection
+    ///
+    /// # Errors
+    ///
+    /// Removing a column fails if the column does not exist (or is reserved, e.g., the geometry column)
+    ///
+    fn remove_column(&self, column_name: &str) -> Result<Self::Output> {
+        self.remove_columns(&[column_name])
+    }
+
+    /// Removes columns and returns an updated collection
+    ///
+    /// # Errors
+    ///
+    /// Removing columns fails if any column does not exist (or is reserved, e.g., the geometry column)
+    ///
+    fn remove_columns(&self, removed_column_names: &[&str]) -> Result<Self::Output>;
+
+    /// Filter a column by one or more ranges.
+    /// If `keep_nulls` is false, then all nulls will be discarded.
+    fn column_range_filter<R>(
+        &self,
+        column: &str,
+        ranges: &[R],
+        keep_nulls: bool,
+    ) -> Result<Self::Output>
+    where
+        R: RangeBounds<FeatureDataValue>;
+
+    /// Appends a collection to another one
+    ///
+    /// # Errors
+    ///
+    /// This method fails if the columns do not match
+    ///
+    fn append(&self, other: &Self) -> Result<Self::Output>;
+}
+
+impl<CollectionType> FeatureCollectionModifications for FeatureCollection<CollectionType>
+where
+    CollectionType: Geometry + ArrowTyped,
+{
+    type Output = Self;
+
+    fn filter<M>(&self, mask: M) -> Result<Self::Output>
+    where
+        M: FilterArray,
+    {
+        ensure!(
+            mask.len() == self.table.len(),
+            error::UnmatchedLength {
+                a: mask.len(),
+                b: self.table.len(),
+            }
+        );
+
+        let filter_array: arrow::array::BooleanArray = mask.into();
+
+        // TODO: use filter directly on struct array when it is implemented
+
+        let table_data = self.table.data();
+        let columns = if let arrow::datatypes::DataType::Struct(columns) = table_data.data_type() {
+            columns
+        } else {
+            unreachable!("`table` field must be a struct")
+        };
+
+        let mut filtered_data =
+            Vec::<(arrow::datatypes::Field, arrow::array::ArrayRef)>::with_capacity(columns.len());
+
+        for (column, array) in columns.iter().zip(self.table.columns()) {
+            filtered_data.push((
+                column.clone(),
+                match column.name().as_str() {
+                    Self::GEOMETRY_COLUMN_NAME => Arc::new(CollectionType::filter(
+                        downcast_array(array),
+                        &filter_array,
+                    )?),
+                    Self::TIME_COLUMN_NAME => {
+                        Arc::new(TimeInterval::filter(downcast_array(array), &filter_array)?)
+                    }
+                    _ => arrow::compute::filter(array.as_ref(), &filter_array)?,
+                },
+            ));
+        }
+
+        Ok(Self::new_from_internals(
+            filtered_data.into(),
+            self.types.clone(),
+        ))
+    }
+
+    fn add_columns(&self, new_columns: &[(&str, FeatureData)]) -> Result<Self::Output> {
+        for &(new_column_name, ref data) in new_columns {
+            ensure!(
+                !Self::is_reserved_name(new_column_name)
+                    && self.table.column_by_name(new_column_name).is_none(),
+                error::ColumnAlreadyExists {
+                    name: new_column_name.to_string(),
+                }
+            );
+
+            ensure!(
+                data.len() == self.table.len(),
+                error::UnmatchedLength {
+                    a: self.table.len(),
+                    b: data.len(),
+                }
+            );
+        }
+
+        let number_of_old_columns = self.table.num_columns();
+        let number_of_new_columns = new_columns.len();
+
+        let mut columns = Vec::<arrow::datatypes::Field>::with_capacity(
+            number_of_old_columns + number_of_new_columns,
+        );
+        let mut column_values = Vec::<arrow::array::ArrayRef>::with_capacity(
+            number_of_old_columns + number_of_new_columns,
+        );
+
+        // copy geometry data if feature collection is geo collection
+        if CollectionType::IS_GEOMETRY {
+            columns.push(arrow::datatypes::Field::new(
+                Self::GEOMETRY_COLUMN_NAME,
+                CollectionType::arrow_data_type(),
+                false,
+            ));
+            column_values.push(
+                self.table
+                    .column_by_name(Self::GEOMETRY_COLUMN_NAME)
+                    .expect("The geometry column must exist")
+                    .clone(),
+            );
+        }
+
+        // copy time data
+        columns.push(arrow::datatypes::Field::new(
+            Self::TIME_COLUMN_NAME,
+            TimeInterval::arrow_data_type(),
+            false,
+        ));
+        column_values.push(
+            self.table
+                .column_by_name(Self::TIME_COLUMN_NAME)
+                .expect("The time column must exist")
+                .clone(),
+        );
+
+        // copy attribute data
+        for (column_name, column_type) in &self.types {
+            columns.push(arrow::datatypes::Field::new(
+                &column_name,
+                column_type.arrow_data_type(),
+                column_type.nullable(),
+            ));
+            column_values.push(
+                self.table
+                    .column_by_name(&column_name)
+                    .expect("The attribute column must exist")
+                    .clone(),
+            );
+        }
+
+        // create new type map
+        let mut types = self.types.clone();
+
+        // append new columns
+        for &(new_column_name, ref data) in new_columns {
+            columns.push(arrow::datatypes::Field::new(
+                &new_column_name,
+                data.arrow_data_type(),
+                data.nullable(),
+            ));
+            column_values.push(data.arrow_builder().map(|mut builder| builder.finish())?);
+
+            types.insert(
+                new_column_name.to_string(),
+                crate::primitives::FeatureDataType::from(data),
+            );
+        }
+
+        Ok(Self::new_from_internals(
+            struct_array_from_data(columns, column_values, self.table.len()),
+            types,
+        ))
+    }
+
+    fn remove_columns(&self, removed_column_names: &[&str]) -> Result<Self::Output> {
+        for &removed_column_name in removed_column_names {
+            ensure!(
+                !Self::is_reserved_name(removed_column_name),
+                error::CannotAccessReservedColumn {
+                    name: removed_column_name.to_string(),
+                }
+            );
+            ensure!(
+                self.table.column_by_name(removed_column_name).is_some(),
+                error::ColumnDoesNotExist {
+                    name: removed_column_name.to_string(),
+                }
+            );
+        }
+
+        let number_of_old_columns = self.table.num_columns();
+        let number_of_removed_columns = 1;
+
+        let mut columns = Vec::<arrow::datatypes::Field>::with_capacity(
+            number_of_old_columns - number_of_removed_columns,
+        );
+        let mut column_values = Vec::<arrow::array::ArrayRef>::with_capacity(
+            number_of_old_columns - number_of_removed_columns,
+        );
+        let mut types = HashMap::<String, FeatureDataType>::with_capacity(
+            number_of_old_columns - number_of_removed_columns,
+        );
+
+        // copy geometry data if feature collection is geo collection
+        if CollectionType::IS_GEOMETRY {
+            columns.push(arrow::datatypes::Field::new(
+                Self::GEOMETRY_COLUMN_NAME,
+                CollectionType::arrow_data_type(),
+                false,
+            ));
+            column_values.push(
+                self.table
+                    .column_by_name(Self::GEOMETRY_COLUMN_NAME)
+                    .expect("The geometry column must exist")
+                    .clone(),
+            );
+        }
+
+        // copy time data
+        columns.push(arrow::datatypes::Field::new(
+            Self::TIME_COLUMN_NAME,
+            TimeInterval::arrow_data_type(),
+            false,
+        ));
+        column_values.push(
+            self.table
+                .column_by_name(Self::TIME_COLUMN_NAME)
+                .expect("The time column must exist")
+                .clone(),
+        );
+
+        // copy remaining attribute data
+        let removed_name_set: HashSet<&str> = removed_column_names.iter().cloned().collect();
+        for (column_name, column_type) in &self.types {
+            if removed_name_set.contains(column_name.as_str()) {
+                continue;
+            }
+
+            columns.push(arrow::datatypes::Field::new(
+                &column_name,
+                column_type.arrow_data_type(),
+                column_type.nullable(),
+            ));
+            column_values.push(
+                self.table
+                    .column_by_name(&column_name)
+                    .expect("The attribute column must exist")
+                    .clone(),
+            );
+
+            types.insert(column_name.to_string(), self.types[column_name]);
+        }
+
+        Ok(Self::new_from_internals(
+            struct_array_from_data(columns, column_values, self.table.len()),
+            types,
+        ))
+    }
+
+    fn column_range_filter<R>(
+        &self,
+        column: &str,
+        ranges: &[R],
+        keep_nulls: bool,
+    ) -> Result<Self::Output>
+    where
+        R: RangeBounds<FeatureDataValue>,
+    {
+        let column_type = self.types.get(column);
+        ensure!(
+            column_type.is_some(),
+            error::ColumnDoesNotExist {
+                name: column.to_string()
+            }
+        );
+
+        let column = self
+            .table
+            .column_by_name(column)
+            .expect("checked by ensure");
+        let column_type = column_type.expect("checked by ensure");
+
+        let mut filter_array = None;
+
+        match column_type {
+            FeatureDataType::Number => {
+                apply_filters(
+                    as_primitive_array::<Float64Type>(column),
+                    &mut filter_array,
+                    ranges,
+                    arrow::compute::gt_eq_scalar,
+                    arrow::compute::gt_scalar,
+                    arrow::compute::lt_eq_scalar,
+                    arrow::compute::lt_scalar,
+                )?;
+            }
+            FeatureDataType::Decimal => {
+                apply_filters(
+                    as_primitive_array::<Int64Type>(column),
+                    &mut filter_array,
+                    ranges,
+                    arrow::compute::gt_eq_scalar,
+                    arrow::compute::gt_scalar,
+                    arrow::compute::lt_eq_scalar,
+                    arrow::compute::lt_scalar,
+                )?;
+            }
+            FeatureDataType::Text => {
+                apply_filters(
+                    as_string_array(column),
+                    &mut filter_array,
+                    ranges,
+                    arrow::compute::gt_eq_utf8_scalar,
+                    arrow::compute::gt_utf8_scalar,
+                    arrow::compute::lt_eq_utf8_scalar,
+                    arrow::compute::lt_utf8_scalar,
+                )?;
+            }
+            FeatureDataType::Categorical => {
+                return Err(error::FeatureCollectionError::WrongDataType.into());
+            }
+        }
+
+        ensure!(filter_array.is_some(), error::EmptyPredicate);
+
+        // update filter array with nulls from original array
+        if keep_nulls && column.null_count() > 0 {
+            let null_bitmap = column
+                .data_ref()
+                .null_bitmap()
+                .as_ref()
+                .expect("must exist if null_count > 0");
+
+            let mut null_array_builder = BooleanArray::builder(column.len());
+            for i in 0..column.len() {
+                null_array_builder.append_value(!null_bitmap.is_set(i))?;
+            }
+            let null_array = null_array_builder.finish();
+
+            update_filter_array(&mut filter_array, Some(null_array), None)?;
+        }
+
+        self.filter(filter_array.expect("checked by ensure"))
+    }
+
+    fn append(&self, other: &Self) -> Result<Self::Output> {
+        ensure!(
+            self.types == other.types,
+            error::UnmatchedSchema {
+                a: self.types.keys().cloned().collect::<Vec<String>>(),
+                b: other.types.keys().cloned().collect::<Vec<String>>(),
+            }
+        );
+
+        let table_data = self.table.data();
+        let columns = if let DataType::Struct(columns) = table_data.data_type() {
+            columns
+        } else {
+            unreachable!("`tables` field must be a struct")
+        };
+
+        let mut new_data = Vec::<(Field, ArrayRef)>::with_capacity(columns.len());
+
+        // concat data column by column
+        for (column, array_a) in columns.iter().zip(self.table.columns()) {
+            let array_b = other
+                .table
+                .column_by_name(&column.name())
+                .expect("column must occur in both collections");
+
+            new_data.push((
+                column.clone(),
+                match column.name().as_str() {
+                    Self::GEOMETRY_COLUMN_NAME => Arc::new(CollectionType::concat(
+                        downcast_array(array_a),
+                        downcast_array(array_b),
+                    )?),
+                    Self::TIME_COLUMN_NAME => Arc::new(TimeInterval::concat(
+                        downcast_array(array_a),
+                        downcast_array(array_b),
+                    )?),
+                    _ => arrow::compute::concat(&[array_a.clone(), array_b.clone()])?,
+                },
+            ));
+        }
+
+        Ok(Self::new_from_internals(
+            new_data.into(),
+            self.types.clone(),
+        ))
+    }
+}
+
 /// A trait for common feature collection information
 pub trait FeatureCollectionInfos {
     /// Returns the number of features
@@ -80,6 +519,12 @@ pub trait FeatureCollectionInfos {
     ///
     fn column_type(&self, column_name: &str) -> Result<FeatureDataType>;
 
+    /// Get a copy of the column type information
+    fn column_types(&self) -> HashMap<String, FeatureDataType>;
+
+    /// Return the names of the columns of this type
+    fn column_names_of_type(&self, column_type: FeatureDataType) -> Vec<String>;
+
     /// Retrieve column data
     ///
     /// # Errors
@@ -91,8 +536,62 @@ pub trait FeatureCollectionInfos {
     /// Retrieve time intervals
     fn time_intervals(&self) -> &[TimeInterval];
 
-    /// Get a copy of the column type information
-    fn column_types(&self) -> HashMap<String, FeatureDataType>;
+    /// Returns the byte-size of this collection
+    fn byte_size(&self) -> usize;
+}
+
+/// Transform an object to the `GeoJson` format
+pub trait ToGeoJson<'i> {
+    /// Serialize the feature collection to a geo json string
+    fn to_geo_json(&'i self) -> String;
+}
+
+impl<'i, CollectionType> ToGeoJson<'i> for FeatureCollection<CollectionType>
+where
+    CollectionType: Geometry + ArrowTyped,
+    Self: IntoGeometryOptionsIterator<'i>,
+{
+    fn to_geo_json(&'i self) -> String {
+        let mut property_maps = (0..self.len())
+            .map(|_| serde_json::Map::with_capacity(self.types.len()))
+            .collect::<Vec<_>>();
+
+        for column_name in self.types.keys() {
+            for (json_value, map) in self
+                .data(column_name)
+                .expect("must exist since it's in `types`")
+                .json_values()
+                .zip(property_maps.as_mut_slice())
+            {
+                map.insert(column_name.clone(), json_value);
+            }
+        }
+
+        let features = self
+            .geometry_options()
+            .zip(self.time_intervals())
+            .zip(property_maps)
+            .map(
+                |((geometry_option, time_interval), properties)| geojson::Feature {
+                    bbox: None,
+                    geometry: geometry_option.map(Into::into),
+                    id: None,
+                    properties: Some(properties),
+                    foreign_members: Some(
+                        json_map! {"when".to_string() => time_interval.to_geo_json_event()},
+                    ),
+                },
+            )
+            .collect();
+
+        let feature_collection = geojson::FeatureCollection {
+            bbox: None,
+            features,
+            foreign_members: None,
+        };
+
+        feature_collection.to_string()
+    }
 }
 
 impl<CollectionType> FeatureCollectionInfos for FeatureCollection<CollectionType>
@@ -203,6 +702,33 @@ where
 
     fn column_types(&self) -> HashMap<String, FeatureDataType> {
         self.types.clone()
+    }
+
+    fn byte_size(&self) -> usize {
+        let table_size = self.table.get_array_memory_size();
+
+        // TODO: store information? avoid re-calculation?
+        let map_size = mem::size_of_val(&self.types)
+            + self
+                .types
+                .iter()
+                .map(|(k, v)| mem::size_of_val(k) + k.as_bytes().len() + mem::size_of_val(v))
+                .sum::<usize>();
+
+        table_size + map_size
+    }
+
+    fn column_names_of_type(&self, column_type: FeatureDataType) -> Vec<String> {
+        self.types
+            .iter()
+            .filter_map(|(k, v)| {
+                if v == &column_type {
+                    Some(k.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 }
 
@@ -325,489 +851,6 @@ where
     /// Checks for name conflicts with reserved names
     pub(super) fn is_reserved_name(name: &str) -> bool {
         name == Self::GEOMETRY_COLUMN_NAME || name == Self::TIME_COLUMN_NAME
-    }
-
-    /// Creates a copy of the collection with an additional column
-    ///
-    /// # Errors
-    ///
-    /// Adding a column fails if the column does already exist or the length does not match the length of the collection
-    ///
-    pub fn add_column(&self, new_column_name: &str, data: FeatureData) -> Result<Self> {
-        self.add_columns(&[(new_column_name, data)])
-    }
-
-    /// Creates a copy of the collection with additional columns
-    ///
-    /// # Errors
-    ///
-    /// Adding columns fails if any column does already exist or the lengths do not match the length of the collection
-    ///
-    pub fn add_columns(&self, new_columns: &[(&str, FeatureData)]) -> Result<Self> {
-        for &(new_column_name, ref data) in new_columns {
-            ensure!(
-                !Self::is_reserved_name(new_column_name)
-                    && self.table.column_by_name(new_column_name).is_none(),
-                error::ColumnAlreadyExists {
-                    name: new_column_name.to_string(),
-                }
-            );
-
-            ensure!(
-                data.len() == self.table.len(),
-                error::UnmatchedLength {
-                    a: self.table.len(),
-                    b: data.len(),
-                }
-            );
-        }
-
-        let number_of_old_columns = self.table.num_columns();
-        let number_of_new_columns = new_columns.len();
-
-        let mut columns = Vec::<arrow::datatypes::Field>::with_capacity(
-            number_of_old_columns + number_of_new_columns,
-        );
-        let mut column_values = Vec::<arrow::array::ArrayRef>::with_capacity(
-            number_of_old_columns + number_of_new_columns,
-        );
-
-        // copy geometry data if feature collection is geo collection
-        if CollectionType::IS_GEOMETRY {
-            columns.push(arrow::datatypes::Field::new(
-                Self::GEOMETRY_COLUMN_NAME,
-                CollectionType::arrow_data_type(),
-                false,
-            ));
-            column_values.push(
-                self.table
-                    .column_by_name(Self::GEOMETRY_COLUMN_NAME)
-                    .expect("The geometry column must exist")
-                    .clone(),
-            );
-        }
-
-        // copy time data
-        columns.push(arrow::datatypes::Field::new(
-            Self::TIME_COLUMN_NAME,
-            TimeInterval::arrow_data_type(),
-            false,
-        ));
-        column_values.push(
-            self.table
-                .column_by_name(Self::TIME_COLUMN_NAME)
-                .expect("The time column must exist")
-                .clone(),
-        );
-
-        // copy attribute data
-        for (column_name, column_type) in &self.types {
-            columns.push(arrow::datatypes::Field::new(
-                &column_name,
-                column_type.arrow_data_type(),
-                column_type.nullable(),
-            ));
-            column_values.push(
-                self.table
-                    .column_by_name(&column_name)
-                    .expect("The attribute column must exist")
-                    .clone(),
-            );
-        }
-
-        // create new type map
-        let mut types = self.types.clone();
-
-        // append new columns
-        for &(new_column_name, ref data) in new_columns {
-            columns.push(arrow::datatypes::Field::new(
-                &new_column_name,
-                data.arrow_data_type(),
-                data.nullable(),
-            ));
-            column_values.push(data.arrow_builder().map(|mut builder| builder.finish())?);
-
-            types.insert(
-                new_column_name.to_string(),
-                crate::primitives::FeatureDataType::from(data),
-            );
-        }
-
-        Ok(Self::new_from_internals(
-            struct_array_from_data(columns, column_values, self.table.len()),
-            types,
-        ))
-    }
-
-    /// Removes a column and returns an updated collection
-    ///
-    /// # Errors
-    ///
-    /// Removing a column fails if the column does not exist (or is reserved, e.g., the geometry column)
-    ///
-    pub fn remove_column(&self, column_name: &str) -> Result<Self> {
-        self.remove_columns(&[column_name])
-    }
-
-    /// Removes columns and returns an updated collection
-    ///
-    /// # Errors
-    ///
-    /// Removing columns fails if any column does not exist (or is reserved, e.g., the geometry column)
-    ///
-    pub fn remove_columns(&self, removed_column_names: &[&str]) -> Result<Self> {
-        for &removed_column_name in removed_column_names {
-            ensure!(
-                !Self::is_reserved_name(removed_column_name),
-                error::CannotAccessReservedColumn {
-                    name: removed_column_name.to_string(),
-                }
-            );
-            ensure!(
-                self.table.column_by_name(removed_column_name).is_some(),
-                error::ColumnDoesNotExist {
-                    name: removed_column_name.to_string(),
-                }
-            );
-        }
-
-        let number_of_old_columns = self.table.num_columns();
-        let number_of_removed_columns = 1;
-
-        let mut columns = Vec::<arrow::datatypes::Field>::with_capacity(
-            number_of_old_columns - number_of_removed_columns,
-        );
-        let mut column_values = Vec::<arrow::array::ArrayRef>::with_capacity(
-            number_of_old_columns - number_of_removed_columns,
-        );
-        let mut types = HashMap::<String, FeatureDataType>::with_capacity(
-            number_of_old_columns - number_of_removed_columns,
-        );
-
-        // copy geometry data if feature collection is geo collection
-        if CollectionType::IS_GEOMETRY {
-            columns.push(arrow::datatypes::Field::new(
-                Self::GEOMETRY_COLUMN_NAME,
-                CollectionType::arrow_data_type(),
-                false,
-            ));
-            column_values.push(
-                self.table
-                    .column_by_name(Self::GEOMETRY_COLUMN_NAME)
-                    .expect("The geometry column must exist")
-                    .clone(),
-            );
-        }
-
-        // copy time data
-        columns.push(arrow::datatypes::Field::new(
-            Self::TIME_COLUMN_NAME,
-            TimeInterval::arrow_data_type(),
-            false,
-        ));
-        column_values.push(
-            self.table
-                .column_by_name(Self::TIME_COLUMN_NAME)
-                .expect("The time column must exist")
-                .clone(),
-        );
-
-        // copy remaining attribute data
-        let removed_name_set: HashSet<&str> = removed_column_names.iter().cloned().collect();
-        for (column_name, column_type) in &self.types {
-            if removed_name_set.contains(column_name.as_str()) {
-                continue;
-            }
-
-            columns.push(arrow::datatypes::Field::new(
-                &column_name,
-                column_type.arrow_data_type(),
-                column_type.nullable(),
-            ));
-            column_values.push(
-                self.table
-                    .column_by_name(&column_name)
-                    .expect("The attribute column must exist")
-                    .clone(),
-            );
-
-            types.insert(column_name.to_string(), self.types[column_name]);
-        }
-
-        Ok(Self::new_from_internals(
-            struct_array_from_data(columns, column_values, self.table.len()),
-            types,
-        ))
-    }
-
-    /// Appends a collection to another one
-    ///
-    /// # Errors
-    ///
-    /// This method fails if the columns do not match
-    ///
-    pub fn append(&self, other: &Self) -> Result<Self> {
-        ensure!(
-            self.types == other.types,
-            error::UnmatchedSchema {
-                a: self.types.keys().cloned().collect::<Vec<String>>(),
-                b: other.types.keys().cloned().collect::<Vec<String>>(),
-            }
-        );
-
-        let table_data = self.table.data();
-        let columns = if let DataType::Struct(columns) = table_data.data_type() {
-            columns
-        } else {
-            unreachable!("`tables` field must be a struct")
-        };
-
-        let mut new_data = Vec::<(Field, ArrayRef)>::with_capacity(columns.len());
-
-        // concat data column by column
-        for (column, array_a) in columns.iter().zip(self.table.columns()) {
-            let array_b = other
-                .table
-                .column_by_name(&column.name())
-                .expect("column must occur in both collections");
-
-            new_data.push((
-                column.clone(),
-                match column.name().as_str() {
-                    Self::GEOMETRY_COLUMN_NAME => Arc::new(CollectionType::concat(
-                        downcast_array(array_a),
-                        downcast_array(array_b),
-                    )?),
-                    Self::TIME_COLUMN_NAME => Arc::new(TimeInterval::concat(
-                        downcast_array(array_a),
-                        downcast_array(array_b),
-                    )?),
-                    _ => arrow::compute::concat(&[array_a.clone(), array_b.clone()])?,
-                },
-            ));
-        }
-
-        Ok(Self::new_from_internals(
-            new_data.into(),
-            self.types.clone(),
-        ))
-    }
-
-    /// Filters the feature collection by copying the data into a new feature collection
-    ///
-    /// # Errors
-    ///
-    /// This method fails if the `mask`'s length does not equal the length of the feature collection
-    ///
-    pub fn filter<M>(&self, mask: M) -> Result<Self>
-    where
-        M: FilterArray,
-    {
-        ensure!(
-            mask.len() == self.table.len(),
-            error::UnmatchedLength {
-                a: mask.len(),
-                b: self.table.len(),
-            }
-        );
-
-        let filter_array: arrow::array::BooleanArray = mask.into();
-
-        // TODO: use filter directly on struct array when it is implemented
-
-        let table_data = self.table.data();
-        let columns = if let arrow::datatypes::DataType::Struct(columns) = table_data.data_type() {
-            columns
-        } else {
-            unreachable!("`table` field must be a struct")
-        };
-
-        let mut filtered_data =
-            Vec::<(arrow::datatypes::Field, arrow::array::ArrayRef)>::with_capacity(columns.len());
-
-        for (column, array) in columns.iter().zip(self.table.columns()) {
-            filtered_data.push((
-                column.clone(),
-                match column.name().as_str() {
-                    Self::GEOMETRY_COLUMN_NAME => Arc::new(CollectionType::filter(
-                        downcast_array(array),
-                        &filter_array,
-                    )?),
-                    Self::TIME_COLUMN_NAME => {
-                        Arc::new(TimeInterval::filter(downcast_array(array), &filter_array)?)
-                    }
-                    _ => arrow::compute::filter(array.as_ref(), &filter_array)?,
-                },
-            ));
-        }
-
-        Ok(Self::new_from_internals(
-            filtered_data.into(),
-            self.types.clone(),
-        ))
-    }
-
-    /// Filter a column by one or more ranges.
-    /// If `keep_nulls` is false, then all nulls will be discarded.
-    pub fn column_range_filter<R>(
-        &self,
-        column: &str,
-        ranges: &[R],
-        keep_nulls: bool,
-    ) -> Result<Self>
-    where
-        R: RangeBounds<FeatureDataValue>,
-    {
-        let column_type = self.types.get(column);
-        ensure!(
-            column_type.is_some(),
-            error::ColumnDoesNotExist {
-                name: column.to_string()
-            }
-        );
-
-        let column = self
-            .table
-            .column_by_name(column)
-            .expect("checked by ensure");
-        let column_type = column_type.expect("checked by ensure");
-
-        let mut filter_array = None;
-
-        match column_type {
-            FeatureDataType::Number => {
-                apply_filters(
-                    as_primitive_array::<Float64Type>(column),
-                    &mut filter_array,
-                    ranges,
-                    arrow::compute::gt_eq_scalar,
-                    arrow::compute::gt_scalar,
-                    arrow::compute::lt_eq_scalar,
-                    arrow::compute::lt_scalar,
-                )?;
-            }
-            FeatureDataType::Decimal => {
-                apply_filters(
-                    as_primitive_array::<Int64Type>(column),
-                    &mut filter_array,
-                    ranges,
-                    arrow::compute::gt_eq_scalar,
-                    arrow::compute::gt_scalar,
-                    arrow::compute::lt_eq_scalar,
-                    arrow::compute::lt_scalar,
-                )?;
-            }
-            FeatureDataType::Text => {
-                apply_filters(
-                    as_string_array(column),
-                    &mut filter_array,
-                    ranges,
-                    arrow::compute::gt_eq_utf8_scalar,
-                    arrow::compute::gt_utf8_scalar,
-                    arrow::compute::lt_eq_utf8_scalar,
-                    arrow::compute::lt_utf8_scalar,
-                )?;
-            }
-            FeatureDataType::Categorical => {
-                return Err(error::FeatureCollectionError::WrongDataType.into());
-            }
-        }
-
-        ensure!(filter_array.is_some(), error::EmptyPredicate);
-
-        // update filter array with nulls from original array
-        if keep_nulls && column.null_count() > 0 {
-            let null_bitmap = column
-                .data_ref()
-                .null_bitmap()
-                .as_ref()
-                .expect("must exist if null_count > 0");
-
-            let mut null_array_builder = BooleanArray::builder(column.len());
-            for i in 0..column.len() {
-                null_array_builder.append_value(!null_bitmap.is_set(i))?;
-            }
-            let null_array = null_array_builder.finish();
-
-            update_filter_array(&mut filter_array, Some(null_array), None)?;
-        }
-
-        self.filter(filter_array.expect("checked by ensure"))
-    }
-
-    /// Serialize the feature collection to a geo json string
-    pub fn to_geo_json<'i>(&'i self) -> String
-    where
-        Self: IntoGeometryOptionsIterator<'i>, // TODO: remove here and impl for struct?
-    {
-        let mut property_maps = (0..self.len())
-            .map(|_| serde_json::Map::with_capacity(self.types.len()))
-            .collect::<Vec<_>>();
-
-        for column_name in self.types.keys() {
-            for (json_value, map) in self
-                .data(column_name)
-                .expect("must exist since it's in `types`")
-                .json_values()
-                .zip(property_maps.as_mut_slice())
-            {
-                map.insert(column_name.clone(), json_value);
-            }
-        }
-
-        let features = self
-            .geometry_options()
-            .zip(self.time_intervals())
-            .zip(property_maps)
-            .map(
-                |((geometry_option, time_interval), properties)| geojson::Feature {
-                    bbox: None,
-                    geometry: geometry_option.map(Into::into),
-                    id: None,
-                    properties: Some(properties),
-                    foreign_members: Some(
-                        json_map! {"when".to_string() => time_interval.to_geo_json_event()},
-                    ),
-                },
-            )
-            .collect();
-
-        let feature_collection = geojson::FeatureCollection {
-            bbox: None,
-            features,
-            foreign_members: None,
-        };
-
-        feature_collection.to_string()
-    }
-
-    /// Returns the byte-size of this collection
-    pub fn byte_size(&self) -> usize {
-        let table_size = self.table.get_array_memory_size();
-
-        // TODO: store information? avoid re-calculation?
-        let map_size = mem::size_of_val(&self.types)
-            + self
-                .types
-                .iter()
-                .map(|(k, v)| mem::size_of_val(k) + k.as_bytes().len() + mem::size_of_val(v))
-                .sum::<usize>();
-
-        table_size + map_size
-    }
-
-    /// Return the names of the columns of this type
-    pub fn column_names_of_type(&self, column_type: FeatureDataType) -> Vec<String> {
-        self.types
-            .iter()
-            .filter_map(|(k, v)| {
-                if v == &column_type {
-                    Some(k.clone())
-                } else {
-                    None
-                }
-            })
-            .collect()
     }
 }
 

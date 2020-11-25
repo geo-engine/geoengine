@@ -143,7 +143,7 @@ impl MultiPointCollection {
 mod tests {
     use super::*;
 
-    use crate::collections::BuilderProvider;
+    use crate::collections::{BuilderProvider, FeatureCollectionModifications, ToGeoJson};
     use crate::primitives::{
         DataRef, FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue, MultiPointAccess,
         TimeInterval,

@@ -18,6 +18,7 @@ mod tests {
     use super::*;
 
     use crate::collections::BuilderProvider;
+    use crate::collections::FeatureCollectionModifications;
     use crate::primitives::{
         DataRef, FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue, TimeInterval,
     };

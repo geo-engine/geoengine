@@ -180,7 +180,7 @@ impl GeoFeatureCollectionRowBuilder<MultiLineString>
 mod tests {
     use super::*;
 
-    use crate::collections::BuilderProvider;
+    use crate::collections::{BuilderProvider, FeatureCollectionModifications};
     use crate::primitives::TimeInterval;
 
     #[test]

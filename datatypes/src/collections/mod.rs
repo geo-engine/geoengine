@@ -13,7 +13,10 @@ mod multi_point_collection;
 mod multi_polygon_collection;
 
 pub(crate) use error::FeatureCollectionError;
-pub use feature_collection::{FeatureCollection, FeatureCollectionInfos};
+pub(self) use feature_collection::FilterArray;
+pub use feature_collection::{
+    FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications, ToGeoJson,
+};
 pub use feature_collection_builder::{
     BuilderProvider, FeatureCollectionBuilder, FeatureCollectionRowBuilder,
     GeoFeatureCollectionRowBuilder,

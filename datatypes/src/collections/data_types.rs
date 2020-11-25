@@ -3,13 +3,17 @@ use std::convert::{TryFrom, TryInto};
 use serde::{Deserialize, Serialize};
 
 use crate::collections::{
-    DataCollection, FeatureCollectionError, FeatureCollectionInfos, MultiLineStringCollection,
-    MultiPointCollection, MultiPolygonCollection,
+    DataCollection, FeatureCollectionError, FeatureCollectionInfos, FeatureCollectionModifications,
+    FilterArray, MultiLineStringCollection, MultiPointCollection, MultiPolygonCollection,
+    ToGeoJson,
 };
 use crate::error::Error;
-use crate::primitives::{Coordinate2D, FeatureDataRef, FeatureDataType, TimeInterval};
+use crate::primitives::{
+    Coordinate2D, FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue, TimeInterval,
+};
 use crate::util::Result;
 use std::collections::HashMap;
+use std::ops::RangeBounds;
 
 /// An enum that contains all possible vector data types
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Deserialize, Serialize, Copy, Clone)]
@@ -22,7 +26,7 @@ pub enum VectorDataType {
 }
 
 /// A feature collection, wrapped by type info
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum TypedFeatureCollection {
     Data(DataCollection),
     MultiPoint(MultiPointCollection),
@@ -31,7 +35,7 @@ pub enum TypedFeatureCollection {
 }
 
 /// A feature collection reference, wrapped by type info
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq)]
 #[allow(dead_code)]
 pub enum TypedFeatureCollectionRef<'c> {
     Data(&'c DataCollection),
@@ -85,6 +89,56 @@ impl_try_from_ref!(Data);
 impl_try_from_ref!(MultiPoint);
 impl_try_from_ref!(MultiLineString);
 impl_try_from_ref!(MultiPolygon);
+
+/// Implement `From<FeatureCollection<?>>` for `TypedFeatureCollection`
+macro_rules! impl_from_collection {
+    ($variant:ident) => {
+        paste::paste! {
+            impl From<[<$variant Collection>]> for TypedFeatureCollection {
+                fn from(collection: [<$variant Collection>]) -> Self {
+                    TypedFeatureCollection::$variant(collection)
+                }
+            }
+        }
+    };
+}
+
+impl_from_collection!(Data);
+impl_from_collection!(MultiPoint);
+impl_from_collection!(MultiLineString);
+impl_from_collection!(MultiPolygon);
+
+/// Implement `From<&FeatureCollection<?>>` for `TypedFeatureCollectionRef`
+macro_rules! impl_from_collection_ref {
+    ($variant:ident) => {
+        paste::paste! {
+            impl<'c> From<&'c [<$variant Collection>]> for TypedFeatureCollectionRef<'c> {
+                fn from(collection: &'c [<$variant Collection>]) -> Self {
+                    TypedFeatureCollectionRef::$variant(collection)
+                }
+            }
+        }
+    };
+}
+
+impl_from_collection_ref!(Data);
+impl_from_collection_ref!(MultiPoint);
+impl_from_collection_ref!(MultiLineString);
+impl_from_collection_ref!(MultiPolygon);
+
+/// Convenience conversion from `&TypedFeatureCollection` to `TypedFeatureCollectionRef`
+impl<'c> From<&'c TypedFeatureCollection> for TypedFeatureCollectionRef<'c> {
+    fn from(typed_collection: &'c TypedFeatureCollection) -> TypedFeatureCollectionRef<'c> {
+        match typed_collection {
+            TypedFeatureCollection::Data(c) => TypedFeatureCollectionRef::Data(c),
+            TypedFeatureCollection::MultiPoint(c) => TypedFeatureCollectionRef::MultiPoint(c),
+            TypedFeatureCollection::MultiLineString(c) => {
+                TypedFeatureCollectionRef::MultiLineString(c)
+            }
+            TypedFeatureCollection::MultiPolygon(c) => TypedFeatureCollectionRef::MultiPolygon(c),
+        }
+    }
+}
 
 impl TypedFeatureCollection {
     pub fn try_into_points(self) -> Result<MultiPointCollection> {
@@ -184,6 +238,8 @@ impl FeatureCollectionInfos for TypedFeatureCollection {
     impl_function_by_forwarding_ref!(fn data(&self, column_name: &str) -> Result<FeatureDataRef>);
     impl_function_by_forwarding_ref!(fn time_intervals(&self) -> &[TimeInterval]);
     impl_function_by_forwarding_ref!(fn column_types(&self) -> HashMap<String, FeatureDataType>);
+    impl_function_by_forwarding_ref!(fn byte_size(&self) -> usize);
+    impl_function_by_forwarding_ref!(fn column_names_of_type(&self, column_type: FeatureDataType) -> Vec<String>);
 }
 
 impl<'c> FeatureCollectionInfos for TypedFeatureCollectionRef<'c> {
@@ -193,6 +249,133 @@ impl<'c> FeatureCollectionInfos for TypedFeatureCollectionRef<'c> {
     impl_function_by_forwarding_ref2!(fn data(&self, column_name: &str) -> Result<FeatureDataRef>);
     impl_function_by_forwarding_ref2!(fn time_intervals(&self) -> &[TimeInterval]);
     impl_function_by_forwarding_ref2!(fn column_types(&self) -> HashMap<String, FeatureDataType>);
+    impl_function_by_forwarding_ref2!(fn byte_size(&self) -> usize);
+    impl_function_by_forwarding_ref2!(fn column_names_of_type(&self, column_type: FeatureDataType) -> Vec<String>);
+}
+
+impl ToGeoJson<'_> for TypedFeatureCollection {
+    impl_function_by_forwarding_ref!(fn to_geo_json(&self) -> String);
+}
+
+impl<'c> ToGeoJson<'_> for TypedFeatureCollectionRef<'c> {
+    impl_function_by_forwarding_ref2!(fn to_geo_json(&self) -> String);
+}
+
+/// Implements a function by forwarding its output
+macro_rules! impl_mod_function_by_forwarding_ref {
+    (fn $function_name:ident( & $self_type:ident $(, $parameter_name:ident : $parameter_type:ty)* ) -> $return_type:ty) => {
+        fn $function_name(&self $(, $parameter_name : $parameter_type)*) -> $return_type {
+            impl_mod_function_by_forwarding_ref!(@resolve self => $function_name( $( $parameter_name ),* ) )
+        }
+    };
+
+    (fn $function_name:ident< $($generics:ident),* >( & $self_type:ident $(, $parameter_name:ident : $parameter_type:ty)* ) -> $return_type:ty
+        where $($tail:tt)* ) => {
+        fn $function_name< $( $generics ),* >(&self $(, $parameter_name : $parameter_type)*) -> $return_type where $($tail)* {
+            impl_mod_function_by_forwarding_ref!(@resolve self => $function_name( $( $parameter_name ),* ) )
+        }
+    };
+
+    (@resolve $typed:expr =>  $function_name:ident( $($parameter_name:ident),* )) => {
+        Ok(match $typed {
+            TypedFeatureCollection::Data(c) => TypedFeatureCollection::Data( c.$function_name($( $parameter_name ),*)? ),
+            TypedFeatureCollection::MultiPoint(c) => TypedFeatureCollection::MultiPoint( c.$function_name($( $parameter_name ),*)? ),
+            TypedFeatureCollection::MultiLineString(c) => TypedFeatureCollection::MultiLineString( c.$function_name($( $parameter_name ),*)? ),
+            TypedFeatureCollection::MultiPolygon(c) => TypedFeatureCollection::MultiPolygon( c.$function_name($( $parameter_name ),*)? ),
+        })
+    };
+}
+
+/// Implements a function by forwarding its output
+macro_rules! impl_mod_function_by_forwarding_ref2 {
+    (fn $function_name:ident( & $self_type:ident $(, $parameter_name:ident : $parameter_type:ty)* ) -> $return_type:ty) => {
+        fn $function_name(&self $(, $parameter_name : $parameter_type)*) -> $return_type {
+            impl_mod_function_by_forwarding_ref2!(@resolve self => $function_name( $( $parameter_name ),* ) )
+        }
+    };
+
+    (fn $function_name:ident< $($generics:ident),* >( & $self_type:ident $(, $parameter_name:ident : $parameter_type:ty)* ) -> $return_type:ty
+        where $($tail:tt)*  ) => {
+        fn $function_name< $( $generics ),* >(&self $(, $parameter_name : $parameter_type)*) -> $return_type where $($tail)* {
+            impl_mod_function_by_forwarding_ref2!(@resolve self => $function_name( $( $parameter_name ),* ) )
+        }
+    };
+
+    (@resolve $typed:expr =>  $function_name:ident( $($parameter_name:ident),* )) => {
+        Ok(match $typed {
+            TypedFeatureCollectionRef::Data(c) => TypedFeatureCollection::Data( c.$function_name($( $parameter_name ),*)? ),
+            TypedFeatureCollectionRef::MultiPoint(c) => TypedFeatureCollection::MultiPoint( c.$function_name($( $parameter_name ),*)? ),
+            TypedFeatureCollectionRef::MultiLineString(c) => TypedFeatureCollection::MultiLineString( c.$function_name($( $parameter_name ),*)? ),
+            TypedFeatureCollectionRef::MultiPolygon(c) => TypedFeatureCollection::MultiPolygon( c.$function_name($( $parameter_name ),*)? ),
+        })
+    };
+}
+
+impl FeatureCollectionModifications for TypedFeatureCollection {
+    type Output = Self;
+
+    impl_mod_function_by_forwarding_ref!(fn filter<M>(&self, mask: M) -> Result<Self::Output> where M: FilterArray);
+
+    impl_mod_function_by_forwarding_ref!(fn add_columns(&self, new_columns: &[(&str, FeatureData)]) -> Result<Self::Output>);
+
+    impl_mod_function_by_forwarding_ref!(fn remove_columns(&self, removed_column_names: &[&str]) -> Result<Self::Output>);
+
+    impl_mod_function_by_forwarding_ref!(fn column_range_filter<R>(&self, column: &str, ranges: &[R], keep_nulls: bool) -> Result<Self::Output>
+                                         where R: RangeBounds<FeatureDataValue>);
+
+    fn append(&self, other: &Self) -> Result<Self::Output> {
+        Ok(match (self, other) {
+            (TypedFeatureCollection::Data(c1), TypedFeatureCollection::Data(c2)) => {
+                TypedFeatureCollection::Data(c1.append(c2)?)
+            }
+            (TypedFeatureCollection::MultiPoint(c1), TypedFeatureCollection::MultiPoint(c2)) => {
+                TypedFeatureCollection::MultiPoint(c1.append(c2)?)
+            }
+            (
+                TypedFeatureCollection::MultiLineString(c1),
+                TypedFeatureCollection::MultiLineString(c2),
+            ) => TypedFeatureCollection::MultiLineString(c1.append(c2)?),
+            (
+                TypedFeatureCollection::MultiPolygon(c1),
+                TypedFeatureCollection::MultiPolygon(c2),
+            ) => TypedFeatureCollection::MultiPolygon(c1.append(c2)?),
+            _ => return Err(FeatureCollectionError::WrongDataType.into()),
+        })
+    }
+}
+
+impl<'c> FeatureCollectionModifications for TypedFeatureCollectionRef<'c> {
+    type Output = TypedFeatureCollection;
+
+    impl_mod_function_by_forwarding_ref2!(fn filter<M>(&self, mask: M) -> Result<Self::Output> where M: FilterArray);
+
+    impl_mod_function_by_forwarding_ref2!(fn add_columns(&self, new_columns: &[(&str, FeatureData)]) -> Result<Self::Output>);
+
+    impl_mod_function_by_forwarding_ref2!(fn remove_columns(&self, removed_column_names: &[&str]) -> Result<Self::Output>);
+
+    impl_mod_function_by_forwarding_ref2!(fn column_range_filter<R>(&self, column: &str, ranges: &[R], keep_nulls: bool) -> Result<Self::Output>
+                                          where R: RangeBounds<FeatureDataValue>);
+
+    fn append(&self, other: &Self) -> Result<Self::Output> {
+        Ok(match (self, other) {
+            (TypedFeatureCollectionRef::Data(c1), TypedFeatureCollectionRef::Data(c2)) => {
+                TypedFeatureCollection::Data(c1.append(c2)?)
+            }
+            (
+                TypedFeatureCollectionRef::MultiPoint(c1),
+                TypedFeatureCollectionRef::MultiPoint(c2),
+            ) => TypedFeatureCollection::MultiPoint(c1.append(c2)?),
+            (
+                TypedFeatureCollectionRef::MultiLineString(c1),
+                TypedFeatureCollectionRef::MultiLineString(c2),
+            ) => TypedFeatureCollection::MultiLineString(c1.append(c2)?),
+            (
+                TypedFeatureCollectionRef::MultiPolygon(c1),
+                TypedFeatureCollectionRef::MultiPolygon(c2),
+            ) => TypedFeatureCollection::MultiPolygon(c1.append(c2)?),
+            _ => return Err(FeatureCollectionError::WrongDataType.into()),
+        })
+    }
 }
 
 #[cfg(test)]
@@ -201,9 +384,28 @@ mod tests {
 
     #[test]
     fn append() {
-        let _c1 = TypedFeatureCollection::MultiPoint(MultiPointCollection::empty());
-        let _c2 = MultiPointCollection::empty();
+        let c1: TypedFeatureCollection = MultiPointCollection::empty().into();
+        let c2 = MultiPointCollection::empty().into();
 
-        // c1.as_ref().append(&c2)
+        c1.append(&c2).unwrap();
+
+        let c1 = MultiPointCollection::empty();
+        let c2 = MultiPointCollection::empty();
+
+        TypedFeatureCollectionRef::from(&c1)
+            .append(&(&c2).into())
+            .unwrap();
+
+        let c3 = MultiPolygonCollection::empty();
+
+        TypedFeatureCollectionRef::from(&c1)
+            .append(&(&c3).into())
+            .unwrap_err();
+
+        let c4: TypedFeatureCollection = MultiPointCollection::empty().into();
+
+        TypedFeatureCollectionRef::from(&c1)
+            .append(&(&c4).into())
+            .unwrap();
     }
 }

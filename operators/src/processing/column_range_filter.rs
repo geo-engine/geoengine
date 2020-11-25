@@ -9,7 +9,9 @@ use crate::util::input::StringOrNumberRange;
 use crate::util::Result;
 use futures::stream::BoxStream;
 use futures::StreamExt;
-use geoengine_datatypes::collections::{FeatureCollection, FeatureCollectionInfos};
+use geoengine_datatypes::collections::{
+    FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
+};
 use geoengine_datatypes::primitives::{FeatureDataType, FeatureDataValue, Geometry};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use serde::{Deserialize, Serialize};
@@ -175,10 +177,11 @@ where
 mod tests {
     use super::*;
     use crate::mock::{MockFeatureCollectionSource, MockFeatureCollectionSourceParams};
+    use geoengine_datatypes::collections::{FeatureCollectionModifications, MultiPointCollection};
+    use geoengine_datatypes::primitives::SpatialResolution;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, FeatureData, MultiPoint, TimeInterval,
     };
-    use geoengine_datatypes::{collections::MultiPointCollection, primitives::SpatialResolution};
 
     #[test]
     fn serde() {
