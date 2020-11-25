@@ -1031,7 +1031,7 @@ mod tests {
     use geoengine_datatypes::collections::{DataCollection, MultiPointCollection};
     use geoengine_datatypes::primitives::{BoundingBox2D, FeatureData, SpatialResolution};
 
-    use crate::engine::ExecutionContext;
+    use crate::engine::MockExecutionContextCreator;
 
     use super::*;
 
@@ -1358,9 +1358,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&ExecutionContext {
-            raster_data_root: Default::default(),
-        })?;
+        .initialize(&MockExecutionContextCreator::default().context())?;
 
         assert_eq!(
             source.result_descriptor().data_type,
@@ -1423,9 +1421,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&ExecutionContext {
-            raster_data_root: Default::default(),
-        })?;
+        .initialize(&MockExecutionContextCreator::default().context())?;
 
         assert_eq!(
             source.result_descriptor().data_type,
@@ -1556,9 +1552,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&ExecutionContext {
-            raster_data_root: Default::default(),
-        })?;
+        .initialize(&MockExecutionContextCreator::default().context())?;
 
         assert_eq!(
             source.result_descriptor().data_type,
@@ -2761,9 +2755,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&ExecutionContext {
-            raster_data_root: Default::default(),
-        })?;
+        .initialize(&MockExecutionContextCreator::default().context())?;
 
         assert_eq!(
             source.result_descriptor().data_type,

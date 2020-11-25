@@ -115,6 +115,7 @@ impl_mock_feature_collection_source!(MultiPolygon, MultiPolygon);
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::MockExecutionContextCreator;
     use futures::executor::block_on_stream;
     use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, FeatureData, TimeInterval};
     use geoengine_datatypes::{collections::MultiPointCollection, primitives::SpatialResolution};
@@ -237,7 +238,9 @@ mod tests {
         }
         .boxed();
 
-        let source = source.initialize(&ExecutionContext::mock_empty()).unwrap();
+        let source = source
+            .initialize(&MockExecutionContextCreator::default().context())
+            .unwrap();
 
         let processor =
             if let Ok(TypedVectorQueryProcessor::MultiPoint(p)) = source.query_processor() {

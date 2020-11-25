@@ -15,7 +15,8 @@ use geoengine_datatypes::{
     primitives::SpatialResolution,
 };
 use geoengine_operators::engine::{
-    ExecutionContext, QueryContext, QueryRectangle, TypedVectorQueryProcessor, VectorQueryProcessor,
+    MockExecutionContextCreator, QueryContext, QueryRectangle, TypedVectorQueryProcessor,
+    VectorQueryProcessor,
 };
 use serde_json::json;
 use std::str::FromStr;
@@ -177,7 +178,9 @@ async fn get_feature<C: Context>(
 
     let operator = workflow.operator.get_vector().context(error::Operator)?;
 
-    let execution_context = ExecutionContext::mock_empty();
+    // TODO: use global context parameters
+    let execution_context_creator = MockExecutionContextCreator::default();
+    let execution_context = execution_context_creator.context();
     let initialized = operator
         .initialize(&execution_context)
         .context(error::Operator)?;

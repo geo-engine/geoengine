@@ -128,8 +128,8 @@ mod tests {
     use super::*;
 
     use crate::engine::{
-        ExecutionContext, QueryContext, QueryProcessor, QueryRectangle, TypedVectorQueryProcessor,
-        VectorOperator,
+        MockExecutionContextCreator, QueryContext, QueryProcessor, QueryRectangle,
+        TypedVectorQueryProcessor, VectorOperator,
     };
     use crate::error::Error;
     use crate::mock::{
@@ -158,7 +158,7 @@ mod tests {
 
         let source = source
             .boxed()
-            .initialize(&ExecutionContext::mock_empty())
+            .initialize(&MockExecutionContextCreator::default().context())
             .unwrap();
 
         let processor =
@@ -233,7 +233,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&ExecutionContext::mock_empty())
+        .initialize(&MockExecutionContextCreator::default().context())
         .unwrap();
 
         let processor =
