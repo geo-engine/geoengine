@@ -102,7 +102,7 @@ mod tests {
         let expect = "{\"type\":\"MockPointSource\",\"params\":{\"points\":[{\"x\":1.0,\"y\":2.0},{\"x\":1.0,\"y\":2.0},{\"x\":1.0,\"y\":2.0}]}}";
         assert_eq!(serialized, expect);
 
-        let _: Box<dyn VectorOperator> = serde_json::from_str(&serialized).unwrap();
+        let _deserialized: Box<dyn VectorOperator> = serde_json::from_str(&serialized).unwrap();
     }
 
     #[test]
