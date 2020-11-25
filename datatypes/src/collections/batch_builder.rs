@@ -438,7 +438,6 @@ mod tests {
     use super::*;
     use crate::collections::{
         BuilderProvider, DataCollection, FeatureCollectionInfos, MultiPointCollection,
-        MultiPolygonCollection,
     };
     use crate::primitives::{DataRef, FeatureDataRef};
     use arrow::buffer::MutableBuffer;
