@@ -1,6 +1,6 @@
 use crate::collections::{
     FeatureCollection, FeatureCollectionInfos, FeatureCollectionRowBuilder,
-    GeoFeatureCollectionRowBuilder, IntoGeometryIterator,
+    GeoFeatureCollectionRowBuilder, GeometryCollection, IntoGeometryIterator,
 };
 use crate::primitives::{Coordinate2D, MultiPolygon, MultiPolygonAccess, MultiPolygonRef};
 use crate::util::arrow::downcast_array;
@@ -11,9 +11,38 @@ use std::slice;
 /// This collection contains temporal multi polygons and miscellaneous data.
 pub type MultiPolygonCollection = FeatureCollection<MultiPolygon>;
 
-impl MultiPolygonCollection {
+impl GeometryCollection for MultiPolygonCollection {
+    fn coordinates(&self) -> &[Coordinate2D] {
+        let geometries_ref = self
+            .table
+            .column_by_name(Self::GEOMETRY_COLUMN_NAME)
+            .expect("There must exist a geometry column");
+        let geometries: &ListArray = downcast_array(geometries_ref);
+
+        let polygons_ref = geometries.values();
+        let polygons: &ListArray = downcast_array(&polygons_ref);
+
+        let rings_ref = polygons.values();
+        let rings: &ListArray = downcast_array(&rings_ref);
+
+        let coordinates_ref = rings.values();
+        let coordinates: &FixedSizeListArray = downcast_array(&coordinates_ref);
+
+        let number_of_coordinates = coordinates.data().len();
+
+        let floats_ref = coordinates.values();
+        let floats: &Float64Array = downcast_array(&floats_ref);
+
+        unsafe {
+            slice::from_raw_parts(
+                floats.raw_values() as *const Coordinate2D,
+                number_of_coordinates,
+            )
+        }
+    }
+
     #[allow(clippy::cast_ptr_alignment)]
-    pub fn multi_polygon_offsets(&self) -> &[i32] {
+    fn feature_offsets(&self) -> &[i32] {
         let geometries_ref = self
             .table
             .column_by_name(Self::GEOMETRY_COLUMN_NAME)
@@ -25,7 +54,9 @@ impl MultiPolygonCollection {
 
         unsafe { slice::from_raw_parts(buffer.raw_data() as *const i32, geometries.len() + 1) }
     }
+}
 
+impl MultiPolygonCollection {
     #[allow(clippy::cast_ptr_alignment)]
     pub fn polygon_offsets(&self) -> &[i32] {
         let geometries_ref = self
@@ -61,35 +92,6 @@ impl MultiPolygonCollection {
         let buffer = &data.buffers()[0];
 
         unsafe { slice::from_raw_parts(buffer.raw_data() as *const i32, rings.len() + 1) }
-    }
-
-    pub fn coordinates(&self) -> &[Coordinate2D] {
-        let geometries_ref = self
-            .table
-            .column_by_name(Self::GEOMETRY_COLUMN_NAME)
-            .expect("There must exist a geometry column");
-        let geometries: &ListArray = downcast_array(geometries_ref);
-
-        let polygons_ref = geometries.values();
-        let polygons: &ListArray = downcast_array(&polygons_ref);
-
-        let rings_ref = polygons.values();
-        let rings: &ListArray = downcast_array(&rings_ref);
-
-        let coordinates_ref = rings.values();
-        let coordinates: &FixedSizeListArray = downcast_array(&coordinates_ref);
-
-        let number_of_coordinates = coordinates.data().len();
-
-        let floats_ref = coordinates.values();
-        let floats: &Float64Array = downcast_array(&floats_ref);
-
-        unsafe {
-            slice::from_raw_parts(
-                floats.raw_values() as *const Coordinate2D,
-                number_of_coordinates,
-            )
-        }
     }
 }
 

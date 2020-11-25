@@ -7,7 +7,8 @@ use arrow::buffer::MutableBuffer;
 use arrow::datatypes::{Float64Type, Int64Type};
 use arrow::util::bit_util;
 use geoengine_datatypes::collections::{
-    FeatureCollectionInfos, RawFeatureCollectionBuilder, TypedFeatureCollection, VectorDataType,
+    FeatureCollectionInfos, GeometryCollection, RawFeatureCollectionBuilder,
+    TypedFeatureCollection, VectorDataType, VectorDataTyped,
 };
 use geoengine_datatypes::primitives::{Coordinate2D, FeatureDataRef, FeatureDataType};
 use geoengine_datatypes::raster::Raster;
@@ -1650,7 +1651,7 @@ mod tests {
     use arrow::datatypes::{DataType, Int32Type};
     use geoengine_datatypes::collections::{
         BuilderProvider, DataCollection, FeatureCollection, MultiLineStringCollection,
-        MultiPointCollection, MultiPolygonCollection,
+        MultiPointCollection, MultiPolygonCollection, VectorDataTyped,
     };
     use geoengine_datatypes::primitives::{
         DataRef, FeatureData, MultiLineString, MultiPoint, MultiPolygon, NoGeometry, TimeInterval,
@@ -2096,7 +2097,7 @@ __kernel void gid(
             ]
         );
 
-        assert_eq!(collection.multipoint_offsets(), &[0, 1, 3, 4]);
+        assert_eq!(collection.feature_offsets(), &[0, 1, 3, 4]);
     }
 
     #[test]

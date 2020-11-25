@@ -21,16 +21,19 @@ pub use feature_collection_builder::{
     BuilderProvider, FeatureCollectionBuilder, FeatureCollectionRowBuilder,
     GeoFeatureCollectionRowBuilder,
 };
-pub use geo_feature_collection::{IntoGeometryIterator, IntoGeometryOptionsIterator};
+pub use geo_feature_collection::{
+    GeometryCollection, IntoGeometryIterator, IntoGeometryOptionsIterator,
+};
 
 pub use data_collection::DataCollection;
-pub use data_types::VectorDataType;
+pub use data_types::{
+    TypedFeatureCollection, TypedFeatureCollectionRef, VectorDataType, VectorDataTyped,
+};
 pub use multi_line_string_collection::MultiLineStringCollection;
 pub use multi_point_collection::MultiPointCollection;
 pub use multi_polygon_collection::MultiPolygonCollection;
 
 pub use batch_builder::RawFeatureCollectionBuilder;
-pub use data_types::TypedFeatureCollection;
 
 /// Calls a function on a `TypedFeatureCollection` by calling it on its variant.
 /// Call via `call_generic_features!(input, features => function)`.

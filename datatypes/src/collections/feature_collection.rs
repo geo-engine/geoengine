@@ -14,7 +14,7 @@ use arrow::error::ArrowError;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
-use crate::collections::{error, IntoGeometryIterator, VectorDataType};
+use crate::collections::{error, IntoGeometryIterator, VectorDataType, VectorDataTyped};
 use crate::collections::{FeatureCollectionError, IntoGeometryOptionsIterator};
 use crate::json_map;
 use crate::primitives::{
@@ -861,6 +861,15 @@ impl<CollectionType> Clone for FeatureCollection<CollectionType> {
             types: self.types.clone(),
             collection_type: Default::default(),
         }
+    }
+}
+
+impl<CollectionType> VectorDataTyped for FeatureCollection<CollectionType>
+where
+    CollectionType: Geometry,
+{
+    fn vector_data_type(&self) -> VectorDataType {
+        CollectionType::DATA_TYPE
     }
 }
 

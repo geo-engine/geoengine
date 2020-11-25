@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::collections::{
     DataCollection, FeatureCollectionError, FeatureCollectionInfos, FeatureCollectionModifications,
-    FilterArray, MultiLineStringCollection, MultiPointCollection, MultiPolygonCollection,
-    ToGeoJson,
+    FilterArray, GeometryCollection, MultiLineStringCollection, MultiPointCollection,
+    MultiPolygonCollection, ToGeoJson,
 };
 use crate::error::Error;
 use crate::primitives::{
@@ -23,6 +23,11 @@ pub enum VectorDataType {
     MultiPoint,
     MultiLineString,
     MultiPolygon,
+}
+
+/// Determine the vector data type of the collection
+pub trait VectorDataTyped {
+    fn vector_data_type(&self) -> VectorDataType;
 }
 
 /// A feature collection, wrapped by type info
@@ -156,17 +161,10 @@ impl TypedFeatureCollection {
     pub fn try_into_data(self) -> Result<DataCollection> {
         self.try_into()
     }
+}
 
-    pub fn vector_data_type(&self) -> VectorDataType {
-        match self {
-            TypedFeatureCollection::Data(_) => VectorDataType::Data,
-            TypedFeatureCollection::MultiPoint(_) => VectorDataType::MultiPoint,
-            TypedFeatureCollection::MultiLineString(_) => VectorDataType::MultiLineString,
-            TypedFeatureCollection::MultiPolygon(_) => VectorDataType::MultiPolygon,
-        }
-    }
-
-    pub fn coordinates(&self) -> &[Coordinate2D] {
+impl GeometryCollection for TypedFeatureCollection {
+    fn coordinates(&self) -> &[Coordinate2D] {
         match self {
             TypedFeatureCollection::Data(_) => &[],
             TypedFeatureCollection::MultiPoint(c) => c.coordinates(),
@@ -175,12 +173,54 @@ impl TypedFeatureCollection {
         }
     }
 
-    pub fn feature_offsets(&self) -> &[i32] {
+    fn feature_offsets(&self) -> &[i32] {
         match self {
             TypedFeatureCollection::Data(_) => &[],
-            TypedFeatureCollection::MultiPoint(c) => c.multipoint_offsets(),
-            TypedFeatureCollection::MultiLineString(c) => c.multi_line_string_offsets(),
-            TypedFeatureCollection::MultiPolygon(c) => c.multi_polygon_offsets(),
+            TypedFeatureCollection::MultiPoint(c) => c.feature_offsets(),
+            TypedFeatureCollection::MultiLineString(c) => c.feature_offsets(),
+            TypedFeatureCollection::MultiPolygon(c) => c.feature_offsets(),
+        }
+    }
+}
+
+impl GeometryCollection for TypedFeatureCollectionRef<'_> {
+    fn coordinates(&self) -> &[Coordinate2D] {
+        match self {
+            TypedFeatureCollectionRef::Data(_) => &[],
+            TypedFeatureCollectionRef::MultiPoint(c) => c.coordinates(),
+            TypedFeatureCollectionRef::MultiLineString(c) => c.coordinates(),
+            TypedFeatureCollectionRef::MultiPolygon(c) => c.coordinates(),
+        }
+    }
+
+    fn feature_offsets(&self) -> &[i32] {
+        match self {
+            TypedFeatureCollectionRef::Data(_) => &[],
+            TypedFeatureCollectionRef::MultiPoint(c) => c.feature_offsets(),
+            TypedFeatureCollectionRef::MultiLineString(c) => c.feature_offsets(),
+            TypedFeatureCollectionRef::MultiPolygon(c) => c.feature_offsets(),
+        }
+    }
+}
+
+impl VectorDataTyped for TypedFeatureCollection {
+    fn vector_data_type(&self) -> VectorDataType {
+        match self {
+            TypedFeatureCollection::Data(_) => VectorDataType::Data,
+            TypedFeatureCollection::MultiPoint(_) => VectorDataType::MultiPoint,
+            TypedFeatureCollection::MultiLineString(_) => VectorDataType::MultiLineString,
+            TypedFeatureCollection::MultiPolygon(_) => VectorDataType::MultiPolygon,
+        }
+    }
+}
+
+impl VectorDataTyped for TypedFeatureCollectionRef<'_> {
+    fn vector_data_type(&self) -> VectorDataType {
+        match self {
+            TypedFeatureCollectionRef::Data(_) => VectorDataType::Data,
+            TypedFeatureCollectionRef::MultiPoint(_) => VectorDataType::MultiPoint,
+            TypedFeatureCollectionRef::MultiLineString(_) => VectorDataType::MultiLineString,
+            TypedFeatureCollectionRef::MultiPolygon(_) => VectorDataType::MultiPolygon,
         }
     }
 }
