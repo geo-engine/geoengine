@@ -1,3 +1,4 @@
+use std::marker::PhantomData;
 use std::sync::Arc;
 use std::thread::JoinHandle;
 use std::{iter, mem};
@@ -6,7 +7,6 @@ use crossbeam::atomic::AtomicCell;
 use crossbeam::deque::{Injector, Steal, Stealer, Worker};
 use crossbeam::sync::WaitGroup;
 use crossbeam::utils::Backoff;
-use failure::_core::marker::PhantomData;
 
 /// A chunk of work with some metadata
 struct Task {
