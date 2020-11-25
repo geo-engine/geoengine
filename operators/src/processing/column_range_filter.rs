@@ -9,7 +9,7 @@ use crate::util::input::StringOrNumberRange;
 use crate::util::Result;
 use futures::stream::BoxStream;
 use futures::StreamExt;
-use geoengine_datatypes::collections::{FeatureCollection, FeatureCollectionOperations};
+use geoengine_datatypes::collections::{FeatureCollection, FeatureCollectionInfos};
 use geoengine_datatypes::primitives::{FeatureDataType, FeatureDataValue, Geometry};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use serde::{Deserialize, Serialize};

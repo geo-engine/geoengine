@@ -87,7 +87,7 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
 mod tests {
     use super::*;
     use futures::executor::block_on_stream;
-    use geoengine_datatypes::collections::FeatureCollectionOperations;
+    use geoengine_datatypes::collections::FeatureCollectionInfos;
     use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution};
 
     #[test]

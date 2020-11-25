@@ -1,6 +1,4 @@
-use crate::collections::{
-    FeatureCollection, FeatureCollectionOperations, IntoGeometryOptionsIterator,
-};
+use crate::collections::{FeatureCollection, FeatureCollectionInfos, IntoGeometryOptionsIterator};
 use crate::primitives::NoGeometry;
 
 /// This collection contains temporal data without geographical features.

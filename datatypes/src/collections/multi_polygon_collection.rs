@@ -1,5 +1,5 @@
 use crate::collections::{
-    FeatureCollection, FeatureCollectionOperations, FeatureCollectionRowBuilder,
+    FeatureCollection, FeatureCollectionInfos, FeatureCollectionRowBuilder,
     GeoFeatureCollectionRowBuilder, IntoGeometryIterator,
 };
 use crate::primitives::{Coordinate2D, MultiPolygon, MultiPolygonAccess, MultiPolygonRef};

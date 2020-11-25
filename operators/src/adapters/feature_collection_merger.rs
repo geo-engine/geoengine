@@ -2,7 +2,7 @@ use crate::util::Result;
 use futures::ready;
 use futures::stream::FusedStream;
 use futures::Stream;
-use geoengine_datatypes::collections::{FeatureCollection, FeatureCollectionOperations};
+use geoengine_datatypes::collections::{FeatureCollection, FeatureCollectionInfos};
 use geoengine_datatypes::primitives::Geometry;
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use pin_project::pin_project;
@@ -28,7 +28,7 @@ where
 impl<St, G> FeatureCollectionChunkMerger<St, G>
 where
     St: Stream<Item = Result<FeatureCollection<G>>> + FusedStream,
-    G: Geometry + ArrowTyped,
+    G: Geometry + ArrowTyped + 'static,
 {
     pub fn new(stream: St, chunk_size_bytes: usize) -> Self {
         Self {
@@ -82,7 +82,7 @@ where
 impl<St, G> Stream for FeatureCollectionChunkMerger<St, G>
 where
     St: Stream<Item = Result<FeatureCollection<G>>> + FusedStream,
-    G: Geometry + ArrowTyped,
+    G: Geometry + ArrowTyped + 'static,
 {
     type Item = St::Item;
 
@@ -116,7 +116,7 @@ where
 impl<St, G> FusedStream for FeatureCollectionChunkMerger<St, G>
 where
     St: Stream<Item = Result<FeatureCollection<G>>> + FusedStream,
-    G: Geometry + ArrowTyped,
+    G: Geometry + ArrowTyped + 'static,
 {
     fn is_terminated(&self) -> bool {
         self.stream.is_terminated() && self.accum.is_none()

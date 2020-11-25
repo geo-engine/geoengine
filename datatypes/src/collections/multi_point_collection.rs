@@ -1,7 +1,7 @@
 use arrow::array::{Array, FixedSizeListArray, Float64Array, ListArray};
 
 use crate::collections::{
-    FeatureCollection, FeatureCollectionOperations, FeatureCollectionRowBuilder,
+    FeatureCollection, FeatureCollectionInfos, FeatureCollectionRowBuilder,
     GeoFeatureCollectionRowBuilder, IntoGeometryIterator,
 };
 use crate::primitives::{Coordinate2D, MultiPoint, MultiPointRef};

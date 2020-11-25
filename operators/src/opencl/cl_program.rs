@@ -7,8 +7,7 @@ use arrow::buffer::MutableBuffer;
 use arrow::datatypes::{Float64Type, Int64Type};
 use arrow::util::bit_util;
 use geoengine_datatypes::collections::{
-    FeatureCollectionOperations, RawFeatureCollectionBuilder, TypedFeatureCollection,
-    VectorDataType,
+    FeatureCollectionInfos, RawFeatureCollectionBuilder, TypedFeatureCollection, VectorDataType,
 };
 use geoengine_datatypes::primitives::{Coordinate2D, FeatureDataRef, FeatureDataType};
 use geoengine_datatypes::raster::Raster;
@@ -1658,6 +1657,7 @@ mod tests {
     };
     use geoengine_datatypes::raster::Raster2D;
     use std::collections::HashMap;
+    use std::convert::TryFrom;
     use std::sync::Arc;
 
     #[test]
@@ -2085,7 +2085,7 @@ __kernel void gid(
         runnable.set_output_features(0, &mut out).unwrap();
         compiled.run(runnable).unwrap();
 
-        let collection = out.output.unwrap().get_points().unwrap();
+        let collection = out.output.unwrap().try_into_points().unwrap();
         assert_eq!(
             collection.coordinates(),
             &[
@@ -2167,7 +2167,7 @@ __kernel void gid(
         runnable.set_output_features(0, &mut out).unwrap();
         compiled.run(runnable).unwrap();
 
-        let result = out.output.unwrap().get_points().unwrap();
+        let result = out.output.unwrap().try_into_points().unwrap();
 
         assert_eq!(result, input);
     }
@@ -2241,7 +2241,7 @@ __kernel void gid(
         runnable.set_output_features(0, &mut out).unwrap();
         compiled.run(runnable).unwrap();
 
-        let collection = out.output.unwrap().get_points().unwrap();
+        let collection = out.output.unwrap().try_into_points().unwrap();
         assert_eq!(
             collection,
             MultiPointCollection::from_data(
@@ -2339,7 +2339,7 @@ __kernel void gid(
             .unwrap();
         compiled.run(runnable).unwrap();
 
-        let output = output_builder.output.unwrap().get_lines().unwrap();
+        let output = output_builder.output.unwrap().try_into_lines().unwrap();
 
         assert_eq!(collection, output);
     }
@@ -2445,7 +2445,7 @@ __kernel void gid(
             .unwrap();
         compiled.run(runnable).unwrap();
 
-        let output = output_builder.output.unwrap().get_polygons().unwrap();
+        let output = output_builder.output.unwrap().try_into_polygons().unwrap();
 
         assert_eq!(collection, output);
     }
@@ -2658,7 +2658,11 @@ __kernel void columns(
         runnable.set_output_features(0, &mut out).unwrap();
         compiled.run(runnable).unwrap();
 
-        match out.output.unwrap().get_data().unwrap().data("foo").unwrap() {
+        match DataCollection::try_from(out.output.unwrap())
+            .unwrap()
+            .data("foo")
+            .unwrap()
+        {
             FeatureDataRef::Number(numbers) => assert_eq!(numbers.as_ref(), &[1., 2., 3.]),
             _ => panic!(),
         }
@@ -2730,7 +2734,14 @@ __kernel void columns(
         runnable.set_output_features(0, &mut out).unwrap();
         compiled.run(runnable).unwrap();
 
-        match out.output.unwrap().get_data().unwrap().data("foo").unwrap() {
+        match out
+            .output
+            .unwrap()
+            .try_into_data()
+            .unwrap()
+            .data("foo")
+            .unwrap()
+        {
             FeatureDataRef::Number(numbers) => {
                 assert_eq!(numbers.as_ref(), &[0., 1337., 0.]);
                 assert_eq!(numbers.nulls().as_slice(), &[true, false, true])

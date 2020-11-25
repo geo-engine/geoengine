@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 use tokio::task::spawn_blocking;
 
 use geoengine_datatypes::collections::{
-    BuilderProvider, FeatureCollection, FeatureCollectionBuilder, FeatureCollectionOperations,
+    BuilderProvider, FeatureCollection, FeatureCollectionBuilder, FeatureCollectionInfos,
     FeatureCollectionRowBuilder, GeoFeatureCollectionRowBuilder, VectorDataType,
 };
 use geoengine_datatypes::primitives::{

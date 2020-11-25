@@ -59,8 +59,8 @@ impl<CollectionType> FeatureCollection<CollectionType> {
     }
 }
 
-/// A trait for common feature collection operations
-pub trait FeatureCollectionOperations {
+/// A trait for common feature collection information
+pub trait FeatureCollectionInfos {
     /// Returns the number of features
     fn len(&self) -> usize;
 
@@ -90,9 +90,12 @@ pub trait FeatureCollectionOperations {
 
     /// Retrieve time intervals
     fn time_intervals(&self) -> &[TimeInterval];
+
+    /// Get a copy of the column type information
+    fn column_types(&self) -> HashMap<String, FeatureDataType>;
 }
 
-impl<CollectionType> FeatureCollectionOperations for FeatureCollection<CollectionType>
+impl<CollectionType> FeatureCollectionInfos for FeatureCollection<CollectionType>
 where
     CollectionType: Geometry + ArrowTyped,
 {
@@ -197,6 +200,10 @@ where
             )
         }
     }
+
+    fn column_types(&self) -> HashMap<String, FeatureDataType> {
+        self.types.clone()
+    }
 }
 
 impl<CollectionType> FeatureCollection<CollectionType>
@@ -208,7 +215,7 @@ where
     /// # Examples
     ///
     /// ```rust
-    /// use geoengine_datatypes::collections::{MultiPointCollection, FeatureCollection, FeatureCollectionOperations};
+    /// use geoengine_datatypes::collections::{MultiPointCollection, FeatureCollection, FeatureCollectionInfos};
     ///
     /// let pc = MultiPointCollection::empty();
     ///
@@ -224,7 +231,7 @@ where
     /// # Examples
     ///
     /// ```rust
-    /// use geoengine_datatypes::collections::{MultiPointCollection, FeatureCollection, FeatureCollectionOperations};
+    /// use geoengine_datatypes::collections::{MultiPointCollection, FeatureCollection, FeatureCollectionInfos};
     /// use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval, FeatureData, MultiPoint};
     /// use std::collections::HashMap;
     ///
@@ -533,6 +540,59 @@ where
         ))
     }
 
+    /// Appends a collection to another one
+    ///
+    /// # Errors
+    ///
+    /// This method fails if the columns do not match
+    ///
+    pub fn append(&self, other: &Self) -> Result<Self> {
+        ensure!(
+            self.types == other.types,
+            error::UnmatchedSchema {
+                a: self.types.keys().cloned().collect::<Vec<String>>(),
+                b: other.types.keys().cloned().collect::<Vec<String>>(),
+            }
+        );
+
+        let table_data = self.table.data();
+        let columns = if let DataType::Struct(columns) = table_data.data_type() {
+            columns
+        } else {
+            unreachable!("`tables` field must be a struct")
+        };
+
+        let mut new_data = Vec::<(Field, ArrayRef)>::with_capacity(columns.len());
+
+        // concat data column by column
+        for (column, array_a) in columns.iter().zip(self.table.columns()) {
+            let array_b = other
+                .table
+                .column_by_name(&column.name())
+                .expect("column must occur in both collections");
+
+            new_data.push((
+                column.clone(),
+                match column.name().as_str() {
+                    Self::GEOMETRY_COLUMN_NAME => Arc::new(CollectionType::concat(
+                        downcast_array(array_a),
+                        downcast_array(array_b),
+                    )?),
+                    Self::TIME_COLUMN_NAME => Arc::new(TimeInterval::concat(
+                        downcast_array(array_a),
+                        downcast_array(array_b),
+                    )?),
+                    _ => arrow::compute::concat(&[array_a.clone(), array_b.clone()])?,
+                },
+            ));
+        }
+
+        Ok(Self::new_from_internals(
+            new_data.into(),
+            self.types.clone(),
+        ))
+    }
+
     /// Filters the feature collection by copying the data into a new feature collection
     ///
     /// # Errors
@@ -675,59 +735,6 @@ where
         self.filter(filter_array.expect("checked by ensure"))
     }
 
-    /// Appends a collection to another one
-    ///
-    /// # Errors
-    ///
-    /// This method fails if the columns do not match
-    ///
-    pub fn append(&self, other: &Self) -> Result<Self> {
-        ensure!(
-            self.types == other.types,
-            error::UnmatchedSchema {
-                a: self.types.keys().cloned().collect::<Vec<String>>(),
-                b: other.types.keys().cloned().collect::<Vec<String>>(),
-            }
-        );
-
-        let table_data = self.table.data();
-        let columns = if let DataType::Struct(columns) = table_data.data_type() {
-            columns
-        } else {
-            unreachable!("`tables` field must be a struct")
-        };
-
-        let mut new_data = Vec::<(Field, ArrayRef)>::with_capacity(columns.len());
-
-        // concat data column by column
-        for (column, array_a) in columns.iter().zip(self.table.columns()) {
-            let array_b = other
-                .table
-                .column_by_name(&column.name())
-                .expect("column must occur in both collections");
-
-            new_data.push((
-                column.clone(),
-                match column.name().as_str() {
-                    Self::GEOMETRY_COLUMN_NAME => Arc::new(CollectionType::concat(
-                        downcast_array(array_a),
-                        downcast_array(array_b),
-                    )?),
-                    Self::TIME_COLUMN_NAME => Arc::new(TimeInterval::concat(
-                        downcast_array(array_a),
-                        downcast_array(array_b),
-                    )?),
-                    _ => arrow::compute::concat(&[array_a.clone(), array_b.clone()])?,
-                },
-            ));
-        }
-
-        Ok(Self::new_from_internals(
-            new_data.into(),
-            self.types.clone(),
-        ))
-    }
-
     /// Serialize the feature collection to a geo json string
     pub fn to_geo_json<'i>(&'i self) -> String
     where
@@ -801,10 +808,6 @@ where
                 }
             })
             .collect()
-    }
-
-    pub fn column_types(&self) -> HashMap<String, FeatureDataType> {
-        self.types.clone()
     }
 }
 

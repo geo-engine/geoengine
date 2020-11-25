@@ -1,10 +1,15 @@
+use std::convert::{TryFrom, TryInto};
+
+use serde::{Deserialize, Serialize};
+
 use crate::collections::{
-    DataCollection, FeatureCollectionOperations, MultiLineStringCollection, MultiPointCollection,
-    MultiPolygonCollection,
+    DataCollection, FeatureCollectionError, FeatureCollectionInfos, MultiLineStringCollection,
+    MultiPointCollection, MultiPolygonCollection,
 };
+use crate::error::Error;
 use crate::primitives::{Coordinate2D, FeatureDataRef, FeatureDataType, TimeInterval};
 use crate::util::Result;
-use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// An enum that contains all possible vector data types
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Deserialize, Serialize, Copy, Clone)]
@@ -35,7 +40,69 @@ pub enum TypedFeatureCollectionRef<'c> {
     MultiPolygon(&'c MultiPolygonCollection),
 }
 
+/// Implement `TryFrom` for `TypedFeatureCollection`
+macro_rules! impl_try_from {
+    ($variant:ident) => {
+        paste::paste! {
+            impl TryFrom<TypedFeatureCollection> for [<$variant Collection>] {
+                type Error = Error;
+
+                fn try_from(typed_collection: TypedFeatureCollection) -> Result<Self, Self::Error> {
+                    if let TypedFeatureCollection::$variant(collection) = typed_collection {
+                        return Ok(collection);
+                    }
+                    Err(FeatureCollectionError::WrongDataType.into())
+                }
+            }
+        }
+    };
+}
+
+impl_try_from!(Data);
+impl_try_from!(MultiPoint);
+impl_try_from!(MultiLineString);
+impl_try_from!(MultiPolygon);
+
+/// Implement `TryFrom` for `TypedFeatureCollectionRef`
+macro_rules! impl_try_from_ref {
+    ($variant:ident) => {
+        paste::paste! {
+            impl<'c> TryFrom<&TypedFeatureCollectionRef<'c>> for &'c [<$variant Collection>] {
+                type Error = Error;
+
+                fn try_from(typed_collection: &TypedFeatureCollectionRef<'c>) -> Result<Self, Self::Error> {
+                    if let TypedFeatureCollectionRef::$variant(collection) = typed_collection {
+                        return Ok(collection);
+                    }
+                    Err(FeatureCollectionError::WrongDataType.into())
+                }
+            }
+        }
+    };
+}
+
+impl_try_from_ref!(Data);
+impl_try_from_ref!(MultiPoint);
+impl_try_from_ref!(MultiLineString);
+impl_try_from_ref!(MultiPolygon);
+
 impl TypedFeatureCollection {
+    pub fn try_into_points(self) -> Result<MultiPointCollection> {
+        self.try_into()
+    }
+
+    pub fn try_into_lines(self) -> Result<MultiLineStringCollection> {
+        self.try_into()
+    }
+
+    pub fn try_into_polygons(self) -> Result<MultiPolygonCollection> {
+        self.try_into()
+    }
+
+    pub fn try_into_data(self) -> Result<DataCollection> {
+        self.try_into()
+    }
+
     pub fn vector_data_type(&self) -> VectorDataType {
         match self {
             TypedFeatureCollection::Data(_) => VectorDataType::Data,
@@ -43,34 +110,6 @@ impl TypedFeatureCollection {
             TypedFeatureCollection::MultiLineString(_) => VectorDataType::MultiLineString,
             TypedFeatureCollection::MultiPolygon(_) => VectorDataType::MultiPolygon,
         }
-    }
-
-    pub fn get_points(self) -> Option<MultiPointCollection> {
-        if let TypedFeatureCollection::MultiPoint(points) = self {
-            return Some(points);
-        }
-        None
-    }
-
-    pub fn get_lines(self) -> Option<MultiLineStringCollection> {
-        if let TypedFeatureCollection::MultiLineString(lines) = self {
-            return Some(lines);
-        }
-        None
-    }
-
-    pub fn get_polygons(self) -> Option<MultiPolygonCollection> {
-        if let TypedFeatureCollection::MultiPolygon(polygons) = self {
-            return Some(polygons);
-        }
-        None
-    }
-
-    pub fn get_data(self) -> Option<DataCollection> {
-        if let TypedFeatureCollection::Data(data) = self {
-            return Some(data);
-        }
-        None
     }
 
     pub fn coordinates(&self) -> &[Coordinate2D] {
@@ -90,15 +129,23 @@ impl TypedFeatureCollection {
             TypedFeatureCollection::MultiPolygon(c) => c.multi_polygon_offsets(),
         }
     }
+}
 
-    // TODO: create common interface between typed and non-typed collection
-    pub fn time_intervals(&self) -> &[TimeInterval] {
-        match self {
-            TypedFeatureCollection::Data(c) => c.time_intervals(),
-            TypedFeatureCollection::MultiPoint(c) => c.time_intervals(),
-            TypedFeatureCollection::MultiLineString(c) => c.time_intervals(),
-            TypedFeatureCollection::MultiPolygon(c) => c.time_intervals(),
-        }
+impl<'c> TypedFeatureCollectionRef<'c> {
+    pub fn try_into_points(&self) -> Result<&MultiPointCollection> {
+        self.try_into()
+    }
+
+    pub fn try_into_lines(&self) -> Result<&MultiLineStringCollection> {
+        self.try_into()
+    }
+
+    pub fn try_into_polygons(&self) -> Result<&MultiPolygonCollection> {
+        self.try_into()
+    }
+
+    pub fn try_into_data(&self) -> Result<&DataCollection> {
+        self.try_into()
     }
 }
 
@@ -130,18 +177,33 @@ macro_rules! impl_function_by_forwarding_ref2 {
     };
 }
 
-impl FeatureCollectionOperations for TypedFeatureCollection {
+impl FeatureCollectionInfos for TypedFeatureCollection {
     impl_function_by_forwarding_ref!(fn len(&self) -> usize);
     impl_function_by_forwarding_ref!(fn is_simple(&self) -> bool);
     impl_function_by_forwarding_ref!(fn column_type(&self, column_name: &str) -> Result<FeatureDataType>);
     impl_function_by_forwarding_ref!(fn data(&self, column_name: &str) -> Result<FeatureDataRef>);
     impl_function_by_forwarding_ref!(fn time_intervals(&self) -> &[TimeInterval]);
+    impl_function_by_forwarding_ref!(fn column_types(&self) -> HashMap<String, FeatureDataType>);
 }
 
-impl<'c> FeatureCollectionOperations for TypedFeatureCollectionRef<'c> {
+impl<'c> FeatureCollectionInfos for TypedFeatureCollectionRef<'c> {
     impl_function_by_forwarding_ref2!(fn len(&self) -> usize);
     impl_function_by_forwarding_ref2!(fn is_simple(&self) -> bool);
     impl_function_by_forwarding_ref2!(fn column_type(&self, column_name: &str) -> Result<FeatureDataType>);
     impl_function_by_forwarding_ref2!(fn data(&self, column_name: &str) -> Result<FeatureDataRef>);
     impl_function_by_forwarding_ref2!(fn time_intervals(&self) -> &[TimeInterval]);
+    impl_function_by_forwarding_ref2!(fn column_types(&self) -> HashMap<String, FeatureDataType>);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn append() {
+        let _c1 = TypedFeatureCollection::MultiPoint(MultiPointCollection::empty());
+        let _c2 = MultiPointCollection::empty();
+
+        // c1.as_ref().append(&c2)
+    }
 }
