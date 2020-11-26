@@ -128,6 +128,10 @@ pub enum Error {
     TimeParse {
         source: chrono::format::ParseError,
     },
+
+    Arrow {
+        source: arrow::error::ArrowError,
+    },
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {
@@ -169,5 +173,11 @@ impl From<chrono::format::ParseError> for Error {
 impl From<ocl::Error> for Error {
     fn from(ocl_error: ocl::Error) -> Self {
         Self::OCL { ocl_error }
+    }
+}
+
+impl From<arrow::error::ArrowError> for Error {
+    fn from(source: arrow::error::ArrowError) -> Self {
+        Error::Arrow { source }
     }
 }

@@ -174,7 +174,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mock::{MockFeatureCollectionSource, MockFeatureCollectionSourceParams};
+    use crate::mock::MockFeatureCollectionSource;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, FeatureData, MultiPoint, TimeInterval,
     };
@@ -212,7 +212,7 @@ mod tests {
             .to_string()
         );
 
-        let _: Box<dyn VectorOperator> = serde_json::from_str(&serialized).unwrap();
+        let _deserialized: Box<dyn VectorOperator> = serde_json::from_str(&serialized).unwrap();
     }
 
     #[tokio::test]
@@ -232,12 +232,7 @@ mod tests {
         )
         .unwrap();
 
-        let source = MockFeatureCollectionSource {
-            params: MockFeatureCollectionSourceParams {
-                collection: collection.clone(),
-            },
-        }
-        .boxed();
+        let source = MockFeatureCollectionSource::single(collection.clone()).boxed();
 
         let filter = ColumnRangeFilter {
             params: ColumnRangeFilterParams {

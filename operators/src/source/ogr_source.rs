@@ -508,7 +508,7 @@ where
         let (data_types, feature_collection_builder) =
             Self::initialize_types_and_builder(dataset_information);
 
-        let time_extractor = Self::initialize_time_extractors(dataset_information)?;
+        let time_extractor = Self::initialize_time_extractors(dataset_information);
 
         let mut features = layer.features().peekable();
 
@@ -595,10 +595,10 @@ where
 
     fn initialize_time_extractors(
         dataset_information: &OgrSourceDataset,
-    ) -> Result<Box<dyn Fn(&Feature) -> Result<TimeInterval> + '_>> {
+    ) -> Box<dyn Fn(&Feature) -> Result<TimeInterval> + '_> {
         // TODO: exploit rust-gdal `datetime` feature
 
-        Ok(match &dataset_information.time {
+        match &dataset_information.time {
             OgrSourceDatasetTimeType::None => {
                 Box::new(move |_feature: &Feature| Ok(TimeInterval::default()))
             }
@@ -673,7 +673,7 @@ where
                     TimeInterval::new(time_start, time_start + duration).map_err(Into::into)
                 })
             }
-        })
+        }
     }
 
     fn initialize_types_and_builder(
