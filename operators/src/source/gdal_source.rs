@@ -264,6 +264,7 @@ where
     /// Generates a new `GdalSource` from the provided parameters
     /// TODO: move the time interval and grid tile information generation somewhere else...
     ///
+    #[allow(clippy::unnecessary_wraps)]
     fn from_params_with_provider(
         params: GdalSourceParameters,
         dataset_information: P,

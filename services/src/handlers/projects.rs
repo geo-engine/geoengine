@@ -816,18 +816,23 @@ mod tests {
             .await
             .unwrap();
 
-        let _ = ctx.project_db().write().await.update(
-            session.user,
-            UpdateProject {
-                id: project,
-                name: Some("TestUpdate".to_string()),
-                description: None,
-                layers: None,
-                bounds: None,
-            }
-            .validated()
-            .unwrap(),
-        );
+        ctx.project_db()
+            .write()
+            .await
+            .update(
+                session.user,
+                UpdateProject {
+                    id: project,
+                    name: Some("TestUpdate".to_string()),
+                    description: None,
+                    layers: None,
+                    bounds: None,
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
 
         let res = warp::test::request()
             .method("GET")

@@ -597,6 +597,7 @@ where
         }
     }
 
+    #[allow(clippy::unnecessary_wraps)]
     fn initialize_time_extractors(
         dataset_information: &OgrSourceDataset,
     ) -> Result<Box<dyn Fn(&Feature) -> Result<TimeInterval> + '_>> {
