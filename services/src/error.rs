@@ -67,6 +67,7 @@ pub enum Error {
 
     DataSetListingProviderUnauthorized,
     UnknownDataSetProviderId,
+    DataSetPermissionDenied,
 
     InvalidNamespace,
 

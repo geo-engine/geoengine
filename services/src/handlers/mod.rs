@@ -11,6 +11,7 @@ use warp::http::StatusCode;
 use warp::Filter;
 use warp::{Rejection, Reply};
 
+pub mod datasets;
 pub mod projects;
 pub mod users;
 pub mod wfs;

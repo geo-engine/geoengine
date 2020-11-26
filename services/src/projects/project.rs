@@ -182,7 +182,15 @@ pub struct RasterInfo {
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 pub struct VectorInfo {
     // TODO add vector layer specific info
+// pub columns: Vec<Column>,
 }
+
+// TODO: column info
+// #[derive(Debug, Serialize, Deserialize, Clone)]
+// pub struct Column {
+//     pub name: String,
+//     pub data_type: FeatureDataType,
+// }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
 pub enum OrderBy {
