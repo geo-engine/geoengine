@@ -176,7 +176,6 @@ mod tests {
     use super::*;
     use crate::engine::MockExecutionContextCreator;
     use crate::mock::MockFeatureCollectionSource;
-    use crate::mock::{MockFeatureCollectionSource, MockFeatureCollectionSourceParams};
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, FeatureData, MultiPoint, TimeInterval,
     };

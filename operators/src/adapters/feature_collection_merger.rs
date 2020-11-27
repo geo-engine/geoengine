@@ -224,17 +224,9 @@ mod tests {
 
     #[tokio::test]
     async fn empty() {
-        let source = MockFeatureCollectionSource {
-            params: MockFeatureCollectionSourceParams {
-                collection: DataCollection::empty(),
-            },
-        }
-        .boxed()
-        .initialize(&MockExecutionContextCreator::default().context())
-        .unwrap();
         let source = MockFeatureCollectionSource::single(DataCollection::empty())
             .boxed()
-            .initialize(&ExecutionContext::mock_empty())
+            .initialize(&MockExecutionContextCreator::default().context())
             .unwrap();
 
         let processor =
