@@ -176,6 +176,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::mock::MockFeatureCollectionSource;
     use crate::mock::{MockFeatureCollectionSource, MockFeatureCollectionSourceParams};
     use geoengine_datatypes::collections::{FeatureCollectionModifications, MultiPointCollection};
     use geoengine_datatypes::primitives::SpatialResolution;
@@ -235,12 +236,7 @@ mod tests {
         )
         .unwrap();
 
-        let source = MockFeatureCollectionSource {
-            params: MockFeatureCollectionSourceParams {
-                collection: collection.clone(),
-            },
-        }
-        .boxed();
+        let source = MockFeatureCollectionSource::single(collection.clone()).boxed();
 
         let filter = ColumnRangeFilter {
             params: ColumnRangeFilterParams {

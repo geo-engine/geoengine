@@ -25,6 +25,13 @@ pub enum VectorDataType {
     MultiPolygon,
 }
 
+impl std::fmt::Display for VectorDataType {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+#[derive(Debug)]
 /// Determine the vector data type of the collection
 pub trait VectorDataTyped {
     fn vector_data_type(&self) -> VectorDataType;
@@ -156,6 +163,13 @@ impl TypedFeatureCollection {
 
     pub fn try_into_polygons(self) -> Result<MultiPolygonCollection> {
         self.try_into()
+    }
+
+    pub fn get_polygons_ref(&self) -> Option<&MultiPolygonCollection> {
+        if let TypedFeatureCollection::MultiPolygon(polygons) = self {
+            return Some(polygons);
+        }
+        None
     }
 
     pub fn try_into_data(self) -> Result<DataCollection> {

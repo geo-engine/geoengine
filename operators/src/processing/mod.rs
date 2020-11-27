@@ -1,2 +1,3 @@
 mod column_range_filter;
-pub mod expression;
+mod expression;
+mod point_in_polygon;
