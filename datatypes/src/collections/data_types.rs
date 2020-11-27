@@ -31,7 +31,6 @@ impl std::fmt::Display for VectorDataType {
     }
 }
 
-#[derive(Debug)]
 /// Determine the vector data type of the collection
 pub trait VectorDataTyped {
     fn vector_data_type(&self) -> VectorDataType;
@@ -165,9 +164,30 @@ impl TypedFeatureCollection {
         self.try_into()
     }
 
-    pub fn get_polygons_ref(&self) -> Option<&MultiPolygonCollection> {
-        if let TypedFeatureCollection::MultiPolygon(polygons) = self {
-            return Some(polygons);
+    pub fn try_as_data_ref(&self) -> Option<&DataCollection> {
+        if let TypedFeatureCollection::Data(collections) = self {
+            return Some(collections);
+        }
+        None
+    }
+
+    pub fn try_as_points_ref(&self) -> Option<&MultiPointCollection> {
+        if let TypedFeatureCollection::MultiPoint(collections) = self {
+            return Some(collections);
+        }
+        None
+    }
+
+    pub fn try_as_lines_ref(&self) -> Option<&MultiLineStringCollection> {
+        if let TypedFeatureCollection::MultiLineString(collections) = self {
+            return Some(collections);
+        }
+        None
+    }
+
+    pub fn try_as_collections_ref(&self) -> Option<&MultiPolygonCollection> {
+        if let TypedFeatureCollection::MultiPolygon(collections) = self {
+            return Some(collections);
         }
         None
     }

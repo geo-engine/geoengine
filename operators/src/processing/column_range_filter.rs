@@ -177,7 +177,6 @@ where
 mod tests {
     use super::*;
     use crate::mock::MockFeatureCollectionSource;
-    use crate::mock::{MockFeatureCollectionSource, MockFeatureCollectionSourceParams};
     use geoengine_datatypes::collections::{FeatureCollectionModifications, MultiPointCollection};
     use geoengine_datatypes::primitives::SpatialResolution;
     use geoengine_datatypes::primitives::{
