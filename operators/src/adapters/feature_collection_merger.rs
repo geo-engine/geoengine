@@ -132,10 +132,7 @@ mod tests {
         TypedVectorQueryProcessor, VectorOperator,
     };
     use crate::error::Error;
-    use crate::mock::{
-        MockFeatureCollectionSource, MockFeatureCollectionSourceParams, MockPointSource,
-        MockPointSourceParams,
-    };
+    use crate::mock::{MockFeatureCollectionSource, MockPointSource, MockPointSourceParams};
     use futures::{StreamExt, TryStreamExt};
     use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, MultiPoint, TimeInterval};
     use geoengine_datatypes::{
@@ -235,6 +232,10 @@ mod tests {
         .boxed()
         .initialize(&MockExecutionContextCreator::default().context())
         .unwrap();
+        let source = MockFeatureCollectionSource::single(DataCollection::empty())
+            .boxed()
+            .initialize(&ExecutionContext::mock_empty())
+            .unwrap();
 
         let processor =
             if let TypedVectorQueryProcessor::Data(p) = source.query_processor().unwrap() {
