@@ -336,4 +336,25 @@ mod tests {
 
         assert_eq!(result.load(Ordering::SeqCst), NUMBER_OF_TASKS);
     }
+
+    #[test]
+    fn scoped_vec() {
+        const NUMBER_OF_TASKS: usize = 42;
+
+        let thread_pool = ThreadPool::new(2);
+        let context = thread_pool.create_context();
+
+        let mut result = vec![0; NUMBER_OF_TASKS];
+
+        context.scope(|scope| {
+            for i in 0..NUMBER_OF_TASKS {
+                let r_slice: &mut [usize] = &mut result[i..=i];
+                scope.compute(move || {
+                    r_slice[0] = i;
+                });
+            }
+        });
+
+        assert_eq!((0..NUMBER_OF_TASKS).collect::<Vec<_>>(), result);
+    }
 }
