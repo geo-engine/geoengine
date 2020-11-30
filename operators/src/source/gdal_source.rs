@@ -24,12 +24,12 @@ use futures::stream::{self, BoxStream, StreamExt};
 use geoengine_datatypes::{
     primitives::{BoundingBox2D, SpatialBounded, SpatialResolution, TimeInterval},
     raster::{
-        GridArray, GridBlit, GridBoundingBox2D, GridBounds, GridIdx, GridIdx2D, GridShape2D,
-        GridSize, GridSpaceToLinearSpace,
+        Grid, GridBlit, GridBoundingBox2D, GridBounds, GridIdx, GridIdx2D, GridShape2D, GridSize,
+        GridSpaceToLinearSpace,
     },
 };
 use geoengine_datatypes::{
-    raster::{GeoTransform, GridArray2D, Pixel, RasterDataType, RasterTile2D, TileInformation},
+    raster::{GeoTransform, Grid2D, Pixel, RasterDataType, RasterTile2D, TileInformation},
     spatial_reference::SpatialReference,
 };
 
@@ -426,7 +426,7 @@ where
         let result_raster = match (dataset_contains_tile, dataset_intersects_tile) {
             (_, false) => {
                 // TODO: refactor tile to hold an Option<GridData> and this will be empty in this case
-                GridArray2D::new_filled(tile_grid, T::zero(), None)
+                Grid2D::new_filled(tile_grid, T::zero(), None)
             }
             (true, true) => {
                 let dataset_idx_ul = gdal_dataset_information
@@ -474,7 +474,7 @@ where
                     GridBoundingBox2D::new(tile_idx_ul, tile_idx_lr)?,
                 )?;
 
-                let mut tile_raster = GridArray2D::new_filled(tile_grid, T::zero(), None);
+                let mut tile_raster = Grid2D::new_filled(tile_grid, T::zero(), None);
                 tile_raster.grid_blit_from(dataset_raster)?;
                 tile_raster
             }
@@ -660,7 +660,7 @@ fn read_as_raster<
     rasterband: &GdalRasterBand,
     dataset_grid_box: &GridBoundingBox2D,
     tile_grid: D,
-) -> Result<GridArray<D, T>>
+) -> Result<Grid<D, T>>
 where
     T: Pixel + GdalType,
 {
@@ -672,7 +672,7 @@ where
         (dataset_x_size, dataset_y_size), // pixelspace size
         (tile_x_size, tile_y_size),       // requested raster size
     )?;
-    GridArray::new(tile_grid, buffer.data, None).map_err(Into::into)
+    Grid::new(tile_grid, buffer.data, None).map_err(Into::into)
 }
 
 #[cfg(test)]

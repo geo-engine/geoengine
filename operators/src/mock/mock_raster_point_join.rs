@@ -144,7 +144,7 @@ mod tests {
     use geoengine_datatypes::{
         primitives::SpatialResolution,
         primitives::{BoundingBox2D, Coordinate2D, FeatureDataRef, TimeInterval},
-        raster::{GridArray2D, RasterDataType, TileInformation},
+        raster::{Grid2D, RasterDataType, TileInformation},
         spatial_reference::SpatialReference,
     };
 
@@ -157,7 +157,7 @@ mod tests {
         }
         .boxed();
 
-        let raster = GridArray2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap();
+        let raster = Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap();
 
         let raster_tile = RasterTile2D::new_with_tile_info(
             TimeInterval::default(),
@@ -257,7 +257,7 @@ mod tests {
         }
         .boxed();
 
-        let raster = GridArray2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap();
+        let raster = Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap();
 
         let raster_tile = RasterTile2D::new_with_tile_info(
             TimeInterval::default(),

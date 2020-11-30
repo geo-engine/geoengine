@@ -1,7 +1,7 @@
 use crate::{
     raster::{
-        BoundedGrid, GridArray, GridArray1D, GridArray2D, GridArray3D, GridBoundingBox, GridBounds,
-        GridIdx, GridIntersection, GridSize, GridSpaceToLinearSpace, Pixel,
+        BoundedGrid, Grid, Grid1D, Grid2D, Grid3D, GridBoundingBox, GridBounds, GridIdx,
+        GridIntersection, GridSize, GridSpaceToLinearSpace, Pixel,
     },
     util::Result,
 };
@@ -11,17 +11,17 @@ where
     OD: GridSize + GridSpaceToLinearSpace,
     T: Pixel,
 {
-    fn grid_blit_from(&mut self, other: GridArray<OD, T>) -> Result<()>;
+    fn grid_blit_from(&mut self, other: Grid<OD, T>) -> Result<()>;
 }
 
-impl<OD, T> GridBlit<OD, T> for GridArray1D<T>
+impl<OD, T> GridBlit<OD, T> for Grid1D<T>
 where
     OD: GridSize
         + GridBounds<IndexArray = [isize; 1]>
         + GridSpaceToLinearSpace<IndexArray = [isize; 1]>,
     T: Pixel + Sized,
 {
-    fn grid_blit_from(&mut self, other: GridArray<OD, T>) -> Result<()> {
+    fn grid_blit_from(&mut self, other: Grid<OD, T>) -> Result<()> {
         let other_offset_dim = other.bounding_box();
         let offset_dim = self.bounding_box();
         let intersection: Option<GridBoundingBox<[isize; 1]>> =
@@ -40,14 +40,14 @@ where
     }
 }
 
-impl<OD, T> GridBlit<OD, T> for GridArray2D<T>
+impl<OD, T> GridBlit<OD, T> for Grid2D<T>
 where
     OD: GridSize
         + GridBounds<IndexArray = [isize; 2]>
         + GridSpaceToLinearSpace<IndexArray = [isize; 2]>, // TODO:
     T: Pixel + Sized,
 {
-    fn grid_blit_from(&mut self, other: GridArray<OD, T>) -> Result<()> {
+    fn grid_blit_from(&mut self, other: Grid<OD, T>) -> Result<()> {
         let other_offset_dim = other.bounding_box();
         let offset_dim = self.bounding_box();
         let intersection: Option<GridBoundingBox<[isize; 2]>> =
@@ -70,14 +70,14 @@ where
     }
 }
 
-impl<OD, T> GridBlit<OD, T> for GridArray3D<T>
+impl<OD, T> GridBlit<OD, T> for Grid3D<T>
 where
     OD: GridSize
         + GridBounds<IndexArray = [isize; 3]>
         + GridSpaceToLinearSpace<IndexArray = [isize; 3]>, // TODO:
     T: Pixel + Sized,
 {
-    fn grid_blit_from(&mut self, other: GridArray<OD, T>) -> Result<()> {
+    fn grid_blit_from(&mut self, other: Grid<OD, T>) -> Result<()> {
         let other_offset_dim = other.bounding_box();
         let offset_dim = self.bounding_box();
         let intersection: Option<GridBoundingBox<[isize; 3]>> =
@@ -109,18 +109,18 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::raster::{GridArray, GridArray2D, GridBlit, GridBoundingBox, GridIdx};
+    use crate::raster::{Grid, Grid2D, GridBlit, GridBoundingBox, GridIdx};
 
     #[test]
     fn grid_blit_from_2d_0_0() {
         let dim = [4, 4];
         let data = vec![0; 16];
 
-        let mut r1 = GridArray2D::new(dim.into(), data, None).unwrap();
+        let mut r1 = Grid2D::new(dim.into(), data, None).unwrap();
 
         let data = vec![7; 16];
 
-        let r2 = GridArray2D::new(dim.into(), data, None).unwrap();
+        let r2 = Grid2D::new(dim.into(), data, None).unwrap();
 
         r1.grid_blit_from(r2).unwrap();
 
@@ -131,13 +131,13 @@ mod tests {
     fn grid_blit_from_2d_2_2() {
         let data = vec![0; 16];
 
-        let mut r1 = GridArray2D::new([4, 4].into(), data, None).unwrap();
+        let mut r1 = Grid2D::new([4, 4].into(), data, None).unwrap();
 
         let data = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
 
         let shifted_idx = GridIdx([2, 2]);
         let shifted_dim = GridBoundingBox::new(shifted_idx, shifted_idx + [3, 3]).unwrap();
-        let r2 = GridArray::new(shifted_dim, data, None).unwrap();
+        let r2 = Grid::new(shifted_dim, data, None).unwrap();
 
         r1.grid_blit_from(r2).unwrap();
 
@@ -151,13 +151,13 @@ mod tests {
     fn grid_blit_from_2d_n2_n2() {
         let data = vec![0; 16];
 
-        let mut r1 = GridArray2D::new([4, 4].into(), data, None).unwrap();
+        let mut r1 = Grid2D::new([4, 4].into(), data, None).unwrap();
 
         let data = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
 
         let shifted_idx = GridIdx([-2, -2]);
         let shifted_dim = GridBoundingBox::new(shifted_idx, shifted_idx + [3, 3]).unwrap();
-        let r2 = GridArray::new(shifted_dim, data, None).unwrap();
+        let r2 = Grid::new(shifted_dim, data, None).unwrap();
 
         r1.grid_blit_from(r2).unwrap();
 

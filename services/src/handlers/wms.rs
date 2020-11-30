@@ -5,7 +5,7 @@ use warp::{http::Response, Filter, Rejection};
 use geoengine_datatypes::{
     operations::image::{Colorizer, ToPng},
     primitives::SpatialResolution,
-    raster::GridArray2D,
+    raster::Grid2D,
     raster::RasterTile2D,
 };
 use geoengine_datatypes::{
@@ -212,7 +212,7 @@ where
         -y_query_resolution, // TODO: negative, s.t. geo transform fits...
     );
 
-    let output_raster = GridArray2D::new_filled(dim.into(), T::zero(), None);
+    let output_raster = Grid2D::new_filled(dim.into(), T::zero(), None);
     let output_tile = Ok(RasterTile2D::new_without_offset(
         request.time.unwrap_or_default(),
         query_geo_transform,
@@ -253,7 +253,7 @@ fn get_legend_graphic<C: Context>(
 }
 
 fn get_map_mock(request: &GetMap) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
-    let raster = GridArray2D::new(
+    let raster = Grid2D::new(
         [2, 2].into(),
         vec![
             0xFF00_00FF_u32,

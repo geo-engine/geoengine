@@ -1,5 +1,5 @@
 use super::{
-    GeoTransform, GridArray, GridBounds, GridIdx, GridIdx2D, GridIndexAccess, GridIndexAccessMut,
+    GeoTransform, Grid, GridBounds, GridIdx, GridIdx2D, GridIndexAccess, GridIndexAccessMut,
     GridShape2D, GridShape3D, GridSize, GridSpaceToLinearSpace, Raster,
 };
 use crate::primitives::{BoundingBox2D, SpatialBounded, TemporalBounded, TimeInterval};
@@ -26,8 +26,8 @@ where
     pub tile_position: GridIdx2D,
     /// The global geotransform to transform pixels into geographic coordinates
     pub global_geo_transform: GeoTransform,
-    /// The data of the `RasterTile` is stored as `GridArray`
-    pub grid_array: GridArray<D, T>,
+    /// The data of the `RasterTile` is stored as `Grid`
+    pub grid_array: Grid<D, T>,
 }
 
 impl<D, T> RasterTile<D, T>
@@ -39,7 +39,7 @@ where
     pub fn new_with_tile_info(
         time: TimeInterval,
         tile_info: TileInformation,
-        data: GridArray<D, T>,
+        data: Grid<D, T>,
     ) -> Self {
         // TODO: assert, tile information xy size equals the data xy size
         Self {
@@ -55,7 +55,7 @@ where
         time: TimeInterval,
         tile_position: GridIdx2D,
         global_geo_transform: GeoTransform,
-        data: GridArray<D, T>,
+        data: Grid<D, T>,
     ) -> Self {
         Self {
             time,
@@ -69,7 +69,7 @@ where
     pub fn new_without_offset(
         time: TimeInterval,
         global_geo_transform: GeoTransform,
-        data: GridArray<D, T>,
+        data: Grid<D, T>,
     ) -> Self {
         Self {
             time,

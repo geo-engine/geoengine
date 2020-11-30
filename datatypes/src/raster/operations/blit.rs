@@ -1,5 +1,5 @@
 use crate::raster::{
-    typed_raster_tile::TypedRasterTile, BoundedGrid, DynamicRasterDataType, GridArray, GridBlit,
+    typed_raster_tile::TypedRasterTile, BoundedGrid, DynamicRasterDataType, Grid, GridBlit,
     GridBoundingBox, GridBounds, Pixel, Raster, RasterTile2D, TypedRasterTile2D,
 };
 use crate::util::Result;
@@ -42,7 +42,7 @@ impl<T: Pixel> Blit<RasterTile2D<T>> for RasterTile2D<T> {
             source_bounds.max_index() + offset,
         );
 
-        let shifted_source = GridArray {
+        let shifted_source = Grid {
             shape: shifted_bounds,
             no_data_value: source.grid_array.no_data_value,
             data: source.grid_array.data,
@@ -81,7 +81,7 @@ impl Blit<TypedRasterTile2D> for TypedRasterTile2D {
 mod tests {
     use crate::{
         primitives::TimeInterval,
-        raster::{Blit, GeoTransform, GridArray2D, RasterTile2D},
+        raster::{Blit, GeoTransform, Grid2D, RasterTile2D},
     };
 
     #[test]
@@ -91,13 +91,13 @@ mod tests {
         let geo_transform = GeoTransform::new((0.0, 10.0).into(), 10.0 / 4.0, -10.0 / 4.0);
         let temporal_bounds: TimeInterval = TimeInterval::default();
 
-        let r1 = GridArray2D::new(dim.into(), data, None).unwrap();
+        let r1 = Grid2D::new(dim.into(), data, None).unwrap();
         let mut t1 = RasterTile2D::new_without_offset(temporal_bounds, geo_transform, r1);
 
         let data = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
         let geo_transform = GeoTransform::new((5.0, 15.0).into(), 10.0 / 4.0, -10.0 / 4.0);
 
-        let r2 = GridArray2D::new(dim.into(), data, None).unwrap();
+        let r2 = Grid2D::new(dim.into(), data, None).unwrap();
         let t2 = RasterTile2D::new_without_offset(temporal_bounds, geo_transform, r2);
 
         t1.blit(t2).unwrap();
@@ -115,13 +115,13 @@ mod tests {
         let geo_transform = GeoTransform::new((0.0, 10.0).into(), 10.0 / 4.0, -10.0 / 4.0);
         let temporal_bounds: TimeInterval = TimeInterval::default();
 
-        let r1 = GridArray2D::new(dim.into(), data, None).unwrap();
+        let r1 = Grid2D::new(dim.into(), data, None).unwrap();
         let mut t1 = RasterTile2D::new_without_offset(temporal_bounds, geo_transform, r1);
 
         let data = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
         let geo_transform = GeoTransform::new((-5.0, 15.0).into(), 10.0 / 4.0, -10.0 / 4.0);
 
-        let r2 = GridArray2D::new(dim.into(), data, None).unwrap();
+        let r2 = Grid2D::new(dim.into(), data, None).unwrap();
         let t2 = RasterTile2D::new_without_offset(temporal_bounds, geo_transform, r2);
 
         t1.blit(t2).unwrap();
@@ -139,13 +139,13 @@ mod tests {
         let geo_transform = GeoTransform::new((0.0, 15.0).into(), 10.0 / 4.0, -10.0 / 4.0);
         let temporal_bounds: TimeInterval = TimeInterval::default();
 
-        let r1 = GridArray2D::new(dim.into(), data, None).unwrap();
+        let r1 = Grid2D::new(dim.into(), data, None).unwrap();
         let mut t1 = RasterTile2D::new_without_offset(temporal_bounds, geo_transform, r1);
 
         let data = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
         let geo_transform = GeoTransform::new((-5.0, 10.0).into(), 10.0 / 4.0, -10.0 / 4.0);
 
-        let r2 = GridArray2D::new(dim.into(), data, None).unwrap();
+        let r2 = Grid2D::new(dim.into(), data, None).unwrap();
         let t2 = RasterTile2D::new_without_offset(temporal_bounds, geo_transform, r2);
 
         t1.blit(t2).unwrap();

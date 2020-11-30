@@ -1,6 +1,6 @@
 use crate::error;
 use crate::operations::image::{Colorizer, RgbaTransmutable};
-use crate::raster::{GridArray2D, GridIndexAccess, Pixel, RasterTile2D, TypedRasterTile2D};
+use crate::raster::{Grid2D, GridIndexAccess, Pixel, RasterTile2D, TypedRasterTile2D};
 use crate::util::Result;
 use image::{DynamicImage, ImageFormat, RgbaImage};
 
@@ -9,7 +9,7 @@ pub trait ToPng {
     fn to_png(&self, width: u32, height: u32, colorizer: &Colorizer) -> Result<Vec<u8>>;
 }
 
-impl<T> ToPng for GridArray2D<T>
+impl<T> ToPng for Grid2D<T>
 where
     T: Pixel + RgbaTransmutable,
 {
@@ -96,7 +96,7 @@ mod tests {
 
     #[test]
     fn linear_gradient() {
-        let mut raster = GridArray2D::new([2, 2].into(), vec![0; 4], None).unwrap();
+        let mut raster = Grid2D::new([2, 2].into(), vec![0; 4], None).unwrap();
 
         raster.set_at_grid_index([0, 0], 255).unwrap();
         raster.set_at_grid_index([1, 0], 100).unwrap();
@@ -121,7 +121,7 @@ mod tests {
 
     #[test]
     fn logarithmic_gradient() {
-        let mut raster = GridArray2D::new([2, 2].into(), vec![1; 4], None).unwrap();
+        let mut raster = Grid2D::new([2, 2].into(), vec![1; 4], None).unwrap();
 
         raster.set_at_grid_index([0, 0], 10).unwrap();
         raster.set_at_grid_index([1, 0], 5).unwrap();
@@ -146,7 +146,7 @@ mod tests {
 
     #[test]
     fn palette() {
-        let mut raster = GridArray2D::new([2, 2].into(), vec![0; 4], None).unwrap();
+        let mut raster = Grid2D::new([2, 2].into(), vec![0; 4], None).unwrap();
 
         raster.set_at_grid_index([0, 0], 2).unwrap();
         raster.set_at_grid_index([1, 0], 1).unwrap();
@@ -174,7 +174,7 @@ mod tests {
 
     #[test]
     fn rgba() {
-        let mut raster = GridArray2D::new([2, 2].into(), vec![0x0000_00FF_u32; 4], None).unwrap();
+        let mut raster = Grid2D::new([2, 2].into(), vec![0x0000_00FF_u32; 4], None).unwrap();
 
         raster.set_at_grid_index([0, 0], 0xFF00_00FF_u32).unwrap();
         raster.set_at_grid_index([1, 0], 0x00FF_00FF_u32).unwrap();

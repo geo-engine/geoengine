@@ -229,22 +229,22 @@ impl GridBounds for GridShape3D {
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
-pub struct GridArray<D, T> {
+pub struct Grid<D, T> {
     pub shape: D,
     pub data: Vec<T>,
     pub no_data_value: Option<T>,
 }
 
-pub type GridArray1D<T> = GridArray<GridShape1D, T>;
-pub type GridArray2D<T> = GridArray<GridShape2D, T>;
-pub type GridArray3D<T> = GridArray<GridShape3D, T>;
+pub type Grid1D<T> = Grid<GridShape1D, T>;
+pub type Grid2D<T> = Grid<GridShape2D, T>;
+pub type Grid3D<T> = Grid<GridShape3D, T>;
 
-impl<D, T> GridArray<D, T>
+impl<D, T> Grid<D, T>
 where
     D: GridSize + GridSpaceToLinearSpace,
     T: Clone,
 {
-    /// Creates a new `GridArray`
+    /// Creates a new `Grid`
     ///
     /// # Errors
     ///
@@ -272,12 +272,12 @@ where
     }
 
     /// Converts the data type of the raster by converting it pixel-wise
-    pub fn convert_dtype<To>(self) -> GridArray<D, To>
+    pub fn convert_dtype<To>(self) -> Grid<D, To>
     where
         T: AsPrimitive<To> + Copy + 'static,
         To: Copy + 'static,
     {
-        GridArray::new(
+        Grid::new(
             self.shape,
             self.data.iter().map(|&pixel| pixel.as_()).collect(),
             self.no_data_value.map(AsPrimitive::as_),
@@ -290,7 +290,7 @@ where
     }
 }
 
-impl<D, T> GridSize for GridArray<D, T>
+impl<D, T> GridSize for Grid<D, T>
 where
     D: GridSize + GridSpaceToLinearSpace,
 {
@@ -307,7 +307,7 @@ where
     }
 }
 
-impl<T, D, I, A> GridIndexAccess<T, I> for GridArray<D, T>
+impl<T, D, I, A> GridIndexAccess<T, I> for Grid<D, T>
 where
     D: GridSize + GridSpaceToLinearSpace<IndexArray = A> + GridBounds<IndexArray = A>,
     I: Into<GridIdx<A>>,
@@ -334,7 +334,7 @@ where
     }
 }
 
-impl<T, D, I, A> GridIndexAccessMut<T, I> for GridArray<D, T>
+impl<T, D, I, A> GridIndexAccessMut<T, I> for Grid<D, T>
 where
     D: GridSize + GridSpaceToLinearSpace<IndexArray = A> + GridBounds<IndexArray = A>,
     I: Into<GridIdx<A>>,
@@ -362,7 +362,7 @@ where
     }
 }
 
-impl<T, D> BoundedGrid for GridArray<D, T>
+impl<T, D> BoundedGrid for Grid<D, T>
 where
     D: GridSize + GridBounds,
 {
@@ -375,13 +375,13 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::{GridArray2D, GridArray3D, GridIndexAccess, GridIndexAccessMut};
+    use super::{Grid2D, Grid3D, GridIndexAccess, GridIndexAccessMut};
 
     #[test]
     fn simple_raster_2d() {
         let dim = [3, 2];
         let data = vec![1, 2, 3, 4, 5, 6];
-        GridArray2D::new(dim.into(), data, None).unwrap();
+        Grid2D::new(dim.into(), data, None).unwrap();
     }
 
     #[test]
@@ -389,7 +389,7 @@ mod tests {
         let index = [1, 1];
         let dim = [3, 2].into();
         let data = vec![1, 2, 3, 4, 5, 6];
-        let raster2d = GridArray2D::new(dim, data, None).unwrap();
+        let raster2d = Grid2D::new(dim, data, None).unwrap();
         assert_eq!(raster2d.get_at_grid_index(index).unwrap(), 4);
     }
 
@@ -398,7 +398,7 @@ mod tests {
         let index = [1, 1];
         let dim = [3, 2].into();
         let data = vec![1, 2, 3, 4, 5, 6];
-        let raster2d = GridArray2D::new(dim, data, None).unwrap();
+        let raster2d = Grid2D::new(dim, data, None).unwrap();
         let value = raster2d.get_at_grid_index(index).unwrap();
         assert_eq!(value, 4);
     }
@@ -408,7 +408,7 @@ mod tests {
         let index = [1, 1];
         let dim = [3, 2].into();
         let data = vec![1, 2, 3, 4, 5, 6];
-        let mut raster2d = GridArray2D::new(dim, data, None).unwrap();
+        let mut raster2d = Grid2D::new(dim, data, None).unwrap();
 
         raster2d.set_at_grid_index(index, 9).unwrap();
         let value = raster2d.get_at_grid_index(index).unwrap();
@@ -420,7 +420,7 @@ mod tests {
     fn simple_raster_3d() {
         let dim = [3, 2, 1];
         let data = vec![1, 2, 3, 4, 5, 6];
-        GridArray3D::new(dim.into(), data, None).unwrap();
+        Grid3D::new(dim.into(), data, None).unwrap();
     }
 
     #[test]
@@ -428,7 +428,7 @@ mod tests {
         let index = [1, 1, 0];
         let dim = [3, 2, 1].into();
         let data = vec![1, 2, 3, 4, 5, 6];
-        let raster3d = GridArray3D::new(dim, data, None).unwrap();
+        let raster3d = Grid3D::new(dim, data, None).unwrap();
         assert_eq!(raster3d.get_at_grid_index(index).unwrap(), 4);
     }
 
@@ -437,7 +437,7 @@ mod tests {
         let index = [1, 1, 0];
         let dim = [3, 2, 1].into();
         let data = vec![1, 2, 3, 4, 5, 6];
-        let raster3d = GridArray3D::new(dim, data, None).unwrap();
+        let raster3d = Grid3D::new(dim, data, None).unwrap();
         let value = raster3d.get_at_grid_index(index).unwrap();
         assert_eq!(value, 4);
     }
@@ -447,7 +447,7 @@ mod tests {
         let index = [1, 1, 0];
         let dim = [3, 2, 1].into();
         let data = vec![1, 2, 3, 4, 5, 6];
-        let mut raster3d = GridArray3D::new(dim, data, None).unwrap();
+        let mut raster3d = Grid3D::new(dim, data, None).unwrap();
 
         raster3d.set_at_grid_index(index, 9).unwrap();
         let value = raster3d.get_at_grid_index(index).unwrap();
