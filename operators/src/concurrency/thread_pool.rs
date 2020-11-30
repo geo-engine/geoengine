@@ -50,7 +50,7 @@ impl Task {
 ///
 #[derive(Debug)]
 pub struct ThreadPool {
-    degree_of_parallelism: usize,
+    target_thread_count: usize,
     global_queue: Arc<Injector<Task>>,
     stealers: Vec<Stealer<Task>>,
     threads: Vec<JoinHandle<()>>,
@@ -69,7 +69,7 @@ impl ThreadPool {
             (0..number_of_threads).map(|_| Worker::new_fifo()).collect();
 
         let mut thread_pool = Self {
-            degree_of_parallelism: number_of_threads,
+            target_thread_count: number_of_threads,
             global_queue: Arc::new(Injector::new()),
             stealers: worker_deques.iter().map(Worker::stealer).collect(),
             threads: Vec::with_capacity(number_of_threads),
@@ -156,10 +156,10 @@ impl<'pool> ThreadPoolContext<'pool> {
         }
     }
 
-    /// What is the degree of parallelism that the `ThreadPool` provides?
+    /// What is the degree of parallelism that the `ThreadPool` aims for?
     /// This is helpful to determine how to split the work into tasks.
     pub fn degree_of_parallelism(&self) -> usize {
-        self.thread_pool.degree_of_parallelism
+        self.thread_pool.target_thread_count
     }
 
     /// Compute a task in the `ThreadPool`
