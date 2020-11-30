@@ -66,6 +66,7 @@ async fn wms<C: Context>(
     }
 }
 
+#[allow(clippy::unnecessary_wraps)] // TODO: remove line once implemented fully
 fn get_capabilities(_request: &GetCapabilities) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
     // TODO: implement
     // TODO: inject correct url of the instance and return data for the default layer
@@ -242,6 +243,7 @@ where
     Ok(output_tile.to_png(request.width, request.height, &colorizer)?)
 }
 
+#[allow(clippy::unnecessary_wraps)] // TODO: remove line once implemented fully
 fn get_legend_graphic<C: Context>(
     _request: &GetLegendGraphic,
     _ctx: &C,

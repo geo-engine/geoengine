@@ -636,6 +636,6 @@ x;y
             .to_string()
         );
 
-        let _: Box<dyn VectorOperator> = serde_json::from_str(&operator_json).unwrap();
+        let _deserialized: Box<dyn VectorOperator> = serde_json::from_str(&operator_json).unwrap();
     }
 }

@@ -46,6 +46,7 @@ async fn wfs<C: Context>(
     }
 }
 
+#[allow(clippy::unnecessary_wraps)] // TODO: remove line once implemented fully
 fn get_capabilities(_request: &GetCapabilities) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
     // TODO: implement
     // TODO: inject correct url of the instance and return data for the default layer
@@ -277,6 +278,7 @@ async fn point_stream_to_geojson(
     Ok(output)
 }
 
+#[allow(clippy::unnecessary_wraps)] // TODO: remove line once implemented fully
 fn get_feature_mock(_request: &GetFeature) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
     let collection = MultiPointCollection::from_data(
         MultiPoint::many(vec![
