@@ -1,12 +1,12 @@
 use super::{
-    ArrayShape2D, DynamicRasterDataType, GridArray, GridSize, GridSpaceToLinearSpace,
+    DynamicRasterDataType, GridArray, GridShape2D, GridSize, GridSpaceToLinearSpace,
     RasterDataType, TypedRasterConversion,
 };
 use crate::raster::Pixel;
 use std::convert::TryFrom;
 
-pub type TypedGridArray2D = TypedGridArray<ArrayShape2D>;
-pub type TypedGridArray3D = TypedGridArray<ArrayShape2D>;
+pub type TypedGridArray2D = TypedGridArray<GridShape2D>;
+pub type TypedGridArray3D = TypedGridArray<GridShape2D>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum TypedGridArray<D: GridSize> {

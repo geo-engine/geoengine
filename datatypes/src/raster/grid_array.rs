@@ -10,20 +10,20 @@ use super::{
     GridIndexAccessMut, GridSize, GridSpaceToLinearSpace,
 };
 
-/// An `ArrayShape` describes the shape of an n-dimensional array by storing the size of each axis.
+/// An `GridShape` describes the shape of an n-dimensional array by storing the size of each axis.
 #[derive(PartialEq, Debug, Copy, Clone, Serialize, Deserialize)]
-pub struct ArrayShape<A>
+pub struct GridShape<A>
 where
     A: AsRef<[usize]>,
 {
     pub shape_array: A,
 }
 
-impl<A> ArrayShape<A>
+impl<A> GridShape<A>
 where
     A: AsRef<[usize]>,
 {
-    /// create a new `ArrayShape`
+    /// create a new `GridShape`
     pub fn new(shape: A) -> Self {
         Self { shape_array: shape }
     }
@@ -37,29 +37,29 @@ where
     }
 }
 
-pub type ArrayShape1D = ArrayShape<[usize; 1]>;
-pub type ArrayShape2D = ArrayShape<[usize; 2]>;
-pub type ArrayShape3D = ArrayShape<[usize; 3]>;
+pub type GridShape1D = GridShape<[usize; 1]>;
+pub type GridShape2D = GridShape<[usize; 2]>;
+pub type GridShape3D = GridShape<[usize; 3]>;
 
-impl From<[usize; 1]> for ArrayShape1D {
+impl From<[usize; 1]> for GridShape1D {
     fn from(shape: [usize; 1]) -> Self {
-        ArrayShape1D { shape_array: shape }
+        GridShape1D { shape_array: shape }
     }
 }
 
-impl From<[usize; 2]> for ArrayShape2D {
+impl From<[usize; 2]> for GridShape2D {
     fn from(shape: [usize; 2]) -> Self {
-        ArrayShape2D { shape_array: shape }
+        GridShape2D { shape_array: shape }
     }
 }
 
-impl From<[usize; 3]> for ArrayShape3D {
+impl From<[usize; 3]> for GridShape3D {
     fn from(shape: [usize; 3]) -> Self {
-        ArrayShape3D { shape_array: shape }
+        GridShape3D { shape_array: shape }
     }
 }
 
-impl GridSize for ArrayShape1D {
+impl GridSize for GridShape1D {
     type ShapeArray = [usize; 1];
 
     const NDIM: usize = 1;
@@ -74,7 +74,7 @@ impl GridSize for ArrayShape1D {
     }
 }
 
-impl GridSpaceToLinearSpace for ArrayShape1D {
+impl GridSpaceToLinearSpace for GridShape1D {
     type IndexArray = [isize; 1];
 
     fn strides(&self) -> Self::ShapeArray {
@@ -101,7 +101,7 @@ impl GridSpaceToLinearSpace for ArrayShape1D {
     }
 }
 
-impl GridBounds for ArrayShape1D {
+impl GridBounds for GridShape1D {
     type IndexArray = [isize; 1];
 
     fn min_index(&self) -> GridIdx<Self::IndexArray> {
@@ -114,7 +114,7 @@ impl GridBounds for ArrayShape1D {
     }
 }
 
-impl GridSize for ArrayShape2D {
+impl GridSize for GridShape2D {
     type ShapeArray = [usize; 2];
 
     const NDIM: usize = 2;
@@ -129,7 +129,7 @@ impl GridSize for ArrayShape2D {
     }
 }
 
-impl GridSpaceToLinearSpace for ArrayShape2D {
+impl GridSpaceToLinearSpace for GridShape2D {
     type IndexArray = [isize; 2];
 
     fn strides(&self) -> Self::ShapeArray {
@@ -156,7 +156,7 @@ impl GridSpaceToLinearSpace for ArrayShape2D {
     }
 }
 
-impl GridBounds for ArrayShape2D {
+impl GridBounds for GridShape2D {
     type IndexArray = [isize; 2];
 
     fn min_index(&self) -> GridIdx<Self::IndexArray> {
@@ -169,7 +169,7 @@ impl GridBounds for ArrayShape2D {
     }
 }
 
-impl GridSize for ArrayShape3D {
+impl GridSize for GridShape3D {
     type ShapeArray = [usize; 3];
 
     const NDIM: usize = 3;
@@ -184,7 +184,7 @@ impl GridSize for ArrayShape3D {
     }
 }
 
-impl GridSpaceToLinearSpace for ArrayShape3D {
+impl GridSpaceToLinearSpace for GridShape3D {
     type IndexArray = [isize; 3];
 
     fn strides(&self) -> Self::ShapeArray {
@@ -215,7 +215,7 @@ impl GridSpaceToLinearSpace for ArrayShape3D {
     }
 }
 
-impl GridBounds for ArrayShape3D {
+impl GridBounds for GridShape3D {
     type IndexArray = [isize; 3];
 
     fn min_index(&self) -> GridIdx<Self::IndexArray> {
@@ -235,9 +235,9 @@ pub struct GridArray<D, T> {
     pub no_data_value: Option<T>,
 }
 
-pub type GridArray1D<T> = GridArray<ArrayShape1D, T>;
-pub type GridArray2D<T> = GridArray<ArrayShape2D, T>;
-pub type GridArray3D<T> = GridArray<ArrayShape3D, T>;
+pub type GridArray1D<T> = GridArray<GridShape1D, T>;
+pub type GridArray2D<T> = GridArray<GridShape2D, T>;
+pub type GridArray3D<T> = GridArray<GridShape3D, T>;
 
 impl<D, T> GridArray<D, T>
 where

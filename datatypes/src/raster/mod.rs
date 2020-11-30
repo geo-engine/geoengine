@@ -33,8 +33,8 @@ pub use self::typed_raster_conversion::TypedRasterConversion;
 pub use self::typed_raster_tile::{TypedRasterTile2D, TypedRasterTile3D};
 use super::primitives::{SpatialBounded, TemporalBounded};
 pub use grid_array::{
-    ArrayShape, ArrayShape1D, ArrayShape2D, ArrayShape3D, GridArray, GridArray1D, GridArray2D,
-    GridArray3D,
+    GridArray, GridArray1D, GridArray2D, GridArray3D, GridShape, GridShape1D, GridShape2D,
+    GridShape3D,
 };
 pub use grid_bounds::{GridBoundingBox, GridBoundingBox1D, GridBoundingBox2D, GridBoundingBox3D};
 pub use raster_tile::{RasterTile, RasterTile2D, RasterTile3D, TileInformation};

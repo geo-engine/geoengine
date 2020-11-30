@@ -1,14 +1,6 @@
-use std::{
-    fmt::Debug,
-    ops::{Add, Div, Mul, Rem, Sub},
-};
-
-use num_traits::{One, Zero};
-use serde::{Deserialize, Serialize};
-
 use crate::util::Result;
 
-use super::grid_bounds::GridBoundingBox;
+use super::{GridBoundingBox, GridIdx};
 
 /// Size information of a grid include the size of each axis and the number elements
 pub trait GridSize {

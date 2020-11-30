@@ -1,10 +1,10 @@
 use super::{
-    ArrayShape2D, ArrayShape3D, DynamicRasterDataType, GridSize, GridSpaceToLinearSpace,
+    DynamicRasterDataType, GridShape2D, GridShape3D, GridSize, GridSpaceToLinearSpace,
     RasterDataType, RasterTile,
 };
 
-pub type TypedRasterTile2D = TypedRasterTile<ArrayShape2D>;
-pub type TypedRasterTile3D = TypedRasterTile<ArrayShape3D>;
+pub type TypedRasterTile2D = TypedRasterTile<GridShape2D>;
+pub type TypedRasterTile3D = TypedRasterTile<GridShape3D>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum TypedRasterTile<D: GridSize + GridSpaceToLinearSpace> {

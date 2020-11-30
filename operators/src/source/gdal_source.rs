@@ -24,7 +24,7 @@ use futures::stream::{self, BoxStream, StreamExt};
 use geoengine_datatypes::{
     primitives::{BoundingBox2D, SpatialBounded, SpatialResolution, TimeInterval},
     raster::{
-        ArrayShape2D, GridArray, GridBlit, GridBoundingBox2D, GridBounds, GridIdx, GridIdx2D,
+        GridArray, GridBlit, GridBoundingBox2D, GridBounds, GridIdx, GridIdx2D, GridShape2D,
         GridSize, GridSpaceToLinearSpace,
     },
 };
@@ -73,7 +73,7 @@ pub trait GdalDatasetInformation {
     fn native_time_information(&self) -> &TimeIntervalInformation;
     fn geo_transform(&self) -> GeoTransform;
     fn bounding_box(&self) -> BoundingBox2D;
-    fn grid_shape(&self) -> ArrayShape2D;
+    fn grid_shape(&self) -> GridShape2D;
     fn file_name_with_time_placeholder(&self) -> &str;
     fn time_format(&self) -> &str;
     fn dataset_path(&self) -> PathBuf;
@@ -95,7 +95,7 @@ pub struct JsonDatasetInformation {
     pub base_path: PathBuf,
     pub data_type: RasterDataType,
     pub geo_transform: GeoTransform,
-    pub grid_shape: ArrayShape2D,
+    pub grid_shape: GridShape2D,
 }
 
 impl JsonDatasetInformationProvider {
@@ -176,7 +176,7 @@ impl GdalDatasetInformation for JsonDatasetInformationProvider {
         )
     }
 
-    fn grid_shape(&self) -> ArrayShape2D {
+    fn grid_shape(&self) -> GridShape2D {
         self.dataset_information.grid_shape
     }
 }
@@ -204,7 +204,7 @@ pub struct TilingInformation {
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct TilingStrategy {
     pub bounding_box: BoundingBox2D,
-    pub tile_pixel_size: ArrayShape2D,
+    pub tile_pixel_size: GridShape2D,
     pub geo_transform: GeoTransform,
 }
 
