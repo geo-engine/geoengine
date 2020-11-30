@@ -3,8 +3,8 @@ use snafu::ensure;
 use crate::{error, util::Result};
 
 use super::{
-    BoundedGrid, GridBounds, GridContains, GridIdx, GridIdx1D, GridIdx2D, GridIdx3D,
-    GridIntersection, GridSize, GridSpaceToLinearSpace,
+    BoundedGrid, GridBounds, GridContains, GridIdx, GridIntersection, GridSize,
+    GridSpaceToLinearSpace,
 };
 
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Clone)]
@@ -25,7 +25,18 @@ where
     A: AsRef<[isize]>,
 {
     pub fn new<I: Into<GridIdx<A>>>(min: I, max: I) -> Result<Self> {
-        Ok(GridBoundingBox::new_unchecked(min, max))
+        let idx_min: GridIdx<A> = min.into();
+        let idx_max: GridIdx<A> = max.into();
+        for (&a, &b) in idx_min.as_slice().iter().zip(idx_max.as_slice()) {
+            ensure!(
+                a <= b,
+                error::InvalidGridBounds {
+                    min: Vec::from(idx_min.as_slice()),
+                    max: Vec::from(idx_max.as_slice())
+                }
+            )
+        }
+        Ok(GridBoundingBox::new_unchecked(idx_min, idx_max))
     }
 
     pub fn new_unchecked<I: Into<GridIdx<A>>>(min: I, max: I) -> Self {
@@ -99,36 +110,6 @@ where
 
     fn max_index(&self) -> GridIdx<A> {
         self.max.clone().into()
-    }
-}
-
-impl GridContains<GridIdx1D> for GridBoundingBox1D {
-    fn contains(&self, rhs: GridIdx1D) -> bool {
-        let GridIdx([idx]) = rhs;
-        let [min] = self.min;
-        let [max] = self.max;
-        crate::util::ranges::value_in_range_inclusive(idx, min, max)
-    }
-}
-
-impl GridContains<GridIdx2D> for GridBoundingBox2D {
-    fn contains(&self, rhs: GridIdx2D) -> bool {
-        let GridIdx([a, b]) = rhs;
-        let [min_a, min_b] = self.min;
-        let [max_a, max_b] = self.max;
-        crate::util::ranges::value_in_range_inclusive(a, min_a, max_a)
-            && crate::util::ranges::value_in_range_inclusive(b, min_b, max_b)
-    }
-}
-
-impl GridContains<GridIdx3D> for GridBoundingBox3D {
-    fn contains(&self, rhs: GridIdx3D) -> bool {
-        let GridIdx([a, b, c]) = rhs;
-        let [min_a, min_b, min_c] = self.min;
-        let [max_a, max_b, max_c] = self.max;
-        crate::util::ranges::value_in_range_inclusive(a, min_a, max_a)
-            && crate::util::ranges::value_in_range_inclusive(b, min_b, max_b)
-            && crate::util::ranges::value_in_range_inclusive(c, min_c, max_c)
     }
 }
 
@@ -222,7 +203,7 @@ impl GridSpaceToLinearSpace for GridBoundingBox<[isize; 1]> {
     fn linear_space_index<I: Into<GridIdx<Self::IndexArray>>>(&self, index: I) -> Result<usize> {
         let real_index = index.into();
         ensure!(
-            self.contains(real_index),
+            self.contains(&real_index),
             error::GridIndexOutOfBounds {
                 index: Vec::from(real_index.0),
                 min_index: Vec::from(self.min_index().0),
@@ -250,7 +231,7 @@ impl GridSpaceToLinearSpace for GridBoundingBox<[isize; 2]> {
     fn linear_space_index<I: Into<GridIdx<Self::IndexArray>>>(&self, index: I) -> Result<usize> {
         let real_index = index.into();
         ensure!(
-            self.contains(real_index),
+            self.contains(&real_index),
             error::GridIndexOutOfBounds {
                 index: Vec::from(real_index.0),
                 min_index: Vec::from(self.min_index().0),
@@ -284,7 +265,7 @@ impl GridSpaceToLinearSpace for GridBoundingBox<[isize; 3]> {
     fn linear_space_index<I: Into<GridIdx<Self::IndexArray>>>(&self, index: I) -> Result<usize> {
         let real_index = index.into();
         ensure!(
-            self.contains(real_index),
+            self.contains(&real_index),
             error::GridIndexOutOfBounds {
                 index: Vec::from(real_index.0),
                 min_index: Vec::from(self.min_index().0),
@@ -303,5 +284,108 @@ where
 
     fn bounding_box(&self) -> GridBoundingBox<Self::IndexArray> {
         GridBoundingBox::new_unchecked(self.min_index(), self.max_index())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn grid_bounding_box_new_1d() {
+        GridBoundingBox::new([1], [42]).unwrap();
+        GridBoundingBox::new([42], [1]).unwrap_err();
+    }
+
+    #[test]
+    fn grid_bounding_box_new_2d() {
+        GridBoundingBox::new([1, 2], [42, 43]).unwrap();
+        GridBoundingBox::new([1, 43], [2, 42]).unwrap_err();
+    }
+
+    #[test]
+    fn grid_bounding_box_new_3d() {
+        GridBoundingBox::new([1, 2, 3], [42, 43, 44]).unwrap();
+        GridBoundingBox::new([1, 2, 44], [42, 43, 3]).unwrap_err();
+    }
+
+    #[test]
+    fn grid_bounding_box_1d_grid_size() {
+        let bbox = GridBoundingBox1D::new([0], [9]).unwrap();
+        assert_eq!(bbox.axis_size(), [10]);
+        assert_eq!(bbox.axis_size_x(), 10);
+        assert_eq!(bbox.axis_size_y(), 1);
+        assert_eq!(bbox.number_of_elements(), 10)
+    }
+
+    #[test]
+    fn grid_bounding_box_2d_grid_size() {
+        let bbox = GridBoundingBox2D::new([0, 0], [9, 9]).unwrap();
+        assert_eq!(bbox.axis_size(), [10, 10]);
+        assert_eq!(bbox.axis_size_x(), 10);
+        assert_eq!(bbox.axis_size_y(), 10);
+        assert_eq!(bbox.number_of_elements(), 100)
+    }
+
+    #[test]
+    fn grid_bounding_box_3d_grid_size() {
+        let bbox = GridBoundingBox3D::new([0, 0, 0], [9, 9, 9]).unwrap();
+        assert_eq!(bbox.axis_size(), [10, 10, 10]);
+        assert_eq!(bbox.axis_size_x(), 10);
+        assert_eq!(bbox.axis_size_y(), 10);
+        assert_eq!(bbox.number_of_elements(), 1000)
+    }
+
+    #[test]
+    fn grid_bounding_box_1d_intersection() {
+        let a = GridBoundingBox::new([1], [42]).unwrap();
+        let b = GridBoundingBox::new([2], [69]).unwrap();
+        let c = a.intersection(&b).unwrap();
+        assert_eq!(c, GridBoundingBox::new([2], [42]).unwrap())
+    }
+
+    #[test]
+    fn grid_bounding_box_2d_intersection() {
+        let a = GridBoundingBox::new([1, 2], [42, 69]).unwrap();
+        let b = GridBoundingBox::new([2, 1], [69, 42]).unwrap();
+        let c = a.intersection(&b).unwrap();
+        assert_eq!(c, GridBoundingBox::new([2, 2], [42, 42]).unwrap())
+    }
+
+    #[test]
+    fn grid_bounding_box_3d_intersection() {
+        let a = GridBoundingBox::new([1, 2, 3], [42, 69, 666]).unwrap();
+        let b = GridBoundingBox::new([3, 2, 1], [69, 666, 42]).unwrap();
+        let c = a.intersection(&b).unwrap();
+        assert_eq!(c, GridBoundingBox::new([3, 2, 3], [42, 69, 42]).unwrap())
+    }
+
+    #[test]
+    fn grid_bounding_box_1d_linear_space() {
+        let a = GridBoundingBox::new([1], [42]).unwrap();
+        let l = a.linear_space_index([2]).unwrap();
+        assert_eq!(l, 1);
+        a.linear_space_index([43]).unwrap_err();
+    }
+
+    #[test]
+    fn grid_bounding_box_2d_linear_space() {
+        let a = GridBoundingBox::new([1, 1], [42, 42]).unwrap();
+
+        assert_eq!(a.linear_space_index([1, 1]).unwrap(), 0);
+        assert_eq!(a.linear_space_index([2, 2]).unwrap(), 43);
+        a.linear_space_index([43, 43]).unwrap_err();
+    }
+
+    #[test]
+    fn grid_bounding_box_3d_linear_space() {
+        let a = GridBoundingBox::new([1, 1, 1], [42, 42, 42]).unwrap();
+
+        assert_eq!(a.linear_space_index([1, 1, 1]).unwrap(), 0);
+        assert_eq!(
+            a.linear_space_index([2, 2, 2]).unwrap(),
+            1 * 42 * 42 + 1 * 42 + 1
+        );
+        a.linear_space_index([43, 43, 43]).unwrap_err();
     }
 }

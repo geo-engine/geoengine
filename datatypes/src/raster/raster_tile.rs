@@ -1,6 +1,6 @@
 use super::{
-    ArrayShape2D, ArrayShape3D, GeoTransform, GridArray, GridIdx, GridIdx2D, GridIndexAccess,
-    GridIndexAccessMut, GridSize, GridSpaceToLinearSpace, Raster,
+    ArrayShape2D, ArrayShape3D, GeoTransform, GridArray, GridBounds, GridIdx, GridIdx2D,
+    GridIndexAccess, GridIndexAccessMut, GridSize, GridSpaceToLinearSpace, Raster,
 };
 use crate::primitives::{BoundingBox2D, SpatialBounded, TemporalBounded, TimeInterval};
 use crate::raster::data_type::FromPrimitive;
@@ -19,9 +19,14 @@ where
     D: GridSize + GridSpaceToLinearSpace,
     T: Pixel,
 {
+    /// The `TimeInterval` where this `RasterTile is valid`.
     pub time: TimeInterval,
+    /// The tile position is the position of the tile in the gird of tiles with origin at the origin of the global_geo_transform.
+    /// This is NOT a pixel position inside the tile.
     pub tile_position: GridIdx2D,
+    /// The global geotransform to transform pixels into geographic coordinates
     pub global_geo_transform: GeoTransform,
+    /// The data of the `RasterTile` is stored as `GridArray`
     pub grid_array: GridArray<D, T>,
 }
 
@@ -243,10 +248,11 @@ where
     }
 }
 
-impl<T, D, I> GridIndexAccess<T, I> for RasterTile<D, T>
+impl<T, D, I, A> GridIndexAccess<T, I> for RasterTile<D, T>
 where
-    D: GridSize + GridSpaceToLinearSpace,
-    I: Into<GridIdx<D::IndexArray>>,
+    D: GridSize + GridSpaceToLinearSpace<IndexArray = A> + GridBounds<IndexArray = A>,
+    I: Into<GridIdx<A>>,
+    A: AsRef<[isize]> + Into<GridIdx<A>> + Clone,
     T: Pixel,
 {
     fn get_at_grid_index(&self, grid_index: I) -> Result<T> {
@@ -258,10 +264,11 @@ where
     }
 }
 
-impl<T, D, I> GridIndexAccessMut<T, I> for RasterTile<D, T>
+impl<T, D, I, A> GridIndexAccessMut<T, I> for RasterTile<D, T>
 where
-    D: GridSize + GridSpaceToLinearSpace,
-    I: Into<GridIdx<D::IndexArray>>,
+    D: GridSize + GridSpaceToLinearSpace<IndexArray = A> + GridBounds<IndexArray = A>,
+    I: Into<GridIdx<A>>,
+    A: AsRef<[isize]> + Into<GridIdx<A>> + Clone,
     T: Pixel,
 {
     fn set_at_grid_index(&mut self, grid_index: I, value: T) -> Result<()> {
@@ -457,6 +464,22 @@ mod tests {
             BoundingBox2D::new_upper_left_lower_right_unchecked(
                 Coordinate2D::new(3000., 200.),
                 Coordinate2D::new(4000., 100.)
+            )
+        );
+    }
+
+    #[test]
+    fn tile_information_spatial_bounds_geotransform() {
+        let ti = TileInformation::new(
+            GridIdx([2, 3]),
+            ArrayShape2D::from([10, 10]),
+            GeoTransform::new_with_coordinate_x_y(-180., 0.1, 90., -0.1),
+        );
+        assert_eq!(
+            ti.spatial_bounds(),
+            BoundingBox2D::new_upper_left_lower_right_unchecked(
+                Coordinate2D::new(-177., 88.),
+                Coordinate2D::new(-176., 87.)
             )
         );
     }

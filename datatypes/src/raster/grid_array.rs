@@ -10,6 +10,7 @@ use super::{
     GridIndexAccessMut, GridSize, GridSpaceToLinearSpace,
 };
 
+/// An `ArrayShape` describes the shape of an n-dimensional array by storing the size of each axis.
 #[derive(PartialEq, Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct ArrayShape<A>
 where
@@ -22,6 +23,7 @@ impl<A> ArrayShape<A>
 where
     A: AsRef<[usize]>,
 {
+    /// create a new `ArrayShape`
     pub fn new(shape: A) -> Self {
         Self { shape_array: shape }
     }
@@ -81,14 +83,13 @@ impl GridSpaceToLinearSpace for ArrayShape1D {
 
     fn linear_space_index_unchecked<I: Into<GridIdx<Self::IndexArray>>>(&self, index: I) -> usize {
         let GridIdx([x]) = index.into();
-        let [stride_x] = self.strides();
-        x as usize * stride_x
+        x as usize
     }
 
     fn linear_space_index<I: Into<GridIdx<Self::IndexArray>>>(&self, index: I) -> Result<usize> {
         let real_index = index.into();
         ensure!(
-            self.bounding_box().contains(real_index),
+            self.bounding_box().contains(&real_index),
             error::GridIndexOutOfBounds {
                 index: Vec::from(real_index.0),
                 min_index: Vec::from(self.min_index().0),
@@ -144,7 +145,7 @@ impl GridSpaceToLinearSpace for ArrayShape2D {
     fn linear_space_index<I: Into<GridIdx<Self::IndexArray>>>(&self, index: I) -> Result<usize> {
         let real_index = index.into();
         ensure!(
-            self.bounding_box().contains(real_index),
+            self.bounding_box().contains(&real_index),
             error::GridIndexOutOfBounds {
                 index: Vec::from(real_index.0),
                 min_index: Vec::from(self.min_index().0),
@@ -187,19 +188,23 @@ impl GridSpaceToLinearSpace for ArrayShape3D {
     type IndexArray = [isize; 3];
 
     fn strides(&self) -> Self::ShapeArray {
-        [self.axis_size_y(), self.axis_size_x(), 1]
+        [
+            self.axis_size_y() * self.axis_size_x(),
+            self.axis_size_x(),
+            1,
+        ]
     }
 
     fn linear_space_index_unchecked<I: Into<GridIdx<Self::IndexArray>>>(&self, index: I) -> usize {
         let GridIdx([z, y, x]) = index.into();
         let [stride_z, stride_y, stride_x] = self.strides();
-        z as usize * stride_z * y as usize * stride_y + x as usize * stride_x
+        z as usize * stride_z + y as usize * stride_y + x as usize * stride_x
     }
 
     fn linear_space_index<I: Into<GridIdx<Self::IndexArray>>>(&self, index: I) -> Result<usize> {
         let real_index = index.into();
         ensure!(
-            self.bounding_box().contains(real_index),
+            self.bounding_box().contains(&real_index),
             error::GridIndexOutOfBounds {
                 index: Vec::from(real_index.0),
                 min_index: Vec::from(self.min_index().0),
@@ -302,14 +307,24 @@ where
     }
 }
 
-impl<T, D, I> GridIndexAccess<T, I> for GridArray<D, T>
+impl<T, D, I, A> GridIndexAccess<T, I> for GridArray<D, T>
 where
-    D: GridSize + GridSpaceToLinearSpace,
-    I: Into<GridIdx<D::IndexArray>>,
+    D: GridSize + GridSpaceToLinearSpace<IndexArray = A> + GridBounds<IndexArray = A>,
+    I: Into<GridIdx<A>>,
+    A: AsRef<[isize]> + Into<GridIdx<A>> + Clone,
     T: Copy,
 {
     fn get_at_grid_index(&self, grid_index: I) -> Result<T> {
-        Ok(self.get_at_grid_index_unchecked(grid_index))
+        let index = grid_index.into();
+        ensure!(
+            self.shape.contains(&index),
+            error::GridIndexOutOfBounds {
+                index: index.as_slice(),
+                min_index: self.shape.min_index().as_slice(),
+                max_index: self.shape.max_index().as_slice()
+            }
+        );
+        Ok(self.get_at_grid_index_unchecked(index))
     }
 
     fn get_at_grid_index_unchecked(&self, grid_index: I) -> T {
@@ -319,14 +334,24 @@ where
     }
 }
 
-impl<T, D, I> GridIndexAccessMut<T, I> for GridArray<D, T>
+impl<T, D, I, A> GridIndexAccessMut<T, I> for GridArray<D, T>
 where
-    D: GridSize + GridSpaceToLinearSpace,
-    I: Into<GridIdx<D::IndexArray>>,
+    D: GridSize + GridSpaceToLinearSpace<IndexArray = A> + GridBounds<IndexArray = A>,
+    I: Into<GridIdx<A>>,
+    A: AsRef<[isize]> + Into<GridIdx<A>> + Clone,
     T: Copy,
 {
     fn set_at_grid_index(&mut self, grid_index: I, value: T) -> Result<()> {
-        self.set_at_grid_index_unchecked(grid_index, value);
+        let index = grid_index.into();
+        ensure!(
+            self.shape.contains(&index),
+            error::GridIndexOutOfBounds {
+                index: index.as_slice(),
+                min_index: self.shape.min_index().as_slice(),
+                max_index: self.shape.max_index().as_slice()
+            }
+        );
+        self.set_at_grid_index_unchecked(index, value);
         Ok(())
     }
 
@@ -350,7 +375,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::{GridArray2D, GridIndexAccess, GridIndexAccessMut};
+    use super::{GridArray2D, GridArray3D, GridIndexAccess, GridIndexAccessMut};
 
     #[test]
     fn simple_raster_2d() {
@@ -389,5 +414,44 @@ mod tests {
         let value = raster2d.get_at_grid_index(index).unwrap();
         assert_eq!(value, 9);
         assert_eq!(raster2d.data, [1, 2, 3, 9, 5, 6]);
+    }
+
+    #[test]
+    fn simple_raster_3d() {
+        let dim = [3, 2, 1];
+        let data = vec![1, 2, 3, 4, 5, 6];
+        GridArray3D::new(dim.into(), data, None).unwrap();
+    }
+
+    #[test]
+    fn simple_raster_3d_at_tuple() {
+        let index = [1, 1, 0];
+        let dim = [3, 2, 1].into();
+        let data = vec![1, 2, 3, 4, 5, 6];
+        let raster3d = GridArray3D::new(dim, data, None).unwrap();
+        assert_eq!(raster3d.get_at_grid_index(index).unwrap(), 4);
+    }
+
+    #[test]
+    fn simple_raster_3d_at_arr() {
+        let index = [1, 1, 0];
+        let dim = [3, 2, 1].into();
+        let data = vec![1, 2, 3, 4, 5, 6];
+        let raster3d = GridArray3D::new(dim, data, None).unwrap();
+        let value = raster3d.get_at_grid_index(index).unwrap();
+        assert_eq!(value, 4);
+    }
+
+    #[test]
+    fn simple_raster_3d_set_at_tuple() {
+        let index = [1, 1, 0];
+        let dim = [3, 2, 1].into();
+        let data = vec![1, 2, 3, 4, 5, 6];
+        let mut raster3d = GridArray3D::new(dim, data, None).unwrap();
+
+        raster3d.set_at_grid_index(index, 9).unwrap();
+        let value = raster3d.get_at_grid_index(index).unwrap();
+        assert_eq!(value, 9);
+        assert_eq!(raster3d.data, [1, 2, 3, 9, 5, 6]);
     }
 }

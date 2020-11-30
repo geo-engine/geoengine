@@ -125,7 +125,15 @@ pub enum Error {
         a: RasterDataType,
         b: RasterDataType,
     },
-
+    #[snafu(display(
+        "Invalid Grid bounds: Each eleemnt in {:?} must be <= the corresponding element in {:?}.",
+        min,
+        max
+    ))]
+    InvalidGridBounds {
+        min: Vec<isize>,
+        max: Vec<isize>,
+    },
     #[snafu(display("InvalidSpatialReferenceString: {}", spatial_reference_string))]
     InvalidSpatialReferenceString {
         spatial_reference_string: String,
