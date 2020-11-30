@@ -7,6 +7,9 @@ use crossbeam::atomic::AtomicCell;
 use crossbeam::deque::{Injector, Steal, Stealer, Worker};
 use crossbeam::sync::WaitGroup;
 use crossbeam::utils::Backoff;
+use futures::task::{Context, Poll, Waker};
+use futures::Future;
+use std::pin::Pin;
 
 /// A chunk of work with some metadata
 struct Task {
@@ -123,8 +126,6 @@ impl ThreadPool {
     fn compute(&self, task: Task) {
         self.global_queue.push(task);
     }
-
-    // TODO: scope for threads
 }
 
 /// A computation context for a group that spawns tasks in a `ThreadPool`
@@ -143,7 +144,7 @@ impl<'pool> ThreadPoolContext<'pool> {
         }
     }
 
-    /// What is the degree of paralellism that the `ThreadPool` provides?
+    /// What is the degree of parallelism that the `ThreadPool` provides?
     /// This is helpful to determine how to split the work into tasks.
     pub fn degree_of_parallelism(&self) -> usize {
         self.thread_pool.degree_of_parallelism
@@ -164,7 +165,7 @@ impl<'pool> ThreadPoolContext<'pool> {
     /// TODO: handle panics: if a thread panics, this function will block forever
     pub fn scope<'scope, S>(&'pool self, scope_fn: S)
     where
-        S: FnOnce(&Scope) + 'scope,
+        S: FnOnce(&Scope<'pool, 'scope>) + 'scope,
     {
         let scope = Scope::<'pool, 'scope> {
             thread_pool_context: &self,
@@ -183,7 +184,8 @@ impl<'pool> ThreadPoolContext<'pool> {
 pub struct Scope<'pool, 'scope> {
     thread_pool_context: &'pool ThreadPoolContext<'pool>,
     wait_group: WaitGroup,
-    _scope_marker: PhantomData<&'scope ()>,
+    // needs to be invariant to `'scope`, cf. https://github.com/crossbeam-rs/crossbeam/pull/226/files#r232721183
+    _scope_marker: PhantomData<&'scope mut &'scope ()>,
 }
 
 impl<'pool, 'scope> Scope<'pool, 'scope> {
@@ -205,13 +207,95 @@ impl<'pool, 'scope> Scope<'pool, 'scope> {
             drop(wait_group);
         });
     }
+
+    /// Compute a task in the `ThreadPool` and return a `Future` of a result
+    pub fn compute_result<F, R>(&self, task: F) -> TaskResult<R>
+    where
+        F: FnOnce() -> R + Send + 'scope,
+        R: Clone + Send + 'static,
+    {
+        let future = TaskResult::default();
+
+        let future_ref = future.clone();
+        self.compute(move || {
+            future_ref.set(task());
+        });
+
+        future
+    }
+}
+
+/// A future that provides the task result
+pub struct TaskResult<R> {
+    option: Arc<AtomicCell<TaskResultOption<R>>>,
+}
+
+// we can't derive `Clone` since it requires `R` to be `Clone` as well
+impl<R> Clone for TaskResult<R> {
+    fn clone(&self) -> Self {
+        Self {
+            option: self.option.clone(),
+        }
+    }
+}
+
+/// The state of the `TaskResult` future
+#[derive(Debug)]
+enum TaskResultOption<R> {
+    None,
+    Result(R),
+    Waiting(Waker),
+}
+
+impl<R> Default for TaskResultOption<R> {
+    fn default() -> Self {
+        TaskResultOption::None
+    }
+}
+
+impl<R> TaskResult<R> {
+    fn set(&self, result: R) {
+        match self.option.swap(TaskResultOption::Result(result)) {
+            TaskResultOption::None | TaskResultOption::Result(_) => {} // do nothing
+            TaskResultOption::Waiting(waker) => waker.wake(),
+        };
+    }
+
+    pub fn result(&self) -> Option<R> {
+        match self.option.take() {
+            TaskResultOption::None | TaskResultOption::Waiting(_) => None,
+            TaskResultOption::Result(r) => Some(r),
+        }
+    }
+}
+
+impl<R> Default for TaskResult<R> {
+    fn default() -> Self {
+        Self {
+            option: Default::default(),
+        }
+    }
+}
+
+impl<R> Future for TaskResult<R> {
+    type Output = R;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        match self
+            .option
+            .swap(TaskResultOption::Waiting(cx.waker().clone()))
+        {
+            TaskResultOption::None | TaskResultOption::Waiting(_) => Poll::Pending,
+            TaskResultOption::Result(r) => Poll::Ready(r),
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicI32, Ordering};
+    use std::sync::atomic::{AtomicI32, AtomicUsize, Ordering};
 
-    use failure::_core::sync::atomic::AtomicUsize;
+    use futures::future;
 
     use super::*;
 
@@ -347,14 +431,31 @@ mod tests {
         let mut result = vec![0; NUMBER_OF_TASKS];
 
         context.scope(|scope| {
-            for i in 0..NUMBER_OF_TASKS {
-                let r_slice: &mut [usize] = &mut result[i..=i];
-                scope.compute(move || {
-                    r_slice[0] = i;
-                });
+            for (chunk, i) in result.chunks_exact_mut(1).zip(0..NUMBER_OF_TASKS) {
+                scope.compute(move || chunk[0] = i);
             }
         });
 
         assert_eq!((0..NUMBER_OF_TASKS).collect::<Vec<_>>(), result);
+    }
+
+    #[tokio::test]
+    async fn compute_results() {
+        const NUMBER_OF_TASKS: usize = 42;
+
+        let thread_pool = ThreadPool::new(2);
+        let context = thread_pool.create_context();
+
+        let mut futures = Vec::with_capacity(NUMBER_OF_TASKS);
+
+        context.scope(|scope| {
+            for i in 0..NUMBER_OF_TASKS {
+                futures.push(scope.compute_result(move || i));
+            }
+        });
+
+        let result = future::join_all(futures).await;
+
+        assert_eq!(result, (0..NUMBER_OF_TASKS).collect::<Vec<_>>());
     }
 }
