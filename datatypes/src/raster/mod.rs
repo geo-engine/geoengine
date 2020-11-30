@@ -1,10 +1,10 @@
 // mod base_raster;
 mod data_type;
 mod geo_transform;
-mod grid;
 mod grid_array;
 mod grid_bounds;
 mod grid_index;
+mod grid_traits;
 // mod grid_dimension;
 mod macros_raster;
 mod macros_raster_tile;
@@ -23,12 +23,12 @@ pub use self::geo_transform::{GdalGeoTransform, GeoTransform};
 
 pub use self::operations::{blit::Blit, grid_blit::GridBlit};
 
-pub use self::grid::{
+pub use self::grid_array_typed::{TypedGridArray, TypedGridArray2D, TypedGridArray3D};
+pub use self::grid_index::{GridIdx, GridIdx1D, GridIdx2D, GridIdx3D};
+pub use self::grid_traits::{
     BoundedGrid, GridBounds, GridContains, GridIndexAccess, GridIndexAccessMut, GridIntersection,
     GridSize, GridSpaceToLinearSpace,
 };
-pub use self::grid_array_typed::{TypedGridArray, TypedGridArray2D, TypedGridArray3D};
-pub use self::grid_index::{GridIdx, GridIdx1D, GridIdx2D, GridIdx3D};
 pub use self::typed_raster_conversion::TypedRasterConversion;
 pub use self::typed_raster_tile::{TypedRasterTile2D, TypedRasterTile3D};
 use super::primitives::{SpatialBounded, TemporalBounded};
