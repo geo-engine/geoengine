@@ -5,8 +5,7 @@ use std::{iter, mem};
 
 use crossbeam::atomic::AtomicCell;
 use crossbeam::deque::{Injector, Steal, Stealer, Worker};
-use crossbeam::sync::WaitGroup;
-use crossbeam::utils::Backoff;
+use crossbeam::sync::{Parker, Unparker, WaitGroup};
 use futures::task::{Context, Poll, Waker};
 use futures::Future;
 use std::pin::Pin;
@@ -56,6 +55,7 @@ pub struct ThreadPool {
     stealers: Vec<Stealer<Task>>,
     threads: Vec<JoinHandle<()>>,
     next_group_id: AtomicCell<usize>,
+    parked_threads: Arc<Injector<Unparker>>,
 }
 
 impl ThreadPool {
@@ -74,22 +74,30 @@ impl ThreadPool {
             stealers: worker_deques.iter().map(Worker::stealer).collect(),
             threads: Vec::with_capacity(number_of_threads),
             next_group_id: AtomicCell::new(0),
+            parked_threads: Arc::new(Injector::new()),
         };
 
         for worker_deque in worker_deques {
             let global_queue = thread_pool.global_queue.clone();
             let stealers = thread_pool.stealers.clone();
+            let parked_threads = thread_pool.parked_threads.clone();
 
             thread_pool.threads.push(std::thread::spawn(move || {
-                Self::await_work(&worker_deque, &global_queue, &stealers);
+                Self::await_work(&worker_deque, &global_queue, &stealers, &parked_threads);
             }))
         }
 
         thread_pool
     }
 
-    fn await_work(local: &Worker<Task>, global: &Injector<Task>, stealers: &[Stealer<Task>]) {
-        let backoff = Backoff::new();
+    fn await_work(
+        local: &Worker<Task>,
+        global: &Injector<Task>,
+        stealers: &[Stealer<Task>],
+        parked_threads: &Injector<Unparker>,
+    ) {
+        let parker = Parker::new();
+        let unparker = parker.unparker();
 
         loop {
             // Pop a task from the local queue, if not empty.
@@ -111,10 +119,9 @@ impl ThreadPool {
             if let Some(task) = task {
                 // TODO: recover panics
                 task.call_once();
-                backoff.reset();
             } else {
-                // TODO: sleep instead of busy waiting?
-                backoff.snooze();
+                parked_threads.push(unparker.clone());
+                parker.park();
             }
         }
     }
@@ -125,6 +132,11 @@ impl ThreadPool {
 
     fn compute(&self, task: Task) {
         self.global_queue.push(task);
+
+        // un-park a thread since there is new work
+        if let Steal::Success(unparker) = self.parked_threads.steal() {
+            unparker.unpark();
+        }
     }
 }
 
@@ -298,6 +310,7 @@ mod tests {
     use futures::future;
 
     use super::*;
+    use crossbeam::utils::Backoff;
 
     #[test]
     #[allow(clippy::blacklisted_name)]
@@ -457,5 +470,22 @@ mod tests {
         let result = future::join_all(futures).await;
 
         assert_eq!(result, (0..NUMBER_OF_TASKS).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn parking() {
+        let thread_pool = ThreadPool::new(1);
+        let context = thread_pool.create_context();
+
+        // wait for the thread to be parked
+        let backoff = Backoff::new();
+        while thread_pool.parked_threads.len() == 0 {
+            backoff.snooze();
+        }
+
+        let mut unparked = false;
+        context.scope(|scope| scope.compute(|| unparked = true));
+
+        assert!(unparked)
     }
 }
