@@ -7,9 +7,7 @@ use arrow::buffer::MutableBuffer;
 use arrow::datatypes::{Float64Type, Int64Type};
 use arrow::util::bit_util;
 use geoengine_datatypes::raster::{DynamicRasterDataType, Grid2D, Pixel, TypedGrid2D};
-use geoengine_datatypes::{
-    call_generic_features, call_generic_raster_2d, call_generic_raster_2d_ext,
-};
+use geoengine_datatypes::{call_generic_features, call_generic_grid_2d, call_generic_grid_2d_ext};
 use geoengine_datatypes::{
     collections::{RawFeatureCollectionBuilder, TypedFeatureCollection, VectorDataType},
     raster::RasterDataType,
@@ -895,7 +893,7 @@ impl<'a> CLProgramRunnable<'a> {
 
         for (idx, raster) in self.input_rasters.iter().enumerate() {
             let raster = raster.expect("checked");
-            call_generic_raster_2d!(raster, raster => {
+            call_generic_grid_2d!(raster, raster => {
                 let data_buffer = Buffer::builder()
                 .queue(queue.clone())
                 .flags(MemFlags::new().read_only())
@@ -916,7 +914,7 @@ impl<'a> CLProgramRunnable<'a> {
 
         for (idx, raster) in self.output_rasters.iter().enumerate() {
             let raster = raster.as_ref().expect("checked");
-            call_generic_raster_2d_ext!(raster, RasterOutputBuffer, (raster, e) => {
+            call_generic_grid_2d_ext!(raster, RasterOutputBuffer, (raster, e) => {
                 let buffer = Buffer::builder()
                     .queue(queue.clone())
                     .len(raster.data.len())
@@ -1371,7 +1369,7 @@ impl CompiledCLProgram {
 
     fn work_size(&self, runnable: &CLProgramRunnable) -> SpatialDims {
         match self.iteration_type {
-            IterationType::Raster => call_generic_raster_2d!(runnable.output_rasters[0].as_ref()
+            IterationType::Raster => call_generic_grid_2d!(runnable.output_rasters[0].as_ref()
                 .expect("checked"), raster => SpatialDims::Two(raster.shape.axis_size_x(), raster.shape.axis_size_y())),
             IterationType::VectorFeatures => SpatialDims::One(
                 runnable.output_features[0]
