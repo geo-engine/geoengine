@@ -18,9 +18,9 @@ updates:
       interval: "daily"
 
   # Services crate
-    - package-ecosystem: "cargo"
-      # Look for `Cargo.toml` and `lock` files in the `root` directory
-      directory: "/services"
-      # Check the `crates.io` for updates every day (weekdays)
-      schedule:
-        interval: "daily"
+  - package-ecosystem: "cargo"
+    # Look for `Cargo.toml` and `lock` files in the `root` directory
+    directory: "/services"
+    # Check the `crates.io` for updates every day (weekdays)
+    schedule:
+      interval: "daily"
