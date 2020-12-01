@@ -436,7 +436,9 @@ impl RawFeatureCollectionBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::collections::{BuilderProvider, DataCollection, MultiPointCollection};
+    use crate::collections::{
+        BuilderProvider, DataCollection, FeatureCollectionInfos, MultiPointCollection, ToGeoJson,
+    };
     use crate::primitives::{DataRef, FeatureDataRef};
     use arrow::buffer::MutableBuffer;
     use arrow::datatypes::{Float64Type, ToByteSlice};
@@ -475,7 +477,7 @@ mod tests {
 
         builder.finish().unwrap();
 
-        let collection = builder.output.unwrap().get_data().unwrap();
+        let collection = builder.output.unwrap().try_into_data().unwrap();
 
         assert_eq!(collection.len(), 4);
 
@@ -510,7 +512,7 @@ mod tests {
 
         builder.finish().unwrap();
 
-        let collection = builder.output.unwrap().get_points().unwrap();
+        let collection = builder.output.unwrap().try_into_points().unwrap();
 
         assert_eq!(
             collection.to_geo_json(),
@@ -586,7 +588,7 @@ mod tests {
 
         builder.finish().unwrap();
 
-        let collection = builder.output.unwrap().get_points().unwrap();
+        let collection = builder.output.unwrap().try_into_points().unwrap();
 
         assert_eq!(
             collection.to_geo_json(),
@@ -658,7 +660,7 @@ mod tests {
 
         builder.finish().unwrap();
 
-        let collection = builder.output.unwrap().get_lines().unwrap();
+        let collection = builder.output.unwrap().try_into_lines().unwrap();
 
         assert_eq!(
             collection.to_geo_json(),
@@ -740,7 +742,7 @@ mod tests {
 
         builder.finish().unwrap();
 
-        let collection = builder.output.unwrap().get_polygons().unwrap();
+        let collection = builder.output.unwrap().try_into_polygons().unwrap();
 
         assert_eq!(
             collection.to_geo_json(),

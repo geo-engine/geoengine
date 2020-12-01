@@ -1,4 +1,4 @@
-use crate::primitives::GeometryRef;
+use crate::primitives::{Coordinate2D, GeometryRef};
 
 /// This trait allows iterating over the geometries of a feature collection
 pub trait IntoGeometryIterator<'a> {
@@ -16,4 +16,11 @@ pub trait IntoGeometryOptionsIterator<'i> {
 
     /// Return an iterator over geometries
     fn geometry_options(&'i self) -> Self::GeometryOptionIterator;
+}
+
+/// Common geo functionality for `FeatureCollection`s
+pub trait GeometryCollection {
+    fn coordinates(&self) -> &[Coordinate2D];
+
+    fn feature_offsets(&self) -> &[i32];
 }

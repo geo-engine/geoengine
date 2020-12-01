@@ -1,6 +1,6 @@
 use crate::collections::{
-    FeatureCollection, FeatureCollectionRowBuilder, GeoFeatureCollectionRowBuilder,
-    IntoGeometryIterator,
+    FeatureCollection, FeatureCollectionInfos, FeatureCollectionRowBuilder,
+    GeoFeatureCollectionRowBuilder, GeometryCollection, IntoGeometryIterator,
 };
 use crate::primitives::{Coordinate2D, MultiLineString, MultiLineStringAccess, MultiLineStringRef};
 use crate::util::arrow::downcast_array;
@@ -11,39 +11,8 @@ use std::slice;
 /// This collection contains temporal `MultiLineString`s and miscellaneous data.
 pub type MultiLineStringCollection = FeatureCollection<MultiLineString>;
 
-impl MultiLineStringCollection {
-    #[allow(clippy::cast_ptr_alignment)]
-    pub fn multi_line_string_offsets(&self) -> &[i32] {
-        let geometries_ref = self
-            .table
-            .column_by_name(Self::GEOMETRY_COLUMN_NAME)
-            .expect("There must exist a geometry column");
-        let geometries: &ListArray = downcast_array(geometries_ref);
-
-        let data = geometries.data();
-        let buffer = &data.buffers()[0];
-
-        unsafe { slice::from_raw_parts(buffer.raw_data() as *const i32, geometries.len() + 1) }
-    }
-
-    #[allow(clippy::cast_ptr_alignment)]
-    pub fn line_string_offsets(&self) -> &[i32] {
-        let geometries_ref = self
-            .table
-            .column_by_name(Self::GEOMETRY_COLUMN_NAME)
-            .expect("There must exist a geometry column");
-        let geometries: &ListArray = downcast_array(geometries_ref);
-
-        let line_strings_ref = geometries.values();
-        let line_strings: &ListArray = downcast_array(&line_strings_ref);
-
-        let data = line_strings.data();
-        let buffer = &data.buffers()[0];
-
-        unsafe { slice::from_raw_parts(buffer.raw_data() as *const i32, line_strings.len() + 1) }
-    }
-
-    pub fn coordinates(&self) -> &[Coordinate2D] {
+impl GeometryCollection for MultiLineStringCollection {
+    fn coordinates(&self) -> &[Coordinate2D] {
         let geometries_ref = self
             .table
             .column_by_name(Self::GEOMETRY_COLUMN_NAME)
@@ -67,6 +36,39 @@ impl MultiLineStringCollection {
                 number_of_coordinates,
             )
         }
+    }
+
+    #[allow(clippy::cast_ptr_alignment)]
+    fn feature_offsets(&self) -> &[i32] {
+        let geometries_ref = self
+            .table
+            .column_by_name(Self::GEOMETRY_COLUMN_NAME)
+            .expect("There must exist a geometry column");
+        let geometries: &ListArray = downcast_array(geometries_ref);
+
+        let data = geometries.data();
+        let buffer = &data.buffers()[0];
+
+        unsafe { slice::from_raw_parts(buffer.raw_data() as *const i32, geometries.len() + 1) }
+    }
+}
+
+impl MultiLineStringCollection {
+    #[allow(clippy::cast_ptr_alignment)]
+    pub fn line_string_offsets(&self) -> &[i32] {
+        let geometries_ref = self
+            .table
+            .column_by_name(Self::GEOMETRY_COLUMN_NAME)
+            .expect("There must exist a geometry column");
+        let geometries: &ListArray = downcast_array(geometries_ref);
+
+        let line_strings_ref = geometries.values();
+        let line_strings: &ListArray = downcast_array(&line_strings_ref);
+
+        let data = line_strings.data();
+        let buffer = &data.buffers()[0];
+
+        unsafe { slice::from_raw_parts(buffer.raw_data() as *const i32, line_strings.len() + 1) }
     }
 }
 
@@ -180,7 +182,7 @@ impl GeoFeatureCollectionRowBuilder<MultiLineString>
 mod tests {
     use super::*;
 
-    use crate::collections::BuilderProvider;
+    use crate::collections::{BuilderProvider, FeatureCollectionModifications};
     use crate::primitives::TimeInterval;
 
     #[test]
