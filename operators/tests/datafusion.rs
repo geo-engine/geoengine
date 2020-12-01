@@ -17,7 +17,7 @@ struct MockLoader {
 
 impl MockLoader {
     pub fn new(data: Vec<StructArray>) -> Self {
-        assert!(data.len() > 0);
+        assert!(!data.is_empty());
 
         Self {
             data: Arc::new(data),
