@@ -54,7 +54,7 @@ where
 
 impl<CollectionType> FeatureCollectionBuilder<CollectionType>
 where
-    CollectionType: Geometry + ArrowTyped,
+    CollectionType: Geometry + ArrowTyped + 'static,
 {
     /// Adds a column to the collection.
     ///
