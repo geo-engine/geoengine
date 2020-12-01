@@ -378,6 +378,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::identity_op)]
     fn grid_bounding_box_3d_linear_space() {
         let a = GridBoundingBox::new([1, 1, 1], [42, 42, 42]).unwrap();
 
