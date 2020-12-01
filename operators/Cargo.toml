@@ -16,7 +16,7 @@ failure = "0.1" # TODO: remove this!
 float-cmp = "0.6"
 futures = "0.3"
 gdal = { version = "0.6", features = ["gdal_2_2"] }
-geo = "0.15"
+geo = "0.16"
 geoengine-datatypes = { path = "../datatypes" }
 lazy_static = "1.4"
 num-traits = "0.2"
