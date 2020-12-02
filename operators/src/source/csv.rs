@@ -406,6 +406,7 @@ mod tests {
     use geoengine_datatypes::primitives::SpatialResolution;
 
     use super::*;
+    use geoengine_datatypes::collections::{FeatureCollectionInfos, ToGeoJson};
 
     #[tokio::test]
     async fn read_points() {
@@ -636,6 +637,6 @@ x;y
             .to_string()
         );
 
-        let _: Box<dyn VectorOperator> = serde_json::from_str(&operator_json).unwrap();
+        let _deserialized: Box<dyn VectorOperator> = serde_json::from_str(&operator_json).unwrap();
     }
 }

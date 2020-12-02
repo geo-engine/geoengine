@@ -9,7 +9,9 @@ use crate::util::input::StringOrNumberRange;
 use crate::util::Result;
 use futures::stream::BoxStream;
 use futures::StreamExt;
-use geoengine_datatypes::collections::FeatureCollection;
+use geoengine_datatypes::collections::{
+    FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
+};
 use geoengine_datatypes::primitives::{FeatureDataType, FeatureDataValue, Geometry};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use serde::{Deserialize, Serialize};
@@ -174,11 +176,13 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mock::{MockFeatureCollectionSource, MockFeatureCollectionSourceParams};
+    use crate::engine::MockExecutionContextCreator;
+    use crate::mock::MockFeatureCollectionSource;
+    use geoengine_datatypes::collections::{FeatureCollectionModifications, MultiPointCollection};
+    use geoengine_datatypes::primitives::SpatialResolution;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, FeatureData, MultiPoint, TimeInterval,
     };
-    use geoengine_datatypes::{collections::MultiPointCollection, primitives::SpatialResolution};
 
     #[test]
     fn serde() {
@@ -212,7 +216,7 @@ mod tests {
             .to_string()
         );
 
-        let _: Box<dyn VectorOperator> = serde_json::from_str(&serialized).unwrap();
+        let _deserialized: Box<dyn VectorOperator> = serde_json::from_str(&serialized).unwrap();
     }
 
     #[tokio::test]
@@ -232,12 +236,7 @@ mod tests {
         )
         .unwrap();
 
-        let source = MockFeatureCollectionSource {
-            params: MockFeatureCollectionSourceParams {
-                collection: collection.clone(),
-            },
-        }
-        .boxed();
+        let source = MockFeatureCollectionSource::single(collection.clone()).boxed();
 
         let filter = ColumnRangeFilter {
             params: ColumnRangeFilterParams {
@@ -250,7 +249,9 @@ mod tests {
         }
         .boxed();
 
-        let initialized = filter.initialize(&ExecutionContext::mock_empty()).unwrap();
+        let initialized = filter
+            .initialize(&MockExecutionContextCreator::default().context())
+            .unwrap();
 
         let point_processor = match initialized.query_processor() {
             Ok(TypedVectorQueryProcessor::MultiPoint(processor)) => processor,

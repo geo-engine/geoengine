@@ -37,15 +37,26 @@ pub enum Error {
     },
 
     #[snafu(display(
-        "{} is not a valid index in the dimension {} with size {}",
+        "{:?} is not a valid index in the bounds {:?}, {:?} ",
         index,
-        dimension,
-        dimension_size
+        min_index,
+        max_index,
     ))]
     GridIndexOutOfBounds {
-        index: usize,
-        dimension: usize,
-        dimension_size: usize,
+        index: Vec<isize>,
+        min_index: Vec<isize>,
+        max_index: Vec<isize>,
+    },
+
+    #[snafu(display("Invalid GridIndex ({:?}), reason: \"{}\".", grid_index, description))]
+    InvalidGridIndex {
+        grid_index: Vec<usize>,
+        description: &'static str,
+    },
+
+    #[snafu(display("Invalid raster operation. Reason: \"{}\".", description))]
+    InvalidRasterOperation {
+        description: &'static str,
     },
 
     #[snafu(display(
@@ -114,7 +125,15 @@ pub enum Error {
         a: RasterDataType,
         b: RasterDataType,
     },
-
+    #[snafu(display(
+        "Invalid Grid bounds: Each eleemnt in {:?} must be <= the corresponding element in {:?}.",
+        min,
+        max
+    ))]
+    InvalidGridBounds {
+        min: Vec<isize>,
+        max: Vec<isize>,
+    },
     #[snafu(display("InvalidSpatialReferenceString: {}", spatial_reference_string))]
     InvalidSpatialReferenceString {
         spatial_reference_string: String,
@@ -124,7 +143,7 @@ pub enum Error {
     ParseU32 {
         source: <u32 as std::str::FromStr>::Err,
     },
-    InvalidTypedRasterConversion,
+    InvalidTypedGridConversion,
     InvalidTypedValueConversion,
 }
 

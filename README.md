@@ -1,5 +1,8 @@
 # geo engine
- This workspace contains the geo engine crates.
+
+![CI](https://github.com/geo-engine/geoengine/workflows/CI/badge.svg)
+
+This workspace contains the geo engine crates.
 
 # Development
 

@@ -147,7 +147,12 @@ impl RawFeatureCollectionBuilder {
     pub fn set_time_intervals(&mut self, values_buffer: Buffer) -> Result<()> {
         let data = ArrayData::builder(TimeInterval::arrow_data_type())
             .len(self.num_features)
-            .add_buffer(values_buffer)
+            .add_child_data(
+                ArrayData::builder(arrow::datatypes::DataType::Int64)
+                    .len(self.num_features * 2)
+                    .add_buffer(values_buffer)
+                    .build(),
+            )
             .build();
 
         let array = Arc::new(FixedSizeListArray::from(data)) as ArrayRef;
@@ -431,7 +436,9 @@ impl RawFeatureCollectionBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::collections::{BuilderProvider, DataCollection, MultiPointCollection};
+    use crate::collections::{
+        BuilderProvider, DataCollection, FeatureCollectionInfos, MultiPointCollection, ToGeoJson,
+    };
     use crate::primitives::{DataRef, FeatureDataRef};
     use arrow::buffer::MutableBuffer;
     use arrow::datatypes::{Float64Type, ToByteSlice};
@@ -470,7 +477,7 @@ mod tests {
 
         builder.finish().unwrap();
 
-        let collection = builder.output.unwrap().get_data().unwrap();
+        let collection = builder.output.unwrap().try_into_data().unwrap();
 
         assert_eq!(collection.len(), 4);
 
@@ -505,7 +512,7 @@ mod tests {
 
         builder.finish().unwrap();
 
-        let collection = builder.output.unwrap().get_points().unwrap();
+        let collection = builder.output.unwrap().try_into_points().unwrap();
 
         assert_eq!(
             collection.to_geo_json(),
@@ -557,6 +564,82 @@ mod tests {
     }
 
     #[test]
+    fn points_with_time() {
+        let mut builder = MultiPointCollection::builder().batch_builder(3, 8);
+        builder.set_default_time_intervals().unwrap();
+
+        let coords: Vec<f64> = vec![0.0, 0.0, 1.1, 1.1, 2.2, 2.2, 3.3, 3.3];
+        let offsets: Vec<i32> = vec![0, 1, 3, 4];
+        let time: Vec<i64> = vec![
+            0,
+            1_000,
+            1_577_836_800 * 1000,
+            1_609_459_199 * 1000 + 999,
+            1_546_300_800 * 1000,
+            1_577_836_799 * 1000 + 999,
+        ];
+
+        let coords_buffer = Buffer::from(coords.to_byte_slice());
+        let offsets_buffer = Buffer::from(offsets.to_byte_slice());
+        let time_buffer = Buffer::from(time.to_byte_slice());
+
+        builder.set_points(coords_buffer, offsets_buffer).unwrap();
+        builder.set_time_intervals(time_buffer).unwrap();
+
+        builder.finish().unwrap();
+
+        let collection = builder.output.unwrap().try_into_points().unwrap();
+
+        assert_eq!(
+            collection.to_geo_json(),
+            json!({
+                "type": "FeatureCollection",
+                "features": [{
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [0.0, 0.0]
+                    },
+                    "properties": {},
+                    "when": {
+                        "start": "1970-01-01T00:00:00+00:00",
+                        "end": "1970-01-01T00:00:01+00:00",
+                        "type": "Interval"
+                    }
+                }, {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "MultiPoint",
+                        "coordinates": [
+                            [1.1, 1.1],
+                            [2.2, 2.2]
+                        ]
+                    },
+                    "properties": {},
+                    "when": {
+                        "start": "2020-01-01T00:00:00+00:00",
+                        "end": "2020-12-31T23:59:59.999+00:00",
+                        "type": "Interval"
+                    }
+                }, {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [3.3, 3.3]
+                    },
+                    "properties": {},
+                    "when": {
+                        "start": "2019-01-01T00:00:00+00:00",
+                        "end": "2019-12-31T23:59:59.999+00:00",
+                        "type": "Interval"
+                    }
+                }]
+            })
+            .to_string()
+        );
+    }
+
+    #[test]
     fn line_builder() {
         let mut builder = RawFeatureCollectionBuilder::lines(Default::default(), 2, 3, 7);
         builder.set_default_time_intervals().unwrap();
@@ -577,7 +660,7 @@ mod tests {
 
         builder.finish().unwrap();
 
-        let collection = builder.output.unwrap().get_lines().unwrap();
+        let collection = builder.output.unwrap().try_into_lines().unwrap();
 
         assert_eq!(
             collection.to_geo_json(),
@@ -659,7 +742,7 @@ mod tests {
 
         builder.finish().unwrap();
 
-        let collection = builder.output.unwrap().get_polygons().unwrap();
+        let collection = builder.output.unwrap().try_into_polygons().unwrap();
 
         assert_eq!(
             collection.to_geo_json(),

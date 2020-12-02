@@ -20,8 +20,8 @@ use serde::{Deserialize, Serialize};
 use tokio::task::spawn_blocking;
 
 use geoengine_datatypes::collections::{
-    BuilderProvider, FeatureCollection, FeatureCollectionBuilder, FeatureCollectionRowBuilder,
-    GeoFeatureCollectionRowBuilder, VectorDataType,
+    BuilderProvider, FeatureCollection, FeatureCollectionBuilder, FeatureCollectionInfos,
+    FeatureCollectionRowBuilder, GeoFeatureCollectionRowBuilder, VectorDataType,
 };
 use geoengine_datatypes::primitives::{
     Coordinate2D, FeatureDataType, FeatureDataValue, Geometry, MultiLineString, MultiPoint,
@@ -508,7 +508,7 @@ where
         let (data_types, feature_collection_builder) =
             Self::initialize_types_and_builder(dataset_information);
 
-        let time_extractor = Self::initialize_time_extractors(dataset_information)?;
+        let time_extractor = Self::initialize_time_extractors(dataset_information);
 
         let mut features = layer.features().peekable();
 
@@ -595,10 +595,10 @@ where
 
     fn initialize_time_extractors(
         dataset_information: &OgrSourceDataset,
-    ) -> Result<Box<dyn Fn(&Feature) -> Result<TimeInterval> + '_>> {
+    ) -> Box<dyn Fn(&Feature) -> Result<TimeInterval> + '_> {
         // TODO: exploit rust-gdal `datetime` feature
 
-        Ok(match &dataset_information.time {
+        match &dataset_information.time {
             OgrSourceDatasetTimeType::None => {
                 Box::new(move |_feature: &Feature| Ok(TimeInterval::default()))
             }
@@ -673,7 +673,7 @@ where
                     TimeInterval::new(time_start, time_start + duration).map_err(Into::into)
                 })
             }
-        })
+        }
     }
 
     fn initialize_types_and_builder(
@@ -1031,7 +1031,7 @@ mod tests {
     use geoengine_datatypes::collections::{DataCollection, MultiPointCollection};
     use geoengine_datatypes::primitives::{BoundingBox2D, FeatureData, SpatialResolution};
 
-    use crate::engine::ExecutionContext;
+    use crate::engine::MockExecutionContextCreator;
 
     use super::*;
 
@@ -1358,9 +1358,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&ExecutionContext {
-            raster_data_root: Default::default(),
-        })?;
+        .initialize(&MockExecutionContextCreator::default().context())?;
 
         assert_eq!(
             source.result_descriptor().data_type,
@@ -1423,9 +1421,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&ExecutionContext {
-            raster_data_root: Default::default(),
-        })?;
+        .initialize(&MockExecutionContextCreator::default().context())?;
 
         assert_eq!(
             source.result_descriptor().data_type,
@@ -1556,9 +1552,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&ExecutionContext {
-            raster_data_root: Default::default(),
-        })?;
+        .initialize(&MockExecutionContextCreator::default().context())?;
 
         assert_eq!(
             source.result_descriptor().data_type,
@@ -2761,9 +2755,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&ExecutionContext {
-            raster_data_root: Default::default(),
-        })?;
+        .initialize(&MockExecutionContextCreator::default().context())?;
 
         assert_eq!(
             source.result_descriptor().data_type,

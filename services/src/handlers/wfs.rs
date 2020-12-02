@@ -9,13 +9,15 @@ use crate::ogc::wfs::request::{GetCapabilities, GetFeature, TypeNames, WFSReques
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use futures::StreamExt;
+use geoengine_datatypes::collections::ToGeoJson;
 use geoengine_datatypes::primitives::{FeatureData, MultiPoint, TimeInstance, TimeInterval};
 use geoengine_datatypes::{
     collections::{FeatureCollection, MultiPointCollection},
     primitives::SpatialResolution,
 };
 use geoengine_operators::engine::{
-    ExecutionContext, QueryContext, QueryRectangle, TypedVectorQueryProcessor, VectorQueryProcessor,
+    MockExecutionContextCreator, QueryContext, QueryRectangle, TypedVectorQueryProcessor,
+    VectorQueryProcessor,
 };
 use serde_json::json;
 use std::str::FromStr;
@@ -46,6 +48,7 @@ async fn wfs<C: Context>(
     }
 }
 
+#[allow(clippy::unnecessary_wraps)] // TODO: remove line once implemented fully
 fn get_capabilities(_request: &GetCapabilities) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
     // TODO: implement
     // TODO: inject correct url of the instance and return data for the default layer
@@ -177,7 +180,9 @@ async fn get_feature<C: Context>(
 
     let operator = workflow.operator.get_vector().context(error::Operator)?;
 
-    let execution_context = ExecutionContext::mock_empty();
+    // TODO: use global context parameters
+    let execution_context_creator = MockExecutionContextCreator::default();
+    let execution_context = execution_context_creator.context();
     let initialized = operator
         .initialize(&execution_context)
         .context(error::Operator)?;
@@ -277,6 +282,7 @@ async fn point_stream_to_geojson(
     Ok(output)
 }
 
+#[allow(clippy::unnecessary_wraps)] // TODO: remove line once implemented fully
 fn get_feature_mock(_request: &GetFeature) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
     let collection = MultiPointCollection::from_data(
         MultiPoint::many(vec![

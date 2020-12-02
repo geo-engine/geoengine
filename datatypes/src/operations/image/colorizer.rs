@@ -122,9 +122,13 @@ impl Colorizer {
     ///
     /// ```
     /// use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
+    /// use std::convert::TryInto;
     ///
     /// let colorizer = Colorizer::linear_gradient(
-    ///     vec![(0.0.into(), RgbaColor::transparent()).into(), (1.0.into(), RgbaColor::transparent()).into()],
+    ///     vec![
+    ///         (0.0, RgbaColor::transparent()).try_into().unwrap(),
+    ///         (1.0, RgbaColor::transparent()).try_into().unwrap(),
+    ///     ],
     ///     RgbaColor::transparent(),
     ///     RgbaColor::transparent(),
     /// ).unwrap();
@@ -145,9 +149,13 @@ impl Colorizer {
     ///
     /// ```
     /// use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
+    /// use std::convert::TryInto;
     ///
     /// let colorizer = Colorizer::logarithmic_gradient(
-    ///     vec![(1.0.into(), RgbaColor::transparent()).into(), (10.0.into(), RgbaColor::transparent()).into()],
+    ///     vec![
+    ///         (1.0, RgbaColor::transparent()).try_into().unwrap(),
+    ///         (10.0, RgbaColor::transparent()).try_into().unwrap(),
+    ///     ],
     ///     RgbaColor::transparent(),
     ///     RgbaColor::transparent(),
     /// ).unwrap();
@@ -170,9 +178,13 @@ impl Colorizer {
     ///
     /// ```
     /// use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
+    /// use std::convert::TryInto;
     ///
     /// let colorizer = Colorizer::linear_gradient(
-    ///     vec![(1.0.into(), RgbaColor::black()).into(), (10.0.into(), RgbaColor::white()).into()],
+    ///     vec![
+    ///         (1.0, RgbaColor::black()).try_into().unwrap(),
+    ///         (10.0, RgbaColor::white()).try_into().unwrap(),
+    ///         ],
     ///     RgbaColor::transparent(),
     ///     RgbaColor::pink(),
     /// ).unwrap();
@@ -194,9 +206,13 @@ impl Colorizer {
     ///
     /// ```
     /// use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
+    /// use std::convert::TryInto;
     ///
     /// let linear_colorizer = Colorizer::linear_gradient(
-    ///     vec![(0.0.into(), RgbaColor::black()).into(), (1.0.into(), RgbaColor::white()).into()],
+    ///     vec![
+    ///         (0.0, RgbaColor::black()).try_into().unwrap(),
+    ///         (1.0, RgbaColor::white()).try_into().unwrap(),
+    ///     ],
     ///     RgbaColor::transparent(),
     ///     RgbaColor::transparent(),
     /// ).unwrap();
@@ -205,7 +221,10 @@ impl Colorizer {
     /// assert_eq!(linear_color_mapper.call(0.5), RgbaColor::new(128, 128, 128, 255));
     ///
     /// let logarithmic_colorizer = Colorizer::logarithmic_gradient(
-    ///     vec![(1.0.into(), RgbaColor::black()).into(), (10.0.into(), RgbaColor::white()).into()],
+    ///     vec![
+    ///         (1.0, RgbaColor::black()).try_into().unwrap(),
+    ///         (10.0, RgbaColor::white()).try_into().unwrap(),
+    ///     ],
     ///     RgbaColor::transparent(),
     ///     RgbaColor::transparent(),
     /// ).unwrap();
@@ -505,13 +524,14 @@ impl Into<image::Rgba<u8>> for RgbaColor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::convert::TryInto;
 
     #[test]
     fn logarithmic_color_table() {
         let colorizer = Colorizer::logarithmic_gradient(
             vec![
-                (1.0.into(), RgbaColor::black()).into(),
-                (10.0.into(), RgbaColor::white()).into(),
+                (1.0, RgbaColor::black()).try_into().unwrap(),
+                (10.0, RgbaColor::white()).try_into().unwrap(),
             ],
             RgbaColor::transparent(),
             RgbaColor::transparent(),
@@ -531,9 +551,11 @@ mod tests {
     fn logarithmic_color_table_2() {
         let colorizer = Colorizer::logarithmic_gradient(
             vec![
-                (1.0.into(), RgbaColor::black()).into(),
-                (51.0.into(), RgbaColor::new(100, 100, 100, 255)).into(),
-                (101.0.into(), RgbaColor::white()).into(),
+                (1.0, RgbaColor::black()).try_into().unwrap(),
+                (51.0, RgbaColor::new(100, 100, 100, 255))
+                    .try_into()
+                    .unwrap(),
+                (101.0, RgbaColor::white()).try_into().unwrap(),
             ],
             RgbaColor::transparent(),
             RgbaColor::transparent(),

@@ -14,7 +14,7 @@ use arrow::error::ArrowError;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
-use crate::collections::{error, IntoGeometryIterator, VectorDataType};
+use crate::collections::{error, IntoGeometryIterator, VectorDataType, VectorDataTyped};
 use crate::collections::{FeatureCollectionError, IntoGeometryOptionsIterator};
 use crate::json_map;
 use crate::primitives::{
@@ -59,249 +59,19 @@ impl<CollectionType> FeatureCollection<CollectionType> {
     }
 }
 
-impl<CollectionType> FeatureCollection<CollectionType>
-where
-    CollectionType: Geometry + ArrowTyped,
-{
-    /// Create an empty `FeatureCollection`.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use geoengine_datatypes::collections::{MultiPointCollection, FeatureCollection};
-    ///
-    /// let pc = MultiPointCollection::empty();
-    ///
-    /// assert_eq!(pc.len(), 0);
-    /// ```
-    pub fn empty() -> Self {
-        Self::from_data(vec![], vec![], Default::default())
-            .expect("does not fail for empty collection")
-    }
+/// A trait for common feature collection modifications that are independent of the geometry type
+pub trait FeatureCollectionModifications {
+    type Output;
 
-    /// Create a `FeatureCollection` from data
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use geoengine_datatypes::collections::{MultiPointCollection, FeatureCollection};
-    /// use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval, FeatureData, MultiPoint};
-    /// use std::collections::HashMap;
-    ///
-    /// let pc = MultiPointCollection::from_data(
-    ///     MultiPoint::many(vec![vec![(0., 0.)], vec![(1., 1.)]]).unwrap(),
-    ///     vec![TimeInterval::new_unchecked(0, 1), TimeInterval::new_unchecked(0, 1)],
-    ///     {
-    ///         let mut map = HashMap::new();
-    ///         map.insert("number".into(), FeatureData::Number(vec![0., 1.]));
-    ///         map
-    ///     },
-    /// ).unwrap();
-    ///
-    /// assert_eq!(pc.len(), 2);
-    /// ```
+    /// Filters the feature collection by copying the data into a new feature collection
     ///
     /// # Errors
     ///
-    /// This constructor fails if the data lenghts are different or `data`'s keys use a reserved name
+    /// This method fails if the `mask`'s length does not equal the length of the feature collection
     ///
-    pub fn from_data(
-        features: Vec<CollectionType>,
-        time_intervals: Vec<TimeInterval>,
-        data: HashMap<String, FeatureData>,
-    ) -> Result<Self> {
-        let number_of_rows = time_intervals.len();
-        let number_of_column: usize =
-            data.len() + 1 + (if CollectionType::IS_GEOMETRY { 1 } else { 0 });
-
-        let mut columns: Vec<Field> = Vec::with_capacity(number_of_column);
-        let mut arrays: Vec<ArrayRef> = Vec::with_capacity(number_of_column);
-
-        if CollectionType::IS_GEOMETRY {
-            ensure!(
-                features.len() == number_of_rows,
-                error::UnmatchedLength {
-                    a: features.len(),
-                    b: number_of_rows
-                }
-            );
-
-            columns.push(Field::new(
-                Self::GEOMETRY_COLUMN_NAME,
-                CollectionType::arrow_data_type(),
-                false,
-            ));
-
-            arrays.push(Arc::new(CollectionType::from_vec(features)?));
-        }
-
-        columns.push(Field::new(
-            Self::TIME_COLUMN_NAME,
-            TimeInterval::arrow_data_type(),
-            false,
-        ));
-        arrays.push(Arc::new(TimeInterval::from_vec(time_intervals)?));
-
-        let mut types = HashMap::with_capacity(data.len());
-
-        for (name, feature_data) in data {
-            ensure!(
-                !Self::is_reserved_name(&name),
-                error::CannotAccessReservedColumn { name }
-            );
-            ensure!(
-                feature_data.len() == number_of_rows,
-                error::UnmatchedLength {
-                    a: feature_data.len(),
-                    b: number_of_rows
-                }
-            );
-
-            let column = Field::new(
-                &name,
-                feature_data.arrow_data_type(),
-                feature_data.nullable(),
-            );
-
-            columns.push(column);
-            arrays.push(feature_data.arrow_builder()?.finish());
-
-            types.insert(name, FeatureDataType::from(&feature_data));
-        }
-
-        Ok(Self::new_from_internals(
-            struct_array_from_data(columns, arrays, number_of_rows),
-            types,
-        ))
-    }
-
-    /// Returns the number of features
-    pub fn len(&self) -> usize {
-        self.table.len()
-    }
-
-    /// Returns whether the feature collection contains no features
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
-    /// Returns whether this feature collection is simple, i.e., contains no multi-types
-    pub fn is_simple(&self) -> bool {
-        if !CollectionType::IS_GEOMETRY {
-            return true; // a `FeatureCollection` without geometry column is simple by default
-        }
-
-        let array_ref = self
-            .table
-            .column_by_name(Self::GEOMETRY_COLUMN_NAME)
-            .expect("must be there for collections with geometry");
-
-        let features_array: &ListArray = downcast_array(array_ref);
-
-        // TODO: assumes multi features, could be moved to `Geometry`
-        let multi_geometry_array_ref = features_array.values();
-        let multi_geometry_array: &ListArray = downcast_array(&multi_geometry_array_ref);
-
-        multi_geometry_array.len() == features_array.len()
-    }
-
-    /// Checks for name conflicts with reserved names
-    pub(super) fn is_reserved_name(name: &str) -> bool {
-        name == Self::GEOMETRY_COLUMN_NAME || name == Self::TIME_COLUMN_NAME
-    }
-
-    /// Retrieves the column's `FeatureDataType`
-    ///
-    /// # Errors
-    ///
-    /// This method fails if there is no `column_name` with that name
-    ///
-    #[allow(clippy::option_if_let_else)]
-    pub fn column_type(&self, column_name: &str) -> Result<FeatureDataType> {
-        ensure!(
-            !Self::is_reserved_name(column_name),
-            error::CannotAccessReservedColumn {
-                name: column_name.to_string(),
-            }
-        );
-
-        if let Some(feature_data_type) = self.types.get(column_name) {
-            Ok(*feature_data_type)
-        } else {
-            Err(error::FeatureCollectionError::ColumnDoesNotExist {
-                name: column_name.to_string(),
-            }
-            .into())
-        }
-    }
-
-    /// Retrieve column data
-    ///
-    /// # Errors
-    ///
-    /// This method fails if there is no `column_name` with that name
-    ///
-    pub fn data(&self, column_name: &str) -> Result<FeatureDataRef> {
-        ensure!(
-            !Self::is_reserved_name(column_name),
-            error::CannotAccessReservedColumn {
-                name: column_name.to_string(),
-            }
-        );
-
-        let column = self.table.column_by_name(column_name).ok_or_else(|| {
-            FeatureCollectionError::ColumnDoesNotExist {
-                name: column_name.to_string(),
-            }
-        })?;
-
-        Ok(
-            match self.types.get(column_name).expect("previously checked") {
-                FeatureDataType::Number => {
-                    let array: &arrow::array::Float64Array = downcast_array(column);
-                    NumberDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
-                }
-                FeatureDataType::Text => {
-                    let array: &arrow::array::StringArray = downcast_array(column);
-                    TextDataRef::new(
-                        array.value_data(),
-                        array.value_offsets(),
-                        array.data_ref().null_bitmap(),
-                    )
-                    .into()
-                }
-                FeatureDataType::Decimal => {
-                    let array: &arrow::array::Int64Array = downcast_array(column);
-                    DecimalDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
-                }
-                FeatureDataType::Categorical => {
-                    let array: &arrow::array::UInt8Array = downcast_array(column);
-                    CategoricalDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
-                }
-            },
-        )
-    }
-
-    /// Retrieve time intervals
-    pub fn time_intervals(&self) -> &[TimeInterval] {
-        let features_ref = self
-            .table
-            .column_by_name(Self::TIME_COLUMN_NAME)
-            .expect("Time interval column must exist");
-        let features: &<TimeInterval as ArrowTyped>::ArrowArray = downcast_array(features_ref);
-
-        let number_of_time_intervals = self.len();
-
-        let timestamps_ref = features.values();
-        let timestamps: &arrow::array::Int64Array = downcast_array(&timestamps_ref);
-
-        unsafe {
-            std::slice::from_raw_parts(
-                timestamps.raw_values() as *const crate::primitives::TimeInterval,
-                number_of_time_intervals,
-            )
-        }
-    }
+    fn filter<M>(&self, mask: M) -> Result<Self::Output>
+    where
+        M: FilterArray;
 
     /// Creates a copy of the collection with an additional column
     ///
@@ -309,7 +79,7 @@ where
     ///
     /// Adding a column fails if the column does already exist or the length does not match the length of the collection
     ///
-    pub fn add_column(&self, new_column_name: &str, data: FeatureData) -> Result<Self> {
+    fn add_column(&self, new_column_name: &str, data: FeatureData) -> Result<Self::Output> {
         self.add_columns(&[(new_column_name, data)])
     }
 
@@ -319,7 +89,101 @@ where
     ///
     /// Adding columns fails if any column does already exist or the lengths do not match the length of the collection
     ///
-    pub fn add_columns(&self, new_columns: &[(&str, FeatureData)]) -> Result<Self> {
+    fn add_columns(&self, new_columns: &[(&str, FeatureData)]) -> Result<Self::Output>;
+
+    /// Removes a column and returns an updated collection
+    ///
+    /// # Errors
+    ///
+    /// Removing a column fails if the column does not exist (or is reserved, e.g., the geometry column)
+    ///
+    fn remove_column(&self, column_name: &str) -> Result<Self::Output> {
+        self.remove_columns(&[column_name])
+    }
+
+    /// Removes columns and returns an updated collection
+    ///
+    /// # Errors
+    ///
+    /// Removing columns fails if any column does not exist (or is reserved, e.g., the geometry column)
+    ///
+    fn remove_columns(&self, removed_column_names: &[&str]) -> Result<Self::Output>;
+
+    /// Filter a column by one or more ranges.
+    /// If `keep_nulls` is false, then all nulls will be discarded.
+    fn column_range_filter<R>(
+        &self,
+        column: &str,
+        ranges: &[R],
+        keep_nulls: bool,
+    ) -> Result<Self::Output>
+    where
+        R: RangeBounds<FeatureDataValue>;
+
+    /// Appends a collection to another one
+    ///
+    /// # Errors
+    ///
+    /// This method fails if the columns do not match
+    ///
+    fn append(&self, other: &Self) -> Result<Self::Output>;
+}
+
+impl<CollectionType> FeatureCollectionModifications for FeatureCollection<CollectionType>
+where
+    CollectionType: Geometry + ArrowTyped,
+{
+    type Output = Self;
+
+    fn filter<M>(&self, mask: M) -> Result<Self::Output>
+    where
+        M: FilterArray,
+    {
+        ensure!(
+            mask.len() == self.table.len(),
+            error::UnmatchedLength {
+                a: mask.len(),
+                b: self.table.len(),
+            }
+        );
+
+        let filter_array: arrow::array::BooleanArray = mask.into();
+
+        // TODO: use filter directly on struct array when it is implemented
+
+        let table_data = self.table.data();
+        let columns = if let arrow::datatypes::DataType::Struct(columns) = table_data.data_type() {
+            columns
+        } else {
+            unreachable!("`table` field must be a struct")
+        };
+
+        let mut filtered_data =
+            Vec::<(arrow::datatypes::Field, arrow::array::ArrayRef)>::with_capacity(columns.len());
+
+        for (column, array) in columns.iter().zip(self.table.columns()) {
+            filtered_data.push((
+                column.clone(),
+                match column.name().as_str() {
+                    Self::GEOMETRY_COLUMN_NAME => Arc::new(CollectionType::filter(
+                        downcast_array(array),
+                        &filter_array,
+                    )?),
+                    Self::TIME_COLUMN_NAME => {
+                        Arc::new(TimeInterval::filter(downcast_array(array), &filter_array)?)
+                    }
+                    _ => arrow::compute::filter(array.as_ref(), &filter_array)?,
+                },
+            ));
+        }
+
+        Ok(Self::new_from_internals(
+            filtered_data.into(),
+            self.types.clone(),
+        ))
+    }
+
+    fn add_columns(&self, new_columns: &[(&str, FeatureData)]) -> Result<Self::Output> {
         for &(new_column_name, ref data) in new_columns {
             ensure!(
                 !Self::is_reserved_name(new_column_name)
@@ -415,23 +279,7 @@ where
         ))
     }
 
-    /// Removes a column and returns an updated collection
-    ///
-    /// # Errors
-    ///
-    /// Removing a column fails if the column does not exist (or is reserved, e.g., the geometry column)
-    ///
-    pub fn remove_column(&self, column_name: &str) -> Result<Self> {
-        self.remove_columns(&[column_name])
-    }
-
-    /// Removes columns and returns an updated collection
-    ///
-    /// # Errors
-    ///
-    /// Removing columns fails if any column does not exist (or is reserved, e.g., the geometry column)
-    ///
-    pub fn remove_columns(&self, removed_column_names: &[&str]) -> Result<Self> {
+    fn remove_columns(&self, removed_column_names: &[&str]) -> Result<Self::Output> {
         for &removed_column_name in removed_column_names {
             ensure!(
                 !Self::is_reserved_name(removed_column_name),
@@ -516,68 +364,12 @@ where
         ))
     }
 
-    /// Filters the feature collection by copying the data into a new feature collection
-    ///
-    /// # Errors
-    ///
-    /// This method fails if the `mask`'s length does not equal the length of the feature collection
-    ///
-    pub fn filter<M>(&self, mask: M) -> Result<Self>
-    where
-        M: FilterArray,
-    {
-        ensure!(
-            mask.len() == self.table.len(),
-            error::UnmatchedLength {
-                a: mask.len(),
-                b: self.table.len(),
-            }
-        );
-
-        let filter_array: arrow::array::BooleanArray = mask.into();
-
-        // TODO: use filter directly on struct array when it is implemented
-
-        let table_data = self.table.data();
-        let columns = if let arrow::datatypes::DataType::Struct(columns) = table_data.data_type() {
-            columns
-        } else {
-            unreachable!("`table` field must be a struct")
-        };
-
-        let mut filtered_data =
-            Vec::<(arrow::datatypes::Field, arrow::array::ArrayRef)>::with_capacity(columns.len());
-
-        for (column, array) in columns.iter().zip(self.table.columns()) {
-            filtered_data.push((
-                column.clone(),
-                match column.name().as_str() {
-                    Self::GEOMETRY_COLUMN_NAME => Arc::new(CollectionType::filter(
-                        downcast_array(array),
-                        &filter_array,
-                    )?),
-                    Self::TIME_COLUMN_NAME => {
-                        Arc::new(TimeInterval::filter(downcast_array(array), &filter_array)?)
-                    }
-                    _ => arrow::compute::filter(array.as_ref(), &filter_array)?,
-                },
-            ));
-        }
-
-        Ok(Self::new_from_internals(
-            filtered_data.into(),
-            self.types.clone(),
-        ))
-    }
-
-    /// Filter a column by one or more ranges.
-    /// If `keep_nulls` is false, then all nulls will be discarded.
-    pub fn column_range_filter<R>(
+    fn column_range_filter<R>(
         &self,
         column: &str,
         ranges: &[R],
         keep_nulls: bool,
-    ) -> Result<Self>
+    ) -> Result<Self::Output>
     where
         R: RangeBounds<FeatureDataValue>,
     {
@@ -658,13 +450,7 @@ where
         self.filter(filter_array.expect("checked by ensure"))
     }
 
-    /// Appends a collection to another one
-    ///
-    /// # Errors
-    ///
-    /// This method fails if the columns do not match
-    ///
-    pub fn append(&self, other: &Self) -> Result<Self> {
+    fn append(&self, other: &Self) -> Result<Self::Output> {
         ensure!(
             self.types == other.types,
             error::UnmatchedSchema {
@@ -710,12 +496,62 @@ where
             self.types.clone(),
         ))
     }
+}
 
+/// A trait for common feature collection information
+pub trait FeatureCollectionInfos {
+    /// Returns the number of features
+    fn len(&self) -> usize;
+
+    /// Returns whether the feature collection contains no features
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Returns whether this feature collection is simple, i.e., contains no multi-types
+    fn is_simple(&self) -> bool;
+
+    /// Retrieves the column's `FeatureDataType`
+    ///
+    /// # Errors
+    ///
+    /// This method fails if there is no `column_name` with that name
+    ///
+    fn column_type(&self, column_name: &str) -> Result<FeatureDataType>;
+
+    /// Get a copy of the column type information
+    fn column_types(&self) -> HashMap<String, FeatureDataType>;
+
+    /// Return the names of the columns of this type
+    fn column_names_of_type(&self, column_type: FeatureDataType) -> Vec<String>;
+
+    /// Retrieve column data
+    ///
+    /// # Errors
+    ///
+    /// This method fails if there is no `column_name` with that name
+    ///
+    fn data(&self, column_name: &str) -> Result<FeatureDataRef>;
+
+    /// Retrieve time intervals
+    fn time_intervals(&self) -> &[TimeInterval];
+
+    /// Returns the byte-size of this collection
+    fn byte_size(&self) -> usize;
+}
+
+/// Transform an object to the `GeoJson` format
+pub trait ToGeoJson<'i> {
     /// Serialize the feature collection to a geo json string
-    pub fn to_geo_json<'i>(&'i self) -> String
-    where
-        Self: IntoGeometryOptionsIterator<'i>, // TODO: remove here and impl for struct?
-    {
+    fn to_geo_json(&'i self) -> String;
+}
+
+impl<'i, CollectionType> ToGeoJson<'i> for FeatureCollection<CollectionType>
+where
+    CollectionType: Geometry + ArrowTyped,
+    Self: IntoGeometryOptionsIterator<'i>,
+{
+    fn to_geo_json(&'i self) -> String {
         let mut property_maps = (0..self.len())
             .map(|_| serde_json::Map::with_capacity(self.types.len()))
             .collect::<Vec<_>>();
@@ -756,9 +592,119 @@ where
 
         feature_collection.to_string()
     }
+}
 
-    /// Returns the byte-size of this collection
-    pub fn byte_size(&self) -> usize {
+impl<CollectionType> FeatureCollectionInfos for FeatureCollection<CollectionType>
+where
+    CollectionType: Geometry + ArrowTyped,
+{
+    fn len(&self) -> usize {
+        self.table.len()
+    }
+
+    fn is_simple(&self) -> bool {
+        if !CollectionType::IS_GEOMETRY {
+            return true; // a `FeatureCollection` without geometry column is simple by default
+        }
+
+        let array_ref = self
+            .table
+            .column_by_name(Self::GEOMETRY_COLUMN_NAME)
+            .expect("must be there for collections with geometry");
+
+        let features_array: &ListArray = downcast_array(array_ref);
+
+        // TODO: assumes multi features, could be moved to `Geometry`
+        let multi_geometry_array_ref = features_array.values();
+        let multi_geometry_array: &ListArray = downcast_array(&multi_geometry_array_ref);
+
+        multi_geometry_array.len() == features_array.len()
+    }
+
+    fn column_type(&self, column_name: &str) -> Result<FeatureDataType> {
+        ensure!(
+            !Self::is_reserved_name(column_name),
+            error::CannotAccessReservedColumn {
+                name: column_name.to_string(),
+            }
+        );
+
+        if let Some(feature_data_type) = self.types.get(column_name) {
+            Ok(*feature_data_type)
+        } else {
+            Err(error::FeatureCollectionError::ColumnDoesNotExist {
+                name: column_name.to_string(),
+            }
+            .into())
+        }
+    }
+
+    fn data(&self, column_name: &str) -> Result<FeatureDataRef> {
+        ensure!(
+            !Self::is_reserved_name(column_name),
+            error::CannotAccessReservedColumn {
+                name: column_name.to_string(),
+            }
+        );
+
+        let column = self.table.column_by_name(column_name).ok_or_else(|| {
+            FeatureCollectionError::ColumnDoesNotExist {
+                name: column_name.to_string(),
+            }
+        })?;
+
+        Ok(
+            match self.types.get(column_name).expect("previously checked") {
+                FeatureDataType::Number => {
+                    let array: &arrow::array::Float64Array = downcast_array(column);
+                    NumberDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
+                }
+                FeatureDataType::Text => {
+                    let array: &arrow::array::StringArray = downcast_array(column);
+                    TextDataRef::new(
+                        array.value_data(),
+                        array.value_offsets(),
+                        array.data_ref().null_bitmap(),
+                    )
+                    .into()
+                }
+                FeatureDataType::Decimal => {
+                    let array: &arrow::array::Int64Array = downcast_array(column);
+                    DecimalDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
+                }
+                FeatureDataType::Categorical => {
+                    let array: &arrow::array::UInt8Array = downcast_array(column);
+                    CategoricalDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
+                }
+            },
+        )
+    }
+
+    fn time_intervals(&self) -> &[TimeInterval] {
+        let features_ref = self
+            .table
+            .column_by_name(Self::TIME_COLUMN_NAME)
+            .expect("Time interval column must exist");
+        let features: &<TimeInterval as ArrowTyped>::ArrowArray = downcast_array(features_ref);
+
+        let number_of_time_intervals = self.len();
+
+        let timestamps_ref = features.values();
+        let timestamps: &arrow::array::Int64Array = downcast_array(&timestamps_ref);
+
+        unsafe {
+            std::slice::from_raw_parts(
+                timestamps.raw_values() as *const crate::primitives::TimeInterval,
+                number_of_time_intervals,
+            )
+        }
+    }
+
+    fn column_types(&self) -> HashMap<String, FeatureDataType> {
+        self.types.clone()
+    }
+
+    fn byte_size(&self) -> usize {
         let table_size = self.table.get_array_memory_size();
 
         // TODO: store information? avoid re-calculation?
@@ -772,8 +718,7 @@ where
         table_size + map_size
     }
 
-    /// Return the names of the columns of this type
-    pub fn column_names_of_type(&self, column_type: FeatureDataType) -> Vec<String> {
+    fn column_names_of_type(&self, column_type: FeatureDataType) -> Vec<String> {
         self.types
             .iter()
             .filter_map(|(k, v)| {
@@ -785,9 +730,127 @@ where
             })
             .collect()
     }
+}
 
-    pub fn column_types(&self) -> HashMap<String, FeatureDataType> {
-        self.types.clone()
+impl<CollectionType> FeatureCollection<CollectionType>
+where
+    CollectionType: Geometry + ArrowTyped,
+{
+    /// Create an empty `FeatureCollection`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use geoengine_datatypes::collections::{MultiPointCollection, FeatureCollection, FeatureCollectionInfos};
+    ///
+    /// let pc = MultiPointCollection::empty();
+    ///
+    /// assert_eq!(pc.len(), 0);
+    /// ```
+    pub fn empty() -> Self {
+        Self::from_data(vec![], vec![], Default::default())
+            .expect("does not fail for empty collection")
+    }
+
+    /// Create a `FeatureCollection` from data
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use geoengine_datatypes::collections::{MultiPointCollection, FeatureCollection, FeatureCollectionInfos};
+    /// use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval, FeatureData, MultiPoint};
+    /// use std::collections::HashMap;
+    ///
+    /// let pc = MultiPointCollection::from_data(
+    ///     MultiPoint::many(vec![vec![(0., 0.)], vec![(1., 1.)]]).unwrap(),
+    ///     vec![TimeInterval::new_unchecked(0, 1), TimeInterval::new_unchecked(0, 1)],
+    ///     {
+    ///         let mut map = HashMap::new();
+    ///         map.insert("number".into(), FeatureData::Number(vec![0., 1.]));
+    ///         map
+    ///     },
+    /// ).unwrap();
+    ///
+    /// assert_eq!(pc.len(), 2);
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// This constructor fails if the data lenghts are different or `data`'s keys use a reserved name
+    ///
+    pub fn from_data(
+        features: Vec<CollectionType>,
+        time_intervals: Vec<TimeInterval>,
+        data: HashMap<String, FeatureData>,
+    ) -> Result<Self> {
+        let number_of_rows = time_intervals.len();
+        let number_of_column: usize =
+            data.len() + 1 + (if CollectionType::IS_GEOMETRY { 1 } else { 0 });
+
+        let mut columns: Vec<Field> = Vec::with_capacity(number_of_column);
+        let mut arrays: Vec<ArrayRef> = Vec::with_capacity(number_of_column);
+
+        if CollectionType::IS_GEOMETRY {
+            ensure!(
+                features.len() == number_of_rows,
+                error::UnmatchedLength {
+                    a: features.len(),
+                    b: number_of_rows
+                }
+            );
+
+            columns.push(Field::new(
+                Self::GEOMETRY_COLUMN_NAME,
+                CollectionType::arrow_data_type(),
+                false,
+            ));
+
+            arrays.push(Arc::new(CollectionType::from_vec(features)?));
+        }
+
+        columns.push(Field::new(
+            Self::TIME_COLUMN_NAME,
+            TimeInterval::arrow_data_type(),
+            false,
+        ));
+        arrays.push(Arc::new(TimeInterval::from_vec(time_intervals)?));
+
+        let mut types = HashMap::with_capacity(data.len());
+
+        for (name, feature_data) in data {
+            ensure!(
+                !Self::is_reserved_name(&name),
+                error::CannotAccessReservedColumn { name }
+            );
+            ensure!(
+                feature_data.len() == number_of_rows,
+                error::UnmatchedLength {
+                    a: feature_data.len(),
+                    b: number_of_rows
+                }
+            );
+
+            let column = Field::new(
+                &name,
+                feature_data.arrow_data_type(),
+                feature_data.nullable(),
+            );
+
+            columns.push(column);
+            arrays.push(feature_data.arrow_builder()?.finish());
+
+            types.insert(name, FeatureDataType::from(&feature_data));
+        }
+
+        Ok(Self::new_from_internals(
+            struct_array_from_data(columns, arrays, number_of_rows),
+            types,
+        ))
+    }
+
+    /// Checks for name conflicts with reserved names
+    pub(super) fn is_reserved_name(name: &str) -> bool {
+        name == Self::GEOMETRY_COLUMN_NAME || name == Self::TIME_COLUMN_NAME
     }
 }
 
@@ -798,6 +861,15 @@ impl<CollectionType> Clone for FeatureCollection<CollectionType> {
             types: self.types.clone(),
             collection_type: Default::default(),
         }
+    }
+}
+
+impl<CollectionType> VectorDataTyped for FeatureCollection<CollectionType>
+where
+    CollectionType: Geometry,
+{
+    fn vector_data_type(&self) -> VectorDataType {
+        CollectionType::DATA_TYPE
     }
 }
 
