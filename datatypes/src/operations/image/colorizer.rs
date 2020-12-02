@@ -122,9 +122,13 @@ impl Colorizer {
     ///
     /// ```
     /// use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
+    /// use std::convert::TryInto;
     ///
     /// let colorizer = Colorizer::linear_gradient(
-    ///     vec![(0.0.into(), RgbaColor::transparent()).into(), (1.0.into(), RgbaColor::transparent()).into()],
+    ///     vec![
+    ///         (0.0.try_into().unwrap(), RgbaColor::transparent()).into(),
+    ///         (1.0.try_into().unwrap(), RgbaColor::transparent()).into(),
+    ///     ],
     ///     RgbaColor::transparent(),
     ///     RgbaColor::transparent(),
     /// ).unwrap();
@@ -145,9 +149,13 @@ impl Colorizer {
     ///
     /// ```
     /// use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
+    /// use std::convert::TryInto;
     ///
     /// let colorizer = Colorizer::logarithmic_gradient(
-    ///     vec![(1.0.into(), RgbaColor::transparent()).into(), (10.0.into(), RgbaColor::transparent()).into()],
+    ///     vec![
+    ///         (1.0.try_into().unwrap(), RgbaColor::transparent()).into(),
+    ///         (10.0.try_into().unwrap(), RgbaColor::transparent()).into(),
+    ///     ],
     ///     RgbaColor::transparent(),
     ///     RgbaColor::transparent(),
     /// ).unwrap();
@@ -170,9 +178,13 @@ impl Colorizer {
     ///
     /// ```
     /// use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
+    /// use std::convert::TryInto;
     ///
     /// let colorizer = Colorizer::linear_gradient(
-    ///     vec![(1.0.into(), RgbaColor::black()).into(), (10.0.into(), RgbaColor::white()).into()],
+    ///     vec![
+    ///         (1.0.try_into().unwrap(), RgbaColor::black()).into(),
+    ///         (10.0.try_into().unwrap(), RgbaColor::white()).into(),
+    ///         ],
     ///     RgbaColor::transparent(),
     ///     RgbaColor::pink(),
     /// ).unwrap();
@@ -194,9 +206,13 @@ impl Colorizer {
     ///
     /// ```
     /// use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
+    /// use std::convert::TryInto;
     ///
     /// let linear_colorizer = Colorizer::linear_gradient(
-    ///     vec![(0.0.into(), RgbaColor::black()).into(), (1.0.into(), RgbaColor::white()).into()],
+    ///     vec![
+    ///         (0.0.try_into().unwrap(), RgbaColor::black()).into(),
+    ///         (1.0.try_into().unwrap(), RgbaColor::white()).into(),
+    ///     ],
     ///     RgbaColor::transparent(),
     ///     RgbaColor::transparent(),
     /// ).unwrap();
@@ -205,7 +221,10 @@ impl Colorizer {
     /// assert_eq!(linear_color_mapper.call(0.5), RgbaColor::new(128, 128, 128, 255));
     ///
     /// let logarithmic_colorizer = Colorizer::logarithmic_gradient(
-    ///     vec![(1.0.into(), RgbaColor::black()).into(), (10.0.into(), RgbaColor::white()).into()],
+    ///     vec![
+    ///         (1.0.try_into().unwrap(), RgbaColor::black()).into(),
+    ///         (10.0.try_into().unwrap(), RgbaColor::white()).into(),
+    ///     ],
     ///     RgbaColor::transparent(),
     ///     RgbaColor::transparent(),
     /// ).unwrap();
