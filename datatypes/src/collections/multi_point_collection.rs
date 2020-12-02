@@ -1,8 +1,8 @@
 use arrow::array::{Array, FixedSizeListArray, Float64Array, ListArray};
 
 use crate::collections::{
-    FeatureCollection, FeatureCollectionRowBuilder, GeoFeatureCollectionRowBuilder,
-    IntoGeometryIterator,
+    FeatureCollection, FeatureCollectionInfos, FeatureCollectionRowBuilder,
+    GeoFeatureCollectionRowBuilder, GeometryCollection, IntoGeometryIterator,
 };
 use crate::primitives::{Coordinate2D, MultiPoint, MultiPointRef};
 use crate::util::arrow::downcast_array;
@@ -100,8 +100,8 @@ impl GeoFeatureCollectionRowBuilder<MultiPoint> for FeatureCollectionRowBuilder<
     }
 }
 
-impl MultiPointCollection {
-    pub fn coordinates(&self) -> &[Coordinate2D] {
+impl GeometryCollection for MultiPointCollection {
+    fn coordinates(&self) -> &[Coordinate2D] {
         let geometries_ref = self
             .table
             .column_by_name(Self::GEOMETRY_COLUMN_NAME)
@@ -125,7 +125,7 @@ impl MultiPointCollection {
     }
 
     #[allow(clippy::cast_ptr_alignment)]
-    pub fn multipoint_offsets(&self) -> &[i32] {
+    fn feature_offsets(&self) -> &[i32] {
         let geometries_ref = self
             .table
             .column_by_name(Self::GEOMETRY_COLUMN_NAME)
@@ -143,7 +143,7 @@ impl MultiPointCollection {
 mod tests {
     use super::*;
 
-    use crate::collections::BuilderProvider;
+    use crate::collections::{BuilderProvider, FeatureCollectionModifications, ToGeoJson};
     use crate::primitives::{
         DataRef, FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue, MultiPointAccess,
         TimeInterval,
@@ -944,7 +944,7 @@ mod tests {
             ]
         );
 
-        let offsets = pc.multipoint_offsets();
+        let offsets = pc.feature_offsets();
         assert_eq!(offsets.len(), 4);
         assert_eq!(offsets, &[0, 1, 3, 4]);
     }

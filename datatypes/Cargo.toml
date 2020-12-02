@@ -13,17 +13,18 @@ edition = "2018"
 arrow = {version = "2.0", features = ["simd"] }
 chrono = "0.4"
 float-cmp = "0.6"
-geo = "0.15"
+geo = "0.16"
 image = "0.23"
 geojson = "0.17"
 ndarray = "0.13"
 num-traits = "0.2"
 ocl = "0.19"
 ordered-float = { version= "1.0", features = ["serde"] }
+paste = "1.0" # TODO remove, once https://doc.rust-lang.org/core/macro.concat_idents.html is stable
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 snafu = "0.6"
-vega_lite_3 = { version = "0.2.4", features = ["ndarray", "show_vega"]} # upgrade to 4 if published
+vega_lite_3 = { version = "0.3.1", features = ["ndarray", "show_vega"]} # upgrade to 4 if published
 postgres-types = { version = "0.1", features = ["derive", "with-chrono-0_4"] }
 
 [dev-dependencies]

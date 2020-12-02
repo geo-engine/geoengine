@@ -1,4 +1,4 @@
-use crate::collections::{FeatureCollection, IntoGeometryOptionsIterator};
+use crate::collections::{FeatureCollection, FeatureCollectionInfos, IntoGeometryOptionsIterator};
 use crate::primitives::NoGeometry;
 
 /// This collection contains temporal data without geographical features.
@@ -18,6 +18,7 @@ mod tests {
     use super::*;
 
     use crate::collections::BuilderProvider;
+    use crate::collections::FeatureCollectionModifications;
     use crate::primitives::{
         DataRef, FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue, TimeInterval,
     };

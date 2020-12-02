@@ -88,6 +88,7 @@ mod tests {
     use super::*;
     use crate::engine::MockExecutionContextCreator;
     use futures::executor::block_on_stream;
+    use geoengine_datatypes::collections::FeatureCollectionInfos;
     use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution};
 
     #[test]

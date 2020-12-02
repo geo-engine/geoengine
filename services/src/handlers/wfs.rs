@@ -9,6 +9,7 @@ use crate::ogc::wfs::request::{GetCapabilities, GetFeature, TypeNames, WFSReques
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use futures::StreamExt;
+use geoengine_datatypes::collections::ToGeoJson;
 use geoengine_datatypes::primitives::{FeatureData, MultiPoint, TimeInstance, TimeInterval};
 use geoengine_datatypes::{
     collections::{FeatureCollection, MultiPointCollection},

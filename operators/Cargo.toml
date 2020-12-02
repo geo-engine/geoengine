@@ -17,13 +17,13 @@ failure = "0.1" # TODO: remove this!
 float-cmp = "0.6"
 futures = "0.3"
 gdal = { version = "0.6", features = ["gdal_2_2"] }
-geo = "0.15"
+geo = "0.16"
 geoengine-datatypes = { path = "../datatypes" }
 lazy_static = "1.4"
 num-traits = "0.2"
 ocl = "0.19"
 paste = "1.0" # TODO remove, once https://doc.rust-lang.org/core/macro.concat_idents.html is stable
-pin-project = "0.4"
+pin-project = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 snafu = "0.6"
