@@ -24,6 +24,7 @@ use crate::workflows::workflow::WorkflowId;
 use futures::StreamExt;
 use geoengine_datatypes::primitives::{TimeInstance, TimeInterval};
 use geoengine_operators::call_on_generic_raster_processor;
+use geoengine_operators::concurrency::ThreadPool;
 use geoengine_operators::engine::{
     ExecutionContext, QueryContext, QueryRectangle, RasterQueryProcessor,
 };
@@ -143,8 +144,10 @@ async fn get_map<C: Context>(
 
     let operator = workflow.operator.get_raster().context(error::Operator)?;
 
+    let thread_pool = ThreadPool::new(1); // TODO: use global thread pool
     let execution_context = ExecutionContext {
         raster_data_root: get_config_element::<config::GdalSource>()?.raster_data_root_path,
+        thread_pool: thread_pool.create_context(),
     };
 
     let initialized = operator

@@ -96,7 +96,7 @@ impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::ExecutionContext;
+    use crate::engine::MockExecutionContextCreator;
     use geoengine_datatypes::raster::RasterDataType;
     use geoengine_datatypes::{
         primitives::TimeInterval,
@@ -167,7 +167,8 @@ mod tests {
 
         let deserialized: Box<dyn RasterOperator> = serde_json::from_str(&serialized).unwrap();
 
-        let execution_context = ExecutionContext::mock_empty();
+        let execution_context_creator = MockExecutionContextCreator::default();
+        let execution_context = execution_context_creator.context();
 
         let initialized = deserialized.initialize(&execution_context).unwrap();
 

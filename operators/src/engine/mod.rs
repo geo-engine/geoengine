@@ -1,18 +1,11 @@
-mod clonable_operator;
-mod operator;
-mod operator_impl;
-mod query;
-mod query_processor;
-mod result_descriptor;
-
-pub use operator::{
-    ExecutionContext, InitializedOperator, InitializedOperatorBase, InitializedRasterOperator,
-    InitializedVectorOperator, RasterOperator, TypedOperator, VectorOperator,
-};
-
 pub use clonable_operator::{
     CloneableInitializedOperator, CloneableInitializedRasterOperator,
     CloneableInitializedVectorOperator, CloneableRasterOperator, CloneableVectorOperator,
+};
+pub use execution_context::{ExecutionContext, MockExecutionContextCreator};
+pub use operator::{
+    InitializedOperator, InitializedOperatorBase, InitializedRasterOperator,
+    InitializedVectorOperator, RasterOperator, TypedOperator, VectorOperator,
 };
 pub use operator_impl::{InitializedOperatorImpl, Operator, SourceOperator};
 pub use query::{QueryContext, QueryRectangle};
@@ -21,6 +14,14 @@ pub use query_processor::{
     VectorQueryProcessor,
 };
 pub use result_descriptor::{RasterResultDescriptor, ResultDescriptor, VectorResultDescriptor};
+
+mod clonable_operator;
+mod execution_context;
+mod operator;
+mod operator_impl;
+mod query;
+mod query_processor;
+mod result_descriptor;
 
 #[macro_export]
 macro_rules! call_generic_raster_processor {

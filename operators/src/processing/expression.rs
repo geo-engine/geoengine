@@ -247,7 +247,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::ExecutionContext;
+    use crate::engine::MockExecutionContextCreator;
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution, TimeInterval};
     use geoengine_datatypes::raster::TileInformation;
@@ -268,9 +268,7 @@ mod tests {
             vector_sources: vec![],
         }
         .boxed()
-        .initialize(&ExecutionContext {
-            raster_data_root: Default::default(),
-        })
+        .initialize(&MockExecutionContextCreator::default().context())
         .unwrap();
 
         let p = o.query_processor().unwrap().get_i8().unwrap();

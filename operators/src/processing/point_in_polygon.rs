@@ -382,6 +382,7 @@ mod tests {
     use crate::mock::MockFeatureCollectionSource;
 
     use super::*;
+    use crate::engine::MockExecutionContextCreator;
 
     #[test]
     fn point_in_polygon_tester() {
@@ -538,7 +539,7 @@ mod tests {
             params: (),
         }
         .boxed()
-        .initialize(&ExecutionContext::mock_empty())?;
+        .initialize(&MockExecutionContextCreator::default().context())?;
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
 
@@ -586,7 +587,7 @@ mod tests {
             params: (),
         }
         .boxed()
-        .initialize(&ExecutionContext::mock_empty())?;
+        .initialize(&MockExecutionContextCreator::default().context())?;
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
 
@@ -647,7 +648,7 @@ mod tests {
             params: (),
         }
         .boxed()
-        .initialize(&ExecutionContext::mock_empty())?;
+        .initialize(&MockExecutionContextCreator::default().context())?;
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
 
@@ -725,7 +726,7 @@ mod tests {
             params: (),
         }
         .boxed()
-        .initialize(&ExecutionContext::mock_empty())?;
+        .initialize(&MockExecutionContextCreator::default().context())?;
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
 

@@ -136,10 +136,9 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::MockExecutionContextCreator;
     use crate::{
-        engine::{
-            ExecutionContext, QueryContext, QueryRectangle, RasterOperator, RasterResultDescriptor,
-        },
+        engine::{QueryContext, QueryRectangle, RasterOperator, RasterResultDescriptor},
         mock::{MockPointSource, MockPointSourceParams, MockRasterSource, MockRasterSourceParams},
     };
     use futures::executor::block_on_stream;
@@ -292,7 +291,8 @@ mod tests {
         }
         .boxed();
 
-        let execution_context = ExecutionContext::mock_empty();
+        let execution_context_creator = MockExecutionContextCreator::default();
+        let execution_context = execution_context_creator.context();
 
         let initialized = op.initialize(&execution_context).unwrap();
 
