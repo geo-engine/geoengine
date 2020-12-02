@@ -1,10 +1,11 @@
 use crate::error;
 use crate::operations::image::RgbaTransmutable;
-use crate::raster::typed_raster::TypedRasterConversion;
-use crate::raster::Dim;
+use crate::raster::TypedRasterConversion;
 use num_traits::{AsPrimitive, Num};
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
+
+use super::{GridShape2D, GridShape3D};
 
 /// A collection of required traits for a pixel type
 pub trait Pixel:
@@ -39,8 +40,8 @@ pub trait Pixel:
     + FromPrimitive<Self>
     + StaticRasterDataType
     + RgbaTransmutable
-    + TypedRasterConversion<Dim<[usize; 2]>>
-    + TypedRasterConversion<Dim<[usize; 3]>>
+    + TypedRasterConversion<GridShape2D>
+    + TypedRasterConversion<GridShape3D>
 {
 }
 

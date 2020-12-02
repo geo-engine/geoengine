@@ -116,13 +116,13 @@ mod tests {
 
     #[test]
     fn deserialize_get_map() {
-        let query = "request=GetMap&service=WMS&version=1.3.0&layers=test&bbox=1,2,3,4&width=2&height=2&crs=foo&styles=ssss&format=image/png&time=2000-01-01T00:00:00.0Z/2000-01-02T00:00:00.0Z&transparent=true&bgcolor=#000000&sld=sld_spec&sld_body=sld_body&elevation=elevation&exceptions=exceptions";
+        let query = "request=GetMap&service=WMS&version=1.3.0&layers=modis_ndvi&bbox=1,2,3,4&width=2&height=2&crs=foo&styles=ssss&format=image/png&time=2000-01-01T00:00:00.0Z/2000-01-02T00:00:00.0Z&transparent=true&bgcolor=#000000&sld=sld_spec&sld_body=sld_body&elevation=elevation&exceptions=exceptions";
         let parsed: WMSRequest = serde_urlencoded::from_str(query).unwrap();
 
         let request = WMSRequest::GetMap(GetMap {
             version: "1.3.0".into(),
             width: 2,
-            layers: "test".into(),
+            layers: "modis_ndvi".into(),
             crs: "foo".into(),
             styles: "ssss".into(),
             time: Some(TimeInterval::new(946_684_800, 946_771_200).unwrap()),
@@ -142,13 +142,13 @@ mod tests {
 
     #[test]
     fn deserialize_get_map_not_time() {
-        let query = "request=GetMap&service=WMS&version=1.3.0&layers=test&bbox=1,2,3,4&width=2&height=2&crs=foo&styles=ssss&format=image/png";
+        let query = "request=GetMap&service=WMS&version=1.3.0&layers=modis_ndvi&bbox=1,2,3,4&width=2&height=2&crs=foo&styles=ssss&format=image/png";
         let parsed: WMSRequest = serde_urlencoded::from_str(query).unwrap();
 
         let request = WMSRequest::GetMap(GetMap {
             version: "1.3.0".into(),
             width: 2,
-            layers: "test".into(),
+            layers: "modis_ndvi".into(),
             crs: "foo".to_string(),
             styles: "ssss".into(),
             time: None,

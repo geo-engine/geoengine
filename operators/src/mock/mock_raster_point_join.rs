@@ -11,7 +11,7 @@ use geoengine_datatypes::raster::Pixel;
 use geoengine_datatypes::{
     collections::MultiPointCollection,
     primitives::FeatureData,
-    raster::{GridPixelAccess, RasterTile2D},
+    raster::{GridIndexAccess, RasterTile2D},
     spatial_reference::SpatialReferenceOption,
 };
 use serde::{Deserialize, Serialize};
@@ -52,7 +52,7 @@ where
                 let raster_future = raster_stream.next().await;
                 let raster_tile: RasterTile2D<T> =
                     raster_future.ok_or(crate::error::Error::QueryProcessor)??;
-                let pixel: T = raster_tile.data.pixel_value_at_grid_index(&(0, 0))?;
+                let pixel: T = raster_tile.grid_array.get_at_grid_index([0, 0])?;
                 let pixel: f64 = pixel.as_();
                 let collection = collection.add_column(
                     &self.feature_name,
@@ -146,7 +146,7 @@ mod tests {
     use geoengine_datatypes::{
         primitives::SpatialResolution,
         primitives::{BoundingBox2D, Coordinate2D, FeatureDataRef, TimeInterval},
-        raster::{Raster2D, RasterDataType, TileInformation},
+        raster::{Grid2D, RasterDataType, TileInformation},
         spatial_reference::SpatialReference,
     };
 
@@ -159,26 +159,17 @@ mod tests {
         }
         .boxed();
 
-        let raster = Raster2D::new(
-            [3, 2].into(),
-            vec![1, 2, 3, 4, 5, 6],
-            None,
-            Default::default(),
-            Default::default(),
-        )
-        .unwrap();
+        let raster = Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap();
 
-        let raster_tile = RasterTile2D {
-            time: TimeInterval::default(),
-            tile: TileInformation {
+        let raster_tile = RasterTile2D::new_with_tile_info(
+            TimeInterval::default(),
+            TileInformation {
                 global_geo_transform: Default::default(),
-                global_pixel_position: [0, 0].into(),
-                global_size_in_tiles: [1, 2].into(),
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
-            data: raster,
-        };
+            raster,
+        );
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -209,52 +200,27 @@ mod tests {
             },
             "raster_sources": [{
                 "type": "MockRasterSource",
-                    "params": {
-                        "data": [{
+                "params": {
+                    "data": [{
                         "time": {
                             "start": -9_223_372_036_854_775_808_i64,
                             "end": 9_223_372_036_854_775_807_i64
                         },
-                        "tile": {
-                            "global_size_in_tiles": {
-                                "dimension_size": [1, 2]
+                        "tile_position": [0, 0],
+                        "global_geo_transform": {
+                            "origin_coordinate": {
+                                "x": 0.0,
+                                "y": 0.0
                             },
-                            "global_tile_position": {
-                                "dimension_size": [0, 0]
-                            },
-                            "global_pixel_position": {
-                                "dimension_size": [0, 0]
-                            },
-                            "tile_size_in_pixels": {
-                                "dimension_size": [3, 2]
-                            },
-                            "global_geo_transform": {
-                                "upper_left_coordinate": {
-                                    "x": 0.0,
-                                    "y": 0.0
-                                },
-                                "x_pixel_size": 1.0,
-                                "y_pixel_size": -1.0
-                            }
+                            "x_pixel_size": 1.0,
+                            "y_pixel_size": -1.0
                         },
-                        "data": {
-                            "grid_dimension": {
-                                "dimension_size": [3, 2]
+                        "grid_array": {
+                            "shape": {
+                                "shape_array": [3, 2]
                             },
-                            "data_container": [1, 2, 3, 4, 5, 6],
-                            "no_data_value": null,
-                            "geo_transform": {
-                                "upper_left_coordinate": {
-                                    "x": 0.0,
-                                    "y": 0.0
-                                },
-                                "x_pixel_size": 1.0,
-                                "y_pixel_size": -1.0
-                            },
-                            "temporal_bounds": {
-                                "start": -9_223_372_036_854_775_808_i64,
-                                "end": 9_223_372_036_854_775_807_i64
-                            }
+                            "data": [1, 2, 3, 4, 5, 6],
+                            "no_data_value": null
                         }
                     }],
                     "result_descriptor": {
@@ -266,18 +232,18 @@ mod tests {
             "vector_sources": [{
                 "type": "MockPointSource",
                 "params": {
-                "points": [{
-                    "x": 1.0,
-                    "y": 2.0
-                }, {
-                    "x": 1.0,
-                    "y": 2.0
-                }, {
-                    "x": 1.0,
-                    "y": 2.0
-                }]
-            }}]
-
+                    "points": [{
+                        "x": 1.0,
+                        "y": 2.0
+                    }, {
+                        "x": 1.0,
+                        "y": 2.0
+                    }, {
+                        "x": 1.0,
+                        "y": 2.0
+                    }]
+                }
+            }]
         })
         .to_string();
         assert_eq!(serialized, expected);
@@ -293,26 +259,17 @@ mod tests {
         }
         .boxed();
 
-        let raster = Raster2D::new(
-            [3, 2].into(),
-            vec![1, 2, 3, 4, 5, 6],
-            None,
-            Default::default(),
-            Default::default(),
-        )
-        .unwrap();
+        let raster = Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap();
 
-        let raster_tile = RasterTile2D {
-            time: TimeInterval::default(),
-            tile: TileInformation {
+        let raster_tile = RasterTile2D::new_with_tile_info(
+            TimeInterval::default(),
+            TileInformation {
                 global_geo_transform: Default::default(),
-                global_pixel_position: [0, 0].into(),
-                global_size_in_tiles: [1, 2].into(),
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
-            data: raster,
-        };
+            raster,
+        );
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
