@@ -448,8 +448,8 @@ mod tests {
         assert_eq!((0..NUMBER_OF_TASKS).collect::<Vec<_>>(), result);
     }
 
-    #[tokio::test]
-    async fn compute_results() {
+    #[test]
+    fn compute_results() {
         const NUMBER_OF_TASKS: usize = 42;
 
         let thread_pool = ThreadPool::new(2);
@@ -463,7 +463,7 @@ mod tests {
             }
         });
 
-        let result = future::join_all(futures).await;
+        let result = futures::executor::block_on(future::join_all(futures));
 
         assert_eq!(result, (0..NUMBER_OF_TASKS).collect::<Vec<_>>());
     }
