@@ -268,7 +268,10 @@ impl<R> Default for TaskResultOption<R> {
 impl<R> TaskResult<R> {
     fn set(&self, result: R) {
         match self.option.swap(TaskResultOption::Result(result)) {
-            TaskResultOption::None | TaskResultOption::Result(_) => {} // do nothing
+            TaskResultOption::None => {} // do nothing
+            TaskResultOption::Result(_) => {
+                unreachable!("There must not be a second computation of the result")
+            }
             TaskResultOption::Waiting(waker) => waker.wake(),
         };
     }
