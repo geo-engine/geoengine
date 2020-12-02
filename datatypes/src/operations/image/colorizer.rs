@@ -505,13 +505,14 @@ impl Into<image::Rgba<u8>> for RgbaColor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::convert::TryInto;
 
     #[test]
     fn logarithmic_color_table() {
         let colorizer = Colorizer::logarithmic_gradient(
             vec![
-                (1.0.into(), RgbaColor::black()).into(),
-                (10.0.into(), RgbaColor::white()).into(),
+                (1.0.try_into().unwrap(), RgbaColor::black()).into(),
+                (10.0.try_into().unwrap(), RgbaColor::white()).into(),
             ],
             RgbaColor::transparent(),
             RgbaColor::transparent(),
@@ -531,9 +532,9 @@ mod tests {
     fn logarithmic_color_table_2() {
         let colorizer = Colorizer::logarithmic_gradient(
             vec![
-                (1.0.into(), RgbaColor::black()).into(),
-                (51.0.into(), RgbaColor::new(100, 100, 100, 255)).into(),
-                (101.0.into(), RgbaColor::white()).into(),
+                (1.0.try_into().unwrap(), RgbaColor::black()).into(),
+                (51.0.try_into().unwrap(), RgbaColor::new(100, 100, 100, 255)).into(),
+                (101.0.try_into().unwrap(), RgbaColor::white()).into(),
             ],
             RgbaColor::transparent(),
             RgbaColor::transparent(),

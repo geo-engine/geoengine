@@ -88,6 +88,7 @@ mod tests {
     use super::*;
     use crate::operations::image::RgbaColor;
     use crate::raster::GridPixelAccessMut;
+    use std::convert::TryInto;
 
     #[test]
     fn linear_gradient() {
@@ -105,8 +106,12 @@ mod tests {
 
         let colorizer = Colorizer::linear_gradient(
             vec![
-                (0.0.into(), RgbaColor::new(0, 0, 0, 255)).into(),
-                (255.0.into(), RgbaColor::new(255, 255, 255, 255)).into(),
+                (0.0.try_into().unwrap(), RgbaColor::new(0, 0, 0, 255)).into(),
+                (
+                    255.0.try_into().unwrap(),
+                    RgbaColor::new(255, 255, 255, 255),
+                )
+                    .into(),
             ],
             RgbaColor::transparent(),
             RgbaColor::pink(),
@@ -137,8 +142,8 @@ mod tests {
 
         let colorizer = Colorizer::logarithmic_gradient(
             vec![
-                (1.0.into(), RgbaColor::new(0, 0, 0, 255)).into(),
-                (10.0.into(), RgbaColor::new(255, 255, 255, 255)).into(),
+                (1.0.try_into().unwrap(), RgbaColor::new(0, 0, 0, 255)).into(),
+                (10.0.try_into().unwrap(), RgbaColor::new(255, 255, 255, 255)).into(),
             ],
             RgbaColor::transparent(),
             RgbaColor::pink(),
@@ -169,9 +174,9 @@ mod tests {
 
         let colorizer = Colorizer::palette(
             [
-                (0.0.into(), RgbaColor::new(0, 0, 0, 255)),
-                (1.0.into(), RgbaColor::new(255, 0, 0, 255)),
-                (2.0.into(), RgbaColor::new(255, 255, 255, 255)),
+                (0.0.try_into().unwrap(), RgbaColor::new(0, 0, 0, 255)),
+                (1.0.try_into().unwrap(), RgbaColor::new(255, 0, 0, 255)),
+                (2.0.try_into().unwrap(), RgbaColor::new(255, 255, 255, 255)),
             ]
             .iter()
             .cloned()
