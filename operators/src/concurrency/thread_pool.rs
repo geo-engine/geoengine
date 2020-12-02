@@ -272,13 +272,6 @@ impl<R> TaskResult<R> {
             TaskResultOption::Waiting(waker) => waker.wake(),
         };
     }
-
-    pub fn result(&self) -> Option<R> {
-        match self.option.take() {
-            TaskResultOption::None | TaskResultOption::Waiting(_) => None,
-            TaskResultOption::Result(r) => Some(r),
-        }
-    }
 }
 
 impl<R> Default for TaskResult<R> {
