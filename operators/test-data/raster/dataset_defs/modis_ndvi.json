@@ -1,0 +1,29 @@
+{
+    "time": {
+        "time_intervals": [
+            {
+                "start": 0,
+                "end": 1
+            }
+        ]
+    },
+    "tile": null,
+    "file_name_with_time_placeholder": "MOD13A2_M_NDVI_2014-01-01.TIFF",
+    "time_format": "",
+    "base_path": "../modis_ndvi",
+    "data_type": "U8",
+    "geo_transform": {
+        "origin_coordinate": {
+            "x": -180.0,
+            "y": 90.0
+        },
+        "x_pixel_size": 0.1,
+        "y_pixel_size": -0.1
+    },
+    "grid_shape": {
+        "shape_array": [
+            1800,
+            3600
+        ]
+    }
+}
