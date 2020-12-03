@@ -34,6 +34,7 @@ where
     current_spatial_tile: usize,
     #[pin]
     stream: Zip<St1, St2>,
+    ended: bool,
 }
 
 impl<T1, T2, St1, St2, F1, F2> RasterTimeAdapter<T1, T2, St1, St2, F1, F2>
@@ -54,6 +55,7 @@ where
             num_spatial_tiles: None,
             current_spatial_tile: 0,
             time_end: None,
+            ended: false,
         }
     }
 
@@ -72,8 +74,9 @@ where
         mut tile_a: RasterTile2D<T1>,
         mut tile_b: RasterTile2D<T2>,
     ) -> (RasterTile2D<T1>, RasterTile2D<T2>) {
-        // TODO: handle error
-        let time = Self::intersect_time_intervals(tile_a.time, tile_b.time).unwrap();
+        // TODO: scale data if measurement unit requires it?
+        let time = Self::intersect_time_intervals(tile_a.time, tile_b.time)
+            .expect("intervals must overlap");
         tile_a.time = time;
         tile_b.time = time;
         (tile_a, tile_b)
@@ -111,35 +114,48 @@ where
             num_spatial_tiles,
             current_spatial_tile,
             mut stream,
+            ended,
         } = self.project();
 
+        if *ended {
+            return Poll::Ready(None);
+        }
+
         // TODO: handle error
-        let next = ready!(stream.as_mut().poll_next(cx)).map(|(a, b)| (a.unwrap(), b.unwrap()));
+        let next = ready!(stream.as_mut().poll_next(cx));
 
-        if let Some((tile_a, tile_b)) = next {
-            // TODO: calculate at start when tiling info is available before querying first tile
-            if num_spatial_tiles.is_none() {
-                *num_spatial_tiles = Some(Self::number_of_tiles_in_bbox(
-                    &tile_a.tile_information(),
-                    query_rect.bbox,
-                ));
+        match next {
+            Some((Ok(tile_a), Ok(tile_b))) => {
+                // TODO: calculate at start when tiling info is available before querying first tile
+                if num_spatial_tiles.is_none() {
+                    *num_spatial_tiles = Some(Self::number_of_tiles_in_bbox(
+                        &tile_a.tile_information(),
+                        query_rect.bbox,
+                    ));
+                }
+
+                if *current_spatial_tile >= num_spatial_tiles.expect("checked") {
+                    // time slice ended => query next time slice of sources
+                    let mut next_qrect = *query_rect;
+                    next_qrect.time_interval.start = min(tile_a.time.end, tile_b.time.end);
+                    *time_end = None;
+
+                    stream.set(source_a(next_qrect).zip(source_b(next_qrect)));
+                    *current_spatial_tile = 0;
+                } else {
+                    *current_spatial_tile += 1;
+                }
+
+                Poll::Ready(Some(Ok(Self::align_tiles(tile_a, tile_b))))
             }
-
-            if *current_spatial_tile >= num_spatial_tiles.expect("checked") {
-                // time slice ended => query next time slice of sources
-                let mut next_qrect = *query_rect;
-                next_qrect.time_interval.start = min(tile_a.time.end, tile_b.time.end);
-                *time_end = None;
-
-                stream.set(source_a(next_qrect).zip(source_b(next_qrect)));
-                *current_spatial_tile = 0;
-            } else {
-                *current_spatial_tile += 1;
+            Some((Ok(_), Err(e))) | Some((Err(e), Ok(_))) | Some((Err(e), Err(_))) => {
+                *ended = true;
+                Poll::Ready(Some(Err(e)))
             }
-
-            Poll::Ready(Some(Ok(Self::align_tiles(tile_a, tile_b))))
-        } else {
-            Poll::Ready(None)
+            None => {
+                *ended = true;
+                Poll::Ready(None)
+            }
         }
     }
 }
