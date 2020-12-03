@@ -1,10 +1,11 @@
 use crate::engine::QueryRectangle;
+use crate::source::TilingStrategy;
 use crate::util::Result;
 use futures::stream::Zip;
 use futures::Stream;
 use futures::{ready, StreamExt};
-use geoengine_datatypes::primitives::{TimeInstance, TimeInterval};
-use geoengine_datatypes::raster::{Pixel, RasterTile2D};
+use geoengine_datatypes::primitives::{BoundingBox2D, TimeInstance, TimeInterval};
+use geoengine_datatypes::raster::{GridSize, Pixel, RasterTile2D, TileInformation};
 use pin_project::pin_project;
 use std::cmp::min;
 use std::pin::Pin;
@@ -28,6 +29,9 @@ where
     source_b: F2,
     query_rect: QueryRectangle,
     time_end: Option<(TimeInstance, TimeInstance)>,
+    // TODO: calculate at start when tiling info is available before querying first tile
+    num_spatial_tiles: Option<usize>,
+    current_spatial_tile: usize,
     #[pin]
     stream: Zip<St1, St2>,
 }
@@ -47,6 +51,8 @@ where
             source_a,
             source_b,
             query_rect,
+            num_spatial_tiles: None,
+            current_spatial_tile: 0,
             time_end: None,
         }
     }
@@ -72,6 +78,17 @@ where
         tile_b.time = time;
         (tile_a, tile_b)
     }
+
+    fn number_of_tiles_in_bbox(tile_info: &TileInformation, bbox: BoundingBox2D) -> usize {
+        // TODO: get tiling strategy from stream or execution context instead of creating it here
+        let strat = TilingStrategy {
+            bounding_box: bbox,
+            tile_pixel_size: tile_info.tile_size_in_pixels,
+            geo_transform: tile_info.global_geo_transform,
+        };
+
+        strat.tile_grid_box().number_of_elements()
+    }
 }
 
 impl<T1, T2, St1, St2, F1, F2> Stream for RasterTimeAdapter<T1, T2, St1, St2, F1, F2>
@@ -85,13 +102,14 @@ where
 {
     type Item = Result<(RasterTile2D<T1>, RasterTile2D<T2>)>;
 
-    #[allow(clippy::needless_return)]
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let RasterTimeAdapterProjection {
             source_a,
             source_b,
             query_rect,
             time_end,
+            num_spatial_tiles,
+            current_spatial_tile,
             mut stream,
         } = self.project();
 
@@ -99,58 +117,29 @@ where
         let next = ready!(stream.as_mut().poll_next(cx)).map(|(a, b)| (a.unwrap(), b.unwrap()));
 
         if let Some((tile_a, tile_b)) = next {
-            if let Some(end) = time_end {
-                if tile_a.time.start >= end.0 || tile_b.time.start >= end.1 {
-                    // a tile belongs to next slice => query next time slice of sources instead
-                    // TODO: determine end of time slice in stream without computing an additional tile
-                    let mut next_qrect = *query_rect;
-                    next_qrect.time_interval.start = min(end.0, end.1);
-                    *time_end = None;
-
-                    stream.set(source_a(next_qrect).zip(source_b(next_qrect)));
-
-                    // TODO: handle error
-                    let next = ready!(stream.as_mut().poll_next(cx))
-                        .map(|(a, b)| (a.unwrap(), b.unwrap()));
-                    if let Some((tile_a, tile_b)) = next {
-                        return Poll::Ready(Some(Ok(Self::align_tiles(tile_a, tile_b))));
-                    } else {
-                        // source streams ended
-                        return Poll::Ready(None);
-                    }
-                }
-            } else {
-                // first tile in time slice
-                *time_end = Some((tile_a.time.end, tile_b.time.end));
-                return Poll::Ready(Some(Ok(Self::align_tiles(tile_a, tile_b))));
+            // TODO: calculate at start when tiling info is available before querying first tile
+            if num_spatial_tiles.is_none() {
+                *num_spatial_tiles = Some(Self::number_of_tiles_in_bbox(
+                    &tile_a.tile_information(),
+                    query_rect.bbox,
+                ));
             }
 
-            return Poll::Ready(Some(Ok(Self::align_tiles(tile_a, tile_b))));
-        } else if let Some(end) = time_end {
-            // at least one of the input streams ended
-            if end.0 != query_rect.time_interval.end || end.1 != query_rect.time_interval.end {
-                // the other input stream still has more data => query next time slice of sources
+            if *current_spatial_tile >= num_spatial_tiles.expect("checked") {
+                // time slice ended => query next time slice of sources
                 let mut next_qrect = *query_rect;
-                next_qrect.time_interval.start = min(end.0, end.1);
+                next_qrect.time_interval.start = min(tile_a.time.end, tile_b.time.end);
                 *time_end = None;
 
                 stream.set(source_a(next_qrect).zip(source_b(next_qrect)));
-
-                // TODO: handle error
-                let next =
-                    ready!(stream.as_mut().poll_next(cx)).map(|(a, b)| (a.unwrap(), b.unwrap()));
-                if let Some((tile_a, tile_b)) = next {
-                    return Poll::Ready(Some(Ok(Self::align_tiles(tile_a, tile_b))));
-                } else {
-                    unreachable!("stream must return result");
-                }
+                *current_spatial_tile = 0;
             } else {
-                // both streams ended
-                return Poll::Ready(None);
+                *current_spatial_tile += 1;
             }
+
+            Poll::Ready(Some(Ok(Self::align_tiles(tile_a, tile_b))))
         } else {
-            // both input streams were empty
-            return Poll::Ready(None);
+            Poll::Ready(None)
         }
     }
 }
@@ -158,6 +147,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::concurrency::ThreadPool;
     use crate::engine::{
         ExecutionContext, QueryContext, QueryProcessor, QueryRectangle, RasterOperator,
         RasterResultDescriptor,
@@ -165,7 +155,7 @@ mod tests {
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;
     use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution};
-    use geoengine_datatypes::raster::{Raster2D, RasterDataType, TileInformation};
+    use geoengine_datatypes::raster::{Grid, RasterDataType};
     use geoengine_datatypes::spatial_reference::SpatialReference;
 
     #[tokio::test]
@@ -175,75 +165,31 @@ mod tests {
                 data: vec![
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(0, 5),
-                        tile: TileInformation {
-                            global_geo_transform: Default::default(),
-                            global_pixel_position: [0, 0].into(),
-                            global_size_in_tiles: [1, 2].into(),
-                            global_tile_position: [0, 0].into(),
-                            tile_size_in_pixels: [3, 2].into(),
-                        },
-                        data: Raster2D::new(
-                            [3, 2].into(),
-                            vec![1, 2, 3, 4, 5, 6],
-                            Some(0),
-                            TimeInterval::new_unchecked(0, 5),
-                            Default::default(),
-                        )
-                        .unwrap(),
+                        tile_position: [0, 0].into(),
+                        global_geo_transform: Default::default(),
+                        grid_array: Grid::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], Some(0))
+                            .unwrap(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(0, 5),
-                        tile: TileInformation {
-                            global_geo_transform: Default::default(),
-                            global_pixel_position: [0, 2].into(),
-                            global_size_in_tiles: [1, 2].into(),
-                            global_tile_position: [0, 1].into(),
-                            tile_size_in_pixels: [3, 2].into(),
-                        },
-                        data: Raster2D::new(
-                            [3, 2].into(),
-                            vec![7, 8, 9, 10, 11, 12],
-                            Some(0),
-                            TimeInterval::new_unchecked(0, 5),
-                            Default::default(),
-                        )
-                        .unwrap(),
+                        tile_position: [0, 1].into(),
+                        global_geo_transform: Default::default(),
+                        grid_array: Grid::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12], Some(0))
+                            .unwrap(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(5, 10),
-                        tile: TileInformation {
-                            global_geo_transform: Default::default(),
-                            global_pixel_position: [0, 0].into(),
-                            global_size_in_tiles: [1, 2].into(),
-                            global_tile_position: [0, 0].into(),
-                            tile_size_in_pixels: [3, 2].into(),
-                        },
-                        data: Raster2D::new(
-                            [3, 2].into(),
-                            vec![13, 14, 15, 16, 17, 18],
-                            Some(0),
-                            TimeInterval::new_unchecked(5, 10),
-                            Default::default(),
-                        )
-                        .unwrap(),
+                        tile_position: [0, 0].into(),
+                        global_geo_transform: Default::default(),
+                        grid_array: Grid::new([3, 2].into(), vec![13, 14, 15, 16, 17, 18], Some(0))
+                            .unwrap(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(5, 10),
-                        tile: TileInformation {
-                            global_geo_transform: Default::default(),
-                            global_pixel_position: [0, 2].into(),
-                            global_size_in_tiles: [1, 2].into(),
-                            global_tile_position: [0, 1].into(),
-                            tile_size_in_pixels: [3, 2].into(),
-                        },
-                        data: Raster2D::new(
-                            [3, 2].into(),
-                            vec![19, 20, 21, 22, 23, 24],
-                            Some(0),
-                            TimeInterval::new_unchecked(5, 10),
-                            Default::default(),
-                        )
-                        .unwrap(),
+                        tile_position: [0, 1].into(),
+                        global_geo_transform: Default::default(),
+                        grid_array: Grid::new([3, 2].into(), vec![19, 20, 21, 22, 23, 24], Some(0))
+                            .unwrap(),
                     },
                 ],
                 result_descriptor: RasterResultDescriptor {
@@ -259,109 +205,67 @@ mod tests {
                 data: vec![
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(0, 3),
-                        tile: TileInformation {
-                            global_geo_transform: Default::default(),
-                            global_pixel_position: [0, 0].into(),
-                            global_size_in_tiles: [1, 2].into(),
-                            global_tile_position: [0, 0].into(),
-                            tile_size_in_pixels: [3, 2].into(),
-                        },
-                        data: Raster2D::new(
+                        tile_position: [0, 0].into(),
+                        global_geo_transform: Default::default(),
+                        grid_array: Grid::new(
                             [3, 2].into(),
                             vec![101, 102, 103, 104, 105, 106],
                             Some(0),
-                            TimeInterval::new_unchecked(0, 3),
-                            Default::default(),
                         )
                         .unwrap(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(0, 3),
-                        tile: TileInformation {
-                            global_geo_transform: Default::default(),
-                            global_pixel_position: [0, 2].into(),
-                            global_size_in_tiles: [1, 2].into(),
-                            global_tile_position: [0, 1].into(),
-                            tile_size_in_pixels: [3, 2].into(),
-                        },
-                        data: Raster2D::new(
+                        tile_position: [0, 1].into(),
+                        global_geo_transform: Default::default(),
+                        grid_array: Grid::new(
                             [3, 2].into(),
                             vec![107, 108, 109, 110, 111, 112],
                             Some(0),
-                            TimeInterval::new_unchecked(0, 3),
-                            Default::default(),
                         )
                         .unwrap(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(3, 6),
-                        tile: TileInformation {
-                            global_geo_transform: Default::default(),
-                            global_pixel_position: [0, 0].into(),
-                            global_size_in_tiles: [1, 2].into(),
-                            global_tile_position: [0, 0].into(),
-                            tile_size_in_pixels: [3, 2].into(),
-                        },
-                        data: Raster2D::new(
+                        tile_position: [0, 0].into(),
+                        global_geo_transform: Default::default(),
+                        grid_array: Grid::new(
                             [3, 2].into(),
                             vec![113, 114, 115, 116, 117, 118],
                             Some(0),
-                            TimeInterval::new_unchecked(3, 6),
-                            Default::default(),
                         )
                         .unwrap(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(3, 6),
-                        tile: TileInformation {
-                            global_geo_transform: Default::default(),
-                            global_pixel_position: [0, 2].into(),
-                            global_size_in_tiles: [1, 2].into(),
-                            global_tile_position: [0, 1].into(),
-                            tile_size_in_pixels: [3, 2].into(),
-                        },
-                        data: Raster2D::new(
+                        tile_position: [0, 1].into(),
+                        global_geo_transform: Default::default(),
+                        grid_array: Grid::new(
                             [3, 2].into(),
                             vec![119, 120, 121, 122, 123, 124],
                             Some(0),
-                            TimeInterval::new_unchecked(3, 6),
-                            Default::default(),
                         )
                         .unwrap(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(6, 10),
-                        tile: TileInformation {
-                            global_geo_transform: Default::default(),
-                            global_pixel_position: [0, 0].into(),
-                            global_size_in_tiles: [1, 2].into(),
-                            global_tile_position: [0, 0].into(),
-                            tile_size_in_pixels: [3, 2].into(),
-                        },
-                        data: Raster2D::new(
+                        tile_position: [0, 0].into(),
+                        global_geo_transform: Default::default(),
+                        grid_array: Grid::new(
                             [3, 2].into(),
                             vec![125, 126, 127, 128, 129, 130],
                             Some(0),
-                            TimeInterval::new_unchecked(6, 10),
-                            Default::default(),
                         )
                         .unwrap(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(6, 10),
-                        tile: TileInformation {
-                            global_geo_transform: Default::default(),
-                            global_pixel_position: [0, 2].into(),
-                            global_size_in_tiles: [1, 2].into(),
-                            global_tile_position: [0, 1].into(),
-                            tile_size_in_pixels: [3, 2].into(),
-                        },
-                        data: Raster2D::new(
+                        tile_position: [0, 1].into(),
+                        global_geo_transform: Default::default(),
+                        grid_array: Grid::new(
                             [3, 2].into(),
                             vec![131, 132, 133, 134, 135, 136],
                             Some(0),
-                            TimeInterval::new_unchecked(6, 10),
-                            Default::default(),
                         )
                         .unwrap(),
                     },
@@ -374,8 +278,10 @@ mod tests {
         }
         .boxed();
 
+        let thread_pool = ThreadPool::new(2);
         let exe_ctx = ExecutionContext {
             raster_data_root: Default::default(),
+            thread_pool: thread_pool.create_context(),
         };
         let query_rect = QueryRectangle {
             bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (1., 1.).into()),
