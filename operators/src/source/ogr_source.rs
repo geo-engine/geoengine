@@ -1037,7 +1037,7 @@ mod tests {
     use geoengine_datatypes::primitives::{BoundingBox2D, FeatureData, SpatialResolution};
 
     use crate::engine::MockExecutionContextCreator;
-    use crate::engine::{ExecutionContext, MockQueryContext};
+    use crate::engine::MockQueryContext;
 
     use super::*;
 

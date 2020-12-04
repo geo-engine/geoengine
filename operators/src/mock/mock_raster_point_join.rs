@@ -139,9 +139,7 @@ mod tests {
     use crate::engine::MockExecutionContextCreator;
     use crate::engine::MockQueryContext;
     use crate::{
-        engine::{
-            ExecutionContext, QueryContext, QueryRectangle, RasterOperator, RasterResultDescriptor,
-        },
+        engine::{QueryRectangle, RasterOperator, RasterResultDescriptor},
         mock::{MockPointSource, MockPointSourceParams, MockRasterSource, MockRasterSourceParams},
     };
     use futures::executor::block_on_stream;

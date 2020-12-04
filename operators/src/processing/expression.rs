@@ -248,7 +248,7 @@ where
 mod tests {
     use super::*;
     use crate::engine::MockExecutionContextCreator;
-    use crate::engine::{ExecutionContext, MockQueryContext};
+    use crate::engine::MockQueryContext;
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution, TimeInterval};
     use geoengine_datatypes::raster::TileInformation;

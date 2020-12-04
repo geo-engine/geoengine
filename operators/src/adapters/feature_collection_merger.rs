@@ -130,8 +130,8 @@ mod tests {
     use super::*;
 
     use crate::engine::{
-        ExecutionContext, MockExecutionContextCreator, MockQueryContext, QueryContext,
-        QueryProcessor, QueryRectangle, TypedVectorQueryProcessor, VectorOperator,
+        MockExecutionContextCreator, MockQueryContext, QueryProcessor, QueryRectangle,
+        TypedVectorQueryProcessor, VectorOperator,
     };
     use crate::error::Error;
     use crate::mock::{MockFeatureCollectionSource, MockPointSource, MockPointSourceParams};

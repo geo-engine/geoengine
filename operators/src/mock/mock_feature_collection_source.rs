@@ -28,7 +28,7 @@ where
     type Output = FeatureCollection<G>;
 
     fn query<'a>(
-        &self,
+        &'a self,
         _query: QueryRectangle,
         _ctx: &'a dyn QueryContext,
     ) -> BoxStream<'a, Result<Self::Output>> {
