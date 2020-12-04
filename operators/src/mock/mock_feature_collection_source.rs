@@ -18,7 +18,7 @@ pub struct MockFeatureCollectionSourceProcessor<G>
 where
     G: Geometry + ArrowTyped,
 {
-    collection: FeatureCollection<G>,
+    collections: Vec<FeatureCollection<G>>,
 }
 
 impl<G> QueryProcessor for MockFeatureCollectionSourceProcessor<G>
@@ -35,8 +35,7 @@ where
         // TODO: chunk it up
         // let chunk_size = ctx.chunk_byte_size / std::mem::size_of::<Coordinate2D>();
 
-        let collection = self.collection.clone();
-        stream::once(async move { Ok(collection) }).boxed()
+        stream::iter(self.collections.iter().map(|c| Ok(c.clone()))).boxed()
     }
 }
 
@@ -45,10 +44,25 @@ pub struct MockFeatureCollectionSourceParams<G>
 where
     G: Geometry + ArrowTyped,
 {
-    pub collection: FeatureCollection<G>,
+    pub collections: Vec<FeatureCollection<G>>,
 }
 
 pub type MockFeatureCollectionSource<G> = SourceOperator<MockFeatureCollectionSourceParams<G>>;
+
+impl<G> MockFeatureCollectionSource<G>
+where
+    G: Geometry + ArrowTyped,
+{
+    pub fn single(collection: FeatureCollection<G>) -> Self {
+        Self::multiple(vec![collection])
+    }
+
+    pub fn multiple(collections: Vec<FeatureCollection<G>>) -> Self {
+        Self {
+            params: MockFeatureCollectionSourceParams { collections },
+        }
+    }
+}
 
 // TODO: use single implementation once
 //      "deserialization of generic impls is not supported yet; use #[typetag::serialize] to generate serialization only"
@@ -102,7 +116,7 @@ macro_rules! impl_mock_feature_collection_source {
             fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
                 Ok(TypedVectorQueryProcessor::$output(
                     MockFeatureCollectionSourceProcessor {
-                        collection: self.params.collection.clone(),
+                        collections: self.params.collections.clone(),
                     }
                     .boxed(),
                 ))
@@ -119,6 +133,7 @@ impl_mock_feature_collection_source!(MultiPolygon, MultiPolygon);
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::MockExecutionContextCreator;
     use crate::engine::MockQueryContext;
     use futures::executor::block_on_stream;
     use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, FeatureData, TimeInterval};
@@ -139,10 +154,7 @@ mod tests {
         )
         .unwrap();
 
-        let source = MockFeatureCollectionSource {
-            params: MockFeatureCollectionSourceParams { collection },
-        }
-        .boxed();
+        let source = MockFeatureCollectionSource::single(collection).boxed();
 
         let serialized = serde_json::to_string(&source).unwrap();
         let collection_bytes = [
@@ -206,12 +218,12 @@ mod tests {
             serde_json::json!({
                 "type": "MockFeatureCollectionSourceMultiPoint",
                 "params": {
-                    "collection": {
+                    "collections": [{
                         "table": collection_bytes,
                         "types": {
                             "foobar": "Decimal"
                         },
-                    }
+                    }]
                 }
             })
             .to_string()
@@ -235,14 +247,11 @@ mod tests {
         )
         .unwrap();
 
-        let source = MockFeatureCollectionSource {
-            params: MockFeatureCollectionSourceParams {
-                collection: collection.clone(),
-            },
-        }
-        .boxed();
+        let source = MockFeatureCollectionSource::single(collection.clone()).boxed();
 
-        let source = source.initialize(&ExecutionContext::mock_empty()).unwrap();
+        let source = source
+            .initialize(&MockExecutionContextCreator::default().context())
+            .unwrap();
 
         let processor =
             if let Ok(TypedVectorQueryProcessor::MultiPoint(p)) = source.query_processor() {

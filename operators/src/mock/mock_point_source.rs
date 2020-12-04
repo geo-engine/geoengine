@@ -86,8 +86,10 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::MockExecutionContextCreator;
     use crate::engine::MockQueryContext;
     use futures::executor::block_on_stream;
+    use geoengine_datatypes::collections::FeatureCollectionInfos;
     use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution};
 
     #[test]
@@ -107,7 +109,8 @@ mod tests {
 
     #[test]
     fn execute() {
-        let execution_context = ExecutionContext::mock_empty();
+        let execution_context_creator = MockExecutionContextCreator::default();
+        let execution_context = execution_context_creator.context();
         let points = vec![Coordinate2D::new(1., 2.); 3];
 
         let mps = MockPointSource {

@@ -2,7 +2,9 @@ use crate::util::Result;
 use futures::ready;
 use futures::stream::FusedStream;
 use futures::Stream;
-use geoengine_datatypes::collections::FeatureCollection;
+use geoengine_datatypes::collections::{
+    FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
+};
 use geoengine_datatypes::primitives::Geometry;
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use pin_project::pin_project;
@@ -28,7 +30,7 @@ where
 impl<St, G> FeatureCollectionChunkMerger<St, G>
 where
     St: Stream<Item = Result<FeatureCollection<G>>> + FusedStream,
-    G: Geometry + ArrowTyped,
+    G: Geometry + ArrowTyped + 'static,
 {
     pub fn new(stream: St, chunk_size_bytes: usize) -> Self {
         Self {
@@ -82,7 +84,7 @@ where
 impl<St, G> Stream for FeatureCollectionChunkMerger<St, G>
 where
     St: Stream<Item = Result<FeatureCollection<G>>> + FusedStream,
-    G: Geometry + ArrowTyped,
+    G: Geometry + ArrowTyped + 'static,
 {
     type Item = St::Item;
 
@@ -116,7 +118,7 @@ where
 impl<St, G> FusedStream for FeatureCollectionChunkMerger<St, G>
 where
     St: Stream<Item = Result<FeatureCollection<G>>> + FusedStream,
-    G: Geometry + ArrowTyped,
+    G: Geometry + ArrowTyped + 'static,
 {
     fn is_terminated(&self) -> bool {
         self.stream.is_terminated() && self.accum.is_none()
@@ -128,14 +130,11 @@ mod tests {
     use super::*;
 
     use crate::engine::{
-        ExecutionContext, MockQueryContext, QueryProcessor, QueryRectangle,
-        TypedVectorQueryProcessor, VectorOperator,
+        ExecutionContext, MockExecutionContextCreator, MockQueryContext, QueryContext,
+        QueryProcessor, QueryRectangle, TypedVectorQueryProcessor, VectorOperator,
     };
     use crate::error::Error;
-    use crate::mock::{
-        MockFeatureCollectionSource, MockFeatureCollectionSourceParams, MockPointSource,
-        MockPointSourceParams,
-    };
+    use crate::mock::{MockFeatureCollectionSource, MockPointSource, MockPointSourceParams};
     use futures::{StreamExt, TryStreamExt};
     use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, MultiPoint, TimeInterval};
     use geoengine_datatypes::{
@@ -158,7 +157,7 @@ mod tests {
 
         let source = source
             .boxed()
-            .initialize(&ExecutionContext::mock_empty())
+            .initialize(&MockExecutionContextCreator::default().context())
             .unwrap();
 
         let processor =
@@ -225,14 +224,10 @@ mod tests {
 
     #[tokio::test]
     async fn empty() {
-        let source = MockFeatureCollectionSource {
-            params: MockFeatureCollectionSourceParams {
-                collection: DataCollection::empty(),
-            },
-        }
-        .boxed()
-        .initialize(&ExecutionContext::mock_empty())
-        .unwrap();
+        let source = MockFeatureCollectionSource::single(DataCollection::empty())
+            .boxed()
+            .initialize(&MockExecutionContextCreator::default().context())
+            .unwrap();
 
         let processor =
             if let TypedVectorQueryProcessor::Data(p) = source.query_processor().unwrap() {
@@ -302,7 +297,7 @@ mod tests {
         );
     }
 
-    #[tokio::test(max_threads = 1)]
+    #[tokio::test(flavor = "current_thread")]
     async fn interleaving_pendings() {
         let mut stream_history: Vec<Poll<Option<Result<MultiPointCollection>>>> = vec![
             Poll::Pending,

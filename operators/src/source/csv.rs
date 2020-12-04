@@ -407,6 +407,7 @@ mod tests {
 
     use super::*;
     use crate::engine::MockQueryContext;
+    use geoengine_datatypes::collections::{FeatureCollectionInfos, ToGeoJson};
 
     #[tokio::test]
     async fn read_points() {

@@ -246,11 +246,11 @@ impl BoundingBox2D {
     }
 
     fn contains_x(&self, other_bbox: &Self) -> bool {
-        crate::util::ranges::value_in_range(
+        crate::util::ranges::value_in_range_inclusive(
             other_bbox.lower_left().x,
             self.lower_left().x,
             self.upper_right().x,
-        ) && crate::util::ranges::value_in_range(
+        ) && crate::util::ranges::value_in_range_inclusive(
             other_bbox.upper_right().x,
             self.lower_left().x,
             self.upper_right().x,
@@ -258,11 +258,11 @@ impl BoundingBox2D {
     }
 
     fn contains_y(&self, other_bbox: &Self) -> bool {
-        crate::util::ranges::value_in_range(
+        crate::util::ranges::value_in_range_inclusive(
             other_bbox.lower_left().y,
             self.lower_left().y,
             self.upper_right().y,
-        ) && crate::util::ranges::value_in_range(
+        ) && crate::util::ranges::value_in_range_inclusive(
             other_bbox.upper_right().y,
             self.lower_left().y,
             self.upper_right().y,
@@ -292,11 +292,11 @@ impl BoundingBox2D {
     }
 
     fn overlap_x(&self, other_bbox: &Self) -> bool {
-        crate::util::ranges::value_in_range(
+        crate::util::ranges::value_in_range_inclusive(
             self.lower_left().x,
             other_bbox.lower_left().x,
             other_bbox.upper_right().x,
-        ) || crate::util::ranges::value_in_range(
+        ) || crate::util::ranges::value_in_range_inclusive(
             other_bbox.lower_left().x,
             self.lower_left().x,
             self.upper_right().x,
@@ -304,11 +304,11 @@ impl BoundingBox2D {
     }
 
     fn overlap_y(&self, other_bbox: &Self) -> bool {
-        crate::util::ranges::value_in_range(
+        crate::util::ranges::value_in_range_inclusive(
             self.lower_left().y,
             other_bbox.lower_left().y,
             other_bbox.upper_right().y,
-        ) || crate::util::ranges::value_in_range(
+        ) || crate::util::ranges::value_in_range_inclusive(
             other_bbox.lower_left().y,
             self.lower_left().y,
             self.upper_right().y,

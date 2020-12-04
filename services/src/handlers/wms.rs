@@ -5,10 +5,12 @@ use warp::{http::Response, Filter, Rejection};
 use geoengine_datatypes::{
     operations::image::{Colorizer, ToPng},
     primitives::SpatialResolution,
+    raster::Grid2D,
+    raster::RasterTile2D,
 };
 use geoengine_datatypes::{
     primitives::BoundingBox2D,
-    raster::{Blit, GeoTransform, Pixel, Raster2D},
+    raster::{Blit, GeoTransform, Pixel},
 };
 
 use crate::error;
@@ -22,6 +24,7 @@ use crate::workflows::workflow::WorkflowId;
 use futures::StreamExt;
 use geoengine_datatypes::primitives::{TimeInstance, TimeInterval};
 use geoengine_operators::call_on_generic_raster_processor;
+use geoengine_operators::concurrency::ThreadPool;
 use geoengine_operators::engine::{
     ExecutionContext, QueryContext, QueryRectangle, RasterQueryProcessor,
 };
@@ -64,7 +67,7 @@ async fn wms<C: Context>(
     }
 }
 
-#[allow(clippy::unnecessary_wraps)]
+#[allow(clippy::unnecessary_wraps)] // TODO: remove line once implemented fully
 fn get_capabilities(_request: &GetCapabilities) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
     // TODO: implement
     // TODO: inject correct url of the instance and return data for the default layer
@@ -141,8 +144,10 @@ async fn get_map<C: Context>(
 
     let operator = workflow.operator.get_raster().context(error::Operator)?;
 
+    let thread_pool = ThreadPool::new(1); // TODO: use global thread pool
     let execution_context = ExecutionContext {
         raster_data_root: get_config_element::<config::GdalSource>()?.raster_data_root_path,
+        thread_pool: thread_pool.create_context(),
     };
 
     let initialized = operator
@@ -202,26 +207,23 @@ where
 
     // build png
     let dim = [request.height as usize, request.width as usize];
-    let data: Vec<T> = vec![T::zero(); dim[0] * dim[1]];
     let query_geo_transform = GeoTransform::new(
         query_rect.bbox.upper_left(),
         x_query_resolution,
         -y_query_resolution, // TODO: negative, s.t. geo transform fits...
     );
 
-    let output_raster: Result<Raster2D<T>> = Raster2D::new(
-        dim.into(),
-        data,
-        None,
+    let output_raster = Grid2D::new_filled(dim.into(), T::zero(), None);
+    let output_tile = Ok(RasterTile2D::new_without_offset(
         request.time.unwrap_or_default(),
         query_geo_transform,
-    )
-    .context(error::DataType);
+        output_raster,
+    ));
 
-    let output_raster = tile_stream
-        .fold(output_raster, |raster2d, tile| {
-            let result: Result<Raster2D<T>> = match (raster2d, tile) {
-                (Ok(mut raster2d), Ok(tile)) => match raster2d.blit(tile.data) {
+    let output_tile = tile_stream
+        .fold(output_tile, |raster2d, tile| {
+            let result: Result<RasterTile2D<T>> = match (raster2d, tile) {
+                (Ok(mut raster2d), Ok(tile)) => match raster2d.blit(tile) {
                     Ok(_) => Ok(raster2d),
                     Err(error) => Err(error.into()),
                 },
@@ -238,10 +240,10 @@ where
 
     let colorizer = Colorizer::rgba(); // TODO: create colorizer from request
 
-    Ok(output_raster.to_png(request.width, request.height, &colorizer)?)
+    Ok(output_tile.to_png(request.width, request.height, &colorizer)?)
 }
 
-#[allow(clippy::unnecessary_wraps)]
+#[allow(clippy::unnecessary_wraps)] // TODO: remove line once implemented fully
 fn get_legend_graphic<C: Context>(
     _request: &GetLegendGraphic,
     _ctx: &C,
@@ -253,7 +255,7 @@ fn get_legend_graphic<C: Context>(
 }
 
 fn get_map_mock(request: &GetMap) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
-    let raster = Raster2D::new(
+    let raster = Grid2D::new(
         [2, 2].into(),
         vec![
             0xFF00_00FF_u32,
@@ -262,8 +264,6 @@ fn get_map_mock(request: &GetMap) -> Result<Box<dyn warp::Reply>, warp::Rejectio
             0x0000_00FF_u32,
         ],
         None,
-        Default::default(),
-        Default::default(),
     )
     .context(error::DataType)?;
 
@@ -334,7 +334,7 @@ mod tests {
     #[tokio::test]
     async fn png_from_stream() {
         let gdal_params = GdalSourceParameters {
-            dataset_id: "test".to_owned(),
+            dataset_id: "modis_ndvi".to_owned(),
             channel: None,
         };
 
@@ -385,7 +385,7 @@ mod tests {
     #[tokio::test]
     async fn png_from_stream_non_full() {
         let gdal_params = GdalSourceParameters {
-            dataset_id: "test".to_owned(),
+            dataset_id: "modis_ndvi".to_owned(),
             channel: None,
         };
 
@@ -465,7 +465,7 @@ mod tests {
             operator: TypedOperator::Raster(
                 GdalSource {
                     params: GdalSourceParameters {
-                        dataset_id: "test".to_owned(),
+                        dataset_id: "modis_ndvi".to_owned(),
                         channel: None,
                     },
                 }
@@ -525,7 +525,7 @@ mod tests {
             operator: TypedOperator::Raster(
                 GdalSource {
                     params: GdalSourceParameters {
-                        dataset_id: "test".to_owned(),
+                        dataset_id: "modis_ndvi".to_owned(),
                         channel: None,
                     },
                 }
