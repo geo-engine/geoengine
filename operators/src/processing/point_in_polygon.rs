@@ -209,6 +209,7 @@ impl<'p> PointInPolygonTester<'p> {
         }
     }
 
+    #[allow(clippy::suspicious_operation_groupings)]
     fn precalculate_ring(&mut self, ring_start_index: usize, ring_end_index: usize) {
         let number_of_corners = ring_end_index - ring_start_index - 1;
         let mut j = number_of_corners - 1;

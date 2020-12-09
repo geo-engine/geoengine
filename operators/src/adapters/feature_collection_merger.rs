@@ -326,7 +326,7 @@ mod tests {
         let stream = futures::stream::poll_fn(move |cx| {
             let item = stream_history.pop().unwrap_or(Poll::Ready(None));
 
-            if let Poll::Pending = item {
+            if item.is_pending() {
                 cx.waker().wake_by_ref();
             }
 
