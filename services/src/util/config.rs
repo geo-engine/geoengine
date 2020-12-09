@@ -1,32 +1,26 @@
 use std::sync::RwLock;
 
-use crate::error;
-use crate::error::Result;
+use crate::error::{self, Result};
 use config::{Config, File};
 use lazy_static::lazy_static;
 use serde::Deserialize;
 use snafu::ResultExt;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 lazy_static! {
     static ref SETTINGS: RwLock<Config> = RwLock::new({
         let mut settings = Config::default();
-        // test may run in subdirectory
-        #[cfg(test)]
-        let paths = [
-            "../Settings-default.toml",
-            "Settings-default.toml",
-            "../Settings-test.toml",
-            "Settings-test.toml",
-        ];
 
-        #[cfg(not(test))]
-        let paths = ["Settings-default.toml", "Settings.toml"];
+        let dir: PathBuf = retrieve_settings_dir().expect("settings directory must exist");
+
+        eprintln!("{:}", dir.display());
+
+        let files = ["Settings-default.toml", "Settings.toml"];
 
         #[allow(clippy::filter_map)]
-        let files: Vec<File<_>> = paths
+        let files: Vec<File<_>> = files
             .iter()
-            .map(Path::new)
+            .map(|f| dir.with_file_name(f))
             .filter(|p| p.exists())
             .map(File::from)
             .collect();
@@ -35,6 +29,34 @@ lazy_static! {
 
         settings
     });
+}
+
+/// test may run in subdirectory
+#[cfg(test)]
+fn retrieve_settings_dir() -> Result<PathBuf> {
+    use crate::error::Error;
+
+    let mut settings_dir = std::env::current_dir().context(error::MissingWorkingDirectory)?;
+
+    let mut unvisited = true;
+
+    while unvisited {
+        if settings_dir
+            .with_file_name("Settings-default.toml")
+            .exists()
+        {
+            return Ok(settings_dir);
+        }
+
+        unvisited = settings_dir.pop(); // parent directory
+    }
+
+    Err(Error::MissingSettingsDirectory)
+}
+
+#[cfg(not(test))]
+fn retrieve_settings_dir() -> Result<PathBuf> {
+    std::env::current_dir().context(error::MissingWorkingDirectory)
 }
 
 pub fn get_config<'a, T>(key: &str) -> Result<T>
