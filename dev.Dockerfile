@@ -32,9 +32,10 @@ RUN RUSTFLAGS='-C target-cpu=native' $HOME/.cargo/bin/cargo build --release \
     mkdir /etc/service/geoengine
 
 # Setup service
+COPY docker/dev/Settings-dev.toml /app/Settings.toml
 COPY docker/dev/service.sh /etc/service/geoengine/run
 RUN chmod +x /etc/service/geoengine/run
-EXPOSE 3030
+EXPOSE 8080
 
 # Clean up APT when done.
 RUN apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
