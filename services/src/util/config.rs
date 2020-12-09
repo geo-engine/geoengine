@@ -13,8 +13,6 @@ lazy_static! {
 
         let dir: PathBuf = retrieve_settings_dir().expect("settings directory must exist");
 
-        eprintln!("{:}", dir.display());
-
         let files = ["Settings-default.toml", "Settings.toml"];
 
         #[allow(clippy::filter_map)]
