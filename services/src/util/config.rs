@@ -22,7 +22,7 @@ lazy_static! {
         #[allow(clippy::filter_map)]
         let files: Vec<File<_>> = files
             .iter()
-            .map(|f| dir.with_file_name(f))
+            .map(|f| dir.join(f))
             .filter(|p| p.exists())
             .map(File::from)
             .collect();
@@ -43,10 +43,7 @@ fn retrieve_settings_dir() -> Result<PathBuf> {
     let mut unvisited = true;
 
     while unvisited {
-        if settings_dir
-            .with_file_name("Settings-default.toml")
-            .exists()
-        {
+        if settings_dir.join("Settings-default.toml").exists() {
             return Ok(settings_dir);
         }
 
