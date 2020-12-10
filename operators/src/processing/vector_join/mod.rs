@@ -1,15 +1,17 @@
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
+use geoengine_datatypes::collections::VectorDataType;
+
 use crate::engine::{
     ExecutionContext, InitializedOperator, InitializedOperatorImpl, InitializedVectorOperator,
     Operator, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
     VectorResultDescriptor,
 };
-use crate::error::{self, Error};
+use crate::error;
 use crate::util::Result;
 
-use geoengine_datatypes::collections::VectorDataType;
+use self::equi_data_join::EquiLeftJoinProcessor;
 
 mod equi_data_join;
 
@@ -28,7 +30,12 @@ pub struct VectorJoinParams {
 #[serde(tag = "type")]
 pub enum VectorJoinType {
     /// A left equi join between a `GeoFeatureCollection` and a `DataCollection`
-    EquiLeft { left: String, right: String },
+    EquiLeft {
+        left_column: String,
+        right_column: String,
+        /// which prefix to use if columns have conflicting names?
+        right_column_prefix: String,
+    },
 }
 
 #[typetag::serde]
@@ -96,7 +103,30 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
     for InitializedVectorJoin
 {
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
-        unimplemented!()
+        match &self.params.join_type {
+            VectorJoinType::EquiLeft {
+                left_column,
+                right_column,
+                right_column_prefix,
+            } => {
+                let right_processor = self.vector_sources[1]
+                    .query_processor()?
+                    .data()
+                    .expect("checked in constructor");
+
+                let left = self.vector_sources[0].query_processor()?;
+
+                Ok(map_typed_vector_query_processor!(left, left_processor => {
+                    EquiLeftJoinProcessor::new(
+                        left_processor,
+                        right_processor,
+                        left_column.clone(),
+                        right_column.clone(),
+                        right_column_prefix.clone(),
+                    ).boxed()
+                }))
+            }
+        }
     }
 }
 
@@ -108,15 +138,17 @@ mod tests {
     fn params() {
         let params = VectorJoinParams {
             join_type: VectorJoinType::EquiLeft {
-                left: "foo".to_string(),
-                right: "bar".to_string(),
+                left_column: "foo".to_string(),
+                right_column: "bar".to_string(),
+                right_column_prefix: "baz".to_string(),
             },
         };
 
         let json = serde_json::json!({
             "type": "EquiLeft",
-            "left": "foo",
-            "right": "bar"
+            "left_column": "foo",
+            "right_column": "bar",
+            "right_column_prefix": "baz",
         })
         .to_string();
 
