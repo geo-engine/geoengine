@@ -16,7 +16,7 @@ float-cmp = "0.8"
 geo = "0.16"
 image = "0.23"
 geojson = "0.21"
-ndarray = "0.13"
+ndarray = "0.14"
 num-traits = "0.2"
 ocl = "0.19"
 ordered-float = { version= "2.0", features = ["serde"] }
