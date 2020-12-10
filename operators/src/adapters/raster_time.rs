@@ -112,7 +112,6 @@ where
             return Poll::Ready(None);
         }
 
-        // TODO: handle error
         let next = ready!(stream.as_mut().poll_next(cx));
 
         match next {
@@ -309,7 +308,6 @@ mod tests {
             .unwrap()
             .get_u8()
             .unwrap();
-        // let s1 = qp1.query(query_rect, query_ctx).fuse();
 
         let qp2 = mrs2
             .initialize(&exe_ctx)
@@ -318,7 +316,6 @@ mod tests {
             .unwrap()
             .get_u8()
             .unwrap();
-        // let s2 = qp2.query(query_rect, query_ctx).fuse();
 
         let source_a = |query_rect| qp1.query(query_rect, query_ctx);
 
