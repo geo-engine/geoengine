@@ -59,23 +59,14 @@ where
         }
     }
 
-    // TODO: move to TimeInterval
-    fn intersect_time_intervals(t1: TimeInterval, t2: TimeInterval) -> Option<TimeInterval> {
-        if t1.intersects(&t2) {
-            let start = std::cmp::max(t1.start, t2.start);
-            let end = std::cmp::min(t1.end, t2.end);
-            Some(TimeInterval::new_unchecked(start, end))
-        } else {
-            None
-        }
-    }
-
     fn align_tiles(
         mut tile_a: RasterTile2D<T1>,
         mut tile_b: RasterTile2D<T2>,
     ) -> (RasterTile2D<T1>, RasterTile2D<T2>) {
         // TODO: scale data if measurement unit requires it?
-        let time = Self::intersect_time_intervals(tile_a.time, tile_b.time)
+        let time = tile_a
+            .time
+            .intersect(&tile_b.time)
             .expect("intervals must overlap");
         tile_a.time = time;
         tile_b.time = time;
@@ -137,7 +128,10 @@ where
                 if *current_spatial_tile >= num_spatial_tiles.expect("checked") {
                     // time slice ended => query next time slice of sources
                     let mut next_qrect = *query_rect;
-                    next_qrect.time_interval.start = min(tile_a.time.end, tile_b.time.end);
+                    next_qrect.time_interval = TimeInterval::new_unchecked(
+                        min(tile_a.time.end(), tile_b.time.end()),
+                        query_rect.time_interval.end(),
+                    );
                     *time_end = None;
 
                     stream.set(source_a(next_qrect).zip(source_b(next_qrect)));
