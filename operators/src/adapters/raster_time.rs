@@ -1,7 +1,7 @@
 use crate::engine::QueryRectangle;
 use crate::source::TilingStrategy;
 use crate::util::Result;
-use futures::stream::Zip;
+use futures::stream::{FusedStream, Zip};
 use futures::Stream;
 use futures::{ready, StreamExt};
 use geoengine_datatypes::primitives::{BoundingBox2D, TimeInstance, TimeInterval};
@@ -97,6 +97,10 @@ where
     type Item = Result<(RasterTile2D<T1>, RasterTile2D<T2>)>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        if self.is_terminated() {
+            return Poll::Ready(None);
+        }
+
         let RasterTimeAdapterProjection {
             source_a,
             source_b,
@@ -107,10 +111,6 @@ where
             mut stream,
             ended,
         } = self.project();
-
-        if *ended {
-            return Poll::Ready(None);
-        }
 
         let next = ready!(stream.as_mut().poll_next(cx));
 
@@ -150,6 +150,20 @@ where
                 Poll::Ready(None)
             }
         }
+    }
+}
+
+impl<T1, T2, St1, St2, F1, F2> FusedStream for RasterTimeAdapter<T1, T2, St1, St2, F1, F2>
+where
+    T1: Pixel,
+    T2: Pixel,
+    St1: Stream<Item = Result<RasterTile2D<T1>>>,
+    St2: Stream<Item = Result<RasterTile2D<T2>>>,
+    F1: Fn(QueryRectangle) -> St1,
+    F2: Fn(QueryRectangle) -> St2,
+{
+    fn is_terminated(&self) -> bool {
+        self.ended
     }
 }
 
