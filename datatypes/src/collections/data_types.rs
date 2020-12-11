@@ -1,19 +1,20 @@
+use std::collections::hash_map::Keys;
+use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
+use std::ops::RangeBounds;
 
 use serde::{Deserialize, Serialize};
 
 use crate::collections::{
     DataCollection, FeatureCollectionError, FeatureCollectionInfos, FeatureCollectionModifications,
-    FilterArray, GeometryCollection, MultiLineStringCollection, MultiPointCollection,
-    MultiPolygonCollection, ToGeoJson,
+    FilterArray, FilteredColumnNameIter, GeometryCollection, MultiLineStringCollection,
+    MultiPointCollection, MultiPolygonCollection, ToGeoJson,
 };
 use crate::error::Error;
 use crate::primitives::{
     Coordinate2D, FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue, TimeInterval,
 };
 use crate::util::Result;
-use std::collections::HashMap;
-use std::ops::RangeBounds;
 
 /// An enum that contains all possible vector data types
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Deserialize, Serialize, Copy, Clone)]
@@ -313,7 +314,8 @@ impl FeatureCollectionInfos for TypedFeatureCollection {
     impl_function_by_forwarding_ref!(fn time_intervals(&self) -> &[TimeInterval]);
     impl_function_by_forwarding_ref!(fn column_types(&self) -> HashMap<String, FeatureDataType>);
     impl_function_by_forwarding_ref!(fn byte_size(&self) -> usize);
-    impl_function_by_forwarding_ref!(fn column_names_of_type(&self, column_type: FeatureDataType) -> Vec<String>);
+    impl_function_by_forwarding_ref!(fn column_names_of_type(&self, column_type: FeatureDataType) -> FilteredColumnNameIter);
+    impl_function_by_forwarding_ref!(fn column_names(&self) -> Keys<String, FeatureDataType>);
 }
 
 impl<'c> FeatureCollectionInfos for TypedFeatureCollectionRef<'c> {
@@ -324,7 +326,8 @@ impl<'c> FeatureCollectionInfos for TypedFeatureCollectionRef<'c> {
     impl_function_by_forwarding_ref2!(fn time_intervals(&self) -> &[TimeInterval]);
     impl_function_by_forwarding_ref2!(fn column_types(&self) -> HashMap<String, FeatureDataType>);
     impl_function_by_forwarding_ref2!(fn byte_size(&self) -> usize);
-    impl_function_by_forwarding_ref2!(fn column_names_of_type(&self, column_type: FeatureDataType) -> Vec<String>);
+    impl_function_by_forwarding_ref2!(fn column_names_of_type(&self, column_type: FeatureDataType) -> FilteredColumnNameIter);
+    impl_function_by_forwarding_ref2!(fn column_names(&self) -> Keys<String, FeatureDataType>);
 }
 
 impl ToGeoJson<'_> for TypedFeatureCollection {

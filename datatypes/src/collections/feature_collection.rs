@@ -1,10 +1,3 @@
-use std::collections::{HashMap, HashSet};
-use std::convert::{TryFrom, TryInto};
-use std::marker::PhantomData;
-use std::mem;
-use std::ops::{Bound, RangeBounds};
-use std::sync::Arc;
-
 use arrow::array::{
     as_primitive_array, as_string_array, Array, ArrayData, ArrayRef, BooleanArray, Float64Array,
     ListArray, PrimitiveArrayOps, StructArray,
@@ -13,6 +6,14 @@ use arrow::datatypes::{DataType, Field, Float64Type, Int64Type};
 use arrow::error::ArrowError;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
+
+use std::collections::hash_map;
+use std::collections::{HashMap, HashSet};
+use std::convert::{TryFrom, TryInto};
+use std::marker::PhantomData;
+use std::mem;
+use std::ops::{Bound, RangeBounds};
+use std::sync::Arc;
 
 use crate::collections::{error, IntoGeometryIterator, VectorDataType, VectorDataTyped};
 use crate::collections::{FeatureCollectionError, IntoGeometryOptionsIterator};
@@ -616,8 +617,11 @@ pub trait FeatureCollectionInfos {
     /// Get a copy of the column type information
     fn column_types(&self) -> HashMap<String, FeatureDataType>;
 
+    /// Return the column names of all attributes
+    fn column_names(&self) -> hash_map::Keys<String, FeatureDataType>;
+
     /// Return the names of the columns of this type
-    fn column_names_of_type(&self, column_type: FeatureDataType) -> Vec<String>;
+    fn column_names_of_type(&self, column_type: FeatureDataType) -> FilteredColumnNameIter;
 
     /// Retrieve column data
     ///
@@ -632,6 +636,24 @@ pub trait FeatureCollectionInfos {
 
     /// Returns the byte-size of this collection
     fn byte_size(&self) -> usize;
+}
+
+pub struct ColumnNamesIter<'i, I>
+where
+    I: Iterator<Item = &'i str> + 'i,
+{
+    iter: I,
+}
+
+impl<'i, I> Iterator for ColumnNamesIter<'i, I>
+where
+    I: Iterator<Item = &'i str> + 'i,
+{
+    type Item = I::Item;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next()
+    }
 }
 
 /// Transform an object to the `GeoJson` format
@@ -812,17 +834,35 @@ where
         table_size + map_size
     }
 
-    fn column_names_of_type(&self, column_type: FeatureDataType) -> Vec<String> {
-        self.types
-            .iter()
-            .filter_map(|(k, v)| {
-                if v == &column_type {
-                    Some(k.clone())
-                } else {
-                    None
-                }
-            })
-            .collect()
+    fn column_names_of_type(&self, column_type: FeatureDataType) -> FilteredColumnNameIter {
+        FilteredColumnNameIter {
+            iter: self.types.iter(),
+            column_type,
+        }
+    }
+
+    fn column_names(&self) -> hash_map::Keys<String, FeatureDataType> {
+        self.types.keys()
+    }
+}
+
+pub struct FilteredColumnNameIter<'i> {
+    iter: hash_map::Iter<'i, String, FeatureDataType>,
+    column_type: FeatureDataType,
+}
+
+impl<'i> Iterator for FilteredColumnNameIter<'i> {
+    type Item = &'i str;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let column_type = &self.column_type;
+        self.iter.find_map(|(k, v)| {
+            if v == column_type {
+                Some(k.as_str())
+            } else {
+                None
+            }
+        })
     }
 }
 
@@ -1271,13 +1311,13 @@ where
 
 /// Custom serializer for Arrow's `StructArray`
 mod struct_serde {
-    use std::fmt::Formatter;
-    use std::io::Cursor;
-
     use arrow::record_batch::RecordBatch;
     use serde::de::{SeqAccess, Visitor};
     use serde::ser::Error;
     use serde::{Deserializer, Serializer};
+
+    use std::fmt::Formatter;
+    use std::io::Cursor;
 
     use super::*;
 
