@@ -394,6 +394,8 @@ impl FeatureCollectionModifications for TypedFeatureCollection {
 
     impl_mod_function_by_forwarding_ref!(fn remove_columns(&self, removed_column_names: &[&str]) -> Result<Self::Output>);
 
+    impl_mod_function_by_forwarding_ref!(fn rename_columns(&self, renamings: &[(&str, &str)]) -> Result<Self::Output>);
+
     impl_mod_function_by_forwarding_ref!(fn column_range_filter<R>(&self, column: &str, ranges: &[R], keep_nulls: bool) -> Result<Self::Output>
                                          where R: RangeBounds<FeatureDataValue>);
 
@@ -426,6 +428,8 @@ impl<'c> FeatureCollectionModifications for TypedFeatureCollectionRef<'c> {
     impl_mod_function_by_forwarding_ref2!(fn add_columns(&self, new_columns: &[(&str, FeatureData)]) -> Result<Self::Output>);
 
     impl_mod_function_by_forwarding_ref2!(fn remove_columns(&self, removed_column_names: &[&str]) -> Result<Self::Output>);
+
+    impl_mod_function_by_forwarding_ref2!(fn rename_columns(&self, renamings: &[(&str, &str)]) -> Result<Self::Output>);
 
     impl_mod_function_by_forwarding_ref2!(fn column_range_filter<R>(&self, column: &str, ranges: &[R], keep_nulls: bool) -> Result<Self::Output>
                                           where R: RangeBounds<FeatureDataValue>);

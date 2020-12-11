@@ -127,6 +127,14 @@ pub trait FeatureCollectionModifications {
     /// This method fails if the columns do not match
     ///
     fn append(&self, other: &Self) -> Result<Self::Output>;
+
+    /// Rename column `old_column_name` to `new_column_name`.
+    fn rename_column(&self, old_column_name: &str, new_column_name: &str) -> Result<Self::Output> {
+        self.rename_columns(&[(old_column_name, new_column_name)])
+    }
+
+    /// Rename columns with (from, to) tuples.
+    fn rename_columns(&self, renamings: &[(&str, &str)]) -> Result<Self::Output>;
 }
 
 impl<CollectionType> FeatureCollectionModifications for FeatureCollection<CollectionType>
@@ -494,6 +502,92 @@ where
         Ok(Self::new_from_internals(
             new_data.into(),
             self.types.clone(),
+        ))
+    }
+
+    fn rename_columns(&self, renamings: &[(&str, &str)]) -> Result<Self::Output> {
+        let mut rename_map: HashMap<&str, &str> = HashMap::with_capacity(renamings.len());
+
+        for &(old_column_name, new_column_name) in renamings {
+            ensure!(
+                !Self::is_reserved_name(new_column_name),
+                error::CannotAccessReservedColumn {
+                    name: new_column_name.to_string(),
+                }
+            );
+            ensure!(
+                self.table.column_by_name(old_column_name).is_some(),
+                error::ColumnDoesNotExist {
+                    name: old_column_name.to_string(),
+                }
+            );
+            ensure!(
+                self.table.column_by_name(new_column_name).is_none(),
+                error::ColumnAlreadyExists {
+                    name: new_column_name.to_string(),
+                }
+            );
+
+            rename_map.insert(old_column_name, new_column_name);
+        }
+
+        let mut columns = Vec::<arrow::datatypes::Field>::with_capacity(self.table.num_columns());
+        let mut column_values =
+            Vec::<arrow::array::ArrayRef>::with_capacity(self.table.num_columns());
+        let mut types = HashMap::<String, FeatureDataType>::with_capacity(self.table.num_columns());
+
+        // copy geometry data if feature collection is geo collection
+        if CollectionType::IS_GEOMETRY {
+            columns.push(arrow::datatypes::Field::new(
+                Self::GEOMETRY_COLUMN_NAME,
+                CollectionType::arrow_data_type(),
+                false,
+            ));
+            column_values.push(
+                self.table
+                    .column_by_name(Self::GEOMETRY_COLUMN_NAME)
+                    .expect("The geometry column must exist")
+                    .clone(),
+            );
+        }
+
+        // copy time data
+        columns.push(arrow::datatypes::Field::new(
+            Self::TIME_COLUMN_NAME,
+            TimeInterval::arrow_data_type(),
+            false,
+        ));
+        column_values.push(
+            self.table
+                .column_by_name(Self::TIME_COLUMN_NAME)
+                .expect("The time column must exist")
+                .clone(),
+        );
+
+        // copy remaining attribute data
+        for (old_column_name, column_type) in &self.types {
+            let new_column_name: &str = rename_map
+                .get(&old_column_name.as_str())
+                .unwrap_or(&old_column_name.as_str());
+
+            columns.push(arrow::datatypes::Field::new(
+                new_column_name,
+                column_type.arrow_data_type(),
+                column_type.nullable(),
+            ));
+            column_values.push(
+                self.table
+                    .column_by_name(old_column_name)
+                    .expect("The attribute column must exist")
+                    .clone(),
+            );
+
+            types.insert(new_column_name.to_string(), self.types[old_column_name]);
+        }
+
+        Ok(Self::new_from_internals(
+            struct_array_from_data(columns, column_values, self.table.len()),
+            types,
         ))
     }
 }
