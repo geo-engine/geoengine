@@ -244,6 +244,18 @@ impl TimeInterval {
             "type": "Interval"
         })
     }
+
+    /// Return a new time interval that is the intersection with the `other` time interval, or
+    /// `None` if the intervals are disjoint
+    pub fn intersect(self, other: &Self) -> Option<TimeInterval> {
+        if self.intersects(other) {
+            let start = std::cmp::max(self.start, other.start);
+            let end = std::cmp::min(self.end, other.end);
+            Some(Self::new_unchecked(start, end))
+        } else {
+            None
+        }
+    }
 }
 
 impl Debug for TimeInterval {
