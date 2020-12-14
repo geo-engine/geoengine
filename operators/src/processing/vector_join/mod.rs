@@ -116,15 +116,45 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
 
                 let left = self.vector_sources[0].query_processor()?;
 
-                Ok(map_typed_vector_query_processor!(left, left_processor => {
-                    EquiLeftJoinProcessor::new(
-                        left_processor,
-                        right_processor,
-                        left_column.clone(),
-                        right_column.clone(),
-                        right_column_prefix.clone(),
-                    ).boxed()
-                }))
+                Ok(match left {
+                    TypedVectorQueryProcessor::Data(_) => unreachable!("check in constructor"),
+                    TypedVectorQueryProcessor::MultiPoint(left_processor) => {
+                        TypedVectorQueryProcessor::MultiPoint(
+                            EquiLeftJoinProcessor::new(
+                                left_processor,
+                                right_processor,
+                                left_column.clone(),
+                                right_column.clone(),
+                                right_column_prefix.clone(),
+                            )
+                            .boxed(),
+                        )
+                    }
+                    TypedVectorQueryProcessor::MultiLineString(left_processor) => {
+                        TypedVectorQueryProcessor::MultiLineString(
+                            EquiLeftJoinProcessor::new(
+                                left_processor,
+                                right_processor,
+                                left_column.clone(),
+                                right_column.clone(),
+                                right_column_prefix.clone(),
+                            )
+                            .boxed(),
+                        )
+                    }
+                    TypedVectorQueryProcessor::MultiPolygon(left_processor) => {
+                        TypedVectorQueryProcessor::MultiPolygon(
+                            EquiLeftJoinProcessor::new(
+                                left_processor,
+                                right_processor,
+                                left_column.clone(),
+                                right_column.clone(),
+                                right_column_prefix.clone(),
+                            )
+                            .boxed(),
+                        )
+                    }
+                })
             }
         }
     }

@@ -135,7 +135,10 @@ pub trait FeatureCollectionModifications {
     }
 
     /// Rename columns with (from, to) tuples.
-    fn rename_columns(&self, renamings: &[(&str, &str)]) -> Result<Self::Output>;
+    fn rename_columns<S1, S2>(&self, renamings: &[(S1, S2)]) -> Result<Self::Output>
+    where
+        S1: AsRef<str>,
+        S2: AsRef<str>;
 }
 
 impl<CollectionType> FeatureCollectionModifications for FeatureCollection<CollectionType>
@@ -506,10 +509,17 @@ where
         ))
     }
 
-    fn rename_columns(&self, renamings: &[(&str, &str)]) -> Result<Self::Output> {
+    fn rename_columns<S1, S2>(&self, renamings: &[(S1, S2)]) -> Result<Self::Output>
+    where
+        S1: AsRef<str>,
+        S2: AsRef<str>,
+    {
         let mut rename_map: HashMap<&str, &str> = HashMap::with_capacity(renamings.len());
 
-        for &(old_column_name, new_column_name) in renamings {
+        for (old_column_name, new_column_name) in renamings {
+            let old_column_name = old_column_name.as_ref();
+            let new_column_name = new_column_name.as_ref();
+
             ensure!(
                 !Self::is_reserved_name(new_column_name),
                 error::CannotAccessReservedColumn {

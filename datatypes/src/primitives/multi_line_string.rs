@@ -288,6 +288,25 @@ impl<'g> Into<geojson::Geometry> for MultiLineStringRef<'g> {
     }
 }
 
+impl<'g> From<MultiLineStringRef<'g>> for MultiLineString {
+    fn from(multi_line_string_ref: MultiLineStringRef<'g>) -> Self {
+        MultiLineString::from(&multi_line_string_ref)
+    }
+}
+
+impl<'g> From<&MultiLineStringRef<'g>> for MultiLineString {
+    fn from(multi_line_string_ref: &MultiLineStringRef<'g>) -> Self {
+        MultiLineString::new_unchecked(
+            multi_line_string_ref
+                .point_coordinates
+                .iter()
+                .cloned()
+                .map(ToOwned::to_owned)
+                .collect(),
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

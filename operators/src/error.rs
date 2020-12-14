@@ -1,5 +1,6 @@
 use chrono::ParseError;
 use failure::Fail; // TODO: replace failure in gdal and then remove
+use geoengine_datatypes::primitives::FeatureDataType;
 use snafu::Snafu;
 use std::ops::Range;
 
@@ -105,7 +106,14 @@ pub enum Error {
         expected: String,
         found: String,
     },
+
     InvalidOperatorType,
+
+    #[snafu(display("Column types do not match: {:?} - {:?}", left, right))]
+    ColumnTypeMismatch {
+        left: FeatureDataType,
+        right: FeatureDataType,
+    },
 
     UnknownDataset {
         name: String,

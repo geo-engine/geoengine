@@ -234,6 +234,7 @@ impl TypedVectorQueryProcessor {
 
 /// Maps a `TypedVectorQueryProcessor` to another `TypedVectorQueryProcessor` by calling a function on its variant.
 /// Call via `map_typed_vector_query_processor!(input, processor => function)`.
+#[allow(unused_macros)]
 macro_rules! map_typed_vector_query_processor {
     ($input:expr, $processor:ident => $function_call:expr) => {
         map_typed_vector_query_processor!(
