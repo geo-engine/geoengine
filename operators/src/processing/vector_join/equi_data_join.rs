@@ -263,6 +263,19 @@ mod tests {
         )
         .unwrap();
 
+        let expected_result = MultiPointCollection::from_data(
+            MultiPoint::many(vec![(1.0, 1.1), (1.0, 1.1)]).unwrap(),
+            vec![TimeInterval::default(); 2],
+            [
+                ("foo".to_string(), FeatureData::Decimal(vec![2, 2])),
+                ("bar".to_string(), FeatureData::Decimal(vec![2, 2])),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+        )
+        .unwrap();
+
         let execution_context_creator = MockExecutionContextCreator::default();
         let execution_context = execution_context_creator.context();
 
@@ -301,6 +314,88 @@ mod tests {
                 .collect::<Result<_>>()
                 .unwrap();
 
-        eprintln!("{:?}", result[0]);
+        assert_eq!(result[0], expected_result);
+    }
+
+    #[test]
+    fn time_intervals() {
+        let left = MultiPointCollection::from_data(
+            MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1)]).unwrap(),
+            vec![
+                TimeInterval::new_unchecked(0, 2),
+                TimeInterval::new_unchecked(4, 5),
+            ],
+            [("foo".to_string(), FeatureData::Decimal(vec![1, 2]))]
+                .iter()
+                .cloned()
+                .collect(),
+        )
+        .unwrap();
+
+        let right = DataCollection::from_data(
+            vec![],
+            vec![
+                TimeInterval::new_unchecked(1, 3),
+                TimeInterval::new_unchecked(5, 6),
+            ],
+            [("bar".to_string(), FeatureData::Decimal(vec![1, 2]))]
+                .iter()
+                .cloned()
+                .collect(),
+        )
+        .unwrap();
+
+        let expected_result = MultiPointCollection::from_data(
+            MultiPoint::many(vec![(0.0, 0.1)]).unwrap(),
+            vec![TimeInterval::new_unchecked(1, 2)],
+            [
+                ("foo".to_string(), FeatureData::Decimal(vec![1])),
+                ("bar".to_string(), FeatureData::Decimal(vec![1])),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+        )
+        .unwrap();
+
+        let execution_context_creator = MockExecutionContextCreator::default();
+        let execution_context = execution_context_creator.context();
+
+        let left = MockFeatureCollectionSource::single(left)
+            .boxed()
+            .initialize(&execution_context)
+            .unwrap();
+        let right = MockFeatureCollectionSource::single(right)
+            .boxed()
+            .initialize(&execution_context)
+            .unwrap();
+
+        let left_processor = left.query_processor().unwrap().multi_point().unwrap();
+        let right_processor = right.query_processor().unwrap().data().unwrap();
+
+        let query_rectangle = QueryRectangle {
+            bbox: BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
+            time_interval: TimeInterval::default(),
+            spatial_resolution: SpatialResolution::zero_point_one(),
+        };
+
+        let ctx = QueryContext {
+            chunk_byte_size: usize::MAX,
+        };
+
+        let processor = EquiLeftJoinProcessor::new(
+            left_processor,
+            right_processor,
+            "foo".to_string(),
+            "bar".to_string(),
+            "".to_string(),
+        );
+
+        let result: Vec<MultiPointCollection> =
+            block_on_stream(processor.vector_query(query_rectangle, ctx))
+                .collect::<Result<_>>()
+                .unwrap();
+
+        assert_eq!(result[0], expected_result);
     }
 }
