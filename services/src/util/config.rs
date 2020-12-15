@@ -38,16 +38,19 @@ lazy_static! {
 fn retrieve_settings_dir() -> Result<PathBuf> {
     use crate::error::Error;
 
+    const MAX_PARENT_DIRS: usize = 1;
+
     let mut settings_dir = std::env::current_dir().context(error::MissingWorkingDirectory)?;
 
-    let mut unvisited = true;
-
-    while unvisited {
+    for _ in 0..=MAX_PARENT_DIRS {
         if settings_dir.join("Settings-default.toml").exists() {
             return Ok(settings_dir);
         }
 
-        unvisited = settings_dir.pop(); // parent directory
+        // go to parent directory
+        if !settings_dir.pop() {
+            break;
+        }
     }
 
     Err(Error::MissingSettingsDirectory)
