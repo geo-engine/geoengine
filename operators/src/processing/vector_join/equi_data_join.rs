@@ -94,15 +94,21 @@ where
         D2: DataRef<'i, T> + 'i,
         T: 'i + PartialEq,
     {
-        let matches_iter = left_join_values.as_ref().iter().map(move |left_value| {
-            // TODO: check time intervals
-
-            right_join_values
-                .as_ref()
-                .iter()
-                .map(|right_value| left_value == right_value)
-                .collect::<Vec<bool>>()
-        });
+        let matches_iter = left_join_values
+            .as_ref()
+            .iter()
+            .zip(left.time_intervals())
+            .map(move |(left_value, left_time_interval)| {
+                right_join_values
+                    .as_ref()
+                    .iter()
+                    .zip(right.time_intervals())
+                    .map(|(right_value, right_time_interval)| {
+                        (left_value == right_value)
+                            && left_time_interval.intersects(right_time_interval)
+                    })
+                    .collect::<Vec<bool>>()
+            });
 
         let mut builder = FeatureCollection::<G>::builder();
 
@@ -132,8 +138,11 @@ where
                 builder.push_geometry(geometry.clone())?;
 
                 // add time
-                // TODO: intersection
-                builder.push_time_interval(left.time_intervals()[left_feature_idx])?;
+                builder.push_time_interval(
+                    left.time_intervals()[left_feature_idx]
+                        .intersect(&right.time_intervals()[right_feature_idx])
+                        .expect("must intersect for join"),
+                )?;
 
                 // add left values
                 for column_name in left.column_names() {
