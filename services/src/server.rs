@@ -133,3 +133,21 @@ pub async fn interrupt_handler(shutdown_tx: Sender<()>, callback: Option<fn()>) 
         .send(())
         .map_err(|_error| Error::TokioChannelSend)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::sync::oneshot;
+
+    /// Test the werbserver startup to ensure that tokio and warp are working properly
+    #[tokio::test]
+    async fn webserver_start() -> Result<(), Error> {
+        let (shutdown_tx, shutdown_rx) = oneshot::channel();
+
+        let server = start_server(Some(shutdown_rx), None);
+
+        shutdown_tx.send(()).unwrap();
+
+        server.await
+    }
+}
