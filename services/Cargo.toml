@@ -12,7 +12,7 @@ edition = "2018"
 chrono = { version = "0.4", features = ["serde"] }
 geoengine-datatypes = { path = "../datatypes" }
 geoengine-operators = { path = "../operators" }
-tokio = { version = "0.3", features = ["macros", "signal", "sync", "rt-multi-thread"] }
+tokio = { version = "0.2", features = ["macros", "signal"] } # TODO: tokio = { version = "0.3", features = ["macros", "signal", "sync", "rt-multi-thread"] }
 warp = "0.2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

@@ -40,3 +40,11 @@ If you plan on optimizing a feature of Geo Engine, please confirm it this way.
 
 ## Running
 Copy `Settings-default.toml` to `Settings.toml` and edit per your requirements.
+
+## Docker
+
+### Dev Container
+
+Build with `sudo docker build --file=dev.Dockerfile --tag=geoengine:0.0.1 .`.
+Execute with `sudo docker container run --detach --name geoengine --publish 127.0.0.1:3030:8080 geoengine:0.0.1`.
+Inspect the container with `sudo docker exec -it geoengine bash`.

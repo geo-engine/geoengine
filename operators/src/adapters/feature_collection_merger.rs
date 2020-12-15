@@ -297,7 +297,7 @@ mod tests {
         );
     }
 
-    #[tokio::test(flavor = "current_thread")]
+    #[tokio::test(max_threads = 1)] // TODO: #[tokio::test(flavor = "current_thread")]
     async fn interleaving_pendings() {
         let mut stream_history: Vec<Poll<Option<Result<MultiPointCollection>>>> = vec![
             Poll::Pending,
@@ -324,7 +324,7 @@ mod tests {
         let stream = futures::stream::poll_fn(move |cx| {
             let item = stream_history.pop().unwrap_or(Poll::Ready(None));
 
-            if let Poll::Pending = item {
+            if item.is_pending() {
                 cx.waker().wake_by_ref();
             }
 

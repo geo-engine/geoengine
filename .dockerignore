@@ -1,0 +1,6 @@
+# Don't provide build directory to Docker context
+target
+
+# Ignore dockerfiles themselves
+.dockerignore
+*Dockerfile

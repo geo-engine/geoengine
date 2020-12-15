@@ -93,6 +93,12 @@ pub enum Error {
     AddrParse {
         source: std::net::AddrParseError,
     },
+
+    MissingWorkingDirectory {
+        source: std::io::Error,
+    },
+
+    MissingSettingsDirectory,
 }
 
 impl Reject for Error {}

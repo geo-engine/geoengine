@@ -1,32 +1,28 @@
 use std::sync::RwLock;
 
-use crate::error;
-use crate::error::Result;
+use crate::error::{self, Result};
 use config::{Config, File};
 use lazy_static::lazy_static;
 use serde::Deserialize;
 use snafu::ResultExt;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 lazy_static! {
     static ref SETTINGS: RwLock<Config> = RwLock::new({
         let mut settings = Config::default();
-        // test may run in subdirectory
+
+        let dir: PathBuf = retrieve_settings_dir().expect("settings directory must exist");
+
         #[cfg(test)]
-        let paths = [
-            "../Settings-default.toml",
-            "Settings-default.toml",
-            "../Settings-test.toml",
-            "Settings-test.toml",
-        ];
+        let files = ["Settings-default.toml", "Settings-test.toml"];
 
         #[cfg(not(test))]
-        let paths = ["Settings-default.toml", "Settings.toml"];
+        let files = ["Settings-default.toml", "Settings.toml"];
 
         #[allow(clippy::filter_map)]
-        let files: Vec<File<_>> = paths
+        let files: Vec<File<_>> = files
             .iter()
-            .map(Path::new)
+            .map(|f| dir.join(f))
             .filter(|p| p.exists())
             .map(File::from)
             .collect();
@@ -35,6 +31,34 @@ lazy_static! {
 
         settings
     });
+}
+
+/// test may run in subdirectory
+#[cfg(test)]
+fn retrieve_settings_dir() -> Result<PathBuf> {
+    use crate::error::Error;
+
+    const MAX_PARENT_DIRS: usize = 1;
+
+    let mut settings_dir = std::env::current_dir().context(error::MissingWorkingDirectory)?;
+
+    for _ in 0..=MAX_PARENT_DIRS {
+        if settings_dir.join("Settings-default.toml").exists() {
+            return Ok(settings_dir);
+        }
+
+        // go to parent directory
+        if !settings_dir.pop() {
+            break;
+        }
+    }
+
+    Err(Error::MissingSettingsDirectory)
+}
+
+#[cfg(not(test))]
+fn retrieve_settings_dir() -> Result<PathBuf> {
+    std::env::current_dir().context(error::MissingWorkingDirectory)
 }
 
 pub fn get_config<'a, T>(key: &str) -> Result<T>
