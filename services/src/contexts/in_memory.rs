@@ -8,8 +8,10 @@ use async_trait::async_trait;
 use tokio::sync::{RwLockReadGuard, RwLockWriteGuard};
 
 use super::{Context, DB};
-use crate::contexts::QueryContextImpl;
+use crate::contexts::{ExecutionContextImpl, QueryContextImpl};
 use crate::datasets::in_memory::HashmapDataSetDB;
+use geoengine_operators::concurrency::ThreadPool;
+use std::sync::Arc;
 
 /// A context with references to in-memory versions of the individual databases.
 #[derive(Clone, Default)]
@@ -19,6 +21,7 @@ pub struct InMemoryContext {
     workflow_registry: DB<HashMapRegistry>,
     data_set_db: DB<HashmapDataSetDB>,
     session: Option<Session>,
+    thread_pool: Arc<ThreadPool>,
 }
 
 #[async_trait]
@@ -28,6 +31,7 @@ impl Context for InMemoryContext {
     type WorkflowRegistry = HashMapRegistry;
     type DataSetDB = HashmapDataSetDB;
     type QueryContext = QueryContextImpl<HashmapDataSetDB>;
+    type ExecutionContext = ExecutionContextImpl<HashmapDataSetDB>;
 
     fn user_db(&self) -> DB<Self::UserDB> {
         self.user_db.clone()
@@ -85,6 +89,13 @@ impl Context for InMemoryContext {
             chunk_byte_size: 1024,
             data_set_db: self.data_set_db.clone(),
             user: self.session().unwrap().user, // TODO: error handling? or need initialized session...
+        }
+    }
+
+    fn execution_context(&self) -> Self::ExecutionContext {
+        ExecutionContextImpl::<HashmapDataSetDB> {
+            data_set_db: self.data_set_db.clone(),
+            thread_pool: self.thread_pool.clone(),
         }
     }
 }

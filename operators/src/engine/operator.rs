@@ -16,7 +16,7 @@ use super::{
 pub trait RasterOperator: CloneableRasterOperator + Send + Sync + std::fmt::Debug {
     fn initialize(
         self: Box<Self>,
-        context: &ExecutionContext,
+        context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedRasterOperator>>;
 
     /// Wrap a box around a `RasterOperator`
@@ -33,7 +33,7 @@ pub trait RasterOperator: CloneableRasterOperator + Send + Sync + std::fmt::Debu
 pub trait VectorOperator: CloneableVectorOperator + Send + Sync + std::fmt::Debug {
     fn initialize(
         self: Box<Self>,
-        context: &ExecutionContext,
+        context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedVectorOperator>>;
 
     /// Wrap a box around a `VectorOperator`

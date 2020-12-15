@@ -87,7 +87,7 @@ macro_rules! impl_mock_feature_collection_source {
         impl VectorOperator for $newtype {
             fn initialize(
                 self: Box<Self>,
-                context: &ExecutionContext,
+                context: &dyn ExecutionContext,
             ) -> Result<Box<InitializedVectorOperator>> {
                 InitializedOperatorImpl::create(
                     self.params,
@@ -133,8 +133,7 @@ impl_mock_feature_collection_source!(MultiPolygon, MultiPolygon);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::MockExecutionContextCreator;
-    use crate::engine::MockQueryContext;
+    use crate::engine::{MockExecutionContext, MockQueryContext};
     use futures::executor::block_on_stream;
     use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, FeatureData, TimeInterval};
     use geoengine_datatypes::{collections::MultiPointCollection, primitives::SpatialResolution};
@@ -249,9 +248,7 @@ mod tests {
 
         let source = MockFeatureCollectionSource::single(collection.clone()).boxed();
 
-        let source = source
-            .initialize(&MockExecutionContextCreator::default().context())
-            .unwrap();
+        let source = source.initialize(&MockExecutionContext::default()).unwrap();
 
         let processor =
             if let Ok(TypedVectorQueryProcessor::MultiPoint(p)) = source.query_processor() {

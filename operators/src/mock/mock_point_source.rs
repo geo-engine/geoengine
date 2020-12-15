@@ -29,7 +29,7 @@ impl QueryProcessor for MockPointSourceProcessor {
         ctx: &'a dyn QueryContext,
     ) -> BoxStream<'a, Result<MultiPointCollection>> {
         let chunk_size = ctx.chunk_byte_size() / std::mem::size_of::<Coordinate2D>();
-        stream::iter(self.points.chunks(chunk_size).map(|chunk| {
+        stream::iter(self.points.chunks(chunk_size).map(move |chunk| {
             Ok(MultiPointCollection::from_data(
                 chunk.iter().map(Into::into).collect(),
                 vec![TimeInterval::default(); chunk.len()],
@@ -51,7 +51,7 @@ pub type MockPointSource = SourceOperator<MockPointSourceParams>;
 impl VectorOperator for MockPointSource {
     fn initialize(
         self: Box<Self>,
-        context: &ExecutionContext,
+        context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedVectorOperator>> {
         InitializedOperatorImpl::create(
             self.params,
@@ -86,8 +86,7 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::MockExecutionContextCreator;
-    use crate::engine::MockQueryContext;
+    use crate::engine::{MockExecutionContext, MockQueryContext};
     use futures::executor::block_on_stream;
     use geoengine_datatypes::collections::FeatureCollectionInfos;
     use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution};
@@ -109,8 +108,7 @@ mod tests {
 
     #[test]
     fn execute() {
-        let execution_context_creator = MockExecutionContextCreator::default();
-        let execution_context = execution_context_creator.context();
+        let execution_context = MockExecutionContext::default();
         let points = vec![Coordinate2D::new(1., 2.); 3];
 
         let mps = MockPointSource {

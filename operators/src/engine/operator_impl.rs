@@ -44,7 +44,7 @@ impl<P, R, S> InitializedOperatorImpl<P, R, S> {
 
     pub fn create<RF, SF>(
         params: P,
-        context: &ExecutionContext,
+        context: &dyn ExecutionContext,
         state_fn: SF,
         result_descriptor_fn: RF,
         uninitialized_raster_sources: Vec<Box<dyn RasterOperator>>,
@@ -53,14 +53,14 @@ impl<P, R, S> InitializedOperatorImpl<P, R, S> {
     where
         RF: Fn(
             &P,
-            &ExecutionContext,
+            &dyn ExecutionContext,
             &S,
             &[Box<InitializedRasterOperator>],
             &[Box<InitializedVectorOperator>],
         ) -> Result<R>,
         SF: Fn(
             &P,
-            &ExecutionContext,
+            &dyn ExecutionContext,
             &[Box<InitializedRasterOperator>],
             &[Box<InitializedVectorOperator>],
         ) -> Result<S>,
@@ -75,14 +75,14 @@ impl<P, R, S> InitializedOperatorImpl<P, R, S> {
             .collect::<Result<Vec<Box<InitializedVectorOperator>>>>()?;
         let state = state_fn(
             &params,
-            &context,
+            context,
             raster_sources.as_slice(),
             vector_sources.as_slice(),
         )?;
 
         let result_descriptor = result_descriptor_fn(
             &params,
-            &context,
+            context,
             &state,
             raster_sources.as_slice(),
             vector_sources.as_slice(),

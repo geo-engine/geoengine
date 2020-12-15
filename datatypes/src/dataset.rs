@@ -5,9 +5,12 @@ identifier!(DataSetProviderId);
 
 identifier!(InternalDataSetId);
 
+identifier!(StagingDataSetId);
+
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize)]
 pub enum DataSetId {
     Internal(InternalDataSetId),
+    Staging(StagingDataSetId),
     External(ExternalDataSetId),
 }
 

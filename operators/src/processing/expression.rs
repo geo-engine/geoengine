@@ -57,7 +57,7 @@ impl Expression {
 impl RasterOperator for Expression {
     fn initialize(
         self: Box<Self>,
-        context: &crate::engine::ExecutionContext,
+        context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<InitializedRasterOperator>> {
         ensure!(
             Self::is_allowed_expression(&self.params.expression),
@@ -247,8 +247,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::MockExecutionContextCreator;
-    use crate::engine::MockQueryContext;
+    use crate::engine::{MockExecutionContext, MockQueryContext};
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution, TimeInterval};
     use geoengine_datatypes::raster::TileInformation;
@@ -269,7 +268,7 @@ mod tests {
             vector_sources: vec![],
         }
         .boxed()
-        .initialize(&MockExecutionContextCreator::default().context())
+        .initialize(&MockExecutionContext::default())
         .unwrap();
 
         let p = o.query_processor().unwrap().get_i8().unwrap();

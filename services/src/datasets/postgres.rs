@@ -12,9 +12,16 @@ use geoengine_datatypes::collections::FeatureCollection;
 use geoengine_datatypes::dataset::{DataSetId, DataSetProviderId};
 use geoengine_datatypes::primitives::Geometry;
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
-use geoengine_operators::engine::LoadingInfo;
 
+#[derive(Debug)]
 pub struct PostgresDataSetDB {}
+
+impl PostgresDataSetDB {
+    pub(crate) fn new() -> Self {
+        // TODO: connection
+        Self {}
+    }
+}
 
 #[async_trait]
 impl DataSetDB for PostgresDataSetDB {
@@ -81,10 +88,6 @@ impl DataSetProvider for PostgresDataSetDB {
         _user: UserId,
         _options: Validated<DataSetListOptions>,
     ) -> Result<Vec<DataSetListing>> {
-        todo!()
-    }
-
-    async fn loading_info(&self, _user: UserId, _data_set: DataSetId) -> Result<LoadingInfo> {
         todo!()
     }
 }

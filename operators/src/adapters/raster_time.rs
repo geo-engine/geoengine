@@ -170,9 +170,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::concurrency::ThreadPool;
     use crate::engine::{
-        ExecutionContext, MockQueryContext, QueryProcessor, QueryRectangle, RasterOperator,
+        MockExecutionContext, MockQueryContext, QueryProcessor, QueryRectangle, RasterOperator,
         RasterResultDescriptor,
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
@@ -301,11 +300,7 @@ mod tests {
         }
         .boxed();
 
-        let thread_pool = ThreadPool::new(2);
-        let exe_ctx = ExecutionContext {
-            raster_data_root: Default::default(),
-            thread_pool: thread_pool.create_context(),
-        };
+        let exe_ctx = MockExecutionContext::default();
         let query_rect = QueryRectangle {
             bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (1., 1.).into()),
             time_interval: TimeInterval::new_unchecked(0, 10),
@@ -313,7 +308,6 @@ mod tests {
         };
         let query_ctx = MockQueryContext {
             chunk_byte_size: 1024 * 1024,
-            loading_infos: Default::default(),
         };
 
         let qp1 = mrs1

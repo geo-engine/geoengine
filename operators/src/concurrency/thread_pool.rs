@@ -8,6 +8,7 @@ use crossbeam::deque::{Injector, Steal, Stealer, Worker};
 use crossbeam::sync::{Parker, Unparker, WaitGroup};
 use futures::task::{Context, Poll, Waker};
 use futures::Future;
+use std::num::NonZeroUsize;
 use std::pin::Pin;
 
 /// A chunk of work with some metadata
@@ -140,6 +141,16 @@ impl ThreadPool {
     }
 }
 
+impl Default for ThreadPool {
+    fn default() -> Self {
+        Self::new(usize::from(
+            std::thread::available_concurrency()
+                .unwrap_or_else(|_| NonZeroUsize::new(1).expect("is non zero")),
+        ))
+    }
+}
+
+// TODO: include/merge into ExecutionContext
 /// A computation context for a group that spawns tasks in a `ThreadPool`
 #[derive(Copy, Clone, Debug)]
 pub struct ThreadPoolContext<'pool> {

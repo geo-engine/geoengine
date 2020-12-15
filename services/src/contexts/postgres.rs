@@ -14,12 +14,13 @@ use std::sync::Arc;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use super::{Context, DB};
-use crate::contexts::QueryContextImpl;
+use crate::contexts::{ExecutionContextImpl, QueryContextImpl};
 use crate::datasets::postgres::PostgresDataSetDB;
 use crate::projects::project::{ProjectId, ProjectPermission};
 use crate::users::user::UserId;
+use geoengine_operators::concurrency::ThreadPool;
 
-/// A contex with references to Postgres backends of the dbs. Automatically migrates schema on instantiation
+/// A context with references to Postgres backends of the dbs. Automatically migrates schema on instantiation
 #[derive(Clone)]
 pub struct PostgresContext<Tls>
 where
@@ -32,6 +33,8 @@ where
     project_db: DB<PostgresProjectDB<Tls>>,
     workflow_registry: DB<PostgresWorkflowRegistry<Tls>>,
     session: Option<Session>,
+    data_set_db: DB<PostgresDataSetDB>,
+    thread_pool: Arc<ThreadPool>,
 }
 
 impl<Tls> PostgresContext<Tls>
@@ -53,6 +56,8 @@ where
             project_db: Arc::new(RwLock::new(PostgresProjectDB::new(pool.clone()))),
             workflow_registry: Arc::new(RwLock::new(PostgresWorkflowRegistry::new(pool.clone()))),
             session: None,
+            data_set_db: Arc::new(RwLock::new(PostgresDataSetDB::new())),
+            thread_pool: Arc::new(ThreadPool::new(1)), // TODO: determine number of threads
         })
     }
 
@@ -244,6 +249,7 @@ where
     type WorkflowRegistry = PostgresWorkflowRegistry<Tls>;
     type DataSetDB = PostgresDataSetDB;
     type QueryContext = QueryContextImpl<PostgresDataSetDB>;
+    type ExecutionContext = ExecutionContextImpl<PostgresDataSetDB>;
 
     fn user_db(&self) -> DB<Self::UserDB> {
         self.user_db.clone()
@@ -300,6 +306,13 @@ where
     fn query_context(&self) -> Self::QueryContext {
         todo!()
     }
+
+    fn execution_context(&self) -> Self::ExecutionContext {
+        ExecutionContextImpl::<PostgresDataSetDB> {
+            data_set_db: self.data_set_db.clone(),
+            thread_pool: self.thread_pool.clone(),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -324,7 +337,7 @@ mod tests {
     use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
     use std::str::FromStr;
 
-    #[ignore] // TODO: remove if postgres if configurable
+    #[ignore] // TODO: remove if postgres is configurable
     #[tokio::test]
     async fn test() {
         // TODO: load from test config

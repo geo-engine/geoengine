@@ -4,7 +4,6 @@ use crate::users::user::UserId;
 use crate::util::user_input::{UserInput, Validated};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::DataSetId;
-use geoengine_operators::engine::LoadingInfo;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -51,8 +50,6 @@ pub trait DataSetProvider: Send + Sync {
         user: UserId,
         options: Validated<DataSetListOptions>,
     ) -> Result<Vec<DataSetListing>>;
-
-    async fn loading_info(&self, user: UserId, data_set: DataSetId) -> Result<LoadingInfo>;
 }
 
 pub enum TypedDataSetProvider {
@@ -94,10 +91,6 @@ impl DataSetProvider for MockDataSetProvider {
         _user: UserId,
         _options: Validated<DataSetListOptions>,
     ) -> Result<Vec<DataSetListing>> {
-        todo!()
-    }
-
-    async fn loading_info(&self, _user: UserId, _data_set: DataSetId) -> Result<LoadingInfo> {
         todo!()
     }
 }

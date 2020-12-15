@@ -1,5 +1,6 @@
 use chrono::ParseError;
 use failure::Fail; // TODO: replace failure in gdal and then remove
+use geoengine_datatypes::dataset::DataSetId;
 use snafu::Snafu;
 use std::ops::Range;
 
@@ -136,6 +137,12 @@ pub enum Error {
     Arrow {
         source: arrow::error::ArrowError,
     },
+
+    NoDataSetWithGivenId {
+        id: DataSetId,
+    },
+
+    RasterRootPathNotConfigured, // TODO: remove when GdalSource uses LoadingInfo
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {

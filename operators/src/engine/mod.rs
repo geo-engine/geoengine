@@ -2,13 +2,15 @@ pub use clonable_operator::{
     CloneableInitializedOperator, CloneableInitializedRasterOperator,
     CloneableInitializedVectorOperator, CloneableRasterOperator, CloneableVectorOperator,
 };
-pub use execution_context::{ExecutionContext, MockExecutionContextCreator};
+pub use execution_context::{
+    ExecutionContext, LoadingInfo, LoadingInfoProvider, MockExecutionContext,
+};
 pub use operator::{
     InitializedOperator, InitializedOperatorBase, InitializedRasterOperator,
     InitializedVectorOperator, RasterOperator, TypedOperator, VectorOperator,
 };
 pub use operator_impl::{InitializedOperatorImpl, Operator, SourceOperator};
-pub use query::{LoadingInfo, MockQueryContext, QueryContext, QueryRectangle};
+pub use query::{MockQueryContext, QueryContext, QueryRectangle};
 pub use query_processor::{
     QueryProcessor, RasterQueryProcessor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
     VectorQueryProcessor,

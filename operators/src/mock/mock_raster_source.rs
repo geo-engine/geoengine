@@ -61,7 +61,7 @@ pub type MockRasterSource = SourceOperator<MockRasterSourceParams>;
 impl RasterOperator for MockRasterSource {
     fn initialize(
         self: Box<Self>,
-        context: &crate::engine::ExecutionContext,
+        context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<InitializedRasterOperator>> {
         InitializedOperatorImpl::create(
             self.params,
@@ -104,7 +104,7 @@ impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::MockExecutionContextCreator;
+    use crate::engine::MockExecutionContext;
     use geoengine_datatypes::raster::RasterDataType;
     use geoengine_datatypes::{
         primitives::TimeInterval,
@@ -175,8 +175,7 @@ mod tests {
 
         let deserialized: Box<dyn RasterOperator> = serde_json::from_str(&serialized).unwrap();
 
-        let execution_context_creator = MockExecutionContextCreator::default();
-        let execution_context = execution_context_creator.context();
+        let execution_context = MockExecutionContext::default();
 
         let initialized = deserialized.initialize(&execution_context).unwrap();
 

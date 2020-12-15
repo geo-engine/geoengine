@@ -19,7 +19,6 @@ use geoengine_datatypes::dataset::{DataSetId, DataSetProviderId};
 use geoengine_datatypes::identifiers::Identifier;
 use geoengine_datatypes::primitives::Geometry;
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
-use geoengine_operators::engine::LoadingInfo;
 use snafu::ensure;
 use std::collections::HashMap;
 
@@ -170,23 +169,5 @@ impl DataSetProvider for HashmapDataSetDB {
                 }
             })
             .collect())
-    }
-
-    async fn loading_info(&self, user: UserId, data_set: DataSetId) -> Result<LoadingInfo> {
-        ensure!(
-            self.data_set_permissions
-                .iter()
-                .any(|p| p.user == user && p.data_set == data_set),
-            error::DataSetPermissionDenied
-        );
-
-        let _data_set = self
-            .data_sets
-            .get(&data_set)
-            .ok_or(error::Error::DataSetPermissionDenied)?; // TODO: custom error?
-
-        // TODO: depending on layer type (raster/vector) return instructions to load from
-        //       engines corresponding internal data store which does not yet exist
-        todo!()
     }
 }

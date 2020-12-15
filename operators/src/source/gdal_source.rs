@@ -565,7 +565,7 @@ pub type GdalSource = SourceOperator<GdalSourceParameters>;
 impl RasterOperator for GdalSource {
     fn initialize(
         self: Box<Self>,
-        context: &crate::engine::ExecutionContext,
+        context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<InitializedRasterOperator>> {
         InitializedOperatorImpl::create(
             self.params.clone(),
@@ -573,7 +573,7 @@ impl RasterOperator for GdalSource {
             |params, exe_context, _, _| {
                 JsonDatasetInformationProvider::with_dataset_id(
                     &params.dataset_id,
-                    &exe_context.raster_data_root,
+                    &exe_context.raster_data_root()?,
                 )
             },
             |_, _, state, _, _| {

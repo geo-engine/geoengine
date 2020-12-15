@@ -233,7 +233,7 @@ pub type InitializedOgrSource =
 impl VectorOperator for OgrSource {
     fn initialize(
         self: Box<Self>,
-        _context: &crate::engine::ExecutionContext,
+        _context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<crate::engine::InitializedVectorOperator>> {
         let mut dataset_information = OgrSourceDataset::load_dataset(&self.params.layer_name)?;
         dataset_information.project_columns(&self.params.attribute_projection);
@@ -1036,8 +1036,7 @@ mod tests {
     use geoengine_datatypes::collections::{DataCollection, MultiPointCollection};
     use geoengine_datatypes::primitives::{BoundingBox2D, FeatureData, SpatialResolution};
 
-    use crate::engine::MockExecutionContextCreator;
-    use crate::engine::MockQueryContext;
+    use crate::engine::{MockExecutionContext, MockQueryContext};
 
     use super::*;
 
@@ -1360,7 +1359,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&MockExecutionContextCreator::default().context())?;
+        .initialize(&MockExecutionContext::default())?;
 
         assert_eq!(
             source.result_descriptor().data_type,
@@ -1422,7 +1421,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&MockExecutionContextCreator::default().context())?;
+        .initialize(&MockExecutionContext::default())?;
 
         assert_eq!(
             source.result_descriptor().data_type,
@@ -1552,7 +1551,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&MockExecutionContextCreator::default().context())?;
+        .initialize(&MockExecutionContext::default())?;
 
         assert_eq!(
             source.result_descriptor().data_type,
@@ -2753,7 +2752,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&MockExecutionContextCreator::default().context())?;
+        .initialize(&MockExecutionContext::default())?;
 
         assert_eq!(
             source.result_descriptor().data_type,

@@ -89,7 +89,7 @@ pub type MockRasterPointJoinOperator = Operator<MockRasterPointJoinParams>;
 impl VectorOperator for MockRasterPointJoinOperator {
     fn initialize(
         self: Box<Self>,
-        context: &crate::engine::ExecutionContext,
+        context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<crate::engine::InitializedVectorOperator>> {
         InitializedOperatorImpl::create(
             self.params,
@@ -136,8 +136,7 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::MockExecutionContextCreator;
-    use crate::engine::MockQueryContext;
+    use crate::engine::{MockExecutionContext, MockQueryContext};
     use crate::{
         engine::{QueryRectangle, RasterOperator, RasterResultDescriptor},
         mock::{MockPointSource, MockPointSourceParams, MockRasterSource, MockRasterSourceParams},
@@ -292,8 +291,7 @@ mod tests {
         }
         .boxed();
 
-        let execution_context_creator = MockExecutionContextCreator::default();
-        let execution_context = execution_context_creator.context();
+        let execution_context = MockExecutionContext::default();
 
         let initialized = op.initialize(&execution_context).unwrap();
 

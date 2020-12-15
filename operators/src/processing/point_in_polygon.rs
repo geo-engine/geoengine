@@ -28,7 +28,7 @@ pub type PointInPolygonFilter = Operator<()>;
 impl VectorOperator for PointInPolygonFilter {
     fn initialize(
         self: Box<Self>,
-        context: &ExecutionContext,
+        context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedVectorOperator>> {
         ensure!(
             self.vector_sources.len() == 2,
@@ -383,7 +383,7 @@ mod tests {
     use crate::mock::MockFeatureCollectionSource;
 
     use super::*;
-    use crate::engine::{MockExecutionContextCreator, MockQueryContext};
+    use crate::engine::{MockExecutionContext, MockQueryContext};
 
     #[test]
     fn point_in_polygon_tester() {
@@ -540,7 +540,7 @@ mod tests {
             params: (),
         }
         .boxed()
-        .initialize(&MockExecutionContextCreator::default().context())?;
+        .initialize(&MockExecutionContext::default())?;
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
 
@@ -586,7 +586,7 @@ mod tests {
             params: (),
         }
         .boxed()
-        .initialize(&MockExecutionContextCreator::default().context())?;
+        .initialize(&MockExecutionContext::default())?;
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
 
@@ -645,7 +645,7 @@ mod tests {
             params: (),
         }
         .boxed()
-        .initialize(&MockExecutionContextCreator::default().context())?;
+        .initialize(&MockExecutionContext::default())?;
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
 
@@ -721,7 +721,7 @@ mod tests {
             params: (),
         }
         .boxed()
-        .initialize(&MockExecutionContextCreator::default().context())?;
+        .initialize(&MockExecutionContext::default())?;
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
 

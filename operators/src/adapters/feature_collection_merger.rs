@@ -130,7 +130,7 @@ mod tests {
     use super::*;
 
     use crate::engine::{
-        MockExecutionContextCreator, MockQueryContext, QueryProcessor, QueryRectangle,
+        MockExecutionContext, MockQueryContext, QueryProcessor, QueryRectangle,
         TypedVectorQueryProcessor, VectorOperator,
     };
     use crate::error::Error;
@@ -157,7 +157,7 @@ mod tests {
 
         let source = source
             .boxed()
-            .initialize(&MockExecutionContextCreator::default().context())
+            .initialize(&MockExecutionContext::default())
             .unwrap();
 
         let processor =
@@ -226,7 +226,7 @@ mod tests {
     async fn empty() {
         let source = MockFeatureCollectionSource::single(DataCollection::empty())
             .boxed()
-            .initialize(&MockExecutionContextCreator::default().context())
+            .initialize(&MockExecutionContext::default())
             .unwrap();
 
         let processor =

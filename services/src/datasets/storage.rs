@@ -12,6 +12,7 @@ use geoengine_datatypes::primitives::Geometry;
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
+use std::fmt::Debug;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DataSet {

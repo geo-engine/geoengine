@@ -1,34 +1,47 @@
-use crate::concurrency::{ThreadPool, ThreadPoolContext};
+use crate::concurrency::ThreadPool;
+use crate::engine::{QueryRectangle, VectorResultDescriptor};
+use crate::mock::MockDataSetDataSourceLoadingInfo;
+use crate::util::Result;
+use geoengine_datatypes::dataset::DataSetId;
 use std::path::PathBuf;
 
-/// A context that provides certain utility access during operator execution
-/// TODO: maybe this is rather a trait
-#[derive(Debug, Clone)]
-pub struct ExecutionContext<'pool> {
-    pub raster_data_root: PathBuf,
-    pub thread_pool: ThreadPoolContext<'pool>,
+/// A context that provides certain utility access during operator initialization
+pub trait ExecutionContext:
+    Send + Sync + LoadingInfoProvider<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>
+{
+    fn thread_pool(&self) -> &ThreadPool;
+    fn raster_data_root(&self) -> Result<PathBuf>; // TODO: remove once GdalSource uses LoadingInfo
 }
 
-/// Create a provider for execution contexts in test environments
-pub struct MockExecutionContextCreator {
-    raster_data_root: PathBuf,
-    thread_pool: ThreadPool,
+pub trait LoadingInfoProvider<T, U> {
+    fn loading_info(&self, data_set: &DataSetId) -> Result<Box<dyn LoadingInfo<T, U>>>;
 }
 
-impl MockExecutionContextCreator {
-    pub fn context(&self) -> ExecutionContext {
-        ExecutionContext {
-            raster_data_root: self.raster_data_root.clone(),
-            thread_pool: self.thread_pool.create_context(),
-        }
+pub trait LoadingInfo<T, U>: Send + Sync {
+    fn get(&self, query: QueryRectangle) -> Result<T>;
+    fn meta(&self) -> Result<U>;
+
+    fn box_clone(&self) -> Box<dyn LoadingInfo<T, U>>;
+}
+
+impl<T, U> Clone for Box<dyn LoadingInfo<T, U>> {
+    fn clone(&self) -> Box<dyn LoadingInfo<T, U>> {
+        self.box_clone()
     }
 }
 
-impl Default for MockExecutionContextCreator {
-    fn default() -> Self {
-        Self {
-            raster_data_root: PathBuf::default(),
-            thread_pool: ThreadPool::new(1),
-        }
+#[derive(Default)]
+pub struct MockExecutionContext {
+    pub thread_pool: ThreadPool,
+    pub loading_info: Option<MockDataSetDataSourceLoadingInfo>,
+}
+
+impl ExecutionContext for MockExecutionContext {
+    fn thread_pool(&self) -> &ThreadPool {
+        &self.thread_pool
+    }
+
+    fn raster_data_root(&self) -> Result<PathBuf> {
+        todo!()
     }
 }

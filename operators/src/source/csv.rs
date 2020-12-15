@@ -145,7 +145,7 @@ pub type CsvSource = SourceOperator<CsvSourceParameters>;
 impl VectorOperator for CsvSource {
     fn initialize(
         self: Box<Self>,
-        context: &crate::engine::ExecutionContext,
+        context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<InitializedVectorOperator>> {
         InitializedOperatorImpl::create(
             self.params,

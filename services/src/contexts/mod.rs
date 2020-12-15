@@ -11,10 +11,17 @@ mod postgres;
 use crate::datasets::storage::DataSetDB;
 
 use crate::users::user::UserId;
+use crate::util::config::{get_config_element, GdalSource};
 use geoengine_datatypes::dataset::DataSetId;
-use geoengine_operators::engine::{LoadingInfo, QueryContext};
+use geoengine_operators::concurrency::ThreadPool;
+use geoengine_operators::engine::{
+    ExecutionContext, LoadingInfo, LoadingInfoProvider, QueryContext, VectorResultDescriptor,
+};
+use geoengine_operators::mock::MockDataSetDataSourceLoadingInfo;
 pub use in_memory::InMemoryContext;
 pub use postgres::PostgresContext;
+use std::borrow::Borrow;
+use std::path::PathBuf;
 
 type DB<T> = Arc<RwLock<T>>;
 
@@ -28,6 +35,7 @@ pub trait Context: 'static + Send + Sync + Clone {
     type WorkflowRegistry: WorkflowRegistry;
     type DataSetDB: DataSetDB;
     type QueryContext: QueryContext;
+    type ExecutionContext: ExecutionContext;
 
     fn user_db(&self) -> DB<Self::UserDB>;
     async fn user_db_ref(&self) -> RwLockReadGuard<Self::UserDB>;
@@ -50,6 +58,8 @@ pub trait Context: 'static + Send + Sync + Clone {
     fn set_session(&mut self, session: Session);
 
     fn query_context(&self) -> Self::QueryContext;
+
+    fn execution_context(&self) -> Self::ExecutionContext;
 }
 
 pub struct QueryContextImpl<D>
@@ -57,8 +67,10 @@ where
     D: DataSetDB,
 {
     chunk_byte_size: usize,
-    data_set_db: DB<D>,
-    user: UserId,
+    #[allow(dead_code)]
+    data_set_db: DB<D>, // TODO: remove if not needed
+    #[allow(dead_code)]
+    user: UserId, // TODO: remove if not needed
 }
 
 impl<D> QueryContext for QueryContextImpl<D>
@@ -68,30 +80,47 @@ where
     fn chunk_byte_size(&self) -> usize {
         self.chunk_byte_size
     }
+}
 
+pub struct ExecutionContextImpl<D>
+where
+    D: DataSetDB,
+{
+    data_set_db: DB<D>,
+    thread_pool: Arc<ThreadPool>,
+}
+
+impl<D> ExecutionContext for ExecutionContextImpl<D>
+where
+    D: DataSetDB,
+{
+    fn thread_pool(&self) -> &ThreadPool {
+        self.thread_pool.borrow()
+    }
+
+    fn raster_data_root(&self) -> std::result::Result<PathBuf, geoengine_operators::error::Error> {
+        Ok(get_config_element::<GdalSource>()
+            .map_err(|_| geoengine_operators::error::Error::RasterRootPathNotConfigured)?
+            .raster_data_root_path)
+    }
+}
+
+impl<D> LoadingInfoProvider<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>
+    for ExecutionContextImpl<D>
+where
+    D: DataSetDB,
+{
     // TODO: make async
     fn loading_info(
         &self,
-        data_set: DataSetId,
-    ) -> Result<LoadingInfo, geoengine_operators::error::Error> {
+        _data_set: &DataSetId,
+    ) -> Result<
+        Box<dyn LoadingInfo<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>>,
+        geoengine_operators::error::Error,
+    > {
         futures::executor::block_on(async {
-            match data_set {
-                DataSetId::Internal(_id) => todo!(),
-                DataSetId::External(id) => self
-                    .data_set_db
-                    .read()
-                    .await
-                    .data_set_provider(self.user, id.provider)
-                    .await
-                    .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
-                        reason: e.to_string(),
-                    })?
-                    .loading_info(self.user, DataSetId::External(id))
-                    .await
-                    .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
-                        reason: e.to_string(),
-                    }),
-            }
+            let _provider = self.data_set_db.read().await;
+            todo!()
         })
     }
 }
