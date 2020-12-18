@@ -99,6 +99,11 @@ pub enum Error {
     },
 
     MissingSettingsDirectory,
+
+    UnknownStagedDataSetId,
+
+    InvalidDataSetId,
+    UnknownDataSetId,
 }
 
 impl Reject for Error {}

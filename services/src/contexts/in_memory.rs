@@ -64,13 +64,13 @@ impl Context for InMemoryContext {
     }
 
     fn data_set_db(&self) -> DB<Self::DataSetDB> {
-        todo!()
+        self.data_set_db.clone()
     }
     async fn data_set_db_ref(&self) -> RwLockReadGuard<'_, Self::DataSetDB> {
-        todo!()
+        self.data_set_db.read().await
     }
     async fn data_set_db_ref_mut(&self) -> RwLockWriteGuard<'_, Self::DataSetDB> {
-        todo!()
+        self.data_set_db.write().await
     }
 
     fn session(&self) -> Result<&Session> {

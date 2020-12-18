@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use geoengine_datatypes::dataset::DataSetId;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct DataSetListing {
     pub id: DataSetId,
     pub name: String,
@@ -26,7 +26,8 @@ pub struct DataSetListOptions {
 
 impl UserInput for DataSetListOptions {
     fn validate(&self) -> Result<()> {
-        todo!()
+        // TODO
+        Ok(())
     }
 }
 

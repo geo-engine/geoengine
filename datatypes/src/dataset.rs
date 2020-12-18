@@ -19,3 +19,26 @@ pub struct ExternalDataSetId {
     pub provider: DataSetProviderId,
     pub id: String, // TODO: generic or enum?
 }
+
+impl DataSetId {
+    pub fn internal(&self) -> Option<InternalDataSetId> {
+        if let Self::Internal(id) = self {
+            return Some(*id);
+        }
+        None
+    }
+
+    pub fn staging(&self) -> Option<StagingDataSetId> {
+        if let Self::Staging(id) = self {
+            return Some(*id);
+        }
+        None
+    }
+
+    pub fn external(&self) -> Option<ExternalDataSetId> {
+        if let Self::External(id) = self {
+            return Some(id.clone());
+        }
+        None
+    }
+}

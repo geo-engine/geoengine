@@ -143,6 +143,10 @@ pub enum Error {
     },
 
     RasterRootPathNotConfigured, // TODO: remove when GdalSource uses LoadingInfo
+
+    InvalidDataSetId,
+    DataSetLoadingInfoProviderMismatch,
+    UnknownDataSetId,
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {

@@ -92,7 +92,7 @@ where
 
 impl<D> ExecutionContext for ExecutionContextImpl<D>
 where
-    D: DataSetDB,
+    D: DataSetDB + LoadingInfoProvider<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>,
 {
     fn thread_pool(&self) -> &ThreadPool {
         self.thread_pool.borrow()
@@ -108,19 +108,19 @@ where
 impl<D> LoadingInfoProvider<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>
     for ExecutionContextImpl<D>
 where
-    D: DataSetDB,
+    D: DataSetDB + LoadingInfoProvider<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>,
 {
     // TODO: make async
     fn loading_info(
         &self,
-        _data_set: &DataSetId,
+        data_set: &DataSetId,
     ) -> Result<
         Box<dyn LoadingInfo<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>>,
         geoengine_operators::error::Error,
     > {
         futures::executor::block_on(async {
-            let _provider = self.data_set_db.read().await;
-            todo!()
+            // TODO: external providers
+            self.data_set_db.read().await.loading_info(data_set)
         })
     }
 }

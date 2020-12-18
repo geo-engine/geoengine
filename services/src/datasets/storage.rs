@@ -5,11 +5,15 @@ use crate::users::user::UserId;
 use crate::util::user_input::{UserInput, Validated};
 use async_trait::async_trait;
 use futures::stream::BoxStream;
-use geoengine_datatypes::collections::FeatureCollection;
-use geoengine_datatypes::dataset::{DataSetId, DataSetProviderId, InternalDataSetId};
+use geoengine_datatypes::collections::{FeatureCollection, TypedFeatureCollection};
+use geoengine_datatypes::dataset::{
+    DataSetId, DataSetProviderId, InternalDataSetId, StagingDataSetId,
+};
 use geoengine_datatypes::identifiers::Identifier;
 use geoengine_datatypes::primitives::Geometry;
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
+use geoengine_operators::mock::MockDataSetDataSourceLoadingInfo;
+use geoengine_operators::source::OgrSourceDataset;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
@@ -22,9 +26,16 @@ pub struct DataSet {
     pub source_operator: String, // TODO: enum?
 }
 
-impl From<AddDataSet> for DataSet {
-    fn from(value: AddDataSet) -> Self {
-        Self {
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ImportDataSet {
+    pub name: String,
+    pub data_type: LayerInfo,
+    pub source_operator: String,
+}
+
+impl From<ImportDataSet> for DataSet {
+    fn from(value: ImportDataSet) -> Self {
+        DataSet {
             id: DataSetId::Internal(InternalDataSetId::new()),
             name: value.name,
             data_type: value.data_type,
@@ -33,27 +44,10 @@ impl From<AddDataSet> for DataSet {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct AddDataSet {
-    pub name: String,
-    pub data_type: LayerInfo,    // TODO: custom type?
-    pub source_operator: String, // TODO: enum?
-}
-
-impl UserInput for AddDataSet {
-    fn validate(&self) -> Result<()> {
-        todo!()
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ImportDataSet {
-    pub name: String,
-}
-
 impl UserInput for ImportDataSet {
     fn validate(&self) -> Result<()> {
-        todo!()
+        // TODO
+        Ok(())
     }
 }
 
@@ -95,28 +89,58 @@ impl UserInput for DataSetProviderListOptions {
     }
 }
 
+#[allow(clippy::large_enum_variant)] // TODO: box?
+pub enum DataSetLoadingInfo {
+    Raster(RasterLoadingInfo),
+    Vector(VectorLoadingInfo),
+}
+
+#[allow(clippy::empty_enum)]
+pub enum RasterLoadingInfo {}
+
+#[allow(clippy::large_enum_variant)] // TODO: box?
+pub enum VectorLoadingInfo {
+    Mock(MockDataSetDataSourceLoadingInfo),
+    Ogr(OgrSourceDataset),
+}
+
 #[async_trait]
 pub trait DataSetDB: DataSetProvider + Send + Sync {
-    /// Add data set (meta data) pointing to existing data in database or on file system
-    async fn add(&mut self, user: UserId, data_set: Validated<AddDataSet>) -> Result<DataSetId>;
+    async fn stage_raster_data(
+        &mut self,
+        user: UserId,
+        loading_info: RasterLoadingInfo,
+    ) -> Result<StagingDataSetId>;
+
+    async fn stage_vector_data(
+        &mut self,
+        user: UserId,
+        loading_info: VectorLoadingInfo,
+    ) -> Result<StagingDataSetId>;
+
+    // TODO: list staged data sets?
+
+    // TODO: remove data or only loading info?
+    async fn unstage_data(&mut self, user: UserId, data_set: StagingDataSetId) -> Result<()>;
 
     /// import data from a stream of tiles (e.g. output of some operator)
     async fn import_raster_data<T: Pixel>(
         &mut self,
         user: UserId,
         data_set: Validated<ImportDataSet>,
-        stream: BoxStream<'_, Result<RasterTile2D<T>>>,
+        stream: BoxStream<'_, geoengine_operators::util::Result<RasterTile2D<T>>>,
     ) -> Result<DataSetId>;
 
-    /// import data from a stream of tiles (e.g. output of some operator)
+    /// import data from a stream of feature collection chunks (e.g. output of some operator)
     async fn import_vector_data<G: Geometry>(
         &mut self,
         user: UserId,
         data_set: Validated<ImportDataSet>,
-        stream: BoxStream<'_, Result<FeatureCollection<G>>>,
-    ) -> Result<DataSetId>;
+        stream: BoxStream<'_, geoengine_operators::util::Result<FeatureCollection<G>>>,
+    ) -> Result<DataSetId>
+    where
+        FeatureCollection<G>: Into<TypedFeatureCollection>; // TODO remove bound
 
-    // TODO: delete?
     async fn add_data_set_permission(
         &mut self,
         data_set: DataSetId,
@@ -124,7 +148,12 @@ pub trait DataSetDB: DataSetProvider + Send + Sync {
         permission: DataSetPermission,
     ) -> Result<()>;
 
-    // TODO: update permissions
+    async fn remove_data_set_permission(
+        &mut self,
+        data_set: DataSetId,
+        user: UserId,
+        permission: DataSetPermission,
+    ) -> Result<()>;
 
     // TODO: update data set
 
