@@ -8,18 +8,7 @@ pub trait Identifier: Sized {
 #[macro_export]
 macro_rules! identifier {
     ($id_name: ident) => {
-        #[derive(
-            Debug,
-            PartialEq,
-            Eq,
-            serde::Serialize,
-            serde::Deserialize,
-            Clone,
-            Copy,
-            Hash,
-            postgres_types::FromSql,
-            postgres_types::ToSql,
-        )]
+        #[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, Clone, Copy, Hash)]
         pub struct $id_name(pub uuid::Uuid);
 
         impl crate::util::identifiers::Identifier for $id_name {
@@ -41,6 +30,47 @@ macro_rules! identifier {
                 Ok(Self(
                     uuid::Uuid::from_str(s).map_err(|_error| crate::error::Error::InvalidUuid)?,
                 ))
+            }
+        }
+
+        impl<'a> postgres_types::FromSql<'a> for $id_name {
+            fn from_sql(
+                ty: &postgres_types::Type,
+                raw: &'a [u8],
+            ) -> Result<Self, Box<dyn std::error::Error + Sync + Send>> {
+                uuid::Uuid::from_sql(ty, raw).map(Self)
+            }
+
+            fn accepts(ty: &postgres_types::Type) -> bool {
+                <uuid::Uuid as postgres_types::FromSql>::accepts(ty)
+            }
+        }
+
+        impl postgres_types::ToSql for $id_name {
+            fn to_sql(
+                &self,
+                ty: &postgres_types::Type,
+                out: &mut postgres_types::private::BytesMut,
+            ) -> Result<postgres_types::IsNull, Box<dyn std::error::Error + Sync + Send>>
+            where
+                Self: Sized,
+            {
+                self.0.to_sql(ty, out)
+            }
+
+            fn to_sql_checked(
+                &self,
+                ty: &postgres_types::Type,
+                out: &mut postgres_types::private::BytesMut,
+            ) -> Result<postgres_types::IsNull, Box<dyn std::error::Error + Sync + Send>> {
+                self.0.to_sql_checked(ty, out)
+            }
+
+            fn accepts(ty: &postgres_types::Type) -> bool
+            where
+                Self: Sized,
+            {
+                <uuid::Uuid as postgres_types::ToSql>::accepts(ty)
             }
         }
     };

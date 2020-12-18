@@ -27,7 +27,7 @@ async fn create_project<C: Context>(
     let id = ctx
         .project_db_ref_mut()
         .await
-        .create(ctx.session()?.user, create)
+        .create(ctx.session()?.user.id, create)
         .await?;
     Ok(warp::reply::json(&IdResponse::from_id(id)))
 }
@@ -51,7 +51,7 @@ async fn list_projects<C: Context>(
     let listing = ctx
         .project_db_ref()
         .await
-        .list(ctx.session()?.user, options)
+        .list(ctx.session()?.user.id, options)
         .await?;
     Ok(warp::reply::json(&listing))
 }
@@ -80,7 +80,7 @@ async fn load_project<C: Context>(
     let id = ctx
         .project_db_ref()
         .await
-        .load(ctx.session()?.user, project.0, project.1)
+        .load(ctx.session()?.user.id, project.0, project.1)
         .await?;
     Ok(warp::reply::json(&id))
 }
@@ -105,7 +105,7 @@ async fn update_project<C: Context>(
     let update = update.validated()?;
     ctx.project_db_ref_mut()
         .await
-        .update(ctx.session()?.user, update)
+        .update(ctx.session()?.user.id, update)
         .await?;
     Ok(warp::reply())
 }
@@ -126,7 +126,7 @@ async fn delete_project<C: Context>(
 ) -> Result<impl warp::Reply, warp::Rejection> {
     ctx.project_db_ref_mut()
         .await
-        .delete(ctx.session()?.user, project)
+        .delete(ctx.session()?.user.id, project)
         .await?;
     Ok(warp::reply())
 }
@@ -149,7 +149,7 @@ async fn project_versions<C: Context>(
     let versions = ctx
         .project_db_ref_mut()
         .await
-        .versions(ctx.session()?.user, project)
+        .versions(ctx.session()?.user.id, project)
         .await?;
     Ok(warp::reply::json(&versions))
 }
@@ -171,7 +171,7 @@ async fn add_permission<C: Context>(
 ) -> Result<impl warp::Reply, warp::Rejection> {
     ctx.project_db_ref_mut()
         .await
-        .add_permission(ctx.session()?.user, permission)
+        .add_permission(ctx.session()?.user.id, permission)
         .await?;
     Ok(warp::reply())
 }
@@ -193,7 +193,7 @@ async fn remove_permission<C: Context>(
 ) -> Result<impl warp::Reply, warp::Rejection> {
     ctx.project_db_ref_mut()
         .await
-        .remove_permission(ctx.session()?.user, permission)
+        .remove_permission(ctx.session()?.user.id, permission)
         .await?;
     Ok(warp::reply())
 }
@@ -215,7 +215,7 @@ async fn list_permissions<C: Context>(
     let permissions = ctx
         .project_db_ref_mut()
         .await
-        .list_permissions(ctx.session()?.user, project)
+        .list_permissions(ctx.session()?.user.id, project)
         .await?;
     Ok(warp::reply::json(&permissions))
 }
@@ -341,7 +341,7 @@ mod tests {
             ctx.project_db()
                 .write()
                 .await
-                .create(session.user, create)
+                .create(session.user.id, create)
                 .await
                 .unwrap();
         }
@@ -413,7 +413,7 @@ mod tests {
             .write()
             .await
             .create(
-                session.user,
+                session.user.id,
                 CreateProject {
                     name: "Test".to_string(),
                     description: "Foo".to_string(),
@@ -486,7 +486,7 @@ mod tests {
             .write()
             .await
             .create(
-                session.user,
+                session.user.id,
                 CreateProject {
                     name: "Test".to_string(),
                     description: "Foo".to_string(),
@@ -511,7 +511,7 @@ mod tests {
             .write()
             .await
             .update(
-                session.user,
+                session.user.id,
                 UpdateProject {
                     id: project,
                     name: Some("TestUpdate".to_string()),
@@ -548,7 +548,7 @@ mod tests {
             .project_db()
             .read()
             .await
-            .versions(session.user, project)
+            .versions(session.user.id, project)
             .await
             .unwrap();
         let version_id = versions.first().unwrap().id;
@@ -609,7 +609,7 @@ mod tests {
             .write()
             .await
             .create(
-                session.user,
+                session.user.id,
                 CreateProject {
                     name: "Test".to_string(),
                     description: "Foo".to_string(),
@@ -662,7 +662,7 @@ mod tests {
             .project_db()
             .read()
             .await
-            .load_latest(session.user, project)
+            .load_latest(session.user.id, project)
             .await
             .unwrap();
         assert_eq!(loaded.name, "TestUpdate");
@@ -704,7 +704,7 @@ mod tests {
             .write()
             .await
             .create(
-                session.user,
+                session.user.id,
                 CreateProject {
                     name: "Test".to_string(),
                     description: "Foo".to_string(),
@@ -742,7 +742,7 @@ mod tests {
             .project_db()
             .read()
             .await
-            .load_latest(session.user, project)
+            .load_latest(session.user.id, project)
             .await
             .is_err());
 
@@ -795,7 +795,7 @@ mod tests {
             .write()
             .await
             .create(
-                session.user,
+                session.user.id,
                 CreateProject {
                     name: "Test".to_string(),
                     description: "Foo".to_string(),
@@ -820,7 +820,7 @@ mod tests {
             .write()
             .await
             .update(
-                session.user,
+                session.user.id,
                 UpdateProject {
                     id: project,
                     name: Some("TestUpdate".to_string()),
@@ -903,7 +903,7 @@ mod tests {
             .write()
             .await
             .create(
-                session.user,
+                session.user.id,
                 CreateProject {
                     name: "Test".to_string(),
                     description: "Foo".to_string(),
@@ -1004,7 +1004,7 @@ mod tests {
             .write()
             .await
             .create(
-                session.user,
+                session.user.id,
                 CreateProject {
                     name: "Test".to_string(),
                     description: "Foo".to_string(),
@@ -1034,7 +1034,7 @@ mod tests {
         ctx.project_db()
             .write()
             .await
-            .add_permission(session.user, permission.clone())
+            .add_permission(session.user.id, permission.clone())
             .await
             .unwrap();
 
@@ -1112,7 +1112,7 @@ mod tests {
             .write()
             .await
             .create(
-                session.user,
+                session.user.id,
                 CreateProject {
                     name: "Test".to_string(),
                     description: "Foo".to_string(),
@@ -1142,7 +1142,7 @@ mod tests {
         ctx.project_db()
             .write()
             .await
-            .add_permission(session.user, permission.clone())
+            .add_permission(session.user.id, permission.clone())
             .await
             .unwrap();
 
