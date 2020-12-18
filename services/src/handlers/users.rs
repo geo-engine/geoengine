@@ -579,4 +579,23 @@ mod tests {
             Some(rect)
         );
     }
+
+    #[tokio::test]
+    async fn anonymous() {
+        let ctx = InMemoryContext::default();
+
+        let res = warp::test::request()
+            .method("POST")
+            .path("/anonymous")
+            .reply(&anonymous_handler(ctx))
+            .await;
+
+        assert_eq!(res.status(), 200);
+
+        let body: String = String::from_utf8(res.body().to_vec()).unwrap();
+        let session = serde_json::from_str::<Session>(&body).unwrap();
+
+        assert!(session.user.real_name.is_none());
+        assert!(session.user.email.is_none());
+    }
 }
