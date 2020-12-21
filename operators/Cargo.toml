@@ -16,7 +16,7 @@ csv = "1.1"
 failure = "0.1" # TODO: remove this!
 float-cmp = "0.8"
 futures = "0.3"
-gdal = { version = "0.6", features = ["gdal_2_2"] }
+gdal = { version = "0.7", features = ["gdal_2_2"] }
 geo = "0.16"
 geoengine-datatypes = { path = "../datatypes" }
 lazy_static = "1.4"
