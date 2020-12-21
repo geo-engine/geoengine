@@ -104,7 +104,7 @@ where
         handlers::users::anonymous_handler(ctx.clone()),
         handlers::users::login_handler(ctx.clone()),
         handlers::users::logout_handler(ctx.clone()),
-        .or(handlers::users::session_handler(ctx.clone()),
+        handlers::users::session_handler(ctx.clone()),
         handlers::users::session_project_handler(ctx.clone()),
         handlers::users::session_view_handler(ctx.clone()),
         handlers::projects::create_project_handler(ctx.clone()),
