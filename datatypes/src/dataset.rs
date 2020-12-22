@@ -42,3 +42,21 @@ impl DataSetId {
         None
     }
 }
+
+impl From<InternalDataSetId> for DataSetId {
+    fn from(value: InternalDataSetId) -> Self {
+        DataSetId::Internal(value)
+    }
+}
+
+impl From<StagingDataSetId> for DataSetId {
+    fn from(value: StagingDataSetId) -> Self {
+        DataSetId::Staging(value)
+    }
+}
+
+impl From<ExternalDataSetId> for DataSetId {
+    fn from(value: ExternalDataSetId) -> Self {
+        DataSetId::External(value)
+    }
+}

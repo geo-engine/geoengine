@@ -12,7 +12,8 @@ pub struct DataSetListing {
     pub name: String,
     pub description: String,
     pub tags: Vec<String>,
-    // TODO: meta data like bounds, crs, resolution
+    pub source_operator: String, // TODO: enum?
+                                 // TODO: meta data like bounds, crs, resolution
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

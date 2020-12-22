@@ -1,6 +1,6 @@
 use crate::datasets::listing::{DataSetListOptions, DataSetListing, DataSetProvider};
 use crate::datasets::storage::{
-    AddDataSetProvider, DataSetDB, DataSetPermission, DataSetProviderListOptions,
+    AddDataSet, AddDataSetProvider, DataSetDB, DataSetPermission, DataSetProviderListOptions,
     DataSetProviderListing, ImportDataSet, RasterLoadingInfo, VectorLoadingInfo,
 };
 use crate::error::Result;
@@ -9,7 +9,9 @@ use crate::util::user_input::Validated;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use geoengine_datatypes::collections::{FeatureCollection, TypedFeatureCollection};
-use geoengine_datatypes::dataset::{DataSetId, DataSetProviderId, StagingDataSetId};
+use geoengine_datatypes::dataset::{
+    DataSetId, DataSetProviderId, InternalDataSetId, StagingDataSetId,
+};
 use geoengine_datatypes::primitives::Geometry;
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use geoengine_operators::engine::{LoadingInfo, LoadingInfoProvider, VectorResultDescriptor};
@@ -27,6 +29,24 @@ impl PostgresDataSetDB {
 
 #[async_trait]
 impl DataSetDB for PostgresDataSetDB {
+    fn add_raster_data(
+        &mut self,
+        _user: UserId,
+        _data_set_info: Validated<AddDataSet>,
+        _loading_info: RasterLoadingInfo,
+    ) -> Result<InternalDataSetId> {
+        unimplemented!()
+    }
+
+    fn add_vector_data(
+        &mut self,
+        _user: UserId,
+        _data_set_info: Validated<AddDataSet>,
+        _loading_info: VectorLoadingInfo,
+    ) -> Result<InternalDataSetId> {
+        unimplemented!()
+    }
+
     async fn stage_raster_data(
         &mut self,
         _user: UserId,
@@ -52,7 +72,7 @@ impl DataSetDB for PostgresDataSetDB {
         _user: UserId,
         _data_set: Validated<ImportDataSet>,
         _stream: BoxStream<'_, geoengine_operators::util::Result<RasterTile2D<T>>>,
-    ) -> Result<DataSetId> {
+    ) -> Result<InternalDataSetId> {
         todo!()
     }
 
@@ -61,7 +81,7 @@ impl DataSetDB for PostgresDataSetDB {
         _user: UserId,
         _data_set: Validated<ImportDataSet>,
         _stream: BoxStream<'_, geoengine_operators::util::Result<FeatureCollection<G>>>,
-    ) -> Result<DataSetId>
+    ) -> Result<InternalDataSetId>
     where
         FeatureCollection<G>: Into<TypedFeatureCollection>,
     {
@@ -70,7 +90,7 @@ impl DataSetDB for PostgresDataSetDB {
 
     async fn add_data_set_permission(
         &mut self,
-        _data_set: DataSetId,
+        _data_set: InternalDataSetId,
         _user: UserId,
         _permission: DataSetPermission,
     ) -> Result<()> {
@@ -79,7 +99,7 @@ impl DataSetDB for PostgresDataSetDB {
 
     async fn remove_data_set_permission(
         &mut self,
-        _data_set: DataSetId,
+        _data_set: InternalDataSetId,
         _user: UserId,
         _permission: DataSetPermission,
     ) -> Result<()> {

@@ -26,6 +26,30 @@ pub struct DataSet {
     pub source_operator: String, // TODO: enum?
 }
 
+impl From<AddDataSet> for DataSet {
+    fn from(value: AddDataSet) -> Self {
+        Self {
+            id: DataSetId::Internal(InternalDataSetId::new()),
+            name: value.name,
+            data_type: value.data_type,
+            source_operator: value.source_operator,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AddDataSet {
+    pub name: String,
+    pub data_type: LayerInfo,    // TODO: custom type?
+    pub source_operator: String, // TODO: enum?
+}
+
+impl UserInput for AddDataSet {
+    fn validate(&self) -> Result<()> {
+        todo!()
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ImportDataSet {
     pub name: String,
@@ -104,14 +128,33 @@ pub enum VectorLoadingInfo {
     Ogr(OgrSourceDataset),
 }
 
+/// Handling of data sets provided by geo engine internally, staged and by external providers
 #[async_trait]
 pub trait DataSetDB: DataSetProvider + Send + Sync {
+    /// Add raster data for `user` with `data_set_info` and `loading_info` without import
+    fn add_raster_data(
+        &mut self,
+        user: UserId,
+        data_set_info: Validated<AddDataSet>,
+        loading_info: RasterLoadingInfo,
+    ) -> Result<InternalDataSetId>;
+
+    /// Add vector data for `user` with `data_set_info` and `loading_info` without import
+    fn add_vector_data(
+        &mut self,
+        user: UserId,
+        data_set_info: Validated<AddDataSet>,
+        loading_info: VectorLoadingInfo,
+    ) -> Result<InternalDataSetId>;
+
+    /// Stage raster data for import for `user` and `loading_info`. Returns a `StagingDataSetId`
     async fn stage_raster_data(
         &mut self,
         user: UserId,
         loading_info: RasterLoadingInfo,
     ) -> Result<StagingDataSetId>;
 
+    /// Stage vector data for import for `user` and `loading_info`. Returns a `StagingDataSetId`
     async fn stage_vector_data(
         &mut self,
         user: UserId,
@@ -120,43 +163,47 @@ pub trait DataSetDB: DataSetProvider + Send + Sync {
 
     // TODO: list staged data sets?
 
+    /// Remove staged data for `user` and `data_set`
     // TODO: remove data or only loading info?
     async fn unstage_data(&mut self, user: UserId, data_set: StagingDataSetId) -> Result<()>;
 
-    /// import data from a stream of tiles (e.g. output of some operator)
+    /// Import `data _set` from a `stream` of tiles (e.g. output of some operator) for `user`
     async fn import_raster_data<T: Pixel>(
         &mut self,
         user: UserId,
         data_set: Validated<ImportDataSet>,
         stream: BoxStream<'_, geoengine_operators::util::Result<RasterTile2D<T>>>,
-    ) -> Result<DataSetId>;
+    ) -> Result<InternalDataSetId>;
 
-    /// import data from a stream of feature collection chunks (e.g. output of some operator)
+    /// Import `data _set` from a `stream` of tiles (e.g. output of some operator) for `user`
     async fn import_vector_data<G: Geometry>(
         &mut self,
         user: UserId,
         data_set: Validated<ImportDataSet>,
         stream: BoxStream<'_, geoengine_operators::util::Result<FeatureCollection<G>>>,
-    ) -> Result<DataSetId>
+    ) -> Result<InternalDataSetId>
     where
         FeatureCollection<G>: Into<TypedFeatureCollection>; // TODO remove bound
 
+    /// Add `permission` by `user` for `data_set`
     async fn add_data_set_permission(
         &mut self,
-        data_set: DataSetId,
+        data_set: InternalDataSetId,
         user: UserId,
         permission: DataSetPermission,
     ) -> Result<()>;
 
+    /// Remove `permission` by `user` for `data_set`
     async fn remove_data_set_permission(
         &mut self,
-        data_set: DataSetId,
+        data_set: InternalDataSetId,
         user: UserId,
         permission: DataSetPermission,
     ) -> Result<()>;
 
     // TODO: update data set
 
+    /// Add an external data set `provider` by `user`
     // TODO: require special privilege to be able to add external data set provider and to access external data in general
     async fn add_data_set_provider(
         &mut self,
@@ -166,12 +213,14 @@ pub trait DataSetDB: DataSetProvider + Send + Sync {
 
     // TODO: share data set provider/manage permissions
 
+    /// List available providers for `user` filtered by `options`
     async fn list_data_set_providers(
         &self,
         user: UserId,
         options: Validated<DataSetProviderListOptions>,
     ) -> Result<Vec<DataSetProviderListing>>;
 
+    /// Get data set `provider` for `user`
     async fn data_set_provider(
         &self,
         user: UserId,
@@ -189,7 +238,7 @@ pub enum DataSetPermission {
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
 pub struct UserDataSetPermission {
     pub user: UserId,
-    pub data_set: DataSetId,
+    pub data_set: InternalDataSetId,
     pub permission: DataSetPermission,
 }
 

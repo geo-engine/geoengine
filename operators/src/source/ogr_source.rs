@@ -38,10 +38,11 @@ use crate::engine::{
 };
 use crate::error::Error;
 use crate::util::Result;
+use geoengine_datatypes::dataset::DataSetId;
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct OgrSourceParameters {
-    pub layer_name: String,
+    pub data_set: DataSetId,
     pub attribute_projection: Option<Vec<String>>,
 }
 
@@ -58,17 +59,17 @@ pub type OgrSource = SourceOperator<OgrSourceParameters>;
 ///  - `provenance`: specify the provenance of a file
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct OgrSourceDataset {
-    file_name: PathBuf,
-    layer_name: String,
-    data_type: Option<VectorDataType>,
+    pub file_name: PathBuf,
+    pub layer_name: String,
+    pub data_type: Option<VectorDataType>,
     #[serde(default)]
-    time: OgrSourceDatasetTimeType,
-    columns: Option<OgrSourceColumnSpec>,
-    default: Option<String>,
+    pub time: OgrSourceDatasetTimeType,
+    pub columns: Option<OgrSourceColumnSpec>,
+    pub default: Option<String>,
     #[serde(default)]
-    force_ogr_time_filter: bool,
-    on_error: OgrSourceErrorSpec,
-    provenance: Option<ProvenanceInformation>,
+    pub force_ogr_time_filter: bool,
+    pub on_error: OgrSourceErrorSpec,
+    pub provenance: Option<ProvenanceInformation>,
 }
 
 impl OgrSourceDataset {
@@ -167,11 +168,11 @@ impl Default for OgrSourceTimeFormat {
 ///  - textual: an array of column names containing alpha-numeric values
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct OgrSourceColumnSpec {
-    x: String,
-    y: Option<String>,
-    numeric: Vec<String>,
-    decimal: Vec<String>,
-    textual: Vec<String>,
+    pub x: String,
+    pub y: Option<String>,
+    pub numeric: Vec<String>,
+    pub decimal: Vec<String>,
+    pub textual: Vec<String>,
 }
 
 impl OgrSourceColumnSpec {
@@ -1039,6 +1040,8 @@ mod tests {
     use crate::engine::{MockExecutionContext, MockQueryContext};
 
     use super::*;
+    use geoengine_datatypes::dataset::InternalDataSetId;
+    use geoengine_datatypes::identifiers::Identifier;
 
     #[test]
     fn specification_serde() {
@@ -1352,9 +1355,17 @@ mod tests {
 
     #[tokio::test]
     async fn ne_10m_ports_bbox_filter() -> Result<()> {
+        let mut exe_ctx = MockExecutionContext::default();
+
+        let data_set = DataSetId::Internal(InternalDataSetId::new());
+        exe_ctx.add_loading_info(
+            data_set.clone(),
+            OgrSourceDataset::load_dataset("ne_10m_ports").unwrap(),
+        );
+
         let source = OgrSource {
             params: OgrSourceParameters {
-                layer_name: "ne_10m_ports".to_string(),
+                data_set,
                 attribute_projection: None,
             },
         }

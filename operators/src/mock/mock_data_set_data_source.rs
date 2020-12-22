@@ -41,20 +41,20 @@ impl LoadingInfo<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>
     }
 }
 
-impl LoadingInfoProvider<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>
-    for MockExecutionContext
-{
-    fn loading_info(
-        &self,
-        _data_set: &DataSetId,
-    ) -> Result<Box<dyn LoadingInfo<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>>>
-    {
-        Ok(Box::new(self.loading_info.as_ref().unwrap().clone())
-            as Box<
-                dyn LoadingInfo<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>,
-            >)
-    }
-}
+// impl LoadingInfoProvider<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>
+//     for MockExecutionContext
+// {
+//     fn loading_info(
+//         &self,
+//         _data_set: &DataSetId,
+//     ) -> Result<Box<dyn LoadingInfo<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>>>
+//     {
+//         Ok(Box::new(self.loading_info.as_ref().unwrap().clone())
+//             as Box<
+//                 dyn LoadingInfo<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>,
+//             >)
+//     }
+// }
 
 pub struct MockDataSetDataSourceProcessor {
     loading_info: Box<dyn LoadingInfo<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>>,
@@ -137,14 +137,16 @@ mod tests {
 
     #[test]
     fn test() {
-        let execution_context = MockExecutionContext {
-            thread_pool: ThreadPool::new(1),
-            loading_info: Some(MockDataSetDataSourceLoadingInfo {
-                points: vec![Coordinate2D::new(1., 2.); 3],
-            }),
-        };
+        let mut execution_context = MockExecutionContext::default();
 
         let id = DataSetId::Internal(InternalDataSetId::new());
+        execution_context.add_loading_info(
+            id.clone(),
+            MockDataSetDataSourceLoadingInfo {
+                points: vec![Coordinate2D::new(1., 2.); 3],
+            },
+        );
+
         let mps = MockDataSetDataSource {
             params: MockDataSetDataSourceParams { data_set: id },
         }

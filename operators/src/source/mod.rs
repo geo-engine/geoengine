@@ -8,4 +8,7 @@ pub use self::csv::{
 pub use self::gdal_source::{
     GdalSource, GdalSourceParameters, GdalSourceProcessor, TilingStrategy,
 };
-pub use self::ogr_source::{OgrSource, OgrSourceDataset, OgrSourceParameters};
+pub use self::ogr_source::{
+    OgrSource, OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceErrorSpec,
+    OgrSourceParameters,
+};
