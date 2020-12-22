@@ -15,7 +15,8 @@ use futures::stream::BoxStream;
 use futures::task::{Context, Waker};
 use futures::Stream;
 use futures::StreamExt;
-use gdal::vector::{Dataset, Feature, FeatureIterator, FieldValue, OGRwkbGeometryType};
+use gdal::vector::{Feature, FeatureIterator, FieldValue, OGRwkbGeometryType};
+use gdal::Dataset;
 use serde::{Deserialize, Serialize};
 use tokio::task::spawn_blocking;
 
@@ -242,7 +243,7 @@ impl VectorOperator for OgrSource {
         let layer = dataset.layer_by_name(&dataset_information.layer_name)?;
 
         let spatial_reference = match layer
-            .spatial_reference()
+            .spatial_ref()
             .and_then(|gdal_srs| gdal_srs.authority())
         {
             Ok(authority) => SpatialReference::from_str(&authority)?.into(),
@@ -552,9 +553,9 @@ where
             // don't emit an empty collection if there were non-empty results previously
             if is_empty && emitted_non_empty_collections {
                 break;
-            } else {
-                emitted_non_empty_collections = true;
             }
+
+            emitted_non_empty_collections = true;
 
             match poll_result_sender.send(Some(batch_result)) {
                 Ok(_) => work_query.waker.wake_by_ref(),
@@ -789,6 +790,7 @@ where
                         Ok(FieldValue::IntegerValue(v)) => Some(v.to_string()),
                         Ok(FieldValue::StringValue(s)) => Some(s),
                         Ok(FieldValue::RealValue(v)) => Some(v.to_string()),
+                        Ok(_) => todo!("handle other types"),
                         Err(_) => None, // TODO: log error
                     };
 
@@ -799,6 +801,7 @@ where
                         Ok(FieldValue::IntegerValue(v)) => Some(f64::from(v)),
                         Ok(FieldValue::StringValue(s)) => f64::from_str(&s).ok(),
                         Ok(FieldValue::RealValue(v)) => Some(v),
+                        Ok(_) => todo!("handle other types"),
                         Err(_) => None, // TODO: log error
                     };
 
@@ -809,6 +812,7 @@ where
                         Ok(FieldValue::IntegerValue(v)) => Some(i64::from(v)), // TODO: PR for allowing i64 in OGR?
                         Ok(FieldValue::StringValue(s)) => i64::from_str(&s).ok(),
                         Ok(FieldValue::RealValue(v)) => Some(v as i64),
+                        Ok(_) => todo!("handle other types"),
                         Err(_) => None, // TODO: log error
                     };
 
@@ -903,7 +907,7 @@ impl TryFromOgrGeometry for MultiPoint {
             OGRwkbGeometryType::wkbPoint => Ok(MultiPoint::new(vec![coordinate(geometry)])?),
             OGRwkbGeometryType::wkbMultiPoint => {
                 let coordinates = (0..geometry.geometry_count())
-                    .map(|i| coordinate(&unsafe { geometry._get_geometry(i) }))
+                    .map(|i| coordinate(&unsafe { geometry.get_unowned_geometry(i) }))
                     .collect();
 
                 Ok(MultiPoint::new(coordinates)?)
@@ -934,7 +938,7 @@ impl TryFromOgrGeometry for MultiLineString {
             }
             OGRwkbGeometryType::wkbMultiLineString => Ok(MultiLineString::new(
                 (0..geometry.geometry_count())
-                    .map(|i| coordinates(&unsafe { geometry._get_geometry(i) }))
+                    .map(|i| coordinates(&unsafe { geometry.get_unowned_geometry(i) }))
                     .collect(),
             )?),
             _ => Err(Error::InvalidType {
@@ -957,7 +961,7 @@ impl TryFromOgrGeometry for MultiPolygon {
         fn rings(geometry: &gdal::vector::Geometry) -> Vec<Vec<Coordinate2D>> {
             let ring_count = geometry.geometry_count();
             (0..ring_count)
-                .map(|i| coordinates(&unsafe { geometry._get_geometry(i) }))
+                .map(|i| coordinates(&unsafe { geometry.get_unowned_geometry(i) }))
                 .collect()
         }
 
@@ -967,7 +971,7 @@ impl TryFromOgrGeometry for MultiPolygon {
             OGRwkbGeometryType::wkbPolygon => Ok(MultiPolygon::new(vec![rings(geometry)])?),
             OGRwkbGeometryType::wkbMultiPolygon => Ok(MultiPolygon::new(
                 (0..geometry.geometry_count())
-                    .map(|i| rings(&unsafe { geometry._get_geometry(i) }))
+                    .map(|i| rings(&unsafe { geometry.get_unowned_geometry(i) }))
                     .collect(),
             )?),
             _ => Err(Error::InvalidType {
@@ -2956,5 +2960,47 @@ mod tests {
         );
 
         Ok(())
+    }
+
+    #[tokio::test]
+    async fn empty() {
+        let source = OgrSource {
+            params: OgrSourceParameters {
+                layer_name: "ne_10m_ports".to_string(),
+                attribute_projection: None,
+            },
+        }
+        .boxed()
+        .initialize(&MockExecutionContextCreator::default().context())
+        .unwrap();
+
+        assert_eq!(
+            source.result_descriptor().data_type,
+            VectorDataType::MultiPoint
+        );
+        assert_eq!(
+            source.result_descriptor().spatial_reference,
+            SpatialReference::wgs84().into()
+        );
+
+        let query_processor = source.query_processor().unwrap().multi_point().unwrap();
+
+        let query_bbox =
+            BoundingBox2D::new((-180.0, -90.0).into(), (-180.00, -90.0).into()).unwrap();
+
+        let query = query_processor.query(
+            QueryRectangle {
+                bbox: query_bbox,
+                time_interval: Default::default(),
+                spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
+            },
+            QueryContext { chunk_byte_size: 0 },
+        );
+
+        let result: Vec<MultiPointCollection> = query.try_collect().await.unwrap();
+
+        assert_eq!(result.len(), 1);
+
+        assert!(result[0].is_empty());
     }
 }
