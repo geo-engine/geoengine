@@ -13,7 +13,7 @@ use warp::Filter;
 
 pub fn register_user_handler<C: Context>(
     ctx: C,
-) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::post()
         .and(warp::path("user"))
         .and(warp::body::json())
@@ -48,7 +48,7 @@ async fn anonymous<C: Context>(ctx: C) -> Result<impl warp::Reply, warp::Rejecti
 
 pub fn login_handler<C: Context>(
     ctx: C,
-) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::post()
         .and(warp::path("login"))
         .and(warp::body::json())
@@ -73,7 +73,7 @@ async fn login<C: Context>(
 
 pub fn logout_handler<C: Context>(
     ctx: C,
-) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::post()
         .and(warp::path("logout"))
         .and(authenticate(ctx))
@@ -107,7 +107,7 @@ async fn session<C: Context>(ctx: C) -> Result<impl warp::Reply, warp::Rejection
 
 pub fn session_project_handler<C: Context>(
     ctx: C,
-) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::post()
         .and(warp::path!("session" / "project" / Uuid).map(ProjectId))
         .and(authenticate(ctx))
@@ -129,7 +129,7 @@ async fn session_project<C: Context>(
 
 pub fn session_view_handler<C: Context>(
     ctx: C,
-) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::post()
         .and(warp::path!("session" / "view"))
         .and(authenticate(ctx))
