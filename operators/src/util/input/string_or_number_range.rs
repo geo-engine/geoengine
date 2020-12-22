@@ -1,8 +1,8 @@
+use std::{convert::TryFrom, ops::RangeInclusive};
+
 use crate::error;
 use crate::util::input::StringOrNumber;
 use crate::util::Result;
-use failure::_core::convert::TryFrom;
-use failure::_core::ops::RangeInclusive;
 use geoengine_datatypes::primitives::FeatureDataValue;
 use num_traits::AsPrimitive;
 use serde::de::{Error, SeqAccess, Visitor};

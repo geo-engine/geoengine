@@ -15,6 +15,14 @@ pub trait UserDB: Send + Sync {
     ///
     async fn register(&mut self, user: Validated<UserRegistration>) -> Result<UserId>;
 
+    /// Creates session for anonymous user
+    ///
+    /// # Errors
+    ///
+    /// This call fails if the `UserRegistration` is invalid.
+    ///
+    async fn anonymous(&mut self) -> Result<Session>;
+
     /// Creates a `Session` by providing `UserCredentials`
     ///
     /// # Errors
@@ -31,7 +39,7 @@ pub trait UserDB: Send + Sync {
     ///
     async fn logout(&mut self, session: SessionId) -> Result<()>;
 
-    /// Creates a new `UserDB` session
+    /// Get session by id
     ///
     /// # Errors
     ///

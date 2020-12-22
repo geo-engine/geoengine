@@ -13,10 +13,9 @@ arrow = { version = "2.0", features = ["simd"] }
 chrono = "0.4"
 crossbeam = "0.8"
 csv = "1.1"
-failure = "0.1" # TODO: remove this!
 float-cmp = "0.8"
 futures = "0.3"
-gdal = { version = "0.6", features = ["gdal_2_2"] }
+gdal = { version = "0.7", features = ["datetime"] }
 geo = "0.16"
 geoengine-datatypes = { path = "../datatypes" }
 lazy_static = "1.4"
@@ -27,7 +26,7 @@ pin-project = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 snafu = "0.6"
-tokio = { version = "0.3", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "0.2", features = ["macros", "blocking"] } # TODO: tokio = { version = "0.3", features = ["macros"] }
 typetag = "0.1"
 warp = "0.2" # TODO: remove and get tokio test to work without it
 
