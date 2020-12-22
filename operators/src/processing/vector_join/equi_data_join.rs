@@ -128,32 +128,32 @@ where
             .enumerate()
             .zip(left.geometries().map(Into::into))
         {
-            // TODO: is it better to traverse column-wise?
+            // add left values
+            for column_name in left.column_names() {
+                let feature_data = left.data(column_name).expect("must exist");
 
-            for (right_feature_idx, time_interval) in matches {
-                // add geo
+                let data = feature_data.get_unchecked(left_feature_idx);
+
+                for _ in &matches {
+                    builder.push_data(column_name, data.clone())?;
+                }
+            }
+
+            // add right values
+            for column_name in right.column_names() {
+                let feature_data = right.data(column_name).expect("must exist");
+
+                for &(right_feature_idx, _) in &matches {
+                    builder
+                        .push_data(column_name, feature_data.get_unchecked(right_feature_idx))?;
+                }
+            }
+
+            // add geo and time
+            for (_, time_interval) in matches {
                 builder.push_geometry(geometry.clone())?;
 
-                // add time
                 builder.push_time_interval(time_interval)?;
-
-                // add left values
-                for column_name in left.column_names() {
-                    let feature_data = left
-                        .data(column_name)
-                        .expect("must exist")
-                        .get_unchecked(left_feature_idx);
-                    builder.push_data(column_name, feature_data)?;
-                }
-
-                // add right values
-                for column_name in right.column_names() {
-                    let feature_data = right
-                        .data(column_name)
-                        .expect("must exist")
-                        .get_unchecked(right_feature_idx);
-                    builder.push_data(column_name, feature_data)?;
-                }
 
                 builder.finish_row();
             }
