@@ -34,7 +34,8 @@ pub enum VectorJoinType {
         left_column: String,
         right_column: String,
         /// which prefix to use if columns have conflicting names?
-        right_column_prefix: String,
+        /// the default is "right"
+        right_column_prefix: Option<String>,
     },
 }
 
@@ -116,6 +117,9 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
 
                 let left = self.vector_sources[0].query_processor()?;
 
+                let right_column_prefix: &str =
+                    right_column_prefix.as_ref().map_or("right", String::as_str);
+
                 Ok(match left {
                     TypedVectorQueryProcessor::Data(_) => unreachable!("check in constructor"),
                     TypedVectorQueryProcessor::MultiPoint(left_processor) => {
@@ -125,7 +129,7 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
                                 right_processor,
                                 left_column.clone(),
                                 right_column.clone(),
-                                right_column_prefix.clone(),
+                                right_column_prefix.to_string(),
                             )
                             .boxed(),
                         )
@@ -137,7 +141,7 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
                                 right_processor,
                                 left_column.clone(),
                                 right_column.clone(),
-                                right_column_prefix.clone(),
+                                right_column_prefix.to_string(),
                             )
                             .boxed(),
                         )
@@ -149,7 +153,7 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
                                 right_processor,
                                 left_column.clone(),
                                 right_column.clone(),
-                                right_column_prefix.clone(),
+                                right_column_prefix.to_string(),
                             )
                             .boxed(),
                         )
@@ -170,7 +174,7 @@ mod tests {
             join_type: VectorJoinType::EquiLeft {
                 left_column: "foo".to_string(),
                 right_column: "bar".to_string(),
-                right_column_prefix: "baz".to_string(),
+                right_column_prefix: Some("baz".to_string()),
             },
         };
 
