@@ -18,8 +18,8 @@ use crate::engine::{QueryContext, QueryProcessor, QueryRectangle, VectorQueryPro
 use crate::error::Error;
 use crate::util::Result;
 
-/// Implements a left inner join between a `GeoFeatureCollection` stream and a `DataCollection` stream.
-pub struct EquiLeftJoinProcessor<G> {
+/// Implements an inner equi-join between a `GeoFeatureCollection` stream and a `DataCollection` stream.
+pub struct EquiGeoToDataJoinProcessor<G> {
     vector_type: PhantomData<FeatureCollection<G>>,
     left_processor: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
     right_processor: Box<dyn VectorQueryProcessor<VectorType = DataCollection>>,
@@ -28,7 +28,7 @@ pub struct EquiLeftJoinProcessor<G> {
     right_column_prefix: String,
 }
 
-impl<G> EquiLeftJoinProcessor<G>
+impl<G> EquiGeoToDataJoinProcessor<G>
 where
     G: Geometry + ArrowTyped + Sync + Send + 'static,
     for<'g> FeatureCollection<G>: IntoGeometryIterator<'g>,
@@ -192,7 +192,7 @@ where
     }
 }
 
-impl<G> VectorQueryProcessor for EquiLeftJoinProcessor<G>
+impl<G> VectorQueryProcessor for EquiGeoToDataJoinProcessor<G>
 where
     G: Geometry + ArrowTyped + Sync + Send + 'static,
     for<'g> FeatureCollection<G>: IntoGeometryIterator<'g>,
@@ -301,7 +301,7 @@ mod tests {
             chunk_byte_size: usize::MAX,
         };
 
-        let processor = EquiLeftJoinProcessor::new(
+        let processor = EquiGeoToDataJoinProcessor::new(
             left_processor,
             right_processor,
             "foo".to_string(),
@@ -383,7 +383,7 @@ mod tests {
             chunk_byte_size: usize::MAX,
         };
 
-        let processor = EquiLeftJoinProcessor::new(
+        let processor = EquiGeoToDataJoinProcessor::new(
             left_processor,
             right_processor,
             "foo".to_string(),

@@ -11,7 +11,7 @@ use crate::engine::{
 use crate::error;
 use crate::util::Result;
 
-use self::equi_data_join::EquiLeftJoinProcessor;
+use self::equi_data_join::EquiGeoToDataJoinProcessor;
 
 mod equi_data_join;
 
@@ -29,8 +29,8 @@ pub struct VectorJoinParams {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type")]
 pub enum VectorJoinType {
-    /// A left equi join between a `GeoFeatureCollection` and a `DataCollection`
-    EquiLeft {
+    /// An inner equi-join between a `GeoFeatureCollection` and a `DataCollection`
+    EquiGeoToData {
         left_column: String,
         right_column: String,
         /// which prefix to use if columns have conflicting names?
@@ -68,7 +68,7 @@ impl VectorOperator for VectorJoin {
             .collect::<Result<Vec<Box<InitializedVectorOperator>>>>()?;
 
         match self.params.join_type {
-            VectorJoinType::EquiLeft { .. } => {
+            VectorJoinType::EquiGeoToData { .. } => {
                 ensure!(
                     vector_sources[0].result_descriptor().data_type != VectorDataType::Data,
                     error::InvalidType {
@@ -105,7 +105,7 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
 {
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
         match &self.params.join_type {
-            VectorJoinType::EquiLeft {
+            VectorJoinType::EquiGeoToData {
                 left_column,
                 right_column,
                 right_column_prefix,
@@ -124,7 +124,7 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
                     TypedVectorQueryProcessor::Data(_) => unreachable!("check in constructor"),
                     TypedVectorQueryProcessor::MultiPoint(left_processor) => {
                         TypedVectorQueryProcessor::MultiPoint(
-                            EquiLeftJoinProcessor::new(
+                            EquiGeoToDataJoinProcessor::new(
                                 left_processor,
                                 right_processor,
                                 left_column.clone(),
@@ -136,7 +136,7 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
                     }
                     TypedVectorQueryProcessor::MultiLineString(left_processor) => {
                         TypedVectorQueryProcessor::MultiLineString(
-                            EquiLeftJoinProcessor::new(
+                            EquiGeoToDataJoinProcessor::new(
                                 left_processor,
                                 right_processor,
                                 left_column.clone(),
@@ -148,7 +148,7 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
                     }
                     TypedVectorQueryProcessor::MultiPolygon(left_processor) => {
                         TypedVectorQueryProcessor::MultiPolygon(
-                            EquiLeftJoinProcessor::new(
+                            EquiGeoToDataJoinProcessor::new(
                                 left_processor,
                                 right_processor,
                                 left_column.clone(),
@@ -171,7 +171,7 @@ mod tests {
     #[test]
     fn params() {
         let params = VectorJoinParams {
-            join_type: VectorJoinType::EquiLeft {
+            join_type: VectorJoinType::EquiGeoToData {
                 left_column: "foo".to_string(),
                 right_column: "bar".to_string(),
                 right_column_prefix: Some("baz".to_string()),
