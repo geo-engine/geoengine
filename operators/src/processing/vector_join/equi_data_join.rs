@@ -9,7 +9,7 @@ use geoengine_datatypes::collections::{
     FeatureCollectionModifications, FeatureCollectionRowBuilder, GeoFeatureCollectionRowBuilder,
     IntoGeometryIterator,
 };
-use geoengine_datatypes::primitives::{DataRef, FeatureDataRef, Geometry};
+use geoengine_datatypes::primitives::{DataRef, FeatureDataRef, Geometry, TimeInterval};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 
 use crate::adapters::FeatureCollectionChunkMerger;
@@ -99,12 +99,22 @@ where
                 right_join_values
                     .as_ref()
                     .iter()
+                    .enumerate()
                     .zip(right.time_intervals())
-                    .map(|(right_value, right_time_interval)| {
-                        (left_value == right_value)
-                            && left_time_interval.intersects(right_time_interval)
+                    .filter_map(|((right_idx, right_value), right_time_interval)| {
+                        if left_value != right_value {
+                            return None;
+                        }
+
+                        if let Some(intersection) =
+                            left_time_interval.intersect(right_time_interval)
+                        {
+                            Some((right_idx, intersection))
+                        } else {
+                            None
+                        }
                     })
-                    .collect::<Vec<bool>>()
+                    .collect::<Vec<(usize, TimeInterval)>>()
             });
 
         let mut builder = FeatureCollection::<G>::builder();
@@ -126,20 +136,12 @@ where
         {
             // TODO: is it better to traverse column-wise?
 
-            for (right_feature_idx, matched) in matches.into_iter().enumerate() {
-                if !matched {
-                    continue;
-                }
-
+            for (right_feature_idx, time_interval) in matches {
                 // add geo
                 builder.push_geometry(geometry.clone())?;
 
                 // add time
-                builder.push_time_interval(
-                    left.time_intervals()[left_feature_idx]
-                        .intersect(&right.time_intervals()[right_feature_idx])
-                        .expect("must intersect for join"),
-                )?;
+                builder.push_time_interval(time_interval)?;
 
                 // add left values
                 for column_name in left.column_names() {
