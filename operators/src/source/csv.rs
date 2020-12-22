@@ -1,7 +1,7 @@
-use std::fs::File;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
+use std::{fs::File, sync::atomic::AtomicBool};
 
 use csv::{Position, Reader, StringRecord};
 use futures::stream::BoxStream;
@@ -25,7 +25,6 @@ use crate::engine::{
 };
 use crate::error;
 use crate::util::Result;
-use failure::_core::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 
 /// Parameters for the CSV Source Operator
