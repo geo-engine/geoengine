@@ -532,6 +532,8 @@ where
             return Ok(());
         }
 
+        let mut emitted_non_empty_collections = false;
+
         while features.peek().is_some() {
             let batch_result = Self::compute_batch(
                 &mut features,
@@ -549,9 +551,11 @@ where
                 .map_or(false, FeatureCollection::is_empty);
 
             // don't emit an empty collection if there were non-empty results previously
-            if is_empty {
+            if is_empty && emitted_non_empty_collections {
                 break;
             }
+
+            emitted_non_empty_collections = true;
 
             match poll_result_sender.send(Some(batch_result)) {
                 Ok(_) => work_query.waker.wake_by_ref(),
@@ -2956,5 +2960,47 @@ mod tests {
         );
 
         Ok(())
+    }
+
+    #[tokio::test]
+    async fn empty() {
+        let source = OgrSource {
+            params: OgrSourceParameters {
+                layer_name: "ne_10m_ports".to_string(),
+                attribute_projection: None,
+            },
+        }
+        .boxed()
+        .initialize(&MockExecutionContextCreator::default().context())
+        .unwrap();
+
+        assert_eq!(
+            source.result_descriptor().data_type,
+            VectorDataType::MultiPoint
+        );
+        assert_eq!(
+            source.result_descriptor().spatial_reference,
+            SpatialReference::wgs84().into()
+        );
+
+        let query_processor = source.query_processor().unwrap().multi_point().unwrap();
+
+        let query_bbox =
+            BoundingBox2D::new((-180.0, -90.0).into(), (-180.00, -90.0).into()).unwrap();
+
+        let query = query_processor.query(
+            QueryRectangle {
+                bbox: query_bbox,
+                time_interval: Default::default(),
+                spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
+            },
+            QueryContext { chunk_byte_size: 0 },
+        );
+
+        let result: Vec<MultiPointCollection> = query.try_collect().await.unwrap();
+
+        assert_eq!(result.len(), 1);
+
+        assert!(result[0].is_empty());
     }
 }
