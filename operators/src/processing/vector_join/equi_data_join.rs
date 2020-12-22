@@ -106,13 +106,7 @@ where
                             return None;
                         }
 
-                        if let Some(intersection) =
-                            left_time_interval.intersect(right_time_interval)
-                        {
-                            Some((right_idx, intersection))
-                        } else {
-                            None
-                        }
+                        Some(right_idx).zip(left_time_interval.intersect(right_time_interval))
                     })
                     .collect::<Vec<(usize, TimeInterval)>>()
             });
