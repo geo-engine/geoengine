@@ -539,7 +539,12 @@ where
                 }
             );
 
-            rename_map.insert(old_column_name, new_column_name);
+            if let Some(duplicate) = rename_map.insert(old_column_name, new_column_name) {
+                return Err(FeatureCollectionError::ColumnDuplicate {
+                    name: duplicate.to_string(),
+                }
+                .into());
+            }
         }
 
         let mut columns = Vec::<arrow::datatypes::Field>::with_capacity(self.table.num_columns());
