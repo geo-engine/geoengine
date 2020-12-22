@@ -80,37 +80,58 @@ where
         }
     }
 
-    fn compute_join<'i, D1, D2, T>(
-        left_join_values: &D1,
+    fn join_iter<'i, D1, D2, T>(
+        left_join_values: &'i D1,
         right_join_values: D2,
-        left: &FeatureCollection<G>,
-        right: &DataCollection,
+        left: &'i FeatureCollection<G>,
+        right: &'i DataCollection,
+    ) -> impl Iterator<Item = (usize, G, Vec<(usize, TimeInterval)>)> + 'i
+    where
+        D1: DataRef<'i, T> + 'i,
+        D2: DataRef<'i, T> + 'i,
+        T: 'i + PartialEq,
+    {
+        left_join_values
+            .as_ref()
+            .iter()
+            .enumerate()
+            .zip(left.geometries())
+            .zip(left.time_intervals())
+            .map(
+                move |(((left_idx, left_value), left_geometry), left_time_interval)| {
+                    (
+                        left_idx,
+                        left_geometry.into(),
+                        right_join_values
+                            .as_ref()
+                            .iter()
+                            .enumerate()
+                            .zip(right.time_intervals())
+                            .filter_map(|((right_idx, right_value), right_time_interval)| {
+                                if left_value != right_value {
+                                    return None;
+                                }
+
+                                Some(right_idx)
+                                    .zip(left_time_interval.intersect(right_time_interval))
+                            })
+                            .collect::<Vec<(usize, TimeInterval)>>(),
+                    )
+                },
+            )
+    }
+
+    fn compute_join<'i, D1, D2, T>(
+        left_join_values: &'i D1,
+        right_join_values: D2,
+        left: &'i FeatureCollection<G>,
+        right: &'i DataCollection,
     ) -> Result<FeatureCollection<G>>
     where
         D1: DataRef<'i, T> + 'i,
         D2: DataRef<'i, T> + 'i,
         T: 'i + PartialEq,
     {
-        let matches_iter = left_join_values
-            .as_ref()
-            .iter()
-            .zip(left.time_intervals())
-            .map(move |(left_value, left_time_interval)| {
-                right_join_values
-                    .as_ref()
-                    .iter()
-                    .enumerate()
-                    .zip(right.time_intervals())
-                    .filter_map(|((right_idx, right_value), right_time_interval)| {
-                        if left_value != right_value {
-                            return None;
-                        }
-
-                        Some(right_idx).zip(left_time_interval.intersect(right_time_interval))
-                    })
-                    .collect::<Vec<(usize, TimeInterval)>>()
-            });
-
         let mut builder = FeatureCollection::<G>::builder();
 
         // create header by combining values from both collections
@@ -124,9 +145,8 @@ where
 
         let mut builder = builder.finish_header();
 
-        for ((left_feature_idx, matches), geometry) in matches_iter
-            .enumerate()
-            .zip(left.geometries().map(Into::into))
+        for (left_feature_idx, geometry, matches) in
+            Self::join_iter(left_join_values, right_join_values, left, right)
         {
             // add left values
             for column_name in left.column_names() {
