@@ -532,8 +532,6 @@ where
             return Ok(());
         }
 
-        let mut emitted_non_empty_collections = false;
-
         while features.peek().is_some() {
             let batch_result = Self::compute_batch(
                 &mut features,
@@ -551,10 +549,8 @@ where
                 .map_or(false, FeatureCollection::is_empty);
 
             // don't emit an empty collection if there were non-empty results previously
-            if is_empty && emitted_non_empty_collections {
+            if is_empty {
                 break;
-            } else {
-                emitted_non_empty_collections = true;
             }
 
             match poll_result_sender.send(Some(batch_result)) {
