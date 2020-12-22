@@ -1,5 +1,4 @@
 use std::collections::HashSet;
-use std::marker::PhantomData;
 
 use futures::stream;
 use futures::stream::BoxStream;
@@ -20,7 +19,6 @@ use crate::util::Result;
 
 /// Implements an inner equi-join between a `GeoFeatureCollection` stream and a `DataCollection` stream.
 pub struct EquiGeoToDataJoinProcessor<G> {
-    vector_type: PhantomData<FeatureCollection<G>>,
     left_processor: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
     right_processor: Box<dyn VectorQueryProcessor<VectorType = DataCollection>>,
     left_column: String,
@@ -43,7 +41,6 @@ where
         right_prefix: String,
     ) -> Self {
         Self {
-            vector_type: PhantomData,
             left_processor,
             right_processor,
             left_column,
