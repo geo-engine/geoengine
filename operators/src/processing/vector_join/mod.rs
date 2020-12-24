@@ -179,7 +179,7 @@ mod tests {
         };
 
         let json = serde_json::json!({
-            "type": "EquiLeft",
+            "type": "EquiGeoToData",
             "left_column": "foo",
             "right_column": "bar",
             "right_column_suffix": "baz",
