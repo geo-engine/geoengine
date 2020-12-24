@@ -33,9 +33,9 @@ pub enum VectorJoinType {
     EquiGeoToData {
         left_column: String,
         right_column: String,
-        /// which prefix to use if columns have conflicting names?
+        /// which suffix to use if columns have conflicting names?
         /// the default is "right"
-        right_column_prefix: Option<String>,
+        right_column_suffix: Option<String>,
     },
 }
 
@@ -108,7 +108,7 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
             VectorJoinType::EquiGeoToData {
                 left_column,
                 right_column,
-                right_column_prefix,
+                right_column_suffix,
             } => {
                 let right_processor = self.vector_sources[1]
                     .query_processor()?
@@ -117,8 +117,8 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
 
                 let left = self.vector_sources[0].query_processor()?;
 
-                let right_column_prefix: &str =
-                    right_column_prefix.as_ref().map_or("right", String::as_str);
+                let right_column_suffix: &str =
+                    right_column_suffix.as_ref().map_or("right", String::as_str);
 
                 Ok(match left {
                     TypedVectorQueryProcessor::Data(_) => unreachable!("check in constructor"),
@@ -129,7 +129,7 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
                                 right_processor,
                                 left_column.clone(),
                                 right_column.clone(),
-                                right_column_prefix.to_string(),
+                                right_column_suffix.to_string(),
                             )
                             .boxed(),
                         )
@@ -141,7 +141,7 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
                                 right_processor,
                                 left_column.clone(),
                                 right_column.clone(),
-                                right_column_prefix.to_string(),
+                                right_column_suffix.to_string(),
                             )
                             .boxed(),
                         )
@@ -153,7 +153,7 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
                                 right_processor,
                                 left_column.clone(),
                                 right_column.clone(),
-                                right_column_prefix.to_string(),
+                                right_column_suffix.to_string(),
                             )
                             .boxed(),
                         )
@@ -174,7 +174,7 @@ mod tests {
             join_type: VectorJoinType::EquiGeoToData {
                 left_column: "foo".to_string(),
                 right_column: "bar".to_string(),
-                right_column_prefix: Some("baz".to_string()),
+                right_column_suffix: Some("baz".to_string()),
             },
         };
 
@@ -182,7 +182,7 @@ mod tests {
             "type": "EquiLeft",
             "left_column": "foo",
             "right_column": "bar",
-            "right_column_prefix": "baz",
+            "right_column_suffix": "baz",
         })
         .to_string();
 

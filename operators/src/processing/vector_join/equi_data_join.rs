@@ -1,15 +1,17 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
+use float_cmp::approx_eq;
 use futures::stream;
 use futures::stream::BoxStream;
 use futures::StreamExt;
 
 use geoengine_datatypes::collections::{
-    BuilderProvider, DataCollection, FeatureCollection, FeatureCollectionInfos,
-    FeatureCollectionModifications, FeatureCollectionRowBuilder, GeoFeatureCollectionRowBuilder,
-    IntoGeometryIterator,
+    BuilderProvider, DataCollection, FeatureCollection, FeatureCollectionBuilder,
+    FeatureCollectionInfos, FeatureCollectionRowBuilder, GeoFeatureCollectionRowBuilder,
+    GeometryRandomAccess,
 };
-use geoengine_datatypes::primitives::{DataRef, FeatureDataRef, Geometry, TimeInterval};
+use geoengine_datatypes::primitives::{FeatureDataRef, Geometry, TimeInterval};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 
 use crate::adapters::FeatureCollectionChunkMerger;
@@ -21,16 +23,16 @@ use crate::util::Result;
 pub struct EquiGeoToDataJoinProcessor<G> {
     left_processor: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
     right_processor: Box<dyn VectorQueryProcessor<VectorType = DataCollection>>,
-    left_column: String,
-    right_column: String,
-    right_column_prefix: String,
+    left_column: Arc<String>,
+    right_column: Arc<String>,
+    right_column_suffix: String,
 }
 
 impl<G> EquiGeoToDataJoinProcessor<G>
 where
     G: Geometry + ArrowTyped + Sync + Send + 'static,
-    for<'g> FeatureCollection<G>: IntoGeometryIterator<'g>,
-    for<'g> <FeatureCollection<G> as IntoGeometryIterator<'g>>::GeometryType: Into<G>,
+    for<'g> FeatureCollection<G>: GeometryRandomAccess<'g>,
+    for<'g> <FeatureCollection<G> as GeometryRandomAccess<'g>>::GeometryType: Into<G>,
     FeatureCollectionRowBuilder<G>: GeoFeatureCollectionRowBuilder<G>,
 {
     pub fn new(
@@ -38,169 +40,319 @@ where
         right_processor: Box<dyn VectorQueryProcessor<VectorType = DataCollection>>,
         left_column: String,
         right_column: String,
-        right_prefix: String,
+        right_suffix: String,
     ) -> Self {
         Self {
             left_processor,
             right_processor,
-            left_column,
-            right_column,
-            right_column_prefix: right_prefix,
+            left_column: Arc::new(left_column),
+            right_column: Arc::new(right_column),
+            right_column_suffix: right_suffix,
         }
     }
 
-    fn join<'c>(
+    fn join(
         &self,
-        left: &'c FeatureCollection<G>,
-        right: &DataCollection,
-    ) -> Result<FeatureCollection<G>> {
-        let right = self.fix_columns(right, &left.column_names().collect())?;
+        left: Arc<FeatureCollection<G>>,
+        right: DataCollection,
+        chunk_byte_size: usize,
+    ) -> Result<BatchBuilderIterator<G>> {
+        let right_translation_table =
+            self.translation_table(left.column_names(), right.column_names());
 
-        let left_join_column = left.data(&self.left_column)?;
-        let right_join_column = right.data(&self.right_column)?;
+        BatchBuilderIterator::new(
+            left,
+            right,
+            self.left_column.clone(),
+            self.right_column.clone(),
+            right_translation_table,
+            chunk_byte_size,
+        )
+    }
 
-        // TODO: use macro
-        match (left_join_column, right_join_column) {
-            (FeatureDataRef::Number(c1), FeatureDataRef::Number(c2)) => {
-                Self::compute_join(&c1, c2, left, &right)
+    /// Create a translation table to resolve name conflicts in the `DataCollection`
+    fn translation_table<'i>(
+        &self,
+        existing_column_names: impl Iterator<Item = &'i String>,
+        new_column_names: impl Iterator<Item = &'i String>,
+    ) -> HashMap<String, String> {
+        let mut existing_column_names: HashSet<String> = existing_column_names.cloned().collect();
+        let mut translation_table = HashMap::new();
+
+        for old_column_name in new_column_names {
+            let mut new_column_name = old_column_name.clone();
+            while existing_column_names.contains(&new_column_name) {
+                new_column_name.push_str(&self.right_column_suffix);
             }
-            (FeatureDataRef::Decimal(c1), FeatureDataRef::Decimal(c2)) => {
-                Self::compute_join(&c1, c2, left, &right)
-            }
-            (FeatureDataRef::Text(c1), FeatureDataRef::Text(c2)) => {
-                Self::compute_join(&c1, c2, left, &right)
-            }
-            (FeatureDataRef::Categorical(c1), FeatureDataRef::Categorical(c2)) => {
-                Self::compute_join(&c1, c2, left, &right)
-            }
-            (left, right) => Err(Error::ColumnTypeMismatch {
-                left: (&left).into(),
-                right: (&right).into(),
-            }),
+            existing_column_names.insert(new_column_name.clone());
+            translation_table.insert(old_column_name.clone(), new_column_name);
         }
+
+        translation_table
     }
+}
 
-    fn join_iter<'i, D1, D2, T>(
-        left_join_values: &'i D1,
-        right_join_values: D2,
-        left: &'i FeatureCollection<G>,
-        right: &'i DataCollection,
-    ) -> impl Iterator<Item = (usize, G, Vec<(usize, TimeInterval)>)> + 'i
-    where
-        D1: DataRef<'i, T> + 'i,
-        D2: DataRef<'i, T> + 'i,
-        T: 'i + PartialEq,
-    {
-        left_join_values
-            .as_ref()
-            .iter()
-            .enumerate()
-            .zip(left.geometries())
-            .zip(left.time_intervals())
-            .map(
-                move |(((left_idx, left_value), left_geometry), left_time_interval)| {
-                    (
-                        left_idx,
-                        left_geometry.into(),
-                        right_join_values
-                            .as_ref()
-                            .iter()
-                            .enumerate()
-                            .zip(right.time_intervals())
-                            .filter_map(|((right_idx, right_value), right_time_interval)| {
-                                if left_value != right_value {
-                                    return None;
-                                }
+struct BatchBuilderIterator<G>
+where
+    G: Geometry + ArrowTyped + Sync + Send + 'static,
+{
+    left: Arc<FeatureCollection<G>>,
+    right: DataCollection,
+    left_column: Arc<String>,
+    right_column: Arc<String>,
+    right_translation_table: HashMap<String, String>,
+    builder: FeatureCollectionBuilder<G>,
+    chunk_byte_size: usize,
+    left_idx: usize,
+    first_iteration: bool,
+    has_ended: bool,
+}
 
-                                Some(right_idx)
-                                    .zip(left_time_interval.intersect(right_time_interval))
-                            })
-                            .collect::<Vec<(usize, TimeInterval)>>(),
-                    )
-                },
-            )
-    }
-
-    fn compute_join<'i, D1, D2, T>(
-        left_join_values: &'i D1,
-        right_join_values: D2,
-        left: &'i FeatureCollection<G>,
-        right: &'i DataCollection,
-    ) -> Result<FeatureCollection<G>>
-    where
-        D1: DataRef<'i, T> + 'i,
-        D2: DataRef<'i, T> + 'i,
-        T: 'i + PartialEq,
-    {
+impl<G> BatchBuilderIterator<G>
+where
+    G: Geometry + ArrowTyped + Sync + Send + 'static,
+    for<'g> FeatureCollection<G>: GeometryRandomAccess<'g>,
+    for<'g> <FeatureCollection<G> as GeometryRandomAccess<'g>>::GeometryType: Into<G>,
+    FeatureCollectionRowBuilder<G>: GeoFeatureCollectionRowBuilder<G>,
+{
+    pub fn new(
+        left: Arc<FeatureCollection<G>>,
+        right: DataCollection,
+        left_column: Arc<String>,
+        right_column: Arc<String>,
+        right_translation_table: HashMap<String, String>,
+        chunk_byte_size: usize,
+    ) -> Result<Self> {
         let mut builder = FeatureCollection::<G>::builder();
 
         // create header by combining values from both collections
-        for (column_name, column_type) in left
-            .column_types()
-            .into_iter()
-            .chain(right.column_types().into_iter())
-        {
+        for (column_name, column_type) in left.column_types() {
             builder.add_column(column_name, column_type)?;
         }
+        for (column_name, column_type) in right.column_types() {
+            builder.add_column(right_translation_table[&column_name].clone(), column_type)?;
+        }
 
-        let mut builder = builder.finish_header();
+        Ok(Self {
+            left,
+            right,
+            left_column,
+            right_column,
+            right_translation_table,
+            builder,
+            chunk_byte_size,
+            left_idx: 0,
+            first_iteration: true,
+            has_ended: false,
+        })
+    }
 
-        for (left_feature_idx, geometry, matches) in
-            Self::join_iter(left_join_values, right_join_values, left, right)
+    fn join_inner_batch_matches(
+        left: &FeatureDataRef,
+        right: &FeatureDataRef,
+        left_time_interval: TimeInterval,
+        right_time_intervals: &[TimeInterval],
+        left_idx: usize,
+    ) -> Result<Vec<(usize, TimeInterval)>> {
+        fn matches<T, F>(
+            right_values: &[T],
+            equals_left_value: F,
+            left_time_interval: TimeInterval,
+            right_time_intervals: &[TimeInterval],
+        ) -> Vec<(usize, TimeInterval)>
+        where
+            T: PartialEq + Copy,
+            F: Fn(T) -> bool,
         {
-            // add left values
-            for column_name in left.column_names() {
-                let feature_data = left.data(column_name).expect("must exist");
+            right_values
+                .iter()
+                .enumerate()
+                .filter_map(move |(right_idx, &right_value)| {
+                    if !equals_left_value(right_value) {
+                        return None;
+                    }
 
-                let data = feature_data.get_unchecked(left_feature_idx);
+                    Some(right_idx)
+                        .zip(left_time_interval.intersect(&right_time_intervals[right_idx]))
+                })
+                .collect()
+        }
 
-                for _ in &matches {
+        let right_indices = match (left, right) {
+            (FeatureDataRef::Number(left), FeatureDataRef::Number(right)) => {
+                let left_value = left.as_ref()[left_idx];
+                matches(
+                    right.as_ref(),
+                    |right_value| approx_eq!(f64, left_value, right_value),
+                    left_time_interval,
+                    right_time_intervals,
+                )
+            }
+            (FeatureDataRef::Categorical(left), FeatureDataRef::Categorical(right)) => {
+                let left_value = left.as_ref()[left_idx];
+                matches(
+                    right.as_ref(),
+                    |right_value| left_value == right_value,
+                    left_time_interval,
+                    right_time_intervals,
+                )
+            }
+            (FeatureDataRef::Decimal(left), FeatureDataRef::Decimal(right)) => {
+                let left_value = left.as_ref()[left_idx];
+                matches(
+                    right.as_ref(),
+                    |right_value| left_value == right_value,
+                    left_time_interval,
+                    right_time_intervals,
+                )
+            }
+            (FeatureDataRef::Text(left), FeatureDataRef::Text(right)) => {
+                let left_value = left.as_ref()[left_idx];
+                matches(
+                    right.as_ref(),
+                    |right_value| left_value == right_value,
+                    left_time_interval,
+                    right_time_intervals,
+                )
+            }
+            (left, right) => {
+                return Err(Error::ColumnTypeMismatch {
+                    left: left.into(),
+                    right: right.into(),
+                });
+            }
+        };
+
+        Ok(right_indices)
+    }
+
+    fn compute_batch(&mut self) -> Result<FeatureCollection<G>> {
+        let mut builder = self.builder.clone().finish_header();
+
+        let left_join_column = self.left.data(&self.left_column).expect("must exist");
+        let right_join_column = self.right.data(&self.right_column).expect("must exist");
+        let left_time_intervals = self.left.time_intervals();
+        let right_time_intervals = self.right.time_intervals();
+
+        // copy such that `self` is not borrowed
+        let mut left_idx = self.left_idx;
+
+        let left_data_lookup: HashMap<String, FeatureDataRef> = self
+            .left
+            .column_names()
+            .map(|column_name| {
+                (
+                    column_name.clone(),
+                    self.left.data(column_name).expect("must exist"),
+                )
+            })
+            .collect();
+        let right_data_lookup: HashMap<String, FeatureDataRef> = self
+            .right_translation_table
+            .iter()
+            .map(|(old_column_name, new_column_name)| {
+                (
+                    new_column_name.clone(),
+                    self.right.data(old_column_name).expect("must exist"),
+                )
+            })
+            .collect();
+
+        while left_idx < self.left.len() {
+            let geometry: G = self
+                .left
+                .geometry_at(left_idx)
+                .expect("index must exist")
+                .into();
+
+            let join_inner_batch_matches = Self::join_inner_batch_matches(
+                &left_join_column,
+                &right_join_column,
+                left_time_intervals[left_idx],
+                right_time_intervals,
+                left_idx,
+            )?;
+
+            // add left value
+            for (column_name, feature_data) in &left_data_lookup {
+                let data = feature_data.get_unchecked(left_idx);
+
+                for _ in 0..join_inner_batch_matches.len() {
                     builder.push_data(column_name, data.clone())?;
                 }
             }
 
-            // add right values
-            for column_name in right.column_names() {
-                let feature_data = right.data(column_name).expect("must exist");
+            // add right value
+            for (column_name, feature_data) in &right_data_lookup {
+                for &(right_idx, _) in &join_inner_batch_matches {
+                    let data = feature_data.get_unchecked(right_idx);
 
-                for &(right_feature_idx, _) in &matches {
-                    builder
-                        .push_data(column_name, feature_data.get_unchecked(right_feature_idx))?;
+                    builder.push_data(column_name, data)?;
                 }
             }
 
-            // add geo and time
-            for (_, time_interval) in matches {
+            // add time and geo
+            for (_, time_interval) in join_inner_batch_matches {
                 builder.push_geometry(geometry.clone())?;
-
                 builder.push_time_interval(time_interval)?;
-
                 builder.finish_row();
             }
+
+            left_idx += 1;
+
+            // there could be the degenerated case that one left feature matches with
+            // many features of the right side and is twice as large as the chunk byte size
+            if !builder.is_empty() && builder.byte_size() > self.chunk_byte_size {
+                break;
+            }
+        }
+
+        self.left_idx = left_idx;
+
+        // if iterator ran through, set flag `has_ended` so that the next call will not
+        // produce an empty collection
+        if self.left_idx >= self.left.len() {
+            self.has_ended = true;
         }
 
         builder.build().map_err(Into::into)
     }
+}
 
-    /// Fix column by renaming column with duplicate keys
-    fn fix_columns(
-        &self,
-        collection: &DataCollection,
-        existing_column_names: &HashSet<&String>,
-    ) -> Result<DataCollection> {
-        let mut renamings: Vec<(&str, String)> = Vec::new();
+impl<G> Iterator for BatchBuilderIterator<G>
+where
+    G: Geometry + ArrowTyped + Sync + Send + 'static,
+    for<'g> FeatureCollection<G>: GeometryRandomAccess<'g>,
+    for<'g> <FeatureCollection<G> as GeometryRandomAccess<'g>>::GeometryType: Into<G>,
+    FeatureCollectionRowBuilder<G>: GeoFeatureCollectionRowBuilder<G>,
+{
+    type Item = Result<FeatureCollection<G>>;
 
-        for column_name in collection.column_names() {
-            while existing_column_names.contains(column_name) {
-                let new_column_name = format!("{}{}", self.right_column_prefix, column_name);
-                renamings.push((column_name, new_column_name));
-            }
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.has_ended {
+            return None;
         }
 
-        if renamings.is_empty() {
-            Ok(collection.clone())
-        } else {
-            collection.rename_columns(&renamings).map_err(Into::into)
+        match self.compute_batch() {
+            Ok(collection) => {
+                if self.first_iteration {
+                    self.first_iteration = false;
+                    return Some(Ok(collection));
+                }
+
+                if collection.is_empty() {
+                    self.has_ended = true;
+                    None
+                } else {
+                    Some(Ok(collection))
+                }
+            }
+            Err(error) => {
+                self.first_iteration = false;
+                self.has_ended = true;
+
+                Some(Err(error))
+            }
         }
     }
 }
@@ -208,8 +360,8 @@ where
 impl<G> VectorQueryProcessor for EquiGeoToDataJoinProcessor<G>
 where
     G: Geometry + ArrowTyped + Sync + Send + 'static,
-    for<'g> FeatureCollection<G>: IntoGeometryIterator<'g>,
-    for<'g> <FeatureCollection<G> as IntoGeometryIterator<'g>>::GeometryType: Into<G>,
+    for<'g> FeatureCollection<G>: GeometryRandomAccess<'g>,
+    for<'g> <FeatureCollection<G> as GeometryRandomAccess<'g>>::GeometryType: Into<G>,
     FeatureCollectionRowBuilder<G>: GeoFeatureCollectionRowBuilder<G>,
 {
     type VectorType = FeatureCollection<G>;
@@ -226,15 +378,24 @@ where
                     // This implementation is a nested-loop join
 
                     let left_collection = match left_collection {
-                        Ok(collection) => collection,
+                        Ok(collection) => Arc::new(collection),
                         Err(e) => return stream::once(async { Err(e) }).boxed(),
                     };
 
                     let data_query = self.right_processor.query(query, ctx);
 
                     data_query
-                        .map(move |right_collection| {
-                            self.join(&left_collection, &right_collection?)
+                        .flat_map(move |right_collection| {
+                            match right_collection.and_then(|right_collection| {
+                                self.join(
+                                    left_collection.clone(),
+                                    right_collection,
+                                    ctx.chunk_byte_size,
+                                )
+                            }) {
+                                Ok(batch_iter) => stream::iter(batch_iter).boxed(),
+                                Err(e) => stream::once(async { Err(e) }).boxed(),
+                            }
                         })
                         .boxed()
                 });
@@ -245,14 +406,63 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::engine::{MockExecutionContextCreator, VectorOperator};
-    use crate::mock::MockFeatureCollectionSource;
     use futures::executor::block_on_stream;
+
     use geoengine_datatypes::collections::MultiPointCollection;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
     };
+
+    use crate::engine::{MockExecutionContextCreator, VectorOperator};
+    use crate::mock::MockFeatureCollectionSource;
+
+    use super::*;
+
+    fn join_mock_collections(
+        left: MultiPointCollection,
+        right: DataCollection,
+        left_join_column: &str,
+        right_join_column: &str,
+        right_suffix: &str,
+    ) -> Vec<MultiPointCollection> {
+        let execution_context_creator = MockExecutionContextCreator::default();
+        let execution_context = execution_context_creator.context();
+
+        let left = MockFeatureCollectionSource::single(left)
+            .boxed()
+            .initialize(&execution_context)
+            .unwrap();
+        let right = MockFeatureCollectionSource::single(right)
+            .boxed()
+            .initialize(&execution_context)
+            .unwrap();
+
+        let left_processor = left.query_processor().unwrap().multi_point().unwrap();
+        let right_processor = right.query_processor().unwrap().data().unwrap();
+
+        let query_rectangle = QueryRectangle {
+            bbox: BoundingBox2D::new((f64::MIN, f64::MIN).into(), (f64::MAX, f64::MAX).into())
+                .unwrap(),
+            time_interval: TimeInterval::default(),
+            spatial_resolution: SpatialResolution::zero_point_one(),
+        };
+
+        let ctx = QueryContext {
+            chunk_byte_size: usize::MAX,
+        };
+
+        let processor = EquiGeoToDataJoinProcessor::new(
+            left_processor,
+            right_processor,
+            left_join_column.to_string(),
+            right_join_column.to_string(),
+            right_suffix.to_string(),
+        );
+
+        block_on_stream(processor.vector_query(query_rectangle, ctx))
+            .collect::<Result<_>>()
+            .unwrap()
+    }
 
     #[test]
     fn join() {
@@ -289,44 +499,9 @@ mod tests {
         )
         .unwrap();
 
-        let execution_context_creator = MockExecutionContextCreator::default();
-        let execution_context = execution_context_creator.context();
+        let result = join_mock_collections(left, right, "foo", "bar", "");
 
-        let left = MockFeatureCollectionSource::single(left)
-            .boxed()
-            .initialize(&execution_context)
-            .unwrap();
-        let right = MockFeatureCollectionSource::single(right)
-            .boxed()
-            .initialize(&execution_context)
-            .unwrap();
-
-        let left_processor = left.query_processor().unwrap().multi_point().unwrap();
-        let right_processor = right.query_processor().unwrap().data().unwrap();
-
-        let query_rectangle = QueryRectangle {
-            bbox: BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-        };
-
-        let ctx = QueryContext {
-            chunk_byte_size: usize::MAX,
-        };
-
-        let processor = EquiGeoToDataJoinProcessor::new(
-            left_processor,
-            right_processor,
-            "foo".to_string(),
-            "bar".to_string(),
-            "".to_string(),
-        );
-
-        let result: Vec<MultiPointCollection> =
-            block_on_stream(processor.vector_query(query_rectangle, ctx))
-                .collect::<Result<_>>()
-                .unwrap();
-
+        assert_eq!(result.len(), 1);
         assert_eq!(result[0], expected_result);
     }
 
@@ -371,44 +546,161 @@ mod tests {
         )
         .unwrap();
 
-        let execution_context_creator = MockExecutionContextCreator::default();
-        let execution_context = execution_context_creator.context();
+        let result = join_mock_collections(left, right, "foo", "bar", "");
 
-        let left = MockFeatureCollectionSource::single(left)
-            .boxed()
-            .initialize(&execution_context)
-            .unwrap();
-        let right = MockFeatureCollectionSource::single(right)
-            .boxed()
-            .initialize(&execution_context)
-            .unwrap();
-
-        let left_processor = left.query_processor().unwrap().multi_point().unwrap();
-        let right_processor = right.query_processor().unwrap().data().unwrap();
-
-        let query_rectangle = QueryRectangle {
-            bbox: BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-        };
-
-        let ctx = QueryContext {
-            chunk_byte_size: usize::MAX,
-        };
-
-        let processor = EquiGeoToDataJoinProcessor::new(
-            left_processor,
-            right_processor,
-            "foo".to_string(),
-            "bar".to_string(),
-            "".to_string(),
-        );
-
-        let result: Vec<MultiPointCollection> =
-            block_on_stream(processor.vector_query(query_rectangle, ctx))
-                .collect::<Result<_>>()
-                .unwrap();
-
+        assert_eq!(result.len(), 1);
         assert_eq!(result[0], expected_result);
+    }
+
+    #[test]
+    fn name_collision() {
+        let left = MultiPointCollection::from_data(
+            MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1)]).unwrap(),
+            vec![TimeInterval::default(); 2],
+            [("foo".to_string(), FeatureData::Decimal(vec![1, 2]))]
+                .iter()
+                .cloned()
+                .collect(),
+        )
+        .unwrap();
+
+        let right = DataCollection::from_data(
+            vec![],
+            vec![TimeInterval::default(); 2],
+            [("foo".to_string(), FeatureData::Decimal(vec![1, 2]))]
+                .iter()
+                .cloned()
+                .collect(),
+        )
+        .unwrap();
+
+        let expected_result = MultiPointCollection::from_data(
+            MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1)]).unwrap(),
+            vec![TimeInterval::default(); 2],
+            [
+                ("foo".to_string(), FeatureData::Decimal(vec![1, 2])),
+                ("foo2".to_string(), FeatureData::Decimal(vec![1, 2])),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+        )
+        .unwrap();
+
+        let result = join_mock_collections(left, right, "foo", "foo", "2");
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], expected_result);
+    }
+
+    #[test]
+    fn multi_match_geo() {
+        let left = MultiPointCollection::from_data(
+            MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1)]).unwrap(),
+            vec![TimeInterval::default(); 2],
+            [("foo".to_string(), FeatureData::Decimal(vec![1, 2]))]
+                .iter()
+                .cloned()
+                .collect(),
+        )
+        .unwrap();
+
+        let right = DataCollection::from_data(
+            vec![],
+            vec![TimeInterval::default(); 5],
+            [
+                ("bar".to_string(), FeatureData::Decimal(vec![1, 1, 1, 2, 2])),
+                (
+                    "baz".to_string(),
+                    FeatureData::Text(vec![
+                        "this".to_string(),
+                        "is".to_string(),
+                        "the".to_string(),
+                        "way".to_string(),
+                        "!".to_string(),
+                    ]),
+                ),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+        )
+        .unwrap();
+
+        let expected_result = MultiPointCollection::from_data(
+            MultiPoint::many(vec![
+                (0.0, 0.1),
+                (0.0, 0.1),
+                (0.0, 0.1),
+                (1.0, 1.1),
+                (1.0, 1.1),
+            ])
+            .unwrap(),
+            vec![TimeInterval::default(); 5],
+            [
+                ("foo".to_string(), FeatureData::Decimal(vec![1, 1, 1, 2, 2])),
+                ("bar".to_string(), FeatureData::Decimal(vec![1, 1, 1, 2, 2])),
+                (
+                    "baz".to_string(),
+                    FeatureData::Text(vec![
+                        "this".to_string(),
+                        "is".to_string(),
+                        "the".to_string(),
+                        "way".to_string(),
+                        "!".to_string(),
+                    ]),
+                ),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+        )
+        .unwrap();
+
+        let result = join_mock_collections(left, right, "foo", "bar", "");
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], expected_result);
+    }
+
+    #[test]
+    fn no_matches() {
+        let left = MultiPointCollection::from_data(
+            MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1)]).unwrap(),
+            vec![TimeInterval::default(); 2],
+            [("foo".to_string(), FeatureData::Decimal(vec![1, 2]))]
+                .iter()
+                .cloned()
+                .collect(),
+        )
+        .unwrap();
+
+        let right = DataCollection::from_data(
+            vec![],
+            vec![TimeInterval::default(); 2],
+            [("bar".to_string(), FeatureData::Decimal(vec![3, 4]))]
+                .iter()
+                .cloned()
+                .collect(),
+        )
+        .unwrap();
+
+        // let expected_result = MultiPointCollection::from_data(
+        //     vec![],
+        //     vec![],
+        //     [
+        //         ("foo".to_string(), FeatureData::Decimal(vec![])),
+        //         ("bar".to_string(), FeatureData::Decimal(vec![])),
+        //     ]
+        //     .iter()
+        //     .cloned()
+        //     .collect(),
+        // )
+        // .unwrap();
+
+        let result = join_mock_collections(left, right, "foo", "bar", "");
+
+        // TODO: do we need an empty collection here? (cf. `FeatureCollectionChunkMerger`)
+        assert_eq!(result.len(), 0);
     }
 }

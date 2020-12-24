@@ -23,7 +23,7 @@ pub use feature_collection_builder::{
     GeoFeatureCollectionRowBuilder,
 };
 pub use geo_feature_collection::{
-    GeometryCollection, IntoGeometryIterator, IntoGeometryOptionsIterator,
+    GeometryCollection, GeometryRandomAccess, IntoGeometryIterator, IntoGeometryOptionsIterator,
 };
 
 pub use data_collection::DataCollection;
