@@ -1,0 +1,26 @@
+name: Update Rust Nightly Version
+on:
+  # Run every Monday at 4:00
+  schedule:
+    - cron: '0 4 * * 1'
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+jobs:
+  update-dep:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set New Rust Nightly Version
+        run: |
+          sed -i -r "s:(toolchain\: nightly).+:\1-`date --date=yesterday +%Y-%m-%d`:g" .github/workflows/ci.yml
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v3
+        with:
+          commit-message: Update Rust Nightly Version
+          title: Update Rust Nightly Version
+          body: |
+            - Fix a new Rust Nightly version
+
+            Auto-generated PR
+          branch: update-rust-nightly-version
