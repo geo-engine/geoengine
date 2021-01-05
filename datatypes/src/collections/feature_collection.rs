@@ -134,7 +134,7 @@ pub trait FeatureCollectionModifications {
         self.rename_columns(&[(old_column_name, new_column_name)])
     }
 
-    /// Rename columns with (from, to) tuples.
+    /// Rename selected columns with (from, to) tuples.
     fn rename_columns<S1, S2>(&self, renamings: &[(S1, S2)]) -> Result<Self::Output>
     where
         S1: AsRef<str>,
