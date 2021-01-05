@@ -515,6 +515,7 @@ where
         S2: AsRef<str>,
     {
         let mut rename_map: HashMap<&str, &str> = HashMap::with_capacity(renamings.len());
+        let mut value_set: HashSet<&str> = HashSet::with_capacity(renamings.len());
 
         for (old_column_name, new_column_name) in renamings {
             let old_column_name = old_column_name.as_ref();
@@ -542,6 +543,13 @@ where
             if let Some(duplicate) = rename_map.insert(old_column_name, new_column_name) {
                 return Err(FeatureCollectionError::ColumnDuplicate {
                     name: duplicate.to_string(),
+                }
+                .into());
+            }
+
+            if !value_set.insert(new_column_name) {
+                return Err(FeatureCollectionError::ColumnDuplicate {
+                    name: new_column_name.to_string(),
                 }
                 .into());
             }
@@ -1418,9 +1426,10 @@ mod struct_serde {
 
 #[cfg(test)]
 mod tests {
-    use crate::primitives::{MultiPoint, NoGeometry};
-
     use super::*;
+
+    use crate::collections::DataCollection;
+    use crate::primitives::{MultiPoint, NoGeometry};
 
     #[test]
     fn is_reserved_name() {
@@ -1472,5 +1481,26 @@ mod tests {
                     + time_interval_size(i)
             );
         }
+    }
+
+    #[test]
+    #[should_panic = "duplicate column"]
+    fn rename_columns_fails() {
+        let collection = DataCollection::from_data(
+            vec![],
+            vec![TimeInterval::new(0, 1).unwrap(); 1],
+            [
+                ("foo".to_string(), FeatureData::Decimal(vec![1])),
+                ("bar".to_string(), FeatureData::Decimal(vec![2])),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+        )
+        .unwrap();
+
+        collection
+            .rename_columns(&[("foo", "baz"), ("bar", "baz")])
+            .expect("duplicate column");
     }
 }
