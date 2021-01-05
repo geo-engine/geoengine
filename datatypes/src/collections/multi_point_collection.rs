@@ -2,7 +2,7 @@ use arrow::array::{Array, FixedSizeListArray, Float64Array, ListArray};
 
 use crate::collections::{
     FeatureCollection, FeatureCollectionInfos, FeatureCollectionRowBuilder,
-    GeoFeatureCollectionRowBuilder, GeometryCollection, IntoGeometryIterator,
+    GeoFeatureCollectionRowBuilder, GeometryCollection, GeometryRandomAccess, IntoGeometryIterator,
 };
 use crate::primitives::{Coordinate2D, MultiPoint, MultiPointRef};
 use crate::util::arrow::downcast_array;
@@ -77,6 +77,37 @@ impl<'l> Iterator for MultiPointIterator<'l> {
 
     fn count(self) -> usize {
         self.length - self.index
+    }
+}
+
+impl<'l> GeometryRandomAccess<'l> for MultiPointCollection {
+    type GeometryType = MultiPointRef<'l>;
+
+    fn geometry_at(&'l self, index: usize) -> Option<Self::GeometryType> {
+        let geometry_column: &ListArray = downcast_array(
+            &self
+                .table
+                .column_by_name(MultiPointCollection::GEOMETRY_COLUMN_NAME)
+                .expect("Column must exist since it is in the metadata"),
+        );
+
+        if index >= self.len() {
+            return None;
+        }
+
+        let multi_point_array_ref = geometry_column.value(index);
+        let multi_point_array: &FixedSizeListArray = downcast_array(&multi_point_array_ref);
+
+        let number_of_points = multi_point_array.len();
+
+        let floats_ref = multi_point_array.value(0);
+        let floats: &Float64Array = downcast_array(&floats_ref);
+
+        let multi_point = MultiPointRef::new_unchecked(unsafe {
+            slice::from_raw_parts(floats.raw_values() as *const Coordinate2D, number_of_points)
+        });
+
+        Some(multi_point)
     }
 }
 

@@ -15,14 +15,15 @@ mod multi_polygon_collection;
 pub(crate) use error::FeatureCollectionError;
 pub(self) use feature_collection::FilterArray;
 pub use feature_collection::{
-    FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications, ToGeoJson,
+    FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
+    FilteredColumnNameIter, ToGeoJson,
 };
 pub use feature_collection_builder::{
     BuilderProvider, FeatureCollectionBuilder, FeatureCollectionRowBuilder,
     GeoFeatureCollectionRowBuilder,
 };
 pub use geo_feature_collection::{
-    GeometryCollection, IntoGeometryIterator, IntoGeometryOptionsIterator,
+    GeometryCollection, GeometryRandomAccess, IntoGeometryIterator, IntoGeometryOptionsIterator,
 };
 
 pub use data_collection::DataCollection;

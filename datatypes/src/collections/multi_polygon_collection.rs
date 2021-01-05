@@ -1,6 +1,6 @@
 use crate::collections::{
     FeatureCollection, FeatureCollectionInfos, FeatureCollectionRowBuilder,
-    GeoFeatureCollectionRowBuilder, GeometryCollection, IntoGeometryIterator,
+    GeoFeatureCollectionRowBuilder, GeometryCollection, GeometryRandomAccess, IntoGeometryIterator,
 };
 use crate::primitives::{Coordinate2D, MultiPolygon, MultiPolygonAccess, MultiPolygonRef};
 use crate::util::arrow::downcast_array;
@@ -182,6 +182,59 @@ impl<'l> Iterator for MultiPolygonIterator<'l> {
 
     fn count(self) -> usize {
         self.length - self.index
+    }
+}
+
+impl<'l> GeometryRandomAccess<'l> for MultiPolygonCollection {
+    type GeometryType = MultiPolygonRef<'l>;
+
+    fn geometry_at(&'l self, index: usize) -> Option<Self::GeometryType> {
+        let geometry_column: &ListArray = downcast_array(
+            &self
+                .table
+                .column_by_name(MultiPolygonCollection::GEOMETRY_COLUMN_NAME)
+                .expect("Column must exist since it is in the metadata"),
+        );
+
+        if index >= self.len() {
+            return None;
+        }
+
+        let polygon_array_ref = geometry_column.value(index);
+        let polygon_array: &ListArray = downcast_array(&polygon_array_ref);
+
+        let number_of_polygons = polygon_array.len();
+        let mut polygon_refs = Vec::with_capacity(number_of_polygons);
+
+        for polygon_index in 0..number_of_polygons {
+            let ring_array_ref = polygon_array.value(polygon_index);
+            let ring_array: &ListArray = downcast_array(&ring_array_ref);
+
+            let number_of_rings = ring_array.len();
+            let mut ring_refs = Vec::with_capacity(number_of_rings);
+
+            for ring_index in 0..number_of_rings {
+                let coordinate_array_ref = ring_array.value(ring_index);
+                let coordinate_array: &FixedSizeListArray = downcast_array(&coordinate_array_ref);
+
+                let number_of_coordinates = coordinate_array.len();
+
+                let float_array_ref = coordinate_array.value(0);
+                let float_array: &Float64Array = downcast_array(&float_array_ref);
+
+                ring_refs.push(unsafe {
+                    #[allow(clippy::cast_ptr_alignment)]
+                    slice::from_raw_parts(
+                        float_array.raw_values() as *const Coordinate2D,
+                        number_of_coordinates,
+                    )
+                });
+            }
+
+            polygon_refs.push(ring_refs);
+        }
+
+        Some(MultiPolygonRef::new_unchecked(polygon_refs))
     }
 }
 
