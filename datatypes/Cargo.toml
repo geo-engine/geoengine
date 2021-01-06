@@ -24,7 +24,7 @@ paste = "1.0" # TODO remove, once https://doc.rust-lang.org/core/macro.concat_id
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 snafu = "0.6"
-vega_lite_3 = { version = "0.3.1", features = ["ndarray", "show_vega"]} # upgrade to 4 if published
+vega_lite_4 = { version = "0.5", features = ["ndarray", "show_vega"]}
 postgres-types = { version = "0.1", features = ["derive", "with-chrono-0_4"] }
 
 [dev-dependencies]

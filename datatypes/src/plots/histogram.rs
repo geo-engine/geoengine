@@ -5,10 +5,9 @@ use float_cmp::*;
 use ndarray::{stack, Array, Array1, Axis};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
-use vega_lite_3::{
-    BinEnum, EncodingBuilder, Mark, Padding, SelectionDefBuilder, SelectionDefType,
-    SingleDefUnitChannel, StandardType, VegaliteBuilder, X2ClassBuilder, XClassBuilder,
-    YClassBuilder,
+use vega_lite_4::{
+    BinEnum, EdEncodingBuilder, Mark, Padding, SelectionDefBuilder, SelectionDefType,
+    SingleDefUnitChannel, Type, VegaliteBuilder, X2ClassBuilder, XClassBuilder, YClassBuilder,
 };
 
 use crate::error;
@@ -230,11 +229,11 @@ impl Plot for Histogram {
             .data(values.t())
             .mark(Mark::Bar)
             .encoding(
-                EncodingBuilder::default()
+                EdEncodingBuilder::default()
                     .x(XClassBuilder::default()
                         .field("data.0")
-                        .title(self.measurement.to_string())
-                        .def_type(StandardType::Quantitative)
+                        .title(self.measurement.to_string().as_str())
+                        .position_def_type(Type::Quantitative)
                         .bin(BinEnum::Binned)
                         .build()
                         .unwrap())
@@ -242,7 +241,7 @@ impl Plot for Histogram {
                     .y(YClassBuilder::default()
                         .field("data.2")
                         .title("Frequency")
-                        .def_type(StandardType::Quantitative)
+                        .position_def_type(Type::Quantitative)
                         .build()
                         .unwrap())
                     .build()
@@ -509,7 +508,7 @@ mod tests {
         assert_eq!(
         histogram.to_vega_embeddable(false).unwrap(),
         PlotData {
-            vega_string: r#"{"$schema":"https://vega.github.io/schema/vega-lite/v3.4.0.json","data":{"values":[{"v":1,"dim":[3],"data":[2.0,0.0,0.5]},{"v":1,"dim":[3],"data":[2.0,0.5,1.0]}]},"encoding":{"x":{"bin":"binned","field":"data.0","title":"","type":"quantitative"},"x2":{"field":"data.1"},"y":{"field":"data.2","title":"Frequency","type":"quantitative"}},"mark":"bar","padding":5.0}"#.to_string(),
+            vega_string: r#"{"$schema":"https://vega.github.io/schema/vega-lite/v4.17.0.json","data":{"values":[{"v":1,"dim":[3],"data":[2.0,0.0,0.5]},{"v":1,"dim":[3],"data":[2.0,0.5,1.0]}]},"encoding":{"x":{"bin":"binned","field":"data.0","title":"","type":"quantitative"},"x2":{"field":"data.1"},"y":{"field":"data.2","title":"Frequency","type":"quantitative"}},"mark":"bar","padding":5.0}"#.to_string(),
             metadata: EmbeddingMetaData {
                 selection_name: None,
             }
@@ -518,7 +517,7 @@ mod tests {
         assert_eq!(
         histogram.to_vega_embeddable(true).unwrap(),
         PlotData {
-            vega_string: r#"{"$schema":"https://vega.github.io/schema/vega-lite/v3.4.0.json","data":{"values":[{"v":1,"dim":[3],"data":[2.0,0.0,0.5]},{"v":1,"dim":[3],"data":[2.0,0.5,1.0]}]},"encoding":{"x":{"bin":"binned","field":"data.0","title":"","type":"quantitative"},"x2":{"field":"data.1"},"y":{"field":"data.2","title":"Frequency","type":"quantitative"}},"mark":"bar","padding":5.0,"selection":{"range_selection":{"encodings":["x"],"type":"interval"}}}"#.to_string(),
+            vega_string: r#"{"$schema":"https://vega.github.io/schema/vega-lite/v4.17.0.json","data":{"values":[{"v":1,"dim":[3],"data":[2.0,0.0,0.5]},{"v":1,"dim":[3],"data":[2.0,0.5,1.0]}]},"encoding":{"x":{"bin":"binned","field":"data.0","title":"","type":"quantitative"},"x2":{"field":"data.1"},"y":{"field":"data.2","title":"Frequency","type":"quantitative"}},"mark":"bar","padding":5.0,"selection":{"range_selection":{"encodings":["x"],"type":"interval"}}}"#.to_string(),
             metadata: EmbeddingMetaData {
                 selection_name: Some("range_selection".to_string()),
             }
