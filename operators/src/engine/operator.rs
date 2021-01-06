@@ -1,15 +1,15 @@
-use std::path::PathBuf;
+use serde::{Deserialize, Serialize};
+
+use crate::engine::query_processor::QueryProcessor;
+use crate::engine::ExecutionContext;
+use crate::error;
+use crate::util::Result;
 
 use super::{
     query_processor::{TypedRasterQueryProcessor, TypedVectorQueryProcessor},
     CloneableRasterOperator, CloneableVectorOperator, RasterResultDescriptor, ResultDescriptor,
     VectorResultDescriptor,
 };
-use crate::engine::query_processor::QueryProcessor;
-use crate::error;
-use crate::util::Result;
-
-use serde::{Deserialize, Serialize};
 
 /// Common methods for `RasterOperator`s
 #[typetag::serde(tag = "type")]
@@ -42,19 +42,6 @@ pub trait VectorOperator: CloneableVectorOperator + Send + Sync + std::fmt::Debu
         Self: Sized + 'static,
     {
         Box::new(self)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct ExecutionContext {
-    pub raster_data_root: PathBuf,
-}
-
-impl ExecutionContext {
-    pub fn mock_empty() -> Self {
-        ExecutionContext {
-            raster_data_root: "".into(),
-        }
     }
 }
 

@@ -12,7 +12,7 @@ edition = "2018"
 chrono = { version = "0.4", features = ["serde"] }
 geoengine-datatypes = { path = "../datatypes" }
 geoengine-operators = { path = "../operators" }
-tokio = { version = "0.2", features = ["macros", "signal"] }
+tokio = { version = "0.2", features = ["macros", "signal"] } # TODO: tokio = { version = "0.3", features = ["macros", "signal", "sync", "rt-multi-thread"] }
 warp = "0.2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -22,7 +22,7 @@ pwhash = "0.3"
 serde_urlencoded = "0.7"
 futures = "0.3"
 image = "0.23"
-bb8-postgres = { version = "0.6", features = ["with-uuid-0_8", "with-chrono-0_4", "with-serde_json-1"] }
+bb8-postgres = { version = "0.5", features = ["with-uuid-0_8", "with-chrono-0_4", "with-serde_json-1"] } # TODO: update v0.6
 postgres-types = { version = "0.1", features = ["derive"] }
 async-trait = "0.1"
 config = "0.10"

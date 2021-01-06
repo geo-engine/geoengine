@@ -385,6 +385,24 @@ impl<'g> Into<geojson::Geometry> for MultiPolygonRef<'g> {
     }
 }
 
+impl<'g> From<MultiPolygonRef<'g>> for MultiPolygon {
+    fn from(multi_point_ref: MultiPolygonRef<'g>) -> Self {
+        MultiPolygon::from(&multi_point_ref)
+    }
+}
+
+impl<'g> From<&MultiPolygonRef<'g>> for MultiPolygon {
+    fn from(multi_point_ref: &MultiPolygonRef<'g>) -> Self {
+        MultiPolygon::new_unchecked(
+            multi_point_ref
+                .polygons
+                .iter()
+                .map(|polygon| polygon.iter().cloned().map(ToOwned::to_owned).collect())
+                .collect(),
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

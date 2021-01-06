@@ -130,8 +130,8 @@ mod tests {
     use super::*;
 
     use crate::engine::{
-        ExecutionContext, QueryContext, QueryProcessor, QueryRectangle, TypedVectorQueryProcessor,
-        VectorOperator,
+        MockExecutionContextCreator, QueryContext, QueryProcessor, QueryRectangle,
+        TypedVectorQueryProcessor, VectorOperator,
     };
     use crate::error::Error;
     use crate::mock::{MockFeatureCollectionSource, MockPointSource, MockPointSourceParams};
@@ -157,7 +157,7 @@ mod tests {
 
         let source = source
             .boxed()
-            .initialize(&ExecutionContext::mock_empty())
+            .initialize(&MockExecutionContextCreator::default().context())
             .unwrap();
 
         let processor =
@@ -228,7 +228,7 @@ mod tests {
     async fn empty() {
         let source = MockFeatureCollectionSource::single(DataCollection::empty())
             .boxed()
-            .initialize(&ExecutionContext::mock_empty())
+            .initialize(&MockExecutionContextCreator::default().context())
             .unwrap();
 
         let processor =
@@ -299,7 +299,7 @@ mod tests {
         );
     }
 
-    #[tokio::test(max_threads = 1)]
+    #[tokio::test(max_threads = 1)] // TODO: #[tokio::test(flavor = "current_thread")]
     async fn interleaving_pendings() {
         let mut stream_history: Vec<Poll<Option<Result<MultiPointCollection>>>> = vec![
             Poll::Pending,
@@ -326,7 +326,7 @@ mod tests {
         let stream = futures::stream::poll_fn(move |cx| {
             let item = stream_history.pop().unwrap_or(Poll::Ready(None));
 
-            if let Poll::Pending = item {
+            if item.is_pending() {
                 cx.waker().wake_by_ref();
             }
 

@@ -1,6 +1,6 @@
 use crate::collections::{
     FeatureCollection, FeatureCollectionInfos, FeatureCollectionRowBuilder,
-    GeoFeatureCollectionRowBuilder, GeometryCollection, IntoGeometryIterator,
+    GeoFeatureCollectionRowBuilder, GeometryCollection, GeometryRandomAccess, IntoGeometryIterator,
 };
 use crate::primitives::{Coordinate2D, MultiLineString, MultiLineStringAccess, MultiLineStringRef};
 use crate::util::arrow::downcast_array;
@@ -149,6 +149,49 @@ impl<'l> Iterator for MultiLineStringIterator<'l> {
 
     fn count(self) -> usize {
         self.length - self.index
+    }
+}
+
+impl<'l> GeometryRandomAccess<'l> for MultiLineStringCollection {
+    type GeometryType = MultiLineStringRef<'l>;
+
+    fn geometry_at(&'l self, index: usize) -> Option<Self::GeometryType> {
+        let geometry_column: &ListArray = downcast_array(
+            &self
+                .table
+                .column_by_name(MultiLineStringCollection::GEOMETRY_COLUMN_NAME)
+                .expect("Column must exist since it is in the metadata"),
+        );
+
+        if index >= self.len() {
+            return None;
+        }
+
+        let line_array_ref = geometry_column.value(index);
+        let line_array: &ListArray = downcast_array(&line_array_ref);
+
+        let number_of_lines = line_array.len();
+        let mut line_coordinate_slices = Vec::with_capacity(number_of_lines);
+
+        for line_index in 0..number_of_lines {
+            let coordinate_array_ref = line_array.value(line_index);
+            let coordinate_array: &FixedSizeListArray = downcast_array(&coordinate_array_ref);
+
+            let number_of_coordinates = coordinate_array.len();
+
+            let float_array_ref = coordinate_array.value(0);
+            let float_array: &Float64Array = downcast_array(&float_array_ref);
+
+            line_coordinate_slices.push(unsafe {
+                #[allow(clippy::cast_ptr_alignment)]
+                slice::from_raw_parts(
+                    float_array.raw_values() as *const Coordinate2D,
+                    number_of_coordinates,
+                )
+            });
+        }
+
+        Some(MultiLineStringRef::new_unchecked(line_coordinate_slices))
     }
 }
 

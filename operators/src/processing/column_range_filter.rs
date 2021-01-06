@@ -176,6 +176,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::MockExecutionContextCreator;
     use crate::mock::MockFeatureCollectionSource;
     use geoengine_datatypes::collections::{FeatureCollectionModifications, MultiPointCollection};
     use geoengine_datatypes::primitives::SpatialResolution;
@@ -248,7 +249,9 @@ mod tests {
         }
         .boxed();
 
-        let initialized = filter.initialize(&ExecutionContext::mock_empty()).unwrap();
+        let initialized = filter
+            .initialize(&MockExecutionContextCreator::default().context())
+            .unwrap();
 
         let point_processor = match initialized.query_processor() {
             Ok(TypedVectorQueryProcessor::MultiPoint(processor)) => processor,

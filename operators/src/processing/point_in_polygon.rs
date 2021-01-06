@@ -209,6 +209,7 @@ impl<'p> PointInPolygonTester<'p> {
         }
     }
 
+    #[allow(clippy::suspicious_operation_groupings)]
     fn precalculate_ring(&mut self, ring_start_index: usize, ring_end_index: usize) {
         let number_of_corners = ring_end_index - ring_start_index - 1;
         let mut j = number_of_corners - 1;
@@ -382,6 +383,7 @@ mod tests {
     use crate::mock::MockFeatureCollectionSource;
 
     use super::*;
+    use crate::engine::MockExecutionContextCreator;
 
     #[test]
     fn point_in_polygon_tester() {
@@ -538,7 +540,7 @@ mod tests {
             params: (),
         }
         .boxed()
-        .initialize(&ExecutionContext::mock_empty())?;
+        .initialize(&MockExecutionContextCreator::default().context())?;
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
 
@@ -586,7 +588,7 @@ mod tests {
             params: (),
         }
         .boxed()
-        .initialize(&ExecutionContext::mock_empty())?;
+        .initialize(&MockExecutionContextCreator::default().context())?;
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
 
@@ -647,7 +649,7 @@ mod tests {
             params: (),
         }
         .boxed()
-        .initialize(&ExecutionContext::mock_empty())?;
+        .initialize(&MockExecutionContextCreator::default().context())?;
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
 
@@ -725,7 +727,7 @@ mod tests {
             params: (),
         }
         .boxed()
-        .initialize(&ExecutionContext::mock_empty())?;
+        .initialize(&MockExecutionContextCreator::default().context())?;
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
 

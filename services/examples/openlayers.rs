@@ -54,7 +54,7 @@ async fn output_info() -> Result<(), Error> {
         return Err(Error::ServerStartup);
     }
 
-    eprintln!("Server is listening… visit {}{}", &url, "static/index.html");
+    eprintln!("Server is listening… visit {}static/index.html", &url);
 
     Ok(())
 }

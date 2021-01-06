@@ -6,7 +6,7 @@ use snafu::ensure;
 use crate::error;
 use crate::error::Result;
 use crate::projects::project::{ProjectId, STRectangle};
-use crate::users::session::{Session, SessionId};
+use crate::users::session::{Session, SessionId, UserInfo};
 use crate::users::user::{User, UserCredentials, UserId, UserRegistration};
 use crate::users::userdb::UserDB;
 use crate::util::identifiers::Identifier;
@@ -37,19 +37,54 @@ impl UserDB for HashMapUserDB {
         Ok(id)
     }
 
+    async fn anonymous(&mut self) -> Result<Session> {
+        let id = UserId::new();
+        let user = User {
+            id,
+            email: id.to_string(),
+            password_hash: "".to_string(),
+            real_name: "".to_string(),
+            active: true,
+        };
+
+        self.users.insert(id.to_string(), user);
+
+        let session = Session {
+            id: SessionId::new(),
+            user: UserInfo {
+                id,
+                email: None,
+                real_name: None,
+            },
+            created: chrono::Utc::now(),
+            // TODO: make session length configurable
+            valid_until: chrono::Utc::now() + chrono::Duration::minutes(60),
+            project: None,
+            view: None,
+        };
+
+        self.sessions.insert(session.id, session.clone());
+        Ok(session)
+    }
+
     /// Log user in
     async fn login(&mut self, user_credentials: UserCredentials) -> Result<Session> {
         match self.users.get(&user_credentials.email) {
             Some(user) if bcrypt::verify(user_credentials.password, &user.password_hash) => {
                 let session = Session {
                     id: SessionId::new(),
-                    user: user.id,
+                    user: UserInfo {
+                        id: user.id,
+                        email: Some(user.email.clone()),
+                        real_name: Some(user.real_name.clone()),
+                    },
                     created: chrono::Utc::now(),
                     // TODO: make session length configurable
                     valid_until: chrono::Utc::now() + chrono::Duration::minutes(60),
                     project: None,
                     view: None,
                 };
+
                 self.sessions.insert(session.id, session.clone());
                 Ok(session)
             }
@@ -65,7 +100,6 @@ impl UserDB for HashMapUserDB {
         }
     }
 
-    /// Get session
     async fn session(&self, session: SessionId) -> Result<Session> {
         match self.sessions.get(&session) {
             Some(session) => Ok(session.clone()),

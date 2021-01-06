@@ -93,10 +93,15 @@ where
 
                         CREATE TABLE users (
                             id UUID PRIMARY KEY,
-                            email character varying (256) UNIQUE NOT NULL,
-                            password_hash character varying (256) NOT NULL,
-                            real_name character varying (256) NOT NULL,
+                            email character varying (256) UNIQUE,
+                            password_hash character varying (256),
+                            real_name character varying (256),
                             active boolean NOT NULL
+                            CONSTRAINT users_anonymous_ck CHECK (
+                               (email IS NULL AND password_hash IS NULL AND real_name IS NULL) OR 
+                               (email IS NOT NULL AND password_hash IS NOT NULL AND 
+                                real_name IS NOT NULL) 
+                            )
                         );
 
                         CREATE TYPE "SpatialReferenceAuthority" AS ENUM (
@@ -316,6 +321,8 @@ mod tests {
         let ctx = PostgresContext::new(config, tokio_postgres::NoTls)
             .await
             .unwrap();
+
+        anonymous(&ctx).await;
 
         let user_id = user_reg_login(&ctx).await;
 
@@ -582,5 +589,18 @@ mod tests {
         assert!(db.session(session.id).await.is_err());
 
         user_id
+    }
+
+    async fn anonymous(ctx: &PostgresContext<NoTls>) {
+        let user_db = ctx.user_db();
+        let mut db = user_db.write().await;
+
+        let session = db.anonymous().await.unwrap();
+
+        let session = db.session(session.id).await.unwrap();
+
+        db.logout(session.id).await.unwrap();
+
+        assert!(db.session(session.id).await.is_err());
     }
 }

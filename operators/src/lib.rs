@@ -21,6 +21,8 @@
 )]
 
 pub mod adapters;
+pub mod concurrency;
+#[macro_use]
 pub mod engine;
 pub mod error;
 pub mod mock;
