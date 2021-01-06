@@ -36,7 +36,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: nightly-2020-12-22
+          toolchain: nightly-2021-01-03
           components: clippy, rustfmt
           override: true
       - name: Install OpenCL
