@@ -32,11 +32,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v1
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with: # uses rust-toolchain file
-          profile: minimal
-          override: true
       - name: Install OpenCL
         run: |
           sudo apt-get update
