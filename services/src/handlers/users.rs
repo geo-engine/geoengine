@@ -11,7 +11,7 @@ use uuid::Uuid;
 use warp::reply::Reply;
 use warp::Filter;
 
-pub fn register_user_handler<C: Context>(
+pub(crate) fn register_user_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::post()
@@ -31,7 +31,7 @@ async fn register_user<C: Context>(
     Ok(warp::reply::json(&IdResponse::from_id(id)))
 }
 
-pub fn anonymous_handler<C: Context>(
+pub(crate) fn anonymous_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::post()
@@ -46,7 +46,7 @@ async fn anonymous<C: Context>(ctx: C) -> Result<impl warp::Reply, warp::Rejecti
     Ok(warp::reply::json(&session))
 }
 
-pub fn login_handler<C: Context>(
+pub(crate) fn login_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::post()
@@ -71,7 +71,7 @@ async fn login<C: Context>(
     Ok(warp::reply::json(&session).into_response())
 }
 
-pub fn logout_handler<C: Context>(
+pub(crate) fn logout_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::post()
@@ -89,7 +89,7 @@ async fn logout<C: Context>(ctx: C) -> Result<impl warp::Reply, warp::Rejection>
     Ok(warp::reply().into_response())
 }
 
-pub fn session_handler<C: Context>(
+pub(crate) fn session_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::get()
@@ -105,7 +105,7 @@ async fn session<C: Context>(ctx: C) -> Result<impl warp::Reply, warp::Rejection
     ))
 }
 
-pub fn session_project_handler<C: Context>(
+pub(crate) fn session_project_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::post()
@@ -127,7 +127,7 @@ async fn session_project<C: Context>(
     Ok(warp::reply())
 }
 
-pub fn session_view_handler<C: Context>(
+pub(crate) fn session_view_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::post()

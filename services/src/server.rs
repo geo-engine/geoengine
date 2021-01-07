@@ -111,6 +111,7 @@ where
         handlers::projects::list_projects_handler(ctx.clone()),
         handlers::projects::update_project_handler(ctx.clone()),
         handlers::projects::delete_project_handler(ctx.clone()),
+        handlers::projects::load_project_handler(ctx.clone()),
         handlers::projects::project_versions_handler(ctx.clone()),
         handlers::projects::add_permission_handler(ctx.clone()),
         handlers::projects::remove_permission_handler(ctx.clone()),
@@ -168,7 +169,7 @@ mod tests {
     use super::*;
     use tokio::sync::oneshot;
 
-    /// Test the werbserver startup to ensure that tokio and warp are working properly
+    /// Test the webserver startup to ensure that `tokio` and `warp` are working properly
     #[tokio::test]
     async fn webserver_start() -> Result<(), Error> {
         let (shutdown_tx, shutdown_rx) = oneshot::channel();

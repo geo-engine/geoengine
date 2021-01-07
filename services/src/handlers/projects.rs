@@ -8,7 +8,7 @@ use crate::util::user_input::UserInput;
 use uuid::Uuid;
 use warp::Filter;
 
-pub fn create_project_handler<C: Context>(
+pub(crate) fn create_project_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::post()
@@ -32,7 +32,7 @@ async fn create_project<C: Context>(
     Ok(warp::reply::json(&IdResponse::from_id(id)))
 }
 
-pub fn list_projects_handler<C: Context>(
+pub(crate) fn list_projects_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::get()
@@ -56,7 +56,7 @@ async fn list_projects<C: Context>(
     Ok(warp::reply::json(&listing))
 }
 
-pub fn load_project_handler<C: Context>(
+pub(crate) fn load_project_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::get()
@@ -85,7 +85,7 @@ async fn load_project<C: Context>(
     Ok(warp::reply::json(&id))
 }
 
-pub fn update_project_handler<C: Context>(
+pub(crate) fn update_project_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::patch()
@@ -110,7 +110,7 @@ async fn update_project<C: Context>(
     Ok(warp::reply())
 }
 
-pub fn delete_project_handler<C: Context>(
+pub(crate) fn delete_project_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::delete()
@@ -131,7 +131,7 @@ async fn delete_project<C: Context>(
     Ok(warp::reply())
 }
 
-pub fn project_versions_handler<C: Context>(
+pub(crate) fn project_versions_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::get()
@@ -154,7 +154,7 @@ async fn project_versions<C: Context>(
     Ok(warp::reply::json(&versions))
 }
 
-pub fn add_permission_handler<C: Context>(
+pub(crate) fn add_permission_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::post()
@@ -176,7 +176,7 @@ async fn add_permission<C: Context>(
     Ok(warp::reply())
 }
 
-pub fn remove_permission_handler<C: Context>(
+pub(crate) fn remove_permission_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::delete()
@@ -198,7 +198,7 @@ async fn remove_permission<C: Context>(
     Ok(warp::reply())
 }
 
-pub fn list_permissions_handler<C: Context>(
+pub(crate) fn list_permissions_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::get()
