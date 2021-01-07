@@ -32,13 +32,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v1
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: nightly-2021-01-03
-          components: clippy, rustfmt
-          override: true
       - name: Install OpenCL
         run: |
           sudo apt-get update

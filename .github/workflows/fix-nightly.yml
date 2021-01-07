@@ -13,7 +13,7 @@ jobs:
       - uses: actions/checkout@v2
       - name: Set New Rust Nightly Version
         run: |
-          sed -i -r "s:(toolchain\: nightly).+:\1-`date --date=yesterday +%Y-%m-%d`:g" .github/workflows/ci.yml
+          sed -i -r "s:(channel = \"nightly).+:\1-`date --date=yesterday +%Y-%m-%d`\":g" rust-toolchain
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v3
         with:
