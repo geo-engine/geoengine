@@ -30,7 +30,7 @@ use geoengine_operators::engine::{
 };
 use std::str::FromStr;
 
-pub fn wms_handler<C: Context>(
+pub(crate) fn wms_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::get()

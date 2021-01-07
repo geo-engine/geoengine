@@ -24,7 +24,7 @@ use geoengine_operators::engine::{
 use serde_json::json;
 use std::str::FromStr;
 
-pub fn wfs_handler<C: Context>(
+pub(crate) fn wfs_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::get()
