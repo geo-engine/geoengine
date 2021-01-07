@@ -1,3 +1,5 @@
+use std::convert::Infallible;
+
 use snafu::Snafu;
 
 use crate::collections::FeatureCollectionError;
@@ -5,7 +7,6 @@ use crate::{
     primitives::{Coordinate2D, PrimitivesError, TimeInterval},
     raster::RasterDataType,
 };
-use std::convert::Infallible;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility = "pub(crate)")]

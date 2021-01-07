@@ -24,6 +24,10 @@ pub enum FeatureCollectionError {
         name: String,
     },
 
+    ColumnDuplicate {
+        name: String,
+    },
+
     EmptyPredicate,
 
     Primitives {

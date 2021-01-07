@@ -5,8 +5,8 @@ on:
     branches: [ master ]
   pull_request:
     branches: [ master ]
-  schedule:
-    - cron: '0 6 * * *'
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
 
 jobs:
   build:
@@ -32,13 +32,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v1
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: nightly
-          components: clippy, rustfmt
-          override: true
       - name: Install OpenCL
         run: |
           sudo apt-get update

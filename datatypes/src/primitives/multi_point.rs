@@ -262,6 +262,18 @@ impl<'g> Into<geojson::Geometry> for MultiPointRef<'g> {
     }
 }
 
+impl<'g> From<MultiPointRef<'g>> for MultiPoint {
+    fn from(multi_point_ref: MultiPointRef<'g>) -> Self {
+        MultiPoint::from(&multi_point_ref)
+    }
+}
+
+impl<'g> From<&MultiPointRef<'g>> for MultiPoint {
+    fn from(multi_point_ref: &MultiPointRef<'g>) -> Self {
+        MultiPoint::new_unchecked(multi_point_ref.point_coordinates.to_owned())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
