@@ -241,7 +241,10 @@ where
         })
         .await?;
 
-    let colorizer = Colorizer::rgba(); // TODO: create colorizer from request
+    let colorizer = match request.styles.strip_prefix("custom:") {
+        None => Colorizer::Rgba,
+        Some(suffix) => serde_json::from_str(suffix)?
+    };
 
     Ok(output_tile.to_png(request.width, request.height, &colorizer)?)
 }

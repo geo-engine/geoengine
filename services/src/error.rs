@@ -131,3 +131,9 @@ impl From<bb8_postgres::tokio_postgres::error::Error> for Error {
         Self::TokioPostgres { source: e }
     }
 }
+
+impl From<serde_json::Error> for Error {
+    fn from(e: serde_json::Error) -> Self {
+        Self::SerdeJson { source: e }
+    }
+}
