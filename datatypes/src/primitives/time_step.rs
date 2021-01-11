@@ -28,13 +28,13 @@ pub struct TimeStep {
 }
 
 impl TimeStep {
-    /// Resolves how many 'TimeSteps' fit into a given 'TimeInterval'.
-    /// Remember that 'TimeInterval' is not inclusive.
+    /// Resolves how many `TimeSteps` fit into a given `TimeInterval`.
+    /// Remember that `TimeInterval` is not inclusive.
     ///
     /// # Errors
-    /// This method uses chrono and therefore fails if a 'TimeInstance' is outside chronos valid date range.
+    /// This method uses chrono and therefore fails if a `TimeInstance` is outside chronos valid date range.
     ///
-    pub fn num_steps_in_interval(&self, time_interval: TimeInterval) -> Result<u32> {
+    pub fn num_steps_in_interval(self, time_interval: TimeInterval) -> Result<u32> {
         let end = time_interval
             .end()
             .as_naive_date_time()
@@ -56,41 +56,42 @@ impl TimeStep {
 
         let num_steps: i64 = match self.granularity {
             TimeGranularity::Seconds => {
-                let s = duration.num_seconds() / self.step as i64;
-                if (duration - Duration::seconds(s * self.step as i64)).is_zero() {
+                let s = duration.num_seconds() / i64::from(self.step);
+                if (duration - Duration::seconds(s * i64::from(self.step))).is_zero() {
                     s - 1
                 } else {
                     s
                 }
             }
             TimeGranularity::Minutes => {
-                let s = duration.num_minutes() / self.step as i64;
-                if (duration - Duration::minutes(s * self.step as i64)).is_zero() {
+                let s = duration.num_minutes() / i64::from(self.step);
+                if (duration - Duration::minutes(s * i64::from(self.step))).is_zero() {
                     s - 1
                 } else {
                     s
                 }
             }
             TimeGranularity::Hours => {
-                let s = duration.num_hours() / self.step as i64;
-                if (duration - Duration::hours(s * self.step as i64)).is_zero() {
+                let s = duration.num_hours() / i64::from(self.step);
+                if (duration - Duration::hours(s * i64::from(self.step))).is_zero() {
                     s - 1
                 } else {
                     s
                 }
             }
             TimeGranularity::Days => {
-                let s = duration.num_days() / self.step as i64;
-                if (duration - Duration::days(s * self.step as i64)).is_zero() {
+                let s = duration.num_days() / i64::from(self.step);
+                if (duration - Duration::days(s * i64::from(self.step))).is_zero() {
                     s - 1
                 } else {
                     s
                 }
             }
             TimeGranularity::Months => {
-                let diff_years = (end.year() - start.year()) as i64;
-                let diff_months = (end.month() as i64 - start.month() as i64) + diff_years * 12;
-                let steps = diff_months / self.step as i64;
+                let diff_years = i64::from(end.year() - start.year());
+                let diff_months =
+                    i64::from(end.month()) - i64::from(start.month()) + diff_years * 12;
+                let steps = diff_months / i64::from(self.step);
 
                 let shifted_start = (time_interval.start()
                     + TimeStep {
@@ -111,10 +112,10 @@ impl TimeStep {
                 }
             }
             TimeGranularity::Years => {
-                let steps = (end.year() - start.year()) as i64 / self.step as i64;
+                let steps = i64::from(end.year() - start.year()) / i64::from(self.step);
 
                 let shifted_start = start
-                    .with_year(start.year() + (self.step as i64 * steps) as i32)
+                    .with_year(start.year() + (i64::from(self.step) * steps) as i32)
                     .expect("is in valid range");
 
                 if (end - shifted_start).is_zero() {
@@ -128,13 +129,13 @@ impl TimeStep {
         Ok(max(0, num_steps as u32))
     }
 
-    /// Snaps a 'TimeInstance' relative to a given reference 'TimeInstance'.
+    /// Snaps a `TimeInstance` relative to a given reference `TimeInstance`.
     ///
     /// # Errors
-    /// This method uses chrono and therefore fails if a 'TimeInstance' is outside chronos valid date range.
+    /// This method uses chrono and therefore fails if a `TimeInstance` is outside chronos valid date range.
     ///
     pub fn snap_relative(
-        &self,
+        self,
         reference: TimeInstance,
         time_to_snap: TimeInstance,
     ) -> Result<TimeInstance> {
@@ -149,24 +150,25 @@ impl TimeStep {
             TimeGranularity::Seconds => {
                 let diff_duration = time_to_snap_date_time - ref_date_time;
                 let snapped_hours =
-                    (diff_duration.num_seconds() / self.step as i64) * self.step as i64;
+                    (diff_duration.num_seconds() / i64::from(self.step)) * i64::from(self.step);
                 ref_date_time + Duration::seconds(snapped_hours)
             }
             TimeGranularity::Minutes => {
                 let diff_duration = time_to_snap_date_time - ref_date_time;
                 let snapped_hours =
-                    (diff_duration.num_minutes() / self.step as i64) * self.step as i64;
+                    (diff_duration.num_minutes() / i64::from(self.step)) * i64::from(self.step);
                 ref_date_time + Duration::minutes(snapped_hours)
             }
             TimeGranularity::Hours => {
                 let diff_duration = time_to_snap_date_time - ref_date_time;
                 let snapped_hours =
-                    (diff_duration.num_hours() / self.step as i64) * self.step as i64;
+                    (diff_duration.num_hours() / i64::from(self.step)) * i64::from(self.step);
                 ref_date_time + Duration::hours(snapped_hours)
             }
             TimeGranularity::Days => {
                 let diff_duration = time_to_snap_date_time - ref_date_time;
-                let snapped_days = (diff_duration.num_days() / self.step as i64) * self.step as i64;
+                let snapped_days =
+                    (diff_duration.num_days() / i64::from(self.step)) * i64::from(self.step);
                 ref_date_time + Duration::days(snapped_days)
             }
             TimeGranularity::Months => {
@@ -219,12 +221,12 @@ impl Add<TimeStep> for TimeInstance {
         })?;
 
         let res_date_time = match rhs.granularity {
-            TimeGranularity::Seconds => date_time + Duration::seconds(rhs.step as i64),
-            TimeGranularity::Minutes => date_time + Duration::minutes(rhs.step as i64),
-            TimeGranularity::Hours => date_time + Duration::hours(rhs.step as i64),
-            TimeGranularity::Days => date_time + Duration::days(rhs.step as i64),
+            TimeGranularity::Seconds => date_time + Duration::seconds(i64::from(rhs.step)),
+            TimeGranularity::Minutes => date_time + Duration::minutes(i64::from(rhs.step)),
+            TimeGranularity::Hours => date_time + Duration::hours(i64::from(rhs.step)),
+            TimeGranularity::Days => date_time + Duration::days(i64::from(rhs.step)),
             TimeGranularity::Months => {
-                let months = date_time.month0() + rhs.step as u32;
+                let months = date_time.month0() + rhs.step;
                 let month = months % 12 + 1;
                 let years_from_months = (months / 12) as i32;
                 let year = date_time.year() + years_from_months;
