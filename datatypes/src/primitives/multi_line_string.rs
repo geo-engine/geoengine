@@ -67,9 +67,9 @@ impl Geometry for MultiLineString {
     }
 }
 
-impl Into<geo::MultiLineString<f64>> for &MultiLineString {
-    fn into(self) -> geo::MultiLineString<f64> {
-        let line_strings = self
+impl From<&MultiLineString> for geo::MultiLineString<f64> {
+    fn from(geometry: &MultiLineString) -> geo::MultiLineString<f64> {
+        let line_strings = geometry
             .coordinates
             .iter()
             .map(|coordinates| {
@@ -270,21 +270,41 @@ impl<'g> MultiLineStringAccess<&'g [Coordinate2D]> for MultiLineStringRef<'g> {
     }
 }
 
-impl<'g> Into<geojson::Geometry> for MultiLineStringRef<'g> {
-    fn into(self) -> geojson::Geometry {
-        geojson::Geometry::new(match self.point_coordinates.len() {
+impl<'g> From<MultiLineStringRef<'g>> for geojson::Geometry {
+    fn from(geometry: MultiLineStringRef<'g>) -> geojson::Geometry {
+        geojson::Geometry::new(match geometry.point_coordinates.len() {
             1 => {
-                let coordinates = self.point_coordinates[0];
+                let coordinates = geometry.point_coordinates[0];
                 let positions = coordinates.iter().map(|c| vec![c.x, c.y]).collect();
                 geojson::Value::LineString(positions)
             }
             _ => geojson::Value::MultiLineString(
-                self.point_coordinates
+                geometry
+                    .point_coordinates
                     .iter()
                     .map(|&coordinates| coordinates.iter().map(|c| vec![c.x, c.y]).collect())
                     .collect(),
             ),
         })
+    }
+}
+
+impl<'g> From<MultiLineStringRef<'g>> for MultiLineString {
+    fn from(multi_line_string_ref: MultiLineStringRef<'g>) -> Self {
+        MultiLineString::from(&multi_line_string_ref)
+    }
+}
+
+impl<'g> From<&MultiLineStringRef<'g>> for MultiLineString {
+    fn from(multi_line_string_ref: &MultiLineStringRef<'g>) -> Self {
+        MultiLineString::new_unchecked(
+            multi_line_string_ref
+                .point_coordinates
+                .iter()
+                .cloned()
+                .map(ToOwned::to_owned)
+                .collect(),
+        )
     }
 }
 

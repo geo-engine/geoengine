@@ -114,15 +114,15 @@ impl From<GdalGeoTransform> for GeoTransform {
     }
 }
 
-impl Into<GdalGeoTransform> for GeoTransform {
-    fn into(self) -> GdalGeoTransform {
+impl From<GeoTransform> for GdalGeoTransform {
+    fn from(geo_transform: GeoTransform) -> GdalGeoTransform {
         [
-            self.origin_coordinate.x,
-            self.x_pixel_size,
+            geo_transform.origin_coordinate.x,
+            geo_transform.x_pixel_size,
             0.0, // self.x_rotation,
-            self.origin_coordinate.y,
+            geo_transform.origin_coordinate.y,
             0.0, // self.y_rotation,
-            self.y_pixel_size,
+            geo_transform.y_pixel_size,
         ]
     }
 }

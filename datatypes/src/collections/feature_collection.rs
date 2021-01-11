@@ -1,10 +1,3 @@
-use std::collections::{HashMap, HashSet};
-use std::convert::{TryFrom, TryInto};
-use std::marker::PhantomData;
-use std::mem;
-use std::ops::{Bound, RangeBounds};
-use std::sync::Arc;
-
 use arrow::array::{
     as_primitive_array, as_string_array, Array, ArrayData, ArrayRef, BooleanArray, Float64Array,
     ListArray, PrimitiveArrayOps, StructArray,
@@ -13,6 +6,14 @@ use arrow::datatypes::{DataType, Field, Float64Type, Int64Type};
 use arrow::error::ArrowError;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
+
+use std::collections::hash_map;
+use std::collections::{HashMap, HashSet};
+use std::convert::{TryFrom, TryInto};
+use std::marker::PhantomData;
+use std::mem;
+use std::ops::{Bound, RangeBounds};
+use std::sync::Arc;
 
 use crate::collections::{error, IntoGeometryIterator, VectorDataType, VectorDataTyped};
 use crate::collections::{FeatureCollectionError, IntoGeometryOptionsIterator};
@@ -127,6 +128,17 @@ pub trait FeatureCollectionModifications {
     /// This method fails if the columns do not match
     ///
     fn append(&self, other: &Self) -> Result<Self::Output>;
+
+    /// Rename column `old_column_name` to `new_column_name`.
+    fn rename_column(&self, old_column_name: &str, new_column_name: &str) -> Result<Self::Output> {
+        self.rename_columns(&[(old_column_name, new_column_name)])
+    }
+
+    /// Rename selected columns with (from, to) tuples.
+    fn rename_columns<S1, S2>(&self, renamings: &[(S1, S2)]) -> Result<Self::Output>
+    where
+        S1: AsRef<str>,
+        S2: AsRef<str>;
 }
 
 impl<CollectionType> FeatureCollectionModifications for FeatureCollection<CollectionType>
@@ -496,6 +508,112 @@ where
             self.types.clone(),
         ))
     }
+
+    fn rename_columns<S1, S2>(&self, renamings: &[(S1, S2)]) -> Result<Self::Output>
+    where
+        S1: AsRef<str>,
+        S2: AsRef<str>,
+    {
+        let mut rename_map: HashMap<&str, &str> = HashMap::with_capacity(renamings.len());
+        let mut value_set: HashSet<&str> = HashSet::with_capacity(renamings.len());
+
+        for (old_column_name, new_column_name) in renamings {
+            let old_column_name = old_column_name.as_ref();
+            let new_column_name = new_column_name.as_ref();
+
+            ensure!(
+                !Self::is_reserved_name(new_column_name),
+                error::CannotAccessReservedColumn {
+                    name: new_column_name.to_string(),
+                }
+            );
+            ensure!(
+                self.table.column_by_name(old_column_name).is_some(),
+                error::ColumnDoesNotExist {
+                    name: old_column_name.to_string(),
+                }
+            );
+            ensure!(
+                self.table.column_by_name(new_column_name).is_none(),
+                error::ColumnAlreadyExists {
+                    name: new_column_name.to_string(),
+                }
+            );
+
+            if let Some(duplicate) = rename_map.insert(old_column_name, new_column_name) {
+                return Err(FeatureCollectionError::ColumnDuplicate {
+                    name: duplicate.to_string(),
+                }
+                .into());
+            }
+
+            if !value_set.insert(new_column_name) {
+                return Err(FeatureCollectionError::ColumnDuplicate {
+                    name: new_column_name.to_string(),
+                }
+                .into());
+            }
+        }
+
+        let mut columns = Vec::<arrow::datatypes::Field>::with_capacity(self.table.num_columns());
+        let mut column_values =
+            Vec::<arrow::array::ArrayRef>::with_capacity(self.table.num_columns());
+        let mut types = HashMap::<String, FeatureDataType>::with_capacity(self.table.num_columns());
+
+        // copy geometry data if feature collection is geo collection
+        if CollectionType::IS_GEOMETRY {
+            columns.push(arrow::datatypes::Field::new(
+                Self::GEOMETRY_COLUMN_NAME,
+                CollectionType::arrow_data_type(),
+                false,
+            ));
+            column_values.push(
+                self.table
+                    .column_by_name(Self::GEOMETRY_COLUMN_NAME)
+                    .expect("The geometry column must exist")
+                    .clone(),
+            );
+        }
+
+        // copy time data
+        columns.push(arrow::datatypes::Field::new(
+            Self::TIME_COLUMN_NAME,
+            TimeInterval::arrow_data_type(),
+            false,
+        ));
+        column_values.push(
+            self.table
+                .column_by_name(Self::TIME_COLUMN_NAME)
+                .expect("The time column must exist")
+                .clone(),
+        );
+
+        // copy remaining attribute data
+        for (old_column_name, column_type) in &self.types {
+            let new_column_name: &str = rename_map
+                .get(&old_column_name.as_str())
+                .unwrap_or(&old_column_name.as_str());
+
+            columns.push(arrow::datatypes::Field::new(
+                new_column_name,
+                column_type.arrow_data_type(),
+                column_type.nullable(),
+            ));
+            column_values.push(
+                self.table
+                    .column_by_name(old_column_name)
+                    .expect("The attribute column must exist")
+                    .clone(),
+            );
+
+            types.insert(new_column_name.to_string(), self.types[old_column_name]);
+        }
+
+        Ok(Self::new_from_internals(
+            struct_array_from_data(columns, column_values, self.table.len()),
+            types,
+        ))
+    }
 }
 
 /// A trait for common feature collection information
@@ -522,8 +640,11 @@ pub trait FeatureCollectionInfos {
     /// Get a copy of the column type information
     fn column_types(&self) -> HashMap<String, FeatureDataType>;
 
+    /// Return the column names of all attributes
+    fn column_names(&self) -> hash_map::Keys<String, FeatureDataType>;
+
     /// Return the names of the columns of this type
-    fn column_names_of_type(&self, column_type: FeatureDataType) -> Vec<String>;
+    fn column_names_of_type(&self, column_type: FeatureDataType) -> FilteredColumnNameIter;
 
     /// Retrieve column data
     ///
@@ -538,6 +659,24 @@ pub trait FeatureCollectionInfos {
 
     /// Returns the byte-size of this collection
     fn byte_size(&self) -> usize;
+}
+
+pub struct ColumnNamesIter<'i, I>
+where
+    I: Iterator<Item = &'i str> + 'i,
+{
+    iter: I,
+}
+
+impl<'i, I> Iterator for ColumnNamesIter<'i, I>
+where
+    I: Iterator<Item = &'i str> + 'i,
+{
+    type Item = I::Item;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next()
+    }
 }
 
 /// Transform an object to the `GeoJson` format
@@ -718,17 +857,35 @@ where
         table_size + map_size
     }
 
-    fn column_names_of_type(&self, column_type: FeatureDataType) -> Vec<String> {
-        self.types
-            .iter()
-            .filter_map(|(k, v)| {
-                if v == &column_type {
-                    Some(k.clone())
-                } else {
-                    None
-                }
-            })
-            .collect()
+    fn column_names_of_type(&self, column_type: FeatureDataType) -> FilteredColumnNameIter {
+        FilteredColumnNameIter {
+            iter: self.types.iter(),
+            column_type,
+        }
+    }
+
+    fn column_names(&self) -> hash_map::Keys<String, FeatureDataType> {
+        self.types.keys()
+    }
+}
+
+pub struct FilteredColumnNameIter<'i> {
+    iter: hash_map::Iter<'i, String, FeatureDataType>,
+    column_type: FeatureDataType,
+}
+
+impl<'i> Iterator for FilteredColumnNameIter<'i> {
+    type Item = &'i str;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let column_type = &self.column_type;
+        self.iter.find_map(|(k, v)| {
+            if v == column_type {
+                Some(k.as_str())
+            } else {
+                None
+            }
+        })
     }
 }
 
@@ -1177,13 +1334,13 @@ where
 
 /// Custom serializer for Arrow's `StructArray`
 mod struct_serde {
-    use std::fmt::Formatter;
-    use std::io::Cursor;
-
     use arrow::record_batch::RecordBatch;
     use serde::de::{SeqAccess, Visitor};
     use serde::ser::Error;
     use serde::{Deserializer, Serializer};
+
+    use std::fmt::Formatter;
+    use std::io::Cursor;
 
     use super::*;
 
@@ -1269,9 +1426,10 @@ mod struct_serde {
 
 #[cfg(test)]
 mod tests {
-    use crate::primitives::{MultiPoint, NoGeometry};
-
     use super::*;
+
+    use crate::collections::DataCollection;
+    use crate::primitives::{MultiPoint, NoGeometry};
 
     #[test]
     fn is_reserved_name() {
@@ -1323,5 +1481,26 @@ mod tests {
                     + time_interval_size(i)
             );
         }
+    }
+
+    #[test]
+    #[should_panic = "duplicate column"]
+    fn rename_columns_fails() {
+        let collection = DataCollection::from_data(
+            vec![],
+            vec![TimeInterval::new(0, 1).unwrap(); 1],
+            [
+                ("foo".to_string(), FeatureData::Decimal(vec![1])),
+                ("bar".to_string(), FeatureData::Decimal(vec![2])),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+        )
+        .unwrap();
+
+        collection
+            .rename_columns(&[("foo", "baz"), ("bar", "baz")])
+            .expect("duplicate column");
     }
 }

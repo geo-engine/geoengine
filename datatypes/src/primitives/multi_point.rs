@@ -242,15 +242,16 @@ impl<'g> MultiPointAccess for MultiPointRef<'g> {
     }
 }
 
-impl<'g> Into<geojson::Geometry> for MultiPointRef<'g> {
-    fn into(self) -> geojson::Geometry {
-        geojson::Geometry::new(match self.point_coordinates.len() {
+impl<'g> From<MultiPointRef<'g>> for geojson::Geometry {
+    fn from(geometry: MultiPointRef<'g>) -> geojson::Geometry {
+        geojson::Geometry::new(match geometry.point_coordinates.len() {
             1 => {
-                let floats: [f64; 2] = self.point_coordinates[0].into();
+                let floats: [f64; 2] = geometry.point_coordinates[0].into();
                 geojson::Value::Point(floats.to_vec())
             }
             _ => geojson::Value::MultiPoint(
-                self.point_coordinates
+                geometry
+                    .point_coordinates
                     .iter()
                     .map(|&c| {
                         let floats: [f64; 2] = c.into();
@@ -259,6 +260,18 @@ impl<'g> Into<geojson::Geometry> for MultiPointRef<'g> {
                     .collect(),
             ),
         })
+    }
+}
+
+impl<'g> From<MultiPointRef<'g>> for MultiPoint {
+    fn from(multi_point_ref: MultiPointRef<'g>) -> Self {
+        MultiPoint::from(&multi_point_ref)
+    }
+}
+
+impl<'g> From<&MultiPointRef<'g>> for MultiPoint {
+    fn from(multi_point_ref: &MultiPointRef<'g>) -> Self {
+        MultiPoint::new_unchecked(multi_point_ref.point_coordinates.to_owned())
     }
 }
 
