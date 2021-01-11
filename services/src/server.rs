@@ -1,3 +1,5 @@
+#[cfg(feature = "postgres")]
+use crate::contexts::PostgresContext;
 use crate::contexts::{Context, InMemoryContext};
 use crate::error;
 use crate::error::{Error, Result};
@@ -5,21 +7,19 @@ use crate::handlers;
 use crate::handlers::handle_rejection;
 use crate::util::config;
 use crate::util::config::{get_config_element, Backend};
-use snafu::ResultExt;
-use std::net::SocketAddr;
-use std::path::PathBuf;
-use tokio::signal;
-use tokio::sync::oneshot::{Receiver, Sender};
-use warp::fs::File;
-use warp::{Filter, Rejection};
 #[cfg(feature = "postgres")]
 use bb8_postgres::tokio_postgres;
 #[cfg(feature = "postgres")]
 use bb8_postgres::tokio_postgres::NoTls;
-#[cfg(feature = "postgres")]
-use crate::contexts::PostgresContext;
+use snafu::ResultExt;
+use std::net::SocketAddr;
+use std::path::PathBuf;
 #[cfg(feature = "postgres")]
 use std::str::FromStr;
+use tokio::signal;
+use tokio::sync::oneshot::{Receiver, Sender};
+use warp::fs::File;
+use warp::{Filter, Rejection};
 
 /// Helper to combine the multiple filters together with Filter::or, possibly boxing the types in
 /// the process. This greatly helps the build times for `ipfs-http`.
