@@ -1,3 +1,5 @@
+#![cfg(feature = "postgres")]
+
 use crate::contexts::PostgresContext;
 use crate::error;
 use crate::error::Result;

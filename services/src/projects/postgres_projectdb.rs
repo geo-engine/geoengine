@@ -1,3 +1,5 @@
+#![cfg(feature = "postgres")]
+
 use crate::error;
 use crate::error::Result;
 use crate::projects::project::{

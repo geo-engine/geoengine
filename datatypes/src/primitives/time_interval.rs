@@ -4,6 +4,7 @@ use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::Result;
 use arrow::array::{Array, ArrayBuilder, BooleanArray, PrimitiveArrayOps};
 use arrow::error::ArrowError;
+#[cfg(feature = "postgres")]
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
@@ -11,7 +12,8 @@ use std::cmp::Ordering;
 use std::fmt::{Debug, Display};
 
 /// Stores time intervals in ms in close-open semantic [start, end)
-#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, ToSql, FromSql)]
+#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
 #[repr(C)]
 pub struct TimeInterval {
     start: TimeInstance,

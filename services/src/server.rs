@@ -1,20 +1,25 @@
-use crate::contexts::{Context, InMemoryContext, PostgresContext};
+use crate::contexts::{Context, InMemoryContext};
 use crate::error;
 use crate::error::{Error, Result};
 use crate::handlers;
 use crate::handlers::handle_rejection;
 use crate::util::config;
 use crate::util::config::{get_config_element, Backend};
-use bb8_postgres::tokio_postgres;
-use bb8_postgres::tokio_postgres::NoTls;
 use snafu::ResultExt;
 use std::net::SocketAddr;
 use std::path::PathBuf;
-use std::str::FromStr;
 use tokio::signal;
 use tokio::sync::oneshot::{Receiver, Sender};
 use warp::fs::File;
 use warp::{Filter, Rejection};
+#[cfg(feature = "postgres")]
+use bb8_postgres::tokio_postgres;
+#[cfg(feature = "postgres")]
+use bb8_postgres::tokio_postgres::NoTls;
+#[cfg(feature = "postgres")]
+use crate::contexts::PostgresContext;
+#[cfg(feature = "postgres")]
+use std::str::FromStr;
 
 /// Helper to combine the multiple filters together with Filter::or, possibly boxing the types in
 /// the process. This greatly helps the build times for `ipfs-http`.
@@ -73,16 +78,21 @@ pub async fn start_server(
             .await
         }
         Backend::Postgres => {
-            eprintln!("Using Postgres backend"); // TODO: log
-            let ctx = PostgresContext::new(
-                tokio_postgres::config::Config::from_str(
-                    &get_config_element::<config::Postgres>()?.config_string,
-                )?,
-                NoTls,
-            )
-            .await?;
+            #[cfg(feature = "postgres")]
+            {
+                eprintln!("Using Postgres backend"); // TODO: log
+                let ctx = PostgresContext::new(
+                    tokio_postgres::config::Config::from_str(
+                        &get_config_element::<config::Postgres>()?.config_string,
+                    )?,
+                    NoTls,
+                )
+                .await?;
 
-            start(shutdown_rx, static_files_dir, bind_address, ctx).await
+                start(shutdown_rx, static_files_dir, bind_address, ctx).await
+            }
+            #[cfg(not(feature = "postgres"))]
+            panic!("Postgres backend was selected but the postgres feature wasn't activated during compilation")
         }
     }
 }

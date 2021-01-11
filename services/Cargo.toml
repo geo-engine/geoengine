@@ -8,6 +8,9 @@ authors = [
 ]
 edition = "2018"
 
+[features]
+postgres = ["postgres-types", "bb8-postgres"]
+
 [dependencies]
 chrono = { version = "0.4", features = ["serde"] }
 geoengine-datatypes = { path = "../datatypes" }
@@ -22,8 +25,8 @@ pwhash = "1.0"
 serde_urlencoded = "0.7"
 futures = "0.3"
 image = "0.23"
-bb8-postgres = { version = "0.5", features = ["with-uuid-0_8", "with-chrono-0_4", "with-serde_json-1"] } # TODO: update v0.6
-postgres-types = { version = "0.1", features = ["derive"] }
+bb8-postgres = { version = "0.5", features = ["with-uuid-0_8", "with-chrono-0_4", "with-serde_json-1"], optional = true } # TODO: update v0.6
+postgres-types = { version = "0.1", features = ["derive"], optional = true }
 async-trait = "0.1"
 config = "0.10"
 lazy_static = "1.4"

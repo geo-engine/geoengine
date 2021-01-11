@@ -1,3 +1,5 @@
+#![cfg(feature = "postgres")]
+
 use crate::error::{self, Result};
 use crate::{
     projects::postgres_projectdb::PostgresProjectDB, users::postgres_userdb::PostgresUserDB,
@@ -309,7 +311,6 @@ mod tests {
     use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
     use std::str::FromStr;
 
-    #[ignore] // TODO: remove if postgres if configurable
     #[tokio::test]
     async fn test() {
         // TODO: load from test config

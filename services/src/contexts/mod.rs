@@ -11,6 +11,7 @@ mod in_memory;
 mod postgres;
 
 pub use in_memory::InMemoryContext;
+#[cfg(feature = "postgres")]
 pub use postgres::PostgresContext;
 
 type DB<T> = Arc<RwLock<T>>;
