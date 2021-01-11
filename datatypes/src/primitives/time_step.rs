@@ -255,7 +255,7 @@ mod tests {
         t_start: &str,
         t_in: &str,
         t_expect: &str,
-    ) -> () {
+    ) {
         let t_ref = TimeInstance::from(
             NaiveDateTime::parse_from_str(t_start, "%Y-%m-%dT%H:%M:%S").unwrap(),
         );
@@ -279,7 +279,7 @@ mod tests {
         t_1: &str,
         t_2: &str,
         steps_expect: u32,
-    ) -> () {
+    ) {
         let t_1 =
             TimeInstance::from(NaiveDateTime::parse_from_str(t_1, "%Y-%m-%dT%H:%M:%S").unwrap());
         let t_2 =
@@ -298,7 +298,7 @@ mod tests {
         )
     }
 
-    fn test_add(granularity: TimeGranularity, t_step: u32, t_1: &str, t_expect: &str) -> () {
+    fn test_add(granularity: TimeGranularity, t_step: u32, t_1: &str, t_expect: &str) {
         let t_1 =
             TimeInstance::from(NaiveDateTime::parse_from_str(t_1, "%Y-%m-%dT%H:%M:%S").unwrap());
         let t_expect = TimeInstance::from(
