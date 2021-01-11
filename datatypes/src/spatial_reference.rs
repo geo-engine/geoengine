@@ -191,9 +191,9 @@ impl std::fmt::Display for SpatialReferenceOption {
     }
 }
 
-impl Into<SpatialReferenceOption> for SpatialReference {
-    fn into(self) -> SpatialReferenceOption {
-        SpatialReferenceOption::SpatialReference(self)
+impl From<SpatialReference> for SpatialReferenceOption {
+    fn from(spatial_reference: SpatialReference) -> Self {
+        Self::SpatialReference(spatial_reference)
     }
 }
 

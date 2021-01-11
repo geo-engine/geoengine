@@ -97,9 +97,9 @@ impl Geometry for MultiPolygon {
     }
 }
 
-impl Into<geo::MultiPolygon<f64>> for &MultiPolygon {
-    fn into(self) -> geo::MultiPolygon<f64> {
-        let polygons: Vec<geo::Polygon<f64>> = self
+impl From<&MultiPolygon> for geo::MultiPolygon<f64> {
+    fn from(geometry: &MultiPolygon) -> geo::MultiPolygon<f64> {
+        let polygons: Vec<geo::Polygon<f64>> = geometry
             .polygons()
             .iter()
             .map(|polygon| {
@@ -358,11 +358,11 @@ impl<'g> MultiPolygonAccess<PolygonRef<'g>, RingRef<'g>> for MultiPolygonRef<'g>
     }
 }
 
-impl<'g> Into<geojson::Geometry> for MultiPolygonRef<'g> {
-    fn into(self) -> geojson::Geometry {
-        geojson::Geometry::new(match self.polygons.len() {
+impl<'g> From<MultiPolygonRef<'g>> for geojson::Geometry {
+    fn from(geometry: MultiPolygonRef<'g>) -> geojson::Geometry {
+        geojson::Geometry::new(match geometry.polygons.len() {
             1 => {
-                let polygon = &self.polygons[0];
+                let polygon = &geometry.polygons[0];
                 geojson::Value::Polygon(
                     polygon
                         .iter()
@@ -371,7 +371,8 @@ impl<'g> Into<geojson::Geometry> for MultiPolygonRef<'g> {
                 )
             }
             _ => geojson::Value::MultiPolygon(
-                self.polygons
+                geometry
+                    .polygons
                     .iter()
                     .map(|polygon| {
                         polygon

@@ -177,9 +177,9 @@ impl AsRef<[f64]> for NumberDataRef<'_> {
     }
 }
 
-impl<'f> Into<FeatureDataRef<'f>> for NumberDataRef<'f> {
-    fn into(self) -> FeatureDataRef<'f> {
-        FeatureDataRef::Number(self)
+impl<'f> From<NumberDataRef<'f>> for FeatureDataRef<'f> {
+    fn from(data_ref: NumberDataRef<'f>) -> FeatureDataRef<'f> {
+        FeatureDataRef::Number(data_ref)
     }
 }
 
@@ -251,9 +251,9 @@ impl AsRef<[i64]> for DecimalDataRef<'_> {
     }
 }
 
-impl<'f> Into<FeatureDataRef<'f>> for DecimalDataRef<'f> {
-    fn into(self) -> FeatureDataRef<'f> {
-        FeatureDataRef::Decimal(self)
+impl<'f> From<DecimalDataRef<'f>> for FeatureDataRef<'f> {
+    fn from(data_ref: DecimalDataRef<'f>) -> FeatureDataRef<'f> {
+        FeatureDataRef::Decimal(data_ref)
     }
 }
 
@@ -309,9 +309,9 @@ impl AsRef<[u8]> for CategoricalDataRef<'_> {
     }
 }
 
-impl<'f> Into<FeatureDataRef<'f>> for CategoricalDataRef<'f> {
-    fn into(self) -> FeatureDataRef<'f> {
-        FeatureDataRef::Categorical(self)
+impl<'f> From<CategoricalDataRef<'f>> for FeatureDataRef<'f> {
+    fn from(data_ref: CategoricalDataRef<'f>) -> FeatureDataRef<'f> {
+        FeatureDataRef::Categorical(data_ref)
     }
 }
 
