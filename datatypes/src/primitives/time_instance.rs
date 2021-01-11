@@ -54,15 +54,15 @@ impl From<DateTime<Utc>> for TimeInstance {
     }
 }
 
-impl Into<TimeInstance> for i64 {
-    fn into(self) -> TimeInstance {
-        TimeInstance::from_millis(self)
+impl From<i64> for TimeInstance {
+    fn from(milliseconds: i64) -> Self {
+        TimeInstance::from_millis(milliseconds)
     }
 }
 
-impl Into<i64> for TimeInstance {
-    fn into(self) -> i64 {
-        self.inner()
+impl From<TimeInstance> for i64 {
+    fn from(time_instance: TimeInstance) -> Self {
+        time_instance.inner()
     }
 }
 

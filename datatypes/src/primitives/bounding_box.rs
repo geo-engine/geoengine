@@ -1,7 +1,6 @@
 use super::Coordinate2D;
 use crate::error;
 use crate::util::Result;
-use geo::Rect;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
@@ -387,15 +386,15 @@ impl BoundingBox2D {
     }
 }
 
-impl Into<geo::Rect<f64>> for BoundingBox2D {
-    fn into(self) -> Rect<f64> {
-        (&self).into()
+impl From<BoundingBox2D> for geo::Rect<f64> {
+    fn from(bbox: BoundingBox2D) -> geo::Rect<f64> {
+        Self::from(&bbox)
     }
 }
 
-impl Into<geo::Rect<f64>> for &BoundingBox2D {
-    fn into(self) -> Rect<f64> {
-        geo::Rect::new(self.lower_left_coordinate, self.upper_right_coordinate)
+impl From<&BoundingBox2D> for geo::Rect<f64> {
+    fn from(bbox: &BoundingBox2D) -> geo::Rect<f64> {
+        geo::Rect::new(bbox.lower_left_coordinate, bbox.upper_right_coordinate)
     }
 }
 
