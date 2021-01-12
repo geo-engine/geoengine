@@ -22,11 +22,14 @@ use serde::{Deserialize, Serialize};
 use futures::stream::{self, BoxStream, StreamExt};
 
 use geoengine_datatypes::{
-    primitives::{BoundingBox2D, SpatialBounded, SpatialResolution, TimeInterval},
+    primitives::{
+        BoundingBox2D, SpatialBounded, SpatialResolution, TimeInstance, TimeInterval, TimeStep,
+    },
     raster::{
         Grid, GridBlit, GridBoundingBox2D, GridBounds, GridIdx, GridIdx2D, GridShape2D, GridSize,
         GridSpaceToLinearSpace,
     },
+    util::time_step_iter::TimeStepIter,
 };
 use geoengine_datatypes::{
     raster::{GeoTransform, Grid2D, Pixel, RasterDataType, RasterTile2D, TileInformation},
@@ -183,14 +186,12 @@ impl GdalDatasetInformation for JsonDatasetInformationProvider {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TimeIntervalInformation {
-    pub time_intervals: Vec<TimeInterval>,
+    pub start_time: TimeInstance,
+    pub time_step: TimeStep,
+    // pub end_time: Option<TimeInstance>,
 }
 
-impl TimeIntervalInformation {
-    pub fn time_intervals(&self) -> &[TimeInterval] {
-        &self.time_intervals
-    }
-}
+impl TimeIntervalInformation {}
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct TilingInformation {
@@ -331,15 +332,26 @@ where
     pub fn time_tile_iter(
         &self,
         tileing_strategy: TilingStrategy,
+        time_interval: TimeInterval,
     ) -> impl Iterator<Item = (TimeInterval, TileInformation)> + '_ {
-        // TODO: get time intervals from ?
-        let time_interval_iterator = self
-            .dataset_information
-            .native_time_information()
-            .time_intervals()
-            .iter();
+        let time_information = self.dataset_information.native_time_information();
+        let snapped_start = time_information
+            .time_step
+            .snap_relative(time_information.start_time, time_interval.start())
+            .expect("is a valid time");
+        let snapped_interval = TimeInterval::new_unchecked(snapped_start, time_interval.end());
 
-        time_interval_iterator.flat_map(move |&time| {
+        let time_iterator = TimeStepIter::new_with_interval_incl_start(
+            snapped_interval,
+            time_information.time_step,
+        )
+        .expect("is a valid interval");
+
+        let time_interval_iterator = time_iterator
+            .try_as_intervals(time_information.time_step)
+            .map(|ti| ti.expect("is a valid time"));
+
+        time_interval_iterator.flat_map(move |time| {
             tileing_strategy
                 .tile_information_iterator()
                 .map(move |tile| (time, tile))
@@ -391,6 +403,7 @@ where
             t.format(&gdal_dataset_information.time_format())
                 .to_string()
         });
+        dbg!(&time_string);
 
         // TODO: replace -> parser?
         let file_name = gdal_dataset_information
@@ -400,14 +413,30 @@ where
                 &time_string.unwrap_or_else(|| "".into()),
             );
 
+        dbg!(&file_name);
+
         let path = gdal_dataset_information.dataset_path(); // TODO: add the path of the definition file for relative paths
         let data_file = path.join(file_name);
 
-        // open the dataset at path (or 'throw' an error)
-        let dataset = GdalDataset::open(&data_file)?; // TODO: investigate if we need a dataset cache
-                                                      // get the geo transform (pixel size ...) of the dataset (or 'throw' an error)
-                                                      // let gdal_geo_transform = dataset.geo_transform()?;
-                                                      // let geo_transform = GeoTransform::from(gdal_geo_transform); //TODO: clip the geotransform information / is this required at all?
+        dbg!(&data_file);
+
+        let tile_grid = tile_information.tile_size_in_pixels();
+
+        // open the dataset at path
+        let dataset_result = GdalDataset::open(&data_file);
+        // TODO: investigate if we need a dataset cache
+
+        // shortcut if there is raster file -> return a no-data file.
+        if dataset_result.is_err() {
+            return Ok(RasterTile2D::new_with_tile_info(
+                time_interval,
+                tile_information,
+                Grid2D::new_filled(tile_grid, T::zero(), None),
+            ));
+        };
+
+        // this was checked one line above...
+        let dataset = dataset_result.expect("checked");
 
         // get the requested raster band of the dataset …
         let rasterband_index = gdal_params.channel.unwrap_or(1) as isize; // TODO: investigate if this should be isize in gdal
@@ -421,8 +450,6 @@ where
         let dataset_intersects_tile = gdal_dataset_information
             .bounding_box()
             .intersects_bbox(&tile_information.spatial_bounds());
-
-        let tile_grid = tile_information.tile_size_in_pixels();
 
         let result_raster = match (dataset_contains_tile, dataset_intersects_tile) {
             (_, false) => {
@@ -494,6 +521,7 @@ where
     pub fn tile_stream(
         &self,
         bbox: BoundingBox2D,
+        time_interval: TimeInterval,
         spatial_resolution: SpatialResolution,
     ) -> BoxStream<Result<RasterTile2D<T>>> {
         // adjust the spatial resolution to the sign of the geotransform
@@ -527,7 +555,7 @@ where
             tile_pixel_size: [600, 600].into(),
         };
 
-        stream::iter(self.time_tile_iter(tiling_strategy))
+        stream::iter(self.time_tile_iter(tiling_strategy, time_interval))
             .map(move |(time, tile)| {
                 (
                     self.gdal_params.clone(),
@@ -554,7 +582,7 @@ where
         query: crate::engine::QueryRectangle,
         _ctx: crate::engine::QueryContext,
     ) -> BoxStream<Result<RasterTile2D<T>>> {
-        self.tile_stream(query.bbox, query.spatial_resolution)
+        self.tile_stream(query.bbox, query.time_interval, query.spatial_resolution)
             .boxed() // TODO: handle query, ctx, remove one boxed
     }
 }
@@ -681,8 +709,12 @@ mod tests {
     use super::*;
     use crate::error::Error;
     use crate::util::Result;
+    use chrono::NaiveDate;
     use futures::executor::block_on_stream;
-    use geoengine_datatypes::{primitives::Coordinate2D, raster::GridIndexAccess};
+    use geoengine_datatypes::{
+        primitives::{Coordinate2D, TimeGranularity},
+        raster::GridIndexAccess,
+    };
 
     #[test]
     fn tiling_strategy_origin() {
@@ -860,10 +892,11 @@ mod tests {
         };
 
         let time_interval_provider = TimeIntervalInformation {
-            time_intervals: vec![
-                TimeInterval::new_unchecked(1, 2),
-                TimeInterval::new_unchecked(2, 3),
-            ],
+            start_time: TimeInstance::from_millis(0),
+            time_step: TimeStep {
+                granularity: TimeGranularity::Seconds,
+                step: 1,
+            },
         };
 
         let gdal_params = GdalSourceParameters {
@@ -894,13 +927,16 @@ mod tests {
         };
 
         let vres: Vec<_> = gdal_source
-            .time_tile_iter(origin_split_tileing_strategy)
+            .time_tile_iter(
+                origin_split_tileing_strategy,
+                TimeInterval::new_unchecked(0, 1000),
+            )
             .collect();
 
         assert_eq!(
             vres[0],
             (
-                TimeInterval::new_unchecked(1, 2),
+                TimeInterval::new_unchecked(0, 1000),
                 TileInformation::new(
                     [-2, -3].into(),
                     tile_size_in_pixels.into(),
@@ -911,7 +947,7 @@ mod tests {
         assert_eq!(
             vres[1],
             (
-                TimeInterval::new_unchecked(1, 2),
+                TimeInterval::new_unchecked(0, 1000),
                 TileInformation::new(
                     [-2, -2].into(),
                     tile_size_in_pixels.into(),
@@ -922,7 +958,7 @@ mod tests {
         assert_eq!(
             vres[12],
             (
-                TimeInterval::new_unchecked(1, 2),
+                TimeInterval::new_unchecked(0, 1000),
                 TileInformation::new(
                     [0, -3].into(),
                     tile_size_in_pixels.into(),
@@ -933,7 +969,7 @@ mod tests {
         assert_eq!(
             vres[23],
             (
-                TimeInterval::new_unchecked(1, 2),
+                TimeInterval::new_unchecked(0, 1000),
                 TileInformation::new(
                     [1, 2].into(),
                     tile_size_in_pixels.into(),
@@ -957,7 +993,11 @@ mod tests {
         );
 
         let time_interval_provider = TimeIntervalInformation {
-            time_intervals: vec![TimeInterval::new_unchecked(0, 1)],
+            start_time: TimeInstance::from_millis(0),
+            time_step: TimeStep {
+                granularity: TimeGranularity::Seconds,
+                step: 1,
+            },
         };
 
         let gdal_params = GdalSourceParameters {
@@ -992,7 +1032,7 @@ mod tests {
             tile_size_in_pixels.into(),
             dataset_geo_transform,
         );
-        let time_interval = TimeInterval::new_unchecked(0, 1);
+        let time_interval = TimeInterval::new_unchecked(0, 1000);
 
         let x = gdal_source
             .load_tile_data(time_interval, tile_information)
@@ -1016,7 +1056,11 @@ mod tests {
         );
 
         let time_interval_provider = TimeIntervalInformation {
-            time_intervals: vec![TimeInterval::new_unchecked(0, 1)],
+            start_time: TimeInstance::from_millis(0),
+            time_step: TimeStep {
+                granularity: TimeGranularity::Seconds,
+                step: 1,
+            },
         };
 
         let gdal_params = GdalSourceParameters {
@@ -1060,7 +1104,7 @@ mod tests {
             tile_size_in_pixels.into(),
             tile_geo_transform,
         );
-        let time_interval = TimeInterval::new_unchecked(0, 1);
+        let time_interval = TimeInterval::new_unchecked(0, 1000);
 
         let x = gdal_source
             .load_tile_data(time_interval, tile_information)
@@ -1090,7 +1134,11 @@ mod tests {
         };
 
         let time_interval_provider = TimeIntervalInformation {
-            time_intervals: vec![TimeInterval::new_unchecked(1, 2)],
+            start_time: TimeInstance::from_millis(0),
+            time_step: TimeStep {
+                granularity: TimeGranularity::Seconds,
+                step: 1,
+            },
         };
 
         let gdal_params = GdalSourceParameters {
@@ -1121,7 +1169,10 @@ mod tests {
         };
 
         let vres: Vec<Result<RasterTile2D<u8>, Error>> = gdal_source
-            .time_tile_iter(origin_split_tileing_strategy)
+            .time_tile_iter(
+                origin_split_tileing_strategy,
+                TimeInterval::new_unchecked(0, 1000),
+            )
             .map(|(time_interval, tile_information)| {
                 gdal_source.load_tile_data(time_interval, tile_information)
             })
@@ -1174,7 +1225,11 @@ mod tests {
         };
 
         let time_interval_provider = TimeIntervalInformation {
-            time_intervals: vec![TimeInterval::new_unchecked(1, 2)],
+            start_time: TimeInstance::from_millis(0),
+            time_step: TimeStep {
+                granularity: TimeGranularity::Seconds,
+                step: 1,
+            },
         };
 
         let gdal_params = GdalSourceParameters {
@@ -1205,7 +1260,10 @@ mod tests {
         };
 
         let vres: Vec<Result<RasterTile2D<u8>, Error>> = gdal_source
-            .time_tile_iter(origin_split_tileing_strategy)
+            .time_tile_iter(
+                origin_split_tileing_strategy,
+                TimeInterval::new_unchecked(0, 1000),
+            )
             .map(|(time_interval, tile_information)| {
                 gdal_source.load_tile_data(time_interval, tile_information)
             })
@@ -1247,7 +1305,11 @@ mod tests {
         );
 
         let time_interval_provider = TimeIntervalInformation {
-            time_intervals: vec![TimeInterval::new_unchecked(1, 2)],
+            start_time: TimeInstance::from_millis(0),
+            time_step: TimeStep {
+                granularity: TimeGranularity::Seconds,
+                step: 1,
+            },
         };
 
         let gdal_params = GdalSourceParameters {
@@ -1286,7 +1348,10 @@ mod tests {
         };
 
         let vres: Vec<Result<RasterTile2D<u8>, Error>> = gdal_source
-            .time_tile_iter(origin_split_tileing_strategy)
+            .time_tile_iter(
+                origin_split_tileing_strategy,
+                TimeInterval::new_unchecked(0, 1000),
+            )
             .map(|(time_interval, tile_information)| {
                 gdal_source.load_tile_data(time_interval, tile_information)
             })
@@ -1325,8 +1390,14 @@ mod tests {
             dataset_y_pixel_size,
         );
 
+        let t_1 = TimeInstance::from(NaiveDate::from_ymd(2014, 01, 01).and_hms(0, 0, 0));
+
         let time_interval_provider = TimeIntervalInformation {
-            time_intervals: vec![TimeInterval::new_unchecked(1, 2)],
+            start_time: t_1,
+            time_step: TimeStep {
+                granularity: TimeGranularity::Months,
+                step: 1,
+            },
         };
 
         let gdal_params = GdalSourceParameters {
@@ -1337,8 +1408,8 @@ mod tests {
         let dataset_information = JsonDatasetInformation {
             time: time_interval_provider,
             tile: None,
-            file_name_with_time_placeholder: "MOD13A2_M_NDVI_2014-01-01.TIFF".into(),
-            time_format: "".into(),
+            file_name_with_time_placeholder: "MOD13A2_M_NDVI_%%%_START_TIME_%%%.TIFF".into(),
+            time_format: "%Y-%m-%d".into(),
             base_path: "../modis_ndvi".into(),
             data_type: RasterDataType::U8,
             geo_transform: dataset_geo_transform,
@@ -1359,6 +1430,7 @@ mod tests {
 
         let mut stream_data = block_on_stream(gdal_source.tile_stream(
             BoundingBox2D::new((-180.0, -90.0).into(), (180.0, 90.0).into()).unwrap(),
+            TimeInterval::new_unchecked(t_1, t_1),
             SpatialResolution::zero_point_one(),
         ));
 
@@ -1405,7 +1477,11 @@ mod tests {
         );
 
         let time_interval_provider = TimeIntervalInformation {
-            time_intervals: vec![time_interval],
+            start_time: TimeInstance::from_millis(0),
+            time_step: TimeStep {
+                granularity: TimeGranularity::Seconds,
+                step: 1,
+            },
         };
 
         let gdal_params = GdalSourceParameters {
