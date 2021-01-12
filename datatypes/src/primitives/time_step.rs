@@ -2,6 +2,7 @@ use std::{cmp::max, ops::Add};
 
 use chrono::{Datelike, Duration, NaiveDate};
 use error::Error::NoDateTimeValid;
+use serde::{Deserialize, Serialize};
 
 use crate::error;
 use crate::primitives::TimeInstance;
@@ -10,7 +11,7 @@ use crate::util::Result;
 use super::TimeInterval;
 
 /// A time granularity.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TimeGranularity {
     Seconds,
     Minutes,
@@ -21,7 +22,7 @@ pub enum TimeGranularity {
 }
 
 /// A step in time.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TimeStep {
     pub granularity: TimeGranularity,
     pub step: u32,

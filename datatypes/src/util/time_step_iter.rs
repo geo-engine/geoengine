@@ -60,6 +60,18 @@ impl TimeStepIter {
 
         Self::new_incl_start(time_interval.start(), time_step, num_steps)
     }
+
+    /// Create a new `Iterator` which will return `TimeInterval` starting at each `TimeInstance`.
+    /// The `Iterator` produces an `Error` if the end of the `TimeInterval` is not valid.
+    pub fn try_as_intervals(
+        self,
+        step_to_t_2: TimeStep,
+    ) -> impl Iterator<Item = Result<TimeInterval>> {
+        self.map(move |t_1| {
+            let t_2 = t_1 + step_to_t_2;
+            t_2.map(|t_2| TimeInterval::new_unchecked(t_1, t_2))
+        })
+    }
 }
 
 impl Iterator for TimeStepIter {
