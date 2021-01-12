@@ -2,7 +2,6 @@ use crate::util::arrow::ArrowTyped;
 use arrow::array::{ArrayBuilder, BooleanArray, Float64Builder};
 use arrow::datatypes::DataType;
 use arrow::error::ArrowError;
-use geo::Coordinate;
 use ocl::OclPrm;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
@@ -91,7 +90,7 @@ impl From<[f64; 2]> for Coordinate2D {
     }
 }
 
-impl Into<(f64, f64)> for Coordinate2D {
+impl From<Coordinate2D> for (f64, f64) {
     /// # Examples
     ///
     /// ```
@@ -105,32 +104,32 @@ impl Into<(f64, f64)> for Coordinate2D {
     /// assert_eq!(y, 0.04);
     /// ```
     ///
-    fn into(self) -> (f64, f64) {
-        (self.x, self.y)
+    fn from(coordinate: Coordinate2D) -> (f64, f64) {
+        (coordinate.x, coordinate.y)
     }
 }
 
-impl Into<[f64; 2]> for Coordinate2D {
-    fn into(self) -> [f64; 2] {
-        [self.x, self.y]
+impl From<Coordinate2D> for [f64; 2] {
+    fn from(coordinate: Coordinate2D) -> [f64; 2] {
+        [coordinate.x, coordinate.y]
     }
 }
 
-impl<'c> Into<&'c [f64]> for &'c Coordinate2D {
-    fn into(self) -> &'c [f64] {
-        unsafe { slice::from_raw_parts(self as *const Coordinate2D as *const f64, 2) }
+impl<'c> From<&'c Coordinate2D> for &'c [f64] {
+    fn from(coordinate: &'c Coordinate2D) -> &'c [f64] {
+        unsafe { slice::from_raw_parts(coordinate as *const Coordinate2D as *const f64, 2) }
     }
 }
 
-impl Into<geo::Coordinate<f64>> for Coordinate2D {
-    fn into(self) -> Coordinate<f64> {
-        (&self).into()
+impl From<Coordinate2D> for geo::Coordinate<f64> {
+    fn from(coordinate: Coordinate2D) -> geo::Coordinate<f64> {
+        Self::from(&coordinate)
     }
 }
 
-impl Into<geo::Coordinate<f64>> for &Coordinate2D {
-    fn into(self) -> Coordinate<f64> {
-        geo::Coordinate::from((self.x, self.y))
+impl From<&Coordinate2D> for geo::Coordinate<f64> {
+    fn from(coordinate: &Coordinate2D) -> geo::Coordinate<f64> {
+        geo::Coordinate::from((coordinate.x, coordinate.y))
     }
 }
 

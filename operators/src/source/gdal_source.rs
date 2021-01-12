@@ -7,8 +7,8 @@ use crate::{
     util::Result,
 };
 
-use gdal::raster::dataset::Dataset as GdalDataset;
-use gdal::raster::{rasterband::RasterBand as GdalRasterBand, types::GdalType};
+use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
+use gdal::Dataset as GdalDataset;
 use std::{
     io::{BufReader, BufWriter, Read},
     marker::PhantomData,
@@ -284,7 +284,7 @@ where
 
 impl<T> GdalSourceProcessor<JsonDatasetInformationProvider, T>
 where
-    T: gdal::raster::types::GdalType + Pixel,
+    T: gdal::raster::GdalType + Pixel,
 {
     pub fn from_params_with_json_provider(
         params: GdalSourceParameters,
@@ -297,7 +297,7 @@ where
 impl<P, T> GdalSourceProcessor<P, T>
 where
     P: GdalDatasetInformation<CreatedType = P> + Sync + Send + Clone + 'static,
-    T: gdal::raster::types::GdalType + Pixel,
+    T: gdal::raster::GdalType + Pixel,
 {
     ///
     /// Generates a new `GdalSource` from the provided parameters
@@ -546,7 +546,7 @@ where
 impl<T, P> QueryProcessor for GdalSourceProcessor<P, T>
 where
     P: GdalDatasetInformation<CreatedType = P> + Send + Sync + 'static + Clone,
-    T: Pixel + gdal::raster::types::GdalType,
+    T: Pixel + gdal::raster::GdalType,
 {
     type Output = RasterTile2D<T>;
     fn query<'a>(

@@ -2,7 +2,7 @@ use crate::contexts::PostgresContext;
 use crate::error;
 use crate::error::Result;
 use crate::projects::project::{ProjectId, ProjectPermission, STRectangle};
-use crate::users::session::{Session, SessionId};
+use crate::users::session::{Session, SessionId, UserInfo};
 use crate::users::user::User;
 use crate::users::user::{UserCredentials, UserId, UserRegistration};
 use crate::users::userdb::UserDB;
@@ -73,10 +73,55 @@ where
         Ok(user.id)
     }
 
+    async fn anonymous(&mut self) -> Result<Session> {
+        let conn = self.conn_pool.get().await?;
+        let stmt = conn
+            .prepare("INSERT INTO users (id, active) VALUES ($1, TRUE);")
+            .await?;
+
+        let user_id = UserId::new();
+        conn.execute(&stmt, &[&user_id]).await?;
+
+        let session_id = SessionId::new();
+        let stmt = conn
+            .prepare(
+                "
+                INSERT INTO sessions (id, user_id, created, valid_until)
+                VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + make_interval(secs:=$3)) 
+                RETURNING created, valid_until;",
+            )
+            .await?;
+
+        // TODO: load from config
+        let session_duration = chrono::Duration::days(30);
+        let row = conn
+            .query_one(
+                &stmt,
+                &[
+                    &session_id,
+                    &user_id,
+                    &(session_duration.num_seconds() as f64),
+                ],
+            )
+            .await?;
+        Ok(Session {
+            id: session_id,
+            user: UserInfo {
+                id: user_id,
+                email: None,
+                real_name: None,
+            },
+            created: row.get(0),
+            valid_until: row.get(1),
+            project: None,
+            view: None,
+        })
+    }
+
     async fn login(&mut self, user_credentials: UserCredentials) -> Result<Session> {
         let conn = self.conn_pool.get().await?;
         let stmt = conn
-            .prepare("SELECT id, password_hash FROM users WHERE email = $1;")
+            .prepare("SELECT id, password_hash, email, real_name FROM users WHERE email = $1;")
             .await?;
 
         let row = conn
@@ -86,6 +131,8 @@ where
 
         let user_id = UserId(row.get(0));
         let password_hash = row.get(1);
+        let email = row.get(2);
+        let real_name = row.get(3);
 
         if bcrypt::verify(user_credentials.password, password_hash) {
             let session_id = SessionId::new();
@@ -112,7 +159,11 @@ where
                 .await?;
             Ok(Session {
                 id: session_id,
-                user: user_id,
+                user: UserInfo {
+                    id: user_id,
+                    email,
+                    real_name,
+                },
                 created: row.get(0),
                 valid_until: row.get(1),
                 project: None,
@@ -141,13 +192,15 @@ where
             .prepare(
                 "
             SELECT 
-                user_id, 
-                created, 
-                valid_until, 
-                project_id,
-                view
-            FROM sessions 
-            WHERE id = $1 AND CURRENT_TIMESTAMP < valid_until;",
+                u.id,   
+                u.email,
+                u.real_name,             
+                s.created, 
+                s.valid_until, 
+                s.project_id,
+                s.view           
+            FROM sessions s JOIN users u ON (s.user_id = u.id)
+            WHERE s.id = $1 AND CURRENT_TIMESTAMP < s.valid_until;",
             )
             .await?;
 
@@ -158,11 +211,15 @@ where
 
         Ok(Session {
             id: session,
-            user: UserId(row.get(0)),
-            created: row.get(1),
-            valid_until: row.get(2),
-            project: row.get::<usize, Option<Uuid>>(3).map(ProjectId),
-            view: row.get(4),
+            user: UserInfo {
+                id: row.get(0),
+                email: row.get(1),
+                real_name: row.get(2),
+            },
+            created: row.get(3),
+            valid_until: row.get(4),
+            project: row.get::<usize, Option<Uuid>>(5).map(ProjectId),
+            view: row.get(6),
         })
     }
 
@@ -170,7 +227,7 @@ where
         let conn = self.conn_pool.get().await?;
         PostgresContext::check_user_project_permission(
             &conn,
-            session.user,
+            session.user.id,
             project,
             &[
                 ProjectPermission::Read,

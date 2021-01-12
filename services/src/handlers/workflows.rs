@@ -7,9 +7,9 @@ use crate::util::identifiers::IdResponse;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 
-pub fn register_workflow_handler<C: Context>(
+pub(crate) fn register_workflow_handler<C: Context>(
     ctx: C,
-) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::post()
         .and(warp::path!("workflow"))
         .and(authenticate(ctx))
@@ -30,9 +30,9 @@ async fn register_workflow<C: Context>(
     Ok(warp::reply::json(&IdResponse::from_id(id)))
 }
 
-pub fn load_workflow_handler<C: Context>(
+pub(crate) fn load_workflow_handler<C: Context>(
     ctx: C,
-) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::get()
         .and(warp::path!("workflow" / Uuid))
         .and(authenticate(ctx))

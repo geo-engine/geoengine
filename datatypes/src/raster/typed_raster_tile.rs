@@ -96,96 +96,24 @@ where
     }
 }
 
-// TODO: use a macro?
-impl<D> Into<TypedRasterTile<D>> for RasterTile<D, u8>
-where
-    D: GridSize + GridSpaceToLinearSpace,
-{
-    fn into(self) -> TypedRasterTile<D> {
-        TypedRasterTile::U8(self)
-    }
+/// Implement `From<RasterTile> for TypedRasterTile`
+macro_rules! impl_from_raster_tile {
+    ($($type:tt),+) => {
+        paste::paste! {
+            $(
+                impl<D> From<RasterTile<D, $type>> for TypedRasterTile<D>
+                where
+                    D: GridSize + GridSpaceToLinearSpace,
+                {
+                    fn from(tile: RasterTile<D, $type>) -> TypedRasterTile<D> {
+                        TypedRasterTile::[<$type:upper>](tile)
+                    }
+                }
+            )+
+        }
+    };
 }
-
-impl<D> Into<TypedRasterTile<D>> for RasterTile<D, u16>
-where
-    D: GridSize + GridSpaceToLinearSpace,
-{
-    fn into(self) -> TypedRasterTile<D> {
-        TypedRasterTile::U16(self)
-    }
-}
-
-impl<D> Into<TypedRasterTile<D>> for RasterTile<D, u32>
-where
-    D: GridSize + GridSpaceToLinearSpace,
-{
-    fn into(self) -> TypedRasterTile<D> {
-        TypedRasterTile::U32(self)
-    }
-}
-
-impl<D> Into<TypedRasterTile<D>> for RasterTile<D, u64>
-where
-    D: GridSize + GridSpaceToLinearSpace,
-{
-    fn into(self) -> TypedRasterTile<D> {
-        TypedRasterTile::U64(self)
-    }
-}
-
-impl<D> Into<TypedRasterTile<D>> for RasterTile<D, i8>
-where
-    D: GridSize + GridSpaceToLinearSpace,
-{
-    fn into(self) -> TypedRasterTile<D> {
-        TypedRasterTile::I8(self)
-    }
-}
-
-impl<D> Into<TypedRasterTile<D>> for RasterTile<D, i16>
-where
-    D: GridSize + GridSpaceToLinearSpace,
-{
-    fn into(self) -> TypedRasterTile<D> {
-        TypedRasterTile::I16(self)
-    }
-}
-
-impl<D> Into<TypedRasterTile<D>> for RasterTile<D, i32>
-where
-    D: GridSize + GridSpaceToLinearSpace,
-{
-    fn into(self) -> TypedRasterTile<D> {
-        TypedRasterTile::I32(self)
-    }
-}
-
-impl<D> Into<TypedRasterTile<D>> for RasterTile<D, i64>
-where
-    D: GridSize + GridSpaceToLinearSpace,
-{
-    fn into(self) -> TypedRasterTile<D> {
-        TypedRasterTile::I64(self)
-    }
-}
-
-impl<D> Into<TypedRasterTile<D>> for RasterTile<D, f32>
-where
-    D: GridSize + GridSpaceToLinearSpace,
-{
-    fn into(self) -> TypedRasterTile<D> {
-        TypedRasterTile::F32(self)
-    }
-}
-
-impl<D> Into<TypedRasterTile<D>> for RasterTile<D, f64>
-where
-    D: GridSize + GridSpaceToLinearSpace,
-{
-    fn into(self) -> TypedRasterTile<D> {
-        TypedRasterTile::F64(self)
-    }
-}
+impl_from_raster_tile!(u8, u16, u32, u64, i8, i16, i32, i64, f32, f64);
 
 impl<D> DynamicRasterDataType for TypedRasterTile<D>
 where

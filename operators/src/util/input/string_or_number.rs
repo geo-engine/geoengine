@@ -1,5 +1,6 @@
+use std::convert::TryFrom;
+
 use crate::error;
-use failure::_core::convert::TryFrom;
 use serde::de::Visitor;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 

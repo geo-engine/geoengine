@@ -26,7 +26,7 @@ async fn list_data_sets_internal<C: Context>(
         .data_set_db_ref()
         .await
         .list(
-            ctx.session().expect("authenticated").user,
+            ctx.session().expect("authenticated").user.id,
             options.validated()?,
         )
         .await?;
@@ -49,7 +49,7 @@ async fn list_data_sets_external<C: Context>(
     ctx: C,
     options: DataSetListOptions,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    let user_id = ctx.session().expect("authenticated").user;
+    let user_id = ctx.session().expect("authenticated").user.id;
     let data_sets = ctx
         .data_set_db_ref()
         .await

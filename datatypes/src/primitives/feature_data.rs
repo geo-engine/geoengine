@@ -79,6 +79,16 @@ impl<'f> FeatureDataRef<'f> {
             FeatureDataRef::Categorical(data_ref) => data_ref.has_nulls(),
         }
     }
+
+    /// Get the `FeatureDataValue` value at position `i`
+    pub fn get_unchecked(&self, i: usize) -> FeatureDataValue {
+        match self {
+            FeatureDataRef::Text(data_ref) => data_ref.get_unchecked(i),
+            FeatureDataRef::Number(data_ref) => data_ref.get_unchecked(i),
+            FeatureDataRef::Decimal(data_ref) => data_ref.get_unchecked(i),
+            FeatureDataRef::Categorical(data_ref) => data_ref.get_unchecked(i),
+        }
+    }
 }
 
 /// Common methods for feature data references
@@ -119,6 +129,8 @@ where
 
     /// Is any of the data elements null?
     fn has_nulls(&self) -> bool;
+
+    fn get_unchecked(&self, i: usize) -> FeatureDataValue;
 }
 
 #[derive(Clone, Debug)]
@@ -145,6 +157,18 @@ impl<'f> DataRef<'f, f64> for NumberDataRef<'f> {
     fn has_nulls(&self) -> bool {
         self.valid_bitmap.is_some()
     }
+
+    fn get_unchecked(&self, i: usize) -> FeatureDataValue {
+        if self.has_nulls() {
+            FeatureDataValue::NullableNumber(if self.is_null(i) {
+                None
+            } else {
+                Some(self.as_ref()[i])
+            })
+        } else {
+            FeatureDataValue::Number(self.as_ref()[i])
+        }
+    }
 }
 
 impl AsRef<[f64]> for NumberDataRef<'_> {
@@ -153,9 +177,9 @@ impl AsRef<[f64]> for NumberDataRef<'_> {
     }
 }
 
-impl<'f> Into<FeatureDataRef<'f>> for NumberDataRef<'f> {
-    fn into(self) -> FeatureDataRef<'f> {
-        FeatureDataRef::Number(self)
+impl<'f> From<NumberDataRef<'f>> for FeatureDataRef<'f> {
+    fn from(data_ref: NumberDataRef<'f>) -> FeatureDataRef<'f> {
+        FeatureDataRef::Number(data_ref)
     }
 }
 
@@ -207,6 +231,18 @@ impl<'f> DataRef<'f, i64> for DecimalDataRef<'f> {
     fn has_nulls(&self) -> bool {
         self.valid_bitmap.is_some()
     }
+
+    fn get_unchecked(&self, i: usize) -> FeatureDataValue {
+        if self.has_nulls() {
+            FeatureDataValue::NullableDecimal(if self.is_null(i) {
+                None
+            } else {
+                Some(self.as_ref()[i])
+            })
+        } else {
+            FeatureDataValue::Decimal(self.as_ref()[i])
+        }
+    }
 }
 
 impl AsRef<[i64]> for DecimalDataRef<'_> {
@@ -215,9 +251,9 @@ impl AsRef<[i64]> for DecimalDataRef<'_> {
     }
 }
 
-impl<'f> Into<FeatureDataRef<'f>> for DecimalDataRef<'f> {
-    fn into(self) -> FeatureDataRef<'f> {
-        FeatureDataRef::Decimal(self)
+impl<'f> From<DecimalDataRef<'f>> for FeatureDataRef<'f> {
+    fn from(data_ref: DecimalDataRef<'f>) -> FeatureDataRef<'f> {
+        FeatureDataRef::Decimal(data_ref)
     }
 }
 
@@ -253,6 +289,18 @@ impl<'f> DataRef<'f, u8> for CategoricalDataRef<'f> {
     fn has_nulls(&self) -> bool {
         self.valid_bitmap.is_some()
     }
+
+    fn get_unchecked(&self, i: usize) -> FeatureDataValue {
+        if self.has_nulls() {
+            FeatureDataValue::NullableCategorical(if self.is_null(i) {
+                None
+            } else {
+                Some(self.as_ref()[i])
+            })
+        } else {
+            FeatureDataValue::Categorical(self.as_ref()[i])
+        }
+    }
 }
 
 impl AsRef<[u8]> for CategoricalDataRef<'_> {
@@ -261,9 +309,9 @@ impl AsRef<[u8]> for CategoricalDataRef<'_> {
     }
 }
 
-impl<'f> Into<FeatureDataRef<'f>> for CategoricalDataRef<'f> {
-    fn into(self) -> FeatureDataRef<'f> {
-        FeatureDataRef::Categorical(self)
+impl<'f> From<CategoricalDataRef<'f>> for FeatureDataRef<'f> {
+    fn from(data_ref: CategoricalDataRef<'f>) -> FeatureDataRef<'f> {
+        FeatureDataRef::Categorical(data_ref)
     }
 }
 
@@ -394,6 +442,16 @@ impl<'r> DataRef<'r, u8> for TextDataRef<'r> {
 
     fn has_nulls(&self) -> bool {
         self.valid_bitmap.is_some()
+    }
+
+    fn get_unchecked(&self, i: usize) -> FeatureDataValue {
+        let text = self.text_at(i).expect("unchecked").map(ToString::to_string);
+
+        if self.has_nulls() {
+            FeatureDataValue::NullableText(text)
+        } else {
+            FeatureDataValue::Text(text.expect("cannot be null"))
+        }
     }
 }
 

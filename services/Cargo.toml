@@ -18,11 +18,11 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 uuid = { version = "0.8", features = ["serde", "v4", "v5"] }
 snafu = "0.6"
-pwhash = "0.3"
+pwhash = "1.0"
 serde_urlencoded = "0.7"
 futures = "0.3"
 image = "0.23"
-bb8-postgres = { version = "0.6", features = ["with-uuid-0_8", "with-chrono-0_4", "with-serde_json-1"] }
+bb8-postgres = { version = "0.5", features = ["with-uuid-0_8", "with-chrono-0_4", "with-serde_json-1"] } # TODO: update v0.6
 postgres-types = { version = "0.1", features = ["derive"] }
 async-trait = "0.1"
 config = "0.10"
@@ -33,4 +33,4 @@ strum = { version = "0.20", features = ["derive"] }
 clap = "3.0.0-beta.1"
 tempfile = "3.1"
 xml-rs = "0.8.3"
-reqwest = "0.10.8"
+reqwest = "0.11.0"

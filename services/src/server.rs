@@ -16,6 +16,31 @@ use tokio::sync::oneshot::{Receiver, Sender};
 use warp::fs::File;
 use warp::{Filter, Rejection};
 
+/// Helper to combine the multiple filters together with Filter::or, possibly boxing the types in
+/// the process. This greatly helps the build times for `ipfs-http`.
+/// https://github.com/seanmonstar/warp/issues/507#issuecomment-615974062
+macro_rules! combine {
+  ($x:expr, $($y:expr),+) => {{
+      let filter = boxed_on_debug!($x);
+      $( let filter = boxed_on_debug!(filter.or($y)); )+
+      filter
+  }}
+}
+
+#[cfg(debug_assertions)]
+macro_rules! boxed_on_debug {
+    ($x:expr) => {
+        $x.boxed()
+    };
+}
+
+#[cfg(not(debug_assertions))]
+macro_rules! boxed_on_debug {
+    ($x:expr) => {
+        $x
+    };
+}
+
 pub async fn start_server(
     shutdown_rx: Option<Receiver<()>>,
     static_files_dir: Option<PathBuf>,
@@ -72,25 +97,30 @@ where
     C: Context,
 {
     // TODO: hierarchical filters workflow -> (register, load), user -> (register, login, ...)
-    let handler = handlers::workflows::register_workflow_handler(ctx.clone())
-        .or(handlers::workflows::load_workflow_handler(ctx.clone()))
-        .or(handlers::users::register_user_handler(ctx.clone()))
-        .or(handlers::users::login_handler(ctx.clone()))
-        .or(handlers::users::logout_handler(ctx.clone()))
-        .or(handlers::users::session_project_handler(ctx.clone()))
-        .or(handlers::users::session_view_handler(ctx.clone()))
-        .or(handlers::projects::create_project_handler(ctx.clone()))
-        .or(handlers::projects::list_projects_handler(ctx.clone()))
-        .or(handlers::projects::update_project_handler(ctx.clone()))
-        .or(handlers::projects::delete_project_handler(ctx.clone()))
-        .or(handlers::projects::project_versions_handler(ctx.clone()))
-        .or(handlers::projects::add_permission_handler(ctx.clone()))
-        .or(handlers::projects::remove_permission_handler(ctx.clone()))
-        .or(handlers::projects::list_permissions_handler(ctx.clone()))
-        .or(handlers::wms::wms_handler(ctx.clone()))
-        .or(handlers::wfs::wfs_handler(ctx.clone()))
-        .or(serve_static_directory(static_files_dir))
-        .recover(handle_rejection);
+    let handler = combine!(
+        handlers::workflows::register_workflow_handler(ctx.clone()),
+        handlers::workflows::load_workflow_handler(ctx.clone()),
+        handlers::users::register_user_handler(ctx.clone()),
+        handlers::users::anonymous_handler(ctx.clone()),
+        handlers::users::login_handler(ctx.clone()),
+        handlers::users::logout_handler(ctx.clone()),
+        handlers::users::session_handler(ctx.clone()),
+        handlers::users::session_project_handler(ctx.clone()),
+        handlers::users::session_view_handler(ctx.clone()),
+        handlers::projects::create_project_handler(ctx.clone()),
+        handlers::projects::list_projects_handler(ctx.clone()),
+        handlers::projects::update_project_handler(ctx.clone()),
+        handlers::projects::delete_project_handler(ctx.clone()),
+        handlers::projects::load_project_handler(ctx.clone()),
+        handlers::projects::project_versions_handler(ctx.clone()),
+        handlers::projects::add_permission_handler(ctx.clone()),
+        handlers::projects::remove_permission_handler(ctx.clone()),
+        handlers::projects::list_permissions_handler(ctx.clone()),
+        handlers::wms::wms_handler(ctx.clone()),
+        handlers::wfs::wfs_handler(ctx.clone()),
+        serve_static_directory(static_files_dir)
+    )
+    .recover(handle_rejection);
 
     let task = if let Some(receiver) = shutdown_rx {
         let (_, server) = warp::serve(handler).bind_with_graceful_shutdown(bind_address, async {
@@ -139,7 +169,7 @@ mod tests {
     use super::*;
     use tokio::sync::oneshot;
 
-    /// Test the werbserver startup to ensure that tokio and warp are working properly
+    /// Test the webserver startup to ensure that `tokio` and `warp` are working properly
     #[tokio::test]
     async fn webserver_start() -> Result<(), Error> {
         let (shutdown_tx, shutdown_rx) = oneshot::channel();

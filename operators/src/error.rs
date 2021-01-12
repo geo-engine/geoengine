@@ -1,6 +1,6 @@
 use chrono::ParseError;
-use failure::Fail; // TODO: replace failure in gdal and then remove
 use geoengine_datatypes::dataset::DataSetId;
+use geoengine_datatypes::primitives::FeatureDataType;
 use snafu::Snafu;
 use std::ops::Range;
 
@@ -60,8 +60,7 @@ pub enum Error {
 
     #[snafu(display("GdalError: {}", source))]
     Gdal {
-        #[snafu(source(from(gdal::errors::Error, failure::Fail::compat)))]
-        source: failure::Compat<gdal::errors::Error>,
+        source: gdal::errors::GdalError,
     },
 
     #[snafu(display("IOError: {}", source))]
@@ -106,7 +105,14 @@ pub enum Error {
         expected: String,
         found: String,
     },
+
     InvalidOperatorType,
+
+    #[snafu(display("Column types do not match: {:?} - {:?}", left, right))]
+    ColumnTypeMismatch {
+        left: FeatureDataType,
+        right: FeatureDataType,
+    },
 
     UnknownDataset {
         name: String,
@@ -157,11 +163,9 @@ impl From<geoengine_datatypes::error::Error> for Error {
     }
 }
 
-impl From<gdal::errors::Error> for Error {
-    fn from(gdal_error: gdal::errors::Error) -> Self {
-        Self::Gdal {
-            source: gdal_error.compat(),
-        }
+impl From<gdal::errors::GdalError> for Error {
+    fn from(gdal_error: gdal::errors::GdalError) -> Self {
+        Self::Gdal { source: gdal_error }
     }
 }
 

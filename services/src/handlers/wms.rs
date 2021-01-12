@@ -25,7 +25,7 @@ use geoengine_operators::call_on_generic_raster_processor;
 use geoengine_operators::engine::{QueryContext, QueryRectangle, RasterQueryProcessor};
 use std::str::FromStr;
 
-pub fn wms_handler<C: Context>(
+pub(crate) fn wms_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::get()

@@ -10,7 +10,9 @@ use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use futures::StreamExt;
 use geoengine_datatypes::collections::ToGeoJson;
-use geoengine_datatypes::primitives::{FeatureData, MultiPoint, TimeInstance, TimeInterval};
+use geoengine_datatypes::primitives::{
+    FeatureData, Geometry, MultiPoint, TimeInstance, TimeInterval,
+};
 use geoengine_datatypes::{
     collections::{FeatureCollection, MultiPointCollection},
     primitives::SpatialResolution,
@@ -22,9 +24,9 @@ use geoengine_operators::engine::{
 use serde_json::json;
 use std::str::FromStr;
 
-pub fn wfs_handler<C: Context>(
+pub(crate) fn wfs_handler<C: Context>(
     ctx: C,
-) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::get()
         .and(warp::path!("wfs"))
         .and(warp::query::<WFSRequest>())
@@ -198,24 +200,18 @@ async fn get_feature<C: Context>(
     };
     let query_ctx = ctx.query_context();
 
-    // TODO: support geojson output for types other than multipoints
     let json = match processor {
-        // TypedVectorQueryProcessor::Data(p) => {
-        //     vector_stream_to_geojson(p, query_rect, query_ctx).await
-        // }
-        TypedVectorQueryProcessor::MultiPoint(p) => {
-            point_stream_to_geojson(p, query_rect, &query_ctx).await
+        TypedVectorQueryProcessor::Data(p) => {
+            vector_stream_to_geojson(p, query_rect, &query_ctx).await
         }
-        // TypedVectorQueryProcessor::MultiLineString(p) => {
-        //     vector_stream_to_geojson(p, query_rect, query_ctx).await
-        // }
-        // TypedVectorQueryProcessor::MultiPolygon(p) => {
-        //     vector_stream_to_geojson(p, query_rect, query_ctx).await
-        // }
-        _ => {
-            return Ok(Box::new(
-                warp::http::StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-            ));
+        TypedVectorQueryProcessor::MultiPoint(p) => {
+            vector_stream_to_geojson(p, query_rect, &query_ctx).await
+        }
+        TypedVectorQueryProcessor::MultiLineString(p) => {
+            vector_stream_to_geojson(p, query_rect, &query_ctx).await
+        }
+        TypedVectorQueryProcessor::MultiPolygon(p) => {
+            vector_stream_to_geojson(p, query_rect, &query_ctx).await
         }
     }?;
 
@@ -227,14 +223,15 @@ async fn get_feature<C: Context>(
     ))
 }
 
-// TODO: generify function to work with arbitrary FeatureCollection<T>.
-//       Currently the problem is the lifetime on the IntoGeometryOptionIterator trait bound
-//       that is required for calling to_geo_json on a feature collection
-async fn point_stream_to_geojson(
-    processor: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<MultiPoint>>>,
+async fn vector_stream_to_geojson<G>(
+    processor: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
     query_rect: QueryRectangle,
     query_ctx: &dyn QueryContext,
-) -> Result<serde_json::Value> {
+) -> Result<serde_json::Value>
+where
+    G: Geometry + 'static,
+    for<'c> FeatureCollection<G>: ToGeoJson<'c>,
+{
     let features: Vec<serde_json::Value> = Vec::new();
 
     // TODO: more efficient merging of the partial feature collections

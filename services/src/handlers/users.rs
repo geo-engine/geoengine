@@ -11,9 +11,9 @@ use uuid::Uuid;
 use warp::reply::Reply;
 use warp::Filter;
 
-pub fn register_user_handler<C: Context>(
+pub(crate) fn register_user_handler<C: Context>(
     ctx: C,
-) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::post()
         .and(warp::path("user"))
         .and(warp::body::json())
@@ -31,9 +31,24 @@ async fn register_user<C: Context>(
     Ok(warp::reply::json(&IdResponse::from_id(id)))
 }
 
-pub fn login_handler<C: Context>(
+pub(crate) fn anonymous_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+    warp::post()
+        .and(warp::path!("anonymous"))
+        .and(warp::any().map(move || ctx.clone()))
+        .and_then(anonymous)
+}
+
+// TODO: move into handler once async closures are available?
+async fn anonymous<C: Context>(ctx: C) -> Result<impl warp::Reply, warp::Rejection> {
+    let session = ctx.user_db_ref_mut().await.anonymous().await?;
+    Ok(warp::reply::json(&session))
+}
+
+pub(crate) fn login_handler<C: Context>(
+    ctx: C,
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::post()
         .and(warp::path("login"))
         .and(warp::body::json())
@@ -56,9 +71,9 @@ async fn login<C: Context>(
     Ok(warp::reply::json(&session).into_response())
 }
 
-pub fn logout_handler<C: Context>(
+pub(crate) fn logout_handler<C: Context>(
     ctx: C,
-) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::post()
         .and(warp::path("logout"))
         .and(authenticate(ctx))
@@ -74,9 +89,25 @@ async fn logout<C: Context>(ctx: C) -> Result<impl warp::Reply, warp::Rejection>
     Ok(warp::reply().into_response())
 }
 
-pub fn session_project_handler<C: Context>(
+pub(crate) fn session_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+    warp::get()
+        .and(warp::path("session"))
+        .and(authenticate(ctx))
+        .and_then(session)
+}
+
+// TODO: move into handler once async closures are available?
+async fn session<C: Context>(ctx: C) -> Result<impl warp::Reply, warp::Rejection> {
+    Ok(warp::reply::json(
+        ctx.session().expect("authentication was successful"),
+    ))
+}
+
+pub(crate) fn session_project_handler<C: Context>(
+    ctx: C,
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::post()
         .and(warp::path!("session" / "project" / Uuid).map(ProjectId))
         .and(authenticate(ctx))
@@ -96,9 +127,9 @@ async fn session_project<C: Context>(
     Ok(warp::reply())
 }
 
-pub fn session_view_handler<C: Context>(
+pub(crate) fn session_view_handler<C: Context>(
     ctx: C,
-) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::post()
         .and(warp::path!("session" / "view"))
         .and(authenticate(ctx))
@@ -386,6 +417,66 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn session() {
+        let ctx = InMemoryContext::default();
+
+        let user = Validated {
+            user_input: UserRegistration {
+                email: "foo@bar.de".to_string(),
+                password: "secret123".to_string(),
+                real_name: " Foo Bar".to_string(),
+            },
+        };
+
+        ctx.user_db().write().await.register(user).await.unwrap();
+
+        let credentials = UserCredentials {
+            email: "foo@bar.de".to_string(),
+            password: "secret123".to_string(),
+        };
+
+        let session = ctx
+            .user_db()
+            .write()
+            .await
+            .login(credentials)
+            .await
+            .unwrap();
+
+        let res = warp::test::request()
+            .method("GET")
+            .path("/session")
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
+            .reply(&session_handler(ctx.clone()).recover(handle_rejection))
+            .await;
+
+        let body: String = String::from_utf8(res.body().to_vec()).unwrap();
+        let session: Session = serde_json::from_str(&body).unwrap();
+
+        ctx.user_db()
+            .write()
+            .await
+            .logout(session.id)
+            .await
+            .unwrap();
+
+        let res = warp::test::request()
+            .method("GET")
+            .path("/session")
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
+            .reply(&session_handler(ctx).recover(handle_rejection))
+            .await;
+
+        assert_eq!(res.status(), 401);
+    }
+
+    #[tokio::test]
     async fn session_view_project() {
         let ctx = InMemoryContext::default();
 
@@ -417,7 +508,7 @@ mod tests {
             .write()
             .await
             .create(
-                session.user,
+                session.user.id,
                 CreateProject {
                     name: "Test".to_string(),
                     description: "Foo".to_string(),
@@ -487,5 +578,24 @@ mod tests {
                 .view,
             Some(rect)
         );
+    }
+
+    #[tokio::test]
+    async fn anonymous() {
+        let ctx = InMemoryContext::default();
+
+        let res = warp::test::request()
+            .method("POST")
+            .path("/anonymous")
+            .reply(&anonymous_handler(ctx))
+            .await;
+
+        assert_eq!(res.status(), 200);
+
+        let body: String = String::from_utf8(res.body().to_vec()).unwrap();
+        let session = serde_json::from_str::<Session>(&body).unwrap();
+
+        assert!(session.user.real_name.is_none());
+        assert!(session.user.email.is_none());
     }
 }

@@ -88,7 +88,7 @@ impl Context for InMemoryContext {
             // TODO: use production config and test config sizes here
             chunk_byte_size: 1024,
             data_set_db: self.data_set_db.clone(),
-            user: self.session().unwrap().user, // TODO: error handling? or need initialized session...
+            user: self.session().unwrap().user.id, // TODO: error handling? or need initialized session...
         }
     }
 

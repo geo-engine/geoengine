@@ -247,3 +247,25 @@ impl TypedVectorQueryProcessor {
         }
     }
 }
+
+/// Maps a `TypedVectorQueryProcessor` to another `TypedVectorQueryProcessor` by calling a function on its variant.
+/// Call via `map_typed_vector_query_processor!(input, processor => function)`.
+#[macro_export]
+macro_rules! map_typed_vector_query_processor {
+    ($input:expr, $processor:ident => $function_call:expr) => {
+        map_typed_vector_query_processor!(
+            @variants $input, $processor => $function_call,
+            Data, MultiPoint, MultiLineString, MultiPolygon
+        )
+    };
+
+    (@variants $input:expr, $processor:ident => $function_call:expr, $($variant:tt),+) => {
+        match $input {
+            $(
+                $crate::engine::TypedVectorQueryProcessor::$variant($processor) => {
+                    $crate::engine::TypedVectorQueryProcessor::$variant($function_call)
+                }
+            )+
+        }
+    };
+}

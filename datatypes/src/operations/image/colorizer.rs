@@ -513,11 +513,11 @@ trait Clamp: Sized + PartialOrd {
 
 impl Clamp for f64 {}
 
-impl Into<image::Rgba<u8>> for RgbaColor {
+impl From<RgbaColor> for image::Rgba<u8> {
     /// Transform an `RgbaColor` to its counterpart from the image crate
-    fn into(self) -> image::Rgba<u8> {
+    fn from(color: RgbaColor) -> image::Rgba<u8> {
         // [r, g, b, a]
-        image::Rgba(self.0)
+        image::Rgba(color.0)
     }
 }
 
