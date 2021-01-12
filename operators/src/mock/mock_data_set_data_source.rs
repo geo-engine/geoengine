@@ -1,8 +1,7 @@
 use crate::engine::{
     ExecutionContext, InitializedOperator, InitializedOperatorImpl, InitializedVectorOperator,
-    LoadingInfo, LoadingInfoProvider, MockExecutionContext, QueryContext, QueryProcessor,
-    QueryRectangle, SourceOperator, TypedVectorQueryProcessor, VectorOperator,
-    VectorQueryProcessor, VectorResultDescriptor,
+    LoadingInfo, QueryContext, QueryProcessor, QueryRectangle, SourceOperator,
+    TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::util::Result;
 use futures::stream;
@@ -15,7 +14,7 @@ use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct MockDataSetDataSourceLoadingInfo {
     pub points: Vec<Coordinate2D>,
 }
@@ -127,8 +126,7 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::concurrency::ThreadPool;
-    use crate::engine::MockQueryContext;
+    use crate::engine::{MockExecutionContext, MockQueryContext};
     use futures::executor::block_on_stream;
     use geoengine_datatypes::collections::FeatureCollectionInfos;
     use geoengine_datatypes::dataset::InternalDataSetId;
@@ -142,9 +140,9 @@ mod tests {
         let id = DataSetId::Internal(InternalDataSetId::new());
         execution_context.add_loading_info(
             id.clone(),
-            MockDataSetDataSourceLoadingInfo {
+            Box::new(MockDataSetDataSourceLoadingInfo {
                 points: vec![Coordinate2D::new(1., 2.); 3],
-            },
+            }),
         );
 
         let mps = MockDataSetDataSource {

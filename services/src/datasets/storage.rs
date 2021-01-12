@@ -17,6 +17,7 @@ use geoengine_operators::source::OgrSourceDataset;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
+use std::path::PathBuf;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DataSet {
@@ -119,8 +120,11 @@ pub enum DataSetLoadingInfo {
     Vector(VectorLoadingInfo),
 }
 
-#[allow(clippy::empty_enum)]
-pub enum RasterLoadingInfo {}
+pub struct GdalLoadingInfo {
+    pub file: PathBuf,
+}
+
+pub type RasterLoadingInfo = GdalLoadingInfo;
 
 #[allow(clippy::large_enum_variant)] // TODO: box?
 pub enum VectorLoadingInfo {

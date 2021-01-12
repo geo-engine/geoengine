@@ -16,6 +16,7 @@ use geoengine_datatypes::primitives::Geometry;
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use geoengine_operators::engine::{LoadingInfo, LoadingInfoProvider, VectorResultDescriptor};
 use geoengine_operators::mock::MockDataSetDataSourceLoadingInfo;
+use geoengine_operators::source::OgrSourceDataset;
 
 #[derive(Debug)]
 pub struct PostgresDataSetDB {}
@@ -139,6 +140,18 @@ impl LoadingInfoProvider<MockDataSetDataSourceLoadingInfo, VectorResultDescripto
         _data_set: &DataSetId,
     ) -> Result<
         Box<dyn LoadingInfo<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>>,
+        geoengine_operators::error::Error,
+    > {
+        todo!()
+    }
+}
+
+impl LoadingInfoProvider<OgrSourceDataset, VectorResultDescriptor> for PostgresDataSetDB {
+    fn loading_info(
+        &self,
+        _data_set: &DataSetId,
+    ) -> Result<
+        Box<dyn LoadingInfo<OgrSourceDataset, VectorResultDescriptor>>,
         geoengine_operators::error::Error,
     > {
         todo!()

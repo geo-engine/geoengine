@@ -18,6 +18,7 @@ use geoengine_operators::engine::{
     ExecutionContext, LoadingInfo, LoadingInfoProvider, QueryContext, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDataSetDataSourceLoadingInfo;
+use geoengine_operators::source::OgrSourceDataset;
 pub use in_memory::InMemoryContext;
 pub use postgres::PostgresContext;
 use std::borrow::Borrow;
@@ -92,7 +93,9 @@ where
 
 impl<D> ExecutionContext for ExecutionContextImpl<D>
 where
-    D: DataSetDB + LoadingInfoProvider<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>,
+    D: DataSetDB
+        + LoadingInfoProvider<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>
+        + LoadingInfoProvider<OgrSourceDataset, VectorResultDescriptor>,
 {
     fn thread_pool(&self) -> &ThreadPool {
         self.thread_pool.borrow()
@@ -116,6 +119,26 @@ where
         data_set: &DataSetId,
     ) -> Result<
         Box<dyn LoadingInfo<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>>,
+        geoengine_operators::error::Error,
+    > {
+        futures::executor::block_on(async {
+            // TODO: external providers
+            self.data_set_db.read().await.loading_info(data_set)
+        })
+    }
+}
+
+// TODO: avoid redundant delegating implementations
+impl<D> LoadingInfoProvider<OgrSourceDataset, VectorResultDescriptor> for ExecutionContextImpl<D>
+where
+    D: DataSetDB + LoadingInfoProvider<OgrSourceDataset, VectorResultDescriptor>,
+{
+    // TODO: make async
+    fn loading_info(
+        &self,
+        data_set: &DataSetId,
+    ) -> Result<
+        Box<dyn LoadingInfo<OgrSourceDataset, VectorResultDescriptor>>,
         geoengine_operators::error::Error,
     > {
         futures::executor::block_on(async {

@@ -4,8 +4,8 @@ use crate::datasets::listing::{
 };
 use crate::datasets::storage::{
     AddDataSet, AddDataSetProvider, DataSet, DataSetLoadingInfo, DataSetProviderListOptions,
-    DataSetProviderListing, ImportDataSet, RasterLoadingInfo, UserDataSetProviderPermission,
-    VectorLoadingInfo,
+    DataSetProviderListing, GdalLoadingInfo, ImportDataSet, RasterLoadingInfo,
+    UserDataSetProviderPermission, VectorLoadingInfo,
 };
 use crate::datasets::storage::{DataSetPermission, UserDataSetPermission};
 use crate::error;
@@ -27,6 +27,7 @@ use geoengine_datatypes::primitives::{Coordinate2D, Geometry};
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use geoengine_operators::engine::{LoadingInfo, LoadingInfoProvider, VectorResultDescriptor};
 use geoengine_operators::mock::MockDataSetDataSourceLoadingInfo;
+use geoengine_operators::source::OgrSourceDataset;
 use snafu::ensure;
 use std::collections::HashMap;
 
@@ -40,7 +41,7 @@ pub struct HashmapDataSetDB {
     data_set_permissions: Vec<UserDataSetPermission>,
     external_providers: HashMap<DataSetProviderId, Box<dyn DataSetProvider>>,
     external_provider_permissions: Vec<UserDataSetProviderPermission>,
-    staged_rasters: HashMap<StagingDataSetId, RasterLoadingInfo>,
+    staged_rasters: HashMap<StagingDataSetId, GdalLoadingInfo>,
     staged_vectors: HashMap<StagingDataSetId, VectorLoadingInfo>,
     data_sets: HashMap<InternalDataSetId, InMemoryDataSet>,
 }
@@ -346,6 +347,18 @@ impl LoadingInfoProvider<MockDataSetDataSourceLoadingInfo, VectorResultDescripto
     }
 }
 
+impl LoadingInfoProvider<OgrSourceDataset, VectorResultDescriptor> for HashmapDataSetDB {
+    fn loading_info(
+        &self,
+        _data_set: &DataSetId,
+    ) -> Result<
+        Box<dyn LoadingInfo<OgrSourceDataset, VectorResultDescriptor>>,
+        geoengine_operators::error::Error,
+    > {
+        todo!()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -539,7 +552,7 @@ mod tests {
                         numeric: vec!["b".to_string()],
                         textual: vec!["c".to_string()],
                     }),
-                    default: None,
+                    default_geometry: None,
                     force_ogr_time_filter: false,
                     on_error: OgrSourceErrorSpec::Skip,
                     provenance: None,

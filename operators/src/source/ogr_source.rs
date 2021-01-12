@@ -7,7 +7,6 @@ use std::path::PathBuf;
 use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::mpsc::{self, Receiver, SyncSender, TryRecvError, TrySendError};
-use std::sync::Arc;
 use std::task::Poll;
 
 use chrono::DateTime;
@@ -28,17 +27,19 @@ use geoengine_datatypes::primitives::{
     MultiPolygon, NoGeometry, TimeInstance, TimeInterval, TypedGeometry,
 };
 use geoengine_datatypes::provenance::ProvenanceInformation;
-use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 
 use crate::engine::{
-    InitializedOperator, InitializedOperatorImpl, QueryContext, QueryProcessor, QueryRectangle,
-    SourceOperator, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
-    VectorResultDescriptor,
+    InitializedOperator, InitializedOperatorImpl, LoadingInfo, QueryContext, QueryProcessor,
+    QueryRectangle, SourceOperator, TypedVectorQueryProcessor, VectorOperator,
+    VectorQueryProcessor, VectorResultDescriptor,
 };
+use crate::error;
 use crate::error::Error;
 use crate::util::Result;
 use geoengine_datatypes::dataset::DataSetId;
+use snafu::ensure;
+use std::convert::{TryFrom, TryInto};
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct OgrSourceParameters {
@@ -65,7 +66,7 @@ pub struct OgrSourceDataset {
     #[serde(default)]
     pub time: OgrSourceDatasetTimeType,
     pub columns: Option<OgrSourceColumnSpec>,
-    pub default: Option<String>,
+    pub default_geometry: Option<TypedGeometry>,
     #[serde(default)]
     pub force_ogr_time_filter: bool,
     pub on_error: OgrSourceErrorSpec,
@@ -73,7 +74,7 @@ pub struct OgrSourceDataset {
 }
 
 impl OgrSourceDataset {
-    fn load_dataset(name: &str) -> Result<Self> {
+    pub fn load_dataset(name: &str) -> Result<Self> {
         // TODO: load dir from config
         let dataset_dir =
             PathBuf::from_str("test-data/vector/").expect("dataset directory does not exist");
@@ -83,11 +84,19 @@ impl OgrSourceDataset {
             name: name.to_string(),
             source,
         })?;
-        let dataset_information =
+        let dataset_information: Self =
             serde_json::from_reader(file).map_err(|source| Error::InvalidDatasetSpec {
                 name: name.to_string(),
                 source,
             })?;
+
+        ensure!(
+            dataset_information.on_error != OgrSourceErrorSpec::Keep
+                || dataset_information.default_geometry.is_some(),
+            error::InvalidOperatorSpec {
+                reason: "Default geometry must only be specified on error type `keep`".to_string(),
+            }
+        );
 
         Ok(dataset_information)
     }
@@ -207,24 +216,7 @@ pub enum OgrSourceErrorSpec {
 
 #[derive(Clone, Debug)]
 pub struct OgrSourceState {
-    dataset_information: Arc<OgrSourceDataset>,
-    default_geometry: OgrSourceDefaultGeometry,
-}
-
-#[derive(Clone, Debug)]
-pub struct OgrSourceDefaultGeometry(Option<TypedGeometry>);
-
-impl OgrSourceDefaultGeometry {
-    pub fn try_into_geometry<G>(&self) -> Result<Option<G>>
-    where
-        G: Geometry,
-    {
-        if let Some(v) = self.0.clone() {
-            Ok(Some(G::try_from(v)?))
-        } else {
-            Ok(None)
-        }
-    }
+    dataset_information: Box<dyn LoadingInfo<OgrSourceDataset, VectorResultDescriptor>>,
 }
 
 pub type InitializedOgrSource =
@@ -234,66 +226,18 @@ pub type InitializedOgrSource =
 impl VectorOperator for OgrSource {
     fn initialize(
         self: Box<Self>,
-        _context: &dyn crate::engine::ExecutionContext,
+        context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<crate::engine::InitializedVectorOperator>> {
-        let mut dataset_information = OgrSourceDataset::load_dataset(&self.params.layer_name)?;
-        dataset_information.project_columns(&self.params.attribute_projection);
-
-        let mut dataset = Dataset::open(&dataset_information.file_name)?;
-        let layer = dataset.layer_by_name(&dataset_information.layer_name)?;
-
-        let spatial_reference = match layer
-            .spatial_reference()
-            .and_then(|gdal_srs| gdal_srs.authority())
-        {
-            Ok(authority) => SpatialReference::from_str(&authority)?.into(),
-            Err(_) => SpatialReferenceOption::Unreferenced,
-        };
-
-        let data_type = if let Some(data_type) = dataset_information.data_type {
-            data_type
-        } else if dataset_information
-            .columns
-            .as_ref()
-            .map_or(false, |columns| columns.y.is_some())
-        {
-            // if there is a `y` column, there is no WKT in a single column
-            VectorDataType::MultiPoint
-        } else {
-            // TODO: is *data* a reasonable fallback type for an empty layer?
-            layer
-                .features()
-                .next()
-                .map_or(VectorDataType::Data, |feature| {
-                    feature
-                        .geometry_by_index(0)
-                        .map(Self::ogr_geometry_type)
-                        .unwrap_or(VectorDataType::Data)
-                })
-        };
-
-        let result_descriptor = VectorResultDescriptor {
-            spatial_reference,
-            data_type,
-        };
-
-        let default_geometry = Self::parse_default_geometry(&dataset_information, data_type)?;
-
-        if default_geometry.0.is_some() && dataset_information.on_error != OgrSourceErrorSpec::Keep
-        {
-            return Err(Error::InvalidOperatorSpec {
-                reason: "Default geometry must only be specified on error type `keep`".to_string(),
-            });
-        }
+        let info: Box<dyn LoadingInfo<OgrSourceDataset, VectorResultDescriptor>> =
+            context.loading_info(&self.params.data_set)?;
 
         Ok(InitializedOgrSource::new(
             self.params,
-            result_descriptor,
+            info.meta()?,
             vec![],
             vec![],
             OgrSourceState {
-                dataset_information: Arc::new(dataset_information),
-                default_geometry,
+                dataset_information: info,
             },
         )
         .boxed())
@@ -319,39 +263,39 @@ impl OgrSource {
         }
     }
 
-    fn parse_default_geometry(
-        dataset_information: &OgrSourceDataset,
-        expected_data_type: VectorDataType,
-    ) -> Result<OgrSourceDefaultGeometry> {
-        let wkt_string = if let Some(wkt_string) = &dataset_information.default {
-            wkt_string
-        } else {
-            return Ok(OgrSourceDefaultGeometry(None));
-        };
-
-        let geometry = gdal::vector::Geometry::from_wkt(&wkt_string)?;
-
-        let geometry_type = Self::ogr_geometry_type(&geometry);
-        if geometry_type != expected_data_type {
-            return Err(Error::InvalidType {
-                expected: format!("{:?}", expected_data_type),
-                found: format!("{:?}", geometry_type),
-            });
-        }
-
-        Ok(OgrSourceDefaultGeometry(Some(match geometry_type {
-            VectorDataType::Data => TypedGeometry::Data(NoGeometry::try_from(Ok(&geometry))?),
-            VectorDataType::MultiPoint => {
-                TypedGeometry::MultiPoint(MultiPoint::try_from(Ok(&geometry))?)
-            }
-            VectorDataType::MultiLineString => {
-                TypedGeometry::MultiLineString(MultiLineString::try_from(Ok(&geometry))?)
-            }
-            VectorDataType::MultiPolygon => {
-                TypedGeometry::MultiPolygon(MultiPolygon::try_from(Ok(&geometry))?)
-            }
-        })))
-    }
+    //     fn parse_default_geometry(
+    //         dataset_information: &OgrSourceDataset,
+    //         expected_data_type: VectorDataType,
+    //     ) -> Result<OgrSourceDefaultGeometry> {
+    //         let wkt_string = if let Some(wkt_string) = &dataset_information.default {
+    //             wkt_string
+    //         } else {
+    //             return Ok(OgrSourceDefaultGeometry(None));
+    //         };
+    //
+    //         let geometry = gdal::vector::Geometry::from_wkt(&wkt_string)?;
+    //
+    //         let geometry_type = Self::ogr_geometry_type(&geometry);
+    //         if geometry_type != expected_data_type {
+    //             return Err(Error::InvalidType {
+    //                 expected: format!("{:?}", expected_data_type),
+    //                 found: format!("{:?}", geometry_type),
+    //             });
+    //         }
+    //
+    //         Ok(OgrSourceDefaultGeometry(Some(match geometry_type {
+    //             VectorDataType::Data => TypedGeometry::Data(NoGeometry::try_from(Ok(&geometry))?),
+    //             VectorDataType::MultiPoint => {
+    //                 TypedGeometry::MultiPoint(MultiPoint::try_from(Ok(&geometry))?)
+    //             }
+    //             VectorDataType::MultiLineString => {
+    //                 TypedGeometry::MultiLineString(MultiLineString::try_from(Ok(&geometry))?)
+    //             }
+    //             VectorDataType::MultiPolygon => {
+    //                 TypedGeometry::MultiPolygon(MultiPolygon::try_from(Ok(&geometry))?)
+    //             }
+    //         })))
+    //     }
 }
 
 impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
@@ -361,32 +305,16 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
         // TODO: simplify with macro
         Ok(match self.result_descriptor.data_type {
             VectorDataType::Data => TypedVectorQueryProcessor::Data(
-                OgrSourceProcessor::new(
-                    self.state.dataset_information.clone(),
-                    self.state.default_geometry.try_into_geometry()?,
-                )
-                .boxed(),
+                OgrSourceProcessor::new(self.state.dataset_information.clone()).boxed(),
             ),
             VectorDataType::MultiPoint => TypedVectorQueryProcessor::MultiPoint(
-                OgrSourceProcessor::new(
-                    self.state.dataset_information.clone(),
-                    self.state.default_geometry.try_into_geometry()?,
-                )
-                .boxed(),
+                OgrSourceProcessor::new(self.state.dataset_information.clone()).boxed(),
             ),
             VectorDataType::MultiLineString => TypedVectorQueryProcessor::MultiLineString(
-                OgrSourceProcessor::new(
-                    self.state.dataset_information.clone(),
-                    self.state.default_geometry.try_into_geometry()?,
-                )
-                .boxed(),
+                OgrSourceProcessor::new(self.state.dataset_information.clone()).boxed(),
             ),
             VectorDataType::MultiPolygon => TypedVectorQueryProcessor::MultiPolygon(
-                OgrSourceProcessor::new(
-                    self.state.dataset_information.clone(),
-                    self.state.default_geometry.try_into_geometry()?,
-                )
-                .boxed(),
+                OgrSourceProcessor::new(self.state.dataset_information.clone()).boxed(),
             ),
         })
     }
@@ -396,8 +324,7 @@ pub struct OgrSourceProcessor<G>
 where
     G: Geometry + ArrowTyped,
 {
-    dataset_information: Arc<OgrSourceDataset>,
-    default_geometry: Option<G>,
+    dataset_information: Box<dyn LoadingInfo<OgrSourceDataset, VectorResultDescriptor>>,
     _collection_type: PhantomData<FeatureCollection<G>>,
 }
 
@@ -405,10 +332,11 @@ impl<G> OgrSourceProcessor<G>
 where
     G: Geometry + ArrowTyped,
 {
-    pub fn new(dataset_information: Arc<OgrSourceDataset>, default_geometry: Option<G>) -> Self {
+    pub fn new(
+        dataset_information: Box<dyn LoadingInfo<OgrSourceDataset, VectorResultDescriptor>>,
+    ) -> Self {
         Self {
             dataset_information,
-            default_geometry,
             _collection_type: Default::default(),
         }
     }
@@ -426,8 +354,7 @@ where
         ctx: &'a dyn QueryContext,
     ) -> BoxStream<'a, Result<Self::Output>> {
         OgrSourceStream::new(
-            self.dataset_information.clone(),
-            self.default_geometry.clone(),
+            self.dataset_information.get(query).unwrap(), // TODO: handle error
             query,
             ctx.chunk_byte_size(),
         )
@@ -452,12 +379,11 @@ struct WorkQuery {
 
 impl<G> OgrSourceStream<G>
 where
-    G: Geometry + ArrowTyped + 'static + TryFromOgrGeometry,
+    G: Geometry + ArrowTyped + 'static + TryFromOgrGeometry + TryFrom<TypedGeometry>,
     FeatureCollectionRowBuilder<G>: FeatureCollectionBuilderGeometryHandler<G>,
 {
     pub fn new(
-        dataset_information: Arc<OgrSourceDataset>,
-        default_geometry: Option<G>,
+        dataset_information: OgrSourceDataset,
         query_rectangle: QueryRectangle,
         chunk_byte_size: usize,
     ) -> Self {
@@ -475,7 +401,6 @@ where
             if let Err(error) = Self::compute_thread(
                 &mut work_query,
                 &dataset_information,
-                &default_geometry,
                 &work_query_receiver,
                 &poll_result_sender,
                 &query_rectangle,
@@ -499,7 +424,6 @@ where
     fn compute_thread(
         work_query: &mut WorkQuery,
         dataset_information: &OgrSourceDataset,
-        default_geometry: &Option<G>,
         work_query_receiver: &Receiver<WorkQuery>,
         poll_result_sender: &SyncSender<Option<Result<FeatureCollection<G>>>>,
         query_rectangle: &QueryRectangle,
@@ -543,7 +467,6 @@ where
                 &mut features,
                 feature_collection_builder.clone(),
                 dataset_information,
-                &default_geometry,
                 &data_types,
                 query_rectangle,
                 &time_extractor,
@@ -557,9 +480,8 @@ where
             // don't emit an empty collection if there were non-empty results previously
             if is_empty && emitted_non_empty_collections {
                 break;
-            } else {
-                emitted_non_empty_collections = true;
             }
+            emitted_non_empty_collections = true;
 
             match poll_result_sender.send(Some(batch_result)) {
                 Ok(_) => work_query.waker.wake_by_ref(),
@@ -720,7 +642,6 @@ where
         feature_iterator: &mut Peekable<FeatureIterator<'_>>,
         feature_collection_builder: FeatureCollectionBuilder<G>,
         dataset_information: &OgrSourceDataset,
-        default_geometry: &Option<G>,
         data_types: &HashMap<String, FeatureDataType>,
         query_rectangle: &QueryRectangle,
         time_extractor: &dyn Fn(&Feature) -> Result<TimeInterval>,
@@ -728,9 +649,16 @@ where
     ) -> Result<FeatureCollection<G>> {
         let mut builder = feature_collection_builder.finish_header();
 
+        // TODO: cleaner way of handling the default geometry that fails earlier on wrongt data type and avoids cloning
+        let default = dataset_information
+            .default_geometry
+            .clone()
+            .map(TryInto::try_into)
+            .and_then(Result::ok);
+
         for feature in feature_iterator {
             if let Err(error) = Self::add_feature_to_batch(
-                default_geometry,
+                &default,
                 data_types,
                 &query_rectangle,
                 time_extractor,
@@ -1037,11 +965,12 @@ mod tests {
     use geoengine_datatypes::collections::{DataCollection, MultiPointCollection};
     use geoengine_datatypes::primitives::{BoundingBox2D, FeatureData, SpatialResolution};
 
-    use crate::engine::{MockExecutionContext, MockQueryContext};
+    use crate::engine::{MockExecutionContext, MockLoadingInfo, MockQueryContext};
 
     use super::*;
     use geoengine_datatypes::dataset::InternalDataSetId;
     use geoengine_datatypes::identifiers::Identifier;
+    use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
 
     #[test]
     fn specification_serde() {
@@ -1063,7 +992,9 @@ mod tests {
                 decimal: vec!["dec1".to_string(), "dec2".to_string()],
                 textual: vec!["text".to_string()],
             }),
-            default: Some("POINT(0, 0)".to_string()),
+            default_geometry: Some(TypedGeometry::MultiPoint(
+                MultiPoint::new(vec![(0.0, 0.0).into()]).unwrap(),
+            )),
             force_ogr_time_filter: false,
             on_error: OgrSourceErrorSpec::Skip,
             provenance: Some(ProvenanceInformation {
@@ -1098,7 +1029,7 @@ mod tests {
                     "decimal": ["dec1", "dec2"],
                     "textual": ["text"]
                 },
-                "default": "POINT(0, 0)",
+                "default_geometry":{"MultiPoint":{"coordinates":[{"x":0.0,"y":0.0}]}},
                 "force_ogr_time_filter": false,
                 "on_error": "skip",
                 "provenance": {
@@ -1132,7 +1063,7 @@ mod tests {
                     "decimal": ["dec1", "dec2"],
                     "textual": ["text"]
                 },
-                "default": "POINT(0, 0)",
+                "default_geometry":{"MultiPoint":{"coordinates":[{"x":0.0,"y":0.0}]}},
                 "force_ogr_time_filter": false,
                 "on_error": "skip",
                 "provenance": {
@@ -1156,18 +1087,21 @@ mod tests {
             data_type: None,
             time: OgrSourceDatasetTimeType::None,
             columns: None,
-            default: None,
+            default_geometry: None,
             force_ogr_time_filter: false,
             on_error: OgrSourceErrorSpec::Skip,
             provenance: None,
         };
-        let default_geometry =
-            OgrSource::parse_default_geometry(&dataset_information, VectorDataType::MultiPoint)?;
 
-        let query_processor = OgrSourceProcessor::<MultiPoint>::new(
-            Arc::new(dataset_information),
-            default_geometry.try_into_geometry()?,
-        );
+        let info = MockLoadingInfo {
+            info: dataset_information,
+            meta: VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+            },
+        };
+
+        let query_processor = OgrSourceProcessor::<MultiPoint>::new(Box::new(info));
 
         let context = MockQueryContext::new(usize::MAX);
         let query = query_processor.query(
@@ -1195,18 +1129,21 @@ mod tests {
             data_type: None,
             time: OgrSourceDatasetTimeType::None,
             columns: None,
-            default: None,
+            default_geometry: None,
             force_ogr_time_filter: false,
             on_error: OgrSourceErrorSpec::Skip,
             provenance: None,
         };
-        let default_geometry =
-            OgrSource::parse_default_geometry(&dataset_information, VectorDataType::MultiPoint)?;
 
-        let query_processor = OgrSourceProcessor::<MultiPoint>::new(
-            Arc::new(dataset_information),
-            default_geometry.try_into_geometry()?,
-        );
+        let info = MockLoadingInfo {
+            info: dataset_information,
+            meta: VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+            },
+        };
+
+        let query_processor = OgrSourceProcessor::<MultiPoint>::new(Box::new(info));
 
         let context = MockQueryContext::new(usize::MAX);
         let query = query_processor.query(
@@ -1234,18 +1171,20 @@ mod tests {
             data_type: None,
             time: OgrSourceDatasetTimeType::None,
             columns: None,
-            default: None,
+            default_geometry: None,
             force_ogr_time_filter: false,
             on_error: OgrSourceErrorSpec::Skip,
             provenance: None,
         };
-        let default_geometry =
-            OgrSource::parse_default_geometry(&dataset_information, VectorDataType::MultiPoint)?;
+        let info = MockLoadingInfo {
+            info: dataset_information,
+            meta: VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+            },
+        };
 
-        let query_processor = OgrSourceProcessor::<MultiPoint>::new(
-            Arc::new(dataset_information),
-            default_geometry.try_into_geometry()?,
-        );
+        let query_processor = OgrSourceProcessor::<MultiPoint>::new(Box::new(info));
 
         let context = MockQueryContext::new(usize::MAX);
         let query = query_processor.query(
@@ -1281,18 +1220,22 @@ mod tests {
             data_type: None,
             time: OgrSourceDatasetTimeType::None,
             columns: None,
-            default: Some("POINT (4.0 4.1)".to_string()),
+            default_geometry: Some(TypedGeometry::MultiPoint(
+                MultiPoint::new(vec![(4.0, 4.1).into()]).unwrap(),
+            )),
             force_ogr_time_filter: false,
             on_error: OgrSourceErrorSpec::Keep,
             provenance: None,
         };
-        let default_geometry =
-            OgrSource::parse_default_geometry(&dataset_information, VectorDataType::MultiPoint)?;
+        let info = MockLoadingInfo {
+            info: dataset_information,
+            meta: VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+            },
+        };
 
-        let query_processor = OgrSourceProcessor::<MultiPoint>::new(
-            Arc::new(dataset_information),
-            default_geometry.try_into_geometry()?,
-        );
+        let query_processor = OgrSourceProcessor::<MultiPoint>::new(Box::new(info));
 
         let context = MockQueryContext::new(usize::MAX);
         let query = query_processor.query(
@@ -1324,43 +1267,51 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn parse_wkt_geometry() -> Result<()> {
-        let dataset_information = OgrSourceDataset {
-            file_name: "".into(),
-            layer_name: "".to_string(),
-            data_type: None,
-            time: OgrSourceDatasetTimeType::None,
-            columns: None,
-            default: Some("POINT(0 1)".to_string()),
-            force_ogr_time_filter: false,
-            on_error: OgrSourceErrorSpec::Skip,
-            provenance: None,
-        };
-
-        let default_geometry =
-            OgrSource::parse_default_geometry(&dataset_information, VectorDataType::MultiPoint)?;
-
-        let default_geometry =
-            if let TypedGeometry::MultiPoint(multi_point) = default_geometry.0.unwrap() {
-                multi_point
-            } else {
-                panic!("invalid geometry type");
-            };
-
-        assert_eq!(default_geometry, MultiPoint::new(vec![(0.0, 1.0).into()])?);
-
-        Ok(())
-    }
+    // #[test]
+    // fn parse_wkt_geometry() -> Result<()> {
+    //     let dataset_information = OgrSourceDataset {
+    //         file_name: "".into(),
+    //         layer_name: "".to_string(),
+    //         data_type: None,
+    //         time: OgrSourceDatasetTimeType::None,
+    //         columns: None,
+    //         default_geometry: Some(TypedGeometry::MultiPoint(
+    //             MultiPoint::new(vec![(0, 1).into()]).unwrap(),
+    //         )),
+    //         force_ogr_time_filter: false,
+    //         on_error: OgrSourceErrorSpec::Skip,
+    //         provenance: None,
+    //     };
+    //
+    //     let default_geometry =
+    //         OgrSource::parse_default_geometry(&dataset_information, VectorDataType::MultiPoint)?;
+    //
+    //     let default_geometry =
+    //         if let TypedGeometry::MultiPoint(multi_point) = default_geometry.0.unwrap() {
+    //             multi_point
+    //         } else {
+    //             panic!("invalid geometry type");
+    //         };
+    //
+    //     assert_eq!(default_geometry, MultiPoint::new(vec![(0.0, 1.0).into()])?);
+    //
+    //     Ok(())
+    // }
 
     #[tokio::test]
     async fn ne_10m_ports_bbox_filter() -> Result<()> {
-        let mut exe_ctx = MockExecutionContext::default();
-
         let data_set = DataSetId::Internal(InternalDataSetId::new());
+        let mut exe_ctx = MockExecutionContext::default();
         exe_ctx.add_loading_info(
             data_set.clone(),
-            OgrSourceDataset::load_dataset("ne_10m_ports").unwrap(),
+            Box::new(MockLoadingInfo {
+                info: OgrSourceDataset::load_dataset("ne_10m_ports")?,
+                meta: VectorResultDescriptor {
+                    // TODO: load from file?!
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReference::wgs84().into(),
+                },
+            }),
         );
 
         let source = OgrSource {
@@ -1370,7 +1321,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&MockExecutionContext::default())?;
+        .initialize(&exe_ctx)?;
 
         assert_eq!(
             source.result_descriptor().data_type,
@@ -1425,14 +1376,28 @@ mod tests {
 
     #[tokio::test]
     async fn ne_10m_ports_columns() -> Result<()> {
+        let id = DataSetId::Internal(InternalDataSetId::new());
+        let mut exe_ctx = MockExecutionContext::default();
+        exe_ctx.add_loading_info(
+            id.clone(),
+            Box::new(MockLoadingInfo {
+                info: OgrSourceDataset::load_dataset("ne_10m_ports_with_columns")?,
+                meta: VectorResultDescriptor {
+                    // TODO: load from file?!
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReference::wgs84().into(),
+                },
+            }),
+        );
+
         let source = OgrSource {
             params: OgrSourceParameters {
-                layer_name: "ne_10m_ports_with_columns".to_string(),
+                data_set: id.clone(),
                 attribute_projection: None,
             },
         }
         .boxed()
-        .initialize(&MockExecutionContext::default())?;
+        .initialize(&exe_ctx)?;
 
         assert_eq!(
             source.result_descriptor().data_type,
@@ -1555,14 +1520,28 @@ mod tests {
 
     #[tokio::test]
     async fn ne_10m_ports() -> Result<()> {
+        let id = DataSetId::Internal(InternalDataSetId::new());
+        let mut exe_ctx = MockExecutionContext::default();
+        exe_ctx.add_loading_info(
+            id.clone(),
+            Box::new(MockLoadingInfo {
+                info: OgrSourceDataset::load_dataset("ne_10m_ports")?,
+                meta: VectorResultDescriptor {
+                    // TODO: load from file?!
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReference::wgs84().into(),
+                },
+            }),
+        );
+
         let source = OgrSource {
             params: OgrSourceParameters {
-                layer_name: "ne_10m_ports".to_string(),
+                data_set: id.clone(),
                 attribute_projection: None,
             },
         }
         .boxed()
-        .initialize(&MockExecutionContext::default())?;
+        .initialize(&exe_ctx)?;
 
         assert_eq!(
             source.result_descriptor().data_type,
@@ -2700,14 +2679,21 @@ mod tests {
                 numeric: vec!["b".to_string()],
                 textual: vec!["c".to_string()],
             }),
-            default: None,
+            default_geometry: None,
             force_ogr_time_filter: false,
             on_error: OgrSourceErrorSpec::Skip,
             provenance: None,
         };
 
-        let query_processor =
-            OgrSourceProcessor::<NoGeometry>::new(Arc::new(dataset_information), None);
+        let info = MockLoadingInfo {
+            info: dataset_information,
+            meta: VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+            },
+        };
+
+        let query_processor = OgrSourceProcessor::<NoGeometry>::new(Box::new(info));
 
         let context = MockQueryContext::new(usize::MAX);
         let query = query_processor.query(
@@ -2756,14 +2742,28 @@ mod tests {
 
     #[tokio::test]
     async fn chunked() -> Result<()> {
+        let id = DataSetId::Internal(InternalDataSetId::new());
+        let mut exe_ctx = MockExecutionContext::default();
+        exe_ctx.add_loading_info(
+            id.clone(),
+            Box::new(MockLoadingInfo {
+                info: OgrSourceDataset::load_dataset("ne_10m_ports")?,
+                meta: VectorResultDescriptor {
+                    // TODO: load from file?!
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReference::wgs84().into(),
+                },
+            }),
+        );
+
         let source = OgrSource {
             params: OgrSourceParameters {
-                layer_name: "ne_10m_ports".to_string(),
+                data_set: id.clone(),
                 attribute_projection: None,
             },
         }
         .boxed()
-        .initialize(&MockExecutionContext::default())?;
+        .initialize(&exe_ctx)?;
 
         assert_eq!(
             source.result_descriptor().data_type,
