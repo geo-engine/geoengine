@@ -350,7 +350,8 @@ mod tests {
             gdal_source.boxed(),
             QueryRectangle {
                 bbox: query_bbox,
-                time_interval: TimeInterval::new(1388534400000, 1388534400000 + 1000).unwrap(),
+                time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
+                    .unwrap(),
                 spatial_resolution: SpatialResolution::zero_point_one(),
             },
             QueryContext { chunk_byte_size: 0 },
@@ -400,7 +401,8 @@ mod tests {
             gdal_source.boxed(),
             QueryRectangle {
                 bbox: query_bbox,
-                time_interval: TimeInterval::new(1388534400000, 1388534400000 + 1000).unwrap(),
+                time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
+                    .unwrap(),
                 spatial_resolution: SpatialResolution::new_unchecked(1.0, 1.0),
             },
             QueryContext { chunk_byte_size: 0 },
