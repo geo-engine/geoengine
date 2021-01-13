@@ -1,5 +1,3 @@
-#![cfg(feature = "postgres")]
-
 use crate::error::{self, Result};
 use crate::{
     projects::postgres_projectdb::PostgresProjectDB, users::postgres_userdb::PostgresUserDB,

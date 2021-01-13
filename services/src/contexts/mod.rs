@@ -8,6 +8,7 @@ use std::sync::Arc;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 mod in_memory;
+#[cfg(feature = "postgres")]
 mod postgres;
 
 pub use in_memory::InMemoryContext;
