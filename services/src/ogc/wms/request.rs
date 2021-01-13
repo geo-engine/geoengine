@@ -125,7 +125,7 @@ mod tests {
             layers: "modis_ndvi".into(),
             crs: "foo".into(),
             styles: "ssss".into(),
-            time: Some(TimeInterval::new(946_684_800, 946_771_200).unwrap()),
+            time: Some(TimeInterval::new(946_684_800_000, 946_771_200_000).unwrap()),
             transparent: Some(true),
             bgcolor: Some("#000000".into()),
             sld: Some("sld_spec".into()),
