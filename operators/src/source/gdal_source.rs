@@ -188,7 +188,7 @@ impl GdalDatasetInformationProvider for JsonDatasetInformationProvider {
 pub struct TimeIntervalInformation {
     pub start_time: TimeInstance,
     pub time_step: TimeStep,
-    // pub end_time: Option<TimeInstance>,
+    // TODO: add an end_time: TimeStep?
 }
 
 impl TimeIntervalInformation {}
