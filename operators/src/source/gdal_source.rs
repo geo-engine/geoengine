@@ -870,20 +870,9 @@ mod tests {
         let global_size_in_pixels = [1800, 3600];
         let tile_size_in_pixels = [600, 600];
         let dataset_upper_right_coord = (-180.0, 90.0).into();
-        let dataset_x_pixel_size = 0.1;
-        let dataset_y_pixel_size = -0.1;
 
-        let dataset_geo_transform = GeoTransform::new(
-            dataset_upper_right_coord,
-            dataset_x_pixel_size,
-            dataset_y_pixel_size,
-        );
-        let central_geo_transform = GeoTransform::new_with_coordinate_x_y(
-            0.0,
-            dataset_x_pixel_size,
-            0.0,
-            dataset_y_pixel_size,
-        );
+        let dataset_geo_transform = GeoTransform::new(dataset_upper_right_coord, 0.1, -0.1);
+        let central_geo_transform = GeoTransform::new_with_coordinate_x_y(0.0, 0.1, 0.0, -0.1);
 
         let origin_split_tileing_strategy = TilingStrategy {
             bounding_box: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
@@ -1390,7 +1379,7 @@ mod tests {
             dataset_y_pixel_size,
         );
 
-        let t_1 = TimeInstance::from(NaiveDate::from_ymd(2014, 01, 01).and_hms(0, 0, 0));
+        let t_1 = TimeInstance::from(NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0));
 
         let time_interval_provider = TimeIntervalInformation {
             start_time: t_1,
