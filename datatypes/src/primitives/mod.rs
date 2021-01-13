@@ -32,4 +32,4 @@ pub use spatio_temporal_bounded::{SpatialBounded, TemporalBounded};
 
 pub use time_instance::TimeInstance;
 pub use time_interval::TimeInterval;
-pub use time_step::{TimeGranularity, TimeStep};
+pub use time_step::{TimeGranularity, TimeStep, TimeStepIter};

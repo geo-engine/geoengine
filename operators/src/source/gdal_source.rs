@@ -24,12 +24,12 @@ use futures::stream::{self, BoxStream, StreamExt};
 use geoengine_datatypes::{
     primitives::{
         BoundingBox2D, SpatialBounded, SpatialResolution, TimeInstance, TimeInterval, TimeStep,
+        TimeStepIter,
     },
     raster::{
         Grid, GridBlit, GridBoundingBox2D, GridBounds, GridIdx, GridIdx2D, GridShape2D, GridSize,
         GridSpaceToLinearSpace,
     },
-    util::time_step_iter::TimeStepIter,
 };
 use geoengine_datatypes::{
     raster::{GeoTransform, Grid2D, Pixel, RasterDataType, RasterTile2D, TileInformation},
