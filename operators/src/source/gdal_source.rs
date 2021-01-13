@@ -418,7 +418,7 @@ where
         let dataset_result = GdalDataset::open(&data_file);
         // TODO: investigate if we need a dataset cache
 
-        // shortcut if there is raster file -> return a no-data file.
+        // shortcut if there is no raster file -> return a no-data file.
         if dataset_result.is_err() {
             return Ok(RasterTile2D::new_with_tile_info(
                 time_interval,
