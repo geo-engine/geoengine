@@ -403,7 +403,6 @@ where
             t.format(&gdal_dataset_information.time_format())
                 .to_string()
         });
-        dbg!(&time_string);
 
         // TODO: replace -> parser?
         let file_name = gdal_dataset_information
@@ -413,12 +412,8 @@ where
                 &time_string.unwrap_or_else(|| "".into()),
             );
 
-        dbg!(&file_name);
-
         let path = gdal_dataset_information.dataset_path(); // TODO: add the path of the definition file for relative paths
         let data_file = path.join(file_name);
-
-        dbg!(&data_file);
 
         let tile_grid = tile_information.tile_size_in_pixels();
 
