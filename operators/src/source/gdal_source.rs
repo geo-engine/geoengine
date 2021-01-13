@@ -407,10 +407,7 @@ where
         // TODO: replace -> parser?
         let file_name = gdal_dataset_information
             .file_name_with_time_placeholder()
-            .replace(
-                "%%%_START_TIME_%%%",
-                &time_string.unwrap_or_else(|| "".into()),
-            );
+            .replace("%%%_START_TIME_%%%", &time_string.unwrap_or_default());
 
         let path = gdal_dataset_information.dataset_path(); // TODO: add the path of the definition file for relative paths
         let data_file = path.join(file_name);
