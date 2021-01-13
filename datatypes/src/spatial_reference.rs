@@ -2,9 +2,9 @@ use crate::error;
 use postgres_types::private::BytesMut;
 use postgres_types::{FromSql, IsNull, ToSql, Type};
 use serde::de::Visitor;
-use serde::export::Formatter;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use snafu::{Error, ResultExt};
+use std::fmt::Formatter;
 use std::str::FromStr;
 
 /// A spatial reference authority that is part of a spatial reference definition
