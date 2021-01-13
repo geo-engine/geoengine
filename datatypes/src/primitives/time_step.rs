@@ -13,6 +13,7 @@ use super::TimeInterval;
 /// A time granularity.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TimeGranularity {
+    Millis,
     Seconds,
     Minutes,
     Hours,
@@ -56,6 +57,15 @@ impl TimeStep {
         }
 
         let num_steps: i64 = match self.granularity {
+            TimeGranularity::Millis => {
+                let s = duration.num_milliseconds() / i64::from(self.step);
+                if (duration - Duration::milliseconds(s * i64::from(self.step))).is_zero() {
+                    s - 1
+                } else {
+                    s
+                }
+            }
+
             TimeGranularity::Seconds => {
                 let s = duration.num_seconds() / i64::from(self.step);
                 if (duration - Duration::seconds(s * i64::from(self.step))).is_zero() {
@@ -148,17 +158,23 @@ impl TimeStep {
         })?;
 
         let snapped_date_time = match self.granularity {
+            TimeGranularity::Millis => {
+                let diff_duration = time_to_snap_date_time - ref_date_time;
+                let snapped_millis = (diff_duration.num_milliseconds() / i64::from(self.step))
+                    * i64::from(self.step);
+                ref_date_time + Duration::milliseconds(snapped_millis)
+            }
             TimeGranularity::Seconds => {
                 let diff_duration = time_to_snap_date_time - ref_date_time;
-                let snapped_hours =
+                let snapped_seconds =
                     (diff_duration.num_seconds() / i64::from(self.step)) * i64::from(self.step);
-                ref_date_time + Duration::seconds(snapped_hours)
+                ref_date_time + Duration::seconds(snapped_seconds)
             }
             TimeGranularity::Minutes => {
                 let diff_duration = time_to_snap_date_time - ref_date_time;
-                let snapped_hours =
+                let snapped_minutes =
                     (diff_duration.num_minutes() / i64::from(self.step)) * i64::from(self.step);
-                ref_date_time + Duration::minutes(snapped_hours)
+                ref_date_time + Duration::minutes(snapped_minutes)
             }
             TimeGranularity::Hours => {
                 let diff_duration = time_to_snap_date_time - ref_date_time;
@@ -222,6 +238,7 @@ impl Add<TimeStep> for TimeInstance {
         })?;
 
         let res_date_time = match rhs.granularity {
+            TimeGranularity::Millis => date_time + Duration::milliseconds(i64::from(rhs.step)),
             TimeGranularity::Seconds => date_time + Duration::seconds(i64::from(rhs.step)),
             TimeGranularity::Minutes => date_time + Duration::minutes(i64::from(rhs.step)),
             TimeGranularity::Hours => date_time + Duration::hours(i64::from(rhs.step)),
@@ -352,12 +369,13 @@ mod tests {
         t_expect: &str,
     ) {
         let t_ref = TimeInstance::from(
-            NaiveDateTime::parse_from_str(t_start, "%Y-%m-%dT%H:%M:%S").unwrap(),
+            NaiveDateTime::parse_from_str(t_start, "%Y-%m-%dT%H:%M:%S%.f").unwrap(),
         );
-        let t_1 =
-            TimeInstance::from(NaiveDateTime::parse_from_str(t_in, "%Y-%m-%dT%H:%M:%S").unwrap());
+        let t_1 = TimeInstance::from(
+            NaiveDateTime::parse_from_str(t_in, "%Y-%m-%dT%H:%M:%S%.f").unwrap(),
+        );
         let t_exp = TimeInstance::from(
-            NaiveDateTime::parse_from_str(t_expect, "%Y-%m-%dT%H:%M:%S").unwrap(),
+            NaiveDateTime::parse_from_str(t_expect, "%Y-%m-%dT%H:%M:%S%.f").unwrap(),
         );
 
         let time_snapper = TimeStep {
@@ -376,9 +394,9 @@ mod tests {
         steps_expect: u32,
     ) {
         let t_1 =
-            TimeInstance::from(NaiveDateTime::parse_from_str(t_1, "%Y-%m-%dT%H:%M:%S").unwrap());
+            TimeInstance::from(NaiveDateTime::parse_from_str(t_1, "%Y-%m-%dT%H:%M:%S%.f").unwrap());
         let t_2 =
-            TimeInstance::from(NaiveDateTime::parse_from_str(t_2, "%Y-%m-%dT%H:%M:%S").unwrap());
+            TimeInstance::from(NaiveDateTime::parse_from_str(t_2, "%Y-%m-%dT%H:%M:%S%.f").unwrap());
 
         let time_snapper = TimeStep {
             granularity,
@@ -395,9 +413,9 @@ mod tests {
 
     fn test_add(granularity: TimeGranularity, t_step: u32, t_1: &str, t_expect: &str) {
         let t_1 =
-            TimeInstance::from(NaiveDateTime::parse_from_str(t_1, "%Y-%m-%dT%H:%M:%S").unwrap());
+            TimeInstance::from(NaiveDateTime::parse_from_str(t_1, "%Y-%m-%dT%H:%M:%S%.f").unwrap());
         let t_expect = TimeInstance::from(
-            NaiveDateTime::parse_from_str(t_expect, "%Y-%m-%dT%H:%M:%S").unwrap(),
+            NaiveDateTime::parse_from_str(t_expect, "%Y-%m-%dT%H:%M:%S%.f").unwrap(),
         );
 
         let time_step = TimeStep {
@@ -413,8 +431,8 @@ mod tests {
         test_add(
             TimeGranularity::Years,
             0,
-            "2000-01-01T00:00:00",
-            "2000-01-01T00:00:00",
+            "2000-01-01T00:00:00.000",
+            "2000-01-01T00:00:00.000",
         )
     }
 
@@ -423,8 +441,8 @@ mod tests {
         test_add(
             TimeGranularity::Years,
             1,
-            "2000-01-01T00:00:00",
-            "2001-01-01T00:00:00",
+            "2000-01-01T00:00:00.0",
+            "2001-01-01T00:00:00.0",
         )
     }
 
@@ -433,8 +451,8 @@ mod tests {
         test_add(
             TimeGranularity::Months,
             0,
-            "2000-01-01T00:00:00",
-            "2000-01-01T00:00:00",
+            "2000-01-01T00:00:00.0",
+            "2000-01-01T00:00:00.0",
         )
     }
 
@@ -443,8 +461,8 @@ mod tests {
         test_add(
             TimeGranularity::Months,
             1,
-            "2000-01-01T00:00:00",
-            "2000-02-01T00:00:00",
+            "2000-01-01T00:00:00.0",
+            "2000-02-01T00:00:00.0",
         )
     }
 
@@ -453,8 +471,8 @@ mod tests {
         test_add(
             TimeGranularity::Months,
             11,
-            "2000-01-01T00:00:00",
-            "2000-12-01T00:00:00",
+            "2000-01-01T00:00:00.0",
+            "2000-12-01T00:00:00.0",
         )
     }
 
@@ -463,8 +481,8 @@ mod tests {
         test_add(
             TimeGranularity::Months,
             12,
-            "2000-01-01T00:00:00",
-            "2001-01-01T00:00:00",
+            "2000-01-01T00:00:00.0",
+            "2001-01-01T00:00:00.0",
         )
     }
 
@@ -473,8 +491,8 @@ mod tests {
         test_add(
             TimeGranularity::Days,
             0,
-            "2000-01-01T00:00:00",
-            "2000-01-01T00:00:00",
+            "2000-01-01T00:00:00.0",
+            "2000-01-01T00:00:00.0",
         )
     }
 
@@ -483,8 +501,8 @@ mod tests {
         test_add(
             TimeGranularity::Days,
             1,
-            "2000-01-01T00:00:00",
-            "2000-01-02T00:00:00",
+            "2000-01-01T00:00:00.0",
+            "2000-01-02T00:00:00.0",
         )
     }
 
@@ -493,8 +511,8 @@ mod tests {
         test_add(
             TimeGranularity::Days,
             31,
-            "2000-01-01T00:00:00",
-            "2000-02-01T00:00:00",
+            "2000-01-01T00:00:00.0",
+            "2000-02-01T00:00:00.0",
         )
     }
 
@@ -503,8 +521,8 @@ mod tests {
         test_add(
             TimeGranularity::Hours,
             0,
-            "2000-01-01T00:00:00",
-            "2000-01-01T00:00:00",
+            "2000-01-01T00:00:00.0",
+            "2000-01-01T00:00:00.0",
         )
     }
 
@@ -513,8 +531,8 @@ mod tests {
         test_add(
             TimeGranularity::Hours,
             1,
-            "2000-01-01T00:00:00",
-            "2000-01-01T01:00:00",
+            "2000-01-01T00:00:00.0",
+            "2000-01-01T01:00:00.0",
         )
     }
 
@@ -523,8 +541,8 @@ mod tests {
         test_add(
             TimeGranularity::Hours,
             24,
-            "2000-01-01T00:00:00",
-            "2000-01-02T00:00:00",
+            "2000-01-01T00:00:00.0",
+            "2000-01-02T00:00:00.0",
         )
     }
 
@@ -533,8 +551,8 @@ mod tests {
         test_add(
             TimeGranularity::Minutes,
             0,
-            "2000-01-01T00:00:00",
-            "2000-01-01T00:00:00",
+            "2000-01-01T00:00:00.0",
+            "2000-01-01T00:00:00.0",
         )
     }
 
@@ -543,8 +561,8 @@ mod tests {
         test_add(
             TimeGranularity::Minutes,
             1,
-            "2000-01-01T00:00:00",
-            "2000-01-01T00:01:00",
+            "2000-01-01T00:00:00.0",
+            "2000-01-01T00:01:00.0",
         )
     }
 
@@ -553,8 +571,8 @@ mod tests {
         test_add(
             TimeGranularity::Minutes,
             60,
-            "2000-01-01T00:00:00",
-            "2000-01-01T01:00:00",
+            "2000-01-01T00:00:00.0",
+            "2000-01-01T01:00:00.0",
         )
     }
 
@@ -563,8 +581,8 @@ mod tests {
         test_add(
             TimeGranularity::Seconds,
             0,
-            "2000-01-01T00:00:00",
-            "2000-01-01T00:00:00",
+            "2000-01-01T00:00:00.0",
+            "2000-01-01T00:00:00.0",
         )
     }
 
@@ -573,8 +591,8 @@ mod tests {
         test_add(
             TimeGranularity::Seconds,
             1,
-            "2000-01-01T00:00:00",
-            "2000-01-01T00:00:01",
+            "2000-01-01T00:00:00.0",
+            "2000-01-01T00:00:01.0",
         )
     }
 
@@ -583,8 +601,38 @@ mod tests {
         test_add(
             TimeGranularity::Seconds,
             60,
-            "2000-01-01T00:00:00",
-            "2000-01-01T00:01:00",
+            "2000-01-01T00:00:00.0",
+            "2000-01-01T00:01:00.0",
+        )
+    }
+
+    #[test]
+    fn test_add_millis_0() {
+        test_add(
+            TimeGranularity::Millis,
+            0,
+            "2000-01-01T00:00:00.0",
+            "2000-01-01T00:00:00.0",
+        )
+    }
+
+    #[test]
+    fn test_add_millis_1() {
+        test_add(
+            TimeGranularity::Millis,
+            10,
+            "2000-01-01T00:00:00.0",
+            "2000-01-01T00:00:00.01",
+        )
+    }
+
+    #[test]
+    fn test_add_millis_1000() {
+        test_add(
+            TimeGranularity::Millis,
+            1000,
+            "2000-01-01T00:00:00.0",
+            "2000-01-01T00:00:01.0",
         )
     }
 
@@ -593,9 +641,9 @@ mod tests {
         test_snap(
             TimeGranularity::Months,
             1,
-            "2000-01-01T00:00:00",
-            "1999-11-01T00:00:00",
-            "1999-11-01T00:00:00",
+            "2000-01-01T00:00:00.0",
+            "1999-11-01T00:00:00.0",
+            "1999-11-01T00:00:00.0",
         );
     }
 
@@ -604,9 +652,9 @@ mod tests {
         test_snap(
             TimeGranularity::Months,
             1,
-            "2000-01-01T00:00:00",
-            "2000-11-11T11:11:11",
-            "2000-11-01T00:00:00",
+            "2000-01-01T00:00:00.0",
+            "2000-11-11T11:11:11.0",
+            "2000-11-01T00:00:00.0",
         );
     }
 
@@ -615,9 +663,9 @@ mod tests {
         test_snap(
             TimeGranularity::Months,
             3,
-            "2000-01-01T00:00:00",
-            "2000-11-11T11:11:11",
-            "2000-10-01T00:00:00",
+            "2000-01-01T00:00:00.0",
+            "2000-11-11T11:11:11.0",
+            "2000-10-01T00:00:00.0",
         );
     }
 
@@ -626,9 +674,9 @@ mod tests {
         test_snap(
             TimeGranularity::Months,
             7,
-            "2000-01-01T00:00:00",
-            "2001-01-01T11:11:11",
-            "2000-08-01T00:00:00",
+            "2000-01-01T00:00:00.0",
+            "2001-01-01T11:11:11.0",
+            "2000-08-01T00:00:00.0",
         );
     }
 
@@ -637,9 +685,9 @@ mod tests {
         test_snap(
             TimeGranularity::Years,
             1,
-            "2010-01-01T00:00:00",
-            "2014-01-03T01:01:00",
-            "2014-01-01T00:00:00",
+            "2010-01-01T00:00:00.0",
+            "2014-01-03T01:01:00.0",
+            "2014-01-01T00:00:00.0",
         );
     }
 
@@ -648,9 +696,9 @@ mod tests {
         test_snap(
             TimeGranularity::Years,
             3,
-            "2010-01-01T00:00:00",
-            "2014-01-03T01:01:00",
-            "2013-01-01T00:00:00",
+            "2010-01-01T00:00:00.0",
+            "2014-01-03T01:01:00.0",
+            "2013-01-01T00:00:00.0",
         );
     }
 
@@ -659,9 +707,9 @@ mod tests {
         test_snap(
             TimeGranularity::Years,
             3,
-            "2010-01-01T00:02:00",
-            "2014-01-03T01:01:00",
-            "2013-01-01T00:02:00",
+            "2010-01-01T00:02:00.0",
+            "2014-01-03T01:01:00.0",
+            "2013-01-01T00:02:00.0",
         );
     }
 
@@ -670,9 +718,9 @@ mod tests {
         test_snap(
             TimeGranularity::Days,
             1,
-            "2010-01-01T00:00:00",
-            "2013-01-01T01:00:00",
-            "2013-01-01T00:00:00",
+            "2010-01-01T00:00:00.0",
+            "2013-01-01T01:00:00.0",
+            "2013-01-01T00:00:00.0",
         );
     }
 
@@ -681,9 +729,9 @@ mod tests {
         test_snap(
             TimeGranularity::Days,
             1,
-            "2010-01-01T00:02:03",
-            "2013-01-01T00:00:00",
-            "2012-12-31T00:02:03",
+            "2010-01-01T00:02:03.0",
+            "2013-01-01T00:00:00.0",
+            "2012-12-31T00:02:03.0",
         );
     }
 
@@ -692,9 +740,9 @@ mod tests {
         test_snap(
             TimeGranularity::Days,
             16,
-            "2018-01-01T00:00:00",
-            "2018-02-16T01:00:00",
-            "2018-02-02T00:00:00",
+            "2018-01-01T00:00:00.0",
+            "2018-02-16T01:00:00.0",
+            "2018-02-02T00:00:00.0",
         );
     }
 
@@ -703,9 +751,9 @@ mod tests {
         test_snap(
             TimeGranularity::Hours,
             1,
-            "2010-01-01T00:00:00",
-            "2013-01-01T01:12:00",
-            "2013-01-01T01:00:00",
+            "2010-01-01T00:00:00.0",
+            "2013-01-01T01:12:00.0",
+            "2013-01-01T01:00:00.0",
         );
     }
 
@@ -714,9 +762,9 @@ mod tests {
         test_snap(
             TimeGranularity::Hours,
             13,
-            "2010-01-01T00:00:00",
-            "2010-01-02T04:00:00",
-            "2010-01-02T02:00:00",
+            "2010-01-01T00:00:00.0",
+            "2010-01-02T04:00:00.0",
+            "2010-01-02T02:00:00.0",
         );
     }
 
@@ -725,9 +773,9 @@ mod tests {
         test_snap(
             TimeGranularity::Hours,
             13,
-            "2010-01-01T00:00:01",
-            "2010-01-02T01:00:02",
-            "2010-01-01T13:00:01",
+            "2010-01-01T00:00:01.0",
+            "2010-01-02T01:00:02.0",
+            "2010-01-01T13:00:01.0",
         );
     }
 
@@ -736,9 +784,9 @@ mod tests {
         test_snap(
             TimeGranularity::Minutes,
             1,
-            "2010-01-01T00:00:00",
-            "2013-01-01T01:12:00",
-            "2013-01-01T01:12:00",
+            "2010-01-01T00:00:00.0",
+            "2013-01-01T01:12:00.0",
+            "2013-01-01T01:12:00.0",
         );
     }
 
@@ -747,9 +795,9 @@ mod tests {
         test_snap(
             TimeGranularity::Minutes,
             1,
-            "2010-01-01T00:00:03",
-            "2013-01-01T01:12:05",
-            "2013-01-01T01:12:03",
+            "2010-01-01T00:00:03.0",
+            "2013-01-01T01:12:05.0",
+            "2013-01-01T01:12:03.0",
         );
     }
 
@@ -758,9 +806,9 @@ mod tests {
         test_snap(
             TimeGranularity::Minutes,
             15,
-            "2010-01-01T00:00:00",
-            "2013-01-01T01:16:00",
-            "2013-01-01T01:15:00",
+            "2010-01-01T00:00:00.0",
+            "2013-01-01T01:16:00.0",
+            "2013-01-01T01:15:00.0",
         );
     }
 
@@ -769,9 +817,9 @@ mod tests {
         test_snap(
             TimeGranularity::Minutes,
             31,
-            "2010-01-01T00:00:00",
-            "2010-01-01T01:01:00",
-            "2010-01-01T00:31:00",
+            "2010-01-01T00:00:00.0",
+            "2010-01-01T01:01:00.0",
+            "2010-01-01T00:31:00.0",
         );
     }
 
@@ -780,9 +828,9 @@ mod tests {
         test_snap(
             TimeGranularity::Seconds,
             1,
-            "2010-01-01T00:00:00",
-            "2010-01-01T01:01:12",
-            "2010-01-01T01:01:12",
+            "2010-01-01T00:00:00.0",
+            "2010-01-01T01:01:12.0",
+            "2010-01-01T01:01:12.0",
         );
     }
 
@@ -791,9 +839,9 @@ mod tests {
         test_snap(
             TimeGranularity::Seconds,
             1,
-            "2010-01-01T00:00:00",
-            "2010-01-01T01:01:12",
-            "2010-01-01T01:01:12",
+            "2010-01-01T00:00:00.0",
+            "2010-01-01T01:01:12.0",
+            "2010-01-01T01:01:12.0",
         );
     }
 
@@ -802,9 +850,9 @@ mod tests {
         test_snap(
             TimeGranularity::Seconds,
             31,
-            "2010-01-01T23:59:00",
-            "2010-01-02T00:00:02",
-            "2010-01-02T00:00:02",
+            "2010-01-01T23:59:00.0",
+            "2010-01-02T00:00:02.0",
+            "2010-01-02T00:00:02.0",
         );
     }
 
@@ -813,9 +861,42 @@ mod tests {
         test_snap(
             TimeGranularity::Seconds,
             31,
-            "2010-01-01T23:59:00",
-            "2010-01-02T00:00:01",
-            "2010-01-01T23:59:31",
+            "2010-01-01T23:59:00.0",
+            "2010-01-02T00:00:01.0",
+            "2010-01-01T23:59:31.0",
+        )
+    }
+
+    #[test]
+    fn time_snap_millis_1() {
+        test_snap(
+            TimeGranularity::Millis,
+            1,
+            "2010-01-01T01:01:01.0000",
+            "2010-01-01T01:01:01.0001",
+            "2010-01-01T01:01:01.0000",
+        )
+    }
+
+    #[test]
+    fn time_snap_millis_2() {
+        test_snap(
+            TimeGranularity::Millis,
+            2,
+            "2010-01-01T01:01:01.0000",
+            "2010-01-01T01:01:01.0002",
+            "2010-01-01T01:01:01.0003",
+        )
+    }
+
+    #[test]
+    fn time_snap_millis_500() {
+        test_snap(
+            TimeGranularity::Millis,
+            500,
+            "2010-01-01T01:01:01.0000",
+            "2010-01-01T01:01:02.7",
+            "2010-01-01T01:01:02.5",
         )
     }
 
@@ -824,8 +905,8 @@ mod tests {
         test_num_steps(
             TimeGranularity::Years,
             1,
-            "2001-01-01T01:01:01",
-            "2001-01-01T01:01:01",
+            "2001-01-01T01:01:01.0",
+            "2001-01-01T01:01:01.0",
             0,
         )
     }
@@ -835,8 +916,8 @@ mod tests {
         test_num_steps(
             TimeGranularity::Years,
             1,
-            "2001-01-01T01:01:01",
-            "2002-01-01T01:01:01",
+            "2001-01-01T01:01:01.0",
+            "2002-01-01T01:01:01.0",
             0,
         )
     }
@@ -846,8 +927,8 @@ mod tests {
         test_num_steps(
             TimeGranularity::Years,
             1,
-            "2001-01-01T01:01:01",
-            "2002-01-01T01:01:02",
+            "2001-01-01T01:01:01.0",
+            "2002-01-01T01:01:02.0",
             1,
         )
     }
@@ -857,8 +938,8 @@ mod tests {
         test_num_steps(
             TimeGranularity::Years,
             1,
-            "2001-01-01T01:01:01",
-            "2003-01-01T01:01:02",
+            "2001-01-01T01:01:01.0",
+            "2003-01-01T01:01:02.0",
             2,
         )
     }
@@ -868,8 +949,8 @@ mod tests {
         test_num_steps(
             TimeGranularity::Years,
             2,
-            "2001-01-01T01:01:01",
-            "2013-02-02T02:02:02",
+            "2001-01-01T01:01:01.0",
+            "2013-02-02T02:02:02.0",
             6,
         )
     }
@@ -879,8 +960,8 @@ mod tests {
         test_num_steps(
             TimeGranularity::Months,
             2,
-            "2001-01-01T01:01:01",
-            "2001-02-01T01:01:01",
+            "2001-01-01T01:01:01.0",
+            "2001-02-01T01:01:01.0",
             0,
         )
     }
@@ -890,8 +971,8 @@ mod tests {
         test_num_steps(
             TimeGranularity::Months,
             1,
-            "2001-01-01T01:01:01",
-            "2001-02-02T02:02:02",
+            "2001-01-01T01:01:01.0",
+            "2001-02-02T02:02:02.0",
             1,
         )
     }
@@ -901,8 +982,8 @@ mod tests {
         test_num_steps(
             TimeGranularity::Months,
             3,
-            "2001-01-01T01:01:01",
-            "2011-10-02T02:02:02",
+            "2001-01-01T01:01:01.0",
+            "2011-10-02T02:02:02.0",
             43,
         )
     }
@@ -912,8 +993,8 @@ mod tests {
         test_num_steps(
             TimeGranularity::Days,
             1,
-            "2001-01-01T01:01:01",
-            "2001-01-02T02:02:02",
+            "2001-01-01T01:01:01.0",
+            "2001-01-02T02:02:02.0",
             1,
         )
     }
@@ -923,8 +1004,8 @@ mod tests {
         test_num_steps(
             TimeGranularity::Days,
             2,
-            "2001-01-01T01:01:01",
-            "2003-01-03T02:02:02",
+            "2001-01-01T01:01:01.0",
+            "2003-01-03T02:02:02.0",
             366,
         )
     }
@@ -934,8 +1015,8 @@ mod tests {
         test_num_steps(
             TimeGranularity::Hours,
             1,
-            "2001-01-01T01:01:01",
-            "2001-01-01T01:01:01",
+            "2001-01-01T01:01:01.0",
+            "2001-01-01T01:01:01.0",
             0,
         )
     }
@@ -945,8 +1026,8 @@ mod tests {
         test_num_steps(
             TimeGranularity::Hours,
             1,
-            "2001-01-01T01:01:01",
-            "2001-01-01T02:02:02",
+            "2001-01-01T01:01:01.0",
+            "2001-01-01T02:02:02.0",
             1,
         )
     }
@@ -956,8 +1037,8 @@ mod tests {
         test_num_steps(
             TimeGranularity::Hours,
             6,
-            "2001-01-01T01:01:01",
-            "2001-01-03T19:01:02",
+            "2001-01-01T01:01:01.0",
+            "2001-01-03T19:01:02.0",
             11,
         )
     }
@@ -967,8 +1048,8 @@ mod tests {
         test_num_steps(
             TimeGranularity::Minutes,
             1,
-            "2001-01-01T01:01:01",
-            "2001-01-01T01:02:02",
+            "2001-01-01T01:01:01.0",
+            "2001-01-01T01:02:02.0",
             1,
         )
     }
@@ -978,8 +1059,8 @@ mod tests {
         test_num_steps(
             TimeGranularity::Minutes,
             10,
-            "2001-01-01T01:01:01",
-            "2001-01-01T02:11:02",
+            "2001-01-01T01:01:01.0",
+            "2001-01-01T02:11:02.0",
             7,
         )
     }
@@ -989,8 +1070,8 @@ mod tests {
         test_num_steps(
             TimeGranularity::Seconds,
             1,
-            "2001-01-01T01:01:01",
-            "2001-01-01T01:01:01",
+            "2001-01-01T01:01:01.0",
+            "2001-01-01T01:01:01.0",
             0,
         )
     }
@@ -1000,8 +1081,8 @@ mod tests {
         test_num_steps(
             TimeGranularity::Seconds,
             1,
-            "2001-01-01T01:01:01",
-            "2001-01-01T01:01:02",
+            "2001-01-01T01:01:01.0",
+            "2001-01-01T01:01:02.0",
             0,
         )
     }
@@ -1011,8 +1092,8 @@ mod tests {
         test_num_steps(
             TimeGranularity::Seconds,
             1,
-            "2001-01-01T01:01:01",
-            "2001-01-01T01:01:03",
+            "2001-01-01T01:01:01.0",
+            "2001-01-01T01:01:03.0",
             1,
         )
     }
@@ -1022,8 +1103,8 @@ mod tests {
         test_num_steps(
             TimeGranularity::Seconds,
             10,
-            "2001-01-01T01:01:01",
-            "2001-01-01T01:02:12",
+            "2001-01-01T01:01:01.0",
+            "2001-01-01T01:02:12.0",
             7,
         )
     }
