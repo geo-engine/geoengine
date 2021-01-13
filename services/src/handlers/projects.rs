@@ -801,7 +801,7 @@ mod tests {
                     name: None,
                     description: None,
                     layers: Some(vec![
-                        LayerUpdate::Keep,
+                        LayerUpdate::None,
                         LayerUpdate::Update(layer_2.clone())
                     ]),
                     bounds: None,
@@ -821,7 +821,7 @@ mod tests {
                     id: project,
                     name: None,
                     description: None,
-                    layers: Some(vec![LayerUpdate::Delete, LayerUpdate::Keep,]),
+                    layers: Some(vec![LayerUpdate::Delete, LayerUpdate::None,]),
                     bounds: None,
                 }
             )

@@ -61,7 +61,7 @@ impl Project {
 
             for (layer, layer_update) in layers.zip(&mut layer_updates) {
                 match layer_update {
-                    LayerUpdate::Keep => project.layers.push(layer),
+                    LayerUpdate::None => project.layers.push(layer),
                     LayerUpdate::Update(updated_layer) => project.layers.push(updated_layer),
                     LayerUpdate::Delete => {}
                 }
@@ -271,8 +271,8 @@ pub struct UpdateProject {
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 #[serde(untagged)]
 pub enum LayerUpdate {
-    #[serde(deserialize_with = "deserialize_layer_update_keep")]
-    Keep, // '/'
+    #[serde(deserialize_with = "deserialize_layer_update_none")]
+    None, // '/'
     #[serde(deserialize_with = "deserialize_layer_update_delete")]
     Delete, // '-'
     Update(Layer),
@@ -284,14 +284,14 @@ impl Serialize for LayerUpdate {
         S: Serializer,
     {
         match self {
-            LayerUpdate::Keep => serializer.serialize_char('/'),
+            LayerUpdate::None => serializer.serialize_char('/'),
             LayerUpdate::Update(layer) => layer.serialize(serializer),
             LayerUpdate::Delete => serializer.serialize_char('-'),
         }
     }
 }
 
-fn deserialize_layer_update_keep<'de, D>(deserializer: D) -> Result<(), D::Error>
+fn deserialize_layer_update_none<'de, D>(deserializer: D) -> Result<(), D::Error>
 where
     D: Deserializer<'de>,
 {
@@ -447,7 +447,7 @@ mod tests {
     fn deserialize_layer_update() {
         assert_eq!(
             serde_json::from_str::<LayerUpdate>(&json!("/").to_string()).unwrap(),
-            LayerUpdate::Keep
+            LayerUpdate::None
         );
 
         assert_eq!(
