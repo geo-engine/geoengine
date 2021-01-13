@@ -69,7 +69,7 @@ pub struct GdalSourceParameters {
     // TODO: add some kind of tick interval
 }
 
-pub trait GdalDatasetInformation {
+pub trait GdalDatasetInformationProvider {
     type CreatedType: Sized;
     fn with_dataset_id(id: &str, raster_data_root: &Path) -> Result<Self::CreatedType>;
     fn native_tiling_information(&self) -> Option<TilingInformation>;
@@ -124,7 +124,7 @@ impl JsonDatasetInformationProvider {
     }
 }
 
-impl GdalDatasetInformation for JsonDatasetInformationProvider {
+impl GdalDatasetInformationProvider for JsonDatasetInformationProvider {
     type CreatedType = Self;
     fn with_dataset_id(id: &str, raster_data_root: &Path) -> Result<Self> {
         let raster_data_root_buf = PathBuf::from(raster_data_root);
@@ -297,7 +297,7 @@ where
 
 impl<P, T> GdalSourceProcessor<P, T>
 where
-    P: GdalDatasetInformation<CreatedType = P> + Sync + Send + Clone + 'static,
+    P: GdalDatasetInformationProvider<CreatedType = P> + Sync + Send + Clone + 'static,
     T: gdal::raster::GdalType + Pixel,
 {
     ///
@@ -573,7 +573,7 @@ where
 
 impl<T, P> QueryProcessor for GdalSourceProcessor<P, T>
 where
-    P: GdalDatasetInformation<CreatedType = P> + Send + Sync + 'static + Clone,
+    P: GdalDatasetInformationProvider<CreatedType = P> + Send + Sync + 'static + Clone,
     T: Pixel + gdal::raster::GdalType,
 {
     type Output = RasterTile2D<T>;

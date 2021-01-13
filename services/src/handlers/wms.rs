@@ -350,7 +350,7 @@ mod tests {
             gdal_source.boxed(),
             QueryRectangle {
                 bbox: query_bbox,
-                time_interval: TimeInterval::default(),
+                time_interval: TimeInterval::new(1388534400000, 1388534400000 + 1000).unwrap(),
                 spatial_resolution: SpatialResolution::zero_point_one(),
             },
             QueryContext { chunk_byte_size: 0 },
@@ -400,7 +400,7 @@ mod tests {
             gdal_source.boxed(),
             QueryRectangle {
                 bbox: query_bbox,
-                time_interval: TimeInterval::default(),
+                time_interval: TimeInterval::new(1388534400000, 1388534400000 + 1000).unwrap(),
                 spatial_resolution: SpatialResolution::new_unchecked(1.0, 1.0),
             },
             QueryContext { chunk_byte_size: 0 },
@@ -457,7 +457,7 @@ mod tests {
 
         let res = warp::test::request()
             .method("GET")
-            .path(&format!("/wms?request=GetMap&service=WMS&version=1.3.0&layers={}&bbox=20,-10,80,50&width=600&height=600&crs=foo&styles=ssss&format=image/png", id.to_string()))
+            .path(&format!("/wms?request=GetMap&service=WMS&version=1.3.0&layers={}&bbox=20,-10,80,50&width=600&height=600&crs=foo&styles=ssss&format=image/png&time=2014-01-01T00:00:00.0Z", id.to_string()))
             .reply(&wms_handler(ctx))
             .await;
         assert_eq!(res.status(), 200);
@@ -493,7 +493,7 @@ mod tests {
 
         let res = warp::test::request()
             .method("GET")
-            .path(&format!("/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS={}&CRS=EPSG%3A3857&STYLES=&WIDTH=600&HEIGHT=600&BBOX=20,-10,80,50", id.to_string()))
+            .path(&format!("/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS={}&CRS=EPSG%3A3857&STYLES=&WIDTH=600&HEIGHT=600&BBOX=20,-10,80,50&time=2014-01-01T00:00:00.0Z", id.to_string()))
             .reply(&wms_handler(ctx))
             .await;
 
