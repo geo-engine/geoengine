@@ -190,7 +190,7 @@ mod tests {
 
         let request = WFSRequest::GetFeature(GetFeature {
             version: "2.0.0".into(),
-            time: Some(TimeInterval::new(946_684_800, 946_771_200).unwrap()),
+            time: Some(TimeInterval::new(946_684_800_000, 946_771_200_000).unwrap()),
             srs_name: Some(SpatialReference::new(SpatialReferenceAuthority::Epsg, 4326)),
             namespaces: Some("xmlns(dog=http://www.example.com/namespaces/dog)".into()),
             count: Some(10),

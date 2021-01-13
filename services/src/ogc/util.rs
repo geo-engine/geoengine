@@ -39,10 +39,10 @@ where
         .collect();
 
     match *split.as_slice() {
-        [Ok(time)] => TimeInterval::new(time.timestamp(), time.timestamp())
+        [Ok(time)] => TimeInterval::new(time.timestamp_millis(), time.timestamp_millis())
             .map(Some)
             .map_err(D::Error::custom),
-        [Ok(start), Ok(end)] => TimeInterval::new(start.timestamp(), end.timestamp())
+        [Ok(start), Ok(end)] => TimeInterval::new(start.timestamp_millis(), end.timestamp_millis())
             .map(Some)
             .map_err(D::Error::custom),
         _ => Err(D::Error::custom("Invalid time")),
