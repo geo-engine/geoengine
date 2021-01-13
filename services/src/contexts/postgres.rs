@@ -291,9 +291,9 @@ where
 mod tests {
     use super::*;
     use crate::projects::project::{
-        CreateProject, Layer, LayerInfo, LoadVersion, OrderBy, ProjectFilter, ProjectId,
-        ProjectListOptions, ProjectListing, ProjectPermission, STRectangle, UpdateProject,
-        UserProjectPermission, VectorInfo,
+        CreateProject, Layer, LayerInfo, LayerUpdate, LoadVersion, OrderBy, ProjectFilter,
+        ProjectId, ProjectListOptions, ProjectListing, ProjectPermission, STRectangle,
+        UpdateProject, UserProjectPermission, VectorInfo,
     };
     use crate::projects::projectdb::ProjectDB;
     use crate::users::user::{UserCredentials, UserId, UserRegistration};
@@ -486,7 +486,7 @@ mod tests {
             id: project.id,
             name: Some("Test9 Updated".into()),
             description: None,
-            layers: Some(vec![Some(Layer {
+            layers: Some(vec![LayerUpdate::Update(Layer {
                 workflow: workflow_id,
                 name: "TestLayer".into(),
                 info: LayerInfo::Vector(VectorInfo {}),

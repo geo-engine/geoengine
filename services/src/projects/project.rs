@@ -13,8 +13,10 @@ use geoengine_datatypes::primitives::{
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use geoengine_datatypes::{operations::image::Colorizer, primitives::TimeInstance};
 use postgres_types::{FromSql, ToSql};
-use serde::{Deserialize, Serialize};
+use serde::de::Unexpected;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use snafu::{ensure, ResultExt};
+use std::mem;
 use uuid::Uuid;
 
 identifier!(ProjectId);
@@ -53,15 +55,24 @@ impl Project {
             project.description = description;
         }
 
-        if let Some(layers) = update.layers {
-            for (i, layer) in layers.into_iter().enumerate() {
-                if let Some(layer) = layer {
-                    if i >= project.layers.len() {
-                        project.layers.push(layer);
-                    } else {
-                        project.layers[i] = layer;
-                    }
+        if let Some(layer_updates) = update.layers {
+            let layers = mem::replace(&mut project.layers, Vec::new()).into_iter();
+            let mut layer_updates = layer_updates.into_iter();
+
+            for (layer, layer_update) in layers.zip(&mut layer_updates) {
+                match layer_update {
+                    LayerUpdate::Keep => project.layers.push(layer),
+                    LayerUpdate::Update(updated_layer) => project.layers.push(updated_layer),
+                    LayerUpdate::Delete => {}
                 }
+            }
+
+            for layer_update in layer_updates {
+                if let LayerUpdate::Update(new_layer) = layer_update {
+                    project.layers.push(new_layer);
+                }
+
+                // TODO: throw errors on other cases?
             }
         }
 
@@ -143,7 +154,7 @@ impl TemporalBounded for STRectangle {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 pub struct Layer {
     // TODO: check that workflow/operator output type fits to the type of LayerInfo
     // TODO: LayerId?
@@ -167,13 +178,13 @@ pub enum LayerType {
     Vector,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 pub enum LayerInfo {
     Raster(RasterInfo),
     Vector(VectorInfo),
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 pub struct RasterInfo {
     pub colorizer: Colorizer,
 }
@@ -253,8 +264,55 @@ pub struct UpdateProject {
     pub id: ProjectId,
     pub name: Option<String>,
     pub description: Option<String>,
-    pub layers: Option<Vec<Option<Layer>>>,
+    pub layers: Option<Vec<LayerUpdate>>,
     pub bounds: Option<STRectangle>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(untagged)]
+pub enum LayerUpdate {
+    #[serde(deserialize_with = "deserialize_layer_update_keep")]
+    Keep, // '/'
+    #[serde(deserialize_with = "deserialize_layer_update_delete")]
+    Delete, // '-'
+    Update(Layer),
+}
+
+impl Serialize for LayerUpdate {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            LayerUpdate::Keep => serializer.serialize_char('/'),
+            LayerUpdate::Update(layer) => layer.serialize(serializer),
+            LayerUpdate::Delete => serializer.serialize_char('-'),
+        }
+    }
+}
+
+fn deserialize_layer_update_keep<'de, D>(deserializer: D) -> Result<(), D::Error>
+where
+    D: Deserializer<'de>,
+{
+    use serde::de::Error;
+
+    match char::deserialize(deserializer)? {
+        '/' => Ok(()),
+        c => Err(D::Error::invalid_value(Unexpected::Char(c), &"/")),
+    }
+}
+
+fn deserialize_layer_update_delete<'de, D>(deserializer: D) -> Result<(), D::Error>
+where
+    D: Deserializer<'de>,
+{
+    use serde::de::Error;
+
+    match char::deserialize(deserializer)? {
+        '-' => Ok(()),
+        c => Err(D::Error::invalid_value(Unexpected::Char(c), &"-")),
+    }
 }
 
 impl UserInput for UpdateProject {
@@ -383,5 +441,38 @@ mod tests {
             .to_string(),
         )
         .unwrap();
+    }
+
+    #[test]
+    fn deserialize_layer_update() {
+        assert_eq!(
+            serde_json::from_str::<LayerUpdate>(&json!("/").to_string()).unwrap(),
+            LayerUpdate::Keep
+        );
+
+        assert_eq!(
+            serde_json::from_str::<LayerUpdate>(&json!("-").to_string()).unwrap(),
+            LayerUpdate::Delete
+        );
+
+        let workflow = WorkflowId::new();
+        assert_eq!(
+            serde_json::from_str::<LayerUpdate>(
+                &json!({
+                    "workflow": workflow.clone(),
+                    "name": "L2",
+                    "info": {
+                        "Vector": {},
+                    },
+                })
+                .to_string()
+            )
+            .unwrap(),
+            LayerUpdate::Update(Layer {
+                workflow,
+                name: "L2".to_string(),
+                info: LayerInfo::Vector(VectorInfo {}),
+            })
+        );
     }
 }
