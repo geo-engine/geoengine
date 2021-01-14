@@ -4,7 +4,7 @@ use tokio::sync::oneshot;
 use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
 use std::convert::TryInto;
 
-/*#[tokio::main]
+#[tokio::main]
 async fn main() -> Result<(), Error> {
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
 
@@ -14,15 +14,4 @@ async fn main() -> Result<(), Error> {
     );
 
     server.and(interrupt_success)
-}*/
-
-fn main() {
-    println!("{}", serde_json::to_string(&Colorizer::linear_gradient(
-        vec![
-            (1.0, RgbaColor::black()).try_into().unwrap(),
-            (10.0, RgbaColor::white()).try_into().unwrap(),
-        ],
-        RgbaColor::transparent(),
-        RgbaColor::pink(),
-    ).unwrap()).unwrap());
 }
