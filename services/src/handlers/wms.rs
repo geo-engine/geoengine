@@ -298,7 +298,6 @@ mod tests {
     use crate::workflows::workflow::Workflow;
     use crate::{contexts::InMemoryContext, ogc::wms::request::GetMapFormat};
     use xml::ParserConfig;
-    use std::io::Write;
 
     #[tokio::test]
     async fn test() {
