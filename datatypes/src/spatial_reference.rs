@@ -6,7 +6,8 @@ use postgres_types::{FromSql, IsNull, ToSql, Type};
 use serde::de::Visitor;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 #[cfg(feature = "postgres")]
-use snafu::{Error, ResultExt};
+use snafu::Error;
+use snafu::ResultExt;
 use std::fmt::Formatter;
 use std::str::FromStr;
 
