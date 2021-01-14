@@ -1,5 +1,5 @@
-use crate::error::Error;
-use crate::error::Result;
+use crate::error::{Error, Result};
+use crate::string_token;
 use crate::users::user::UserId;
 use crate::util::config::ProjectService;
 use crate::util::identifiers::Identifier;
@@ -13,8 +13,7 @@ use geoengine_datatypes::primitives::{
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use geoengine_datatypes::{operations::image::Colorizer, primitives::TimeInstance};
 use postgres_types::{FromSql, ToSql};
-use serde::de::Unexpected;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
 use std::mem;
 use uuid::Uuid;
@@ -43,7 +42,12 @@ impl Project {
         }
     }
 
-    pub fn update_project(&self, update: UpdateProject, user: UserId) -> Project {
+    /// Updates a project with partial fields.
+    ///
+    /// If the updates layer list is longer than the current list,
+    /// it just inserts new layers to the end.
+    ///
+    pub fn update_project(&self, update: UpdateProject, user: UserId) -> Result<Project> {
         let mut project = self.clone();
         project.version = ProjectVersion::new(user);
 
@@ -61,18 +65,20 @@ impl Project {
 
             for (layer, layer_update) in layers.zip(&mut layer_updates) {
                 match layer_update {
-                    LayerUpdate::None => project.layers.push(layer),
-                    LayerUpdate::Update(updated_layer) => project.layers.push(updated_layer),
-                    LayerUpdate::Delete => {}
+                    LayerUpdate::None(..) => project.layers.push(layer),
+                    LayerUpdate::UpdateOrInsert(updated_layer) => {
+                        project.layers.push(updated_layer)
+                    }
+                    LayerUpdate::Delete(..) => {}
                 }
             }
 
             for layer_update in layer_updates {
-                if let LayerUpdate::Update(new_layer) = layer_update {
+                if let LayerUpdate::UpdateOrInsert(new_layer) = layer_update {
                     project.layers.push(new_layer);
+                } else {
+                    return Err(Error::ProjectUpdateFailed);
                 }
-
-                // TODO: throw errors on other cases?
             }
         }
 
@@ -80,7 +86,7 @@ impl Project {
             project.bounds = bounds;
         }
 
-        project
+        Ok(project)
     }
 }
 
@@ -268,52 +274,16 @@ pub struct UpdateProject {
     pub bounds: Option<STRectangle>,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(untagged)]
 pub enum LayerUpdate {
-    #[serde(deserialize_with = "deserialize_layer_update_none")]
-    None, // '/'
-    #[serde(deserialize_with = "deserialize_layer_update_delete")]
-    Delete, // '-'
-    Update(Layer),
+    None(None),
+    Delete(Delete),
+    UpdateOrInsert(Layer),
 }
 
-impl Serialize for LayerUpdate {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        match self {
-            LayerUpdate::None => serializer.serialize_char('/'),
-            LayerUpdate::Update(layer) => layer.serialize(serializer),
-            LayerUpdate::Delete => serializer.serialize_char('-'),
-        }
-    }
-}
-
-fn deserialize_layer_update_none<'de, D>(deserializer: D) -> Result<(), D::Error>
-where
-    D: Deserializer<'de>,
-{
-    use serde::de::Error;
-
-    match char::deserialize(deserializer)? {
-        '/' => Ok(()),
-        c => Err(D::Error::invalid_value(Unexpected::Char(c), &"/")),
-    }
-}
-
-fn deserialize_layer_update_delete<'de, D>(deserializer: D) -> Result<(), D::Error>
-where
-    D: Deserializer<'de>,
-{
-    use serde::de::Error;
-
-    match char::deserialize(deserializer)? {
-        '-' => Ok(()),
-        c => Err(D::Error::invalid_value(Unexpected::Char(c), &"-")),
-    }
-}
+string_token!(None, "none");
+string_token!(Delete, "delete");
 
 impl UserInput for UpdateProject {
     fn validate(&self) -> Result<(), Error> {
@@ -446,13 +416,13 @@ mod tests {
     #[test]
     fn deserialize_layer_update() {
         assert_eq!(
-            serde_json::from_str::<LayerUpdate>(&json!("/").to_string()).unwrap(),
-            LayerUpdate::None
+            serde_json::from_str::<LayerUpdate>(&json!("none").to_string()).unwrap(),
+            LayerUpdate::None(None)
         );
 
         assert_eq!(
-            serde_json::from_str::<LayerUpdate>(&json!("-").to_string()).unwrap(),
-            LayerUpdate::Delete
+            serde_json::from_str::<LayerUpdate>(&json!("delete").to_string()).unwrap(),
+            LayerUpdate::Delete(Delete)
         );
 
         let workflow = WorkflowId::new();
@@ -468,7 +438,7 @@ mod tests {
                 .to_string()
             )
             .unwrap(),
-            LayerUpdate::Update(Layer {
+            LayerUpdate::UpdateOrInsert(Layer {
                 workflow,
                 name: "L2".to_string(),
                 info: LayerInfo::Vector(VectorInfo {}),

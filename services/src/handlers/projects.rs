@@ -636,7 +636,7 @@ mod tests {
             id: project,
             name: Some("TestUpdate".to_string()),
             description: None,
-            layers: Some(vec![LayerUpdate::Update(Layer {
+            layers: Some(vec![LayerUpdate::UpdateOrInsert(Layer {
                 workflow: WorkflowId::new(),
                 name: "L1".to_string(),
                 info: LayerInfo::Raster(RasterInfo {
@@ -782,7 +782,7 @@ mod tests {
                     id: project,
                     name: None,
                     description: None,
-                    layers: Some(vec![LayerUpdate::Update(layer_1.clone())]),
+                    layers: Some(vec![LayerUpdate::UpdateOrInsert(layer_1.clone())]),
                     bounds: None,
                 }
             )
@@ -801,8 +801,8 @@ mod tests {
                     name: None,
                     description: None,
                     layers: Some(vec![
-                        LayerUpdate::None,
-                        LayerUpdate::Update(layer_2.clone())
+                        LayerUpdate::None(Default::default()),
+                        LayerUpdate::UpdateOrInsert(layer_2.clone())
                     ]),
                     bounds: None,
                 }
@@ -821,7 +821,10 @@ mod tests {
                     id: project,
                     name: None,
                     description: None,
-                    layers: Some(vec![LayerUpdate::Delete, LayerUpdate::None,]),
+                    layers: Some(vec![
+                        LayerUpdate::Delete(Default::default()),
+                        LayerUpdate::None(Default::default()),
+                    ]),
                     bounds: None,
                 }
             )

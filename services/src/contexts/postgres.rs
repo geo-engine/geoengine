@@ -486,7 +486,7 @@ mod tests {
             id: project.id,
             name: Some("Test9 Updated".into()),
             description: None,
-            layers: Some(vec![LayerUpdate::Update(Layer {
+            layers: Some(vec![LayerUpdate::UpdateOrInsert(Layer {
                 workflow: workflow_id,
                 name: "TestLayer".into(),
                 info: LayerInfo::Vector(VectorInfo {}),
