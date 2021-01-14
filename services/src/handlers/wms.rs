@@ -6,7 +6,7 @@ use geoengine_datatypes::{
     operations::image::{Colorizer, ToPng},
     primitives::SpatialResolution,
     raster::Grid2D,
-    raster::RasterTile2D,
+    raster::{GridShape2D, RasterTile2D, TilingStrategy},
 };
 use geoengine_datatypes::{
     primitives::BoundingBox2D,
@@ -148,6 +148,10 @@ async fn get_map<C: Context>(
     let execution_context = ExecutionContext {
         raster_data_root: get_config_element::<config::GdalSource>()?.raster_data_root_path,
         thread_pool: thread_pool.create_context(),
+        tiling_strategy: TilingStrategy {
+            tile_pixel_size: GridShape2D::from([600, 600]),
+            geo_transform: GeoTransform::default(),
+        },
     };
 
     let initialized = operator

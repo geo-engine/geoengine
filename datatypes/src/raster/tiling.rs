@@ -12,6 +12,13 @@ pub struct TilingStrategy {
 }
 
 impl TilingStrategy {
+    pub fn new(tile_pixel_size: GridShape2D, geo_transform: GeoTransform) -> Self {
+        Self {
+            tile_pixel_size,
+            geo_transform,
+        }
+    }
+
     pub fn upper_left_pixel_idx(&self, bounding_box: BoundingBox2D) -> GridIdx2D {
         self.geo_transform
             .coordinate_to_grid_idx_2d(bounding_box.upper_left())
