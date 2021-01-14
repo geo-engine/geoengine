@@ -262,6 +262,7 @@ where
         &self,
         tileing_strategy: TilingStrategy,
         time_interval: TimeInterval,
+        bounding_box: BoundingBox2D,
     ) -> impl Iterator<Item = (TimeInterval, TileInformation)> + '_ {
         let time_information = self.dataset_information.native_time_information();
         let snapped_start = time_information
@@ -282,7 +283,7 @@ where
 
         time_interval_iterator.flat_map(move |time| {
             tileing_strategy
-                .tile_information_iterator()
+                .tile_information_iterator(bounding_box)
                 .map(move |tile| (time, tile))
         })
     }
@@ -471,12 +472,11 @@ where
         };
 
         let tiling_strategy = TilingStrategy {
-            bounding_box: bbox,
             geo_transform: GeoTransform::new_with_coordinate_x_y(0.0, x_signed, 0.0, y_signed),
             tile_pixel_size: [600, 600].into(),
         };
 
-        stream::iter(self.time_tile_iter(tiling_strategy, time_interval))
+        stream::iter(self.time_tile_iter(tiling_strategy, time_interval, bbox))
             .map(move |(time, tile)| {
                 (
                     self.gdal_params.clone(),
@@ -649,22 +649,23 @@ mod tests {
             dataset_y_pixel_size,
         );
 
+        let bounding_box = BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap();
+
         let origin_split_tileing_strategy = TilingStrategy {
-            bounding_box: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
             tile_pixel_size: tile_size_in_pixels.into(),
             geo_transform: dataset_geo_transform,
         };
 
         assert_eq!(
-            origin_split_tileing_strategy.upper_left_pixel_idx(),
+            origin_split_tileing_strategy.upper_left_pixel_idx(bounding_box),
             [0, 0].into()
         );
         assert_eq!(
-            origin_split_tileing_strategy.lower_right_pixel_idx(),
+            origin_split_tileing_strategy.lower_right_pixel_idx(bounding_box),
             [1800 - 1, 3600 - 1].into()
         );
 
-        let tile_grid = origin_split_tileing_strategy.tile_grid_box();
+        let tile_grid = origin_split_tileing_strategy.tile_grid_box(bounding_box);
         assert_eq!(tile_grid.axis_size(), [3, 6]);
         assert_eq!(tile_grid.min_index(), [0, 0].into());
         assert_eq!(tile_grid.max_index(), [2, 5].into());
@@ -682,22 +683,23 @@ mod tests {
             dataset_y_pixel_size,
         );
 
+        let bounding_box = BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap();
+
         let origin_split_tileing_strategy = TilingStrategy {
-            bounding_box: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
             tile_pixel_size: tile_size_in_pixels.into(),
             geo_transform: central_geo_transform,
         };
 
         assert_eq!(
-            origin_split_tileing_strategy.upper_left_pixel_idx(),
+            origin_split_tileing_strategy.upper_left_pixel_idx(bounding_box),
             [-900, -1800].into()
         );
         assert_eq!(
-            origin_split_tileing_strategy.lower_right_pixel_idx(),
+            origin_split_tileing_strategy.lower_right_pixel_idx(bounding_box),
             [1800 / 2 - 1, 3600 / 2 - 1].into()
         );
 
-        let tile_grid = origin_split_tileing_strategy.tile_grid_box();
+        let tile_grid = origin_split_tileing_strategy.tile_grid_box(bounding_box);
         assert_eq!(tile_grid.axis_size(), [4, 6]);
         assert_eq!(tile_grid.min_index(), [-2, -3].into());
         assert_eq!(tile_grid.max_index(), [1, 2].into());
@@ -715,13 +717,16 @@ mod tests {
             dataset_y_pixel_size,
         );
 
+        let bounding_box = BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap();
+
         let origin_split_tileing_strategy = TilingStrategy {
-            bounding_box: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
             tile_pixel_size: tile_size_in_pixels.into(),
             geo_transform: central_geo_transform,
         };
 
-        let vres: Vec<GridIdx2D> = origin_split_tileing_strategy.tile_idx_iterator().collect();
+        let vres: Vec<GridIdx2D> = origin_split_tileing_strategy
+            .tile_idx_iterator(bounding_box)
+            .collect();
         assert_eq!(vres.len(), 4 * 6);
         assert_eq!(vres[0], [-2, -3].into());
         assert_eq!(vres[1], [-2, -2].into());
@@ -742,14 +747,15 @@ mod tests {
             dataset_y_pixel_size,
         );
 
+        let bounding_box = BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap();
+
         let origin_split_tileing_strategy = TilingStrategy {
-            bounding_box: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
             tile_pixel_size: tile_size_in_pixels.into(),
             geo_transform: central_geo_transform,
         };
 
         let vres: Vec<TileInformation> = origin_split_tileing_strategy
-            .tile_information_iterator()
+            .tile_information_iterator(bounding_box)
             .collect();
         assert_eq!(vres.len(), 4 * 6);
         assert_eq!(
@@ -795,8 +801,9 @@ mod tests {
         let dataset_geo_transform = GeoTransform::new(dataset_upper_right_coord, 0.1, -0.1);
         let central_geo_transform = GeoTransform::new_with_coordinate_x_y(0.0, 0.1, 0.0, -0.1);
 
+        let bounding_box = BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap();
+
         let origin_split_tileing_strategy = TilingStrategy {
-            bounding_box: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
             tile_pixel_size: tile_size_in_pixels.into(),
             geo_transform: central_geo_transform,
         };
@@ -840,6 +847,7 @@ mod tests {
             .time_tile_iter(
                 origin_split_tileing_strategy,
                 TimeInterval::new_unchecked(0, 1000),
+                bounding_box,
             )
             .collect();
 
@@ -1037,8 +1045,9 @@ mod tests {
             dataset_y_pixel_size,
         );
 
+        let bounding_box = BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap();
+
         let origin_split_tileing_strategy = TilingStrategy {
-            bounding_box: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
             tile_pixel_size: tile_size_in_pixels.into(),
             geo_transform: dataset_geo_transform,
         };
@@ -1082,6 +1091,7 @@ mod tests {
             .time_tile_iter(
                 origin_split_tileing_strategy,
                 TimeInterval::new_unchecked(0, 1000),
+                bounding_box,
             )
             .map(|(time_interval, tile_information)| {
                 gdal_source.load_tile_data(time_interval, tile_information)
@@ -1128,8 +1138,9 @@ mod tests {
             dataset_y_pixel_size,
         );
 
+        let bounding_box = BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap();
+
         let origin_split_tileing_strategy = TilingStrategy {
-            bounding_box: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
             tile_pixel_size: tile_size_in_pixels.into(),
             geo_transform: center_geo_transform,
         };
@@ -1173,6 +1184,7 @@ mod tests {
             .time_tile_iter(
                 origin_split_tileing_strategy,
                 TimeInterval::new_unchecked(0, 1000),
+                bounding_box,
             )
             .map(|(time_interval, tile_information)| {
                 gdal_source.load_tile_data(time_interval, tile_information)
@@ -1252,7 +1264,6 @@ mod tests {
         let query_bbox = BoundingBox2D::new((-30., 0.).into(), (35., 65.).into()).unwrap();
 
         let origin_split_tileing_strategy = TilingStrategy {
-            bounding_box: query_bbox,
             tile_pixel_size: tile_size_in_pixels.into(),
             geo_transform: dataset_geo_transform,
         };
@@ -1261,6 +1272,7 @@ mod tests {
             .time_tile_iter(
                 origin_split_tileing_strategy,
                 TimeInterval::new_unchecked(0, 1000),
+                query_bbox,
             )
             .map(|(time_interval, tile_information)| {
                 gdal_source.load_tile_data(time_interval, tile_information)

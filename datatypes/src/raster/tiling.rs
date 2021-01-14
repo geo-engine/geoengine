@@ -7,21 +7,20 @@ use serde::{Deserialize, Serialize};
 /// A provider of tile (size) information for a raster/grid
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct TilingStrategy {
-    pub bounding_box: BoundingBox2D,
     pub tile_pixel_size: GridShape2D,
     pub geo_transform: GeoTransform,
 }
 
 impl TilingStrategy {
-    pub fn upper_left_pixel_idx(&self) -> GridIdx2D {
+    pub fn upper_left_pixel_idx(&self, bounding_box: BoundingBox2D) -> GridIdx2D {
         self.geo_transform
-            .coordinate_to_grid_idx_2d(self.bounding_box.upper_left())
+            .coordinate_to_grid_idx_2d(bounding_box.upper_left())
     }
 
-    pub fn lower_right_pixel_idx(&self) -> GridIdx2D {
+    pub fn lower_right_pixel_idx(&self, bounding_box: BoundingBox2D) -> GridIdx2D {
         let lr_idx = self
             .geo_transform
-            .coordinate_to_grid_idx_2d(self.bounding_box.lower_right());
+            .coordinate_to_grid_idx_2d(bounding_box.lower_right());
 
         lr_idx - 1
     }
@@ -42,25 +41,28 @@ impl TilingStrategy {
         [y_tile_idx, x_tile_idx].into()
     }
 
-    pub fn pixel_grid_box(&self) -> GridBoundingBox2D {
-        let start = self.upper_left_pixel_idx();
-        let end = self.lower_right_pixel_idx();
+    pub fn pixel_grid_box(&self, bounding_box: BoundingBox2D) -> GridBoundingBox2D {
+        let start = self.upper_left_pixel_idx(bounding_box);
+        let end = self.lower_right_pixel_idx(bounding_box);
         GridBoundingBox2D::new_unchecked(start, end)
     }
 
-    pub fn tile_grid_box(&self) -> GridBoundingBox2D {
-        let start = self.pixel_idx_to_tile_idx(self.upper_left_pixel_idx());
-        let end = self.pixel_idx_to_tile_idx(self.lower_right_pixel_idx());
+    pub fn tile_grid_box(&self, bounding_box: BoundingBox2D) -> GridBoundingBox2D {
+        let start = self.pixel_idx_to_tile_idx(self.upper_left_pixel_idx(bounding_box));
+        let end = self.pixel_idx_to_tile_idx(self.lower_right_pixel_idx(bounding_box));
         GridBoundingBox2D::new_unchecked(start, end)
     }
 
     /// generates the tile idx for the tiles intersecting the bounding box
-    pub fn tile_idx_iterator(&self) -> impl Iterator<Item = GridIdx2D> {
+    pub fn tile_idx_iterator(
+        &self,
+        bounding_box: BoundingBox2D,
+    ) -> impl Iterator<Item = GridIdx2D> {
         let GridIdx([upper_left_tile_y, upper_left_tile_x]) =
-            self.pixel_idx_to_tile_idx(self.upper_left_pixel_idx());
+            self.pixel_idx_to_tile_idx(self.upper_left_pixel_idx(bounding_box));
 
         let GridIdx([lower_right_tile_y, lower_right_tile_x]) =
-            self.pixel_idx_to_tile_idx(self.lower_right_pixel_idx());
+            self.pixel_idx_to_tile_idx(self.lower_right_pixel_idx(bounding_box));
 
         let y_range = upper_left_tile_y..=lower_right_tile_y;
         let x_range = upper_left_tile_x..=lower_right_tile_x;
@@ -69,10 +71,13 @@ impl TilingStrategy {
     }
 
     /// generates the tile idx for the tiles intersecting the bounding box
-    pub fn tile_information_iterator(&self) -> impl Iterator<Item = TileInformation> {
+    pub fn tile_information_iterator(
+        &self,
+        bounding_box: BoundingBox2D,
+    ) -> impl Iterator<Item = TileInformation> {
         let tile_pixel_size = self.tile_pixel_size;
         let geo_transform = self.geo_transform;
-        self.tile_idx_iterator()
+        self.tile_idx_iterator(bounding_box)
             .map(move |idx| TileInformation::new(idx, tile_pixel_size, geo_transform))
     }
 }
