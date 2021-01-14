@@ -2,7 +2,7 @@ use std::convert::Infallible;
 
 use snafu::Snafu;
 
-use crate::collections::FeatureCollectionError;
+use crate::{collections::FeatureCollectionError, primitives::TimeInstance};
 use crate::{
     primitives::{Coordinate2D, PrimitivesError, TimeInterval},
     raster::RasterDataType,
@@ -146,6 +146,11 @@ pub enum Error {
     },
     InvalidTypedGridConversion,
     InvalidTypedValueConversion,
+
+    #[snafu(display("NoDateTimeValid: {:?}", time_instance))]
+    NoDateTimeValid {
+        time_instance: TimeInstance,
+    },
 }
 
 impl From<arrow::error::ArrowError> for Error {
