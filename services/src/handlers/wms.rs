@@ -519,7 +519,7 @@ mod tests {
                         channel: None,
                     },
                 }
-                    .boxed(),
+                .boxed(),
             ),
         };
 
