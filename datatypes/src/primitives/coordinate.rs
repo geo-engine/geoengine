@@ -3,13 +3,13 @@ use arrow::array::{ArrayBuilder, BooleanArray, Float64Builder};
 use arrow::datatypes::DataType;
 use arrow::error::ArrowError;
 use ocl::OclPrm;
+#[cfg(feature = "postgres")]
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use std::{fmt, slice};
 
-#[derive(
-    Clone, Copy, Debug, Deserialize, PartialEq, PartialOrd, Serialize, Default, ToSql, FromSql,
-)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, PartialOrd, Serialize, Default)]
+#[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
 #[repr(C)]
 pub struct Coordinate2D {
     pub x: f64,

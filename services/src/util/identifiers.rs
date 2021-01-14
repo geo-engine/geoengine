@@ -33,6 +33,7 @@ macro_rules! identifier {
             }
         }
 
+        #[cfg(feature = "postgres")]
         impl<'a> postgres_types::FromSql<'a> for $id_name {
             fn from_sql(
                 ty: &postgres_types::Type,
@@ -46,6 +47,7 @@ macro_rules! identifier {
             }
         }
 
+        #[cfg(feature = "postgres")]
         impl postgres_types::ToSql for $id_name {
             fn to_sql(
                 &self,

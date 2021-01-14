@@ -10,7 +10,7 @@ This workspace contains the geo engine crates.
 - You need a recent Rust environment with a Rust nightly compiler. We recommend rustup to manage Rust `https://rustup.rs/`
 - geo engine uses OpenCL and therefore requires a functional OpenCL environment. On Linux you can use POCL to run OpenCL on CPUs.
 
-# Dependencies
+## Dependencies
  ```
 # Build essentials
 sudo apt build-essential
@@ -38,7 +38,13 @@ Edit `Settings-test.toml` for environment specific test parameters.
 For performance-critical features, we aim to provide benchmarks in the `benches` directory.
 If you plan on optimizing a feature of Geo Engine, please confirm it this way.
 
-## Running
+# Deployment
+Deploy an instance using `cargo run --package geoengine-services --bin main --release`
+
+## Features
+The PostgreSQL storage backend can optionally be enabled using `--features postgres` in the `cargo` command.
+
+## Configuration
 Copy `Settings-default.toml` to `Settings.toml` and edit per your requirements.
 
 ## Docker
