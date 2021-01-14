@@ -57,7 +57,12 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           args: --all-targets --all-features -- -D warnings
-      - name: Build
+      - name: Build (no features)
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --verbose
+      - name: Build (all features)
         uses: actions-rs/cargo@v1
         with:
           command: build
