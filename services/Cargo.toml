@@ -8,9 +8,12 @@ authors = [
 ]
 edition = "2018"
 
+[features]
+postgres = ["postgres-types", "bb8-postgres"]
+
 [dependencies]
 async-trait = "0.1"
-bb8-postgres = { version = "0.5", features = ["with-uuid-0_8", "with-chrono-0_4", "with-serde_json-1"] } # TODO: update v0.6
+bb8-postgres = { version = "0.5", features = ["with-uuid-0_8", "with-chrono-0_4", "with-serde_json-1"], optional = true } # TODO: update v0.6
 chrono = { version = "0.4", features = ["serde"] }
 config = "0.10"
 futures = "0.3"
@@ -19,7 +22,7 @@ geoengine-operators = { path = "../operators" }
 image = "0.23"
 lazy_static = "1.4"
 paste = "1.0"
-postgres-types = { version = "0.1", features = ["derive"] }
+postgres-types = { version = "0.1", features = ["derive"], optional = true }
 pwhash = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

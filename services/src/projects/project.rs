@@ -12,6 +12,7 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use geoengine_datatypes::{operations::image::Colorizer, primitives::TimeInstance};
+#[cfg(feature = "postgres")]
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
@@ -90,7 +91,8 @@ impl Project {
     }
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, ToSql, FromSql)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+#[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
 pub struct STRectangle {
     pub spatial_reference: SpatialReferenceOption,
     pub bounding_box: BoundingBox2D,
@@ -178,7 +180,8 @@ impl Layer {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, ToSql, FromSql)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
+#[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
 pub enum LayerType {
     Raster,
     Vector,
@@ -301,7 +304,8 @@ impl UserInput for UpdateProject {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, ToSql, FromSql)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
+#[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
 pub enum ProjectPermission {
     Read,
     Write,
