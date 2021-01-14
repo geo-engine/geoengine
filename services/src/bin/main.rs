@@ -1,8 +1,6 @@
 use geoengine_services::error::Error;
 use geoengine_services::server;
 use tokio::sync::oneshot;
-use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
-use std::convert::TryInto;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
