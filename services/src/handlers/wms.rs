@@ -298,6 +298,7 @@ mod tests {
     use crate::workflows::workflow::Workflow;
     use crate::{contexts::InMemoryContext, ogc::wms::request::GetMapFormat};
     use xml::ParserConfig;
+    use std::io::Write;
 
     #[tokio::test]
     async fn test() {
@@ -503,6 +504,42 @@ mod tests {
         assert_eq!(res.status(), 200);
         assert_eq!(
             include_bytes!("../../../services/test-data/wms/raster.png") as &[u8],
+            res.body().to_vec().as_slice()
+        );
+    }
+
+    #[tokio::test]
+    async fn get_map_colorizer() {
+        let ctx = InMemoryContext::default();
+
+        let workflow = Workflow {
+            operator: TypedOperator::Raster(
+                GdalSource {
+                    params: GdalSourceParameters {
+                        dataset_id: "modis_ndvi".to_owned(),
+                        channel: None,
+                    },
+                }
+                    .boxed(),
+            ),
+        };
+
+        let id = ctx
+            .workflow_registry()
+            .write()
+            .await
+            .register(workflow.clone())
+            .await
+            .unwrap();
+
+        let res = warp::test::request()
+            .method("GET")
+            .path(&format!("/wms?request=GetMap&service=WMS&version=1.3.0&layers={}&bbox=20,-10,80,50&width=600&height=600&crs=foo&styles=custom:%7B%22LinearGradient%22%3A%7B%22breakpoints%22%3A%5B%7B%22value%22%3A1.0%2C%22color%22%3A%5B0%2C0%2C0%2C255%5D%7D%2C%7B%22value%22%3A10.0%2C%22color%22%3A%5B255%2C255%2C255%2C255%5D%7D%5D%2C%22no_data_color%22%3A%5B0%2C0%2C0%2C0%5D%2C%22default_color%22%3A%5B255%2C0%2C255%2C255%5D%7D%7D&format=image/png", id.to_string()))
+            .reply(&wms_handler(ctx))
+            .await;
+        assert_eq!(res.status(), 200);
+        assert_eq!(
+            include_bytes!("../../../services/test-data/wms/raster_colorizer.png") as &[u8],
             res.body().to_vec().as_slice()
         );
     }
