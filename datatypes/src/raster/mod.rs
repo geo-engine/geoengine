@@ -10,6 +10,7 @@ mod macros_raster;
 mod macros_raster_tile;
 mod operations;
 mod raster_tile;
+mod tiling;
 mod typed_raster_conversion;
 mod typed_raster_tile;
 
@@ -31,7 +32,8 @@ pub use self::typed_raster_tile::{TypedRasterTile2D, TypedRasterTile3D};
 use super::primitives::{SpatialBounded, TemporalBounded};
 pub use grid::{Grid, Grid1D, Grid2D, Grid3D, GridShape, GridShape1D, GridShape2D, GridShape3D};
 pub use grid_bounds::{GridBoundingBox, GridBoundingBox1D, GridBoundingBox2D, GridBoundingBox3D};
-pub use raster_tile::{RasterTile, RasterTile2D, RasterTile3D, TileInformation};
+pub use raster_tile::{RasterTile, RasterTile2D, RasterTile3D};
+pub use tiling::{TileInformation, TilingStrategy};
 
 pub trait Raster<D, T: Pixel, C>: SpatialBounded + TemporalBounded {
     /// returns the grid dimension object of type D: `GridDimension`

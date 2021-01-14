@@ -1,0 +1,172 @@
+use crate::primitives::{BoundingBox2D, SpatialBounded};
+
+use super::{GeoTransform, GridBoundingBox2D, GridIdx, GridIdx2D, GridShape2D, GridSize};
+
+use serde::{Deserialize, Serialize};
+
+/// A provider of tile (size) information for a raster/grid
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+pub struct TilingStrategy {
+    pub bounding_box: BoundingBox2D,
+    pub tile_pixel_size: GridShape2D,
+    pub geo_transform: GeoTransform,
+}
+
+impl TilingStrategy {
+    pub fn upper_left_pixel_idx(&self) -> GridIdx2D {
+        self.geo_transform
+            .coordinate_to_grid_idx_2d(self.bounding_box.upper_left())
+    }
+
+    pub fn lower_right_pixel_idx(&self) -> GridIdx2D {
+        let lr_idx = self
+            .geo_transform
+            .coordinate_to_grid_idx_2d(self.bounding_box.lower_right());
+
+        lr_idx - 1
+    }
+
+    pub fn pixel_idx_to_tile_idx(&self, pixel_idx: GridIdx2D) -> GridIdx2D {
+        let GridIdx([y_pixel_idx, x_pixel_idx]) = pixel_idx;
+        let [y_tile_size, x_tile_size] = self.tile_pixel_size.into_inner();
+        let y_tile_idx = (y_pixel_idx as f32 / y_tile_size as f32).floor() as isize;
+        let x_tile_idx = (x_pixel_idx as f32 / x_tile_size as f32).floor() as isize;
+        [y_tile_idx, x_tile_idx].into()
+    }
+
+    pub fn pixel_idx_to_next_tile_idx(&self, pixel_idx: GridIdx2D) -> GridIdx2D {
+        let GridIdx([y_pixel_idx, x_pixel_idx]) = pixel_idx;
+        let [y_tile_size, x_tile_size] = self.tile_pixel_size.into_inner();
+        let y_tile_idx = (y_pixel_idx as f32 / y_tile_size as f32).ceil() as isize;
+        let x_tile_idx = (x_pixel_idx as f32 / x_tile_size as f32).ceil() as isize;
+        [y_tile_idx, x_tile_idx].into()
+    }
+
+    pub fn pixel_grid_box(&self) -> GridBoundingBox2D {
+        let start = self.upper_left_pixel_idx();
+        let end = self.lower_right_pixel_idx();
+        GridBoundingBox2D::new_unchecked(start, end)
+    }
+
+    pub fn tile_grid_box(&self) -> GridBoundingBox2D {
+        let start = self.pixel_idx_to_tile_idx(self.upper_left_pixel_idx());
+        let end = self.pixel_idx_to_tile_idx(self.lower_right_pixel_idx());
+        GridBoundingBox2D::new_unchecked(start, end)
+    }
+
+    /// generates the tile idx for the tiles intersecting the bounding box
+    pub fn tile_idx_iterator(&self) -> impl Iterator<Item = GridIdx2D> {
+        let GridIdx([upper_left_tile_y, upper_left_tile_x]) =
+            self.pixel_idx_to_tile_idx(self.upper_left_pixel_idx());
+
+        let GridIdx([lower_right_tile_y, lower_right_tile_x]) =
+            self.pixel_idx_to_tile_idx(self.lower_right_pixel_idx());
+
+        let y_range = upper_left_tile_y..=lower_right_tile_y;
+        let x_range = upper_left_tile_x..=lower_right_tile_x;
+
+        y_range.flat_map(move |y_tile| x_range.clone().map(move |x_tile| [y_tile, x_tile].into()))
+    }
+
+    /// generates the tile idx for the tiles intersecting the bounding box
+    pub fn tile_information_iterator(&self) -> impl Iterator<Item = TileInformation> {
+        let tile_pixel_size = self.tile_pixel_size;
+        let geo_transform = self.geo_transform;
+        self.tile_idx_iterator()
+            .map(move |idx| TileInformation::new(idx, tile_pixel_size, geo_transform))
+    }
+}
+
+/// The `TileInformation` is used to represent the spatial position of each tile
+#[derive(PartialEq, Debug, Copy, Clone, Serialize, Deserialize)]
+pub struct TileInformation {
+    pub tile_size_in_pixels: GridShape2D,
+    pub global_tile_position: GridIdx2D,
+    pub global_geo_transform: GeoTransform,
+}
+
+impl TileInformation {
+    pub fn new(
+        global_tile_position: GridIdx2D,
+        tile_size_in_pixels: GridShape2D,
+        global_geo_transform: GeoTransform,
+    ) -> Self {
+        Self {
+            global_tile_position,
+            tile_size_in_pixels,
+            global_geo_transform,
+        }
+    }
+
+    #[allow(clippy::unused_self)]
+    pub fn local_upper_left_idx(&self) -> GridIdx2D {
+        [0, 0].into()
+    }
+
+    pub fn local_lower_left_idx(&self) -> GridIdx2D {
+        [self.tile_size_in_pixels.axis_size_y() as isize - 1, 0].into()
+    }
+
+    pub fn local_upper_right_idx(&self) -> GridIdx2D {
+        [0, self.tile_size_in_pixels.axis_size_x() as isize - 1].into()
+    }
+
+    pub fn local_lower_right_idx(&self) -> GridIdx2D {
+        let GridIdx([y, _]) = self.local_lower_left_idx();
+        let GridIdx([_, x]) = self.local_upper_right_idx();
+        [y, x].into()
+    }
+
+    pub fn global_tile_position(&self) -> GridIdx2D {
+        self.global_tile_position
+    }
+
+    pub fn global_upper_left_idx(&self) -> GridIdx2D {
+        let [tile_size_y, tile_size_x] = self.tile_size_in_pixels.into_inner();
+        self.global_tile_position() * [tile_size_y as isize, tile_size_x as isize]
+    }
+
+    pub fn global_upper_right_idx(&self) -> GridIdx2D {
+        self.global_upper_left_idx() + self.local_upper_right_idx()
+    }
+
+    pub fn global_lower_right_idx(&self) -> GridIdx2D {
+        self.global_upper_left_idx() + self.local_lower_right_idx()
+    }
+
+    pub fn global_lower_left_idx(&self) -> GridIdx2D {
+        self.global_upper_left_idx() + self.local_lower_left_idx()
+    }
+
+    pub fn tile_size_in_pixels(&self) -> GridShape2D {
+        self.tile_size_in_pixels
+    }
+
+    pub fn local_to_global_idx(&self, local_pixel_position: GridIdx2D) -> GridIdx2D {
+        self.global_upper_left_idx() + local_pixel_position
+    }
+
+    pub fn tile_geo_transform(&self) -> GeoTransform {
+        let tile_upper_left_coord = self
+            .global_geo_transform
+            .grid_idx_to_coordinate_2d(self.global_upper_left_idx());
+
+        GeoTransform::new(
+            tile_upper_left_coord,
+            self.global_geo_transform.x_pixel_size,
+            self.global_geo_transform.y_pixel_size,
+        )
+    }
+}
+
+impl SpatialBounded for TileInformation {
+    fn spatial_bounds(&self) -> BoundingBox2D {
+        let top_left_coord = self
+            .global_geo_transform
+            .grid_idx_to_coordinate_2d(self.global_upper_left_idx());
+        let lower_right_coord = self
+            .global_geo_transform
+            .grid_idx_to_coordinate_2d(self.global_lower_right_idx() + 1); // we need the border of the lower right pixel.
+        BoundingBox2D::new_upper_left_lower_right_unchecked(top_left_coord, lower_right_coord)
+    }
+}

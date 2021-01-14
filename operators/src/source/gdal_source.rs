@@ -27,12 +27,14 @@ use geoengine_datatypes::{
         TimeStepIter,
     },
     raster::{
-        Grid, GridBlit, GridBoundingBox2D, GridBounds, GridIdx, GridIdx2D, GridShape2D, GridSize,
+        Grid, GridBlit, GridBoundingBox2D, GridBounds, GridIdx, GridShape2D, GridSize,
         GridSpaceToLinearSpace,
     },
 };
 use geoengine_datatypes::{
-    raster::{GeoTransform, Grid2D, Pixel, RasterDataType, RasterTile2D, TileInformation},
+    raster::{
+        GeoTransform, Grid2D, Pixel, RasterDataType, RasterTile2D, TileInformation, TilingStrategy,
+    },
     spatial_reference::SpatialReference,
 };
 
@@ -199,79 +201,6 @@ pub struct TilingInformation {
     pub y_axis_tiles: usize,
     pub x_axis_tile_size: usize,
     pub y_axis_tile_size: usize,
-}
-
-/// A provider of tile (size) information for a raster/grid
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
-pub struct TilingStrategy {
-    pub bounding_box: BoundingBox2D,
-    pub tile_pixel_size: GridShape2D,
-    pub geo_transform: GeoTransform,
-}
-
-impl TilingStrategy {
-    pub fn upper_left_pixel_idx(&self) -> GridIdx2D {
-        self.geo_transform
-            .coordinate_to_grid_idx_2d(self.bounding_box.upper_left())
-    }
-
-    pub fn lower_right_pixel_idx(&self) -> GridIdx2D {
-        let lr_idx = self
-            .geo_transform
-            .coordinate_to_grid_idx_2d(self.bounding_box.lower_right());
-
-        lr_idx - 1
-    }
-
-    pub fn pixel_idx_to_tile_idx(&self, pixel_idx: GridIdx2D) -> GridIdx2D {
-        let GridIdx([y_pixel_idx, x_pixel_idx]) = pixel_idx;
-        let [y_tile_size, x_tile_size] = self.tile_pixel_size.into_inner();
-        let y_tile_idx = (y_pixel_idx as f32 / y_tile_size as f32).floor() as isize;
-        let x_tile_idx = (x_pixel_idx as f32 / x_tile_size as f32).floor() as isize;
-        [y_tile_idx, x_tile_idx].into()
-    }
-
-    pub fn pixel_idx_to_next_tile_idx(&self, pixel_idx: GridIdx2D) -> GridIdx2D {
-        let GridIdx([y_pixel_idx, x_pixel_idx]) = pixel_idx;
-        let [y_tile_size, x_tile_size] = self.tile_pixel_size.into_inner();
-        let y_tile_idx = (y_pixel_idx as f32 / y_tile_size as f32).ceil() as isize;
-        let x_tile_idx = (x_pixel_idx as f32 / x_tile_size as f32).ceil() as isize;
-        [y_tile_idx, x_tile_idx].into()
-    }
-
-    pub fn pixel_grid_box(&self) -> GridBoundingBox2D {
-        let start = self.upper_left_pixel_idx();
-        let end = self.lower_right_pixel_idx();
-        GridBoundingBox2D::new_unchecked(start, end)
-    }
-
-    pub fn tile_grid_box(&self) -> GridBoundingBox2D {
-        let start = self.pixel_idx_to_tile_idx(self.upper_left_pixel_idx());
-        let end = self.pixel_idx_to_tile_idx(self.lower_right_pixel_idx());
-        GridBoundingBox2D::new_unchecked(start, end)
-    }
-
-    /// generates the tile idx for the tiles intersecting the bounding box
-    pub fn tile_idx_iterator(&self) -> impl Iterator<Item = GridIdx2D> {
-        let GridIdx([upper_left_tile_y, upper_left_tile_x]) =
-            self.pixel_idx_to_tile_idx(self.upper_left_pixel_idx());
-
-        let GridIdx([lower_right_tile_y, lower_right_tile_x]) =
-            self.pixel_idx_to_tile_idx(self.lower_right_pixel_idx());
-
-        let y_range = upper_left_tile_y..=lower_right_tile_y;
-        let x_range = upper_left_tile_x..=lower_right_tile_x;
-
-        y_range.flat_map(move |y_tile| x_range.clone().map(move |x_tile| [y_tile, x_tile].into()))
-    }
-
-    /// generates the tile idx for the tiles intersecting the bounding box
-    pub fn tile_information_iterator(&self) -> impl Iterator<Item = TileInformation> {
-        let tile_pixel_size = self.tile_pixel_size;
-        let geo_transform = self.geo_transform;
-        self.tile_idx_iterator()
-            .map(move |idx| TileInformation::new(idx, tile_pixel_size, geo_transform))
-    }
 }
 
 pub struct GdalSourceProcessor<P, T>
@@ -705,7 +634,7 @@ mod tests {
     use futures::executor::block_on_stream;
     use geoengine_datatypes::{
         primitives::{Coordinate2D, TimeGranularity},
-        raster::GridIndexAccess,
+        raster::{GridIdx2D, GridIndexAccess},
     };
 
     #[test]
