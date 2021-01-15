@@ -268,7 +268,7 @@ impl UserInput for CreateProject {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct UpdateProject {
     pub id: ProjectId,
     pub name: Option<String>,
@@ -280,12 +280,12 @@ pub struct UpdateProject {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(untagged)]
 pub enum LayerUpdate {
-    None(None),
+    None(NoUpdate),
     Delete(Delete),
     UpdateOrInsert(Layer),
 }
 
-string_token!(None, "none");
+string_token!(NoUpdate, "none");
 string_token!(Delete, "delete");
 
 impl UserInput for UpdateProject {
@@ -421,12 +421,12 @@ mod tests {
     fn deserialize_layer_update() {
         assert_eq!(
             serde_json::from_str::<LayerUpdate>(&json!("none").to_string()).unwrap(),
-            LayerUpdate::None(None)
+            LayerUpdate::None(Default::default())
         );
 
         assert_eq!(
             serde_json::from_str::<LayerUpdate>(&json!("delete").to_string()).unwrap(),
-            LayerUpdate::Delete(Delete)
+            LayerUpdate::Delete(Default::default())
         );
 
         let workflow = WorkflowId::new();
@@ -448,5 +448,43 @@ mod tests {
                 info: LayerInfo::Vector(VectorInfo {}),
             })
         );
+    }
+
+    #[test]
+    fn serialize_update_project() {
+        let update = UpdateProject {
+            id: ProjectId::new(),
+            name: Some("name".to_string()),
+            description: Some("description".to_string()),
+            layers: Some(vec![
+                LayerUpdate::None(Default::default()),
+                LayerUpdate::Delete(Default::default()),
+                LayerUpdate::UpdateOrInsert(Layer {
+                    workflow: WorkflowId::new(),
+                    name: "vector layer".to_string(),
+                    info: LayerInfo::Vector(VectorInfo {}),
+                }),
+                LayerUpdate::UpdateOrInsert(Layer {
+                    workflow: WorkflowId::new(),
+                    name: "raster layer".to_string(),
+                    info: LayerInfo::Raster(RasterInfo {
+                        colorizer: Colorizer::Rgba,
+                    }),
+                }),
+            ]),
+            bounds: Some(STRectangle {
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+                bounding_box: BoundingBox2D::new((0.0, 0.1).into(), (1.0, 1.1).into()).unwrap(),
+                time_interval: Default::default(),
+            }),
+        };
+
+        let serialized = serde_json::to_string(&update).unwrap();
+
+        let deserialized: UpdateProject = serde_json::from_str(&serialized).unwrap();
+
+        assert_eq!(update, deserialized);
+
+        let _: UpdateProject = serde_json::from_reader(serialized.as_bytes()).unwrap();
     }
 }

@@ -52,8 +52,15 @@ macro_rules! string_token {
                         if v == $string {
                             Ok($struct)
                         } else {
-                            Err(E::invalid_value(Unexpected::Str(v), &$string))
+                            Err(E::invalid_value(Unexpected::Str(v), &self))
                         }
+                    }
+
+                    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+                    where
+                        E: serde::de::Error,
+                    {
+                        self.visit_borrowed_str(v)
                     }
                 }
 
@@ -65,6 +72,7 @@ macro_rules! string_token {
 
 #[cfg(test)]
 mod tests {
+
     #[test]
     fn serialize() {
         string_token!(Foo);
@@ -81,5 +89,14 @@ mod tests {
 
         serde_json::from_str::<Foo>(&serde_json::json! {"Foo"}.to_string()).unwrap();
         serde_json::from_str::<Bar>(&serde_json::json! {"bar"}.to_string()).unwrap();
+    }
+
+    #[test]
+    fn binary() {
+        string_token!(Foo);
+        string_token!(Bar, "bar");
+
+        let foo: Vec<u8> = serde_json::to_string(&Foo).unwrap().into_bytes();
+        let _: Foo = serde_json::from_reader(foo.as_slice()).unwrap();
     }
 }
