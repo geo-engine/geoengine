@@ -1,8 +1,8 @@
 use crate::{
     engine::{
-        InitializedOperator, InitializedOperatorBase, InitializedOperatorImpl,
-        InitializedRasterOperator, QueryProcessor, RasterOperator, RasterQueryProcessor,
-        RasterResultDescriptor, SourceOperator, TypedRasterQueryProcessor,
+        InitializedOperator, InitializedOperatorBase, InitializedRasterOperator, QueryProcessor,
+        RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SourceOperator,
+        TypedRasterQueryProcessor,
     },
     util::Result,
 };
@@ -28,7 +28,7 @@ use geoengine_datatypes::{
     },
     raster::{
         Grid, GridBlit, GridBoundingBox2D, GridBounds, GridIdx, GridShape2D, GridSize,
-        GridSpaceToLinearSpace,
+        GridSpaceToLinearSpace, TilingSpecification,
     },
 };
 use geoengine_datatypes::{
@@ -208,6 +208,7 @@ where
     T: Pixel,
 {
     pub dataset_information: P,
+    pub tiling_specification: TilingSpecification,
     pub gdal_params: GdalSourceParameters,
     pub phantom_data: PhantomData<T>,
 }
@@ -219,8 +220,9 @@ where
     pub fn from_params_with_json_provider(
         params: GdalSourceParameters,
         raster_data_root: &Path,
+        tiling_specification: TilingSpecification,
     ) -> Result<Self> {
-        GdalSourceProcessor::from_params(params, raster_data_root)
+        GdalSourceProcessor::from_params(params, raster_data_root, tiling_specification)
     }
 }
 
@@ -233,10 +235,18 @@ where
     /// Generates a new `GdalSource` from the provided parameters
     /// TODO: move the time interval and grid tile information generation somewhere else...
     ///
-    pub fn from_params(params: GdalSourceParameters, raster_data_root: &Path) -> Result<Self> {
+    pub fn from_params(
+        params: GdalSourceParameters,
+        raster_data_root: &Path,
+        tiling_specification: TilingSpecification,
+    ) -> Result<Self> {
         let dataset_information = P::with_dataset_id(&params.dataset_id, raster_data_root)?;
 
-        GdalSourceProcessor::from_params_with_provider(params, dataset_information)
+        GdalSourceProcessor::from_params_with_provider(
+            params,
+            dataset_information,
+            tiling_specification,
+        )
     }
 
     ///
@@ -247,10 +257,12 @@ where
     fn from_params_with_provider(
         params: GdalSourceParameters,
         dataset_information: P,
+        tiling_specification: TilingSpecification,
     ) -> Result<Self> {
         Ok(GdalSourceProcessor {
             dataset_information,
             gdal_params: params,
+            tiling_specification,
             phantom_data: PhantomData,
         })
     }
@@ -471,10 +483,8 @@ where
             spatial_resolution.y * -1.0
         };
 
-        let tiling_strategy = TilingStrategy {
-            geo_transform: GeoTransform::new_with_coordinate_x_y(0.0, x_signed, 0.0, y_signed),
-            tile_pixel_size: [600, 600].into(),
-        };
+        let tiling_strategy =
+            TilingStrategy::new_with_tiling_spec(self.tiling_specification, x_signed, y_signed);
 
         stream::iter(self.time_tile_iter(tiling_strategy, time_interval, bbox))
             .map(move |(time, tile)| {
@@ -516,55 +526,83 @@ impl RasterOperator for GdalSource {
         self: Box<Self>,
         context: &crate::engine::ExecutionContext,
     ) -> Result<Box<InitializedRasterOperator>> {
-        InitializedOperatorImpl::create(
-            self.params.clone(),
-            context,
-            |params, exe_context, _, _| {
-                JsonDatasetInformationProvider::with_dataset_id(
-                    &params.dataset_id,
-                    &exe_context.raster_data_root,
-                )
+        let provider = JsonDatasetInformationProvider::with_dataset_id(
+            &self.params.dataset_id,
+            &context.raster_data_root,
+        )?;
+
+        let data_type = provider.data_type();
+
+        let init = InitializedGdalSourceOperator {
+            provider,
+            result_descriptor: RasterResultDescriptor {
+                data_type: data_type,
+                spatial_reference: SpatialReference::wgs84().into(), // TODO: lookup from dataset
             },
-            |_, _, state, _, _| {
-                Ok(RasterResultDescriptor {
-                    data_type: state.data_type(),
-                    spatial_reference: SpatialReference::wgs84().into(), // TODO: lookup from dataset
-                })
-            },
-            vec![],
-            vec![],
-        )
-        .map(InitializedOperatorImpl::boxed)
+            tiling_specification: context.tiling_specification,
+            params: self.params,
+        };
+        Ok(Box::from(init))
+    }
+}
+
+pub struct InitializedGdalSourceOperator<P> {
+    pub provider: P,
+    pub params: GdalSourceParameters,
+    pub result_descriptor: RasterResultDescriptor,
+    pub tiling_specification: TilingSpecification,
+}
+
+impl<P> InitializedOperatorBase for InitializedGdalSourceOperator<P> {
+    type Descriptor = RasterResultDescriptor;
+
+    fn result_descriptor(&self) -> Self::Descriptor {
+        self.result_descriptor
+    }
+
+    fn raster_sources(&self) -> &[Box<InitializedRasterOperator>] {
+        &[]
+    }
+
+    fn vector_sources(&self) -> &[Box<crate::engine::InitializedVectorOperator>] {
+        &[]
+    }
+
+    fn raster_sources_mut(&mut self) -> &mut [Box<InitializedRasterOperator>] {
+        &mut []
+    }
+
+    fn vector_sources_mut(&mut self) -> &mut [Box<crate::engine::InitializedVectorOperator>] {
+        &mut []
     }
 }
 
 impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
-    for InitializedOperatorImpl<
-        GdalSourceParameters,
-        RasterResultDescriptor,
-        JsonDatasetInformationProvider,
-    >
+    for InitializedGdalSourceOperator<JsonDatasetInformationProvider>
 {
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         Ok(match self.result_descriptor().data_type {
             RasterDataType::U8 => TypedRasterQueryProcessor::U8(
                 GdalSourceProcessor::from_params_with_provider(
                     self.params.clone(),
-                    self.state.clone(),
+                    self.provider.clone(),
+                    self.tiling_specification,
                 )?
                 .boxed(),
             ),
             RasterDataType::U16 => TypedRasterQueryProcessor::U16(
                 GdalSourceProcessor::from_params_with_provider(
                     self.params.clone(),
-                    self.state.clone(),
+                    self.provider.clone(),
+                    self.tiling_specification,
                 )?
                 .boxed(),
             ),
             RasterDataType::U32 => TypedRasterQueryProcessor::U32(
                 GdalSourceProcessor::from_params_with_provider(
                     self.params.clone(),
-                    self.state.clone(),
+                    self.provider.clone(),
+                    self.tiling_specification,
                 )?
                 .boxed(),
             ),
@@ -573,14 +611,16 @@ impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
             RasterDataType::I16 => TypedRasterQueryProcessor::I16(
                 GdalSourceProcessor::from_params_with_provider(
                     self.params.clone(),
-                    self.state.clone(),
+                    self.provider.clone(),
+                    self.tiling_specification,
                 )?
                 .boxed(),
             ),
             RasterDataType::I32 => TypedRasterQueryProcessor::I32(
                 GdalSourceProcessor::from_params_with_provider(
                     self.params.clone(),
-                    self.state.clone(),
+                    self.provider.clone(),
+                    self.tiling_specification,
                 )?
                 .boxed(),
             ),
@@ -588,14 +628,16 @@ impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
             RasterDataType::F32 => TypedRasterQueryProcessor::F32(
                 GdalSourceProcessor::from_params_with_provider(
                     self.params.clone(),
-                    self.state.clone(),
+                    self.provider.clone(),
+                    self.tiling_specification,
                 )?
                 .boxed(),
             ),
             RasterDataType::F64 => TypedRasterQueryProcessor::F64(
                 GdalSourceProcessor::from_params_with_provider(
                     self.params.clone(),
-                    self.state.clone(),
+                    self.provider.clone(),
+                    self.tiling_specification,
                 )?
                 .boxed(),
             ),
@@ -803,11 +845,6 @@ mod tests {
 
         let bounding_box = BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap();
 
-        let origin_split_tileing_strategy = TilingStrategy {
-            tile_pixel_size: tile_size_in_pixels.into(),
-            geo_transform: central_geo_transform,
-        };
-
         let time_interval_provider = TimeIntervalInformation {
             start_time: TimeInstance::from_millis(0),
             time_step: TimeStep {
@@ -840,7 +877,16 @@ mod tests {
         let gdal_source = GdalSourceProcessor::<_, u8> {
             dataset_information: dataset_information_provider,
             gdal_params,
+            tiling_specification: TilingSpecification {
+                origin_coordinate: central_geo_transform.origin_coordinate,
+                tile_size: GridShape2D::from(tile_size_in_pixels),
+            },
             phantom_data: PhantomData,
+        };
+
+        let origin_split_tileing_strategy = TilingStrategy {
+            tile_pixel_size: tile_size_in_pixels.into(),
+            geo_transform: central_geo_transform,
         };
 
         let vres: Vec<_> = gdal_source
@@ -942,6 +988,10 @@ mod tests {
         let gdal_source = GdalSourceProcessor::<_, u8> {
             dataset_information: dataset_information_provider,
             gdal_params,
+            tiling_specification: TilingSpecification {
+                origin_coordinate: Coordinate2D::default(),
+                tile_size: GridShape2D::from(tile_size_in_pixels),
+            },
             phantom_data: PhantomData,
         };
 
@@ -1005,6 +1055,10 @@ mod tests {
         let gdal_source = GdalSourceProcessor::<_, u8> {
             dataset_information: dataset_information_provider,
             gdal_params,
+            tiling_specification: TilingSpecification {
+                origin_coordinate: Coordinate2D::new(0., 0.),
+                tile_size: GridShape2D::from(tile_size_in_pixels),
+            },
             phantom_data: PhantomData,
         };
 
@@ -1084,6 +1138,10 @@ mod tests {
         let gdal_source = GdalSourceProcessor {
             dataset_information: dataset_information_provider,
             gdal_params,
+            tiling_specification: TilingSpecification {
+                origin_coordinate: Coordinate2D::new(0., 0.),
+                tile_size: GridShape2D::from(tile_size_in_pixels),
+            },
             phantom_data: PhantomData,
         };
 
@@ -1177,6 +1235,10 @@ mod tests {
         let gdal_source = GdalSourceProcessor {
             dataset_information: dataset_information_provider,
             gdal_params,
+            tiling_specification: TilingSpecification {
+                origin_coordinate: Coordinate2D::new(0., 0.),
+                tile_size: GridShape2D::from(tile_size_in_pixels),
+            },
             phantom_data: PhantomData,
         };
 
@@ -1258,6 +1320,10 @@ mod tests {
         let gdal_source = GdalSourceProcessor {
             dataset_information: dataset_information_provider,
             gdal_params,
+            tiling_specification: TilingSpecification {
+                origin_coordinate: Coordinate2D::new(0., 0.),
+                tile_size: GridShape2D::from(tile_size_in_pixels),
+            },
             phantom_data: PhantomData,
         };
 
@@ -1347,6 +1413,10 @@ mod tests {
             GdalSourceProcessor {
                 dataset_information: dataset_information_provider,
                 gdal_params,
+                tiling_specification: TilingSpecification {
+                    origin_coordinate: Coordinate2D::new(0., 0.),
+                    tile_size: GridShape2D::from(tile_size_in_pixels),
+                },
                 phantom_data: PhantomData,
             };
 

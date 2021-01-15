@@ -1,8 +1,15 @@
-use crate::primitives::{BoundingBox2D, SpatialBounded};
+use crate::primitives::{BoundingBox2D, Coordinate2D, SpatialBounded};
 
 use super::{GeoTransform, GridBoundingBox2D, GridIdx, GridIdx2D, GridShape2D, GridSize};
 
 use serde::{Deserialize, Serialize};
+
+/// The static parameters of a `TilingStrategy`
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+pub struct TilingSpecification {
+    pub origin_coordinate: Coordinate2D,
+    pub tile_size: GridShape2D,
+}
 
 /// A provider of tile (size) information for a raster/grid
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
@@ -16,6 +23,21 @@ impl TilingStrategy {
         Self {
             tile_pixel_size,
             geo_transform,
+        }
+    }
+
+    pub fn new_with_tiling_spec(
+        tiling_specification: TilingSpecification,
+        x_pixel_size: f64,
+        y_pixel_size: f64,
+    ) -> Self {
+        Self {
+            tile_pixel_size: tiling_specification.tile_size,
+            geo_transform: GeoTransform::new(
+                tiling_specification.origin_coordinate,
+                x_pixel_size,
+                y_pixel_size,
+            ),
         }
     }
 

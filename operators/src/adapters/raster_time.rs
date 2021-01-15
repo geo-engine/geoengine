@@ -175,11 +175,11 @@ mod tests {
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;
-    use geoengine_datatypes::raster::{Grid, GridShape2D, RasterDataType};
+    use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution};
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::{
-        primitives::{BoundingBox2D, SpatialResolution},
-        raster::GeoTransform,
+        primitives::Coordinate2D,
+        raster::{Grid, GridShape2D, RasterDataType, TilingSpecification},
     };
 
     #[tokio::test]
@@ -306,9 +306,9 @@ mod tests {
         let exe_ctx = ExecutionContext {
             raster_data_root: Default::default(),
             thread_pool: thread_pool.create_context(),
-            tiling_strategy: TilingStrategy {
-                geo_transform: GeoTransform::default(),
-                tile_pixel_size: GridShape2D::from([600, 600]),
+            tiling_specification: TilingSpecification {
+                origin_coordinate: Coordinate2D::default(),
+                tile_size: GridShape2D::from([600, 600]),
             },
         };
         let query_rect = QueryRectangle {
