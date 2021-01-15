@@ -19,7 +19,7 @@ pub struct DataSetListing {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DataSetListOptions {
     // TODO: permissions
-    pub filter: DataSetFilter,
+    pub filter: Option<DataSetFilter>,
     pub order: OrderBy,
     pub offset: u32,
     pub limit: u32,

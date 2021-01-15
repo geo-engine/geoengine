@@ -88,16 +88,16 @@ where
 }
 
 #[derive(Debug, Clone)]
-pub struct MockLoadingInfo<T, U>
+pub struct StaticLoadingInfo<T, U>
 where
     T: Debug + Clone + Send + Sync + 'static,
     U: Debug + Clone + Send + Sync + 'static,
 {
-    pub(crate) info: T,
-    pub(crate) meta: U,
+    pub info: T,
+    pub meta: U,
 }
 
-impl<T, U> LoadingInfo<T, U> for MockLoadingInfo<T, U>
+impl<T, U> LoadingInfo<T, U> for StaticLoadingInfo<T, U>
 where
     T: Debug + Clone + Send + Sync + 'static,
     U: Debug + Clone + Send + Sync + 'static,
@@ -121,7 +121,7 @@ mod tests {
 
     #[test]
     fn test() {
-        let info = MockLoadingInfo {
+        let info = StaticLoadingInfo {
             info: 1_i32,
             meta: 2_i32,
         };

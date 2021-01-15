@@ -116,6 +116,8 @@ where
         handlers::projects::add_permission_handler(ctx.clone()),
         handlers::projects::remove_permission_handler(ctx.clone()),
         handlers::projects::list_permissions_handler(ctx.clone()),
+        handlers::datasets::list_data_sets_external_handler(ctx.clone()),
+        handlers::datasets::list_data_sets_internal_handler(ctx.clone()),
         handlers::wms::wms_handler(ctx.clone()),
         handlers::wfs::wfs_handler(ctx.clone()),
         serve_static_directory(static_files_dir)

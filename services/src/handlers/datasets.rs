@@ -7,10 +7,10 @@ use geoengine_datatypes::dataset::DataSetProviderId;
 use uuid::Uuid;
 use warp::Filter;
 
-pub fn list_data_sets_internal_handler<C: Context>(
+pub(crate) fn list_data_sets_internal_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    warp::post()
+    warp::get()
         .and(warp::path!("datasets" / "internal"))
         .and(authenticate(ctx))
         .and(warp::body::json())
@@ -33,10 +33,10 @@ async fn list_data_sets_internal<C: Context>(
     Ok(warp::reply::json(&data_sets))
 }
 
-pub fn list_data_sets_external_handler<C: Context>(
+pub(crate) fn list_data_sets_external_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    warp::post()
+    warp::get()
         .and(warp::path!("datasets" / "external" / Uuid).map(DataSetProviderId))
         .and(authenticate(ctx))
         .and(warp::body::json())
@@ -63,3 +63,71 @@ async fn list_data_sets_external<C: Context>(
 // TODO: upload data
 
 // TODO: import data set (stage, import, unstage)
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::contexts::InMemoryContext;
+    use crate::datasets::listing::{DataSetListing, OrderBy};
+    use crate::users::user::{UserCredentials, UserRegistration};
+    use crate::users::userdb::UserDB;
+
+    #[tokio::test]
+    async fn list() {
+        let ctx = InMemoryContext::default();
+
+        ctx.user_db()
+            .write()
+            .await
+            .register(
+                UserRegistration {
+                    email: "foo@bar.de".to_string(),
+                    password: "secret123".to_string(),
+                    real_name: "Foo Bar".to_string(),
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let session = ctx
+            .user_db()
+            .write()
+            .await
+            .login(UserCredentials {
+                email: "foo@bar.de".to_string(),
+                password: "secret123".to_string(),
+            })
+            .await
+            .unwrap();
+
+        let options = DataSetListOptions {
+            filter: None,
+            order: OrderBy::NameAsc,
+            offset: 0,
+            limit: 5,
+        };
+
+        let res = warp::test::request()
+            .method("GET")
+            .path("/datasets/internal")
+            .header("Content-Length", "0")
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
+            .json(&options)
+            .reply(&list_data_sets_internal_handler(ctx))
+            .await;
+
+        assert_eq!(res.status(), 200);
+
+        let body: String = String::from_utf8(res.body().to_vec()).unwrap();
+        let projects = serde_json::from_str::<Vec<DataSetListing>>(&body).unwrap();
+
+        assert_eq!(projects.len(), 1);
+        assert_eq!(projects[0].name, "Ports");
+        assert_eq!(projects[0].source_operator, "OgrSource");
+    }
+}

@@ -1,6 +1,5 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
-use std::fs::File;
 use std::iter::Peekable;
 use std::marker::PhantomData;
 use std::path::PathBuf;
@@ -35,11 +34,9 @@ use crate::engine::{
     QueryRectangle, SourceOperator, TypedVectorQueryProcessor, VectorOperator,
     VectorQueryProcessor, VectorResultDescriptor,
 };
-use crate::error;
 use crate::error::Error;
 use crate::util::Result;
 use geoengine_datatypes::dataset::DataSetId;
-use snafu::ensure;
 use std::convert::{TryFrom, TryInto};
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
@@ -67,7 +64,7 @@ pub struct OgrSourceDataset {
     #[serde(default)]
     pub time: OgrSourceDatasetTimeType,
     pub columns: Option<OgrSourceColumnSpec>,
-    pub default_geometry: Option<TypedGeometry>,
+    pub default_geometry: Option<TypedGeometry>, // TODO: move default geometry to OgrSourceErrorSpec::Keep
     #[serde(default)]
     pub force_ogr_time_filter: bool,
     pub on_error: OgrSourceErrorSpec,
@@ -75,33 +72,6 @@ pub struct OgrSourceDataset {
 }
 
 impl OgrSourceDataset {
-    pub fn load_dataset(name: &str) -> Result<Self> {
-        // TODO: load dir from config
-        let dataset_dir =
-            PathBuf::from_str("test-data/vector/").expect("dataset directory does not exist");
-        let path = dataset_dir.join(name).with_extension("json");
-
-        let file = File::open(path).map_err(|source| Error::UnknownDataset {
-            name: name.to_string(),
-            source,
-        })?;
-        let dataset_information: Self =
-            serde_json::from_reader(file).map_err(|source| Error::InvalidDatasetSpec {
-                name: name.to_string(),
-                source,
-            })?;
-
-        ensure!(
-            dataset_information.on_error != OgrSourceErrorSpec::Keep
-                || dataset_information.default_geometry.is_some(),
-            error::InvalidOperatorSpec {
-                reason: "Default geometry must only be specified on error type `keep`".to_string(),
-            }
-        );
-
-        Ok(dataset_information)
-    }
-
     pub fn project_columns(&mut self, attribute_projection: &Option<Vec<String>>) {
         if let Some(columns) = self.columns.as_mut() {
             columns.project_columns(attribute_projection);
@@ -935,7 +905,7 @@ mod tests {
     use geoengine_datatypes::collections::{DataCollection, MultiPointCollection};
     use geoengine_datatypes::primitives::{BoundingBox2D, FeatureData, SpatialResolution};
 
-    use crate::engine::{MockExecutionContext, MockLoadingInfo, MockQueryContext};
+    use crate::engine::{MockExecutionContext, MockQueryContext, StaticLoadingInfo};
 
     use super::*;
     use geoengine_datatypes::dataset::InternalDataSetId;
@@ -1063,7 +1033,7 @@ mod tests {
             provenance: None,
         };
 
-        let info = MockLoadingInfo {
+        let info = StaticLoadingInfo {
             info: dataset_information,
             meta: VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint,
@@ -1105,7 +1075,7 @@ mod tests {
             provenance: None,
         };
 
-        let info = MockLoadingInfo {
+        let info = StaticLoadingInfo {
             info: dataset_information,
             meta: VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint,
@@ -1146,7 +1116,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Skip,
             provenance: None,
         };
-        let info = MockLoadingInfo {
+        let info = StaticLoadingInfo {
             info: dataset_information,
             meta: VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint,
@@ -1197,7 +1167,7 @@ mod tests {
             on_error: OgrSourceErrorSpec::Keep,
             provenance: None,
         };
-        let info = MockLoadingInfo {
+        let info = StaticLoadingInfo {
             info: dataset_information,
             meta: VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint,
@@ -1243,10 +1213,19 @@ mod tests {
         let mut exe_ctx = MockExecutionContext::default();
         exe_ctx.add_loading_info(
             data_set.clone(),
-            Box::new(MockLoadingInfo {
-                info: OgrSourceDataset::load_dataset("ne_10m_ports")?,
+            Box::new(StaticLoadingInfo {
+                info: OgrSourceDataset {
+                    file_name: "test-data/vector/data/ne_10m_ports/ne_10m_ports.shp".into(),
+                    layer_name: "ne_10m_ports".to_string(),
+                    data_type: Some(VectorDataType::MultiPoint),
+                    time: OgrSourceDatasetTimeType::None,
+                    columns: None,
+                    default_geometry: None,
+                    force_ogr_time_filter: false,
+                    on_error: OgrSourceErrorSpec::Skip,
+                    provenance: None,
+                },
                 meta: VectorResultDescriptor {
-                    // TODO: load from file?!
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::wgs84().into(),
                 },
@@ -1319,10 +1298,29 @@ mod tests {
         let mut exe_ctx = MockExecutionContext::default();
         exe_ctx.add_loading_info(
             id.clone(),
-            Box::new(MockLoadingInfo {
-                info: OgrSourceDataset::load_dataset("ne_10m_ports_with_columns")?,
+            Box::new(StaticLoadingInfo {
+                info: OgrSourceDataset {
+                    file_name: "test-data/vector/data/ne_10m_ports/ne_10m_ports.shp".into(),
+                    layer_name: "ne_10m_ports".to_string(),
+                    data_type: Some(VectorDataType::MultiPoint),
+                    time: OgrSourceDatasetTimeType::None,
+                    columns: Some(OgrSourceColumnSpec {
+                        x: "".to_string(),
+                        y: None,
+                        numeric: vec!["natlscale".to_string()],
+                        decimal: vec!["scalerank".to_string()],
+                        textual: vec![
+                            "featurecla".to_string(),
+                            "name".to_string(),
+                            "website".to_string(),
+                        ],
+                    }),
+                    default_geometry: None,
+                    force_ogr_time_filter: false,
+                    on_error: OgrSourceErrorSpec::Skip,
+                    provenance: None,
+                },
                 meta: VectorResultDescriptor {
-                    // TODO: load from file?!
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::wgs84().into(),
                 },
@@ -1463,10 +1461,19 @@ mod tests {
         let mut exe_ctx = MockExecutionContext::default();
         exe_ctx.add_loading_info(
             id.clone(),
-            Box::new(MockLoadingInfo {
-                info: OgrSourceDataset::load_dataset("ne_10m_ports")?,
+            Box::new(StaticLoadingInfo {
+                info: OgrSourceDataset {
+                    file_name: "test-data/vector/data/ne_10m_ports/ne_10m_ports.shp".into(),
+                    layer_name: "ne_10m_ports".to_string(),
+                    data_type: Some(VectorDataType::MultiPoint),
+                    time: OgrSourceDatasetTimeType::None,
+                    columns: None,
+                    default_geometry: None,
+                    force_ogr_time_filter: false,
+                    on_error: OgrSourceErrorSpec::Skip,
+                    provenance: None,
+                },
                 meta: VectorResultDescriptor {
-                    // TODO: load from file?!
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::wgs84().into(),
                 },
@@ -2624,7 +2631,7 @@ mod tests {
             provenance: None,
         };
 
-        let info = MockLoadingInfo {
+        let info = StaticLoadingInfo {
             info: dataset_information,
             meta: VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint,
@@ -2685,10 +2692,19 @@ mod tests {
         let mut exe_ctx = MockExecutionContext::default();
         exe_ctx.add_loading_info(
             id.clone(),
-            Box::new(MockLoadingInfo {
-                info: OgrSourceDataset::load_dataset("ne_10m_ports")?,
+            Box::new(StaticLoadingInfo {
+                info: OgrSourceDataset {
+                    file_name: "test-data/vector/data/ne_10m_ports/ne_10m_ports.shp".into(),
+                    layer_name: "ne_10m_ports".to_string(),
+                    data_type: Some(VectorDataType::MultiPoint),
+                    time: OgrSourceDatasetTimeType::None,
+                    columns: None,
+                    default_geometry: None,
+                    force_ogr_time_filter: false,
+                    on_error: OgrSourceErrorSpec::Skip,
+                    provenance: None,
+                },
                 meta: VectorResultDescriptor {
-                    // TODO: load from file?!
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::wgs84().into(),
                 },
@@ -2910,10 +2926,19 @@ mod tests {
         let mut exe_ctx = MockExecutionContext::default();
         exe_ctx.add_loading_info(
             data_set.clone(),
-            Box::new(MockLoadingInfo {
-                info: OgrSourceDataset::load_dataset("ne_10m_ports").unwrap(),
+            Box::new(StaticLoadingInfo {
+                info: OgrSourceDataset {
+                    file_name: "test-data/vector/data/ne_10m_ports/ne_10m_ports.shp".into(),
+                    layer_name: "ne_10m_ports".to_string(),
+                    data_type: Some(VectorDataType::MultiPoint),
+                    time: OgrSourceDatasetTimeType::None,
+                    columns: None,
+                    default_geometry: None,
+                    force_ogr_time_filter: false,
+                    on_error: OgrSourceErrorSpec::Skip,
+                    provenance: None,
+                },
                 meta: VectorResultDescriptor {
-                    // TODO: load from file?!
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::wgs84().into(),
                 },

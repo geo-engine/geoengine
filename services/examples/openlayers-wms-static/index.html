@@ -91,6 +91,7 @@
 
             console.log("Creating layer with workflow id:", workflow_id);
 
+            // TODO: add authentication header
             const layer = new ol.layer.Image({
                 extent: [-180, -90, 180, 90],
                 source: new ol.source.ImageWMS({

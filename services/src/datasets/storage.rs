@@ -12,6 +12,7 @@ use geoengine_datatypes::dataset::{
 use geoengine_datatypes::identifiers::Identifier;
 use geoengine_datatypes::primitives::Geometry;
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
+use geoengine_operators::engine::{RasterResultDescriptor, VectorResultDescriptor};
 use geoengine_operators::mock::MockDataSetDataSourceLoadingInfo;
 use geoengine_operators::source::OgrSourceDataset;
 use postgres_types::{FromSql, ToSql};
@@ -23,7 +24,8 @@ use std::path::PathBuf;
 pub struct DataSet {
     pub id: DataSetId,
     pub name: String,
-    pub data_type: LayerInfo,    // TODO: custom type?
+    pub description: String,
+    pub data_type: LayerInfo, // TODO: custom type instead of reusing existing one?
     pub source_operator: String, // TODO: enum?
 }
 
@@ -32,6 +34,7 @@ impl From<AddDataSet> for DataSet {
         Self {
             id: DataSetId::Internal(InternalDataSetId::new()),
             name: value.name,
+            description: value.description,
             data_type: value.data_type,
             source_operator: value.source_operator,
         }
@@ -41,19 +44,22 @@ impl From<AddDataSet> for DataSet {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AddDataSet {
     pub name: String,
+    pub description: String,
     pub data_type: LayerInfo,    // TODO: custom type?
     pub source_operator: String, // TODO: enum?
 }
 
 impl UserInput for AddDataSet {
     fn validate(&self) -> Result<()> {
-        todo!()
+        // TODO
+        Ok(())
     }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ImportDataSet {
     pub name: String,
+    pub description: String,
     pub data_type: LayerInfo,
     pub source_operator: String,
 }
@@ -63,6 +69,7 @@ impl From<ImportDataSet> for DataSet {
         DataSet {
             id: DataSetId::Internal(InternalDataSetId::new()),
             name: value.name,
+            description: value.description,
             data_type: value.data_type,
             source_operator: value.source_operator,
         }
@@ -136,19 +143,21 @@ pub enum VectorLoadingInfo {
 #[async_trait]
 pub trait DataSetDB: DataSetProvider + Send + Sync {
     /// Add raster data for `user` with `data_set_info` and `loading_info` without import
-    fn add_raster_data(
+    async fn add_raster_data(
         &mut self,
         user: UserId,
         data_set_info: Validated<AddDataSet>,
         loading_info: RasterLoadingInfo,
+        result: RasterResultDescriptor,
     ) -> Result<InternalDataSetId>;
 
     /// Add vector data for `user` with `data_set_info` and `loading_info` without import
-    fn add_vector_data(
+    async fn add_vector_data(
         &mut self,
         user: UserId,
         data_set_info: Validated<AddDataSet>,
         loading_info: VectorLoadingInfo,
+        result: VectorResultDescriptor,
     ) -> Result<InternalDataSetId>;
 
     /// Stage raster data for import for `user` and `loading_info`. Returns a `StagingDataSetId`
@@ -156,6 +165,7 @@ pub trait DataSetDB: DataSetProvider + Send + Sync {
         &mut self,
         user: UserId,
         loading_info: RasterLoadingInfo,
+        result: RasterResultDescriptor,
     ) -> Result<StagingDataSetId>;
 
     /// Stage vector data for import for `user` and `loading_info`. Returns a `StagingDataSetId`
@@ -163,6 +173,7 @@ pub trait DataSetDB: DataSetProvider + Send + Sync {
         &mut self,
         user: UserId,
         loading_info: VectorLoadingInfo,
+        result: VectorResultDescriptor,
     ) -> Result<StagingDataSetId>;
 
     // TODO: list staged data sets?
@@ -177,6 +188,7 @@ pub trait DataSetDB: DataSetProvider + Send + Sync {
         user: UserId,
         data_set: Validated<ImportDataSet>,
         stream: BoxStream<'_, geoengine_operators::util::Result<RasterTile2D<T>>>,
+        meta: RasterResultDescriptor,
     ) -> Result<InternalDataSetId>;
 
     /// Import `data _set` from a `stream` of tiles (e.g. output of some operator) for `user`
@@ -185,6 +197,7 @@ pub trait DataSetDB: DataSetProvider + Send + Sync {
         user: UserId,
         data_set: Validated<ImportDataSet>,
         stream: BoxStream<'_, geoengine_operators::util::Result<FeatureCollection<G>>>,
+        meta: VectorResultDescriptor,
     ) -> Result<InternalDataSetId>
     where
         FeatureCollection<G>: Into<TypedFeatureCollection>; // TODO remove bound

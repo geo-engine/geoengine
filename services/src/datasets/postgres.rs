@@ -14,7 +14,9 @@ use geoengine_datatypes::dataset::{
 };
 use geoengine_datatypes::primitives::Geometry;
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
-use geoengine_operators::engine::{LoadingInfo, LoadingInfoProvider, VectorResultDescriptor};
+use geoengine_operators::engine::{
+    LoadingInfo, LoadingInfoProvider, RasterResultDescriptor, VectorResultDescriptor,
+};
 use geoengine_operators::mock::MockDataSetDataSourceLoadingInfo;
 use geoengine_operators::source::OgrSourceDataset;
 
@@ -30,42 +32,46 @@ impl PostgresDataSetDB {
 
 #[async_trait]
 impl DataSetDB for PostgresDataSetDB {
-    fn add_raster_data(
+    async fn add_raster_data(
         &mut self,
         _user: UserId,
         _data_set_info: Validated<AddDataSet>,
         _loading_info: RasterLoadingInfo,
+        _result: RasterResultDescriptor,
     ) -> Result<InternalDataSetId> {
-        unimplemented!()
+        todo!()
     }
 
-    fn add_vector_data(
+    async fn add_vector_data(
         &mut self,
         _user: UserId,
         _data_set_info: Validated<AddDataSet>,
         _loading_info: VectorLoadingInfo,
+        _result: VectorResultDescriptor,
     ) -> Result<InternalDataSetId> {
-        unimplemented!()
+        todo!()
     }
 
     async fn stage_raster_data(
         &mut self,
         _user: UserId,
         _loading_info: RasterLoadingInfo,
+        _result: RasterResultDescriptor,
     ) -> Result<StagingDataSetId> {
-        unimplemented!()
+        todo!()
     }
 
     async fn stage_vector_data(
         &mut self,
         _user: UserId,
         _loading_info: VectorLoadingInfo,
+        _result: VectorResultDescriptor,
     ) -> Result<StagingDataSetId> {
-        unimplemented!()
+        todo!()
     }
 
     async fn unstage_data(&mut self, _user: UserId, _data_set: StagingDataSetId) -> Result<()> {
-        unimplemented!()
+        todo!()
     }
 
     async fn import_raster_data<T: Pixel>(
@@ -73,6 +79,7 @@ impl DataSetDB for PostgresDataSetDB {
         _user: UserId,
         _data_set: Validated<ImportDataSet>,
         _stream: BoxStream<'_, geoengine_operators::util::Result<RasterTile2D<T>>>,
+        _meta: RasterResultDescriptor,
     ) -> Result<InternalDataSetId> {
         todo!()
     }
@@ -82,6 +89,7 @@ impl DataSetDB for PostgresDataSetDB {
         _user: UserId,
         _data_set: Validated<ImportDataSet>,
         _stream: BoxStream<'_, geoengine_operators::util::Result<FeatureCollection<G>>>,
+        _meta: VectorResultDescriptor,
     ) -> Result<InternalDataSetId>
     where
         FeatureCollection<G>: Into<TypedFeatureCollection>,
@@ -104,7 +112,7 @@ impl DataSetDB for PostgresDataSetDB {
         _user: UserId,
         _permission: DataSetPermission,
     ) -> Result<()> {
-        unimplemented!()
+        todo!()
     }
 
     async fn add_data_set_provider(

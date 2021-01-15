@@ -3,21 +3,22 @@ use crate::datasets::listing::{
     DataSetListOptions, DataSetListing, DataSetProvider, TypedDataSetProvider,
 };
 use crate::datasets::storage::{
-    AddDataSet, AddDataSetProvider, DataSet, DataSetLoadingInfo, DataSetProviderListOptions,
-    DataSetProviderListing, GdalLoadingInfo, ImportDataSet, RasterLoadingInfo,
-    UserDataSetProviderPermission, VectorLoadingInfo,
+    AddDataSet, AddDataSetProvider, DataSet, DataSetProviderListOptions, DataSetProviderListing,
+    ImportDataSet, RasterLoadingInfo, UserDataSetProviderPermission, VectorLoadingInfo,
 };
 use crate::datasets::storage::{DataSetPermission, UserDataSetPermission};
 use crate::error;
 use crate::error::Error::UnknownDataSetProviderId;
 use crate::error::{Error, Result};
+use crate::projects::project::{LayerInfo, VectorInfo};
 use crate::users::user::UserId;
+use crate::util::config::project_root;
 use crate::util::user_input::Validated;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::collections::{
-    FeatureCollection, GeometryCollection, TypedFeatureCollection,
+    FeatureCollection, GeometryCollection, TypedFeatureCollection, VectorDataType,
 };
 use geoengine_datatypes::dataset::{
     DataSetId, DataSetProviderId, InternalDataSetId, StagingDataSetId,
@@ -25,43 +26,119 @@ use geoengine_datatypes::dataset::{
 use geoengine_datatypes::identifiers::Identifier;
 use geoengine_datatypes::primitives::{Coordinate2D, Geometry};
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
-use geoengine_operators::engine::{LoadingInfo, LoadingInfoProvider, VectorResultDescriptor};
+use geoengine_datatypes::spatial_reference::SpatialReference;
+use geoengine_operators::engine::{
+    LoadingInfo, LoadingInfoProvider, RasterResultDescriptor, StaticLoadingInfo,
+    VectorResultDescriptor,
+};
 use geoengine_operators::mock::MockDataSetDataSourceLoadingInfo;
-use geoengine_operators::source::OgrSourceDataset;
+use geoengine_operators::source::{OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceErrorSpec};
 use snafu::ensure;
 use std::collections::HashMap;
 
-struct InMemoryDataSet {
+// TODO: merge Raster and Vector DataSet as generic DataSet
+struct RasterDataSet {
     data_set: DataSet,
-    loading_info: DataSetLoadingInfo,
+    #[allow(dead_code)] // TODO: use this
+    loading_info: RasterLoadingInfo,
+    #[allow(dead_code)] // TODO: use this
+    result: RasterResultDescriptor,
 }
 
-#[derive(Default)]
+struct VectorDataSet {
+    data_set: DataSet,
+    loading_info: VectorLoadingInfo,
+    result: VectorResultDescriptor,
+}
+
+struct StagedRaster {
+    #[allow(dead_code)] // TODO: use this
+    loading_info: RasterLoadingInfo,
+    #[allow(dead_code)] // TODO: use this
+    result: RasterResultDescriptor,
+}
+
+struct StagedVector {
+    loading_info: VectorLoadingInfo,
+    result: VectorResultDescriptor,
+}
+
 pub struct HashmapDataSetDB {
     data_set_permissions: Vec<UserDataSetPermission>,
     external_providers: HashMap<DataSetProviderId, Box<dyn DataSetProvider>>,
     external_provider_permissions: Vec<UserDataSetProviderPermission>,
-    staged_rasters: HashMap<StagingDataSetId, GdalLoadingInfo>,
-    staged_vectors: HashMap<StagingDataSetId, VectorLoadingInfo>,
-    data_sets: HashMap<InternalDataSetId, InMemoryDataSet>,
+    staged_rasters: HashMap<StagingDataSetId, StagedRaster>,
+    staged_vectors: HashMap<StagingDataSetId, StagedVector>,
+    raster_data_sets: HashMap<InternalDataSetId, RasterDataSet>,
+    vector_data_sets: HashMap<InternalDataSetId, VectorDataSet>,
+}
+
+impl Default for HashmapDataSetDB {
+    fn default() -> Self {
+        let mut vector_data_sets = HashMap::new();
+        vector_data_sets.insert(
+            InternalDataSetId(
+                uuid::Uuid::parse_str("e3fc70fc-5fbc-41e9-9e7a-3d6ac27e12a9").unwrap(), // TODO: define a constant
+            ),
+            VectorDataSet {
+                data_set: DataSet {
+                    id: DataSetId::Internal(InternalDataSetId(
+                        uuid::Uuid::parse_str("e3fc70fc-5fbc-41e9-9e7a-3d6ac27e12a9").unwrap(),
+                    )),
+                    name: "Ports".to_string(),
+                    description: "".to_string(),
+                    data_type: LayerInfo::Vector(VectorInfo {}),
+                    source_operator: "OgrSource".to_string(),
+                },
+                loading_info: VectorLoadingInfo::Ogr(OgrSourceDataset {
+                    file_name: project_root()
+                        .join("operators/test-data/vector/data/ne_10m_ports/ne_10m_ports.shp"),
+                    layer_name: "ne_10m_ports".to_string(),
+                    data_type: Some(VectorDataType::MultiPoint),
+                    time: OgrSourceDatasetTimeType::None,
+                    columns: None,
+                    default_geometry: None,
+                    force_ogr_time_filter: false,
+                    on_error: OgrSourceErrorSpec::Skip,
+                    provenance: None,
+                }),
+                result: VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReference::wgs84().into(),
+                },
+            },
+        );
+
+        Self {
+            data_set_permissions: vec![],
+            external_providers: Default::default(),
+            external_provider_permissions: vec![],
+            staged_rasters: Default::default(),
+            staged_vectors: Default::default(),
+            vector_data_sets,
+            raster_data_sets: HashMap::default(),
+        }
+    }
 }
 
 #[async_trait]
 impl DataSetDB for HashmapDataSetDB {
-    fn add_raster_data(
+    async fn add_raster_data(
         &mut self,
         user: UserId,
         data_set_info: Validated<AddDataSet>,
         loading_info: RasterLoadingInfo,
+        result: RasterResultDescriptor,
     ) -> Result<InternalDataSetId> {
         let data_set: DataSet = data_set_info.user_input.into();
         let id = data_set.id.internal().expect("added");
 
-        self.data_sets.insert(
+        self.raster_data_sets.insert(
             id,
-            InMemoryDataSet {
+            RasterDataSet {
                 data_set,
-                loading_info: DataSetLoadingInfo::Raster(loading_info),
+                loading_info,
+                result,
             },
         );
 
@@ -74,20 +151,25 @@ impl DataSetDB for HashmapDataSetDB {
         Ok(id)
     }
 
-    fn add_vector_data(
+    async fn add_vector_data(
         &mut self,
         user: UserId,
         data_set_info: Validated<AddDataSet>,
         loading_info: VectorLoadingInfo,
+        result: VectorResultDescriptor,
     ) -> Result<InternalDataSetId> {
         let data_set: DataSet = data_set_info.user_input.into();
-        let id = data_set.id.internal().expect("added");
+        let id = data_set
+            .id
+            .internal()
+            .expect("Data sets from user inputs get internal ids");
 
-        self.data_sets.insert(
+        self.vector_data_sets.insert(
             id,
-            InMemoryDataSet {
+            VectorDataSet {
                 data_set,
-                loading_info: DataSetLoadingInfo::Vector(loading_info),
+                loading_info,
+                result,
             },
         );
 
@@ -104,10 +186,17 @@ impl DataSetDB for HashmapDataSetDB {
         &mut self,
         _user: UserId,
         loading_info: RasterLoadingInfo,
+        result: RasterResultDescriptor,
     ) -> Result<StagingDataSetId> {
         // TODO: store user data set relationship
         let id = StagingDataSetId::new();
-        self.staged_rasters.insert(id, loading_info);
+        self.staged_rasters.insert(
+            id,
+            StagedRaster {
+                loading_info,
+                result,
+            },
+        );
         Ok(id)
     }
 
@@ -115,10 +204,17 @@ impl DataSetDB for HashmapDataSetDB {
         &mut self,
         _user: UserId,
         loading_info: VectorLoadingInfo,
+        result: VectorResultDescriptor,
     ) -> Result<StagingDataSetId> {
         // TODO: store user data set relationship
         let id = StagingDataSetId::new();
-        self.staged_vectors.insert(id, loading_info);
+        self.staged_vectors.insert(
+            id,
+            StagedVector {
+                loading_info,
+                result,
+            },
+        );
         Ok(id)
     }
 
@@ -138,6 +234,7 @@ impl DataSetDB for HashmapDataSetDB {
         _user: UserId,
         _data_set: Validated<ImportDataSet>,
         _stream: BoxStream<'_, geoengine_operators::util::Result<RasterTile2D<T>>>,
+        _meta: RasterResultDescriptor,
     ) -> Result<InternalDataSetId> {
         // TODO: check user permission?
         todo!()
@@ -148,6 +245,7 @@ impl DataSetDB for HashmapDataSetDB {
         user: UserId,
         data_set: Validated<ImportDataSet>,
         stream: BoxStream<'_, geoengine_operators::util::Result<FeatureCollection<G>>>,
+        result: VectorResultDescriptor,
     ) -> Result<InternalDataSetId>
     where
         FeatureCollection<G>: Into<TypedFeatureCollection>,
@@ -170,13 +268,12 @@ impl DataSetDB for HashmapDataSetDB {
         let points = points.into_iter().flatten().collect::<Vec<_>>();
 
         let id = data_set.id.internal().expect("imported");
-        self.data_sets.insert(
+        self.vector_data_sets.insert(
             id,
-            InMemoryDataSet {
+            VectorDataSet {
                 data_set,
-                loading_info: DataSetLoadingInfo::Vector(VectorLoadingInfo::Mock(
-                    MockDataSetDataSourceLoadingInfo { points },
-                )),
+                loading_info: VectorLoadingInfo::Mock(MockDataSetDataSourceLoadingInfo { points }),
+                result,
             },
         );
 
@@ -269,27 +366,30 @@ impl DataSetDB for HashmapDataSetDB {
 impl DataSetProvider for HashmapDataSetDB {
     async fn list(
         &self,
-        user: UserId,
+        _user: UserId,
         _options: Validated<DataSetListOptions>,
     ) -> Result<Vec<DataSetListing>> {
         // TODO: use options
+        // TODO: use data_set_permissions
+
+        // TODO: DataSet into DataSetListing once unified
         Ok(self
-            .data_set_permissions
-            .iter()
-            .filter_map(|p| {
-                if p.user == user {
-                    let d = self.data_sets.get(&p.data_set).unwrap();
-                    Some(DataSetListing {
-                        id: d.data_set.id.clone(),
-                        name: d.data_set.name.clone(),
-                        description: "".to_string(),     // TODO
-                        tags: vec![],                    // TODO
-                        source_operator: "".to_string(), // TODO: get from loading info?
-                    })
-                } else {
-                    None
-                }
+            .vector_data_sets
+            .values()
+            .map(|d| DataSetListing {
+                id: d.data_set.id.clone(),
+                name: d.data_set.name.clone(),
+                description: d.data_set.description.clone(),
+                tags: vec![], // TODO
+                source_operator: d.data_set.source_operator.clone(),
             })
+            .chain(self.raster_data_sets.values().map(|d| DataSetListing {
+                id: d.data_set.id.clone(),
+                name: d.data_set.name.clone(),
+                description: d.data_set.description.clone(),
+                tags: vec![], // TODO
+                source_operator: d.data_set.source_operator.clone(),
+            }))
             .collect())
     }
 }
@@ -308,31 +408,28 @@ impl LoadingInfoProvider<MockDataSetDataSourceLoadingInfo, VectorResultDescripto
             match data_set {
                 DataSetId::Internal(id) => {
                     let data = self
-                        .data_sets
+                        .vector_data_sets
                         .get(&id)
                         .ok_or(geoengine_operators::error::Error::UnknownDataSetId)?;
 
                     match &data.loading_info {
-                        DataSetLoadingInfo::Vector(VectorLoadingInfo::Mock(loading_info)) => {
-                            loading_info.clone()
-                        }
+                        VectorLoadingInfo::Mock(loading_info) => loading_info.clone(),
                         _ => return Err(
                             geoengine_operators::error::Error::DataSetLoadingInfoProviderMismatch,
                         ),
                     }
                 }
                 DataSetId::Staging(id) => {
-                    let loading_info = self
+                    let data = self
                         .staged_vectors
                         .get(&id)
                         .ok_or(geoengine_operators::error::Error::UnknownDataSetId)?;
 
-                    if let VectorLoadingInfo::Mock(loading_info) = loading_info {
-                        loading_info.clone()
-                    } else {
-                        return Err(
+                    match &data.loading_info {
+                        VectorLoadingInfo::Mock(loading_info) => loading_info.clone(),
+                        _ => return Err(
                             geoengine_operators::error::Error::DataSetLoadingInfoProviderMismatch,
-                        );
+                        ),
                     }
                 }
                 DataSetId::External(_) => {
@@ -350,12 +447,51 @@ impl LoadingInfoProvider<MockDataSetDataSourceLoadingInfo, VectorResultDescripto
 impl LoadingInfoProvider<OgrSourceDataset, VectorResultDescriptor> for HashmapDataSetDB {
     fn loading_info(
         &self,
-        _data_set: &DataSetId,
+        data_set: &DataSetId,
     ) -> Result<
         Box<dyn LoadingInfo<OgrSourceDataset, VectorResultDescriptor>>,
         geoengine_operators::error::Error,
     > {
-        todo!()
+        let (loading_info, result) =
+            match data_set {
+                DataSetId::Internal(id) => {
+                    let data = self
+                        .vector_data_sets
+                        .get(&id)
+                        .ok_or(geoengine_operators::error::Error::UnknownDataSetId)?;
+
+                    match &data.loading_info {
+                        VectorLoadingInfo::Ogr(loading_info) => (loading_info.clone(), data.result),
+                        _ => return Err(
+                            geoengine_operators::error::Error::DataSetLoadingInfoProviderMismatch,
+                        ),
+                    }
+                }
+                DataSetId::Staging(id) => {
+                    let data = self
+                        .staged_vectors
+                        .get(&id)
+                        .ok_or(geoengine_operators::error::Error::UnknownDataSetId)?;
+
+                    match &data.loading_info {
+                        VectorLoadingInfo::Ogr(loading_info) => (loading_info.clone(), data.result),
+                        _ => return Err(
+                            geoengine_operators::error::Error::DataSetLoadingInfoProviderMismatch,
+                        ),
+                    }
+                }
+                DataSetId::External(_) => {
+                    return Err(geoengine_operators::error::Error::InvalidDataSetId)
+                }
+            };
+
+        Ok(Box::new(StaticLoadingInfo {
+            info: loading_info,
+            meta: result,
+        })
+            as Box<
+                dyn LoadingInfo<OgrSourceDataset, VectorResultDescriptor>,
+            >)
     }
 }
 
@@ -363,20 +499,23 @@ impl LoadingInfoProvider<OgrSourceDataset, VectorResultDescriptor> for HashmapDa
 mod tests {
     use super::*;
     use crate::contexts::{Context, InMemoryContext};
-    use crate::datasets::listing::{DataSetFilter, OrderBy};
+    use crate::datasets::listing::OrderBy;
     use crate::projects::project::{LayerInfo, VectorInfo};
     use crate::users::user::UserRegistration;
     use crate::users::userdb::UserDB;
     use crate::util::user_input::UserInput;
     use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution, TimeInterval};
+    use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
     use geoengine_operators::engine::VectorOperator;
     use geoengine_operators::engine::{
         MockQueryContext, QueryRectangle, TypedVectorQueryProcessor,
     };
     use geoengine_operators::mock::{MockDataSetDataSource, MockDataSetDataSourceParams};
     use geoengine_operators::source::{
-        OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceErrorSpec,
+        OgrSource, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceErrorSpec,
+        OgrSourceParameters,
     };
+    use std::str::FromStr;
 
     #[tokio::test]
     async fn mock() {
@@ -407,6 +546,10 @@ mod tests {
                 VectorLoadingInfo::Mock(MockDataSetDataSourceLoadingInfo {
                     points: coordinates.clone(),
                 }),
+                VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReferenceOption::Unreferenced,
+                },
             )
             .await
             .unwrap();
@@ -440,6 +583,7 @@ mod tests {
         // import into the db
         let data_set_info = ImportDataSet {
             name: "Mock data".to_string(),
+            description: "".to_string(),
             data_type: LayerInfo::Vector(VectorInfo {}),
             source_operator: "MockDataSetDataSource".to_string(),
         }
@@ -449,7 +593,15 @@ mod tests {
         let imported_id = ctx
             .data_set_db_ref_mut()
             .await
-            .import_vector_data(user_id, data_set_info, stream)
+            .import_vector_data(
+                user_id,
+                data_set_info,
+                stream,
+                VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReferenceOption::Unreferenced,
+                },
+            )
             .await
             .unwrap();
 
@@ -490,12 +642,10 @@ mod tests {
             .list(
                 user_id,
                 DataSetListOptions {
-                    filter: DataSetFilter {
-                        name: "".to_string(),
-                    },
+                    filter: None,
                     order: OrderBy::NameAsc,
-                    offset: 0,
-                    limit: 1,
+                    offset: 0, // Skip default data set
+                    limit: 5,
                 }
                 .validated()
                 .unwrap(),
@@ -504,14 +654,25 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            list[0],
-            DataSetListing {
-                id: imported_id.into(),
-                name: "Mock data".to_string(),
-                description: "".to_string(),
-                tags: vec![],
-                source_operator: "".to_string()
-            }
+            list,
+            vec![
+                DataSetListing {
+                    id: DataSetId::Internal(InternalDataSetId(
+                        uuid::Uuid::from_str("e3fc70fc-5fbc-41e9-9e7a-3d6ac27e12a9").unwrap()
+                    )),
+                    name: "Ports".to_string(),
+                    description: "".to_string(),
+                    tags: vec![],
+                    source_operator: "OgrSource".to_string()
+                },
+                DataSetListing {
+                    id: imported_id.into(),
+                    name: "Mock data".to_string(),
+                    description: "".to_string(),
+                    tags: vec![],
+                    source_operator: "MockDataSetDataSource".to_string()
+                }
+            ]
         );
     }
 
@@ -534,38 +695,48 @@ mod tests {
             .await
             .unwrap();
 
-        // stage the data
-        let staged_id = ctx
+        let add = AddDataSet {
+            name: "Ports".to_string(),
+            description: "".to_string(),
+            data_type: LayerInfo::Vector(VectorInfo {}),
+            source_operator: "OgrSource".to_string(),
+        }
+        .validated()
+        .unwrap();
+
+        // add the data
+        let id = ctx
             .data_set_db_ref_mut()
             .await
-            .stage_vector_data(
+            .add_vector_data(
                 user_id,
+                add,
                 VectorLoadingInfo::Ogr(OgrSourceDataset {
-                    file_name: "test-data/vector/data/plain_data.csv".into(),
-                    layer_name: "plain_data".to_string(),
-                    data_type: None,
+                    file_name: "operators/test-data/vector/data/ne_10m_ports/ne_10m_ports.shp"
+                        .into(),
+                    layer_name: "ne_10m_ports".to_string(),
+                    data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::None,
-                    columns: Some(OgrSourceColumnSpec {
-                        x: "".to_string(),
-                        y: None,
-                        decimal: vec!["a".to_string()],
-                        numeric: vec!["b".to_string()],
-                        textual: vec!["c".to_string()],
-                    }),
+                    columns: None,
                     default_geometry: None,
                     force_ogr_time_filter: false,
                     on_error: OgrSourceErrorSpec::Skip,
                     provenance: None,
                 }),
+                VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReferenceOption::Unreferenced,
+                },
             )
             .await
             .unwrap();
 
         // build operator that loads data
         let execution_context = ctx.execution_context();
-        let mps = MockDataSetDataSource {
-            params: MockDataSetDataSourceParams {
-                data_set: DataSetId::Staging(staged_id),
+        let mps = OgrSource {
+            params: OgrSourceParameters {
+                data_set: DataSetId::Internal(id),
+                attribute_projection: None,
             },
         }
         .boxed();
@@ -587,51 +758,7 @@ mod tests {
 
         let stream = point_processor.vector_query(query_rectangle, &query_ctx);
 
-        // import into the db
-        let data_set_info = ImportDataSet {
-            name: "Ogr data".to_string(),
-            data_type: LayerInfo::Vector(VectorInfo {}),
-            source_operator: "OgrSource".to_string(),
-        }
-        .validated()
-        .unwrap();
-
-        let imported_id = ctx
-            .data_set_db_ref_mut()
-            .await
-            .import_vector_data(user_id, data_set_info, stream)
-            .await
-            .unwrap();
-
-        // query from db
-        let mps = MockDataSetDataSource {
-            params: MockDataSetDataSourceParams {
-                data_set: imported_id.into(),
-            },
-        }
-        .boxed();
-        let initialized = mps.initialize(&execution_context).unwrap();
-
-        let typed_processor = initialized.query_processor();
-        let point_processor = match typed_processor {
-            Ok(TypedVectorQueryProcessor::MultiPoint(processor)) => processor,
-            _ => panic!(),
-        };
-
-        // build stream from operator
-        let stream = point_processor.vector_query(query_rectangle, &query_ctx);
-
-        let coords = stream
-            .map(|c| {
-                let c = c.unwrap();
-                c.coordinates().to_vec()
-            })
-            .collect::<Vec<_>>()
-            .await;
-
-        let _coords = coords.into_iter().flatten().collect::<Vec<_>>();
-
-        // TODO: check result coords
+        assert_eq!(stream.collect::<Vec<_>>().await.len(), 1);
 
         // list data sets
         let list = ctx
@@ -640,9 +767,7 @@ mod tests {
             .list(
                 user_id,
                 DataSetListOptions {
-                    filter: DataSetFilter {
-                        name: "".to_string(),
-                    },
+                    filter: None,
                     order: OrderBy::NameAsc,
                     offset: 0,
                     limit: 1,
@@ -656,11 +781,11 @@ mod tests {
         assert_eq!(
             list[0],
             DataSetListing {
-                id: imported_id.into(),
-                name: "Mock data".to_string(),
+                id: id.into(),
+                name: "Ports".to_string(),
                 description: "".to_string(),
                 tags: vec![],
-                source_operator: "".to_string()
+                source_operator: "OgrSource".to_string()
             }
         );
     }

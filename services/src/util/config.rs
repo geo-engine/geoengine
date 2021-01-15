@@ -7,6 +7,14 @@ use serde::Deserialize;
 use snafu::ResultExt;
 use std::path::PathBuf;
 
+pub fn project_root() -> PathBuf {
+    #[cfg(test)]
+    return "../".into();
+
+    #[cfg(not(test))]
+    return ".".into();
+}
+
 lazy_static! {
     static ref SETTINGS: RwLock<Config> = RwLock::new({
         let mut settings = Config::default();

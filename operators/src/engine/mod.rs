@@ -3,7 +3,7 @@ pub use clonable_operator::{
     CloneableInitializedVectorOperator, CloneableRasterOperator, CloneableVectorOperator,
 };
 pub use execution_context::{
-    ExecutionContext, LoadingInfo, LoadingInfoProvider, MockExecutionContext, MockLoadingInfo,
+    ExecutionContext, LoadingInfo, LoadingInfoProvider, MockExecutionContext, StaticLoadingInfo,
 };
 pub use operator::{
     InitializedOperator, InitializedOperatorBase, InitializedRasterOperator,

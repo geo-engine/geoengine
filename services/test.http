@@ -141,3 +141,39 @@ GET http://localhost:3030/workflow/1
 Accept: application/json
 
 ###
+
+POST http://localhost:3030/workflow
+Authorization: Bearer d522fa38-c0e2-44f0-b269-bbadc6806541
+Content-Type: application/json
+
+{
+  "type": "Vector",
+  "operator": {
+    "type": "OgrSource",
+    "params": {
+      "data_set": {
+        "Internal": "e3fc70fc-5fbc-41e9-9e7a-3d6ac27e12a9"
+      }
+    }
+  }
+}
+
+###
+
+GET http://localhost:3030/wfs?request=GetFeature&service=WFS&version=2.0.0&bbox=-90,-180,90,180&crs=EPSG:4326&typeNames=registry:07968e99-e100-557e-ab4d-08fcdc7d8ff8
+Authorization: Bearer d522fa38-c0e2-44f0-b269-bbadc6806541
+Content-Type: application/json
+
+###
+
+GET http://localhost:3030/datasets/internal
+Authorization: Bearer d522fa38-c0e2-44f0-b269-bbadc6806541
+Content-Type: application/json
+
+{
+  "order": "NameAsc",
+  "offset": 0,
+  "limit": 5
+}
+
+###

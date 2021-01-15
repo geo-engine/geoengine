@@ -4,7 +4,7 @@ use warp::{http::Response, Filter};
 
 use crate::error;
 use crate::error::Result;
-use crate::handlers::Context;
+use crate::handlers::{authenticate, Context};
 use crate::ogc::wfs::request::{GetCapabilities, GetFeature, TypeNames, WFSRequest};
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
@@ -18,8 +18,7 @@ use geoengine_datatypes::{
     primitives::SpatialResolution,
 };
 use geoengine_operators::engine::{
-    MockExecutionContext, QueryContext, QueryRectangle, TypedVectorQueryProcessor,
-    VectorQueryProcessor,
+    QueryContext, QueryRectangle, TypedVectorQueryProcessor, VectorQueryProcessor,
 };
 use serde_json::json;
 use std::str::FromStr;
@@ -29,15 +28,15 @@ pub(crate) fn wfs_handler<C: Context>(
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::get()
         .and(warp::path!("wfs"))
+        .and(authenticate(ctx))
         .and(warp::query::<WFSRequest>())
-        .and(warp::any().map(move || ctx.clone()))
         .and_then(wfs)
 }
 
 // TODO: move into handler once async closures are available?
 async fn wfs<C: Context>(
-    request: WFSRequest,
     ctx: C,
+    request: WFSRequest,
 ) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
     // TODO: authentication
     // TODO: more useful error output than "invalid query string"
@@ -182,10 +181,8 @@ async fn get_feature<C: Context>(
 
     let operator = workflow.operator.get_vector().context(error::Operator)?;
 
-    // TODO: use global context parameters
-    let execution_context = MockExecutionContext::default();
     let initialized = operator
-        .initialize(&execution_context)
+        .initialize(&ctx.execution_context())
         .context(error::Operator)?;
 
     let processor = initialized.query_processor().context(error::Operator)?;
@@ -302,13 +299,14 @@ fn get_feature_mock(_request: &GetFeature) -> Result<Box<dyn warp::Reply>, warp:
 
 #[cfg(test)]
 mod tests {
-    use geoengine_operators::source::CsvSourceParameters;
+    use geoengine_operators::source::{CsvSourceParameters, OgrSource, OgrSourceParameters};
 
     use super::*;
     use crate::users::user::{UserCredentials, UserRegistration};
     use crate::users::userdb::UserDB;
     use crate::util::user_input::UserInput;
     use crate::{contexts::InMemoryContext, workflows::workflow::Workflow};
+    use geoengine_datatypes::dataset::{DataSetId, InternalDataSetId};
     use geoengine_operators::engine::TypedOperator;
     use geoengine_operators::source::{CsvGeometrySpecification, CsvSource, CsvTimeSpecification};
     use serde_json::json;
@@ -318,9 +316,35 @@ mod tests {
     #[tokio::test]
     async fn mock_test() {
         let ctx = InMemoryContext::default();
+        ctx.user_db_ref_mut()
+            .await
+            .register(
+                UserRegistration {
+                    email: "foo@bar.de".to_string(),
+                    password: "secret123".to_string(),
+                    real_name: "Foo Bar".to_string(),
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        let session = ctx
+            .user_db_ref_mut()
+            .await
+            .login(UserCredentials {
+                email: "foo@bar.de".to_string(),
+                password: "secret123".to_string(),
+            })
+            .await
+            .unwrap();
 
         let res = warp::test::request()
             .method("GET")
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
             .path("/wfs?request=GetFeature&service=WFS&version=2.0.0&typeNames=test&bbox=1,2,3,4")
             .reply(&wfs_handler(ctx))
             .await;
@@ -411,9 +435,35 @@ mod tests {
     #[tokio::test]
     async fn get_capabilities() {
         let ctx = InMemoryContext::default();
+        ctx.user_db_ref_mut()
+            .await
+            .register(
+                UserRegistration {
+                    email: "foo@bar.de".to_string(),
+                    password: "secret123".to_string(),
+                    real_name: "Foo Bar".to_string(),
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        let session = ctx
+            .user_db_ref_mut()
+            .await
+            .login(UserCredentials {
+                email: "foo@bar.de".to_string(),
+                password: "secret123".to_string(),
+            })
+            .await
+            .unwrap();
 
         let res = warp::test::request()
             .method("GET")
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
             .path("/wfs?request=GetCapabilities&service=WFS")
             .reply(&wfs_handler(ctx))
             .await;
@@ -443,7 +493,7 @@ x;y
         .unwrap();
         temp_file.seek(SeekFrom::Start(0)).unwrap();
 
-        let mut ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::default();
         ctx.user_db_ref_mut()
             .await
             .register(
@@ -466,8 +516,6 @@ x;y
             })
             .await
             .unwrap();
-
-        ctx.set_session(session);
 
         let workflow = Workflow {
             operator: TypedOperator::Vector(Box::new(CsvSource {
@@ -493,6 +541,10 @@ x;y
 
         let res = warp::test::request()
             .method("GET")
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
             .path(&format!("/wfs?request=GetFeature&service=WFS&version=2.0.0&typeNames=registry:{}&bbox=-90,-180,90,180&crs=EPSG:4326", id.to_string()))
             .reply(&wfs_handler(ctx))
             .await;
@@ -559,7 +611,7 @@ x;y
         .unwrap();
         temp_file.seek(SeekFrom::Start(0)).unwrap();
 
-        let mut ctx = InMemoryContext::default();
+        let ctx = InMemoryContext::default();
         ctx.user_db_ref_mut()
             .await
             .register(
@@ -582,8 +634,6 @@ x;y
             })
             .await
             .unwrap();
-
-        ctx.set_session(session);
 
         let workflow = Workflow {
             operator: TypedOperator::Vector(Box::new(CsvSource {
@@ -612,6 +662,10 @@ x;y
         let url = format!("/wfs?{}", &serde_urlencoded::to_string(params).unwrap());
         let res = warp::test::request()
             .method("GET")
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
             .path(&url)
             .reply(&wfs_handler(ctx))
             .await;
@@ -660,6 +714,73 @@ x;y
             })
             .to_string()
         );
+        assert_eq!(res.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn dataset() {
+        let ctx = InMemoryContext::default();
+        ctx.user_db_ref_mut()
+            .await
+            .register(
+                UserRegistration {
+                    email: "foo@bar.de".to_string(),
+                    password: "secret123".to_string(),
+                    real_name: "Foo Bar".to_string(),
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        let session = ctx
+            .user_db_ref_mut()
+            .await
+            .login(UserCredentials {
+                email: "foo@bar.de".to_string(),
+                password: "secret123".to_string(),
+            })
+            .await
+            .unwrap();
+
+        let workflow = Workflow {
+            operator: TypedOperator::Vector(Box::new(OgrSource {
+                params: OgrSourceParameters {
+                    data_set: DataSetId::Internal(InternalDataSetId(
+                        uuid::Uuid::parse_str("e3fc70fc-5fbc-41e9-9e7a-3d6ac27e12a9").unwrap(), // default data set defined in datasets/in_memory.rs
+                    )),
+                    attribute_projection: None,
+                },
+            })),
+        };
+
+        let id = ctx
+            .workflow_registry()
+            .write()
+            .await
+            .register(workflow.clone())
+            .await
+            .unwrap();
+
+        let params = &[
+            ("request", "GetFeature"),
+            ("service", "WFS"),
+            ("version", "2.0.0"),
+            ("typeNames", &format!("registry:{}", id)),
+            ("bbox", "-90,-180,90,180"),
+            ("crs", "EPSG:4326"),
+        ];
+        let url = format!("/wfs?{}", &serde_urlencoded::to_string(params).unwrap());
+        let res = warp::test::request()
+            .method("GET")
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
+            .path(&url)
+            .reply(&wfs_handler(ctx))
+            .await;
+
         assert_eq!(res.status(), 200);
     }
 }
