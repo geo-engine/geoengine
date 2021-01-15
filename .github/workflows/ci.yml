@@ -72,10 +72,10 @@ jobs:
         with:
           command: test
           args: --all-features --verbose
-
       - name: Generate code coverage
-        run: cargo install cargo-tarpaulin
-        run: cargo tarpaulin --verbose --all-features --workspace --timeout 120 --out Lcov
+        run: |
+          cargo install cargo-tarpaulin
+          cargo tarpaulin --verbose --all-features --workspace --timeout 120 --out Lcov
       - name: Upload coverage to Coveralls
         uses: coverallsapp/github-action@v1.1.1
         with:
