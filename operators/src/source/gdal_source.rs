@@ -536,7 +536,7 @@ impl RasterOperator for GdalSource {
         let init = InitializedGdalSourceOperator {
             provider,
             result_descriptor: RasterResultDescriptor {
-                data_type: data_type,
+                data_type,
                 spatial_reference: SpatialReference::wgs84().into(), // TODO: lookup from dataset
             },
             tiling_specification: context.tiling_specification,
