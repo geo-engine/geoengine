@@ -166,15 +166,15 @@ impl TypedOperator {
     }
 }
 
-impl Into<TypedOperator> for Box<dyn VectorOperator> {
-    fn into(self) -> TypedOperator {
-        TypedOperator::Vector(self)
+impl From<Box<dyn VectorOperator>> for TypedOperator {
+    fn from(operator: Box<dyn VectorOperator>) -> Self {
+        Self::Vector(operator)
     }
 }
 
-impl Into<TypedOperator> for Box<dyn RasterOperator> {
-    fn into(self) -> TypedOperator {
-        TypedOperator::Raster(self)
+impl From<Box<dyn RasterOperator>> for TypedOperator {
+    fn from(operator: Box<dyn RasterOperator>) -> Self {
+        Self::Raster(operator)
     }
 }
 
@@ -184,14 +184,14 @@ pub enum TypedInitializedOperator {
     Raster(Box<InitializedRasterOperator>),
 }
 
-impl Into<TypedInitializedOperator> for Box<InitializedVectorOperator> {
-    fn into(self) -> TypedInitializedOperator {
-        TypedInitializedOperator::Vector(self)
+impl From<Box<InitializedVectorOperator>> for TypedInitializedOperator {
+    fn from(operator: Box<InitializedVectorOperator>) -> Self {
+        TypedInitializedOperator::Vector(operator)
     }
 }
 
-impl Into<TypedInitializedOperator> for Box<InitializedRasterOperator> {
-    fn into(self) -> TypedInitializedOperator {
-        TypedInitializedOperator::Raster(self)
+impl From<Box<InitializedRasterOperator>> for TypedInitializedOperator {
+    fn from(operator: Box<InitializedRasterOperator>) -> Self {
+        TypedInitializedOperator::Raster(operator)
     }
 }

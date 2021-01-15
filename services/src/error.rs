@@ -1,4 +1,3 @@
-use bb8_postgres::bb8::{ManageConnection, RunError};
 use snafu::Snafu;
 use strum::IntoStaticStr;
 use warp::reject::Reject;
@@ -71,6 +70,7 @@ pub enum Error {
 
     NoWorkflowForGivenId,
 
+    #[cfg(feature = "postgres")]
     TokioPostgres {
         source: bb8_postgres::tokio_postgres::Error,
     },
@@ -117,15 +117,17 @@ impl From<Error> for warp::Rejection {
     }
 }
 
-impl From<RunError<<bb8_postgres::PostgresConnectionManager<bb8_postgres::tokio_postgres::NoTls> as ManageConnection>::Error>> for Error {
-    fn from(e: RunError<<bb8_postgres::PostgresConnectionManager<bb8_postgres::tokio_postgres::NoTls> as ManageConnection>::Error>) -> Self {
+#[cfg(feature = "postgres")]
+impl From<bb8_postgres::bb8::RunError<<bb8_postgres::PostgresConnectionManager<bb8_postgres::tokio_postgres::NoTls> as bb8_postgres::bb8::ManageConnection>::Error>> for Error {
+    fn from(e: bb8_postgres::bb8::RunError<<bb8_postgres::PostgresConnectionManager<bb8_postgres::tokio_postgres::NoTls> as bb8_postgres::bb8::ManageConnection>::Error>) -> Self {
         match e {
-            RunError::User(e) => Self::TokioPostgres { source: e },
-            RunError::TimedOut => Self::TokioPostgresTimeout,
+            bb8_postgres::bb8::RunError::User(e) => Self::TokioPostgres { source: e },
+            bb8_postgres::bb8::RunError::TimedOut => Self::TokioPostgresTimeout,
         }
     }
 }
 
+#[cfg(feature = "postgres")]
 impl From<bb8_postgres::tokio_postgres::error::Error> for Error {
     fn from(e: bb8_postgres::tokio_postgres::error::Error) -> Self {
         Self::TokioPostgres { source: e }

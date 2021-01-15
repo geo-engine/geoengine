@@ -238,13 +238,13 @@ where
     }
 }
 
-impl<D, T> Into<TypedGrid<D>> for Grid<D, T>
+impl<D, T> From<Grid<D, T>> for TypedGrid<D>
 where
     D: GridSize + GridSpaceToLinearSpace,
     T: Pixel + TypedRasterConversion<D>,
 {
-    fn into(self) -> TypedGrid<D> {
-        T::get_typed_raster(self)
+    fn from(grid: Grid<D, T>) -> TypedGrid<D> {
+        T::get_typed_raster(grid)
     }
 }
 

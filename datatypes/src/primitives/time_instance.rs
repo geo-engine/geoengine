@@ -1,7 +1,10 @@
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
+#[cfg(feature = "postgres")]
 use postgres_types::private::BytesMut;
+#[cfg(feature = "postgres")]
 use postgres_types::{FromSql, IsNull, ToSql, Type};
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "postgres")]
 use snafu::Error;
 use std::ops::Add;
 
@@ -54,18 +57,19 @@ impl From<DateTime<Utc>> for TimeInstance {
     }
 }
 
-impl Into<TimeInstance> for i64 {
-    fn into(self) -> TimeInstance {
-        TimeInstance::from_millis(self)
+impl From<i64> for TimeInstance {
+    fn from(milliseconds: i64) -> Self {
+        TimeInstance::from_millis(milliseconds)
     }
 }
 
-impl Into<i64> for TimeInstance {
-    fn into(self) -> i64 {
-        self.inner()
+impl From<TimeInstance> for i64 {
+    fn from(time_instance: TimeInstance) -> Self {
+        time_instance.inner()
     }
 }
 
+#[cfg(feature = "postgres")]
 impl ToSql for TimeInstance {
     fn to_sql(&self, ty: &Type, out: &mut BytesMut) -> Result<IsNull, Box<dyn Error + Sync + Send>>
     where
@@ -90,6 +94,7 @@ impl ToSql for TimeInstance {
     }
 }
 
+#[cfg(feature = "postgres")]
 impl<'a> FromSql<'a> for TimeInstance {
     fn from_sql(ty: &Type, raw: &'a [u8]) -> Result<Self, Box<dyn Error + Sync + Send>> {
         DateTime::<Utc>::from_sql(ty, raw).map(Into::into)

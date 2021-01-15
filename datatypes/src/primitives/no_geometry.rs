@@ -80,8 +80,8 @@ impl ArrowTyped for NoGeometry {
     }
 }
 
-impl Into<geojson::Geometry> for NoGeometry {
-    fn into(self) -> geojson::Geometry {
+impl From<NoGeometry> for geojson::Geometry {
+    fn from(_: NoGeometry) -> geojson::Geometry {
         unreachable!("There is no geometry since there is no geometry")
     }
 }

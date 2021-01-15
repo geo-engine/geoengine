@@ -223,6 +223,8 @@ async fn list_permissions<C: Context>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::projects::project::{LayerUpdate, VectorInfo};
+    use crate::users::session::Session;
     use crate::users::user::{UserCredentials, UserRegistration};
     use crate::users::userdb::UserDB;
     use crate::util::identifiers::Identifier;
@@ -634,7 +636,7 @@ mod tests {
             id: project,
             name: Some("TestUpdate".to_string()),
             description: None,
-            layers: Some(vec![Some(Layer {
+            layers: Some(vec![LayerUpdate::UpdateOrInsert(Layer {
                 workflow: WorkflowId::new(),
                 name: "L1".to_string(),
                 info: LayerInfo::Raster(RasterInfo {
@@ -667,6 +669,186 @@ mod tests {
             .unwrap();
         assert_eq!(loaded.name, "TestUpdate");
         assert_eq!(loaded.layers.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn update_layers() {
+        async fn update_and_load_latest(
+            ctx: &InMemoryContext,
+            session: &Session,
+            project_id: ProjectId,
+            update: UpdateProject,
+        ) -> Vec<Layer> {
+            let res = warp::test::request()
+                .method("PATCH")
+                .path(&format!("/project/{}", project_id.to_string()))
+                .header("Content-Length", "0")
+                .header(
+                    "Authorization",
+                    format!("Bearer {}", session.id.to_string()),
+                )
+                .json(&update)
+                .reply(&update_project_handler(ctx.clone()))
+                .await;
+
+            assert_eq!(res.status(), 200);
+
+            let loaded = ctx
+                .project_db()
+                .read()
+                .await
+                .load_latest(session.user.id, project_id)
+                .await
+                .unwrap();
+
+            loaded.layers
+        }
+
+        let ctx = InMemoryContext::default();
+
+        ctx.user_db()
+            .write()
+            .await
+            .register(
+                UserRegistration {
+                    email: "foo@bar.de".to_string(),
+                    password: "secret123".to_string(),
+                    real_name: "Foo Bar".to_string(),
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let session = ctx
+            .user_db()
+            .write()
+            .await
+            .login(UserCredentials {
+                email: "foo@bar.de".to_string(),
+                password: "secret123".to_string(),
+            })
+            .await
+            .unwrap();
+
+        let project = ctx
+            .project_db()
+            .write()
+            .await
+            .create(
+                session.user.id,
+                CreateProject {
+                    name: "Test".to_string(),
+                    description: "Foo".to_string(),
+                    bounds: STRectangle::new(
+                        SpatialReferenceOption::Unreferenced,
+                        0.,
+                        0.,
+                        1.,
+                        1.,
+                        0,
+                        1,
+                    )
+                    .unwrap(),
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let layer_1 = Layer {
+            workflow: WorkflowId::new(),
+            name: "L1".to_string(),
+            info: LayerInfo::Raster(RasterInfo {
+                colorizer: Colorizer::Rgba,
+            }),
+        };
+
+        let layer_2 = Layer {
+            workflow: WorkflowId::new(),
+            name: "L2".to_string(),
+            info: LayerInfo::Vector(VectorInfo {}),
+        };
+
+        // add first layer
+        assert_eq!(
+            update_and_load_latest(
+                &ctx,
+                &session,
+                project,
+                UpdateProject {
+                    id: project,
+                    name: None,
+                    description: None,
+                    layers: Some(vec![LayerUpdate::UpdateOrInsert(layer_1.clone())]),
+                    bounds: None,
+                }
+            )
+            .await,
+            vec![layer_1.clone()]
+        );
+
+        // add second layer
+        assert_eq!(
+            update_and_load_latest(
+                &ctx,
+                &session,
+                project,
+                UpdateProject {
+                    id: project,
+                    name: None,
+                    description: None,
+                    layers: Some(vec![
+                        LayerUpdate::None(Default::default()),
+                        LayerUpdate::UpdateOrInsert(layer_2.clone())
+                    ]),
+                    bounds: None,
+                }
+            )
+            .await,
+            vec![layer_1.clone(), layer_2.clone()]
+        );
+
+        // remove first layer
+        assert_eq!(
+            update_and_load_latest(
+                &ctx,
+                &session,
+                project,
+                UpdateProject {
+                    id: project,
+                    name: None,
+                    description: None,
+                    layers: Some(vec![
+                        LayerUpdate::Delete(Default::default()),
+                        LayerUpdate::None(Default::default()),
+                    ]),
+                    bounds: None,
+                }
+            )
+            .await,
+            vec![layer_2.clone()]
+        );
+
+        // clear layers
+        assert_eq!(
+            update_and_load_latest(
+                &ctx,
+                &session,
+                project,
+                UpdateProject {
+                    id: project,
+                    name: None,
+                    description: None,
+                    layers: Some(vec![]),
+                    bounds: None,
+                }
+            )
+            .await,
+            vec![]
+        );
     }
 
     #[tokio::test]

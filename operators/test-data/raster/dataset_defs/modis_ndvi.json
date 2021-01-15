@@ -1,15 +1,14 @@
 {
     "time": {
-        "time_intervals": [
-            {
-                "start": 0,
-                "end": 1
-            }
-        ]
+        "start_time": 1388534400000,
+        "time_step": {
+            "granularity": "Months",
+            "step": 1
+        }
     },
     "tile": null,
-    "file_name_with_time_placeholder": "MOD13A2_M_NDVI_2014-01-01.TIFF",
-    "time_format": "",
+    "file_name_with_time_placeholder": "MOD13A2_M_NDVI_%%%_START_TIME_%%%.TIFF",
+    "time_format": "%Y-%m-%d",
     "base_path": "../modis_ndvi",
     "data_type": "U8",
     "geo_transform": {

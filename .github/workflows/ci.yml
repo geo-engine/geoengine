@@ -27,7 +27,7 @@ jobs:
     strategy:
       matrix:
         os:
-          - ubuntu-18.04
+          - ubuntu-20.04
 
     steps:
       - name: Checkout code
@@ -36,7 +36,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install ocl-icd-opencl-dev pocl-opencl-icd
-          sudo ln -s /usr/lib/llvm-6.0/lib/clang/6.0.1 /usr/lib/llvm-6.0/lib/clang/6.0.0
       - name: Install GDAL
         run: |
           sudo apt-get update
@@ -58,7 +57,12 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           args: --all-targets --all-features -- -D warnings
-      - name: Build
+      - name: Build (no features)
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --verbose
+      - name: Build (all features)
         uses: actions-rs/cargo@v1
         with:
           command: build

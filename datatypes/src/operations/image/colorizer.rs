@@ -10,7 +10,7 @@ use std::convert::TryFrom;
 
 /// A colorizer specifies a mapping between raster values and an output image
 /// There are different variants that perform different kinds of mapping.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
 pub enum Colorizer {
     LinearGradient {
         breakpoints: Breakpoints,
@@ -394,7 +394,7 @@ impl<'c> ColorMapper<'c> {
 }
 
 /// A container type for breakpoints that specify a value to color mapping
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
 pub struct Breakpoint {
     pub value: NotNan<f64>,
     pub color: RgbaColor,
@@ -432,7 +432,7 @@ pub type Breakpoints = Vec<Breakpoint>;
 pub type Palette = HashMap<NotNan<f64>, RgbaColor>;
 
 /// `RgbaColor` defines a 32 bit RGB color with alpha value
-#[derive(Copy, Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Copy, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct RgbaColor([u8; 4]);
 
 impl RgbaColor {
@@ -513,11 +513,11 @@ trait Clamp: Sized + PartialOrd {
 
 impl Clamp for f64 {}
 
-impl Into<image::Rgba<u8>> for RgbaColor {
+impl From<RgbaColor> for image::Rgba<u8> {
     /// Transform an `RgbaColor` to its counterpart from the image crate
-    fn into(self) -> image::Rgba<u8> {
+    fn from(color: RgbaColor) -> image::Rgba<u8> {
         // [r, g, b, a]
-        image::Rgba(self.0)
+        image::Rgba(color.0)
     }
 }
 
