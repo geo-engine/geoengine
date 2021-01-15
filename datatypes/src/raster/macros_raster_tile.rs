@@ -245,7 +245,7 @@ mod tests {
         raster::{GeoTransform, Grid2D, GridIndexAccess, Pixel, RasterTile2D, TypedRasterTile2D},
     };
     use crate::{raster::RasterDataType, util::test::catch_unwind_silent};
-    use serde::export::PhantomData;
+    use std::marker::PhantomData;
 
     #[test]
     fn map_generic_raster2d() {

@@ -23,13 +23,6 @@ use geoengine_operators::source::OgrSourceDataset;
 #[derive(Debug)]
 pub struct PostgresDataSetDB {}
 
-impl PostgresDataSetDB {
-    pub(crate) fn new() -> Self {
-        // TODO: connection
-        Self {}
-    }
-}
-
 #[async_trait]
 impl DataSetDB for PostgresDataSetDB {
     async fn add_raster_data(

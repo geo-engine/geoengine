@@ -56,7 +56,7 @@ where
             project_db: Arc::new(RwLock::new(PostgresProjectDB::new(pool.clone()))),
             workflow_registry: Arc::new(RwLock::new(PostgresWorkflowRegistry::new(pool.clone()))),
             session: None,
-            data_set_db: Arc::new(RwLock::new(PostgresDataSetDB::new())),
+            data_set_db: Arc::new(RwLock::new(PostgresDataSetDB {})),
             thread_pool: Arc::new(ThreadPool::new(1)), // TODO: determine number of threads
         })
     }
@@ -324,9 +324,9 @@ where
 mod tests {
     use super::*;
     use crate::projects::project::{
-        CreateProject, Layer, LayerInfo, LoadVersion, OrderBy, ProjectFilter, ProjectId,
-        ProjectListOptions, ProjectListing, ProjectPermission, STRectangle, UpdateProject,
-        UserProjectPermission, VectorInfo,
+        CreateProject, Layer, LayerInfo, LayerUpdate, LoadVersion, OrderBy, ProjectFilter,
+        ProjectId, ProjectListOptions, ProjectListing, ProjectPermission, STRectangle,
+        UpdateProject, UserProjectPermission, VectorInfo,
     };
     use crate::projects::projectdb::ProjectDB;
     use crate::users::user::{UserCredentials, UserId, UserRegistration};
@@ -342,7 +342,6 @@ mod tests {
     use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
     use std::str::FromStr;
 
-    #[ignore] // TODO: remove if postgres is configurable
     #[tokio::test]
     async fn test() {
         // TODO: load from test config
@@ -519,7 +518,7 @@ mod tests {
             id: project.id,
             name: Some("Test9 Updated".into()),
             description: None,
-            layers: Some(vec![Some(Layer {
+            layers: Some(vec![LayerUpdate::UpdateOrInsert(Layer {
                 workflow: workflow_id,
                 name: "TestLayer".into(),
                 info: LayerInfo::Vector(VectorInfo {}),

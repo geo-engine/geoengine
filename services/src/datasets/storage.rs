@@ -15,7 +15,6 @@ use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use geoengine_operators::engine::{RasterResultDescriptor, VectorResultDescriptor};
 use geoengine_operators::mock::MockDataSetDataSourceLoadingInfo;
 use geoengine_operators::source::OgrSourceDataset;
-use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use std::path::PathBuf;
@@ -245,7 +244,7 @@ pub trait DataSetDB: DataSetProvider + Send + Sync {
     ) -> Result<&dyn DataSetProvider>;
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, ToSql, FromSql)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
 pub enum DataSetPermission {
     Read,
     Write,
@@ -259,7 +258,7 @@ pub struct UserDataSetPermission {
     pub permission: DataSetPermission,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, ToSql, FromSql)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
 pub enum DataSetProviderPermission {
     Read,
     Write,

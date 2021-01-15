@@ -128,7 +128,7 @@ impl ProjectDB for HashMapProjectDB {
             .last()
             .ok_or(error::Error::ProjectUpdateFailed)?;
 
-        let project_update = project.update_project(update, user);
+        let project_update = project.update_project(update, user)?;
 
         project_versions.push(project_update);
 

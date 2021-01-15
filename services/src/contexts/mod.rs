@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 mod in_memory;
+#[cfg(feature = "postgres")]
 mod postgres;
 use crate::datasets::storage::DataSetDB;
 
@@ -20,6 +21,7 @@ use geoengine_operators::engine::{
 use geoengine_operators::mock::MockDataSetDataSourceLoadingInfo;
 use geoengine_operators::source::OgrSourceDataset;
 pub use in_memory::InMemoryContext;
+#[cfg(feature = "postgres")]
 pub use postgres::PostgresContext;
 use std::borrow::Borrow;
 use std::path::PathBuf;

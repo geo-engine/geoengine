@@ -8,12 +8,15 @@ authors = [
 ]
 edition = "2018"
 
+[features]
+postgres = ["postgres-types"]
+
 [dependencies]
 # simd compiles with nightly only, allow default features to build with arrow-flight once it is possible
 arrow = {version = "2.0", features = ["simd"] }
 chrono = "0.4"
 float-cmp = "0.8"
-geo = "0.16"
+geo = "0.17"
 geojson = "0.21"
 image = "0.23"
 ndarray = "0.14"
@@ -21,10 +24,10 @@ num-traits = "0.2"
 ocl = "0.19"
 ordered-float = { version= "2.0", features = ["serde"] }
 paste = "1.0" # TODO remove, once https://doc.rust-lang.org/core/macro.concat_idents.html is stable
+postgres-types = { version = "0.1", features = ["derive", "with-chrono-0_4", "with-uuid-0_8"], optional = true }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 snafu = "0.6"
-postgres-types = { version = "0.1", features = ["derive", "with-chrono-0_4", "with-uuid-0_8"] }
 uuid = { version = "0.8", features = ["serde", "v4", "v5"] }
 vega_lite_4 = { version = "0.5", features = ["ndarray", "show_vega"]}
 

@@ -636,7 +636,7 @@ mod tests {
         assert_eq!(coords, coordinates);
 
         // list data sets
-        let list = ctx
+        let mut list = ctx
             .data_set_db_ref_mut()
             .await
             .list(
@@ -653,9 +653,18 @@ mod tests {
             .await
             .unwrap();
 
+        list.sort_by(|a, b| a.name.cmp(&b.name));
+
         assert_eq!(
             list,
             vec![
+                DataSetListing {
+                    id: imported_id.into(),
+                    name: "Mock data".to_string(),
+                    description: "".to_string(),
+                    tags: vec![],
+                    source_operator: "MockDataSetDataSource".to_string()
+                },
                 DataSetListing {
                     id: DataSetId::Internal(InternalDataSetId(
                         uuid::Uuid::from_str("e3fc70fc-5fbc-41e9-9e7a-3d6ac27e12a9").unwrap()
@@ -664,13 +673,6 @@ mod tests {
                     description: "".to_string(),
                     tags: vec![],
                     source_operator: "OgrSource".to_string()
-                },
-                DataSetListing {
-                    id: imported_id.into(),
-                    name: "Mock data".to_string(),
-                    description: "".to_string(),
-                    tags: vec![],
-                    source_operator: "MockDataSetDataSource".to_string()
                 }
             ]
         );
@@ -696,7 +698,7 @@ mod tests {
             .unwrap();
 
         let add = AddDataSet {
-            name: "Ports".to_string(),
+            name: "Ports2".to_string(),
             description: "".to_string(),
             data_type: LayerInfo::Vector(VectorInfo {}),
             source_operator: "OgrSource".to_string(),
@@ -761,7 +763,7 @@ mod tests {
         assert_eq!(stream.collect::<Vec<_>>().await.len(), 1);
 
         // list data sets
-        let list = ctx
+        let mut list = ctx
             .data_set_db_ref_mut()
             .await
             .list(
@@ -778,15 +780,28 @@ mod tests {
             .await
             .unwrap();
 
+        list.sort_by(|a, b| a.name.cmp(&b.name));
+
         assert_eq!(
-            list[0],
-            DataSetListing {
-                id: id.into(),
-                name: "Ports".to_string(),
-                description: "".to_string(),
-                tags: vec![],
-                source_operator: "OgrSource".to_string()
-            }
+            list,
+            vec![
+                DataSetListing {
+                    id: DataSetId::Internal(InternalDataSetId(
+                        uuid::Uuid::from_str("e3fc70fc-5fbc-41e9-9e7a-3d6ac27e12a9").unwrap()
+                    )),
+                    name: "Ports".to_string(),
+                    description: "".to_string(),
+                    tags: vec![],
+                    source_operator: "OgrSource".to_string()
+                },
+                DataSetListing {
+                    id: DataSetId::Internal(id),
+                    name: "Ports2".to_string(),
+                    description: "".to_string(),
+                    tags: vec![],
+                    source_operator: "OgrSource".to_string()
+                }
+            ]
         );
     }
 }

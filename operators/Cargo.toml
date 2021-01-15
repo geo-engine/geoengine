@@ -16,12 +16,12 @@ csv = "1.1"
 float-cmp = "0.8"
 futures = "0.3"
 gdal = { version = "0.7", features = ["datetime"] }
-geo = "0.16"
+geo = "0.17"
 geoengine-datatypes = { path = "../datatypes" }
 lazy_static = "1.4"
 num-traits = "0.2"
 ocl = "0.19"
-paste = "1.0" # TODO remove, once https://doc.rust-lang.org/core/macro.concat_idents.html is stable
+paste = "1.0"
 pin-project = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

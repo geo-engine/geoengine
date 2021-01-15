@@ -311,7 +311,7 @@ where
             .await?;
         trans.execute(&stmt, &[&project.id]).await?;
 
-        let project = project.update_project(update, user);
+        let project = project.update_project(update, user)?;
 
         let stmt = trans
             .prepare(
