@@ -535,7 +535,7 @@ mod tests {
 
         let res = warp::test::request()
             .method("GET")
-            .path(&format!("/wms?request=GetMap&service=WMS&version=1.3.0&layers={}&bbox=20,-10,80,50&width=600&height=600&crs=foo&styles=custom:%7B%22LinearGradient%22%3A%7B%22breakpoints%22%3A%5B%7B%22value%22%3A1.0%2C%22color%22%3A%5B0%2C0%2C0%2C255%5D%7D%2C%7B%22value%22%3A10.0%2C%22color%22%3A%5B255%2C255%2C255%2C255%5D%7D%5D%2C%22no_data_color%22%3A%5B0%2C0%2C0%2C0%5D%2C%22default_color%22%3A%5B255%2C0%2C255%2C255%5D%7D%7D&format=image/png", id.to_string()))
+            .path(&format!("/wms?request=GetMap&service=WMS&version=1.3.0&layers={}&bbox=20,-10,80,50&width=600&height=600&crs=foo&styles=custom:%7B%22LinearGradient%22%3A%7B%22breakpoints%22%3A%5B%7B%22value%22%3A1.0%2C%22color%22%3A%5B0%2C0%2C0%2C255%5D%7D%2C%7B%22value%22%3A10.0%2C%22color%22%3A%5B255%2C255%2C255%2C255%5D%7D%5D%2C%22no_data_color%22%3A%5B0%2C0%2C0%2C0%5D%2C%22default_color%22%3A%5B255%2C0%2C255%2C255%5D%7D%7D&format=image/png&time=2014-01-01T00:00:00.0Z", id.to_string()))
             .reply(&wms_handler(ctx))
             .await;
         assert_eq!(res.status(), 200);
