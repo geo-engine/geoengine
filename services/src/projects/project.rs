@@ -1,5 +1,5 @@
-use crate::error::Error;
-use crate::error::Result;
+use crate::error::{Error, Result};
+use crate::string_token;
 use crate::users::user::UserId;
 use crate::util::config::ProjectService;
 use crate::util::identifiers::Identifier;
@@ -16,6 +16,7 @@ use geoengine_datatypes::{operations::image::Colorizer, primitives::TimeInstance
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
+use std::mem;
 use uuid::Uuid;
 
 identifier!(ProjectId);
@@ -42,7 +43,12 @@ impl Project {
         }
     }
 
-    pub fn update_project(&self, update: UpdateProject, user: UserId) -> Project {
+    /// Updates a project with partial fields.
+    ///
+    /// If the updates layer list is longer than the current list,
+    /// it just inserts new layers to the end.
+    ///
+    pub fn update_project(&self, update: UpdateProject, user: UserId) -> Result<Project> {
         let mut project = self.clone();
         project.version = ProjectVersion::new(user);
 
@@ -54,14 +60,25 @@ impl Project {
             project.description = description;
         }
 
-        if let Some(layers) = update.layers {
-            for (i, layer) in layers.into_iter().enumerate() {
-                if let Some(layer) = layer {
-                    if i >= project.layers.len() {
-                        project.layers.push(layer);
-                    } else {
-                        project.layers[i] = layer;
+        if let Some(layer_updates) = update.layers {
+            let layers = mem::replace(&mut project.layers, Vec::new()).into_iter();
+            let mut layer_updates = layer_updates.into_iter();
+
+            for (layer, layer_update) in layers.zip(&mut layer_updates) {
+                match layer_update {
+                    LayerUpdate::None(..) => project.layers.push(layer),
+                    LayerUpdate::UpdateOrInsert(updated_layer) => {
+                        project.layers.push(updated_layer)
                     }
+                    LayerUpdate::Delete(..) => {}
+                }
+            }
+
+            for layer_update in layer_updates {
+                if let LayerUpdate::UpdateOrInsert(new_layer) = layer_update {
+                    project.layers.push(new_layer);
+                } else {
+                    return Err(Error::ProjectUpdateFailed);
                 }
             }
         }
@@ -70,7 +87,7 @@ impl Project {
             project.bounds = bounds;
         }
 
-        project
+        Ok(project)
     }
 }
 
@@ -145,7 +162,7 @@ impl TemporalBounded for STRectangle {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 pub struct Layer {
     // TODO: check that workflow/operator output type fits to the type of LayerInfo
     // TODO: LayerId?
@@ -170,13 +187,13 @@ pub enum LayerType {
     Vector,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 pub enum LayerInfo {
     Raster(RasterInfo),
     Vector(VectorInfo),
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 pub struct RasterInfo {
     pub colorizer: Colorizer,
 }
@@ -251,14 +268,25 @@ impl UserInput for CreateProject {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct UpdateProject {
     pub id: ProjectId,
     pub name: Option<String>,
     pub description: Option<String>,
-    pub layers: Option<Vec<Option<Layer>>>,
+    pub layers: Option<Vec<LayerUpdate>>,
     pub bounds: Option<STRectangle>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(untagged)]
+pub enum LayerUpdate {
+    None(NoUpdate),
+    Delete(Delete),
+    UpdateOrInsert(Layer),
+}
+
+string_token!(NoUpdate, "none");
+string_token!(Delete, "delete");
 
 impl UserInput for UpdateProject {
     fn validate(&self) -> Result<(), Error> {
@@ -387,5 +415,76 @@ mod tests {
             .to_string(),
         )
         .unwrap();
+    }
+
+    #[test]
+    fn deserialize_layer_update() {
+        assert_eq!(
+            serde_json::from_str::<LayerUpdate>(&json!("none").to_string()).unwrap(),
+            LayerUpdate::None(Default::default())
+        );
+
+        assert_eq!(
+            serde_json::from_str::<LayerUpdate>(&json!("delete").to_string()).unwrap(),
+            LayerUpdate::Delete(Default::default())
+        );
+
+        let workflow = WorkflowId::new();
+        assert_eq!(
+            serde_json::from_str::<LayerUpdate>(
+                &json!({
+                    "workflow": workflow.clone(),
+                    "name": "L2",
+                    "info": {
+                        "Vector": {},
+                    },
+                })
+                .to_string()
+            )
+            .unwrap(),
+            LayerUpdate::UpdateOrInsert(Layer {
+                workflow,
+                name: "L2".to_string(),
+                info: LayerInfo::Vector(VectorInfo {}),
+            })
+        );
+    }
+
+    #[test]
+    fn serialize_update_project() {
+        let update = UpdateProject {
+            id: ProjectId::new(),
+            name: Some("name".to_string()),
+            description: Some("description".to_string()),
+            layers: Some(vec![
+                LayerUpdate::None(Default::default()),
+                LayerUpdate::Delete(Default::default()),
+                LayerUpdate::UpdateOrInsert(Layer {
+                    workflow: WorkflowId::new(),
+                    name: "vector layer".to_string(),
+                    info: LayerInfo::Vector(VectorInfo {}),
+                }),
+                LayerUpdate::UpdateOrInsert(Layer {
+                    workflow: WorkflowId::new(),
+                    name: "raster layer".to_string(),
+                    info: LayerInfo::Raster(RasterInfo {
+                        colorizer: Colorizer::Rgba,
+                    }),
+                }),
+            ]),
+            bounds: Some(STRectangle {
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+                bounding_box: BoundingBox2D::new((0.0, 0.1).into(), (1.0, 1.1).into()).unwrap(),
+                time_interval: Default::default(),
+            }),
+        };
+
+        let serialized = serde_json::to_string(&update).unwrap();
+
+        let deserialized: UpdateProject = serde_json::from_str(&serialized).unwrap();
+
+        assert_eq!(update, deserialized);
+
+        let _: UpdateProject = serde_json::from_reader(serialized.as_bytes()).unwrap();
     }
 }
