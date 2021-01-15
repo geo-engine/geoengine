@@ -96,7 +96,7 @@ mod tests {
         string_token!(Foo);
         string_token!(Bar, "bar");
 
-        let foo: Vec<u8> = serde_json::to_string(&Foo).unwrap().into_bytes();
-        let _: Foo = serde_json::from_reader(foo.as_slice()).unwrap();
+        let serialized_bytes: Vec<u8> = serde_json::to_string(&Foo).unwrap().into_bytes();
+        let _: Foo = serde_json::from_reader(serialized_bytes.as_slice()).unwrap();
     }
 }
