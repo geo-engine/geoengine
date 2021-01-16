@@ -3,19 +3,26 @@ use crate::error::Result;
 use crate::users::session::SessionId;
 use crate::users::userdb::UserDB;
 use crate::{contexts::Context, error::Error};
-use serde_json::json;
+use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use std::error::Error as StdError;
 use std::str::FromStr;
 use warp::http::StatusCode;
 use warp::Filter;
 use warp::{Rejection, Reply};
+use warp::reject::MethodNotAllowed;
 
 pub mod projects;
 pub mod users;
 pub mod wfs;
 pub mod wms;
 pub mod workflows;
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ErrorResponse {
+    pub error: String,
+    pub message: String,
+}
 
 /// A handler for custom rejections
 pub async fn handle_rejection(err: Rejection) -> Result<impl Reply, Rejection> {
@@ -47,6 +54,12 @@ pub async fn handle_rejection(err: Rejection) -> Result<impl Reply, Rejection> {
             e.source()
                 .map_or("Bad Request".to_string(), ToString::to_string),
         )
+    } else if let Some(_) = err.find::<MethodNotAllowed>() {
+        (
+            StatusCode::METHOD_NOT_ALLOWED,
+            "MethodNotAllowed".to_string(),
+            "HTTP method not allowed.".to_string()
+        )
     } else {
         // no matching filter
 
@@ -57,10 +70,10 @@ pub async fn handle_rejection(err: Rejection) -> Result<impl Reply, Rejection> {
         )
     };
 
-    let json = warp::reply::json(&json!( {
-        "error": error,
-        "message": message,
-    }));
+    let json = warp::reply::json(&ErrorResponse {
+        error: error,
+        message: message,
+    });
     Ok(warp::reply::with_status(json, code))
 }
 
