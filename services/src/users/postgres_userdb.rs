@@ -207,7 +207,7 @@ where
         let row = conn
             .query_one(&stmt, &[&session])
             .await
-            .map_err(|_error| error::Error::SessionDoesNotExist)?;
+            .map_err(|_error| error::Error::InvalidSession)?;
 
         Ok(Session {
             id: session,
