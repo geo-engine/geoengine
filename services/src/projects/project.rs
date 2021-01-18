@@ -250,6 +250,12 @@ pub enum ProjectFilter {
     None,
 }
 
+impl Default for ProjectFilter {
+    fn default() -> Self {
+        ProjectFilter::None
+    }
+}
+
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct CreateProject {
     pub name: String,
@@ -321,11 +327,42 @@ pub struct UserProjectPermission {
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
 pub struct ProjectListOptions {
+    // TODO: remove, once warp allows parsing list params
+    #[serde(deserialize_with = "permissions_from_json_str")]
     pub permissions: Vec<ProjectPermission>,
+    #[serde(default)]
     pub filter: ProjectFilter,
     pub order: OrderBy,
     pub offset: u32,
     pub limit: u32,
+}
+
+/// Instead of parsing list params, deserialize `ProjectPermission`s as JSON list.
+pub fn permissions_from_json_str<'de, D>(
+    deserializer: D,
+) -> Result<Vec<ProjectPermission>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::Visitor;
+
+    struct PermissionsFromJsonStrVisitor;
+    impl<'de> Visitor<'de> for PermissionsFromJsonStrVisitor {
+        type Value = Vec<ProjectPermission>;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("a JSON array of type `ProjectPermission`")
+        }
+
+        fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            serde_json::from_str(v).map_err(|error| E::custom(error.to_string()))
+        }
+    }
+
+    deserializer.deserialize_str(PermissionsFromJsonStrVisitor)
 }
 
 impl UserInput for ProjectListOptions {
