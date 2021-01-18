@@ -443,7 +443,7 @@ mod tests {
     fn list_options_serialization() {
         serde_json::from_str::<ProjectListOptions>(
             &json!({
-                "permissions": [ "Owner" ],
+                "permissions": "[\"Owner\"]",
                 "filter": "None",
                 "order": "NameAsc",
                 "offset": 0,
