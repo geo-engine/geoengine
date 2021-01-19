@@ -556,7 +556,7 @@ mod tests {
             ("crs", "foo"),
             (
                 "styles",
-                &format!("custom:{}", serde_json::to_string(&colorizer).unwrap())
+                &format!("custom:{}", serde_json::to_string(&colorizer).unwrap()),
             ),
             ("format", "image/png"),
             ("time", "2014-01-01T00:00:00.0Z"),
