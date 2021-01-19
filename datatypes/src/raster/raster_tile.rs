@@ -222,7 +222,7 @@ mod tests {
             GridShape2D::from([100, 100]),
             GeoTransform::default(),
         );
-        assert_eq!(ti.local_upper_left_idx(), GridIdx([0, 0]));
+        assert_eq!(ti.local_upper_left_pixel_idx(), GridIdx([0, 0]));
     }
 
     #[test]
@@ -232,7 +232,7 @@ mod tests {
             GridShape2D::from([100, 100]),
             GeoTransform::default(),
         );
-        assert_eq!(ti.local_lower_left_idx(), GridIdx([99, 0]));
+        assert_eq!(ti.local_lower_left_pixel_idx(), GridIdx([99, 0]));
     }
 
     #[test]
@@ -242,7 +242,7 @@ mod tests {
             GridShape2D::from([100, 100]),
             GeoTransform::default(),
         );
-        assert_eq!(ti.local_upper_right_idx(), GridIdx([0, 99]));
+        assert_eq!(ti.local_upper_right_pixel_idx(), GridIdx([0, 99]));
     }
 
     #[test]
@@ -252,7 +252,7 @@ mod tests {
             GridShape2D::from([100, 100]),
             GeoTransform::default(),
         );
-        assert_eq!(ti.local_lower_right_idx(), GridIdx([99, 99]));
+        assert_eq!(ti.local_lower_right_pixel_idx(), GridIdx([99, 99]));
     }
 
     #[test]
@@ -262,7 +262,7 @@ mod tests {
             GridShape2D::from([100, 100]),
             GeoTransform::default(),
         );
-        assert_eq!(ti.global_upper_left_idx(), GridIdx([0, 0]));
+        assert_eq!(ti.global_upper_left_pixel_idx(), GridIdx([0, 0]));
     }
 
     #[test]
@@ -272,7 +272,7 @@ mod tests {
             GridShape2D::from([100, 1000]),
             GeoTransform::default(),
         );
-        assert_eq!(ti.global_upper_left_idx(), GridIdx([-200, 3000]));
+        assert_eq!(ti.global_upper_left_pixel_idx(), GridIdx([-200, 3000]));
     }
 
     #[test]
@@ -282,7 +282,7 @@ mod tests {
             GridShape2D::from([100, 100]),
             GeoTransform::default(),
         );
-        assert_eq!(ti.global_upper_right_idx(), GridIdx([0, 99]));
+        assert_eq!(ti.global_upper_right_pixel_idx(), GridIdx([0, 99]));
     }
 
     #[test]
@@ -292,7 +292,7 @@ mod tests {
             GridShape2D::from([100, 1000]),
             GeoTransform::default(),
         );
-        assert_eq!(ti.global_upper_right_idx(), GridIdx([-200, 3999]));
+        assert_eq!(ti.global_upper_right_pixel_idx(), GridIdx([-200, 3999]));
     }
 
     #[test]
@@ -302,7 +302,7 @@ mod tests {
             GridShape2D::from([100, 100]),
             GeoTransform::default(),
         );
-        assert_eq!(ti.global_lower_right_idx(), GridIdx([99, 99]));
+        assert_eq!(ti.global_lower_right_pixel_idx(), GridIdx([99, 99]));
     }
 
     #[test]
@@ -312,7 +312,7 @@ mod tests {
             GridShape2D::from([100, 1000]),
             GeoTransform::default(),
         );
-        assert_eq!(ti.global_lower_right_idx(), GridIdx([-101, 3999]));
+        assert_eq!(ti.global_lower_right_pixel_idx(), GridIdx([-101, 3999]));
     }
 
     #[test]
@@ -322,7 +322,7 @@ mod tests {
             GridShape2D::from([100, 100]),
             GeoTransform::default(),
         );
-        assert_eq!(ti.global_lower_left_idx(), GridIdx([99, 0]));
+        assert_eq!(ti.global_lower_left_pixel_idx(), GridIdx([99, 0]));
     }
 
     #[test]
@@ -332,7 +332,7 @@ mod tests {
             GridShape2D::from([100, 1000]),
             GeoTransform::default(),
         );
-        assert_eq!(ti.global_lower_left_idx(), GridIdx([-101, 3000]));
+        assert_eq!(ti.global_lower_left_pixel_idx(), GridIdx([-101, 3000]));
     }
 
     #[test]
@@ -342,7 +342,10 @@ mod tests {
             GridShape2D::from([100, 100]),
             GeoTransform::default(),
         );
-        assert_eq!(ti.local_to_global_idx(GridIdx([25, 75])), GridIdx([25, 75]));
+        assert_eq!(
+            ti.local_to_global_pixel_idx(GridIdx([25, 75])),
+            GridIdx([25, 75])
+        );
     }
 
     #[test]
@@ -353,7 +356,7 @@ mod tests {
             GeoTransform::default(),
         );
         assert_eq!(
-            ti.local_to_global_idx(GridIdx([25, 75])),
+            ti.local_to_global_pixel_idx(GridIdx([25, 75])),
             GridIdx([-175, 3075])
         );
     }
