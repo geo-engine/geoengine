@@ -291,6 +291,7 @@ mod tests {
     use std::path::PathBuf;
 
     use geoengine_datatypes::primitives::{BoundingBox2D, TimeInterval};
+    use geoengine_datatypes::operations::image::RgbaColor;
     use geoengine_operators::engine::{RasterOperator, TypedOperator};
     use geoengine_operators::source::{GdalSource, GdalSourceParameters, GdalSourceProcessor};
 
@@ -298,6 +299,7 @@ mod tests {
     use crate::workflows::workflow::Workflow;
     use crate::{contexts::InMemoryContext, ogc::wms::request::GetMapFormat};
     use xml::ParserConfig;
+    use std::convert::TryInto;
 
     #[tokio::test]
     async fn test() {
@@ -533,9 +535,32 @@ mod tests {
             .await
             .unwrap();
 
+        let colorizer = Colorizer::linear_gradient(
+            vec![
+                (0.0, RgbaColor::white()).try_into().unwrap(),
+                (1.0, RgbaColor::black()).try_into().unwrap(),
+            ],
+            RgbaColor::transparent(),
+            RgbaColor::pink(),
+        ).unwrap();
+
+        let params = &[
+            ("request", "GetMap"),
+            ("service", "WMS"),
+            ("version", "1.3.0"),
+            ("layers", id.to_string()),
+            ("bbox", "20,-10,80,50"),
+            ("width", "600"),
+            ("height", "600"),
+            ("crs", "foo"),
+            ("styles", &format!("custom:{}", serde_json::to_string(&colorizer).unwrap())),
+            ("format", "image/png"),
+            ("time", "2014-01-01T00:00:00.0Z"),
+        ];
+
         let res = warp::test::request()
             .method("GET")
-            .path(&format!("/wms?request=GetMap&service=WMS&version=1.3.0&layers={}&bbox=20,-10,80,50&width=600&height=600&crs=foo&styles=custom:%7B%22LinearGradient%22%3A%7B%22breakpoints%22%3A%5B%7B%22value%22%3A1.0%2C%22color%22%3A%5B0%2C0%2C0%2C255%5D%7D%2C%7B%22value%22%3A10.0%2C%22color%22%3A%5B255%2C255%2C255%2C255%5D%7D%5D%2C%22no_data_color%22%3A%5B0%2C0%2C0%2C0%5D%2C%22default_color%22%3A%5B255%2C0%2C255%2C255%5D%7D%7D&format=image/png&time=2014-01-01T00:00:00.0Z", id.to_string()))
+            .path(&format!("/wms?{}", serde_urlencoded::to_string(params).unwrap()))
             .reply(&wms_handler(ctx))
             .await;
         assert_eq!(res.status(), 200);
