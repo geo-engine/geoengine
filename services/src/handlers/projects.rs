@@ -38,7 +38,7 @@ pub(crate) fn list_projects_handler<C: Context>(
     warp::get()
         .and(warp::path("projects"))
         .and(authenticate(ctx))
-        .and(warp::body::json())
+        .and(warp::query::<ProjectListOptions>())
         .and_then(list_projects)
 }
 
@@ -232,8 +232,8 @@ mod tests {
     use crate::{
         contexts::InMemoryContext,
         projects::project::{
-            Layer, LayerInfo, OrderBy, Project, ProjectFilter, ProjectId, ProjectListing,
-            ProjectPermission, ProjectVersion, RasterInfo, STRectangle, UpdateProject,
+            Layer, LayerInfo, Project, ProjectId, ProjectListing, ProjectPermission,
+            ProjectVersion, RasterInfo, STRectangle, UpdateProject,
         },
     };
     use geoengine_datatypes::operations::image::Colorizer;
@@ -348,27 +348,29 @@ mod tests {
                 .unwrap();
         }
 
-        let options = ProjectListOptions {
-            permissions: vec![
-                ProjectPermission::Owner,
-                ProjectPermission::Write,
-                ProjectPermission::Read,
-            ],
-            filter: ProjectFilter::None,
-            order: OrderBy::NameDesc,
-            offset: 0,
-            limit: 2,
-        };
-
         let res = warp::test::request()
             .method("GET")
-            .path("/projects")
+            .path(&format!(
+                "/projects?{}",
+                &serde_urlencoded::to_string([
+                    (
+                        "permissions",
+                        serde_json::json! {["Read", "Write", "Owner"]}
+                            .to_string()
+                            .as_str()
+                    ),
+                    // omitted ("filter", "None"),
+                    ("order", "NameDesc"),
+                    ("offset", "0"),
+                    ("limit", "2"),
+                ])
+                .unwrap()
+            ))
             .header("Content-Length", "0")
             .header(
                 "Authorization",
                 format!("Bearer {}", session.id.to_string()),
             )
-            .json(&options)
             .reply(&list_projects_handler(ctx))
             .await;
 
