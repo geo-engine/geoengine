@@ -44,14 +44,17 @@ pub enum Error {
     RegistrationFailed {
         reason: String,
     },
+    #[snafu(display("User does not exist or password is wrong."))]
     LoginFailed,
     LogoutFailed,
-    SessionDoesNotExist,
+    #[snafu(display("The session id is invalid."))]
     InvalidSession,
+    #[snafu(display("Header with authorization token not provided."))]
     MissingAuthorizationHeader,
+    #[snafu(display("You need to authenticate with bearer."))]
     InvalidAuthorizationScheme,
 
-    #[snafu(display("Authorization error {:?}", source))]
+    #[snafu(display("Authorization error: {:?}", source))]
     Authorization {
         source: Box<Error>,
     },
@@ -77,6 +80,7 @@ pub enum Error {
 
     TokioPostgresTimeout,
 
+    #[snafu(display("Identifier does not have the right format."))]
     InvalidUuid,
     SessionNotInitialized,
 
