@@ -147,6 +147,7 @@ where
             p.name, 
             p.description,
             p.bounds,
+            p.time_step,
             p.changed,
             p.author_user_id
         FROM user_project_permissions u JOIN project_versions p ON (u.project_id = p.project_id)
@@ -165,6 +166,7 @@ where
             p.name, 
             p.description,
             p.bounds,
+            p.time_step,
             p.changed,
             p.author_user_id
         FROM user_project_permissions u JOIN project_versions p ON (u.project_id = p.project_id)
@@ -180,8 +182,9 @@ where
         let name = row.get(2);
         let description = row.get(3);
         let bounds = row.get(4);
-        let changed = row.get(5);
-        let author_id = UserId(row.get(6));
+        let time_step = row.get(5);
+        let changed = row.get(6);
+        let author_id = UserId(row.get(7));
 
         let stmt = conn
             .prepare(
@@ -224,6 +227,7 @@ where
             description,
             layers,
             bounds,
+            time_step,
         })
     }
 
@@ -252,10 +256,11 @@ where
                     name,
                     description,
                     bounds,
+                    time_step,
                     author_user_id,
                     changed,
                     latest)
-                    VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, TRUE);",
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, TRUE);",
             )
             .await?;
 
@@ -268,6 +273,7 @@ where
                     &project.name,
                     &project.description,
                     &project.bounds,
+                    &project.time_step,
                     &user,
                 ],
             )
@@ -322,10 +328,11 @@ where
                     name,
                     description,
                     bounds,
+                    time_step,
                     author_user_id,
                     changed,
                     latest)
-                VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, TRUE);",
+                VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, TRUE);",
             )
             .await?;
 
@@ -338,6 +345,7 @@ where
                     &project.name,
                     &project.description,
                     &project.bounds,
+                    &project.time_step,
                     &user,
                 ],
             )

@@ -133,6 +133,16 @@ where
                             bounding_box "BoundingBox2D",
                             time_interval "TimeInterval"
                         );
+                        
+                        CREATE TYPE "TimeGranularity" AS ENUM (
+                            'Millis', 'Seconds', 'Minutes', 'Hours',
+                            'Days',  'Months', 'Years'
+                        );
+                        
+                        CREATE TYPE "TimeStep" AS (
+                            granularity "TimeGranularity",
+                            step integer,
+                        );
 
                         CREATE TABLE projects (
                             id UUID PRIMARY KEY
@@ -153,6 +163,7 @@ where
                             name character varying (256) NOT NULL,
                             description text NOT NULL,
                             bounds "STRectangle" NOT NULL,
+                            time_step "TimeStep" NOT NULL,
                             changed timestamp with time zone,
                             author_user_id UUID REFERENCES users(id) NOT NULL,
                             latest boolean
@@ -549,6 +560,7 @@ mod tests {
                     1,
                 )
                 .unwrap(),
+                time_step: None,
             }
             .validated()
             .unwrap();

@@ -237,6 +237,7 @@ mod tests {
         },
     };
     use geoengine_datatypes::operations::image::Colorizer;
+    use geoengine_datatypes::primitives::{TimeGranularity, TimeStep};
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
 
     #[tokio::test]
@@ -273,6 +274,10 @@ mod tests {
             name: "Test".to_string(),
             description: "Foo".to_string(),
             bounds: STRectangle::new(SpatialReference::wgs84(), 0., 0., 1., 1., 0, 1).unwrap(),
+            time_step: Some(TimeStep {
+                step: 1,
+                granularity: TimeGranularity::Months,
+            }),
         };
 
         let res = warp::test::request()
@@ -337,6 +342,7 @@ mod tests {
                     1,
                 )
                 .unwrap(),
+                time_step: None,
             }
             .validated()
             .unwrap();
@@ -429,6 +435,7 @@ mod tests {
                         1,
                     )
                     .unwrap(),
+                    time_step: None,
                 }
                 .validated()
                 .unwrap(),
@@ -502,6 +509,7 @@ mod tests {
                         1,
                     )
                     .unwrap(),
+                    time_step: None,
                 }
                 .validated()
                 .unwrap(),
@@ -625,6 +633,7 @@ mod tests {
                         1,
                     )
                     .unwrap(),
+                    time_step: None,
                 }
                 .validated()
                 .unwrap(),
@@ -751,6 +760,7 @@ mod tests {
                         1,
                     )
                     .unwrap(),
+                    time_step: None,
                 }
                 .validated()
                 .unwrap(),
@@ -900,6 +910,7 @@ mod tests {
                         1,
                     )
                     .unwrap(),
+                    time_step: None,
                 }
                 .validated()
                 .unwrap(),
@@ -991,6 +1002,7 @@ mod tests {
                         1,
                     )
                     .unwrap(),
+                    time_step: None,
                 }
                 .validated()
                 .unwrap(),
@@ -1099,6 +1111,7 @@ mod tests {
                         1,
                     )
                     .unwrap(),
+                    time_step: None,
                 }
                 .validated()
                 .unwrap(),
@@ -1200,6 +1213,7 @@ mod tests {
                         1,
                     )
                     .unwrap(),
+                    time_step: None,
                 }
                 .validated()
                 .unwrap(),
@@ -1308,6 +1322,7 @@ mod tests {
                         1,
                     )
                     .unwrap(),
+                    time_step: None,
                 }
                 .validated()
                 .unwrap(),

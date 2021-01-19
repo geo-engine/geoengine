@@ -8,7 +8,8 @@ use crate::workflows::workflow::WorkflowId;
 use crate::{error, util::config::get_config_element};
 use chrono::{DateTime, Utc};
 use geoengine_datatypes::primitives::{
-    BoundingBox2D, Coordinate2D, SpatialBounded, TemporalBounded, TimeInterval,
+    BoundingBox2D, Coordinate2D, SpatialBounded, TemporalBounded, TimeGranularity, TimeInterval,
+    TimeStep,
 };
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use geoengine_datatypes::{operations::image::Colorizer, primitives::TimeInstance};
@@ -29,6 +30,7 @@ pub struct Project {
     pub description: String,
     pub layers: Vec<Layer>,
     pub bounds: STRectangle,
+    pub time_step: TimeStep,
 }
 
 impl Project {
@@ -40,6 +42,11 @@ impl Project {
             description: create.description,
             layers: vec![],
             bounds: create.bounds,
+            time_step: create.time_step.unwrap_or_else(|| TimeStep {
+                // TODO: use config to store default time step
+                granularity: TimeGranularity::Days,
+                step: 1,
+            }),
         }
     }
 
@@ -255,6 +262,7 @@ pub struct CreateProject {
     pub name: String,
     pub description: String,
     pub bounds: STRectangle,
+    pub time_step: Option<TimeStep>,
 }
 
 impl UserInput for CreateProject {
