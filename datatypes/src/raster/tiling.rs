@@ -68,7 +68,7 @@ impl TilingStrategy {
         GridBoundingBox2D::new_unchecked(start, end)
     }
 
-    /// generates the tile idx for the tiles intersecting the bounding box
+    /// generates the tile idx in [z,y,x] order for the tiles intersecting the bounding box
     pub fn tile_idx_iterator(
         &self,
         bounding_box: BoundingBox2D,
@@ -85,7 +85,7 @@ impl TilingStrategy {
         y_range.flat_map(move |y_tile| x_range.clone().map(move |x_tile| [y_tile, x_tile].into()))
     }
 
-    /// generates the tile idx for the tiles intersecting the bounding box
+    /// generates the tile idx in [z,y,x] order for the tiles intersecting the bounding box
     pub fn tile_information_iterator(
         &self,
         bounding_box: BoundingBox2D,
