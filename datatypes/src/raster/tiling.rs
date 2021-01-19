@@ -62,14 +62,6 @@ impl TilingStrategy {
         [y_tile_idx, x_tile_idx].into()
     }
 
-    pub fn pixel_idx_to_next_tile_idx(&self, pixel_idx: GridIdx2D) -> GridIdx2D {
-        let GridIdx([y_pixel_idx, x_pixel_idx]) = pixel_idx;
-        let [y_tile_size, x_tile_size] = self.tile_pixel_size.into_inner();
-        let y_tile_idx = (y_pixel_idx as f32 / y_tile_size as f32).ceil() as isize;
-        let x_tile_idx = (x_pixel_idx as f32 / x_tile_size as f32).ceil() as isize;
-        [y_tile_idx, x_tile_idx].into()
-    }
-
     pub fn pixel_grid_box(&self, bounding_box: BoundingBox2D) -> GridBoundingBox2D {
         let start = self.upper_left_pixel_idx(bounding_box);
         let end = self.lower_right_pixel_idx(bounding_box);
