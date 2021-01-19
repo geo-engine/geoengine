@@ -75,7 +75,7 @@ where
     fn number_of_tiles_in_bbox(tile_info: &TileInformation, bbox: BoundingBox2D) -> usize {
         // TODO: get tiling strategy from stream or execution context instead of creating it here
         let strat = TilingStrategy {
-            tile_pixel_size: tile_info.tile_size_in_pixels,
+            tile_size_in_pixels: tile_info.tile_size_in_pixels,
             geo_transform: tile_info.global_geo_transform,
         };
 
@@ -308,7 +308,7 @@ mod tests {
             thread_pool: thread_pool.create_context(),
             tiling_specification: TilingSpecification {
                 origin_coordinate: Coordinate2D::default(),
-                tile_size: GridShape2D::from([600, 600]),
+                tile_size_in_pixels: GridShape2D::from([600, 600]),
             },
         };
         let query_rect = QueryRectangle {

@@ -39,7 +39,7 @@ impl Default for MockExecutionContextCreator {
             thread_pool: ThreadPool::new(1),
             tiling_specification: TilingSpecification {
                 origin_coordinate: Coordinate2D::default(),
-                tile_size: GridShape2D::from([600, 600]),
+                tile_size_in_pixels: GridShape2D::from([600, 600]),
             },
         }
     }

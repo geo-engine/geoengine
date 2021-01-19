@@ -8,20 +8,20 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct TilingSpecification {
     pub origin_coordinate: Coordinate2D,
-    pub tile_size: GridShape2D,
+    pub tile_size_in_pixels: GridShape2D,
 }
 
 /// A provider of tile (size) information for a raster/grid
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct TilingStrategy {
-    pub tile_pixel_size: GridShape2D,
+    pub tile_size_in_pixels: GridShape2D,
     pub geo_transform: GeoTransform,
 }
 
 impl TilingStrategy {
     pub fn new(tile_pixel_size: GridShape2D, geo_transform: GeoTransform) -> Self {
         Self {
-            tile_pixel_size,
+            tile_size_in_pixels: tile_pixel_size,
             geo_transform,
         }
     }
@@ -32,7 +32,7 @@ impl TilingStrategy {
         y_pixel_size: f64,
     ) -> Self {
         Self {
-            tile_pixel_size: tiling_specification.tile_size,
+            tile_size_in_pixels: tiling_specification.tile_size_in_pixels,
             geo_transform: GeoTransform::new(
                 tiling_specification.origin_coordinate,
                 x_pixel_size,
@@ -56,7 +56,7 @@ impl TilingStrategy {
 
     pub fn pixel_idx_to_tile_idx(&self, pixel_idx: GridIdx2D) -> GridIdx2D {
         let GridIdx([y_pixel_idx, x_pixel_idx]) = pixel_idx;
-        let [y_tile_size, x_tile_size] = self.tile_pixel_size.into_inner();
+        let [y_tile_size, x_tile_size] = self.tile_size_in_pixels.into_inner();
         let y_tile_idx = (y_pixel_idx as f32 / y_tile_size as f32).floor() as isize;
         let x_tile_idx = (x_pixel_idx as f32 / x_tile_size as f32).floor() as isize;
         [y_tile_idx, x_tile_idx].into()
@@ -92,7 +92,7 @@ impl TilingStrategy {
         &self,
         bounding_box: BoundingBox2D,
     ) -> impl Iterator<Item = TileInformation> {
-        let tile_pixel_size = self.tile_pixel_size;
+        let tile_pixel_size = self.tile_size_in_pixels;
         let geo_transform = self.geo_transform;
         self.tile_idx_iterator(bounding_box)
             .map(move |idx| TileInformation::new(idx, tile_pixel_size, geo_transform))

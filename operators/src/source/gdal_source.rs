@@ -694,7 +694,7 @@ mod tests {
         let bounding_box = BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap();
 
         let origin_split_tileing_strategy = TilingStrategy {
-            tile_pixel_size: tile_size_in_pixels.into(),
+            tile_size_in_pixels: tile_size_in_pixels.into(),
             geo_transform: dataset_geo_transform,
         };
 
@@ -728,7 +728,7 @@ mod tests {
         let bounding_box = BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap();
 
         let origin_split_tileing_strategy = TilingStrategy {
-            tile_pixel_size: tile_size_in_pixels.into(),
+            tile_size_in_pixels: tile_size_in_pixels.into(),
             geo_transform: central_geo_transform,
         };
 
@@ -762,7 +762,7 @@ mod tests {
         let bounding_box = BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap();
 
         let origin_split_tileing_strategy = TilingStrategy {
-            tile_pixel_size: tile_size_in_pixels.into(),
+            tile_size_in_pixels: tile_size_in_pixels.into(),
             geo_transform: central_geo_transform,
         };
 
@@ -792,7 +792,7 @@ mod tests {
         let bounding_box = BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap();
 
         let origin_split_tileing_strategy = TilingStrategy {
-            tile_pixel_size: tile_size_in_pixels.into(),
+            tile_size_in_pixels: tile_size_in_pixels.into(),
             geo_transform: central_geo_transform,
         };
 
@@ -879,13 +879,13 @@ mod tests {
             gdal_params,
             tiling_specification: TilingSpecification {
                 origin_coordinate: central_geo_transform.origin_coordinate,
-                tile_size: GridShape2D::from(tile_size_in_pixels),
+                tile_size_in_pixels: GridShape2D::from(tile_size_in_pixels),
             },
             phantom_data: PhantomData,
         };
 
         let origin_split_tileing_strategy = TilingStrategy {
-            tile_pixel_size: tile_size_in_pixels.into(),
+            tile_size_in_pixels: tile_size_in_pixels.into(),
             geo_transform: central_geo_transform,
         };
 
@@ -990,7 +990,7 @@ mod tests {
             gdal_params,
             tiling_specification: TilingSpecification {
                 origin_coordinate: Coordinate2D::default(),
-                tile_size: GridShape2D::from(tile_size_in_pixels),
+                tile_size_in_pixels: GridShape2D::from(tile_size_in_pixels),
             },
             phantom_data: PhantomData,
         };
@@ -1057,7 +1057,7 @@ mod tests {
             gdal_params,
             tiling_specification: TilingSpecification {
                 origin_coordinate: Coordinate2D::new(0., 0.),
-                tile_size: GridShape2D::from(tile_size_in_pixels),
+                tile_size_in_pixels: GridShape2D::from(tile_size_in_pixels),
             },
             phantom_data: PhantomData,
         };
@@ -1102,7 +1102,7 @@ mod tests {
         let bounding_box = BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap();
 
         let origin_split_tileing_strategy = TilingStrategy {
-            tile_pixel_size: tile_size_in_pixels.into(),
+            tile_size_in_pixels: tile_size_in_pixels.into(),
             geo_transform: dataset_geo_transform,
         };
 
@@ -1140,7 +1140,7 @@ mod tests {
             gdal_params,
             tiling_specification: TilingSpecification {
                 origin_coordinate: Coordinate2D::new(0., 0.),
-                tile_size: GridShape2D::from(tile_size_in_pixels),
+                tile_size_in_pixels: GridShape2D::from(tile_size_in_pixels),
             },
             phantom_data: PhantomData,
         };
@@ -1199,7 +1199,7 @@ mod tests {
         let bounding_box = BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap();
 
         let origin_split_tileing_strategy = TilingStrategy {
-            tile_pixel_size: tile_size_in_pixels.into(),
+            tile_size_in_pixels: tile_size_in_pixels.into(),
             geo_transform: center_geo_transform,
         };
 
@@ -1237,7 +1237,7 @@ mod tests {
             gdal_params,
             tiling_specification: TilingSpecification {
                 origin_coordinate: Coordinate2D::new(0., 0.),
-                tile_size: GridShape2D::from(tile_size_in_pixels),
+                tile_size_in_pixels: GridShape2D::from(tile_size_in_pixels),
             },
             phantom_data: PhantomData,
         };
@@ -1322,7 +1322,7 @@ mod tests {
             gdal_params,
             tiling_specification: TilingSpecification {
                 origin_coordinate: Coordinate2D::new(0., 0.),
-                tile_size: GridShape2D::from(tile_size_in_pixels),
+                tile_size_in_pixels: GridShape2D::from(tile_size_in_pixels),
             },
             phantom_data: PhantomData,
         };
@@ -1330,7 +1330,7 @@ mod tests {
         let query_bbox = BoundingBox2D::new((-30., 0.).into(), (35., 65.).into()).unwrap();
 
         let origin_split_tileing_strategy = TilingStrategy {
-            tile_pixel_size: tile_size_in_pixels.into(),
+            tile_size_in_pixels: tile_size_in_pixels.into(),
             geo_transform: dataset_geo_transform,
         };
 
@@ -1415,7 +1415,7 @@ mod tests {
                 gdal_params,
                 tiling_specification: TilingSpecification {
                     origin_coordinate: Coordinate2D::new(0., 0.),
-                    tile_size: GridShape2D::from(tile_size_in_pixels),
+                    tile_size_in_pixels: GridShape2D::from(tile_size_in_pixels),
                 },
                 phantom_data: PhantomData,
             };

@@ -150,7 +150,7 @@ async fn get_map<C: Context>(
         thread_pool: thread_pool.create_context(),
         tiling_specification: TilingSpecification {
             origin_coordinate: Coordinate2D::default(),
-            tile_size: GridShape2D::from([600, 600]),
+            tile_size_in_pixels: GridShape2D::from([600, 600]),
         },
     };
 
@@ -347,7 +347,7 @@ mod tests {
             &PathBuf::from("../operators/test-data/raster"),
             TilingSpecification {
                 origin_coordinate: Coordinate2D::new(0., 0.),
-                tile_size: GridShape2D::from([600, 600]),
+                tile_size_in_pixels: GridShape2D::from([600, 600]),
             },
         )
         .unwrap();
@@ -402,7 +402,7 @@ mod tests {
             PathBuf::from("../operators/test-data/raster").as_ref(),
             TilingSpecification {
                 origin_coordinate: Coordinate2D::new(0., 0.),
-                tile_size: GridShape2D::from([600, 600]),
+                tile_size_in_pixels: GridShape2D::from([600, 600]),
             },
         )
         .unwrap();
