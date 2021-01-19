@@ -94,7 +94,7 @@ impl GeoTransform {
         [grid_y_index, grid_x_index].into()
     }
 
-    /// Transform a BoundingBox2D into a GridBoundingBox
+    /// Transform a `BoundingBox2D` into a `GridBoundingBox`
     pub fn pixel_box(&self, bounding_box: BoundingBox2D) -> GridBoundingBox2D {
         let start = self.coordinate_to_grid_idx_2d(bounding_box.upper_left());
         let end = self.coordinate_to_grid_idx_2d(bounding_box.lower_right());
