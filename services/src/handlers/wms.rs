@@ -290,16 +290,16 @@ fn get_map_mock(request: &GetMap) -> Result<Box<dyn warp::Reply>, warp::Rejectio
 mod tests {
     use std::path::PathBuf;
 
-    use geoengine_datatypes::primitives::{BoundingBox2D, TimeInterval};
     use geoengine_datatypes::operations::image::RgbaColor;
+    use geoengine_datatypes::primitives::{BoundingBox2D, TimeInterval};
     use geoengine_operators::engine::{RasterOperator, TypedOperator};
     use geoengine_operators::source::{GdalSource, GdalSourceParameters, GdalSourceProcessor};
 
     use super::*;
     use crate::workflows::workflow::Workflow;
     use crate::{contexts::InMemoryContext, ogc::wms::request::GetMapFormat};
-    use xml::ParserConfig;
     use std::convert::TryInto;
+    use xml::ParserConfig;
 
     #[tokio::test]
     async fn test() {
@@ -542,7 +542,8 @@ mod tests {
             ],
             RgbaColor::transparent(),
             RgbaColor::pink(),
-        ).unwrap();
+        )
+        .unwrap();
 
         let params = &[
             ("request", "GetMap"),
@@ -553,14 +554,20 @@ mod tests {
             ("width", "600"),
             ("height", "600"),
             ("crs", "foo"),
-            ("styles", &format!("custom:{}", serde_json::to_string(&colorizer).unwrap())),
+            (
+                "styles",
+                &format!("custom:{}", serde_json::to_string(&colorizer).unwrap())
+            ),
             ("format", "image/png"),
             ("time", "2014-01-01T00:00:00.0Z"),
         ];
 
         let res = warp::test::request()
             .method("GET")
-            .path(&format!("/wms?{}", serde_urlencoded::to_string(params).unwrap()))
+            .path(&format!(
+                "/wms?{}",
+                serde_urlencoded::to_string(params).unwrap()
+            ))
             .reply(&wms_handler(ctx))
             .await;
         assert_eq!(res.status(), 200);
