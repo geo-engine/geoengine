@@ -11,6 +11,20 @@ pub struct TilingSpecification {
     pub tile_size_in_pixels: GridShape2D,
 }
 
+impl TilingSpecification {
+    pub fn new(origin_coordinate: Coordinate2D, tile_size_in_pixels: GridShape2D) -> Self {
+        Self {
+            origin_coordinate,
+            tile_size_in_pixels,
+        }
+    }
+
+    /// create a `TilingStrategy` from self and pixel sizes
+    pub fn strategy(self, x_pixel_size: f64, y_pixel_size: f64) -> TilingStrategy {
+        TilingStrategy::new_with_tiling_spec(self, x_pixel_size, y_pixel_size)
+    }
+}
+
 /// A provider of tile (size) information for a raster/grid
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct TilingStrategy {
