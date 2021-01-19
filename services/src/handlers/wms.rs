@@ -549,7 +549,7 @@ mod tests {
             ("request", "GetMap"),
             ("service", "WMS"),
             ("version", "1.3.0"),
-            ("layers", id.to_string()),
+            ("layers", &id.to_string()),
             ("bbox", "20,-10,80,50"),
             ("width", "600"),
             ("height", "600"),
