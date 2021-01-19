@@ -62,12 +62,6 @@ impl TilingStrategy {
         [y_tile_idx, x_tile_idx].into()
     }
 
-    pub fn pixel_grid_box(&self, bounding_box: BoundingBox2D) -> GridBoundingBox2D {
-        let start = self.upper_left_pixel_idx(bounding_box);
-        let end = self.lower_right_pixel_idx(bounding_box);
-        GridBoundingBox2D::new_unchecked(start, end)
-    }
-
     pub fn tile_grid_box(&self, bounding_box: BoundingBox2D) -> GridBoundingBox2D {
         let start = self.pixel_idx_to_tile_idx(self.upper_left_pixel_idx(bounding_box));
         let end = self.pixel_idx_to_tile_idx(self.lower_right_pixel_idx(bounding_box));
