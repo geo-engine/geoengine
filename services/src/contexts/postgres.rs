@@ -76,6 +76,7 @@ where
         Ok(row.get(0))
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn update_schema(
         conn: PooledConnection<'_, PostgresConnectionManager<Tls>>,
     ) -> Result<()> {

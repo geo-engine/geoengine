@@ -42,7 +42,7 @@ impl Project {
             description: create.description,
             layers: vec![],
             bounds: create.bounds,
-            time_step: create.time_step.unwrap_or_else(|| TimeStep {
+            time_step: create.time_step.unwrap_or(TimeStep {
                 // TODO: use config to store default time step
                 granularity: TimeGranularity::Days,
                 step: 1,
