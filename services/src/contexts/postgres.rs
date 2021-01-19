@@ -142,7 +142,7 @@ where
                         
                         CREATE TYPE "TimeStep" AS (
                             granularity "TimeGranularity",
-                            step integer,
+                            step OID
                         );
 
                         CREATE TABLE projects (
