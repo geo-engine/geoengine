@@ -69,6 +69,7 @@ impl TilingStrategy {
     }
 
     /// generates the tile idx in [z,y,x] order for the tiles intersecting the bounding box
+    /// the iterator moves once along the x-axis and then increases the y-axis
     pub fn tile_idx_iterator(
         &self,
         bounding_box: BoundingBox2D,
@@ -85,7 +86,8 @@ impl TilingStrategy {
         y_range.flat_map(move |y_tile| x_range.clone().map(move |x_tile| [y_tile, x_tile].into()))
     }
 
-    /// generates the tile idx in [z,y,x] order for the tiles intersecting the bounding box
+    /// generates the tile information for the tiles intersecting the bounding box
+    /// the iterator moves once along the x-axis and then increases the y-axis
     pub fn tile_information_iterator(
         &self,
         bounding_box: BoundingBox2D,
