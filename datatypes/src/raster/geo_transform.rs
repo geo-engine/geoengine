@@ -1,7 +1,7 @@
-use crate::primitives::Coordinate2D;
+use crate::primitives::{BoundingBox2D, Coordinate2D};
 use serde::{Deserialize, Serialize};
 
-use super::{GridIdx, GridIdx2D};
+use super::{GridBoundingBox2D, GridIdx, GridIdx2D};
 
 /// This is a typedef for the `GDAL GeoTransform`. It represents an affine transformation matrix.
 pub type GdalGeoTransform = [f64; 6];
@@ -92,6 +92,13 @@ impl GeoTransform {
         let grid_x_index = ((coord.x - self.origin_coordinate.x) / self.x_pixel_size) as isize;
         let grid_y_index = ((coord.y - self.origin_coordinate.y) / self.y_pixel_size) as isize;
         [grid_y_index, grid_x_index].into()
+    }
+
+    /// Transform a `BoundingBox2D` into a `GridBoundingBox`
+    pub fn pixel_box(&self, bounding_box: BoundingBox2D) -> GridBoundingBox2D {
+        let start = self.coordinate_to_grid_idx_2d(bounding_box.upper_left());
+        let end = self.coordinate_to_grid_idx_2d(bounding_box.lower_right());
+        GridBoundingBox2D::new_unchecked(start, end)
     }
 }
 
