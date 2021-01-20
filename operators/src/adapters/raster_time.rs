@@ -1,11 +1,10 @@
 use crate::engine::QueryRectangle;
-use crate::source::TilingStrategy;
 use crate::util::Result;
 use futures::stream::{FusedStream, Zip};
 use futures::Stream;
 use futures::{ready, StreamExt};
 use geoengine_datatypes::primitives::{BoundingBox2D, TimeInstance, TimeInterval};
-use geoengine_datatypes::raster::{GridSize, Pixel, RasterTile2D, TileInformation};
+use geoengine_datatypes::raster::{GridSize, Pixel, RasterTile2D, TileInformation, TilingStrategy};
 use pin_project::pin_project;
 use std::cmp::min;
 use std::pin::Pin;
@@ -76,12 +75,11 @@ where
     fn number_of_tiles_in_bbox(tile_info: &TileInformation, bbox: BoundingBox2D) -> usize {
         // TODO: get tiling strategy from stream or execution context instead of creating it here
         let strat = TilingStrategy {
-            bounding_box: bbox,
-            tile_pixel_size: tile_info.tile_size_in_pixels,
+            tile_size_in_pixels: tile_info.tile_size_in_pixels,
             geo_transform: tile_info.global_geo_transform,
         };
 
-        strat.tile_grid_box().number_of_elements()
+        strat.tile_grid_box(bbox).number_of_elements()
     }
 }
 

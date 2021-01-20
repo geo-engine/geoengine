@@ -86,19 +86,10 @@ Content-Type: application/json
 
 ###
 
-GET http://localhost:3030/projects
+GET http://localhost:3030/projects?permissions=["Owner"]&filter=None&order=NameAsc&offset=0&limit=1
 Authorization: Bearer 6d69326e-8694-4ae5-815a-b4b1ef02a8f6
 Content-Type: application/json
 
-{
-  "permissions": [
-    "Owner"
-  ],
-  "filter": "None",
-  "order": "NameAsc",
-  "offset": 0,
-  "limit": 1
-}
 
 ###
 

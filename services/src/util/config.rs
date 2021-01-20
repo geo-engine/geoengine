@@ -143,3 +143,15 @@ pub struct GdalSource {
 impl ConfigElement for GdalSource {
     const KEY: &'static str = "operators.gdal_source";
 }
+
+#[derive(Debug, Deserialize)]
+pub struct TilingSpecification {
+    pub origin_coordinate_x: f64,
+    pub origin_coordinate_y: f64,
+    pub tile_shape_pixels_x: usize,
+    pub tile_shape_pixels_y: usize,
+}
+
+impl ConfigElement for TilingSpecification {
+    const KEY: &'static str = "raster.tiling_specification";
+}

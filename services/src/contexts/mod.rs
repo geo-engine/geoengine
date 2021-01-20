@@ -12,8 +12,12 @@ mod postgres;
 use crate::datasets::storage::DataSetDB;
 
 use crate::users::user::UserId;
+use crate::util::config;
 use crate::util::config::{get_config_element, GdalSource};
 use geoengine_datatypes::dataset::DataSetId;
+use geoengine_datatypes::primitives::Coordinate2D;
+use geoengine_datatypes::raster::GridShape2D;
+use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_operators::concurrency::ThreadPool;
 use geoengine_operators::engine::{
     ExecutionContext, LoadingInfo, LoadingInfoProvider, QueryContext, VectorResultDescriptor,
@@ -107,6 +111,22 @@ where
         Ok(get_config_element::<GdalSource>()
             .map_err(|_| geoengine_operators::error::Error::RasterRootPathNotConfigured)?
             .raster_data_root_path)
+    }
+
+    fn tiling_specification(&self) -> TilingSpecification {
+        // TODO: load only once and handle error
+        let config_tiling_spec = get_config_element::<config::TilingSpecification>().unwrap();
+
+        TilingSpecification {
+            origin_coordinate: Coordinate2D::new(
+                config_tiling_spec.origin_coordinate_x,
+                config_tiling_spec.origin_coordinate_y,
+            ),
+            tile_size_in_pixels: GridShape2D::from([
+                config_tiling_spec.tile_shape_pixels_y,
+                config_tiling_spec.tile_shape_pixels_x,
+            ]),
+        }
     }
 }
 

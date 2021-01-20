@@ -275,7 +275,7 @@ fn get_map_mock(request: &GetMap) -> Result<Box<dyn warp::Reply>, warp::Rejectio
 mod tests {
     use std::path::PathBuf;
 
-    use geoengine_datatypes::primitives::{BoundingBox2D, TimeInterval};
+    use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, TimeInterval};
     use geoengine_operators::engine::{MockQueryContext, RasterOperator, TypedOperator};
     use geoengine_operators::source::{GdalSource, GdalSourceParameters, GdalSourceProcessor};
 
@@ -285,6 +285,7 @@ mod tests {
     use crate::util::user_input::UserInput;
     use crate::workflows::workflow::Workflow;
     use crate::{contexts::InMemoryContext, ogc::wms::request::GetMapFormat};
+    use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
     use xml::ParserConfig;
 
     #[tokio::test]
@@ -332,6 +333,10 @@ mod tests {
         let gdal_source = GdalSourceProcessor::<_, u8>::from_params_with_json_provider(
             gdal_params,
             &PathBuf::from("../operators/test-data/raster"),
+            TilingSpecification {
+                origin_coordinate: Coordinate2D::new(0., 0.),
+                tile_size_in_pixels: GridShape2D::from([600, 600]),
+            },
         )
         .unwrap();
 
@@ -384,6 +389,10 @@ mod tests {
         let gdal_source = GdalSourceProcessor::<_, u8>::from_params_with_json_provider(
             gdal_params,
             PathBuf::from("../operators/test-data/raster").as_ref(),
+            TilingSpecification {
+                origin_coordinate: Coordinate2D::new(0., 0.),
+                tile_size_in_pixels: GridShape2D::from([600, 600]),
+            },
         )
         .unwrap();
 
