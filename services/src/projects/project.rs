@@ -176,6 +176,7 @@ pub struct Layer {
     pub workflow: WorkflowId,
     pub name: String,
     pub info: LayerInfo,
+    pub visibility: LayerVisibility,
 }
 
 impl Layer {
@@ -208,6 +209,22 @@ pub struct RasterInfo {
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 pub struct VectorInfo {
     // TODO add vector layer specific info
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
+#[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
+pub struct LayerVisibility {
+    pub data: bool,
+    pub legend: bool,
+}
+
+impl Default for LayerVisibility {
+    fn default() -> Self {
+        LayerVisibility {
+            data: true,
+            legend: false,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
@@ -446,6 +463,10 @@ mod tests {
                     "info": {
                         "Vector": {},
                     },
+                    "visibility": {
+                        "data": true,
+                        "legend": false,
+                    }
                 })
                 .to_string()
             )
@@ -454,6 +475,10 @@ mod tests {
                 workflow,
                 name: "L2".to_string(),
                 info: LayerInfo::Vector(VectorInfo {}),
+                visibility: LayerVisibility {
+                    data: true,
+                    legend: false,
+                }
             })
         );
     }
@@ -471,6 +496,7 @@ mod tests {
                     workflow: WorkflowId::new(),
                     name: "vector layer".to_string(),
                     info: LayerInfo::Vector(VectorInfo {}),
+                    visibility: Default::default(),
                 }),
                 LayerUpdate::UpdateOrInsert(Layer {
                     workflow: WorkflowId::new(),
@@ -478,6 +504,7 @@ mod tests {
                     info: LayerInfo::Raster(RasterInfo {
                         colorizer: Colorizer::Rgba,
                     }),
+                    visibility: Default::default(),
                 }),
             ]),
             bounds: Some(STRectangle {

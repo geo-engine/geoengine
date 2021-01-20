@@ -223,7 +223,7 @@ async fn list_permissions<C: Context>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::projects::project::{LayerUpdate, VectorInfo};
+    use crate::projects::project::{LayerUpdate, LayerVisibility, VectorInfo};
     use crate::users::session::Session;
     use crate::users::user::{UserCredentials, UserRegistration};
     use crate::users::userdb::UserDB;
@@ -651,6 +651,7 @@ mod tests {
                 info: LayerInfo::Raster(RasterInfo {
                     colorizer: Colorizer::Rgba,
                 }),
+                visibility: Default::default(),
             })]),
             bounds: None,
         };
@@ -774,12 +775,20 @@ mod tests {
             info: LayerInfo::Raster(RasterInfo {
                 colorizer: Colorizer::Rgba,
             }),
+            visibility: LayerVisibility {
+                data: true,
+                legend: false,
+            },
         };
 
         let layer_2 = Layer {
             workflow: WorkflowId::new(),
             name: "L2".to_string(),
             info: LayerInfo::Vector(VectorInfo {}),
+            visibility: LayerVisibility {
+                data: false,
+                legend: true,
+            },
         };
 
         // add first layer

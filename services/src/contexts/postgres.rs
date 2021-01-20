@@ -174,6 +174,11 @@ where
                         ON project_versions (project_id, latest DESC, changed DESC, author_user_id DESC);
 
                         CREATE TYPE "LayerType" AS ENUM ('Raster', 'Vector');
+                        
+                        CREATE TYPE "LayerVisibility" AS (
+                            data BOOLEAN,
+                            legend BOOLEAN
+                        );
 
                         CREATE TABLE project_version_layers (
                             layer_index integer NOT NULL,
@@ -183,6 +188,7 @@ where
                             name character varying (256) NOT NULL,
                             workflow_id UUID NOT NULL, -- TODO: REFERENCES workflows(id)
                             raster_colorizer json,
+                            visibility "LayerVisibility" NOT NULL,
                             PRIMARY KEY (project_id, layer_index)            
                         );
 
@@ -328,6 +334,8 @@ mod tests {
             "postgresql://geoengine:geoengine@localhost:5432",
         )
         .unwrap();
+
+        // TODO: clean schema before test
 
         let ctx = PostgresContext::new(config, tokio_postgres::NoTls)
             .await
@@ -501,6 +509,7 @@ mod tests {
                 workflow: workflow_id,
                 name: "TestLayer".into(),
                 info: LayerInfo::Vector(VectorInfo {}),
+                visibility: Default::default(),
             })]),
             bounds: None,
         };

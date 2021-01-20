@@ -190,7 +190,7 @@ where
             .prepare(
                 "
         SELECT  
-            layer_type, name, workflow_id, raster_colorizer
+            layer_type, name, workflow_id, raster_colorizer, visibility
         FROM project_version_layers
         WHERE project_version_id = $1
         ORDER BY layer_index ASC",
@@ -213,6 +213,7 @@ where
                 workflow: WorkflowId(row.get(3)),
                 name: row.get(1),
                 info,
+                visibility: row.get(5),
             });
         }
 
@@ -362,8 +363,9 @@ where
                     layer_type,
                     name,
                     workflow_id,
-                    raster_colorizer)
-                VALUES ($1, $2, $3, $4, $5, $6, $7);",
+                    raster_colorizer,
+                    visibility)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8);",
                 )
                 .await?;
 
@@ -384,6 +386,7 @@ where
                         &layer.name,
                         &layer.workflow,
                         &raster_colorizer,
+                        &layer.visibility,
                     ],
                 )
                 .await?;
