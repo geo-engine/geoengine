@@ -238,6 +238,7 @@ mod tests {
     };
     use geoengine_datatypes::operations::image::Colorizer;
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
+    use crate::handlers::ErrorResponse;
 
     #[tokio::test]
     async fn create() {
@@ -291,6 +292,196 @@ mod tests {
 
         let body: String = String::from_utf8(res.body().to_vec()).unwrap();
         assert!(serde_json::from_str::<IdResponse<ProjectId>>(&body).is_ok());
+    }
+
+    #[tokio::test]
+    async fn create_invalid_method() {
+        let ctx = InMemoryContext::default();
+
+        ctx.user_db()
+            .write()
+            .await
+            .register(
+                UserRegistration {
+                    email: "foo@bar.de".to_string(),
+                    password: "secret123".to_string(),
+                    real_name: "Foo Bar".to_string(),
+                }
+                    .validated()
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let session = ctx
+            .user_db()
+            .write()
+            .await
+            .login(UserCredentials {
+                email: "foo@bar.de".to_string(),
+                password: "secret123".to_string(),
+            })
+            .await
+            .unwrap();
+
+        let create = CreateProject {
+            name: "Test".to_string(),
+            description: "Foo".to_string(),
+            bounds: STRectangle::new(SpatialReference::wgs84(), 0., 0., 1., 1., 0, 1).unwrap(),
+        };
+
+        let res = warp::test::request()
+            .method("GET")
+            .path("/project/create")
+            .header("Content-Length", "0")
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
+            .json(&create)
+            .reply(&create_project_handler(ctx))
+            .await;
+
+        assert_eq!(res.status(), 405);
+
+        let body = std::str::from_utf8(&res.body()).unwrap();
+        assert_eq!(serde_json::from_str::<ErrorResponse>(body).unwrap(), ErrorResponse {
+            error: "MethodNotAllowed".to_string(),
+            message: "HTTP method not allowed.".to_string(),
+        });
+    }
+
+    #[tokio::test]
+    async fn create_invalid_body() {
+        let ctx = InMemoryContext::default();
+
+        ctx.user_db()
+            .write()
+            .await
+            .register(
+                UserRegistration {
+                    email: "foo@bar.de".to_string(),
+                    password: "secret123".to_string(),
+                    real_name: "Foo Bar".to_string(),
+                }
+                    .validated()
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let session = ctx
+            .user_db()
+            .write()
+            .await
+            .login(UserCredentials {
+                email: "foo@bar.de".to_string(),
+                password: "secret123".to_string(),
+            })
+            .await
+            .unwrap();
+
+        let res = warp::test::request()
+            .method("GET")
+            .path("/project/create")
+            .header("Content-Length", "0")
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
+            .body("no json")
+            .reply(&create_project_handler(ctx))
+            .await;
+
+        assert_eq!(res.status(), 400);
+
+        let body = std::str::from_utf8(&res.body()).unwrap();
+        assert_eq!(serde_json::from_str::<ErrorResponse>(body).unwrap(), ErrorResponse {
+            error: "BodyDeserializeError".to_string(),
+            message: "expected ident at line 1 column 2".to_string(),
+        });
+    }
+
+    #[tokio::test]
+    async fn create_missing_fields() {
+        let ctx = InMemoryContext::default();
+
+        ctx.user_db()
+            .write()
+            .await
+            .register(
+                UserRegistration {
+                    email: "foo@bar.de".to_string(),
+                    password: "secret123".to_string(),
+                    real_name: "Foo Bar".to_string(),
+                }
+                    .validated()
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let session = ctx
+            .user_db()
+            .write()
+            .await
+            .login(UserCredentials {
+                email: "foo@bar.de".to_string(),
+                password: "secret123".to_string(),
+            })
+            .await
+            .unwrap();
+
+        let create = json!({
+            "description": "Foo".to_string(),
+            "bounds": STRectangle::new(SpatialReference::wgs84(), 0., 0., 1., 1., 0, 1).unwrap(),
+        });
+
+        let res = warp::test::request()
+            .method("POST")
+            .path("/project/create")
+            .header("Content-Length", "0")
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
+            .json(&create)
+            .reply(&create_project_handler(ctx))
+            .await;
+
+        assert_eq!(res.status(), 400);
+
+        let body = std::str::from_utf8(&res.body()).unwrap();
+        assert_eq!(serde_json::from_str::<ErrorResponse>(body).unwrap(), ErrorResponse {
+            error: "BodyDeserializeError".to_string(),
+            message: "missing field `name` at line 1 column 22".to_string(),
+        });
+    }
+
+    #[tokio::test]
+    async fn create_missing_header() {
+        let ctx = InMemoryContext::default();
+
+        let create = json!({
+            "description": "Foo".to_string(),
+            "bounds": STRectangle::new(SpatialReference::wgs84(), 0., 0., 1., 1., 0, 1).unwrap(),
+        });
+
+        let res = warp::test::request()
+            .method("POST")
+            .path("/project/create")
+            .header("Content-Length", "0")
+            .json(&create)
+            .reply(&create_project_handler(ctx))
+            .await;
+
+        assert_eq!(res.status(), 401);
+
+        let body = std::str::from_utf8(&res.body()).unwrap();
+        assert_eq!(serde_json::from_str::<ErrorResponse>(body).unwrap(), ErrorResponse {
+            error: "MissingAuthorizationHeader".to_string(),
+            message: "Header with authorization token not provided.".to_string(),
+        });
     }
 
     #[tokio::test]
