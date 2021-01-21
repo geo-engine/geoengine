@@ -8,7 +8,8 @@ use crate::workflows::workflow::WorkflowId;
 use crate::{error, util::config::get_config_element};
 use chrono::{DateTime, Utc};
 use geoengine_datatypes::primitives::{
-    BoundingBox2D, Coordinate2D, SpatialBounded, TemporalBounded, TimeInterval,
+    BoundingBox2D, Coordinate2D, SpatialBounded, TemporalBounded, TimeGranularity, TimeInterval,
+    TimeStep,
 };
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use geoengine_datatypes::{operations::image::Colorizer, primitives::TimeInstance};
@@ -29,6 +30,7 @@ pub struct Project {
     pub description: String,
     pub layers: Vec<Layer>,
     pub bounds: STRectangle,
+    pub time_step: TimeStep,
 }
 
 impl Project {
@@ -40,6 +42,11 @@ impl Project {
             description: create.description,
             layers: vec![],
             bounds: create.bounds,
+            time_step: create.time_step.unwrap_or(TimeStep {
+                // TODO: use config to store default time step
+                granularity: TimeGranularity::Days,
+                step: 1,
+            }),
         }
     }
 
@@ -169,6 +176,7 @@ pub struct Layer {
     pub workflow: WorkflowId,
     pub name: String,
     pub info: LayerInfo,
+    pub visibility: LayerVisibility,
 }
 
 impl Layer {
@@ -201,6 +209,22 @@ pub struct RasterInfo {
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 pub struct VectorInfo {
     // TODO add vector layer specific info
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
+#[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
+pub struct LayerVisibility {
+    pub data: bool,
+    pub legend: bool,
+}
+
+impl Default for LayerVisibility {
+    fn default() -> Self {
+        LayerVisibility {
+            data: true,
+            legend: false,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
@@ -261,6 +285,7 @@ pub struct CreateProject {
     pub name: String,
     pub description: String,
     pub bounds: STRectangle,
+    pub time_step: Option<TimeStep>,
 }
 
 impl UserInput for CreateProject {
@@ -475,6 +500,10 @@ mod tests {
                     "info": {
                         "Vector": {},
                     },
+                    "visibility": {
+                        "data": true,
+                        "legend": false,
+                    }
                 })
                 .to_string()
             )
@@ -483,6 +512,10 @@ mod tests {
                 workflow,
                 name: "L2".to_string(),
                 info: LayerInfo::Vector(VectorInfo {}),
+                visibility: LayerVisibility {
+                    data: true,
+                    legend: false,
+                }
             })
         );
     }
@@ -500,6 +533,7 @@ mod tests {
                     workflow: WorkflowId::new(),
                     name: "vector layer".to_string(),
                     info: LayerInfo::Vector(VectorInfo {}),
+                    visibility: Default::default(),
                 }),
                 LayerUpdate::UpdateOrInsert(Layer {
                     workflow: WorkflowId::new(),
@@ -507,6 +541,7 @@ mod tests {
                     info: LayerInfo::Raster(RasterInfo {
                         colorizer: Colorizer::Rgba,
                     }),
+                    visibility: Default::default(),
                 }),
             ]),
             bounds: Some(STRectangle {

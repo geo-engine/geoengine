@@ -76,6 +76,7 @@ where
         Ok(row.get(0))
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn update_schema(
         conn: PooledConnection<'_, PostgresConnectionManager<Tls>>,
     ) -> Result<()> {
@@ -133,6 +134,16 @@ where
                             bounding_box "BoundingBox2D",
                             time_interval "TimeInterval"
                         );
+                        
+                        CREATE TYPE "TimeGranularity" AS ENUM (
+                            'Millis', 'Seconds', 'Minutes', 'Hours',
+                            'Days',  'Months', 'Years'
+                        );
+                        
+                        CREATE TYPE "TimeStep" AS (
+                            granularity "TimeGranularity",
+                            step OID
+                        );
 
                         CREATE TABLE projects (
                             id UUID PRIMARY KEY
@@ -153,6 +164,7 @@ where
                             name character varying (256) NOT NULL,
                             description text NOT NULL,
                             bounds "STRectangle" NOT NULL,
+                            time_step "TimeStep" NOT NULL,
                             changed timestamp with time zone,
                             author_user_id UUID REFERENCES users(id) NOT NULL,
                             latest boolean
@@ -162,6 +174,11 @@ where
                         ON project_versions (project_id, latest DESC, changed DESC, author_user_id DESC);
 
                         CREATE TYPE "LayerType" AS ENUM ('Raster', 'Vector');
+                        
+                        CREATE TYPE "LayerVisibility" AS (
+                            data BOOLEAN,
+                            legend BOOLEAN
+                        );
 
                         CREATE TABLE project_version_layers (
                             layer_index integer NOT NULL,
@@ -171,6 +188,7 @@ where
                             name character varying (256) NOT NULL,
                             workflow_id UUID NOT NULL, -- TODO: REFERENCES workflows(id)
                             raster_colorizer json,
+                            visibility "LayerVisibility" NOT NULL,
                             PRIMARY KEY (project_id, layer_index)            
                         );
 
@@ -316,6 +334,8 @@ mod tests {
             "postgresql://geoengine:geoengine@localhost:5432",
         )
         .unwrap();
+
+        // TODO: clean schema before test
 
         let ctx = PostgresContext::new(config, tokio_postgres::NoTls)
             .await
@@ -489,6 +509,7 @@ mod tests {
                 workflow: workflow_id,
                 name: "TestLayer".into(),
                 info: LayerInfo::Vector(VectorInfo {}),
+                visibility: Default::default(),
             })]),
             bounds: None,
         };
@@ -549,6 +570,7 @@ mod tests {
                     1,
                 )
                 .unwrap(),
+                time_step: None,
             }
             .validated()
             .unwrap();
