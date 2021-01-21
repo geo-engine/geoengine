@@ -29,6 +29,8 @@ use geoengine_operators::engine::{
     ExecutionContext, QueryContext, QueryRectangle, RasterQueryProcessor,
 };
 use std::str::FromStr;
+use geoengine_datatypes::operations::image::RgbaColor;
+use std::convert::TryInto;
 
 pub(crate) fn wms_handler<C: Context>(
     ctx: C,
@@ -242,7 +244,15 @@ where
         .await?;
 
     let colorizer = match request.styles.strip_prefix("custom:") {
-        None => Colorizer::Rgba,
+        None => Colorizer::linear_gradient(
+            vec![
+                (T::TYPE.min_value(), RgbaColor::black()).try_into().unwrap(),
+                (T::TYPE.max_value(), RgbaColor::white()).try_into().unwrap(),
+            ],
+            RgbaColor::transparent(),
+            RgbaColor::pink(),
+        )
+        .unwrap(),
         Some(suffix) => serde_json::from_str(suffix)?,
     };
 
