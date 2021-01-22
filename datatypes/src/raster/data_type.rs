@@ -1,7 +1,7 @@
 use crate::error;
 use crate::operations::image::RgbaTransmutable;
 use crate::raster::TypedRasterConversion;
-use num_traits::{AsPrimitive, Num};
+use num_traits::{AsPrimitive, Bounded, Num};
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 
@@ -15,6 +15,7 @@ pub trait Pixel:
     + Sync
     + Send
     + Num
+    + Bounded
     + PartialOrd
     + AsPrimitive<u8>
     + AsPrimitive<i8>
@@ -283,35 +284,5 @@ impl RasterDataType {
             RasterDataType::F32 => "float",
             RasterDataType::F64 => "double",
         }
-    }
-
-    pub fn min_value(self) -> f64 {
-        match self {
-            RasterDataType::U8 => u8::MIN,
-            RasterDataType::U16 => u16::MIN,
-            RasterDataType::U32 => u32::MIN,
-            RasterDataType::U64 => u64::MIN,
-            RasterDataType::I8 => i8::MIN,
-            RasterDataType::I16 => i16::MIN,
-            RasterDataType::I32 => i32::MIN,
-            RasterDataType::I64 => i64::MIN,
-            RasterDataType::F32 => f32::MIN,
-            RasterDataType::F64 => f64::MIN,
-        } as f64
-    }
-
-    pub fn max_value(self) -> f64 {
-        match self {
-            RasterDataType::U8 => u8::MAX,
-            RasterDataType::U16 => u16::MAX,
-            RasterDataType::U32 => u32::MAX,
-            RasterDataType::U64 => u64::MAX,
-            RasterDataType::I8 => i8::MAX,
-            RasterDataType::I16 => i16::MAX,
-            RasterDataType::I32 => i32::MAX,
-            RasterDataType::I64 => i64::MAX,
-            RasterDataType::F32 => f32::MAX,
-            RasterDataType::F64 => f64::MAX,
-        } as f64
     }
 }

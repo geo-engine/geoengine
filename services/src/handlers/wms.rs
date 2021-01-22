@@ -22,15 +22,16 @@ use crate::util::config::get_config_element;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 use futures::StreamExt;
+use geoengine_datatypes::operations::image::RgbaColor;
 use geoengine_datatypes::primitives::{TimeInstance, TimeInterval};
 use geoengine_operators::call_on_generic_raster_processor;
 use geoengine_operators::concurrency::ThreadPool;
 use geoengine_operators::engine::{
     ExecutionContext, QueryContext, QueryRectangle, RasterQueryProcessor,
 };
-use std::str::FromStr;
-use geoengine_datatypes::operations::image::RgbaColor;
+use num_traits::AsPrimitive;
 use std::convert::TryInto;
+use std::str::FromStr;
 
 pub(crate) fn wms_handler<C: Context>(
     ctx: C,
@@ -246,8 +247,12 @@ where
     let colorizer = match request.styles.strip_prefix("custom:") {
         None => Colorizer::linear_gradient(
             vec![
-                (T::TYPE.min_value(), RgbaColor::black()).try_into().unwrap(),
-                (T::TYPE.max_value(), RgbaColor::white()).try_into().unwrap(),
+                (AsPrimitive::<f64>::as_(T::min_value()), RgbaColor::black())
+                    .try_into()
+                    .unwrap(),
+                (AsPrimitive::<f64>::as_(T::max_value()), RgbaColor::white())
+                    .try_into()
+                    .unwrap(),
             ],
             RgbaColor::transparent(),
             RgbaColor::pink(),
