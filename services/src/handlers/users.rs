@@ -729,6 +729,7 @@ mod tests {
                         1,
                     )
                     .unwrap(),
+                    time_step: None,
                 }
                 .validated()
                 .unwrap(),

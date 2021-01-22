@@ -1,11 +1,10 @@
 use crate::engine::QueryRectangle;
-use crate::source::TilingStrategy;
 use crate::util::Result;
 use futures::stream::{FusedStream, Zip};
 use futures::Stream;
 use futures::{ready, StreamExt};
 use geoengine_datatypes::primitives::{BoundingBox2D, TimeInstance, TimeInterval};
-use geoengine_datatypes::raster::{GridSize, Pixel, RasterTile2D, TileInformation};
+use geoengine_datatypes::raster::{GridSize, Pixel, RasterTile2D, TileInformation, TilingStrategy};
 use pin_project::pin_project;
 use std::cmp::min;
 use std::pin::Pin;
@@ -76,12 +75,11 @@ where
     fn number_of_tiles_in_bbox(tile_info: &TileInformation, bbox: BoundingBox2D) -> usize {
         // TODO: get tiling strategy from stream or execution context instead of creating it here
         let strat = TilingStrategy {
-            bounding_box: bbox,
-            tile_pixel_size: tile_info.tile_size_in_pixels,
+            tile_size_in_pixels: tile_info.tile_size_in_pixels,
             geo_transform: tile_info.global_geo_transform,
         };
 
-        strat.tile_grid_box().number_of_elements()
+        strat.tile_grid_box(bbox).number_of_elements()
     }
 }
 
@@ -178,8 +176,11 @@ mod tests {
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;
     use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution};
-    use geoengine_datatypes::raster::{Grid, RasterDataType};
     use geoengine_datatypes::spatial_reference::SpatialReference;
+    use geoengine_datatypes::{
+        primitives::Coordinate2D,
+        raster::{Grid, GridShape2D, RasterDataType, TilingSpecification},
+    };
 
     #[tokio::test]
     async fn adapter() {
@@ -305,6 +306,10 @@ mod tests {
         let exe_ctx = ExecutionContext {
             raster_data_root: Default::default(),
             thread_pool: thread_pool.create_context(),
+            tiling_specification: TilingSpecification {
+                origin_coordinate: Coordinate2D::default(),
+                tile_size_in_pixels: GridShape2D::from([600, 600]),
+            },
         };
         let query_rect = QueryRectangle {
             bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (1., 1.).into()),

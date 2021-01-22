@@ -4,6 +4,9 @@ use chrono::{Datelike, Duration, NaiveDate};
 use error::Error::NoDateTimeValid;
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "postgres")]
+use postgres_types::{FromSql, ToSql};
+
 use crate::error;
 use crate::primitives::TimeInstance;
 use crate::util::Result;
@@ -12,6 +15,7 @@ use super::TimeInterval;
 
 /// A time granularity.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
 pub enum TimeGranularity {
     Millis,
     Seconds,
@@ -24,6 +28,7 @@ pub enum TimeGranularity {
 
 /// A step in time.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
 pub struct TimeStep {
     pub granularity: TimeGranularity,
     pub step: u32,
