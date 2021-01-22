@@ -4,9 +4,9 @@ use warp::{http::Response, Filter, Rejection};
 
 use geoengine_datatypes::{
     operations::image::{Colorizer, ToPng},
-    primitives::SpatialResolution,
+    primitives::{Coordinate2D, SpatialResolution},
     raster::Grid2D,
-    raster::RasterTile2D,
+    raster::{GridShape2D, RasterTile2D, TilingSpecification},
 };
 use geoengine_datatypes::{
     primitives::BoundingBox2D,
@@ -148,9 +148,21 @@ async fn get_map<C: Context>(
     let operator = workflow.operator.get_raster().context(error::Operator)?;
 
     let thread_pool = ThreadPool::new(1); // TODO: use global thread pool
+
+    let config_tiling_spec = get_config_element::<config::TilingSpecification>()?;
     let execution_context = ExecutionContext {
         raster_data_root: get_config_element::<config::GdalSource>()?.raster_data_root_path,
         thread_pool: thread_pool.create_context(),
+        tiling_specification: TilingSpecification {
+            origin_coordinate: Coordinate2D::new(
+                config_tiling_spec.origin_coordinate_x,
+                config_tiling_spec.origin_coordinate_y,
+            ),
+            tile_size_in_pixels: GridShape2D::from([
+                config_tiling_spec.tile_shape_pixels_y,
+                config_tiling_spec.tile_shape_pixels_x,
+            ]),
+        },
     };
 
     let initialized = operator
@@ -361,6 +373,10 @@ mod tests {
         let gdal_source = GdalSourceProcessor::<_, u8>::from_params_with_json_provider(
             gdal_params,
             &PathBuf::from("../operators/test-data/raster"),
+            TilingSpecification {
+                origin_coordinate: Coordinate2D::new(0., 0.),
+                tile_size_in_pixels: GridShape2D::from([600, 600]),
+            },
         )
         .unwrap();
 
@@ -412,6 +428,10 @@ mod tests {
         let gdal_source = GdalSourceProcessor::<_, u8>::from_params_with_json_provider(
             gdal_params,
             PathBuf::from("../operators/test-data/raster").as_ref(),
+            TilingSpecification {
+                origin_coordinate: Coordinate2D::new(0., 0.),
+                tile_size_in_pixels: GridShape2D::from([600, 600]),
+            },
         )
         .unwrap();
 

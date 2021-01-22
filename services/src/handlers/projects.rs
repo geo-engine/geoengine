@@ -38,7 +38,7 @@ pub(crate) fn list_projects_handler<C: Context>(
     warp::get()
         .and(warp::path("projects"))
         .and(authenticate(ctx))
-        .and(warp::body::json())
+        .and(warp::query::<ProjectListOptions>())
         .and_then(list_projects)
 }
 
@@ -223,7 +223,7 @@ async fn list_permissions<C: Context>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::projects::project::{LayerUpdate, VectorInfo};
+    use crate::projects::project::{LayerUpdate, LayerVisibility, VectorInfo};
     use crate::users::session::Session;
     use crate::users::user::{UserCredentials, UserRegistration};
     use crate::users::userdb::UserDB;
@@ -232,11 +232,12 @@ mod tests {
     use crate::{
         contexts::InMemoryContext,
         projects::project::{
-            Layer, LayerInfo, OrderBy, Project, ProjectFilter, ProjectId, ProjectListing,
-            ProjectPermission, ProjectVersion, RasterInfo, STRectangle, UpdateProject,
+            Layer, LayerInfo, Project, ProjectId, ProjectListing, ProjectPermission,
+            ProjectVersion, RasterInfo, STRectangle, UpdateProject,
         },
     };
     use geoengine_datatypes::operations::image::Colorizer;
+    use geoengine_datatypes::primitives::{TimeGranularity, TimeStep};
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
 
     #[tokio::test]
@@ -273,6 +274,10 @@ mod tests {
             name: "Test".to_string(),
             description: "Foo".to_string(),
             bounds: STRectangle::new(SpatialReference::wgs84(), 0., 0., 1., 1., 0, 1).unwrap(),
+            time_step: Some(TimeStep {
+                step: 1,
+                granularity: TimeGranularity::Months,
+            }),
         };
 
         let res = warp::test::request()
@@ -337,6 +342,7 @@ mod tests {
                     1,
                 )
                 .unwrap(),
+                time_step: None,
             }
             .validated()
             .unwrap();
@@ -348,27 +354,29 @@ mod tests {
                 .unwrap();
         }
 
-        let options = ProjectListOptions {
-            permissions: vec![
-                ProjectPermission::Owner,
-                ProjectPermission::Write,
-                ProjectPermission::Read,
-            ],
-            filter: ProjectFilter::None,
-            order: OrderBy::NameDesc,
-            offset: 0,
-            limit: 2,
-        };
-
         let res = warp::test::request()
             .method("GET")
-            .path("/projects")
+            .path(&format!(
+                "/projects?{}",
+                &serde_urlencoded::to_string([
+                    (
+                        "permissions",
+                        serde_json::json! {["Read", "Write", "Owner"]}
+                            .to_string()
+                            .as_str()
+                    ),
+                    // omitted ("filter", "None"),
+                    ("order", "NameDesc"),
+                    ("offset", "0"),
+                    ("limit", "2"),
+                ])
+                .unwrap()
+            ))
             .header("Content-Length", "0")
             .header(
                 "Authorization",
                 format!("Bearer {}", session.id.to_string()),
             )
-            .json(&options)
             .reply(&list_projects_handler(ctx))
             .await;
 
@@ -429,6 +437,7 @@ mod tests {
                         1,
                     )
                     .unwrap(),
+                    time_step: None,
                 }
                 .validated()
                 .unwrap(),
@@ -502,6 +511,7 @@ mod tests {
                         1,
                     )
                     .unwrap(),
+                    time_step: None,
                 }
                 .validated()
                 .unwrap(),
@@ -625,6 +635,7 @@ mod tests {
                         1,
                     )
                     .unwrap(),
+                    time_step: None,
                 }
                 .validated()
                 .unwrap(),
@@ -642,6 +653,7 @@ mod tests {
                 info: LayerInfo::Raster(RasterInfo {
                     colorizer: Colorizer::Rgba,
                 }),
+                visibility: Default::default(),
             })]),
             bounds: None,
         };
@@ -751,6 +763,7 @@ mod tests {
                         1,
                     )
                     .unwrap(),
+                    time_step: None,
                 }
                 .validated()
                 .unwrap(),
@@ -764,12 +777,20 @@ mod tests {
             info: LayerInfo::Raster(RasterInfo {
                 colorizer: Colorizer::Rgba,
             }),
+            visibility: LayerVisibility {
+                data: true,
+                legend: false,
+            },
         };
 
         let layer_2 = Layer {
             workflow: WorkflowId::new(),
             name: "L2".to_string(),
             info: LayerInfo::Vector(VectorInfo {}),
+            visibility: LayerVisibility {
+                data: false,
+                legend: true,
+            },
         };
 
         // add first layer
@@ -900,6 +921,7 @@ mod tests {
                         1,
                     )
                     .unwrap(),
+                    time_step: None,
                 }
                 .validated()
                 .unwrap(),
@@ -991,6 +1013,7 @@ mod tests {
                         1,
                     )
                     .unwrap(),
+                    time_step: None,
                 }
                 .validated()
                 .unwrap(),
@@ -1099,6 +1122,7 @@ mod tests {
                         1,
                     )
                     .unwrap(),
+                    time_step: None,
                 }
                 .validated()
                 .unwrap(),
@@ -1200,6 +1224,7 @@ mod tests {
                         1,
                     )
                     .unwrap(),
+                    time_step: None,
                 }
                 .validated()
                 .unwrap(),
@@ -1308,6 +1333,7 @@ mod tests {
                         1,
                     )
                     .unwrap(),
+                    time_step: None,
                 }
                 .validated()
                 .unwrap(),

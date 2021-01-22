@@ -28,10 +28,12 @@ where
         Self { shape_array: shape }
     }
 
+    /// return a ref to the inner data
     pub fn inner_ref(&self) -> &A {
         &self.shape_array
     }
 
+    /// return the inner data
     pub fn into_inner(self) -> A {
         self.shape_array
     }

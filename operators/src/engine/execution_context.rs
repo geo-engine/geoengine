@@ -1,3 +1,8 @@
+use geoengine_datatypes::{
+    primitives::Coordinate2D,
+    raster::{GridShape2D, TilingSpecification},
+};
+
 use crate::concurrency::{ThreadPool, ThreadPoolContext};
 use std::path::PathBuf;
 
@@ -7,12 +12,14 @@ use std::path::PathBuf;
 pub struct ExecutionContext<'pool> {
     pub raster_data_root: PathBuf,
     pub thread_pool: ThreadPoolContext<'pool>,
+    pub tiling_specification: TilingSpecification,
 }
 
 /// Create a provider for execution contexts in test environments
 pub struct MockExecutionContextCreator {
     raster_data_root: PathBuf,
     thread_pool: ThreadPool,
+    tiling_specification: TilingSpecification,
 }
 
 impl MockExecutionContextCreator {
@@ -20,6 +27,7 @@ impl MockExecutionContextCreator {
         ExecutionContext {
             raster_data_root: self.raster_data_root.clone(),
             thread_pool: self.thread_pool.create_context(),
+            tiling_specification: self.tiling_specification,
         }
     }
 }
@@ -29,6 +37,10 @@ impl Default for MockExecutionContextCreator {
         Self {
             raster_data_root: PathBuf::default(),
             thread_pool: ThreadPool::new(1),
+            tiling_specification: TilingSpecification {
+                origin_coordinate: Coordinate2D::default(),
+                tile_size_in_pixels: GridShape2D::from([600, 600]),
+            },
         }
     }
 }

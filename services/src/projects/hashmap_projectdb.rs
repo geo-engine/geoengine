@@ -266,6 +266,7 @@ mod test {
             name: "Own".into(),
             description: "Text".into(),
             bounds: strect(),
+            time_step: None,
         }
         .validated()
         .unwrap();
@@ -276,6 +277,7 @@ mod test {
             name: "User2's".into(),
             description: "Text".into(),
             bounds: strect(),
+            time_step: None,
         }
         .validated()
         .unwrap();
@@ -286,6 +288,7 @@ mod test {
             name: "User3's".into(),
             description: "Text".into(),
             bounds: strect(),
+            time_step: None,
         }
         .validated()
         .unwrap();
@@ -360,6 +363,7 @@ mod test {
                     1,
                 )
                 .unwrap(),
+                time_step: None,
             }
             .validated()
             .unwrap();
@@ -395,6 +399,7 @@ mod test {
             description: "Text".into(),
             bounds: STRectangle::new(SpatialReferenceOption::Unreferenced, 0., 0., 1., 1., 0, 1)
                 .unwrap(),
+            time_step: None,
         }
         .validated()
         .unwrap();
@@ -422,6 +427,7 @@ mod test {
             description: "Text".into(),
             bounds: STRectangle::new(SpatialReferenceOption::Unreferenced, 0., 0., 1., 1., 0, 1)
                 .unwrap(),
+            time_step: None,
         }
         .validated()
         .unwrap();
@@ -441,6 +447,7 @@ mod test {
             description: "Text".into(),
             bounds: STRectangle::new(SpatialReferenceOption::Unreferenced, 0., 0., 1., 1., 0, 1)
                 .unwrap(),
+            time_step: None,
         }
         .validated()
         .unwrap();
@@ -472,6 +479,7 @@ mod test {
             description: "Text".into(),
             bounds: STRectangle::new(SpatialReferenceOption::Unreferenced, 0., 0., 1., 1., 0, 1)
                 .unwrap(),
+            time_step: None,
         }
         .validated()
         .unwrap();
@@ -491,6 +499,7 @@ mod test {
             description: "Text".into(),
             bounds: STRectangle::new(SpatialReferenceOption::Unreferenced, 0., 0., 1., 1., 0, 1)
                 .unwrap(),
+            time_step: None,
         }
         .validated()
         .unwrap();
@@ -527,6 +536,7 @@ mod test {
             description: "Text".into(),
             bounds: STRectangle::new(SpatialReferenceOption::Unreferenced, 0., 0., 1., 1., 0, 1)
                 .unwrap(),
+            time_step: None,
         }
         .validated()
         .unwrap();
@@ -571,6 +581,7 @@ mod test {
             description: "Text".into(),
             bounds: STRectangle::new(SpatialReferenceOption::Unreferenced, 0., 0., 1., 1., 0, 1)
                 .unwrap(),
+            time_step: None,
         }
         .validated()
         .unwrap();
@@ -615,6 +626,7 @@ mod test {
             description: "Text".into(),
             bounds: STRectangle::new(SpatialReferenceOption::Unreferenced, 0., 0., 1., 1., 0, 1)
                 .unwrap(),
+            time_step: None,
         }
         .validated()
         .unwrap();
