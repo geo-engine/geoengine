@@ -223,6 +223,7 @@ async fn list_permissions<C: Context>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::handlers::{handle_rejection, ErrorResponse};
     use crate::projects::project::{LayerUpdate, LayerVisibility, VectorInfo};
     use crate::users::session::Session;
     use crate::users::user::{UserCredentials, UserRegistration};
@@ -239,7 +240,7 @@ mod tests {
     use geoengine_datatypes::operations::image::Colorizer;
     use geoengine_datatypes::primitives::{TimeGranularity, TimeStep};
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
-    use crate::handlers::ErrorResponse;
+    use serde_json::json;
 
     #[tokio::test]
     async fn create() {
@@ -312,8 +313,8 @@ mod tests {
                     password: "secret123".to_string(),
                     real_name: "Foo Bar".to_string(),
                 }
-                    .validated()
-                    .unwrap(),
+                .validated()
+                .unwrap(),
             )
             .await
             .unwrap();
@@ -333,6 +334,10 @@ mod tests {
             name: "Test".to_string(),
             description: "Foo".to_string(),
             bounds: STRectangle::new(SpatialReference::wgs84(), 0., 0., 1., 1., 0, 1).unwrap(),
+            time_step: Some(TimeStep {
+                step: 1,
+                granularity: TimeGranularity::Months,
+            }),
         };
 
         let res = warp::test::request()
@@ -344,16 +349,19 @@ mod tests {
                 format!("Bearer {}", session.id.to_string()),
             )
             .json(&create)
-            .reply(&create_project_handler(ctx))
+            .reply(&create_project_handler(ctx).recover(handle_rejection))
             .await;
 
         assert_eq!(res.status(), 405);
 
         let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(serde_json::from_str::<ErrorResponse>(body).unwrap(), ErrorResponse {
-            error: "MethodNotAllowed".to_string(),
-            message: "HTTP method not allowed.".to_string(),
-        });
+        assert_eq!(
+            serde_json::from_str::<ErrorResponse>(body).unwrap(),
+            ErrorResponse {
+                error: "MethodNotAllowed".to_string(),
+                message: "HTTP method not allowed.".to_string(),
+            }
+        );
     }
 
     #[tokio::test]
@@ -369,8 +377,8 @@ mod tests {
                     password: "secret123".to_string(),
                     real_name: "Foo Bar".to_string(),
                 }
-                    .validated()
-                    .unwrap(),
+                .validated()
+                .unwrap(),
             )
             .await
             .unwrap();
@@ -387,7 +395,7 @@ mod tests {
             .unwrap();
 
         let res = warp::test::request()
-            .method("GET")
+            .method("POST")
             .path("/project/create")
             .header("Content-Length", "0")
             .header(
@@ -395,16 +403,19 @@ mod tests {
                 format!("Bearer {}", session.id.to_string()),
             )
             .body("no json")
-            .reply(&create_project_handler(ctx))
+            .reply(&create_project_handler(ctx).recover(handle_rejection))
             .await;
 
         assert_eq!(res.status(), 400);
 
         let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(serde_json::from_str::<ErrorResponse>(body).unwrap(), ErrorResponse {
-            error: "BodyDeserializeError".to_string(),
-            message: "expected ident at line 1 column 2".to_string(),
-        });
+        assert_eq!(
+            serde_json::from_str::<ErrorResponse>(body).unwrap(),
+            ErrorResponse {
+                error: "BodyDeserializeError".to_string(),
+                message: "expected ident at line 1 column 2".to_string(),
+            }
+        );
     }
 
     #[tokio::test]
@@ -420,8 +431,8 @@ mod tests {
                     password: "secret123".to_string(),
                     real_name: "Foo Bar".to_string(),
                 }
-                    .validated()
-                    .unwrap(),
+                .validated()
+                .unwrap(),
             )
             .await
             .unwrap();
@@ -451,16 +462,19 @@ mod tests {
                 format!("Bearer {}", session.id.to_string()),
             )
             .json(&create)
-            .reply(&create_project_handler(ctx))
+            .reply(&create_project_handler(ctx).recover(handle_rejection))
             .await;
 
         assert_eq!(res.status(), 400);
 
         let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(serde_json::from_str::<ErrorResponse>(body).unwrap(), ErrorResponse {
-            error: "BodyDeserializeError".to_string(),
-            message: "missing field `name` at line 1 column 22".to_string(),
-        });
+        assert_eq!(
+            serde_json::from_str::<ErrorResponse>(body).unwrap(),
+            ErrorResponse {
+                error: "BodyDeserializeError".to_string(),
+                message: "missing field `name` at line 1 column 202".to_string(),
+            }
+        );
     }
 
     #[tokio::test]
@@ -477,16 +491,19 @@ mod tests {
             .path("/project/create")
             .header("Content-Length", "0")
             .json(&create)
-            .reply(&create_project_handler(ctx))
+            .reply(&create_project_handler(ctx).recover(handle_rejection))
             .await;
 
         assert_eq!(res.status(), 401);
 
         let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(serde_json::from_str::<ErrorResponse>(body).unwrap(), ErrorResponse {
-            error: "MissingAuthorizationHeader".to_string(),
-            message: "Header with authorization token not provided.".to_string(),
-        });
+        assert_eq!(
+            serde_json::from_str::<ErrorResponse>(body).unwrap(),
+            ErrorResponse {
+                error: "MissingAuthorizationHeader".to_string(),
+                message: "Header with authorization token not provided.".to_string(),
+            }
+        );
     }
 
     #[tokio::test]
@@ -580,6 +597,190 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn list_invalid_method() {
+        let ctx = InMemoryContext::default();
+
+        ctx.user_db()
+            .write()
+            .await
+            .register(
+                UserRegistration {
+                    email: "foo@bar.de".to_string(),
+                    password: "secret123".to_string(),
+                    real_name: "Foo Bar".to_string(),
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let session = ctx
+            .user_db()
+            .write()
+            .await
+            .login(UserCredentials {
+                email: "foo@bar.de".to_string(),
+                password: "secret123".to_string(),
+            })
+            .await
+            .unwrap();
+
+        for i in 0..10 {
+            let create = CreateProject {
+                name: format!("Test{}", i),
+                description: format!("Test{}", 10 - i),
+                bounds: STRectangle::new(
+                    SpatialReferenceOption::Unreferenced,
+                    0.,
+                    0.,
+                    1.,
+                    1.,
+                    0,
+                    1,
+                )
+                .unwrap(),
+                time_step: None,
+            }
+            .validated()
+            .unwrap();
+            ctx.project_db()
+                .write()
+                .await
+                .create(session.user.id, create)
+                .await
+                .unwrap();
+        }
+
+        let res = warp::test::request()
+            .method("POST")
+            .path(&format!(
+                "/projects?{}",
+                &serde_urlencoded::to_string([
+                    (
+                        "permissions",
+                        serde_json::json! {["Read", "Write", "Owner"]}
+                            .to_string()
+                            .as_str()
+                    ),
+                    // omitted ("filter", "None"),
+                    ("order", "NameDesc"),
+                    ("offset", "0"),
+                    ("limit", "2"),
+                ])
+                .unwrap()
+            ))
+            .header("Content-Length", "0")
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
+            .reply(&list_projects_handler(ctx).recover(handle_rejection))
+            .await;
+
+        assert_eq!(res.status(), 405);
+
+        let body = std::str::from_utf8(&res.body()).unwrap();
+        assert_eq!(
+            serde_json::from_str::<ErrorResponse>(body).unwrap(),
+            ErrorResponse {
+                error: "MethodNotAllowed".to_string(),
+                message: "HTTP method not allowed.".to_string(),
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn list_missing_header() {
+        let ctx = InMemoryContext::default();
+
+        ctx.user_db()
+            .write()
+            .await
+            .register(
+                UserRegistration {
+                    email: "foo@bar.de".to_string(),
+                    password: "secret123".to_string(),
+                    real_name: "Foo Bar".to_string(),
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let session = ctx
+            .user_db()
+            .write()
+            .await
+            .login(UserCredentials {
+                email: "foo@bar.de".to_string(),
+                password: "secret123".to_string(),
+            })
+            .await
+            .unwrap();
+
+        for i in 0..10 {
+            let create = CreateProject {
+                name: format!("Test{}", i),
+                description: format!("Test{}", 10 - i),
+                bounds: STRectangle::new(
+                    SpatialReferenceOption::Unreferenced,
+                    0.,
+                    0.,
+                    1.,
+                    1.,
+                    0,
+                    1,
+                )
+                .unwrap(),
+                time_step: None,
+            }
+            .validated()
+            .unwrap();
+            ctx.project_db()
+                .write()
+                .await
+                .create(session.user.id, create)
+                .await
+                .unwrap();
+        }
+
+        let res = warp::test::request()
+            .method("GET")
+            .path(&format!(
+                "/projects?{}",
+                &serde_urlencoded::to_string([
+                    (
+                        "permissions",
+                        serde_json::json! {["Read", "Write", "Owner"]}
+                            .to_string()
+                            .as_str()
+                    ),
+                    // omitted ("filter", "None"),
+                    ("order", "NameDesc"),
+                    ("offset", "0"),
+                    ("limit", "2"),
+                ])
+                .unwrap()
+            ))
+            .header("Content-Length", "0")
+            .reply(&list_projects_handler(ctx).recover(handle_rejection))
+            .await;
+
+        assert_eq!(res.status(), 401);
+
+        let body = std::str::from_utf8(&res.body()).unwrap();
+        assert_eq!(
+            serde_json::from_str::<ErrorResponse>(body).unwrap(),
+            ErrorResponse {
+                error: "MissingAuthorizationHeader".to_string(),
+                message: "Header with authorization token not provided.".to_string(),
+            }
+        );
+    }
+
+    #[tokio::test]
     async fn load() {
         let ctx = InMemoryContext::default();
 
@@ -651,6 +852,215 @@ mod tests {
 
         let body: String = String::from_utf8(res.body().to_vec()).unwrap();
         assert!(serde_json::from_str::<Project>(&body).is_ok());
+    }
+
+    #[tokio::test]
+    async fn load_invalid_method() {
+        let ctx = InMemoryContext::default();
+
+        ctx.user_db()
+            .write()
+            .await
+            .register(
+                UserRegistration {
+                    email: "foo@bar.de".to_string(),
+                    password: "secret123".to_string(),
+                    real_name: "Foo Bar".to_string(),
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let session = ctx
+            .user_db()
+            .write()
+            .await
+            .login(UserCredentials {
+                email: "foo@bar.de".to_string(),
+                password: "secret123".to_string(),
+            })
+            .await
+            .unwrap();
+
+        let project = ctx
+            .project_db()
+            .write()
+            .await
+            .create(
+                session.user.id,
+                CreateProject {
+                    name: "Test".to_string(),
+                    description: "Foo".to_string(),
+                    bounds: STRectangle::new(
+                        SpatialReferenceOption::Unreferenced,
+                        0.,
+                        0.,
+                        1.,
+                        1.,
+                        0,
+                        1,
+                    )
+                    .unwrap(),
+                    time_step: None,
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let res = warp::test::request()
+            .method("POST")
+            .path(&format!("/project/{}", project.to_string()))
+            .header("Content-Length", "0")
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
+            .reply(&load_project_handler(ctx).recover(handle_rejection))
+            .await;
+
+        assert_eq!(res.status(), 405);
+
+        let body = std::str::from_utf8(&res.body()).unwrap();
+        assert_eq!(
+            serde_json::from_str::<ErrorResponse>(body).unwrap(),
+            ErrorResponse {
+                error: "MethodNotAllowed".to_string(),
+                message: "HTTP method not allowed.".to_string(),
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn load_missing_header() {
+        let ctx = InMemoryContext::default();
+
+        ctx.user_db()
+            .write()
+            .await
+            .register(
+                UserRegistration {
+                    email: "foo@bar.de".to_string(),
+                    password: "secret123".to_string(),
+                    real_name: "Foo Bar".to_string(),
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let session = ctx
+            .user_db()
+            .write()
+            .await
+            .login(UserCredentials {
+                email: "foo@bar.de".to_string(),
+                password: "secret123".to_string(),
+            })
+            .await
+            .unwrap();
+
+        let project = ctx
+            .project_db()
+            .write()
+            .await
+            .create(
+                session.user.id,
+                CreateProject {
+                    name: "Test".to_string(),
+                    description: "Foo".to_string(),
+                    bounds: STRectangle::new(
+                        SpatialReferenceOption::Unreferenced,
+                        0.,
+                        0.,
+                        1.,
+                        1.,
+                        0,
+                        1,
+                    )
+                    .unwrap(),
+                    time_step: None,
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let res = warp::test::request()
+            .method("GET")
+            .path(&format!("/project/{}", project.to_string()))
+            .header("Content-Length", "0")
+            .reply(&load_project_handler(ctx).recover(handle_rejection))
+            .await;
+
+        assert_eq!(res.status(), 401);
+
+        let body = std::str::from_utf8(&res.body()).unwrap();
+        assert_eq!(
+            serde_json::from_str::<ErrorResponse>(body).unwrap(),
+            ErrorResponse {
+                error: "MissingAuthorizationHeader".to_string(),
+                message: "Header with authorization token not provided.".to_string(),
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn load_not_found() {
+        let ctx = InMemoryContext::default();
+
+        ctx.user_db()
+            .write()
+            .await
+            .register(
+                UserRegistration {
+                    email: "foo@bar.de".to_string(),
+                    password: "secret123".to_string(),
+                    real_name: "Foo Bar".to_string(),
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let session = ctx
+            .user_db()
+            .write()
+            .await
+            .login(UserCredentials {
+                email: "foo@bar.de".to_string(),
+                password: "secret123".to_string(),
+            })
+            .await
+            .unwrap();
+
+        let res = warp::test::request()
+            .method("GET")
+            .path(&format!("/project"))
+            .header("Content-Length", "0")
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
+            .reply(&load_project_handler(ctx).recover(handle_rejection))
+            .await;
+
+        assert_eq!(res.status(), 404);
+
+        let body = std::str::from_utf8(&res.body()).unwrap();
+        assert_eq!(
+            serde_json::from_str::<ErrorResponse>(body).unwrap(),
+            ErrorResponse {
+                error: "NotFound".to_string(),
+                message: "Not Found".to_string(),
+            }
+        );
     }
 
     #[tokio::test]
@@ -778,6 +1188,89 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn load_version_not_found() {
+        let ctx = InMemoryContext::default();
+
+        ctx.user_db()
+            .write()
+            .await
+            .register(
+                UserRegistration {
+                    email: "foo@bar.de".to_string(),
+                    password: "secret123".to_string(),
+                    real_name: "Foo Bar".to_string(),
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let session = ctx
+            .user_db()
+            .write()
+            .await
+            .login(UserCredentials {
+                email: "foo@bar.de".to_string(),
+                password: "secret123".to_string(),
+            })
+            .await
+            .unwrap();
+
+        let project = ctx
+            .project_db()
+            .write()
+            .await
+            .create(
+                session.user.id,
+                CreateProject {
+                    name: "Test".to_string(),
+                    description: "Foo".to_string(),
+                    bounds: STRectangle::new(
+                        SpatialReferenceOption::Unreferenced,
+                        0.,
+                        0.,
+                        1.,
+                        1.,
+                        0,
+                        1,
+                    )
+                    .unwrap(),
+                    time_step: None,
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let res = warp::test::request()
+            .method("GET")
+            .path(&format!(
+                "/project/{}/00000000-0000-0000-0000-000000000000",
+                project.to_string()
+            ))
+            .header("Content-Length", "0")
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
+            .reply(&load_project_handler(ctx).recover(handle_rejection))
+            .await;
+
+        assert_eq!(res.status(), 404);
+
+        let body = std::str::from_utf8(&res.body()).unwrap();
+        assert_eq!(
+            serde_json::from_str::<ErrorResponse>(body).unwrap(),
+            ErrorResponse {
+                error: "ProjectLoadFailed".to_string(),
+                message: "The project failed to load.".to_string(),
+            }
+        );
+    }
+
+    #[tokio::test]
     async fn update() {
         let ctx = InMemoryContext::default();
 
@@ -872,6 +1365,278 @@ mod tests {
             .unwrap();
         assert_eq!(loaded.name, "TestUpdate");
         assert_eq!(loaded.layers.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn update_invalid_method() {
+        let ctx = InMemoryContext::default();
+
+        ctx.user_db()
+            .write()
+            .await
+            .register(
+                UserRegistration {
+                    email: "foo@bar.de".to_string(),
+                    password: "secret123".to_string(),
+                    real_name: "Foo Bar".to_string(),
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let session = ctx
+            .user_db()
+            .write()
+            .await
+            .login(UserCredentials {
+                email: "foo@bar.de".to_string(),
+                password: "secret123".to_string(),
+            })
+            .await
+            .unwrap();
+
+        let project = ctx
+            .project_db()
+            .write()
+            .await
+            .create(
+                session.user.id,
+                CreateProject {
+                    name: "Test".to_string(),
+                    description: "Foo".to_string(),
+                    bounds: STRectangle::new(
+                        SpatialReferenceOption::Unreferenced,
+                        0.,
+                        0.,
+                        1.,
+                        1.,
+                        0,
+                        1,
+                    )
+                    .unwrap(),
+                    time_step: None,
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let update = UpdateProject {
+            id: project,
+            name: Some("TestUpdate".to_string()),
+            description: None,
+            layers: Some(vec![LayerUpdate::UpdateOrInsert(Layer {
+                workflow: WorkflowId::new(),
+                name: "L1".to_string(),
+                info: LayerInfo::Raster(RasterInfo {
+                    colorizer: Colorizer::Rgba,
+                }),
+                visibility: Default::default(),
+            })]),
+            bounds: None,
+        };
+
+        let res = warp::test::request()
+            .method("POST")
+            .path(&format!("/project/{}", project.to_string()))
+            .header("Content-Length", "0")
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
+            .json(&update)
+            .reply(&update_project_handler(ctx).recover(handle_rejection))
+            .await;
+
+        assert_eq!(res.status(), 405);
+
+        let body = std::str::from_utf8(&res.body()).unwrap();
+        assert_eq!(
+            serde_json::from_str::<ErrorResponse>(body).unwrap(),
+            ErrorResponse {
+                error: "MethodNotAllowed".to_string(),
+                message: "HTTP method not allowed.".to_string(),
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn update_invalid_body() {
+        let ctx = InMemoryContext::default();
+
+        ctx.user_db()
+            .write()
+            .await
+            .register(
+                UserRegistration {
+                    email: "foo@bar.de".to_string(),
+                    password: "secret123".to_string(),
+                    real_name: "Foo Bar".to_string(),
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let session = ctx
+            .user_db()
+            .write()
+            .await
+            .login(UserCredentials {
+                email: "foo@bar.de".to_string(),
+                password: "secret123".to_string(),
+            })
+            .await
+            .unwrap();
+
+        let project = ctx
+            .project_db()
+            .write()
+            .await
+            .create(
+                session.user.id,
+                CreateProject {
+                    name: "Test".to_string(),
+                    description: "Foo".to_string(),
+                    bounds: STRectangle::new(
+                        SpatialReferenceOption::Unreferenced,
+                        0.,
+                        0.,
+                        1.,
+                        1.,
+                        0,
+                        1,
+                    )
+                    .unwrap(),
+                    time_step: None,
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let res = warp::test::request()
+            .method("PATCH")
+            .path(&format!("/project/{}", project.to_string()))
+            .header("Content-Length", "0")
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
+            .body("no json")
+            .reply(&update_project_handler(ctx).recover(handle_rejection))
+            .await;
+
+        assert_eq!(res.status(), 400);
+
+        let body = std::str::from_utf8(&res.body()).unwrap();
+        assert_eq!(
+            serde_json::from_str::<ErrorResponse>(body).unwrap(),
+            ErrorResponse {
+                error: "BodyDeserializeError".to_string(),
+                message: "expected ident at line 1 column 2".to_string(),
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn update_missing_fields() {
+        let ctx = InMemoryContext::default();
+
+        ctx.user_db()
+            .write()
+            .await
+            .register(
+                UserRegistration {
+                    email: "foo@bar.de".to_string(),
+                    password: "secret123".to_string(),
+                    real_name: "Foo Bar".to_string(),
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let session = ctx
+            .user_db()
+            .write()
+            .await
+            .login(UserCredentials {
+                email: "foo@bar.de".to_string(),
+                password: "secret123".to_string(),
+            })
+            .await
+            .unwrap();
+
+        let project = ctx
+            .project_db()
+            .write()
+            .await
+            .create(
+                session.user.id,
+                CreateProject {
+                    name: "Test".to_string(),
+                    description: "Foo".to_string(),
+                    bounds: STRectangle::new(
+                        SpatialReferenceOption::Unreferenced,
+                        0.,
+                        0.,
+                        1.,
+                        1.,
+                        0,
+                        1,
+                    )
+                    .unwrap(),
+                    time_step: None,
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let update = json!({
+            "name": "TestUpdate",
+            "description": None::<String>,
+            "layers": vec![LayerUpdate::UpdateOrInsert(Layer {
+                workflow: WorkflowId::new(),
+                name: "L1".to_string(),
+                info: LayerInfo::Raster(RasterInfo {
+                    colorizer: Colorizer::Rgba,
+                }),
+                visibility: Default::default(),
+            })],
+            "bounds": None::<String>,
+        });
+
+        let res = warp::test::request()
+            .method("PATCH")
+            .path(&format!("/project/{}", project.to_string()))
+            .header("Content-Length", "0")
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
+            .json(&update)
+            .reply(&update_project_handler(ctx).recover(handle_rejection))
+            .await;
+
+        assert_eq!(res.status(), 400);
+
+        let body = std::str::from_utf8(&res.body()).unwrap();
+        assert_eq!(
+            serde_json::from_str::<ErrorResponse>(body).unwrap(),
+            ErrorResponse {
+                error: "BodyDeserializeError".to_string(),
+                message: "missing field `id` at line 1 column 210".to_string(),
+            }
+        );
     }
 
     #[tokio::test]
@@ -1149,10 +1914,19 @@ mod tests {
                 "Authorization",
                 format!("Bearer {}", session.id.to_string()),
             )
-            .reply(&delete_project_handler(ctx))
+            .reply(&delete_project_handler(ctx).recover(handle_rejection))
             .await;
 
-        assert_eq!(res.status(), 500);
+        assert_eq!(res.status(), 400);
+
+        let body = std::str::from_utf8(&res.body()).unwrap();
+        assert_eq!(
+            serde_json::from_str::<ErrorResponse>(body).unwrap(),
+            ErrorResponse {
+                error: "ProjectDeleteFailed".to_string(),
+                message: "Failed to delete the project.".to_string(),
+            }
+        );
     }
 
     #[tokio::test]

@@ -8,9 +8,9 @@ use snafu::ResultExt;
 use std::error::Error as StdError;
 use std::str::FromStr;
 use warp::http::StatusCode;
+use warp::reject::MethodNotAllowed;
 use warp::Filter;
 use warp::{Rejection, Reply};
-use warp::reject::MethodNotAllowed;
 
 pub mod projects;
 pub mod users;
@@ -58,7 +58,7 @@ pub async fn handle_rejection(err: Rejection) -> Result<impl Reply, Rejection> {
         (
             StatusCode::METHOD_NOT_ALLOWED,
             "MethodNotAllowed".to_string(),
-            "HTTP method not allowed.".to_string()
+            "HTTP method not allowed.".to_string(),
         )
     } else {
         // no matching filter

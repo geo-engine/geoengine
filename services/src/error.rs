@@ -58,11 +58,15 @@ pub enum Error {
     Authorization {
         source: Box<Error>,
     },
-
+    #[snafu(display("Failed to create the project."))]
     ProjectCreateFailed,
+    #[snafu(display("Failed to list projects."))]
     ProjectListFailed,
+    #[snafu(display("The project failed to load."))]
     ProjectLoadFailed,
+    #[snafu(display("Failed to update the project."))]
     ProjectUpdateFailed,
+    #[snafu(display("Failed to delete the project."))]
     ProjectDeleteFailed,
     PermissionFailed,
     ProjectDBUnauthorized,
