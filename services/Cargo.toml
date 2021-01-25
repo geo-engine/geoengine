@@ -29,7 +29,7 @@ serde_json = "1.0"
 serde_urlencoded = "0.7"
 snafu = "0.6"
 strum = { version = "0.20", features = ["derive"] }
-tokio = { version = "0.2", features = ["macros", "signal"] } # TODO: tokio = { version = "0.3", features = ["macros", "signal", "sync", "rt-multi-thread"] }
+tokio = { version = "1.1", features = ["macros", "signal"] } # TODO: tokio = { version = "0.3", features = ["macros", "signal", "sync", "rt-multi-thread"] }
 uuid = { version = "0.8", features = ["serde", "v4", "v5"] }
 warp = "0.2"
 
