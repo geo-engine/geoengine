@@ -501,7 +501,7 @@ impl<'a> CLProgramRunnable<'a> {
                 .len(coordinates.len())
                 .copy_host_slice(unsafe {
                     std::slice::from_raw_parts(
-                        coordinates.as_ptr() as *const Double2,
+                        coordinates.as_ptr().cast::<Double2>(),
                         coordinates.len(),
                     )
                 })
@@ -596,7 +596,7 @@ impl<'a> CLProgramRunnable<'a> {
                     .len(time_intervals.len())
                     .copy_host_slice(unsafe {
                         std::slice::from_raw_parts(
-                            time_intervals.as_ptr() as *const Long2,
+                            time_intervals.as_ptr().cast::<Long2>(),
                             time_intervals.len(),
                         )
                     })
