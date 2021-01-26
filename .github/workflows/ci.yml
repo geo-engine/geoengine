@@ -28,10 +28,12 @@ jobs:
       matrix:
         os:
           - ubuntu-20.04
+        features:
+          ["", "--all-features"]
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v1
+        uses: actions/checkout@v2
       - name: Install OpenCL
         run: |
           sudo apt-get update
@@ -56,19 +58,47 @@ jobs:
         uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          args: --all-targets --all-features -- -D warnings
-      - name: Build (no features)
+          args: --all-targets ${{ matrix.features }} -- -D warnings
+      - name: Build
         uses: actions-rs/cargo@v1
         with:
           command: build
-          args: --verbose
-      - name: Build (all features)
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --all-features --verbose
+          args: ${{ matrix.features }} --verbose
       - name: Run tests
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --all-features --verbose
+          args: ${{ matrix.features }} --verbose
+  
+  coverage:
+    runs-on: ubuntu-20.04    
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - name: Install OpenCL
+        run: |
+          sudo apt-get update
+          sudo apt-get install ocl-icd-opencl-dev pocl-opencl-icd
+      - name: Install GDAL
+        run: |
+          sudo apt-get update
+          sudo apt-get install libgdal-dev gdal-bin build-essential
+          export C_INCLUDE_PATH=/usr/include/gdal:$C_INCLUDE_PATH
+          export CPLUS_INCLUDE_PATH=/usr/include/gdal:$CPLUS_INCLUDE_PATH
+          sudo ldconfig
+      - name: Setup building
+        run: |
+          export CC="clang-9"
+          export CXX="clang++-9"
+      - name: Generate code coverage
+        run: |
+          cargo install cargo-tarpaulin
+          cargo tarpaulin --verbose --workspace --timeout 120 --out Lcov
+      - name: Upload coverage to Coveralls
+        uses: coverallsapp/github-action@v1.1.1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path-to-lcov: lcov.info
