@@ -1,4 +1,4 @@
-use crate::concurrency::ThreadPool;
+use crate::concurrency::{ThreadPool, ThreadPoolContext};
 use crate::engine::{QueryRectangle, VectorResultDescriptor};
 use crate::error::Error;
 use crate::mock::MockDataSetDataSourceLoadingInfo;
@@ -19,7 +19,7 @@ pub trait ExecutionContext:
     + LoadingInfoProvider<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>
     + LoadingInfoProvider<OgrSourceDataset, VectorResultDescriptor>
 {
-    fn thread_pool(&self) -> &ThreadPool;
+    fn thread_pool(&self) -> ThreadPoolContext;
     fn raster_data_root(&self) -> Result<PathBuf>; // TODO: remove once GdalSource uses LoadingInfo
     fn tiling_specification(&self) -> TilingSpecification;
 }
@@ -81,8 +81,8 @@ impl MockExecutionContext {
 }
 
 impl ExecutionContext for MockExecutionContext {
-    fn thread_pool(&self) -> &ThreadPool {
-        &self.thread_pool
+    fn thread_pool(&self) -> ThreadPoolContext {
+        self.thread_pool.create_context()
     }
 
     fn raster_data_root(&self) -> Result<PathBuf> {
