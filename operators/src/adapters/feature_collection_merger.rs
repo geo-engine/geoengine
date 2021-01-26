@@ -299,7 +299,7 @@ mod tests {
         );
     }
 
-    #[tokio::test(max_threads = 1)] // TODO: #[tokio::test(flavor = "current_thread")]
+    #[tokio::test(flavor = "current_thread")]
     async fn interleaving_pendings() {
         let mut stream_history: Vec<Poll<Option<Result<MultiPointCollection>>>> = vec![
             Poll::Pending,

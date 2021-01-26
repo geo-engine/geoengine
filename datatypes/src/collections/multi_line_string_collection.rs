@@ -32,7 +32,7 @@ impl GeometryCollection for MultiLineStringCollection {
 
         unsafe {
             slice::from_raw_parts(
-                floats.raw_values() as *const Coordinate2D,
+                floats.raw_values().cast::<Coordinate2D>(),
                 number_of_coordinates,
             )
         }
@@ -49,7 +49,7 @@ impl GeometryCollection for MultiLineStringCollection {
         let data = geometries.data();
         let buffer = &data.buffers()[0];
 
-        unsafe { slice::from_raw_parts(buffer.raw_data() as *const i32, geometries.len() + 1) }
+        unsafe { slice::from_raw_parts(buffer.raw_data().cast::<i32>(), geometries.len() + 1) }
     }
 }
 
@@ -68,7 +68,7 @@ impl MultiLineStringCollection {
         let data = line_strings.data();
         let buffer = &data.buffers()[0];
 
-        unsafe { slice::from_raw_parts(buffer.raw_data() as *const i32, line_strings.len() + 1) }
+        unsafe { slice::from_raw_parts(buffer.raw_data().cast::<i32>(), line_strings.len() + 1) }
     }
 }
 
@@ -131,7 +131,7 @@ impl<'l> Iterator for MultiLineStringIterator<'l> {
             line_coordinate_slices.push(unsafe {
                 #[allow(clippy::cast_ptr_alignment)]
                 slice::from_raw_parts(
-                    float_array.raw_values() as *const Coordinate2D,
+                    float_array.raw_values().cast::<Coordinate2D>(),
                     number_of_coordinates,
                 )
             });
@@ -185,7 +185,7 @@ impl<'l> GeometryRandomAccess<'l> for MultiLineStringCollection {
             line_coordinate_slices.push(unsafe {
                 #[allow(clippy::cast_ptr_alignment)]
                 slice::from_raw_parts(
-                    float_array.raw_values() as *const Coordinate2D,
+                    float_array.raw_values().cast::<Coordinate2D>(),
                     number_of_coordinates,
                 )
             });

@@ -833,7 +833,7 @@ where
 
         unsafe {
             std::slice::from_raw_parts(
-                timestamps.raw_values() as *const crate::primitives::TimeInterval,
+                timestamps.raw_values().cast::<TimeInterval>(),
                 number_of_time_intervals,
             )
         }
