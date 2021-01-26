@@ -39,11 +39,11 @@ where
     V: VectorQueryProcessor<VectorType = MultiPointCollection> + Sync,
 {
     type Output = MultiPointCollection;
-    fn query(
-        &self,
+    fn query<'a>(
+        &'a self,
         query: crate::engine::QueryRectangle,
-        ctx: crate::engine::QueryContext,
-    ) -> futures::stream::BoxStream<crate::util::Result<Self::Output>> {
+        ctx: &'a dyn crate::engine::QueryContext,
+    ) -> futures::stream::BoxStream<'a, crate::util::Result<Self::Output>> {
         let point_stream = self.point_source.vector_query(query, ctx);
         point_stream
             .then(async move |collection| {
@@ -89,7 +89,7 @@ pub type MockRasterPointJoinOperator = Operator<MockRasterPointJoinParams>;
 impl VectorOperator for MockRasterPointJoinOperator {
     fn initialize(
         self: Box<Self>,
-        context: &crate::engine::ExecutionContext,
+        context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<crate::engine::InitializedVectorOperator>> {
         InitializedOperatorImpl::create(
             self.params,
@@ -136,9 +136,9 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::MockExecutionContextCreator;
+    use crate::engine::{MockExecutionContext, MockQueryContext};
     use crate::{
-        engine::{QueryContext, QueryRectangle, RasterOperator, RasterResultDescriptor},
+        engine::{QueryRectangle, RasterOperator, RasterResultDescriptor},
         mock::{MockPointSource, MockPointSourceParams, MockRasterSource, MockRasterSourceParams},
     };
     use futures::executor::block_on_stream;
@@ -246,7 +246,7 @@ mod tests {
         })
         .to_string();
         assert_eq!(serialized, expected);
-        let _deserialized: Box<dyn VectorOperator> = serde_json::from_str(&serialized).unwrap();
+        let _operator: Box<dyn VectorOperator> = serde_json::from_str(&serialized).unwrap();
     }
 
     #[test]
@@ -291,8 +291,7 @@ mod tests {
         }
         .boxed();
 
-        let execution_context_creator = MockExecutionContextCreator::default();
-        let execution_context = execution_context_creator.context();
+        let execution_context = MockExecutionContext::default();
 
         let initialized = op.initialize(&execution_context).unwrap();
 
@@ -306,10 +305,9 @@ mod tests {
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
-        let ctx = QueryContext {
-            chunk_byte_size: 2 * std::mem::size_of::<Coordinate2D>(),
-        };
-        let stream = point_processor.vector_query(query_rectangle, ctx);
+        let ctx = MockQueryContext::new(2 * std::mem::size_of::<Coordinate2D>());
+
+        let stream = point_processor.vector_query(query_rectangle, &ctx);
 
         let blocking_stream = block_on_stream(stream);
         let collections: Vec<MultiPointCollection> = blocking_stream.map(Result::unwrap).collect();

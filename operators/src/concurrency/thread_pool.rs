@@ -140,6 +140,17 @@ impl ThreadPool {
     }
 }
 
+impl Default for ThreadPool {
+    fn default() -> Self {
+        Self::new(
+            std::thread::available_concurrency()
+                .map(std::num::NonZeroUsize::get)
+                .unwrap_or(1),
+        )
+    }
+}
+
+// TODO: include/merge into ExecutionContext
 /// A computation context for a group that spawns tasks in a `ThreadPool`
 #[derive(Copy, Clone, Debug)]
 pub struct ThreadPoolContext<'pool> {

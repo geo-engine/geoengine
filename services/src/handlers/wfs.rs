@@ -18,8 +18,8 @@ use geoengine_datatypes::{
     primitives::SpatialResolution,
 };
 use geoengine_operators::engine::{
-    MockExecutionContextCreator, QueryContext, QueryRectangle, TypedVectorQueryProcessor,
-    VectorQueryProcessor,
+    MockExecutionContext, MockQueryContext, QueryContext, QueryRectangle,
+    TypedVectorQueryProcessor, VectorQueryProcessor,
 };
 use serde_json::json;
 use std::str::FromStr;
@@ -183,8 +183,7 @@ async fn get_feature<C: Context>(
     let operator = workflow.operator.get_vector().context(error::Operator)?;
 
     // TODO: use global context parameters
-    let execution_context_creator = MockExecutionContextCreator::default();
-    let execution_context = execution_context_creator.context();
+    let execution_context = MockExecutionContext::default();
     let initialized = operator
         .initialize(&execution_context)
         .context(error::Operator)?;
@@ -199,23 +198,23 @@ async fn get_feature<C: Context>(
         }),
         spatial_resolution: SpatialResolution::zero_point_one(),
     };
-    let query_ctx = QueryContext {
+    let query_ctx = MockQueryContext {
         // TODO: use production config and test config sizes here
         chunk_byte_size: 1024,
     };
 
     let json = match processor {
         TypedVectorQueryProcessor::Data(p) => {
-            vector_stream_to_geojson(p, query_rect, query_ctx).await
+            vector_stream_to_geojson(p, query_rect, &query_ctx).await
         }
         TypedVectorQueryProcessor::MultiPoint(p) => {
-            vector_stream_to_geojson(p, query_rect, query_ctx).await
+            vector_stream_to_geojson(p, query_rect, &query_ctx).await
         }
         TypedVectorQueryProcessor::MultiLineString(p) => {
-            vector_stream_to_geojson(p, query_rect, query_ctx).await
+            vector_stream_to_geojson(p, query_rect, &query_ctx).await
         }
         TypedVectorQueryProcessor::MultiPolygon(p) => {
-            vector_stream_to_geojson(p, query_rect, query_ctx).await
+            vector_stream_to_geojson(p, query_rect, &query_ctx).await
         }
     }?;
 
@@ -230,7 +229,7 @@ async fn get_feature<C: Context>(
 async fn vector_stream_to_geojson<G>(
     processor: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
     query_rect: QueryRectangle,
-    query_ctx: QueryContext,
+    query_ctx: &dyn QueryContext,
 ) -> Result<serde_json::Value>
 where
     G: Geometry + 'static,

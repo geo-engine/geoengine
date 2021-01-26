@@ -26,7 +26,7 @@ use geoengine_datatypes::primitives::{TimeInstance, TimeInterval};
 use geoengine_operators::call_on_generic_raster_processor;
 use geoengine_operators::concurrency::ThreadPool;
 use geoengine_operators::engine::{
-    ExecutionContext, QueryContext, QueryRectangle, RasterQueryProcessor,
+    MockExecutionContext, MockQueryContext, QueryContext, QueryRectangle, RasterQueryProcessor,
 };
 use std::str::FromStr;
 
@@ -147,9 +147,10 @@ async fn get_map<C: Context>(
     let thread_pool = ThreadPool::new(1); // TODO: use global thread pool
 
     let config_tiling_spec = get_config_element::<config::TilingSpecification>()?;
-    let execution_context = ExecutionContext {
+    let execution_context = MockExecutionContext {
         raster_data_root: get_config_element::<config::GdalSource>()?.raster_data_root_path,
-        thread_pool: thread_pool.create_context(),
+        thread_pool,
+        loading_info: Default::default(),
         tiling_specification: TilingSpecification {
             origin_coordinate: Coordinate2D::new(
                 config_tiling_spec.origin_coordinate_x,
@@ -188,7 +189,7 @@ async fn get_map<C: Context>(
         ),
     };
 
-    let query_ctx = QueryContext {
+    let query_ctx = MockQueryContext {
         // TODO: define meaningful query context
         chunk_byte_size: 1024,
     };
@@ -206,16 +207,16 @@ async fn get_map<C: Context>(
     ))
 }
 
-async fn raster_stream_to_png_bytes<T>(
+async fn raster_stream_to_png_bytes<T, C: QueryContext>(
     processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
     query_rect: QueryRectangle,
-    query_ctx: QueryContext,
+    query_ctx: C,
     request: &GetMap,
 ) -> Result<Vec<u8>>
 where
     T: Pixel,
 {
-    let tile_stream = processor.raster_query(query_rect, query_ctx);
+    let tile_stream = processor.raster_query(query_rect, &query_ctx);
 
     let x_query_resolution = query_rect.bbox.size_x() / f64::from(request.width);
     let y_query_resolution = query_rect.bbox.size_y() / f64::from(request.height);
@@ -370,7 +371,7 @@ mod tests {
                     .unwrap(),
                 spatial_resolution: SpatialResolution::zero_point_one(),
             },
-            QueryContext { chunk_byte_size: 0 },
+            MockQueryContext { chunk_byte_size: 0 },
             &GetMap {
                 version: "".to_string(),
                 width: 600,
@@ -425,7 +426,7 @@ mod tests {
                     .unwrap(),
                 spatial_resolution: SpatialResolution::new_unchecked(1.0, 1.0),
             },
-            QueryContext { chunk_byte_size: 0 },
+            MockQueryContext { chunk_byte_size: 0 },
             &GetMap {
                 version: "".to_string(),
                 width: 360,
