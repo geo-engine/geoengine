@@ -34,6 +34,7 @@ pub enum Error {
 
     TokioChannelSend,
 
+    #[snafu(display("Unable to parse query string: {}", source))]
     UnableToParseQueryString {
         source: serde_urlencoded::de::Error,
     },

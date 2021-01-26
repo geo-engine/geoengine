@@ -304,6 +304,7 @@ mod tests {
     use geoengine_operators::source::{GdalSource, GdalSourceParameters, GdalSourceProcessor};
 
     use super::*;
+    use crate::handlers::{handle_rejection, ErrorResponse};
     use crate::workflows::workflow::Workflow;
     use crate::{contexts::InMemoryContext, ogc::wms::request::GetMapFormat};
     use xml::ParserConfig;
@@ -325,6 +326,50 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_invalid_method() {
+        let ctx = InMemoryContext::default();
+
+        let res = warp::test::request()
+            .method("POST")
+            .path("/wms?request=GetMap&service=WMS&version=1.3.0&layers=mock_raster&bbox=1,2,3,4&width=100&height=100&crs=foo&styles=ssss&format=image/png")
+            .reply(&wms_handler(ctx).recover(handle_rejection))
+            .await;
+
+        assert_eq!(res.status(), 405);
+
+        let body = std::str::from_utf8(&res.body()).unwrap();
+        assert_eq!(
+            serde_json::from_str::<ErrorResponse>(body).unwrap(),
+            ErrorResponse {
+                error: "MethodNotAllowed".to_string(),
+                message: "HTTP method not allowed.".to_string(),
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn test_missing_fields() {
+        let ctx = InMemoryContext::default();
+
+        let res = warp::test::request()
+            .method("GET")
+            .path("/wms?service=WMS&version=1.3.0&layers=mock_raster&bbox=1,2,3,4&width=100&height=100&crs=foo&styles=ssss&format=image/png")
+            .reply(&wms_handler(ctx).recover(handle_rejection))
+            .await;
+
+        assert_eq!(res.status(), 400);
+
+        let body = std::str::from_utf8(&res.body()).unwrap();
+        assert_eq!(
+            serde_json::from_str::<ErrorResponse>(body).unwrap(),
+            ErrorResponse {
+                error: "UnableToParseQueryString".to_string(),
+                message: "Unable to parse query string: missing field `request`".to_string(),
+            }
+        );
+    }
+
+    #[tokio::test]
     async fn get_capabilities() {
         let ctx = InMemoryContext::default();
 
@@ -341,6 +386,28 @@ mod tests {
         for event in reader {
             assert!(event.is_ok());
         }
+    }
+
+    #[tokio::test]
+    async fn get_capabilities_invalid_method() {
+        let ctx = InMemoryContext::default();
+
+        let res = warp::test::request()
+            .method("POST")
+            .path("/wms?request=GetCapabilities&service=WMS")
+            .reply(&wms_handler(ctx).recover(handle_rejection))
+            .await;
+
+        assert_eq!(res.status(), 405);
+
+        let body = std::str::from_utf8(&res.body()).unwrap();
+        assert_eq!(
+            serde_json::from_str::<ErrorResponse>(body).unwrap(),
+            ErrorResponse {
+                error: "MethodNotAllowed".to_string(),
+                message: "HTTP method not allowed.".to_string(),
+            }
+        );
     }
 
     #[tokio::test]
@@ -523,6 +590,70 @@ mod tests {
         assert_eq!(
             include_bytes!("../../../services/test-data/wms/raster.png") as &[u8],
             res.body().to_vec().as_slice()
+        );
+    }
+
+    #[tokio::test]
+    async fn get_map_invalid_method() {
+        let ctx = InMemoryContext::default();
+
+        let workflow = Workflow {
+            operator: TypedOperator::Raster(
+                GdalSource {
+                    params: GdalSourceParameters {
+                        dataset_id: "modis_ndvi".to_owned(),
+                        channel: None,
+                    },
+                }
+                .boxed(),
+            ),
+        };
+
+        let id = ctx
+            .workflow_registry()
+            .write()
+            .await
+            .register(workflow.clone())
+            .await
+            .unwrap();
+
+        let res = warp::test::request()
+            .method("POST")
+            .path(&format!("/wms?request=GetMap&service=WMS&version=1.3.0&layers={}&bbox=20,-10,80,50&width=600&height=600&crs=foo&styles=ssss&format=image/png&time=2014-01-01T00:00:00.0Z", id.to_string()))
+            .reply(&wms_handler(ctx).recover(handle_rejection))
+            .await;
+
+        assert_eq!(res.status(), 405);
+
+        let body = std::str::from_utf8(&res.body()).unwrap();
+        assert_eq!(
+            serde_json::from_str::<ErrorResponse>(body).unwrap(),
+            ErrorResponse {
+                error: "MethodNotAllowed".to_string(),
+                message: "HTTP method not allowed.".to_string(),
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn get_map_missing_fields() {
+        let ctx = InMemoryContext::default();
+
+        let res = warp::test::request()
+            .method("GET")
+            .path("/wms?request=GetMap&service=WMS&version=1.3.0&bbox=20,-10,80,50&width=600&height=600&crs=foo&styles=ssss&format=image/png&time=2014-01-01T00:00:00.0Z")
+            .reply(&wms_handler(ctx).recover(handle_rejection))
+            .await;
+
+        assert_eq!(res.status(), 400);
+
+        let body = std::str::from_utf8(&res.body()).unwrap();
+        assert_eq!(
+            serde_json::from_str::<ErrorResponse>(body).unwrap(),
+            ErrorResponse {
+                error: "UnableToParseQueryString".to_string(),
+                message: "Unable to parse query string: missing field `layers`".to_string(),
+            }
         );
     }
 }
