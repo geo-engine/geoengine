@@ -9,17 +9,17 @@ use crate::ogc::wfs::request::{GetCapabilities, GetFeature, TypeNames, WFSReques
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use futures::StreamExt;
-use geoengine_datatypes::collections::ToGeoJson;
 use geoengine_datatypes::primitives::{
     FeatureData, Geometry, MultiPoint, TimeInstance, TimeInterval,
 };
+use geoengine_datatypes::{collections::ToGeoJson, spatial_reference::SpatialReferenceOption};
 use geoengine_datatypes::{
     collections::{FeatureCollection, MultiPointCollection},
     primitives::SpatialResolution,
 };
 use geoengine_operators::engine::{
-    MockExecutionContextCreator, QueryContext, QueryRectangle, TypedVectorQueryProcessor,
-    VectorQueryProcessor,
+    MockExecutionContextCreator, QueryContext, QueryRectangle, ResultDescriptor,
+    TypedVectorQueryProcessor, VectorQueryProcessor,
 };
 use serde_json::json;
 use std::str::FromStr;
@@ -188,6 +188,19 @@ async fn get_feature<C: Context>(
     let initialized = operator
         .initialize(&execution_context)
         .context(error::Operator)?;
+
+    // handle request and workflow crs matching
+    let spatial_ref = initialized.result_descriptor().spatial_reference();
+    // TODO: use a default spatial reference if it is not set?
+    snafu::ensure!(request.srs_name.is_some(), error::InvalidSpatialReference);
+    // TODO: inject projection Operator?
+    snafu::ensure!(
+        spatial_ref == request.srs_name.into(),
+        error::SpatialReferenceMissmatch {
+            a: spatial_ref,
+            b: SpatialReferenceOption::from(request.srs_name),
+        }
+    );
 
     let processor = initialized.query_processor().context(error::Operator)?;
 

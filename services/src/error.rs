@@ -1,3 +1,4 @@
+use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use snafu::Snafu;
 use strum::IntoStaticStr;
 use warp::reject::Reject;
@@ -65,6 +66,13 @@ pub enum Error {
     ProjectDBUnauthorized,
 
     InvalidNamespace,
+
+    InvalidSpatialReference,
+    #[snafu(display("SpatialReferenceMissmatch {} != {}", a, b))]
+    SpatialReferenceMissmatch {
+        a: SpatialReferenceOption,
+        b: SpatialReferenceOption,
+    },
 
     InvalidWFSTypeNames,
 
