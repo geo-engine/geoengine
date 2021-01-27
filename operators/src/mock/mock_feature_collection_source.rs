@@ -92,7 +92,7 @@ macro_rules! impl_mock_feature_collection_source {
                     |_, _, _, _, _| {
                         Ok(VectorResultDescriptor {
                             data_type: <$geometry>::DATA_TYPE,
-                            spatial_reference: SpatialReference::wgs84().into(), // TODO: get from `FeatureCollection`
+                            spatial_reference: SpatialReference::epsg_4326().into(), // TODO: get from `FeatureCollection`
                         })
                     },
                     vec![],

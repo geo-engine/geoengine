@@ -51,7 +51,7 @@ impl SpatialReference {
     }
 
     /// the WGS 84 spatial reference system
-    pub fn wgs84() -> Self {
+    pub fn epsg_4326() -> Self {
         Self::new(SpatialReferenceAuthority::Epsg, 4326)
     }
 }
