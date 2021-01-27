@@ -483,7 +483,7 @@ x;y
 
         let res = warp::test::request()
             .method("GET")
-            .path(&format!("/wfs?request=GetFeature&service=WFS&version=2.0.0&typeNames=registry:{}&bbox=-90,-180,90,180&crs=EPSG:4326", id.to_string()))
+            .path(&format!("/wfs?request=GetFeature&service=WFS&version=2.0.0&typeNames=registry:{}&bbox=-90,-180,90,180&srsName=EPSG:4326", id.to_string()))
             .reply(&wfs_handler(ctx))
             .await;
         let body: String = String::from_utf8(res.body().to_vec()).unwrap();
@@ -573,7 +573,7 @@ x;y
             ("version", "2.0.0"),
             ("typeNames", &format!("json:{}", json)),
             ("bbox", "-90,-180,90,180"),
-            ("crs", "EPSG:4326"),
+            ("srsName", "EPSG:4326"),
         ];
         let url = format!("/wfs?{}", &serde_urlencoded::to_string(params).unwrap());
         let res = warp::test::request()
