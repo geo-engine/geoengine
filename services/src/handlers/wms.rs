@@ -602,7 +602,7 @@ mod tests {
             ("bbox", "20,-10,80,50"),
             ("width", "600"),
             ("height", "600"),
-            ("crs", "foo"),
+            ("crs", "EPSG:4326"),
             (
                 "styles",
                 &format!("custom:{}", serde_json::to_string(&colorizer).unwrap()),
