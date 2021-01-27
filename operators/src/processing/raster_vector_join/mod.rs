@@ -1,10 +1,15 @@
+mod aggregator;
+mod points;
+
 use crate::engine::{
     ExecutionContext, InitializedOperator, InitializedOperatorImpl, InitializedVectorOperator,
-    Operator, TypedVectorQueryProcessor, VectorOperator, VectorResultDescriptor,
+    Operator, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
+    VectorResultDescriptor,
 };
 use crate::error;
 use crate::util::Result;
 
+use crate::processing::raster_vector_join::points::RasterPointJoinProcessor;
 use geoengine_datatypes::collections::VectorDataType;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
@@ -12,15 +17,26 @@ use snafu::ensure;
 /// An operator that attaches raster values to vector data
 pub type RasterVectorJoin = Operator<RasterVectorJoinParams>;
 
+const MAX_NUMBER_OF_RASTER_INPUTS: usize = 8;
+
 /// The parameter spec for `RasterVectorJoin`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RasterVectorJoinParams {
     /// Each name reflects the output column of the join result.
     /// For each raster input, one name must be defined.
     pub names: Vec<String>,
+
+    /// Specifies which method is used for aggregating values
+    pub aggregation: AggregationMethod,
 }
 
-const MAX_NUMBER_OF_RASTER_INPUTS: usize = 8;
+/// The aggregation method for extracted values
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy)]
+#[serde(rename_all = "snake_case")]
+pub enum AggregationMethod {
+    First,
+    Mean,
+}
 
 #[typetag::serde]
 impl VectorOperator for RasterVectorJoin {
@@ -91,7 +107,26 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
     for InitializedRasterVectorJoin
 {
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
-        todo!("implement")
+        let typed_raster_processors = self
+            .raster_sources
+            .iter()
+            .map(|r| r.query_processor())
+            .collect::<Result<Vec<_>>>()?;
+
+        Ok(match self.vector_sources[0].query_processor()? {
+            TypedVectorQueryProcessor::Data(_) => unreachable!(),
+            TypedVectorQueryProcessor::MultiPoint(points) => TypedVectorQueryProcessor::MultiPoint(
+                RasterPointJoinProcessor::new(
+                    points,
+                    typed_raster_processors,
+                    self.params.names.clone(),
+                    self.params.aggregation,
+                )
+                .boxed(),
+            ),
+            TypedVectorQueryProcessor::MultiLineString(_)
+            | TypedVectorQueryProcessor::MultiPolygon(_) => todo!("implement"),
+        })
     }
 }
 
@@ -106,6 +141,7 @@ mod tests {
         let raster_vector_join = RasterVectorJoin {
             params: RasterVectorJoinParams {
                 names: ["foo", "bar"].iter().cloned().map(str::to_string).collect(),
+                aggregation: AggregationMethod::Mean,
             },
             raster_sources: vec![],
             vector_sources: vec![],
@@ -115,6 +151,7 @@ mod tests {
             "type": "RasterVectorJoin",
             "params": {
                 "names": ["foo", "bar"],
+                "aggregation": "mean",
             },
             "raster_sources": [],
             "vector_sources": [],
