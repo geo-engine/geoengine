@@ -1021,6 +1021,34 @@ impl<CollectionType> Clone for FeatureCollection<CollectionType> {
     }
 }
 
+impl<CollectionType> PartialEq for FeatureCollection<CollectionType>
+where
+    CollectionType: Geometry + ArrowTyped,
+{
+    fn eq(&self, other: &Self) -> bool {
+        if self.types != other.types {
+            return false;
+        }
+
+        let mandatory_keys = if CollectionType::IS_GEOMETRY {
+            vec![Self::GEOMETRY_COLUMN_NAME, Self::TIME_COLUMN_NAME]
+        } else {
+            vec![Self::TIME_COLUMN_NAME]
+        };
+
+        for key in self.types.keys().map(String::as_str).chain(mandatory_keys) {
+            let c1 = self.table.column_by_name(key).expect("column must exist");
+            let c2 = other.table.column_by_name(key).expect("column must exist");
+
+            if c1 != c2 {
+                return false;
+            }
+        }
+
+        true
+    }
+}
+
 impl<CollectionType> VectorDataTyped for FeatureCollection<CollectionType>
 where
     CollectionType: Geometry,
