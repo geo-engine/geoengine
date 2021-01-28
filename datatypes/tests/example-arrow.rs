@@ -698,3 +698,35 @@ fn multipoint_builder_bytes() {
         &[(2.0, 2.1).into(), (3.0, 3.1).into(), (4.0, 4.1).into()]
     );
 }
+
+#[test]
+#[allow(clippy::eq_op)]
+fn float_equality() {
+    let mut floats = Float64Builder::new(3);
+    floats.append_value(4.0).unwrap();
+    floats.append_null().unwrap();
+    floats.append_value(f64::NAN).unwrap();
+
+    let floats = floats.finish();
+
+    assert_eq!(floats, floats);
+
+    let mut floats2 = Float64Builder::new(3);
+    floats2.append_value(4.0).unwrap();
+    floats2.append_null().unwrap();
+    floats2.append_value(f64::NAN).unwrap();
+
+    let floats2 = floats2.finish();
+
+    assert_eq!(floats, floats2);
+
+    let mut floats3 = Float64Builder::new(3);
+    floats3.append_value(f64::NAN).unwrap();
+    floats3.append_null().unwrap();
+    floats3.append_value(4.0).unwrap();
+
+    let floats3 = floats3.finish();
+
+    assert_ne!(floats, floats3);
+    assert_ne!(floats2, floats3);
+}
