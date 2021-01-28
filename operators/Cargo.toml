@@ -9,7 +9,8 @@ authors = [
 edition = "2018"
 
 [dependencies]
-arrow = { version = "2.0", features = ["simd"] }
+# arrow = { version = "3.0", features = ["simd"] } TODO: activate when version is patched
+arrow = { version = "3.0" }
 chrono = "0.4"
 crossbeam = "0.8"
 csv = "1.1"
@@ -26,9 +27,8 @@ pin-project = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 snafu = "0.6"
-tokio = { version = "0.2", features = ["macros", "blocking"] } # TODO: tokio = { version = "0.3", features = ["macros"] }
+tokio = { version = "1.1", features = ["macros", "rt"] }
 typetag = "0.1"
-warp = "0.2" # TODO: remove and get tokio test to work without it
 
 [dev-dependencies]
 criterion = "0.3"

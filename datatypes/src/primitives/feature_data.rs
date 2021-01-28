@@ -135,7 +135,7 @@ where
 
 #[derive(Clone, Debug)]
 pub struct NumberDataRef<'f> {
-    buffer: arrow::buffer::Buffer,
+    buffer: &'f [f64],
     valid_bitmap: &'f Option<arrow::bitmap::Bitmap>,
 }
 
@@ -173,7 +173,7 @@ impl<'f> DataRef<'f, f64> for NumberDataRef<'f> {
 
 impl AsRef<[f64]> for NumberDataRef<'_> {
     fn as_ref(&self) -> &[f64] {
-        unsafe { self.buffer.typed_data() }
+        self.buffer
     }
 }
 
@@ -184,10 +184,7 @@ impl<'f> From<NumberDataRef<'f>> for FeatureDataRef<'f> {
 }
 
 impl<'f> NumberDataRef<'f> {
-    pub fn new(
-        buffer: arrow::buffer::Buffer,
-        null_bitmap: &'f Option<arrow::bitmap::Bitmap>,
-    ) -> Self {
+    pub fn new(buffer: &'f [f64], null_bitmap: &'f Option<arrow::bitmap::Bitmap>) -> Self {
         Self {
             buffer,
             valid_bitmap: null_bitmap,
@@ -197,15 +194,12 @@ impl<'f> NumberDataRef<'f> {
 
 #[derive(Clone, Debug)]
 pub struct DecimalDataRef<'f> {
-    buffer: arrow::buffer::Buffer,
+    buffer: &'f [i64],
     valid_bitmap: &'f Option<arrow::bitmap::Bitmap>,
 }
 
 impl<'f> DecimalDataRef<'f> {
-    pub fn new(
-        buffer: arrow::buffer::Buffer,
-        null_bitmap: &'f Option<arrow::bitmap::Bitmap>,
-    ) -> Self {
+    pub fn new(buffer: &'f [i64], null_bitmap: &'f Option<arrow::bitmap::Bitmap>) -> Self {
         Self {
             buffer,
             valid_bitmap: null_bitmap,
@@ -247,7 +241,7 @@ impl<'f> DataRef<'f, i64> for DecimalDataRef<'f> {
 
 impl AsRef<[i64]> for DecimalDataRef<'_> {
     fn as_ref(&self) -> &[i64] {
-        unsafe { self.buffer.typed_data() }
+        self.buffer
     }
 }
 
@@ -267,7 +261,7 @@ fn null_bitmap_to_bools(null_bitmap: &Option<Bitmap>, len: usize) -> Vec<bool> {
 
 #[derive(Clone, Debug)]
 pub struct CategoricalDataRef<'f> {
-    buffer: arrow::buffer::Buffer,
+    buffer: &'f [u8],
     valid_bitmap: &'f Option<arrow::bitmap::Bitmap>,
 }
 
@@ -305,7 +299,7 @@ impl<'f> DataRef<'f, u8> for CategoricalDataRef<'f> {
 
 impl AsRef<[u8]> for CategoricalDataRef<'_> {
     fn as_ref(&self) -> &[u8] {
-        self.buffer.data()
+        self.buffer
     }
 }
 
@@ -316,10 +310,7 @@ impl<'f> From<CategoricalDataRef<'f>> for FeatureDataRef<'f> {
 }
 
 impl<'f> CategoricalDataRef<'f> {
-    pub fn new(
-        buffer: arrow::buffer::Buffer,
-        null_bitmap: &'f Option<arrow::bitmap::Bitmap>,
-    ) -> Self {
+    pub fn new(buffer: &'f [u8], null_bitmap: &'f Option<arrow::bitmap::Bitmap>) -> Self {
         Self {
             buffer,
             valid_bitmap: null_bitmap,
@@ -370,7 +361,7 @@ pub struct TextDataRef<'f> {
 
 impl<'f> AsRef<[u8]> for TextDataRef<'f> {
     fn as_ref(&self) -> &[u8] {
-        self.data_buffer.data()
+        self.data_buffer.as_slice()
     }
 }
 
@@ -389,7 +380,7 @@ impl<'r> DataRef<'r, u8> for TextDataRef<'r> {
 
             let text = unsafe {
                 byte_ptr_to_str(
-                    self.data_buffer.slice(start as usize).raw_data(),
+                    self.data_buffer.slice(start as usize).as_ptr(),
                     (end - start) as usize,
                 )
             };
@@ -501,7 +492,7 @@ impl<'r> TextDataRef<'r> {
 
         let text = unsafe {
             byte_ptr_to_str(
-                self.data_buffer.slice(start as usize).raw_data(),
+                self.data_buffer.slice(start as usize).as_ptr(),
                 (end - start) as usize,
             )
         };
