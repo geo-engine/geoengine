@@ -150,7 +150,6 @@ impl Default for ThreadPool {
     }
 }
 
-// TODO: include/merge into ExecutionContext
 /// A computation context for a group that spawns tasks in a `ThreadPool`
 #[derive(Copy, Clone, Debug)]
 pub struct ThreadPoolContext<'pool> {
