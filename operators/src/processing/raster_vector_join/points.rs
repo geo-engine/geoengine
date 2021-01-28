@@ -1,10 +1,11 @@
 use futures::stream::BoxStream;
-use futures::StreamExt;
+use futures::{StreamExt, TryStreamExt};
 
 use geoengine_datatypes::collections::{
-    FeatureCollectionInfos, FeatureCollectionModifications, MultiPointCollection,
+    FeatureCollectionInfos, FeatureCollectionModifications, GeometryRandomAccess,
+    MultiPointCollection,
 };
-use geoengine_datatypes::raster::{Pixel, RasterDataType};
+use geoengine_datatypes::raster::{GridIndexAccess, Pixel, RasterDataType};
 
 use crate::engine::{
     QueryContext, QueryProcessor, QueryRectangle, RasterQueryProcessor, TypedRasterQueryProcessor,
@@ -14,12 +15,14 @@ use crate::processing::raster_vector_join::aggregator::{
     Aggregator, FirstValueDecimalAggregator, FirstValueNumberAggregator, MeanValueAggregator,
     TypedAggregator,
 };
+use crate::processing::raster_vector_join::util::TimeSpanIter;
 use crate::processing::raster_vector_join::AggregationMethod;
 use crate::util::Result;
+use geoengine_datatypes::primitives::MultiPointAccess;
 
 pub struct RasterPointJoinProcessor {
     points: Box<dyn VectorQueryProcessor<VectorType = MultiPointCollection>>,
-    rasters: Vec<TypedRasterQueryProcessor>,
+    raster_processors: Vec<TypedRasterQueryProcessor>,
     column_names: Vec<String>,
     aggregation: AggregationMethod,
 }
@@ -27,28 +30,69 @@ pub struct RasterPointJoinProcessor {
 impl RasterPointJoinProcessor {
     pub fn new(
         points: Box<dyn VectorQueryProcessor<VectorType = MultiPointCollection>>,
-        rasters: Vec<TypedRasterQueryProcessor>,
+        raster_processors: Vec<TypedRasterQueryProcessor>,
         column_names: Vec<String>,
         aggregation: AggregationMethod,
     ) -> Self {
         Self {
             points,
-            rasters,
+            raster_processors,
             column_names,
             aggregation,
         }
     }
 
-    fn extract_raster_values<P: Pixel>(
+    async fn extract_raster_values<P: Pixel>(
         points: &MultiPointCollection,
-        raster: &dyn RasterQueryProcessor<RasterType = P>,
+        raster_processor: &dyn RasterQueryProcessor<RasterType = P>,
         new_column_name: &str,
         aggregation: AggregationMethod,
+        query: QueryRectangle,
+        ctx: QueryContext,
     ) -> Result<MultiPointCollection> {
         let mut aggregator = Self::create_aggregator::<P>(points.len(), aggregation);
 
+        let points = points.sort_by_time_asc()?;
+
+        for time_span in TimeSpanIter::new(points.time_intervals()) {
+            let query = QueryRectangle {
+                bbox: query.bbox,
+                time_interval: time_span.time_interval,
+                spatial_resolution: query.spatial_resolution,
+            };
+            let mut rasters = raster_processor.raster_query(query, ctx);
+
+            // TODO: optimize geo access (only specific tiles, etc.)
+
+            while let Some(raster) = rasters.next().await {
+                let raster = raster?;
+
+                for feature_index in time_span.idx_from..=time_span.idx_to {
+                    // TODO: don't do random access but use a single iterator
+                    let geometry = points.geometry_at(feature_index).expect("must exist");
+
+                    // TODO: add another aggregation method?
+                    for coordinate in geometry.points() {
+                        // TODO: take by reference
+                        let grid_idx = raster
+                            .global_geo_transform
+                            .coordinate_to_grid_idx_2d(*coordinate);
+
+                        // try to get the pixel if the coordinate is within the current tile
+                        if let Ok(pixel) = raster.get_at_grid_index(grid_idx) {
+                            // finally, attach value to feature
+                            aggregator.add_value(
+                                feature_index,
+                                pixel,
+                                time_span.time_interval.duration_ms() as u64,
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
         // TODO: call rasters, etc.
-        let _raster = raster;
         aggregator.add_value(0, 0, 1);
 
         points
@@ -91,13 +135,95 @@ impl VectorQueryProcessor for RasterPointJoinProcessor {
     ) -> BoxStream<'_, Result<Self::VectorType>> {
         self.points
             .query(query, ctx)
-            .map(move |mut points| {
-                for (raster, new_column_name) in self.rasters.iter().zip(&self.column_names) {
-                    points = call_on_generic_raster_processor!(raster, raster => Self::extract_raster_values(&points?, raster, new_column_name, self.aggregation));
+            .and_then(async move |mut points| {
+
+                for (raster, new_column_name) in self.raster_processors.iter().zip(&self.column_names) {
+                    points = call_on_generic_raster_processor!(raster, raster => {
+                        Self::extract_raster_values(&points, raster, new_column_name, self.aggregation, query, ctx).await?
+                    });
                 }
 
-                points
+                Ok(points)
             })
             .boxed()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::engine::RasterOperator;
+    use crate::engine::{MockExecutionContextCreator, RasterResultDescriptor};
+    use crate::mock::{MockRasterSource, MockRasterSourceParams};
+    use geoengine_datatypes::primitives::{
+        BoundingBox2D, FeatureDataRef, MultiPoint, SpatialResolution, TimeInterval,
+    };
+    use geoengine_datatypes::raster::{Grid2D, RasterTile2D, TileInformation};
+    use geoengine_datatypes::spatial_reference::SpatialReference;
+
+    #[tokio::test]
+    async fn extract_raster_values_single_raster() {
+        let raster_tile = RasterTile2D::new_with_tile_info(
+            TimeInterval::default(),
+            TileInformation {
+                global_geo_transform: Default::default(),
+                global_tile_position: [0, 0].into(),
+                tile_size_in_pixels: [3, 2].into(),
+            },
+            Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap(),
+        );
+
+        let raster_source = MockRasterSource {
+            params: MockRasterSourceParams {
+                data: vec![raster_tile.clone()],
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U8,
+                    spatial_reference: SpatialReference::wgs84().into(),
+                },
+            },
+        }
+        .boxed();
+
+        let execution_context_creator = MockExecutionContextCreator::default();
+        let execution_context = execution_context_creator.context();
+
+        let raster_source = raster_source.initialize(&execution_context).unwrap();
+
+        let points = MultiPointCollection::from_data(
+            MultiPoint::many(vec![
+                (0.0, 0.0),
+                (1.0, 0.0),
+                (0.0, -1.0),
+                (1.0, -1.0),
+                (0.0, -2.0),
+                (1.0, -2.0),
+            ])
+            .unwrap(),
+            vec![TimeInterval::default(); 6],
+            Default::default(),
+        )
+        .unwrap();
+
+        let result = RasterPointJoinProcessor::extract_raster_values(
+            &points,
+            &raster_source.query_processor().unwrap().get_u8().unwrap(),
+            "foo",
+            AggregationMethod::First,
+            QueryRectangle {
+                bbox: BoundingBox2D::new((0.0, 0.0).into(), (3.0, 2.0).into()).unwrap(),
+                time_interval: Default::default(),
+                spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
+            },
+            QueryContext { chunk_byte_size: 0 },
+        )
+        .await
+        .unwrap();
+
+        if let FeatureDataRef::Decimal(extracted_data) = result.data("foo").unwrap() {
+            assert_eq!(extracted_data.as_ref(), &[1, 2, 3, 4, 5, 6]);
+        } else {
+            unreachable!();
+        }
     }
 }

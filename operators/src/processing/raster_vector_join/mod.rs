@@ -1,5 +1,6 @@
 mod aggregator;
 mod points;
+mod util;
 
 use crate::engine::{
     ExecutionContext, InitializedOperator, InitializedOperatorImpl, InitializedVectorOperator,
