@@ -1,6 +1,6 @@
 use std::convert::{TryFrom, TryInto};
 
-use arrow::array::{ArrayBuilder, BooleanArray, PrimitiveArrayOps};
+use arrow::array::{ArrayBuilder, BooleanArray};
 use arrow::error::ArrowError;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
@@ -116,7 +116,7 @@ impl ArrowTyped for MultiPoint {
     type ArrowBuilder = arrow::array::ListBuilder<<Coordinate2D as ArrowTyped>::ArrowBuilder>;
 
     fn arrow_data_type() -> arrow::datatypes::DataType {
-        arrow::datatypes::DataType::List(Box::new(Coordinate2D::arrow_data_type()))
+        Coordinate2D::arrow_list_data_type()
     }
 
     fn builder_byte_size(builder: &mut Self::ArrowBuilder) -> usize {
@@ -151,7 +151,7 @@ impl ArrowTyped for MultiPoint {
                     let floats: &Float64Array = downcast_array(&floats_ref);
 
                     let new_floats = new_points.values();
-                    new_floats.append_slice(floats.value_slice(0, 2))?;
+                    new_floats.append_slice(floats.values())?;
 
                     new_points.append(true)?;
                 }
@@ -184,7 +184,7 @@ impl ArrowTyped for MultiPoint {
                     let old_floats: &Float64Array = downcast_array(&old_floats_array);
 
                     let float_builder = coordinate_builder.values();
-                    float_builder.append_slice(old_floats.value_slice(0, 2))?;
+                    float_builder.append_slice(old_floats.values())?;
 
                     coordinate_builder.append(true)?;
                 }

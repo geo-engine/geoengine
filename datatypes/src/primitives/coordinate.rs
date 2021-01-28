@@ -1,6 +1,6 @@
 use crate::util::arrow::ArrowTyped;
 use arrow::array::{ArrayBuilder, BooleanArray, Float64Builder};
-use arrow::datatypes::DataType;
+use arrow::datatypes::{DataType, Field};
 use arrow::error::ArrowError;
 use ocl::OclPrm;
 #[cfg(feature = "postgres")]
@@ -138,7 +138,9 @@ impl ArrowTyped for Coordinate2D {
     type ArrowBuilder = arrow::array::FixedSizeListBuilder<Float64Builder>;
 
     fn arrow_data_type() -> DataType {
-        arrow::datatypes::DataType::FixedSizeList(Box::new(arrow::datatypes::DataType::Float64), 2)
+        let nullable = true; // TODO: should actually be false, but arrow's builders set it to `true` currently
+
+        DataType::FixedSizeList(Box::new(Field::new("item", DataType::Float64, nullable)), 2)
     }
 
     fn builder_byte_size(builder: &mut Self::ArrowBuilder) -> usize {

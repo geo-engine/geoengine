@@ -1177,14 +1177,14 @@ impl<'a> CLProgramRunnable<'a> {
                     let num_bytes = bit_util::ceil(nulls.len(), 8);
                     let mut arrow_buffer =
                         MutableBuffer::new(num_bytes).with_bitset(num_bytes, false);
-                    let null_slice = arrow_buffer.data_mut();
+                    let null_slice = arrow_buffer.as_slice_mut();
 
                     for (i, null) in nulls.iter().enumerate() {
                         if *null != 0 {
                             bit_util::set_bit(null_slice, i);
                         }
                     }
-                    Some(arrow_buffer.freeze())
+                    Some(arrow_buffer.into())
                 } else {
                     None
                 };
@@ -1208,14 +1208,14 @@ impl<'a> CLProgramRunnable<'a> {
                     let num_bytes = bit_util::ceil(nulls.len(), 8);
                     let mut arrow_buffer =
                         MutableBuffer::new(num_bytes).with_bitset(num_bytes, false);
-                    let null_slice = arrow_buffer.data_mut();
+                    let null_slice = arrow_buffer.as_slice_mut();
 
                     for (i, null) in nulls.iter().enumerate() {
                         if *null != 0 {
                             bit_util::set_bit(null_slice, i);
                         }
                     }
-                    Some(arrow_buffer.freeze())
+                    Some(arrow_buffer.into())
                 } else {
                     None
                 };
@@ -1239,15 +1239,14 @@ impl<'a> CLProgramRunnable<'a> {
         len: usize,
     ) -> Result<arrow::buffer::Buffer> {
         let mut arrow_buffer = MutableBuffer::new(len * std::mem::size_of::<T>());
-        arrow_buffer.resize(len * std::mem::size_of::<T>()).unwrap();
+        arrow_buffer.resize(len * std::mem::size_of::<T>());
 
-        let dest = unsafe {
-            std::slice::from_raw_parts_mut(arrow_buffer.data_mut().as_ptr() as *mut T, len)
-        };
+        let dest =
+            unsafe { std::slice::from_raw_parts_mut(arrow_buffer.as_mut_ptr().cast::<T>(), len) };
 
         ocl_buffer.read(dest).enq()?;
 
-        Ok(arrow_buffer.freeze())
+        Ok(arrow_buffer.into())
     }
 }
 
@@ -2460,17 +2459,14 @@ __kernel void nop(__global int* buffer) {
         assert_eq!(vec, &[0, 1, 2, 3]);
 
         let mut arrow_buffer = MutableBuffer::new(len * std::mem::size_of::<i32>());
-        arrow_buffer
-            .resize(len * std::mem::size_of::<i32>())
-            .unwrap();
+        arrow_buffer.resize(len * std::mem::size_of::<i32>());
 
-        let dest = unsafe {
-            std::slice::from_raw_parts_mut(arrow_buffer.data_mut().as_ptr() as *mut i32, len)
-        };
+        let dest =
+            unsafe { std::slice::from_raw_parts_mut(arrow_buffer.as_mut_ptr().cast::<i32>(), len) };
 
         ocl_buffer.read(dest).enq().unwrap();
 
-        let arrow_buffer = arrow_buffer.freeze();
+        let arrow_buffer = arrow_buffer.into();
 
         let data = ArrayData::builder(DataType::Int32)
             .len(len)
@@ -2479,7 +2475,7 @@ __kernel void nop(__global int* buffer) {
 
         let array = Arc::new(PrimitiveArray::<Int32Type>::from(data));
 
-        assert_eq!(array.value_slice(0, len), &[0, 1, 2, 3]);
+        assert_eq!(array.values(), &[0, 1, 2, 3]);
     }
 
     #[test]

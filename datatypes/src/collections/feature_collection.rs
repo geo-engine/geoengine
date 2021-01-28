@@ -1,6 +1,6 @@
 use arrow::array::{
     as_primitive_array, as_string_array, Array, ArrayData, ArrayRef, BooleanArray, Float64Array,
-    ListArray, PrimitiveArrayOps, StructArray,
+    ListArray, StructArray,
 };
 use arrow::datatypes::{DataType, Field, Float64Type, Int64Type};
 use arrow::error::ArrowError;
@@ -498,7 +498,7 @@ where
                         downcast_array(array_a),
                         downcast_array(array_b),
                     )?),
-                    _ => arrow::compute::concat(&[array_a.clone(), array_b.clone()])?,
+                    _ => arrow::compute::concat(&[array_a.as_ref(), array_b.as_ref()])?,
                 },
             ));
         }
@@ -833,7 +833,7 @@ where
 
         unsafe {
             std::slice::from_raw_parts(
-                timestamps.raw_values().cast::<TimeInterval>(),
+                timestamps.values().as_ptr().cast::<TimeInterval>(),
                 number_of_time_intervals,
             )
         }
@@ -1045,8 +1045,8 @@ where
             let number_of_values = a.len();
 
             if a.null_count() == 0 {
-                let a_values: &[f64] = a.value_slice(0, number_of_values);
-                let b_values: &[f64] = a.value_slice(0, number_of_values);
+                let a_values: &[f64] = a.values();
+                let b_values: &[f64] = b.values();
 
                 for (&v1, &v2) in a_values.iter().zip(b_values) {
                     match (v1.is_nan(), v2.is_nan()) {
@@ -1103,7 +1103,7 @@ where
                     match CollectionType::DATA_TYPE {
                         VectorDataType::Data => {}
                         VectorDataType::MultiPoint => {
-                            if !c1.equals(c2.as_ref()) {
+                            if c1 != c2 {
                                 return false;
                             }
                         }
@@ -1128,19 +1128,14 @@ where
                                 .unwrap();
 
                             let feature_offsets_eq = || {
-                                c1_feature_offsets.buffers()[0].data()
-                                    == c2_feature_offsets.buffers()[0].data()
+                                c1_feature_offsets.buffers()[0] == c2_feature_offsets.buffers()[0]
                             };
 
-                            let lines_offsets_eq = || {
-                                c1_lines_offsets.buffers()[0].data()
-                                    == c2_lines_offsets.buffers()[0].data()
-                            };
+                            let lines_offsets_eq =
+                                || c1_lines_offsets.buffers()[0] == c2_lines_offsets.buffers()[0];
 
-                            let coordinates_eq = || {
-                                c1_coordinates.buffers()[0].data()
-                                    == c2_coordinates.buffers()[0].data()
-                            };
+                            let coordinates_eq =
+                                || c1_coordinates.buffers()[0] == c2_coordinates.buffers()[0];
 
                             if !feature_offsets_eq() || !lines_offsets_eq() || !coordinates_eq() {
                                 return false;
@@ -1173,24 +1168,18 @@ where
                                 .unwrap();
 
                             let feature_offsets_eq = || {
-                                c1_feature_offsets.buffers()[0].data()
-                                    == c2_feature_offsets.buffers()[0].data()
+                                c1_feature_offsets.buffers()[0] == c2_feature_offsets.buffers()[0]
                             };
 
                             let polygons_offsets_eq = || {
-                                c1_polygons_offsets.buffers()[0].data()
-                                    == c2_polygons_offsets.buffers()[0].data()
+                                c1_polygons_offsets.buffers()[0] == c2_polygons_offsets.buffers()[0]
                             };
 
-                            let rings_offsets_eq = || {
-                                c1_rings_offsets.buffers()[0].data()
-                                    == c2_rings_offsets.buffers()[0].data()
-                            };
+                            let rings_offsets_eq =
+                                || c1_rings_offsets.buffers()[0] == c2_rings_offsets.buffers()[0];
 
-                            let coordinates_eq = || {
-                                c1_coordinates.buffers()[0].data()
-                                    == c2_coordinates.buffers()[0].data()
-                            };
+                            let coordinates_eq =
+                                || c1_coordinates.buffers()[0] == c2_coordinates.buffers()[0];
 
                             if !feature_offsets_eq()
                                 || !polygons_offsets_eq()
@@ -1203,7 +1192,7 @@ where
                     }
                 }
                 _ => {
-                    if !c1.equals(c2.as_ref()) {
+                    if c1 != c2 {
                         return false;
                     }
                 }
@@ -1484,7 +1473,6 @@ mod tests {
     }
 
     #[test]
-    #[should_panic = "duplicate column"]
     fn rename_columns_fails() {
         let collection = DataCollection::from_data(
             vec![],
@@ -1499,8 +1487,8 @@ mod tests {
         )
         .unwrap();
 
-        collection
+        assert!(collection
             .rename_columns(&[("foo", "baz"), ("bar", "baz")])
-            .expect("duplicate column");
+            .is_err());
     }
 }

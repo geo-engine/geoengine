@@ -35,7 +35,7 @@ impl GeometryCollection for MultiPolygonCollection {
 
         unsafe {
             slice::from_raw_parts(
-                floats.raw_values().cast::<Coordinate2D>(),
+                floats.values().as_ptr().cast::<Coordinate2D>(),
                 number_of_coordinates,
             )
         }
@@ -52,7 +52,7 @@ impl GeometryCollection for MultiPolygonCollection {
         let data = geometries.data();
         let buffer = &data.buffers()[0];
 
-        unsafe { slice::from_raw_parts(buffer.raw_data().cast::<i32>(), geometries.len() + 1) }
+        unsafe { slice::from_raw_parts(buffer.as_ptr().cast::<i32>(), geometries.len() + 1) }
     }
 }
 
@@ -71,7 +71,7 @@ impl MultiPolygonCollection {
         let data = polygons.data();
         let buffer = &data.buffers()[0];
 
-        unsafe { slice::from_raw_parts(buffer.raw_data().cast::<i32>(), polygons.len() + 1) }
+        unsafe { slice::from_raw_parts(buffer.as_ptr().cast::<i32>(), polygons.len() + 1) }
     }
 
     #[allow(clippy::cast_ptr_alignment)]
@@ -91,7 +91,7 @@ impl MultiPolygonCollection {
         let data = rings.data();
         let buffer = &data.buffers()[0];
 
-        unsafe { slice::from_raw_parts(buffer.raw_data().cast::<i32>(), rings.len() + 1) }
+        unsafe { slice::from_raw_parts(buffer.as_ptr().cast::<i32>(), rings.len() + 1) }
     }
 }
 
@@ -161,7 +161,7 @@ impl<'l> Iterator for MultiPolygonIterator<'l> {
                 ring_refs.push(unsafe {
                     #[allow(clippy::cast_ptr_alignment)]
                     slice::from_raw_parts(
-                        float_array.raw_values().cast::<Coordinate2D>(),
+                        float_array.values().as_ptr().cast::<Coordinate2D>(),
                         number_of_coordinates,
                     )
                 });
@@ -225,7 +225,7 @@ impl<'l> GeometryRandomAccess<'l> for MultiPolygonCollection {
                 ring_refs.push(unsafe {
                     #[allow(clippy::cast_ptr_alignment)]
                     slice::from_raw_parts(
-                        float_array.raw_values().cast::<Coordinate2D>(),
+                        float_array.values().as_ptr().cast::<Coordinate2D>(),
                         number_of_coordinates,
                     )
                 });
