@@ -1,6 +1,8 @@
 pub mod arrow;
 pub mod helpers;
-pub mod identifiers;
+mod identifiers;
+
+pub use self::identifiers::Identifier;
 pub mod ranges;
 mod result;
 pub mod test;
