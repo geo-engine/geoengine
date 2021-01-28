@@ -27,7 +27,7 @@ use crate::util::helpers::SomeIter;
 use crate::util::Result;
 
 #[allow(clippy::unsafe_derive_deserialize)]
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct FeatureCollection<CollectionType> {
     #[serde(with = "struct_serde")]
     pub(super) table: StructArray,
