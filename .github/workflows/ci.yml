@@ -28,6 +28,8 @@ jobs:
       matrix:
         os:
           - ubuntu-20.04
+        features:
+          ["", "--all-features"]
 
     steps:
       - name: Checkout code
@@ -56,22 +58,17 @@ jobs:
         uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          args: --all-targets --all-features -- -D warnings
-      - name: Build (no features)
+          args: --all-targets ${{ matrix.features }} -- -D warnings
+      - name: Build
         uses: actions-rs/cargo@v1
         with:
           command: build
-          args: --verbose
-      - name: Build (all features)
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --all-features --verbose
+          args: ${{ matrix.features }} --verbose
       - name: Run tests
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --all-features --verbose
+          args: ${{ matrix.features }} --verbose
   
   coverage:
     runs-on: ubuntu-20.04    

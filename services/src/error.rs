@@ -120,12 +120,6 @@ impl From<geoengine_operators::error::Error> for Error {
     }
 }
 
-impl From<Error> for warp::Rejection {
-    fn from(e: Error) -> Self {
-        warp::reject::custom(e)
-    }
-}
-
 #[cfg(feature = "postgres")]
 impl From<bb8_postgres::bb8::RunError<<bb8_postgres::PostgresConnectionManager<bb8_postgres::tokio_postgres::NoTls> as bb8_postgres::bb8::ManageConnection>::Error>> for Error {
     fn from(e: bb8_postgres::bb8::RunError<<bb8_postgres::PostgresConnectionManager<bb8_postgres::tokio_postgres::NoTls> as bb8_postgres::bb8::ManageConnection>::Error>) -> Self {
@@ -140,5 +134,11 @@ impl From<bb8_postgres::bb8::RunError<<bb8_postgres::PostgresConnectionManager<b
 impl From<bb8_postgres::tokio_postgres::error::Error> for Error {
     fn from(e: bb8_postgres::tokio_postgres::error::Error) -> Self {
         Self::TokioPostgres { source: e }
+    }
+}
+
+impl From<serde_json::Error> for Error {
+    fn from(e: serde_json::Error) -> Self {
+        Self::SerdeJson { source: e }
     }
 }
