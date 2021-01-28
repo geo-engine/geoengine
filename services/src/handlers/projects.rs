@@ -3,8 +3,8 @@ use crate::projects::project::{
     CreateProject, LoadVersion, ProjectId, ProjectListOptions, UpdateProject, UserProjectPermission,
 };
 use crate::projects::projectdb::ProjectDB;
-use crate::util::identifiers::IdResponse;
 use crate::util::user_input::UserInput;
+use crate::util::IdResponse;
 use uuid::Uuid;
 use warp::Filter;
 
@@ -227,7 +227,7 @@ mod tests {
     use crate::users::session::Session;
     use crate::users::user::{UserCredentials, UserRegistration};
     use crate::users::userdb::UserDB;
-    use crate::util::identifiers::Identifier;
+    use crate::util::Identifier;
     use crate::workflows::workflow::WorkflowId;
     use crate::{
         contexts::InMemoryContext,

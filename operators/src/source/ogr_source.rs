@@ -910,7 +910,7 @@ mod tests {
     use super::*;
     use geoengine_datatypes::dataset::InternalDataSetId;
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
-    use geoengine_datatypes::util::identifiers::Identifier;
+    use geoengine_datatypes::util::Identifier;
 
     #[test]
     fn specification_serde() {

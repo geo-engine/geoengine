@@ -132,7 +132,7 @@ mod tests {
     use geoengine_datatypes::collections::FeatureCollectionInfos;
     use geoengine_datatypes::dataset::InternalDataSetId;
     use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution};
-    use geoengine_datatypes::util::identifiers::Identifier;
+    use geoengine_datatypes::util::Identifier;
 
     #[test]
     fn test() {
