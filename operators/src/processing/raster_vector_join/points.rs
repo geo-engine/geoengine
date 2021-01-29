@@ -60,12 +60,14 @@ impl RasterPointJoinProcessor {
                 time_interval: time_span.time_interval,
                 spatial_resolution: query.spatial_resolution,
             };
+
             let mut rasters = raster_processor.raster_query(query, ctx);
 
             // TODO: optimize geo access (only specific tiles, etc.)
 
             while let Some(raster) = rasters.next().await {
                 let raster = raster?;
+                let geo_transform = raster.tile_information().tile_geo_transform();
 
                 for feature_index in time_span.idx_from..=time_span.idx_to {
                     // TODO: don't do random access but use a single iterator
@@ -74,9 +76,7 @@ impl RasterPointJoinProcessor {
                     // TODO: add another aggregation method?
                     for coordinate in geometry.points() {
                         // TODO: take by reference
-                        let grid_idx = raster
-                            .global_geo_transform
-                            .coordinate_to_grid_idx_2d(*coordinate);
+                        let grid_idx = geo_transform.coordinate_to_grid_idx_2d(*coordinate);
 
                         // try to get the pixel if the coordinate is within the current tile
                         if let Ok(pixel) = raster.get_at_grid_index(grid_idx) {

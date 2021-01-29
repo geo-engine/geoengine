@@ -135,6 +135,17 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
 mod tests {
     use super::*;
 
+    use crate::engine::{
+        MockExecutionContextCreator, QueryContext, QueryProcessor, QueryRectangle, RasterOperator,
+    };
+    use crate::mock::MockFeatureCollectionSource;
+    use crate::source::{GdalSource, GdalSourceParameters};
+    use chrono::NaiveDate;
+    use futures::StreamExt;
+    use geoengine_datatypes::collections::{FeatureCollectionInfos, MultiPointCollection};
+    use geoengine_datatypes::primitives::{
+        BoundingBox2D, FeatureDataRef, MultiPoint, SpatialResolution, TimeInterval,
+    };
     use serde_json::json;
 
     #[test]
@@ -162,5 +173,95 @@ mod tests {
         let deserialized: RasterVectorJoin = serde_json::from_str(&serialized).unwrap();
 
         assert_eq!(deserialized.params, raster_vector_join.params);
+    }
+
+    fn ndvi_source() -> Box<dyn RasterOperator> {
+        let gdal_source = GdalSource {
+            params: GdalSourceParameters {
+                dataset_id: "modis_ndvi".to_string(),
+                channel: None,
+            },
+        };
+
+        gdal_source.boxed()
+    }
+
+    fn raster_dir() -> std::path::PathBuf {
+        let mut current_path = std::env::current_dir().unwrap();
+
+        if !current_path.ends_with("operators") {
+            current_path = current_path.join("operators");
+        }
+
+        current_path = current_path.join("test-data/raster");
+
+        current_path
+    }
+
+    #[tokio::test]
+    async fn ndvi() {
+        let point_source = MockFeatureCollectionSource::single(
+            MultiPointCollection::from_data(
+                MultiPoint::many(vec![
+                    (-13.95, 20.05),
+                    (-14.05, 20.05),
+                    (-13.95, 19.95),
+                    (-14.05, 19.95),
+                ])
+                .unwrap(),
+                vec![
+                    TimeInterval::new(
+                        NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
+                        NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
+                    )
+                    .unwrap();
+                    4
+                ],
+                Default::default(),
+            )
+            .unwrap(),
+        )
+        .boxed();
+
+        let operator = RasterVectorJoin {
+            params: RasterVectorJoinParams {
+                names: vec!["ndvi".to_string()],
+                aggregation: AggregationMethod::First,
+            },
+            raster_sources: vec![ndvi_source()],
+            vector_sources: vec![point_source],
+        };
+
+        let execution_context_creator = MockExecutionContextCreator::default();
+        let mut execution_context = execution_context_creator.context();
+
+        execution_context.raster_data_root = raster_dir();
+
+        let operator = operator.boxed().initialize(&execution_context).unwrap();
+
+        let query_processor = operator.query_processor().unwrap().multi_point().unwrap();
+
+        let result = query_processor
+            .query(
+                QueryRectangle {
+                    bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    time_interval: TimeInterval::default(),
+                    spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
+                },
+                QueryContext { chunk_byte_size: 0 },
+            )
+            .map(Result::unwrap)
+            .collect::<Vec<MultiPointCollection>>()
+            .await;
+
+        assert_eq!(result.len(), 1);
+
+        let data = if let FeatureDataRef::Decimal(data) = result[0].data("ndvi").unwrap() {
+            data
+        } else {
+            unreachable!();
+        };
+
+        assert_eq!(data.as_ref(), &[54, 55, 51, 55]);
     }
 }
