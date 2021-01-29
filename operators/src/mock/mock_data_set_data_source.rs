@@ -1,6 +1,6 @@
 use crate::engine::{
     ExecutionContext, InitializedOperator, InitializedOperatorImpl, InitializedVectorOperator,
-    LoadingInfo, QueryContext, QueryProcessor, QueryRectangle, SourceOperator,
+    MetaData, QueryContext, QueryProcessor, QueryRectangle, SourceOperator,
     TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::util::Result;
@@ -20,14 +20,14 @@ pub struct MockDataSetDataSourceLoadingInfo {
     pub points: Vec<Coordinate2D>,
 }
 
-impl LoadingInfo<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>
+impl MetaData<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>
     for MockDataSetDataSourceLoadingInfo
 {
-    fn get(&self, _query: QueryRectangle) -> Result<MockDataSetDataSourceLoadingInfo> {
+    fn loading_info(&self, _query: QueryRectangle) -> Result<MockDataSetDataSourceLoadingInfo> {
         Ok(self.clone()) // TODO: intersect points with query rectangle
     }
 
-    fn meta(&self) -> Result<VectorResultDescriptor> {
+    fn result_descriptor(&self) -> Result<VectorResultDescriptor> {
         Ok(VectorResultDescriptor {
             data_type: VectorDataType::MultiPoint,
             spatial_reference: SpatialReferenceOption::Unreferenced,
@@ -36,7 +36,7 @@ impl LoadingInfo<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>
 
     fn box_clone(
         &self,
-    ) -> Box<dyn LoadingInfo<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>> {
+    ) -> Box<dyn MetaData<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>> {
         Box::new(self.clone())
     }
 }
@@ -57,7 +57,7 @@ impl LoadingInfo<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>
 // }
 
 pub struct MockDataSetDataSourceProcessor {
-    loading_info: Box<dyn LoadingInfo<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>>,
+    loading_info: Box<dyn MetaData<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>>,
 }
 
 impl QueryProcessor for MockDataSetDataSourceProcessor {
@@ -70,7 +70,7 @@ impl QueryProcessor for MockDataSetDataSourceProcessor {
         // TODO: split into `chunk_byte_size`d chunks
         // let chunk_size = ctx.chunk_byte_size() / std::mem::size_of::<Coordinate2D>();
 
-        let loading_info = self.loading_info.get(query).unwrap();
+        let loading_info = self.loading_info.loading_info(query).unwrap();
 
         stream::once(async move {
             Ok(MultiPointCollection::from_data(
@@ -96,12 +96,12 @@ impl VectorOperator for MockDataSetDataSource {
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedVectorOperator>> {
-        let loading_info = context.loading_info(&self.params.data_set)?;
+        let loading_info = context.meta_data(&self.params.data_set)?;
         Ok(Box::new(InitializedOperatorImpl {
             params: self.params.clone(),
             raster_sources: vec![],
             vector_sources: vec![],
-            result_descriptor: loading_info.meta()?,
+            result_descriptor: loading_info.result_descriptor()?,
             state: loading_info,
         }))
     }
@@ -111,7 +111,7 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
     for InitializedOperatorImpl<
         MockDataSetDataSourceParams,
         VectorResultDescriptor,
-        Box<dyn LoadingInfo<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>>,
+        Box<dyn MetaData<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>>,
     >
 {
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
@@ -139,7 +139,7 @@ mod tests {
         let mut execution_context = MockExecutionContext::default();
 
         let id = DataSetId::Internal(InternalDataSetId::new());
-        execution_context.add_loading_info(
+        execution_context.add_meta_data(
             id.clone(),
             Box::new(MockDataSetDataSourceLoadingInfo {
                 points: vec![Coordinate2D::new(1., 2.); 3],

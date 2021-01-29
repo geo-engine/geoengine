@@ -150,7 +150,7 @@ async fn get_map<C: Context>(
     let execution_context = MockExecutionContext {
         raster_data_root: get_config_element::<config::GdalSource>()?.raster_data_root_path,
         thread_pool,
-        loading_info: Default::default(),
+        meta_data: Default::default(),
         tiling_specification: TilingSpecification {
             origin_coordinate: Coordinate2D::new(
                 config_tiling_spec.origin_coordinate_x,
