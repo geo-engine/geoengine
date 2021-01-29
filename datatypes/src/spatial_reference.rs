@@ -140,6 +140,19 @@ pub enum SpatialReferenceOption {
     Unreferenced,
 }
 
+impl SpatialReferenceOption {
+    pub fn is_spatial_ref(self) -> bool {
+        match self {
+            SpatialReferenceOption::SpatialReference(_) => true,
+            SpatialReferenceOption::Unreferenced => false,
+        }
+    }
+
+    pub fn is_unreferenced(self) -> bool {
+        !self.is_spatial_ref()
+    }
+}
+
 #[cfg(feature = "postgres")]
 impl ToSql for SpatialReferenceOption {
     fn to_sql(&self, ty: &Type, out: &mut BytesMut) -> Result<IsNull, Box<dyn Error + Sync + Send>>
@@ -218,6 +231,15 @@ impl Serialize for SpatialReferenceOption {
         S: Serializer,
     {
         serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl From<SpatialReferenceOption> for Option<SpatialReference> {
+    fn from(s_ref: SpatialReferenceOption) -> Self {
+        match s_ref {
+            SpatialReferenceOption::SpatialReference(s) => Some(s),
+            SpatialReferenceOption::Unreferenced => None,
+        }
     }
 }
 
@@ -364,5 +386,47 @@ mod tests {
         );
 
         assert!(serde_json::from_str::<SpatialReferenceOption>("\"foo:bar\"").is_err());
+    }
+
+    #[test]
+    fn is_spatial_ref() {
+        let s_ref = SpatialReferenceOption::from(SpatialReference::epsg_4326());
+        assert!(s_ref.is_spatial_ref());
+        assert!(!s_ref.is_unreferenced());
+    }
+
+    #[test]
+    fn is_unreferenced() {
+        let s_ref = SpatialReferenceOption::Unreferenced;
+        assert!(s_ref.is_unreferenced());
+        assert!(!s_ref.is_spatial_ref());
+    }
+
+    #[test]
+    fn from_option_some() {
+        let s_ref: SpatialReferenceOption = Some(SpatialReference::epsg_4326()).into();
+        assert_eq!(
+            s_ref,
+            SpatialReferenceOption::SpatialReference(SpatialReference::epsg_4326())
+        );
+    }
+
+    #[test]
+    fn from_option_none() {
+        let s_ref: SpatialReferenceOption = None.into();
+        assert_eq!(s_ref, SpatialReferenceOption::Unreferenced);
+    }
+
+    #[test]
+    fn into_option_some() {
+        let s_ref: Option<SpatialReference> =
+            SpatialReferenceOption::SpatialReference(SpatialReference::epsg_4326()).into();
+        assert_eq!(s_ref, Some(SpatialReference::epsg_4326()));
+    }
+
+    #[test]
+    fn into_option_none() {
+        let s_ref: Option<SpatialReference> = SpatialReferenceOption::Unreferenced.into();
+        assert_eq!(s_ref, None);
     }
 }

@@ -190,15 +190,19 @@ async fn get_feature<C: Context>(
         .context(error::Operator)?;
 
     // handle request and workflow crs matching
-    let spatial_ref = initialized.result_descriptor().spatial_reference();
+    let workflow_spatial_ref = initialized.result_descriptor().spatial_reference();
+    let request_spatial_ref: SpatialReferenceOption = request.srs_name.into();
     // TODO: use a default spatial reference if it is not set?
-    snafu::ensure!(request.srs_name.is_some(), error::InvalidSpatialReference);
+    snafu::ensure!(
+        request_spatial_ref.is_spatial_ref(),
+        error::InvalidSpatialReference
+    );
     // TODO: inject projection Operator
     snafu::ensure!(
-        spatial_ref == request.srs_name.into(),
+        workflow_spatial_ref == request_spatial_ref,
         error::SpatialReferenceMissmatch {
-            found: SpatialReferenceOption::from(request.srs_name),
-            expected: spatial_ref,
+            found: request_spatial_ref,
+            expected: workflow_spatial_ref,
         }
     );
 

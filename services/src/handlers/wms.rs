@@ -171,15 +171,19 @@ async fn get_map<C: Context>(
         .context(error::Operator)?;
 
     // handle request and workflow crs matching
-    let spatial_ref = initialized.result_descriptor().spatial_reference();
+    let workflow_spatial_ref = initialized.result_descriptor().spatial_reference();
+    let request_spatial_ref: SpatialReferenceOption = request.crs.into();
     // TODO: use a default spatial reference if it is not set?
-    snafu::ensure!(request.crs.is_some(), error::InvalidSpatialReference);
+    snafu::ensure!(
+        request_spatial_ref.is_spatial_ref(),
+        error::InvalidSpatialReference
+    );
     // TODO: inject projection Operator
     snafu::ensure!(
-        spatial_ref == request.crs.into(),
+        workflow_spatial_ref == request_spatial_ref,
         error::SpatialReferenceMissmatch {
-            found: SpatialReferenceOption::from(request.crs),
-            expected: spatial_ref,
+            found: request_spatial_ref,
+            expected: workflow_spatial_ref,
         }
     );
 
@@ -412,7 +416,7 @@ mod tests {
                 bbox: query_bbox,
                 format: GetMapFormat::ImagePng,
                 layers: "".to_string(),
-                crs: None,
+                crs: None.into(),
                 styles: "".to_string(),
                 time: None,
                 transparent: None,
@@ -467,7 +471,7 @@ mod tests {
                 bbox: query_bbox,
                 format: GetMapFormat::ImagePng,
                 layers: "".to_string(),
-                crs: None,
+                crs: None.into(),
                 styles: "".to_string(),
                 time: None,
                 transparent: None,
