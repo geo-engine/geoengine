@@ -142,11 +142,7 @@ impl ThreadPool {
 
 impl Default for ThreadPool {
     fn default() -> Self {
-        Self::new(
-            std::thread::available_concurrency()
-                .map(std::num::NonZeroUsize::get)
-                .unwrap_or(1),
-        )
+        Self::new(num_cpus::get())
     }
 }
 
