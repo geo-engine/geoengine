@@ -174,12 +174,12 @@ async fn get_map<C: Context>(
     let spatial_ref = initialized.result_descriptor().spatial_reference();
     // TODO: use a default spatial reference if it is not set?
     snafu::ensure!(request.crs.is_some(), error::InvalidSpatialReference);
-    // TODO: inject projection Operator?
+    // TODO: inject projection Operator
     snafu::ensure!(
         spatial_ref == request.crs.into(),
         error::SpatialReferenceMissmatch {
-            a: spatial_ref,
-            b: SpatialReferenceOption::from(request.crs),
+            found: SpatialReferenceOption::from(request.crs),
+            expected: spatial_ref,
         }
     );
 

@@ -193,12 +193,12 @@ async fn get_feature<C: Context>(
     let spatial_ref = initialized.result_descriptor().spatial_reference();
     // TODO: use a default spatial reference if it is not set?
     snafu::ensure!(request.srs_name.is_some(), error::InvalidSpatialReference);
-    // TODO: inject projection Operator?
+    // TODO: inject projection Operator
     snafu::ensure!(
         spatial_ref == request.srs_name.into(),
         error::SpatialReferenceMissmatch {
-            a: spatial_ref,
-            b: SpatialReferenceOption::from(request.srs_name),
+            found: SpatialReferenceOption::from(request.srs_name),
+            expected: spatial_ref,
         }
     );
 

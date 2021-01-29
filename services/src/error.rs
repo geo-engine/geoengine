@@ -68,10 +68,10 @@ pub enum Error {
     InvalidNamespace,
 
     InvalidSpatialReference,
-    #[snafu(display("SpatialReferenceMissmatch {} != {}", a, b))]
+    #[snafu(display("SpatialReferenceMissmatch: Found {}, expected: {}", found, expected))]
     SpatialReferenceMissmatch {
-        a: SpatialReferenceOption,
-        b: SpatialReferenceOption,
+        found: SpatialReferenceOption,
+        expected: SpatialReferenceOption,
     },
 
     InvalidWFSTypeNames,
