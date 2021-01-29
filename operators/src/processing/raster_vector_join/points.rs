@@ -75,7 +75,6 @@ impl RasterPointJoinProcessor {
 
                     // TODO: add another aggregation method?
                     for coordinate in geometry.points() {
-                        // TODO: take by reference
                         let grid_idx = geo_transform.coordinate_to_grid_idx_2d(*coordinate);
 
                         // try to get the pixel if the coordinate is within the current tile
