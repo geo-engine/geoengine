@@ -73,7 +73,7 @@ impl RasterPointJoinProcessor {
                     // TODO: don't do random access but use a single iterator
                     let geometry = points.geometry_at(feature_index).expect("must exist");
 
-                    // TODO: add another aggregation method?
+                    // TODO: aggregate multiple extracted values for one multi point before inserting it to the aggregator
                     for coordinate in geometry.points() {
                         let grid_idx = geo_transform.coordinate_to_grid_idx_2d(*coordinate);
 
