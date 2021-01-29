@@ -7,6 +7,7 @@ use geoengine_datatypes::{
     primitives::{Coordinate2D, SpatialResolution},
     raster::Grid2D,
     raster::{GridShape2D, RasterTile2D, TilingSpecification},
+    spatial_reference::SpatialReferenceOption,
 };
 use geoengine_datatypes::{
     primitives::BoundingBox2D,
@@ -27,7 +28,7 @@ use geoengine_datatypes::primitives::{TimeInstance, TimeInterval};
 use geoengine_operators::call_on_generic_raster_processor;
 use geoengine_operators::concurrency::ThreadPool;
 use geoengine_operators::engine::{
-    ExecutionContext, QueryContext, QueryRectangle, RasterQueryProcessor,
+    ExecutionContext, QueryContext, QueryRectangle, RasterQueryProcessor, ResultDescriptor,
 };
 use num_traits::AsPrimitive;
 use std::convert::TryInto;
@@ -168,6 +169,23 @@ async fn get_map<C: Context>(
     let initialized = operator
         .initialize(&execution_context)
         .context(error::Operator)?;
+
+    // handle request and workflow crs matching
+    let workflow_spatial_ref = initialized.result_descriptor().spatial_reference();
+    let request_spatial_ref: SpatialReferenceOption = request.crs.into();
+    // TODO: use a default spatial reference if it is not set?
+    snafu::ensure!(
+        request_spatial_ref.is_spatial_ref(),
+        error::InvalidSpatialReference
+    );
+    // TODO: inject projection Operator
+    snafu::ensure!(
+        workflow_spatial_ref == request_spatial_ref,
+        error::SpatialReferenceMissmatch {
+            found: request_spatial_ref,
+            expected: workflow_spatial_ref,
+        }
+    );
 
     let processor = initialized.query_processor().context(error::Operator)?;
 
@@ -334,7 +352,7 @@ mod tests {
 
         let res = warp::test::request()
             .method("GET")
-            .path("/wms?request=GetMap&service=WMS&version=1.3.0&layers=mock_raster&bbox=1,2,3,4&width=100&height=100&crs=foo&styles=ssss&format=image/png")
+            .path("/wms?request=GetMap&service=WMS&version=1.3.0&layers=mock_raster&bbox=1,2,3,4&width=100&height=100&crs=EPSG:4326&styles=ssss&format=image/png")
             .reply(&wms_handler(ctx))
             .await;
         assert_eq!(res.status(), 200);
@@ -398,7 +416,7 @@ mod tests {
                 bbox: query_bbox,
                 format: GetMapFormat::ImagePng,
                 layers: "".to_string(),
-                crs: "".to_string(),
+                crs: None,
                 styles: "".to_string(),
                 time: None,
                 transparent: None,
@@ -453,7 +471,7 @@ mod tests {
                 bbox: query_bbox,
                 format: GetMapFormat::ImagePng,
                 layers: "".to_string(),
-                crs: "".to_string(),
+                crs: None,
                 styles: "".to_string(),
                 time: None,
                 transparent: None,
@@ -499,7 +517,7 @@ mod tests {
 
         let res = warp::test::request()
             .method("GET")
-            .path(&format!("/wms?request=GetMap&service=WMS&version=1.3.0&layers={}&bbox=20,-10,80,50&width=600&height=600&crs=foo&styles=ssss&format=image/png&time=2014-01-01T00:00:00.0Z", id.to_string()))
+            .path(&format!("/wms?request=GetMap&service=WMS&version=1.3.0&layers={}&bbox=20,-10,80,50&width=600&height=600&crs=EPSG:4326&styles=ssss&format=image/png&time=2014-01-01T00:00:00.0Z", id.to_string()))
             .reply(&wms_handler(ctx))
             .await;
         assert_eq!(res.status(), 200);
@@ -535,7 +553,7 @@ mod tests {
 
         let res = warp::test::request()
             .method("GET")
-            .path(&format!("/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS={}&CRS=EPSG%3A3857&STYLES=&WIDTH=600&HEIGHT=600&BBOX=20,-10,80,50&time=2014-01-01T00:00:00.0Z", id.to_string()))
+            .path(&format!("/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS={}&CRS=EPSG:4326&STYLES=&WIDTH=600&HEIGHT=600&BBOX=20,-10,80,50&time=2014-01-01T00:00:00.0Z", id.to_string()))
             .reply(&wms_handler(ctx))
             .await;
 
@@ -588,7 +606,7 @@ mod tests {
             ("bbox", "20,-10,80,50"),
             ("width", "600"),
             ("height", "600"),
-            ("crs", "foo"),
+            ("crs", "EPSG:4326"),
             (
                 "styles",
                 &format!("custom:{}", serde_json::to_string(&colorizer).unwrap()),

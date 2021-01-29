@@ -9,17 +9,17 @@ use crate::ogc::wfs::request::{GetCapabilities, GetFeature, TypeNames, WFSReques
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use futures::StreamExt;
-use geoengine_datatypes::collections::ToGeoJson;
 use geoengine_datatypes::primitives::{
     FeatureData, Geometry, MultiPoint, TimeInstance, TimeInterval,
 };
+use geoengine_datatypes::{collections::ToGeoJson, spatial_reference::SpatialReferenceOption};
 use geoengine_datatypes::{
     collections::{FeatureCollection, MultiPointCollection},
     primitives::SpatialResolution,
 };
 use geoengine_operators::engine::{
-    MockExecutionContextCreator, QueryContext, QueryRectangle, TypedVectorQueryProcessor,
-    VectorQueryProcessor,
+    MockExecutionContextCreator, QueryContext, QueryRectangle, ResultDescriptor,
+    TypedVectorQueryProcessor, VectorQueryProcessor,
 };
 use serde_json::json;
 use std::str::FromStr;
@@ -188,6 +188,23 @@ async fn get_feature<C: Context>(
     let initialized = operator
         .initialize(&execution_context)
         .context(error::Operator)?;
+
+    // handle request and workflow crs matching
+    let workflow_spatial_ref = initialized.result_descriptor().spatial_reference();
+    let request_spatial_ref: SpatialReferenceOption = request.srs_name.into();
+    // TODO: use a default spatial reference if it is not set?
+    snafu::ensure!(
+        request_spatial_ref.is_spatial_ref(),
+        error::InvalidSpatialReference
+    );
+    // TODO: inject projection Operator
+    snafu::ensure!(
+        workflow_spatial_ref == request_spatial_ref,
+        error::SpatialReferenceMissmatch {
+            found: request_spatial_ref,
+            expected: workflow_spatial_ref,
+        }
+    );
 
     let processor = initialized.query_processor().context(error::Operator)?;
 
@@ -470,7 +487,7 @@ x;y
 
         let res = warp::test::request()
             .method("GET")
-            .path(&format!("/wfs?request=GetFeature&service=WFS&version=2.0.0&typeNames=registry:{}&bbox=-90,-180,90,180&crs=EPSG:4326", id.to_string()))
+            .path(&format!("/wfs?request=GetFeature&service=WFS&version=2.0.0&typeNames=registry:{}&bbox=-90,-180,90,180&srsName=EPSG:4326", id.to_string()))
             .reply(&wfs_handler(ctx))
             .await;
         let body: String = String::from_utf8(res.body().to_vec()).unwrap();
@@ -560,7 +577,7 @@ x;y
             ("version", "2.0.0"),
             ("typeNames", &format!("json:{}", json)),
             ("bbox", "-90,-180,90,180"),
-            ("crs", "EPSG:4326"),
+            ("srsName", "EPSG:4326"),
         ];
         let url = format!("/wfs?{}", &serde_urlencoded::to_string(params).unwrap());
         let res = warp::test::request()
