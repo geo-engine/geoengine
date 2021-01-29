@@ -176,7 +176,7 @@ mod tests {
 
         let raster_source = MockRasterSource {
             params: MockRasterSourceParams {
-                data: vec![raster_tile.clone()],
+                data: vec![raster_tile],
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::wgs84().into(),
@@ -222,6 +222,81 @@ mod tests {
 
         if let FeatureDataRef::Decimal(extracted_data) = result.data("foo").unwrap() {
             assert_eq!(extracted_data.as_ref(), &[1, 2, 3, 4, 5, 6]);
+        } else {
+            unreachable!();
+        }
+    }
+
+    #[tokio::test]
+    #[allow(clippy::float_cmp)]
+    async fn extract_raster_values_two_raster_timesteps() {
+        let raster_tile_a = RasterTile2D::new_with_tile_info(
+            TimeInterval::new(0, 10).unwrap(),
+            TileInformation {
+                global_geo_transform: Default::default(),
+                global_tile_position: [0, 0].into(),
+                tile_size_in_pixels: [3, 2].into(),
+            },
+            Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1], None).unwrap(),
+        );
+        let raster_tile_b = RasterTile2D::new_with_tile_info(
+            TimeInterval::new(10, 20).unwrap(),
+            TileInformation {
+                global_geo_transform: Default::default(),
+                global_tile_position: [0, 0].into(),
+                tile_size_in_pixels: [3, 2].into(),
+            },
+            Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap(),
+        );
+
+        let raster_source = MockRasterSource {
+            params: MockRasterSourceParams {
+                data: vec![raster_tile_a, raster_tile_b],
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U8,
+                    spatial_reference: SpatialReference::wgs84().into(),
+                },
+            },
+        }
+        .boxed();
+
+        let execution_context_creator = MockExecutionContextCreator::default();
+        let execution_context = execution_context_creator.context();
+
+        let raster_source = raster_source.initialize(&execution_context).unwrap();
+
+        let points = MultiPointCollection::from_data(
+            MultiPoint::many(vec![
+                (0.0, 0.0),
+                (1.0, 0.0),
+                (0.0, -1.0),
+                (1.0, -1.0),
+                (0.0, -2.0),
+                (1.0, -2.0),
+            ])
+            .unwrap(),
+            vec![TimeInterval::default(); 6],
+            Default::default(),
+        )
+        .unwrap();
+
+        let result = RasterPointJoinProcessor::extract_raster_values(
+            &points,
+            &raster_source.query_processor().unwrap().get_u8().unwrap(),
+            "foo",
+            AggregationMethod::Mean,
+            QueryRectangle {
+                bbox: BoundingBox2D::new((0.0, 0.0).into(), (3.0, 2.0).into()).unwrap(),
+                time_interval: Default::default(),
+                spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
+            },
+            QueryContext { chunk_byte_size: 0 },
+        )
+        .await
+        .unwrap();
+
+        if let FeatureDataRef::Number(extracted_data) = result.data("foo").unwrap() {
+            assert_eq!(extracted_data.as_ref(), &[3.5, 3.5, 3.5, 3.5, 3.5, 3.5]);
         } else {
             unreachable!();
         }
