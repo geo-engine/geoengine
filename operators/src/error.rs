@@ -137,7 +137,7 @@ pub enum Error {
     },
 
     LoadingInfo {
-        reason: String, // cannot nest error because it's from service crate
+        reason: String, // TODO: source error will be from service crate, use a Box here
     },
 
     Arrow {
