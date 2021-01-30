@@ -1,9 +1,7 @@
 use std::any::Any;
 use std::convert::TryFrom;
 
-use arrow::array::{
-    Array, ArrayBuilder, ArrayDataRef, ArrayEqual, ArrayRef, BooleanArray, JsonEqual,
-};
+use arrow::array::{Array, ArrayBuilder, ArrayDataRef, ArrayRef, BooleanArray, JsonEqual};
 use arrow::datatypes::DataType;
 use arrow::error::ArrowError;
 use serde::{Deserialize, Serialize};
@@ -121,14 +119,6 @@ impl ArrayBuilder for NoArrowArray {
         unreachable!("There is no implementation since there is no geometry")
     }
 
-    fn append_data(&mut self, _data: &[ArrayDataRef]) -> Result<(), ArrowError> {
-        unreachable!("There is no implementation since there is no geometry")
-    }
-
-    fn data_type(&self) -> DataType {
-        unreachable!("There is no implementation since there is no geometry")
-    }
-
     fn finish(&mut self) -> ArrayRef {
         unreachable!("There is no implementation since there is no geometry")
     }
@@ -148,22 +138,6 @@ impl ArrayBuilder for NoArrowArray {
 
 impl JsonEqual for NoArrowArray {
     fn equals_json(&self, _json: &[&Value]) -> bool {
-        unreachable!("There is no implementation since there is no geometry")
-    }
-}
-
-impl ArrayEqual for NoArrowArray {
-    fn equals(&self, _other: &dyn Array) -> bool {
-        unreachable!("There is no implementation since there is no geometry")
-    }
-
-    fn range_equals(
-        &self,
-        _other: &dyn Array,
-        _start_idx: usize,
-        _end_idx: usize,
-        _other_start_idx: usize,
-    ) -> bool {
         unreachable!("There is no implementation since there is no geometry")
     }
 }

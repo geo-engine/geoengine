@@ -348,7 +348,7 @@ impl HistogramBuilder {
 
 #[cfg(test)]
 mod tests {
-    use arrow::array::{Array, Float64Builder, Int64Builder, PrimitiveArrayOps, UInt8Builder};
+    use arrow::array::{Array, Float64Builder, Int64Builder, UInt8Builder};
 
     use crate::primitives::{CategoricalDataRef, DecimalDataRef, NumberDataRef};
 

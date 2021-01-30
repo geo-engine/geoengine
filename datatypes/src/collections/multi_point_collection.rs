@@ -62,7 +62,10 @@ impl<'l> Iterator for MultiPointIterator<'l> {
         let floats: &Float64Array = downcast_array(&floats_ref);
 
         let multi_point = MultiPointRef::new_unchecked(unsafe {
-            slice::from_raw_parts(floats.raw_values().cast::<Coordinate2D>(), number_of_points)
+            slice::from_raw_parts(
+                floats.values().as_ptr().cast::<Coordinate2D>(),
+                number_of_points,
+            )
         });
 
         self.index += 1; // increment!
@@ -104,7 +107,10 @@ impl<'l> GeometryRandomAccess<'l> for MultiPointCollection {
         let floats: &Float64Array = downcast_array(&floats_ref);
 
         let multi_point = MultiPointRef::new_unchecked(unsafe {
-            slice::from_raw_parts(floats.raw_values().cast::<Coordinate2D>(), number_of_points)
+            slice::from_raw_parts(
+                floats.values().as_ptr().cast::<Coordinate2D>(),
+                number_of_points,
+            )
         });
 
         Some(multi_point)
@@ -149,7 +155,7 @@ impl GeometryCollection for MultiPointCollection {
 
         unsafe {
             slice::from_raw_parts(
-                floats.raw_values().cast::<Coordinate2D>(),
+                floats.values().as_ptr().cast::<Coordinate2D>(),
                 number_of_coordinates,
             )
         }
@@ -166,7 +172,7 @@ impl GeometryCollection for MultiPointCollection {
         let data = geometries.data();
         let buffer = &data.buffers()[0];
 
-        unsafe { slice::from_raw_parts(buffer.raw_data().cast::<i32>(), geometries.len() + 1) }
+        unsafe { slice::from_raw_parts(buffer.as_ptr().cast::<i32>(), geometries.len() + 1) }
     }
 }
 

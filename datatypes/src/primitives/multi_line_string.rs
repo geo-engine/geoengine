@@ -1,6 +1,6 @@
 use std::convert::TryFrom;
 
-use arrow::array::{ArrayBuilder, BooleanArray, PrimitiveArrayOps};
+use arrow::array::{ArrayBuilder, BooleanArray};
 use arrow::error::ArrowError;
 use geo::algorithm::intersects::Intersects;
 use serde::{Deserialize, Serialize};
@@ -8,7 +8,9 @@ use snafu::ensure;
 
 use crate::collections::VectorDataType;
 use crate::error::Error;
-use crate::primitives::{error, BoundingBox2D, GeometryRef, PrimitivesError, TypedGeometry};
+use crate::primitives::{
+    error, BoundingBox2D, GeometryRef, MultiPoint, PrimitivesError, TypedGeometry,
+};
 use crate::primitives::{Coordinate2D, Geometry};
 use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::Result;
@@ -106,9 +108,7 @@ impl ArrowTyped for MultiLineString {
     >;
 
     fn arrow_data_type() -> arrow::datatypes::DataType {
-        arrow::datatypes::DataType::List(
-            arrow::datatypes::DataType::List(Coordinate2D::arrow_data_type().into()).into(),
-        )
+        MultiPoint::arrow_list_data_type()
     }
 
     fn builder_byte_size(builder: &mut Self::ArrowBuilder) -> usize {
@@ -154,9 +154,7 @@ impl ArrowTyped for MultiLineString {
                         let floats_ref = coordinates.value(coordinate_index);
                         let floats: &Float64Array = downcast_array(&floats_ref);
 
-                        coordinate_builder
-                            .values()
-                            .append_slice(floats.value_slice(0, 2))?;
+                        coordinate_builder.values().append_slice(floats.values())?;
 
                         coordinate_builder.append(true)?;
                     }
@@ -199,9 +197,7 @@ impl ArrowTyped for MultiLineString {
                     let floats_ref = coordinates.value(coordinate_index);
                     let floats: &Float64Array = downcast_array(&floats_ref);
 
-                    coordinate_builder
-                        .values()
-                        .append_slice(floats.value_slice(0, 2))?;
+                    coordinate_builder.values().append_slice(floats.values())?;
 
                     coordinate_builder.append(true)?;
                 }
