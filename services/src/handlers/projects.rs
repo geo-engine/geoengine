@@ -11,8 +11,8 @@ use warp::Filter;
 pub(crate) fn create_project_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::post()
-        .and(warp::path("project"))
+    warp::path("project")
+        .and(warp::post())
         .and(authenticate(ctx))
         .and(warp::body::json())
         .and_then(create_project)
@@ -35,8 +35,8 @@ async fn create_project<C: Context>(
 pub(crate) fn list_projects_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::get()
-        .and(warp::path("projects"))
+    warp::path("projects")
+        .and(warp::get())
         .and(authenticate(ctx))
         .and(warp::query::<ProjectListOptions>())
         .and_then(list_projects)
@@ -59,17 +59,15 @@ async fn list_projects<C: Context>(
 pub(crate) fn load_project_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::get()
-        .and(
-            (warp::path!("project" / Uuid / Uuid).map(|project_id: Uuid, version_id: Uuid| {
-                (ProjectId(project_id), LoadVersion::from(Some(version_id)))
-            }))
-            .or(warp::path!("project" / Uuid)
-                .map(|project_id| (ProjectId(project_id), LoadVersion::Latest)))
-            .unify(),
-        )
-        .and(authenticate(ctx))
-        .and_then(load_project)
+    (warp::path!("project" / Uuid / Uuid).map(|project_id: Uuid, version_id: Uuid| {
+        (ProjectId(project_id), LoadVersion::from(Some(version_id)))
+    }))
+    .or(warp::path!("project" / Uuid)
+        .map(|project_id| (ProjectId(project_id), LoadVersion::Latest)))
+    .unify()
+    .and(warp::get())
+    .and(authenticate(ctx))
+    .and_then(load_project)
 }
 
 // TODO: move into handler once async closures are available?
@@ -88,8 +86,9 @@ async fn load_project<C: Context>(
 pub(crate) fn update_project_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::patch()
-        .and(warp::path!("project" / Uuid).map(ProjectId))
+    warp::path!("project" / Uuid)
+        .map(ProjectId)
+        .and(warp::patch())
         .and(authenticate(ctx))
         .and(warp::body::json())
         .and_then(update_project)
@@ -113,8 +112,9 @@ async fn update_project<C: Context>(
 pub(crate) fn delete_project_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::delete()
-        .and(warp::path!("project" / Uuid).map(ProjectId))
+    warp::path!("project" / Uuid)
+        .map(ProjectId)
+        .and(warp::delete())
         .and(authenticate(ctx))
         .and_then(delete_project)
 }
@@ -134,8 +134,8 @@ async fn delete_project<C: Context>(
 pub(crate) fn project_versions_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::get()
-        .and(warp::path!("project" / "versions"))
+    warp::path!("project" / "versions")
+        .and(warp::get())
         .and(authenticate(ctx))
         .and(warp::body::json())
         .and_then(project_versions)
@@ -157,8 +157,8 @@ async fn project_versions<C: Context>(
 pub(crate) fn add_permission_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::post()
-        .and(warp::path!("project" / "permission" / "add"))
+    warp::path!("project" / "permission" / "add")
+        .and(warp::post())
         .and(authenticate(ctx))
         .and(warp::body::json())
         .and_then(add_permission)
@@ -179,8 +179,8 @@ async fn add_permission<C: Context>(
 pub(crate) fn remove_permission_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::delete()
-        .and(warp::path!("project" / "permission"))
+    warp::path!("project" / "permission")
+        .and(warp::delete())
         .and(authenticate(ctx))
         .and(warp::body::json())
         .and_then(remove_permission)
@@ -201,8 +201,9 @@ async fn remove_permission<C: Context>(
 pub(crate) fn list_permissions_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::get()
-        .and(warp::path!("project" / Uuid / "permissions").map(ProjectId))
+    warp::path!("project" / Uuid / "permissions")
+        .map(ProjectId)
+        .and(warp::get())
         .and(authenticate(ctx))
         .and_then(list_permissions)
 }

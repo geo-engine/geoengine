@@ -151,6 +151,7 @@ fn serve_static_directory(
     let has_path = path.is_some();
 
     warp::path("static")
+        .and(warp::get())
         .and_then(move || async move {
             if has_path {
                 Ok(())

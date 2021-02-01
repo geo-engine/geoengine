@@ -14,8 +14,8 @@ use warp::Filter;
 pub(crate) fn register_user_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::post()
-        .and(warp::path("user"))
+    warp::path("user")
+        .and(warp::post())
         .and(warp::body::json())
         .and(warp::any().map(move || ctx.clone()))
         .and_then(register_user)
@@ -34,8 +34,8 @@ async fn register_user<C: Context>(
 pub(crate) fn anonymous_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    warp::post()
-        .and(warp::path!("anonymous"))
+    warp::path!("anonymous")
+        .and(warp::post())
         .and(warp::any().map(move || ctx.clone()))
         .and_then(anonymous)
 }
@@ -49,8 +49,8 @@ async fn anonymous<C: Context>(ctx: C) -> Result<impl warp::Reply, warp::Rejecti
 pub(crate) fn login_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::post()
-        .and(warp::path("login"))
+    warp::path("login")
+        .and(warp::post())
         .and(warp::body::json())
         .and(warp::any().map(move || ctx.clone()))
         .and_then(login)
@@ -74,8 +74,8 @@ async fn login<C: Context>(
 pub(crate) fn logout_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::post()
-        .and(warp::path("logout"))
+    warp::path("logout")
+        .and(warp::post())
         .and(authenticate(ctx))
         .and_then(logout)
 }
@@ -92,8 +92,8 @@ async fn logout<C: Context>(ctx: C) -> Result<impl warp::Reply, warp::Rejection>
 pub(crate) fn session_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    warp::get()
-        .and(warp::path("session"))
+    warp::path("session")
+        .and(warp::get())
         .and(authenticate(ctx))
         .and_then(session)
 }
@@ -108,8 +108,9 @@ async fn session<C: Context>(ctx: C) -> Result<impl warp::Reply, warp::Rejection
 pub(crate) fn session_project_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::post()
-        .and(warp::path!("session" / "project" / Uuid).map(ProjectId))
+    warp::path!("session" / "project" / Uuid)
+        .map(ProjectId)
+        .and(warp::post())
         .and(authenticate(ctx))
         .and_then(session_project)
 }
@@ -130,8 +131,8 @@ async fn session_project<C: Context>(
 pub(crate) fn session_view_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::post()
-        .and(warp::path!("session" / "view"))
+    warp::path!("session" / "view")
+        .and(warp::post())
         .and(authenticate(ctx))
         .and(warp::body::json())
         .and_then(session_view)
@@ -153,7 +154,7 @@ async fn session_view<C: Context>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::handlers::{assert_error_response, ErrorResponse};
+    use crate::handlers::ErrorResponse;
     use crate::projects::project::{CreateProject, STRectangle};
     use crate::projects::projectdb::ProjectDB;
     use crate::users::session::Session;

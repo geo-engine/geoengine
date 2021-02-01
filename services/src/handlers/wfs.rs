@@ -27,8 +27,8 @@ use std::str::FromStr;
 pub(crate) fn wfs_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::get()
-        .and(warp::path!("wfs"))
+    warp::path!("wfs")
+        .and(warp::get())
         .and(warp::query::<WFSRequest>())
         .and(warp::any().map(move || ctx.clone()))
         .and_then(wfs)

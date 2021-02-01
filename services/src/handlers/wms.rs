@@ -37,8 +37,8 @@ use std::str::FromStr;
 pub(crate) fn wms_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    warp::get()
-        .and(warp::path!("wms"))
+    warp::path!("wms")
+        .and(warp::get())
         .and(
             warp::query::raw().and_then(|query_string: String| async move {
                 // TODO: make case insensitive by using serde-aux instead
