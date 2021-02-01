@@ -587,7 +587,7 @@ mod tests {
             serde_json::from_str::<ErrorResponse>(body).unwrap(),
             ErrorResponse {
                 error: "InvalidAuthorizationScheme".to_string(),
-                message: "You need to authenticate with bearer.".to_string(),
+                message: "Authentication scheme must be Bearer.".to_string(),
             }
         );
     }

@@ -53,7 +53,7 @@ pub enum Error {
     InvalidSession,
     #[snafu(display("Header with authorization token not provided."))]
     MissingAuthorizationHeader,
-    #[snafu(display("You need to authenticate with bearer."))]
+    #[snafu(display("Authentication scheme must be Bearer."))]
     InvalidAuthorizationScheme,
 
     #[snafu(display("Authorization error: {:?}", source))]
