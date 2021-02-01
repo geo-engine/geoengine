@@ -6,8 +6,8 @@ use crate::users::session::{Session, SessionId, UserInfo};
 use crate::users::user::User;
 use crate::users::user::{UserCredentials, UserId, UserRegistration};
 use crate::users::userdb::UserDB;
-use crate::util::identifiers::Identifier;
 use crate::util::user_input::Validated;
+use crate::util::Identifier;
 use async_trait::async_trait;
 use bb8_postgres::PostgresConnectionManager;
 use bb8_postgres::{

@@ -140,6 +140,12 @@ impl ThreadPool {
     }
 }
 
+impl Default for ThreadPool {
+    fn default() -> Self {
+        Self::new(num_cpus::get())
+    }
+}
+
 /// A computation context for a group that spawns tasks in a `ThreadPool`
 #[derive(Copy, Clone, Debug)]
 pub struct ThreadPoolContext<'pool> {

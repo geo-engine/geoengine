@@ -3,7 +3,7 @@ use warp::reply::Reply;
 use warp::Filter;
 
 use crate::handlers::{authenticate, Context};
-use crate::util::identifiers::IdResponse;
+use crate::util::IdResponse;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 
@@ -54,8 +54,8 @@ mod tests {
     use super::*;
     use crate::users::user::{UserCredentials, UserRegistration};
     use crate::users::userdb::UserDB;
-    use crate::util::identifiers::IdResponse;
     use crate::util::user_input::UserInput;
+    use crate::util::IdResponse;
     use crate::{contexts::InMemoryContext, workflows::registry::WorkflowRegistry};
     use geoengine_operators::engine::VectorOperator;
     use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};

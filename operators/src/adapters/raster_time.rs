@@ -168,19 +168,15 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::concurrency::ThreadPool;
     use crate::engine::{
-        ExecutionContext, QueryContext, QueryProcessor, QueryRectangle, RasterOperator,
+        MockExecutionContext, MockQueryContext, QueryProcessor, QueryRectangle, RasterOperator,
         RasterResultDescriptor,
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;
     use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution};
+    use geoengine_datatypes::raster::{Grid, RasterDataType};
     use geoengine_datatypes::spatial_reference::SpatialReference;
-    use geoengine_datatypes::{
-        primitives::Coordinate2D,
-        raster::{Grid, GridShape2D, RasterDataType, TilingSpecification},
-    };
 
     #[tokio::test]
     async fn adapter() {
@@ -302,21 +298,13 @@ mod tests {
         }
         .boxed();
 
-        let thread_pool = ThreadPool::new(2);
-        let exe_ctx = ExecutionContext {
-            raster_data_root: Default::default(),
-            thread_pool: thread_pool.create_context(),
-            tiling_specification: TilingSpecification {
-                origin_coordinate: Coordinate2D::default(),
-                tile_size_in_pixels: GridShape2D::from([600, 600]),
-            },
-        };
+        let exe_ctx = MockExecutionContext::default();
         let query_rect = QueryRectangle {
             bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (1., 1.).into()),
             time_interval: TimeInterval::new_unchecked(0, 10),
             spatial_resolution: SpatialResolution::one(),
         };
-        let query_ctx = QueryContext {
+        let query_ctx = MockQueryContext {
             chunk_byte_size: 1024 * 1024,
         };
 
@@ -336,9 +324,9 @@ mod tests {
             .get_u8()
             .unwrap();
 
-        let source_a = |query_rect| qp1.query(query_rect, query_ctx);
+        let source_a = |query_rect| qp1.query(query_rect, &query_ctx);
 
-        let source_b = |query_rect| qp2.query(query_rect, query_ctx);
+        let source_b = |query_rect| qp2.query(query_rect, &query_ctx);
 
         let adapter = RasterTimeAdapter::new(source_a, source_b, query_rect);
 
