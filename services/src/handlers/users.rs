@@ -155,34 +155,44 @@ async fn session_view<C: Context>(
 mod tests {
     use super::*;
     use crate::handlers::ErrorResponse;
-    use crate::projects::project::{CreateProject, STRectangle};
-    use crate::projects::projectdb::ProjectDB;
+    use crate::projects::project::STRectangle;
     use crate::users::session::Session;
     use crate::users::user::UserId;
     use crate::users::userdb::UserDB;
+    use crate::util::tests::{create_project_helper, create_session_helper};
     use crate::util::user_input::Validated;
     use crate::{contexts::InMemoryContext, handlers::handle_rejection};
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
     use serde_json::json;
+    use warp::http::Response;
+    use warp::hyper::body::Bytes;
 
-    #[tokio::test]
-    async fn register() {
-        let ctx = InMemoryContext::default();
-
+    async fn register_test_helper<C: Context>(
+        ctx: C,
+        method: &str,
+        email: &str,
+    ) -> Response<Bytes> {
         let user = UserRegistration {
-            email: "foo@bar.de".to_string(),
+            email: email.to_string(),
             password: "secret123".to_string(),
             real_name: " Foo Bar".to_string(),
         };
 
         // register user
-        let res = warp::test::request()
-            .method("POST")
+        warp::test::request()
+            .method(method)
             .path("/user")
             .header("Content-Length", "0")
             .json(&user)
-            .reply(&register_user_handler(ctx))
-            .await;
+            .reply(&register_user_handler(ctx).recover(handle_rejection))
+            .await
+    }
+
+    #[tokio::test]
+    async fn register() {
+        let ctx = InMemoryContext::default();
+
+        let res = register_test_helper(ctx, "POST", "foo@bar.de").await;
 
         assert_eq!(res.status(), 200);
 
@@ -194,30 +204,13 @@ mod tests {
     async fn register_fail() {
         let ctx = InMemoryContext::default();
 
-        let user = UserRegistration {
-            email: "notanemail".to_string(),
-            password: "secret123".to_string(),
-            real_name: " Foo Bar".to_string(),
-        };
+        let res = register_test_helper(ctx, "POST", "notanemail").await;
 
-        // register user
-        let res = warp::test::request()
-            .method("POST")
-            .path("/user")
-            .header("Content-Length", "0")
-            .json(&user)
-            .reply(&register_user_handler(ctx).recover(handle_rejection))
-            .await;
-
-        assert_eq!(res.status(), 400);
-
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
-            ErrorResponse {
-                error: "RegistrationFailed".to_string(),
-                message: "Registration failed: Invalid e-mail address".to_string(),
-            }
+        ErrorResponse::assert(
+            &res,
+            400,
+            "RegistrationFailed",
+            "Registration failed: Invalid e-mail address",
         );
     }
 
@@ -225,39 +218,16 @@ mod tests {
     async fn register_duplicate_email() {
         let ctx = InMemoryContext::default();
 
-        let user = UserRegistration {
-            email: "foo@bar.de".to_string(),
-            password: "secret123".to_string(),
-            real_name: " Foo Bar".to_string(),
-        };
-
-        ctx.user_db()
-            .write()
-            .await
-            .register(Validated {
-                user_input: user.clone(),
-            })
-            .await
-            .unwrap();
+        register_test_helper(ctx.clone(), "POST", "foo@bar.de").await;
 
         // register user
-        let res = warp::test::request()
-            .method("POST")
-            .path("/user")
-            .header("Content-Length", "0")
-            .json(&user)
-            .reply(&register_user_handler(ctx).recover(handle_rejection))
-            .await;
+        let res = register_test_helper(ctx, "POST", "foo@bar.de").await;
 
-        assert_eq!(res.status(), 409);
-
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
-            ErrorResponse {
-                error: "RegistrationFailed".to_string(),
-                message: "Registration failed: E-mail already exists".to_string(),
-            }
+        ErrorResponse::assert(
+            &res,
+            409,
+            "RegistrationFailed",
+            "Registration failed: E-mail already exists",
         );
     }
 
@@ -265,31 +235,9 @@ mod tests {
     async fn register_invalid_method() {
         let ctx = InMemoryContext::default();
 
-        let user = UserRegistration {
-            email: "foo@bar.de".to_string(),
-            password: "secret123".to_string(),
-            real_name: " Foo Bar".to_string(),
-        };
+        let res = register_test_helper(ctx, "GET", "foo@bar.de").await;
 
-        // register user
-        let res = warp::test::request()
-            .method("GET")
-            .path("/user")
-            .header("Content-Length", "0")
-            .json(&user)
-            .reply(&register_user_handler(ctx).recover(handle_rejection))
-            .await;
-
-        assert_eq!(res.status(), 405);
-
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
-            ErrorResponse {
-                error: "MethodNotAllowed".to_string(),
-                message: "HTTP method not allowed.".to_string(),
-            }
-        );
+        ErrorResponse::assert(&res, 405, "MethodNotAllowed", "HTTP method not allowed.");
     }
 
     #[tokio::test]
@@ -305,15 +253,11 @@ mod tests {
             .reply(&register_user_handler(ctx).recover(handle_rejection))
             .await;
 
-        assert_eq!(res.status(), 400);
-
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
-            ErrorResponse {
-                error: "BodyDeserializeError".to_string(),
-                message: "expected ident at line 1 column 2".to_string(),
-            }
+        ErrorResponse::assert(
+            &res,
+            400,
+            "BodyDeserializeError",
+            "expected ident at line 1 column 2",
         );
     }
 
@@ -335,22 +279,19 @@ mod tests {
             .reply(&register_user_handler(ctx).recover(handle_rejection))
             .await;
 
-        assert_eq!(res.status(), 400);
-
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
-            ErrorResponse {
-                error: "BodyDeserializeError".to_string(),
-                message: "missing field `email` at line 1 column 47".to_string(),
-            }
+        ErrorResponse::assert(
+            &res,
+            400,
+            "BodyDeserializeError",
+            "missing field `email` at line 1 column 47",
         );
     }
 
-    #[tokio::test]
-    async fn login() {
-        let ctx = InMemoryContext::default();
-
+    async fn login_test_helper<C: Context>(
+        ctx: C,
+        method: &str,
+        password: &str,
+    ) -> Response<Bytes> {
         let user = Validated {
             user_input: UserRegistration {
                 email: "foo@bar.de".to_string(),
@@ -363,16 +304,23 @@ mod tests {
 
         let credentials = UserCredentials {
             email: "foo@bar.de".to_string(),
-            password: "secret123".to_string(),
+            password: password.to_string(),
         };
 
-        let res = warp::test::request()
-            .method("POST")
+        warp::test::request()
+            .method(method)
             .path("/login")
             .header("Content-Length", "0")
             .json(&credentials)
             .reply(&login_handler(ctx).recover(handle_rejection))
-            .await;
+            .await
+    }
+
+    #[tokio::test]
+    async fn login() {
+        let ctx = InMemoryContext::default();
+
+        let res = login_test_helper(ctx, "POST", "secret123").await;
 
         assert_eq!(res.status(), 200);
 
@@ -384,38 +332,13 @@ mod tests {
     async fn login_fail() {
         let ctx = InMemoryContext::default();
 
-        let user = Validated {
-            user_input: UserRegistration {
-                email: "foo@bar.de".to_string(),
-                password: "secret123".to_string(),
-                real_name: "Foo Bar".to_string(),
-            },
-        };
+        let res = login_test_helper(ctx, "POST", "wrong").await;
 
-        ctx.user_db().write().await.register(user).await.unwrap();
-
-        let credentials = UserCredentials {
-            email: "foo@bar.de".to_string(),
-            password: "wrong".to_string(),
-        };
-
-        let res = warp::test::request()
-            .method("POST")
-            .path("/login")
-            .header("Content-Length", "0")
-            .json(&credentials)
-            .reply(&login_handler(ctx).recover(handle_rejection))
-            .await;
-
-        assert_eq!(res.status(), 401);
-
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
-            ErrorResponse {
-                error: "LoginFailed".to_string(),
-                message: "User does not exist or password is wrong.".to_string(),
-            }
+        ErrorResponse::assert(
+            &res,
+            401,
+            "LoginFailed",
+            "User does not exist or password is wrong.",
         );
     }
 
@@ -423,39 +346,9 @@ mod tests {
     async fn login_invalid_method() {
         let ctx = InMemoryContext::default();
 
-        let user = Validated {
-            user_input: UserRegistration {
-                email: "foo@bar.de".to_string(),
-                password: "secret123".to_string(),
-                real_name: " Foo Bar".to_string(),
-            },
-        };
+        let res = login_test_helper(ctx, "GET", "secret123").await;
 
-        ctx.user_db().write().await.register(user).await.unwrap();
-
-        let credentials = UserCredentials {
-            email: "foo@bar.de".to_string(),
-            password: "secret123".to_string(),
-        };
-
-        let res = warp::test::request()
-            .method("GET")
-            .path("/login")
-            .header("Content-Length", "0")
-            .json(&credentials)
-            .reply(&login_handler(ctx).recover(handle_rejection))
-            .await;
-
-        assert_eq!(res.status(), 405);
-
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
-            ErrorResponse {
-                error: "MethodNotAllowed".to_string(),
-                message: "HTTP method not allowed.".to_string(),
-            }
-        );
+        ErrorResponse::assert(&res, 405, "MethodNotAllowed", "HTTP method not allowed.");
     }
 
     #[tokio::test]
@@ -470,15 +363,11 @@ mod tests {
             .reply(&login_handler(ctx).recover(handle_rejection))
             .await;
 
-        assert_eq!(res.status(), 400);
-
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
-            ErrorResponse {
-                error: "BodyDeserializeError".to_string(),
-                message: "expected ident at line 1 column 2".to_string(),
-            }
+        ErrorResponse::assert(
+            &res,
+            400,
+            "BodyDeserializeError",
+            "expected ident at line 1 column 2",
         );
     }
 
@@ -508,22 +397,15 @@ mod tests {
             .reply(&login_handler(ctx).recover(handle_rejection))
             .await;
 
-        assert_eq!(res.status(), 400);
-
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
-            ErrorResponse {
-                error: "BodyDeserializeError".to_string(),
-                message: "missing field `password` at line 1 column 22".to_string(),
-            }
+        ErrorResponse::assert(
+            &res,
+            400,
+            "BodyDeserializeError",
+            "missing field `password` at line 1 column 22",
         );
     }
 
-    #[tokio::test]
-    async fn logout() {
-        let ctx = InMemoryContext::default();
-
+    async fn logout_test_helper<C: Context>(ctx: C, method: &str) -> Response<Bytes> {
         let user = Validated {
             user_input: UserRegistration {
                 email: "foo@bar.de".to_string(),
@@ -547,8 +429,8 @@ mod tests {
             .await
             .unwrap();
 
-        let res = warp::test::request()
-            .method("POST")
+        warp::test::request()
+            .method(method)
             .path("/logout")
             .header(
                 "Authorization",
@@ -556,7 +438,14 @@ mod tests {
             )
             .body("no json")
             .reply(&logout_handler(ctx).recover(handle_rejection))
-            .await;
+            .await
+    }
+
+    #[tokio::test]
+    async fn logout() {
+        let ctx = InMemoryContext::default();
+
+        let res = logout_test_helper(ctx, "POST").await;
 
         assert_eq!(res.status(), 200);
         assert_eq!(res.body(), "");
@@ -572,15 +461,11 @@ mod tests {
             .reply(&logout_handler(ctx).recover(handle_rejection))
             .await;
 
-        assert_eq!(res.status(), 401);
-
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
-            ErrorResponse {
-                error: "MissingAuthorizationHeader".to_string(),
-                message: "Header with authorization token not provided.".to_string(),
-            }
+        ErrorResponse::assert(
+            &res,
+            401,
+            "MissingAuthorizationHeader",
+            "Header with authorization token not provided.",
         );
     }
 
@@ -598,16 +483,7 @@ mod tests {
             .reply(&logout_handler(ctx).recover(handle_rejection))
             .await;
 
-        assert_eq!(res.status(), 401);
-
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
-            ErrorResponse {
-                error: "InvalidSession".to_string(),
-                message: "The session id is invalid.".to_string(),
-            }
-        );
+        ErrorResponse::assert(&res, 401, "InvalidSession", "The session id is invalid.");
     }
 
     #[tokio::test]
@@ -621,15 +497,11 @@ mod tests {
             .reply(&logout_handler(ctx).recover(handle_rejection))
             .await;
 
-        assert_eq!(res.status(), 401);
-
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
-            ErrorResponse {
-                error: "InvalidAuthorizationScheme".to_string(),
-                message: "Authentication scheme must be Bearer.".to_string(),
-            }
+        ErrorResponse::assert(
+            &res,
+            401,
+            "InvalidAuthorizationScheme",
+            "Authentication scheme must be Bearer.",
         );
     }
 
@@ -643,15 +515,12 @@ mod tests {
             .header("Authorization", format!("Bearer {}", "no uuid"))
             .reply(&logout_handler(ctx).recover(handle_rejection))
             .await;
-        assert_eq!(res.status(), 401);
 
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
-            ErrorResponse {
-                error: "InvalidUuid".to_string(),
-                message: "Identifier does not have the right format.".to_string(),
-            }
+        ErrorResponse::assert(
+            &res,
+            401,
+            "InvalidUuid",
+            "Identifier does not have the right format.",
         );
     }
 
@@ -659,77 +528,16 @@ mod tests {
     async fn logout_invalid_method() {
         let ctx = InMemoryContext::default();
 
-        let user = Validated {
-            user_input: UserRegistration {
-                email: "foo@bar.de".to_string(),
-                password: "secret123".to_string(),
-                real_name: " Foo Bar".to_string(),
-            },
-        };
+        let res = logout_test_helper(ctx, "GET").await;
 
-        ctx.user_db().write().await.register(user).await.unwrap();
-
-        let credentials = UserCredentials {
-            email: "foo@bar.de".to_string(),
-            password: "secret123".to_string(),
-        };
-
-        let session = ctx
-            .user_db()
-            .write()
-            .await
-            .login(credentials)
-            .await
-            .unwrap();
-
-        let res = warp::test::request()
-            .method("GET")
-            .path("/logout")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session.id.to_string()),
-            )
-            .reply(&logout_handler(ctx).recover(handle_rejection))
-            .await;
-
-        assert_eq!(res.status(), 405);
-
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
-            ErrorResponse {
-                error: "MethodNotAllowed".to_string(),
-                message: "HTTP method not allowed.".to_string(),
-            }
-        );
+        ErrorResponse::assert(&res, 405, "MethodNotAllowed", "HTTP method not allowed.");
     }
 
     #[tokio::test]
     async fn session() {
         let ctx = InMemoryContext::default();
 
-        let user = Validated {
-            user_input: UserRegistration {
-                email: "foo@bar.de".to_string(),
-                password: "secret123".to_string(),
-                real_name: " Foo Bar".to_string(),
-            },
-        };
-
-        ctx.user_db().write().await.register(user).await.unwrap();
-
-        let credentials = UserCredentials {
-            email: "foo@bar.de".to_string(),
-            password: "secret123".to_string(),
-        };
-
-        let session = ctx
-            .user_db()
-            .write()
-            .await
-            .login(credentials)
-            .await
-            .unwrap();
+        let session = create_session_helper(&ctx).await;
 
         let res = warp::test::request()
             .method("GET")
@@ -761,62 +569,14 @@ mod tests {
             .reply(&session_handler(ctx).recover(handle_rejection))
             .await;
 
-        assert_eq!(res.status(), 401);
+        ErrorResponse::assert(&res, 401, "InvalidSession", "The session id is invalid.");
     }
 
     #[tokio::test]
     async fn session_view_project() {
         let ctx = InMemoryContext::default();
 
-        let user = Validated {
-            user_input: UserRegistration {
-                email: "foo@bar.de".to_string(),
-                password: "secret123".to_string(),
-                real_name: " Foo Bar".to_string(),
-            },
-        };
-
-        ctx.user_db().write().await.register(user).await.unwrap();
-
-        let credentials = UserCredentials {
-            email: "foo@bar.de".to_string(),
-            password: "secret123".to_string(),
-        };
-
-        let session = ctx
-            .user_db()
-            .write()
-            .await
-            .login(credentials)
-            .await
-            .unwrap();
-
-        let project = ctx
-            .project_db()
-            .write()
-            .await
-            .create(
-                session.user.id,
-                CreateProject {
-                    name: "Test".to_string(),
-                    description: "Foo".to_string(),
-                    bounds: STRectangle::new(
-                        SpatialReferenceOption::Unreferenced,
-                        0.,
-                        0.,
-                        1.,
-                        1.,
-                        0,
-                        1,
-                    )
-                    .unwrap(),
-                    time_step: None,
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
+        let (session, project) = create_project_helper(&ctx).await;
 
         let res = warp::test::request()
             .method("POST")
@@ -869,15 +629,19 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn anonymous() {
+    async fn anonymous_test_helper(method: &str) -> Response<Bytes> {
         let ctx = InMemoryContext::default();
 
-        let res = warp::test::request()
-            .method("POST")
+        warp::test::request()
+            .method(method)
             .path("/anonymous")
-            .reply(&anonymous_handler(ctx))
-            .await;
+            .reply(&anonymous_handler(ctx).recover(handle_rejection))
+            .await
+    }
+
+    #[tokio::test]
+    async fn anonymous() {
+        let res = anonymous_test_helper("POST").await;
 
         assert_eq!(res.status(), 200);
 
@@ -890,23 +654,8 @@ mod tests {
 
     #[tokio::test]
     async fn anonymous_invalid_method() {
-        let ctx = InMemoryContext::default();
+        let res = anonymous_test_helper("GET").await;
 
-        let res = warp::test::request()
-            .method("GET")
-            .path("/anonymous")
-            .reply(&anonymous_handler(ctx).recover(handle_rejection))
-            .await;
-
-        assert_eq!(res.status(), 405);
-
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
-            ErrorResponse {
-                error: "MethodNotAllowed".to_string(),
-                message: "HTTP method not allowed.".to_string(),
-            }
-        );
+        ErrorResponse::assert(&res, 405, "MethodNotAllowed", "HTTP method not allowed.");
     }
 }

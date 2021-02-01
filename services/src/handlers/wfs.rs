@@ -332,6 +332,7 @@ mod tests {
     use geoengine_operators::source::{CsvGeometrySpecification, CsvSource, CsvTimeSpecification};
     use serde_json::json;
     use std::io::{Seek, SeekFrom, Write};
+    use warp::hyper::body::Bytes;
     use xml::ParserConfig;
 
     #[tokio::test]
@@ -427,15 +428,19 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn get_capabilities() {
+    async fn get_capabilities_test_helper(method: &str) -> Response<Bytes> {
         let ctx = InMemoryContext::default();
 
-        let res = warp::test::request()
-            .method("GET")
+        warp::test::request()
+            .method(method)
             .path("/wfs?request=GetCapabilities&service=WFS")
-            .reply(&wfs_handler(ctx))
-            .await;
+            .reply(&wfs_handler(ctx).recover(handle_rejection))
+            .await
+    }
+
+    #[tokio::test]
+    async fn get_capabilities() {
+        let res = get_capabilities_test_helper("GET").await;
 
         assert_eq!(res.status(), 200);
 
@@ -449,28 +454,12 @@ mod tests {
 
     #[tokio::test]
     async fn get_capabilities_invalid_method() {
-        let ctx = InMemoryContext::default();
+        let res = get_capabilities_test_helper("POST").await;
 
-        let res = warp::test::request()
-            .method("POST")
-            .path("/wfs?request=GetCapabilities&service=WFS")
-            .reply(&wfs_handler(ctx).recover(handle_rejection))
-            .await;
-
-        assert_eq!(res.status(), 405);
-
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
-            ErrorResponse {
-                error: "MethodNotAllowed".to_string(),
-                message: "HTTP method not allowed.".to_string(),
-            }
-        );
+        ErrorResponse::assert(&res, 405, "MethodNotAllowed", "HTTP method not allowed.");
     }
 
-    #[tokio::test]
-    async fn get_feature_registry() {
+    async fn get_feature_registry_test_helper(method: &str) -> Response<Bytes> {
         let mut temp_file = tempfile::NamedTempFile::new().unwrap();
         write!(
             temp_file,
@@ -508,11 +497,17 @@ x;y
             .await
             .unwrap();
 
-        let res = warp::test::request()
-            .method("GET")
+        warp::test::request()
+            .method(method)
             .path(&format!("/wfs?request=GetFeature&service=WFS&version=2.0.0&typeNames=registry:{}&bbox=-90,-180,90,180&srsName=EPSG:4326", id.to_string()))
-            .reply(&wfs_handler(ctx))
-            .await;
+            .reply(&wfs_handler(ctx).recover(handle_rejection))
+            .await
+    }
+
+    #[tokio::test]
+    async fn get_feature_registry() {
+        let res = get_feature_registry_test_helper("GET").await;
+
         let body: String = String::from_utf8(res.body().to_vec()).unwrap();
         assert_eq!(
             body,
@@ -563,59 +558,9 @@ x;y
 
     #[tokio::test]
     async fn get_feature_registry_invalid_method() {
-        let mut temp_file = tempfile::NamedTempFile::new().unwrap();
-        write!(
-            temp_file,
-            "
-x;y
-0;1
-2;3
-4;5
-"
-        )
-        .unwrap();
-        temp_file.seek(SeekFrom::Start(0)).unwrap();
+        let res = get_feature_registry_test_helper("POST").await;
 
-        let ctx = InMemoryContext::default();
-
-        let workflow = Workflow {
-            operator: TypedOperator::Vector(Box::new(CsvSource {
-                params: CsvSourceParameters {
-                    file_path: temp_file.path().into(),
-                    field_separator: ';',
-                    geometry: CsvGeometrySpecification::XY {
-                        x: "x".into(),
-                        y: "y".into(),
-                    },
-                    time: CsvTimeSpecification::None,
-                },
-            })),
-        };
-
-        let id = ctx
-            .workflow_registry()
-            .write()
-            .await
-            .register(workflow.clone())
-            .await
-            .unwrap();
-
-        let res = warp::test::request()
-            .method("POST")
-            .path(&format!("/wfs?request=GetFeature&service=WFS&version=2.0.0&typeNames=registry:{}&bbox=-90,-180,90,180&crs=EPSG:4326", id.to_string()))
-            .reply(&wfs_handler(ctx).recover(handle_rejection))
-            .await;
-
-        assert_eq!(res.status(), 405);
-
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
-            ErrorResponse {
-                error: "MethodNotAllowed".to_string(),
-                message: "HTTP method not allowed.".to_string(),
-            }
-        );
+        ErrorResponse::assert(&res, 405, "MethodNotAllowed", "HTTP method not allowed.");
     }
 
     #[tokio::test]
@@ -628,20 +573,10 @@ x;y
             .reply(&wfs_handler(ctx).recover(handle_rejection))
             .await;
 
-        assert_eq!(res.status(), 400);
-
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
-            ErrorResponse {
-                error: "InvalidQuery".to_string(),
-                message: "Invalid query string.".to_string(),
-            }
-        );
+        ErrorResponse::assert(&res, 400, "InvalidQuery", "Invalid query string.");
     }
 
-    #[tokio::test]
-    async fn get_feature_json() {
+    async fn get_feature_json_test_helper(method: &str) -> Response<Bytes> {
         let mut temp_file = tempfile::NamedTempFile::new().unwrap();
         write!(
             temp_file,
@@ -682,11 +617,17 @@ x;y
             ("srsName", "EPSG:4326"),
         ];
         let url = format!("/wfs?{}", &serde_urlencoded::to_string(params).unwrap());
-        let res = warp::test::request()
-            .method("GET")
+        warp::test::request()
+            .method(method)
             .path(&url)
-            .reply(&wfs_handler(ctx))
-            .await;
+            .reply(&wfs_handler(ctx).recover(handle_rejection))
+            .await
+    }
+
+    #[tokio::test]
+    async fn get_feature_json() {
+        let res = get_feature_json_test_helper("GET").await;
+
         let body: String = String::from_utf8(res.body().to_vec()).unwrap();
         assert_eq!(
             body,
@@ -737,62 +678,9 @@ x;y
 
     #[tokio::test]
     async fn get_feature_json_invalid_method() {
-        let mut temp_file = tempfile::NamedTempFile::new().unwrap();
-        write!(
-            temp_file,
-            "
-x;y
-0;1
-2;3
-4;5
-"
-        )
-        .unwrap();
-        temp_file.seek(SeekFrom::Start(0)).unwrap();
+        let res = get_feature_json_test_helper("POST").await;
 
-        let ctx = InMemoryContext::default();
-
-        let workflow = Workflow {
-            operator: TypedOperator::Vector(Box::new(CsvSource {
-                params: CsvSourceParameters {
-                    file_path: temp_file.path().into(),
-                    field_separator: ';',
-                    geometry: CsvGeometrySpecification::XY {
-                        x: "x".into(),
-                        y: "y".into(),
-                    },
-                    time: CsvTimeSpecification::None,
-                },
-            })),
-        };
-
-        let json = serde_json::to_string(&workflow).unwrap();
-
-        let params = &[
-            ("request", "GetFeature"),
-            ("service", "WFS"),
-            ("version", "2.0.0"),
-            ("typeNames", &format!("json:{}", json)),
-            ("bbox", "-90,-180,90,180"),
-            ("crs", "EPSG:4326"),
-        ];
-        let url = format!("/wfs?{}", &serde_urlencoded::to_string(params).unwrap());
-        let res = warp::test::request()
-            .method("POST")
-            .path(&url)
-            .reply(&wfs_handler(ctx).recover(handle_rejection))
-            .await;
-
-        assert_eq!(res.status(), 405);
-
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
-            ErrorResponse {
-                error: "MethodNotAllowed".to_string(),
-                message: "HTTP method not allowed.".to_string(),
-            }
-        );
+        ErrorResponse::assert(&res, 405, "MethodNotAllowed", "HTTP method not allowed.");
     }
 
     #[tokio::test]
@@ -813,15 +701,6 @@ x;y
             .reply(&wfs_handler(ctx).recover(handle_rejection))
             .await;
 
-        assert_eq!(res.status(), 400);
-
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
-            ErrorResponse {
-                error: "InvalidQuery".to_string(),
-                message: "Invalid query string.".to_string(),
-            }
-        );
+        ErrorResponse::assert(&res, 400, "InvalidQuery", "Invalid query string.");
     }
 }

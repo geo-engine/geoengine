@@ -227,9 +227,10 @@ mod tests {
     use crate::handlers::{handle_rejection, ErrorResponse};
     use crate::projects::project::{LayerUpdate, LayerVisibility, VectorInfo};
     use crate::users::session::Session;
-    use crate::users::user::{UserCredentials, UserRegistration};
+    use crate::users::user::UserRegistration;
     use crate::users::userdb::UserDB;
     use crate::util::identifiers::Identifier;
+    use crate::util::tests::{create_project_helper, create_session_helper, update_project_helper};
     use crate::workflows::workflow::WorkflowId;
     use crate::{
         contexts::InMemoryContext,
@@ -240,38 +241,13 @@ mod tests {
     };
     use geoengine_datatypes::operations::image::Colorizer;
     use geoengine_datatypes::primitives::{TimeGranularity, TimeStep};
-    use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
+    use geoengine_datatypes::spatial_reference::SpatialReference;
     use serde_json::json;
+    use warp::http::Response;
+    use warp::hyper::body::Bytes;
 
-    #[tokio::test]
-    async fn create() {
-        let ctx = InMemoryContext::default();
-
-        ctx.user_db()
-            .write()
-            .await
-            .register(
-                UserRegistration {
-                    email: "foo@bar.de".to_string(),
-                    password: "secret123".to_string(),
-                    real_name: "Foo Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let session = ctx
-            .user_db()
-            .write()
-            .await
-            .login(UserCredentials {
-                email: "foo@bar.de".to_string(),
-                password: "secret123".to_string(),
-            })
-            .await
-            .unwrap();
+    async fn create_test_helper<C: Context>(ctx: C, method: &str) -> Response<Bytes> {
+        let session = create_session_helper(&ctx).await;
 
         let create = CreateProject {
             name: "Test".to_string(),
@@ -283,8 +259,8 @@ mod tests {
             }),
         };
 
-        let res = warp::test::request()
-            .method("POST")
+        warp::test::request()
+            .method(method)
             .path("/project/create")
             .header("Content-Length", "0")
             .header(
@@ -292,8 +268,15 @@ mod tests {
                 format!("Bearer {}", session.id.to_string()),
             )
             .json(&create)
-            .reply(&create_project_handler(ctx))
-            .await;
+            .reply(&create_project_handler(ctx).recover(handle_rejection))
+            .await
+    }
+
+    #[tokio::test]
+    async fn create() {
+        let ctx = InMemoryContext::default();
+
+        let res = create_test_helper(ctx, "POST").await;
 
         assert_eq!(res.status(), 200);
 
@@ -305,95 +288,16 @@ mod tests {
     async fn create_invalid_method() {
         let ctx = InMemoryContext::default();
 
-        ctx.user_db()
-            .write()
-            .await
-            .register(
-                UserRegistration {
-                    email: "foo@bar.de".to_string(),
-                    password: "secret123".to_string(),
-                    real_name: "Foo Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
+        let res = create_test_helper(ctx, "GET").await;
 
-        let session = ctx
-            .user_db()
-            .write()
-            .await
-            .login(UserCredentials {
-                email: "foo@bar.de".to_string(),
-                password: "secret123".to_string(),
-            })
-            .await
-            .unwrap();
-
-        let create = CreateProject {
-            name: "Test".to_string(),
-            description: "Foo".to_string(),
-            bounds: STRectangle::new(SpatialReference::epsg_4326(), 0., 0., 1., 1., 0, 1).unwrap(),
-            time_step: Some(TimeStep {
-                step: 1,
-                granularity: TimeGranularity::Months,
-            }),
-        };
-
-        let res = warp::test::request()
-            .method("GET")
-            .path("/project/create")
-            .header("Content-Length", "0")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session.id.to_string()),
-            )
-            .json(&create)
-            .reply(&create_project_handler(ctx).recover(handle_rejection))
-            .await;
-
-        assert_eq!(res.status(), 405);
-
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
-            ErrorResponse {
-                error: "MethodNotAllowed".to_string(),
-                message: "HTTP method not allowed.".to_string(),
-            }
-        );
+        ErrorResponse::assert(&res, 405, "MethodNotAllowed", "HTTP method not allowed.");
     }
 
     #[tokio::test]
     async fn create_invalid_body() {
         let ctx = InMemoryContext::default();
 
-        ctx.user_db()
-            .write()
-            .await
-            .register(
-                UserRegistration {
-                    email: "foo@bar.de".to_string(),
-                    password: "secret123".to_string(),
-                    real_name: "Foo Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let session = ctx
-            .user_db()
-            .write()
-            .await
-            .login(UserCredentials {
-                email: "foo@bar.de".to_string(),
-                password: "secret123".to_string(),
-            })
-            .await
-            .unwrap();
+        let session = create_session_helper(&ctx).await;
 
         let res = warp::test::request()
             .method("POST")
@@ -407,15 +311,11 @@ mod tests {
             .reply(&create_project_handler(ctx).recover(handle_rejection))
             .await;
 
-        assert_eq!(res.status(), 400);
-
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
-            ErrorResponse {
-                error: "BodyDeserializeError".to_string(),
-                message: "expected ident at line 1 column 2".to_string(),
-            }
+        ErrorResponse::assert(
+            &res,
+            400,
+            "BodyDeserializeError",
+            "expected ident at line 1 column 2",
         );
     }
 
@@ -423,31 +323,7 @@ mod tests {
     async fn create_missing_fields() {
         let ctx = InMemoryContext::default();
 
-        ctx.user_db()
-            .write()
-            .await
-            .register(
-                UserRegistration {
-                    email: "foo@bar.de".to_string(),
-                    password: "secret123".to_string(),
-                    real_name: "Foo Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let session = ctx
-            .user_db()
-            .write()
-            .await
-            .login(UserCredentials {
-                email: "foo@bar.de".to_string(),
-                password: "secret123".to_string(),
-            })
-            .await
-            .unwrap();
+        let session = create_session_helper(&ctx).await;
 
         let create = json!({
             "description": "Foo".to_string(),
@@ -466,15 +342,11 @@ mod tests {
             .reply(&create_project_handler(ctx).recover(handle_rejection))
             .await;
 
-        assert_eq!(res.status(), 400);
-
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
-            ErrorResponse {
-                error: "BodyDeserializeError".to_string(),
-                message: "missing field `name` at line 1 column 202".to_string(),
-            }
+        ErrorResponse::assert(
+            &res,
+            400,
+            "BodyDeserializeError",
+            "missing field `name` at line 1 column 202",
         );
     }
 
@@ -495,76 +367,21 @@ mod tests {
             .reply(&create_project_handler(ctx).recover(handle_rejection))
             .await;
 
-        assert_eq!(res.status(), 401);
-
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
-            ErrorResponse {
-                error: "MissingAuthorizationHeader".to_string(),
-                message: "Header with authorization token not provided.".to_string(),
-            }
+        ErrorResponse::assert(
+            &res,
+            401,
+            "MissingAuthorizationHeader",
+            "Header with authorization token not provided.",
         );
     }
 
-    #[tokio::test]
-    async fn list() {
+    async fn list_test_helper(method: &str) -> Response<Bytes> {
         let ctx = InMemoryContext::default();
 
-        ctx.user_db()
-            .write()
-            .await
-            .register(
-                UserRegistration {
-                    email: "foo@bar.de".to_string(),
-                    password: "secret123".to_string(),
-                    real_name: "Foo Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
+        let (session, _) = create_project_helper(&ctx).await;
 
-        let session = ctx
-            .user_db()
-            .write()
-            .await
-            .login(UserCredentials {
-                email: "foo@bar.de".to_string(),
-                password: "secret123".to_string(),
-            })
-            .await
-            .unwrap();
-
-        for i in 0..10 {
-            let create = CreateProject {
-                name: format!("Test{}", i),
-                description: format!("Test{}", 10 - i),
-                bounds: STRectangle::new(
-                    SpatialReferenceOption::Unreferenced,
-                    0.,
-                    0.,
-                    1.,
-                    1.,
-                    0,
-                    1,
-                )
-                .unwrap(),
-                time_step: None,
-            }
-            .validated()
-            .unwrap();
-            ctx.project_db()
-                .write()
-                .await
-                .create(session.user.id, create)
-                .await
-                .unwrap();
-        }
-
-        let res = warp::test::request()
-            .method("GET")
+        warp::test::request()
+            .method(method)
             .path(&format!(
                 "/projects?{}",
                 &serde_urlencoded::to_string([
@@ -586,166 +403,34 @@ mod tests {
                 "Authorization",
                 format!("Bearer {}", session.id.to_string()),
             )
-            .reply(&list_projects_handler(ctx))
-            .await;
+            .reply(&list_projects_handler(ctx).recover(handle_rejection))
+            .await
+    }
+
+    #[tokio::test]
+    async fn list() {
+        let res = list_test_helper("GET").await;
 
         assert_eq!(res.status(), 200);
 
         let body: String = String::from_utf8(res.body().to_vec()).unwrap();
         let result = serde_json::from_str::<Vec<ProjectListing>>(&body);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().len(), 2);
+        assert_eq!(result.unwrap().len(), 1);
     }
 
     #[tokio::test]
     async fn list_invalid_method() {
-        let ctx = InMemoryContext::default();
+        let res = list_test_helper("POST").await;
 
-        ctx.user_db()
-            .write()
-            .await
-            .register(
-                UserRegistration {
-                    email: "foo@bar.de".to_string(),
-                    password: "secret123".to_string(),
-                    real_name: "Foo Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let session = ctx
-            .user_db()
-            .write()
-            .await
-            .login(UserCredentials {
-                email: "foo@bar.de".to_string(),
-                password: "secret123".to_string(),
-            })
-            .await
-            .unwrap();
-
-        for i in 0..10 {
-            let create = CreateProject {
-                name: format!("Test{}", i),
-                description: format!("Test{}", 10 - i),
-                bounds: STRectangle::new(
-                    SpatialReferenceOption::Unreferenced,
-                    0.,
-                    0.,
-                    1.,
-                    1.,
-                    0,
-                    1,
-                )
-                .unwrap(),
-                time_step: None,
-            }
-            .validated()
-            .unwrap();
-            ctx.project_db()
-                .write()
-                .await
-                .create(session.user.id, create)
-                .await
-                .unwrap();
-        }
-
-        let res = warp::test::request()
-            .method("POST")
-            .path(&format!(
-                "/projects?{}",
-                &serde_urlencoded::to_string([
-                    (
-                        "permissions",
-                        serde_json::json! {["Read", "Write", "Owner"]}
-                            .to_string()
-                            .as_str()
-                    ),
-                    // omitted ("filter", "None"),
-                    ("order", "NameDesc"),
-                    ("offset", "0"),
-                    ("limit", "2"),
-                ])
-                .unwrap()
-            ))
-            .header("Content-Length", "0")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session.id.to_string()),
-            )
-            .reply(&list_projects_handler(ctx).recover(handle_rejection))
-            .await;
-
-        assert_eq!(res.status(), 405);
-
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
-            ErrorResponse {
-                error: "MethodNotAllowed".to_string(),
-                message: "HTTP method not allowed.".to_string(),
-            }
-        );
+        ErrorResponse::assert(&res, 405, "MethodNotAllowed", "HTTP method not allowed.");
     }
 
     #[tokio::test]
     async fn list_missing_header() {
         let ctx = InMemoryContext::default();
 
-        ctx.user_db()
-            .write()
-            .await
-            .register(
-                UserRegistration {
-                    email: "foo@bar.de".to_string(),
-                    password: "secret123".to_string(),
-                    real_name: "Foo Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let session = ctx
-            .user_db()
-            .write()
-            .await
-            .login(UserCredentials {
-                email: "foo@bar.de".to_string(),
-                password: "secret123".to_string(),
-            })
-            .await
-            .unwrap();
-
-        for i in 0..10 {
-            let create = CreateProject {
-                name: format!("Test{}", i),
-                description: format!("Test{}", 10 - i),
-                bounds: STRectangle::new(
-                    SpatialReferenceOption::Unreferenced,
-                    0.,
-                    0.,
-                    1.,
-                    1.,
-                    0,
-                    1,
-                )
-                .unwrap(),
-                time_step: None,
-            }
-            .validated()
-            .unwrap();
-            ctx.project_db()
-                .write()
-                .await
-                .create(session.user.id, create)
-                .await
-                .unwrap();
-        }
+        create_project_helper(&ctx).await;
 
         let res = warp::test::request()
             .method("GET")
@@ -769,85 +454,34 @@ mod tests {
             .reply(&list_projects_handler(ctx).recover(handle_rejection))
             .await;
 
-        assert_eq!(res.status(), 401);
-
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
-            ErrorResponse {
-                error: "MissingAuthorizationHeader".to_string(),
-                message: "Header with authorization token not provided.".to_string(),
-            }
+        ErrorResponse::assert(
+            &res,
+            401,
+            "MissingAuthorizationHeader",
+            "Header with authorization token not provided.",
         );
     }
 
-    #[tokio::test]
-    async fn load() {
+    async fn load_test_helper(method: &str) -> Response<Bytes> {
         let ctx = InMemoryContext::default();
 
-        ctx.user_db()
-            .write()
-            .await
-            .register(
-                UserRegistration {
-                    email: "foo@bar.de".to_string(),
-                    password: "secret123".to_string(),
-                    real_name: "Foo Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
+        let (session, project) = create_project_helper(&ctx).await;
 
-        let session = ctx
-            .user_db()
-            .write()
-            .await
-            .login(UserCredentials {
-                email: "foo@bar.de".to_string(),
-                password: "secret123".to_string(),
-            })
-            .await
-            .unwrap();
-
-        let project = ctx
-            .project_db()
-            .write()
-            .await
-            .create(
-                session.user.id,
-                CreateProject {
-                    name: "Test".to_string(),
-                    description: "Foo".to_string(),
-                    bounds: STRectangle::new(
-                        SpatialReferenceOption::Unreferenced,
-                        0.,
-                        0.,
-                        1.,
-                        1.,
-                        0,
-                        1,
-                    )
-                    .unwrap(),
-                    time_step: None,
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let res = warp::test::request()
-            .method("GET")
+        warp::test::request()
+            .method(method)
             .path(&format!("/project/{}", project.to_string()))
             .header("Content-Length", "0")
             .header(
                 "Authorization",
                 format!("Bearer {}", session.id.to_string()),
             )
-            .reply(&load_project_handler(ctx))
-            .await;
+            .reply(&load_project_handler(ctx).recover(handle_rejection))
+            .await
+    }
+
+    #[tokio::test]
+    async fn load() {
+        let res = load_test_helper("GET").await;
 
         assert_eq!(res.status(), 200);
 
@@ -857,140 +491,16 @@ mod tests {
 
     #[tokio::test]
     async fn load_invalid_method() {
-        let ctx = InMemoryContext::default();
+        let res = load_test_helper("POST").await;
 
-        ctx.user_db()
-            .write()
-            .await
-            .register(
-                UserRegistration {
-                    email: "foo@bar.de".to_string(),
-                    password: "secret123".to_string(),
-                    real_name: "Foo Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let session = ctx
-            .user_db()
-            .write()
-            .await
-            .login(UserCredentials {
-                email: "foo@bar.de".to_string(),
-                password: "secret123".to_string(),
-            })
-            .await
-            .unwrap();
-
-        let project = ctx
-            .project_db()
-            .write()
-            .await
-            .create(
-                session.user.id,
-                CreateProject {
-                    name: "Test".to_string(),
-                    description: "Foo".to_string(),
-                    bounds: STRectangle::new(
-                        SpatialReferenceOption::Unreferenced,
-                        0.,
-                        0.,
-                        1.,
-                        1.,
-                        0,
-                        1,
-                    )
-                    .unwrap(),
-                    time_step: None,
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let res = warp::test::request()
-            .method("POST")
-            .path(&format!("/project/{}", project.to_string()))
-            .header("Content-Length", "0")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session.id.to_string()),
-            )
-            .reply(&load_project_handler(ctx).recover(handle_rejection))
-            .await;
-
-        assert_eq!(res.status(), 405);
-
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
-            ErrorResponse {
-                error: "MethodNotAllowed".to_string(),
-                message: "HTTP method not allowed.".to_string(),
-            }
-        );
+        ErrorResponse::assert(&res, 405, "MethodNotAllowed", "HTTP method not allowed.");
     }
 
     #[tokio::test]
     async fn load_missing_header() {
         let ctx = InMemoryContext::default();
 
-        ctx.user_db()
-            .write()
-            .await
-            .register(
-                UserRegistration {
-                    email: "foo@bar.de".to_string(),
-                    password: "secret123".to_string(),
-                    real_name: "Foo Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let session = ctx
-            .user_db()
-            .write()
-            .await
-            .login(UserCredentials {
-                email: "foo@bar.de".to_string(),
-                password: "secret123".to_string(),
-            })
-            .await
-            .unwrap();
-
-        let project = ctx
-            .project_db()
-            .write()
-            .await
-            .create(
-                session.user.id,
-                CreateProject {
-                    name: "Test".to_string(),
-                    description: "Foo".to_string(),
-                    bounds: STRectangle::new(
-                        SpatialReferenceOption::Unreferenced,
-                        0.,
-                        0.,
-                        1.,
-                        1.,
-                        0,
-                        1,
-                    )
-                    .unwrap(),
-                    time_step: None,
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
+        let (_, project) = create_project_helper(&ctx).await;
 
         let res = warp::test::request()
             .method("GET")
@@ -999,15 +509,11 @@ mod tests {
             .reply(&load_project_handler(ctx).recover(handle_rejection))
             .await;
 
-        assert_eq!(res.status(), 401);
-
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
-            ErrorResponse {
-                error: "MissingAuthorizationHeader".to_string(),
-                message: "Header with authorization token not provided.".to_string(),
-            }
+        ErrorResponse::assert(
+            &res,
+            401,
+            "MissingAuthorizationHeader",
+            "Header with authorization token not provided.",
         );
     }
 
@@ -1015,31 +521,7 @@ mod tests {
     async fn load_not_found() {
         let ctx = InMemoryContext::default();
 
-        ctx.user_db()
-            .write()
-            .await
-            .register(
-                UserRegistration {
-                    email: "foo@bar.de".to_string(),
-                    password: "secret123".to_string(),
-                    real_name: "Foo Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let session = ctx
-            .user_db()
-            .write()
-            .await
-            .login(UserCredentials {
-                email: "foo@bar.de".to_string(),
-                password: "secret123".to_string(),
-            })
-            .await
-            .unwrap();
+        let session = create_session_helper(&ctx).await;
 
         let res = warp::test::request()
             .method("GET")
@@ -1052,89 +534,21 @@ mod tests {
             .reply(&load_project_handler(ctx).recover(handle_rejection))
             .await;
 
-        assert_eq!(res.status(), 404);
-
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
-            ErrorResponse {
-                error: "NotFound".to_string(),
-                message: "Not Found".to_string(),
-            }
-        );
+        ErrorResponse::assert(&res, 404, "NotFound", "Not Found");
     }
 
     #[tokio::test]
     async fn load_version() {
         let ctx = InMemoryContext::default();
 
-        ctx.user_db()
-            .write()
-            .await
-            .register(
-                UserRegistration {
-                    email: "foo@bar.de".to_string(),
-                    password: "secret123".to_string(),
-                    real_name: "Foo Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let session = ctx
-            .user_db()
-            .write()
-            .await
-            .login(UserCredentials {
-                email: "foo@bar.de".to_string(),
-                password: "secret123".to_string(),
-            })
-            .await
-            .unwrap();
-
-        let project = ctx
-            .project_db()
-            .write()
-            .await
-            .create(
-                session.user.id,
-                CreateProject {
-                    name: "Test".to_string(),
-                    description: "Foo".to_string(),
-                    bounds: STRectangle::new(
-                        SpatialReferenceOption::Unreferenced,
-                        0.,
-                        0.,
-                        1.,
-                        1.,
-                        0,
-                        1,
-                    )
-                    .unwrap(),
-                    time_step: None,
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
+        let (session, project) = create_project_helper(&ctx).await;
 
         ctx.project_db()
             .write()
             .await
             .update(
                 session.user.id,
-                UpdateProject {
-                    id: project,
-                    name: Some("TestUpdate".to_string()),
-                    description: None,
-                    layers: None,
-                    bounds: None,
-                }
-                .validated()
-                .unwrap(),
+                update_project_helper(project).validated().unwrap(),
             )
             .await
             .unwrap();
@@ -1192,58 +606,7 @@ mod tests {
     async fn load_version_not_found() {
         let ctx = InMemoryContext::default();
 
-        ctx.user_db()
-            .write()
-            .await
-            .register(
-                UserRegistration {
-                    email: "foo@bar.de".to_string(),
-                    password: "secret123".to_string(),
-                    real_name: "Foo Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let session = ctx
-            .user_db()
-            .write()
-            .await
-            .login(UserCredentials {
-                email: "foo@bar.de".to_string(),
-                password: "secret123".to_string(),
-            })
-            .await
-            .unwrap();
-
-        let project = ctx
-            .project_db()
-            .write()
-            .await
-            .create(
-                session.user.id,
-                CreateProject {
-                    name: "Test".to_string(),
-                    description: "Foo".to_string(),
-                    bounds: STRectangle::new(
-                        SpatialReferenceOption::Unreferenced,
-                        0.,
-                        0.,
-                        1.,
-                        1.,
-                        0,
-                        1,
-                    )
-                    .unwrap(),
-                    time_step: None,
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
+        let (session, project) = create_project_helper(&ctx).await;
 
         let res = warp::test::request()
             .method("GET")
@@ -1259,92 +622,24 @@ mod tests {
             .reply(&load_project_handler(ctx).recover(handle_rejection))
             .await;
 
-        assert_eq!(res.status(), 400);
-
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
-            ErrorResponse {
-                error: "ProjectLoadFailed".to_string(),
-                message: "The project failed to load.".to_string(),
-            }
+        ErrorResponse::assert(
+            &res,
+            400,
+            "ProjectLoadFailed",
+            "The project failed to load.",
         );
     }
 
-    #[tokio::test]
-    async fn update() {
-        let ctx = InMemoryContext::default();
+    async fn update_test_helper<C: Context>(
+        ctx: &C,
+        method: &str,
+    ) -> (Session, ProjectId, Response<Bytes>) {
+        let (session, project) = create_project_helper(ctx).await;
 
-        ctx.user_db()
-            .write()
-            .await
-            .register(
-                UserRegistration {
-                    email: "foo@bar.de".to_string(),
-                    password: "secret123".to_string(),
-                    real_name: "Foo Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let session = ctx
-            .user_db()
-            .write()
-            .await
-            .login(UserCredentials {
-                email: "foo@bar.de".to_string(),
-                password: "secret123".to_string(),
-            })
-            .await
-            .unwrap();
-
-        let project = ctx
-            .project_db()
-            .write()
-            .await
-            .create(
-                session.user.id,
-                CreateProject {
-                    name: "Test".to_string(),
-                    description: "Foo".to_string(),
-                    bounds: STRectangle::new(
-                        SpatialReferenceOption::Unreferenced,
-                        0.,
-                        0.,
-                        1.,
-                        1.,
-                        0,
-                        1,
-                    )
-                    .unwrap(),
-                    time_step: None,
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let update = UpdateProject {
-            id: project,
-            name: Some("TestUpdate".to_string()),
-            description: None,
-            layers: Some(vec![LayerUpdate::UpdateOrInsert(Layer {
-                workflow: WorkflowId::new(),
-                name: "L1".to_string(),
-                info: LayerInfo::Raster(RasterInfo {
-                    colorizer: Colorizer::Rgba,
-                }),
-                visibility: Default::default(),
-            })]),
-            bounds: None,
-        };
+        let update = update_project_helper(project);
 
         let res = warp::test::request()
-            .method("PATCH")
+            .method(method)
             .path(&format!("/project/{}", project.to_string()))
             .header("Content-Length", "0")
             .header(
@@ -1352,8 +647,17 @@ mod tests {
                 format!("Bearer {}", session.id.to_string()),
             )
             .json(&update)
-            .reply(&update_project_handler(ctx.clone()))
+            .reply(&update_project_handler(ctx.clone()).recover(handle_rejection))
             .await;
+
+        (session, project, res)
+    }
+
+    #[tokio::test]
+    async fn update() {
+        let ctx = InMemoryContext::default();
+
+        let (session, project, res) = update_test_helper(&ctx, "PATCH").await;
 
         assert_eq!(res.status(), 200);
 
@@ -1372,154 +676,16 @@ mod tests {
     async fn update_invalid_method() {
         let ctx = InMemoryContext::default();
 
-        ctx.user_db()
-            .write()
-            .await
-            .register(
-                UserRegistration {
-                    email: "foo@bar.de".to_string(),
-                    password: "secret123".to_string(),
-                    real_name: "Foo Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
+        let (_, _, res) = update_test_helper(&ctx, "POST").await;
 
-        let session = ctx
-            .user_db()
-            .write()
-            .await
-            .login(UserCredentials {
-                email: "foo@bar.de".to_string(),
-                password: "secret123".to_string(),
-            })
-            .await
-            .unwrap();
-
-        let project = ctx
-            .project_db()
-            .write()
-            .await
-            .create(
-                session.user.id,
-                CreateProject {
-                    name: "Test".to_string(),
-                    description: "Foo".to_string(),
-                    bounds: STRectangle::new(
-                        SpatialReferenceOption::Unreferenced,
-                        0.,
-                        0.,
-                        1.,
-                        1.,
-                        0,
-                        1,
-                    )
-                    .unwrap(),
-                    time_step: None,
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let update = UpdateProject {
-            id: project,
-            name: Some("TestUpdate".to_string()),
-            description: None,
-            layers: Some(vec![LayerUpdate::UpdateOrInsert(Layer {
-                workflow: WorkflowId::new(),
-                name: "L1".to_string(),
-                info: LayerInfo::Raster(RasterInfo {
-                    colorizer: Colorizer::Rgba,
-                }),
-                visibility: Default::default(),
-            })]),
-            bounds: None,
-        };
-
-        let res = warp::test::request()
-            .method("POST")
-            .path(&format!("/project/{}", project.to_string()))
-            .header("Content-Length", "0")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session.id.to_string()),
-            )
-            .json(&update)
-            .reply(&update_project_handler(ctx).recover(handle_rejection))
-            .await;
-
-        assert_eq!(res.status(), 405);
-
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
-            ErrorResponse {
-                error: "MethodNotAllowed".to_string(),
-                message: "HTTP method not allowed.".to_string(),
-            }
-        );
+        ErrorResponse::assert(&res, 405, "MethodNotAllowed", "HTTP method not allowed.");
     }
 
     #[tokio::test]
     async fn update_invalid_body() {
         let ctx = InMemoryContext::default();
 
-        ctx.user_db()
-            .write()
-            .await
-            .register(
-                UserRegistration {
-                    email: "foo@bar.de".to_string(),
-                    password: "secret123".to_string(),
-                    real_name: "Foo Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let session = ctx
-            .user_db()
-            .write()
-            .await
-            .login(UserCredentials {
-                email: "foo@bar.de".to_string(),
-                password: "secret123".to_string(),
-            })
-            .await
-            .unwrap();
-
-        let project = ctx
-            .project_db()
-            .write()
-            .await
-            .create(
-                session.user.id,
-                CreateProject {
-                    name: "Test".to_string(),
-                    description: "Foo".to_string(),
-                    bounds: STRectangle::new(
-                        SpatialReferenceOption::Unreferenced,
-                        0.,
-                        0.,
-                        1.,
-                        1.,
-                        0,
-                        1,
-                    )
-                    .unwrap(),
-                    time_step: None,
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
+        let (session, project) = create_project_helper(&ctx).await;
 
         let res = warp::test::request()
             .method("PATCH")
@@ -1533,15 +699,11 @@ mod tests {
             .reply(&update_project_handler(ctx).recover(handle_rejection))
             .await;
 
-        assert_eq!(res.status(), 400);
-
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
-            ErrorResponse {
-                error: "BodyDeserializeError".to_string(),
-                message: "expected ident at line 1 column 2".to_string(),
-            }
+        ErrorResponse::assert(
+            &res,
+            400,
+            "BodyDeserializeError",
+            "expected ident at line 1 column 2",
         );
     }
 
@@ -1549,58 +711,7 @@ mod tests {
     async fn update_missing_fields() {
         let ctx = InMemoryContext::default();
 
-        ctx.user_db()
-            .write()
-            .await
-            .register(
-                UserRegistration {
-                    email: "foo@bar.de".to_string(),
-                    password: "secret123".to_string(),
-                    real_name: "Foo Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let session = ctx
-            .user_db()
-            .write()
-            .await
-            .login(UserCredentials {
-                email: "foo@bar.de".to_string(),
-                password: "secret123".to_string(),
-            })
-            .await
-            .unwrap();
-
-        let project = ctx
-            .project_db()
-            .write()
-            .await
-            .create(
-                session.user.id,
-                CreateProject {
-                    name: "Test".to_string(),
-                    description: "Foo".to_string(),
-                    bounds: STRectangle::new(
-                        SpatialReferenceOption::Unreferenced,
-                        0.,
-                        0.,
-                        1.,
-                        1.,
-                        0,
-                        1,
-                    )
-                    .unwrap(),
-                    time_step: None,
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
+        let (session, project) = create_project_helper(&ctx).await;
 
         let update = json!({
             "name": "TestUpdate",
@@ -1628,15 +739,11 @@ mod tests {
             .reply(&update_project_handler(ctx).recover(handle_rejection))
             .await;
 
-        assert_eq!(res.status(), 400);
-
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
-            ErrorResponse {
-                error: "BodyDeserializeError".to_string(),
-                message: "missing field `id` at line 1 column 210".to_string(),
-            }
+        ErrorResponse::assert(
+            &res,
+            400,
+            "BodyDeserializeError",
+            "missing field `id` at line 1 column 210",
         );
     }
 
@@ -1675,58 +782,7 @@ mod tests {
 
         let ctx = InMemoryContext::default();
 
-        ctx.user_db()
-            .write()
-            .await
-            .register(
-                UserRegistration {
-                    email: "foo@bar.de".to_string(),
-                    password: "secret123".to_string(),
-                    real_name: "Foo Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let session = ctx
-            .user_db()
-            .write()
-            .await
-            .login(UserCredentials {
-                email: "foo@bar.de".to_string(),
-                password: "secret123".to_string(),
-            })
-            .await
-            .unwrap();
-
-        let project = ctx
-            .project_db()
-            .write()
-            .await
-            .create(
-                session.user.id,
-                CreateProject {
-                    name: "Test".to_string(),
-                    description: "Foo".to_string(),
-                    bounds: STRectangle::new(
-                        SpatialReferenceOption::Unreferenced,
-                        0.,
-                        0.,
-                        1.,
-                        1.,
-                        0,
-                        1,
-                    )
-                    .unwrap(),
-                    time_step: None,
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
+        let (session, project) = create_project_helper(&ctx).await;
 
         let layer_1 = Layer {
             workflow: WorkflowId::new(),
@@ -1833,58 +889,7 @@ mod tests {
     async fn delete() {
         let ctx = InMemoryContext::default();
 
-        ctx.user_db()
-            .write()
-            .await
-            .register(
-                UserRegistration {
-                    email: "foo@bar.de".to_string(),
-                    password: "secret123".to_string(),
-                    real_name: "Foo Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let session = ctx
-            .user_db()
-            .write()
-            .await
-            .login(UserCredentials {
-                email: "foo@bar.de".to_string(),
-                password: "secret123".to_string(),
-            })
-            .await
-            .unwrap();
-
-        let project = ctx
-            .project_db()
-            .write()
-            .await
-            .create(
-                session.user.id,
-                CreateProject {
-                    name: "Test".to_string(),
-                    description: "Foo".to_string(),
-                    bounds: STRectangle::new(
-                        SpatialReferenceOption::Unreferenced,
-                        0.,
-                        0.,
-                        1.,
-                        1.,
-                        0,
-                        1,
-                    )
-                    .unwrap(),
-                    time_step: None,
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
+        let (session, project) = create_project_helper(&ctx).await;
 
         let res = warp::test::request()
             .method("DELETE")
@@ -1918,95 +923,31 @@ mod tests {
             .reply(&delete_project_handler(ctx).recover(handle_rejection))
             .await;
 
-        assert_eq!(res.status(), 400);
-
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
-            ErrorResponse {
-                error: "ProjectDeleteFailed".to_string(),
-                message: "Failed to delete the project.".to_string(),
-            }
+        ErrorResponse::assert(
+            &res,
+            400,
+            "ProjectDeleteFailed",
+            "Failed to delete the project.",
         );
     }
 
-    #[tokio::test]
-    async fn versions() {
+    async fn versions_test_helper(method: &str) -> Response<Bytes> {
         let ctx = InMemoryContext::default();
 
-        ctx.user_db()
-            .write()
-            .await
-            .register(
-                UserRegistration {
-                    email: "foo@bar.de".to_string(),
-                    password: "secret123".to_string(),
-                    real_name: "Foo Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let session = ctx
-            .user_db()
-            .write()
-            .await
-            .login(UserCredentials {
-                email: "foo@bar.de".to_string(),
-                password: "secret123".to_string(),
-            })
-            .await
-            .unwrap();
-
-        let project = ctx
-            .project_db()
-            .write()
-            .await
-            .create(
-                session.user.id,
-                CreateProject {
-                    name: "Test".to_string(),
-                    description: "Foo".to_string(),
-                    bounds: STRectangle::new(
-                        SpatialReferenceOption::Unreferenced,
-                        0.,
-                        0.,
-                        1.,
-                        1.,
-                        0,
-                        1,
-                    )
-                    .unwrap(),
-                    time_step: None,
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
+        let (session, project) = create_project_helper(&ctx).await;
 
         ctx.project_db()
             .write()
             .await
             .update(
                 session.user.id,
-                UpdateProject {
-                    id: project,
-                    name: Some("TestUpdate".to_string()),
-                    description: None,
-                    layers: None,
-                    bounds: None,
-                }
-                .validated()
-                .unwrap(),
+                update_project_helper(project).validated().unwrap(),
             )
             .await
             .unwrap();
 
-        let res = warp::test::request()
-            .method("GET")
+        warp::test::request()
+            .method(method)
             .path("/project/versions")
             .header("Content-Length", "0")
             .header(
@@ -2014,8 +955,13 @@ mod tests {
                 format!("Bearer {}", session.id.to_string()),
             )
             .json(&project)
-            .reply(&project_versions_handler(ctx))
-            .await;
+            .reply(&project_versions_handler(ctx).recover(handle_rejection))
+            .await
+    }
+
+    #[tokio::test]
+    async fn versions() {
+        let res = versions_test_helper("GET").await;
 
         assert_eq!(res.status(), 200);
 
@@ -2025,174 +971,23 @@ mod tests {
 
     #[tokio::test]
     async fn versions_invalid_method() {
-        let ctx = InMemoryContext::default();
+        let res = versions_test_helper("POST").await;
 
-        ctx.user_db()
-            .write()
-            .await
-            .register(
-                UserRegistration {
-                    email: "foo@bar.de".to_string(),
-                    password: "secret123".to_string(),
-                    real_name: "Foo Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let session = ctx
-            .user_db()
-            .write()
-            .await
-            .login(UserCredentials {
-                email: "foo@bar.de".to_string(),
-                password: "secret123".to_string(),
-            })
-            .await
-            .unwrap();
-
-        let project = ctx
-            .project_db()
-            .write()
-            .await
-            .create(
-                session.user.id,
-                CreateProject {
-                    name: "Test".to_string(),
-                    description: "Foo".to_string(),
-                    bounds: STRectangle::new(
-                        SpatialReferenceOption::Unreferenced,
-                        0.,
-                        0.,
-                        1.,
-                        1.,
-                        0,
-                        1,
-                    )
-                    .unwrap(),
-                    time_step: None,
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        ctx.project_db()
-            .write()
-            .await
-            .update(
-                session.user.id,
-                UpdateProject {
-                    id: project,
-                    name: Some("TestUpdate".to_string()),
-                    description: None,
-                    layers: None,
-                    bounds: None,
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let res = warp::test::request()
-            .method("POST")
-            .path("/project/versions")
-            .header("Content-Length", "0")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session.id.to_string()),
-            )
-            .json(&project)
-            .reply(&project_versions_handler(ctx).recover(handle_rejection))
-            .await;
-
-        assert_eq!(res.status(), 405);
-
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
-            ErrorResponse {
-                error: "MethodNotAllowed".to_string(),
-                message: "HTTP method not allowed.".to_string(),
-            }
-        );
+        ErrorResponse::assert(&res, 405, "MethodNotAllowed", "HTTP method not allowed.");
     }
 
     #[tokio::test]
     async fn versions_missing_header() {
         let ctx = InMemoryContext::default();
 
-        ctx.user_db()
-            .write()
-            .await
-            .register(
-                UserRegistration {
-                    email: "foo@bar.de".to_string(),
-                    password: "secret123".to_string(),
-                    real_name: "Foo Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let session = ctx
-            .user_db()
-            .write()
-            .await
-            .login(UserCredentials {
-                email: "foo@bar.de".to_string(),
-                password: "secret123".to_string(),
-            })
-            .await
-            .unwrap();
-
-        let project = ctx
-            .project_db()
-            .write()
-            .await
-            .create(
-                session.user.id,
-                CreateProject {
-                    name: "Test".to_string(),
-                    description: "Foo".to_string(),
-                    bounds: STRectangle::new(
-                        SpatialReferenceOption::Unreferenced,
-                        0.,
-                        0.,
-                        1.,
-                        1.,
-                        0,
-                        1,
-                    )
-                    .unwrap(),
-                    time_step: None,
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
+        let (session, project) = create_project_helper(&ctx).await;
 
         ctx.project_db()
             .write()
             .await
             .update(
                 session.user.id,
-                UpdateProject {
-                    id: project,
-                    name: Some("TestUpdate".to_string()),
-                    description: None,
-                    layers: None,
-                    bounds: None,
-                }
-                .validated()
-                .unwrap(),
+                update_project_helper(project).validated().unwrap(),
             )
             .await
             .unwrap();
@@ -2205,15 +1000,11 @@ mod tests {
             .reply(&project_versions_handler(ctx).recover(handle_rejection))
             .await;
 
-        assert_eq!(res.status(), 401);
-
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
-            ErrorResponse {
-                error: "MissingAuthorizationHeader".to_string(),
-                message: "Header with authorization token not provided.".to_string(),
-            }
+        ErrorResponse::assert(
+            &res,
+            401,
+            "MissingAuthorizationHeader",
+            "Header with authorization token not provided.",
         );
     }
 
@@ -2221,20 +1012,7 @@ mod tests {
     async fn add_permission() {
         let ctx = InMemoryContext::default();
 
-        ctx.user_db()
-            .write()
-            .await
-            .register(
-                UserRegistration {
-                    email: "foo@bar.de".to_string(),
-                    password: "secret123".to_string(),
-                    real_name: "Foo Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
+        let (session, project) = create_project_helper(&ctx).await;
 
         let target_user = ctx
             .user_db()
@@ -2245,44 +1023,6 @@ mod tests {
                     email: "foo2@bar.de".to_string(),
                     password: "secret1234".to_string(),
                     real_name: "Foo2 Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let session = ctx
-            .user_db()
-            .write()
-            .await
-            .login(UserCredentials {
-                email: "foo@bar.de".to_string(),
-                password: "secret123".to_string(),
-            })
-            .await
-            .unwrap();
-
-        let project = ctx
-            .project_db()
-            .write()
-            .await
-            .create(
-                session.user.id,
-                CreateProject {
-                    name: "Test".to_string(),
-                    description: "Foo".to_string(),
-                    bounds: STRectangle::new(
-                        SpatialReferenceOption::Unreferenced,
-                        0.,
-                        0.,
-                        1.,
-                        1.,
-                        0,
-                        1,
-                    )
-                    .unwrap(),
-                    time_step: None,
                 }
                 .validated()
                 .unwrap(),
@@ -2323,20 +1063,7 @@ mod tests {
     async fn add_permission_missing_header() {
         let ctx = InMemoryContext::default();
 
-        ctx.user_db()
-            .write()
-            .await
-            .register(
-                UserRegistration {
-                    email: "foo@bar.de".to_string(),
-                    password: "secret123".to_string(),
-                    real_name: "Foo Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
+        let (_, project) = create_project_helper(&ctx).await;
 
         let target_user = ctx
             .user_db()
@@ -2347,44 +1074,6 @@ mod tests {
                     email: "foo2@bar.de".to_string(),
                     password: "secret1234".to_string(),
                     real_name: "Foo2 Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let session = ctx
-            .user_db()
-            .write()
-            .await
-            .login(UserCredentials {
-                email: "foo@bar.de".to_string(),
-                password: "secret123".to_string(),
-            })
-            .await
-            .unwrap();
-
-        let project = ctx
-            .project_db()
-            .write()
-            .await
-            .create(
-                session.user.id,
-                CreateProject {
-                    name: "Test".to_string(),
-                    description: "Foo".to_string(),
-                    bounds: STRectangle::new(
-                        SpatialReferenceOption::Unreferenced,
-                        0.,
-                        0.,
-                        1.,
-                        1.,
-                        0,
-                        1,
-                    )
-                    .unwrap(),
-                    time_step: None,
                 }
                 .validated()
                 .unwrap(),
@@ -2406,15 +1095,11 @@ mod tests {
             .reply(&add_permission_handler(ctx.clone()).recover(handle_rejection))
             .await;
 
-        assert_eq!(res.status(), 401);
-
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
-            ErrorResponse {
-                error: "MissingAuthorizationHeader".to_string(),
-                message: "Header with authorization token not provided.".to_string(),
-            }
+        ErrorResponse::assert(
+            &res,
+            401,
+            "MissingAuthorizationHeader",
+            "Header with authorization token not provided.",
         );
     }
 
@@ -2422,20 +1107,7 @@ mod tests {
     async fn remove_permission() {
         let ctx = InMemoryContext::default();
 
-        ctx.user_db()
-            .write()
-            .await
-            .register(
-                UserRegistration {
-                    email: "foo@bar.de".to_string(),
-                    password: "secret123".to_string(),
-                    real_name: "Foo Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
+        let (session, project) = create_project_helper(&ctx).await;
 
         let target_user = ctx
             .user_db()
@@ -2446,44 +1118,6 @@ mod tests {
                     email: "foo2@bar.de".to_string(),
                     password: "secret1234".to_string(),
                     real_name: "Foo2 Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let session = ctx
-            .user_db()
-            .write()
-            .await
-            .login(UserCredentials {
-                email: "foo@bar.de".to_string(),
-                password: "secret123".to_string(),
-            })
-            .await
-            .unwrap();
-
-        let project = ctx
-            .project_db()
-            .write()
-            .await
-            .create(
-                session.user.id,
-                CreateProject {
-                    name: "Test".to_string(),
-                    description: "Foo".to_string(),
-                    bounds: STRectangle::new(
-                        SpatialReferenceOption::Unreferenced,
-                        0.,
-                        0.,
-                        1.,
-                        1.,
-                        0,
-                        1,
-                    )
-                    .unwrap(),
-                    time_step: None,
                 }
                 .validated()
                 .unwrap(),
@@ -2531,20 +1165,7 @@ mod tests {
     async fn remove_permission_missing_header() {
         let ctx = InMemoryContext::default();
 
-        ctx.user_db()
-            .write()
-            .await
-            .register(
-                UserRegistration {
-                    email: "foo@bar.de".to_string(),
-                    password: "secret123".to_string(),
-                    real_name: "Foo Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
+        let (session, project) = create_project_helper(&ctx).await;
 
         let target_user = ctx
             .user_db()
@@ -2555,44 +1176,6 @@ mod tests {
                     email: "foo2@bar.de".to_string(),
                     password: "secret1234".to_string(),
                     real_name: "Foo2 Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let session = ctx
-            .user_db()
-            .write()
-            .await
-            .login(UserCredentials {
-                email: "foo@bar.de".to_string(),
-                password: "secret123".to_string(),
-            })
-            .await
-            .unwrap();
-
-        let project = ctx
-            .project_db()
-            .write()
-            .await
-            .create(
-                session.user.id,
-                CreateProject {
-                    name: "Test".to_string(),
-                    description: "Foo".to_string(),
-                    bounds: STRectangle::new(
-                        SpatialReferenceOption::Unreferenced,
-                        0.,
-                        0.,
-                        1.,
-                        1.,
-                        0,
-                        1,
-                    )
-                    .unwrap(),
-                    time_step: None,
                 }
                 .validated()
                 .unwrap(),
@@ -2621,15 +1204,11 @@ mod tests {
             .reply(&remove_permission_handler(ctx.clone()).recover(handle_rejection))
             .await;
 
-        assert_eq!(res.status(), 401);
-
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
-            ErrorResponse {
-                error: "MissingAuthorizationHeader".to_string(),
-                message: "Header with authorization token not provided.".to_string(),
-            }
+        ErrorResponse::assert(
+            &res,
+            401,
+            "MissingAuthorizationHeader",
+            "Header with authorization token not provided.",
         );
     }
 
@@ -2637,20 +1216,7 @@ mod tests {
     async fn list_permissions() {
         let ctx = InMemoryContext::default();
 
-        ctx.user_db()
-            .write()
-            .await
-            .register(
-                UserRegistration {
-                    email: "foo@bar.de".to_string(),
-                    password: "secret123".to_string(),
-                    real_name: "Foo Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
+        let (session, project) = create_project_helper(&ctx).await;
 
         let target_user = ctx
             .user_db()
@@ -2661,44 +1227,6 @@ mod tests {
                     email: "foo2@bar.de".to_string(),
                     password: "secret1234".to_string(),
                     real_name: "Foo2 Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let session = ctx
-            .user_db()
-            .write()
-            .await
-            .login(UserCredentials {
-                email: "foo@bar.de".to_string(),
-                password: "secret123".to_string(),
-            })
-            .await
-            .unwrap();
-
-        let project = ctx
-            .project_db()
-            .write()
-            .await
-            .create(
-                session.user.id,
-                CreateProject {
-                    name: "Test".to_string(),
-                    description: "Foo".to_string(),
-                    bounds: STRectangle::new(
-                        SpatialReferenceOption::Unreferenced,
-                        0.,
-                        0.,
-                        1.,
-                        1.,
-                        0,
-                        1,
-                    )
-                    .unwrap(),
-                    time_step: None,
                 }
                 .validated()
                 .unwrap(),
@@ -2742,20 +1270,7 @@ mod tests {
     async fn list_permissions_missing_header() {
         let ctx = InMemoryContext::default();
 
-        ctx.user_db()
-            .write()
-            .await
-            .register(
-                UserRegistration {
-                    email: "foo@bar.de".to_string(),
-                    password: "secret123".to_string(),
-                    real_name: "Foo Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
+        let (session, project) = create_project_helper(&ctx).await;
 
         let target_user = ctx
             .user_db()
@@ -2766,44 +1281,6 @@ mod tests {
                     email: "foo2@bar.de".to_string(),
                     password: "secret1234".to_string(),
                     real_name: "Foo2 Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let session = ctx
-            .user_db()
-            .write()
-            .await
-            .login(UserCredentials {
-                email: "foo@bar.de".to_string(),
-                password: "secret123".to_string(),
-            })
-            .await
-            .unwrap();
-
-        let project = ctx
-            .project_db()
-            .write()
-            .await
-            .create(
-                session.user.id,
-                CreateProject {
-                    name: "Test".to_string(),
-                    description: "Foo".to_string(),
-                    bounds: STRectangle::new(
-                        SpatialReferenceOption::Unreferenced,
-                        0.,
-                        0.,
-                        1.,
-                        1.,
-                        0,
-                        1,
-                    )
-                    .unwrap(),
-                    time_step: None,
                 }
                 .validated()
                 .unwrap(),
@@ -2831,15 +1308,11 @@ mod tests {
             .reply(&list_permissions_handler(ctx).recover(handle_rejection))
             .await;
 
-        assert_eq!(res.status(), 401);
-
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
-            ErrorResponse {
-                error: "MissingAuthorizationHeader".to_string(),
-                message: "Header with authorization token not provided.".to_string(),
-            }
+        ErrorResponse::assert(
+            &res,
+            401,
+            "MissingAuthorizationHeader",
+            "Header with authorization token not provided.",
         );
     }
 }

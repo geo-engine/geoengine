@@ -25,7 +25,7 @@ pub struct ErrorResponse {
 }
 
 impl ErrorResponse {
-    pub fn assert(res: Response<Bytes>, status: u16, error: &str, message: &str) {
+    pub fn assert(res: &Response<Bytes>, status: u16, error: &str, message: &str) {
         assert_eq!(res.status(), status);
 
         let body = std::str::from_utf8(&res.body()).unwrap();

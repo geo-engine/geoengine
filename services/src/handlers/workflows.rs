@@ -52,45 +52,20 @@ async fn load_workflow<C: Context>(id: Uuid, ctx: C) -> Result<impl warp::Reply,
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::contexts::InMemoryContext;
     use crate::handlers::{handle_rejection, ErrorResponse};
-    use crate::users::user::{UserCredentials, UserRegistration};
-    use crate::users::userdb::UserDB;
     use crate::util::identifiers::IdResponse;
-    use crate::util::user_input::UserInput;
-    use crate::{contexts::InMemoryContext, workflows::registry::WorkflowRegistry};
+    use crate::util::tests::{create_session_helper, register_workflow_helper};
     use geoengine_operators::engine::VectorOperator;
     use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
     use serde_json::json;
+    use warp::http::Response;
+    use warp::hyper::body::Bytes;
 
-    #[tokio::test]
-    async fn register() {
+    async fn register_test_helper(method: &str) -> Response<Bytes> {
         let ctx = InMemoryContext::default();
 
-        ctx.user_db()
-            .write()
-            .await
-            .register(
-                UserRegistration {
-                    email: "foo@bar.de".to_string(),
-                    password: "secret123".to_string(),
-                    real_name: "Foo Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let session = ctx
-            .user_db()
-            .write()
-            .await
-            .login(UserCredentials {
-                email: "foo@bar.de".to_string(),
-                password: "secret123".to_string(),
-            })
-            .await
-            .unwrap();
+        let session = create_session_helper(&ctx).await;
 
         let workflow = Workflow {
             operator: MockPointSource {
@@ -103,8 +78,8 @@ mod tests {
         };
 
         // insert workflow
-        let res = warp::test::request()
-            .method("POST")
+        warp::test::request()
+            .method(method)
             .path("/workflow")
             .header("Content-Length", "0")
             .header(
@@ -112,8 +87,13 @@ mod tests {
                 format!("Bearer {}", session.id.to_string()),
             )
             .json(&workflow)
-            .reply(&register_workflow_handler(ctx))
-            .await;
+            .reply(&register_workflow_handler(ctx).recover(handle_rejection))
+            .await
+    }
+
+    #[tokio::test]
+    async fn register() {
+        let res = register_test_helper("POST").await;
 
         assert_eq!(res.status(), 200);
 
@@ -123,87 +103,16 @@ mod tests {
 
     #[tokio::test]
     async fn register_invalid_method() {
-        let ctx = InMemoryContext::default();
+        let res = register_test_helper("GET").await;
 
-        ctx.user_db()
-            .write()
-            .await
-            .register(
-                UserRegistration {
-                    email: "foo@bar.de".to_string(),
-                    password: "secret123".to_string(),
-                    real_name: "Foo Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let session = ctx
-            .user_db()
-            .write()
-            .await
-            .login(UserCredentials {
-                email: "foo@bar.de".to_string(),
-                password: "secret123".to_string(),
-            })
-            .await
-            .unwrap();
-
-        let workflow = Workflow {
-            operator: MockPointSource {
-                params: MockPointSourceParams {
-                    points: vec![(0.0, 0.1).into(), (1.0, 1.1).into()],
-                },
-            }
-            .boxed()
-            .into(),
-        };
-
-        // insert workflow
-        let res = warp::test::request()
-            .method("GET")
-            .path("/workflow")
-            .header("Content-Length", "0")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session.id.to_string()),
-            )
-            .json(&workflow)
-            .reply(&register_workflow_handler(ctx).recover(handle_rejection))
-            .await;
-
-        assert_eq!(res.status(), 405);
-
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
-            ErrorResponse {
-                error: "MethodNotAllowed".to_string(),
-                message: "HTTP method not allowed.".to_string(),
-            }
-        );
+        ErrorResponse::assert(&res, 405, "MethodNotAllowed", "HTTP method not allowed.");
     }
 
     #[tokio::test]
     async fn register_missing_header() {
         let ctx = InMemoryContext::default();
 
-        ctx.user_db()
-            .write()
-            .await
-            .register(
-                UserRegistration {
-                    email: "foo@bar.de".to_string(),
-                    password: "secret123".to_string(),
-                    real_name: "Foo Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
+        create_session_helper(&ctx).await;
 
         let workflow = Workflow {
             operator: MockPointSource {
@@ -224,15 +133,11 @@ mod tests {
             .reply(&register_workflow_handler(ctx).recover(handle_rejection))
             .await;
 
-        assert_eq!(res.status(), 401);
-
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
-            ErrorResponse {
-                error: "MissingAuthorizationHeader".to_string(),
-                message: "Header with authorization token not provided.".to_string(),
-            }
+        ErrorResponse::assert(
+            &res,
+            401,
+            "MissingAuthorizationHeader",
+            "Header with authorization token not provided.",
         );
     }
 
@@ -240,31 +145,7 @@ mod tests {
     async fn register_invalid_body() {
         let ctx = InMemoryContext::default();
 
-        ctx.user_db()
-            .write()
-            .await
-            .register(
-                UserRegistration {
-                    email: "foo@bar.de".to_string(),
-                    password: "secret123".to_string(),
-                    real_name: "Foo Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let session = ctx
-            .user_db()
-            .write()
-            .await
-            .login(UserCredentials {
-                email: "foo@bar.de".to_string(),
-                password: "secret123".to_string(),
-            })
-            .await
-            .unwrap();
+        let session = create_session_helper(&ctx).await;
 
         // insert workflow
         let res = warp::test::request()
@@ -279,15 +160,11 @@ mod tests {
             .reply(&register_workflow_handler(ctx).recover(handle_rejection))
             .await;
 
-        assert_eq!(res.status(), 400);
-
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
-            ErrorResponse {
-                error: "BodyDeserializeError".to_string(),
-                message: "expected ident at line 1 column 2".to_string(),
-            }
+        ErrorResponse::assert(
+            &res,
+            400,
+            "BodyDeserializeError",
+            "expected ident at line 1 column 2",
         );
     }
 
@@ -295,31 +172,7 @@ mod tests {
     async fn register_missing_fields() {
         let ctx = InMemoryContext::default();
 
-        ctx.user_db()
-            .write()
-            .await
-            .register(
-                UserRegistration {
-                    email: "foo@bar.de".to_string(),
-                    password: "secret123".to_string(),
-                    real_name: "Foo Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let session = ctx
-            .user_db()
-            .write()
-            .await
-            .login(UserCredentials {
-                email: "foo@bar.de".to_string(),
-                password: "secret123".to_string(),
-            })
-            .await
-            .unwrap();
+        let session = create_session_helper(&ctx).await;
 
         let workflow = json!({});
 
@@ -336,15 +189,11 @@ mod tests {
             .reply(&register_workflow_handler(ctx).recover(handle_rejection))
             .await;
 
-        assert_eq!(res.status(), 400);
-
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
-            ErrorResponse {
-                error: "BodyDeserializeError".to_string(),
-                message: "missing field `type` at line 1 column 2".to_string(),
-            }
+        ErrorResponse::assert(
+            &res,
+            400,
+            "BodyDeserializeError",
+            "missing field `type` at line 1 column 2",
         );
     }
 
@@ -352,49 +201,9 @@ mod tests {
     async fn load() {
         let ctx = InMemoryContext::default();
 
-        ctx.user_db()
-            .write()
-            .await
-            .register(
-                UserRegistration {
-                    email: "foo@bar.de".to_string(),
-                    password: "secret123".to_string(),
-                    real_name: "Foo Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
+        let session = create_session_helper(&ctx).await;
 
-        let session = ctx
-            .user_db()
-            .write()
-            .await
-            .login(UserCredentials {
-                email: "foo@bar.de".to_string(),
-                password: "secret123".to_string(),
-            })
-            .await
-            .unwrap();
-
-        let workflow = Workflow {
-            operator: MockPointSource {
-                params: MockPointSourceParams {
-                    points: vec![(0.0, 0.1).into(), (1.0, 1.1).into()],
-                },
-            }
-            .boxed()
-            .into(),
-        };
-
-        let id = ctx
-            .workflow_registry()
-            .write()
-            .await
-            .register(workflow.clone())
-            .await
-            .unwrap();
+        let (workflow, id) = register_workflow_helper(&ctx).await;
 
         let res = warp::test::request()
             .method("GET")
@@ -414,23 +223,7 @@ mod tests {
     async fn load_missing_header() {
         let ctx = InMemoryContext::default();
 
-        let workflow = Workflow {
-            operator: MockPointSource {
-                params: MockPointSourceParams {
-                    points: vec![(0.0, 0.1).into(), (1.0, 1.1).into()],
-                },
-            }
-            .boxed()
-            .into(),
-        };
-
-        let id = ctx
-            .workflow_registry()
-            .write()
-            .await
-            .register(workflow.clone())
-            .await
-            .unwrap();
+        let (_, id) = register_workflow_helper(&ctx).await;
 
         let res = warp::test::request()
             .method("GET")
@@ -438,15 +231,11 @@ mod tests {
             .reply(&load_workflow_handler(ctx).recover(handle_rejection))
             .await;
 
-        assert_eq!(res.status(), 401);
-
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
-            ErrorResponse {
-                error: "MissingAuthorizationHeader".to_string(),
-                message: "Header with authorization token not provided.".to_string(),
-            }
+        ErrorResponse::assert(
+            &res,
+            401,
+            "MissingAuthorizationHeader",
+            "Header with authorization token not provided.",
         );
     }
 
@@ -460,6 +249,6 @@ mod tests {
             .reply(&load_workflow_handler(ctx).recover(handle_rejection))
             .await;
 
-        assert_eq!(res.status(), 404);
+        ErrorResponse::assert(&res, 404, "NotFound", "Not Found");
     }
 }
