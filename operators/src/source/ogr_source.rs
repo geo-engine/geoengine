@@ -1370,7 +1370,7 @@ mod tests {
         );
         assert_eq!(
             source.result_descriptor().spatial_reference,
-            SpatialReference::wgs84().into()
+            SpatialReference::epsg_4326().into()
         );
 
         let query_processor = source.query_processor()?.multi_point().unwrap();
@@ -1433,7 +1433,7 @@ mod tests {
         );
         assert_eq!(
             source.result_descriptor().spatial_reference,
-            SpatialReference::wgs84().into()
+            SpatialReference::epsg_4326().into()
         );
 
         let query_processor = source.query_processor()?.multi_point().unwrap();
@@ -1564,7 +1564,7 @@ mod tests {
         );
         assert_eq!(
             source.result_descriptor().spatial_reference,
-            SpatialReference::wgs84().into()
+            SpatialReference::epsg_4326().into()
         );
 
         let query_processor = source.query_processor()?.multi_point().unwrap();
@@ -2767,7 +2767,7 @@ mod tests {
         );
         assert_eq!(
             source.result_descriptor().spatial_reference,
-            SpatialReference::wgs84().into()
+            SpatialReference::epsg_4326().into()
         );
 
         let query_processor = source.query_processor()?.multi_point().unwrap();
@@ -2980,7 +2980,7 @@ mod tests {
         );
         assert_eq!(
             source.result_descriptor().spatial_reference,
-            SpatialReference::wgs84().into()
+            SpatialReference::epsg_4326().into()
         );
 
         let query_processor = source.query_processor().unwrap().multi_point().unwrap();

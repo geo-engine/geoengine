@@ -275,7 +275,7 @@ mod tests {
         let create = CreateProject {
             name: "Test".to_string(),
             description: "Foo".to_string(),
-            bounds: STRectangle::new(SpatialReference::wgs84(), 0., 0., 1., 1., 0, 1).unwrap(),
+            bounds: STRectangle::new(SpatialReference::epsg_4326(), 0., 0., 1., 1., 0, 1).unwrap(),
             time_step: Some(TimeStep {
                 step: 1,
                 granularity: TimeGranularity::Months,

@@ -253,13 +253,18 @@ where
             .builders
             .values()
             .map(|builder| {
-                let data_type_size = match builder.data_type() {
-                    arrow::datatypes::DataType::Float64 => std::mem::size_of::<f64>(),
-                    arrow::datatypes::DataType::Int64 => std::mem::size_of::<i64>(),
-                    arrow::datatypes::DataType::UInt8 => std::mem::size_of::<u8>(),
-                    arrow::datatypes::DataType::Utf8 => 0, // TODO: how to get this dynamic value
-                    _ => unreachable!("This type is not an attribute type"),
+                let data_type_size = if builder.as_any().is::<Float64Builder>() {
+                    std::mem::size_of::<f64>()
+                } else if builder.as_any().is::<Int64Builder>() {
+                    std::mem::size_of::<i64>()
+                } else if builder.as_any().is::<UInt8Builder>() {
+                    std::mem::size_of::<u8>()
+                } else if builder.as_any().is::<StringBuilder>() {
+                    0 // TODO: how to get this dynamic value
+                } else {
+                    unreachable!("This type is not an attribute type");
                 };
+
                 let values_size = builder.len() * data_type_size;
                 let null_size_estimate = builder.len() / 8;
 

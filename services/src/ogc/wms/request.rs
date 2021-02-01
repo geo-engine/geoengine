@@ -1,6 +1,9 @@
 use crate::ogc::util::{parse_bbox, parse_time};
 use crate::util::{from_str, from_str_option};
-use geoengine_datatypes::primitives::{BoundingBox2D, TimeInterval};
+use geoengine_datatypes::{
+    primitives::{BoundingBox2D, TimeInterval},
+    spatial_reference::SpatialReference,
+};
 use serde::{Deserialize, Serialize};
 
 // TODO: ignore case for field names
@@ -48,7 +51,7 @@ pub struct GetMap {
     #[serde(alias = "LAYERS")]
     pub layers: String,
     #[serde(alias = "CRS")]
-    pub crs: String, // TODO: parse CRS
+    pub crs: Option<SpatialReference>,
     #[serde(alias = "STYLES")]
     pub styles: String,
     #[serde(default)]
@@ -112,18 +115,21 @@ pub struct GetLegendGraphic {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D};
+    use geoengine_datatypes::{
+        primitives::{BoundingBox2D, Coordinate2D},
+        spatial_reference::SpatialReference,
+    };
 
     #[test]
     fn deserialize_get_map() {
-        let query = "request=GetMap&service=WMS&version=1.3.0&layers=modis_ndvi&bbox=1,2,3,4&width=2&height=2&crs=foo&styles=ssss&format=image/png&time=2000-01-01T00:00:00.0Z/2000-01-02T00:00:00.0Z&transparent=true&bgcolor=#000000&sld=sld_spec&sld_body=sld_body&elevation=elevation&exceptions=exceptions";
+        let query = "request=GetMap&service=WMS&version=1.3.0&layers=modis_ndvi&bbox=1,2,3,4&width=2&height=2&crs=EPSG:4326&styles=ssss&format=image/png&time=2000-01-01T00:00:00.0Z/2000-01-02T00:00:00.0Z&transparent=true&bgcolor=#000000&sld=sld_spec&sld_body=sld_body&elevation=elevation&exceptions=exceptions";
         let parsed: WMSRequest = serde_urlencoded::from_str(query).unwrap();
 
         let request = WMSRequest::GetMap(GetMap {
             version: "1.3.0".into(),
             width: 2,
             layers: "modis_ndvi".into(),
-            crs: "foo".into(),
+            crs: Some(SpatialReference::epsg_4326()),
             styles: "ssss".into(),
             time: Some(TimeInterval::new(946_684_800_000, 946_771_200_000).unwrap()),
             transparent: Some(true),
@@ -142,14 +148,14 @@ mod tests {
 
     #[test]
     fn deserialize_get_map_not_time() {
-        let query = "request=GetMap&service=WMS&version=1.3.0&layers=modis_ndvi&bbox=1,2,3,4&width=2&height=2&crs=foo&styles=ssss&format=image/png";
+        let query = "request=GetMap&service=WMS&version=1.3.0&layers=modis_ndvi&bbox=1,2,3,4&width=2&height=2&crs=EPSG:4326&styles=ssss&format=image/png";
         let parsed: WMSRequest = serde_urlencoded::from_str(query).unwrap();
 
         let request = WMSRequest::GetMap(GetMap {
             version: "1.3.0".into(),
             width: 2,
             layers: "modis_ndvi".into(),
-            crs: "foo".to_string(),
+            crs: SpatialReference::epsg_4326().into(),
             styles: "ssss".into(),
             time: None,
             transparent: None,

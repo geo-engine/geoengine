@@ -34,7 +34,10 @@ RUN RUSTFLAGS='-C target-cpu=native' $HOME/.cargo/bin/cargo build --release \
 # Setup service
 COPY docker/dev/Settings-dev.toml /app/Settings.toml
 COPY docker/dev/service.sh /etc/service/geoengine/run
-RUN chmod +x /etc/service/geoengine/run
+RUN chmod +x /etc/service/geoengine/run \
+    && \
+    adduser --disabled-password --gecos "" geoengine
+
 EXPOSE 8080
 
 # Clean up APT when done.
