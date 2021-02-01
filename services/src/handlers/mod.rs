@@ -7,10 +7,10 @@ use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use std::error::Error as StdError;
 use std::str::FromStr;
-use warp::http::StatusCode;
+use warp::http::{Response, StatusCode};
+use warp::hyper::body::Bytes;
 use warp::reject::{InvalidQuery, MethodNotAllowed};
-use warp::Filter;
-use warp::{Rejection, Reply};
+use warp::{Filter, Rejection, Reply};
 
 pub mod projects;
 pub mod users;
@@ -24,26 +24,43 @@ pub struct ErrorResponse {
     pub message: String,
 }
 
+impl ErrorResponse {
+    pub fn assert(res: Response<Bytes>, status: u16, error: &str, message: &str) {
+        assert_eq!(res.status(), status);
+
+        let body = std::str::from_utf8(&res.body()).unwrap();
+        assert_eq!(
+            serde_json::from_str::<ErrorResponse>(body).unwrap(),
+            ErrorResponse {
+                error: error.to_string(),
+                message: message.to_string(),
+            }
+        );
+    }
+}
+
 /// A handler for custom rejections
 pub async fn handle_rejection(err: Rejection) -> Result<impl Reply, Rejection> {
     let (code, error, message) = if let Some(e) = err.find::<Error>() {
         // custom errors
 
         // TODO: distinguish between client/server/temporary/permanent errors
-        if let error::Error::Authorization { source: e } = e {
-            let error_name: &'static str = e.as_ref().into();
-            (
+        match e {
+            error::Error::Authorization { source } => (
                 StatusCode::UNAUTHORIZED,
-                error_name.to_string(),
+                Into::<&str>::into(source.as_ref()).to_string(),
+                source.to_string(),
+            ),
+            error::Error::RegistrationFailed { reason } if reason == "E-mail already exists" => (
+                StatusCode::CONFLICT,
+                Into::<&str>::into(e).to_string(),
                 e.to_string(),
-            )
-        } else {
-            let error_name: &'static str = e.into();
-            (
+            ),
+            _ => (
                 StatusCode::BAD_REQUEST,
-                error_name.to_string(),
+                Into::<&str>::into(e).to_string(),
                 e.to_string(),
-            )
+            ),
         }
     } else if let Some(e) = err.find::<warp::filters::body::BodyDeserializeError>() {
         // serde_json deserialization errors

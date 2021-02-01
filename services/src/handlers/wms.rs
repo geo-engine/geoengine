@@ -679,7 +679,7 @@ mod tests {
 
         let res = warp::test::request()
             .method("GET")
-            .path("/wms?request=GetMap&service=WMS&version=1.3.0&bbox=20,-10,80,50&width=600&height=600&crs=foo&styles=ssss&format=image/png&time=2014-01-01T00:00:00.0Z")
+            .path("/wms?request=GetMap&service=WMS&version=1.3.0&bbox=20,-10,80,50&width=600&height=600&crs=EPSG:4326&styles=ssss&format=image/png&time=2014-01-01T00:00:00.0Z")
             .reply(&wms_handler(ctx).recover(handle_rejection))
             .await;
 

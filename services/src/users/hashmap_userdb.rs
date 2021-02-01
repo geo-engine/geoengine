@@ -27,7 +27,7 @@ impl UserDB for HashMapUserDB {
         ensure!(
             !self.users.contains_key(&user_registration.email),
             error::RegistrationFailed {
-                reason: "E-mail already exists "
+                reason: "E-mail already exists"
             }
         );
 

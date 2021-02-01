@@ -42,7 +42,7 @@ pub enum Error {
 
     ServerStartup,
 
-    #[snafu(display("Registration failed: {:?}", reason))]
+    #[snafu(display("Registration failed: {}", reason))]
     RegistrationFailed {
         reason: String,
     },

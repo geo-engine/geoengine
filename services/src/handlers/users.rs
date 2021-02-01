@@ -153,7 +153,7 @@ async fn session_view<C: Context>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::handlers::ErrorResponse;
+    use crate::handlers::{assert_error_response, ErrorResponse};
     use crate::projects::project::{CreateProject, STRectangle};
     use crate::projects::projectdb::ProjectDB;
     use crate::users::session::Session;
@@ -215,7 +215,47 @@ mod tests {
             serde_json::from_str::<ErrorResponse>(body).unwrap(),
             ErrorResponse {
                 error: "RegistrationFailed".to_string(),
-                message: "Registration failed: \"Invalid e-mail address\"".to_string(),
+                message: "Registration failed: Invalid e-mail address".to_string(),
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn register_duplicate_email() {
+        let ctx = InMemoryContext::default();
+
+        let user = UserRegistration {
+            email: "foo@bar.de".to_string(),
+            password: "secret123".to_string(),
+            real_name: " Foo Bar".to_string(),
+        };
+
+        ctx.user_db()
+            .write()
+            .await
+            .register(Validated {
+                user_input: user.clone(),
+            })
+            .await
+            .unwrap();
+
+        // register user
+        let res = warp::test::request()
+            .method("POST")
+            .path("/user")
+            .header("Content-Length", "0")
+            .json(&user)
+            .reply(&register_user_handler(ctx).recover(handle_rejection))
+            .await;
+
+        assert_eq!(res.status(), 409);
+
+        let body = std::str::from_utf8(&res.body()).unwrap();
+        assert_eq!(
+            serde_json::from_str::<ErrorResponse>(body).unwrap(),
+            ErrorResponse {
+                error: "RegistrationFailed".to_string(),
+                message: "Registration failed: E-mail already exists".to_string(),
             }
         );
     }
