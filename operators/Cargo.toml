@@ -9,7 +9,8 @@ authors = [
 edition = "2018"
 
 [dependencies]
-arrow = { version = "2.0", features = ["simd"] }
+# arrow = { version = "3.0", features = ["simd"] } TODO: activate when version is patched
+arrow = { version = "3.0" }
 chrono = "0.4"
 crossbeam = "0.8"
 csv = "1.1"

@@ -21,6 +21,9 @@ use serde::{Deserialize, Serialize};
 
 use futures::stream::{self, BoxStream, StreamExt};
 
+use geoengine_datatypes::raster::{
+    GeoTransform, Grid2D, Pixel, RasterDataType, RasterTile2D, TileInformation, TilingStrategy,
+};
 use geoengine_datatypes::{
     primitives::{
         BoundingBox2D, SpatialBounded, SpatialResolution, TimeInstance, TimeInterval, TimeStep,
@@ -30,12 +33,7 @@ use geoengine_datatypes::{
         Grid, GridBlit, GridBoundingBox2D, GridBounds, GridIdx, GridShape2D, GridSize,
         GridSpaceToLinearSpace, TilingSpecification,
     },
-};
-use geoengine_datatypes::{
-    raster::{
-        GeoTransform, Grid2D, Pixel, RasterDataType, RasterTile2D, TileInformation, TilingStrategy,
-    },
-    spatial_reference::SpatialReference,
+    spatial_reference::SpatialReferenceOption,
 };
 
 /// Parameters for the GDAL Source Operator
@@ -83,6 +81,7 @@ pub trait GdalDatasetInformationProvider {
     fn time_format(&self) -> &str;
     fn dataset_path(&self) -> PathBuf;
     fn data_type(&self) -> RasterDataType;
+    fn spatial_ref(&self) -> SpatialReferenceOption;
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -101,6 +100,7 @@ pub struct JsonDatasetInformation {
     pub data_type: RasterDataType,
     pub geo_transform: GeoTransform,
     pub grid_shape: GridShape2D,
+    pub spatial_ref: SpatialReferenceOption,
 }
 
 impl JsonDatasetInformationProvider {
@@ -183,6 +183,10 @@ impl GdalDatasetInformationProvider for JsonDatasetInformationProvider {
 
     fn grid_shape(&self) -> GridShape2D {
         self.dataset_information.grid_shape
+    }
+
+    fn spatial_ref(&self) -> SpatialReferenceOption {
+        self.dataset_information.spatial_ref
     }
 }
 
@@ -530,6 +534,7 @@ impl RasterOperator for GdalSource {
             &self.params.dataset_id,
             &context.raster_data_root()?,
         )?;
+        let spatial_ref = provider.spatial_ref();
 
         let data_type = provider.data_type();
 
@@ -537,7 +542,7 @@ impl RasterOperator for GdalSource {
             provider,
             result_descriptor: RasterResultDescriptor {
                 data_type,
-                spatial_reference: SpatialReference::wgs84().into(), // TODO: lookup from dataset
+                spatial_reference: spatial_ref,
             },
             tiling_specification: context.tiling_specification(),
             params: self.params,
@@ -677,6 +682,7 @@ mod tests {
     use geoengine_datatypes::{
         primitives::{Coordinate2D, TimeGranularity},
         raster::{GridIdx2D, GridIndexAccess},
+        spatial_reference::SpatialReference,
     };
 
     #[test]
@@ -867,6 +873,7 @@ mod tests {
             data_type: RasterDataType::U8,
             geo_transform: dataset_geo_transform,
             grid_shape: global_size_in_pixels.into(),
+            spatial_ref: SpatialReference::epsg_4326().into(),
         };
 
         let dataset_information_provider = JsonDatasetInformationProvider {
@@ -978,6 +985,7 @@ mod tests {
             data_type: RasterDataType::U8,
             geo_transform: dataset_geo_transform,
             grid_shape: global_size_in_pixels.into(),
+            spatial_ref: SpatialReference::epsg_4326().into(),
         };
 
         let dataset_information_provider = JsonDatasetInformationProvider {
@@ -1045,6 +1053,7 @@ mod tests {
             data_type: RasterDataType::U8,
             geo_transform: dataset_geo_transform,
             grid_shape: global_size_in_pixels.into(),
+            spatial_ref: SpatialReference::epsg_4326().into(),
         };
 
         let dataset_information_provider = JsonDatasetInformationProvider {
@@ -1128,6 +1137,7 @@ mod tests {
             data_type: RasterDataType::U8,
             geo_transform: dataset_geo_transform,
             grid_shape: global_size_in_pixels.into(),
+            spatial_ref: SpatialReference::epsg_4326().into(),
         };
 
         let dataset_information_provider = JsonDatasetInformationProvider {
@@ -1225,6 +1235,7 @@ mod tests {
             data_type: RasterDataType::U8,
             geo_transform: dataset_geo_transform,
             grid_shape: global_size_in_pixels.into(),
+            spatial_ref: SpatialReference::epsg_4326().into(),
         };
 
         let dataset_information_provider = JsonDatasetInformationProvider {
@@ -1310,6 +1321,7 @@ mod tests {
             data_type: RasterDataType::U8,
             geo_transform: dataset_geo_transform,
             grid_shape: global_size_in_pixels.into(),
+            spatial_ref: SpatialReference::epsg_4326().into(),
         };
 
         let dataset_information_provider = JsonDatasetInformationProvider {
@@ -1402,6 +1414,7 @@ mod tests {
             data_type: RasterDataType::U8,
             geo_transform: dataset_geo_transform,
             grid_shape: global_size_in_pixels.into(),
+            spatial_ref: SpatialReference::epsg_4326().into(),
         };
 
         let dataset_information_provider = JsonDatasetInformationProvider {
@@ -1490,6 +1503,7 @@ mod tests {
             data_type: RasterDataType::U8,
             geo_transform: dataset_geo_transform,
             grid_shape: global_size_in_pixels.into(),
+            spatial_ref: SpatialReference::epsg_4326().into(),
         };
         let dataset_information_provider = JsonDatasetInformationProvider {
             dataset_information,

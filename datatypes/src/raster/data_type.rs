@@ -1,7 +1,7 @@
 use crate::error;
 use crate::operations::image::RgbaTransmutable;
 use crate::raster::TypedRasterConversion;
-use num_traits::{AsPrimitive, Num};
+use num_traits::{AsPrimitive, Bounded, Num};
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 
@@ -15,6 +15,7 @@ pub trait Pixel:
     + Sync
     + Send
     + Num
+    + Bounded
     + PartialOrd
     + AsPrimitive<u8>
     + AsPrimitive<i8>

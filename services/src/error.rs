@@ -1,3 +1,4 @@
+use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use snafu::Snafu;
 use strum::IntoStaticStr;
 use warp::reject::Reject;
@@ -66,6 +67,13 @@ pub enum Error {
 
     InvalidNamespace,
 
+    InvalidSpatialReference,
+    #[snafu(display("SpatialReferenceMissmatch: Found {}, expected: {}", found, expected))]
+    SpatialReferenceMissmatch {
+        found: SpatialReferenceOption,
+        expected: SpatialReferenceOption,
+    },
+
     InvalidWFSTypeNames,
 
     NoWorkflowForGivenId,
@@ -125,5 +133,11 @@ impl From<bb8_postgres::bb8::RunError<<bb8_postgres::PostgresConnectionManager<b
 impl From<bb8_postgres::tokio_postgres::error::Error> for Error {
     fn from(e: bb8_postgres::tokio_postgres::error::Error) -> Self {
         Self::TokioPostgres { source: e }
+    }
+}
+
+impl From<serde_json::Error> for Error {
+    fn from(e: serde_json::Error) -> Self {
+        Self::SerdeJson { source: e }
     }
 }

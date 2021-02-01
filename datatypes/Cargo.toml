@@ -13,7 +13,8 @@ postgres = ["postgres-types"]
 
 [dependencies]
 # simd compiles with nightly only, allow default features to build with arrow-flight once it is possible
-arrow = {version = "2.0", features = ["simd"] }
+# arrow = { version = "3.0", features = ["simd"] } TODO: activate when version is patched
+arrow = { version = "3.0" }
 chrono = "0.4"
 float-cmp = "0.8"
 geo = "0.17"

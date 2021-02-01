@@ -1,7 +1,7 @@
 use std::any::Any;
 
 use arrow::array::{Array, ArrayBuilder, ArrayRef, BooleanArray};
-use arrow::datatypes::DataType;
+use arrow::datatypes::{DataType, Field};
 use arrow::error::ArrowError;
 
 /// Helper function to downcast an arrow array
@@ -32,6 +32,15 @@ pub trait ArrowTyped {
 
     /// Return the specific arrow data type
     fn arrow_data_type() -> DataType;
+
+    fn arrow_list_data_type() -> DataType {
+        let nullable = true; // TODO: should actually be false, but arrow's builders set it to `true` currently
+        DataType::List(Box::new(Field::new(
+            "item",
+            Self::arrow_data_type(),
+            nullable,
+        )))
+    }
 
     /// Computes the byte size of the builder
     fn builder_byte_size(builder: &mut Self::ArrowBuilder) -> usize;

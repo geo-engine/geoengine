@@ -131,7 +131,7 @@ mod tests {
                 data: vec![raster_tile],
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::wgs84().into(),
+                    spatial_reference: SpatialReference::epsg_4326().into(),
                 },
             },
         }

@@ -153,7 +153,7 @@ impl VectorOperator for CsvSource {
             |_, _, _, _, _| {
                 Ok(VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint, // TODO: get as user input
-                    spatial_reference: SpatialReference::wgs84().into(), // TODO: get as user input
+                    spatial_reference: SpatialReference::epsg_4326().into(), // TODO: get as user input
                 })
             },
             vec![],
