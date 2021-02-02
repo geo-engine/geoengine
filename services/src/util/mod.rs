@@ -1,7 +1,8 @@
 use serde::de::Error;
 
 #[macro_use]
-pub mod identifiers;
+mod identifiers;
+pub use self::identifiers::{IdResponse, Identifier};
 pub mod config;
 mod string_token;
 pub mod tests;

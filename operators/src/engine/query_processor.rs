@@ -10,18 +10,22 @@ use geoengine_datatypes::{collections::MultiPointCollection, raster::RasterTile2
 /// An instantiation of an operator that produces a stream of results for a query
 pub trait QueryProcessor {
     type Output;
-    fn query(&self, query: QueryRectangle, ctx: QueryContext) -> BoxStream<Result<Self::Output>>;
+    fn query<'a>(
+        &'a self,
+        query: QueryRectangle,
+        ctx: &'a dyn QueryContext,
+    ) -> BoxStream<'a, Result<Self::Output>>;
 }
 
 /// An instantiation of a raster operator that produces a stream of raster results for a query
 pub trait RasterQueryProcessor: Sync + Send {
     type RasterType: Pixel;
 
-    fn raster_query(
-        &self,
+    fn raster_query<'a>(
+        &'a self,
         query: QueryRectangle,
-        ctx: QueryContext,
-    ) -> BoxStream<Result<RasterTile2D<Self::RasterType>>>;
+        ctx: &'a dyn QueryContext,
+    ) -> BoxStream<'a, Result<RasterTile2D<Self::RasterType>>>;
 
     fn boxed(self) -> Box<dyn RasterQueryProcessor<RasterType = Self::RasterType>>
     where
@@ -37,11 +41,11 @@ where
     T: Pixel,
 {
     type RasterType = T;
-    fn raster_query(
-        &self,
+    fn raster_query<'a>(
+        &'a self,
         query: QueryRectangle,
-        ctx: QueryContext,
-    ) -> BoxStream<Result<RasterTile2D<Self::RasterType>>> {
+        ctx: &'a dyn QueryContext,
+    ) -> BoxStream<'a, Result<RasterTile2D<Self::RasterType>>> {
         self.query(query, ctx)
     }
 }
@@ -49,11 +53,11 @@ where
 /// An instantiation of a vector operator that produces a stream of vector results for a query
 pub trait VectorQueryProcessor: Sync + Send {
     type VectorType;
-    fn vector_query(
-        &self,
+    fn vector_query<'a>(
+        &'a self,
         query: QueryRectangle,
-        ctx: QueryContext,
-    ) -> BoxStream<Result<Self::VectorType>>;
+        ctx: &'a dyn QueryContext,
+    ) -> BoxStream<'a, Result<Self::VectorType>>;
 
     fn boxed(self) -> Box<dyn VectorQueryProcessor<VectorType = Self::VectorType>>
     where
@@ -69,18 +73,22 @@ where
 {
     type VectorType = VD;
 
-    fn vector_query(
-        &self,
+    fn vector_query<'a>(
+        &'a self,
         query: QueryRectangle,
-        ctx: QueryContext,
-    ) -> BoxStream<Result<Self::VectorType>> {
+        ctx: &'a dyn QueryContext,
+    ) -> BoxStream<'a, Result<Self::VectorType>> {
         self.query(query, ctx)
     }
 }
 
 impl<T> QueryProcessor for Box<dyn QueryProcessor<Output = T>> {
     type Output = T;
-    fn query(&self, query: QueryRectangle, ctx: QueryContext) -> BoxStream<Result<Self::Output>> {
+    fn query<'a>(
+        &'a self,
+        query: QueryRectangle,
+        ctx: &'a dyn QueryContext,
+    ) -> BoxStream<'a, Result<Self::Output>> {
         self.as_ref().query(query, ctx)
     }
 }
@@ -91,7 +99,11 @@ where
 {
     type Output = RasterTile2D<T>;
 
-    fn query(&self, query: QueryRectangle, ctx: QueryContext) -> BoxStream<Result<Self::Output>> {
+    fn query<'a>(
+        &'a self,
+        query: QueryRectangle,
+        ctx: &'a dyn QueryContext,
+    ) -> BoxStream<'a, Result<Self::Output>> {
         self.as_ref().raster_query(query, ctx)
     }
 }
@@ -101,7 +113,11 @@ where
     V: 'static,
 {
     type Output = V;
-    fn query(&self, query: QueryRectangle, ctx: QueryContext) -> BoxStream<Result<Self::Output>> {
+    fn query<'a>(
+        &'a self,
+        query: QueryRectangle,
+        ctx: &'a dyn QueryContext,
+    ) -> BoxStream<'a, Result<Self::Output>> {
         self.as_ref().vector_query(query, ctx)
     }
 }

@@ -1,4 +1,5 @@
 use chrono::ParseError;
+use geoengine_datatypes::dataset::DataSetId;
 use geoengine_datatypes::primitives::FeatureDataType;
 use snafu::Snafu;
 use std::ops::Range;
@@ -38,9 +39,9 @@ pub enum Error {
 
     // TODO: use something more general than `Range`, e.g. `dyn RangeBounds` that can, however not be made into an object
     #[snafu(display(
-        "InvalidNumberOfRasterInputsError: expected \"[{} .. {}]\" found \"{}\"",
-        expected.start, expected.end,
-        found
+    "InvalidNumberOfRasterInputsError: expected \"[{} .. {}]\" found \"{}\"",
+    expected.start, expected.end,
+    found
     ))]
     InvalidNumberOfRasterInputs {
         expected: Range<usize>,
@@ -48,9 +49,9 @@ pub enum Error {
     },
 
     #[snafu(display(
-        "InvalidNumberOfVectorInputsError: expected \"[{} .. {}]\" found \"{}\"",
-        expected.start, expected.end,
-        found
+    "InvalidNumberOfVectorInputsError: expected \"[{} .. {}]\" found \"{}\"",
+    expected.start, expected.end,
+    found
     ))]
     InvalidNumberOfVectorInputs {
         expected: Range<usize>,
@@ -135,9 +136,23 @@ pub enum Error {
         source: chrono::format::ParseError,
     },
 
+    LoadingInfo {
+        reason: String, // TODO: source error will be from service crate, use a Box here
+    },
+
     Arrow {
         source: arrow::error::ArrowError,
     },
+
+    NoDataSetWithGivenId {
+        id: DataSetId,
+    },
+
+    RasterRootPathNotConfigured, // TODO: remove when GdalSource uses LoadingInfo
+
+    InvalidDataSetId,
+    DataSetLoadingInfoProviderMismatch,
+    UnknownDataSetId,
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {

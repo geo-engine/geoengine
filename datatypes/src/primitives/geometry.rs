@@ -2,6 +2,7 @@ use crate::collections::VectorDataType;
 use crate::primitives::{BoundingBox2D, MultiLineString, MultiPoint, MultiPolygon, NoGeometry};
 
 use crate::error::Error;
+use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::fmt::Debug;
 
@@ -22,7 +23,7 @@ pub trait Geometry: Clone + Debug + Send + Sync + TryFrom<TypedGeometry, Error =
 
 pub trait GeometryRef: Into<geojson::Geometry> {}
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum TypedGeometry {
     Data(NoGeometry),
     MultiPoint(MultiPoint),

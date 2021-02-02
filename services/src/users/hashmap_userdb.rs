@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use async_trait::async_trait;
 use pwhash::bcrypt;
 use snafu::ensure;
 
@@ -9,9 +10,8 @@ use crate::projects::project::{ProjectId, STRectangle};
 use crate::users::session::{Session, SessionId, UserInfo};
 use crate::users::user::{User, UserCredentials, UserId, UserRegistration};
 use crate::users::userdb::UserDB;
-use crate::util::identifiers::Identifier;
 use crate::util::user_input::Validated;
-use async_trait::async_trait;
+use crate::util::Identifier;
 
 #[derive(Default)]
 pub struct HashMapUserDB {

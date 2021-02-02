@@ -3,7 +3,7 @@ use warp::reply::Reply;
 use warp::Filter;
 
 use crate::handlers::{authenticate, Context};
-use crate::util::identifiers::IdResponse;
+use crate::util::IdResponse;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 
@@ -54,8 +54,8 @@ mod tests {
     use super::*;
     use crate::contexts::InMemoryContext;
     use crate::handlers::{handle_rejection, ErrorResponse};
-    use crate::util::identifiers::IdResponse;
     use crate::util::tests::{create_session_helper, register_workflow_helper};
+    use crate::util::IdResponse;
     use geoengine_operators::engine::VectorOperator;
     use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
     use serde_json::json;

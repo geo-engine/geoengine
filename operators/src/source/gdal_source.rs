@@ -512,10 +512,10 @@ where
     T: Pixel + gdal::raster::GdalType,
 {
     type Output = RasterTile2D<T>;
-    fn query(
-        &self,
+    fn query<'a>(
+        &'a self,
         query: crate::engine::QueryRectangle,
-        _ctx: crate::engine::QueryContext,
+        _ctx: &'a dyn crate::engine::QueryContext,
     ) -> BoxStream<Result<RasterTile2D<T>>> {
         self.tile_stream(query.bbox, query.time_interval, query.spatial_resolution)
             .boxed() // TODO: handle query, ctx, remove one boxed
@@ -528,11 +528,11 @@ pub type GdalSource = SourceOperator<GdalSourceParameters>;
 impl RasterOperator for GdalSource {
     fn initialize(
         self: Box<Self>,
-        context: &crate::engine::ExecutionContext,
+        context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<InitializedRasterOperator>> {
         let provider = JsonDatasetInformationProvider::with_dataset_id(
             &self.params.dataset_id,
-            &context.raster_data_root,
+            &context.raster_data_root()?,
         )?;
         let spatial_ref = provider.spatial_ref();
 
@@ -544,7 +544,7 @@ impl RasterOperator for GdalSource {
                 data_type,
                 spatial_reference: spatial_ref,
             },
-            tiling_specification: context.tiling_specification,
+            tiling_specification: context.tiling_specification(),
             params: self.params,
         };
         Ok(Box::from(init))

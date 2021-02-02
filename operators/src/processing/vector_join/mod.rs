@@ -43,7 +43,7 @@ pub enum VectorJoinType {
 impl VectorOperator for VectorJoin {
     fn initialize(
         self: Box<Self>,
-        context: &ExecutionContext,
+        context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedVectorOperator>> {
         ensure!(
             self.vector_sources.len() == 2,

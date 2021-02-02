@@ -6,4 +6,7 @@ pub use self::csv::{
     CsvGeometrySpecification, CsvSource, CsvSourceParameters, CsvSourceStream, CsvTimeSpecification,
 };
 pub use self::gdal_source::{GdalSource, GdalSourceParameters, GdalSourceProcessor};
-pub use self::ogr_source::{OgrSource, OgrSourceParameters};
+pub use self::ogr_source::{
+    OgrSource, OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceErrorSpec,
+    OgrSourceParameters,
+};
