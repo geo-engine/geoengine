@@ -91,9 +91,6 @@ impl RasterPointJoinProcessor {
             }
         }
 
-        // TODO: call rasters, etc.
-        aggregator.add_value(0, 0, 1);
-
         points
             .add_column(new_column_name, aggregator.into_data())
             .map_err(Into::into)
