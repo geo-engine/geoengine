@@ -15,7 +15,7 @@ use crate::processing::raster_vector_join::aggregator::{
     Aggregator, FirstValueDecimalAggregator, FirstValueNumberAggregator, MeanValueAggregator,
     TypedAggregator,
 };
-use crate::processing::raster_vector_join::util::TimeSpanIter;
+use crate::processing::raster_vector_join::util::FeatureTimeSpanIter;
 use crate::processing::raster_vector_join::AggregationMethod;
 use crate::util::Result;
 use geoengine_datatypes::primitives::MultiPointAccess;
@@ -54,7 +54,7 @@ impl RasterPointJoinProcessor {
 
         let points = points.sort_by_time_asc()?;
 
-        for time_span in TimeSpanIter::new(points.time_intervals()) {
+        for time_span in FeatureTimeSpanIter::new(points.time_intervals()) {
             let query = QueryRectangle {
                 bbox: query.bbox,
                 time_interval: time_span.time_interval,
