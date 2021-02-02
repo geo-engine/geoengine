@@ -48,7 +48,7 @@ impl RasterPointJoinProcessor {
         new_column_name: &str,
         aggregation: AggregationMethod,
         query: QueryRectangle,
-        ctx: QueryContext,
+        ctx: &dyn QueryContext,
     ) -> Result<MultiPointCollection> {
         let mut aggregator = Self::create_aggregator::<P>(points.len(), aggregation);
 
@@ -124,11 +124,11 @@ impl RasterPointJoinProcessor {
 impl VectorQueryProcessor for RasterPointJoinProcessor {
     type VectorType = MultiPointCollection;
 
-    fn vector_query(
-        &self,
+    fn vector_query<'a>(
+        &'a self,
         query: QueryRectangle,
-        ctx: QueryContext,
-    ) -> BoxStream<'_, Result<Self::VectorType>> {
+        ctx: &'a dyn QueryContext,
+    ) -> BoxStream<'a, Result<Self::VectorType>> {
         self.points
             .query(query, ctx)
             .and_then(async move |mut points| {
@@ -149,8 +149,8 @@ impl VectorQueryProcessor for RasterPointJoinProcessor {
 mod tests {
     use super::*;
 
-    use crate::engine::RasterOperator;
-    use crate::engine::{MockExecutionContextCreator, RasterResultDescriptor};
+    use crate::engine::{MockExecutionContext, RasterResultDescriptor};
+    use crate::engine::{MockQueryContext, RasterOperator};
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureDataRef, MultiPoint, SpatialResolution, TimeInterval,
@@ -181,8 +181,7 @@ mod tests {
         }
         .boxed();
 
-        let execution_context_creator = MockExecutionContextCreator::default();
-        let execution_context = execution_context_creator.context();
+        let execution_context = MockExecutionContext::default();
 
         let raster_source = raster_source.initialize(&execution_context).unwrap();
 
@@ -211,7 +210,7 @@ mod tests {
                 time_interval: Default::default(),
                 spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
             },
-            QueryContext { chunk_byte_size: 0 },
+            &MockQueryContext::new(0),
         )
         .await
         .unwrap();
@@ -256,8 +255,7 @@ mod tests {
         }
         .boxed();
 
-        let execution_context_creator = MockExecutionContextCreator::default();
-        let execution_context = execution_context_creator.context();
+        let execution_context = MockExecutionContext::default();
 
         let raster_source = raster_source.initialize(&execution_context).unwrap();
 
@@ -286,7 +284,7 @@ mod tests {
                 time_interval: Default::default(),
                 spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
             },
-            QueryContext { chunk_byte_size: 0 },
+            &MockQueryContext::new(0),
         )
         .await
         .unwrap();

@@ -43,7 +43,7 @@ pub enum AggregationMethod {
 impl VectorOperator for RasterVectorJoin {
     fn initialize(
         mut self: Box<Self>,
-        context: &ExecutionContext<'_>,
+        context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedVectorOperator>> {
         ensure!(
             self.vector_sources.len() == 1,
@@ -136,7 +136,7 @@ mod tests {
     use super::*;
 
     use crate::engine::{
-        MockExecutionContextCreator, QueryContext, QueryProcessor, QueryRectangle, RasterOperator,
+        MockExecutionContext, MockQueryContext, QueryProcessor, QueryRectangle, RasterOperator,
     };
     use crate::mock::MockFeatureCollectionSource;
     use crate::source::{GdalSource, GdalSourceParameters};
@@ -233,10 +233,10 @@ mod tests {
             vector_sources: vec![point_source],
         };
 
-        let execution_context_creator = MockExecutionContextCreator::default();
-        let mut execution_context = execution_context_creator.context();
-
-        execution_context.raster_data_root = raster_dir();
+        let execution_context = MockExecutionContext {
+            raster_data_root: raster_dir(),
+            ..Default::default()
+        };
 
         let operator = operator.boxed().initialize(&execution_context).unwrap();
 
@@ -249,7 +249,7 @@ mod tests {
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
                 },
-                QueryContext { chunk_byte_size: 0 },
+                &MockQueryContext::new(0),
             )
             .map(Result::unwrap)
             .collect::<Vec<MultiPointCollection>>()
@@ -302,10 +302,10 @@ mod tests {
             vector_sources: vec![point_source],
         };
 
-        let execution_context_creator = MockExecutionContextCreator::default();
-        let mut execution_context = execution_context_creator.context();
-
-        execution_context.raster_data_root = raster_dir();
+        let execution_context = MockExecutionContext {
+            raster_data_root: raster_dir(),
+            ..Default::default()
+        };
 
         let operator = operator.boxed().initialize(&execution_context).unwrap();
 
@@ -318,7 +318,7 @@ mod tests {
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
                 },
-                QueryContext { chunk_byte_size: 0 },
+                &MockQueryContext::new(0),
             )
             .map(Result::unwrap)
             .collect::<Vec<MultiPointCollection>>()
