@@ -88,6 +88,10 @@ impl RasterPointJoinProcessor {
                         }
                     }
                 }
+
+                if aggregator.is_satisfied() {
+                    break;
+                }
             }
         }
 

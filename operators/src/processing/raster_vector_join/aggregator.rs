@@ -21,6 +21,9 @@ pub trait Aggregator {
     fn into_data(self) -> Vec<Self::Output>;
 
     fn into_typed(self) -> TypedAggregator;
+
+    /// Whether an aggregator needs no more values for producing the outcome
+    fn is_satisfied(&self) -> bool;
 }
 
 /// An aggregator wrapper for different return types
@@ -69,6 +72,15 @@ impl TypedAggregator {
             TypedAggregator::MeanNumber(aggregator) => FeatureData::Number(aggregator.into_data()),
         }
     }
+
+    /// Whether an aggregator needs no more values for producing the outcome
+    pub fn is_satisfied(&self) -> bool {
+        match self {
+            TypedAggregator::FirstValueNumber(aggregator) => aggregator.is_satisfied(),
+            TypedAggregator::FirstValueDecimal(aggregator) => aggregator.is_satisfied(),
+            TypedAggregator::MeanNumber(aggregator) => aggregator.is_satisfied(),
+        }
+    }
 }
 
 pub type FirstValueNumberAggregator = FirstValueAggregator<f64>;
@@ -78,6 +90,7 @@ pub type FirstValueDecimalAggregator = FirstValueAggregator<i64>;
 pub struct FirstValueAggregator<T> {
     values: Vec<T>,
     pristine: Vec<bool>,
+    number_of_pristine_values: usize,
 }
 
 impl<T> Aggregator for FirstValueAggregator<T>
@@ -90,6 +103,7 @@ where
         Self {
             values: vec![T::zero(); number_of_features],
             pristine: vec![true; number_of_features],
+            number_of_pristine_values: number_of_features,
         }
     }
 
@@ -100,6 +114,7 @@ where
         if self.pristine[feature_idx] {
             self.values[feature_idx] = pixel.as_();
             self.pristine[feature_idx] = false;
+            self.number_of_pristine_values -= 1;
         }
     }
 
@@ -117,6 +132,10 @@ where
 
     fn into_typed(self) -> TypedAggregator {
         T::typed_aggregator(self)
+    }
+
+    fn is_satisfied(&self) -> bool {
+        self.number_of_pristine_values == 0
     }
 }
 
@@ -194,6 +213,10 @@ impl Aggregator for MeanValueAggregator {
     fn into_typed(self) -> TypedAggregator {
         TypedAggregator::MeanNumber(self)
     }
+
+    fn is_satisfied(&self) -> bool {
+        false
+    }
 }
 
 #[cfg(test)]
@@ -254,5 +277,24 @@ mod tests {
         }
 
         assert_eq!(aggregator.into_data(), FeatureData::Decimal(vec![2, 4]));
+    }
+
+    #[test]
+    fn satisfaction() {
+        let mut aggregator = FirstValueDecimalAggregator::new(2).into_typed();
+
+        assert!(!aggregator.is_satisfied());
+
+        aggregator.add_value(0, 2., 1);
+
+        assert!(!aggregator.is_satisfied());
+
+        aggregator.add_value(1, 0., 1);
+
+        assert!(aggregator.is_satisfied());
+
+        aggregator.add_value(1, 4., 1);
+
+        assert!(aggregator.is_satisfied());
     }
 }
