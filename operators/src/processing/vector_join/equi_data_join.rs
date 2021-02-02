@@ -366,11 +366,11 @@ where
 {
     type VectorType = FeatureCollection<G>;
 
-    fn vector_query(
-        &self,
+    fn vector_query<'a>(
+        &'a self,
         query: QueryRectangle,
-        ctx: QueryContext,
-    ) -> BoxStream<Result<Self::VectorType>> {
+        ctx: &'a dyn QueryContext,
+    ) -> BoxStream<'a, Result<Self::VectorType>> {
         let result_stream =
             self.left_processor
                 .query(query, ctx)
@@ -390,7 +390,7 @@ where
                                 self.join(
                                     left_collection.clone(),
                                     right_collection,
-                                    ctx.chunk_byte_size,
+                                    ctx.chunk_byte_size(),
                                 )
                             }) {
                                 Ok(batch_iter) => stream::iter(batch_iter).boxed(),
@@ -400,7 +400,7 @@ where
                         .boxed()
                 });
 
-        FeatureCollectionChunkMerger::new(result_stream.fuse(), ctx.chunk_byte_size).boxed()
+        FeatureCollectionChunkMerger::new(result_stream.fuse(), ctx.chunk_byte_size()).boxed()
     }
 }
 
@@ -413,7 +413,7 @@ mod tests {
         BoundingBox2D, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
     };
 
-    use crate::engine::{MockExecutionContextCreator, VectorOperator};
+    use crate::engine::{MockExecutionContext, MockQueryContext, VectorOperator};
     use crate::mock::MockFeatureCollectionSource;
 
     use super::*;
@@ -425,8 +425,7 @@ mod tests {
         right_join_column: &str,
         right_suffix: &str,
     ) -> Vec<MultiPointCollection> {
-        let execution_context_creator = MockExecutionContextCreator::default();
-        let execution_context = execution_context_creator.context();
+        let execution_context = MockExecutionContext::default();
 
         let left = MockFeatureCollectionSource::single(left)
             .boxed()
@@ -447,9 +446,7 @@ mod tests {
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
 
-        let ctx = QueryContext {
-            chunk_byte_size: usize::MAX,
-        };
+        let ctx = MockQueryContext::new(usize::MAX);
 
         let processor = EquiGeoToDataJoinProcessor::new(
             left_processor,
@@ -459,7 +456,7 @@ mod tests {
             right_suffix.to_string(),
         );
 
-        block_on_stream(processor.vector_query(query_rectangle, ctx))
+        block_on_stream(processor.vector_query(query_rectangle, &ctx))
             .collect::<Result<_>>()
             .unwrap()
     }

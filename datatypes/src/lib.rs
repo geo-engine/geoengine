@@ -20,6 +20,7 @@
 )]
 
 pub mod collections;
+pub mod dataset;
 pub mod error;
 pub mod operations;
 pub mod plots;
