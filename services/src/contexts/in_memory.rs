@@ -98,7 +98,7 @@ impl Context for InMemoryContext {
             data_set_db: self.data_set_db.clone(),
             thread_pool: self.thread_pool.clone(),
             // user: self.session()?.user.id,
-            user: self.session().map(|s| s.user.id).unwrap_or(UserId::new()), // TODO: return Error once WMS/WFS handle authentication
+            user: self.session().map_or_else(|_| UserId::new(), |s| s.user.id), // TODO: return Error once WMS/WFS handle authentication
         })
     }
 }
