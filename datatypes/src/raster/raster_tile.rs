@@ -115,6 +115,26 @@ where
             self.global_geo_transform,
         )
     }
+
+    /// Use this geo transform to transform `Coordinate2D` into local grid indices and vice versa.
+    #[inline]
+    pub fn tile_geo_transform(&self) -> GeoTransform {
+        let global_upper_left_idx = self.tile_position
+            * [
+                self.grid_array.axis_size_y() as isize,
+                self.grid_array.axis_size_x() as isize,
+            ];
+
+        let tile_upper_left_coord = self
+            .global_geo_transform
+            .grid_idx_to_coordinate_2d(global_upper_left_idx);
+
+        GeoTransform::new(
+            tile_upper_left_coord,
+            self.global_geo_transform.x_pixel_size,
+            self.global_geo_transform.y_pixel_size,
+        )
+    }
 }
 
 impl<D, T> TemporalBounded for RasterTile<D, T>
@@ -191,49 +211,27 @@ where
 
 impl<D, A, P> CoordinatePixelAccess<P> for RasterTile<D, P>
 where
-    D: GridSize + GridSpaceToLinearSpace<IndexArray = A> + GridBounds<IndexArray = A>,
+    D: GridSize + GridSpaceToLinearSpace<IndexArray = A> + GridBounds<IndexArray = A> + Clone,
     A: AsRef<[isize]> + Into<GridIdx<A>> + Clone,
     P: Pixel,
     Self: GridIndexAccess<P, GridIdx2D>,
 {
     fn pixel_value_at_coord(&self, coordinate: Coordinate2D) -> Result<P> {
-        // TODO: lots of computations for each coordinate, can we do better?
+        // TODO: benchmark the impact of creating the `GeoTransform`s
 
-        let global_upper_left_pixel_idx = self.tile_position
-            * [
-                self.grid_array.shape.axis_size_y() as isize,
-                self.grid_array.shape.axis_size_x() as isize,
-            ];
+        let grid_index = self
+            .tile_geo_transform()
+            .coordinate_to_grid_idx_2d(coordinate);
 
-        let origin_coordinate = self
-            .global_geo_transform
-            .grid_idx_to_coordinate_2d(global_upper_left_pixel_idx);
-
-        let grid_x_index = ((coordinate.x - origin_coordinate.x)
-            / self.global_geo_transform.x_pixel_size) as isize;
-        let grid_y_index = ((coordinate.y - origin_coordinate.y)
-            / self.global_geo_transform.y_pixel_size) as isize;
-
-        self.get_at_grid_index([grid_y_index, grid_x_index].into())
+        self.get_at_grid_index(grid_index)
     }
 
     fn pixel_value_at_coord_unchecked(&self, coordinate: Coordinate2D) -> P {
-        let global_upper_left_pixel_idx = self.tile_position
-            * [
-                self.grid_array.shape.axis_size_y() as isize,
-                self.grid_array.shape.axis_size_x() as isize,
-            ];
+        let grid_index = self
+            .tile_geo_transform()
+            .coordinate_to_grid_idx_2d(coordinate);
 
-        let origin_coordinate = self
-            .global_geo_transform
-            .grid_idx_to_coordinate_2d(global_upper_left_pixel_idx);
-
-        let grid_x_index = ((coordinate.x - origin_coordinate.x)
-            / self.global_geo_transform.x_pixel_size) as isize;
-        let grid_y_index = ((coordinate.y - origin_coordinate.y)
-            / self.global_geo_transform.y_pixel_size) as isize;
-
-        self.get_at_grid_index_unchecked([grid_y_index, grid_x_index].into())
+        self.get_at_grid_index_unchecked(grid_index)
     }
 }
 
