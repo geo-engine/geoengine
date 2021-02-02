@@ -69,7 +69,7 @@ impl RasterPointJoinProcessor {
                 let raster = raster?;
                 let geo_transform = raster.tile_information().tile_geo_transform();
 
-                for feature_index in time_span.idx_from..=time_span.idx_to {
+                for feature_index in time_span.feature_index_start..=time_span.feature_index_end {
                     // TODO: don't do random access but use a single iterator
                     let geometry = points.geometry_at(feature_index).expect("must exist");
 
