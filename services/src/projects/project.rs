@@ -3,7 +3,6 @@ use crate::string_token;
 use crate::users::user::UserId;
 use crate::util::config::ProjectService;
 use crate::util::user_input::UserInput;
-use crate::util::Identifier;
 use crate::workflows::workflow::WorkflowId;
 use crate::{error, util::config::get_config_element};
 use chrono::{DateTime, Utc};
@@ -13,6 +12,7 @@ use geoengine_datatypes::primitives::{
     TimeStep,
 };
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
+use geoengine_datatypes::util::Identifier;
 use geoengine_datatypes::{operations::image::Colorizer, primitives::TimeInstance};
 #[cfg(feature = "postgres")]
 use postgres_types::{FromSql, ToSql};

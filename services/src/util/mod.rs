@@ -1,7 +1,6 @@
+pub use geoengine_datatypes::util::Identifier;
 use serde::de::Error;
 use serde::{Deserialize, Serialize};
-
-pub use geoengine_datatypes::util::Identifier;
 
 pub mod config;
 mod string_token;

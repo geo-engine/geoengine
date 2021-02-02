@@ -10,7 +10,9 @@ use tokio::sync::{RwLockReadGuard, RwLockWriteGuard};
 use super::{Context, DB};
 use crate::contexts::{ExecutionContextImpl, QueryContextImpl};
 use crate::datasets::in_memory::HashMapDataSetDB;
+use crate::users::user::UserId;
 use crate::util::config;
+use geoengine_datatypes::util::Identifier;
 use geoengine_operators::concurrency::ThreadPool;
 use std::sync::Arc;
 
@@ -95,7 +97,8 @@ impl Context for InMemoryContext {
         Ok(ExecutionContextImpl::<HashMapDataSetDB> {
             data_set_db: self.data_set_db.clone(),
             thread_pool: self.thread_pool.clone(),
-            user: self.session()?.user.id,
+            // user: self.session()?.user.id,
+            user: self.session().map(|s| s.user.id).unwrap_or(UserId::new()), // TODO: return Error once WMS/WFS handle authentication
         })
     }
 }
