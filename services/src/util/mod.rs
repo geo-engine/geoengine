@@ -1,11 +1,25 @@
 use serde::de::Error;
+use serde::{Deserialize, Serialize};
 
-#[macro_use]
-mod identifiers;
-pub use self::identifiers::{IdResponse, Identifier};
+pub use geoengine_datatypes::util::Identifier;
+
 pub mod config;
 mod string_token;
 pub mod user_input;
+
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+pub struct IdResponse<T: Identifier> {
+    pub id: T,
+}
+
+impl<T> IdResponse<T>
+where
+    T: Identifier,
+{
+    pub fn from_id(id: T) -> Self {
+        Self { id }
+    }
+}
 
 /// Serde deserializer <https://docs.rs/serde_qs/0.6.0/serde_qs/index.html#flatten-workaround>
 pub fn from_str<'de, D, S>(deserializer: D) -> Result<S, D::Error>

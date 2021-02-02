@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use geoengine_datatypes::identifier;
 use geoengine_operators::engine::TypedOperator;
 
 identifier!(WorkflowId);
