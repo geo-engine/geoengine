@@ -17,7 +17,7 @@ pub enum FeatureDataType {
     Text,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub enum FeatureData {
     Categorical(Vec<u8>), // TODO: add names to categories
     NullableCategorical(Vec<Option<u8>>),
@@ -29,7 +29,7 @@ pub enum FeatureData {
     NullableText(Vec<Option<String>>),
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub enum FeatureDataValue {
     Categorical(u8),
     NullableCategorical(Option<u8>),

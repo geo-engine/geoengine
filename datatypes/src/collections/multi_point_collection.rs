@@ -985,4 +985,59 @@ mod tests {
         assert_eq!(offsets.len(), 4);
         assert_eq!(offsets, &[0, 1, 3, 4]);
     }
+
+    #[test]
+    fn sort_by_time_asc() {
+        let collection = MultiPointCollection::from_data(
+            MultiPoint::many(vec![
+                vec![(0., 0.)],
+                vec![(1., 1.), (1.1, 1.1)],
+                vec![(2., 2.)],
+            ])
+            .unwrap(),
+            vec![
+                TimeInterval::new_unchecked(1, 5),
+                TimeInterval::new_unchecked(0, 3),
+                TimeInterval::new_unchecked(1, 3),
+            ],
+            {
+                let mut map = HashMap::new();
+                map.insert("numbers".into(), FeatureData::Number(vec![0., 1., 2.]));
+                map.insert(
+                    "number_nulls".into(),
+                    FeatureData::NullableNumber(vec![Some(0.), None, Some(2.)]),
+                );
+                map
+            },
+        )
+        .unwrap();
+
+        let expected_collection = MultiPointCollection::from_data(
+            MultiPoint::many(vec![
+                vec![(1., 1.), (1.1, 1.1)],
+                vec![(2., 2.)],
+                vec![(0., 0.)],
+            ])
+            .unwrap(),
+            vec![
+                TimeInterval::new_unchecked(0, 3),
+                TimeInterval::new_unchecked(1, 3),
+                TimeInterval::new_unchecked(1, 5),
+            ],
+            {
+                let mut map = HashMap::new();
+                map.insert("numbers".into(), FeatureData::Number(vec![1., 2., 0.]));
+                map.insert(
+                    "number_nulls".into(),
+                    FeatureData::NullableNumber(vec![None, Some(2.), Some(0.)]),
+                );
+                map
+            },
+        )
+        .unwrap();
+
+        let sorted_collection = collection.sort_by_time_asc().unwrap();
+
+        assert_eq!(sorted_collection, expected_collection);
+    }
 }
