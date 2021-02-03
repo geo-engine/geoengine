@@ -255,8 +255,8 @@ mod tests {
 
     #[tokio::test]
     async fn basic() {
-        let a = make_raster();
-        let b = make_raster();
+        let a = make_raster::<i8>();
+        let b = make_raster::<i8>();
 
         let o = Expression {
             params: ExpressionParams {
@@ -293,7 +293,7 @@ mod tests {
         );
     }
 
-    fn make_raster() -> Box<dyn RasterOperator> {
+    fn make_raster<P: Pixel>() -> Box<dyn RasterOperator> {
         let raster = Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap();
 
         let raster_tile = RasterTile2D::new_with_tile_info(
@@ -310,11 +310,51 @@ mod tests {
             params: MockRasterSourceParams {
                 data: vec![raster_tile],
                 result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::I8,
+                    data_type: P::TYPE,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                 },
             },
         }
         .boxed()
+    }
+
+    #[tokio::test]
+    async fn different_types() {
+        let a = make_raster::<i8>();
+        let b = make_raster::<i16>();
+
+        let o = Expression {
+            params: ExpressionParams {
+                expression: "A+B".to_string(),
+                output_type: RasterDataType::I32,
+                output_no_data_value: TypedValue::I32(42),
+            },
+            raster_sources: vec![a, b],
+            vector_sources: vec![],
+        }
+        .boxed()
+        .initialize(&MockExecutionContext::default())
+        .unwrap();
+
+        let p = o.query_processor().unwrap().get_i32().unwrap();
+
+        let ctx = MockQueryContext::new(1);
+        let q = p.query(
+            QueryRectangle {
+                bbox: BoundingBox2D::new_unchecked((1., 2.).into(), (3., 4.).into()),
+                time_interval: Default::default(),
+                spatial_resolution: SpatialResolution::one(),
+            },
+            &ctx,
+        );
+
+        let c: Vec<RasterTile2D<i32>> = q.map(Result::unwrap).collect().await;
+
+        assert_eq!(c.len(), 1);
+
+        assert_eq!(
+            c[0].grid_array,
+            Grid2D::new([3, 2].into(), vec![2, 4, 6, 8, 10, 12], Some(42),).unwrap()
+        );
     }
 }
