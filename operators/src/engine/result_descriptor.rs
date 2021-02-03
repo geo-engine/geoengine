@@ -23,12 +23,12 @@ pub trait ResultDescriptor: Copy {
     }
 
     /// Map one descriptor to another one by modifying only the spatial reference
-    fn map_spatial_reference<F>(self, f: F) -> Self
+    fn map_data_type<F>(self, f: F) -> Self
     where
         F: Fn(Self::DataType) -> Self::DataType;
 
     /// Map one descriptor to another one by modifying only the data type
-    fn map_data_type<F>(self, f: F) -> Self
+    fn map_spatial_reference<F>(self, f: F) -> Self
     where
         F: Fn(SpatialReferenceOption) -> SpatialReferenceOption;
 }
@@ -51,7 +51,7 @@ impl ResultDescriptor for RasterResultDescriptor {
         self.spatial_reference
     }
 
-    fn map_spatial_reference<F>(mut self, f: F) -> Self
+    fn map_data_type<F>(mut self, f: F) -> Self
     where
         F: Fn(Self::DataType) -> Self::DataType,
     {
@@ -59,7 +59,7 @@ impl ResultDescriptor for RasterResultDescriptor {
         self
     }
 
-    fn map_data_type<F>(mut self, f: F) -> Self
+    fn map_spatial_reference<F>(mut self, f: F) -> Self
     where
         F: Fn(SpatialReferenceOption) -> SpatialReferenceOption,
     {
@@ -86,7 +86,7 @@ impl ResultDescriptor for VectorResultDescriptor {
         self.spatial_reference
     }
 
-    fn map_spatial_reference<F>(mut self, f: F) -> Self
+    fn map_data_type<F>(mut self, f: F) -> Self
     where
         F: Fn(Self::DataType) -> Self::DataType,
     {
@@ -94,11 +94,37 @@ impl ResultDescriptor for VectorResultDescriptor {
         self
     }
 
-    fn map_data_type<F>(mut self, f: F) -> Self
+    fn map_spatial_reference<F>(mut self, f: F) -> Self
     where
         F: Fn(SpatialReferenceOption) -> SpatialReferenceOption,
     {
         self.spatial_reference = f(self.spatial_reference);
         self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use geoengine_datatypes::spatial_reference::SpatialReference;
+
+    #[test]
+    fn map_vector_descriptor() {
+        let descriptor = VectorResultDescriptor {
+            data_type: VectorDataType::Data,
+            spatial_reference: SpatialReferenceOption::Unreferenced,
+        };
+
+        let descriptor = descriptor.map_data_type(|_d| VectorDataType::MultiPoint);
+        let descriptor =
+            descriptor.map_spatial_reference(|_sref| SpatialReference::epsg_4326().into());
+
+        assert_eq!(
+            descriptor,
+            VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReference::epsg_4326().into(),
+            }
+        );
     }
 }
