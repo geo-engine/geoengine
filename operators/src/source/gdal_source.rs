@@ -285,6 +285,7 @@ where
             .time_step
             .snap_relative(time_information.start_time, time_interval.start())
             .expect("is a valid time");
+        eprintln!("snapped start {:?}", snapped_start);
         let snapped_interval = TimeInterval::new_unchecked(snapped_start, time_interval.end());
 
         let time_iterator = TimeStepIter::new_with_interval_incl_start(
@@ -675,6 +676,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::{MockExecutionContext, MockQueryContext, QueryRectangle};
     use crate::error::Error;
     use crate::util::Result;
     use chrono::NaiveDate;
@@ -1529,5 +1531,45 @@ mod tests {
             ])
             .unwrap();
         assert_eq!(center_pixel, 19);
+    }
+
+    #[tokio::test]
+    async fn no_data() {
+        let op: Box<dyn RasterOperator> = serde_json::from_str(
+            r#"
+        {
+            "type": "GdalSource",
+            "params": {
+            "dataset_id": "modis_ndvi",
+            "channel": null
+            }
+        }"#,
+        )
+        .unwrap();
+        let exe_ctx = MockExecutionContext::default();
+        let o = op.initialize(&exe_ctx).unwrap();
+        let p = o.query_processor().unwrap().get_u8().unwrap();
+        let bbox = BoundingBox2D::new_unchecked((0., 0.).into(), (30., 30.).into());
+        let x_query_resolution = bbox.size_x() / f64::from(256);
+        let y_query_resolution = bbox.size_y() / f64::from(256);
+        let query_ctx = MockQueryContext::default();
+        let q = p.query(
+            QueryRectangle {
+                bbox,
+                time_interval: TimeInterval::new_unchecked(0, 0),
+                spatial_resolution: SpatialResolution::new_unchecked(
+                    x_query_resolution,
+                    y_query_resolution,
+                ),
+            },
+            &query_ctx,
+        );
+        let c: Vec<Result<RasterTile2D<u8>>> = q.collect().await;
+
+        assert_eq!(c.len(), 1);
+        assert_eq!(
+            c[0].as_ref().unwrap().time,
+            TimeInterval::new_unchecked(0, 2_678_400_000)
+        );
     }
 }
