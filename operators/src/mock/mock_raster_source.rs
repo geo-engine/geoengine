@@ -184,4 +184,36 @@ mod tests {
             _ => panic!("wrong raster type"),
         }
     }
+
+    #[tokio::test]
+    async fn typed() {
+        let raster = Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap();
+
+        let raster_tile = RasterTile2D::new_with_tile_info(
+            TimeInterval::default(),
+            TileInformation {
+                global_tile_position: [0, 0].into(),
+                tile_size_in_pixels: [3, 2].into(),
+                global_geo_transform: Default::default(),
+            },
+            raster,
+        );
+
+        let source = MockRasterSource {
+            params: MockRasterSourceParams {
+                data: vec![raster_tile],
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::I32,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                },
+            },
+        }
+        .boxed()
+        .initialize(&MockExecutionContext::default())
+        .unwrap();
+
+        source.query_processor().unwrap().get_i32().unwrap();
+
+        assert!(source.query_processor().unwrap().get_f32().is_none());
+    }
 }
