@@ -208,6 +208,10 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::MockExecutionContext;
+    use crate::mock::MockFeatureCollectionSource;
+    use geoengine_datatypes::collections::{DataCollection, MultiPointCollection};
+    use geoengine_datatypes::primitives::{FeatureData, NoGeometry, TimeInterval};
 
     #[test]
     fn params() {
@@ -232,5 +236,44 @@ mod tests {
         let params_deserialized: VectorJoinParams = serde_json::from_str(&json).unwrap();
 
         assert_eq!(params, params_deserialized);
+    }
+
+    #[test]
+    fn initialization() {
+        let operator = VectorJoin {
+            params: VectorJoinParams {
+                join_type: VectorJoinType::EquiGeoToData {
+                    left_column: "foo".to_string(),
+                    right_column: "bar".to_string(),
+                    right_column_suffix: Some("baz".to_string()),
+                },
+            },
+            raster_sources: vec![],
+            vector_sources: vec![
+                MockFeatureCollectionSource::single(
+                    MultiPointCollection::from_slices(
+                        &[(0.0, 0.1)],
+                        &[TimeInterval::default()],
+                        &[("join_column", FeatureData::Decimal(vec![5]))],
+                    )
+                    .unwrap(),
+                )
+                .boxed(),
+                MockFeatureCollectionSource::single(
+                    DataCollection::from_slices(
+                        &[] as &[NoGeometry],
+                        &[TimeInterval::default()],
+                        &[("join_column", FeatureData::Decimal(vec![5]))],
+                    )
+                    .unwrap(),
+                )
+                .boxed(),
+            ],
+        };
+
+        operator
+            .boxed()
+            .initialize(&MockExecutionContext::default())
+            .unwrap();
     }
 }
