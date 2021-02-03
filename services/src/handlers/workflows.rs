@@ -66,7 +66,6 @@ async fn get_workflow_metadata<C: Context>(
     id: Uuid,
     ctx: C,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    // TODO: check for rights to access workflow?
     let workflow = ctx
         .workflow_registry_ref()
         .await
@@ -302,7 +301,7 @@ mod tests {
         assert_eq!(res.status(), 200);
 
         assert_eq!(
-            *res.body(),
+            serde_json::from_slice::<serde_json::Value>(res.body()).unwrap(),
             serde_json::json!({
                 "data_type": "MultiPoint",
                 "spatial_reference": "EPSG:4326",
@@ -311,7 +310,6 @@ mod tests {
                     "foo": "Number"
                 }
             })
-            .to_string()
         );
     }
 }
