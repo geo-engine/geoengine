@@ -11,11 +11,11 @@ pub struct IdResponse<T: Identifier> {
     pub id: T,
 }
 
-impl<T> IdResponse<T>
+impl<T> From<T> for IdResponse<T>
 where
     T: Identifier,
 {
-    pub fn from_id(id: T) -> Self {
+    fn from(id: T) -> Self {
         Self { id }
     }
 }
