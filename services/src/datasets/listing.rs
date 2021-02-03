@@ -4,6 +4,7 @@ use crate::users::user::UserId;
 use crate::util::user_input::{UserInput, Validated};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::DataSetId;
+use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use geoengine_operators::engine::{
     MetaData, MetaDataProvider, ResultDescriptor, VectorResultDescriptor,
 };
@@ -18,7 +19,8 @@ pub struct DataSetListing {
     pub description: String,
     pub tags: Vec<String>,
     pub source_operator: String, // TODO: enum?
-                                 // TODO: meta data like bounds, crs, resolution
+    pub spatial_reference: SpatialReferenceOption,
+    // TODO: meta data like bounds, resolution
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
