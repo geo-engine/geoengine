@@ -68,7 +68,7 @@ impl VectorOperator for PointInPolygonFilter {
 
         Ok(InitializedPointInPolygonFilter::new(
             (),
-            vector_sources[0].result_descriptor(),
+            vector_sources[0].result_descriptor().clone(),
             vec![],
             vector_sources,
             (),

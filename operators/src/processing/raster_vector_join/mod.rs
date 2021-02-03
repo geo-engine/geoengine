@@ -12,6 +12,8 @@ use crate::util::Result;
 
 use crate::processing::raster_vector_join::points::RasterPointJoinProcessor;
 use geoengine_datatypes::collections::VectorDataType;
+use geoengine_datatypes::primitives::FeatureDataType;
+use geoengine_datatypes::raster::RasterDataType;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
@@ -86,14 +88,40 @@ impl VectorOperator for RasterVectorJoin {
         // TODO: check for column clashes earlier with the result descriptor
         // TODO: update result descriptor with new column(s)
 
+        let raster_sources = self
+            .raster_sources
+            .drain(..)
+            .map(|source| source.initialize(context))
+            .collect::<Result<Vec<_>>>()?;
+
+        let result_descriptor = vector_source.result_descriptor().map_columns(|columns| {
+            let mut columns = columns.clone();
+            for (i, new_column_name) in self.params.names.iter().enumerate() {
+                let feature_data_type = match self.params.aggregation {
+                    AggregationMethod::First => {
+                        match raster_sources[i].result_descriptor().data_type {
+                            RasterDataType::U8
+                            | RasterDataType::U16
+                            | RasterDataType::U32
+                            | RasterDataType::U64
+                            | RasterDataType::I8
+                            | RasterDataType::I16
+                            | RasterDataType::I32
+                            | RasterDataType::I64 => FeatureDataType::Decimal,
+                            RasterDataType::F32 | RasterDataType::F64 => FeatureDataType::Number,
+                        }
+                    }
+                    AggregationMethod::Mean => FeatureDataType::Number,
+                };
+                columns.insert(new_column_name.clone(), feature_data_type);
+            }
+            columns
+        });
+
         Ok(InitializedRasterVectorJoin {
             params: self.params,
-            raster_sources: self
-                .raster_sources
-                .into_iter()
-                .map(|source| source.initialize(context))
-                .collect::<Result<Vec<_>>>()?,
-            result_descriptor: vector_source.result_descriptor(),
+            raster_sources,
+            result_descriptor,
             vector_sources: vec![vector_source],
             state: (),
         }

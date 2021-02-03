@@ -561,8 +561,8 @@ pub struct InitializedGdalSourceOperator<P> {
 impl<P> InitializedOperatorBase for InitializedGdalSourceOperator<P> {
     type Descriptor = RasterResultDescriptor;
 
-    fn result_descriptor(&self) -> Self::Descriptor {
-        self.result_descriptor
+    fn result_descriptor(&self) -> &Self::Descriptor {
+        &self.result_descriptor
     }
 
     fn raster_sources(&self) -> &[Box<InitializedRasterOperator>] {

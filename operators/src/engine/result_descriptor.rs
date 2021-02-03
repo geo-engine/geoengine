@@ -1,11 +1,13 @@
+use geoengine_datatypes::primitives::FeatureDataType;
 use geoengine_datatypes::{
     collections::VectorDataType, raster::RasterDataType, spatial_reference::SpatialReferenceOption,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// A descriptor that contains information about the query result, for instance, the data type
 /// and spatial reference.
-pub trait ResultDescriptor: Copy {
+pub trait ResultDescriptor: Clone {
     type DataType;
 
     /// Return the type-specific result data type
@@ -69,10 +71,25 @@ impl ResultDescriptor for RasterResultDescriptor {
 }
 
 /// A `ResultDescriptor` for vector queries
-#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct VectorResultDescriptor {
     pub data_type: VectorDataType,
     pub spatial_reference: SpatialReferenceOption,
+    pub columns: HashMap<String, FeatureDataType>,
+}
+
+impl VectorResultDescriptor {
+    /// Create a new `VectorResultDescriptor` by only using new `columns`
+    pub fn map_columns<F>(&self, f: F) -> Self
+    where
+        F: Fn(&HashMap<String, FeatureDataType>) -> HashMap<String, FeatureDataType>,
+    {
+        Self {
+            data_type: self.data_type,
+            spatial_reference: self.spatial_reference,
+            columns: f(&self.columns),
+        }
+    }
 }
 
 impl ResultDescriptor for VectorResultDescriptor {
@@ -113,17 +130,26 @@ mod tests {
         let descriptor = VectorResultDescriptor {
             data_type: VectorDataType::Data,
             spatial_reference: SpatialReferenceOption::Unreferenced,
+            columns: Default::default(),
         };
 
-        let descriptor = descriptor.map_data_type(|_d| VectorDataType::MultiPoint);
-        let descriptor =
-            descriptor.map_spatial_reference(|_sref| SpatialReference::epsg_4326().into());
+        let columns = {
+            let mut columns = HashMap::with_capacity(1);
+            columns.insert("foo".to_string(), FeatureDataType::Number);
+            columns
+        };
+
+        let descriptor = descriptor
+            .map_data_type(|_d| VectorDataType::MultiPoint)
+            .map_spatial_reference(|_sref| SpatialReference::epsg_4326().into())
+            .map_columns(|_cols| columns.clone());
 
         assert_eq!(
             descriptor,
             VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint,
                 spatial_reference: SpatialReference::epsg_4326().into(),
+                columns,
             }
         );
     }

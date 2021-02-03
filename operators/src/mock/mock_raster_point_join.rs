@@ -7,6 +7,7 @@ use futures::StreamExt;
 use geoengine_datatypes::collections::{
     FeatureCollectionInfos, FeatureCollectionModifications, VectorDataType,
 };
+use geoengine_datatypes::primitives::FeatureDataType;
 use geoengine_datatypes::raster::Pixel;
 use geoengine_datatypes::{
     collections::MultiPointCollection,
@@ -91,23 +92,40 @@ impl VectorOperator for MockRasterPointJoinOperator {
         self: Box<Self>,
         context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<crate::engine::InitializedVectorOperator>> {
-        InitializedOperatorImpl::create(
+        let vector_sources = self
+            .vector_sources
+            .into_iter()
+            .map(|o| o.initialize(context))
+            .collect::<Result<Vec<_>>>()?;
+
+        let raster_sources = self
+            .raster_sources
+            .into_iter()
+            .map(|o| o.initialize(context))
+            .collect::<Result<Vec<_>>>()?;
+
+        let result_descriptor = {
+            let mut columns = vector_sources[0].result_descriptor().columns.clone();
+            columns.insert(self.params.feature_name.clone(), FeatureDataType::Number);
+
+            VectorResultDescriptor {
+                spatial_reference: vector_sources.get(0).map_or_else(
+                    || SpatialReferenceOption::Unreferenced,
+                    |o| o.result_descriptor().spatial_reference,
+                ),
+                data_type: VectorDataType::MultiPoint,
+                columns,
+            }
+        };
+
+        Ok(InitializedOperatorImpl::new(
             self.params,
-            context,
-            |_, _, _, _| Ok(()),
-            |_, _, _, _, vs| {
-                Ok(VectorResultDescriptor {
-                    spatial_reference: vs.get(0).map_or_else(
-                        || SpatialReferenceOption::Unreferenced,
-                        |o| o.result_descriptor().spatial_reference,
-                    ),
-                    data_type: VectorDataType::MultiPoint,
-                })
-            },
-            self.raster_sources,
-            self.vector_sources,
+            result_descriptor,
+            raster_sources,
+            vector_sources,
+            (),
         )
-        .map(InitializedOperatorImpl::boxed)
+        .boxed())
     }
 }
 
