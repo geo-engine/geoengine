@@ -2,6 +2,7 @@ use crate::engine::{
     InitializedOperator, InitializedOperatorImpl, Operator, QueryProcessor, RasterQueryProcessor,
     TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
+use crate::error;
 use crate::util::Result;
 use futures::StreamExt;
 use geoengine_datatypes::collections::{
@@ -16,6 +17,7 @@ use geoengine_datatypes::{
     spatial_reference::SpatialReferenceOption,
 };
 use serde::{Deserialize, Serialize};
+use snafu::ensure;
 
 pub struct MockRasterPointJoinProcessor<R, V> {
     raster_source: R,
@@ -92,11 +94,35 @@ impl VectorOperator for MockRasterPointJoinOperator {
         self: Box<Self>,
         context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<crate::engine::InitializedVectorOperator>> {
+        ensure!(
+            self.vector_sources.len() == 1,
+            error::InvalidNumberOfVectorInputs {
+                expected: 1..2,
+                found: self.vector_sources.len(),
+            }
+        );
+
+        ensure!(
+            self.raster_sources.len() == 1,
+            error::InvalidNumberOfRasterInputs {
+                expected: 1..2,
+                found: self.raster_sources.len(),
+            }
+        );
+
         let vector_sources = self
             .vector_sources
             .into_iter()
             .map(|o| o.initialize(context))
             .collect::<Result<Vec<_>>>()?;
+
+        ensure!(
+            vector_sources[0].result_descriptor().data_type == VectorDataType::MultiPoint,
+            error::InvalidType {
+                expected: VectorDataType::MultiPoint.to_string(),
+                found: vector_sources[0].result_descriptor().data_type.to_string(),
+            }
+        );
 
         let raster_sources = self
             .raster_sources
@@ -106,7 +132,15 @@ impl VectorOperator for MockRasterPointJoinOperator {
 
         let result_descriptor = {
             let mut columns = vector_sources[0].result_descriptor().columns.clone();
-            columns.insert(self.params.feature_name.clone(), FeatureDataType::Number);
+            if columns
+                .insert(self.params.feature_name.clone(), FeatureDataType::Number)
+                .is_some()
+            {
+                return Err(geoengine_datatypes::error::Error::ColumnNameConflict {
+                    name: self.params.feature_name,
+                }
+                .into());
+            }
 
             VectorResultDescriptor {
                 spatial_reference: vector_sources.get(0).map_or_else(
@@ -134,10 +168,10 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
 {
     fn query_processor(&self) -> Result<crate::engine::TypedVectorQueryProcessor> {
         let raster_source = self.raster_sources[0].query_processor()?;
-        let point_source = match self.vector_sources[0].query_processor()? {
-            TypedVectorQueryProcessor::MultiPoint(v) => v,
-            _ => panic!(),
-        };
+        let point_source = self.vector_sources[0]
+            .query_processor()?
+            .multi_point()
+            .expect("checked in initialization");
         Ok(TypedVectorQueryProcessor::MultiPoint(match raster_source {
             crate::engine::TypedRasterQueryProcessor::U8(r) => {
                 Box::new(create_binary_raster_vector::<u8, MultiPointCollection>(
