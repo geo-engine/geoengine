@@ -28,7 +28,7 @@ async fn register_user<C: Context>(
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let user = user.validated()?;
     let id = ctx.user_db_ref_mut().await.register(user).await?;
-    Ok(warp::reply::json(&IdResponse::from_id(id)))
+    Ok(warp::reply::json(&IdResponse::from(id)))
 }
 
 pub(crate) fn anonymous_handler<C: Context>(

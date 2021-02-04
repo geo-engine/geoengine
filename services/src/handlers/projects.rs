@@ -29,7 +29,7 @@ async fn create_project<C: Context>(
         .await
         .create(ctx.session()?.user.id, create)
         .await?;
-    Ok(warp::reply::json(&IdResponse::from_id(id)))
+    Ok(warp::reply::json(&IdResponse::from(id)))
 }
 
 pub(crate) fn list_projects_handler<C: Context>(

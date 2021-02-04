@@ -11,7 +11,7 @@ use crate::users::session::{Session, SessionId, UserInfo};
 use crate::users::user::{User, UserCredentials, UserId, UserRegistration};
 use crate::users::userdb::UserDB;
 use crate::util::user_input::Validated;
-use crate::util::Identifier;
+use geoengine_datatypes::util::Identifier;
 
 #[derive(Default)]
 pub struct HashMapUserDB {

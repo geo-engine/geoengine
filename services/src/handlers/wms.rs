@@ -4,9 +4,9 @@ use warp::{http::Response, Filter, Rejection};
 
 use geoengine_datatypes::{
     operations::image::{Colorizer, ToPng},
-    primitives::{Coordinate2D, SpatialResolution},
+    primitives::SpatialResolution,
     raster::Grid2D,
-    raster::{GridShape2D, RasterTile2D, TilingSpecification},
+    raster::RasterTile2D,
     spatial_reference::SpatialReferenceOption,
 };
 use geoengine_datatypes::{
@@ -18,18 +18,14 @@ use crate::error;
 use crate::error::Result;
 use crate::handlers::Context;
 use crate::ogc::wms::request::{GetCapabilities, GetLegendGraphic, GetMap, WMSRequest};
-use crate::util::config;
-use crate::util::config::get_config_element;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 use futures::StreamExt;
 use geoengine_datatypes::operations::image::RgbaColor;
 use geoengine_datatypes::primitives::{TimeInstance, TimeInterval};
 use geoengine_operators::call_on_generic_raster_processor;
-use geoengine_operators::concurrency::ThreadPool;
 use geoengine_operators::engine::{
-    MockExecutionContext, MockQueryContext, QueryContext, QueryRectangle, RasterQueryProcessor,
-    ResultDescriptor,
+    QueryContext, QueryRectangle, RasterQueryProcessor, ResultDescriptor,
 };
 use num_traits::AsPrimitive;
 use std::convert::TryInto;
@@ -149,24 +145,7 @@ async fn get_map<C: Context>(
 
     let operator = workflow.operator.get_raster().context(error::Operator)?;
 
-    let thread_pool = ThreadPool::new(1); // TODO: use global thread pool
-
-    let config_tiling_spec = get_config_element::<config::TilingSpecification>()?;
-    let execution_context = MockExecutionContext {
-        raster_data_root: get_config_element::<config::GdalSource>()?.raster_data_root_path,
-        thread_pool,
-        meta_data: Default::default(),
-        tiling_specification: TilingSpecification {
-            origin_coordinate: Coordinate2D::new(
-                config_tiling_spec.origin_coordinate_x,
-                config_tiling_spec.origin_coordinate_y,
-            ),
-            tile_size_in_pixels: GridShape2D::from([
-                config_tiling_spec.tile_shape_pixels_y,
-                config_tiling_spec.tile_shape_pixels_x,
-            ]),
-        },
-    };
+    let execution_context = ctx.execution_context()?;
 
     let initialized = operator
         .initialize(&execution_context)
@@ -211,10 +190,7 @@ async fn get_map<C: Context>(
         ),
     };
 
-    let query_ctx = MockQueryContext {
-        // TODO: define meaningful query context
-        chunk_byte_size: 1024,
-    };
+    let query_ctx = ctx.query_context()?;
 
     let image_bytes = call_on_generic_raster_processor!(
         processor,
@@ -338,13 +314,15 @@ mod tests {
     use std::path::PathBuf;
 
     use geoengine_datatypes::operations::image::RgbaColor;
-    use geoengine_datatypes::primitives::{BoundingBox2D, TimeInterval};
-    use geoengine_operators::engine::{RasterOperator, TypedOperator};
+    use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, TimeInterval};
+    use geoengine_datatypes::raster::GridShape2D;
+    use geoengine_operators::engine::{MockQueryContext, RasterOperator, TypedOperator};
     use geoengine_operators::source::{GdalSource, GdalSourceParameters, GdalSourceProcessor};
 
     use super::*;
     use crate::workflows::workflow::Workflow;
     use crate::{contexts::InMemoryContext, ogc::wms::request::GetMapFormat};
+    use geoengine_datatypes::raster::TilingSpecification;
     use std::convert::TryInto;
     use xml::ParserConfig;
 

@@ -16,6 +16,14 @@ pub struct MockQueryContext {
     pub chunk_byte_size: usize,
 }
 
+impl Default for MockQueryContext {
+    fn default() -> Self {
+        Self {
+            chunk_byte_size: 1024 * 1024,
+        }
+    }
+}
+
 impl MockQueryContext {
     pub fn new(chunk_byte_size: usize) -> Self {
         Self { chunk_byte_size }

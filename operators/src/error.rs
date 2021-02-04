@@ -137,7 +137,7 @@ pub enum Error {
     },
 
     LoadingInfo {
-        reason: String, // TODO: source error will be from service crate, use a Box here
+        source: Box<dyn std::error::Error + Send + Sync>,
     },
 
     Arrow {
