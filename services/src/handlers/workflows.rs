@@ -7,7 +7,6 @@ use crate::handlers::{authenticate, Context};
 use crate::util::IdResponse;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
-use geoengine_operators::engine::MockExecutionContext;
 use snafu::ResultExt;
 
 pub(crate) fn register_workflow_handler<C: Context>(
@@ -71,10 +70,11 @@ async fn get_workflow_metadata<C: Context>(
         .await
         .load(&WorkflowId(id))
         .await?;
+
     let operator = workflow.operator.get_vector().context(error::Operator)?;
-    // TODO: use meaningful context to initialize
+
     let operator = operator
-        .initialize(&MockExecutionContext::default())
+        .initialize(&ctx.execution_context()?)
         .context(error::Operator)?;
 
     // TODO: use cache here
