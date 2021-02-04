@@ -56,7 +56,7 @@ pub(crate) fn get_workflow_metadata_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::get()
-        .and(warp::path!("workflow" / "metadata" / Uuid))
+        .and(warp::path!("workflow" / Uuid / "metadata"))
         .and(authenticate(ctx))
         .and_then(get_workflow_metadata)
 }
@@ -77,6 +77,7 @@ async fn get_workflow_metadata<C: Context>(
         .initialize(&MockExecutionContext::default())
         .context(error::Operator)?;
 
+    // TODO: use cache here
     let result_descriptor = operator.result_descriptor();
 
     Ok(warp::reply::json(result_descriptor))
@@ -290,7 +291,7 @@ mod tests {
 
         let res = warp::test::request()
             .method("GET")
-            .path(&format!("/workflow/metadata/{}", id.to_string()))
+            .path(&format!("/workflow/{}/metadata", id.to_string()))
             .header(
                 "Authorization",
                 format!("Bearer {}", session.id.to_string()),
