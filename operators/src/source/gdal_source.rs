@@ -1569,7 +1569,7 @@ mod tests {
         assert_eq!(c.len(), 1);
         assert_eq!(
             c[0].as_ref().unwrap().time,
-            TimeInterval::new_unchecked(0, 2_678_400_000)
+            TimeInterval::new_unchecked(0, 2_678_400_000) // (1970-01-01T00:00:00, 1970-02-01T00:00:00)
         );
     }
 }

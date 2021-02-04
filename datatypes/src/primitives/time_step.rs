@@ -34,15 +34,6 @@ pub struct TimeStep {
     pub step: u32,
 }
 
-/// mathematical modulo that correctly handles negative `a`s
-fn modulo(a: i32, n: i32) -> i32 {
-    if a < 0 {
-        (a % n + n) % n
-    } else {
-        a % n
-    }
-}
-
 impl TimeStep {
     /// Resolves how many `TimeSteps` fit into a given `TimeInterval`.
     /// Remember that `TimeInterval` is not inclusive.
@@ -216,7 +207,7 @@ impl TimeStep {
                     ref_date_time.year() + (ref_date_time.month() as i32 + snapped_months) / 12
                 };
 
-                let snapped_month = modulo(ref_date_time.month() as i32 + snapped_months, 12);
+                let snapped_month = (ref_date_time.month() as i32 + snapped_months).rem_euclid(12);
 
                 NaiveDate::from_ymd(snapped_year, snapped_month as u32, ref_date_time.day())
                     .and_time(ref_date_time.time())
@@ -946,6 +937,7 @@ mod tests {
             step: 1,
         };
 
+        // snap with reference 2014-01-01T00:00:00 and time_to_snap 1970-01-01T00:00:00
         assert_eq!(
             time_snapper
                 .snap_relative(1_388_534_400_000.into(), 0.into())
