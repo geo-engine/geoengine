@@ -60,7 +60,7 @@ pub struct MockExecutionContext {
 impl Default for MockExecutionContext {
     fn default() -> Self {
         Self {
-            raster_data_root: Default::default(),
+            raster_data_root: "../operators/test-data/raster".into(),
             thread_pool: ThreadPool::default(),
             meta_data: HashMap::default(),
             tiling_specification: TilingSpecification {
