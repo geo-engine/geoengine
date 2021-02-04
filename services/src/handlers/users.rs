@@ -287,6 +287,27 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn register_invalid_type() {
+        let ctx = InMemoryContext::default();
+
+        // register user
+        let res = warp::test::request()
+            .method("POST")
+            .path("/user")
+            .header("Content-Length", "0")
+            .header("Content-Type", "text/html")
+            .reply(&register_user_handler(ctx).recover(handle_rejection))
+            .await;
+
+        ErrorResponse::assert(
+            &res,
+            415,
+            "UnsupportedMediaType",
+            "Unsupported content type header.",
+        );
+    }
+
     async fn login_test_helper<C: Context>(
         ctx: C,
         method: &str,

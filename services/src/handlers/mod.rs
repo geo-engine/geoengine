@@ -9,7 +9,7 @@ use std::error::Error as StdError;
 use std::str::FromStr;
 use warp::http::{Response, StatusCode};
 use warp::hyper::body::Bytes;
-use warp::reject::{InvalidQuery, MethodNotAllowed};
+use warp::reject::{InvalidQuery, MethodNotAllowed, UnsupportedMediaType};
 use warp::{Filter, Rejection, Reply};
 
 pub mod projects;
@@ -62,6 +62,18 @@ pub async fn handle_rejection(err: Rejection) -> Result<impl Reply, Rejection> {
                 e.to_string(),
             ),
         }
+    } else if err.find::<MethodNotAllowed>().is_some() {
+        (
+            StatusCode::METHOD_NOT_ALLOWED,
+            "MethodNotAllowed".to_string(),
+            "HTTP method not allowed.".to_string(),
+        )
+    } else if err.find::<UnsupportedMediaType>().is_some() {
+        (
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            "UnsupportedMediaType".to_string(),
+            "Unsupported content type header.".to_string(),
+        )
     } else if let Some(e) = err.find::<warp::filters::body::BodyDeserializeError>() {
         // serde_json deserialization errors
 
@@ -70,12 +82,6 @@ pub async fn handle_rejection(err: Rejection) -> Result<impl Reply, Rejection> {
             "BodyDeserializeError".to_string(),
             e.source()
                 .map_or("Bad Request".to_string(), ToString::to_string),
-        )
-    } else if err.find::<MethodNotAllowed>().is_some() {
-        (
-            StatusCode::METHOD_NOT_ALLOWED,
-            "MethodNotAllowed".to_string(),
-            "HTTP method not allowed.".to_string(),
         )
     } else if err.find::<InvalidQuery>().is_some() {
         (
