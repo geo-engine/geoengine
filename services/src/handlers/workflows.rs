@@ -27,7 +27,7 @@ async fn register_workflow<C: Context>(
         .await
         .register(workflow)
         .await?;
-    Ok(warp::reply::json(&IdResponse::from_id(id)))
+    Ok(warp::reply::json(&IdResponse::from(id)))
 }
 
 pub(crate) fn load_workflow_handler<C: Context>(

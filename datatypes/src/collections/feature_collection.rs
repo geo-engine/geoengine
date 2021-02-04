@@ -139,6 +139,9 @@ pub trait FeatureCollectionModifications {
     where
         S1: AsRef<str>,
         S2: AsRef<str>;
+
+    /// Sorts the features in this collection by their timestamps ascending.
+    fn sort_by_time_asc(&self) -> Result<Self::Output>;
 }
 
 impl<CollectionType> FeatureCollectionModifications for FeatureCollection<CollectionType>
@@ -613,6 +616,27 @@ where
             struct_array_from_data(columns, column_values, self.table.len()),
             types,
         ))
+    }
+
+    #[allow(clippy::too_many_lines)]
+    fn sort_by_time_asc(&self) -> Result<Self::Output> {
+        let time_column = self
+            .table
+            .column_by_name(Self::TIME_COLUMN_NAME)
+            .expect("must exist");
+
+        let sort_options = Some(arrow::compute::SortOptions {
+            descending: false,
+            nulls_first: false,
+        });
+
+        let sort_indices = arrow::compute::sort_to_indices(time_column, sort_options)?;
+
+        let table_ref = arrow::compute::take(&self.table, &sort_indices, None)?;
+
+        let table = StructArray::from(table_ref.data());
+
+        Ok(Self::new_from_internals(table, self.types.clone()))
     }
 }
 

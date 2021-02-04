@@ -422,6 +422,8 @@ impl FeatureCollectionModifications for TypedFeatureCollection {
             _ => return Err(FeatureCollectionError::WrongDataType.into()),
         })
     }
+
+    impl_mod_function_by_forwarding_ref!(fn sort_by_time_asc(&self) -> Result<Self::Output>);
 }
 
 impl<'c> FeatureCollectionModifications for TypedFeatureCollectionRef<'c> {
@@ -459,6 +461,8 @@ impl<'c> FeatureCollectionModifications for TypedFeatureCollectionRef<'c> {
             _ => return Err(FeatureCollectionError::WrongDataType.into()),
         })
     }
+
+    impl_mod_function_by_forwarding_ref2!(fn sort_by_time_asc(&self) -> Result<Self::Output>);
 }
 
 #[cfg(test)]

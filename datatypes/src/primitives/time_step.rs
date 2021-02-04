@@ -201,21 +201,13 @@ impl TimeStep {
                 // get the difference in time steps
                 let snapped_months = (diff_months / self.step as i32) * self.step as i32;
 
-                let (snapped_year, snapped_month) = if diff_months.is_negative() {
-                    // if difference is negative, go one year more back in any case
-                    let snapped_year = ref_date_time.year() + (snapped_months / 12) as i32 - 1;
-                    // calculate the month, avoid negative values and values > 12
-                    let snapped_month =
-                        (ref_date_time.month() as i32 + 12 + (snapped_months % 12)) % 12;
-
-                    (snapped_year, snapped_month)
+                let snapped_year = if snapped_months.is_negative() {
+                    ref_date_time.year() + (ref_date_time.month() as i32 + snapped_months - 12) / 12
                 } else {
-                    let snapped_year = ref_date_time.year() + (snapped_months / 12) as i32;
-
-                    let snapped_month = ref_date_time.month() as i32 + snapped_months % 12;
-
-                    (snapped_year, snapped_month)
+                    ref_date_time.year() + (ref_date_time.month() as i32 + snapped_months) / 12
                 };
+
+                let snapped_month = (ref_date_time.month() as i32 + snapped_months).rem_euclid(12);
 
                 NaiveDate::from_ymd(snapped_year, snapped_month as u32, ref_date_time.day())
                     .and_time(ref_date_time.time())
@@ -653,6 +645,39 @@ mod tests {
     }
 
     #[test]
+    fn time_snap_month_n_after_ref() {
+        test_snap(
+            TimeGranularity::Months,
+            1,
+            "2000-06-01T00:00:00.0",
+            "1998-07-15T00:00:00.0",
+            "1998-07-01T00:00:00.0",
+        );
+    }
+
+    #[test]
+    fn time_snap_month_n_before_ref() {
+        test_snap(
+            TimeGranularity::Months,
+            1,
+            "2000-06-01T00:00:00.0",
+            "1998-05-15T00:00:00.0",
+            "1998-05-01T00:00:00.0",
+        );
+    }
+
+    #[test]
+    fn time_snap_month_wrap() {
+        test_snap(
+            TimeGranularity::Months,
+            7,
+            "2000-06-01T00:00:00.0",
+            "2001-01-01T00:00:00.0",
+            "2001-01-01T00:00:00.0",
+        );
+    }
+
+    #[test]
     fn time_snap_month_1() {
         test_snap(
             TimeGranularity::Months,
@@ -902,6 +927,22 @@ mod tests {
             "2010-01-01T01:01:01.0000",
             "2010-01-01T01:01:02.7",
             "2010-01-01T01:01:02.5",
+        )
+    }
+
+    #[test]
+    fn time_snap_0() {
+        let time_snapper = TimeStep {
+            granularity: TimeGranularity::Months,
+            step: 1,
+        };
+
+        // snap with reference 2014-01-01T00:00:00 and time_to_snap 1970-01-01T00:00:00
+        assert_eq!(
+            time_snapper
+                .snap_relative(1_388_534_400_000.into(), 0.into())
+                .unwrap(),
+            0.into()
         )
     }
 

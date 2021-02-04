@@ -259,6 +259,10 @@ impl TimeInterval {
             None
         }
     }
+
+    pub fn duration_ms(&self) -> u64 {
+        self.end.inner().wrapping_sub(self.start.inner()) as u64
+    }
 }
 
 impl Debug for TimeInterval {
