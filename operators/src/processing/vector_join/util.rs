@@ -20,3 +20,65 @@ pub(super) fn translation_table<'i>(
 
     translation_table
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn no_conflict() {
+        let existing_columns: Vec<String> =
+            ["foo", "bar"].iter().map(ToString::to_string).collect();
+        let new_columns: Vec<String> = ["baz"].iter().map(ToString::to_string).collect();
+
+        let translations =
+            translation_table(existing_columns.iter(), new_columns.iter(), "_SUFFIX");
+
+        assert_eq!(
+            translations,
+            [("baz", "baz")]
+                .iter()
+                .map(|&(k, v)| (k.to_string(), v.to_string()))
+                .collect::<HashMap<String, String>>()
+        );
+    }
+
+    #[test]
+    fn simple_conflict() {
+        let existing_columns: Vec<String> =
+            ["foo", "bar"].iter().map(ToString::to_string).collect();
+        let new_columns: Vec<String> = ["bar", "baz"].iter().map(ToString::to_string).collect();
+
+        let translations =
+            translation_table(existing_columns.iter(), new_columns.iter(), "_SUFFIX");
+
+        assert_eq!(
+            translations,
+            [("bar", "bar_SUFFIX"), ("baz", "baz")]
+                .iter()
+                .map(|&(k, v)| (k.to_string(), v.to_string()))
+                .collect::<HashMap<String, String>>()
+        );
+    }
+
+    #[test]
+    fn recursive_conflict() {
+        let existing_columns: Vec<String> =
+            ["foo", "bar"].iter().map(ToString::to_string).collect();
+        let new_columns: Vec<String> = ["bar", "bar_SUFFIX"]
+            .iter()
+            .map(ToString::to_string)
+            .collect();
+
+        let translations =
+            translation_table(existing_columns.iter(), new_columns.iter(), "_SUFFIX");
+
+        assert_eq!(
+            translations,
+            [("bar", "bar_SUFFIX"), ("bar_SUFFIX", "bar_SUFFIX_SUFFIX")]
+                .iter()
+                .map(|&(k, v)| (k.to_string(), v.to_string()))
+                .collect::<HashMap<String, String>>()
+        );
+    }
+}
