@@ -14,7 +14,6 @@ use geoengine_datatypes::{
     collections::MultiPointCollection,
     primitives::FeatureData,
     raster::{GridIndexAccess, RasterTile2D},
-    spatial_reference::SpatialReferenceOption,
 };
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
@@ -143,10 +142,7 @@ impl VectorOperator for MockRasterPointJoinOperator {
             }
 
             VectorResultDescriptor {
-                spatial_reference: vector_sources.get(0).map_or_else(
-                    || SpatialReferenceOption::Unreferenced,
-                    |o| o.result_descriptor().spatial_reference,
-                ),
+                spatial_reference: vector_sources[0].result_descriptor().spatial_reference,
                 data_type: VectorDataType::MultiPoint,
                 columns,
             }
