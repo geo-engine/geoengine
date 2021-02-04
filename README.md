@@ -7,7 +7,7 @@ This workspace contains the Geo Engine crates.
 
 # Development
 
-- While Geo Engine should build on Linux and Windows environments, we currently only support Ubuntu Linux 20.04 LTS .
+- While Geo Engine should build on Linux and Windows environments, we currently only support Ubuntu Linux 20.04 LTS.
 - You need a recent Rust environment with a Rust nightly compiler. We recommend rustup to manage Rust `https://rustup.rs/`.
 - Geo Engine uses OpenCL and therefore requires a functional OpenCL environment. On Linux you can use POCL to run OpenCL on CPUs.
 
