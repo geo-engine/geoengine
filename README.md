@@ -1,20 +1,20 @@
-# geo engine
+# Geo Engine
 
 ![CI](https://github.com/geo-engine/geoengine/workflows/CI/badge.svg)
 [![Coverage Status](https://coveralls.io/repos/github/geo-engine/geoengine/badge.svg?branch=master)](https://coveralls.io/github/geo-engine/geoengine?branch=master)
 
-This workspace contains the geo engine crates.
+This workspace contains the Geo Engine crates.
 
 # Development
 
-- While geo engine should build on Linux and Windows environments, we currently only support Ubuntu Linux 20.04 LTS 
-- You need a recent Rust environment with a Rust nightly compiler. We recommend rustup to manage Rust `https://rustup.rs/`
-- geo engine uses OpenCL and therefore requires a functional OpenCL environment. On Linux you can use POCL to run OpenCL on CPUs.
+- While Geo Engine should build on Linux and Windows environments, we currently only support Ubuntu Linux 20.04 LTS .
+- You need a recent Rust environment with a Rust nightly compiler. We recommend rustup to manage Rust `https://rustup.rs/`.
+- Geo Engine uses OpenCL and therefore requires a functional OpenCL environment. On Linux you can use POCL to run OpenCL on CPUs.
 
 ## Dependencies
  ```
 # Build essentials
-sudo apt build-essential
+sudo apt install build-essential
 # GDAL
 sudo apt install libgdal-dev gdal-bin 
 # OpenCL
@@ -40,7 +40,7 @@ For performance-critical features, we aim to provide benchmarks in the `benches`
 If you plan on optimizing a feature of Geo Engine, please confirm it this way.
 
 # Deployment
-Deploy an instance using `cargo run --package geoengine-services --bin main --release`
+Deploy an instance using `cargo run --package geoengine-services --bin main --release`.
 
 ## Features
 The PostgreSQL storage backend can optionally be enabled using `--features postgres` in the `cargo` command.
