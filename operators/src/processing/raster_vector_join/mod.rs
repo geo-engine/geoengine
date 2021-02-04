@@ -85,9 +85,6 @@ impl VectorOperator for RasterVectorJoin {
             },
         );
 
-        // TODO: check for column clashes earlier with the result descriptor
-        // TODO: update result descriptor with new column(s)
-
         let raster_sources = self
             .raster_sources
             .drain(..)
