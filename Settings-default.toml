@@ -13,7 +13,10 @@ config_string = "postgresql://geoengine:geoengine@localhost:5432"
 raster_data_root_path = "operators/test-data/raster"
 
 [raster.tiling_specification]
-    origin_coordinate_x = 0.0
-    origin_coordinate_y = 0.0
-    tile_shape_pixels_x = 600
-    tile_shape_pixels_y = 600
+origin_coordinate_x = 0.0
+origin_coordinate_y = 0.0
+tile_shape_pixels_x = 600
+tile_shape_pixels_y = 600
+
+[query_context]
+chunk_byte_size = 1048576 # TODO: find reasonable default
