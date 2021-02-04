@@ -79,7 +79,7 @@ pub struct VectorResultDescriptor {
 }
 
 impl VectorResultDescriptor {
-    /// Create a new `VectorResultDescriptor` by only using new `columns`
+    /// Create a new `VectorResultDescriptor` by only modifying the columns
     pub fn map_columns<F>(&self, f: F) -> Self
     where
         F: Fn(&HashMap<String, FeatureDataType>) -> HashMap<String, FeatureDataType>,
