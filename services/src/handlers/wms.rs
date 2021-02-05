@@ -321,7 +321,7 @@ mod tests {
 
     use super::*;
     use crate::handlers::{handle_rejection, ErrorResponse};
-    use crate::util::tests::register_workflow_helper;
+    use crate::util::tests::{check_allowed_http_methods, register_workflow_helper};
     use crate::{contexts::InMemoryContext, ogc::wms::request::GetMapFormat};
     use geoengine_datatypes::raster::TilingSpecification;
     use std::convert::TryInto;
@@ -351,9 +351,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_method() {
-        let res = test_test_helper("POST", None).await;
-
-        ErrorResponse::assert(&res, 405, "MethodNotAllowed", "HTTP method not allowed.");
+        check_allowed_http_methods(|method| test_test_helper(method, None), &["GET"]).await;
     }
 
     #[tokio::test]
@@ -394,9 +392,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_capabilities_invalid_method() {
-        let res = get_capabilities_test_helper("POST").await;
-
-        ErrorResponse::assert(&res, 405, "MethodNotAllowed", "HTTP method not allowed.");
+        check_allowed_http_methods(get_capabilities_test_helper, &["GET"]).await;
     }
 
     #[tokio::test]
@@ -553,9 +549,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_map_invalid_method() {
-        let res = get_map_test_helper("POST", None).await;
-
-        ErrorResponse::assert(&res, 405, "MethodNotAllowed", "HTTP method not allowed.");
+        check_allowed_http_methods(|method| get_map_test_helper(method, None), &["GET"]).await;
     }
 
     #[tokio::test]

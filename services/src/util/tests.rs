@@ -1,4 +1,5 @@
 use crate::contexts::Context;
+use crate::handlers::ErrorResponse;
 use crate::projects::project::{
     CreateProject, Layer, LayerInfo, LayerUpdate, ProjectId, RasterInfo, STRectangle, UpdateProject,
 };
@@ -14,6 +15,8 @@ use geoengine_datatypes::operations::image::Colorizer;
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use geoengine_operators::engine::{RasterOperator, TypedOperator};
 use geoengine_operators::source::{GdalSource, GdalSourceParameters};
+use warp::http::Response;
+use warp::hyper::body::Bytes;
 
 pub async fn create_session_helper<C: Context>(ctx: &C) -> Session {
     ctx.user_db()
@@ -114,4 +117,22 @@ pub async fn register_workflow_helper<C: Context>(ctx: &C) -> (Workflow, Workflo
         .unwrap();
 
     (workflow, id)
+}
+
+pub const HTTP_METHODS: [&str; 9] = [
+    "GET", "HEAD", "POST", "PUT", "DELETE", "CONNECT", "OPTIONS", "TRACE", "PATCH",
+];
+
+pub async fn check_allowed_http_methods<'a, T, TRes>(test_helper: T, allowed_methods: &'a [&str])
+where
+    T: Fn(&'a str) -> TRes,
+    TRes: futures::Future<Output = Response<Bytes>>,
+{
+    for method in &HTTP_METHODS {
+        if !allowed_methods.contains(method) {
+            let res = test_helper(method).await;
+
+            ErrorResponse::assert(&res, 405, "MethodNotAllowed", "HTTP method not allowed.");
+        }
+    }
 }

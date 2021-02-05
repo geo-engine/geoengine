@@ -229,7 +229,10 @@ mod tests {
     use crate::users::session::Session;
     use crate::users::user::UserRegistration;
     use crate::users::userdb::UserDB;
-    use crate::util::tests::{create_project_helper, create_session_helper, update_project_helper};
+    use crate::util::tests::{
+        check_allowed_http_methods, create_project_helper, create_session_helper,
+        update_project_helper, HTTP_METHODS,
+    };
     use crate::util::Identifier;
     use crate::workflows::workflow::WorkflowId;
     use crate::{
@@ -246,7 +249,9 @@ mod tests {
     use warp::http::Response;
     use warp::hyper::body::Bytes;
 
-    async fn create_test_helper<C: Context>(ctx: C, method: &str) -> Response<Bytes> {
+    async fn create_test_helper(method: &str) -> Response<Bytes> {
+        let ctx = InMemoryContext::default();
+
         let session = create_session_helper(&ctx).await;
 
         let create = CreateProject {
@@ -274,9 +279,7 @@ mod tests {
 
     #[tokio::test]
     async fn create() {
-        let ctx = InMemoryContext::default();
-
-        let res = create_test_helper(ctx, "POST").await;
+        let res = create_test_helper("POST").await;
 
         assert_eq!(res.status(), 200);
 
@@ -286,11 +289,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_invalid_method() {
-        let ctx = InMemoryContext::default();
-
-        let res = create_test_helper(ctx, "GET").await;
-
-        ErrorResponse::assert(&res, 405, "MethodNotAllowed", "HTTP method not allowed.");
+        check_allowed_http_methods(create_test_helper, &["POST"]).await;
     }
 
     #[tokio::test]
@@ -421,9 +420,7 @@ mod tests {
 
     #[tokio::test]
     async fn list_invalid_method() {
-        let res = list_test_helper("POST").await;
-
-        ErrorResponse::assert(&res, 405, "MethodNotAllowed", "HTTP method not allowed.");
+        check_allowed_http_methods(list_test_helper, &["GET"]).await;
     }
 
     #[tokio::test]
@@ -491,9 +488,7 @@ mod tests {
 
     #[tokio::test]
     async fn load_invalid_method() {
-        let res = load_test_helper("POST").await;
-
-        ErrorResponse::assert(&res, 405, "MethodNotAllowed", "HTTP method not allowed.");
+        check_allowed_http_methods(load_test_helper, &["GET"]).await;
     }
 
     #[tokio::test]
@@ -674,11 +669,14 @@ mod tests {
 
     #[tokio::test]
     async fn update_invalid_method() {
-        let ctx = InMemoryContext::default();
+        for method in &HTTP_METHODS {
+            if method != &"PATCH" {
+                let ctx = InMemoryContext::default();
+                let (_, _, res) = update_test_helper(&ctx, method).await;
 
-        let (_, _, res) = update_test_helper(&ctx, "POST").await;
-
-        ErrorResponse::assert(&res, 405, "MethodNotAllowed", "HTTP method not allowed.");
+                ErrorResponse::assert(&res, 405, "MethodNotAllowed", "HTTP method not allowed.");
+            }
+        }
     }
 
     #[tokio::test]
@@ -971,9 +969,7 @@ mod tests {
 
     #[tokio::test]
     async fn versions_invalid_method() {
-        let res = versions_test_helper("POST").await;
-
-        ErrorResponse::assert(&res, 405, "MethodNotAllowed", "HTTP method not allowed.");
+        check_allowed_http_methods(versions_test_helper, &["GET"]).await;
     }
 
     #[tokio::test]

@@ -321,6 +321,7 @@ mod tests {
 
     use super::*;
     use crate::handlers::{handle_rejection, ErrorResponse};
+    use crate::util::tests::check_allowed_http_methods;
     use crate::{contexts::InMemoryContext, workflows::workflow::Workflow};
     use geoengine_operators::engine::TypedOperator;
     use geoengine_operators::source::{CsvGeometrySpecification, CsvSource, CsvTimeSpecification};
@@ -448,9 +449,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_capabilities_invalid_method() {
-        let res = get_capabilities_test_helper("POST").await;
-
-        ErrorResponse::assert(&res, 405, "MethodNotAllowed", "HTTP method not allowed.");
+        check_allowed_http_methods(get_capabilities_test_helper, &["GET"]).await;
     }
 
     async fn get_feature_registry_test_helper(method: &str) -> Response<Bytes> {
@@ -552,9 +551,7 @@ x;y
 
     #[tokio::test]
     async fn get_feature_registry_invalid_method() {
-        let res = get_feature_registry_test_helper("POST").await;
-
-        ErrorResponse::assert(&res, 405, "MethodNotAllowed", "HTTP method not allowed.");
+        check_allowed_http_methods(get_feature_registry_test_helper, &["GET"]).await;
     }
 
     #[tokio::test]
@@ -672,9 +669,7 @@ x;y
 
     #[tokio::test]
     async fn get_feature_json_invalid_method() {
-        let res = get_feature_json_test_helper("POST").await;
-
-        ErrorResponse::assert(&res, 405, "MethodNotAllowed", "HTTP method not allowed.");
+        check_allowed_http_methods(get_feature_json_test_helper, &["GET"]).await;
     }
 
     #[tokio::test]

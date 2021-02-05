@@ -159,7 +159,9 @@ mod tests {
     use crate::users::session::Session;
     use crate::users::user::UserId;
     use crate::users::userdb::UserDB;
-    use crate::util::tests::{create_project_helper, create_session_helper};
+    use crate::util::tests::{
+        check_allowed_http_methods, create_project_helper, create_session_helper,
+    };
     use crate::util::user_input::Validated;
     use crate::{contexts::InMemoryContext, handlers::handle_rejection};
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
@@ -235,9 +237,11 @@ mod tests {
     async fn register_invalid_method() {
         let ctx = InMemoryContext::default();
 
-        let res = register_test_helper(ctx, "GET", "foo@bar.de").await;
-
-        ErrorResponse::assert(&res, 405, "MethodNotAllowed", "HTTP method not allowed.");
+        check_allowed_http_methods(
+            |method| register_test_helper(ctx.clone(), method, "foo@bar.de"),
+            &["POST"],
+        )
+        .await;
     }
 
     #[tokio::test]
@@ -308,11 +312,9 @@ mod tests {
         );
     }
 
-    async fn login_test_helper<C: Context>(
-        ctx: C,
-        method: &str,
-        password: &str,
-    ) -> Response<Bytes> {
+    async fn login_test_helper(method: &str, password: &str) -> Response<Bytes> {
+        let ctx = InMemoryContext::default();
+
         let user = Validated {
             user_input: UserRegistration {
                 email: "foo@bar.de".to_string(),
@@ -339,9 +341,7 @@ mod tests {
 
     #[tokio::test]
     async fn login() {
-        let ctx = InMemoryContext::default();
-
-        let res = login_test_helper(ctx, "POST", "secret123").await;
+        let res = login_test_helper("POST", "secret123").await;
 
         assert_eq!(res.status(), 200);
 
@@ -351,9 +351,7 @@ mod tests {
 
     #[tokio::test]
     async fn login_fail() {
-        let ctx = InMemoryContext::default();
-
-        let res = login_test_helper(ctx, "POST", "wrong").await;
+        let res = login_test_helper("POST", "wrong").await;
 
         ErrorResponse::assert(
             &res,
@@ -365,11 +363,8 @@ mod tests {
 
     #[tokio::test]
     async fn login_invalid_method() {
-        let ctx = InMemoryContext::default();
-
-        let res = login_test_helper(ctx, "GET", "secret123").await;
-
-        ErrorResponse::assert(&res, 405, "MethodNotAllowed", "HTTP method not allowed.");
+        check_allowed_http_methods(|method| login_test_helper(method, "secret123"), &["POST"])
+            .await;
     }
 
     #[tokio::test]
@@ -426,7 +421,9 @@ mod tests {
         );
     }
 
-    async fn logout_test_helper<C: Context>(ctx: C, method: &str) -> Response<Bytes> {
+    async fn logout_test_helper(method: &str) -> Response<Bytes> {
+        let ctx = InMemoryContext::default();
+
         let user = Validated {
             user_input: UserRegistration {
                 email: "foo@bar.de".to_string(),
@@ -464,9 +461,7 @@ mod tests {
 
     #[tokio::test]
     async fn logout() {
-        let ctx = InMemoryContext::default();
-
-        let res = logout_test_helper(ctx, "POST").await;
+        let res = logout_test_helper("POST").await;
 
         assert_eq!(res.status(), 200);
         assert_eq!(res.body(), "");
@@ -547,11 +542,7 @@ mod tests {
 
     #[tokio::test]
     async fn logout_invalid_method() {
-        let ctx = InMemoryContext::default();
-
-        let res = logout_test_helper(ctx, "GET").await;
-
-        ErrorResponse::assert(&res, 405, "MethodNotAllowed", "HTTP method not allowed.");
+        check_allowed_http_methods(logout_test_helper, &["POST"]).await;
     }
 
     #[tokio::test]
@@ -675,8 +666,6 @@ mod tests {
 
     #[tokio::test]
     async fn anonymous_invalid_method() {
-        let res = anonymous_test_helper("GET").await;
-
-        ErrorResponse::assert(&res, 405, "MethodNotAllowed", "HTTP method not allowed.");
+        check_allowed_http_methods(anonymous_test_helper, &["POST"]).await;
     }
 }
