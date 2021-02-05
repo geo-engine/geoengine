@@ -168,7 +168,8 @@ mod tests {
                 }],
                 "result_descriptor": {
                     "data_type": "U8",
-                    "spatial_reference": "EPSG:4326"
+                    "spatial_reference": "EPSG:4326",
+                    "measurement": "unitless",
                 }
             }
         })
