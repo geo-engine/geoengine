@@ -9,7 +9,6 @@ use crate::{call_bi_generic_processor, call_generic_raster_processor};
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::raster::{Grid2D, Pixel, RasterDataType, RasterTile2D, TypedValue};
-use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::collections::HashSet;
@@ -70,21 +69,52 @@ impl RasterOperator for Expression {
                 found: self.vector_sources.len()
             }
         );
+        ensure!(
+            !self.raster_sources.is_empty(),
+            crate::error::InvalidNumberOfVectorInputs {
+                expected: 1..9,
+                found: self.raster_sources.len()
+            }
+        );
 
-        InitializedOperatorImpl::create(
-            self.params,
-            context,
-            |_, _, _, _| Ok(()),
-            |params, _, _, _, _| {
-                Ok(RasterResultDescriptor {
-                    data_type: params.output_type,
-                    spatial_reference: SpatialReferenceOption::Unreferenced, // TODO
-                })
-            },
-            self.raster_sources,
-            vec![],
+        let raster_sources = self
+            .raster_sources
+            .into_iter()
+            .map(|source| source.initialize(context))
+            .collect::<Result<Vec<_>>>()?;
+
+        let spatial_reference = raster_sources[0].result_descriptor().spatial_reference;
+
+        for other_spatial_refenence in raster_sources
+            .iter()
+            .skip(1)
+            .map(|source| source.result_descriptor().spatial_reference)
+        {
+            ensure!(
+                spatial_reference == other_spatial_refenence,
+                crate::error::InvalidSpatialReference {
+                    expected: spatial_reference,
+                    found: other_spatial_refenence,
+                }
+            );
+        }
+
+        let result_descriptor = RasterResultDescriptor {
+            data_type: self.params.output_type,
+            spatial_reference,
+            measurement: raster_sources[0].result_descriptor().measurement.clone(), // TODO: use parameter to define it
+        };
+
+        Ok(
+            InitializedOperatorImpl::new(
+                self.params,
+                result_descriptor,
+                raster_sources,
+                vec![],
+                (),
+            )
+            .boxed(),
         )
-        .map(InitializedOperatorImpl::boxed)
     }
 }
 
@@ -249,7 +279,9 @@ mod tests {
     use super::*;
     use crate::engine::{MockExecutionContext, MockQueryContext};
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
-    use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution, TimeInterval};
+    use geoengine_datatypes::primitives::{
+        BoundingBox2D, Measurement, SpatialResolution, TimeInterval,
+    };
     use geoengine_datatypes::raster::TileInformation;
     use geoengine_datatypes::spatial_reference::SpatialReference;
 
@@ -312,6 +344,7 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::I8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
+                    measurement: Measurement::Unitless,
                 },
             },
         }

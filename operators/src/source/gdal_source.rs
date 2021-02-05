@@ -21,6 +21,7 @@ use serde::{Deserialize, Serialize};
 
 use futures::stream::{self, BoxStream, StreamExt};
 
+use geoengine_datatypes::primitives::Measurement;
 use geoengine_datatypes::raster::{
     GeoTransform, Grid2D, Pixel, RasterDataType, RasterTile2D, TileInformation, TilingStrategy,
 };
@@ -101,6 +102,7 @@ pub struct JsonDatasetInformation {
     pub geo_transform: GeoTransform,
     pub grid_shape: GridShape2D,
     pub spatial_ref: SpatialReferenceOption,
+    pub measurement: Measurement,
 }
 
 impl JsonDatasetInformationProvider {
@@ -285,7 +287,7 @@ where
             .time_step
             .snap_relative(time_information.start_time, time_interval.start())
             .expect("is a valid time");
-        eprintln!("snapped start {:?}", snapped_start);
+
         let snapped_interval = TimeInterval::new_unchecked(snapped_start, time_interval.end());
 
         let time_iterator = TimeStepIter::new_with_interval_incl_start(
@@ -539,16 +541,19 @@ impl RasterOperator for GdalSource {
 
         let data_type = provider.data_type();
 
-        let init = InitializedGdalSourceOperator {
+        let result_descriptor = RasterResultDescriptor {
+            data_type,
+            spatial_reference: spatial_ref,
+            measurement: provider.dataset_information.measurement.clone(),
+        };
+
+        Ok(InitializedGdalSourceOperator {
             provider,
-            result_descriptor: RasterResultDescriptor {
-                data_type,
-                spatial_reference: spatial_ref,
-            },
+            result_descriptor,
             tiling_specification: context.tiling_specification(),
             params: self.params,
-        };
-        Ok(Box::from(init))
+        }
+        .boxed())
     }
 }
 
@@ -876,6 +881,7 @@ mod tests {
             geo_transform: dataset_geo_transform,
             grid_shape: global_size_in_pixels.into(),
             spatial_ref: SpatialReference::epsg_4326().into(),
+            measurement: Measurement::Unitless,
         };
 
         let dataset_information_provider = JsonDatasetInformationProvider {
@@ -988,6 +994,7 @@ mod tests {
             geo_transform: dataset_geo_transform,
             grid_shape: global_size_in_pixels.into(),
             spatial_ref: SpatialReference::epsg_4326().into(),
+            measurement: Measurement::Unitless,
         };
 
         let dataset_information_provider = JsonDatasetInformationProvider {
@@ -1056,6 +1063,7 @@ mod tests {
             geo_transform: dataset_geo_transform,
             grid_shape: global_size_in_pixels.into(),
             spatial_ref: SpatialReference::epsg_4326().into(),
+            measurement: Measurement::Unitless,
         };
 
         let dataset_information_provider = JsonDatasetInformationProvider {
@@ -1140,6 +1148,7 @@ mod tests {
             geo_transform: dataset_geo_transform,
             grid_shape: global_size_in_pixels.into(),
             spatial_ref: SpatialReference::epsg_4326().into(),
+            measurement: Measurement::Unitless,
         };
 
         let dataset_information_provider = JsonDatasetInformationProvider {
@@ -1238,6 +1247,7 @@ mod tests {
             geo_transform: dataset_geo_transform,
             grid_shape: global_size_in_pixels.into(),
             spatial_ref: SpatialReference::epsg_4326().into(),
+            measurement: Measurement::Unitless,
         };
 
         let dataset_information_provider = JsonDatasetInformationProvider {
@@ -1324,6 +1334,7 @@ mod tests {
             geo_transform: dataset_geo_transform,
             grid_shape: global_size_in_pixels.into(),
             spatial_ref: SpatialReference::epsg_4326().into(),
+            measurement: Measurement::Unitless,
         };
 
         let dataset_information_provider = JsonDatasetInformationProvider {
@@ -1417,6 +1428,7 @@ mod tests {
             geo_transform: dataset_geo_transform,
             grid_shape: global_size_in_pixels.into(),
             spatial_ref: SpatialReference::epsg_4326().into(),
+            measurement: Measurement::Unitless,
         };
 
         let dataset_information_provider = JsonDatasetInformationProvider {
@@ -1506,6 +1518,7 @@ mod tests {
             geo_transform: dataset_geo_transform,
             grid_shape: global_size_in_pixels.into(),
             spatial_ref: SpatialReference::epsg_4326().into(),
+            measurement: Measurement::Unitless,
         };
         let dataset_information_provider = JsonDatasetInformationProvider {
             dataset_information,

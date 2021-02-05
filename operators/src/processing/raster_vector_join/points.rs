@@ -157,7 +157,7 @@ mod tests {
     use crate::engine::{MockQueryContext, RasterOperator};
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, FeatureDataRef, MultiPoint, SpatialResolution, TimeInterval,
+        BoundingBox2D, FeatureDataRef, Measurement, MultiPoint, SpatialResolution, TimeInterval,
     };
     use geoengine_datatypes::raster::{Grid2D, RasterTile2D, TileInformation};
     use geoengine_datatypes::spatial_reference::SpatialReference;
@@ -180,6 +180,7 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
+                    measurement: Measurement::Unitless,
                 },
             },
         }
@@ -254,6 +255,7 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
+                    measurement: Measurement::Unitless,
                 },
             },
         }

@@ -195,3 +195,13 @@ impl From<Box<InitializedRasterOperator>> for TypedInitializedOperator {
         TypedInitializedOperator::Raster(operator)
     }
 }
+
+#[macro_export]
+macro_rules! call_on_typed_operator {
+    ($typed_operator:expr, $operator_var:ident => $function_call:expr) => {
+        match $typed_operator {
+            $crate::engine::TypedOperator::Vector($operator_var) => $function_call,
+            $crate::engine::TypedOperator::Raster($operator_var) => $function_call,
+        }
+    };
+}
