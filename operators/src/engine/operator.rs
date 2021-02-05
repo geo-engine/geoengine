@@ -49,7 +49,7 @@ pub trait InitializedOperatorBase {
     type Descriptor: ResultDescriptor + Clone;
 
     /// Get the result descriptor of the `Operator`
-    fn result_descriptor(&self) -> Self::Descriptor;
+    fn result_descriptor(&self) -> &Self::Descriptor;
 
     /// Get the sources of the `Operator`
     fn raster_sources(&self) -> &[Box<InitializedRasterOperator>];
@@ -92,7 +92,7 @@ where
 {
     type Descriptor = R;
 
-    fn result_descriptor(&self) -> Self::Descriptor {
+    fn result_descriptor(&self) -> &Self::Descriptor {
         self.as_ref().result_descriptor()
     }
     fn raster_sources(&self) -> &[Box<InitializedRasterOperator>] {
@@ -115,7 +115,7 @@ where
     Q: QueryProcessor,
 {
     type Descriptor = R;
-    fn result_descriptor(&self) -> Self::Descriptor {
+    fn result_descriptor(&self) -> &Self::Descriptor {
         self.as_ref().result_descriptor()
     }
     fn raster_sources(&self) -> &[Box<InitializedRasterOperator>] {

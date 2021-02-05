@@ -61,6 +61,7 @@ impl VectorOperator for MockPointSource {
                 Ok(VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: Default::default(),
                 })
             },
             vec![],
