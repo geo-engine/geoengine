@@ -146,7 +146,7 @@ where
                     .await
                     .data_set_provider(self.user, external.provider)
                     .await
-                    .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
+                    .map_err(|e| geoengine_operators::error::Error::DataSetMetaData {
                         source: Box::new(e),
                     })?
                     .meta_data(data_set),
@@ -178,7 +178,7 @@ where
                     .await
                     .data_set_provider(self.user, external.provider)
                     .await
-                    .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
+                    .map_err(|e| geoengine_operators::error::Error::DataSetMetaData {
                         source: Box::new(e),
                     })?
                     .meta_data(data_set),

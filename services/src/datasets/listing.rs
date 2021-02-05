@@ -18,7 +18,7 @@ pub struct DataSetListing {
     pub name: String,
     pub description: String,
     pub tags: Vec<String>,
-    pub source_operator: String, // TODO: enum?
+    pub source_operator: String,
     pub spatial_reference: SpatialReferenceOption,
     // TODO: meta data like bounds, resolution
 }
