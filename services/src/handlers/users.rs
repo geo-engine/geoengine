@@ -2,6 +2,7 @@ use crate::error;
 use crate::error::Result;
 use crate::handlers::{authenticate, Context};
 use crate::projects::project::{ProjectId, STRectangle};
+use crate::users::session::Session;
 use crate::users::user::{UserCredentials, UserRegistration};
 use crate::users::userdb::UserDB;
 use crate::util::user_input::UserInput;
@@ -76,16 +77,14 @@ pub(crate) fn logout_handler<C: Context>(
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::post()
         .and(warp::path("logout"))
-        .and(authenticate(ctx))
+        .and(authenticate(ctx.clone()))
+        .and(warp::any().map(move || ctx.clone()))
         .and_then(logout)
 }
 
 // TODO: move into handler once async closures are available?
-async fn logout<C: Context>(ctx: C) -> Result<impl warp::Reply, warp::Rejection> {
-    ctx.user_db_ref_mut()
-        .await
-        .logout(ctx.session()?.id)
-        .await?;
+async fn logout<C: Context>(session: Session, ctx: C) -> Result<impl warp::Reply, warp::Rejection> {
+    ctx.user_db_ref_mut().await.logout(session.id).await?;
     Ok(warp::reply().into_response())
 }
 
@@ -99,10 +98,8 @@ pub(crate) fn session_handler<C: Context>(
 }
 
 // TODO: move into handler once async closures are available?
-async fn session<C: Context>(ctx: C) -> Result<impl warp::Reply, warp::Rejection> {
-    Ok(warp::reply::json(
-        ctx.session().expect("authentication was successful"),
-    ))
+async fn session(session: Session) -> Result<impl warp::Reply, warp::Rejection> {
+    Ok(warp::reply::json(&session))
 }
 
 pub(crate) fn session_project_handler<C: Context>(
@@ -110,18 +107,20 @@ pub(crate) fn session_project_handler<C: Context>(
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::post()
         .and(warp::path!("session" / "project" / Uuid).map(ProjectId))
-        .and(authenticate(ctx))
+        .and(authenticate(ctx.clone()))
+        .and(warp::any().map(move || ctx.clone()))
         .and_then(session_project)
 }
 
 // TODO: move into handler once async closures are available?
 async fn session_project<C: Context>(
     project: ProjectId,
+    session: Session,
     ctx: C,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     ctx.user_db_ref_mut()
         .await
-        .set_session_project(ctx.session()?, project)
+        .set_session_project(&session, project)
         .await?;
 
     Ok(warp::reply())
@@ -132,19 +131,21 @@ pub(crate) fn session_view_handler<C: Context>(
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::post()
         .and(warp::path!("session" / "view"))
-        .and(authenticate(ctx))
+        .and(authenticate(ctx.clone()))
+        .and(warp::any().map(move || ctx.clone()))
         .and(warp::body::json())
         .and_then(session_view)
 }
 
 // TODO: move into handler once async closures are available?
 async fn session_view<C: Context>(
+    session: Session,
     ctx: C,
     view: STRectangle,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     ctx.user_db_ref_mut()
         .await
-        .set_session_view(ctx.session()?, view)
+        .set_session_view(&session, view)
         .await?;
 
     Ok(warp::reply())

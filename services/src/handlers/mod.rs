@@ -1,6 +1,6 @@
 use crate::error;
 use crate::error::Result;
-use crate::users::session::SessionId;
+use crate::users::session::{Session, SessionId};
 use crate::users::userdb::UserDB;
 use crate::{contexts::Context, error::Error};
 use serde_json::json;
@@ -66,11 +66,11 @@ pub async fn handle_rejection(err: Rejection) -> Result<impl Reply, Rejection> {
 
 fn authenticate<C: Context>(
     ctx: C,
-) -> impl warp::Filter<Extract = (C,), Error = warp::Rejection> + Clone {
+) -> impl warp::Filter<Extract = (Session,), Error = warp::Rejection> + Clone {
     async fn do_authenticate<C: Context>(
-        mut ctx: C,
+        ctx: C,
         token: Option<String>,
-    ) -> Result<C, warp::Rejection> {
+    ) -> Result<Session, warp::Rejection> {
         if let Some(token) = token {
             if !token.starts_with("Bearer ") {
                 return Err(Error::Authorization {
@@ -89,8 +89,8 @@ fn authenticate<C: Context>(
                 .await
                 .map_err(Box::new)
                 .context(error::Authorization)?;
-            ctx.set_session(session);
-            Ok(ctx)
+
+            Ok(session)
         } else {
             Err(Error::Authorization {
                 source: Box::new(Error::MissingAuthorizationHeader),

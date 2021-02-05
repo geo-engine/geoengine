@@ -1,4 +1,3 @@
-use crate::error;
 use crate::error::Result;
 use crate::{
     projects::hashmap_projectdb::HashMapProjectDB, users::hashmap_userdb::HashMapUserDB,
@@ -10,9 +9,7 @@ use tokio::sync::{RwLockReadGuard, RwLockWriteGuard};
 use super::{Context, DB};
 use crate::contexts::{ExecutionContextImpl, QueryContextImpl};
 use crate::datasets::in_memory::HashMapDataSetDB;
-use crate::users::user::UserId;
 use crate::util::config;
-use geoengine_datatypes::util::Identifier;
 use geoengine_operators::concurrency::ThreadPool;
 use std::sync::Arc;
 
@@ -76,16 +73,6 @@ impl Context for InMemoryContext {
         self.data_set_db.write().await
     }
 
-    fn session(&self) -> Result<&Session> {
-        self.session
-            .as_ref()
-            .ok_or(error::Error::SessionNotInitialized)
-    }
-
-    fn set_session(&mut self, session: Session) {
-        self.session = Some(session)
-    }
-
     fn query_context(&self) -> Result<Self::QueryContext> {
         Ok(QueryContextImpl {
             // TODO: load config only once
@@ -93,12 +80,11 @@ impl Context for InMemoryContext {
         })
     }
 
-    fn execution_context(&self) -> Result<Self::ExecutionContext> {
+    fn execution_context(&self, session: &Session) -> Result<Self::ExecutionContext> {
         Ok(ExecutionContextImpl::<HashMapDataSetDB> {
             data_set_db: self.data_set_db.clone(),
             thread_pool: self.thread_pool.clone(),
-            // user: self.session()?.user.id,
-            user: self.session().map_or_else(|_| UserId::new(), |s| s.user.id), // TODO: return Error once WMS/WFS handle authentication
+            user: session.user.id,
         })
     }
 }

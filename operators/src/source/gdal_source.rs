@@ -285,7 +285,7 @@ where
             .time_step
             .snap_relative(time_information.start_time, time_interval.start())
             .expect("is a valid time");
-        eprintln!("snapped start {:?}", snapped_start);
+
         let snapped_interval = TimeInterval::new_unchecked(snapped_start, time_interval.end());
 
         let time_iterator = TimeStepIter::new_with_interval_incl_start(
