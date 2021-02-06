@@ -54,7 +54,7 @@ impl VectorOperator for ColumnRangeFilter {
             self.params,
             context,
             |_, _, _, _| Ok(()),
-            |_, _, _, _, vector_sources| Ok(vector_sources[0].result_descriptor()),
+            |_, _, _, _, vector_sources| Ok(vector_sources[0].result_descriptor().clone()),
             self.raster_sources,
             self.vector_sources,
         )

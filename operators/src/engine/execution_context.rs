@@ -135,7 +135,7 @@ where
     }
 
     fn result_descriptor(&self) -> Result<R> {
-        Ok(self.result_descriptor)
+        Ok(self.result_descriptor.clone())
     }
 
     fn box_clone(&self) -> Box<dyn MetaData<L, R>> {
@@ -156,6 +156,7 @@ mod tests {
             result_descriptor: VectorResultDescriptor {
                 data_type: VectorDataType::Data,
                 spatial_reference: SpatialReferenceOption::Unreferenced,
+                columns: Default::default(),
             },
         };
 
@@ -172,6 +173,7 @@ mod tests {
             VectorResultDescriptor {
                 data_type: VectorDataType::Data,
                 spatial_reference: SpatialReferenceOption::Unreferenced,
+                columns: Default::default(),
             }
         );
     }

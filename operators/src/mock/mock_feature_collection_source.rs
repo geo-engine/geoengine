@@ -6,7 +6,7 @@ use crate::engine::{
 use crate::engine::{QueryContext, QueryProcessor, QueryRectangle};
 use crate::util::Result;
 use futures::stream::{self, BoxStream, StreamExt};
-use geoengine_datatypes::collections::FeatureCollection;
+use geoengine_datatypes::collections::{FeatureCollection, FeatureCollectionInfos};
 use geoengine_datatypes::primitives::{
     Geometry, MultiLineString, MultiPoint, MultiPolygon, NoGeometry,
 };
@@ -87,22 +87,24 @@ macro_rules! impl_mock_feature_collection_source {
         impl VectorOperator for $newtype {
             fn initialize(
                 self: Box<Self>,
-                context: &dyn ExecutionContext,
+                _context: &dyn ExecutionContext,
             ) -> Result<Box<InitializedVectorOperator>> {
-                InitializedOperatorImpl::create(
-                    self.params,
-                    context,
-                    |_, _, _, _| Ok(()),
-                    |_, _, _, _, _| {
-                        Ok(VectorResultDescriptor {
-                            data_type: <$geometry>::DATA_TYPE,
-                            spatial_reference: SpatialReference::epsg_4326().into(), // TODO: get from `FeatureCollection`
-                        })
-                    },
-                    vec![],
-                    vec![],
+                let result_descriptor = VectorResultDescriptor {
+                    data_type: <$geometry>::DATA_TYPE,
+                    spatial_reference: SpatialReference::epsg_4326().into(), // TODO: get from `FeatureCollection`
+                    columns: self.params.collections[0].column_types(),
+                };
+
+                Ok(
+                    InitializedOperatorImpl::new(
+                        self.params,
+                        result_descriptor,
+                        vec![],
+                        vec![],
+                        (),
+                    )
+                    .boxed(),
                 )
-                .map(InitializedOperatorImpl::boxed)
             }
         }
 

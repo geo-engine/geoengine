@@ -192,6 +192,7 @@ mod tests {
             result_descriptor: VectorResultDescriptor {
                 data_type: VectorDataType::Data,
                 spatial_reference: SpatialReferenceOption::Unreferenced,
+                columns: Default::default(),
             },
         };
 
@@ -211,6 +212,7 @@ mod tests {
             VectorResultDescriptor {
                 data_type: VectorDataType::Data,
                 spatial_reference: SpatialReferenceOption::Unreferenced,
+                columns: Default::default()
             }
         );
 
