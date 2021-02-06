@@ -119,20 +119,36 @@ pub async fn register_workflow_helper<C: Context>(ctx: &C) -> (Workflow, Workflo
     (workflow, id)
 }
 
-pub const HTTP_METHODS: [&str; 9] = [
-    "GET", "HEAD", "POST", "PUT", "DELETE", "CONNECT", "OPTIONS", "TRACE", "PATCH",
-];
-
-pub async fn check_allowed_http_methods<'a, T, TRes>(test_helper: T, allowed_methods: &'a [&str])
-where
+pub async fn check_allowed_http_methods2<'a, T, TRes, P, PParam>(
+    test_helper: T,
+    allowed_methods: &'a [&str],
+    projector: P,
+) where
     T: Fn(&'a str) -> TRes,
-    TRes: futures::Future<Output = Response<Bytes>>,
+    TRes: futures::Future<Output = PParam>,
+    P: Fn(PParam) -> Response<Bytes>,
 {
+    const HTTP_METHODS: [&str; 9] = [
+        "GET", "HEAD", "POST", "PUT", "DELETE", "CONNECT", "OPTIONS", "TRACE", "PATCH",
+    ];
+
     for method in &HTTP_METHODS {
         if !allowed_methods.contains(method) {
             let res = test_helper(method).await;
+            let res = projector(res);
 
             ErrorResponse::assert(&res, 405, "MethodNotAllowed", "HTTP method not allowed.");
         }
     }
+}
+
+pub fn check_allowed_http_methods<'a, T, TRes>(
+    test_helper: T,
+    allowed_methods: &'a [&str],
+) -> impl futures::Future + 'a
+where
+    T: Fn(&'a str) -> TRes + 'a,
+    TRes: futures::Future<Output = Response<Bytes>> + 'a,
+{
+    check_allowed_http_methods2(test_helper, allowed_methods, |res| res)
 }

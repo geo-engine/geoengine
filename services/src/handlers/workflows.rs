@@ -88,7 +88,10 @@ mod tests {
     use super::*;
     use crate::contexts::InMemoryContext;
     use crate::handlers::{handle_rejection, ErrorResponse};
-    use crate::util::tests::{create_session_helper, register_workflow_helper};
+    use crate::util::tests::{
+        check_allowed_http_methods, check_allowed_http_methods2, create_session_helper,
+        register_workflow_helper,
+    };
     use crate::util::IdResponse;
     use crate::workflows::registry::WorkflowRegistry;
     use geoengine_datatypes::collections::MultiPointCollection;
@@ -142,16 +145,12 @@ mod tests {
 
     #[tokio::test]
     async fn register_invalid_method() {
-        let res = register_test_helper("GET").await;
-
-        ErrorResponse::assert(&res, 405, "MethodNotAllowed", "HTTP method not allowed.");
+        check_allowed_http_methods(register_test_helper, &["POST"]).await;
     }
 
     #[tokio::test]
     async fn register_missing_header() {
         let ctx = InMemoryContext::default();
-
-        create_session_helper(&ctx).await;
 
         let workflow = Workflow {
             operator: MockPointSource {
@@ -236,8 +235,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn load() {
+    async fn load_test_helper(method: &str) -> (Workflow, Response<Bytes>) {
         let ctx = InMemoryContext::default();
 
         let session = create_session_helper(&ctx).await;
@@ -245,17 +243,29 @@ mod tests {
         let (workflow, id) = register_workflow_helper(&ctx).await;
 
         let res = warp::test::request()
-            .method("GET")
+            .method(method)
             .path(&format!("/workflow/{}", id.to_string()))
             .header(
                 "Authorization",
                 format!("Bearer {}", session.id.to_string()),
             )
-            .reply(&load_workflow_handler(ctx))
+            .reply(&load_workflow_handler(ctx).recover(handle_rejection))
             .await;
+
+        (workflow, res)
+    }
+
+    #[tokio::test]
+    async fn load() {
+        let (workflow, res) = load_test_helper("GET").await;
 
         assert_eq!(res.status(), 200);
         assert_eq!(res.body(), &serde_json::to_string(&workflow).unwrap());
+    }
+
+    #[tokio::test]
+    async fn load_invalid_method() {
+        check_allowed_http_methods2(load_test_helper, &["GET"], |(_, res)| res).await;
     }
 
     #[tokio::test]
@@ -291,8 +301,7 @@ mod tests {
         ErrorResponse::assert(&res, 404, "NotFound", "Not Found");
     }
 
-    #[tokio::test]
-    async fn metadata() {
+    async fn metadata_test_helper(method: &str) -> Response<Bytes> {
         let ctx = InMemoryContext::default();
 
         let session = create_session_helper(&ctx).await;
@@ -324,21 +333,26 @@ mod tests {
             .await
             .unwrap();
 
-        let res = warp::test::request()
-            .method("GET")
+        warp::test::request()
+            .method(method)
             .path(&format!("/workflow/{}/metadata", id.to_string()))
             .header(
                 "Authorization",
                 format!("Bearer {}", session.id.to_string()),
             )
-            .reply(&get_workflow_metadata_handler(ctx))
-            .await;
+            .reply(&get_workflow_metadata_handler(ctx).recover(handle_rejection))
+            .await
+    }
+
+    #[tokio::test]
+    async fn metadata() {
+        let res = metadata_test_helper("GET").await;
 
         assert_eq!(res.status(), 200);
 
         assert_eq!(
             serde_json::from_slice::<serde_json::Value>(res.body()).unwrap(),
-            serde_json::json!({
+            json!({
                 "data_type": "MultiPoint",
                 "spatial_reference": "EPSG:4326",
                 "columns": {
@@ -346,6 +360,56 @@ mod tests {
                     "foo": "Number"
                 }
             })
+        );
+    }
+
+    #[tokio::test]
+    async fn metadata_invalid_method() {
+        check_allowed_http_methods(metadata_test_helper, &["GET"]).await;
+    }
+
+    #[tokio::test]
+    async fn metadata_missing_header() {
+        let ctx = InMemoryContext::default();
+
+        let workflow = Workflow {
+            operator: MockFeatureCollectionSource::single(
+                MultiPointCollection::from_data(
+                    MultiPoint::many(vec![(0.0, 0.1)]).unwrap(),
+                    vec![TimeInterval::default()],
+                    [
+                        ("foo".to_string(), FeatureData::Number(vec![42.0])),
+                        ("bar".to_string(), FeatureData::Decimal(vec![23])),
+                    ]
+                    .iter()
+                    .cloned()
+                    .collect(),
+                )
+                .unwrap(),
+            )
+            .boxed()
+            .into(),
+        };
+
+        let id = ctx
+            .workflow_registry()
+            .write()
+            .await
+            .register(workflow.clone())
+            .await
+            .unwrap();
+
+        let res = warp::test::request()
+            .method("GET")
+            .path(&format!("/workflow/{}/metadata", id.to_string()))
+            .reply(&get_workflow_metadata_handler(ctx).recover(handle_rejection))
+            .await;
+
+        ErrorResponse::assert(
+            &res,
+            401,
+            "MissingAuthorizationHeader",
+            "Header with authorization token not provided.",
         );
     }
 }

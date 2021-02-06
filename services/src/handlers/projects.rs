@@ -230,8 +230,8 @@ mod tests {
     use crate::users::user::UserRegistration;
     use crate::users::userdb::UserDB;
     use crate::util::tests::{
-        check_allowed_http_methods, create_project_helper, create_session_helper,
-        update_project_helper, HTTP_METHODS,
+        check_allowed_http_methods, check_allowed_http_methods2, create_project_helper,
+        create_session_helper, update_project_helper,
     };
     use crate::util::Identifier;
     use crate::workflows::workflow::WorkflowId;
@@ -625,11 +625,12 @@ mod tests {
         );
     }
 
-    async fn update_test_helper<C: Context>(
-        ctx: &C,
+    async fn update_test_helper(
         method: &str,
-    ) -> (Session, ProjectId, Response<Bytes>) {
-        let (session, project) = create_project_helper(ctx).await;
+    ) -> (InMemoryContext, Session, ProjectId, Response<Bytes>) {
+        let ctx = InMemoryContext::default();
+
+        let (session, project) = create_project_helper(&ctx).await;
 
         let update = update_project_helper(project);
 
@@ -645,14 +646,12 @@ mod tests {
             .reply(&update_project_handler(ctx.clone()).recover(handle_rejection))
             .await;
 
-        (session, project, res)
+        (ctx, session, project, res)
     }
 
     #[tokio::test]
     async fn update() {
-        let ctx = InMemoryContext::default();
-
-        let (session, project, res) = update_test_helper(&ctx, "PATCH").await;
+        let (ctx, session, project, res) = update_test_helper("PATCH").await;
 
         assert_eq!(res.status(), 200);
 
@@ -669,14 +668,7 @@ mod tests {
 
     #[tokio::test]
     async fn update_invalid_method() {
-        for method in &HTTP_METHODS {
-            if method != &"PATCH" {
-                let ctx = InMemoryContext::default();
-                let (_, _, res) = update_test_helper(&ctx, method).await;
-
-                ErrorResponse::assert(&res, 405, "MethodNotAllowed", "HTTP method not allowed.");
-            }
-        }
+        check_allowed_http_methods2(update_test_helper, &["PATCH"], |(_, _, _, res)| res).await;
     }
 
     #[tokio::test]
