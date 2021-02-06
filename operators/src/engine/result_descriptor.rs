@@ -1,11 +1,13 @@
+use geoengine_datatypes::primitives::FeatureDataType;
 use geoengine_datatypes::{
     collections::VectorDataType, raster::RasterDataType, spatial_reference::SpatialReferenceOption,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// A descriptor that contains information about the query result, for instance, the data type
 /// and spatial reference.
-pub trait ResultDescriptor: Copy {
+pub trait ResultDescriptor: Clone {
     type DataType;
 
     /// Return the type-specific result data type
@@ -23,12 +25,12 @@ pub trait ResultDescriptor: Copy {
     }
 
     /// Map one descriptor to another one by modifying only the spatial reference
-    fn map_spatial_reference<F>(self, f: F) -> Self
+    fn map_data_type<F>(self, f: F) -> Self
     where
         F: Fn(Self::DataType) -> Self::DataType;
 
     /// Map one descriptor to another one by modifying only the data type
-    fn map_data_type<F>(self, f: F) -> Self
+    fn map_spatial_reference<F>(self, f: F) -> Self
     where
         F: Fn(SpatialReferenceOption) -> SpatialReferenceOption;
 }
@@ -51,7 +53,7 @@ impl ResultDescriptor for RasterResultDescriptor {
         self.spatial_reference
     }
 
-    fn map_spatial_reference<F>(mut self, f: F) -> Self
+    fn map_data_type<F>(mut self, f: F) -> Self
     where
         F: Fn(Self::DataType) -> Self::DataType,
     {
@@ -59,7 +61,7 @@ impl ResultDescriptor for RasterResultDescriptor {
         self
     }
 
-    fn map_data_type<F>(mut self, f: F) -> Self
+    fn map_spatial_reference<F>(mut self, f: F) -> Self
     where
         F: Fn(SpatialReferenceOption) -> SpatialReferenceOption,
     {
@@ -69,10 +71,25 @@ impl ResultDescriptor for RasterResultDescriptor {
 }
 
 /// A `ResultDescriptor` for vector queries
-#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct VectorResultDescriptor {
     pub data_type: VectorDataType,
     pub spatial_reference: SpatialReferenceOption,
+    pub columns: HashMap<String, FeatureDataType>,
+}
+
+impl VectorResultDescriptor {
+    /// Create a new `VectorResultDescriptor` by only modifying the columns
+    pub fn map_columns<F>(&self, f: F) -> Self
+    where
+        F: Fn(&HashMap<String, FeatureDataType>) -> HashMap<String, FeatureDataType>,
+    {
+        Self {
+            data_type: self.data_type,
+            spatial_reference: self.spatial_reference,
+            columns: f(&self.columns),
+        }
+    }
 }
 
 impl ResultDescriptor for VectorResultDescriptor {
@@ -86,7 +103,7 @@ impl ResultDescriptor for VectorResultDescriptor {
         self.spatial_reference
     }
 
-    fn map_spatial_reference<F>(mut self, f: F) -> Self
+    fn map_data_type<F>(mut self, f: F) -> Self
     where
         F: Fn(Self::DataType) -> Self::DataType,
     {
@@ -94,11 +111,46 @@ impl ResultDescriptor for VectorResultDescriptor {
         self
     }
 
-    fn map_data_type<F>(mut self, f: F) -> Self
+    fn map_spatial_reference<F>(mut self, f: F) -> Self
     where
         F: Fn(SpatialReferenceOption) -> SpatialReferenceOption,
     {
         self.spatial_reference = f(self.spatial_reference);
         self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use geoengine_datatypes::spatial_reference::SpatialReference;
+
+    #[test]
+    fn map_vector_descriptor() {
+        let descriptor = VectorResultDescriptor {
+            data_type: VectorDataType::Data,
+            spatial_reference: SpatialReferenceOption::Unreferenced,
+            columns: Default::default(),
+        };
+
+        let columns = {
+            let mut columns = HashMap::with_capacity(1);
+            columns.insert("foo".to_string(), FeatureDataType::Number);
+            columns
+        };
+
+        let descriptor = descriptor
+            .map_data_type(|_d| VectorDataType::MultiPoint)
+            .map_spatial_reference(|_sref| SpatialReference::epsg_4326().into())
+            .map_columns(|_cols| columns.clone());
+
+        assert_eq!(
+            descriptor,
+            VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReference::epsg_4326().into(),
+                columns,
+            }
+        );
     }
 }
