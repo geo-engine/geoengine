@@ -366,6 +366,18 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn test_invalid_fields() {
+        let res = test_test_helper("GET", Some("/wms?request=GetMap&service=WMS&version=1.3.0&layers=mock_raster&bbox=1,2,3,4&width=XYZ&height=100&crs=EPSG:4326&styles=ssss&format=image/png")).await;
+
+        ErrorResponse::assert(
+            &res,
+            400,
+            "UnableToParseQueryString",
+            "Unable to parse query string: could not parse string",
+        );
+    }
+
     async fn get_capabilities_test_helper(method: &str) -> Response<Bytes> {
         let ctx = InMemoryContext::default();
 
