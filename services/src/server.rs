@@ -110,6 +110,7 @@ where
     let handler = combine!(
         handlers::workflows::register_workflow_handler(ctx.clone()),
         handlers::workflows::load_workflow_handler(ctx.clone()),
+        handlers::workflows::get_workflow_metadata_handler(ctx.clone()),
         handlers::users::register_user_handler(ctx.clone()),
         handlers::users::anonymous_handler(ctx.clone()),
         handlers::users::login_handler(ctx.clone()),

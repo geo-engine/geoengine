@@ -154,6 +154,7 @@ impl VectorOperator for CsvSource {
                 Ok(VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint, // TODO: get as user input
                     spatial_reference: SpatialReference::epsg_4326().into(), // TODO: get as user input
+                    columns: Default::default(), // TODO: get when source allows loading other columns
                 })
             },
             vec![],

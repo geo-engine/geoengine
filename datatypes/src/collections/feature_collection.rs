@@ -1029,6 +1029,27 @@ where
         ))
     }
 
+    /// A convenient method for creating feature collections in tests
+    pub fn from_slices<F, T, DK, DV>(
+        features: &[F],
+        time_intervals: &[T],
+        data: &[(DK, DV)],
+    ) -> Result<Self>
+    where
+        F: Into<CollectionType> + Clone,
+        T: Into<TimeInterval> + Clone,
+        DK: Into<String> + Clone,
+        DV: Into<FeatureData> + Clone,
+    {
+        Self::from_data(
+            features.iter().cloned().map(Into::into).collect(),
+            time_intervals.iter().cloned().map(Into::into).collect(),
+            data.iter()
+                .map(|(k, v)| (k.clone().into(), v.clone().into()))
+                .collect(),
+        )
+    }
+
     /// Checks for name conflicts with reserved names
     pub(super) fn is_reserved_name(name: &str) -> bool {
         name == Self::GEOMETRY_COLUMN_NAME || name == Self::TIME_COLUMN_NAME

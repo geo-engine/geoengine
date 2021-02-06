@@ -1038,6 +1038,7 @@ mod tests {
             result_descriptor: VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint,
                 spatial_reference: SpatialReferenceOption::Unreferenced,
+                columns: Default::default(),
             },
         };
 
@@ -1080,6 +1081,7 @@ mod tests {
             result_descriptor: VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint,
                 spatial_reference: SpatialReferenceOption::Unreferenced,
+                columns: Default::default(),
             },
         };
 
@@ -1121,6 +1123,7 @@ mod tests {
             result_descriptor: VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint,
                 spatial_reference: SpatialReferenceOption::Unreferenced,
+                columns: Default::default(),
             },
         };
 
@@ -1172,6 +1175,7 @@ mod tests {
             result_descriptor: VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint,
                 spatial_reference: SpatialReferenceOption::Unreferenced,
+                columns: Default::default(),
             },
         };
 
@@ -1228,6 +1232,7 @@ mod tests {
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: Default::default(),
                 },
             }),
         );
@@ -1323,6 +1328,16 @@ mod tests {
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: [
+                        ("natlscale".to_string(), FeatureDataType::Number),
+                        ("scalerank".to_string(), FeatureDataType::Decimal),
+                        ("featurecla".to_string(), FeatureDataType::Decimal),
+                        ("name".to_string(), FeatureDataType::Text),
+                        ("website".to_string(), FeatureDataType::Text),
+                    ]
+                    .iter()
+                    .cloned()
+                    .collect(),
                 },
             }),
         );
@@ -1476,6 +1491,7 @@ mod tests {
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: Default::default(),
                 },
             }),
         );
@@ -2636,6 +2652,14 @@ mod tests {
             result_descriptor: VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint,
                 spatial_reference: SpatialReferenceOption::Unreferenced,
+                columns: [
+                    ("a".to_string(), FeatureDataType::Decimal),
+                    ("b".to_string(), FeatureDataType::Number),
+                    ("c".to_string(), FeatureDataType::Text),
+                ]
+                .iter()
+                .cloned()
+                .collect(),
             },
         };
 
@@ -2707,6 +2731,7 @@ mod tests {
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: Default::default(),
                 },
             }),
         );
@@ -2941,6 +2966,7 @@ mod tests {
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: Default::default(),
                 },
             }),
         );

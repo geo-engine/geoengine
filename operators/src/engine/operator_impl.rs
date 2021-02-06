@@ -106,8 +106,8 @@ where
 {
     type Descriptor = R;
 
-    fn result_descriptor(&self) -> Self::Descriptor {
-        self.result_descriptor
+    fn result_descriptor(&self) -> &Self::Descriptor {
+        &self.result_descriptor
     }
     fn raster_sources(&self) -> &[Box<InitializedRasterOperator>] {
         self.raster_sources.as_slice()
