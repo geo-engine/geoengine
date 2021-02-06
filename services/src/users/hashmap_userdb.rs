@@ -26,7 +26,7 @@ impl UserDB for HashMapUserDB {
         let user_registration = user_registration.user_input;
         ensure!(
             !self.users.contains_key(&user_registration.email),
-            error::RegistrationFailed {
+            error::Duplicate {
                 reason: "E-mail already exists"
             }
         );

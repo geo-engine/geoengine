@@ -228,8 +228,8 @@ mod tests {
         ErrorResponse::assert(
             &res,
             409,
-            "RegistrationFailed",
-            "Registration failed: E-mail already exists",
+            "Duplicate",
+            "Tried to create duplicate: E-mail already exists",
         );
     }
 

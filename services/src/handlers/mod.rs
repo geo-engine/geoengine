@@ -51,7 +51,7 @@ pub async fn handle_rejection(err: Rejection) -> Result<impl Reply, Rejection> {
                 Into::<&str>::into(source.as_ref()).to_string(),
                 source.to_string(),
             ),
-            error::Error::RegistrationFailed { reason } if reason == "E-mail already exists" => (
+            error::Error::Duplicate { reason: _ } => (
                 StatusCode::CONFLICT,
                 Into::<&str>::into(e).to_string(),
                 e.to_string(),

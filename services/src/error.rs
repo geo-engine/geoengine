@@ -46,6 +46,10 @@ pub enum Error {
     RegistrationFailed {
         reason: String,
     },
+    #[snafu(display("Tried to create duplicate: {}", reason))]
+    Duplicate {
+        reason: String,
+    },
     #[snafu(display("User does not exist or password is wrong."))]
     LoginFailed,
     LogoutFailed,
