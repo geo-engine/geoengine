@@ -159,6 +159,7 @@ mod tests {
     use crate::contexts::{Context, InMemoryContext};
     use crate::datasets::listing::OrderBy;
     use crate::projects::project::{LayerInfo, VectorInfo};
+    use crate::users::session::Session;
     use crate::util::user_input::UserInput;
     use crate::util::Identifier;
     use geoengine_datatypes::collections::VectorDataType;
@@ -202,7 +203,7 @@ mod tests {
             .add_data_set(UserId::new(), ds.validated()?, Box::new(meta))
             .await?;
 
-        let exe_ctx = ctx.execution_context()?;
+        let exe_ctx = ctx.execution_context(&Session::mock())?;
 
         let meta: Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor>> =
             exe_ctx.meta_data(&id)?;
