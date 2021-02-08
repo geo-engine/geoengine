@@ -61,13 +61,9 @@ pub trait Context: 'static + Send + Sync + Clone {
     async fn data_set_db_ref(&self) -> RwLockReadGuard<Self::DataSetDB>;
     async fn data_set_db_ref_mut(&self) -> RwLockWriteGuard<Self::DataSetDB>;
 
-    fn session(&self) -> Result<&Session>;
-
-    fn set_session(&mut self, session: Session);
-
     fn query_context(&self) -> Result<Self::QueryContext>;
 
-    fn execution_context(&self) -> Result<Self::ExecutionContext>;
+    fn execution_context(&self, session: &Session) -> Result<Self::ExecutionContext>;
 }
 
 pub struct QueryContextImpl {
