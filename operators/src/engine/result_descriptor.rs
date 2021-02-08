@@ -120,6 +120,34 @@ impl ResultDescriptor for VectorResultDescriptor {
     }
 }
 
+/// A `ResultDescriptor` for plot queries
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Serialize, Deserialize)]
+pub struct PlotResultDescriptor {}
+
+impl ResultDescriptor for PlotResultDescriptor {
+    type DataType = (); // TODO: maybe distinguish between image, interactive plot, etc.
+
+    fn data_type(&self) -> Self::DataType {}
+
+    fn spatial_reference(&self) -> SpatialReferenceOption {
+        SpatialReferenceOption::Unreferenced
+    }
+
+    fn map_data_type<F>(self, _f: F) -> Self
+    where
+        F: Fn(Self::DataType) -> Self::DataType,
+    {
+        self
+    }
+
+    fn map_spatial_reference<F>(self, _f: F) -> Self
+    where
+        F: Fn(SpatialReferenceOption) -> SpatialReferenceOption,
+    {
+        self
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1,6 +1,6 @@
 use super::{
-    InitializedOperatorBase, InitializedRasterOperator, InitializedVectorOperator, RasterOperator,
-    ResultDescriptor, VectorOperator,
+    InitializedOperatorBase, InitializedPlotOperator, InitializedRasterOperator,
+    InitializedVectorOperator, PlotOperator, RasterOperator, ResultDescriptor, VectorOperator,
 };
 
 /// Helper trait for making boxed `RasterOperator`s cloneable
@@ -11,6 +11,11 @@ pub trait CloneableRasterOperator {
 /// Helper trait for making boxed `VectorOperator`s cloneable
 pub trait CloneableVectorOperator {
     fn clone_boxed_vector(&self) -> Box<dyn VectorOperator>;
+}
+
+/// Helper trait for making boxed `PlotOperator`s cloneable
+pub trait CloneablePlotOperator {
+    fn clone_boxed_plot(&self) -> Box<dyn PlotOperator>;
 }
 
 impl<T> CloneableRasterOperator for T
@@ -31,6 +36,15 @@ where
     }
 }
 
+impl<T> CloneablePlotOperator for T
+where
+    T: 'static + PlotOperator + Clone,
+{
+    fn clone_boxed_plot(&self) -> Box<dyn PlotOperator> {
+        Box::new(self.clone())
+    }
+}
+
 impl Clone for Box<dyn RasterOperator> {
     fn clone(&self) -> Box<dyn RasterOperator> {
         self.clone_boxed_raster()
@@ -40,6 +54,12 @@ impl Clone for Box<dyn RasterOperator> {
 impl Clone for Box<dyn VectorOperator> {
     fn clone(&self) -> Box<dyn VectorOperator> {
         self.clone_boxed_vector()
+    }
+}
+
+impl Clone for Box<dyn PlotOperator> {
+    fn clone(&self) -> Box<dyn PlotOperator> {
+        self.clone_boxed_plot()
     }
 }
 
@@ -57,6 +77,11 @@ pub trait CloneableInitializedRasterOperator {
 /// Helper trait for making boxed `InitializedVectorOperator`s cloneable
 pub trait CloneableInitializedVectorOperator {
     fn clone_boxed_vector(&self) -> Box<InitializedVectorOperator>;
+}
+
+/// Helper trait for making boxed `InitializedPlotOperator`s cloneable
+pub trait CloneableInitializedPlotOperator {
+    fn clone_boxed_plot(&self) -> Box<InitializedPlotOperator>;
 }
 
 impl<T, R> CloneableInitializedOperator for T

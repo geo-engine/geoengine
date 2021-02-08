@@ -1,21 +1,25 @@
 pub use clonable_operator::{
     CloneableInitializedOperator, CloneableInitializedRasterOperator,
-    CloneableInitializedVectorOperator, CloneableRasterOperator, CloneableVectorOperator,
+    CloneableInitializedVectorOperator, CloneablePlotOperator, CloneableRasterOperator,
+    CloneableVectorOperator,
 };
 pub use execution_context::{
     ExecutionContext, MetaData, MetaDataProvider, MockExecutionContext, StaticMetaData,
 };
 pub use operator::{
-    InitializedOperator, InitializedOperatorBase, InitializedRasterOperator,
-    InitializedVectorOperator, RasterOperator, TypedOperator, VectorOperator,
+    InitializedOperator, InitializedOperatorBase, InitializedPlotOperator,
+    InitializedRasterOperator, InitializedVectorOperator, PlotOperator, RasterOperator,
+    TypedOperator, VectorOperator,
 };
 pub use operator_impl::{InitializedOperatorImpl, Operator, SourceOperator};
 pub use query::{MockQueryContext, QueryContext, QueryRectangle};
 pub use query_processor::{
-    QueryProcessor, RasterQueryProcessor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
-    VectorQueryProcessor,
+    PlotQueryProcessor, QueryProcessor, RasterQueryProcessor, TypedPlotQueryProcessor,
+    TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorQueryProcessor,
 };
-pub use result_descriptor::{RasterResultDescriptor, ResultDescriptor, VectorResultDescriptor};
+pub use result_descriptor::{
+    PlotResultDescriptor, RasterResultDescriptor, ResultDescriptor, VectorResultDescriptor,
+};
 
 mod clonable_operator;
 mod execution_context;
