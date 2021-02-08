@@ -1,10 +1,11 @@
-use crate::datasets::listing::DataSetProvider;
+use crate::datasets::listing::{DataSetListing, DataSetProvider};
 use crate::error::Result;
 use crate::projects::project::LayerInfo;
 use crate::users::user::UserId;
 use crate::util::user_input::{UserInput, Validated};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DataSetId, DataSetProviderId, InternalDataSetId};
+use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::mock::MockDataSetDataSourceLoadingInfo;
 use geoengine_operators::source::OgrSourceDataset;
@@ -18,7 +19,21 @@ pub struct DataSet {
     pub name: String,
     pub description: String,
     pub data_type: LayerInfo, // TODO: custom type instead of reusing existing one?
-    pub source_operator: String, // TODO: enum?
+    pub source_operator: String,
+    pub spatial_reference: SpatialReferenceOption,
+}
+
+impl DataSet {
+    pub fn listing(&self) -> DataSetListing {
+        DataSetListing {
+            id: self.id.clone(),
+            name: self.name.clone(),
+            description: self.description.clone(),
+            tags: vec![], // TODO
+            source_operator: self.source_operator.clone(),
+            spatial_reference: self.spatial_reference,
+        }
+    }
 }
 
 impl From<AddDataSet> for DataSet {
@@ -29,6 +44,7 @@ impl From<AddDataSet> for DataSet {
             description: value.description,
             data_type: value.data_type,
             source_operator: value.source_operator,
+            spatial_reference: value.spatial_reference,
         }
     }
 }
@@ -37,8 +53,9 @@ impl From<AddDataSet> for DataSet {
 pub struct AddDataSet {
     pub name: String,
     pub description: String,
-    pub data_type: LayerInfo,    // TODO: custom type?
-    pub source_operator: String, // TODO: enum?
+    pub data_type: LayerInfo, // TODO: custom type?
+    pub source_operator: String,
+    pub spatial_reference: SpatialReferenceOption,
 }
 
 impl UserInput for AddDataSet {
@@ -54,6 +71,7 @@ pub struct ImportDataSet {
     pub description: String,
     pub data_type: LayerInfo,
     pub source_operator: String,
+    pub spatial_reference: SpatialReferenceOption,
 }
 
 impl From<ImportDataSet> for DataSet {
@@ -64,6 +82,7 @@ impl From<ImportDataSet> for DataSet {
             description: value.description,
             data_type: value.data_type,
             source_operator: value.source_operator,
+            spatial_reference: value.spatial_reference,
         }
     }
 }
@@ -133,7 +152,11 @@ pub enum VectorLoadingInfo {
 
 /// Handling of data sets provided by geo engine internally, staged and by external providers
 #[async_trait]
-pub trait DataSetDB: DataSetProvider + Send + Sync {
+pub trait DataSetDB: DataSetProvider + DataSetProviderDB + Send + Sync {}
+
+/// Storage and access of external data set providers
+#[async_trait]
+pub trait DataSetProviderDB {
     /// Add an external data set `provider` by `user`
     // TODO: require special privilege to be able to add external data set provider and to access external data in general
     async fn add_data_set_provider(
@@ -141,8 +164,6 @@ pub trait DataSetDB: DataSetProvider + Send + Sync {
         user: UserId,
         provider: Validated<AddDataSetProvider>,
     ) -> Result<DataSetProviderId>;
-
-    // TODO: share data set provider/manage permissions
 
     /// List available providers for `user` filtered by `options`
     async fn list_data_set_providers(
@@ -157,6 +178,23 @@ pub trait DataSetDB: DataSetProvider + Send + Sync {
         user: UserId,
         provider: DataSetProviderId,
     ) -> Result<&dyn DataSetProvider>;
+}
+
+/// Defines the type of meta data a `DataSetDB` is able to store
+pub trait DataSetStorer: Send + Sync {
+    type StorageType: Send + Sync;
+}
+
+/// Allow storage of meta data of a particular storage type, e.g. `HashMapStorable` meta data for
+/// `HashMapDataSetDB`
+#[async_trait]
+pub trait DataSetStore: DataSetStorer {
+    async fn add_data_set(
+        &mut self,
+        user: UserId,
+        data_set: Validated<AddDataSet>,
+        meta_data: Self::StorageType,
+    ) -> Result<DataSetId>;
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
