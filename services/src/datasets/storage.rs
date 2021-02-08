@@ -154,6 +154,7 @@ pub enum VectorLoadingInfo {
 #[async_trait]
 pub trait DataSetDB: DataSetProvider + DataSetProviderDB + Send + Sync {}
 
+/// Storage and access of external data set providers
 #[async_trait]
 pub trait DataSetProviderDB {
     /// Add an external data set `provider` by `user`
@@ -179,17 +180,20 @@ pub trait DataSetProviderDB {
     ) -> Result<&dyn DataSetProvider>;
 }
 
+/// Defines the type of meta data a `DataSetDB` is able to store
 pub trait DataSetStorer: Send + Sync {
-    type D: Send + Sync;
+    type StorageType: Send + Sync;
 }
 
+/// Allow storage of meta data of a particular storage type, e.g. `HashMapStorable` meta data for
+/// `HashMapDataSetDB`
 #[async_trait]
 pub trait DataSetStore: DataSetStorer {
     async fn add_data_set(
         &mut self,
         user: UserId,
         data_set: Validated<AddDataSet>,
-        meta_data: Self::D,
+        meta_data: Self::StorageType,
     ) -> Result<DataSetId>;
 }
 

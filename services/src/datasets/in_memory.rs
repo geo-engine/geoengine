@@ -61,7 +61,7 @@ pub trait HashMapStorable: Send + Sync {
 }
 
 impl DataSetStorer for HashMapDataSetDB {
-    type D = Box<dyn HashMapStorable>;
+    type StorageType = Box<dyn HashMapStorable>;
 }
 
 impl HashMapStorable for StaticMetaData<OgrSourceDataset, VectorResultDescriptor> {

@@ -51,6 +51,7 @@ pub enum OrderBy {
     NameDesc,
 }
 
+/// Listing of stored data sets
 #[async_trait]
 pub trait DataSetProvider:
     Send
