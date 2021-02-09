@@ -6,6 +6,7 @@ use crate::error;
 use crate::error::Result;
 use crate::handlers::Context;
 use crate::ogc::wfs::request::{GetCapabilities, GetFeature, TypeNames, WFSRequest};
+use crate::users::session::Session;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use futures::StreamExt;
@@ -181,7 +182,8 @@ async fn get_feature<C: Context>(
 
     let operator = workflow.operator.get_vector().context(error::Operator)?;
 
-    let execution_context = ctx.execution_context()?;
+    // TODO: use correct session when WFS uses authenticated access
+    let execution_context = ctx.execution_context(&Session::mock())?;
     let initialized = operator
         .initialize(&execution_context)
         .context(error::Operator)?;

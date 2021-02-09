@@ -116,6 +116,10 @@ pub enum Error {
     },
 
     MissingSettingsDirectory,
+
+    DataSetIdTypeMissMatch,
+    UnknownDataSetId,
+    UnknownProviderId,
 }
 
 impl Reject for Error {}

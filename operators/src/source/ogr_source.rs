@@ -1034,7 +1034,7 @@ mod tests {
         };
 
         let info = StaticMetaData {
-            laoding_info: dataset_information,
+            loading_info: dataset_information,
             result_descriptor: VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint,
                 spatial_reference: SpatialReferenceOption::Unreferenced,
@@ -1077,7 +1077,7 @@ mod tests {
         };
 
         let info = StaticMetaData {
-            laoding_info: dataset_information,
+            loading_info: dataset_information,
             result_descriptor: VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint,
                 spatial_reference: SpatialReferenceOption::Unreferenced,
@@ -1119,7 +1119,7 @@ mod tests {
             provenance: None,
         };
         let info = StaticMetaData {
-            laoding_info: dataset_information,
+            loading_info: dataset_information,
             result_descriptor: VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint,
                 spatial_reference: SpatialReferenceOption::Unreferenced,
@@ -1171,7 +1171,7 @@ mod tests {
             provenance: None,
         };
         let info = StaticMetaData {
-            laoding_info: dataset_information,
+            loading_info: dataset_information,
             result_descriptor: VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint,
                 spatial_reference: SpatialReferenceOption::Unreferenced,
@@ -1218,7 +1218,7 @@ mod tests {
         exe_ctx.add_meta_data(
             data_set.clone(),
             Box::new(StaticMetaData {
-                laoding_info: OgrSourceDataset {
+                loading_info: OgrSourceDataset {
                     file_name: "test-data/vector/data/ne_10m_ports/ne_10m_ports.shp".into(),
                     layer_name: "ne_10m_ports".to_string(),
                     data_type: Some(VectorDataType::MultiPoint),
@@ -1304,7 +1304,7 @@ mod tests {
         exe_ctx.add_meta_data(
             id.clone(),
             Box::new(StaticMetaData {
-                laoding_info: OgrSourceDataset {
+                loading_info: OgrSourceDataset {
                     file_name: "test-data/vector/data/ne_10m_ports/ne_10m_ports.shp".into(),
                     layer_name: "ne_10m_ports".to_string(),
                     data_type: Some(VectorDataType::MultiPoint),
@@ -1477,7 +1477,7 @@ mod tests {
         exe_ctx.add_meta_data(
             id.clone(),
             Box::new(StaticMetaData {
-                laoding_info: OgrSourceDataset {
+                loading_info: OgrSourceDataset {
                     file_name: "test-data/vector/data/ne_10m_ports/ne_10m_ports.shp".into(),
                     layer_name: "ne_10m_ports".to_string(),
                     data_type: Some(VectorDataType::MultiPoint),
@@ -2648,7 +2648,7 @@ mod tests {
         };
 
         let info = StaticMetaData {
-            laoding_info: dataset_information,
+            loading_info: dataset_information,
             result_descriptor: VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint,
                 spatial_reference: SpatialReferenceOption::Unreferenced,
@@ -2717,7 +2717,7 @@ mod tests {
         exe_ctx.add_meta_data(
             id.clone(),
             Box::new(StaticMetaData {
-                laoding_info: OgrSourceDataset {
+                loading_info: OgrSourceDataset {
                     file_name: "test-data/vector/data/ne_10m_ports/ne_10m_ports.shp".into(),
                     layer_name: "ne_10m_ports".to_string(),
                     data_type: Some(VectorDataType::MultiPoint),
@@ -2952,7 +2952,7 @@ mod tests {
         exe_ctx.add_meta_data(
             data_set.clone(),
             Box::new(StaticMetaData {
-                laoding_info: OgrSourceDataset {
+                loading_info: OgrSourceDataset {
                     file_name: "test-data/vector/data/ne_10m_ports/ne_10m_ports.shp".into(),
                     layer_name: "ne_10m_ports".to_string(),
                     data_type: Some(VectorDataType::MultiPoint),

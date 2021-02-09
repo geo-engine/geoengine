@@ -136,7 +136,7 @@ pub enum Error {
         source: chrono::format::ParseError,
     },
 
-    LoadingInfo {
+    DataSetMetaData {
         source: Box<dyn std::error::Error + Send + Sync>,
     },
 

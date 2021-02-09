@@ -1,6 +1,7 @@
 use crate::datasets::listing::{DataSetListOptions, DataSetListing, DataSetProvider};
 use crate::datasets::storage::{
-    AddDataSetProvider, DataSetDB, DataSetProviderListOptions, DataSetProviderListing,
+    AddDataSetProvider, DataSetDB, DataSetProviderDB, DataSetProviderListOptions,
+    DataSetProviderListing,
 };
 use crate::error::Result;
 use crate::users::user::UserId;
@@ -12,8 +13,10 @@ use geoengine_operators::engine::{MetaData, MetaDataProvider, ResultDescriptor};
 // TODO: implement in separate PR, need placeholder here to satisfy bounds of `Context`
 pub struct PostgresDataSetDB {}
 
+impl DataSetDB for PostgresDataSetDB {}
+
 #[async_trait]
-impl DataSetDB for PostgresDataSetDB {
+impl DataSetProviderDB for PostgresDataSetDB {
     async fn add_data_set_provider(
         &mut self,
         _user: UserId,
