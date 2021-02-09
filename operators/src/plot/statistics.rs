@@ -16,6 +16,9 @@ use crate::util::number_statistics::NumberStatistics;
 use crate::util::Result;
 
 /// A plot that outputs basic statistics about its inputs
+///
+/// Does currently not use a weighted computations, so it assumes equally weighted
+/// time steps in the sources.
 pub type Statistics = Operator<StatisticsParams>;
 
 /// The parameter spec for `Statistics`

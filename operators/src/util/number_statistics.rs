@@ -116,9 +116,9 @@ impl NumberStatistics {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use float_cmp::approx_eq;
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn example_data() {
         let mut number_statistics = NumberStatistics::default();
 
@@ -128,12 +128,12 @@ mod tests {
 
         assert_eq!(number_statistics.count(), 8);
         assert_eq!(number_statistics.nan_count(), 0);
-        approx_eq!(f64, number_statistics.min(), 2.);
-        approx_eq!(f64, number_statistics.max(), 9.);
-        approx_eq!(f64, number_statistics.mean(), 5.);
-        approx_eq!(f64, number_statistics.var(), 4.);
-        approx_eq!(f64, number_statistics.std_dev(), 2.);
-        approx_eq!(f64, number_statistics.sample_std_dev(), 2.138_089_935_3);
+        assert_eq!(number_statistics.min(), 2.);
+        assert_eq!(number_statistics.max(), 9.);
+        assert_eq!(number_statistics.mean(), 5.);
+        assert_eq!(number_statistics.var(), 4.);
+        assert_eq!(number_statistics.std_dev(), 2.);
+        assert_eq!(number_statistics.sample_std_dev(), 2.138_089_935_299_395);
     }
 
     #[test]
