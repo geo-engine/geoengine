@@ -549,6 +549,7 @@ mod tests {
                     description: None,
                     layers: None,
                     bounds: None,
+                    time_step: None,
                 }
                 .validated()
                 .unwrap(),
@@ -675,6 +676,7 @@ mod tests {
                 visibility: Default::default(),
             })]),
             bounds: None,
+            time_step: None,
         };
 
         let res = warp::test::request()
@@ -824,6 +826,7 @@ mod tests {
                     description: None,
                     layers: Some(vec![LayerUpdate::UpdateOrInsert(layer_1.clone())]),
                     bounds: None,
+                    time_step: None,
                 }
             )
             .await,
@@ -845,6 +848,7 @@ mod tests {
                         LayerUpdate::UpdateOrInsert(layer_2.clone())
                     ]),
                     bounds: None,
+                    time_step: None,
                 }
             )
             .await,
@@ -866,6 +870,7 @@ mod tests {
                         LayerUpdate::None(Default::default()),
                     ]),
                     bounds: None,
+                    time_step: None,
                 }
             )
             .await,
@@ -884,6 +889,7 @@ mod tests {
                     description: None,
                     layers: Some(vec![]),
                     bounds: None,
+                    time_step: None,
                 }
             )
             .await,
@@ -1051,6 +1057,7 @@ mod tests {
                     description: None,
                     layers: None,
                     bounds: None,
+                    time_step: None,
                 }
                 .validated()
                 .unwrap(),

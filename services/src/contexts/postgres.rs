@@ -527,6 +527,7 @@ mod tests {
                 visibility: Default::default(),
             })]),
             bounds: None,
+            time_step: None,
         };
         ctx.project_db_ref_mut()
             .await

@@ -460,6 +460,7 @@ mod test {
             description: None,
             layers: None,
             bounds: None,
+            time_step: None,
         }
         .validated()
         .unwrap();
@@ -514,6 +515,7 @@ mod test {
             description: None,
             layers: None,
             bounds: None,
+            time_step: None,
         }
         .validated()
         .unwrap();
