@@ -145,7 +145,7 @@ fn process_raster(number_statistics: &mut NumberStatistics, raster_tile: &Raster
 /// The statistics summary output type for each raster input
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 struct StatisticsOutput {
-    pub count: usize,
+    pub pixel_count: usize,
     pub nan_count: usize,
     pub min: f64,
     pub max: f64,
@@ -156,7 +156,7 @@ struct StatisticsOutput {
 impl From<&NumberStatistics> for StatisticsOutput {
     fn from(number_statistics: &NumberStatistics) -> Self {
         Self {
-            count: number_statistics.count(),
+            pixel_count: number_statistics.count(),
             nan_count: number_statistics.nan_count(),
             min: number_statistics.min(),
             max: number_statistics.max(),
@@ -248,7 +248,7 @@ mod tests {
         assert_eq!(
             result.to_string(),
             json!([{
-                "count": 6,
+                "pixel_count": 6,
                 "nan_count": 0,
                 "min": 1.0,
                 "max": 6.0,
