@@ -27,8 +27,8 @@ use std::str::FromStr;
 pub(crate) fn wfs_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::get()
-        .and(warp::path!("wfs"))
+    warp::path!("wfs")
+        .and(warp::get())
         .and(warp::query::<WFSRequest>())
         .and(warp::any().map(move || ctx.clone()))
         .and_then(wfs)
@@ -322,11 +322,14 @@ mod tests {
     use geoengine_operators::source::CsvSourceParameters;
 
     use super::*;
+    use crate::handlers::{handle_rejection, ErrorResponse};
+    use crate::util::tests::check_allowed_http_methods;
     use crate::{contexts::InMemoryContext, workflows::workflow::Workflow};
     use geoengine_operators::engine::TypedOperator;
     use geoengine_operators::source::{CsvGeometrySpecification, CsvSource, CsvTimeSpecification};
     use serde_json::json;
     use std::io::{Seek, SeekFrom, Write};
+    use warp::hyper::body::Bytes;
     use xml::ParserConfig;
 
     #[tokio::test]
@@ -422,15 +425,19 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn get_capabilities() {
+    async fn get_capabilities_test_helper(method: &str) -> Response<Bytes> {
         let ctx = InMemoryContext::default();
 
-        let res = warp::test::request()
-            .method("GET")
+        warp::test::request()
+            .method(method)
             .path("/wfs?request=GetCapabilities&service=WFS")
-            .reply(&wfs_handler(ctx))
-            .await;
+            .reply(&wfs_handler(ctx).recover(handle_rejection))
+            .await
+    }
+
+    #[tokio::test]
+    async fn get_capabilities() {
+        let res = get_capabilities_test_helper("GET").await;
 
         assert_eq!(res.status(), 200);
 
@@ -443,7 +450,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn get_feature_registry() {
+    async fn get_capabilities_invalid_method() {
+        check_allowed_http_methods(get_capabilities_test_helper, &["GET"]).await;
+    }
+
+    async fn get_feature_registry_test_helper(method: &str) -> Response<Bytes> {
         let mut temp_file = tempfile::NamedTempFile::new().unwrap();
         write!(
             temp_file,
@@ -481,11 +492,17 @@ x;y
             .await
             .unwrap();
 
-        let res = warp::test::request()
-            .method("GET")
+        warp::test::request()
+            .method(method)
             .path(&format!("/wfs?request=GetFeature&service=WFS&version=2.0.0&typeNames=registry:{}&bbox=-90,-180,90,180&srsName=EPSG:4326", id.to_string()))
-            .reply(&wfs_handler(ctx))
-            .await;
+            .reply(&wfs_handler(ctx).recover(handle_rejection))
+            .await
+    }
+
+    #[tokio::test]
+    async fn get_feature_registry() {
+        let res = get_feature_registry_test_helper("GET").await;
+
         let body: String = String::from_utf8(res.body().to_vec()).unwrap();
         assert_eq!(
             body,
@@ -535,7 +552,24 @@ x;y
     }
 
     #[tokio::test]
-    async fn get_feature_json() {
+    async fn get_feature_registry_invalid_method() {
+        check_allowed_http_methods(get_feature_registry_test_helper, &["GET"]).await;
+    }
+
+    #[tokio::test]
+    async fn get_feature_registry_missing_fields() {
+        let ctx = InMemoryContext::default();
+
+        let res = warp::test::request()
+            .method("GET")
+            .path("/wfs?request=GetFeature&service=WFS&version=2.0.0&bbox=-90,-180,90,180&crs=EPSG:4326")
+            .reply(&wfs_handler(ctx).recover(handle_rejection))
+            .await;
+
+        ErrorResponse::assert(&res, 400, "InvalidQuery", "Invalid query string.");
+    }
+
+    async fn get_feature_json_test_helper(method: &str) -> Response<Bytes> {
         let mut temp_file = tempfile::NamedTempFile::new().unwrap();
         write!(
             temp_file,
@@ -576,11 +610,17 @@ x;y
             ("srsName", "EPSG:4326"),
         ];
         let url = format!("/wfs?{}", &serde_urlencoded::to_string(params).unwrap());
-        let res = warp::test::request()
-            .method("GET")
+        warp::test::request()
+            .method(method)
             .path(&url)
-            .reply(&wfs_handler(ctx))
-            .await;
+            .reply(&wfs_handler(ctx).recover(handle_rejection))
+            .await
+    }
+
+    #[tokio::test]
+    async fn get_feature_json() {
+        let res = get_feature_json_test_helper("GET").await;
+
         let body: String = String::from_utf8(res.body().to_vec()).unwrap();
         assert_eq!(
             body,
@@ -627,5 +667,31 @@ x;y
             .to_string()
         );
         assert_eq!(res.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn get_feature_json_invalid_method() {
+        check_allowed_http_methods(get_feature_json_test_helper, &["GET"]).await;
+    }
+
+    #[tokio::test]
+    async fn get_feature_json_missing_fields() {
+        let ctx = InMemoryContext::default();
+
+        let params = &[
+            ("request", "GetFeature"),
+            ("service", "WFS"),
+            ("version", "2.0.0"),
+            ("bbox", "-90,-180,90,180"),
+            ("crs", "EPSG:4326"),
+        ];
+        let url = format!("/wfs?{}", &serde_urlencoded::to_string(params).unwrap());
+        let res = warp::test::request()
+            .method("GET")
+            .path(&url)
+            .reply(&wfs_handler(ctx).recover(handle_rejection))
+            .await;
+
+        ErrorResponse::assert(&res, 400, "InvalidQuery", "Invalid query string.");
     }
 }

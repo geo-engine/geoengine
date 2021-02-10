@@ -26,8 +26,8 @@ impl UserDB for HashMapUserDB {
         let user_registration = user_registration.user_input;
         ensure!(
             !self.users.contains_key(&user_registration.email),
-            error::RegistrationFailed {
-                reason: "E-mail already exists "
+            error::Duplicate {
+                reason: "E-mail already exists"
             }
         );
 
@@ -103,7 +103,7 @@ impl UserDB for HashMapUserDB {
     async fn session(&self, session: SessionId) -> Result<Session> {
         match self.sessions.get(&session) {
             Some(session) => Ok(session.clone()),
-            None => Err(error::Error::SessionDoesNotExist),
+            None => Err(error::Error::InvalidSession),
         }
     }
 
@@ -114,7 +114,7 @@ impl UserDB for HashMapUserDB {
                 session.project = Some(project);
                 Ok(())
             }
-            None => Err(error::Error::SessionDoesNotExist),
+            None => Err(error::Error::InvalidSession),
         }
     }
 
@@ -124,7 +124,7 @@ impl UserDB for HashMapUserDB {
                 session.view = Some(view);
                 Ok(())
             }
-            None => Err(error::Error::SessionDoesNotExist),
+            None => Err(error::Error::InvalidSession),
         }
     }
 }
