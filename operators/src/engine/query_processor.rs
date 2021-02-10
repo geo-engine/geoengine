@@ -1,5 +1,6 @@
 use super::query::{QueryContext, QueryRectangle};
 use crate::util::Result;
+use futures::future::BoxFuture;
 use futures::stream::BoxStream;
 use geoengine_datatypes::collections::{
     DataCollection, MultiLineStringCollection, MultiPolygonCollection,
@@ -79,6 +80,24 @@ where
         ctx: &'a dyn QueryContext,
     ) -> BoxStream<'a, Result<Self::VectorType>> {
         self.query(query, ctx)
+    }
+}
+
+/// An instantiation of a plot operator that produces a stream of vector results for a query
+pub trait PlotQueryProcessor: Sync + Send {
+    type PlotType;
+
+    fn plot_query<'a>(
+        &'a self,
+        query: QueryRectangle,
+        ctx: &'a dyn QueryContext,
+    ) -> BoxFuture<'a, Result<Self::PlotType>>;
+
+    fn boxed(self) -> Box<dyn PlotQueryProcessor<PlotType = Self::PlotType>>
+    where
+        Self: Sized + 'static,
+    {
+        Box::new(self)
     }
 }
 
@@ -241,6 +260,31 @@ impl TypedVectorQueryProcessor {
         self,
     ) -> Option<Box<dyn VectorQueryProcessor<VectorType = MultiPolygonCollection>>> {
         if let TypedVectorQueryProcessor::MultiPolygon(p) = self {
+            Some(p)
+        } else {
+            None
+        }
+    }
+}
+
+/// An enum that contains all possible query processor variants
+#[allow(clippy::pub_enum_variant_names)]
+pub enum TypedPlotQueryProcessor {
+    JSON(Box<dyn PlotQueryProcessor<PlotType = serde_json::Value>>),
+    PNG(Box<dyn PlotQueryProcessor<PlotType = Vec<u8>>>),
+}
+
+impl TypedPlotQueryProcessor {
+    pub fn json(self) -> Option<Box<dyn PlotQueryProcessor<PlotType = serde_json::Value>>> {
+        if let TypedPlotQueryProcessor::JSON(p) = self {
+            Some(p)
+        } else {
+            None
+        }
+    }
+
+    pub fn png(self) -> Option<Box<dyn PlotQueryProcessor<PlotType = Vec<u8>>>> {
+        if let TypedPlotQueryProcessor::PNG(p) = self {
             Some(p)
         } else {
             None
