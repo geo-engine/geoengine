@@ -8,6 +8,7 @@ use crate::util::Result;
 use crate::{call_bi_generic_processor, call_generic_raster_processor};
 use futures::stream::BoxStream;
 use futures::StreamExt;
+use geoengine_datatypes::primitives::Measurement;
 use geoengine_datatypes::raster::{Grid2D, Pixel, RasterDataType, RasterTile2D, TypedValue};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
@@ -21,11 +22,13 @@ use std::marker::PhantomData;
 ///     calculations.
 /// * `output_type` is the data type of the produced raster tiles.
 /// * `output_no_data_value` is the no data value of the output raster
+/// * `output_measurement` is the measurement description of the output
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct ExpressionParams {
     pub expression: String,
     pub output_type: RasterDataType,
     pub output_no_data_value: TypedValue,
+    pub output_measurement: Option<Measurement>,
 }
 
 // TODO: custom type or simple string?
@@ -102,7 +105,11 @@ impl RasterOperator for Expression {
         let result_descriptor = RasterResultDescriptor {
             data_type: self.params.output_type,
             spatial_reference,
-            measurement: raster_sources[0].result_descriptor().measurement.clone(), // TODO: use parameter to define it
+            measurement: self
+                .params
+                .output_measurement
+                .as_ref()
+                .map_or(Measurement::Unitless, Measurement::clone),
         };
 
         Ok(
@@ -295,6 +302,7 @@ mod tests {
                 expression: "A+B".to_string(),
                 output_type: RasterDataType::I8,
                 output_no_data_value: TypedValue::I8(42),
+                output_measurement: Some(Measurement::Unitless),
             },
             raster_sources: vec![a, b],
             vector_sources: vec![],
