@@ -35,8 +35,8 @@ use std::str::FromStr;
 pub(crate) fn wms_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    warp::get()
-        .and(warp::path!("wms"))
+    warp::path!("wms")
+        .and(warp::get())
         .and(
             warp::query::raw().and_then(|query_string: String| async move {
                 // TODO: make case insensitive by using serde-aux instead
@@ -318,25 +318,32 @@ mod tests {
     use geoengine_datatypes::operations::image::RgbaColor;
     use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, TimeInterval};
     use geoengine_datatypes::raster::GridShape2D;
-    use geoengine_operators::engine::{MockQueryContext, RasterOperator, TypedOperator};
-    use geoengine_operators::source::{GdalSource, GdalSourceParameters, GdalSourceProcessor};
+    use geoengine_operators::engine::MockQueryContext;
+    use geoengine_operators::source::{GdalSourceParameters, GdalSourceProcessor};
 
     use super::*;
-    use crate::workflows::workflow::Workflow;
+    use crate::handlers::{handle_rejection, ErrorResponse};
+    use crate::util::tests::{check_allowed_http_methods, register_workflow_helper};
     use crate::{contexts::InMemoryContext, ogc::wms::request::GetMapFormat};
     use geoengine_datatypes::raster::TilingSpecification;
     use std::convert::TryInto;
+    use warp::hyper::body::Bytes;
     use xml::ParserConfig;
+
+    async fn test_test_helper(method: &str, path: Option<&str>) -> Response<Bytes> {
+        let ctx = InMemoryContext::default();
+
+        warp::test::request()
+            .method(method)
+            .path(path.unwrap_or("/wms?request=GetMap&service=WMS&version=1.3.0&layers=mock_raster&bbox=1,2,3,4&width=100&height=100&crs=EPSG:4326&styles=ssss&format=image/png"))
+            .reply(&wms_handler(ctx).recover(handle_rejection))
+            .await
+    }
 
     #[tokio::test]
     async fn test() {
-        let ctx = InMemoryContext::default();
+        let res = test_test_helper("GET", None).await;
 
-        let res = warp::test::request()
-            .method("GET")
-            .path("/wms?request=GetMap&service=WMS&version=1.3.0&layers=mock_raster&bbox=1,2,3,4&width=100&height=100&crs=EPSG:4326&styles=ssss&format=image/png")
-            .reply(&wms_handler(ctx))
-            .await;
         assert_eq!(res.status(), 200);
         assert_eq!(
             include_bytes!("../../../datatypes/test-data/colorizer/rgba.png") as &[u8],
@@ -345,14 +352,48 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn get_capabilities() {
+    async fn test_invalid_method() {
+        check_allowed_http_methods(|method| test_test_helper(method, None), &["GET"]).await;
+    }
+
+    #[tokio::test]
+    async fn test_missing_fields() {
+        let res = test_test_helper("GET", Some("/wms?service=WMS&version=1.3.0&layers=mock_raster&bbox=1,2,3,4&width=100&height=100&crs=foo&styles=ssss&format=image/png")).await;
+
+        ErrorResponse::assert(
+            &res,
+            400,
+            "UnableToParseQueryString",
+            "Unable to parse query string: missing field `request`",
+        );
+    }
+
+    #[tokio::test]
+    async fn test_invalid_fields() {
+        let res = test_test_helper("GET", Some("/wms?request=GetMap&service=WMS&version=1.3.0&layers=mock_raster&bbox=1,2,3,4&width=XYZ&height=100&crs=EPSG:4326&styles=ssss&format=image/png")).await;
+
+        ErrorResponse::assert(
+            &res,
+            400,
+            "UnableToParseQueryString",
+            "Unable to parse query string: could not parse string",
+        );
+    }
+
+    async fn get_capabilities_test_helper(method: &str) -> Response<Bytes> {
         let ctx = InMemoryContext::default();
 
-        let res = warp::test::request()
-            .method("GET")
+        warp::test::request()
+            .method(method)
             .path("/wms?request=GetCapabilities&service=WMS")
-            .reply(&wms_handler(ctx))
-            .await;
+            .reply(&wms_handler(ctx).recover(handle_rejection))
+            .await
+    }
+
+    #[tokio::test]
+    async fn get_capabilities() {
+        let res = get_capabilities_test_helper("GET").await;
+
         assert_eq!(res.status(), 200);
 
         // TODO: validate against schema
@@ -361,6 +402,11 @@ mod tests {
         for event in reader {
             assert!(event.is_ok());
         }
+    }
+
+    #[tokio::test]
+    async fn get_capabilities_invalid_method() {
+        check_allowed_http_methods(get_capabilities_test_helper, &["GET"]).await;
     }
 
     #[tokio::test]
@@ -473,35 +519,22 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn get_map() {
+    async fn get_map_test_helper(method: &str, path: Option<&str>) -> Response<Bytes> {
         let ctx = InMemoryContext::default();
 
-        let workflow = Workflow {
-            operator: TypedOperator::Raster(
-                GdalSource {
-                    params: GdalSourceParameters {
-                        dataset_id: "modis_ndvi".to_owned(),
-                        channel: None,
-                    },
-                }
-                .boxed(),
-            ),
-        };
+        let (_, id) = register_workflow_helper(&ctx).await;
 
-        let id = ctx
-            .workflow_registry()
-            .write()
+        warp::test::request()
+            .method(method)
+            .path(path.unwrap_or(&format!("/wms?request=GetMap&service=WMS&version=1.3.0&layers={}&bbox=20,-10,80,50&width=600&height=600&crs=EPSG:4326&styles=ssss&format=image/png&time=2014-01-01T00:00:00.0Z", id.to_string())))
+            .reply(&wms_handler(ctx).recover(handle_rejection))
             .await
-            .register(workflow.clone())
-            .await
-            .unwrap();
+    }
 
-        let res = warp::test::request()
-            .method("GET")
-            .path(&format!("/wms?request=GetMap&service=WMS&version=1.3.0&layers={}&bbox=20,-10,80,50&width=600&height=600&crs=EPSG:4326&styles=ssss&format=image/png&time=2014-01-01T00:00:00.0Z", id.to_string()))
-            .reply(&wms_handler(ctx))
-            .await;
+    #[tokio::test]
+    async fn get_map() {
+        let res = get_map_test_helper("GET", None).await;
+
         assert_eq!(res.status(), 200);
         assert_eq!(
             include_bytes!("../../../services/test-data/wms/raster.png") as &[u8],
@@ -513,25 +546,7 @@ mod tests {
     async fn get_map_uppercase() {
         let ctx = InMemoryContext::default();
 
-        let workflow = Workflow {
-            operator: TypedOperator::Raster(
-                GdalSource {
-                    params: GdalSourceParameters {
-                        dataset_id: "modis_ndvi".to_owned(),
-                        channel: None,
-                    },
-                }
-                .boxed(),
-            ),
-        };
-
-        let id = ctx
-            .workflow_registry()
-            .write()
-            .await
-            .register(workflow.clone())
-            .await
-            .unwrap();
+        let (_, id) = register_workflow_helper(&ctx).await;
 
         let res = warp::test::request()
             .method("GET")
@@ -547,28 +562,27 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn get_map_invalid_method() {
+        check_allowed_http_methods(|method| get_map_test_helper(method, None), &["GET"]).await;
+    }
+
+    #[tokio::test]
+    async fn get_map_missing_fields() {
+        let res = get_map_test_helper("GET", Some("/wms?request=GetMap&service=WMS&version=1.3.0&bbox=20,-10,80,50&width=600&height=600&crs=EPSG:4326&styles=ssss&format=image/png&time=2014-01-01T00:00:00.0Z")).await;
+
+        ErrorResponse::assert(
+            &res,
+            400,
+            "UnableToParseQueryString",
+            "Unable to parse query string: missing field `layers`",
+        );
+    }
+
+    #[tokio::test]
     async fn get_map_colorizer() {
         let ctx = InMemoryContext::default();
 
-        let workflow = Workflow {
-            operator: TypedOperator::Raster(
-                GdalSource {
-                    params: GdalSourceParameters {
-                        dataset_id: "modis_ndvi".to_owned(),
-                        channel: None,
-                    },
-                }
-                .boxed(),
-            ),
-        };
-
-        let id = ctx
-            .workflow_registry()
-            .write()
-            .await
-            .register(workflow.clone())
-            .await
-            .unwrap();
+        let (_, id) = register_workflow_helper(&ctx).await;
 
         let colorizer = Colorizer::linear_gradient(
             vec![
@@ -605,6 +619,7 @@ mod tests {
             ))
             .reply(&wms_handler(ctx))
             .await;
+
         assert_eq!(res.status(), 200);
         assert_eq!(
             include_bytes!("../../../services/test-data/wms/raster_colorizer.png") as &[u8],

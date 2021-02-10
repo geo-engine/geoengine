@@ -190,6 +190,7 @@ mod tests {
         mock::{MockPointSource, MockPointSourceParams, MockRasterSource, MockRasterSourceParams},
     };
     use futures::executor::block_on_stream;
+    use geoengine_datatypes::primitives::Measurement;
     use geoengine_datatypes::{
         primitives::SpatialResolution,
         primitives::{BoundingBox2D, Coordinate2D, FeatureDataRef, TimeInterval},
@@ -224,6 +225,7 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
+                    measurement: Measurement::Unitless,
                 },
             },
         }
@@ -272,7 +274,8 @@ mod tests {
                     }],
                     "result_descriptor": {
                         "data_type": "U8",
-                        "spatial_reference": "EPSG:4326"
+                        "spatial_reference": "EPSG:4326",
+                        "measurement": "unitless"
                     }
                 }
             }],
@@ -324,6 +327,7 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
+                    measurement: Measurement::Unitless,
                 },
             },
         }

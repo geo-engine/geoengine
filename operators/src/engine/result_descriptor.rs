@@ -1,4 +1,4 @@
-use geoengine_datatypes::primitives::FeatureDataType;
+use geoengine_datatypes::primitives::{FeatureDataType, Measurement};
 use geoengine_datatypes::{
     collections::VectorDataType, raster::RasterDataType, spatial_reference::SpatialReferenceOption,
 };
@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 /// A descriptor that contains information about the query result, for instance, the data type
 /// and spatial reference.
-pub trait ResultDescriptor: Clone {
+pub trait ResultDescriptor: Clone + Serialize {
     type DataType;
 
     /// Return the type-specific result data type
@@ -17,29 +17,30 @@ pub trait ResultDescriptor: Clone {
     fn spatial_reference(&self) -> SpatialReferenceOption;
 
     /// Map one descriptor to another one
-    fn map<F>(self, f: F) -> Self
+    fn map<F>(&self, f: F) -> Self
     where
-        F: Fn(Self) -> Self,
+        F: Fn(&Self) -> Self,
     {
         f(self)
     }
 
     /// Map one descriptor to another one by modifying only the spatial reference
-    fn map_data_type<F>(self, f: F) -> Self
+    fn map_data_type<F>(&self, f: F) -> Self
     where
-        F: Fn(Self::DataType) -> Self::DataType;
+        F: Fn(&Self::DataType) -> Self::DataType;
 
     /// Map one descriptor to another one by modifying only the data type
-    fn map_spatial_reference<F>(self, f: F) -> Self
+    fn map_spatial_reference<F>(&self, f: F) -> Self
     where
-        F: Fn(SpatialReferenceOption) -> SpatialReferenceOption;
+        F: Fn(&SpatialReferenceOption) -> SpatialReferenceOption;
 }
 
 /// A `ResultDescriptor` for raster queries
-#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct RasterResultDescriptor {
     pub data_type: RasterDataType,
     pub spatial_reference: SpatialReferenceOption,
+    pub measurement: Measurement,
 }
 
 impl ResultDescriptor for RasterResultDescriptor {
@@ -53,20 +54,26 @@ impl ResultDescriptor for RasterResultDescriptor {
         self.spatial_reference
     }
 
-    fn map_data_type<F>(mut self, f: F) -> Self
+    fn map_data_type<F>(&self, f: F) -> Self
     where
-        F: Fn(Self::DataType) -> Self::DataType,
+        F: Fn(&Self::DataType) -> Self::DataType,
     {
-        self.data_type = f(self.data_type);
-        self
+        Self {
+            data_type: f(&self.data_type),
+            spatial_reference: self.spatial_reference,
+            measurement: self.measurement.clone(),
+        }
     }
 
-    fn map_spatial_reference<F>(mut self, f: F) -> Self
+    fn map_spatial_reference<F>(&self, f: F) -> Self
     where
-        F: Fn(SpatialReferenceOption) -> SpatialReferenceOption,
+        F: Fn(&SpatialReferenceOption) -> SpatialReferenceOption,
     {
-        self.spatial_reference = f(self.spatial_reference);
-        self
+        Self {
+            data_type: self.data_type,
+            spatial_reference: f(&self.spatial_reference),
+            measurement: self.measurement.clone(),
+        }
     }
 }
 
@@ -103,20 +110,26 @@ impl ResultDescriptor for VectorResultDescriptor {
         self.spatial_reference
     }
 
-    fn map_data_type<F>(mut self, f: F) -> Self
+    fn map_data_type<F>(&self, f: F) -> Self
     where
-        F: Fn(Self::DataType) -> Self::DataType,
+        F: Fn(&Self::DataType) -> Self::DataType,
     {
-        self.data_type = f(self.data_type);
-        self
+        Self {
+            data_type: f(&self.data_type),
+            spatial_reference: self.spatial_reference,
+            columns: self.columns.clone(),
+        }
     }
 
-    fn map_spatial_reference<F>(mut self, f: F) -> Self
+    fn map_spatial_reference<F>(&self, f: F) -> Self
     where
-        F: Fn(SpatialReferenceOption) -> SpatialReferenceOption,
+        F: Fn(&SpatialReferenceOption) -> SpatialReferenceOption,
     {
-        self.spatial_reference = f(self.spatial_reference);
-        self
+        Self {
+            data_type: self.data_type,
+            spatial_reference: f(&self.spatial_reference),
+            columns: self.columns.clone(),
+        }
     }
 }
 

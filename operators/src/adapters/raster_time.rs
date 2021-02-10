@@ -174,7 +174,7 @@ mod tests {
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;
-    use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution};
+    use geoengine_datatypes::primitives::{BoundingBox2D, Measurement, SpatialResolution};
     use geoengine_datatypes::raster::{Grid, RasterDataType};
     use geoengine_datatypes::spatial_reference::SpatialReference;
 
@@ -215,6 +215,7 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
+                    measurement: Measurement::Unitless,
                 },
             },
         }
@@ -293,6 +294,7 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
+                    measurement: Measurement::Unitless,
                 },
             },
         }
