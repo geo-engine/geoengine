@@ -95,6 +95,10 @@ impl Project {
             project.bounds = bounds;
         }
 
+        if let Some(time_step) = update.time_step {
+            project.time_step = time_step;
+        }
+
         Ok(project)
     }
 }
@@ -307,6 +311,7 @@ pub struct UpdateProject {
     pub description: Option<String>,
     pub layers: Option<Vec<LayerUpdate>>,
     pub bounds: Option<STRectangle>,
+    pub time_step: Option<TimeStep>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -549,6 +554,10 @@ mod tests {
                 spatial_reference: SpatialReferenceOption::Unreferenced,
                 bounding_box: BoundingBox2D::new((0.0, 0.1).into(), (1.0, 1.1).into()).unwrap(),
                 time_interval: Default::default(),
+            }),
+            time_step: Some(TimeStep {
+                step: 1,
+                granularity: TimeGranularity::Days,
             }),
         };
 
