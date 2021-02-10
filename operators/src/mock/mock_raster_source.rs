@@ -67,7 +67,7 @@ impl RasterOperator for MockRasterSource {
             self.params,
             context,
             |_, _, _, _| Ok(()),
-            |params, _, _, _, _| Ok(params.result_descriptor),
+            |params, _, _, _, _| Ok(params.result_descriptor.clone()),
             vec![],
             vec![],
         )
@@ -105,6 +105,7 @@ impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
 mod tests {
     use super::*;
     use crate::engine::MockExecutionContext;
+    use geoengine_datatypes::primitives::Measurement;
     use geoengine_datatypes::raster::RasterDataType;
     use geoengine_datatypes::{
         primitives::TimeInterval,
@@ -132,6 +133,7 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
+                    measurement: Measurement::Unitless,
                 },
             },
         }
@@ -166,7 +168,8 @@ mod tests {
                 }],
                 "result_descriptor": {
                     "data_type": "U8",
-                    "spatial_reference": "EPSG:4326"
+                    "spatial_reference": "EPSG:4326",
+                    "measurement": "unitless",
                 }
             }
         })

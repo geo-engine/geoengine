@@ -8,6 +8,7 @@ use crate::users::session::Session;
 use crate::util::IdResponse;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
+use geoengine_operators::call_on_typed_operator;
 use snafu::ResultExt;
 
 pub(crate) fn register_workflow_handler<C: Context>(
@@ -81,16 +82,21 @@ async fn get_workflow_metadata<C: Context>(
         .load(&WorkflowId(id))
         .await?;
 
-    let operator = workflow.operator.get_vector().context(error::Operator)?;
-
-    let operator = operator
-        .initialize(&ctx.execution_context(&session)?)
-        .context(error::Operator)?;
+    let execution_context = ctx.execution_context(&session)?;
 
     // TODO: use cache here
-    let result_descriptor = operator.result_descriptor();
+    call_on_typed_operator!(
+        workflow.operator,
+        operator => {
+            let operator = operator
+                .initialize(&execution_context)
+                .context(error::Operator)?;
 
-    Ok(warp::reply::json(result_descriptor))
+            let result_descriptor = operator.result_descriptor();
+
+            Ok(warp::reply::json(result_descriptor))
+        }
+    )
 }
 
 #[cfg(test)]
@@ -105,10 +111,13 @@ mod tests {
     use crate::util::IdResponse;
     use crate::workflows::registry::WorkflowRegistry;
     use geoengine_datatypes::collections::MultiPointCollection;
-    use geoengine_datatypes::primitives::{FeatureData, MultiPoint, TimeInterval};
-    use geoengine_operators::engine::VectorOperator;
+    use geoengine_datatypes::primitives::{FeatureData, Measurement, MultiPoint, TimeInterval};
+    use geoengine_datatypes::raster::RasterDataType;
+    use geoengine_datatypes::spatial_reference::SpatialReference;
+    use geoengine_operators::engine::{RasterOperator, RasterResultDescriptor, VectorOperator};
     use geoengine_operators::mock::{
-        MockFeatureCollectionSource, MockPointSource, MockPointSourceParams,
+        MockFeatureCollectionSource, MockPointSource, MockPointSourceParams, MockRasterSource,
+        MockRasterSourceParams,
     };
     use serde_json::json;
     use warp::http::Response;
@@ -311,7 +320,7 @@ mod tests {
         ErrorResponse::assert(&res, 404, "NotFound", "Not Found");
     }
 
-    async fn metadata_test_helper(method: &str) -> Response<Bytes> {
+    async fn vector_metadata_test_helper(method: &str) -> Response<Bytes> {
         let ctx = InMemoryContext::default();
 
         let session = create_session_helper(&ctx).await;
@@ -355,10 +364,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn metadata() {
-        let res = metadata_test_helper("GET").await;
+    async fn vector_metadata() {
+        let res = vector_metadata_test_helper("GET").await;
 
-        assert_eq!(res.status(), 200);
+        assert_eq!(res.status(), 200, "{:?}", res.body());
 
         assert_eq!(
             serde_json::from_slice::<serde_json::Value>(res.body()).unwrap(),
@@ -374,8 +383,67 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn raster_metadata() {
+        let ctx = InMemoryContext::default();
+
+        let session = create_session_helper(&ctx).await;
+
+        let workflow = Workflow {
+            operator: MockRasterSource {
+                params: MockRasterSourceParams {
+                    data: vec![],
+                    result_descriptor: RasterResultDescriptor {
+                        data_type: RasterDataType::U8,
+                        spatial_reference: SpatialReference::epsg_4326().into(),
+                        measurement: Measurement::Continuous {
+                            measurement: "radiation".to_string(),
+                            unit: None,
+                        },
+                    },
+                },
+            }
+            .boxed()
+            .into(),
+        };
+
+        let id = ctx
+            .workflow_registry()
+            .write()
+            .await
+            .register(workflow.clone())
+            .await
+            .unwrap();
+
+        let res = warp::test::request()
+            .method("GET")
+            .path(&format!("/workflow/{}/metadata", id.to_string()))
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
+            .reply(&get_workflow_metadata_handler(ctx))
+            .await;
+
+        assert_eq!(res.status(), 200, "{:?}", res.body());
+
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(res.body()).unwrap(),
+            serde_json::json!({
+                "data_type": "U8",
+                "spatial_reference": "EPSG:4326",
+                "measurement": {
+                    "continuous": {
+                        "measurement": "radiation",
+                        "unit": null
+                    }
+                }
+            })
+        );
+    }
+
+    #[tokio::test]
     async fn metadata_invalid_method() {
-        check_allowed_http_methods(metadata_test_helper, &["GET"]).await;
+        check_allowed_http_methods(vector_metadata_test_helper, &["GET"]).await;
     }
 
     #[tokio::test]

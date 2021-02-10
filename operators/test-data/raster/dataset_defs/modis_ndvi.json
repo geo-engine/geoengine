@@ -25,5 +25,6 @@
             3600
         ]
     },
-    "spatial_ref": "EPSG:4326"
+    "spatial_ref": "EPSG:4326",
+    "measurement": "unitless"
 }
