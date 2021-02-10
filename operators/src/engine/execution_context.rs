@@ -121,7 +121,7 @@ where
     L: Debug + Clone + Send + Sync + 'static,
     R: Debug + Send + Sync + 'static + ResultDescriptor,
 {
-    pub laoding_info: L,
+    pub loading_info: L,
     pub result_descriptor: R,
 }
 
@@ -131,7 +131,7 @@ where
     R: Debug + Send + Sync + 'static + ResultDescriptor,
 {
     fn loading_info(&self, _query: QueryRectangle) -> Result<L> {
-        Ok(self.laoding_info.clone())
+        Ok(self.loading_info.clone())
     }
 
     fn result_descriptor(&self) -> Result<R> {
@@ -152,7 +152,7 @@ mod tests {
     #[test]
     fn test() {
         let info = StaticMetaData {
-            laoding_info: 1_i32,
+            loading_info: 1_i32,
             result_descriptor: VectorResultDescriptor {
                 data_type: VectorDataType::Data,
                 spatial_reference: SpatialReferenceOption::Unreferenced,

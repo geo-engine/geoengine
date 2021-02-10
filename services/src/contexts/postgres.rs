@@ -311,21 +311,11 @@ where
         todo!()
     }
 
-    fn session(&self) -> Result<&Session> {
-        self.session
-            .as_ref()
-            .ok_or(error::Error::SessionNotInitialized)
-    }
-
-    fn set_session(&mut self, session: Session) {
-        self.session = Some(session)
-    }
-
     fn query_context(&self) -> Result<Self::QueryContext> {
         todo!()
     }
 
-    fn execution_context(&self) -> Result<Self::ExecutionContext> {
+    fn execution_context(&self, _session: &Session) -> Result<Self::ExecutionContext> {
         todo!()
     }
 }

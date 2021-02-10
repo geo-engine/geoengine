@@ -3,6 +3,7 @@ use crate::projects::project::{
     CreateProject, LoadVersion, ProjectId, ProjectListOptions, UpdateProject, UserProjectPermission,
 };
 use crate::projects::projectdb::ProjectDB;
+use crate::users::session::Session;
 use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
 use uuid::Uuid;
@@ -13,13 +14,15 @@ pub(crate) fn create_project_handler<C: Context>(
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::post()
         .and(warp::path("project"))
-        .and(authenticate(ctx))
+        .and(authenticate(ctx.clone()))
+        .and(warp::any().map(move || ctx.clone()))
         .and(warp::body::json())
         .and_then(create_project)
 }
 
 // TODO: move into handler once async closures are available?
 async fn create_project<C: Context>(
+    session: Session,
     ctx: C,
     create: CreateProject,
 ) -> Result<impl warp::Reply, warp::Rejection> {
@@ -27,7 +30,7 @@ async fn create_project<C: Context>(
     let id = ctx
         .project_db_ref_mut()
         .await
-        .create(ctx.session()?.user.id, create)
+        .create(session.user.id, create)
         .await?;
     Ok(warp::reply::json(&IdResponse::from(id)))
 }
@@ -37,13 +40,15 @@ pub(crate) fn list_projects_handler<C: Context>(
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::get()
         .and(warp::path("projects"))
-        .and(authenticate(ctx))
+        .and(authenticate(ctx.clone()))
+        .and(warp::any().map(move || ctx.clone()))
         .and(warp::query::<ProjectListOptions>())
         .and_then(list_projects)
 }
 
 // TODO: move into handler once async closures are available?
 async fn list_projects<C: Context>(
+    session: Session,
     ctx: C,
     options: ProjectListOptions,
 ) -> Result<impl warp::Reply, warp::Rejection> {
@@ -51,7 +56,7 @@ async fn list_projects<C: Context>(
     let listing = ctx
         .project_db_ref()
         .await
-        .list(ctx.session()?.user.id, options)
+        .list(session.user.id, options)
         .await?;
     Ok(warp::reply::json(&listing))
 }
@@ -68,19 +73,21 @@ pub(crate) fn load_project_handler<C: Context>(
                 .map(|project_id| (ProjectId(project_id), LoadVersion::Latest)))
             .unify(),
         )
-        .and(authenticate(ctx))
+        .and(authenticate(ctx.clone()))
+        .and(warp::any().map(move || ctx.clone()))
         .and_then(load_project)
 }
 
 // TODO: move into handler once async closures are available?
 async fn load_project<C: Context>(
     project: (ProjectId, LoadVersion),
+    session: Session,
     ctx: C,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let id = ctx
         .project_db_ref()
         .await
-        .load(ctx.session()?.user.id, project.0, project.1)
+        .load(session.user.id, project.0, project.1)
         .await?;
     Ok(warp::reply::json(&id))
 }
@@ -90,7 +97,8 @@ pub(crate) fn update_project_handler<C: Context>(
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::patch()
         .and(warp::path!("project" / Uuid).map(ProjectId))
-        .and(authenticate(ctx))
+        .and(authenticate(ctx.clone()))
+        .and(warp::any().map(move || ctx.clone()))
         .and(warp::body::json())
         .and_then(update_project)
 }
@@ -98,6 +106,7 @@ pub(crate) fn update_project_handler<C: Context>(
 // TODO: move into handler once async closures are available?
 async fn update_project<C: Context>(
     project: ProjectId,
+    session: Session,
     ctx: C,
     mut update: UpdateProject,
 ) -> Result<impl warp::Reply, warp::Rejection> {
@@ -105,7 +114,7 @@ async fn update_project<C: Context>(
     let update = update.validated()?;
     ctx.project_db_ref_mut()
         .await
-        .update(ctx.session()?.user.id, update)
+        .update(session.user.id, update)
         .await?;
     Ok(warp::reply())
 }
@@ -115,18 +124,20 @@ pub(crate) fn delete_project_handler<C: Context>(
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::delete()
         .and(warp::path!("project" / Uuid).map(ProjectId))
-        .and(authenticate(ctx))
+        .and(authenticate(ctx.clone()))
+        .and(warp::any().map(move || ctx.clone()))
         .and_then(delete_project)
 }
 
 // TODO: move into handler once async closures are available?
 async fn delete_project<C: Context>(
     project: ProjectId,
+    session: Session,
     ctx: C,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     ctx.project_db_ref_mut()
         .await
-        .delete(ctx.session()?.user.id, project)
+        .delete(session.user.id, project)
         .await?;
     Ok(warp::reply())
 }
@@ -136,20 +147,22 @@ pub(crate) fn project_versions_handler<C: Context>(
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::get()
         .and(warp::path!("project" / "versions"))
-        .and(authenticate(ctx))
+        .and(authenticate(ctx.clone()))
+        .and(warp::any().map(move || ctx.clone()))
         .and(warp::body::json())
         .and_then(project_versions)
 }
 
 // TODO: move into handler once async closures are available?
 async fn project_versions<C: Context>(
+    session: Session,
     ctx: C,
     project: ProjectId,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let versions = ctx
         .project_db_ref_mut()
         .await
-        .versions(ctx.session()?.user.id, project)
+        .versions(session.user.id, project)
         .await?;
     Ok(warp::reply::json(&versions))
 }
@@ -159,19 +172,21 @@ pub(crate) fn add_permission_handler<C: Context>(
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::post()
         .and(warp::path!("project" / "permission" / "add"))
-        .and(authenticate(ctx))
+        .and(authenticate(ctx.clone()))
+        .and(warp::any().map(move || ctx.clone()))
         .and(warp::body::json())
         .and_then(add_permission)
 }
 
 // TODO: move into handler once async closures are available?
 async fn add_permission<C: Context>(
+    session: Session,
     ctx: C,
     permission: UserProjectPermission,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     ctx.project_db_ref_mut()
         .await
-        .add_permission(ctx.session()?.user.id, permission)
+        .add_permission(session.user.id, permission)
         .await?;
     Ok(warp::reply())
 }
@@ -181,19 +196,21 @@ pub(crate) fn remove_permission_handler<C: Context>(
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::delete()
         .and(warp::path!("project" / "permission"))
-        .and(authenticate(ctx))
+        .and(authenticate(ctx.clone()))
+        .and(warp::any().map(move || ctx.clone()))
         .and(warp::body::json())
         .and_then(remove_permission)
 }
 
 // TODO: move into handler once async closures are available?
 async fn remove_permission<C: Context>(
+    session: Session,
     ctx: C,
     permission: UserProjectPermission,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     ctx.project_db_ref_mut()
         .await
-        .remove_permission(ctx.session()?.user.id, permission)
+        .remove_permission(session.user.id, permission)
         .await?;
     Ok(warp::reply())
 }
@@ -203,19 +220,21 @@ pub(crate) fn list_permissions_handler<C: Context>(
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::get()
         .and(warp::path!("project" / Uuid / "permissions").map(ProjectId))
-        .and(authenticate(ctx))
+        .and(authenticate(ctx.clone()))
+        .and(warp::any().map(move || ctx.clone()))
         .and_then(list_permissions)
 }
 
 // TODO: move into handler once async closures are available?
 async fn list_permissions<C: Context>(
     project: ProjectId,
+    session: Session,
     ctx: C,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let permissions = ctx
         .project_db_ref_mut()
         .await
-        .list_permissions(ctx.session()?.user.id, project)
+        .list_permissions(session.user.id, project)
         .await?;
     Ok(warp::reply::json(&permissions))
 }

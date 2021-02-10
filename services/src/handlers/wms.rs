@@ -18,6 +18,7 @@ use crate::error;
 use crate::error::Result;
 use crate::handlers::Context;
 use crate::ogc::wms::request::{GetCapabilities, GetLegendGraphic, GetMap, WMSRequest};
+use crate::users::session::Session;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 use futures::StreamExt;
@@ -145,7 +146,8 @@ async fn get_map<C: Context>(
 
     let operator = workflow.operator.get_raster().context(error::Operator)?;
 
-    let execution_context = ctx.execution_context()?;
+    // TODO: use correct session when WMS uses authenticated access
+    let execution_context = ctx.execution_context(&Session::mock())?;
 
     let initialized = operator
         .initialize(&execution_context)

@@ -4,6 +4,7 @@ use warp::Filter;
 
 use crate::error;
 use crate::handlers::{authenticate, Context};
+use crate::users::session::Session;
 use crate::util::IdResponse;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
@@ -15,13 +16,15 @@ pub(crate) fn register_workflow_handler<C: Context>(
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::post()
         .and(warp::path!("workflow"))
-        .and(authenticate(ctx))
+        .and(authenticate(ctx.clone()))
+        .and(warp::any().map(move || ctx.clone()))
         .and(warp::body::json())
         .and_then(register_workflow)
 }
 
 // TODO: move into handler once async closures are available?
 async fn register_workflow<C: Context>(
+    _session: Session,
     ctx: C,
     workflow: Workflow,
 ) -> Result<impl warp::Reply, warp::Rejection> {
@@ -38,12 +41,17 @@ pub(crate) fn load_workflow_handler<C: Context>(
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::get()
         .and(warp::path!("workflow" / Uuid))
-        .and(authenticate(ctx))
+        .and(authenticate(ctx.clone()))
+        .and(warp::any().map(move || ctx.clone()))
         .and_then(load_workflow)
 }
 
 // TODO: move into handler once async closures are available?
-async fn load_workflow<C: Context>(id: Uuid, ctx: C) -> Result<impl warp::Reply, warp::Rejection> {
+async fn load_workflow<C: Context>(
+    id: Uuid,
+    _session: Session,
+    ctx: C,
+) -> Result<impl warp::Reply, warp::Rejection> {
     let wf = ctx
         .workflow_registry_ref()
         .await
@@ -57,13 +65,15 @@ pub(crate) fn get_workflow_metadata_handler<C: Context>(
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::get()
         .and(warp::path!("workflow" / Uuid / "metadata"))
-        .and(authenticate(ctx))
+        .and(authenticate(ctx.clone()))
+        .and(warp::any().map(move || ctx.clone()))
         .and_then(get_workflow_metadata)
 }
 
 // TODO: move into handler once async closures are available?
 async fn get_workflow_metadata<C: Context>(
     id: Uuid,
+    session: Session,
     ctx: C,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let workflow = ctx
@@ -72,7 +82,7 @@ async fn get_workflow_metadata<C: Context>(
         .load(&WorkflowId(id))
         .await?;
 
-    let execution_context = ctx.execution_context()?;
+    let execution_context = ctx.execution_context(&session)?;
 
     // TODO: use cache here
     call_on_typed_operator!(
