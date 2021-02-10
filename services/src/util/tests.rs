@@ -92,6 +92,7 @@ pub fn update_project_helper(project: ProjectId) -> UpdateProject {
             visibility: Default::default(),
         })]),
         bounds: None,
+        time_step: None,
     }
 }
 
