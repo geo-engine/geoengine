@@ -146,18 +146,18 @@ impl ResultDescriptor for PlotResultDescriptor {
         SpatialReferenceOption::Unreferenced
     }
 
-    fn map_data_type<F>(self, _f: F) -> Self
+    fn map_data_type<F>(&self, _f: F) -> Self
     where
-        F: Fn(Self::DataType) -> Self::DataType,
+        F: Fn(&Self::DataType) -> Self::DataType,
     {
-        self
+        *self
     }
 
-    fn map_spatial_reference<F>(self, _f: F) -> Self
+    fn map_spatial_reference<F>(&self, _f: F) -> Self
     where
-        F: Fn(SpatialReferenceOption) -> SpatialReferenceOption,
+        F: Fn(&SpatialReferenceOption) -> SpatialReferenceOption,
     {
-        self
+        *self
     }
 }
 

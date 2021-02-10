@@ -242,6 +242,7 @@ macro_rules! call_on_typed_operator {
         match $typed_operator {
             $crate::engine::TypedOperator::Vector($operator_var) => $function_call,
             $crate::engine::TypedOperator::Raster($operator_var) => $function_call,
+            $crate::engine::TypedOperator::Plot($operator_var) => $function_call,
         }
     };
 }

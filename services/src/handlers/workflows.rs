@@ -114,11 +114,13 @@ mod tests {
     use geoengine_datatypes::primitives::{FeatureData, Measurement, MultiPoint, TimeInterval};
     use geoengine_datatypes::raster::RasterDataType;
     use geoengine_datatypes::spatial_reference::SpatialReference;
+    use geoengine_operators::engine::PlotOperator;
     use geoengine_operators::engine::{RasterOperator, RasterResultDescriptor, VectorOperator};
     use geoengine_operators::mock::{
         MockFeatureCollectionSource, MockPointSource, MockPointSourceParams, MockRasterSource,
         MockRasterSourceParams,
     };
+    use geoengine_operators::plot::{Statistics, StatisticsParams};
     use serde_json::json;
     use warp::http::Response;
     use warp::hyper::body::Bytes;
@@ -488,6 +490,48 @@ mod tests {
             401,
             "MissingAuthorizationHeader",
             "Header with authorization token not provided.",
+        );
+    }
+
+    #[tokio::test]
+    async fn plot_metadata() {
+        let ctx = InMemoryContext::default();
+
+        let session = create_session_helper(&ctx).await;
+
+        let workflow = Workflow {
+            operator: Statistics {
+                params: StatisticsParams {},
+                raster_sources: vec![],
+                vector_sources: vec![],
+            }
+            .boxed()
+            .into(),
+        };
+
+        let id = ctx
+            .workflow_registry()
+            .write()
+            .await
+            .register(workflow.clone())
+            .await
+            .unwrap();
+
+        let res = warp::test::request()
+            .method("GET")
+            .path(&format!("/workflow/{}/metadata", id.to_string()))
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
+            .reply(&get_workflow_metadata_handler(ctx))
+            .await;
+
+        assert_eq!(res.status(), 200, "{:?}", res.body());
+
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(res.body()).unwrap(),
+            serde_json::json!({})
         );
     }
 }

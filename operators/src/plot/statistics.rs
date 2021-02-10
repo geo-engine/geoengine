@@ -175,7 +175,9 @@ mod tests {
         MockExecutionContext, MockQueryContext, RasterOperator, RasterResultDescriptor,
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
-    use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution, TimeInterval};
+    use geoengine_datatypes::primitives::{
+        BoundingBox2D, Measurement, SpatialResolution, TimeInterval,
+    };
     use geoengine_datatypes::raster::{Grid2D, RasterDataType, TileInformation};
     use geoengine_datatypes::spatial_reference::SpatialReference;
 
@@ -216,6 +218,7 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
+                    measurement: Measurement::Unitless,
                 },
             },
         }
