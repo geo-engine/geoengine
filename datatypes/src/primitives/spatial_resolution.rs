@@ -2,10 +2,11 @@ use std::{convert::TryFrom, ops::Add, ops::Div, ops::Mul, ops::Sub};
 
 use crate::primitives::error;
 use crate::util::Result;
+use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
 /// The spatial resolution in SRS units
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct SpatialResolution {
     pub x: f64,
     pub y: f64,

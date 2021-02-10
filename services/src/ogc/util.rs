@@ -25,7 +25,20 @@ where
 /// indicate no restriction on time in that direction."
 /// sources: - <http://docs.geoserver.org/2.8.x/en/user/services/wms/time.html#wms-time>
 ///          - <http://www.ogcnetwork.net/node/178>
-pub fn parse_time<'de, D>(deserializer: D) -> Result<Option<TimeInterval>, D::Error>
+pub fn parse_time_option<'de, D>(deserializer: D) -> Result<Option<TimeInterval>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    parse_time(deserializer).map(Some)
+}
+
+/// Parse the time string of a WMS request
+/// time is specified in ISO8601, it can either be an instant (single datetime) or an interval
+/// An interval is separated by "/". "Either the start value or the end value can be omitted to
+/// indicate no restriction on time in that direction."
+/// sources: - <http://docs.geoserver.org/2.8.x/en/user/services/wms/time.html#wms-time>
+///          - <http://www.ogcnetwork.net/node/178>
+pub fn parse_time<'de, D>(deserializer: D) -> Result<TimeInterval, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
@@ -40,10 +53,8 @@ where
 
     match *split.as_slice() {
         [Ok(time)] => TimeInterval::new(time.timestamp_millis(), time.timestamp_millis())
-            .map(Some)
             .map_err(D::Error::custom),
         [Ok(start), Ok(end)] => TimeInterval::new(start.timestamp_millis(), end.timestamp_millis())
-            .map(Some)
             .map_err(D::Error::custom),
         _ => Err(D::Error::custom("Invalid time")),
     }
