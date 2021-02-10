@@ -35,32 +35,44 @@ pub enum Error {
 
     TokioChannelSend,
 
+    #[snafu(display("Unable to parse query string: {}", source))]
     UnableToParseQueryString {
         source: serde_urlencoded::de::Error,
     },
 
     ServerStartup,
 
-    #[snafu(display("Registration failed: {:?}", reason))]
+    #[snafu(display("Registration failed: {}", reason))]
     RegistrationFailed {
         reason: String,
     },
+    #[snafu(display("Tried to create duplicate: {}", reason))]
+    Duplicate {
+        reason: String,
+    },
+    #[snafu(display("User does not exist or password is wrong."))]
     LoginFailed,
     LogoutFailed,
-    SessionDoesNotExist,
+    #[snafu(display("The session id is invalid."))]
     InvalidSession,
+    #[snafu(display("Header with authorization token not provided."))]
     MissingAuthorizationHeader,
+    #[snafu(display("Authentication scheme must be Bearer."))]
     InvalidAuthorizationScheme,
 
-    #[snafu(display("Authorization error {:?}", source))]
+    #[snafu(display("Authorization error: {:?}", source))]
     Authorization {
         source: Box<Error>,
     },
-
+    #[snafu(display("Failed to create the project."))]
     ProjectCreateFailed,
+    #[snafu(display("Failed to list projects."))]
     ProjectListFailed,
+    #[snafu(display("The project failed to load."))]
     ProjectLoadFailed,
+    #[snafu(display("Failed to update the project."))]
     ProjectUpdateFailed,
+    #[snafu(display("Failed to delete the project."))]
     ProjectDeleteFailed,
     PermissionFailed,
     ProjectDBUnauthorized,
@@ -85,6 +97,7 @@ pub enum Error {
 
     TokioPostgresTimeout,
 
+    #[snafu(display("Identifier does not have the right format."))]
     InvalidUuid,
     SessionNotInitialized,
 
