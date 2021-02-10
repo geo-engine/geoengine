@@ -159,8 +159,8 @@ mod tests {
     use crate::contexts::{Context, InMemoryContext};
     use crate::datasets::listing::OrderBy;
     use crate::projects::project::{LayerInfo, VectorInfo};
+    use crate::users::session::Session;
     use crate::util::user_input::UserInput;
-    use crate::util::Identifier;
     use geoengine_datatypes::collections::VectorDataType;
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
     use geoengine_operators::source::OgrSourceErrorSpec;
@@ -168,6 +168,8 @@ mod tests {
     #[tokio::test]
     async fn add_ogr_and_list() -> Result<()> {
         let ctx = InMemoryContext::default();
+
+        let session = Session::mock();
 
         let ds = AddDataSet {
             name: "OgrDataSet".to_string(),
@@ -199,10 +201,10 @@ mod tests {
         let id = ctx
             .data_set_db_ref_mut()
             .await
-            .add_data_set(UserId::new(), ds.validated()?, Box::new(meta))
+            .add_data_set(session.user.id, ds.validated()?, Box::new(meta))
             .await?;
 
-        let exe_ctx = ctx.execution_context()?;
+        let exe_ctx = ctx.execution_context(&session)?;
 
         let meta: Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor>> =
             exe_ctx.meta_data(&id)?;
@@ -220,7 +222,7 @@ mod tests {
             .data_set_db_ref()
             .await
             .list(
-                UserId::new(),
+                session.user.id,
                 DataSetListOptions {
                     filter: None,
                     order: OrderBy::NameAsc,

@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod config;
 mod string_token;
+pub mod tests;
 pub mod user_input;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
