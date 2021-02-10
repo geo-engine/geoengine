@@ -71,7 +71,7 @@ impl RasterOperator for Expression {
         );
         ensure!(
             !self.raster_sources.is_empty(),
-            crate::error::InvalidNumberOfVectorInputs {
+            crate::error::InvalidNumberOfRasterInputs {
                 expected: 1..9,
                 found: self.raster_sources.len()
             }
