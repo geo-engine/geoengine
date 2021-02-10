@@ -320,7 +320,7 @@ mod tests {
         ErrorResponse::assert(&res, 404, "NotFound", "Not Found");
     }
 
-    async fn metadata_test_helper(method: &str) -> Response<Bytes> {
+    async fn vector_metadata_test_helper(method: &str) -> Response<Bytes> {
         let ctx = InMemoryContext::default();
 
         let session = create_session_helper(&ctx).await;
@@ -365,7 +365,7 @@ mod tests {
 
     #[tokio::test]
     async fn vector_metadata() {
-        let res = metadata_test_helper("GET").await;
+        let res = vector_metadata_test_helper("GET").await;
 
         assert_eq!(res.status(), 200, "{:?}", res.body());
 
@@ -386,31 +386,7 @@ mod tests {
     async fn raster_metadata() {
         let ctx = InMemoryContext::default();
 
-        ctx.user_db()
-            .write()
-            .await
-            .register(
-                UserRegistration {
-                    email: "foo@bar.de".to_string(),
-                    password: "secret123".to_string(),
-                    real_name: "Foo Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let session = ctx
-            .user_db()
-            .write()
-            .await
-            .login(UserCredentials {
-                email: "foo@bar.de".to_string(),
-                password: "secret123".to_string(),
-            })
-            .await
-            .unwrap();
+        let session = create_session_helper(&ctx).await;
 
         let workflow = Workflow {
             operator: MockRasterSource {
@@ -467,7 +443,7 @@ mod tests {
 
     #[tokio::test]
     async fn metadata_invalid_method() {
-        check_allowed_http_methods(metadata_test_helper, &["GET"]).await;
+        check_allowed_http_methods(vector_metadata_test_helper, &["GET"]).await;
     }
 
     #[tokio::test]
