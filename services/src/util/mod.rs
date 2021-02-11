@@ -3,6 +3,7 @@ use serde::de::Error;
 use serde::{Deserialize, Serialize};
 
 pub mod config;
+pub mod parsing;
 mod string_token;
 pub mod tests;
 pub mod user_input;

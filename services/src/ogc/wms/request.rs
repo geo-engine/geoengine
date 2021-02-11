@@ -1,4 +1,4 @@
-use crate::ogc::util::{parse_bbox, parse_time};
+use crate::ogc::util::{parse_bbox, parse_time_option};
 use crate::util::{from_str, from_str_option};
 use geoengine_datatypes::{
     primitives::{BoundingBox2D, TimeInterval},
@@ -56,7 +56,7 @@ pub struct GetMap {
     pub styles: String,
     #[serde(default)]
     #[serde(alias = "TIME")]
-    #[serde(deserialize_with = "parse_time")]
+    #[serde(deserialize_with = "parse_time_option")]
     pub time: Option<TimeInterval>,
     #[serde(alias = "TRANSPARENT")]
     #[serde(default)]
