@@ -115,7 +115,8 @@ mod tests {
     use crate::workflows::workflow::Workflow;
 
     use super::*;
-    use crate::util::tests::create_session_helper;
+    use crate::util::tests::{check_allowed_http_methods, create_session_helper};
+    use warp::hyper::body::Bytes;
 
     fn example_raster_source() -> Box<dyn RasterOperator> {
         MockRasterSource {
@@ -221,5 +222,53 @@ mod tests {
                 spatial_resolution: SpatialResolution::zero_point_one(),
             }
         );
+    }
+
+    #[tokio::test]
+    async fn check_request_types() {
+        async fn get_workflow_json(method: &str) -> Response<Bytes> {
+            let ctx = InMemoryContext::default();
+            let session = create_session_helper(&ctx).await;
+
+            let workflow = Workflow {
+                operator: Statistics {
+                    params: StatisticsParams {},
+                    raster_sources: vec![example_raster_source()],
+                    vector_sources: vec![],
+                }
+                .boxed()
+                .into(),
+            };
+
+            let id = ctx
+                .workflow_registry()
+                .write()
+                .await
+                .register(workflow)
+                .await
+                .unwrap();
+
+            let params = &[
+                ("bbox", "-180,-90,180,90"),
+                ("time", "2020-01-01T00:00:00.0Z"),
+                ("spatial_resolution", "0.1,0.1"),
+            ];
+            let url = format!(
+                "/plot/{}/?{}",
+                id,
+                &serde_urlencoded::to_string(params).unwrap()
+            );
+            warp::test::request()
+                .method(method)
+                .path(&url)
+                .header(
+                    "Authorization",
+                    format!("Bearer {}", session.id.to_string()),
+                )
+                .reply(&get_plot_handler(ctx).recover(handle_rejection))
+                .await
+        }
+
+        check_allowed_http_methods(get_workflow_json, &["GET"]).await;
     }
 }
