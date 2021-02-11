@@ -1,4 +1,4 @@
-use crate::ogc::util::{parse_bbox, parse_time};
+use crate::ogc::util::{parse_bbox, parse_time_option};
 use crate::util::from_str_option;
 use geoengine_datatypes::primitives::{BoundingBox2D, TimeInterval};
 use geoengine_datatypes::spatial_reference::SpatialReference;
@@ -54,7 +54,7 @@ pub struct GetFeature {
     #[serde(deserialize_with = "parse_bbox")]
     pub bbox: BoundingBox2D,
     #[serde(default)]
-    #[serde(deserialize_with = "parse_time")]
+    #[serde(deserialize_with = "parse_time_option")]
     pub time: Option<TimeInterval>,
     pub srs_name: Option<SpatialReference>,
     pub namespaces: Option<String>, // TODO e.g. xmlns(dog=http://www.example.com/namespaces/dog)
