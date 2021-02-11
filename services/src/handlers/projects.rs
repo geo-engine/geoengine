@@ -244,7 +244,7 @@ async fn list_permissions<C: Context>(
 mod tests {
     use super::*;
     use crate::handlers::{handle_rejection, ErrorResponse};
-    use crate::projects::project::{LayerUpdate, LayerVisibility, VectorInfo};
+    use crate::projects::project::{LayerUpdate, LayerVisibility, Plot, PlotUpdate, VectorInfo};
     use crate::users::session::Session;
     use crate::users::user::UserRegistration;
     use crate::users::userdb::UserDB;
@@ -827,6 +827,7 @@ mod tests {
                     name: None,
                     description: None,
                     layers: Some(vec![LayerUpdate::UpdateOrInsert(layer_1.clone())]),
+                    plots: None,
                     bounds: None,
                     time_step: None,
                 }
@@ -849,6 +850,7 @@ mod tests {
                         LayerUpdate::None(Default::default()),
                         LayerUpdate::UpdateOrInsert(layer_2.clone())
                     ]),
+                    plots: None,
                     bounds: None,
                     time_step: None,
                 }
@@ -871,6 +873,7 @@ mod tests {
                         LayerUpdate::Delete(Default::default()),
                         LayerUpdate::None(Default::default()),
                     ]),
+                    plots: None,
                     bounds: None,
                     time_step: None,
                 }
@@ -890,6 +893,141 @@ mod tests {
                     name: None,
                     description: None,
                     layers: Some(vec![]),
+                    plots: None,
+                    bounds: None,
+                    time_step: None,
+                }
+            )
+            .await,
+            vec![]
+        );
+    }
+
+    #[tokio::test]
+    async fn update_plots() {
+        async fn update_and_load_latest(
+            ctx: &InMemoryContext,
+            session: &Session,
+            project_id: ProjectId,
+            update: UpdateProject,
+        ) -> Vec<Plot> {
+            let res = warp::test::request()
+                .method("PATCH")
+                .path(&format!("/project/{}", project_id.to_string()))
+                .header("Content-Length", "0")
+                .header(
+                    "Authorization",
+                    format!("Bearer {}", session.id.to_string()),
+                )
+                .json(&update)
+                .reply(&update_project_handler(ctx.clone()))
+                .await;
+
+            assert_eq!(res.status(), 200);
+
+            let loaded = ctx
+                .project_db()
+                .read()
+                .await
+                .load_latest(session.user.id, project_id)
+                .await
+                .unwrap();
+
+            loaded.plots
+        }
+
+        let ctx = InMemoryContext::default();
+
+        let (session, project) = create_project_helper(&ctx).await;
+
+        let plot_1 = Plot {
+            workflow: WorkflowId::new(),
+            name: "P1".to_string(),
+        };
+
+        let plot_2 = Plot {
+            workflow: WorkflowId::new(),
+            name: "P2".to_string(),
+        };
+
+        // add first plot
+        assert_eq!(
+            update_and_load_latest(
+                &ctx,
+                &session,
+                project,
+                UpdateProject {
+                    id: project,
+                    name: None,
+                    description: None,
+                    layers: None,
+                    plots: Some(vec![PlotUpdate::UpdateOrInsert(plot_1.clone())]),
+                    bounds: None,
+                    time_step: None,
+                }
+            )
+            .await,
+            vec![plot_1.clone()]
+        );
+
+        // add second plot
+        assert_eq!(
+            update_and_load_latest(
+                &ctx,
+                &session,
+                project,
+                UpdateProject {
+                    id: project,
+                    name: None,
+                    description: None,
+                    layers: None,
+                    plots: Some(vec![
+                        PlotUpdate::None(Default::default()),
+                        PlotUpdate::UpdateOrInsert(plot_2.clone())
+                    ]),
+                    bounds: None,
+                    time_step: None,
+                }
+            )
+            .await,
+            vec![plot_1.clone(), plot_2.clone()]
+        );
+
+        // remove first plot
+        assert_eq!(
+            update_and_load_latest(
+                &ctx,
+                &session,
+                project,
+                UpdateProject {
+                    id: project,
+                    name: None,
+                    description: None,
+                    layers: None,
+                    plots: Some(vec![
+                        PlotUpdate::Delete(Default::default()),
+                        PlotUpdate::None(Default::default()),
+                    ]),
+                    bounds: None,
+                    time_step: None,
+                }
+            )
+            .await,
+            vec![plot_2.clone()]
+        );
+
+        // clear plots
+        assert_eq!(
+            update_and_load_latest(
+                &ctx,
+                &session,
+                project,
+                UpdateProject {
+                    id: project,
+                    name: None,
+                    description: None,
+                    layers: None,
+                    plots: Some(vec![]),
                     bounds: None,
                     time_step: None,
                 }

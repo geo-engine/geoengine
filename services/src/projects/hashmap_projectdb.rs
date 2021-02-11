@@ -459,6 +459,7 @@ mod test {
             name: Some("Foo".into()),
             description: None,
             layers: None,
+            plots: None,
             bounds: None,
             time_step: None,
         }
@@ -514,6 +515,7 @@ mod test {
             name: Some("Foo".into()),
             description: None,
             layers: None,
+            plots: None,
             bounds: None,
             time_step: None,
         }

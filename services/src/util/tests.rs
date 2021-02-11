@@ -91,6 +91,7 @@ pub fn update_project_helper(project: ProjectId) -> UpdateProject {
             }),
             visibility: Default::default(),
         })]),
+        plots: None,
         bounds: None,
         time_step: None,
     }
