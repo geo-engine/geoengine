@@ -193,6 +193,15 @@ where
                             visibility "LayerVisibility" NOT NULL,
                             PRIMARY KEY (project_id, layer_index)            
                         );
+                        
+                        CREATE TABLE project_version_plots (
+                            plot_index integer NOT NULL,
+                            project_id UUID REFERENCES projects(id) ON DELETE CASCADE NOT NULL,
+                            project_version_id UUID REFERENCES project_versions(id) ON DELETE CASCADE NOT NULL,                            
+                            name character varying (256) NOT NULL,
+                            workflow_id UUID NOT NULL, -- TODO: REFERENCES workflows(id)
+                            PRIMARY KEY (project_id, plot_index)            
+                        );
 
                         CREATE TYPE "ProjectPermission" AS ENUM ('Read', 'Write', 'Owner');
 
@@ -324,9 +333,9 @@ where
 mod tests {
     use super::*;
     use crate::projects::project::{
-        CreateProject, Layer, LayerInfo, LayerUpdate, LoadVersion, OrderBy, ProjectFilter,
-        ProjectId, ProjectListOptions, ProjectListing, ProjectPermission, STRectangle,
-        UpdateProject, UserProjectPermission, VectorInfo,
+        CreateProject, Layer, LayerInfo, LayerUpdate, LoadVersion, OrderBy, Plot, PlotUpdate,
+        ProjectFilter, ProjectId, ProjectListOptions, ProjectListing, ProjectPermission,
+        STRectangle, UpdateProject, UserProjectPermission, VectorInfo,
     };
     use crate::projects::projectdb::ProjectDB;
     use crate::users::user::{UserCredentials, UserId, UserRegistration};
@@ -338,8 +347,9 @@ mod tests {
     use bb8_postgres::tokio_postgres::NoTls;
     use geoengine_datatypes::primitives::Coordinate2D;
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
-    use geoengine_operators::engine::{TypedOperator, VectorOperator};
+    use geoengine_operators::engine::{PlotOperator, TypedOperator, VectorOperator};
     use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
+    use geoengine_operators::plot::{Statistics, StatisticsParams};
     use std::str::FromStr;
 
     #[tokio::test]
@@ -493,7 +503,7 @@ mod tests {
             .await
             .unwrap();
 
-        let workflow_id = ctx
+        let layer_workflow_id = ctx
             .workflow_registry_ref_mut()
             .await
             .register(Workflow {
@@ -512,7 +522,29 @@ mod tests {
         assert!(ctx
             .workflow_registry_ref()
             .await
-            .load(&workflow_id)
+            .load(&layer_workflow_id)
+            .await
+            .is_ok());
+
+        let plot_workflow_id = ctx
+            .workflow_registry_ref_mut()
+            .await
+            .register(Workflow {
+                operator: Statistics {
+                    params: StatisticsParams {},
+                    vector_sources: vec![],
+                    raster_sources: vec![],
+                }
+                .boxed()
+                .into(),
+            })
+            .await
+            .unwrap();
+
+        assert!(ctx
+            .workflow_registry_ref()
+            .await
+            .load(&plot_workflow_id)
             .await
             .is_ok());
 
@@ -521,10 +553,14 @@ mod tests {
             name: Some("Test9 Updated".into()),
             description: None,
             layers: Some(vec![LayerUpdate::UpdateOrInsert(Layer {
-                workflow: workflow_id,
+                workflow: layer_workflow_id,
                 name: "TestLayer".into(),
                 info: LayerInfo::Vector(VectorInfo {}),
                 visibility: Default::default(),
+            })]),
+            plots: Some(vec![PlotUpdate::UpdateOrInsert(Plot {
+                workflow: plot_workflow_id,
+                name: "Test Plot".into(),
             })]),
             bounds: None,
             time_step: None,
