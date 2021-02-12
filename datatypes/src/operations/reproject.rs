@@ -187,33 +187,33 @@ mod tests {
     use super::*;
 
     const MARBURG_EPSG_4326: Coordinate2D = Coordinate2D {
-        x: 8.7667933,
-        y: 50.8021728,
+        x: 8.766_793_3,
+        y: 50.802_172_8,
     };
 
-    const MARBURG_EPSG_900913: Coordinate2D = Coordinate2D {
-        x: 975914.96975616,
-        y: 6586374.70871007,
+    const MARBURG_EPSG_900_913: Coordinate2D = Coordinate2D {
+        x: 975_914.969_756_16,
+        y: 6_586_374.708_710_07,
     };
 
     const COLOGNE_EPSG_4326: Coordinate2D = Coordinate2D {
-        x: 6.9602786,
-        y: 50.937531,
+        x: 6.960_278_6,
+        y: 50.937_531,
     };
 
-    const COLOGNE_EPSG_900913: Coordinate2D = Coordinate2D {
-        x: 774814.66953132,
-        y: 6610251.10992642,
+    const COLOGNE_EPSG_900_913: Coordinate2D = Coordinate2D {
+        x: 774_814.669_531_32,
+        y: 6_610_251.109_926_42,
     };
 
     const HAMBURG_EPSG_4326: Coordinate2D = Coordinate2D {
-        x: 10.001389,
-        y: 53.565278,
+        x: 10.001_389,
+        y: 53.565_278,
     };
 
-    const HAMBURG_EPSG_900913: Coordinate2D = Coordinate2D {
-        x: 1113349.51833785,
-        y: 7088251.30664632,
+    const HAMBURG_EPSG_900_913: Coordinate2D = Coordinate2D {
+        x: 1_113_349.518_337_85,
+        y: 7_088_251.306_646_32,
     };
 
     #[test]
@@ -239,8 +239,8 @@ mod tests {
         let p = Proj::from_known_srs(from, to).unwrap();
         let rp = p.project_coordinate(MARBURG_EPSG_4326).unwrap();
 
-        approx_eq!(f64, rp.x, MARBURG_EPSG_900913.x);
-        approx_eq!(f64, rp.y, MARBURG_EPSG_900913.y);
+        approx_eq!(f64, rp.x, MARBURG_EPSG_900_913.x);
+        approx_eq!(f64, rp.y, MARBURG_EPSG_900_913.y);
     }
 
     #[test]
@@ -250,8 +250,8 @@ mod tests {
         let p = Proj::from_known_srs(from, to).unwrap();
         let rp = MARBURG_EPSG_4326.reproject(&p).unwrap();
 
-        approx_eq!(f64, rp.x, MARBURG_EPSG_900913.x);
-        approx_eq!(f64, rp.y, MARBURG_EPSG_900913.y);
+        approx_eq!(f64, rp.x, MARBURG_EPSG_900_913.x);
+        approx_eq!(f64, rp.y, MARBURG_EPSG_900_913.y);
     }
 
     #[test]
@@ -266,10 +266,10 @@ mod tests {
         };
         let rl = l.reproject(&p).unwrap();
 
-        approx_eq!(f64, rl.start.x, MARBURG_EPSG_900913.x);
-        approx_eq!(f64, rl.start.y, MARBURG_EPSG_900913.y);
-        approx_eq!(f64, rl.end.x, COLOGNE_EPSG_900913.x);
-        approx_eq!(f64, rl.end.y, COLOGNE_EPSG_900913.y);
+        approx_eq!(f64, rl.start.x, MARBURG_EPSG_900_913.x);
+        approx_eq!(f64, rl.start.y, MARBURG_EPSG_900_913.y);
+        approx_eq!(f64, rl.end.x, COLOGNE_EPSG_900_913.x);
+        approx_eq!(f64, rl.end.y, COLOGNE_EPSG_900_913.y);
     }
 
     #[test]
@@ -283,10 +283,10 @@ mod tests {
         let mp = MultiPoint::new(cs).unwrap();
         let rp = mp.reproject(&p).unwrap();
 
-        approx_eq!(f64, rp.points()[0].x, MARBURG_EPSG_900913.x);
-        approx_eq!(f64, rp.points()[0].y, MARBURG_EPSG_900913.y);
-        approx_eq!(f64, rp.points()[1].x, COLOGNE_EPSG_900913.x);
-        approx_eq!(f64, rp.points()[1].y, COLOGNE_EPSG_900913.y);
+        approx_eq!(f64, rp.points()[0].x, MARBURG_EPSG_900_913.x);
+        approx_eq!(f64, rp.points()[0].y, MARBURG_EPSG_900_913.y);
+        approx_eq!(f64, rp.points()[1].x, COLOGNE_EPSG_900_913.x);
+        approx_eq!(f64, rp.points()[1].y, COLOGNE_EPSG_900_913.y);
     }
 
     #[test]
@@ -299,18 +299,17 @@ mod tests {
             MARBURG_EPSG_4326,
             COLOGNE_EPSG_4326,
             HAMBURG_EPSG_4326,
-            MARBURG_EPSG_4326,
         ]];
 
         let mp = MultiLineString::new(cs).unwrap();
         let rp = mp.reproject(&p).unwrap();
 
-        approx_eq!(f64, rp.lines()[0][0].x, MARBURG_EPSG_900913.x);
-        approx_eq!(f64, rp.lines()[0][0].y, MARBURG_EPSG_900913.y);
-        approx_eq!(f64, rp.lines()[0][1].x, COLOGNE_EPSG_900913.x);
-        approx_eq!(f64, rp.lines()[0][1].y, COLOGNE_EPSG_900913.y);
-        approx_eq!(f64, rp.lines()[0][2].x, HAMBURG_EPSG_900913.x);
-        approx_eq!(f64, rp.lines()[0][2].y, HAMBURG_EPSG_900913.y);
+        approx_eq!(f64, rp.lines()[0][0].x, MARBURG_EPSG_900_913.x);
+        approx_eq!(f64, rp.lines()[0][0].y, MARBURG_EPSG_900_913.y);
+        approx_eq!(f64, rp.lines()[0][1].x, COLOGNE_EPSG_900_913.x);
+        approx_eq!(f64, rp.lines()[0][1].y, COLOGNE_EPSG_900_913.y);
+        approx_eq!(f64, rp.lines()[0][2].x, HAMBURG_EPSG_900_913.x);
+        approx_eq!(f64, rp.lines()[0][2].y, HAMBURG_EPSG_900_913.y);
     }
 
     #[test]
@@ -329,11 +328,11 @@ mod tests {
         let mp = MultiPolygon::new(cs).unwrap();
         let rp = mp.reproject(&p).unwrap();
 
-        approx_eq!(f64, rp.polygons()[0][0][0].x, MARBURG_EPSG_900913.x);
-        approx_eq!(f64, rp.polygons()[0][0][0].y, MARBURG_EPSG_900913.y);
-        approx_eq!(f64, rp.polygons()[0][0][1].x, COLOGNE_EPSG_900913.x);
-        approx_eq!(f64, rp.polygons()[0][0][1].y, COLOGNE_EPSG_900913.y);
-        approx_eq!(f64, rp.polygons()[0][0][2].x, HAMBURG_EPSG_900913.x);
-        approx_eq!(f64, rp.polygons()[0][0][2].y, HAMBURG_EPSG_900913.y);
+        approx_eq!(f64, rp.polygons()[0][0][0].x, MARBURG_EPSG_900_913.x);
+        approx_eq!(f64, rp.polygons()[0][0][0].y, MARBURG_EPSG_900_913.y);
+        approx_eq!(f64, rp.polygons()[0][0][1].x, COLOGNE_EPSG_900_913.x);
+        approx_eq!(f64, rp.polygons()[0][0][1].y, COLOGNE_EPSG_900_913.y);
+        approx_eq!(f64, rp.polygons()[0][0][2].x, HAMBURG_EPSG_900_913.x);
+        approx_eq!(f64, rp.polygons()[0][0][2].y, HAMBURG_EPSG_900_913.y);
     }
 }
