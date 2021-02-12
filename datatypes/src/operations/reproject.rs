@@ -219,7 +219,7 @@ mod tests {
     #[test]
     fn new_proj() {
         let from = SpatialReference::epsg_4326();
-        let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900913);
+        let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
         let p = Proj::from_known_srs(from, to);
         assert!(p.is_ok())
     }
@@ -227,7 +227,7 @@ mod tests {
     #[test]
     fn new_proj_fail() {
         let from = SpatialReference::epsg_4326();
-        let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 8008135);
+        let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 8_008_135);
         let p = Proj::from_known_srs(from, to);
         assert!(p.is_err())
     }
@@ -235,7 +235,7 @@ mod tests {
     #[test]
     fn proj_coordinate_4326_900913() {
         let from = SpatialReference::epsg_4326();
-        let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900913);
+        let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
         let p = Proj::from_known_srs(from, to).unwrap();
         let rp = p.project_coordinate(MARBURG_EPSG_4326).unwrap();
 
@@ -246,7 +246,7 @@ mod tests {
     #[test]
     fn reproject_coordinate_4326_900913() {
         let from = SpatialReference::epsg_4326();
-        let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900913);
+        let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
         let p = Proj::from_known_srs(from, to).unwrap();
         let rp = MARBURG_EPSG_4326.reproject(&p).unwrap();
 
@@ -257,7 +257,7 @@ mod tests {
     #[test]
     fn reproject_line_4326_900913() {
         let from = SpatialReference::epsg_4326();
-        let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900913);
+        let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
         let p = Proj::from_known_srs(from, to).unwrap();
 
         let l = Line {
@@ -275,7 +275,7 @@ mod tests {
     #[test]
     fn reproject_multi_point_4326_900913() {
         let from = SpatialReference::epsg_4326();
-        let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900913);
+        let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
         let p = Proj::from_known_srs(from, to).unwrap();
 
         let cs = vec![MARBURG_EPSG_4326, COLOGNE_EPSG_4326];
@@ -292,7 +292,7 @@ mod tests {
     #[test]
     fn reproject_multi_line_4326_900913() {
         let from = SpatialReference::epsg_4326();
-        let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900913);
+        let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
         let p = Proj::from_known_srs(from, to).unwrap();
 
         let cs = vec![vec![
@@ -315,7 +315,7 @@ mod tests {
     #[test]
     fn reproject_multi_polygon_4326_900913() {
         let from = SpatialReference::epsg_4326();
-        let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900913);
+        let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
         let p = Proj::from_known_srs(from, to).unwrap();
 
         let cs = vec![vec![vec![
