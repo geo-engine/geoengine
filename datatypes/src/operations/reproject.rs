@@ -145,13 +145,13 @@ where
     fn reproject(&self, projector: &P) -> Result<BoundingBox2D> {
         let points_per_line = 7; // TODO: static or something else ?
         let upper_line = Line::new(self.upper_left(), self.upper_right())
-            .equi_spaced_coordinates(points_per_line);
+            .with_additional_equi_spaced_coords(points_per_line);
         let right_line = Line::new(self.upper_right(), self.lower_right())
-            .equi_spaced_coordinates(points_per_line);
+            .with_additional_equi_spaced_coords(points_per_line);
         let lower_line = Line::new(self.lower_right(), self.lower_left())
-            .equi_spaced_coordinates(points_per_line);
+            .with_additional_equi_spaced_coords(points_per_line);
         let left_line = Line::new(self.lower_left(), self.upper_left())
-            .equi_spaced_coordinates(points_per_line);
+            .with_additional_equi_spaced_coords(points_per_line);
 
         let cs: Vec<Coordinate2D> = upper_line
             .chain(right_line)
