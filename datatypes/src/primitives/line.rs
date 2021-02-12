@@ -35,7 +35,7 @@ impl Line {
     }
 
     pub fn equi_spaced_coordinates(self, n: i32) -> impl Iterator<Item = Coordinate2D> {
-        (0..n + 1).map(move |f| self.interpolate_coordinate(f as f64 / n as f64))
+        (0..=n).map(move |f| self.interpolate_coordinate(f64::from(f) / f64::from(n)))
     }
 }
 
