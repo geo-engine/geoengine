@@ -89,8 +89,8 @@ impl OgrSourceDataset {
 ///  - `start_field` and `end_field`: the name of the field that contains time information
 ///  - `start_format` and `start_format`: a mapping of a field type to a time value (cf. `OgrSourceDatasetTimeType`)
 ///  - `duration`: the duration of the time validity for all features in the file
-#[serde(rename_all = "lowercase")]
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum OgrSourceDatasetTimeType {
     None,
     Start {
@@ -125,9 +125,9 @@ impl Default for OgrSourceDatasetTimeType {
 ///   - "custom": define a custom format in the attribute `custom_format`
 ///   - "seconds": time column is numeric and contains seconds as UNIX timestamp
 ///   - "iso": time column contains string with ISO8601
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(tag = "format")]
 #[serde(rename_all = "lowercase")]
-#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub enum OgrSourceTimeFormat {
     Custom { custom_format: String },
     Seconds,
@@ -177,8 +177,8 @@ impl OgrSourceColumnSpec {
 ///  - "skip"
 ///  - "abort"
 ///  - "keep"
-#[serde(rename_all = "lowercase")]
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum OgrSourceErrorSpec {
     Skip,
     Abort,
