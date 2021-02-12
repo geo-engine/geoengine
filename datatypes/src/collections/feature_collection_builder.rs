@@ -245,6 +245,10 @@ where
     }
 
     /// Outputs the number of bytes that is occupied in the builder buffers
+    ///
+    /// # Panics
+    /// * if the data type is unknown or unexpected which must not be the case
+    ///
     pub fn byte_size(&mut self) -> usize {
         let geometry_size = CollectionType::builder_byte_size(&mut self.geometries_builder);
         let time_intervals_size = TimeInterval::builder_byte_size(&mut self.time_intervals_builder);
@@ -253,13 +257,18 @@ where
             .builders
             .values()
             .map(|builder| {
-                let data_type_size = match builder.data_type() {
-                    arrow::datatypes::DataType::Float64 => std::mem::size_of::<f64>(),
-                    arrow::datatypes::DataType::Int64 => std::mem::size_of::<i64>(),
-                    arrow::datatypes::DataType::UInt8 => std::mem::size_of::<u8>(),
-                    arrow::datatypes::DataType::Utf8 => 0, // TODO: how to get this dynamic value
-                    _ => unreachable!("This type is not an attribute type"),
+                let data_type_size = if builder.as_any().is::<Float64Builder>() {
+                    std::mem::size_of::<f64>()
+                } else if builder.as_any().is::<Int64Builder>() {
+                    std::mem::size_of::<i64>()
+                } else if builder.as_any().is::<UInt8Builder>() {
+                    std::mem::size_of::<u8>()
+                } else if builder.as_any().is::<StringBuilder>() {
+                    0 // TODO: how to get this dynamic value
+                } else {
+                    unreachable!("This type is not an attribute type");
                 };
+
                 let values_size = builder.len() * data_type_size;
                 let null_size_estimate = builder.len() / 8;
 
@@ -319,7 +328,7 @@ where
         builders.push(Box::new(self.time_intervals_builder));
 
         for (column_name, builder) in self.builders.drain() {
-            let column_type = self.types.get(&column_name).unwrap(); // column must exist
+            let column_type = self.types.get(&column_name).expect("column must exist");
             columns.push(Field::new(
                 &column_name,
                 column_type.arrow_data_type(),

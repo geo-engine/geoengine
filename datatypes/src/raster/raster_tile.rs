@@ -2,9 +2,11 @@ use super::{
     GeoTransform, Grid, GridBounds, GridIdx, GridIdx2D, GridIndexAccess, GridIndexAccessMut,
     GridShape2D, GridShape3D, GridSize, GridSpaceToLinearSpace, Raster, TileInformation,
 };
-use crate::primitives::{BoundingBox2D, SpatialBounded, TemporalBounded, TimeInterval};
+use crate::primitives::{
+    BoundingBox2D, Coordinate2D, SpatialBounded, TemporalBounded, TimeInterval,
+};
 use crate::raster::data_type::FromPrimitive;
-use crate::raster::Pixel;
+use crate::raster::{CoordinatePixelAccess, Pixel};
 use crate::util::Result;
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
@@ -113,6 +115,26 @@ where
             self.global_geo_transform,
         )
     }
+
+    /// Use this geo transform to transform `Coordinate2D` into local grid indices and vice versa.
+    #[inline]
+    pub fn tile_geo_transform(&self) -> GeoTransform {
+        let global_upper_left_idx = self.tile_position
+            * [
+                self.grid_array.axis_size_y() as isize,
+                self.grid_array.axis_size_x() as isize,
+            ];
+
+        let tile_upper_left_coord = self
+            .global_geo_transform
+            .grid_idx_to_coordinate_2d(global_upper_left_idx);
+
+        GeoTransform::new(
+            tile_upper_left_coord,
+            self.global_geo_transform.x_pixel_size,
+            self.global_geo_transform.y_pixel_size,
+        )
+    }
 }
 
 impl<D, T> TemporalBounded for RasterTile<D, T>
@@ -187,11 +209,106 @@ where
     }
 }
 
+impl<D, A, P> CoordinatePixelAccess<P> for RasterTile<D, P>
+where
+    D: GridSize + GridSpaceToLinearSpace<IndexArray = A> + GridBounds<IndexArray = A> + Clone,
+    A: AsRef<[isize]> + Into<GridIdx<A>> + Clone,
+    P: Pixel,
+    Self: GridIndexAccess<P, GridIdx2D>,
+{
+    fn pixel_value_at_coord(&self, coordinate: Coordinate2D) -> Result<P> {
+        // TODO: benchmark the impact of creating the `GeoTransform`s
+
+        let grid_index = self
+            .tile_geo_transform()
+            .coordinate_to_grid_idx_2d(coordinate);
+
+        self.get_at_grid_index(grid_index)
+    }
+
+    fn pixel_value_at_coord_unchecked(&self, coordinate: Coordinate2D) -> P {
+        let grid_index = self
+            .tile_geo_transform()
+            .coordinate_to_grid_idx_2d(coordinate);
+
+        self.get_at_grid_index_unchecked(grid_index)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::primitives::Coordinate2D;
 
     use super::*;
+    use crate::raster::Grid2D;
+
+    #[test]
+    fn coordinate_pixel_access() {
+        fn validate_coordinate<C: Into<Coordinate2D> + Copy>(
+            raster_tile: &RasterTile2D<i32>,
+            coordinate: C,
+        ) {
+            let coordinate: Coordinate2D = coordinate.into();
+
+            let tile_geo_transform = raster_tile.tile_information().tile_geo_transform();
+
+            let value_a = raster_tile.pixel_value_at_coord(coordinate);
+
+            let value_b = raster_tile
+                .get_at_grid_index(tile_geo_transform.coordinate_to_grid_idx_2d(coordinate));
+
+            match (value_a, value_b) {
+                (Ok(a), Ok(b)) => assert_eq!(a, b),
+                (Err(e1), Err(e2)) => assert_eq!(format!("{:?}", e1), format!("{:?}", e2)),
+                (Err(e), _) | (_, Err(e)) => panic!("{}", e.to_string()),
+            };
+        }
+
+        let raster_tile = RasterTile2D::new_with_tile_info(
+            TimeInterval::default(),
+            TileInformation {
+                global_geo_transform: Default::default(),
+                global_tile_position: [0, 0].into(),
+                tile_size_in_pixels: [3, 2].into(),
+            },
+            Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap(),
+        );
+
+        validate_coordinate(&raster_tile, (0.0, 0.0));
+        validate_coordinate(&raster_tile, (1.0, 0.0));
+
+        assert_eq!(
+            raster_tile.pixel_value_at_coord_unchecked((0.0, 0.0).into()),
+            1
+        );
+        assert_eq!(
+            raster_tile.pixel_value_at_coord_unchecked((1.0, 0.0).into()),
+            2
+        );
+
+        let raster_tile = RasterTile2D::new_with_tile_info(
+            TimeInterval::default(),
+            TileInformation {
+                global_geo_transform: Default::default(),
+                global_tile_position: [1, 1].into(),
+                tile_size_in_pixels: [3, 2].into(),
+            },
+            Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap(),
+        );
+
+        validate_coordinate(&raster_tile, (0.0, 0.0));
+        validate_coordinate(&raster_tile, (2.0, -3.0));
+        validate_coordinate(&raster_tile, (3.0, -3.0));
+
+        assert_eq!(
+            raster_tile.pixel_value_at_coord_unchecked((2.0, -3.0).into()),
+            1
+        );
+        assert_eq!(
+            raster_tile.pixel_value_at_coord_unchecked((3.0, -3.0).into()),
+            2
+        );
+    }
 
     #[test]
     fn tile_information_new() {

@@ -4,7 +4,7 @@ use crate::projects::project::{
     CreateProject, LoadVersion, OrderBy, Project, ProjectFilter, ProjectId, ProjectListOptions,
     ProjectListing, ProjectPermission, ProjectVersion, UpdateProject, UserProjectPermission,
 };
-use crate::projects::projectdb::ProjectDB;
+use crate::projects::projectdb::ProjectDb;
 use crate::users::user::UserId;
 use crate::util::user_input::Validated;
 use async_trait::async_trait;
@@ -12,13 +12,13 @@ use snafu::ensure;
 use std::collections::HashMap;
 
 #[derive(Default)]
-pub struct HashMapProjectDB {
+pub struct HashMapProjectDb {
     projects: HashMap<ProjectId, Vec<Project>>,
     permissions: Vec<UserProjectPermission>,
 }
 
 #[async_trait]
-impl ProjectDB for HashMapProjectDB {
+impl ProjectDb for HashMapProjectDb {
     /// List projects
     async fn list(
         &self,
@@ -240,8 +240,8 @@ impl ProjectDB for HashMapProjectDB {
 mod test {
     use super::*;
     use crate::projects::project::STRectangle;
-    use crate::util::identifiers::Identifier;
     use crate::util::user_input::UserInput;
+    use crate::util::Identifier;
     use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, TimeInterval};
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
     use std::{thread, time};
@@ -257,7 +257,7 @@ mod test {
 
     #[tokio::test]
     async fn list_permitted() {
-        let mut project_db = HashMapProjectDB::default();
+        let mut project_db = HashMapProjectDb::default();
         let user = UserId::new();
         let user2 = UserId::new();
         let user3 = UserId::new();
@@ -346,7 +346,7 @@ mod test {
 
     #[tokio::test]
     async fn list() {
-        let mut project_db = HashMapProjectDB::default();
+        let mut project_db = HashMapProjectDb::default();
         let user = UserId::new();
 
         for i in 0..10 {
@@ -391,7 +391,7 @@ mod test {
 
     #[tokio::test]
     async fn load() {
-        let mut project_db = HashMapProjectDB::default();
+        let mut project_db = HashMapProjectDb::default();
         let user = UserId::new();
 
         let create = CreateProject {
@@ -419,7 +419,7 @@ mod test {
 
     #[tokio::test]
     async fn create() {
-        let mut project_db = HashMapProjectDB::default();
+        let mut project_db = HashMapProjectDb::default();
         let user = UserId::new();
 
         let create = CreateProject {
@@ -439,7 +439,7 @@ mod test {
 
     #[tokio::test]
     async fn update() {
-        let mut project_db = HashMapProjectDB::default();
+        let mut project_db = HashMapProjectDb::default();
         let user = UserId::new();
 
         let create = CreateProject {
@@ -459,7 +459,9 @@ mod test {
             name: Some("Foo".into()),
             description: None,
             layers: None,
+            plots: None,
             bounds: None,
+            time_step: None,
         }
         .validated()
         .unwrap();
@@ -471,7 +473,7 @@ mod test {
 
     #[tokio::test]
     async fn delete() {
-        let mut project_db = HashMapProjectDB::default();
+        let mut project_db = HashMapProjectDb::default();
         let user = UserId::new();
 
         let create = CreateProject {
@@ -491,7 +493,7 @@ mod test {
 
     #[tokio::test]
     async fn versions() {
-        let mut project_db = HashMapProjectDB::default();
+        let mut project_db = HashMapProjectDb::default();
         let user = UserId::new();
 
         let create = CreateProject {
@@ -513,7 +515,9 @@ mod test {
             name: Some("Foo".into()),
             description: None,
             layers: None,
+            plots: None,
             bounds: None,
+            time_step: None,
         }
         .validated()
         .unwrap();
@@ -528,7 +532,7 @@ mod test {
 
     #[tokio::test]
     async fn permissions() {
-        let mut project_db = HashMapProjectDB::default();
+        let mut project_db = HashMapProjectDb::default();
         let user = UserId::new();
 
         let create = CreateProject {
@@ -573,7 +577,7 @@ mod test {
 
     #[tokio::test]
     async fn add_permission() {
-        let mut project_db = HashMapProjectDB::default();
+        let mut project_db = HashMapProjectDb::default();
         let user = UserId::new();
 
         let create = CreateProject {
@@ -618,7 +622,7 @@ mod test {
 
     #[tokio::test]
     async fn remove_permission() {
-        let mut project_db = HashMapProjectDB::default();
+        let mut project_db = HashMapProjectDb::default();
         let user = UserId::new();
 
         let create = CreateProject {

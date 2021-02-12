@@ -226,23 +226,21 @@ impl RawFeatureCollectionBuilder {
             .len(num_features)
             .add_buffer(feature_offsets)
             .add_child_data(
-                ArrayData::builder(arrow::datatypes::DataType::List(
-                    Coordinate2D::arrow_data_type().into(),
-                ))
-                .len(num_lines)
-                .add_buffer(line_offsets)
-                .add_child_data(
-                    ArrayData::builder(Coordinate2D::arrow_data_type())
-                        .len(num_coords)
-                        .add_child_data(
-                            ArrayData::builder(DataType::Float64)
-                                .len(num_floats)
-                                .add_buffer(coords)
-                                .build(),
-                        )
-                        .build(),
-                )
-                .build(),
+                ArrayData::builder(Coordinate2D::arrow_list_data_type())
+                    .len(num_lines)
+                    .add_buffer(line_offsets)
+                    .add_child_data(
+                        ArrayData::builder(Coordinate2D::arrow_data_type())
+                            .len(num_coords)
+                            .add_child_data(
+                                ArrayData::builder(DataType::Float64)
+                                    .len(num_floats)
+                                    .add_buffer(coords)
+                                    .build(),
+                            )
+                            .build(),
+                    )
+                    .build(),
             )
             .build();
 
@@ -269,31 +267,27 @@ impl RawFeatureCollectionBuilder {
             .len(num_features)
             .add_buffer(feature_offsets)
             .add_child_data(
-                ArrayData::builder(arrow::datatypes::DataType::List(
-                    arrow::datatypes::DataType::List(Coordinate2D::arrow_data_type().into()).into(),
-                ))
-                .len(num_polygons)
-                .add_buffer(polygon_offsets)
-                .add_child_data(
-                    ArrayData::builder(arrow::datatypes::DataType::List(
-                        Coordinate2D::arrow_data_type().into(),
-                    ))
-                    .len(num_rings)
-                    .add_buffer(ring_offsets)
+                ArrayData::builder(MultiLineString::arrow_data_type())
+                    .len(num_polygons)
+                    .add_buffer(polygon_offsets)
                     .add_child_data(
-                        ArrayData::builder(Coordinate2D::arrow_data_type())
-                            .len(num_coords)
+                        ArrayData::builder(Coordinate2D::arrow_list_data_type())
+                            .len(num_rings)
+                            .add_buffer(ring_offsets)
                             .add_child_data(
-                                ArrayData::builder(DataType::Float64)
-                                    .len(num_floats)
-                                    .add_buffer(coords)
+                                ArrayData::builder(Coordinate2D::arrow_data_type())
+                                    .len(num_coords)
+                                    .add_child_data(
+                                        ArrayData::builder(DataType::Float64)
+                                            .len(num_floats)
+                                            .add_buffer(coords)
+                                            .build(),
+                                    )
                                     .build(),
                             )
                             .build(),
                     )
                     .build(),
-                )
-                .build(),
             )
             .build();
 
@@ -462,7 +456,7 @@ mod tests {
 
         let num_bytes = bit_util::ceil(numbers.len(), 8);
         let mut null_buffer = MutableBuffer::new(num_bytes).with_bitset(num_bytes, false);
-        let null_slice = null_buffer.data_mut();
+        let null_slice = null_buffer.as_slice_mut();
 
         for (i, null) in nulls.iter().enumerate() {
             if *null {
@@ -472,7 +466,7 @@ mod tests {
 
         // nulls
         builder
-            .set_column::<Float64Type>("foo", value_buffer, Some(null_buffer.freeze()))
+            .set_column::<Float64Type>("foo", value_buffer, Some(null_buffer.into()))
             .unwrap();
 
         builder.finish().unwrap();

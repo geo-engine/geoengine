@@ -6,8 +6,8 @@ set -m
 # Go to dir where config files are
 cd /app || exit
 
-# `/sbin/setuser www-data` runs the given command as the user `geoengine`.
-exec /sbin/setuser www-data /usr/bin/geoengine >>/var/log/geoengine.log 2>&1 &
+# `/sbin/setuser geoengine` runs the given command as the user `geoengine`.
+exec /sbin/setuser geoengine /usr/bin/geoengine >>/var/log/geoengine.log 2>&1 &
 
 # TODO: make requests to setup system
 

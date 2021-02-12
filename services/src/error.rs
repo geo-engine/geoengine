@@ -13,7 +13,7 @@ pub enum Error {
     Operator {
         source: geoengine_operators::error::Error,
     },
-    HTTP {
+    Http {
         source: warp::http::Error,
     },
     Uuid {
@@ -22,7 +22,7 @@ pub enum Error {
     SerdeJson {
         source: serde_json::Error,
     },
-    IO {
+    Io {
         source: std::io::Error,
     },
     TokioJoin {
@@ -35,35 +35,47 @@ pub enum Error {
 
     TokioChannelSend,
 
+    #[snafu(display("Unable to parse query string: {}", source))]
     UnableToParseQueryString {
         source: serde_urlencoded::de::Error,
     },
 
     ServerStartup,
 
-    #[snafu(display("Registration failed: {:?}", reason))]
+    #[snafu(display("Registration failed: {}", reason))]
     RegistrationFailed {
         reason: String,
     },
+    #[snafu(display("Tried to create duplicate: {}", reason))]
+    Duplicate {
+        reason: String,
+    },
+    #[snafu(display("User does not exist or password is wrong."))]
     LoginFailed,
     LogoutFailed,
-    SessionDoesNotExist,
+    #[snafu(display("The session id is invalid."))]
     InvalidSession,
+    #[snafu(display("Header with authorization token not provided."))]
     MissingAuthorizationHeader,
+    #[snafu(display("Authentication scheme must be Bearer."))]
     InvalidAuthorizationScheme,
 
-    #[snafu(display("Authorization error {:?}", source))]
+    #[snafu(display("Authorization error: {:?}", source))]
     Authorization {
         source: Box<Error>,
     },
-
+    #[snafu(display("Failed to create the project."))]
     ProjectCreateFailed,
+    #[snafu(display("Failed to list projects."))]
     ProjectListFailed,
+    #[snafu(display("The project failed to load."))]
     ProjectLoadFailed,
+    #[snafu(display("Failed to update the project."))]
     ProjectUpdateFailed,
+    #[snafu(display("Failed to delete the project."))]
     ProjectDeleteFailed,
     PermissionFailed,
-    ProjectDBUnauthorized,
+    ProjectDbUnauthorized,
 
     InvalidNamespace,
 
@@ -74,7 +86,7 @@ pub enum Error {
         expected: SpatialReferenceOption,
     },
 
-    InvalidWFSTypeNames,
+    InvalidWfsTypeNames,
 
     NoWorkflowForGivenId,
 
@@ -85,6 +97,7 @@ pub enum Error {
 
     TokioPostgresTimeout,
 
+    #[snafu(display("Identifier does not have the right format."))]
     InvalidUuid,
     SessionNotInitialized,
 
@@ -103,6 +116,22 @@ pub enum Error {
     },
 
     MissingSettingsDirectory,
+
+    DataSetIdTypeMissMatch,
+    UnknownDataSetId,
+    UnknownProviderId,
+
+    #[snafu(display("Parameter {} must have length between {} and {}", parameter, min, max))]
+    InvalidStringLength {
+        parameter: String,
+        min: usize,
+        max: usize,
+    },
+
+    #[snafu(display("Limit must be <= {}", limit))]
+    InvalidListLimit {
+        limit: usize,
+    },
 }
 
 impl Reject for Error {}

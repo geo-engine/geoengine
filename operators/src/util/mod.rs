@@ -1,4 +1,5 @@
 pub mod input;
+pub mod number_statistics;
 
 use crate::error::Error;
 use std::ops::Deref;

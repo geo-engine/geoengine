@@ -46,6 +46,12 @@ macro_rules! boxed_on_debug {
     };
 }
 
+/// Starts the webserver for the Geo Engine API.
+///
+/// # Panics
+///  * may panic if the `Postgres` backend is chosen without compiling the `postgres` feature
+///
+///
 pub async fn start_server(
     shutdown_rx: Option<Receiver<()>>,
     static_files_dir: Option<PathBuf>,
@@ -73,7 +79,7 @@ pub async fn start_server(
                 shutdown_rx,
                 static_files_dir,
                 bind_address,
-                InMemoryContext::default(),
+                InMemoryContext::new_with_data().await,
             )
             .await
         }
@@ -110,6 +116,7 @@ where
     let handler = combine!(
         handlers::workflows::register_workflow_handler(ctx.clone()),
         handlers::workflows::load_workflow_handler(ctx.clone()),
+        handlers::workflows::get_workflow_metadata_handler(ctx.clone()),
         handlers::users::register_user_handler(ctx.clone()),
         handlers::users::anonymous_handler(ctx.clone()),
         handlers::users::login_handler(ctx.clone()),
@@ -126,8 +133,10 @@ where
         handlers::projects::add_permission_handler(ctx.clone()),
         handlers::projects::remove_permission_handler(ctx.clone()),
         handlers::projects::list_permissions_handler(ctx.clone()),
+        handlers::datasets::list_datasets_handler(ctx.clone()),
         handlers::wms::wms_handler(ctx.clone()),
         handlers::wfs::wfs_handler(ctx.clone()),
+        handlers::plots::get_plot_handler(ctx.clone()),
         serve_static_directory(static_files_dir)
     )
     .recover(handle_rejection);
@@ -151,6 +160,7 @@ fn serve_static_directory(
     let has_path = path.is_some();
 
     warp::path("static")
+        .and(warp::get())
         .and_then(move || async move {
             if has_path {
                 Ok(())

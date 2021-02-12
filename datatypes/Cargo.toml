@@ -13,22 +13,24 @@ postgres = ["postgres-types"]
 
 [dependencies]
 # simd compiles with nightly only, allow default features to build with arrow-flight once it is possible
-arrow = {version = "2.0", features = ["simd"] }
+# arrow = { version = "3.0", features = ["simd"] } TODO: activate when version is patched
+arrow = { version = "3.0" }
 chrono = "0.4"
 float-cmp = "0.8"
 geo = "0.17"
 proj = "0.21"
-geojson = "0.21"
+geojson = "0.22"
 image = "0.23"
 ndarray = "0.14"
 num-traits = "0.2"
 ocl = "0.19"
 ordered-float = { version= "2.0", features = ["serde"] }
 paste = "1.0"
-postgres-types = { version = "0.2", features = ["derive", "with-chrono-0_4"], optional = true }
+postgres-types = { version = "0.2", features = ["derive", "with-chrono-0_4", "with-uuid-0_8"], optional = true }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 snafu = "0.6"
+uuid = { version = "0.8", features = ["serde", "v4", "v5"] }
 vega_lite_4 = { version = "0.6", features = ["ndarray", "show_vega"]}
 
 [dev-dependencies]

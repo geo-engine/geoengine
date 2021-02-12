@@ -1,6 +1,6 @@
 use arrow::array::{
-    as_primitive_array, as_string_array, Array, ArrayData, ArrayRef, BooleanArray, Float64Array,
-    ListArray, PrimitiveArrayOps, StructArray,
+    as_primitive_array, as_string_array, Array, ArrayData, ArrayRef, BooleanArray, ListArray,
+    StructArray,
 };
 use arrow::datatypes::{DataType, Field, Float64Type, Int64Type};
 use arrow::error::ArrowError;
@@ -139,6 +139,9 @@ pub trait FeatureCollectionModifications {
     where
         S1: AsRef<str>,
         S2: AsRef<str>;
+
+    /// Sorts the features in this collection by their timestamps ascending.
+    fn sort_by_time_asc(&self) -> Result<Self::Output>;
 }
 
 impl<CollectionType> FeatureCollectionModifications for FeatureCollection<CollectionType>
@@ -498,7 +501,7 @@ where
                         downcast_array(array_a),
                         downcast_array(array_b),
                     )?),
-                    _ => arrow::compute::concat(&[array_a.clone(), array_b.clone()])?,
+                    _ => arrow::compute::concat(&[array_a.as_ref(), array_b.as_ref()])?,
                 },
             ));
         }
@@ -613,6 +616,27 @@ where
             struct_array_from_data(columns, column_values, self.table.len()),
             types,
         ))
+    }
+
+    #[allow(clippy::too_many_lines)]
+    fn sort_by_time_asc(&self) -> Result<Self::Output> {
+        let time_column = self
+            .table
+            .column_by_name(Self::TIME_COLUMN_NAME)
+            .expect("must exist");
+
+        let sort_options = Some(arrow::compute::SortOptions {
+            descending: false,
+            nulls_first: false,
+        });
+
+        let sort_indices = arrow::compute::sort_to_indices(time_column, sort_options)?;
+
+        let table_ref = arrow::compute::take(&self.table, &sort_indices, None)?;
+
+        let table = StructArray::from(table_ref.data());
+
+        Ok(Self::new_from_internals(table, self.types.clone()))
     }
 }
 
@@ -833,7 +857,7 @@ where
 
         unsafe {
             std::slice::from_raw_parts(
-                timestamps.raw_values().cast::<TimeInterval>(),
+                timestamps.values().as_ptr().cast::<TimeInterval>(),
                 number_of_time_intervals,
             )
         }
@@ -1005,6 +1029,27 @@ where
         ))
     }
 
+    /// A convenient method for creating feature collections in tests
+    pub fn from_slices<F, T, DK, DV>(
+        features: &[F],
+        time_intervals: &[T],
+        data: &[(DK, DV)],
+    ) -> Result<Self>
+    where
+        F: Into<CollectionType> + Clone,
+        T: Into<TimeInterval> + Clone,
+        DK: Into<String> + Clone,
+        DV: Into<FeatureData> + Clone,
+    {
+        Self::from_data(
+            features.iter().cloned().map(Into::into).collect(),
+            time_intervals.iter().cloned().map(Into::into).collect(),
+            data.iter()
+                .map(|(k, v)| (k.clone().into(), v.clone().into()))
+                .collect(),
+        )
+    }
+
     /// Checks for name conflicts with reserved names
     pub(super) fn is_reserved_name(name: &str) -> bool {
         name == Self::GEOMETRY_COLUMN_NAME || name == Self::TIME_COLUMN_NAME
@@ -1021,62 +1066,11 @@ impl<CollectionType> Clone for FeatureCollection<CollectionType> {
     }
 }
 
-impl<CollectionType> VectorDataTyped for FeatureCollection<CollectionType>
-where
-    CollectionType: Geometry,
-{
-    fn vector_data_type(&self) -> VectorDataType {
-        CollectionType::DATA_TYPE
-    }
-}
-
 impl<CollectionType> PartialEq for FeatureCollection<CollectionType>
 where
     CollectionType: Geometry + ArrowTyped,
 {
-    #[allow(clippy::too_many_lines)] // TODO: split function
     fn eq(&self, other: &Self) -> bool {
-        /// compares two `f64` typed columns
-        /// treats `f64::NAN` values as if they are equal
-        fn f64_column_equals(a: &Float64Array, b: &Float64Array) -> bool {
-            if (a.len() != b.len()) || (a.null_count() != b.null_count()) {
-                return false;
-            }
-            let number_of_values = a.len();
-
-            if a.null_count() == 0 {
-                let a_values: &[f64] = a.value_slice(0, number_of_values);
-                let b_values: &[f64] = a.value_slice(0, number_of_values);
-
-                for (&v1, &v2) in a_values.iter().zip(b_values) {
-                    match (v1.is_nan(), v2.is_nan()) {
-                        (true, true) => continue,
-                        (false, false) if float_cmp::approx_eq!(f64, v1, v2) => continue,
-                        _ => return false,
-                    }
-                }
-            } else {
-                for i in 0..number_of_values {
-                    match (a.is_null(i), b.is_null(i)) {
-                        (true, true) => continue,
-                        (false, false) => (), // need to compare values
-                        _ => return false,
-                    };
-
-                    let v1: f64 = a.value(i);
-                    let v2: f64 = b.value(i);
-
-                    match (v1.is_nan(), v2.is_nan()) {
-                        (true, true) => continue,
-                        (false, false) if float_cmp::approx_eq!(f64, v1, v2) => continue,
-                        _ => return false,
-                    }
-                }
-            }
-
-            true
-        }
-
         if self.types != other.types {
             return false;
         }
@@ -1091,126 +1085,21 @@ where
             let c1 = self.table.column_by_name(key).expect("column must exist");
             let c2 = other.table.column_by_name(key).expect("column must exist");
 
-            match (c1.data_type(), c2.data_type()) {
-                (DataType::Float64, DataType::Float64) => {
-                    if !f64_column_equals(downcast_array(c1), downcast_array(c2)) {
-                        return false;
-                    }
-                }
-                (DataType::List(_), DataType::List(_)) => {
-                    // TODO: remove special treatment for geometry types on next arrow version
-
-                    match CollectionType::DATA_TYPE {
-                        VectorDataType::Data => {}
-                        VectorDataType::MultiPoint => {
-                            if !c1.equals(c2.as_ref()) {
-                                return false;
-                            }
-                        }
-                        VectorDataType::MultiLineString => {
-                            let c1_feature_offsets = c1.data();
-                            let c2_feature_offsets = c2.data();
-                            let c1_lines_offsets = c1_feature_offsets.child_data().first().unwrap();
-                            let c2_lines_offsets = c2_feature_offsets.child_data().first().unwrap();
-                            let c1_coordinates = c1_lines_offsets
-                                .child_data()
-                                .first()
-                                .unwrap()
-                                .child_data()
-                                .first()
-                                .unwrap();
-                            let c2_coordinates = c2_lines_offsets
-                                .child_data()
-                                .first()
-                                .unwrap()
-                                .child_data()
-                                .first()
-                                .unwrap();
-
-                            let feature_offsets_eq = || {
-                                c1_feature_offsets.buffers()[0].data()
-                                    == c2_feature_offsets.buffers()[0].data()
-                            };
-
-                            let lines_offsets_eq = || {
-                                c1_lines_offsets.buffers()[0].data()
-                                    == c2_lines_offsets.buffers()[0].data()
-                            };
-
-                            let coordinates_eq = || {
-                                c1_coordinates.buffers()[0].data()
-                                    == c2_coordinates.buffers()[0].data()
-                            };
-
-                            if !feature_offsets_eq() || !lines_offsets_eq() || !coordinates_eq() {
-                                return false;
-                            }
-                        }
-                        VectorDataType::MultiPolygon => {
-                            let c1_feature_offsets = c1.data();
-                            let c2_feature_offsets = c2.data();
-                            let c1_polygons_offsets =
-                                c1_feature_offsets.child_data().first().unwrap();
-                            let c2_polygons_offsets =
-                                c2_feature_offsets.child_data().first().unwrap();
-                            let c1_rings_offsets =
-                                c1_polygons_offsets.child_data().first().unwrap();
-                            let c2_rings_offsets =
-                                c2_polygons_offsets.child_data().first().unwrap();
-                            let c1_coordinates = c1_rings_offsets
-                                .child_data()
-                                .first()
-                                .unwrap()
-                                .child_data()
-                                .first()
-                                .unwrap();
-                            let c2_coordinates = c2_rings_offsets
-                                .child_data()
-                                .first()
-                                .unwrap()
-                                .child_data()
-                                .first()
-                                .unwrap();
-
-                            let feature_offsets_eq = || {
-                                c1_feature_offsets.buffers()[0].data()
-                                    == c2_feature_offsets.buffers()[0].data()
-                            };
-
-                            let polygons_offsets_eq = || {
-                                c1_polygons_offsets.buffers()[0].data()
-                                    == c2_polygons_offsets.buffers()[0].data()
-                            };
-
-                            let rings_offsets_eq = || {
-                                c1_rings_offsets.buffers()[0].data()
-                                    == c2_rings_offsets.buffers()[0].data()
-                            };
-
-                            let coordinates_eq = || {
-                                c1_coordinates.buffers()[0].data()
-                                    == c2_coordinates.buffers()[0].data()
-                            };
-
-                            if !feature_offsets_eq()
-                                || !polygons_offsets_eq()
-                                || !rings_offsets_eq()
-                                || !coordinates_eq()
-                            {
-                                return false;
-                            }
-                        }
-                    }
-                }
-                _ => {
-                    if !c1.equals(c2.as_ref()) {
-                        return false;
-                    }
-                }
+            if c1 != c2 {
+                return false;
             }
         }
 
         true
+    }
+}
+
+impl<CollectionType> VectorDataTyped for FeatureCollection<CollectionType>
+where
+    CollectionType: Geometry,
+{
+    fn vector_data_type(&self) -> VectorDataType {
+        CollectionType::DATA_TYPE
     }
 }
 
@@ -1484,7 +1373,6 @@ mod tests {
     }
 
     #[test]
-    #[should_panic = "duplicate column"]
     fn rename_columns_fails() {
         let collection = DataCollection::from_data(
             vec![],
@@ -1499,8 +1387,8 @@ mod tests {
         )
         .unwrap();
 
-        collection
+        assert!(collection
             .rename_columns(&[("foo", "baz"), ("bar", "baz")])
-            .expect("duplicate column");
+            .is_err());
     }
 }

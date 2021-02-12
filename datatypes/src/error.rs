@@ -160,6 +160,8 @@ pub enum Error {
     InvalidTypedGridConversion,
     InvalidTypedValueConversion,
 
+    InvalidUuid,
+
     #[snafu(display("NoDateTimeValid: {:?}", time_instance))]
     NoDateTimeValid {
         time_instance: TimeInstance,

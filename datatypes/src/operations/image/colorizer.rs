@@ -478,6 +478,10 @@ impl RgbaColor {
     ///
     /// assert_eq!(RgbaColor::black().factor_add(RgbaColor::white(), 0.5), RgbaColor::new(128, 128, 128, 255));
     /// ```
+    ///
+    /// # Panics
+    /// On debug, if factor is not in [0, 1]
+    ///
     #[allow(unstable_name_collisions)]
     pub fn factor_add(self, other: Self, factor: f64) -> Self {
         debug_assert!((0.0..=1.0).contains(&factor));
@@ -493,25 +497,6 @@ impl RgbaColor {
         ])
     }
 }
-
-// TODO: use float's clamp function once it is stable
-trait Clamp: Sized + PartialOrd {
-    /// Restrict a value to a certain interval unless it is NaN.
-    /// taken from std-lib nightly
-    fn clamp(self, min: Self, max: Self) -> Self {
-        assert!(min <= max);
-        let mut x = self;
-        if x < min {
-            x = min;
-        }
-        if x > max {
-            x = max;
-        }
-        x
-    }
-}
-
-impl Clamp for f64 {}
 
 impl From<RgbaColor> for image::Rgba<u8> {
     /// Transform an `RgbaColor` to its counterpart from the image crate

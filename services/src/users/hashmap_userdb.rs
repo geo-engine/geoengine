@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use async_trait::async_trait;
 use pwhash::bcrypt;
 use snafu::ensure;
 
@@ -8,26 +9,25 @@ use crate::error::Result;
 use crate::projects::project::{ProjectId, STRectangle};
 use crate::users::session::{Session, SessionId, UserInfo};
 use crate::users::user::{User, UserCredentials, UserId, UserRegistration};
-use crate::users::userdb::UserDB;
-use crate::util::identifiers::Identifier;
+use crate::users::userdb::UserDb;
 use crate::util::user_input::Validated;
-use async_trait::async_trait;
+use geoengine_datatypes::util::Identifier;
 
 #[derive(Default)]
-pub struct HashMapUserDB {
+pub struct HashMapUserDb {
     users: HashMap<String, User>,
     sessions: HashMap<SessionId, Session>,
 }
 
 #[async_trait]
-impl UserDB for HashMapUserDB {
+impl UserDb for HashMapUserDb {
     /// Register a user
     async fn register(&mut self, user_registration: Validated<UserRegistration>) -> Result<UserId> {
         let user_registration = user_registration.user_input;
         ensure!(
             !self.users.contains_key(&user_registration.email),
-            error::RegistrationFailed {
-                reason: "E-mail already exists "
+            error::Duplicate {
+                reason: "E-mail already exists"
             }
         );
 
@@ -103,7 +103,7 @@ impl UserDB for HashMapUserDB {
     async fn session(&self, session: SessionId) -> Result<Session> {
         match self.sessions.get(&session) {
             Some(session) => Ok(session.clone()),
-            None => Err(error::Error::SessionDoesNotExist),
+            None => Err(error::Error::InvalidSession),
         }
     }
 
@@ -114,7 +114,7 @@ impl UserDB for HashMapUserDB {
                 session.project = Some(project);
                 Ok(())
             }
-            None => Err(error::Error::SessionDoesNotExist),
+            None => Err(error::Error::InvalidSession),
         }
     }
 
@@ -124,7 +124,7 @@ impl UserDB for HashMapUserDB {
                 session.view = Some(view);
                 Ok(())
             }
-            None => Err(error::Error::SessionDoesNotExist),
+            None => Err(error::Error::InvalidSession),
         }
     }
 }
@@ -136,7 +136,7 @@ mod tests {
 
     #[tokio::test]
     async fn register() {
-        let mut user_db = HashMapUserDB::default();
+        let mut user_db = HashMapUserDb::default();
 
         let user_registration = UserRegistration {
             email: "foo@bar.de".into(),
@@ -151,7 +151,7 @@ mod tests {
 
     #[tokio::test]
     async fn login() {
-        let mut user_db = HashMapUserDB::default();
+        let mut user_db = HashMapUserDb::default();
 
         let user_registration = UserRegistration {
             email: "foo@bar.de".into(),
@@ -173,7 +173,7 @@ mod tests {
 
     #[tokio::test]
     async fn logout() {
-        let mut user_db = HashMapUserDB::default();
+        let mut user_db = HashMapUserDb::default();
 
         let user_registration = UserRegistration {
             email: "foo@bar.de".into(),
@@ -197,7 +197,7 @@ mod tests {
 
     #[tokio::test]
     async fn session() {
-        let mut user_db = HashMapUserDB::default();
+        let mut user_db = HashMapUserDb::default();
 
         let user_registration = UserRegistration {
             email: "foo@bar.de".into(),

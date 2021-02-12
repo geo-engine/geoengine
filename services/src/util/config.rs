@@ -147,3 +147,21 @@ pub struct TilingSpecification {
 impl ConfigElement for TilingSpecification {
     const KEY: &'static str = "raster.tiling_specification";
 }
+
+#[derive(Debug, Deserialize)]
+pub struct QueryContext {
+    pub chunk_byte_size: usize,
+}
+
+impl ConfigElement for QueryContext {
+    const KEY: &'static str = "query_context";
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DataSetService {
+    pub list_limit: u32,
+}
+
+impl ConfigElement for DataSetService {
+    const KEY: &'static str = "dataset_service";
+}

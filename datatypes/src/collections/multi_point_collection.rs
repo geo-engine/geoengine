@@ -62,7 +62,10 @@ impl<'l> Iterator for MultiPointIterator<'l> {
         let floats: &Float64Array = downcast_array(&floats_ref);
 
         let multi_point = MultiPointRef::new_unchecked(unsafe {
-            slice::from_raw_parts(floats.raw_values().cast::<Coordinate2D>(), number_of_points)
+            slice::from_raw_parts(
+                floats.values().as_ptr().cast::<Coordinate2D>(),
+                number_of_points,
+            )
         });
 
         self.index += 1; // increment!
@@ -104,7 +107,10 @@ impl<'l> GeometryRandomAccess<'l> for MultiPointCollection {
         let floats: &Float64Array = downcast_array(&floats_ref);
 
         let multi_point = MultiPointRef::new_unchecked(unsafe {
-            slice::from_raw_parts(floats.raw_values().cast::<Coordinate2D>(), number_of_points)
+            slice::from_raw_parts(
+                floats.values().as_ptr().cast::<Coordinate2D>(),
+                number_of_points,
+            )
         });
 
         Some(multi_point)
@@ -149,7 +155,7 @@ impl GeometryCollection for MultiPointCollection {
 
         unsafe {
             slice::from_raw_parts(
-                floats.raw_values().cast::<Coordinate2D>(),
+                floats.values().as_ptr().cast::<Coordinate2D>(),
                 number_of_coordinates,
             )
         }
@@ -166,7 +172,7 @@ impl GeometryCollection for MultiPointCollection {
         let data = geometries.data();
         let buffer = &data.buffers()[0];
 
-        unsafe { slice::from_raw_parts(buffer.raw_data().cast::<i32>(), geometries.len() + 1) }
+        unsafe { slice::from_raw_parts(buffer.as_ptr().cast::<i32>(), geometries.len() + 1) }
     }
 }
 
@@ -978,5 +984,60 @@ mod tests {
         let offsets = pc.feature_offsets();
         assert_eq!(offsets.len(), 4);
         assert_eq!(offsets, &[0, 1, 3, 4]);
+    }
+
+    #[test]
+    fn sort_by_time_asc() {
+        let collection = MultiPointCollection::from_data(
+            MultiPoint::many(vec![
+                vec![(0., 0.)],
+                vec![(1., 1.), (1.1, 1.1)],
+                vec![(2., 2.)],
+            ])
+            .unwrap(),
+            vec![
+                TimeInterval::new_unchecked(1, 5),
+                TimeInterval::new_unchecked(0, 3),
+                TimeInterval::new_unchecked(1, 3),
+            ],
+            {
+                let mut map = HashMap::new();
+                map.insert("numbers".into(), FeatureData::Number(vec![0., 1., 2.]));
+                map.insert(
+                    "number_nulls".into(),
+                    FeatureData::NullableNumber(vec![Some(0.), None, Some(2.)]),
+                );
+                map
+            },
+        )
+        .unwrap();
+
+        let expected_collection = MultiPointCollection::from_data(
+            MultiPoint::many(vec![
+                vec![(1., 1.), (1.1, 1.1)],
+                vec![(2., 2.)],
+                vec![(0., 0.)],
+            ])
+            .unwrap(),
+            vec![
+                TimeInterval::new_unchecked(0, 3),
+                TimeInterval::new_unchecked(1, 3),
+                TimeInterval::new_unchecked(1, 5),
+            ],
+            {
+                let mut map = HashMap::new();
+                map.insert("numbers".into(), FeatureData::Number(vec![1., 2., 0.]));
+                map.insert(
+                    "number_nulls".into(),
+                    FeatureData::NullableNumber(vec![None, Some(2.), Some(0.)]),
+                );
+                map
+            },
+        )
+        .unwrap();
+
+        let sorted_collection = collection.sort_by_time_asc().unwrap();
+
+        assert_eq!(sorted_collection, expected_collection);
     }
 }

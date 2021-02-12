@@ -8,10 +8,30 @@ pub struct QueryRectangle {
     pub spatial_resolution: SpatialResolution,
 }
 
-/// A collection of meta data for processing a query
-#[derive(Copy, Clone, Debug)]
-pub struct QueryContext {
-    // TODO: resolution, profiler, user session, ...
-    // TODO: determine chunk size globally or dynamically from workload? Or global Engine Manager instance that gives that info
+pub trait QueryContext: Send + Sync {
+    fn chunk_byte_size(&self) -> usize;
+}
+
+pub struct MockQueryContext {
     pub chunk_byte_size: usize,
+}
+
+impl Default for MockQueryContext {
+    fn default() -> Self {
+        Self {
+            chunk_byte_size: 1024 * 1024,
+        }
+    }
+}
+
+impl MockQueryContext {
+    pub fn new(chunk_byte_size: usize) -> Self {
+        Self { chunk_byte_size }
+    }
+}
+
+impl QueryContext for MockQueryContext {
+    fn chunk_byte_size(&self) -> usize {
+        self.chunk_byte_size
+    }
 }

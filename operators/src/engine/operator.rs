@@ -1,14 +1,13 @@
 use serde::{Deserialize, Serialize};
 
-use crate::engine::query_processor::QueryProcessor;
-use crate::engine::ExecutionContext;
 use crate::error;
 use crate::util::Result;
 
 use super::{
     query_processor::{TypedRasterQueryProcessor, TypedVectorQueryProcessor},
-    CloneableRasterOperator, CloneableVectorOperator, RasterResultDescriptor, ResultDescriptor,
-    VectorResultDescriptor,
+    CloneablePlotOperator, CloneableRasterOperator, CloneableVectorOperator, ExecutionContext,
+    PlotResultDescriptor, QueryProcessor, RasterResultDescriptor, ResultDescriptor,
+    TypedPlotQueryProcessor, VectorResultDescriptor,
 };
 
 /// Common methods for `RasterOperator`s
@@ -16,7 +15,7 @@ use super::{
 pub trait RasterOperator: CloneableRasterOperator + Send + Sync + std::fmt::Debug {
     fn initialize(
         self: Box<Self>,
-        context: &ExecutionContext,
+        context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedRasterOperator>>;
 
     /// Wrap a box around a `RasterOperator`
@@ -33,7 +32,7 @@ pub trait RasterOperator: CloneableRasterOperator + Send + Sync + std::fmt::Debu
 pub trait VectorOperator: CloneableVectorOperator + Send + Sync + std::fmt::Debug {
     fn initialize(
         self: Box<Self>,
-        context: &ExecutionContext,
+        context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedVectorOperator>>;
 
     /// Wrap a box around a `VectorOperator`
@@ -45,11 +44,28 @@ pub trait VectorOperator: CloneableVectorOperator + Send + Sync + std::fmt::Debu
     }
 }
 
+/// Common methods for `PlotOperator`s
+#[typetag::serde(tag = "type")]
+pub trait PlotOperator: CloneablePlotOperator + Send + Sync + std::fmt::Debug {
+    fn initialize(
+        self: Box<Self>,
+        context: &dyn ExecutionContext,
+    ) -> Result<Box<InitializedPlotOperator>>;
+
+    /// Wrap a box around a `PlotOperator`
+    fn boxed(self) -> Box<dyn PlotOperator>
+    where
+        Self: Sized + 'static,
+    {
+        Box::new(self)
+    }
+}
+
 pub trait InitializedOperatorBase {
     type Descriptor: ResultDescriptor + Clone;
 
     /// Get the result descriptor of the `Operator`
-    fn result_descriptor(&self) -> Self::Descriptor;
+    fn result_descriptor(&self) -> &Self::Descriptor;
 
     /// Get the sources of the `Operator`
     fn raster_sources(&self) -> &[Box<InitializedRasterOperator>];
@@ -69,6 +85,9 @@ pub type InitializedVectorOperator =
 
 pub type InitializedRasterOperator =
     dyn InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>;
+
+pub type InitializedPlotOperator =
+    dyn InitializedOperator<PlotResultDescriptor, TypedPlotQueryProcessor>;
 
 pub trait InitializedOperator<R, Q>: InitializedOperatorBase<Descriptor = R> + Send + Sync
 where
@@ -92,7 +111,7 @@ where
 {
     type Descriptor = R;
 
-    fn result_descriptor(&self) -> Self::Descriptor {
+    fn result_descriptor(&self) -> &Self::Descriptor {
         self.as_ref().result_descriptor()
     }
     fn raster_sources(&self) -> &[Box<InitializedRasterOperator>] {
@@ -115,7 +134,7 @@ where
     Q: QueryProcessor,
 {
     type Descriptor = R;
-    fn result_descriptor(&self) -> Self::Descriptor {
+    fn result_descriptor(&self) -> &Self::Descriptor {
         self.as_ref().result_descriptor()
     }
     fn raster_sources(&self) -> &[Box<InitializedRasterOperator>] {
@@ -148,6 +167,7 @@ where
 pub enum TypedOperator {
     Vector(Box<dyn VectorOperator>),
     Raster(Box<dyn RasterOperator>),
+    Plot(Box<dyn PlotOperator>),
 }
 
 impl TypedOperator {
@@ -160,6 +180,13 @@ impl TypedOperator {
 
     pub fn get_raster(self) -> Result<Box<dyn RasterOperator>> {
         if let TypedOperator::Raster(o) = self {
+            return Ok(o);
+        }
+        Err(error::Error::InvalidOperatorType)
+    }
+
+    pub fn get_plot(self) -> Result<Box<dyn PlotOperator>> {
+        if let TypedOperator::Plot(o) = self {
             return Ok(o);
         }
         Err(error::Error::InvalidOperatorType)
@@ -178,10 +205,17 @@ impl From<Box<dyn RasterOperator>> for TypedOperator {
     }
 }
 
+impl From<Box<dyn PlotOperator>> for TypedOperator {
+    fn from(operator: Box<dyn PlotOperator>) -> Self {
+        Self::Plot(operator)
+    }
+}
+
 /// An enum to differentiate between `InitializedOperator` variants
 pub enum TypedInitializedOperator {
     Vector(Box<InitializedVectorOperator>),
     Raster(Box<InitializedRasterOperator>),
+    Plot(Box<InitializedPlotOperator>),
 }
 
 impl From<Box<InitializedVectorOperator>> for TypedInitializedOperator {
@@ -194,4 +228,21 @@ impl From<Box<InitializedRasterOperator>> for TypedInitializedOperator {
     fn from(operator: Box<InitializedRasterOperator>) -> Self {
         TypedInitializedOperator::Raster(operator)
     }
+}
+
+impl From<Box<InitializedPlotOperator>> for TypedInitializedOperator {
+    fn from(operator: Box<InitializedPlotOperator>) -> Self {
+        TypedInitializedOperator::Plot(operator)
+    }
+}
+
+#[macro_export]
+macro_rules! call_on_typed_operator {
+    ($typed_operator:expr, $operator_var:ident => $function_call:expr) => {
+        match $typed_operator {
+            $crate::engine::TypedOperator::Vector($operator_var) => $function_call,
+            $crate::engine::TypedOperator::Raster($operator_var) => $function_call,
+            $crate::engine::TypedOperator::Plot($operator_var) => $function_call,
+        }
+    };
 }

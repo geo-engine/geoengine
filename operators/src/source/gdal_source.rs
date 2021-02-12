@@ -21,6 +21,7 @@ use serde::{Deserialize, Serialize};
 
 use futures::stream::{self, BoxStream, StreamExt};
 
+use geoengine_datatypes::primitives::Measurement;
 use geoengine_datatypes::raster::{
     GeoTransform, Grid2D, Pixel, RasterDataType, RasterTile2D, TileInformation, TilingStrategy,
 };
@@ -101,6 +102,7 @@ pub struct JsonDatasetInformation {
     pub geo_transform: GeoTransform,
     pub grid_shape: GridShape2D,
     pub spatial_ref: SpatialReferenceOption,
+    pub measurement: Measurement,
 }
 
 impl JsonDatasetInformationProvider {
@@ -285,6 +287,7 @@ where
             .time_step
             .snap_relative(time_information.start_time, time_interval.start())
             .expect("is a valid time");
+
         let snapped_interval = TimeInterval::new_unchecked(snapped_start, time_interval.end());
 
         let time_iterator = TimeStepIter::new_with_interval_incl_start(
@@ -304,6 +307,8 @@ where
         })
     }
 
+    /// # Panics
+    /// Panics on `TaskJoinError`
     pub async fn load_tile_data_async(
         gdal_params: GdalSourceParameters,
         gdal_dataset_information: P,
@@ -512,10 +517,10 @@ where
     T: Pixel + gdal::raster::GdalType,
 {
     type Output = RasterTile2D<T>;
-    fn query(
-        &self,
+    fn query<'a>(
+        &'a self,
         query: crate::engine::QueryRectangle,
-        _ctx: crate::engine::QueryContext,
+        _ctx: &'a dyn crate::engine::QueryContext,
     ) -> BoxStream<Result<RasterTile2D<T>>> {
         self.tile_stream(query.bbox, query.time_interval, query.spatial_resolution)
             .boxed() // TODO: handle query, ctx, remove one boxed
@@ -528,26 +533,29 @@ pub type GdalSource = SourceOperator<GdalSourceParameters>;
 impl RasterOperator for GdalSource {
     fn initialize(
         self: Box<Self>,
-        context: &crate::engine::ExecutionContext,
+        context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<InitializedRasterOperator>> {
         let provider = JsonDatasetInformationProvider::with_dataset_id(
             &self.params.dataset_id,
-            &context.raster_data_root,
+            &context.raster_data_root()?,
         )?;
         let spatial_ref = provider.spatial_ref();
 
         let data_type = provider.data_type();
 
-        let init = InitializedGdalSourceOperator {
-            provider,
-            result_descriptor: RasterResultDescriptor {
-                data_type,
-                spatial_reference: spatial_ref,
-            },
-            tiling_specification: context.tiling_specification,
-            params: self.params,
+        let result_descriptor = RasterResultDescriptor {
+            data_type,
+            spatial_reference: spatial_ref,
+            measurement: provider.dataset_information.measurement.clone(),
         };
-        Ok(Box::from(init))
+
+        Ok(InitializedGdalSourceOperator {
+            provider,
+            result_descriptor,
+            tiling_specification: context.tiling_specification(),
+            params: self.params,
+        }
+        .boxed())
     }
 }
 
@@ -561,8 +569,8 @@ pub struct InitializedGdalSourceOperator<P> {
 impl<P> InitializedOperatorBase for InitializedGdalSourceOperator<P> {
     type Descriptor = RasterResultDescriptor;
 
-    fn result_descriptor(&self) -> Self::Descriptor {
-        self.result_descriptor
+    fn result_descriptor(&self) -> &Self::Descriptor {
+        &self.result_descriptor
     }
 
     fn raster_sources(&self) -> &[Box<InitializedRasterOperator>] {
@@ -675,6 +683,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::{MockExecutionContext, MockQueryContext, QueryRectangle};
     use crate::error::Error;
     use crate::util::Result;
     use chrono::NaiveDate;
@@ -874,6 +883,7 @@ mod tests {
             geo_transform: dataset_geo_transform,
             grid_shape: global_size_in_pixels.into(),
             spatial_ref: SpatialReference::epsg_4326().into(),
+            measurement: Measurement::Unitless,
         };
 
         let dataset_information_provider = JsonDatasetInformationProvider {
@@ -986,6 +996,7 @@ mod tests {
             geo_transform: dataset_geo_transform,
             grid_shape: global_size_in_pixels.into(),
             spatial_ref: SpatialReference::epsg_4326().into(),
+            measurement: Measurement::Unitless,
         };
 
         let dataset_information_provider = JsonDatasetInformationProvider {
@@ -1054,6 +1065,7 @@ mod tests {
             geo_transform: dataset_geo_transform,
             grid_shape: global_size_in_pixels.into(),
             spatial_ref: SpatialReference::epsg_4326().into(),
+            measurement: Measurement::Unitless,
         };
 
         let dataset_information_provider = JsonDatasetInformationProvider {
@@ -1138,6 +1150,7 @@ mod tests {
             geo_transform: dataset_geo_transform,
             grid_shape: global_size_in_pixels.into(),
             spatial_ref: SpatialReference::epsg_4326().into(),
+            measurement: Measurement::Unitless,
         };
 
         let dataset_information_provider = JsonDatasetInformationProvider {
@@ -1236,6 +1249,7 @@ mod tests {
             geo_transform: dataset_geo_transform,
             grid_shape: global_size_in_pixels.into(),
             spatial_ref: SpatialReference::epsg_4326().into(),
+            measurement: Measurement::Unitless,
         };
 
         let dataset_information_provider = JsonDatasetInformationProvider {
@@ -1322,6 +1336,7 @@ mod tests {
             geo_transform: dataset_geo_transform,
             grid_shape: global_size_in_pixels.into(),
             spatial_ref: SpatialReference::epsg_4326().into(),
+            measurement: Measurement::Unitless,
         };
 
         let dataset_information_provider = JsonDatasetInformationProvider {
@@ -1415,6 +1430,7 @@ mod tests {
             geo_transform: dataset_geo_transform,
             grid_shape: global_size_in_pixels.into(),
             spatial_ref: SpatialReference::epsg_4326().into(),
+            measurement: Measurement::Unitless,
         };
 
         let dataset_information_provider = JsonDatasetInformationProvider {
@@ -1504,6 +1520,7 @@ mod tests {
             geo_transform: dataset_geo_transform,
             grid_shape: global_size_in_pixels.into(),
             spatial_ref: SpatialReference::epsg_4326().into(),
+            measurement: Measurement::Unitless,
         };
         let dataset_information_provider = JsonDatasetInformationProvider {
             dataset_information,
@@ -1529,5 +1546,45 @@ mod tests {
             ])
             .unwrap();
         assert_eq!(center_pixel, 19);
+    }
+
+    #[tokio::test]
+    async fn no_data() {
+        let op: Box<dyn RasterOperator> = serde_json::from_str(
+            r#"
+        {
+            "type": "GdalSource",
+            "params": {
+            "dataset_id": "modis_ndvi",
+            "channel": null
+            }
+        }"#,
+        )
+        .unwrap();
+        let exe_ctx = MockExecutionContext::default();
+        let o = op.initialize(&exe_ctx).unwrap();
+        let p = o.query_processor().unwrap().get_u8().unwrap();
+        let bbox = BoundingBox2D::new_unchecked((0., 0.).into(), (30., 30.).into());
+        let x_query_resolution = bbox.size_x() / f64::from(256);
+        let y_query_resolution = bbox.size_y() / f64::from(256);
+        let query_ctx = MockQueryContext::default();
+        let q = p.query(
+            QueryRectangle {
+                bbox,
+                time_interval: TimeInterval::new_unchecked(0, 0),
+                spatial_resolution: SpatialResolution::new_unchecked(
+                    x_query_resolution,
+                    y_query_resolution,
+                ),
+            },
+            &query_ctx,
+        );
+        let c: Vec<Result<RasterTile2D<u8>>> = q.collect().await;
+
+        assert_eq!(c.len(), 1);
+        assert_eq!(
+            c[0].as_ref().unwrap().time,
+            TimeInterval::new_unchecked(0, 2_678_400_000) // (1970-01-01T00:00:00, 1970-02-01T00:00:00)
+        );
     }
 }

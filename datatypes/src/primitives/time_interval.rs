@@ -2,7 +2,8 @@ use crate::error;
 use crate::primitives::TimeInstance;
 use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::Result;
-use arrow::array::{Array, ArrayBuilder, BooleanArray, PrimitiveArrayOps};
+use arrow::array::{Array, ArrayBuilder, BooleanArray};
+use arrow::datatypes::{DataType, Field};
 use arrow::error::ArrowError;
 #[cfg(feature = "postgres")]
 use postgres_types::{FromSql, ToSql};
@@ -258,6 +259,10 @@ impl TimeInterval {
             None
         }
     }
+
+    pub fn duration_ms(&self) -> u64 {
+        self.end.inner().wrapping_sub(self.start.inner()) as u64
+    }
 }
 
 impl Debug for TimeInterval {
@@ -344,12 +349,11 @@ impl ArrowTyped for TimeInterval {
 
     fn arrow_data_type() -> arrow::datatypes::DataType {
         // TODO: use date if dates out-of-range is fixed for us
-        // arrow::datatypes::DataType::FixedSizeList(
-        //     arrow::datatypes::DataType::Date64(arrow::datatypes::DateUnit::Millisecond).into(),
-        //     2,
-        // )
+        // DataType::FixedSizeList(Box::new(Field::new("item", DataType::Date64(arrow::datatypes::DateUnit::Millisecond), nullable)), 2)
 
-        arrow::datatypes::DataType::FixedSizeList(arrow::datatypes::DataType::Int64.into(), 2)
+        let nullable = true; // TODO: should actually be false, but arrow's builders set it to `true` currently
+
+        DataType::FixedSizeList(Box::new(Field::new("item", DataType::Int64, nullable)), 2)
     }
 
     fn builder_byte_size(builder: &mut Self::ArrowBuilder) -> usize {
@@ -380,8 +384,8 @@ impl ArrowTyped for TimeInterval {
             let ints_a: &Int64Array = downcast_array(&ints_a_ref);
             let ints_b: &Int64Array = downcast_array(&ints_b_ref);
 
-            int_builder.append_slice(ints_a.value_slice(0, ints_a.len()))?;
-            int_builder.append_slice(ints_b.value_slice(0, ints_b.len()))?;
+            int_builder.append_slice(ints_a.values())?;
+            int_builder.append_slice(ints_b.values())?;
         }
 
         for _ in 0..new_length {
@@ -410,7 +414,7 @@ impl ArrowTyped for TimeInterval {
             let old_timestamps: &Int64Array = downcast_array(&old_timestamps_ref);
 
             let date_builder = new_time_intervals.values();
-            date_builder.append_slice(old_timestamps.value_slice(0, 2))?;
+            date_builder.append_slice(old_timestamps.values())?;
 
             new_time_intervals.append(true)?;
         }

@@ -32,7 +32,7 @@ pub type ColumnRangeFilter = Operator<ColumnRangeFilterParams>;
 impl VectorOperator for ColumnRangeFilter {
     fn initialize(
         self: Box<Self>,
-        context: &ExecutionContext,
+        context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedVectorOperator>> {
         // TODO: create generic validate util
         ensure!(
@@ -54,7 +54,7 @@ impl VectorOperator for ColumnRangeFilter {
             self.params,
             context,
             |_, _, _, _| Ok(()),
-            |_, _, _, _, vector_sources| Ok(vector_sources[0].result_descriptor()),
+            |_, _, _, _, vector_sources| Ok(vector_sources[0].result_descriptor().clone()),
             self.raster_sources,
             self.vector_sources,
         )
@@ -125,11 +125,11 @@ where
 {
     type VectorType = FeatureCollection<G>;
 
-    fn vector_query(
-        &self,
+    fn vector_query<'a>(
+        &'a self,
         query: QueryRectangle,
-        ctx: QueryContext,
-    ) -> BoxStream<Result<Self::VectorType>> {
+        ctx: &'a dyn QueryContext,
+    ) -> BoxStream<'a, Result<Self::VectorType>> {
         let column_name = self.column.clone();
         let ranges = self.ranges.clone();
         let keep_nulls = self.keep_nulls;
@@ -167,7 +167,7 @@ where
         });
 
         let merged_chunks_stream =
-            FeatureCollectionChunkMerger::new(filter_stream.fuse(), ctx.chunk_byte_size);
+            FeatureCollectionChunkMerger::new(filter_stream.fuse(), ctx.chunk_byte_size());
 
         merged_chunks_stream.boxed()
     }
@@ -176,7 +176,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::MockExecutionContextCreator;
+    use crate::engine::{MockExecutionContext, MockQueryContext};
     use crate::mock::MockFeatureCollectionSource;
     use geoengine_datatypes::collections::{FeatureCollectionModifications, MultiPointCollection};
     use geoengine_datatypes::primitives::SpatialResolution;
@@ -216,7 +216,7 @@ mod tests {
             .to_string()
         );
 
-        let _deserialized: Box<dyn VectorOperator> = serde_json::from_str(&serialized).unwrap();
+        let _operator: Box<dyn VectorOperator> = serde_json::from_str(&serialized).unwrap();
     }
 
     #[tokio::test]
@@ -249,9 +249,7 @@ mod tests {
         }
         .boxed();
 
-        let initialized = filter
-            .initialize(&MockExecutionContextCreator::default().context())
-            .unwrap();
+        let initialized = filter.initialize(&MockExecutionContext::default()).unwrap();
 
         let point_processor = match initialized.query_processor() {
             Ok(TypedVectorQueryProcessor::MultiPoint(processor)) => processor,
@@ -263,10 +261,10 @@ mod tests {
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
-        let ctx = QueryContext {
-            chunk_byte_size: 2 * std::mem::size_of::<Coordinate2D>(),
-        };
-        let stream = point_processor.vector_query(query_rectangle, ctx);
+
+        let ctx = MockQueryContext::new(2 * std::mem::size_of::<Coordinate2D>());
+
+        let stream = point_processor.vector_query(query_rectangle, &ctx);
 
         let collections: Vec<MultiPointCollection> = stream.map(Result::unwrap).collect().await;
 

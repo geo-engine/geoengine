@@ -1,6 +1,6 @@
 use crate::error::{self, Result};
 use crate::{
-    projects::postgres_projectdb::PostgresProjectDB, users::postgres_userdb::PostgresUserDB,
+    projects::postgres_projectdb::PostgresProjectDb, users::postgres_userdb::PostgresUserDb,
     users::session::Session, workflows::postgres_workflow_registry::PostgresWorkflowRegistry,
 };
 use async_trait::async_trait;
@@ -13,7 +13,9 @@ use bb8_postgres::{
 use std::sync::Arc;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
-use super::{Context, DB};
+use super::{Context, Db};
+use crate::contexts::{ExecutionContextImpl, QueryContextImpl};
+use crate::datasets::postgres::PostgresDataSetDb;
 use crate::projects::project::{ProjectId, ProjectPermission};
 use crate::users::user::UserId;
 
@@ -26,9 +28,9 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    user_db: DB<PostgresUserDB<Tls>>,
-    project_db: DB<PostgresProjectDB<Tls>>,
-    workflow_registry: DB<PostgresWorkflowRegistry<Tls>>,
+    user_db: Db<PostgresUserDb<Tls>>,
+    project_db: Db<PostgresProjectDb<Tls>>,
+    workflow_registry: Db<PostgresWorkflowRegistry<Tls>>,
     session: Option<Session>,
 }
 
@@ -47,8 +49,8 @@ where
         Self::update_schema(pool.get().await?).await?;
 
         Ok(Self {
-            user_db: Arc::new(RwLock::new(PostgresUserDB::new(pool.clone()))),
-            project_db: Arc::new(RwLock::new(PostgresProjectDB::new(pool.clone()))),
+            user_db: Arc::new(RwLock::new(PostgresUserDb::new(pool.clone()))),
+            project_db: Arc::new(RwLock::new(PostgresProjectDb::new(pool.clone()))),
             workflow_registry: Arc::new(RwLock::new(PostgresWorkflowRegistry::new(pool.clone()))),
             session: None,
         })
@@ -191,6 +193,15 @@ where
                             visibility "LayerVisibility" NOT NULL,
                             PRIMARY KEY (project_id, layer_index)            
                         );
+                        
+                        CREATE TABLE project_version_plots (
+                            plot_index integer NOT NULL,
+                            project_id UUID REFERENCES projects(id) ON DELETE CASCADE NOT NULL,
+                            project_version_id UUID REFERENCES project_versions(id) ON DELETE CASCADE NOT NULL,                            
+                            name character varying (256) NOT NULL,
+                            workflow_id UUID NOT NULL, -- TODO: REFERENCES workflows(id)
+                            PRIMARY KEY (project_id, plot_index)            
+                        );
 
                         CREATE TYPE "ProjectPermission" AS ENUM ('Read', 'Write', 'Owner');
 
@@ -246,7 +257,7 @@ where
 
         conn.query_one(&stmt, &[&user, &project, &permissions])
             .await
-            .map_err(|_error| error::Error::ProjectDBUnauthorized)?;
+            .map_err(|_error| error::Error::ProjectDbUnauthorized)?;
 
         Ok(())
     }
@@ -260,11 +271,14 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    type UserDB = PostgresUserDB<Tls>;
-    type ProjectDB = PostgresProjectDB<Tls>;
+    type UserDB = PostgresUserDb<Tls>;
+    type ProjectDB = PostgresProjectDb<Tls>;
     type WorkflowRegistry = PostgresWorkflowRegistry<Tls>;
+    type DataSetDB = PostgresDataSetDb;
+    type QueryContext = QueryContextImpl;
+    type ExecutionContext = ExecutionContextImpl<PostgresDataSetDb>;
 
-    fn user_db(&self) -> DB<Self::UserDB> {
+    fn user_db(&self) -> Db<Self::UserDB> {
         self.user_db.clone()
     }
     async fn user_db_ref(&self) -> RwLockReadGuard<'_, Self::UserDB> {
@@ -274,7 +288,7 @@ where
         self.user_db.write().await
     }
 
-    fn project_db(&self) -> DB<Self::ProjectDB> {
+    fn project_db(&self) -> Db<Self::ProjectDB> {
         self.project_db.clone()
     }
     async fn project_db_ref(&self) -> RwLockReadGuard<'_, Self::ProjectDB> {
@@ -284,7 +298,7 @@ where
         self.project_db.write().await
     }
 
-    fn workflow_registry(&self) -> DB<Self::WorkflowRegistry> {
+    fn workflow_registry(&self) -> Db<Self::WorkflowRegistry> {
         self.workflow_registry.clone()
     }
     async fn workflow_registry_ref(&self) -> RwLockReadGuard<'_, Self::WorkflowRegistry> {
@@ -294,14 +308,24 @@ where
         self.workflow_registry.write().await
     }
 
-    fn session(&self) -> Result<&Session> {
-        self.session
-            .as_ref()
-            .ok_or(error::Error::SessionNotInitialized)
+    fn data_set_db(&self) -> Db<Self::DataSetDB> {
+        todo!()
     }
 
-    fn set_session(&mut self, session: Session) {
-        self.session = Some(session)
+    async fn data_set_db_ref(&self) -> RwLockReadGuard<'_, Self::DataSetDB> {
+        todo!()
+    }
+
+    async fn data_set_db_ref_mut(&self) -> RwLockWriteGuard<'_, Self::DataSetDB> {
+        todo!()
+    }
+
+    fn query_context(&self) -> Result<Self::QueryContext> {
+        todo!()
+    }
+
+    fn execution_context(&self, _session: &Session) -> Result<Self::ExecutionContext> {
+        todo!()
     }
 }
 
@@ -309,13 +333,13 @@ where
 mod tests {
     use super::*;
     use crate::projects::project::{
-        CreateProject, Layer, LayerInfo, LayerUpdate, LoadVersion, OrderBy, ProjectFilter,
-        ProjectId, ProjectListOptions, ProjectListing, ProjectPermission, STRectangle,
-        UpdateProject, UserProjectPermission, VectorInfo,
+        CreateProject, Layer, LayerInfo, LayerUpdate, LoadVersion, OrderBy, Plot, PlotUpdate,
+        ProjectFilter, ProjectId, ProjectListOptions, ProjectListing, ProjectPermission,
+        STRectangle, UpdateProject, UserProjectPermission, VectorInfo,
     };
-    use crate::projects::projectdb::ProjectDB;
+    use crate::projects::projectdb::ProjectDb;
     use crate::users::user::{UserCredentials, UserId, UserRegistration};
-    use crate::users::userdb::UserDB;
+    use crate::users::userdb::UserDb;
     use crate::util::user_input::UserInput;
     use crate::workflows::registry::WorkflowRegistry;
     use crate::workflows::workflow::Workflow;
@@ -323,8 +347,9 @@ mod tests {
     use bb8_postgres::tokio_postgres::NoTls;
     use geoengine_datatypes::primitives::Coordinate2D;
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
-    use geoengine_operators::engine::{TypedOperator, VectorOperator};
+    use geoengine_operators::engine::{PlotOperator, TypedOperator, VectorOperator};
     use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
+    use geoengine_operators::plot::{Statistics, StatisticsParams};
     use std::str::FromStr;
 
     #[tokio::test]
@@ -478,7 +503,7 @@ mod tests {
             .await
             .unwrap();
 
-        let workflow_id = ctx
+        let layer_workflow_id = ctx
             .workflow_registry_ref_mut()
             .await
             .register(Workflow {
@@ -497,7 +522,29 @@ mod tests {
         assert!(ctx
             .workflow_registry_ref()
             .await
-            .load(&workflow_id)
+            .load(&layer_workflow_id)
+            .await
+            .is_ok());
+
+        let plot_workflow_id = ctx
+            .workflow_registry_ref_mut()
+            .await
+            .register(Workflow {
+                operator: Statistics {
+                    params: StatisticsParams {},
+                    vector_sources: vec![],
+                    raster_sources: vec![],
+                }
+                .boxed()
+                .into(),
+            })
+            .await
+            .unwrap();
+
+        assert!(ctx
+            .workflow_registry_ref()
+            .await
+            .load(&plot_workflow_id)
             .await
             .is_ok());
 
@@ -506,12 +553,17 @@ mod tests {
             name: Some("Test9 Updated".into()),
             description: None,
             layers: Some(vec![LayerUpdate::UpdateOrInsert(Layer {
-                workflow: workflow_id,
+                workflow: layer_workflow_id,
                 name: "TestLayer".into(),
                 info: LayerInfo::Vector(VectorInfo {}),
                 visibility: Default::default(),
             })]),
+            plots: Some(vec![PlotUpdate::UpdateOrInsert(Plot {
+                workflow: plot_workflow_id,
+                name: "Test Plot".into(),
+            })]),
             bounds: None,
+            time_step: None,
         };
         ctx.project_db_ref_mut()
             .await

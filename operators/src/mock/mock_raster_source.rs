@@ -32,10 +32,10 @@ where
     T: Pixel,
 {
     type Output = RasterTile2D<T>;
-    fn query(
-        &self,
+    fn query<'a>(
+        &'a self,
         query: crate::engine::QueryRectangle,
-        _ctx: crate::engine::QueryContext,
+        _ctx: &'a dyn crate::engine::QueryContext,
     ) -> futures::stream::BoxStream<crate::util::Result<Self::Output>> {
         // TODO: filter spatially w.r.t. query rectangle
         stream::iter(
@@ -61,13 +61,13 @@ pub type MockRasterSource = SourceOperator<MockRasterSourceParams>;
 impl RasterOperator for MockRasterSource {
     fn initialize(
         self: Box<Self>,
-        context: &crate::engine::ExecutionContext,
+        context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<InitializedRasterOperator>> {
         InitializedOperatorImpl::create(
             self.params,
             context,
             |_, _, _, _| Ok(()),
-            |params, _, _, _, _| Ok(params.result_descriptor),
+            |params, _, _, _, _| Ok(params.result_descriptor.clone()),
             vec![],
             vec![],
         )
@@ -104,7 +104,8 @@ impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::MockExecutionContextCreator;
+    use crate::engine::MockExecutionContext;
+    use geoengine_datatypes::primitives::Measurement;
     use geoengine_datatypes::raster::RasterDataType;
     use geoengine_datatypes::{
         primitives::TimeInterval,
@@ -132,6 +133,7 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
+                    measurement: Measurement::Unitless,
                 },
             },
         }
@@ -166,7 +168,8 @@ mod tests {
                 }],
                 "result_descriptor": {
                     "data_type": "U8",
-                    "spatial_reference": "EPSG:4326"
+                    "spatial_reference": "EPSG:4326",
+                    "measurement": "unitless",
                 }
             }
         })
@@ -175,8 +178,7 @@ mod tests {
 
         let deserialized: Box<dyn RasterOperator> = serde_json::from_str(&serialized).unwrap();
 
-        let execution_context_creator = MockExecutionContextCreator::default();
-        let execution_context = execution_context_creator.context();
+        let execution_context = MockExecutionContext::default();
 
         let initialized = deserialized.initialize(&execution_context).unwrap();
 

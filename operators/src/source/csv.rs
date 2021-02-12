@@ -73,6 +73,7 @@ pub struct CsvSourceParameters {
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum CsvGeometrySpecification {
+    #[allow(clippy::upper_case_acronyms)]
     XY { x: String, y: String },
 }
 
@@ -144,7 +145,7 @@ pub type CsvSource = SourceOperator<CsvSourceParameters>;
 impl VectorOperator for CsvSource {
     fn initialize(
         self: Box<Self>,
-        context: &crate::engine::ExecutionContext,
+        context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<InitializedVectorOperator>> {
         InitializedOperatorImpl::create(
             self.params,
@@ -154,6 +155,7 @@ impl VectorOperator for CsvSource {
                 Ok(VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint, // TODO: get as user input
                     spatial_reference: SpatialReference::epsg_4326().into(), // TODO: get as user input
+                    columns: Default::default(), // TODO: get when source allows loading other columns
                 })
             },
             vec![],
@@ -372,11 +374,11 @@ struct CsvSourceProcessor {
 impl QueryProcessor for CsvSourceProcessor {
     type Output = MultiPointCollection;
 
-    fn query(
+    fn query<'a>(
         &self,
         query: QueryRectangle,
-        _ctx: QueryContext,
-    ) -> BoxStream<'_, Result<Self::Output>> {
+        _ctx: &'a dyn QueryContext,
+    ) -> BoxStream<'a, Result<Self::Output>> {
         // TODO: properly propagate error
         // TODO: properly handle chunk_size
         CsvSourceStream::new(self.params.clone(), query.bbox, 10)
@@ -405,6 +407,7 @@ mod tests {
     use geoengine_datatypes::primitives::SpatialResolution;
 
     use super::*;
+    use crate::engine::MockQueryContext;
     use geoengine_datatypes::collections::{FeatureCollectionInfos, ToGeoJson};
 
     #[tokio::test]
@@ -547,11 +550,9 @@ x,y
             time_interval: TimeInterval::new_unchecked(0, 1),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
-        let ctx = QueryContext {
-            chunk_byte_size: 10 * 8 * 2,
-        };
+        let ctx = MockQueryContext::new(10 * 8 * 2);
 
-        let r: Vec<Result<MultiPointCollection>> = p.query(query, ctx).collect().await;
+        let r: Vec<Result<MultiPointCollection>> = p.query(query, &ctx).collect().await;
 
         assert_eq!(r.len(), 1);
 
@@ -636,6 +637,6 @@ x;y
             .to_string()
         );
 
-        let _deserialized: Box<dyn VectorOperator> = serde_json::from_str(&operator_json).unwrap();
+        let _operator: Box<dyn VectorOperator> = serde_json::from_str(&operator_json).unwrap();
     }
 }

@@ -2,33 +2,34 @@ use crate::error::{Error, Result};
 use crate::string_token;
 use crate::users::user::UserId;
 use crate::util::config::ProjectService;
-use crate::util::identifiers::Identifier;
 use crate::util::user_input::UserInput;
 use crate::workflows::workflow::WorkflowId;
 use crate::{error, util::config::get_config_element};
 use chrono::{DateTime, Utc};
+use geoengine_datatypes::identifier;
 use geoengine_datatypes::primitives::{
     BoundingBox2D, Coordinate2D, SpatialBounded, TemporalBounded, TimeGranularity, TimeInterval,
     TimeStep,
 };
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
+use geoengine_datatypes::util::Identifier;
 use geoengine_datatypes::{operations::image::Colorizer, primitives::TimeInstance};
 #[cfg(feature = "postgres")]
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
-use std::mem;
 use uuid::Uuid;
 
 identifier!(ProjectId);
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct Project {
     pub id: ProjectId,
     pub version: ProjectVersion,
     pub name: String,
     pub description: String,
     pub layers: Vec<Layer>,
+    pub plots: Vec<Plot>,
     pub bounds: STRectangle,
     pub time_step: TimeStep,
 }
@@ -41,6 +42,7 @@ impl Project {
             name: create.name,
             description: create.description,
             layers: vec![],
+            plots: vec![],
             bounds: create.bounds,
             time_step: create.time_step.unwrap_or(TimeStep {
                 // TODO: use config to store default time step
@@ -56,6 +58,33 @@ impl Project {
     /// it just inserts new layers to the end.
     ///
     pub fn update_project(&self, update: UpdateProject, user: UserId) -> Result<Project> {
+        fn update_layer_or_plots<Content>(
+            state: Vec<Content>,
+            updates: Vec<VecUpdate<Content>>,
+        ) -> Result<Vec<Content>> {
+            let mut result = Vec::new();
+
+            let mut updates = updates.into_iter();
+
+            for (layer, layer_update) in state.into_iter().zip(&mut updates) {
+                match layer_update {
+                    VecUpdate::None(..) => result.push(layer),
+                    VecUpdate::UpdateOrInsert(updated_content) => result.push(updated_content),
+                    VecUpdate::Delete(..) => {}
+                }
+            }
+
+            for update in updates {
+                if let VecUpdate::UpdateOrInsert(new_content) = update {
+                    result.push(new_content);
+                } else {
+                    return Err(Error::ProjectUpdateFailed);
+                }
+            }
+
+            Ok(result)
+        }
+
         let mut project = self.clone();
         project.version = ProjectVersion::new(user);
 
@@ -68,30 +97,19 @@ impl Project {
         }
 
         if let Some(layer_updates) = update.layers {
-            let layers = mem::replace(&mut project.layers, Vec::new()).into_iter();
-            let mut layer_updates = layer_updates.into_iter();
+            project.layers = update_layer_or_plots(project.layers, layer_updates)?;
+        }
 
-            for (layer, layer_update) in layers.zip(&mut layer_updates) {
-                match layer_update {
-                    LayerUpdate::None(..) => project.layers.push(layer),
-                    LayerUpdate::UpdateOrInsert(updated_layer) => {
-                        project.layers.push(updated_layer)
-                    }
-                    LayerUpdate::Delete(..) => {}
-                }
-            }
-
-            for layer_update in layer_updates {
-                if let LayerUpdate::UpdateOrInsert(new_layer) = layer_update {
-                    project.layers.push(new_layer);
-                } else {
-                    return Err(Error::ProjectUpdateFailed);
-                }
-            }
+        if let Some(plot_updates) = update.plots {
+            project.plots = update_layer_or_plots(project.plots, plot_updates)?;
         }
 
         if let Some(bounds) = update.bounds {
             project.bounds = bounds;
+        }
+
+        if let Some(time_step) = update.time_step {
+            project.time_step = time_step;
         }
 
         Ok(project)
@@ -100,6 +118,7 @@ impl Project {
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 #[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
+#[allow(clippy::upper_case_acronyms)]
 pub struct STRectangle {
     pub spatial_reference: SpatialReferenceOption,
     pub bounding_box: BoundingBox2D,
@@ -227,6 +246,12 @@ impl Default for LayerVisibility {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Plot {
+    pub workflow: WorkflowId,
+    pub name: String,
+}
+
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
 pub enum OrderBy {
     DateAsc,
@@ -252,6 +277,7 @@ pub struct ProjectListing {
     pub name: String,
     pub description: String,
     pub layer_names: Vec<String>,
+    pub plot_names: Vec<String>,
     pub changed: DateTime<Utc>,
 }
 
@@ -262,6 +288,7 @@ impl From<&Project> for ProjectListing {
             name: project.name.clone(),
             description: project.description.clone(),
             layer_names: project.layers.iter().map(|l| l.name.clone()).collect(),
+            plot_names: project.layers.iter().map(|p| p.name.clone()).collect(),
             changed: project.version.changed,
         }
     }
@@ -305,16 +332,21 @@ pub struct UpdateProject {
     pub name: Option<String>,
     pub description: Option<String>,
     pub layers: Option<Vec<LayerUpdate>>,
+    pub plots: Option<Vec<PlotUpdate>>,
     pub bounds: Option<STRectangle>,
+    pub time_step: Option<TimeStep>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(untagged)]
-pub enum LayerUpdate {
+pub enum VecUpdate<Content> {
     None(NoUpdate),
     Delete(Delete),
-    UpdateOrInsert(Layer),
+    UpdateOrInsert(Content),
 }
+
+pub type LayerUpdate = VecUpdate<Layer>;
+pub type PlotUpdate = VecUpdate<Plot>;
 
 string_token!(NoUpdate, "none");
 string_token!(Delete, "delete");
@@ -544,10 +576,15 @@ mod tests {
                     visibility: Default::default(),
                 }),
             ]),
+            plots: None,
             bounds: Some(STRectangle {
                 spatial_reference: SpatialReferenceOption::Unreferenced,
                 bounding_box: BoundingBox2D::new((0.0, 0.1).into(), (1.0, 1.1).into()).unwrap(),
                 time_interval: Default::default(),
+            }),
+            time_step: Some(TimeStep {
+                step: 1,
+                granularity: TimeGranularity::Days,
             }),
         };
 

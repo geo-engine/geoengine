@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use float_cmp::approx_eq;
@@ -25,7 +25,7 @@ pub struct EquiGeoToDataJoinProcessor<G> {
     right_processor: Box<dyn VectorQueryProcessor<VectorType = DataCollection>>,
     left_column: Arc<String>,
     right_column: Arc<String>,
-    right_column_suffix: String,
+    right_translation_table: Arc<HashMap<String, String>>,
 }
 
 impl<G> EquiGeoToDataJoinProcessor<G>
@@ -40,14 +40,14 @@ where
         right_processor: Box<dyn VectorQueryProcessor<VectorType = DataCollection>>,
         left_column: String,
         right_column: String,
-        right_suffix: String,
+        right_translation_table: HashMap<String, String>,
     ) -> Self {
         Self {
             left_processor,
             right_processor,
             left_column: Arc::new(left_column),
             right_column: Arc::new(right_column),
-            right_column_suffix: right_suffix,
+            right_translation_table: Arc::new(right_translation_table),
         }
     }
 
@@ -57,38 +57,14 @@ where
         right: DataCollection,
         chunk_byte_size: usize,
     ) -> Result<BatchBuilderIterator<G>> {
-        let right_translation_table =
-            self.translation_table(left.column_names(), right.column_names());
-
         BatchBuilderIterator::new(
             left,
             right,
             self.left_column.clone(),
             self.right_column.clone(),
-            right_translation_table,
+            self.right_translation_table.clone(),
             chunk_byte_size,
         )
-    }
-
-    /// Create a translation table to resolve name conflicts in the `DataCollection`
-    fn translation_table<'i>(
-        &self,
-        existing_column_names: impl Iterator<Item = &'i String>,
-        new_column_names: impl Iterator<Item = &'i String>,
-    ) -> HashMap<String, String> {
-        let mut existing_column_names: HashSet<String> = existing_column_names.cloned().collect();
-        let mut translation_table = HashMap::new();
-
-        for old_column_name in new_column_names {
-            let mut new_column_name = old_column_name.clone();
-            while existing_column_names.contains(&new_column_name) {
-                new_column_name.push_str(&self.right_column_suffix);
-            }
-            existing_column_names.insert(new_column_name.clone());
-            translation_table.insert(old_column_name.clone(), new_column_name);
-        }
-
-        translation_table
     }
 }
 
@@ -100,7 +76,7 @@ where
     right: DataCollection,
     left_column: Arc<String>,
     right_column: Arc<String>,
-    right_translation_table: HashMap<String, String>,
+    right_translation_table: Arc<HashMap<String, String>>,
     builder: FeatureCollectionBuilder<G>,
     chunk_byte_size: usize,
     left_idx: usize,
@@ -120,7 +96,7 @@ where
         right: DataCollection,
         left_column: Arc<String>,
         right_column: Arc<String>,
-        right_translation_table: HashMap<String, String>,
+        right_translation_table: Arc<HashMap<String, String>>,
         chunk_byte_size: usize,
     ) -> Result<Self> {
         let mut builder = FeatureCollection::<G>::builder();
@@ -366,11 +342,11 @@ where
 {
     type VectorType = FeatureCollection<G>;
 
-    fn vector_query(
-        &self,
+    fn vector_query<'a>(
+        &'a self,
         query: QueryRectangle,
-        ctx: QueryContext,
-    ) -> BoxStream<Result<Self::VectorType>> {
+        ctx: &'a dyn QueryContext,
+    ) -> BoxStream<'a, Result<Self::VectorType>> {
         let result_stream =
             self.left_processor
                 .query(query, ctx)
@@ -390,7 +366,7 @@ where
                                 self.join(
                                     left_collection.clone(),
                                     right_collection,
-                                    ctx.chunk_byte_size,
+                                    ctx.chunk_byte_size(),
                                 )
                             }) {
                                 Ok(batch_iter) => stream::iter(batch_iter).boxed(),
@@ -400,7 +376,7 @@ where
                         .boxed()
                 });
 
-        FeatureCollectionChunkMerger::new(result_stream.fuse(), ctx.chunk_byte_size).boxed()
+        FeatureCollectionChunkMerger::new(result_stream.fuse(), ctx.chunk_byte_size()).boxed()
     }
 }
 
@@ -413,10 +389,11 @@ mod tests {
         BoundingBox2D, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
     };
 
-    use crate::engine::{MockExecutionContextCreator, VectorOperator};
+    use crate::engine::{MockExecutionContext, MockQueryContext, VectorOperator};
     use crate::mock::MockFeatureCollectionSource;
 
     use super::*;
+    use crate::processing::vector_join::util::translation_table;
 
     fn join_mock_collections(
         left: MultiPointCollection,
@@ -425,8 +402,7 @@ mod tests {
         right_join_column: &str,
         right_suffix: &str,
     ) -> Vec<MultiPointCollection> {
-        let execution_context_creator = MockExecutionContextCreator::default();
-        let execution_context = execution_context_creator.context();
+        let execution_context = MockExecutionContext::default();
 
         let left = MockFeatureCollectionSource::single(left)
             .boxed()
@@ -447,19 +423,21 @@ mod tests {
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
 
-        let ctx = QueryContext {
-            chunk_byte_size: usize::MAX,
-        };
+        let ctx = MockQueryContext::new(usize::MAX);
 
         let processor = EquiGeoToDataJoinProcessor::new(
             left_processor,
             right_processor,
             left_join_column.to_string(),
             right_join_column.to_string(),
-            right_suffix.to_string(),
+            translation_table(
+                left.result_descriptor().columns.keys(),
+                right.result_descriptor().columns.keys(),
+                right_suffix,
+            ),
         );
 
-        block_on_stream(processor.vector_query(query_rectangle, ctx))
+        block_on_stream(processor.vector_query(query_rectangle, &ctx))
             .collect::<Result<_>>()
             .unwrap()
     }
