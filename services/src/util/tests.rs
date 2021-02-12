@@ -3,10 +3,10 @@ use crate::handlers::ErrorResponse;
 use crate::projects::project::{
     CreateProject, Layer, LayerInfo, LayerUpdate, ProjectId, RasterInfo, STRectangle, UpdateProject,
 };
-use crate::projects::projectdb::ProjectDB;
+use crate::projects::projectdb::ProjectDb;
 use crate::users::session::Session;
 use crate::users::user::{UserCredentials, UserRegistration};
-use crate::users::userdb::UserDB;
+use crate::users::userdb::UserDb;
 use crate::util::user_input::UserInput;
 use crate::util::Identifier;
 use crate::workflows::registry::WorkflowRegistry;
@@ -18,6 +18,7 @@ use geoengine_operators::source::{GdalSource, GdalSourceParameters};
 use warp::http::Response;
 use warp::hyper::body::Bytes;
 
+#[allow(clippy::missing_panics_doc)]
 pub async fn create_session_helper<C: Context>(ctx: &C) -> Session {
     ctx.user_db()
         .write()
@@ -45,6 +46,7 @@ pub async fn create_session_helper<C: Context>(ctx: &C) -> Session {
         .unwrap()
 }
 
+#[allow(clippy::missing_panics_doc)]
 pub async fn create_project_helper<C: Context>(ctx: &C) -> (Session, ProjectId) {
     let session = create_session_helper(ctx).await;
 
@@ -97,6 +99,7 @@ pub fn update_project_helper(project: ProjectId) -> UpdateProject {
     }
 }
 
+#[allow(clippy::missing_panics_doc)]
 pub async fn register_workflow_helper<C: Context>(ctx: &C) -> (Workflow, WorkflowId) {
     let workflow = Workflow {
         operator: TypedOperator::Raster(

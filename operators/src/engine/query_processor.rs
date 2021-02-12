@@ -268,15 +268,14 @@ impl TypedVectorQueryProcessor {
 }
 
 /// An enum that contains all possible query processor variants
-#[allow(clippy::pub_enum_variant_names)]
 pub enum TypedPlotQueryProcessor {
-    JSON(Box<dyn PlotQueryProcessor<PlotType = serde_json::Value>>),
-    PNG(Box<dyn PlotQueryProcessor<PlotType = Vec<u8>>>),
+    Json(Box<dyn PlotQueryProcessor<PlotType = serde_json::Value>>),
+    Png(Box<dyn PlotQueryProcessor<PlotType = Vec<u8>>>),
 }
 
 impl TypedPlotQueryProcessor {
     pub fn json(self) -> Option<Box<dyn PlotQueryProcessor<PlotType = serde_json::Value>>> {
-        if let TypedPlotQueryProcessor::JSON(p) = self {
+        if let TypedPlotQueryProcessor::Json(p) = self {
             Some(p)
         } else {
             None
@@ -284,7 +283,7 @@ impl TypedPlotQueryProcessor {
     }
 
     pub fn png(self) -> Option<Box<dyn PlotQueryProcessor<PlotType = Vec<u8>>>> {
-        if let TypedPlotQueryProcessor::PNG(p) = self {
+        if let TypedPlotQueryProcessor::Png(p) = self {
             Some(p)
         } else {
             None

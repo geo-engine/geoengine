@@ -10,7 +10,9 @@ impl WorkflowId {
     pub fn from_hash(workflow: &Workflow) -> Self {
         Self(Uuid::new_v5(
             &Uuid::NAMESPACE_OID,
-            serde_json::to_string(workflow).unwrap().as_bytes(),
+            serde_json::to_string(workflow)
+                .expect("It is always possible to create a workflow id from a workflow.")
+                .as_bytes(),
         ))
     }
 }

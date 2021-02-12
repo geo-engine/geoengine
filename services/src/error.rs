@@ -13,7 +13,7 @@ pub enum Error {
     Operator {
         source: geoengine_operators::error::Error,
     },
-    HTTP {
+    Http {
         source: warp::http::Error,
     },
     Uuid {
@@ -22,7 +22,7 @@ pub enum Error {
     SerdeJson {
         source: serde_json::Error,
     },
-    IO {
+    Io {
         source: std::io::Error,
     },
     TokioJoin {
@@ -75,7 +75,7 @@ pub enum Error {
     #[snafu(display("Failed to delete the project."))]
     ProjectDeleteFailed,
     PermissionFailed,
-    ProjectDBUnauthorized,
+    ProjectDbUnauthorized,
 
     InvalidNamespace,
 
@@ -86,7 +86,7 @@ pub enum Error {
         expected: SpatialReferenceOption,
     },
 
-    InvalidWFSTypeNames,
+    InvalidWfsTypeNames,
 
     NoWorkflowForGivenId,
 

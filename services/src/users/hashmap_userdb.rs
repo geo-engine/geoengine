@@ -9,18 +9,18 @@ use crate::error::Result;
 use crate::projects::project::{ProjectId, STRectangle};
 use crate::users::session::{Session, SessionId, UserInfo};
 use crate::users::user::{User, UserCredentials, UserId, UserRegistration};
-use crate::users::userdb::UserDB;
+use crate::users::userdb::UserDb;
 use crate::util::user_input::Validated;
 use geoengine_datatypes::util::Identifier;
 
 #[derive(Default)]
-pub struct HashMapUserDB {
+pub struct HashMapUserDb {
     users: HashMap<String, User>,
     sessions: HashMap<SessionId, Session>,
 }
 
 #[async_trait]
-impl UserDB for HashMapUserDB {
+impl UserDb for HashMapUserDb {
     /// Register a user
     async fn register(&mut self, user_registration: Validated<UserRegistration>) -> Result<UserId> {
         let user_registration = user_registration.user_input;
@@ -136,7 +136,7 @@ mod tests {
 
     #[tokio::test]
     async fn register() {
-        let mut user_db = HashMapUserDB::default();
+        let mut user_db = HashMapUserDb::default();
 
         let user_registration = UserRegistration {
             email: "foo@bar.de".into(),
@@ -151,7 +151,7 @@ mod tests {
 
     #[tokio::test]
     async fn login() {
-        let mut user_db = HashMapUserDB::default();
+        let mut user_db = HashMapUserDb::default();
 
         let user_registration = UserRegistration {
             email: "foo@bar.de".into(),
@@ -173,7 +173,7 @@ mod tests {
 
     #[tokio::test]
     async fn logout() {
-        let mut user_db = HashMapUserDB::default();
+        let mut user_db = HashMapUserDb::default();
 
         let user_registration = UserRegistration {
             email: "foo@bar.de".into(),
@@ -197,7 +197,7 @@ mod tests {
 
     #[tokio::test]
     async fn session() {
-        let mut user_db = HashMapUserDB::default();
+        let mut user_db = HashMapUserDb::default();
 
         let user_registration = UserRegistration {
             email: "foo@bar.de".into(),

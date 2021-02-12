@@ -307,6 +307,8 @@ where
         })
     }
 
+    /// # Panics
+    /// Panics on `TaskJoinError`
     pub async fn load_tile_data_async(
         gdal_params: GdalSourceParameters,
         gdal_dataset_information: P,

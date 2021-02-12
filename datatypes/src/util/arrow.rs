@@ -7,6 +7,10 @@ use arrow::error::ArrowError;
 /// Helper function to downcast an arrow array
 ///
 /// The caller must be sure of its type, otherwise it panics
+///
+/// # Panics
+/// Panics if `array` is not of type `T`
+///
 pub fn downcast_array<T: Any>(array: &ArrayRef) -> &T {
     array.as_any().downcast_ref().unwrap() // must obey type
 }
@@ -14,6 +18,10 @@ pub fn downcast_array<T: Any>(array: &ArrayRef) -> &T {
 /// Helper function to downcast an arrow array
 ///
 /// The caller must be sure of its type, otherwise it panics
+///
+/// # Panics
+/// Panics if `array` is not of type `T`
+///
 pub fn downcast_dyn_array<T: Any>(array: &dyn Array) -> &T {
     array.as_any().downcast_ref().unwrap() // must obey type
 }
@@ -21,6 +29,9 @@ pub fn downcast_dyn_array<T: Any>(array: &dyn Array) -> &T {
 /// Helper function to downcast a mutable arrow array from a builder
 ///
 /// The caller must be sure of its type, otherwise it panics
+/// # Panics
+/// Panics if `array` is not of type `T`
+///
 pub fn downcast_mut_array<T: Any>(array: &mut dyn ArrayBuilder) -> &mut T {
     array.as_any_mut().downcast_mut().unwrap() // must obey type
 }

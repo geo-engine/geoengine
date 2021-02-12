@@ -4,7 +4,7 @@ use crate::handlers::{authenticate, Context};
 use crate::projects::project::{ProjectId, STRectangle};
 use crate::users::session::Session;
 use crate::users::user::{UserCredentials, UserRegistration};
-use crate::users::userdb::UserDB;
+use crate::users::userdb::UserDb;
 use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
 use snafu::ResultExt;
@@ -159,7 +159,7 @@ mod tests {
     use crate::projects::project::STRectangle;
     use crate::users::session::Session;
     use crate::users::user::UserId;
-    use crate::users::userdb::UserDB;
+    use crate::users::userdb::UserDb;
     use crate::util::tests::{
         check_allowed_http_methods, create_project_helper, create_session_helper,
     };

@@ -17,7 +17,7 @@ use geoengine_datatypes::{
 use crate::error;
 use crate::error::Result;
 use crate::handlers::Context;
-use crate::ogc::wms::request::{GetCapabilities, GetLegendGraphic, GetMap, WMSRequest};
+use crate::ogc::wms::request::{GetCapabilities, GetLegendGraphic, GetMap, WmsRequest};
 use crate::users::session::Session;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
@@ -42,7 +42,7 @@ pub(crate) fn wms_handler<C: Context>(
                 // TODO: make case insensitive by using serde-aux instead
                 let query_string = query_string.replace("REQUEST", "request");
 
-                serde_urlencoded::from_str::<WMSRequest>(&query_string)
+                serde_urlencoded::from_str::<WmsRequest>(&query_string)
                     .context(error::UnableToParseQueryString)
                     .map_err(Rejection::from)
             }),
@@ -54,15 +54,15 @@ pub(crate) fn wms_handler<C: Context>(
 
 // TODO: move into handler once async closures are available?
 async fn wms<C: Context>(
-    request: WMSRequest,
+    request: WmsRequest,
     ctx: C,
 ) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
     // TODO: authentication
     // TODO: more useful error output than "invalid query string"
     match request {
-        WMSRequest::GetCapabilities(request) => get_capabilities(&request),
-        WMSRequest::GetMap(request) => get_map(&request, &ctx).await,
-        WMSRequest::GetLegendGraphic(request) => get_legend_graphic(&request, &ctx),
+        WmsRequest::GetCapabilities(request) => get_capabilities(&request),
+        WmsRequest::GetMap(request) => get_map(&request, &ctx).await,
+        WmsRequest::GetLegendGraphic(request) => get_legend_graphic(&request, &ctx),
         _ => Ok(Box::new(
             warp::http::StatusCode::NOT_IMPLEMENTED.into_response(),
         )),
@@ -203,7 +203,7 @@ async fn get_map<C: Context>(
         Response::builder()
             .header("Content-Type", "image/png")
             .body(image_bytes)
-            .context(error::HTTP)?,
+            .context(error::Http)?,
     ))
 }
 
@@ -307,7 +307,7 @@ fn get_map_mock(request: &GetMap) -> Result<Box<dyn warp::Reply>, warp::Rejectio
         Response::builder()
             .header("Content-Type", "image/png")
             .body(image_bytes)
-            .context(error::HTTP)?,
+            .context(error::Http)?,
     ))
 }
 

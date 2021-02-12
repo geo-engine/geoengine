@@ -3,7 +3,7 @@ use crate::engine::{
     QueryContext, QueryProcessor, QueryRectangle, RasterOperator, RasterQueryProcessor,
     RasterResultDescriptor, TypedRasterQueryProcessor,
 };
-use crate::opencl::{CLProgram, CompiledCLProgram, IterationType, RasterArgument};
+use crate::opencl::{ClProgram, CompiledClProgram, IterationType, RasterArgument};
 use crate::util::Result;
 use crate::{call_bi_generic_processor, call_generic_raster_processor};
 use futures::stream::BoxStream;
@@ -163,7 +163,7 @@ where
     pub source_a: Box<dyn RasterQueryProcessor<RasterType = T1>>,
     pub source_b: Box<dyn RasterQueryProcessor<RasterType = T2>>,
     pub phantom_data: PhantomData<TO>,
-    pub cl_program: CompiledCLProgram,
+    pub cl_program: CompiledClProgram,
     pub no_data_value: TO,
 }
 
@@ -188,7 +188,7 @@ where
         }
     }
 
-    fn create_cl_program(expression: &SafeExpression) -> CompiledCLProgram {
+    fn create_cl_program(expression: &SafeExpression) -> CompiledClProgram {
         // TODO: generate code for arbitrary amount of inputs
         let source = r#"
 __kernel void expressionkernel(
@@ -220,7 +220,7 @@ __kernel void expressionkernel(
 }"#
         .replace("%%%EXPRESSION%%%", &expression.expression);
 
-        let mut cl_program = CLProgram::new(IterationType::Raster);
+        let mut cl_program = ClProgram::new(IterationType::Raster);
         cl_program.add_input_raster(RasterArgument::new(T1::TYPE));
         cl_program.add_input_raster(RasterArgument::new(T2::TYPE));
         cl_program.add_output_raster(RasterArgument::new(TO::TYPE));

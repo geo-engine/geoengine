@@ -64,7 +64,7 @@ pub type InitializedStatistics = InitializedOperatorImpl<(), PlotResultDescripto
 
 impl InitializedOperator<PlotResultDescriptor, TypedPlotQueryProcessor> for InitializedStatistics {
     fn query_processor(&self) -> Result<TypedPlotQueryProcessor> {
-        Ok(TypedPlotQueryProcessor::JSON(
+        Ok(TypedPlotQueryProcessor::Json(
             StatisticsQueryProcessor {
                 rasters: self
                     .raster_sources

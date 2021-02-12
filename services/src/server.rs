@@ -46,6 +46,12 @@ macro_rules! boxed_on_debug {
     };
 }
 
+/// Starts the webserver for the Geo Engine API.
+///
+/// # Panics
+///  * may panic if the `Postgres` backend is chosen without compiling the `postgres` feature
+///
+///
 pub async fn start_server(
     shutdown_rx: Option<Receiver<()>>,
     static_files_dir: Option<PathBuf>,

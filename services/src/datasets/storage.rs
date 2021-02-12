@@ -166,11 +166,11 @@ pub enum VectorLoadingInfo {
 
 /// Handling of data sets provided by geo engine internally, staged and by external providers
 #[async_trait]
-pub trait DataSetDB: DataSetProvider + DataSetProviderDB + Send + Sync {}
+pub trait DataSetDb: DataSetProvider + DataSetProviderDb + Send + Sync {}
 
 /// Storage and access of external data set providers
 #[async_trait]
-pub trait DataSetProviderDB {
+pub trait DataSetProviderDb {
     /// Add an external data set `provider` by `user`
     // TODO: require special privilege to be able to add external data set provider and to access external data in general
     async fn add_data_set_provider(

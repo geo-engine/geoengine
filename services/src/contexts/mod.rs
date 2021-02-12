@@ -1,6 +1,6 @@
 use crate::error::Result;
 use crate::{
-    projects::projectdb::ProjectDB, users::session::Session, users::userdb::UserDB,
+    projects::projectdb::ProjectDb, users::session::Session, users::userdb::UserDb,
     workflows::registry::WorkflowRegistry,
 };
 use async_trait::async_trait;
@@ -11,7 +11,7 @@ mod in_memory;
 #[cfg(feature = "postgres")]
 mod postgres;
 
-use crate::datasets::storage::DataSetDB;
+use crate::datasets::storage::DataSetDb;
 
 use crate::users::user::UserId;
 use crate::util::config;
@@ -31,33 +31,33 @@ pub use in_memory::InMemoryContext;
 pub use postgres::PostgresContext;
 use std::path::PathBuf;
 
-type DB<T> = Arc<RwLock<T>>;
+type Db<T> = Arc<RwLock<T>>;
 
 /// A context bundles access to shared resources like databases and session specific information
 /// about the user to pass to the services handlers.
 // TODO: avoid locking the individual DBs here IF they are already thread safe (e.g. guaranteed by postgres)
 #[async_trait]
 pub trait Context: 'static + Send + Sync + Clone {
-    type UserDB: UserDB;
-    type ProjectDB: ProjectDB;
+    type UserDB: UserDb;
+    type ProjectDB: ProjectDb;
     type WorkflowRegistry: WorkflowRegistry;
-    type DataSetDB: DataSetDB;
+    type DataSetDB: DataSetDb;
     type QueryContext: QueryContext;
     type ExecutionContext: ExecutionContext;
 
-    fn user_db(&self) -> DB<Self::UserDB>;
+    fn user_db(&self) -> Db<Self::UserDB>;
     async fn user_db_ref(&self) -> RwLockReadGuard<Self::UserDB>;
     async fn user_db_ref_mut(&self) -> RwLockWriteGuard<Self::UserDB>;
 
-    fn project_db(&self) -> DB<Self::ProjectDB>;
+    fn project_db(&self) -> Db<Self::ProjectDB>;
     async fn project_db_ref(&self) -> RwLockReadGuard<Self::ProjectDB>;
     async fn project_db_ref_mut(&self) -> RwLockWriteGuard<Self::ProjectDB>;
 
-    fn workflow_registry(&self) -> DB<Self::WorkflowRegistry>;
+    fn workflow_registry(&self) -> Db<Self::WorkflowRegistry>;
     async fn workflow_registry_ref(&self) -> RwLockReadGuard<Self::WorkflowRegistry>;
     async fn workflow_registry_ref_mut(&self) -> RwLockWriteGuard<Self::WorkflowRegistry>;
 
-    fn data_set_db(&self) -> DB<Self::DataSetDB>;
+    fn data_set_db(&self) -> Db<Self::DataSetDB>;
     async fn data_set_db_ref(&self) -> RwLockReadGuard<Self::DataSetDB>;
     async fn data_set_db_ref_mut(&self) -> RwLockWriteGuard<Self::DataSetDB>;
 
@@ -78,16 +78,16 @@ impl QueryContext for QueryContextImpl {
 
 pub struct ExecutionContextImpl<D>
 where
-    D: DataSetDB,
+    D: DataSetDb,
 {
-    data_set_db: DB<D>,
+    data_set_db: Db<D>,
     thread_pool: Arc<ThreadPool>,
     user: UserId,
 }
 
 impl<D> ExecutionContext for ExecutionContextImpl<D>
 where
-    D: DataSetDB
+    D: DataSetDb
         + MetaDataProvider<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>
         + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor>,
 {
@@ -122,7 +122,7 @@ where
 impl<D> MetaDataProvider<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>
     for ExecutionContextImpl<D>
 where
-    D: DataSetDB + MetaDataProvider<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>,
+    D: DataSetDb + MetaDataProvider<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>,
 {
     // TODO: make async
     fn meta_data(
@@ -154,7 +154,7 @@ where
 // TODO: use macro(?) for delegating meta_data function to DataSetDB to avoid redundant code
 impl<D> MetaDataProvider<OgrSourceDataset, VectorResultDescriptor> for ExecutionContextImpl<D>
 where
-    D: DataSetDB + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor>,
+    D: DataSetDb + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor>,
 {
     // TODO: make async
     fn meta_data(

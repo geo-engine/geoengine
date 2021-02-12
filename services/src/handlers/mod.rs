@@ -1,7 +1,7 @@
 use crate::error;
 use crate::error::Result;
 use crate::users::session::{Session, SessionId};
-use crate::users::userdb::UserDB;
+use crate::users::userdb::UserDb;
 use crate::{contexts::Context, error::Error};
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
@@ -27,6 +27,11 @@ pub struct ErrorResponse {
 }
 
 impl ErrorResponse {
+    /// Assert that a `Response` has a certain `status` and `error` message.
+    ///
+    /// # Panics
+    /// Panics if `status` or `error` do not match.
+    ///
     pub fn assert(res: &Response<Bytes>, status: u16, error: &str, message: &str) {
         assert_eq!(res.status(), status);
 

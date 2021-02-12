@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 #[serde(tag = "request")]
 // TODO: evaluate overhead of large enum variant and maybe refactor it
 #[allow(clippy::pub_enum_variant_names, clippy::large_enum_variant)]
-pub enum WMSRequest {
+pub enum WmsRequest {
     GetCapabilities(GetCapabilities),
     GetMap(GetMap),
     GetFeatureInfo(GetFeatureInfo),
@@ -77,7 +77,7 @@ pub struct GetMap {
 
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub enum GetMapExceptionFormat {
-    TextXML, // TODO: remaining formats
+    TextXml, // TODO: remaining formats
 }
 
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
@@ -96,7 +96,7 @@ pub struct GetFeatureInfo {
 
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub enum GetFeatureInfoFormat {
-    TextXML, // TODO: remaining formats
+    TextXml, // TODO: remaining formats
 }
 
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
@@ -123,9 +123,9 @@ mod tests {
     #[test]
     fn deserialize_get_map() {
         let query = "request=GetMap&service=WMS&version=1.3.0&layers=modis_ndvi&bbox=1,2,3,4&width=2&height=2&crs=EPSG:4326&styles=ssss&format=image/png&time=2000-01-01T00:00:00.0Z/2000-01-02T00:00:00.0Z&transparent=true&bgcolor=#000000&sld=sld_spec&sld_body=sld_body&elevation=elevation&exceptions=exceptions";
-        let parsed: WMSRequest = serde_urlencoded::from_str(query).unwrap();
+        let parsed: WmsRequest = serde_urlencoded::from_str(query).unwrap();
 
-        let request = WMSRequest::GetMap(GetMap {
+        let request = WmsRequest::GetMap(GetMap {
             version: "1.3.0".into(),
             width: 2,
             layers: "modis_ndvi".into(),
@@ -149,9 +149,9 @@ mod tests {
     #[test]
     fn deserialize_get_map_not_time() {
         let query = "request=GetMap&service=WMS&version=1.3.0&layers=modis_ndvi&bbox=1,2,3,4&width=2&height=2&crs=EPSG:4326&styles=ssss&format=image/png";
-        let parsed: WMSRequest = serde_urlencoded::from_str(query).unwrap();
+        let parsed: WmsRequest = serde_urlencoded::from_str(query).unwrap();
 
-        let request = WMSRequest::GetMap(GetMap {
+        let request = WmsRequest::GetMap(GetMap {
             version: "1.3.0".into(),
             width: 2,
             layers: "modis_ndvi".into(),
