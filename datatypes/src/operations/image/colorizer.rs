@@ -478,6 +478,10 @@ impl RgbaColor {
     ///
     /// assert_eq!(RgbaColor::black().factor_add(RgbaColor::white(), 0.5), RgbaColor::new(128, 128, 128, 255));
     /// ```
+    ///
+    /// # Panics
+    /// On debug, if factor is not in [0, 1]
+    ///
     #[allow(unstable_name_collisions)]
     pub fn factor_add(self, other: Self, factor: f64) -> Self {
         debug_assert!((0.0..=1.0).contains(&factor));

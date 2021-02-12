@@ -26,6 +26,11 @@ pub struct ErrorResponse {
 }
 
 impl ErrorResponse {
+    /// Assert that a `Response` has a certain `status` and `error` message.
+    ///
+    /// # Panics
+    /// Panics if `status` or `error` do not match.
+    ///
     pub fn assert(res: &Response<Bytes>, status: u16, error: &str, message: &str) {
         assert_eq!(res.status(), status);
 

@@ -59,6 +59,11 @@ pub struct ThreadPool {
 }
 
 impl ThreadPool {
+    /// Creates a new thread pool with `number_of_threads` threads.
+    ///
+    /// # Panics
+    /// Panics if `number_of_threads` is 0.
+    ///
     pub fn new(number_of_threads: usize) -> Self {
         assert!(
             number_of_threads > 0,

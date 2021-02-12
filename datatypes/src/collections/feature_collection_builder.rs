@@ -245,6 +245,10 @@ where
     }
 
     /// Outputs the number of bytes that is occupied in the builder buffers
+    ///
+    /// # Panics
+    /// * if the data type is unknown or unexpected which must not be the case
+    ///
     pub fn byte_size(&mut self) -> usize {
         let geometry_size = CollectionType::builder_byte_size(&mut self.geometries_builder);
         let time_intervals_size = TimeInterval::builder_byte_size(&mut self.time_intervals_builder);
@@ -324,7 +328,7 @@ where
         builders.push(Box::new(self.time_intervals_builder));
 
         for (column_name, builder) in self.builders.drain() {
-            let column_type = self.types.get(&column_name).unwrap(); // column must exist
+            let column_type = self.types.get(&column_name).expect("column must exist");
             columns.push(Field::new(
                 &column_name,
                 column_type.arrow_data_type(),
