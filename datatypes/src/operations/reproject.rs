@@ -273,6 +273,23 @@ mod tests {
     }
 
     #[test]
+    fn reproject_bounding_box_4326_900913() {
+        let from = SpatialReference::epsg_4326();
+        let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
+        let p = Proj::from_known_srs(from, to).unwrap();
+
+        let bbox =
+            BoundingBox2D::from_coord_ref_iter(&[MARBURG_EPSG_4326, COLOGNE_EPSG_4326]).unwrap();
+
+        let rl = bbox.reproject(&p).unwrap();
+
+        approx_eq!(f64, rl.lower_left().x, COLOGNE_EPSG_900_913.x);
+        approx_eq!(f64, rl.lower_left().y, MARBURG_EPSG_900_913.y);
+        approx_eq!(f64, rl.upper_right().x, MARBURG_EPSG_900_913.x);
+        approx_eq!(f64, rl.upper_right().y, COLOGNE_EPSG_900_913.y);
+    }
+
+    #[test]
     fn reproject_multi_point_4326_900913() {
         let from = SpatialReference::epsg_4326();
         let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);

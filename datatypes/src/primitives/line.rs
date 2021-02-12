@@ -66,6 +66,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn x_axis_lenght() {
         assert_eq!(
             Line::new((1., 1.).into(), (2., 2.).into()).x_axis_length(),
@@ -74,6 +75,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn y_axis_lenght() {
         assert_eq!(
             Line::new((1., 1.).into(), (2., 2.).into()).y_axis_length(),
@@ -82,10 +84,11 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn vector_length() {
         assert_eq!(
             Line::new((1., 1.).into(), (2., 2.).into()).vector_length(),
-            (2. as f64).sqrt()
+            2_f64.sqrt()
         )
     }
 
