@@ -1,4 +1,4 @@
-use super::Coordinate2D;
+use super::{Coordinate2D, SpatialBounded};
 use crate::error;
 use crate::util::Result;
 #[cfg(feature = "postgres")]
@@ -386,6 +386,39 @@ impl BoundingBox2D {
             None
         }
     }
+
+    pub fn add_coord(&mut self, coord: Coordinate2D) {
+        self.lower_left_coordinate = self.lower_left_coordinate.min_elements(coord);
+        self.upper_right_coordinate = self.upper_right_coordinate.min_elements(coord);
+    }
+
+    pub fn from_coord_iter<I: IntoIterator<Item = Coordinate2D>>(iter: I) -> Option<Self> {
+        let mut iterator = iter.into_iter();
+
+        let first = iterator.next().map(|c| BoundingBox2D::new_unchecked(c, c));
+
+        first.map(|mut f| {
+            for c in iterator {
+                f.add_coord(c);
+            }
+            f
+        })
+    }
+
+    pub fn from_coord_ref_iter<'l, I: IntoIterator<Item = &'l Coordinate2D>>(
+        iter: I,
+    ) -> Option<Self> {
+        let mut iterator = iter.into_iter();
+
+        let first = iterator.next().map(|&c| BoundingBox2D::new_unchecked(c, c));
+
+        first.map(|mut f| {
+            for &c in iterator {
+                f.add_coord(c);
+            }
+            f
+        })
+    }
 }
 
 impl From<BoundingBox2D> for geo::Rect<f64> {
@@ -397,6 +430,12 @@ impl From<BoundingBox2D> for geo::Rect<f64> {
 impl From<&BoundingBox2D> for geo::Rect<f64> {
     fn from(bbox: &BoundingBox2D) -> geo::Rect<f64> {
         geo::Rect::new(bbox.lower_left_coordinate, bbox.upper_right_coordinate)
+    }
+}
+
+impl SpatialBounded for BoundingBox2D {
+    fn spatial_bounds(&self) -> BoundingBox2D {
+        *self
     }
 }
 

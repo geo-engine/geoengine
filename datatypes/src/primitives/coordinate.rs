@@ -6,7 +6,11 @@ use ocl::OclPrm;
 #[cfg(feature = "postgres")]
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
-use std::{fmt, slice};
+use std::{
+    fmt,
+    ops::{Add, Div, Mul, Sub},
+    slice,
+};
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, PartialOrd, Serialize, Default)]
 #[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
@@ -35,6 +39,20 @@ impl Coordinate2D {
     ///
     pub fn new(x: f64, y: f64) -> Self {
         Self { x, y }
+    }
+
+    pub fn min_elements(&self, other: Self) -> Self {
+        Coordinate2D {
+            x: self.x.min(other.x),
+            y: self.y.min(other.y),
+        }
+    }
+
+    pub fn max_elements(&self, other: Self) -> Self {
+        Coordinate2D {
+            x: self.x.max(other.x),
+            y: self.y.max(other.y),
+        }
     }
 }
 
@@ -175,6 +193,70 @@ impl AsRef<[f64]> for Coordinate2D {
     fn as_ref(&self) -> &[f64] {
         let raw_ptr = (self as *const Coordinate2D).cast::<f64>();
         unsafe { std::slice::from_raw_parts(raw_ptr, 2) }
+    }
+}
+
+impl Add for Coordinate2D {
+    type Output = Coordinate2D;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Coordinate2D::new(self.x + rhs.x, self.y + rhs.y)
+    }
+}
+
+impl Add<f64> for Coordinate2D {
+    type Output = Coordinate2D;
+
+    fn add(self, rhs: f64) -> Self::Output {
+        Coordinate2D::new(self.x + rhs, self.y + rhs)
+    }
+}
+
+impl Sub for Coordinate2D {
+    type Output = Coordinate2D;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        Coordinate2D::new(self.x - rhs.x, self.y - rhs.y)
+    }
+}
+
+impl Sub<f64> for Coordinate2D {
+    type Output = Coordinate2D;
+
+    fn sub(self, rhs: f64) -> Self::Output {
+        Coordinate2D::new(self.x - rhs, self.y - rhs)
+    }
+}
+
+impl Mul for Coordinate2D {
+    type Output = Coordinate2D;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        Coordinate2D::new(self.x * rhs.x, self.y * rhs.y)
+    }
+}
+
+impl Mul<f64> for Coordinate2D {
+    type Output = Coordinate2D;
+
+    fn mul(self, rhs: f64) -> Self::Output {
+        Coordinate2D::new(self.x * rhs, self.y * rhs)
+    }
+}
+
+impl Div for Coordinate2D {
+    type Output = Coordinate2D;
+
+    fn div(self, rhs: Self) -> Self::Output {
+        Coordinate2D::new(self.x / rhs.x, self.y / rhs.y)
+    }
+}
+
+impl Div<f64> for Coordinate2D {
+    type Output = Coordinate2D;
+
+    fn div(self, rhs: f64) -> Self::Output {
+        Coordinate2D::new(self.x / rhs, self.y / rhs)
     }
 }
 
