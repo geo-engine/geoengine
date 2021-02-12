@@ -36,47 +36,23 @@ async fn list_datasets<C: Context>(
 mod tests {
     use super::*;
     use crate::contexts::InMemoryContext;
-    use crate::datasets::listing::DataSetListing;
     use crate::datasets::storage::{AddDataSet, DataSetStore};
     use crate::error::Result;
-    use crate::users::user::{UserCredentials, UserId, UserRegistration};
-    use crate::users::userdb::UserDB;
+    use crate::users::user::UserId;
+    use crate::util::tests::create_session_helper;
     use crate::util::Identifier;
     use geoengine_datatypes::collections::VectorDataType;
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
     use geoengine_operators::engine::{StaticMetaData, VectorResultDescriptor};
     use geoengine_operators::source::{OgrSourceDataset, OgrSourceErrorSpec};
+    use serde_json::json;
 
     #[tokio::test]
     async fn test_list_datasets() -> Result<()> {
         // TODO: use new tests helpers once they are merged
         let ctx = InMemoryContext::default();
 
-        ctx.user_db()
-            .write()
-            .await
-            .register(
-                UserRegistration {
-                    email: "foo@bar.de".to_string(),
-                    password: "secret123".to_string(),
-                    real_name: "Foo Bar".to_string(),
-                }
-                .validated()
-                .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let session = ctx
-            .user_db()
-            .write()
-            .await
-            .login(UserCredentials {
-                email: "foo@bar.de".to_string(),
-                password: "secret123".to_string(),
-            })
-            .await
-            .unwrap();
+        let session = create_session_helper(&ctx).await;
 
         let descriptor = VectorResultDescriptor {
             data_type: VectorDataType::Data,
@@ -106,7 +82,7 @@ mod tests {
             result_descriptor: descriptor,
         };
 
-        let _id = ctx
+        let id = ctx
             .data_set_db_ref_mut()
             .await
             .add_data_set(UserId::new(), ds.validated()?, Box::new(meta))
@@ -134,9 +110,27 @@ mod tests {
         assert_eq!(res.status(), 200);
 
         let body: String = String::from_utf8(res.body().to_vec()).unwrap();
-        let result = serde_json::from_str::<Vec<DataSetListing>>(&body);
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap().len(), 1);
+
+        assert_eq!(
+            body,
+            json!([{
+                "id": {
+                    "Internal": id.internal().unwrap()
+                },
+                "name": "OgrDataSet",
+                "description": "My Ogr data set",
+                "tags": [],
+                "source_operator": "OgrSource",
+                "result_descriptor": {
+                    "Vector": {
+                        "data_type": "Data",
+                        "spatial_reference": "",
+                        "columns": {}
+                    }
+                }
+            }])
+            .to_string()
+        );
 
         Ok(())
     }
