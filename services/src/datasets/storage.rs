@@ -5,8 +5,8 @@ use crate::users::user::UserId;
 use crate::util::user_input::{UserInput, Validated};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DataSetId, DataSetProviderId, InternalDataSetId};
-use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use geoengine_datatypes::util::Identifier;
+use geoengine_operators::engine::{RasterResultDescriptor, VectorResultDescriptor};
 use geoengine_operators::mock::MockDataSetDataSourceLoadingInfo;
 use geoengine_operators::source::OgrSourceDataset;
 use serde::{Deserialize, Serialize};
@@ -18,9 +18,26 @@ pub struct DataSet {
     pub id: DataSetId,
     pub name: String,
     pub description: String,
-    pub data_type: LayerInfo, // TODO: custom type instead of reusing existing one?
+    pub result_descriptor: DataSetResultDescriptor,
     pub source_operator: String,
-    pub spatial_reference: SpatialReferenceOption,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub enum DataSetResultDescriptor {
+    Raster(RasterResultDescriptor),
+    Vector(VectorResultDescriptor),
+}
+
+impl From<RasterResultDescriptor> for DataSetResultDescriptor {
+    fn from(value: RasterResultDescriptor) -> Self {
+        Self::Raster(value)
+    }
+}
+
+impl From<VectorResultDescriptor> for DataSetResultDescriptor {
+    fn from(value: VectorResultDescriptor) -> Self {
+        Self::Vector(value)
+    }
 }
 
 impl DataSet {
@@ -31,7 +48,7 @@ impl DataSet {
             description: self.description.clone(),
             tags: vec![], // TODO
             source_operator: self.source_operator.clone(),
-            spatial_reference: self.spatial_reference,
+            result_descriptor: self.result_descriptor.clone(),
         }
     }
 }
@@ -42,9 +59,8 @@ impl From<AddDataSet> for DataSet {
             id: DataSetId::Internal(InternalDataSetId::new()),
             name: value.name,
             description: value.description,
-            data_type: value.data_type,
+            result_descriptor: value.result_descriptor,
             source_operator: value.source_operator,
-            spatial_reference: value.spatial_reference,
         }
     }
 }
@@ -53,9 +69,8 @@ impl From<AddDataSet> for DataSet {
 pub struct AddDataSet {
     pub name: String,
     pub description: String,
-    pub data_type: LayerInfo, // TODO: custom type?
+    pub result_descriptor: DataSetResultDescriptor,
     pub source_operator: String,
-    pub spatial_reference: SpatialReferenceOption,
 }
 
 impl UserInput for AddDataSet {
@@ -71,7 +86,7 @@ pub struct ImportDataSet {
     pub description: String,
     pub data_type: LayerInfo,
     pub source_operator: String,
-    pub spatial_reference: SpatialReferenceOption,
+    pub result_descriptor: DataSetResultDescriptor,
 }
 
 impl From<ImportDataSet> for DataSet {
@@ -80,9 +95,8 @@ impl From<ImportDataSet> for DataSet {
             id: DataSetId::Internal(InternalDataSetId::new()),
             name: value.name,
             description: value.description,
-            data_type: value.data_type,
+            result_descriptor: value.result_descriptor,
             source_operator: value.source_operator,
-            spatial_reference: value.spatial_reference,
         }
     }
 }

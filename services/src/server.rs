@@ -79,7 +79,7 @@ pub async fn start_server(
                 shutdown_rx,
                 static_files_dir,
                 bind_address,
-                InMemoryContext::default(),
+                InMemoryContext::new_with_data().await,
             )
             .await
         }
@@ -133,6 +133,7 @@ where
         handlers::projects::add_permission_handler(ctx.clone()),
         handlers::projects::remove_permission_handler(ctx.clone()),
         handlers::projects::list_permissions_handler(ctx.clone()),
+        handlers::datasets::list_datasets_handler(ctx.clone()),
         handlers::wms::wms_handler(ctx.clone()),
         handlers::wfs::wfs_handler(ctx.clone()),
         handlers::plots::get_plot_handler(ctx.clone()),

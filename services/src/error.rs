@@ -120,6 +120,18 @@ pub enum Error {
     DataSetIdTypeMissMatch,
     UnknownDataSetId,
     UnknownProviderId,
+
+    #[snafu(display("Parameter {} must have length between {} and {}", parameter, min, max))]
+    InvalidStringLength {
+        parameter: String,
+        min: usize,
+        max: usize,
+    },
+
+    #[snafu(display("Limit must be <= {}", limit))]
+    InvalidListLimit {
+        limit: usize,
+    },
 }
 
 impl Reject for Error {}
