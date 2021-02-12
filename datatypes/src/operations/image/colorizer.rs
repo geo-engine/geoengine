@@ -498,25 +498,6 @@ impl RgbaColor {
     }
 }
 
-// TODO: use float's clamp function once it is stable
-trait Clamp: Sized + PartialOrd {
-    /// Restrict a value to a certain interval unless it is NaN.
-    /// taken from std-lib nightly
-    fn clamp(self, min: Self, max: Self) -> Self {
-        assert!(min <= max);
-        let mut x = self;
-        if x < min {
-            x = min;
-        }
-        if x > max {
-            x = max;
-        }
-        x
-    }
-}
-
-impl Clamp for f64 {}
-
 impl From<RgbaColor> for image::Rgba<u8> {
     /// Transform an `RgbaColor` to its counterpart from the image crate
     fn from(color: RgbaColor) -> image::Rgba<u8> {
