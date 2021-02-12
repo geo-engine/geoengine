@@ -1,16 +1,20 @@
-use crate::datasets::storage::{AddDataSetProvider, AddMockDataSetProvider, DataSet};
+use crate::datasets::storage::{
+    AddDataSetProvider, AddMockDataSetProvider, DataSet, DataSetResultDescriptor,
+};
+use crate::error;
 use crate::error::Result;
 use crate::users::user::UserId;
+use crate::util::config::{get_config_element, DataSetService};
 use crate::util::user_input::{UserInput, Validated};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::DataSetId;
-use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use geoengine_operators::engine::{
     MetaData, MetaDataProvider, ResultDescriptor, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDataSetDataSourceLoadingInfo;
 use geoengine_operators::source::OgrSourceDataset;
 use serde::{Deserialize, Serialize};
+use snafu::ensure;
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct DataSetListing {
@@ -19,14 +23,14 @@ pub struct DataSetListing {
     pub description: String,
     pub tags: Vec<String>,
     pub source_operator: String,
-    pub spatial_reference: SpatialReferenceOption,
+    pub result_descriptor: DataSetResultDescriptor,
     // TODO: meta data like bounds, resolution
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DataSetListOptions {
     // TODO: permissions
-    pub filter: Option<DataSetFilter>,
+    pub filter: Option<String>,
     pub order: OrderBy,
     pub offset: u32,
     pub limit: u32,
@@ -34,15 +38,27 @@ pub struct DataSetListOptions {
 
 impl UserInput for DataSetListOptions {
     fn validate(&self) -> Result<()> {
-        // TODO
+        let limit = get_config_element::<DataSetService>()?.list_limit;
+        ensure!(
+            self.limit <= limit,
+            error::InvalidListLimit {
+                limit: limit as usize
+            }
+        );
+
+        if let Some(filter) = &self.filter {
+            ensure!(
+                filter.len() >= 3 && filter.len() <= 256,
+                error::InvalidStringLength {
+                    parameter: "filter".to_string(),
+                    min: 3_usize,
+                    max: 256_usize
+                }
+            );
+        }
+
         Ok(())
     }
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct DataSetFilter {
-    pub name: String,
-    // TODO: tags, ..
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]

@@ -12,6 +12,7 @@ use warp::hyper::body::Bytes;
 use warp::reject::{InvalidQuery, MethodNotAllowed, UnsupportedMediaType};
 use warp::{Filter, Rejection, Reply};
 
+pub mod datasets;
 pub mod plots;
 pub mod projects;
 pub mod users;

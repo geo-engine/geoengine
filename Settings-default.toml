@@ -6,6 +6,9 @@ backend = "in_memory"
 [project_service]
 list_limit = 20
 
+[dataset_service]
+list_limit = 20
+
 [postgres]
 config_string = "postgresql://geoengine:geoengine@localhost:5432"
 
