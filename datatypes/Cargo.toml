@@ -17,7 +17,7 @@ arrow = {version = "2.0", features = ["simd"] }
 chrono = "0.4"
 float-cmp = "0.8"
 geo = "0.17"
-proj = "0.20.5"
+proj = "0.21"
 geojson = "0.21"
 image = "0.23"
 ndarray = "0.14"

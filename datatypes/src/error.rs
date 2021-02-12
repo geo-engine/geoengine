@@ -16,6 +16,11 @@ pub enum Error {
         source: arrow::error::ArrowError,
     },
 
+    #[snafu(display("ProjInternal error: {:?}", source))]
+    ProjInternal {
+        source: proj::ProjError,
+    },
+
     #[snafu(display("Field is reserved or already in use: {}", name))]
     ColumnNameConflict {
         name: String,
@@ -156,6 +161,12 @@ pub enum Error {
 impl From<arrow::error::ArrowError> for Error {
     fn from(source: arrow::error::ArrowError) -> Self {
         Error::ArrowInternal { source }
+    }
+}
+
+impl From<proj::ProjError> for Error {
+    fn from(source: proj::ProjError) -> Self {
+        Error::ProjInternal { source }
     }
 }
 
