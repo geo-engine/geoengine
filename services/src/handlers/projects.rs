@@ -1038,6 +1038,53 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn update_plots2() {
+        let ctx = InMemoryContext::default();
+
+        let (session, project_id) = create_project_helper(&ctx).await;
+
+        let first_update = warp::test::request()
+            .method("PATCH")
+            .path(&format!("/project/{}", project_id.to_string()))
+            .header("Content-Length", "0")
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
+            .json(&json!({
+                "id": project_id.to_string(),
+                "plots": [{
+                    "name": "Statistics of NDVI Test Raster",
+                    "workflow": "f5e62c7e-94eb-59f4-a164-0a6a6d4acb48"
+                }]
+            }))
+            .reply(&update_project_handler(ctx.clone()))
+            .await;
+
+        assert_eq!(first_update.status(), 200, "{:?}", first_update.body());
+
+        let second_update = warp::test::request()
+            .method("PATCH")
+            .path(&format!("/project/{}", project_id.to_string()))
+            .header("Content-Length", "0")
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
+            .json(&json!({
+                "id": project_id.to_string(),
+                "plots": [{
+                    "name": "Statistics of NDVI Test Raster",
+                    "workflow": "f5e62c7e-94eb-59f4-a164-0a6a6d4acb48"
+                }, "none"]
+            }))
+            .reply(&update_project_handler(ctx.clone()))
+            .await;
+
+        assert_eq!(second_update.status(), 200, "{:?}", second_update.body());
+    }
+
+    #[tokio::test]
     async fn delete() {
         let ctx = InMemoryContext::default();
 
