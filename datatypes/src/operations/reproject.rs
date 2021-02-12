@@ -323,6 +323,7 @@ mod tests {
             MARBURG_EPSG_4326,
             COLOGNE_EPSG_4326,
             HAMBURG_EPSG_4326,
+            MARBURG_EPSG_4326,
         ]]];
 
         let mp = MultiPolygon::new(cs).unwrap();
