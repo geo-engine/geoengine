@@ -118,6 +118,7 @@ impl Project {
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 #[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
+#[allow(clippy::upper_case_acronyms)]
 pub struct STRectangle {
     pub spatial_reference: SpatialReferenceOption,
     pub bounding_box: BoundingBox2D,

@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 #[serde(tag = "request")]
 // TODO: evaluate overhead of large enum variant and maybe refactor it
 #[allow(clippy::pub_enum_variant_names, clippy::large_enum_variant)]
-pub enum WFSRequest {
+pub enum WfsRequest {
     GetCapabilities(GetCapabilities),
     DescribeFeatureType(DescribeFeatureType),
     GetFeature(GetFeature),
@@ -140,9 +140,9 @@ mod tests {
     #[test]
     fn deserialize_get_feature() {
         let query = "request=GetFeature&service=WFS&version=2.0.0&typeNames=ns:test&bbox=1,2,3,4";
-        let parsed: WFSRequest = serde_urlencoded::from_str(query).unwrap();
+        let parsed: WfsRequest = serde_urlencoded::from_str(query).unwrap();
 
-        let request = WFSRequest::GetFeature(GetFeature {
+        let request = WfsRequest::GetFeature(GetFeature {
             version: "2.0.0".into(),
             time: None,
             srs_name: None,
@@ -186,9 +186,9 @@ mod tests {
             ("propertyName","P1,P2"),
         ];
         let query = serde_urlencoded::to_string(params).unwrap();
-        let parsed: WFSRequest = serde_urlencoded::from_str(&query).unwrap();
+        let parsed: WfsRequest = serde_urlencoded::from_str(&query).unwrap();
 
-        let request = WFSRequest::GetFeature(GetFeature {
+        let request = WfsRequest::GetFeature(GetFeature {
             version: "2.0.0".into(),
             time: Some(TimeInterval::new(946_684_800_000, 946_771_200_000).unwrap()),
             srs_name: Some(SpatialReference::new(SpatialReferenceAuthority::Epsg, 4326)),
@@ -227,9 +227,9 @@ mod tests {
         ];
         let url = serde_urlencoded::to_string(params).unwrap();
 
-        let parsed: WFSRequest = serde_urlencoded::from_str(&url).unwrap();
+        let parsed: WfsRequest = serde_urlencoded::from_str(&url).unwrap();
 
-        let request = WFSRequest::GetFeature(GetFeature {
+        let request = WfsRequest::GetFeature(GetFeature {
             version: "2.0.0".into(),
             time: None,
             srs_name: None,

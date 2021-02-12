@@ -1,6 +1,6 @@
 use crate::datasets::listing::{DataSetListOptions, DataSetListing, DataSetProvider};
 use crate::datasets::storage::{
-    AddDataSet, AddDataSetProvider, DataSet, DataSetDB, DataSetProviderDB,
+    AddDataSet, AddDataSetProvider, DataSet, DataSetDb, DataSetProviderDb,
     DataSetProviderListOptions, DataSetProviderListing, DataSetStore, DataSetStorer,
 };
 use crate::error;
@@ -17,7 +17,7 @@ use geoengine_operators::source::OgrSourceDataset;
 use std::collections::HashMap;
 
 #[derive(Default)]
-pub struct HashMapDataSetDB {
+pub struct HashMapDataSetDb {
     data_sets: Vec<DataSet>,
     ogr_data_sets:
         HashMap<InternalDataSetId, StaticMetaData<OgrSourceDataset, VectorResultDescriptor>>,
@@ -27,10 +27,10 @@ pub struct HashMapDataSetDB {
     >,
 }
 
-impl DataSetDB for HashMapDataSetDB {}
+impl DataSetDb for HashMapDataSetDb {}
 
 #[async_trait]
-impl DataSetProviderDB for HashMapDataSetDB {
+impl DataSetProviderDb for HashMapDataSetDb {
     async fn add_data_set_provider(
         &mut self,
         _user: UserId,
@@ -57,27 +57,27 @@ impl DataSetProviderDB for HashMapDataSetDB {
 }
 
 pub trait HashMapStorable: Send + Sync {
-    fn store(&self, id: InternalDataSetId, db: &mut HashMapDataSetDB);
+    fn store(&self, id: InternalDataSetId, db: &mut HashMapDataSetDb);
 }
 
-impl DataSetStorer for HashMapDataSetDB {
+impl DataSetStorer for HashMapDataSetDb {
     type StorageType = Box<dyn HashMapStorable>;
 }
 
 impl HashMapStorable for StaticMetaData<OgrSourceDataset, VectorResultDescriptor> {
-    fn store(&self, id: InternalDataSetId, db: &mut HashMapDataSetDB) {
+    fn store(&self, id: InternalDataSetId, db: &mut HashMapDataSetDb) {
         db.ogr_data_sets.insert(id, self.clone());
     }
 }
 
 impl HashMapStorable for StaticMetaData<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor> {
-    fn store(&self, id: InternalDataSetId, db: &mut HashMapDataSetDB) {
+    fn store(&self, id: InternalDataSetId, db: &mut HashMapDataSetDb) {
         db.mock_data_sets.insert(id, self.clone());
     }
 }
 
 #[async_trait]
-impl DataSetStore for HashMapDataSetDB {
+impl DataSetStore for HashMapDataSetDb {
     async fn add_data_set(
         &mut self,
         _user: UserId,
@@ -93,7 +93,7 @@ impl DataSetStore for HashMapDataSetDB {
 }
 
 #[async_trait]
-impl DataSetProvider for HashMapDataSetDB {
+impl DataSetProvider for HashMapDataSetDb {
     async fn list(
         &self,
         _user: UserId,
@@ -106,7 +106,7 @@ impl DataSetProvider for HashMapDataSetDB {
 }
 
 impl MetaDataProvider<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>
-    for HashMapDataSetDB
+    for HashMapDataSetDb
 {
     fn meta_data(
         &self,
@@ -130,7 +130,7 @@ impl MetaDataProvider<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>
     }
 }
 
-impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor> for HashMapDataSetDB {
+impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor> for HashMapDataSetDb {
     fn meta_data(
         &self,
         data_set: &DataSetId,

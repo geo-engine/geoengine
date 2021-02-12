@@ -4,7 +4,7 @@ use crate::projects::project::{
     CreateProject, LoadVersion, Plot, Project, ProjectId, ProjectListOptions, ProjectListing,
     ProjectVersion, ProjectVersionId, UpdateProject, UserProjectPermission,
 };
-use crate::projects::projectdb::ProjectDB;
+use crate::projects::projectdb::ProjectDb;
 use crate::users::user::UserId;
 use crate::util::user_input::Validated;
 use crate::util::Identifier;
@@ -22,7 +22,7 @@ use crate::contexts::PostgresContext;
 use bb8_postgres::bb8::PooledConnection;
 use bb8_postgres::tokio_postgres::Transaction;
 
-pub struct PostgresProjectDB<Tls>
+pub struct PostgresProjectDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -32,7 +32,7 @@ where
     conn_pool: Pool<PostgresConnectionManager<Tls>>,
 }
 
-impl<Tls> PostgresProjectDB<Tls>
+impl<Tls> PostgresProjectDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -135,7 +135,7 @@ where
 }
 
 #[async_trait]
-impl<Tls> ProjectDB for PostgresProjectDB<Tls>
+impl<Tls> ProjectDb for PostgresProjectDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,

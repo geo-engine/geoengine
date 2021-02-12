@@ -1,6 +1,6 @@
 use crate::datasets::listing::{DataSetListOptions, DataSetListing, DataSetProvider};
 use crate::datasets::storage::{
-    AddDataSetProvider, DataSetDB, DataSetProviderDB, DataSetProviderListOptions,
+    AddDataSetProvider, DataSetDb, DataSetProviderDb, DataSetProviderListOptions,
     DataSetProviderListing,
 };
 use crate::error::Result;
@@ -11,12 +11,12 @@ use geoengine_datatypes::dataset::{DataSetId, DataSetProviderId};
 use geoengine_operators::engine::{MetaData, MetaDataProvider, ResultDescriptor};
 
 // TODO: implement in separate PR, need placeholder here to satisfy bounds of `Context`
-pub struct PostgresDataSetDB {}
+pub struct PostgresDataSetDb {}
 
-impl DataSetDB for PostgresDataSetDB {}
+impl DataSetDb for PostgresDataSetDb {}
 
 #[async_trait]
-impl DataSetProviderDB for PostgresDataSetDB {
+impl DataSetProviderDb for PostgresDataSetDb {
     async fn add_data_set_provider(
         &mut self,
         _user: UserId,
@@ -43,7 +43,7 @@ impl DataSetProviderDB for PostgresDataSetDB {
 }
 
 #[async_trait]
-impl DataSetProvider for PostgresDataSetDB {
+impl DataSetProvider for PostgresDataSetDb {
     async fn list(
         &self,
         _user: UserId,
@@ -53,7 +53,7 @@ impl DataSetProvider for PostgresDataSetDB {
     }
 }
 
-impl<L, R> MetaDataProvider<L, R> for PostgresDataSetDB
+impl<L, R> MetaDataProvider<L, R> for PostgresDataSetDb
 where
     R: ResultDescriptor,
 {

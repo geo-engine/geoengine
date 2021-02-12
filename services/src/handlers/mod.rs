@@ -1,7 +1,7 @@
 use crate::error;
 use crate::error::Result;
 use crate::users::session::{Session, SessionId};
-use crate::users::userdb::UserDB;
+use crate::users::userdb::UserDb;
 use crate::{contexts::Context, error::Error};
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;

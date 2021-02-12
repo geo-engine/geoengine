@@ -5,7 +5,7 @@ use warp::{http::Response, Filter};
 use crate::error;
 use crate::error::Result;
 use crate::handlers::Context;
-use crate::ogc::wfs::request::{GetCapabilities, GetFeature, TypeNames, WFSRequest};
+use crate::ogc::wfs::request::{GetCapabilities, GetFeature, TypeNames, WfsRequest};
 use crate::users::session::Session;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
@@ -29,21 +29,21 @@ pub(crate) fn wfs_handler<C: Context>(
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::path!("wfs")
         .and(warp::get())
-        .and(warp::query::<WFSRequest>())
+        .and(warp::query::<WfsRequest>())
         .and(warp::any().map(move || ctx.clone()))
         .and_then(wfs)
 }
 
 // TODO: move into handler once async closures are available?
 async fn wfs<C: Context>(
-    request: WFSRequest,
+    request: WfsRequest,
     ctx: C,
 ) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
     // TODO: authentication
     // TODO: more useful error output than "invalid query string"
     match request {
-        WFSRequest::GetCapabilities(request) => get_capabilities(&request),
-        WFSRequest::GetFeature(request) => get_feature(&request, &ctx).await,
+        WfsRequest::GetCapabilities(request) => get_capabilities(&request),
+        WfsRequest::GetFeature(request) => get_feature(&request, &ctx).await,
         _ => Ok(Box::new(
             warp::http::StatusCode::NOT_IMPLEMENTED.into_response(),
         )),
@@ -176,7 +176,7 @@ async fn get_feature<C: Context>(
             return Err(error::Error::InvalidNamespace.into());
         }
         None => {
-            return Err(error::Error::InvalidWFSTypeNames.into());
+            return Err(error::Error::InvalidWfsTypeNames.into());
         }
     };
 
@@ -236,7 +236,7 @@ async fn get_feature<C: Context>(
         Response::builder()
             .header("Content-Type", "application/json")
             .body(json.to_string())
-            .context(error::HTTP)?,
+            .context(error::Http)?,
     ))
 }
 

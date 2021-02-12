@@ -3,10 +3,10 @@ use crate::handlers::ErrorResponse;
 use crate::projects::project::{
     CreateProject, Layer, LayerInfo, LayerUpdate, ProjectId, RasterInfo, STRectangle, UpdateProject,
 };
-use crate::projects::projectdb::ProjectDB;
+use crate::projects::projectdb::ProjectDb;
 use crate::users::session::Session;
 use crate::users::user::{UserCredentials, UserRegistration};
-use crate::users::userdb::UserDB;
+use crate::users::userdb::UserDb;
 use crate::util::user_input::UserInput;
 use crate::util::Identifier;
 use crate::workflows::registry::WorkflowRegistry;

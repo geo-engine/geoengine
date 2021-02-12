@@ -5,7 +5,7 @@ use crate::projects::project::{ProjectId, ProjectPermission, STRectangle};
 use crate::users::session::{Session, SessionId, UserInfo};
 use crate::users::user::User;
 use crate::users::user::{UserCredentials, UserId, UserRegistration};
-use crate::users::userdb::UserDB;
+use crate::users::userdb::UserDb;
 use crate::util::user_input::Validated;
 use crate::util::Identifier;
 use async_trait::async_trait;
@@ -17,7 +17,7 @@ use bb8_postgres::{
 use pwhash::bcrypt;
 use uuid::Uuid;
 
-pub struct PostgresUserDB<Tls>
+pub struct PostgresUserDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -27,7 +27,7 @@ where
     conn_pool: Pool<PostgresConnectionManager<Tls>>,
 }
 
-impl<Tls> PostgresUserDB<Tls>
+impl<Tls> PostgresUserDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -40,7 +40,7 @@ where
 }
 
 #[async_trait]
-impl<Tls> UserDB for PostgresUserDB<Tls>
+impl<Tls> UserDb for PostgresUserDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,

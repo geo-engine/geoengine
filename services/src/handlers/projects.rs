@@ -2,7 +2,7 @@ use crate::handlers::{authenticate, Context};
 use crate::projects::project::{
     CreateProject, LoadVersion, ProjectId, ProjectListOptions, UpdateProject, UserProjectPermission,
 };
-use crate::projects::projectdb::ProjectDB;
+use crate::projects::projectdb::ProjectDb;
 use crate::users::session::Session;
 use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
@@ -247,7 +247,7 @@ mod tests {
     use crate::projects::project::{LayerUpdate, LayerVisibility, Plot, PlotUpdate, VectorInfo};
     use crate::users::session::Session;
     use crate::users::user::UserRegistration;
-    use crate::users::userdb::UserDB;
+    use crate::users::userdb::UserDb;
     use crate::util::tests::{
         check_allowed_http_methods, check_allowed_http_methods2, create_project_helper,
         create_session_helper, update_project_helper,

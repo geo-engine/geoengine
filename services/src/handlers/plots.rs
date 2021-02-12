@@ -69,7 +69,7 @@ async fn get_plot<C: Context>(
     let query_ctx = ctx.query_context()?;
 
     Ok(match processor {
-        TypedPlotQueryProcessor::JSON(processor) => {
+        TypedPlotQueryProcessor::Json(processor) => {
             let json = processor
                 .plot_query(query_rect, &query_ctx)
                 .await
@@ -79,10 +79,10 @@ async fn get_plot<C: Context>(
                 Response::builder()
                     .header("Content-Type", "application/json")
                     .body(json.to_string())
-                    .context(error::HTTP)?,
+                    .context(error::Http)?,
             )
         }
-        TypedPlotQueryProcessor::PNG(processor) => {
+        TypedPlotQueryProcessor::Png(processor) => {
             let png_bytes = processor
                 .plot_query(query_rect, &query_ctx)
                 .await
@@ -92,7 +92,7 @@ async fn get_plot<C: Context>(
                 Response::builder()
                     .header("Content-Type", "application/png")
                     .body(png_bytes)
-                    .context(error::HTTP)?,
+                    .context(error::Http)?,
             )
         }
     })

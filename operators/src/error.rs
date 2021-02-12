@@ -64,7 +64,7 @@ pub enum Error {
     },
 
     #[snafu(display("IOError: {}", source))]
-    IO {
+    Io {
         source: std::io::Error,
     },
 
@@ -73,31 +73,31 @@ pub enum Error {
         source: serde_json::Error,
     },
 
-    OCL {
+    Ocl {
         ocl_error: ocl::error::Error,
     },
 
-    CLProgramInvalidRasterIndex,
+    ClProgramInvalidRasterIndex,
 
-    CLProgramInvalidRasterDataType,
+    ClProgramInvalidRasterDataType,
 
-    CLProgramInvalidFeaturesIndex,
+    ClProgramInvalidFeaturesIndex,
 
-    CLProgramInvalidVectorDataType,
+    ClProgramInvalidVectorDataType,
 
-    CLProgramInvalidGenericIndex,
+    ClProgramInvalidGenericIndex,
 
-    CLProgramInvalidGenericDataType,
+    ClProgramInvalidGenericDataType,
 
-    CLProgramUnspecifiedRaster,
+    ClProgramUnspecifiedRaster,
 
-    CLProgramUnspecifiedFeatures,
+    ClProgramUnspecifiedFeatures,
 
-    CLProgramUnspecifiedGenericBuffer,
+    ClProgramUnspecifiedGenericBuffer,
 
-    CLProgramInvalidColumn,
+    ClProgramInvalidColumn,
 
-    CLInvalidInputsForIterationType,
+    ClInvalidInputsForIterationType,
 
     InvalidExpression,
 
@@ -171,7 +171,7 @@ impl From<gdal::errors::GdalError> for Error {
 
 impl From<std::io::Error> for Error {
     fn from(io_error: std::io::Error) -> Self {
-        Self::IO { source: io_error }
+        Self::Io { source: io_error }
     }
 }
 
@@ -191,7 +191,7 @@ impl From<chrono::format::ParseError> for Error {
 
 impl From<ocl::Error> for Error {
     fn from(ocl_error: ocl::Error) -> Self {
-        Self::OCL { ocl_error }
+        Self::Ocl { ocl_error }
     }
 }
 

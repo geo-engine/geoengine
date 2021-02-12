@@ -73,6 +73,7 @@ pub struct CsvSourceParameters {
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum CsvGeometrySpecification {
+    #[allow(clippy::upper_case_acronyms)]
     XY { x: String, y: String },
 }
 
