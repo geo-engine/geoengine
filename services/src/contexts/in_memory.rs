@@ -62,9 +62,13 @@ impl InMemoryContext {
 
         ctx.data_set_db_ref_mut()
             .await
-            .add_data_set(UserId::new(), ds.validated().unwrap(), Box::new(meta))
+            .add_data_set(
+                UserId::new(),
+                ds.validated().expect("valid dataset description"),
+                Box::new(meta),
+            )
             .await
-            .unwrap();
+            .expect("dataset db access");
 
         let descriptor = VectorResultDescriptor {
             data_type: VectorDataType::MultiPoint,
@@ -114,9 +118,13 @@ impl InMemoryContext {
 
         ctx.data_set_db_ref_mut()
             .await
-            .add_data_set(UserId::new(), ds.validated().unwrap(), Box::new(meta))
+            .add_data_set(
+                UserId::new(),
+                ds.validated().expect("valid dataset description"),
+                Box::new(meta),
+            )
             .await
-            .unwrap();
+            .expect("dataset db access");
 
         ctx
     }
