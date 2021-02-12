@@ -2,7 +2,10 @@ use std::convert::Infallible;
 
 use snafu::Snafu;
 
-use crate::{collections::FeatureCollectionError, primitives::TimeInstance};
+use crate::{
+    collections::FeatureCollectionError, primitives::TimeInstance,
+    spatial_reference::SpatialReference,
+};
 use crate::{
     primitives::{Coordinate2D, PrimitivesError, TimeInterval},
     raster::RasterDataType,
@@ -19,6 +22,11 @@ pub enum Error {
     #[snafu(display("ProjInternal error: {:?}", source))]
     ProjInternal {
         source: proj::ProjError,
+    },
+    #[snafu(display("No CoordinateProjector available for: {:?} --> {:?}", from, to))]
+    NoCoordinateProjector {
+        from: SpatialReference,
+        to: SpatialReference,
     },
 
     #[snafu(display("Field is reserved or already in use: {}", name))]

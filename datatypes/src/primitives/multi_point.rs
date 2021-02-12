@@ -325,4 +325,17 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn spatial_bounds() {
+        let expected = BoundingBox2D::new_unchecked((0., 0.).into(), (1., 1.).into());
+        let coordinates: Vec<Coordinate2D> = Vec::from([
+            (1., 0.4).into(),
+            (0.8, 0.0).into(),
+            (0.3, 0.1).into(),
+            (0.0, 1.0).into(),
+        ]);
+        let mp = MultiPoint { coordinates };
+        assert_eq!(mp.spatial_bounds(), expected)
+    }
 }

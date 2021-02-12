@@ -170,4 +170,15 @@ mod tests {
             approx_eq!(f64, a.y, b.y);
         });
     }
+
+    #[test]
+    fn spatial_bounds() {
+        let expected = BoundingBox2D::new_unchecked((0., 0.).into(), (1., 1.).into());
+        let l = Line {
+            start: (0., 1.).into(),
+            end: (1., 0.).into(),
+        };
+
+        assert_eq!(l.spatial_bounds(), expected)
+    }
 }

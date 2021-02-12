@@ -389,7 +389,7 @@ impl BoundingBox2D {
 
     pub fn add_coord(&mut self, coord: Coordinate2D) {
         self.lower_left_coordinate = self.lower_left_coordinate.min_elements(coord);
-        self.upper_right_coordinate = self.upper_right_coordinate.min_elements(coord);
+        self.upper_right_coordinate = self.upper_right_coordinate.max_elements(coord);
     }
 
     pub fn from_coord_iter<I: IntoIterator<Item = Coordinate2D>>(iter: I) -> Option<Self> {
@@ -441,7 +441,8 @@ impl SpatialBounded for BoundingBox2D {
 
 #[cfg(test)]
 mod tests {
-    use crate::primitives::{BoundingBox2D, Coordinate2D};
+
+    use crate::primitives::{BoundingBox2D, Coordinate2D, SpatialBounded};
     #[test]
     #[allow(clippy::float_cmp)]
     fn bounding_box_new() {
@@ -899,5 +900,47 @@ mod tests {
         let bbox2 = BoundingBox2D::new((5.0, 5.0).into(), (10.0, 10.0).into()).unwrap();
 
         assert_eq!(bbox.intersection(&bbox2), Some(bbox2));
+    }
+
+    #[test]
+    fn spatial_bounds() {
+        let bbox = BoundingBox2D::new_unchecked((0., 0.).into(), (1., 1.).into());
+        assert_eq!(bbox, bbox.spatial_bounds())
+    }
+
+    #[test]
+    fn add_coord_outside() {
+        let mut bbox = BoundingBox2D::new_unchecked((0., 0.).into(), (1., 1.).into());
+        bbox.add_coord(Coordinate2D::new(-1., 1.5));
+        let expect = BoundingBox2D::new_unchecked((-1., 0.).into(), (1., 1.5).into());
+        assert_eq!(bbox, expect)
+    }
+
+    #[test]
+    fn from_coord_iter() {
+        let expected = BoundingBox2D::new_unchecked((0., 0.).into(), (1., 1.).into());
+
+        let coordinates: Vec<Coordinate2D> = Vec::from([
+            (1., 0.4).into(),
+            (0.8, 0.0).into(),
+            (0.3, 0.1).into(),
+            (0.0, 1.0).into(),
+        ]);
+        let bbox = BoundingBox2D::from_coord_iter(coordinates).unwrap();
+        assert_eq!(bbox, expected)
+    }
+
+    #[test]
+    fn from_coord_ref_iter() {
+        let expected = BoundingBox2D::new_unchecked((0., 0.).into(), (1., 1.).into());
+
+        let coordinates: Vec<Coordinate2D> = Vec::from([
+            (1., 0.4).into(),
+            (0.8, 0.0).into(),
+            (0.3, 0.1).into(),
+            (0.0, 1.0).into(),
+        ]);
+        let bbox = BoundingBox2D::from_coord_ref_iter(coordinates.iter()).unwrap();
+        assert_eq!(bbox, expected)
     }
 }
