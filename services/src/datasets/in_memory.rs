@@ -1,4 +1,4 @@
-use crate::datasets::listing::{DataSetListOptions, DataSetListing, DataSetProvider};
+use crate::datasets::listing::{DataSetListOptions, DataSetListing, DataSetProvider, OrderBy};
 use crate::datasets::storage::{
     AddDataSet, AddDataSetProvider, DataSet, DataSetDB, DataSetProviderDB,
     DataSetProviderListOptions, DataSetProviderListing, DataSetStore, DataSetStorer,
@@ -97,11 +97,35 @@ impl DataSetProvider for HashMapDataSetDB {
     async fn list(
         &self,
         _user: UserId,
-        _options: Validated<DataSetListOptions>,
+        options: Validated<DataSetListOptions>,
     ) -> Result<Vec<DataSetListing>> {
         // TODO: permissions
-        // TODO: options
-        Ok(self.data_sets.iter().map(DataSet::listing).collect())
+
+        // TODO: include data sets from external data set providers
+        let options = options.user_input;
+
+        let mut list: Vec<_> = if let Some(filter) = &options.filter {
+            self.data_sets
+                .iter()
+                .filter(|d| d.name.contains(filter) || d.description.contains(filter))
+                .collect()
+        } else {
+            self.data_sets.iter().collect()
+        };
+
+        match options.order {
+            OrderBy::NameAsc => list.sort_by(|a, b| a.name.cmp(&b.name)),
+            OrderBy::NameDesc => list.sort_by(|a, b| b.name.cmp(&a.name)),
+        };
+
+        let list = list
+            .into_iter()
+            .skip(options.offset as usize)
+            .take(options.limit as usize)
+            .map(DataSet::listing)
+            .collect();
+
+        Ok(list)
     }
 }
 
@@ -158,7 +182,6 @@ mod tests {
     use super::*;
     use crate::contexts::{Context, InMemoryContext};
     use crate::datasets::listing::OrderBy;
-    use crate::projects::project::{LayerInfo, VectorInfo};
     use crate::users::session::Session;
     use crate::util::user_input::UserInput;
     use geoengine_datatypes::collections::VectorDataType;
@@ -171,12 +194,17 @@ mod tests {
 
         let session = Session::mock();
 
+        let descriptor = VectorResultDescriptor {
+            data_type: VectorDataType::Data,
+            spatial_reference: SpatialReferenceOption::Unreferenced,
+            columns: Default::default(),
+        };
+
         let ds = AddDataSet {
             name: "OgrDataSet".to_string(),
             description: "My Ogr data set".to_string(),
-            data_type: LayerInfo::Vector(VectorInfo {}),
             source_operator: "OgrSource".to_string(),
-            spatial_reference: SpatialReferenceOption::Unreferenced,
+            result_descriptor: descriptor.clone().into(),
         };
 
         let meta = StaticMetaData {
@@ -191,11 +219,7 @@ mod tests {
                 on_error: OgrSourceErrorSpec::Skip,
                 provenance: None,
             },
-            result_descriptor: VectorResultDescriptor {
-                data_type: VectorDataType::Data,
-                spatial_reference: SpatialReferenceOption::Unreferenced,
-                columns: Default::default(),
-            },
+            result_descriptor: descriptor.clone(),
         };
 
         let id = ctx
@@ -243,7 +267,7 @@ mod tests {
                 description: "My Ogr data set".to_string(),
                 tags: vec![],
                 source_operator: "OgrSource".to_string(),
-                spatial_reference: SpatialReferenceOption::Unreferenced
+                result_descriptor: descriptor.into()
             }
         );
 
