@@ -387,7 +387,7 @@ impl BoundingBox2D {
         }
     }
 
-    pub fn add_coord(&mut self, coord: Coordinate2D) {
+    pub fn extend_with_coord(&mut self, coord: Coordinate2D) {
         self.lower_left_coordinate = self.lower_left_coordinate.min_elements(coord);
         self.upper_right_coordinate = self.upper_right_coordinate.max_elements(coord);
     }
@@ -399,7 +399,7 @@ impl BoundingBox2D {
 
         first.map(|mut f| {
             for c in iterator {
-                f.add_coord(c);
+                f.extend_with_coord(c);
             }
             f
         })
@@ -414,7 +414,7 @@ impl BoundingBox2D {
 
         first.map(|mut f| {
             for &c in iterator {
-                f.add_coord(c);
+                f.extend_with_coord(c);
             }
             f
         })
@@ -911,7 +911,7 @@ mod tests {
     #[test]
     fn add_coord_outside() {
         let mut bbox = BoundingBox2D::new_unchecked((0., 0.).into(), (1., 1.).into());
-        bbox.add_coord(Coordinate2D::new(-1., 1.5));
+        bbox.extend_with_coord(Coordinate2D::new(-1., 1.5));
         let expect = BoundingBox2D::new_unchecked((-1., 0.).into(), (1., 1.5).into());
         assert_eq!(bbox, expect)
     }
