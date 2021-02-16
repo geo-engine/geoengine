@@ -22,15 +22,21 @@ pub trait CoordinateProjector {
     // fn project_coordinate_slice_copy<A: AsRef<[Coordinate2D]>>(&self, coords: A) -> Result<Vec<[Coordinate2D]>>;
 }
 
+pub struct ProjProjector(Proj);
+
 // TODO: move Proj impl into a separate module?
-impl CoordinateProjector for Proj {
+impl CoordinateProjector for ProjProjector {
     fn from_known_srs(from: SpatialReference, to: SpatialReference) -> Result<Self> {
         Proj::new_known_crs(&from.to_string(), &to.to_string(), None)
             .ok_or(error::Error::NoCoordinateProjector { from, to })
+            .map(|p| ProjProjector(p))
     }
 
     fn project_coordinate(&self, c: Coordinate2D) -> Result<Coordinate2D> {
-        self.convert((c.x, c.y)).map_err(Into::into).map(Into::into)
+        self.0
+            .convert((c.x, c.y))
+            .map_err(Into::into)
+            .map(Into::into)
     }
 }
 
@@ -228,7 +234,7 @@ mod tests {
     fn new_proj() {
         let from = SpatialReference::epsg_4326();
         let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
-        let p = Proj::from_known_srs(from, to);
+        let p = ProjProjector::from_known_srs(from, to);
         assert!(p.is_ok())
     }
 
@@ -236,7 +242,7 @@ mod tests {
     fn new_proj_fail() {
         let from = SpatialReference::epsg_4326();
         let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 8_008_135);
-        let p = Proj::from_known_srs(from, to);
+        let p = ProjProjector::from_known_srs(from, to);
         assert!(p.is_err())
     }
 
@@ -244,7 +250,7 @@ mod tests {
     fn proj_coordinate_4326_900913() {
         let from = SpatialReference::epsg_4326();
         let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
-        let p = Proj::from_known_srs(from, to).unwrap();
+        let p = ProjProjector::from_known_srs(from, to).unwrap();
         let rp = p.project_coordinate(MARBURG_EPSG_4326).unwrap();
 
         assert!(approx_eq!(f64, rp.x, MARBURG_EPSG_900_913.x));
@@ -255,7 +261,7 @@ mod tests {
     fn reproject_coordinate_4326_900913() {
         let from = SpatialReference::epsg_4326();
         let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
-        let p = Proj::from_known_srs(from, to).unwrap();
+        let p = ProjProjector::from_known_srs(from, to).unwrap();
         let rp = MARBURG_EPSG_4326.reproject(&p).unwrap();
 
         assert!(approx_eq!(f64, rp.x, MARBURG_EPSG_900_913.x));
@@ -266,7 +272,7 @@ mod tests {
     fn reproject_line_4326_900913() {
         let from = SpatialReference::epsg_4326();
         let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
-        let p = Proj::from_known_srs(from, to).unwrap();
+        let p = ProjProjector::from_known_srs(from, to).unwrap();
 
         let l = Line {
             start: MARBURG_EPSG_4326,
@@ -284,7 +290,7 @@ mod tests {
     fn reproject_bounding_box_4326_900913() {
         let from = SpatialReference::epsg_4326();
         let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
-        let p = Proj::from_known_srs(from, to).unwrap();
+        let p = ProjProjector::from_known_srs(from, to).unwrap();
 
         let bbox =
             BoundingBox2D::from_coord_ref_iter(&[MARBURG_EPSG_4326, COLOGNE_EPSG_4326]).unwrap();
@@ -301,7 +307,7 @@ mod tests {
     fn reproject_multi_point_4326_900913() {
         let from = SpatialReference::epsg_4326();
         let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
-        let p = Proj::from_known_srs(from, to).unwrap();
+        let p = ProjProjector::from_known_srs(from, to).unwrap();
 
         let cs = vec![MARBURG_EPSG_4326, COLOGNE_EPSG_4326];
 
@@ -318,7 +324,7 @@ mod tests {
     fn reproject_multi_line_4326_900913() {
         let from = SpatialReference::epsg_4326();
         let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
-        let p = Proj::from_known_srs(from, to).unwrap();
+        let p = ProjProjector::from_known_srs(from, to).unwrap();
 
         let cs = vec![vec![
             MARBURG_EPSG_4326,
@@ -341,7 +347,7 @@ mod tests {
     fn reproject_multi_polygon_4326_900913() {
         let from = SpatialReference::epsg_4326();
         let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
-        let p = Proj::from_known_srs(from, to).unwrap();
+        let p = ProjProjector::from_known_srs(from, to).unwrap();
 
         let cs = vec![vec![vec![
             MARBURG_EPSG_4326,
