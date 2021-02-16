@@ -29,7 +29,7 @@ impl CoordinateProjector for ProjProjector {
     fn from_known_srs(from: SpatialReference, to: SpatialReference) -> Result<Self> {
         Proj::new_known_crs(&from.to_string(), &to.to_string(), None)
             .ok_or(error::Error::NoCoordinateProjector { from, to })
-            .map(|p| ProjProjector(p))
+            .map(ProjProjector)
     }
 
     fn project_coordinate(&self, c: Coordinate2D) -> Result<Coordinate2D> {
