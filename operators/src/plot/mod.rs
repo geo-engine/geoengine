@@ -1,3 +1,4 @@
+mod histogram;
 mod statistics;
 
 pub use self::statistics::{

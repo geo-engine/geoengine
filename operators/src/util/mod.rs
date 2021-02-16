@@ -1,9 +1,11 @@
-pub mod input;
-pub mod number_statistics;
-
-use crate::error::Error;
 use std::ops::Deref;
 use std::sync::{Mutex, MutexGuard};
+
+use crate::error::Error;
+
+pub mod input;
+pub mod number_statistics;
+pub mod string_token;
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
