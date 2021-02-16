@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use uuid::Uuid;
-use warp::http::Response;
 use warp::Filter;
 
+use geoengine_datatypes::plots::PlotType;
 use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution, TimeInterval};
 use geoengine_operators::engine::{QueryRectangle, TypedPlotQueryProcessor};
 
@@ -43,7 +43,7 @@ async fn get_plot<C: Context>(
     params: GetPlot,
     session: Session,
     ctx: C,
-) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
+) -> Result<impl warp::Reply, warp::Rejection> {
     let workflow = ctx
         .workflow_registry_ref()
         .await
@@ -68,19 +68,21 @@ async fn get_plot<C: Context>(
 
     let query_ctx = ctx.query_context()?;
 
-    Ok(match processor {
-        TypedPlotQueryProcessor::Json(processor) => {
-            let json = processor
+    let plot_type = PlotType::from(&processor);
+    let plot_name = processor.plot_name();
+
+    let data = match processor {
+        TypedPlotQueryProcessor::Json(processor) => processor
+            .plot_query(query_rect, &query_ctx)
+            .await
+            .context(error::Operator)?,
+        TypedPlotQueryProcessor::Chart(processor) => {
+            let chart = processor
                 .plot_query(query_rect, &query_ctx)
                 .await
                 .context(error::Operator)?;
 
-            Box::new(
-                Response::builder()
-                    .header("Content-Type", "application/json")
-                    .body(json.to_string())
-                    .context(error::Http)?,
-            )
+            serde_json::to_value(&chart).context(error::SerdeJson)?
         }
         TypedPlotQueryProcessor::Png(processor) => {
             let png_bytes = processor
@@ -88,14 +90,26 @@ async fn get_plot<C: Context>(
                 .await
                 .context(error::Operator)?;
 
-            Box::new(
-                Response::builder()
-                    .header("Content-Type", "application/png")
-                    .body(png_bytes)
-                    .context(error::Http)?,
-            )
+            let data_uri = format!("data:image/png;base64,{}", base64::encode(png_bytes));
+
+            serde_json::to_value(&data_uri).context(error::SerdeJson)?
         }
-    })
+    };
+
+    let output = WrappedPlotOutput {
+        plot_type,
+        plot_name,
+        data,
+    };
+
+    Ok(warp::reply::json(&output))
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+struct WrappedPlotOutput {
+    plot_type: PlotType,
+    plot_name: &'static str,
+    data: serde_json::Value,
 }
 
 #[cfg(test)]
@@ -108,7 +122,9 @@ mod tests {
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_operators::engine::{PlotOperator, RasterOperator, RasterResultDescriptor};
     use geoengine_operators::mock::{MockRasterSource, MockRasterSourceParams};
-    use geoengine_operators::plot::{Statistics, StatisticsParams};
+    use geoengine_operators::plot::{
+        Histogram, HistogramBounds, HistogramParams, Statistics, StatisticsParams,
+    };
 
     use crate::contexts::InMemoryContext;
     use crate::handlers::handle_rejection;
@@ -116,6 +132,7 @@ mod tests {
 
     use super::*;
     use crate::util::tests::{check_allowed_http_methods, create_session_helper};
+    use warp::http::Response;
     use warp::hyper::body::Bytes;
 
     fn example_raster_source() -> Box<dyn RasterOperator> {
@@ -189,14 +206,87 @@ mod tests {
 
         assert_eq!(
             result,
-            json!([{
-                "pixel_count": 6,
-                "nan_count": 0,
-                "min": 1.0,
-                "max": 6.0,
-                "mean": 3.5,
-                "stddev": 1.707_825_127_659_933
-            }])
+            json!({
+                "plot_type": "Json",
+                "plot_name": "Statistics",
+                "data": [{
+                    "pixel_count": 6,
+                    "nan_count": 0,
+                    "min": 1.0,
+                    "max": 6.0,
+                    "mean": 3.5,
+                    "stddev": 1.707825127659933
+                }]
+            })
+            .to_string()
+        );
+    }
+
+    #[tokio::test]
+    async fn chart() {
+        let ctx = InMemoryContext::default();
+        let session = create_session_helper(&ctx).await;
+
+        let workflow = Workflow {
+            operator: Histogram {
+                params: HistogramParams {
+                    column_name: None,
+                    bounds: HistogramBounds::Values {
+                        min: 0.0,
+                        max: 10.0,
+                    },
+                    buckets: Some(4),
+                    interactive: false,
+                },
+                raster_sources: vec![example_raster_source()],
+                vector_sources: vec![],
+            }
+            .boxed()
+            .into(),
+        };
+
+        let id = ctx
+            .workflow_registry()
+            .write()
+            .await
+            .register(workflow)
+            .await
+            .unwrap();
+
+        let params = &[
+            ("bbox", "-180,-90,180,90"),
+            ("time", "2020-01-01T00:00:00.0Z"),
+            ("spatial_resolution", "0.1,0.1"),
+        ];
+        let url = format!(
+            "/plot/{}/?{}",
+            id,
+            &serde_urlencoded::to_string(params).unwrap()
+        );
+        let response = warp::test::request()
+            .method("GET")
+            .path(&url)
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
+            .reply(&get_plot_handler(ctx).recover(handle_rejection))
+            .await;
+
+        assert_eq!(response.status(), 200, "{:?}", response.body());
+
+        let result = String::from_utf8(response.body().to_vec()).unwrap();
+
+        assert_eq!(
+            result,
+            json!({
+                "plot_type": "Chart",
+                "plot_name": "Histogram",
+                "data": {
+                    "vega_string": "{\"$schema\":\"https://vega.github.io/schema/vega-lite/v4.17.0.json\",\"data\":{\"values\":[{\"v\":1,\"dim\":[3],\"data\":[0.0,2.5,2.0]},{\"v\":1,\"dim\":[3],\"data\":[2.5,5.0,2.0]},{\"v\":1,\"dim\":[3],\"data\":[5.0,7.5,2.0]},{\"v\":1,\"dim\":[3],\"data\":[7.5,10.0,0.0]}]},\"encoding\":{\"x\":{\"bin\":\"binned\",\"field\":\"data.0\",\"title\":\"\",\"type\":\"quantitative\"},\"x2\":{\"field\":\"data.1\"},\"y\":{\"field\":\"data.2\",\"title\":\"Frequency\",\"type\":\"quantitative\"}},\"mark\":\"bar\",\"padding\":5.0}",
+                    "metadata": null
+                }
+            })
             .to_string()
         );
     }

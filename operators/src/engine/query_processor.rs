@@ -5,6 +5,7 @@ use futures::stream::BoxStream;
 use geoengine_datatypes::collections::{
     DataCollection, MultiLineStringCollection, MultiPolygonCollection,
 };
+use geoengine_datatypes::plots::{PlotData, PlotType};
 use geoengine_datatypes::raster::Pixel;
 use geoengine_datatypes::{collections::MultiPointCollection, raster::RasterTile2D};
 
@@ -86,6 +87,8 @@ where
 /// An instantiation of a plot operator that produces a stream of vector results for a query
 pub trait PlotQueryProcessor: Sync + Send {
     type PlotType;
+
+    fn plot_name(&self) -> &'static str;
 
     fn plot_query<'a>(
         &'a self,
@@ -270,12 +273,39 @@ impl TypedVectorQueryProcessor {
 /// An enum that contains all possible query processor variants
 pub enum TypedPlotQueryProcessor {
     Json(Box<dyn PlotQueryProcessor<PlotType = serde_json::Value>>),
+    Chart(Box<dyn PlotQueryProcessor<PlotType = PlotData>>),
     Png(Box<dyn PlotQueryProcessor<PlotType = Vec<u8>>>),
 }
 
+impl From<&TypedPlotQueryProcessor> for PlotType {
+    fn from(typed_processor: &TypedPlotQueryProcessor) -> Self {
+        match typed_processor {
+            TypedPlotQueryProcessor::Json(_) => PlotType::Json,
+            TypedPlotQueryProcessor::Chart(_) => PlotType::Chart,
+            TypedPlotQueryProcessor::Png(_) => PlotType::Png,
+        }
+    }
+}
+
 impl TypedPlotQueryProcessor {
+    pub fn plot_name(&self) -> &'static str {
+        match self {
+            TypedPlotQueryProcessor::Json(p) => p.plot_name(),
+            TypedPlotQueryProcessor::Chart(p) => p.plot_name(),
+            TypedPlotQueryProcessor::Png(p) => p.plot_name(),
+        }
+    }
+
     pub fn json(self) -> Option<Box<dyn PlotQueryProcessor<PlotType = serde_json::Value>>> {
         if let TypedPlotQueryProcessor::Json(p) = self {
+            Some(p)
+        } else {
+            None
+        }
+    }
+
+    pub fn chart(self) -> Option<Box<dyn PlotQueryProcessor<PlotType = PlotData>>> {
+        if let TypedPlotQueryProcessor::Chart(p) = self {
             Some(p)
         } else {
             None

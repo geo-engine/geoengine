@@ -86,6 +86,22 @@ macro_rules! call_on_generic_raster_processor {
     };
 }
 
+#[macro_export]
+macro_rules! call_on_generic_vector_processor {
+    ($typed_vector:expr, $processor_var:ident => $function_call:expr) => {
+        match $typed_vector {
+            $crate::engine::TypedVectorQueryProcessor::Data($processor_var) => $function_call,
+            $crate::engine::TypedVectorQueryProcessor::MultiPoint($processor_var) => $function_call,
+            $crate::engine::TypedVectorQueryProcessor::MultiLineString($processor_var) => {
+                $function_call
+            }
+            $crate::engine::TypedVectorQueryProcessor::MultiPolygon($processor_var) => {
+                $function_call
+            }
+        }
+    };
+}
+
 /// Calls a function on two `TypedRQueryProcessor`s by calling it on their variant combination.
 /// Call via `call_bi_generic_processor!(input_a, input_b, (processor_a, processor_b) => function)`.
 #[macro_export]

@@ -15,6 +15,8 @@ use crate::error;
 use crate::util::number_statistics::NumberStatistics;
 use crate::util::Result;
 
+pub const STATISTICS_OPERATOR_NAME: &str = "Statistics";
+
 /// A plot that outputs basic statistics about its inputs
 ///
 /// Does currently not use a weighted computations, so it assumes equally weighted
@@ -84,6 +86,10 @@ pub struct StatisticsQueryProcessor {
 
 impl PlotQueryProcessor for StatisticsQueryProcessor {
     type PlotType = serde_json::Value;
+
+    fn plot_name(&self) -> &'static str {
+        STATISTICS_OPERATOR_NAME
+    }
 
     fn plot_query<'a>(
         &'a self,

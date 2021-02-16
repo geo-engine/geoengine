@@ -11,7 +11,7 @@ use vega_lite_4::{
 };
 
 use crate::error;
-use crate::plots::{Plot, PlotData};
+use crate::plots::{Plot, PlotData, PlotMetaData};
 use crate::primitives::{DataRef, FeatureDataRef, Measurement};
 use crate::raster::Pixel;
 use crate::util::Result;
@@ -33,6 +33,7 @@ impl Histogram {
         max: f64,
         measurement: Measurement,
         labels: Option<Vec<String>>,
+        counts: Option<Vec<u64>>,
     ) -> Result<Self> {
         ensure!(
             number_of_buckets > 0,
@@ -61,8 +62,20 @@ impl Histogram {
             );
         }
 
+        let counts = if let Some(counts) = counts {
+            ensure!(
+                counts.len() == number_of_buckets,
+                error::Plot {
+                    details: "The `counts` must be of length `number_of_buckets`"
+                }
+            );
+            counts
+        } else {
+            vec![0; number_of_buckets]
+        };
+
         Ok(Self {
-            counts: vec![0; number_of_buckets],
+            counts,
             labels,
             nodata_count: 0,
             min,
@@ -206,18 +219,8 @@ impl Histogram {
     }
 }
 
-#[derive(Debug, Deserialize, PartialEq, Serialize)]
-pub struct EmbeddingMetaData {
-    pub selection_name: Option<String>,
-}
-
 impl Plot for Histogram {
-    type PlotDataMetadataType = EmbeddingMetaData;
-
-    fn to_vega_embeddable(
-        &self,
-        allow_interactions: bool,
-    ) -> Result<PlotData<Self::PlotDataMetadataType>> {
+    fn to_vega_embeddable(&self, allow_interactions: bool) -> Result<PlotData> {
         let bucket_counts: Array1<f64> = self.counts.iter().map(|&v| v as f64).collect();
 
         let step = (self.max - self.min) / (self.counts.len() as f64);
@@ -286,12 +289,10 @@ impl Plot for Histogram {
 
         Ok(PlotData {
             vega_string: chart.to_string().unwrap(),
-            metadata: EmbeddingMetaData { selection_name },
+            metadata: selection_name.map_or(PlotMetaData::None, |selection_name| {
+                PlotMetaData::Selection { selection_name }
+            }),
         })
-    }
-
-    fn to_png(&self, _width_px: u16, _height_px: u16) -> Vec<u8> {
-        todo!("keep track of https://github.com/procyon-rs/vega_lite_3.rs/issues/18")
     }
 }
 
@@ -301,6 +302,7 @@ pub struct HistogramBuilder {
     max: f64,
     measurement: Measurement,
     labels: Option<Vec<String>>,
+    counts: Option<Vec<u64>>,
 }
 
 impl HistogramBuilder {
@@ -312,6 +314,7 @@ impl HistogramBuilder {
             max,
             measurement,
             labels: None,
+            counts: None,
         }
     }
 
@@ -329,6 +332,12 @@ impl HistogramBuilder {
     /// ```
     pub fn labels(mut self, labels: Vec<String>) -> Self {
         self.labels = Some(labels);
+        self
+    }
+
+    /// Add counts to the histogram
+    pub fn counts(mut self, counts: Vec<u64>) -> Self {
+        self.counts = Some(counts);
         self
     }
 
@@ -356,6 +365,7 @@ impl HistogramBuilder {
             self.max,
             self.measurement,
             self.labels,
+            self.counts,
         )
     }
 }
@@ -523,17 +533,15 @@ mod tests {
         histogram.to_vega_embeddable(false).unwrap(),
         PlotData {
             vega_string: r#"{"$schema":"https://vega.github.io/schema/vega-lite/v4.17.0.json","data":{"values":[{"v":1,"dim":[3],"data":[0.0,0.5,2.0]},{"v":1,"dim":[3],"data":[0.5,1.0,2.0]}]},"encoding":{"x":{"bin":"binned","field":"data.0","title":"","type":"quantitative"},"x2":{"field":"data.1"},"y":{"field":"data.2","title":"Frequency","type":"quantitative"}},"mark":"bar","padding":5.0}"#.to_string(),
-            metadata: EmbeddingMetaData {
-                selection_name: None,
-            }
+            metadata: PlotMetaData::None
         }
     );
         assert_eq!(
         histogram.to_vega_embeddable(true).unwrap(),
         PlotData {
             vega_string: r#"{"$schema":"https://vega.github.io/schema/vega-lite/v4.17.0.json","data":{"values":[{"v":1,"dim":[3],"data":[0.0,0.5,2.0]},{"v":1,"dim":[3],"data":[0.5,1.0,2.0]}]},"encoding":{"x":{"bin":"binned","field":"data.0","title":"","type":"quantitative"},"x2":{"field":"data.1"},"y":{"field":"data.2","title":"Frequency","type":"quantitative"}},"mark":"bar","padding":5.0,"selection":{"range_selection":{"encodings":["x"],"type":"interval"}}}"#.to_string(),
-            metadata: EmbeddingMetaData {
-                selection_name: Some("range_selection".to_string()),
+            metadata: PlotMetaData::Selection {
+                selection_name: "range_selection".to_string(),
             }
         }
     );

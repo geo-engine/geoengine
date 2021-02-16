@@ -1,19 +1,26 @@
 use crate::engine::{
     ExecutionContext, InitializedOperator, InitializedOperatorImpl, InitializedPlotOperator,
     Operator, PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor,
-    QueryRectangle, TypedPlotQueryProcessor, TypedRasterQueryProcessor,
+    QueryRectangle, TypedPlotQueryProcessor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
 };
 use crate::error;
 use crate::error::Error;
 use crate::string_token;
 use crate::util::Result;
 use futures::future::BoxFuture;
-use futures::{FutureExt, StreamExt};
-use geoengine_datatypes::plots::Plot;
-use geoengine_datatypes::primitives::{FeatureDataType, Measurement};
-use geoengine_datatypes::raster::RasterTile2D;
+use futures::stream::BoxStream;
+use futures::{FutureExt, StreamExt, TryFutureExt};
+use geoengine_datatypes::collections::{FeatureCollection, FeatureCollectionInfos};
+use geoengine_datatypes::plots::{Plot, PlotData};
+use geoengine_datatypes::primitives::{
+    DataRef, FeatureDataRef, FeatureDataType, Geometry, Measurement,
+};
+use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, OptionExt};
+use std::convert::TryFrom;
+
+pub const HISTOGRAM_OPERATOR_NAME: &str = "Histogram";
 
 /// A histogram plot about either a raster or a vector input.
 ///
@@ -25,11 +32,14 @@ pub type Histogram = Operator<HistogramParams>;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct HistogramParams {
     /// Name of the (numeric) attribute to compute the histogram on. Ignored for operation on rasters.
-    column_name: Option<String>,
+    pub column_name: Option<String>,
     /// The bounds (min/max) of the histogram.
-    bounds: HistogramBounds,
+    pub bounds: HistogramBounds,
     /// If the bounds are empty, it is derived from the square-root choice rule.
-    buckets: Option<usize>,
+    pub buckets: Option<usize>,
+    /// Whether to create an interactive output (`false` by default)
+    #[serde(default)]
+    pub interactive: bool,
 }
 
 string_token!(Data, "data");
@@ -117,76 +127,238 @@ impl InitializedOperator<PlotResultDescriptor, TypedPlotQueryProcessor> for Init
         } else {
             (None, None)
         };
-        let number_of_buckets = self.params.buckets;
+        let metadata = HistogramMetadataOptions {
+            number_of_buckets: self.params.buckets,
+            min,
+            max,
+        };
 
         if self.vector_sources.is_empty() {
             let raster_source = &self.raster_sources[0];
 
-            Ok(TypedPlotQueryProcessor::Json(
-                HistogramQueryProcessor {
+            Ok(TypedPlotQueryProcessor::Chart(
+                HistogramRasterQueryProcessor {
                     input: raster_source.query_processor()?,
                     measurement: raster_source.result_descriptor().measurement.clone(),
-                    number_of_buckets,
-                    min,
-                    max,
+                    metadata,
+                    interactive: self.params.interactive,
                 }
                 .boxed(),
             ))
         } else {
-            todo!()
+            let vector_source = &self.vector_sources[0];
+
+            Ok(TypedPlotQueryProcessor::Chart(
+                HistogramVectorQueryProcessor {
+                    input: vector_source.query_processor()?,
+                    column_name: self.params.column_name.clone().expect("checked in param"),
+                    measurement: Measurement::Unitless, // TODO: incorporate measurement once it is there
+                    metadata,
+                    interactive: self.params.interactive,
+                }
+                .boxed(),
+            ))
         }
     }
 }
 
-/// A query processor that calculates the Histogram about its inputs.
-pub struct HistogramQueryProcessor {
+/// A query processor that calculates the Histogram about its raster inputs.
+pub struct HistogramRasterQueryProcessor {
     input: TypedRasterQueryProcessor,
     measurement: Measurement,
-    number_of_buckets: Option<usize>,
-    min: Option<f64>,
-    max: Option<f64>,
+    metadata: HistogramMetadataOptions,
+    interactive: bool,
 }
 
-impl PlotQueryProcessor for HistogramQueryProcessor {
-    type PlotType = serde_json::Value;
+/// A query processor that calculates the Histogram about its vector inputs.
+pub struct HistogramVectorQueryProcessor {
+    input: TypedVectorQueryProcessor,
+    column_name: String,
+    measurement: Measurement,
+    metadata: HistogramMetadataOptions,
+    interactive: bool,
+}
 
-    fn plot_query<'a>(
-        &'a self,
+impl PlotQueryProcessor for HistogramRasterQueryProcessor {
+    type PlotType = PlotData;
+
+    fn plot_name(&self) -> &'static str {
+        HISTOGRAM_OPERATOR_NAME
+    }
+
+    fn plot_query<'p>(
+        &'p self,
         query: QueryRectangle,
-        ctx: &'a dyn QueryContext,
-    ) -> BoxFuture<'a, Result<Self::PlotType>> {
-        let histogram_metadata = self.preprocess();
+        ctx: &'p dyn QueryContext,
+    ) -> BoxFuture<'p, Result<Self::PlotType>> {
+        Box::pin(
+            self.preprocess(query, ctx)
+                .and_then(move |histogram_metadata| async move {
+                    self.process(histogram_metadata, query, ctx).await
+                }),
+        )
+    }
+}
 
-        let query = call_on_generic_raster_processor!(&self.input, processor => {
-            processor.query(query, ctx)
-                     .map(move |r| r.map(RasterTile2D::convert::<f64>))
-                     .boxed()
-        });
+impl PlotQueryProcessor for HistogramVectorQueryProcessor {
+    type PlotType = PlotData;
 
-        let histogram = geoengine_datatypes::plots::Histogram::builder(
-            histogram_metadata.number_of_buckets,
-            histogram_metadata.min,
-            histogram_metadata.max,
+    fn plot_name(&self) -> &'static str {
+        HISTOGRAM_OPERATOR_NAME
+    }
+
+    fn plot_query<'p>(
+        &'p self,
+        query: QueryRectangle,
+        ctx: &'p dyn QueryContext,
+    ) -> BoxFuture<'p, Result<Self::PlotType>> {
+        Box::pin(
+            self.preprocess(query, ctx)
+                .and_then(move |histogram_metadata| async move {
+                    self.process(histogram_metadata, query, ctx).await
+                }),
+        )
+    }
+}
+
+impl HistogramRasterQueryProcessor {
+    fn preprocess<'p>(
+        &'p self,
+        query: QueryRectangle,
+        ctx: &'p dyn QueryContext,
+    ) -> BoxFuture<'p, Result<HistogramMetadata>> {
+        fn process_metadata<T: Pixel>(
+            input: BoxStream<Result<RasterTile2D<T>>>,
+            metadata: HistogramMetadataOptions,
+        ) -> BoxFuture<'_, Result<HistogramMetadata>> {
+            input
+                .fold(
+                    Ok(HistogramMetadataInProgress::default()),
+                    |metadata: Result<HistogramMetadataInProgress>, tile| async move {
+                        let mut metadata = metadata?;
+                        let tile = tile?;
+
+                        metadata
+                            .add_raster_batch(&tile.grid_array.data, tile.grid_array.no_data_value);
+
+                        Ok(metadata)
+                    },
+                )
+                .map(move |computed_metadata| Ok(metadata.merge_with(computed_metadata?.into())))
+                .boxed()
+        }
+
+        if let Ok(metadata) = HistogramMetadata::try_from(self.metadata) {
+            return futures::future::ok(metadata).boxed();
+        }
+
+        call_on_generic_raster_processor!(&self.input, processor => {
+            process_metadata(processor.query(query, ctx), self.metadata)
+        })
+    }
+
+    async fn process<'p>(
+        &'p self,
+        metadata: HistogramMetadata,
+        query: QueryRectangle,
+        ctx: &'p dyn QueryContext,
+    ) -> Result<<HistogramRasterQueryProcessor as PlotQueryProcessor>::PlotType> {
+        let mut histogram = geoengine_datatypes::plots::Histogram::builder(
+            metadata.number_of_buckets,
+            metadata.min,
+            metadata.max,
             self.measurement.clone(),
         )
         .build()
-        .map_err(Error::from);
+        .map_err(Error::from)?;
 
-        query
-            .fold(histogram, |builder, tile| async move {
-                let mut builder = builder?;
+        call_on_generic_raster_processor!(&self.input, processor => {
+            let mut query = processor.query(query, ctx);
+
+            while let Some(tile) = query.next().await {
                 let tile = tile?;
 
-                builder.add_raster_data(&tile.grid_array.data, tile.grid_array.no_data_value);
+                histogram.add_raster_data(&tile.grid_array.data, tile.grid_array.no_data_value);
+            }
+        });
 
-                Ok(builder)
-            })
-            .map(|histogram| {
-                histogram
-                    .and_then(|histogram| histogram.to_vega_embeddable(false).map_err(Into::into))
-                    .and_then(|histogram| serde_json::to_value(histogram).map_err(Into::into))
-            })
-            .boxed()
+        let chart = histogram.to_vega_embeddable(self.interactive)?;
+
+        Ok(chart)
+    }
+}
+
+impl HistogramVectorQueryProcessor {
+    fn preprocess<'p>(
+        &'p self,
+        query: QueryRectangle,
+        ctx: &'p dyn QueryContext,
+    ) -> BoxFuture<'p, Result<HistogramMetadata>> {
+        fn process_metadata<'m, G>(
+            input: BoxStream<'m, Result<FeatureCollection<G>>>,
+            column_name: &'m str,
+            metadata: HistogramMetadataOptions,
+        ) -> BoxFuture<'m, Result<HistogramMetadata>>
+        where
+            G: Geometry + 'static,
+            FeatureCollection<G>: FeatureCollectionInfos,
+        {
+            input
+                .fold(
+                    Ok(HistogramMetadataInProgress::default()),
+                    move |metadata: Result<HistogramMetadataInProgress>, collection| async move {
+                        let mut metadata = metadata?;
+                        let collection = collection?;
+
+                        let feature_data = collection.data(column_name).expect("check in param");
+                        metadata.add_vector_batch(feature_data);
+
+                        Ok(metadata)
+                    },
+                )
+                .map(move |computed_metadata| Ok(metadata.merge_with(computed_metadata?.into())))
+                .boxed()
+        }
+
+        if let Ok(metadata) = HistogramMetadata::try_from(self.metadata) {
+            return futures::future::ok(metadata).boxed();
+        }
+
+        call_on_generic_vector_processor!(&self.input, processor => {
+            process_metadata(processor.query(query, ctx), &self.column_name, self.metadata)
+        })
+    }
+
+    async fn process<'p>(
+        &'p self,
+        metadata: HistogramMetadata,
+        query: QueryRectangle,
+        ctx: &'p dyn QueryContext,
+    ) -> Result<<HistogramRasterQueryProcessor as PlotQueryProcessor>::PlotType> {
+        let mut histogram = geoengine_datatypes::plots::Histogram::builder(
+            metadata.number_of_buckets,
+            metadata.min,
+            metadata.max,
+            self.measurement.clone(),
+        )
+        .build()
+        .map_err(Error::from)?;
+
+        call_on_generic_vector_processor!(&self.input, processor => {
+            let mut query = processor.query(query, ctx);
+
+            while let Some(collection) = query.next().await {
+                let collection = collection?;
+
+                let feature_data = collection.data(&self.column_name).expect("checked in param");
+
+                histogram.add_feature_data(feature_data)?;
+            }
+        });
+
+        let chart = histogram.to_vega_embeddable(self.interactive)?;
+
+        Ok(chart)
     }
 }
 
@@ -197,66 +369,129 @@ struct HistogramMetadata {
     pub max: f64,
 }
 
-impl HistogramQueryProcessor {
-    fn preprocess(&self) -> HistogramMetadata {
-        if let (Some(number_of_buckets), Some(min), Some(max)) =
-            (self.number_of_buckets, self.min, self.max)
-        {
-            return HistogramMetadata {
+#[derive(Debug, Copy, Clone, PartialEq)]
+struct HistogramMetadataOptions {
+    pub number_of_buckets: Option<usize>,
+    pub min: Option<f64>,
+    pub max: Option<f64>,
+}
+
+impl TryFrom<HistogramMetadataOptions> for HistogramMetadata {
+    type Error = ();
+
+    fn try_from(options: HistogramMetadataOptions) -> Result<Self, Self::Error> {
+        match (options.number_of_buckets, options.min, options.max) {
+            (Some(number_of_buckets), Some(min), Some(max)) => Ok(Self {
                 number_of_buckets,
                 min,
                 max,
-            };
+            }),
+            _ => Err(()),
         }
-
-        todo!("preprocess")
     }
 }
 
-// enum SliceProducer {
-//     Raster(TypedRasterQueryProcessor),
-//     Vector(TypedVectorQueryProcessor, String),
-// }
-//
-// impl SliceProducer {
-//     fn query<'a>(
-//         &'a self,
-//         query: QueryRectangle,
-//         ctx: &'a dyn QueryContext,
-//     ) -> BoxStream<'a, Result<Box<dyn AsRef<[f64]>>>> {
-//         match self {
-//             SliceProducer::Raster(generic_processor) => {
-//                 call_on_generic_raster_processor!(generic_processor, processor => {
-//                     Box::pin(processor.query(query, ctx)
-//                              .map(move |r| r.map(|tile| Self::box_vec(tile.convert::<f64>().grid_array.data)))
-//                              .boxed())
-//                 })
-//             }
-//             SliceProducer::Vector(generic_processor, column_name) => match generic_processor {
-//                 TypedVectorQueryProcessor::Data(processor) => {
-//                     processor.query(query, ctx).map(|collection_result| {
-//                         collection_result.and_then(|collection| {
-//                             collection.data(column_name).map(|data| Box::new(data))
-//                         })
-//                     })
-//                 }
-//                 TypedVectorQueryProcessor::MultiPoint(_) => {
-//                     todo!()
-//                 }
-//                 TypedVectorQueryProcessor::MultiLineString(_) => {
-//                     todo!()
-//                 }
-//                 TypedVectorQueryProcessor::MultiPolygon(_) => {
-//                     todo!()
-//                 }
-//             },
-//         }
-//     }
-//
-//     fn box_vec(vec: Vec<f64>) -> Box<dyn AsRef<[f64]>> {
-//         Box::new(vec)
-//     }
-// }
+impl HistogramMetadataOptions {
+    fn merge_with(self, metadata: HistogramMetadata) -> HistogramMetadata {
+        HistogramMetadata {
+            number_of_buckets: self.number_of_buckets.unwrap_or(metadata.number_of_buckets),
+            min: self.min.unwrap_or(metadata.min),
+            max: self.max.unwrap_or(metadata.max),
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+struct HistogramMetadataInProgress {
+    pub n: usize,
+    pub min: f64,
+    pub max: f64,
+}
+
+impl Default for HistogramMetadataInProgress {
+    fn default() -> Self {
+        Self {
+            n: 0,
+            min: f64::MAX,
+            max: f64::MIN,
+        }
+    }
+}
+
+impl HistogramMetadataInProgress {
+    #[inline]
+    fn add_raster_batch<T: Pixel>(&mut self, values: &[T], no_data: Option<T>) {
+        if let Some(no_data) = no_data {
+            for &v in values {
+                if v == no_data {
+                    continue;
+                }
+
+                self.n += 1;
+                self.update_minmax(v.as_());
+            }
+        } else {
+            self.n += values.len();
+            for v in values {
+                self.update_minmax(v.as_());
+            }
+        }
+    }
+
+    #[inline]
+    fn add_vector_batch(&mut self, values: FeatureDataRef) {
+        fn add_data_ref<'d, D, T>(metadata: &mut HistogramMetadataInProgress, data_ref: &D)
+        where
+            D: DataRef<'d, T>,
+            T: Pixel,
+        {
+            if data_ref.has_nulls() {
+                for (i, v) in data_ref.as_ref().iter().enumerate() {
+                    if data_ref.is_null(i) {
+                        continue;
+                    }
+
+                    metadata.n += 1;
+                    metadata.update_minmax(v.as_());
+                }
+            } else {
+                let values = data_ref.as_ref();
+                metadata.n += values.len();
+                for v in values {
+                    metadata.update_minmax(v.as_());
+                }
+            }
+        }
+
+        match values {
+            FeatureDataRef::Decimal(values) => {
+                add_data_ref(self, &values);
+            }
+            FeatureDataRef::Number(values) => {
+                add_data_ref(self, &values);
+            }
+            FeatureDataRef::Categorical(_) | FeatureDataRef::Text(_) => {
+                unreachable!("disallowed in param");
+            }
+        }
+    }
+
+    #[inline]
+    fn update_minmax(&mut self, value: f64) {
+        self.min = f64::min(self.min, value);
+        self.max = f64::max(self.max, value);
+    }
+}
+
+impl From<HistogramMetadataInProgress> for HistogramMetadata {
+    fn from(metadata: HistogramMetadataInProgress) -> Self {
+        Self {
+            number_of_buckets: f64::sqrt(metadata.n as f64) as usize,
+            min: metadata.min,
+            max: metadata.max,
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -264,10 +499,14 @@ mod tests {
 
     use crate::engine::{
         MockExecutionContext, MockQueryContext, RasterOperator, RasterResultDescriptor,
+        VectorOperator,
     };
-    use crate::mock::{MockRasterSource, MockRasterSourceParams};
-    use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution, TimeInterval};
-    use geoengine_datatypes::raster::{Grid2D, RasterDataType, TileInformation};
+    use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
+    use geoengine_datatypes::collections::DataCollection;
+    use geoengine_datatypes::primitives::{
+        BoundingBox2D, FeatureData, NoGeometry, SpatialResolution, TimeInterval,
+    };
+    use geoengine_datatypes::raster::{Grid2D, RasterDataType, RasterTile2D, TileInformation};
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use serde_json::json;
 
@@ -281,6 +520,7 @@ mod tests {
                     max: 10.0,
                 },
                 buckets: Some(15),
+                interactive: false,
             },
             raster_sources: vec![],
             vector_sources: vec![],
@@ -295,6 +535,7 @@ mod tests {
                     "max": 10.0,
                 },
                 "buckets": 15,
+                "interactivity": false,
             },
             "raster_sources": [],
             "vector_sources": [],
@@ -313,6 +554,7 @@ mod tests {
                 column_name: None,
                 bounds: HistogramBounds::Data(Default::default()),
                 buckets: None,
+                interactive: false,
             },
             raster_sources: vec![],
             vector_sources: vec![],
@@ -360,6 +602,7 @@ mod tests {
                 column_name: None,
                 bounds: HistogramBounds::Values { min: 0.0, max: 8.0 },
                 buckets: Some(3),
+                interactive: false,
             },
             raster_sources: vec![raster_source],
             vector_sources: vec![],
@@ -373,7 +616,7 @@ mod tests {
             .unwrap()
             .query_processor()
             .unwrap()
-            .json()
+            .chart()
             .unwrap();
 
         let result = query_processor
@@ -389,14 +632,210 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            result.to_string(),
-            json!({
-                "vega_string": "{\"$schema\":\"https://vega.github.io/schema/vega-lite/v4.17.0.json\",\"data\":{\"values\":[{\"v\":1,\"dim\":[3],\"data\":[0.0,2.6666666666666665,2.0]},{\"v\":1,\"dim\":[3],\"data\":[2.666666666666667,5.333333333333334,3.0]},{\"v\":1,\"dim\":[3],\"data\":[5.333333333333334,8.0,1.0]}]},\"encoding\":{\"x\":{\"bin\":\"binned\",\"field\":\"data.0\",\"title\":\"\",\"type\":\"quantitative\"},\"x2\":{\"field\":\"data.1\"},\"y\":{\"field\":\"data.2\",\"title\":\"Frequency\",\"type\":\"quantitative\"}},\"mark\":\"bar\",\"padding\":5.0}",
-                "metadata": {
-                    "selection_name": null
-                }
-            })
-            .to_string()
+            result,
+            geoengine_datatypes::plots::Histogram::builder(3, 0., 8., Measurement::Unitless)
+                .counts(vec![2, 3, 1])
+                .build()
+                .unwrap()
+                .to_vega_embeddable(false)
+                .unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn simple_raster_without_spec() {
+        let raster_source = MockRasterSource {
+            params: MockRasterSourceParams {
+                data: vec![RasterTile2D::new_with_tile_info(
+                    TimeInterval::default(),
+                    TileInformation {
+                        global_geo_transform: Default::default(),
+                        global_tile_position: [0, 0].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                    },
+                    Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap(),
+                )],
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U8,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    measurement: Measurement::Unitless,
+                },
+            },
+        }
+        .boxed();
+
+        let histogram = Histogram {
+            params: HistogramParams {
+                column_name: None,
+                bounds: HistogramBounds::Data(Default::default()),
+                buckets: None,
+                interactive: false,
+            },
+            raster_sources: vec![raster_source],
+            vector_sources: vec![],
+        };
+
+        let execution_context = MockExecutionContext::default();
+
+        let query_processor = histogram
+            .boxed()
+            .initialize(&execution_context)
+            .unwrap()
+            .query_processor()
+            .unwrap()
+            .chart()
+            .unwrap();
+
+        let result = query_processor
+            .plot_query(
+                QueryRectangle {
+                    bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    time_interval: TimeInterval::default(),
+                    spatial_resolution: SpatialResolution::one(),
+                },
+                &MockQueryContext::new(0),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            result,
+            geoengine_datatypes::plots::Histogram::builder(2, 1., 6., Measurement::Unitless)
+                .counts(vec![3, 3])
+                .build()
+                .unwrap()
+                .to_vega_embeddable(false)
+                .unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn vector_data() {
+        let vector_source = MockFeatureCollectionSource::multiple(vec![
+            DataCollection::from_slices(
+                &[] as &[NoGeometry],
+                &[TimeInterval::default(); 8],
+                &[("foo", FeatureData::Decimal(vec![1, 1, 2, 2, 3, 3, 4, 4]))],
+            )
+            .unwrap(),
+            DataCollection::from_slices(
+                &[] as &[NoGeometry],
+                &[TimeInterval::default(); 4],
+                &[("foo", FeatureData::Decimal(vec![5, 6, 7, 8]))],
+            )
+            .unwrap(),
+        ])
+        .boxed();
+
+        let histogram = Histogram {
+            params: HistogramParams {
+                column_name: Some("foo".to_string()),
+                bounds: HistogramBounds::Values { min: 0.0, max: 8.0 },
+                buckets: Some(3),
+                interactive: true,
+            },
+            raster_sources: vec![],
+            vector_sources: vec![vector_source],
+        };
+
+        let execution_context = MockExecutionContext::default();
+
+        let query_processor = histogram
+            .boxed()
+            .initialize(&execution_context)
+            .unwrap()
+            .query_processor()
+            .unwrap()
+            .chart()
+            .unwrap();
+
+        let result = query_processor
+            .plot_query(
+                QueryRectangle {
+                    bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    time_interval: TimeInterval::default(),
+                    spatial_resolution: SpatialResolution::one(),
+                },
+                &MockQueryContext::new(0),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            result,
+            geoengine_datatypes::plots::Histogram::builder(3, 0., 8., Measurement::Unitless)
+                .counts(vec![4, 5, 3])
+                .build()
+                .unwrap()
+                .to_vega_embeddable(true)
+                .unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn vector_data_with_nulls() {
+        let vector_source = MockFeatureCollectionSource::single(
+            DataCollection::from_slices(
+                &[] as &[NoGeometry],
+                &[TimeInterval::default(); 6],
+                &[(
+                    "foo",
+                    FeatureData::NullableNumber(vec![
+                        Some(1.),
+                        Some(2.),
+                        None,
+                        Some(4.),
+                        None,
+                        Some(5.),
+                    ]),
+                )],
+            )
+            .unwrap(),
+        )
+        .boxed();
+
+        let histogram = Histogram {
+            params: HistogramParams {
+                column_name: Some("foo".to_string()),
+                bounds: HistogramBounds::Data(Default::default()),
+                buckets: None,
+                interactive: false,
+            },
+            raster_sources: vec![],
+            vector_sources: vec![vector_source],
+        };
+
+        let execution_context = MockExecutionContext::default();
+
+        let query_processor = histogram
+            .boxed()
+            .initialize(&execution_context)
+            .unwrap()
+            .query_processor()
+            .unwrap()
+            .chart()
+            .unwrap();
+
+        let result = query_processor
+            .plot_query(
+                QueryRectangle {
+                    bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    time_interval: TimeInterval::default(),
+                    spatial_resolution: SpatialResolution::one(),
+                },
+                &MockQueryContext::new(0),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            result,
+            geoengine_datatypes::plots::Histogram::builder(2, 1., 5., Measurement::Unitless)
+                .counts(vec![2, 2])
+                .build()
+                .unwrap()
+                .to_vega_embeddable(false)
+                .unwrap()
         );
     }
 }
