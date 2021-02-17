@@ -19,7 +19,10 @@ pub trait CoordinateProjection {
 
     // TODO: add for performance
     // fn project_coordinate_slice_inplace(&self, coords: &mut [Coordinate2D]) -> Result<&mut [Coordinate2D]>;
-    // fn project_coordinate_slice_copy<A: AsRef<[Coordinate2D]>>(&self, coords: A) -> Result<Vec<[Coordinate2D]>>;
+    fn project_coordinate_slice_copy<A: AsRef<[Coordinate2D]>>(
+        &self,
+        coords: A,
+    ) -> Result<Vec<Coordinate2D>>;
 }
 
 pub struct CoordinateProjector(Proj);
@@ -33,10 +36,19 @@ impl CoordinateProjection for CoordinateProjector {
     }
 
     fn project_coordinate(&self, c: Coordinate2D) -> Result<Coordinate2D> {
-        self.0
-            .convert((c.x, c.y))
-            .map_err(Into::into)
-            .map(Into::into)
+        self.0.convert(c).map_err(Into::into)
+    }
+
+    fn project_coordinate_slice_copy<A: AsRef<[Coordinate2D]>>(
+        &self,
+        coords: A,
+    ) -> Result<Vec<Coordinate2D>> {
+        let c_ref = coords.as_ref();
+
+        let mut cc = Vec::from(c_ref);
+        self.0.convert_array(&mut cc)?;
+
+        Ok(cc)
     }
 }
 
@@ -63,11 +75,7 @@ where
 {
     type Out = MultiPoint;
     fn reproject(&self, projector: &P) -> Result<MultiPoint> {
-        let ps: Result<Vec<Coordinate2D>> = self
-            .points()
-            .iter()
-            .map(|&c| c.reproject(projector))
-            .collect();
+        let ps: Result<Vec<Coordinate2D>> = projector.project_coordinate_slice_copy(self.points());
         ps.and_then(MultiPoint::new)
     }
 }
@@ -95,7 +103,7 @@ where
         let ls: Result<Vec<Vec<Coordinate2D>>> = self
             .lines()
             .iter()
-            .map(|line| line.iter().map(|&c| c.reproject(projector)).collect())
+            .map(|line| projector.project_coordinate_slice_copy(line))
             .collect();
         ls.and_then(MultiLineString::new)
     }
@@ -110,7 +118,7 @@ where
         let ls: Result<Vec<Vec<Coordinate2D>>> = self
             .lines()
             .iter()
-            .map(|line| line.iter().map(|&c| c.reproject(projector)).collect())
+            .map(|line| projector.project_coordinate_slice_copy(line))
             .collect();
         ls.and_then(MultiLineString::new)
     }
@@ -127,7 +135,7 @@ where
             .iter()
             .map(|poly| {
                 poly.iter()
-                    .map(|ring| ring.iter().map(|&c| c.reproject(projector)).collect())
+                    .map(|ring| projector.project_coordinate_slice_copy(ring))
                     .collect()
             })
             .collect();
@@ -146,7 +154,7 @@ where
             .iter()
             .map(|poly| {
                 poly.iter()
-                    .map(|ring| ring.iter().map(|&c| c.reproject(projector)).collect())
+                    .map(|ring| projector.project_coordinate_slice_copy(ring))
                     .collect()
             })
             .collect();

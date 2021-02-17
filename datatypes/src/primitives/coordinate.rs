@@ -5,6 +5,7 @@ use arrow::error::ArrowError;
 use ocl::OclPrm;
 #[cfg(feature = "postgres")]
 use postgres_types::{FromSql, ToSql};
+use proj::Coord;
 use serde::{Deserialize, Serialize};
 use std::{
     fmt,
@@ -148,6 +149,20 @@ impl From<Coordinate2D> for geo::Coordinate<f64> {
 impl From<&Coordinate2D> for geo::Coordinate<f64> {
     fn from(coordinate: &Coordinate2D) -> geo::Coordinate<f64> {
         geo::Coordinate::from((coordinate.x, coordinate.y))
+    }
+}
+
+impl Coord<f64> for Coordinate2D {
+    fn x(&self) -> f64 {
+        self.x
+    }
+
+    fn y(&self) -> f64 {
+        self.y
+    }
+
+    fn from_xy(x: f64, y: f64) -> Self {
+        Coordinate2D::new(x, y)
     }
 }
 
