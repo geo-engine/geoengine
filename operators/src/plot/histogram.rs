@@ -61,9 +61,15 @@ impl PlotOperator for Histogram {
     ) -> Result<Box<InitializedPlotOperator>> {
         ensure!(
             self.vector_sources.len() + self.raster_sources.len() == 1,
-            error::InvalidNumberOfVectorInputs {
+            error::InvalidNumberOfInputs {
                 expected: 1..2,
                 found: self.vector_sources.len() + self.raster_sources.len()
+            }
+        );
+        ensure!(
+            self.raster_sources.is_empty() || self.params.column_name.is_none(),
+            error::InvalidOperatorSpec {
+                reason: "`column_name` must not be specified on raster input".to_string(),
             }
         );
 
@@ -575,9 +581,26 @@ mod tests {
         assert_eq!(deserialized.params, histogram.params);
     }
 
-    #[tokio::test]
-    async fn simple_raster() {
-        let raster_source = MockRasterSource {
+    #[test]
+    fn column_name_for_raster_source() {
+        let histogram = Histogram {
+            params: HistogramParams {
+                column_name: Some("foo".to_string()),
+                bounds: HistogramBounds::Values { min: 0.0, max: 8.0 },
+                buckets: Some(3),
+                interactive: false,
+            },
+            raster_sources: vec![mock_raster_source()],
+            vector_sources: vec![],
+        };
+
+        let execution_context = MockExecutionContext::default();
+
+        assert!(histogram.boxed().initialize(&execution_context).is_err());
+    }
+
+    fn mock_raster_source() -> Box<dyn RasterOperator> {
+        MockRasterSource {
             params: MockRasterSourceParams {
                 data: vec![RasterTile2D::new_with_tile_info(
                     TimeInterval::default(),
@@ -595,8 +618,11 @@ mod tests {
                 },
             },
         }
-        .boxed();
+        .boxed()
+    }
 
+    #[tokio::test]
+    async fn simple_raster() {
         let histogram = Histogram {
             params: HistogramParams {
                 column_name: None,
@@ -604,7 +630,7 @@ mod tests {
                 buckets: Some(3),
                 interactive: false,
             },
-            raster_sources: vec![raster_source],
+            raster_sources: vec![mock_raster_source()],
             vector_sources: vec![],
         };
 
@@ -644,26 +670,6 @@ mod tests {
 
     #[tokio::test]
     async fn simple_raster_without_spec() {
-        let raster_source = MockRasterSource {
-            params: MockRasterSourceParams {
-                data: vec![RasterTile2D::new_with_tile_info(
-                    TimeInterval::default(),
-                    TileInformation {
-                        global_geo_transform: Default::default(),
-                        global_tile_position: [0, 0].into(),
-                        tile_size_in_pixels: [3, 2].into(),
-                    },
-                    Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap(),
-                )],
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
-                },
-            },
-        }
-        .boxed();
-
         let histogram = Histogram {
             params: HistogramParams {
                 column_name: None,
@@ -671,7 +677,7 @@ mod tests {
                 buckets: None,
                 interactive: false,
             },
-            raster_sources: vec![raster_source],
+            raster_sources: vec![mock_raster_source()],
             vector_sources: vec![],
         };
 
