@@ -186,9 +186,9 @@ pub struct HistogramVectorQueryProcessor {
 }
 
 impl PlotQueryProcessor for HistogramRasterQueryProcessor {
-    type PlotType = PlotData;
+    type OutputFormat = PlotData;
 
-    fn plot_name(&self) -> &'static str {
+    fn plot_type(&self) -> &'static str {
         HISTOGRAM_OPERATOR_NAME
     }
 
@@ -196,7 +196,7 @@ impl PlotQueryProcessor for HistogramRasterQueryProcessor {
         &'p self,
         query: QueryRectangle,
         ctx: &'p dyn QueryContext,
-    ) -> BoxFuture<'p, Result<Self::PlotType>> {
+    ) -> BoxFuture<'p, Result<Self::OutputFormat>> {
         Box::pin(
             self.preprocess(query, ctx)
                 .and_then(move |histogram_metadata| async move {
@@ -207,9 +207,9 @@ impl PlotQueryProcessor for HistogramRasterQueryProcessor {
 }
 
 impl PlotQueryProcessor for HistogramVectorQueryProcessor {
-    type PlotType = PlotData;
+    type OutputFormat = PlotData;
 
-    fn plot_name(&self) -> &'static str {
+    fn plot_type(&self) -> &'static str {
         HISTOGRAM_OPERATOR_NAME
     }
 
@@ -217,7 +217,7 @@ impl PlotQueryProcessor for HistogramVectorQueryProcessor {
         &'p self,
         query: QueryRectangle,
         ctx: &'p dyn QueryContext,
-    ) -> BoxFuture<'p, Result<Self::PlotType>> {
+    ) -> BoxFuture<'p, Result<Self::OutputFormat>> {
         Box::pin(
             self.preprocess(query, ctx)
                 .and_then(move |histogram_metadata| async move {
@@ -268,7 +268,7 @@ impl HistogramRasterQueryProcessor {
         metadata: HistogramMetadata,
         query: QueryRectangle,
         ctx: &'p dyn QueryContext,
-    ) -> Result<<HistogramRasterQueryProcessor as PlotQueryProcessor>::PlotType> {
+    ) -> Result<<HistogramRasterQueryProcessor as PlotQueryProcessor>::OutputFormat> {
         let mut histogram = geoengine_datatypes::plots::Histogram::builder(
             metadata.number_of_buckets,
             metadata.min,
@@ -340,7 +340,7 @@ impl HistogramVectorQueryProcessor {
         metadata: HistogramMetadata,
         query: QueryRectangle,
         ctx: &'p dyn QueryContext,
-    ) -> Result<<HistogramRasterQueryProcessor as PlotQueryProcessor>::PlotType> {
+    ) -> Result<<HistogramRasterQueryProcessor as PlotQueryProcessor>::OutputFormat> {
         let mut histogram = geoengine_datatypes::plots::Histogram::builder(
             metadata.number_of_buckets,
             metadata.min,

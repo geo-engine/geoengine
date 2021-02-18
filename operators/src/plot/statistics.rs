@@ -85,9 +85,9 @@ pub struct StatisticsQueryProcessor {
 }
 
 impl PlotQueryProcessor for StatisticsQueryProcessor {
-    type PlotType = serde_json::Value;
+    type OutputFormat = serde_json::Value;
 
-    fn plot_name(&self) -> &'static str {
+    fn plot_type(&self) -> &'static str {
         STATISTICS_OPERATOR_NAME
     }
 
@@ -95,7 +95,7 @@ impl PlotQueryProcessor for StatisticsQueryProcessor {
         &'a self,
         query: QueryRectangle,
         ctx: &'a dyn QueryContext,
-    ) -> BoxFuture<'a, Result<Self::PlotType>> {
+    ) -> BoxFuture<'a, Result<Self::OutputFormat>> {
         let mut queries = Vec::with_capacity(self.rasters.len());
         for (i, raster_processor) in self.rasters.iter().enumerate() {
             queries.push(

@@ -5,7 +5,7 @@ use futures::stream::BoxStream;
 use geoengine_datatypes::collections::{
     DataCollection, MultiLineStringCollection, MultiPolygonCollection,
 };
-use geoengine_datatypes::plots::{PlotData, PlotType};
+use geoengine_datatypes::plots::{PlotData, PlotOutputFormat};
 use geoengine_datatypes::raster::Pixel;
 use geoengine_datatypes::{collections::MultiPointCollection, raster::RasterTile2D};
 
@@ -86,17 +86,17 @@ where
 
 /// An instantiation of a plot operator that produces a stream of vector results for a query
 pub trait PlotQueryProcessor: Sync + Send {
-    type PlotType;
+    type OutputFormat;
 
-    fn plot_name(&self) -> &'static str;
+    fn plot_type(&self) -> &'static str;
 
     fn plot_query<'a>(
         &'a self,
         query: QueryRectangle,
         ctx: &'a dyn QueryContext,
-    ) -> BoxFuture<'a, Result<Self::PlotType>>;
+    ) -> BoxFuture<'a, Result<Self::OutputFormat>>;
 
-    fn boxed(self) -> Box<dyn PlotQueryProcessor<PlotType = Self::PlotType>>
+    fn boxed(self) -> Box<dyn PlotQueryProcessor<OutputFormat = Self::OutputFormat>>
     where
         Self: Sized + 'static,
     {
@@ -272,31 +272,31 @@ impl TypedVectorQueryProcessor {
 
 /// An enum that contains all possible query processor variants
 pub enum TypedPlotQueryProcessor {
-    Json(Box<dyn PlotQueryProcessor<PlotType = serde_json::Value>>),
-    Chart(Box<dyn PlotQueryProcessor<PlotType = PlotData>>),
-    Png(Box<dyn PlotQueryProcessor<PlotType = Vec<u8>>>),
+    Json(Box<dyn PlotQueryProcessor<OutputFormat = serde_json::Value>>),
+    Chart(Box<dyn PlotQueryProcessor<OutputFormat = PlotData>>),
+    Png(Box<dyn PlotQueryProcessor<OutputFormat = Vec<u8>>>),
 }
 
-impl From<&TypedPlotQueryProcessor> for PlotType {
+impl From<&TypedPlotQueryProcessor> for PlotOutputFormat {
     fn from(typed_processor: &TypedPlotQueryProcessor) -> Self {
         match typed_processor {
-            TypedPlotQueryProcessor::Json(_) => PlotType::Json,
-            TypedPlotQueryProcessor::Chart(_) => PlotType::Chart,
-            TypedPlotQueryProcessor::Png(_) => PlotType::Png,
+            TypedPlotQueryProcessor::Json(_) => PlotOutputFormat::Json,
+            TypedPlotQueryProcessor::Chart(_) => PlotOutputFormat::Chart,
+            TypedPlotQueryProcessor::Png(_) => PlotOutputFormat::Png,
         }
     }
 }
 
 impl TypedPlotQueryProcessor {
-    pub fn plot_name(&self) -> &'static str {
+    pub fn plot_type(&self) -> &'static str {
         match self {
-            TypedPlotQueryProcessor::Json(p) => p.plot_name(),
-            TypedPlotQueryProcessor::Chart(p) => p.plot_name(),
-            TypedPlotQueryProcessor::Png(p) => p.plot_name(),
+            TypedPlotQueryProcessor::Json(p) => p.plot_type(),
+            TypedPlotQueryProcessor::Chart(p) => p.plot_type(),
+            TypedPlotQueryProcessor::Png(p) => p.plot_type(),
         }
     }
 
-    pub fn json(self) -> Option<Box<dyn PlotQueryProcessor<PlotType = serde_json::Value>>> {
+    pub fn json(self) -> Option<Box<dyn PlotQueryProcessor<OutputFormat = serde_json::Value>>> {
         if let TypedPlotQueryProcessor::Json(p) = self {
             Some(p)
         } else {
@@ -304,7 +304,7 @@ impl TypedPlotQueryProcessor {
         }
     }
 
-    pub fn chart(self) -> Option<Box<dyn PlotQueryProcessor<PlotType = PlotData>>> {
+    pub fn chart(self) -> Option<Box<dyn PlotQueryProcessor<OutputFormat = PlotData>>> {
         if let TypedPlotQueryProcessor::Chart(p) = self {
             Some(p)
         } else {
@@ -312,7 +312,7 @@ impl TypedPlotQueryProcessor {
         }
     }
 
-    pub fn png(self) -> Option<Box<dyn PlotQueryProcessor<PlotType = Vec<u8>>>> {
+    pub fn png(self) -> Option<Box<dyn PlotQueryProcessor<OutputFormat = Vec<u8>>>> {
         if let TypedPlotQueryProcessor::Png(p) = self {
             Some(p)
         } else {

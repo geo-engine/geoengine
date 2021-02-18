@@ -32,7 +32,7 @@ pub enum PlotMetaData {
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Serialize)]
-pub enum PlotType {
+pub enum PlotOutputFormat {
     Json,
     Chart,
     Png,

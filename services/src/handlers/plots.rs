@@ -3,7 +3,7 @@ use snafu::ResultExt;
 use uuid::Uuid;
 use warp::Filter;
 
-use geoengine_datatypes::plots::PlotType;
+use geoengine_datatypes::plots::PlotOutputFormat;
 use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution, TimeInterval};
 use geoengine_operators::engine::{QueryRectangle, TypedPlotQueryProcessor};
 
@@ -68,8 +68,8 @@ async fn get_plot<C: Context>(
 
     let query_ctx = ctx.query_context()?;
 
-    let plot_type = PlotType::from(&processor);
-    let plot_name = processor.plot_name();
+    let output_format = PlotOutputFormat::from(&processor);
+    let plot_type = processor.plot_type();
 
     let data = match processor {
         TypedPlotQueryProcessor::Json(processor) => processor
@@ -97,8 +97,8 @@ async fn get_plot<C: Context>(
     };
 
     let output = WrappedPlotOutput {
+        output_format,
         plot_type,
-        plot_name,
         data,
     };
 
@@ -107,8 +107,8 @@ async fn get_plot<C: Context>(
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 struct WrappedPlotOutput {
-    plot_type: PlotType,
-    plot_name: &'static str,
+    output_format: PlotOutputFormat,
+    plot_type: &'static str,
     data: serde_json::Value,
 }
 
@@ -207,8 +207,8 @@ mod tests {
         assert_eq!(
             result,
             json!({
-                "plot_type": "Json",
-                "plot_name": "Statistics",
+                "output_format": "Json",
+                "plot_type": "Statistics",
                 "data": [{
                     "pixel_count": 6,
                     "nan_count": 0,
@@ -280,8 +280,8 @@ mod tests {
         assert_eq!(
             result,
             json!({
-                "plot_type": "Chart",
-                "plot_name": "Histogram",
+                "output_format": "Chart",
+                "plot_type": "Histogram",
                 "data": {
                     "vega_string": "{\"$schema\":\"https://vega.github.io/schema/vega-lite/v4.17.0.json\",\"data\":{\"values\":[{\"v\":1,\"dim\":[3],\"data\":[0.0,2.5,2.0]},{\"v\":1,\"dim\":[3],\"data\":[2.5,5.0,2.0]},{\"v\":1,\"dim\":[3],\"data\":[5.0,7.5,2.0]},{\"v\":1,\"dim\":[3],\"data\":[7.5,10.0,0.0]}]},\"encoding\":{\"x\":{\"bin\":\"binned\",\"field\":\"data.0\",\"title\":\"\",\"type\":\"quantitative\"},\"x2\":{\"field\":\"data.1\"},\"y\":{\"field\":\"data.2\",\"title\":\"Frequency\",\"type\":\"quantitative\"}},\"mark\":\"bar\",\"padding\":5.0}",
                     "metadata": null
