@@ -1,7 +1,10 @@
-pub mod histogram;
+mod area_line_plot;
+mod histogram;
+
+pub use area_line_plot::AreaLineChart;
+pub use histogram::{Histogram, HistogramBuilder};
 
 use crate::util::Result;
-pub use histogram::Histogram;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
