@@ -35,7 +35,7 @@ pub struct HistogramParams {
     pub column_name: Option<String>,
     /// The bounds (min/max) of the histogram.
     pub bounds: HistogramBounds,
-    /// If the bounds are empty, it is derived from the square-root choice rule.
+    /// If the number of buckets is undefined, it is derived from the square-root choice rule.
     pub buckets: Option<usize>,
     /// Whether to create an interactive output (`false` by default)
     #[serde(default)]
