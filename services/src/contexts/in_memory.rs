@@ -76,7 +76,7 @@ impl InMemoryContext {
             columns: [
                 ("natlscale".to_string(), FeatureDataType::Number),
                 ("scalerank".to_string(), FeatureDataType::Decimal),
-                ("featurecla".to_string(), FeatureDataType::Decimal),
+                ("featurecla".to_string(), FeatureDataType::Text),
                 ("name".to_string(), FeatureDataType::Text),
                 ("website".to_string(), FeatureDataType::Text),
             ]

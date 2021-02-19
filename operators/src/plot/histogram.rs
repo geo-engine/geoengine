@@ -497,15 +497,20 @@ mod tests {
 
     use crate::engine::{
         MockExecutionContext, MockQueryContext, RasterOperator, RasterResultDescriptor,
-        VectorOperator,
+        StaticMetaData, VectorOperator, VectorResultDescriptor,
     };
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
-    use geoengine_datatypes::collections::DataCollection;
+    use crate::source::{
+        OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceErrorSpec,
+    };
+    use geoengine_datatypes::collections::{DataCollection, VectorDataType};
+    use geoengine_datatypes::dataset::{DataSetId, InternalDataSetId};
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureData, NoGeometry, SpatialResolution, TimeInterval,
     };
     use geoengine_datatypes::raster::{Grid2D, RasterDataType, RasterTile2D, TileInformation};
     use geoengine_datatypes::spatial_reference::SpatialReference;
+    use geoengine_datatypes::util::Identifier;
     use serde_json::json;
 
     #[test]
@@ -835,5 +840,80 @@ mod tests {
                 .to_vega_embeddable(false)
                 .unwrap()
         );
+    }
+
+    #[tokio::test]
+    async fn textual_attribute() {
+        let dataset_id = InternalDataSetId::new();
+
+        let workflow = serde_json::json!({
+            "type": "Histogram",
+            "params": {
+                "column_name": "featurecla",
+                "bounds": "data"
+            },
+            "raster_sources": [],
+            "vector_sources": [{
+                "type": "OgrSource",
+                "params": {
+                    "data_set": {
+                        "Internal": dataset_id
+                    },
+                    "attribute_projection": null
+                }
+            }]
+        });
+        let histogram: Histogram = serde_json::from_value(workflow).unwrap();
+
+        let mut execution_context = MockExecutionContext::default();
+        execution_context.add_meta_data(
+            DataSetId::Internal(dataset_id),
+            Box::new(StaticMetaData {
+                loading_info: OgrSourceDataset {
+                    file_name: "operators/test-data/vector/data/ne_10m_ports/ne_10m_ports.shp"
+                        .into(),
+                    layer_name: "ne_10m_ports".to_string(),
+                    data_type: Some(VectorDataType::MultiPoint),
+                    time: OgrSourceDatasetTimeType::None,
+                    columns: Some(OgrSourceColumnSpec {
+                        x: "".to_string(),
+                        y: None,
+                        numeric: vec!["natlscale".to_string()],
+                        decimal: vec!["scalerank".to_string()],
+                        textual: vec![
+                            "featurecla".to_string(),
+                            "name".to_string(),
+                            "website".to_string(),
+                        ],
+                    }),
+                    default_geometry: None,
+                    force_ogr_time_filter: false,
+                    on_error: OgrSourceErrorSpec::Skip,
+                    provenance: None,
+                },
+                result_descriptor: VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: [
+                        ("natlscale".to_string(), FeatureDataType::Number),
+                        ("scalerank".to_string(), FeatureDataType::Decimal),
+                        ("featurecla".to_string(), FeatureDataType::Text),
+                        ("name".to_string(), FeatureDataType::Text),
+                        ("website".to_string(), FeatureDataType::Text),
+                    ]
+                    .iter()
+                    .cloned()
+                    .collect(),
+                },
+            }),
+        );
+
+        if let Err(Error::InvalidOperatorSpec { reason }) =
+            histogram.boxed().initialize(&execution_context)
+        {
+            assert_eq!(reason, "column `featurecla` must be numerical");
+        } else {
+            panic!("we currently don't support textual features, but this went through");
+        }
     }
 }
