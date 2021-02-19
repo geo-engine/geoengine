@@ -19,6 +19,8 @@
     clippy::type_repetition_in_bounds,
     clippy::wildcard_imports
 )]
+// enable some restriction lints
+#![warn(clippy::print_stdout, clippy::print_stderr, clippy::dbg_macro)]
 
 pub mod adapters;
 pub mod concurrency;
