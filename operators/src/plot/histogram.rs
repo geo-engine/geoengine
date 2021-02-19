@@ -469,7 +469,8 @@ impl HistogramMetadataInProgress {
                 add_data_ref(self, &values);
             }
             FeatureDataRef::Categorical(_) | FeatureDataRef::Text(_) => {
-                unreachable!("disallowed in param");
+                // do nothing since we don't support them
+                // TODO: fill with live once we support categorical and textual types
             }
         }
     }
