@@ -11,6 +11,7 @@ use crate::contexts::{ExecutionContextImpl, QueryContextImpl};
 use crate::datasets::in_memory::HashMapDataSetDb;
 use crate::datasets::storage::{AddDataSet, DataSetStore};
 use crate::users::user::UserId;
+use crate::util::tests::add_ndvi_to_datasets;
 use crate::util::user_input::UserInput;
 use crate::util::{config, Identifier};
 use geoengine_datatypes::collections::VectorDataType;
@@ -36,6 +37,7 @@ pub struct InMemoryContext {
 }
 
 impl InMemoryContext {
+    #[allow(clippy::too_many_lines)]
     pub async fn new_with_data() -> Self {
         // TODO: scan directory and auto import
 
@@ -125,6 +127,8 @@ impl InMemoryContext {
             )
             .await
             .expect("dataset db access");
+
+        add_ndvi_to_datasets(&ctx).await;
 
         ctx
     }

@@ -1,7 +1,7 @@
 use crate::datasets::listing::{DataSetListOptions, DataSetListing, DataSetProvider};
 use crate::datasets::storage::{
-    AddDataSetProvider, DataSetDb, DataSetProviderDb, DataSetProviderListOptions,
-    DataSetProviderListing,
+    AddDataSet, AddDataSetProvider, DataSetDb, DataSetProviderDb, DataSetProviderListOptions,
+    DataSetProviderListing, DataSetStore, DataSetStorer,
 };
 use crate::error::Result;
 use crate::users::user::UserId;
@@ -61,6 +61,22 @@ where
         &self,
         _data_set: &DataSetId,
     ) -> std::result::Result<Box<dyn MetaData<L, R>>, geoengine_operators::error::Error> {
+        todo!()
+    }
+}
+
+impl DataSetStorer for PostgresDataSetDb {
+    type StorageType = i32; // placeholder
+}
+
+#[async_trait]
+impl DataSetStore for PostgresDataSetDb {
+    async fn add_data_set(
+        &mut self,
+        _user: UserId,
+        _data_set: Validated<AddDataSet>,
+        _meta_data: i32,
+    ) -> Result<DataSetId> {
         todo!()
     }
 }

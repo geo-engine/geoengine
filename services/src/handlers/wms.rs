@@ -313,19 +313,14 @@ fn get_map_mock(request: &GetMap) -> Result<Box<dyn warp::Reply>, warp::Rejectio
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
-
-    use geoengine_datatypes::operations::image::RgbaColor;
-    use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, TimeInterval};
-    use geoengine_datatypes::raster::GridShape2D;
-    use geoengine_operators::engine::MockQueryContext;
-    use geoengine_operators::source::{GdalSourceParameters, GdalSourceProcessor};
-
     use super::*;
+    use crate::contexts::InMemoryContext;
     use crate::handlers::{handle_rejection, ErrorResponse};
-    use crate::util::tests::{check_allowed_http_methods, register_workflow_helper};
-    use crate::{contexts::InMemoryContext, ogc::wms::request::GetMapFormat};
-    use geoengine_datatypes::raster::TilingSpecification;
+    use crate::ogc::wms::request::GetMapFormat;
+    use crate::util::tests::{check_allowed_http_methods, register_ndvi_workflow_helper};
+    use geoengine_datatypes::operations::image::RgbaColor;
+    use geoengine_operators::engine::ExecutionContext;
+    use geoengine_operators::source::{create_ndvi_meta_data, GdalSourceProcessor};
     use std::convert::TryInto;
     use warp::hyper::body::Bytes;
     use xml::ParserConfig;
@@ -411,20 +406,14 @@ mod tests {
 
     #[tokio::test]
     async fn png_from_stream() {
-        let gdal_params = GdalSourceParameters {
-            dataset_id: "modis_ndvi".to_owned(),
-            channel: None,
-        };
+        let ctx = InMemoryContext::default();
+        let exe_ctx = ctx.execution_context(&Session::mock()).unwrap();
 
-        let gdal_source = GdalSourceProcessor::<_, u8>::from_params_with_json_provider(
-            gdal_params,
-            &PathBuf::from("../operators/test-data/raster"),
-            TilingSpecification {
-                origin_coordinate: Coordinate2D::new(0., 0.),
-                tile_size_in_pixels: GridShape2D::from([600, 600]),
-            },
-        )
-        .unwrap();
+        let gdal_source = GdalSourceProcessor::<u8> {
+            tiling_specification: exe_ctx.tiling_specification(),
+            meta_data: Box::new(create_ndvi_meta_data()),
+            phantom_data: Default::default(),
+        };
 
         let query_bbox = BoundingBox2D::new((-10., 20.).into(), (50., 80.).into()).unwrap();
 
@@ -436,7 +425,7 @@ mod tests {
                     .unwrap(),
                 spatial_resolution: SpatialResolution::zero_point_one(),
             },
-            MockQueryContext { chunk_byte_size: 0 },
+            ctx.query_context().unwrap(),
             &GetMap {
                 version: "".to_string(),
                 width: 600,
@@ -466,20 +455,14 @@ mod tests {
 
     #[tokio::test]
     async fn png_from_stream_non_full() {
-        let gdal_params = GdalSourceParameters {
-            dataset_id: "modis_ndvi".to_owned(),
-            channel: None,
-        };
+        let ctx = InMemoryContext::default();
+        let exe_ctx = ctx.execution_context(&Session::mock()).unwrap();
 
-        let gdal_source = GdalSourceProcessor::<_, u8>::from_params_with_json_provider(
-            gdal_params,
-            PathBuf::from("../operators/test-data/raster").as_ref(),
-            TilingSpecification {
-                origin_coordinate: Coordinate2D::new(0., 0.),
-                tile_size_in_pixels: GridShape2D::from([600, 600]),
-            },
-        )
-        .unwrap();
+        let gdal_source = GdalSourceProcessor::<u8> {
+            tiling_specification: exe_ctx.tiling_specification(),
+            meta_data: Box::new(create_ndvi_meta_data()),
+            phantom_data: Default::default(),
+        };
 
         let query_bbox = BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap();
 
@@ -491,7 +474,7 @@ mod tests {
                     .unwrap(),
                 spatial_resolution: SpatialResolution::new_unchecked(1.0, 1.0),
             },
-            MockQueryContext { chunk_byte_size: 0 },
+            ctx.query_context().unwrap(),
             &GetMap {
                 version: "".to_string(),
                 width: 360,
@@ -522,7 +505,7 @@ mod tests {
     async fn get_map_test_helper(method: &str, path: Option<&str>) -> Response<Bytes> {
         let ctx = InMemoryContext::default();
 
-        let (_, id) = register_workflow_helper(&ctx).await;
+        let (_, id) = register_ndvi_workflow_helper(&ctx).await;
 
         warp::test::request()
             .method(method)
@@ -546,7 +529,7 @@ mod tests {
     async fn get_map_uppercase() {
         let ctx = InMemoryContext::default();
 
-        let (_, id) = register_workflow_helper(&ctx).await;
+        let (_, id) = register_ndvi_workflow_helper(&ctx).await;
 
         let res = warp::test::request()
             .method("GET")
@@ -582,7 +565,7 @@ mod tests {
     async fn get_map_colorizer() {
         let ctx = InMemoryContext::default();
 
-        let (_, id) = register_workflow_helper(&ctx).await;
+        let (_, id) = register_ndvi_workflow_helper(&ctx).await;
 
         let colorizer = Colorizer::linear_gradient(
             vec![

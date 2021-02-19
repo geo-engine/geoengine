@@ -1,20 +1,26 @@
-use crate::contexts::Context;
+use crate::contexts::{Context, InMemoryContext};
+use crate::datasets::storage::AddDataSet;
+use crate::datasets::storage::DataSetStore;
 use crate::handlers::ErrorResponse;
 use crate::projects::project::{
     CreateProject, Layer, LayerInfo, LayerUpdate, ProjectId, RasterInfo, STRectangle, UpdateProject,
 };
 use crate::projects::projectdb::ProjectDb;
 use crate::users::session::Session;
+use crate::users::user::UserId;
 use crate::users::user::{UserCredentials, UserRegistration};
 use crate::users::userdb::UserDb;
 use crate::util::user_input::UserInput;
 use crate::util::Identifier;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
+use geoengine_datatypes::dataset::DataSetId;
 use geoengine_datatypes::operations::image::Colorizer;
-use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
-use geoengine_operators::engine::{RasterOperator, TypedOperator};
-use geoengine_operators::source::{GdalSource, GdalSourceParameters};
+use geoengine_datatypes::primitives::Measurement;
+use geoengine_datatypes::raster::RasterDataType;
+use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
+use geoengine_operators::engine::{RasterOperator, RasterResultDescriptor, TypedOperator};
+use geoengine_operators::source::{create_ndvi_meta_data, GdalSource, GdalSourceParameters};
 use warp::http::Response;
 use warp::hyper::body::Bytes;
 
@@ -100,14 +106,13 @@ pub fn update_project_helper(project: ProjectId) -> UpdateProject {
 }
 
 #[allow(clippy::missing_panics_doc)]
-pub async fn register_workflow_helper<C: Context>(ctx: &C) -> (Workflow, WorkflowId) {
+pub async fn register_ndvi_workflow_helper(ctx: &InMemoryContext) -> (Workflow, WorkflowId) {
+    let data_set = add_ndvi_to_datasets(ctx).await;
+
     let workflow = Workflow {
         operator: TypedOperator::Raster(
             GdalSource {
-                params: GdalSourceParameters {
-                    dataset_id: "modis_ndvi".to_owned(),
-                    channel: None,
-                },
+                params: GdalSourceParameters { data_set },
             }
             .boxed(),
         ),
@@ -122,6 +127,31 @@ pub async fn register_workflow_helper<C: Context>(ctx: &C) -> (Workflow, Workflo
         .unwrap();
 
     (workflow, id)
+}
+
+pub async fn add_ndvi_to_datasets(ctx: &InMemoryContext) -> DataSetId {
+    let descriptor = RasterResultDescriptor {
+        data_type: RasterDataType::U8,
+        spatial_reference: SpatialReference::epsg_4326().into(),
+        measurement: Measurement::Unitless,
+    };
+
+    let ds = AddDataSet {
+        name: "NDVI".to_string(),
+        description: "NDVI data from MODIS".to_string(),
+        result_descriptor: descriptor.clone().into(),
+        source_operator: "GdalSource".to_string(),
+    };
+
+    ctx.data_set_db_ref_mut()
+        .await
+        .add_data_set(
+            UserId::new(),
+            ds.validated().expect("valid dataset description"),
+            Box::new(create_ndvi_meta_data()),
+        )
+        .await
+        .expect("dataset db access")
 }
 
 pub async fn check_allowed_http_methods2<'a, T, TRes, P, PParam>(

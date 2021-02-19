@@ -153,6 +153,12 @@ pub enum Error {
     InvalidDataSetId,
     DataSetLoadingInfoProviderMismatch,
     UnknownDataSetId,
+
+    // TODO: this error should not be propagated to user
+    #[snafu(display("Could not open gdal data set for file path {:?}", file_path))]
+    CouldNotOpenGdalDataSet {
+        file_path: String,
+    },
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {
