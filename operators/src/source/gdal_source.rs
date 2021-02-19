@@ -504,15 +504,19 @@ where
     Grid::new(tile_grid, buffer.data, None).map_err(Into::into)
 }
 
+// TODO: better way for determining raster directory
 fn raster_dir() -> std::path::PathBuf {
     let mut current_path = std::env::current_dir().unwrap();
+
+    if current_path.ends_with("services") {
+        current_path = current_path.join("../operators");
+    }
 
     if !current_path.ends_with("operators") {
         current_path = current_path.join("operators");
     }
 
     current_path = current_path.join("test-data/raster");
-
     current_path
 }
 
