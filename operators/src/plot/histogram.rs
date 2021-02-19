@@ -197,12 +197,11 @@ impl PlotQueryProcessor for HistogramRasterQueryProcessor {
         query: QueryRectangle,
         ctx: &'p dyn QueryContext,
     ) -> BoxFuture<'p, Result<Self::OutputFormat>> {
-        Box::pin(
-            self.preprocess(query, ctx)
-                .and_then(move |histogram_metadata| async move {
-                    self.process(histogram_metadata, query, ctx).await
-                }),
-        )
+        self.preprocess(query, ctx)
+            .and_then(move |histogram_metadata| async move {
+                self.process(histogram_metadata, query, ctx).await
+            })
+            .boxed()
     }
 }
 
@@ -218,48 +217,42 @@ impl PlotQueryProcessor for HistogramVectorQueryProcessor {
         query: QueryRectangle,
         ctx: &'p dyn QueryContext,
     ) -> BoxFuture<'p, Result<Self::OutputFormat>> {
-        Box::pin(
-            self.preprocess(query, ctx)
-                .and_then(move |histogram_metadata| async move {
-                    self.process(histogram_metadata, query, ctx).await
-                }),
-        )
+        self.preprocess(query, ctx)
+            .and_then(move |histogram_metadata| async move {
+                self.process(histogram_metadata, query, ctx).await
+            })
+            .boxed()
     }
 }
 
 impl HistogramRasterQueryProcessor {
-    fn preprocess<'p>(
+    async fn preprocess<'p>(
         &'p self,
         query: QueryRectangle,
         ctx: &'p dyn QueryContext,
-    ) -> BoxFuture<'p, Result<HistogramMetadata>> {
-        fn process_metadata<T: Pixel>(
-            input: BoxStream<Result<RasterTile2D<T>>>,
+    ) -> Result<HistogramMetadata> {
+        async fn process_metadata<T: Pixel>(
+            mut input: BoxStream<'_, Result<RasterTile2D<T>>>,
             metadata: HistogramMetadataOptions,
-        ) -> BoxFuture<'_, Result<HistogramMetadata>> {
-            input
-                .fold(
-                    Ok(HistogramMetadataInProgress::default()),
-                    |metadata: Result<HistogramMetadataInProgress>, tile| async move {
-                        let mut metadata = metadata?;
-                        let tile = tile?;
+        ) -> Result<HistogramMetadata> {
+            let mut computed_metadata = HistogramMetadataInProgress::default();
 
-                        metadata
-                            .add_raster_batch(&tile.grid_array.data, tile.grid_array.no_data_value);
+            while let Some(tile) = input.next().await {
+                let tile = tile?;
 
-                        Ok(metadata)
-                    },
-                )
-                .map(move |computed_metadata| Ok(metadata.merge_with(computed_metadata?.into())))
-                .boxed()
+                computed_metadata
+                    .add_raster_batch(&tile.grid_array.data, tile.grid_array.no_data_value);
+            }
+
+            Ok(metadata.merge_with(computed_metadata.into()))
         }
 
         if let Ok(metadata) = HistogramMetadata::try_from(self.metadata) {
-            return futures::future::ok(metadata).boxed();
+            return Ok(metadata);
         }
 
         call_on_generic_raster_processor!(&self.input, processor => {
-            process_metadata(processor.query(query, ctx), self.metadata)
+            process_metadata(processor.query(query, ctx), self.metadata).await
         })
     }
 
@@ -295,43 +288,38 @@ impl HistogramRasterQueryProcessor {
 }
 
 impl HistogramVectorQueryProcessor {
-    fn preprocess<'p>(
+    async fn preprocess<'p>(
         &'p self,
         query: QueryRectangle,
         ctx: &'p dyn QueryContext,
-    ) -> BoxFuture<'p, Result<HistogramMetadata>> {
-        fn process_metadata<'m, G>(
-            input: BoxStream<'m, Result<FeatureCollection<G>>>,
+    ) -> Result<HistogramMetadata> {
+        async fn process_metadata<'m, G>(
+            mut input: BoxStream<'m, Result<FeatureCollection<G>>>,
             column_name: &'m str,
             metadata: HistogramMetadataOptions,
-        ) -> BoxFuture<'m, Result<HistogramMetadata>>
+        ) -> Result<HistogramMetadata>
         where
             G: Geometry + 'static,
             FeatureCollection<G>: FeatureCollectionInfos,
         {
-            input
-                .fold(
-                    Ok(HistogramMetadataInProgress::default()),
-                    move |metadata: Result<HistogramMetadataInProgress>, collection| async move {
-                        let mut metadata = metadata?;
-                        let collection = collection?;
+            let mut computed_metadata = HistogramMetadataInProgress::default();
 
-                        let feature_data = collection.data(column_name).expect("check in param");
-                        metadata.add_vector_batch(feature_data);
+            while let Some(collection) = input.next().await {
+                let collection = collection?;
 
-                        Ok(metadata)
-                    },
-                )
-                .map(move |computed_metadata| Ok(metadata.merge_with(computed_metadata?.into())))
-                .boxed()
+                let feature_data = collection.data(column_name).expect("check in param");
+                computed_metadata.add_vector_batch(feature_data);
+            }
+
+            Ok(metadata.merge_with(computed_metadata.into()))
         }
 
         if let Ok(metadata) = HistogramMetadata::try_from(self.metadata) {
-            return futures::future::ok(metadata).boxed();
+            return Ok(metadata);
         }
 
         call_on_generic_vector_processor!(&self.input, processor => {
-            process_metadata(processor.query(query, ctx), &self.column_name, self.metadata)
+            process_metadata(processor.query(query, ctx), &self.column_name, self.metadata).await
         })
     }
 
