@@ -1,5 +1,10 @@
 mod statistics;
+mod temporal_raster_mean_plot;
 
 pub use self::statistics::{
     InitializedStatistics, Statistics, StatisticsParams, StatisticsQueryProcessor,
+};
+pub use self::temporal_raster_mean_plot::{
+    InitializedTemporalRasterMeanPlot, TemporalRasterMeanPlot, TemporalRasterMeanPlotParams,
+    TemporalRasterMeanPlotQueryProcessor,
 };
