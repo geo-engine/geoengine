@@ -251,6 +251,8 @@ impl HistogramRasterQueryProcessor {
             return Ok(metadata);
         }
 
+        // TODO: compute only number of buckets if possible
+
         call_on_generic_raster_processor!(&self.input, processor => {
             process_metadata(processor.query(query, ctx), self.metadata).await
         })
@@ -317,6 +319,8 @@ impl HistogramVectorQueryProcessor {
         if let Ok(metadata) = HistogramMetadata::try_from(self.metadata) {
             return Ok(metadata);
         }
+
+        // TODO: compute only number of buckets if possible
 
         call_on_generic_vector_processor!(&self.input, processor => {
             process_metadata(processor.query(query, ctx), &self.column_name, self.metadata).await
