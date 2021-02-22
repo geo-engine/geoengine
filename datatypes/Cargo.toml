@@ -18,7 +18,7 @@ arrow = { version = "3.0" }
 chrono = "0.4"
 float-cmp = "0.8"
 geo = "0.17"
-proj = "0.21"
+proj = "0.22"
 geojson = "0.22"
 image = "0.23"
 ndarray = "0.14"
