@@ -28,7 +28,7 @@ macro_rules! json_map {
             let _cap = json_map!(@count $($key),*);
             let mut _map = ::serde_json::Map::with_capacity(_cap);
             $(
-                let _ = _map.insert($key, $value);
+                _map.insert($key, $value);
             )*
             _map
         }
