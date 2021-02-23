@@ -4,12 +4,13 @@ use crate::{
         RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SourceOperator,
         TypedRasterQueryProcessor,
     },
-    error::Error,
+    error::{self, Error},
     util::Result,
 };
 
 use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
 use gdal::Dataset as GdalDataset;
+use snafu::ResultExt;
 use std::{marker::PhantomData, path::PathBuf};
 //use gdal::metadata::Metadata; // TODO: handle metadata
 
@@ -209,6 +210,27 @@ where
     T: gdal::raster::GdalType + Pixel,
 {
     ///
+    /// A method to async load single tiles from a GDAL dataset.
+    ///
+    pub async fn load_tile_data_async(
+        loading_info: GdalDataSetParameters,
+        output_bounds: BoundingBox2D,
+        output_shape: GridShape2D,
+        output_geo_transform: GeoTransform,
+    ) -> Result<Grid2D<T>> {
+        tokio::task::spawn_blocking(move || {
+            Self::load_tile_data(
+                &loading_info,
+                output_bounds,
+                output_shape,
+                output_geo_transform,
+            )
+        })
+        .await
+        .context(error::TokioJoin)?
+    }
+
+    ///
     /// A method to load single tiles from a GDAL dataset.
     ///
     pub fn load_tile_data(
@@ -330,16 +352,18 @@ where
         let tiling_strategy = self.tiling_specification.strategy(x_signed, y_signed);
 
         stream::iter(tiling_strategy.tile_information_iterator(query.bbox))
-            .map(move |tile| {
+            .map(move |tile| (tile, info.clone()))
+            .then(async move |(tile, info)| {
                 Ok(RasterTile2D::new_with_tile_info(
                     info.time,
                     tile,
-                    Self::load_tile_data(
-                        &info.params,
+                    Self::load_tile_data_async(
+                        info.params.clone(),
                         tile.spatial_bounds(),
                         tile.tile_size_in_pixels(),
                         tile.tile_geo_transform(),
-                    )?,
+                    )
+                    .await?,
                 ))
             })
             .boxed()

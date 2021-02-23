@@ -136,7 +136,7 @@ pub enum Error {
         source: chrono::format::ParseError,
     },
 
-    TimeInstanceNotDisplayable, 
+    TimeInstanceNotDisplayable,
 
     DataSetMetaData {
         source: Box<dyn std::error::Error + Send + Sync>,
@@ -163,6 +163,10 @@ pub enum Error {
     },
 
     FilePathNotRepresentableAsString,
+
+    TokioJoin {
+        source: tokio::task::JoinError,
+    },
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {
