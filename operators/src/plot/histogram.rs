@@ -142,7 +142,7 @@ impl InitializedOperator<PlotResultDescriptor, TypedPlotQueryProcessor> for Init
         if self.vector_sources.is_empty() {
             let raster_source = &self.raster_sources[0];
 
-            Ok(TypedPlotQueryProcessor::Chart(
+            Ok(TypedPlotQueryProcessor::JsonVega(
                 HistogramRasterQueryProcessor {
                     input: raster_source.query_processor()?,
                     measurement: raster_source.result_descriptor().measurement.clone(),
@@ -154,7 +154,7 @@ impl InitializedOperator<PlotResultDescriptor, TypedPlotQueryProcessor> for Init
         } else {
             let vector_source = &self.vector_sources[0];
 
-            Ok(TypedPlotQueryProcessor::Chart(
+            Ok(TypedPlotQueryProcessor::JsonVega(
                 HistogramVectorQueryProcessor {
                     input: vector_source.query_processor()?,
                     column_name: self.params.column_name.clone().expect("checked in param"),
@@ -640,7 +640,7 @@ mod tests {
             .unwrap()
             .query_processor()
             .unwrap()
-            .chart()
+            .json_vega()
             .unwrap();
 
         let result = query_processor
@@ -687,7 +687,7 @@ mod tests {
             .unwrap()
             .query_processor()
             .unwrap()
-            .chart()
+            .json_vega()
             .unwrap();
 
         let result = query_processor
@@ -750,7 +750,7 @@ mod tests {
             .unwrap()
             .query_processor()
             .unwrap()
-            .chart()
+            .json_vega()
             .unwrap();
 
         let result = query_processor
@@ -817,7 +817,7 @@ mod tests {
             .unwrap()
             .query_processor()
             .unwrap()
-            .chart()
+            .json_vega()
             .unwrap();
 
         let result = query_processor

@@ -66,7 +66,7 @@ pub type InitializedStatistics = InitializedOperatorImpl<(), PlotResultDescripto
 
 impl InitializedOperator<PlotResultDescriptor, TypedPlotQueryProcessor> for InitializedStatistics {
     fn query_processor(&self) -> Result<TypedPlotQueryProcessor> {
-        Ok(TypedPlotQueryProcessor::Json(
+        Ok(TypedPlotQueryProcessor::JsonPlain(
             StatisticsQueryProcessor {
                 rasters: self
                     .raster_sources
@@ -240,7 +240,7 @@ mod tests {
 
         let statistics = statistics.boxed().initialize(&execution_context).unwrap();
 
-        let processor = statistics.query_processor().unwrap().json().unwrap();
+        let processor = statistics.query_processor().unwrap().json_plain().unwrap();
 
         let result = processor
             .plot_query(

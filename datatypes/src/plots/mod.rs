@@ -33,9 +33,9 @@ pub enum PlotMetaData {
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Serialize)]
 pub enum PlotOutputFormat {
-    Json,
-    Chart,
-    Png,
+    JsonPlain,
+    JsonVega,
+    ImagePng,
 }
 
 impl Default for PlotMetaData {

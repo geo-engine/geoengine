@@ -272,17 +272,17 @@ impl TypedVectorQueryProcessor {
 
 /// An enum that contains all possible query processor variants
 pub enum TypedPlotQueryProcessor {
-    Json(Box<dyn PlotQueryProcessor<OutputFormat = serde_json::Value>>),
-    Chart(Box<dyn PlotQueryProcessor<OutputFormat = PlotData>>),
-    Png(Box<dyn PlotQueryProcessor<OutputFormat = Vec<u8>>>),
+    JsonPlain(Box<dyn PlotQueryProcessor<OutputFormat = serde_json::Value>>),
+    JsonVega(Box<dyn PlotQueryProcessor<OutputFormat = PlotData>>),
+    ImagePng(Box<dyn PlotQueryProcessor<OutputFormat = Vec<u8>>>),
 }
 
 impl From<&TypedPlotQueryProcessor> for PlotOutputFormat {
     fn from(typed_processor: &TypedPlotQueryProcessor) -> Self {
         match typed_processor {
-            TypedPlotQueryProcessor::Json(_) => PlotOutputFormat::Json,
-            TypedPlotQueryProcessor::Chart(_) => PlotOutputFormat::Chart,
-            TypedPlotQueryProcessor::Png(_) => PlotOutputFormat::Png,
+            TypedPlotQueryProcessor::JsonPlain(_) => PlotOutputFormat::JsonPlain,
+            TypedPlotQueryProcessor::JsonVega(_) => PlotOutputFormat::JsonVega,
+            TypedPlotQueryProcessor::ImagePng(_) => PlotOutputFormat::ImagePng,
         }
     }
 }
@@ -290,30 +290,32 @@ impl From<&TypedPlotQueryProcessor> for PlotOutputFormat {
 impl TypedPlotQueryProcessor {
     pub fn plot_type(&self) -> &'static str {
         match self {
-            TypedPlotQueryProcessor::Json(p) => p.plot_type(),
-            TypedPlotQueryProcessor::Chart(p) => p.plot_type(),
-            TypedPlotQueryProcessor::Png(p) => p.plot_type(),
+            TypedPlotQueryProcessor::JsonPlain(p) => p.plot_type(),
+            TypedPlotQueryProcessor::JsonVega(p) => p.plot_type(),
+            TypedPlotQueryProcessor::ImagePng(p) => p.plot_type(),
         }
     }
 
-    pub fn json(self) -> Option<Box<dyn PlotQueryProcessor<OutputFormat = serde_json::Value>>> {
-        if let TypedPlotQueryProcessor::Json(p) = self {
+    pub fn json_plain(
+        self,
+    ) -> Option<Box<dyn PlotQueryProcessor<OutputFormat = serde_json::Value>>> {
+        if let TypedPlotQueryProcessor::JsonPlain(p) = self {
             Some(p)
         } else {
             None
         }
     }
 
-    pub fn chart(self) -> Option<Box<dyn PlotQueryProcessor<OutputFormat = PlotData>>> {
-        if let TypedPlotQueryProcessor::Chart(p) = self {
+    pub fn json_vega(self) -> Option<Box<dyn PlotQueryProcessor<OutputFormat = PlotData>>> {
+        if let TypedPlotQueryProcessor::JsonVega(p) = self {
             Some(p)
         } else {
             None
         }
     }
 
-    pub fn png(self) -> Option<Box<dyn PlotQueryProcessor<OutputFormat = Vec<u8>>>> {
-        if let TypedPlotQueryProcessor::Png(p) = self {
+    pub fn image_png(self) -> Option<Box<dyn PlotQueryProcessor<OutputFormat = Vec<u8>>>> {
+        if let TypedPlotQueryProcessor::ImagePng(p) = self {
             Some(p)
         } else {
             None

@@ -72,11 +72,11 @@ async fn get_plot<C: Context>(
     let plot_type = processor.plot_type();
 
     let data = match processor {
-        TypedPlotQueryProcessor::Json(processor) => processor
+        TypedPlotQueryProcessor::JsonPlain(processor) => processor
             .plot_query(query_rect, &query_ctx)
             .await
             .context(error::Operator)?,
-        TypedPlotQueryProcessor::Chart(processor) => {
+        TypedPlotQueryProcessor::JsonVega(processor) => {
             let chart = processor
                 .plot_query(query_rect, &query_ctx)
                 .await
@@ -84,7 +84,7 @@ async fn get_plot<C: Context>(
 
             serde_json::to_value(&chart).context(error::SerdeJson)?
         }
-        TypedPlotQueryProcessor::Png(processor) => {
+        TypedPlotQueryProcessor::ImagePng(processor) => {
             let png_bytes = processor
                 .plot_query(query_rect, &query_ctx)
                 .await
@@ -207,7 +207,7 @@ mod tests {
         assert_eq!(
             result,
             json!({
-                "output_format": "Json",
+                "output_format": "JsonPlain",
                 "plot_type": "Statistics",
                 "data": [{
                     "pixel_count": 6,
@@ -280,10 +280,10 @@ mod tests {
         assert_eq!(
             result,
             json!({
-                "output_format": "Chart",
+                "output_format": "JsonVega",
                 "plot_type": "Histogram",
                 "data": {
-                    "vega_string": "{\"$schema\":\"https://vega.github.io/schema/vega-lite/v4.17.0.json\",\"data\":{\"values\":[{\"v\":1,\"dim\":[3],\"data\":[0.0,2.5,2.0]},{\"v\":1,\"dim\":[3],\"data\":[2.5,5.0,2.0]},{\"v\":1,\"dim\":[3],\"data\":[5.0,7.5,2.0]},{\"v\":1,\"dim\":[3],\"data\":[7.5,10.0,0.0]}]},\"encoding\":{\"x\":{\"bin\":\"binned\",\"field\":\"data.0\",\"title\":\"\",\"type\":\"quantitative\"},\"x2\":{\"field\":\"data.1\"},\"y\":{\"field\":\"data.2\",\"title\":\"Frequency\",\"type\":\"quantitative\"}},\"mark\":\"bar\",\"padding\":5.0}",
+                    "vega_string": "{\"$schema\":\"https://vega.github.io/schema/vega-lite/v4.json\",\"data\":{\"values\":[{\"bin_start\":0.0,\"bin_end\":2.5,\"count\":2},{\"bin_start\":2.5,\"bin_end\":5.0,\"count\":2},{\"bin_start\":5.0,\"bin_end\":7.5,\"count\":2},{\"bin_start\":7.5,\"bin_end\":10.0,\"count\":0}]},\"mark\":\"bar\",\"encoding\":{\"x\":{\"field\":\"bin_start\",\"bin\":{\"binned\":true,\"step\":2.5}},\"x2\":{\"field\":\"bin_end\"},\"y\":{\"field\":\"count\",\"type\":\"quantitative\"}}}",
                     "metadata": null
                 }
             })
