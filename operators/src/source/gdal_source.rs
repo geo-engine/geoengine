@@ -18,15 +18,11 @@ use serde::{Deserialize, Serialize};
 
 use futures::stream::{self, BoxStream, StreamExt};
 
-use crate::engine::{MetaData, MockExecutionContext, QueryRectangle};
+use crate::engine::{MetaData, QueryRectangle};
 use geoengine_datatypes::dataset::DataSetId;
-use geoengine_datatypes::dataset::InternalDataSetId;
-use geoengine_datatypes::primitives::{Measurement, TimeGranularity};
 use geoengine_datatypes::raster::{
     GeoTransform, Grid2D, GridShape2D, Pixel, RasterDataType, RasterTile2D,
 };
-use geoengine_datatypes::spatial_reference::SpatialReference;
-use geoengine_datatypes::util::Identifier;
 use geoengine_datatypes::{
     primitives::{
         BoundingBox2D, SpatialBounded, TimeInstance, TimeInterval, TimeStep, TimeStepIter,
@@ -530,62 +526,11 @@ where
     Grid::new(tile_grid, buffer.data, None).map_err(Into::into)
 }
 
-// TODO: better way for determining raster directory
-fn raster_dir() -> std::path::PathBuf {
-    let mut current_path = std::env::current_dir().unwrap();
-
-    if current_path.ends_with("services") {
-        current_path = current_path.join("../operators");
-    }
-
-    if !current_path.ends_with("operators") {
-        current_path = current_path.join("operators");
-    }
-
-    current_path = current_path.join("test-data/raster");
-    current_path
-}
-
-// TODO: move test helper somewhere else?
-pub fn create_ndvi_meta_data() -> GdalMetaDataRegular {
-    GdalMetaDataRegular {
-        start: 1_388_534_400_000.into(),
-        step: TimeStep {
-            granularity: TimeGranularity::Months,
-            step: 1,
-        },
-        placeholder: "%%%_START_TIME_%%%".to_string(),
-        time_format: "%Y-%m-%d".to_string(),
-        params: GdalDataSetParameters {
-            file_path: raster_dir().join("modis_ndvi/MOD13A2_M_NDVI_%%%_START_TIME_%%%.TIFF"),
-            rasterband_channel: 1,
-            geo_transform: GeoTransform {
-                origin_coordinate: (-180., 90.).into(),
-                x_pixel_size: 0.1,
-                y_pixel_size: -0.1,
-            },
-            bbox: BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
-            file_not_found_handling: FileNotFoundHandling::NoData,
-        },
-        result_descriptor: RasterResultDescriptor {
-            data_type: RasterDataType::U8,
-            spatial_reference: SpatialReference::epsg_4326().into(),
-            measurement: Measurement::Unitless,
-        },
-    }
-}
-
-// TODO: move test helper somewhere else?
-pub fn add_ndvi_data_set(ctx: &mut MockExecutionContext) -> DataSetId {
-    let id: DataSetId = InternalDataSetId::new().into();
-    ctx.add_meta_data(id.clone(), Box::new(create_ndvi_meta_data()));
-    id
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::engine::{MockExecutionContext, MockQueryContext, QueryRectangle};
+    use crate::util::gdal::add_ndvi_data_set;
     use crate::util::Result;
     use geoengine_datatypes::primitives::{Measurement, SpatialResolution, TimeGranularity};
     use geoengine_datatypes::raster::{TileInformation, TilingStrategy};

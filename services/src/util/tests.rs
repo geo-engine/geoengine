@@ -20,7 +20,8 @@ use geoengine_datatypes::primitives::Measurement;
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
 use geoengine_operators::engine::{RasterOperator, RasterResultDescriptor, TypedOperator};
-use geoengine_operators::source::{create_ndvi_meta_data, GdalSource, GdalSourceParameters};
+use geoengine_operators::source::{GdalSource, GdalSourceParameters};
+use geoengine_operators::util::gdal::create_ndvi_meta_data;
 use warp::http::Response;
 use warp::hyper::body::Bytes;
 

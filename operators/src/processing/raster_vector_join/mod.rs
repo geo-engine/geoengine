@@ -164,7 +164,8 @@ mod tests {
         MockExecutionContext, MockQueryContext, QueryProcessor, QueryRectangle, RasterOperator,
     };
     use crate::mock::MockFeatureCollectionSource;
-    use crate::source::{add_ndvi_data_set, GdalSource, GdalSourceParameters};
+    use crate::source::{GdalSource, GdalSourceParameters};
+    use crate::util::gdal::add_ndvi_data_set;
     use chrono::NaiveDate;
     use float_cmp::approx_eq;
     use futures::StreamExt;

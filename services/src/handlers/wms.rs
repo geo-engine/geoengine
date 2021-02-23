@@ -320,7 +320,8 @@ mod tests {
     use crate::util::tests::{check_allowed_http_methods, register_ndvi_workflow_helper};
     use geoengine_datatypes::operations::image::RgbaColor;
     use geoengine_operators::engine::ExecutionContext;
-    use geoengine_operators::source::{create_ndvi_meta_data, GdalSourceProcessor};
+    use geoengine_operators::source::GdalSourceProcessor;
+    use geoengine_operators::util::gdal::create_ndvi_meta_data;
     use std::convert::TryInto;
     use warp::hyper::body::Bytes;
     use xml::ParserConfig;
