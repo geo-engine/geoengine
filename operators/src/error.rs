@@ -136,6 +136,8 @@ pub enum Error {
         source: chrono::format::ParseError,
     },
 
+    TimeInstanceNotDisplayable, 
+
     DataSetMetaData {
         source: Box<dyn std::error::Error + Send + Sync>,
     },
@@ -159,6 +161,8 @@ pub enum Error {
     CouldNotOpenGdalDataSet {
         file_path: String,
     },
+
+    FilePathNotRepresentableAsString,
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {

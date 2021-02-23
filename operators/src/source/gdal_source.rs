@@ -4,6 +4,7 @@ use crate::{
         RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SourceOperator,
         TypedRasterQueryProcessor,
     },
+    error::Error,
     util::Result,
 };
 
@@ -133,18 +134,20 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor> for GdalMetaDataRegular {
             .try_as_intervals(self.step)
             .map(|ti| ti.expect("is a valid time"));
 
-        let info = time_interval_iterator
-            .map(|time| GdalLoadingInfoPart {
-                time,
-                params: self.params.clone().replace_time_placeholder(
-                    &self.placeholder,
-                    &self.time_format,
-                    time.start(),
-                ),
+        let info: Result<Vec<_>> = time_interval_iterator
+            .map(|time| {
+                Ok(GdalLoadingInfoPart {
+                    time,
+                    params: self.params.replace_time_placeholder(
+                        &self.placeholder,
+                        &self.time_format,
+                        time.start(),
+                    )?,
+                })
             })
             .collect();
 
-        Ok(GdalLoadingInfo { info })
+        Ok(GdalLoadingInfo { info: info? })
     }
 
     fn result_descriptor(&self) -> Result<RasterResultDescriptor> {
@@ -162,25 +165,25 @@ impl GdalDataSetParameters {
         placeholder: &str,
         time_format: &str,
         time: TimeInstance,
-    ) -> Self {
+    ) -> Result<Self> {
         let time_string = time
             .as_naive_date_time()
-            .expect("valid date")
+            .ok_or(Error::TimeInstanceNotDisplayable)?
             .format(time_format)
             .to_string();
         let file_path = self
             .file_path
             .to_str()
-            .expect("file_path is valid")
+            .ok_or(Error::FilePathNotRepresentableAsString)?
             .replace(placeholder, &time_string);
 
-        Self {
+        Ok(Self {
             file_path: file_path.into(),
             rasterband_channel: self.rasterband_channel,
             geo_transform: self.geo_transform,
             bbox: self.bbox,
             file_not_found_handling: FileNotFoundHandling::NoData,
-        }
+        })
     }
 }
 
