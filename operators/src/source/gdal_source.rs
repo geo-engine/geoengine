@@ -536,6 +536,71 @@ mod tests {
     use geoengine_datatypes::raster::{TileInformation, TilingStrategy};
     use geoengine_datatypes::{raster::GridIdx2D, spatial_reference::SpatialReference};
 
+    async fn query_gdal_source(
+        exe_ctx: &mut MockExecutionContext,
+        query_ctx: &MockQueryContext,
+        id: DataSetId,
+        output_shape: GridShape2D,
+        output_bounds: BoundingBox2D,
+        time_interval: TimeInterval,
+    ) -> Vec<Result<RasterTile2D<u8>>> {
+        let op = GdalSource {
+            params: GdalSourceParameters {
+                data_set: id.clone(),
+            },
+        }
+        .boxed();
+
+        let x_query_resolution = output_bounds.size_x() / output_shape.axis_size_x() as f64;
+        let y_query_resolution = output_bounds.size_y() / output_shape.axis_size_y() as f64;
+        let spatial_resolution =
+            SpatialResolution::new_unchecked(x_query_resolution, y_query_resolution);
+
+        let o = op.initialize(exe_ctx).unwrap();
+
+        o.query_processor()
+            .unwrap()
+            .get_u8()
+            .unwrap()
+            .query(
+                QueryRectangle {
+                    bbox: output_bounds,
+                    time_interval,
+                    spatial_resolution,
+                },
+                query_ctx,
+            )
+            .collect()
+            .await
+    }
+
+    fn load_ndvi_jan_2014(
+        output_shape: GridShape2D,
+        output_bounds: BoundingBox2D,
+    ) -> Result<Grid2D<u8>> {
+        GdalSourceProcessor::<u8>::load_tile_data(
+            &GdalDataSetParameters {
+                file_path:
+                    "../operators/test-data/raster/modis_ndvi/MOD13A2_M_NDVI_2014-01-01.TIFF".into(),
+                rasterband_channel: 1,
+                geo_transform: GeoTransform {
+                    origin_coordinate: (-180., 90.).into(),
+                    x_pixel_size: 0.1,
+                    y_pixel_size: -0.1,
+                },
+                bbox: BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
+                file_not_found_handling: FileNotFoundHandling::NoData,
+            },
+            output_bounds,
+            output_shape,
+            GeoTransform {
+                origin_coordinate: Default::default(),
+                x_pixel_size: output_bounds.size_x() / output_shape.axis_size_x() as f64,
+                y_pixel_size: -output_bounds.size_y() / output_shape.axis_size_y() as f64,
+            },
+        )
+    }
+
     #[test]
     fn tiling_strategy_origin() {
         let tile_size_in_pixels = [600, 600];
@@ -735,33 +800,6 @@ mod tests {
         );
     }
 
-    fn load_ndvi_jan_2014(
-        output_shape: GridShape2D,
-        output_bounds: BoundingBox2D,
-    ) -> Result<Grid2D<u8>> {
-        GdalSourceProcessor::<u8>::load_tile_data(
-            &GdalDataSetParameters {
-                file_path:
-                    "../operators/test-data/raster/modis_ndvi/MOD13A2_M_NDVI_2014-01-01.TIFF".into(),
-                rasterband_channel: 1,
-                geo_transform: GeoTransform {
-                    origin_coordinate: (-180., 90.).into(),
-                    x_pixel_size: 0.1,
-                    y_pixel_size: -0.1,
-                },
-                bbox: BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
-                file_not_found_handling: FileNotFoundHandling::NoData,
-            },
-            output_bounds,
-            output_shape,
-            GeoTransform {
-                origin_coordinate: Default::default(),
-                x_pixel_size: output_bounds.size_x() / output_shape.axis_size_x() as f64,
-                y_pixel_size: -output_bounds.size_y() / output_shape.axis_size_y() as f64,
-            },
-        )
-    }
-
     #[test]
     fn test_load_tile_data() {
         let output_shape: GridShape2D = [8, 8].into();
@@ -786,44 +824,6 @@ mod tests {
 
         // TODO: compare actual data
         // assert_eq!(x.data, &[] as &[u8]);
-    }
-
-    async fn query_gdal_source(
-        exe_ctx: &mut MockExecutionContext,
-        query_ctx: &MockQueryContext,
-        id: DataSetId,
-        output_shape: GridShape2D,
-        output_bounds: BoundingBox2D,
-        time_interval: TimeInterval,
-    ) -> Vec<Result<RasterTile2D<u8>>> {
-        let op = GdalSource {
-            params: GdalSourceParameters {
-                data_set: id.clone(),
-            },
-        }
-        .boxed();
-
-        let x_query_resolution = output_bounds.size_x() / output_shape.axis_size_x() as f64;
-        let y_query_resolution = output_bounds.size_y() / output_shape.axis_size_y() as f64;
-        let spatial_resolution =
-            SpatialResolution::new_unchecked(x_query_resolution, y_query_resolution);
-
-        let o = op.initialize(exe_ctx).unwrap();
-
-        o.query_processor()
-            .unwrap()
-            .get_u8()
-            .unwrap()
-            .query(
-                QueryRectangle {
-                    bbox: output_bounds,
-                    time_interval,
-                    spatial_resolution,
-                },
-                query_ctx,
-            )
-            .collect()
-            .await
     }
 
     #[tokio::test]
