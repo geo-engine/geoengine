@@ -329,7 +329,6 @@ where
 
         let tiling_strategy = self.tiling_specification.strategy(x_signed, y_signed);
 
-        // TODO: avoid cloning loading_info?
         stream::iter(tiling_strategy.tile_information_iterator(query.bbox))
             .map(move |tile| {
                 Ok(RasterTile2D::new_with_tile_info(
