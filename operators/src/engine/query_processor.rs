@@ -1,6 +1,6 @@
 use super::query::{QueryContext, QueryRectangle};
 use crate::util::Result;
-use futures::future::BoxFuture;
+use async_trait::async_trait;
 use futures::stream::BoxStream;
 use geoengine_datatypes::collections::{
     DataCollection, MultiLineStringCollection, MultiPolygonCollection,
@@ -85,16 +85,17 @@ where
 }
 
 /// An instantiation of a plot operator that produces a stream of vector results for a query
+#[async_trait]
 pub trait PlotQueryProcessor: Sync + Send {
     type OutputFormat;
 
     fn plot_type(&self) -> &'static str;
 
-    fn plot_query<'a>(
+    async fn plot_query<'a>(
         &'a self,
         query: QueryRectangle,
         ctx: &'a dyn QueryContext,
-    ) -> BoxFuture<'a, Result<Self::OutputFormat>>;
+    ) -> Result<Self::OutputFormat>;
 
     fn boxed(self) -> Box<dyn PlotQueryProcessor<OutputFormat = Self::OutputFormat>>
     where

@@ -7,9 +7,9 @@ use crate::error;
 use crate::error::Error;
 use crate::string_token;
 use crate::util::Result;
-use futures::future::BoxFuture;
+use async_trait::async_trait;
 use futures::stream::BoxStream;
-use futures::{FutureExt, StreamExt, TryFutureExt};
+use futures::{StreamExt, TryFutureExt};
 use geoengine_datatypes::collections::{FeatureCollection, FeatureCollectionInfos};
 use geoengine_datatypes::plots::{Plot, PlotData};
 use geoengine_datatypes::primitives::{
@@ -185,6 +185,7 @@ pub struct HistogramVectorQueryProcessor {
     interactive: bool,
 }
 
+#[async_trait]
 impl PlotQueryProcessor for HistogramRasterQueryProcessor {
     type OutputFormat = PlotData;
 
@@ -192,19 +193,20 @@ impl PlotQueryProcessor for HistogramRasterQueryProcessor {
         HISTOGRAM_OPERATOR_NAME
     }
 
-    fn plot_query<'p>(
+    async fn plot_query<'p>(
         &'p self,
         query: QueryRectangle,
         ctx: &'p dyn QueryContext,
-    ) -> BoxFuture<'p, Result<Self::OutputFormat>> {
+    ) -> Result<Self::OutputFormat> {
         self.preprocess(query, ctx)
             .and_then(move |histogram_metadata| async move {
                 self.process(histogram_metadata, query, ctx).await
             })
-            .boxed()
+            .await
     }
 }
 
+#[async_trait]
 impl PlotQueryProcessor for HistogramVectorQueryProcessor {
     type OutputFormat = PlotData;
 
@@ -212,16 +214,16 @@ impl PlotQueryProcessor for HistogramVectorQueryProcessor {
         HISTOGRAM_OPERATOR_NAME
     }
 
-    fn plot_query<'p>(
+    async fn plot_query<'p>(
         &'p self,
         query: QueryRectangle,
         ctx: &'p dyn QueryContext,
-    ) -> BoxFuture<'p, Result<Self::OutputFormat>> {
+    ) -> Result<Self::OutputFormat> {
         self.preprocess(query, ctx)
             .and_then(move |histogram_metadata| async move {
                 self.process(histogram_metadata, query, ctx).await
             })
-            .boxed()
+            .await
     }
 }
 

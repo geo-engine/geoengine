@@ -1,11 +1,3 @@
-use futures::future::BoxFuture;
-use futures::stream::select_all;
-use futures::{FutureExt, StreamExt};
-use serde::{Deserialize, Serialize};
-use snafu::ensure;
-
-use geoengine_datatypes::raster::RasterTile2D;
-
 use crate::engine::{
     ExecutionContext, InitializedOperator, InitializedOperatorImpl, InitializedPlotOperator,
     Operator, PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor,
@@ -14,6 +6,12 @@ use crate::engine::{
 use crate::error;
 use crate::util::number_statistics::NumberStatistics;
 use crate::util::Result;
+use async_trait::async_trait;
+use futures::stream::select_all;
+use futures::{FutureExt, StreamExt};
+use geoengine_datatypes::raster::RasterTile2D;
+use serde::{Deserialize, Serialize};
+use snafu::ensure;
 
 pub const STATISTICS_OPERATOR_NAME: &str = "Statistics";
 
@@ -84,6 +82,7 @@ pub struct StatisticsQueryProcessor {
     rasters: Vec<TypedRasterQueryProcessor>,
 }
 
+#[async_trait]
 impl PlotQueryProcessor for StatisticsQueryProcessor {
     type OutputFormat = serde_json::Value;
 
@@ -91,11 +90,11 @@ impl PlotQueryProcessor for StatisticsQueryProcessor {
         STATISTICS_OPERATOR_NAME
     }
 
-    fn plot_query<'a>(
+    async fn plot_query<'a>(
         &'a self,
         query: QueryRectangle,
         ctx: &'a dyn QueryContext,
-    ) -> BoxFuture<'a, Result<Self::OutputFormat>> {
+    ) -> Result<Self::OutputFormat> {
         let mut queries = Vec::with_capacity(self.rasters.len());
         for (i, raster_processor) in self.rasters.iter().enumerate() {
             queries.push(
@@ -125,7 +124,7 @@ impl PlotQueryProcessor for StatisticsQueryProcessor {
                 let output: Vec<StatisticsOutput> = number_statistics?.iter().map(StatisticsOutput::from).collect();
                 serde_json::to_value(&output).map_err(Into::into)
             })
-            .boxed()
+            .await
     }
 }
 
