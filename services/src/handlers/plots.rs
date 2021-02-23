@@ -223,7 +223,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn chart() {
+    async fn json_vega() {
         let ctx = InMemoryContext::default();
         let session = create_session_helper(&ctx).await;
 
@@ -283,7 +283,7 @@ mod tests {
                 "output_format": "JsonVega",
                 "plot_type": "Histogram",
                 "data": {
-                    "vega_string": "{\"$schema\":\"https://vega.github.io/schema/vega-lite/v4.json\",\"data\":{\"values\":[{\"bin_start\":0.0,\"bin_end\":2.5,\"count\":2},{\"bin_start\":2.5,\"bin_end\":5.0,\"count\":2},{\"bin_start\":5.0,\"bin_end\":7.5,\"count\":2},{\"bin_start\":7.5,\"bin_end\":10.0,\"count\":0}]},\"mark\":\"bar\",\"encoding\":{\"x\":{\"field\":\"bin_start\",\"bin\":{\"binned\":true,\"step\":2.5}},\"x2\":{\"field\":\"bin_end\"},\"y\":{\"field\":\"count\",\"type\":\"quantitative\"}}}",
+                    "vega_string": "{\"$schema\":\"https://vega.github.io/schema/vega-lite/v4.json\",\"data\":{\"values\":[{\"bin_start\":0.0,\"bin_end\":2.5,\"Frequency\":2},{\"bin_start\":2.5,\"bin_end\":5.0,\"Frequency\":2},{\"bin_start\":5.0,\"bin_end\":7.5,\"Frequency\":2},{\"bin_start\":7.5,\"bin_end\":10.0,\"Frequency\":0}]},\"mark\":\"bar\",\"encoding\":{\"x\":{\"field\":\"bin_start\",\"bin\":{\"binned\":true,\"step\":2.5},\"axis\":{\"title\":\"\"}},\"x2\":{\"field\":\"bin_end\"},\"y\":{\"field\":\"Frequency\",\"type\":\"quantitative\"}}}",
                     "metadata": null
                 }
             })
