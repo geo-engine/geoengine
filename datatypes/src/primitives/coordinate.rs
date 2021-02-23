@@ -6,7 +6,11 @@ use ocl::OclPrm;
 #[cfg(feature = "postgres")]
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
-use std::{fmt, slice};
+use std::{
+    fmt,
+    ops::{Add, Div, Mul, Sub},
+    slice,
+};
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, PartialOrd, Serialize, Default)]
 #[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
@@ -35,6 +39,20 @@ impl Coordinate2D {
     ///
     pub fn new(x: f64, y: f64) -> Self {
         Self { x, y }
+    }
+
+    pub fn min_elements(&self, other: Self) -> Self {
+        Coordinate2D {
+            x: self.x.min(other.x),
+            y: self.y.min(other.y),
+        }
+    }
+
+    pub fn max_elements(&self, other: Self) -> Self {
+        Coordinate2D {
+            x: self.x.max(other.x),
+            y: self.y.max(other.y),
+        }
     }
 }
 
@@ -180,6 +198,70 @@ impl AsRef<[f64]> for Coordinate2D {
     }
 }
 
+impl Add for Coordinate2D {
+    type Output = Coordinate2D;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Coordinate2D::new(self.x + rhs.x, self.y + rhs.y)
+    }
+}
+
+impl Add<f64> for Coordinate2D {
+    type Output = Coordinate2D;
+
+    fn add(self, rhs: f64) -> Self::Output {
+        Coordinate2D::new(self.x + rhs, self.y + rhs)
+    }
+}
+
+impl Sub for Coordinate2D {
+    type Output = Coordinate2D;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        Coordinate2D::new(self.x - rhs.x, self.y - rhs.y)
+    }
+}
+
+impl Sub<f64> for Coordinate2D {
+    type Output = Coordinate2D;
+
+    fn sub(self, rhs: f64) -> Self::Output {
+        Coordinate2D::new(self.x - rhs, self.y - rhs)
+    }
+}
+
+impl Mul for Coordinate2D {
+    type Output = Coordinate2D;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        Coordinate2D::new(self.x * rhs.x, self.y * rhs.y)
+    }
+}
+
+impl Mul<f64> for Coordinate2D {
+    type Output = Coordinate2D;
+
+    fn mul(self, rhs: f64) -> Self::Output {
+        Coordinate2D::new(self.x * rhs, self.y * rhs)
+    }
+}
+
+impl Div for Coordinate2D {
+    type Output = Coordinate2D;
+
+    fn div(self, rhs: Self) -> Self::Output {
+        Coordinate2D::new(self.x / rhs.x, self.y / rhs.y)
+    }
+}
+
+impl Div<f64> for Coordinate2D {
+    type Output = Coordinate2D;
+
+    fn div(self, rhs: f64) -> Self::Output {
+        Coordinate2D::new(self.x / rhs, self.y / rhs)
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -189,5 +271,53 @@ mod test {
     fn byte_size() {
         assert_eq!(mem::size_of::<Coordinate2D>(), 2 * mem::size_of::<f64>());
         assert_eq!(mem::size_of::<Coordinate2D>(), 2 * 8);
+    }
+
+    #[test]
+    fn add() {
+        let res = Coordinate2D { x: 4., y: 9. } + Coordinate2D { x: 1., y: 1. };
+        assert_eq!(res, Coordinate2D { x: 5., y: 10. })
+    }
+
+    #[test]
+    fn add_scalar() {
+        let res = Coordinate2D { x: 4., y: 9. } + 1.;
+        assert_eq!(res, Coordinate2D { x: 5., y: 10. })
+    }
+
+    #[test]
+    fn sub() {
+        let res = Coordinate2D { x: 4., y: 9. } - Coordinate2D { x: 1., y: 1. };
+        assert_eq!(res, Coordinate2D { x: 3., y: 8. })
+    }
+
+    #[test]
+    fn sub_scalar() {
+        let res = Coordinate2D { x: 4., y: 9. } - 1.;
+        assert_eq!(res, Coordinate2D { x: 3., y: 8. })
+    }
+
+    #[test]
+    fn mul() {
+        let res = Coordinate2D { x: 4., y: 9. } * Coordinate2D { x: 2., y: 2. };
+        assert_eq!(res, Coordinate2D { x: 8., y: 18. })
+    }
+
+    #[test]
+    fn mul_scalar() {
+        let res = Coordinate2D { x: 4., y: 9. } * 2.;
+        assert_eq!(res, Coordinate2D { x: 8., y: 18. })
+    }
+
+    #[test]
+    fn div() {
+        let res = Coordinate2D { x: 4., y: 8. } / Coordinate2D { x: 2., y: 2. };
+        assert_eq!(res, Coordinate2D { x: 2., y: 4. })
+    }
+
+    #[test]
+    fn div_scalar() {
+        let res = Coordinate2D { x: 4., y: 8. } / 2.;
+        assert_eq!(res, Coordinate2D { x: 2., y: 4. })
     }
 }

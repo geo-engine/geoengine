@@ -3,6 +3,7 @@ mod coordinate;
 pub(self) mod error;
 mod feature_data;
 mod geometry;
+mod line;
 mod measurement;
 mod multi_line_string;
 mod multi_point;
@@ -22,6 +23,7 @@ pub use feature_data::{
     FeatureDataValue, NumberDataRef, TextDataRef,
 };
 pub use geometry::{Geometry, GeometryRef, TypedGeometry};
+pub use line::Line;
 pub use measurement::Measurement;
 pub use multi_line_string::{MultiLineString, MultiLineStringAccess, MultiLineStringRef};
 pub use multi_point::{MultiPoint, MultiPointAccess, MultiPointRef};

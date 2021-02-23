@@ -12,6 +12,8 @@ use crate::primitives::{Coordinate2D, Geometry};
 use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::Result;
 
+use super::SpatialBounded;
+
 /// A trait that allows a common access to points of `MultiPoint`s and its references
 pub trait MultiPointAccess {
     fn points(&self) -> &[Coordinate2D];
@@ -275,6 +277,16 @@ impl<'g> From<&MultiPointRef<'g>> for MultiPoint {
     }
 }
 
+impl<A> SpatialBounded for A
+where
+    A: MultiPointAccess,
+{
+    fn spatial_bounds(&self) -> BoundingBox2D {
+        BoundingBox2D::from_coord_ref_iter(self.points())
+            .expect("there must be at least one cordinate in a multipoint")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -312,5 +324,18 @@ mod tests {
         );
 
         Ok(())
+    }
+
+    #[test]
+    fn spatial_bounds() {
+        let expected = BoundingBox2D::new_unchecked((0., 0.).into(), (1., 1.).into());
+        let coordinates: Vec<Coordinate2D> = Vec::from([
+            (1., 0.4).into(),
+            (0.8, 0.0).into(),
+            (0.3, 0.1).into(),
+            (0.0, 1.0).into(),
+        ]);
+        let mp = MultiPoint { coordinates };
+        assert_eq!(mp.spatial_bounds(), expected)
     }
 }

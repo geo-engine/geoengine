@@ -17,12 +17,10 @@ use crate::util::Result;
 use arrow::datatypes::DataType;
 
 /// A trait that allows a common access to polygons of `MultiPolygon`s and its references
-pub trait MultiPolygonAccess<R, L>
-where
-    R: AsRef<[L]>,
-    L: AsRef<[Coordinate2D]>,
-{
-    fn polygons(&self) -> &[R];
+pub trait MultiPolygonAccess {
+    type L: AsRef<[Coordinate2D]>;
+    type R: AsRef<[Self::L]>;
+    fn polygons(&self) -> &[Self::R];
 }
 
 type Ring = Vec<Coordinate2D>;
@@ -77,8 +75,10 @@ impl MultiPolygon {
     }
 }
 
-impl MultiPolygonAccess<Polygon, Ring> for MultiPolygon {
-    fn polygons(&self) -> &[Polygon] {
+impl MultiPolygonAccess for MultiPolygon {
+    type R = Polygon;
+    type L = Ring;
+    fn polygons(&self) -> &[Self::R] {
         &self.polygons
     }
 }
@@ -346,8 +346,11 @@ impl<'g> MultiPolygonRef<'g> {
     }
 }
 
-impl<'g> MultiPolygonAccess<PolygonRef<'g>, RingRef<'g>> for MultiPolygonRef<'g> {
-    fn polygons(&self) -> &[PolygonRef<'g>] {
+impl<'g> MultiPolygonAccess for MultiPolygonRef<'g> {
+    type R = PolygonRef<'g>;
+    type L = RingRef<'g>;
+
+    fn polygons(&self) -> &[Self::R] {
         &self.polygons
     }
 }
@@ -404,21 +407,19 @@ mod tests {
 
     #[test]
     fn access() {
-        fn aggregate<T: MultiPolygonAccess<R, L>, R: AsRef<[L]>, L: AsRef<[Coordinate2D]>>(
-            multi_line_string: &T,
-        ) -> (usize, usize, usize) {
+        fn aggregate<T: MultiPolygonAccess>(multi_line_string: &T) -> (usize, usize, usize) {
             let number_of_polygons = multi_line_string.polygons().len();
             let number_of_rings = multi_line_string
                 .polygons()
                 .iter()
                 .map(AsRef::as_ref)
-                .map(<[L]>::len)
+                .map(<[_]>::len)
                 .sum();
             let number_of_coordinates = multi_line_string
                 .polygons()
                 .iter()
                 .map(AsRef::as_ref)
-                .flat_map(<[L]>::iter)
+                .flat_map(<[_]>::iter)
                 .map(AsRef::as_ref)
                 .map(<[Coordinate2D]>::len)
                 .sum();

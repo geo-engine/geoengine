@@ -16,11 +16,9 @@ use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::Result;
 
 /// A trait that allows a common access to lines of `MultiLineString`s and its references
-pub trait MultiLineStringAccess<L>
-where
-    L: AsRef<[Coordinate2D]>,
-{
-    fn lines(&self) -> &[L];
+pub trait MultiLineStringAccess {
+    type L: AsRef<[Coordinate2D]>;
+    fn lines(&self) -> &[Self::L];
 }
 
 /// A representation of a simple feature multi line string
@@ -44,7 +42,8 @@ impl MultiLineString {
     }
 }
 
-impl MultiLineStringAccess<Vec<Coordinate2D>> for MultiLineString {
+impl MultiLineStringAccess for MultiLineString {
+    type L = Vec<Coordinate2D>;
     fn lines(&self) -> &[Vec<Coordinate2D>] {
         &self.coordinates
     }
@@ -260,7 +259,8 @@ impl<'g> MultiLineStringRef<'g> {
     }
 }
 
-impl<'g> MultiLineStringAccess<&'g [Coordinate2D]> for MultiLineStringRef<'g> {
+impl<'g> MultiLineStringAccess for MultiLineStringRef<'g> {
+    type L = &'g [Coordinate2D];
     fn lines(&self) -> &[&'g [Coordinate2D]] {
         &self.point_coordinates
     }
@@ -310,9 +310,7 @@ mod tests {
 
     #[test]
     fn access() {
-        fn aggregate<T: MultiLineStringAccess<L>, L: AsRef<[Coordinate2D]>>(
-            multi_line_string: &T,
-        ) -> (usize, usize) {
+        fn aggregate<T: MultiLineStringAccess>(multi_line_string: &T) -> (usize, usize) {
             let number_of_lines = multi_line_string.lines().len();
             let number_of_coordinates = multi_line_string
                 .lines()

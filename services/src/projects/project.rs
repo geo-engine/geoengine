@@ -594,6 +594,7 @@ mod tests {
 
         assert_eq!(update, deserialized);
 
-        let _: UpdateProject = serde_json::from_reader(serialized.as_bytes()).unwrap();
+        let _update_project: UpdateProject =
+            serde_json::from_reader(serialized.as_bytes()).unwrap();
     }
 }
