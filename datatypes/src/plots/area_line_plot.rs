@@ -1,5 +1,5 @@
 use crate::error;
-use crate::plots::{Plot, PlotData};
+use crate::plots::{Plot, PlotData, PlotMetaData};
 use crate::primitives::{Measurement, TimeInstance};
 use crate::util::Result;
 use snafu::ensure;
@@ -32,12 +32,7 @@ impl AreaLineChart {
 }
 
 impl Plot for AreaLineChart {
-    type PlotDataMetadataType = ();
-
-    fn to_vega_embeddable(
-        &self,
-        _allow_interactions: bool,
-    ) -> Result<PlotData<Self::PlotDataMetadataType>> {
+    fn to_vega_embeddable(&self, _allow_interactions: bool) -> Result<PlotData> {
         let data = self
             .timestamps
             .iter()
@@ -81,12 +76,8 @@ impl Plot for AreaLineChart {
 
         Ok(PlotData {
             vega_string,
-            metadata: (),
+            metadata: PlotMetaData::None,
         })
-    }
-
-    fn to_png(&self, _width_px: u16, _height_px: u16) -> Vec<u8> {
-        unimplemented!()
     }
 }
 
@@ -113,8 +104,8 @@ mod tests {
         assert_eq!(
             chart.to_vega_embeddable(false).unwrap(),
             PlotData {
-                vega_string: "".to_string(),
-                metadata: (),
+                vega_string: r#"{"$schema":"https://vega.github.io/schema/vega-lite/v4.17.0.json","data":{"values":[{"x":"2010-01-01T00:00:00+00:00","y":0.0},{"x":"2011-01-01T00:00:00+00:00","y":1.0},{"x":"2012-01-01T00:00:00+00:00","y":4.0},{"x":"2013-01-01T00:00:00+00:00","y":9.0},{"x":"2014-01-01T00:00:00+00:00","y":7.0}]},"description":"Area Plot","encoding":{"x":{"field":"x","title":"Time","type":"temporal"},"y":{"field":"y","title":"","type":"quantitative"}},"mark":{"type":"area","line":true,"point":true}}"#.to_owned(),
+                metadata: PlotMetaData::None,
             }
         );
     }

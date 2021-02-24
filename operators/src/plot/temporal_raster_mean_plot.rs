@@ -6,15 +6,17 @@ use crate::engine::{
 use crate::error;
 use crate::util::math::average_floor;
 use crate::util::Result;
-use futures::future::BoxFuture;
+use async_trait::async_trait;
 use futures::stream::BoxStream;
-use futures::{FutureExt, StreamExt, TryFutureExt};
-use geoengine_datatypes::plots::{AreaLineChart, Plot};
+use futures::StreamExt;
+use geoengine_datatypes::plots::{AreaLineChart, Plot, PlotData};
 use geoengine_datatypes::primitives::{Measurement, TimeInstance, TimeInterval};
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::collections::BTreeMap;
+
+pub const TEMPORAL_RASTER_MEAN_PLOT_NAME: &str = "Temporal Area Mean Plot";
 
 /// A plot that shows the mean values of rasters over time as an area plot.
 pub type TemporalRasterMeanPlot = Operator<TemporalRasterMeanPlotParams>;
@@ -90,7 +92,7 @@ impl InitializedOperator<PlotResultDescriptor, TypedPlotQueryProcessor>
             TemporalRasterMeanPlotQueryProcessor { raster, time_position, measurement }.boxed()
         });
 
-        Ok(TypedPlotQueryProcessor::Json(processor))
+        Ok(TypedPlotQueryProcessor::JsonVega(processor))
     }
 }
 
@@ -101,22 +103,27 @@ pub struct TemporalRasterMeanPlotQueryProcessor<P: Pixel> {
     measurement: Measurement,
 }
 
+#[async_trait]
 impl<P: Pixel> PlotQueryProcessor for TemporalRasterMeanPlotQueryProcessor<P> {
-    // TODO: chart
-    type PlotType = serde_json::Value;
+    type OutputFormat = PlotData;
 
-    fn plot_query<'a>(
+    fn plot_type(&self) -> &'static str {
+        TEMPORAL_RASTER_MEAN_PLOT_NAME
+    }
+
+    async fn plot_query<'a>(
         &'a self,
         query: QueryRectangle,
         ctx: &'a dyn QueryContext,
-    ) -> BoxFuture<'a, Result<Self::PlotType>> {
-        Self::calculate_means(self.raster.query(query, ctx), self.time_position)
-            .and_then(move |means| async move {
-                let plot = Self::generate_plot(means, self.measurement.clone())?;
-                let plot = plot.to_vega_embeddable(false)?;
-                Ok(serde_json::to_value(&plot)?)
-            })
-            .boxed()
+    ) -> Result<Self::OutputFormat> {
+        let means =
+            Self::calculate_means(self.raster.query(query, ctx), self.time_position).await?;
+
+        let plot = Self::generate_plot(means, self.measurement.clone())?;
+
+        let plot_data = plot.to_vega_embeddable(false)?;
+
+        Ok(plot_data)
     }
 }
 
@@ -230,20 +237,20 @@ impl MeanCalculator {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
-
     use super::*;
+
     use crate::engine::{
         MockExecutionContext, MockQueryContext, RasterOperator, RasterResultDescriptor,
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use chrono::NaiveDate;
-    use geoengine_datatypes::plots::PlotData;
+    use geoengine_datatypes::plots::{PlotData, PlotMetaData};
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Measurement, SpatialResolution, TimeInterval,
     };
     use geoengine_datatypes::raster::{Grid2D, RasterDataType, TileInformation};
     use geoengine_datatypes::spatial_reference::SpatialReference;
+    use serde_json::json;
 
     #[test]
     fn serialization() {
@@ -297,7 +304,7 @@ mod tests {
         let processor = temporal_raster_mean_plot
             .query_processor()
             .unwrap()
-            .json()
+            .json_vega()
             .unwrap();
 
         let result = processor
@@ -313,12 +320,11 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            result.to_string(),
-            json!({
-                "vega_string": "{\"$schema\":\"https://vega.github.io/schema/vega-lite/v4.17.0.json\",\"data\":{\"values\":[{\"x\":\"1995-01-01T00:00:00+00:00\",\"y\":3.5}]},\"description\":\"Area Plot\",\"encoding\":{\"x\":{\"field\":\"x\",\"title\":\"Time\",\"type\":\"temporal\"},\"y\":{\"field\":\"y\",\"title\":\"\",\"type\":\"quantitative\"}},\"mark\":{\"type\":\"area\",\"line\":true,\"point\":true}}",
-                "metadata": null
-            })
-                .to_string()
+            result,
+            PlotData {
+                vega_string: r#"{"$schema":"https://vega.github.io/schema/vega-lite/v4.17.0.json","data":{"values":[{"x":"1995-01-01T00:00:00+00:00","y":3.5}]},"description":"Area Plot","encoding":{"x":{"field":"x","title":"Time","type":"temporal"},"y":{"field":"y","title":"","type":"quantitative"}},"mark":{"type":"area","line":true,"point":true}}"#.to_owned(),
+                metadata: PlotMetaData::None,
+            }
         );
     }
 
@@ -398,7 +404,7 @@ mod tests {
         let processor = temporal_raster_mean_plot
             .query_processor()
             .unwrap()
-            .json()
+            .json_vega()
             .unwrap();
 
         let result = processor
@@ -414,7 +420,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            serde_json::from_value::<PlotData<()>>(result).unwrap(),
+            result,
             AreaLineChart::new(
                 vec![
                     TimeInstance::from(NaiveDate::from_ymd(1990, 1, 1).and_hms(0, 0, 0)),
