@@ -378,8 +378,6 @@ where
     ) -> BoxStream<Result<RasterTile2D<T>>> {
         let meta_data = self.meta_data.loading_info(query).unwrap(); // TODO: change when query signature returns Result
 
-        // TODO: more efficient chaining of streams
-        // TODO: load tile data async?
         stream::iter(meta_data.info.into_iter())
             .map(move |info| self.tile_stream(query, info))
             .flatten()
