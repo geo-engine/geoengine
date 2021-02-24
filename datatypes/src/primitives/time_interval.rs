@@ -1,5 +1,4 @@
 use crate::error;
-use crate::error::Error;
 use crate::primitives::TimeInstance;
 use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::Result;
@@ -11,7 +10,6 @@ use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::cmp::Ordering;
-use std::convert::TryFrom;
 use std::fmt::{Debug, Display};
 
 /// Stores time intervals in ms in close-open semantic [start, end)
@@ -343,11 +341,9 @@ impl PartialOrd for TimeInterval {
     }
 }
 
-impl TryFrom<TimeInstance> for TimeInterval {
-    type Error = Error;
-
-    fn try_from(time_instance: TimeInstance) -> Result<Self, Self::Error> {
-        Self::new(time_instance, time_instance)
+impl From<TimeInstance> for TimeInterval {
+    fn from(time_instance: TimeInstance) -> Self {
+        Self::new_unchecked(time_instance, time_instance)
     }
 }
 
