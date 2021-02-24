@@ -27,6 +27,14 @@ pub struct MeanRasterPixelValuesOverTimeParams {
     /// Where should the x-axis (time) tick be positioned?
     /// At either time start, time end or in the center.
     time_position: MeanRasterPixelValuesOverTimePosition,
+
+    /// Whether to fill the area under the curve.
+    #[serde(default = "default_true")]
+    area: bool,
+}
+
+const fn default_true() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -87,9 +95,10 @@ impl InitializedOperator<PlotResultDescriptor, TypedPlotQueryProcessor>
             .result_descriptor()
             .measurement
             .clone();
+        let draw_area = self.params.area;
 
         let processor = call_on_generic_raster_processor!(input_processor, raster => {
-            MeanRasterPixelValuesOverTimeQueryProcessor { raster, time_position, measurement }.boxed()
+            MeanRasterPixelValuesOverTimeQueryProcessor { raster, time_position, measurement, draw_area }.boxed()
         });
 
         Ok(TypedPlotQueryProcessor::JsonVega(processor))
@@ -101,6 +110,7 @@ pub struct MeanRasterPixelValuesOverTimeQueryProcessor<P: Pixel> {
     raster: Box<dyn RasterQueryProcessor<RasterType = P>>,
     time_position: MeanRasterPixelValuesOverTimePosition,
     measurement: Measurement,
+    draw_area: bool,
 }
 
 #[async_trait]
@@ -119,7 +129,7 @@ impl<P: Pixel> PlotQueryProcessor for MeanRasterPixelValuesOverTimeQueryProcesso
         let means =
             Self::calculate_means(self.raster.query(query, ctx), self.time_position).await?;
 
-        let plot = Self::generate_plot(means, self.measurement.clone())?;
+        let plot = Self::generate_plot(means, self.measurement.clone(), self.draw_area)?;
 
         let plot_data = plot.to_vega_embeddable(false)?;
 
@@ -163,6 +173,7 @@ impl<P: Pixel> MeanRasterPixelValuesOverTimeQueryProcessor<P> {
     fn generate_plot(
         means: BTreeMap<TimeInstance, MeanCalculator>,
         measurement: Measurement,
+        draw_area: bool,
     ) -> Result<AreaLineChart> {
         let mut timestamps = Vec::with_capacity(means.len());
         let mut values = Vec::with_capacity(means.len());
@@ -172,7 +183,7 @@ impl<P: Pixel> MeanRasterPixelValuesOverTimeQueryProcessor<P> {
             values.push(mean_calculator.mean());
         }
 
-        AreaLineChart::new(timestamps, values, measurement).map_err(Into::into)
+        AreaLineChart::new(timestamps, values, measurement, draw_area).map_err(Into::into)
     }
 }
 
@@ -256,6 +267,7 @@ mod tests {
         let temporal_raster_mean_plot = MeanRasterPixelValuesOverTime {
             params: MeanRasterPixelValuesOverTimeParams {
                 time_position: MeanRasterPixelValuesOverTimePosition::Start,
+                area: true,
             },
             raster_sources: vec![],
             vector_sources: vec![],
@@ -264,7 +276,8 @@ mod tests {
         let serialized = json!({
             "type": "MeanRasterPixelValuesOverTime",
             "params": {
-                "time_position": "start"
+                "time_position": "start",
+                "area": true,
             },
             "raster_sources": [],
             "vector_sources": [],
@@ -284,6 +297,7 @@ mod tests {
         let temporal_raster_mean_plot = MeanRasterPixelValuesOverTime {
             params: MeanRasterPixelValuesOverTimeParams {
                 time_position: MeanRasterPixelValuesOverTimePosition::Center,
+                area: true,
             },
             raster_sources: vec![generate_mock_raster_source(
                 vec![TimeInterval::new(
@@ -368,6 +382,7 @@ mod tests {
         let temporal_raster_mean_plot = MeanRasterPixelValuesOverTime {
             params: MeanRasterPixelValuesOverTimeParams {
                 time_position: MeanRasterPixelValuesOverTimePosition::Start,
+                area: true,
             },
             raster_sources: vec![generate_mock_raster_source(
                 vec![
@@ -431,6 +446,7 @@ mod tests {
                 ],
                 vec![3.5, 8.5, 5.5],
                 Measurement::Unitless,
+                true,
             )
             .unwrap()
             .to_vega_embeddable(false)
