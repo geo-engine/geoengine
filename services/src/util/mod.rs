@@ -1,10 +1,10 @@
-pub use geoengine_datatypes::util::Identifier;
 use serde::de::Error;
 use serde::{Deserialize, Serialize};
 
+pub use geoengine_datatypes::util::Identifier;
+
 pub mod config;
 pub mod parsing;
-mod string_token;
 pub mod tests;
 pub mod user_input;
 
