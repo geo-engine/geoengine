@@ -10,6 +10,6 @@ pub use self::statistics::{
     InitializedStatistics, Statistics, StatisticsParams, StatisticsQueryProcessor,
 };
 pub use self::temporal_raster_mean_plot::{
-    InitializedTemporalRasterMeanPlot, TemporalRasterMeanPlot, TemporalRasterMeanPlotParams,
-    TemporalRasterMeanPlotQueryProcessor,
+    InitializedMeanRasterPixelValuesOverTime, MeanRasterPixelValuesOverTime,
+    MeanRasterPixelValuesOverTimeParams, MeanRasterPixelValuesOverTimeQueryProcessor,
 };

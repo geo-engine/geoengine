@@ -16,29 +16,29 @@ use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::collections::BTreeMap;
 
-pub const TEMPORAL_RASTER_MEAN_PLOT_NAME: &str = "Temporal Area Mean Plot";
+pub const MEAN_RASTER_PIXEL_VALUES_OVER_TIME_NAME: &str = "Mean Raster Pixel Values over Time";
 
 /// A plot that shows the mean values of rasters over time as an area plot.
-pub type TemporalRasterMeanPlot = Operator<TemporalRasterMeanPlotParams>;
+pub type MeanRasterPixelValuesOverTime = Operator<MeanRasterPixelValuesOverTimeParams>;
 
-/// The parameter spec for `TemporalRasterMeanPlot`
+/// The parameter spec for `MeanRasterPixelValuesOverTime`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct TemporalRasterMeanPlotParams {
+pub struct MeanRasterPixelValuesOverTimeParams {
     /// Where should the x-axis (time) tick be positioned?
     /// At either time start, time end or in the center.
-    time_position: TemporalRasterMeanPlotTimePosition,
+    time_position: MeanRasterPixelValuesOverTimePosition,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub enum TemporalRasterMeanPlotTimePosition {
+pub enum MeanRasterPixelValuesOverTimePosition {
     Start,
     Center,
     End,
 }
 
 #[typetag::serde]
-impl PlotOperator for TemporalRasterMeanPlot {
+impl PlotOperator for MeanRasterPixelValuesOverTime {
     fn initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
@@ -58,7 +58,7 @@ impl PlotOperator for TemporalRasterMeanPlot {
             }
         );
 
-        Ok(InitializedTemporalRasterMeanPlot {
+        Ok(InitializedMeanRasterPixelValuesOverTime {
             params: self.params,
             result_descriptor: PlotResultDescriptor {},
             raster_sources: self
@@ -73,12 +73,12 @@ impl PlotOperator for TemporalRasterMeanPlot {
     }
 }
 
-/// The initialization of `TemporalRasterMeanPlot`
-pub type InitializedTemporalRasterMeanPlot =
-    InitializedOperatorImpl<TemporalRasterMeanPlotParams, PlotResultDescriptor, ()>;
+/// The initialization of `MeanRasterPixelValuesOverTime`
+pub type InitializedMeanRasterPixelValuesOverTime =
+    InitializedOperatorImpl<MeanRasterPixelValuesOverTimeParams, PlotResultDescriptor, ()>;
 
 impl InitializedOperator<PlotResultDescriptor, TypedPlotQueryProcessor>
-    for InitializedTemporalRasterMeanPlot
+    for InitializedMeanRasterPixelValuesOverTime
 {
     fn query_processor(&self) -> Result<TypedPlotQueryProcessor> {
         let input_processor = self.raster_sources[0].query_processor()?;
@@ -89,7 +89,7 @@ impl InitializedOperator<PlotResultDescriptor, TypedPlotQueryProcessor>
             .clone();
 
         let processor = call_on_generic_raster_processor!(input_processor, raster => {
-            TemporalRasterMeanPlotQueryProcessor { raster, time_position, measurement }.boxed()
+            MeanRasterPixelValuesOverTimeQueryProcessor { raster, time_position, measurement }.boxed()
         });
 
         Ok(TypedPlotQueryProcessor::JsonVega(processor))
@@ -97,18 +97,18 @@ impl InitializedOperator<PlotResultDescriptor, TypedPlotQueryProcessor>
 }
 
 /// A query processor that calculates the `TemporalRasterMeanPlot` about its input.
-pub struct TemporalRasterMeanPlotQueryProcessor<P: Pixel> {
+pub struct MeanRasterPixelValuesOverTimeQueryProcessor<P: Pixel> {
     raster: Box<dyn RasterQueryProcessor<RasterType = P>>,
-    time_position: TemporalRasterMeanPlotTimePosition,
+    time_position: MeanRasterPixelValuesOverTimePosition,
     measurement: Measurement,
 }
 
 #[async_trait]
-impl<P: Pixel> PlotQueryProcessor for TemporalRasterMeanPlotQueryProcessor<P> {
+impl<P: Pixel> PlotQueryProcessor for MeanRasterPixelValuesOverTimeQueryProcessor<P> {
     type OutputFormat = PlotData;
 
     fn plot_type(&self) -> &'static str {
-        TEMPORAL_RASTER_MEAN_PLOT_NAME
+        MEAN_RASTER_PIXEL_VALUES_OVER_TIME_NAME
     }
 
     async fn plot_query<'a>(
@@ -127,10 +127,10 @@ impl<P: Pixel> PlotQueryProcessor for TemporalRasterMeanPlotQueryProcessor<P> {
     }
 }
 
-impl<P: Pixel> TemporalRasterMeanPlotQueryProcessor<P> {
+impl<P: Pixel> MeanRasterPixelValuesOverTimeQueryProcessor<P> {
     async fn calculate_means(
         mut tile_stream: BoxStream<'_, Result<RasterTile2D<P>>>,
-        position: TemporalRasterMeanPlotTimePosition,
+        position: MeanRasterPixelValuesOverTimePosition,
     ) -> Result<BTreeMap<TimeInstance, MeanCalculator>> {
         let mut means: BTreeMap<TimeInstance, MeanCalculator> = BTreeMap::new();
 
@@ -149,15 +149,14 @@ impl<P: Pixel> TemporalRasterMeanPlotQueryProcessor<P> {
     #[inline]
     fn time_interval_projection(
         time_interval: TimeInterval,
-        time_position: TemporalRasterMeanPlotTimePosition,
+        time_position: MeanRasterPixelValuesOverTimePosition,
     ) -> TimeInstance {
         match time_position {
-            TemporalRasterMeanPlotTimePosition::Start => time_interval.start(),
-            TemporalRasterMeanPlotTimePosition::Center => TimeInstance::from_millis(average_floor(
-                time_interval.start().inner(),
-                time_interval.end().inner(),
-            )),
-            TemporalRasterMeanPlotTimePosition::End => time_interval.end(),
+            MeanRasterPixelValuesOverTimePosition::Start => time_interval.start(),
+            MeanRasterPixelValuesOverTimePosition::Center => TimeInstance::from_millis(
+                average_floor(time_interval.start().inner(), time_interval.end().inner()),
+            ),
+            MeanRasterPixelValuesOverTimePosition::End => time_interval.end(),
         }
     }
 
@@ -254,16 +253,16 @@ mod tests {
 
     #[test]
     fn serialization() {
-        let temporal_raster_mean_plot = TemporalRasterMeanPlot {
-            params: TemporalRasterMeanPlotParams {
-                time_position: TemporalRasterMeanPlotTimePosition::Start,
+        let temporal_raster_mean_plot = MeanRasterPixelValuesOverTime {
+            params: MeanRasterPixelValuesOverTimeParams {
+                time_position: MeanRasterPixelValuesOverTimePosition::Start,
             },
             raster_sources: vec![],
             vector_sources: vec![],
         };
 
         let serialized = json!({
-            "type": "TemporalRasterMeanPlot",
+            "type": "MeanRasterPixelValuesOverTime",
             "params": {
                 "time_position": "start"
             },
@@ -272,16 +271,19 @@ mod tests {
         })
         .to_string();
 
-        let deserialized: TemporalRasterMeanPlot = serde_json::from_str(&serialized).unwrap();
+        serde_json::from_str::<Box<dyn PlotOperator>>(&serialized).unwrap();
+
+        let deserialized: MeanRasterPixelValuesOverTime =
+            serde_json::from_str(&serialized).unwrap();
 
         assert_eq!(deserialized.params, temporal_raster_mean_plot.params);
     }
 
     #[tokio::test]
     async fn single_raster() {
-        let temporal_raster_mean_plot = TemporalRasterMeanPlot {
-            params: TemporalRasterMeanPlotParams {
-                time_position: TemporalRasterMeanPlotTimePosition::Center,
+        let temporal_raster_mean_plot = MeanRasterPixelValuesOverTime {
+            params: MeanRasterPixelValuesOverTimeParams {
+                time_position: MeanRasterPixelValuesOverTimePosition::Center,
             },
             raster_sources: vec![generate_mock_raster_source(
                 vec![TimeInterval::new(
@@ -363,9 +365,9 @@ mod tests {
 
     #[tokio::test]
     async fn raster_series() {
-        let temporal_raster_mean_plot = TemporalRasterMeanPlot {
-            params: TemporalRasterMeanPlotParams {
-                time_position: TemporalRasterMeanPlotTimePosition::Start,
+        let temporal_raster_mean_plot = MeanRasterPixelValuesOverTime {
+            params: MeanRasterPixelValuesOverTimeParams {
+                time_position: MeanRasterPixelValuesOverTimePosition::Start,
             },
             raster_sources: vec![generate_mock_raster_source(
                 vec![
