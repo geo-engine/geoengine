@@ -40,13 +40,10 @@ impl MultiPoint {
         M: TryInto<MultiPoint, Error = E>,
         E: Into<crate::error::Error>,
     {
-        let mut multi_points = Vec::with_capacity(raw_multi_points.len());
-
-        for multi_point in raw_multi_points {
-            multi_points.push(multi_point.try_into().map_err(Into::into)?);
-        }
-
-        Ok(multi_points)
+        raw_multi_points
+            .into_iter()
+            .map(|m| m.try_into().map_err(Into::into))
+            .collect()
     }
 }
 
