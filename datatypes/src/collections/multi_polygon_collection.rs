@@ -1,12 +1,28 @@
-use crate::collections::{
-    FeatureCollection, FeatureCollectionInfos, FeatureCollectionRowBuilder,
-    GeoFeatureCollectionRowBuilder, GeometryCollection, GeometryRandomAccess, IntoGeometryIterator,
+use crate::{
+    collections::{
+        FeatureCollection, FeatureCollectionInfos, FeatureCollectionRowBuilder,
+        GeoFeatureCollectionRowBuilder, GeometryCollection, GeometryRandomAccess,
+        IntoGeometryIterator,
+    },
+    operations::reproject::Reproject,
 };
-use crate::primitives::{Coordinate2D, MultiPolygon, MultiPolygonAccess, MultiPolygonRef};
-use crate::util::arrow::downcast_array;
-use crate::util::Result;
-use arrow::array::{Array, FixedSizeListArray, Float64Array, ListArray};
-use std::slice;
+use crate::{
+    operations::reproject::CoordinateProjection,
+    primitives::{Coordinate2D, MultiPolygon, MultiPolygonAccess, MultiPolygonRef},
+};
+use crate::{
+    primitives::MultiLineString,
+    util::arrow::{downcast_array, ArrowTyped},
+};
+use crate::{primitives::TimeInterval, util::Result};
+use arrow::{
+    array::{Array, ArrayData, FixedSizeListArray, Float64Array, ListArray},
+    buffer::Buffer,
+    datatypes::DataType,
+};
+use std::{slice, sync::Arc};
+
+use super::feature_collection::struct_array_from_data;
 
 /// This collection contains temporal multi polygons and miscellaneous data.
 pub type MultiPolygonCollection = FeatureCollection<MultiPolygon>;
@@ -265,6 +281,126 @@ impl GeoFeatureCollectionRowBuilder<MultiPolygon> for FeatureCollectionRowBuilde
         self.geometries_builder.append(true)?;
 
         Ok(())
+    }
+}
+
+impl<P> Reproject<P> for MultiPolygonCollection
+where
+    P: CoordinateProjection,
+{
+    type Out = MultiPolygonCollection;
+
+    fn reproject(&self, projector: &P) -> Result<Self::Out> {
+        // get the coordinates
+        let coords_ref = self.coordinates();
+        // reproject them...
+        let projected_coords = projector.project_coordinate_slice_copy(coords_ref)?;
+
+        // transform the coordinates into a byte slice and create a Buffer from it.
+        let coords_buffer = unsafe {
+            let coord_bytes: &[u8] = std::slice::from_raw_parts(
+                projected_coords.as_ptr().cast::<u8>(),
+                projected_coords.len() * std::mem::size_of::<Coordinate2D>(),
+            );
+            Buffer::from(coord_bytes)
+        };
+
+        // get the offsets (reuse)
+        let geometries_ref = self
+            .table
+            .column_by_name(Self::GEOMETRY_COLUMN_NAME)
+            .expect("There must exist a geometry column");
+        let geometries: &ListArray = downcast_array(geometries_ref);
+
+        let feature_offset_array = geometries.data();
+        let feature_offsets_buffer = &feature_offset_array.buffers()[0];
+        let num_features = (feature_offsets_buffer.len() / std::mem::size_of::<i32>()) - 1;
+
+        let polygon_offsets_array = &feature_offset_array.child_data()[0];
+        let polygon_offsets_buffer = &polygon_offsets_array.buffers()[0];
+        let num_polygons = (polygon_offsets_buffer.len() / std::mem::size_of::<i32>()) - 1;
+
+        let ring_offsets_array = &polygon_offsets_array.child_data()[0];
+        let ring_offsets_buffer = &ring_offsets_array.buffers()[0];
+        let num_rings = (ring_offsets_buffer.len() / std::mem::size_of::<i32>()) - 1;
+
+        let num_coords = coords_buffer.len() / std::mem::size_of::<Coordinate2D>();
+        let num_floats = num_coords * 2;
+
+        let multi_polygon_array = ArrayData::builder(MultiPolygon::arrow_data_type())
+            .len(num_features)
+            .add_buffer(feature_offsets_buffer.clone())
+            .add_child_data(
+                ArrayData::builder(MultiLineString::arrow_data_type())
+                    .len(num_polygons)
+                    .add_buffer(polygon_offsets_buffer.clone())
+                    .add_child_data(
+                        ArrayData::builder(Coordinate2D::arrow_list_data_type())
+                            .len(num_rings)
+                            .add_buffer(ring_offsets_buffer.clone())
+                            .add_child_data(
+                                ArrayData::builder(Coordinate2D::arrow_data_type())
+                                    .len(num_coords)
+                                    .add_child_data(
+                                        ArrayData::builder(DataType::Float64)
+                                            .len(num_floats)
+                                            .add_buffer(coords_buffer)
+                                            .build(),
+                                    )
+                                    .build(),
+                            )
+                            .build(),
+                    )
+                    .build(),
+            )
+            .build();
+
+        let mut columns = Vec::<arrow::datatypes::Field>::with_capacity(self.table.num_columns());
+        let mut column_values =
+            Vec::<arrow::array::ArrayRef>::with_capacity(self.table.num_columns());
+
+        // copy geometry data if feature collection is geo collection
+        // if CollectionType::IS_GEOMETRY {
+        columns.push(arrow::datatypes::Field::new(
+            Self::GEOMETRY_COLUMN_NAME,
+            MultiLineString::arrow_data_type(),
+            false,
+        ));
+        column_values.push(Arc::new(ListArray::from(multi_polygon_array)));
+        // }
+
+        // copy time data
+        columns.push(arrow::datatypes::Field::new(
+            Self::TIME_COLUMN_NAME,
+            TimeInterval::arrow_data_type(),
+            false,
+        ));
+        column_values.push(
+            self.table
+                .column_by_name(Self::TIME_COLUMN_NAME)
+                .expect("The time column must exist")
+                .clone(),
+        );
+
+        // copy remaining attribute data
+        for (column_name, column_type) in &self.types {
+            columns.push(arrow::datatypes::Field::new(
+                &column_name,
+                column_type.arrow_data_type(),
+                column_type.nullable(),
+            ));
+            column_values.push(
+                self.table
+                    .column_by_name(&column_name)
+                    .expect("The attribute column must exist")
+                    .clone(),
+            );
+        }
+
+        Ok(Self::new_from_internals(
+            struct_array_from_data(columns, column_values, self.table.len()),
+            self.types.clone(),
+        ))
     }
 }
 
@@ -685,5 +821,106 @@ mod tests {
             ]]
         );
         assert!(geometry_iter.next().is_none());
+    }
+
+    #[test]
+    fn reproject_multi_lines_epsg4326_epsg900913_collection() {
+        use crate::operations::reproject::{CoordinateProjection, CoordinateProjector};
+        use crate::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
+
+        use crate::operations::reproject::tests::{
+            COLOGNE_EPSG_4326, COLOGNE_EPSG_900_913, HAMBURG_EPSG_4326, HAMBURG_EPSG_900_913,
+            MARBURG_EPSG_4326, MARBURG_EPSG_900_913,
+        };
+
+        let from = SpatialReference::epsg_4326();
+        let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
+        let projector = CoordinateProjector::from_known_srs(from, to).unwrap();
+
+        let mut builder = MultiPolygonCollection::builder().finish_header();
+
+        builder
+            .push_geometry(
+                MultiPolygon::new(vec![
+                    vec![vec![
+                        HAMBURG_EPSG_4326,
+                        MARBURG_EPSG_4326,
+                        COLOGNE_EPSG_4326,
+                        HAMBURG_EPSG_4326,
+                    ]],
+                    vec![vec![
+                        COLOGNE_EPSG_4326,
+                        HAMBURG_EPSG_4326,
+                        MARBURG_EPSG_4326,
+                        COLOGNE_EPSG_4326,
+                    ]],
+                ])
+                .unwrap(),
+            )
+            .unwrap();
+        builder
+            .push_geometry(
+                MultiPolygon::new(vec![vec![vec![
+                    MARBURG_EPSG_4326,
+                    COLOGNE_EPSG_4326,
+                    HAMBURG_EPSG_4326,
+                    MARBURG_EPSG_4326,
+                ]]])
+                .unwrap(),
+            )
+            .unwrap();
+
+        for _ in 0..2 {
+            builder.push_time_interval(TimeInterval::default()).unwrap();
+
+            builder.finish_row();
+        }
+
+        let collection = builder.build().unwrap();
+
+        let mut builder = MultiPolygonCollection::builder().finish_header();
+
+        builder
+            .push_geometry(
+                MultiPolygon::new(vec![
+                    vec![vec![
+                        HAMBURG_EPSG_900_913,
+                        MARBURG_EPSG_900_913,
+                        COLOGNE_EPSG_900_913,
+                        HAMBURG_EPSG_900_913,
+                    ]],
+                    vec![vec![
+                        COLOGNE_EPSG_900_913,
+                        HAMBURG_EPSG_900_913,
+                        MARBURG_EPSG_900_913,
+                        COLOGNE_EPSG_900_913,
+                    ]],
+                ])
+                .unwrap(),
+            )
+            .unwrap();
+        builder
+            .push_geometry(
+                MultiPolygon::new(vec![vec![vec![
+                    MARBURG_EPSG_900_913,
+                    COLOGNE_EPSG_900_913,
+                    HAMBURG_EPSG_900_913,
+                    MARBURG_EPSG_900_913,
+                ]]])
+                .unwrap(),
+            )
+            .unwrap();
+
+        for _ in 0..2 {
+            builder.push_time_interval(TimeInterval::default()).unwrap();
+
+            builder.finish_row();
+        }
+
+        let expected_collection = builder.build().unwrap();
+
+        let proj_collection = collection.reproject(&projector).unwrap();
+
+        assert_eq!(proj_collection, expected_collection)
     }
 }
