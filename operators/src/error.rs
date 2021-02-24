@@ -38,24 +38,27 @@ pub enum Error {
     },
 
     // TODO: use something more general than `Range`, e.g. `dyn RangeBounds` that can, however not be made into an object
-    #[snafu(display(
-    "InvalidNumberOfRasterInputsError: expected \"[{} .. {}]\" found \"{}\"",
-    expected.start, expected.end,
-    found
-    ))]
+    #[snafu(display("InvalidNumberOfRasterInputsError: expected \"[{} .. {}]\" found \"{}\"", expected.start, expected.end, found))]
     InvalidNumberOfRasterInputs {
         expected: Range<usize>,
         found: usize,
     },
 
-    #[snafu(display(
-    "InvalidNumberOfVectorInputsError: expected \"[{} .. {}]\" found \"{}\"",
-    expected.start, expected.end,
-    found
-    ))]
+    #[snafu(display("InvalidNumberOfVectorInputsError: expected \"[{} .. {}]\" found \"{}\"", expected.start, expected.end, found))]
     InvalidNumberOfVectorInputs {
         expected: Range<usize>,
         found: usize,
+    },
+
+    #[snafu(display("InvalidNumberOfVectorInputsError: expected \"[{} .. {}]\" found \"{}\"", expected.start, expected.end, found))]
+    InvalidNumberOfInputs {
+        expected: Range<usize>,
+        found: usize,
+    },
+
+    #[snafu(display("Column {} does not exist", column))]
+    ColumnDoesNotExist {
+        column: String,
     },
 
     #[snafu(display("GdalError: {}", source))]

@@ -1,5 +1,4 @@
 use crate::error::{Error, Result};
-use crate::string_token;
 use crate::users::user::UserId;
 use crate::util::config::ProjectService;
 use crate::util::user_input::UserInput;
@@ -14,6 +13,7 @@ use geoengine_datatypes::primitives::{
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use geoengine_datatypes::util::Identifier;
 use geoengine_datatypes::{operations::image::Colorizer, primitives::TimeInstance};
+use geoengine_operators::string_token;
 #[cfg(feature = "postgres")]
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
