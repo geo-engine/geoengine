@@ -11,6 +11,7 @@ edition = "2018"
 [dependencies]
 # arrow = { version = "3.0", features = ["simd"] } TODO: activate when version is patched
 arrow = { version = "3.0" }
+async-trait = "0.1"
 chrono = "0.4"
 crossbeam = "0.8"
 csv = "1.1"
@@ -22,7 +23,7 @@ geoengine-datatypes = { path = "../datatypes" }
 lazy_static = "1.4"
 num_cpus = "1.13" # TODO: remove and switch to std::thread::available_concurrency() when it is available
 num-traits = "0.2"
-ocl = "0.19"
+ocl = { git = "https://github.com/michaelmattig/ocl", branch = "tentative_master" }  # TODO: use crates.io version once it builds again
 paste = "1.0"
 pin-project = "1.0"
 serde = { version = "1.0", features = ["derive"] }

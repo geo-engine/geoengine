@@ -1,10 +1,11 @@
 use super::query::{QueryContext, QueryRectangle};
 use crate::util::Result;
-use futures::future::BoxFuture;
+use async_trait::async_trait;
 use futures::stream::BoxStream;
 use geoengine_datatypes::collections::{
     DataCollection, MultiLineStringCollection, MultiPolygonCollection,
 };
+use geoengine_datatypes::plots::{PlotData, PlotOutputFormat};
 use geoengine_datatypes::raster::Pixel;
 use geoengine_datatypes::{collections::MultiPointCollection, raster::RasterTile2D};
 
@@ -84,16 +85,19 @@ where
 }
 
 /// An instantiation of a plot operator that produces a stream of vector results for a query
+#[async_trait]
 pub trait PlotQueryProcessor: Sync + Send {
-    type PlotType;
+    type OutputFormat;
 
-    fn plot_query<'a>(
+    fn plot_type(&self) -> &'static str;
+
+    async fn plot_query<'a>(
         &'a self,
         query: QueryRectangle,
         ctx: &'a dyn QueryContext,
-    ) -> BoxFuture<'a, Result<Self::PlotType>>;
+    ) -> Result<Self::OutputFormat>;
 
-    fn boxed(self) -> Box<dyn PlotQueryProcessor<PlotType = Self::PlotType>>
+    fn boxed(self) -> Box<dyn PlotQueryProcessor<OutputFormat = Self::OutputFormat>>
     where
         Self: Sized + 'static,
     {
@@ -269,21 +273,50 @@ impl TypedVectorQueryProcessor {
 
 /// An enum that contains all possible query processor variants
 pub enum TypedPlotQueryProcessor {
-    Json(Box<dyn PlotQueryProcessor<PlotType = serde_json::Value>>),
-    Png(Box<dyn PlotQueryProcessor<PlotType = Vec<u8>>>),
+    JsonPlain(Box<dyn PlotQueryProcessor<OutputFormat = serde_json::Value>>),
+    JsonVega(Box<dyn PlotQueryProcessor<OutputFormat = PlotData>>),
+    ImagePng(Box<dyn PlotQueryProcessor<OutputFormat = Vec<u8>>>),
+}
+
+impl From<&TypedPlotQueryProcessor> for PlotOutputFormat {
+    fn from(typed_processor: &TypedPlotQueryProcessor) -> Self {
+        match typed_processor {
+            TypedPlotQueryProcessor::JsonPlain(_) => PlotOutputFormat::JsonPlain,
+            TypedPlotQueryProcessor::JsonVega(_) => PlotOutputFormat::JsonVega,
+            TypedPlotQueryProcessor::ImagePng(_) => PlotOutputFormat::ImagePng,
+        }
+    }
 }
 
 impl TypedPlotQueryProcessor {
-    pub fn json(self) -> Option<Box<dyn PlotQueryProcessor<PlotType = serde_json::Value>>> {
-        if let TypedPlotQueryProcessor::Json(p) = self {
+    pub fn plot_type(&self) -> &'static str {
+        match self {
+            TypedPlotQueryProcessor::JsonPlain(p) => p.plot_type(),
+            TypedPlotQueryProcessor::JsonVega(p) => p.plot_type(),
+            TypedPlotQueryProcessor::ImagePng(p) => p.plot_type(),
+        }
+    }
+
+    pub fn json_plain(
+        self,
+    ) -> Option<Box<dyn PlotQueryProcessor<OutputFormat = serde_json::Value>>> {
+        if let TypedPlotQueryProcessor::JsonPlain(p) = self {
             Some(p)
         } else {
             None
         }
     }
 
-    pub fn png(self) -> Option<Box<dyn PlotQueryProcessor<PlotType = Vec<u8>>>> {
-        if let TypedPlotQueryProcessor::Png(p) = self {
+    pub fn json_vega(self) -> Option<Box<dyn PlotQueryProcessor<OutputFormat = PlotData>>> {
+        if let TypedPlotQueryProcessor::JsonVega(p) = self {
+            Some(p)
+        } else {
+            None
+        }
+    }
+
+    pub fn image_png(self) -> Option<Box<dyn PlotQueryProcessor<OutputFormat = Vec<u8>>>> {
+        if let TypedPlotQueryProcessor::ImagePng(p) = self {
             Some(p)
         } else {
             None
