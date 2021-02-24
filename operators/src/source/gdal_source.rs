@@ -212,15 +212,9 @@ where
         loading_info: GdalDataSetParameters,
         output_bounds: BoundingBox2D,
         output_shape: GridShape2D,
-        output_geo_transform: GeoTransform,
     ) -> Result<Grid2D<T>> {
         tokio::task::spawn_blocking(move || {
-            Self::load_tile_data(
-                &loading_info,
-                output_bounds,
-                output_shape,
-                output_geo_transform,
-            )
+            Self::load_tile_data(&loading_info, output_bounds, output_shape)
         })
         .await
         .context(error::TokioJoin)?
@@ -233,10 +227,15 @@ where
         loading_info: &GdalDataSetParameters,
         output_bounds: BoundingBox2D,
         output_shape: GridShape2D,
-        output_geo_transform: GeoTransform,
     ) -> Result<Grid2D<T>> {
         let dataset_bounds = loading_info.bbox;
         let geo_transform = loading_info.geo_transform;
+
+        let output_geo_transform = GeoTransform {
+            origin_coordinate: output_bounds.upper_left(),
+            x_pixel_size: output_bounds.size_x() / output_shape.axis_size_x() as f64,
+            y_pixel_size: -output_bounds.size_y() / output_shape.axis_size_y() as f64,
+        };
 
         let dataset_result = GdalDataset::open(&loading_info.file_path);
 
@@ -308,6 +307,7 @@ where
                     GridBoundingBox2D::new(tile_idx_ul, tile_idx_lr)?,
                 )?;
 
+                // TODO: fill with actual no data
                 let mut tile_raster = Grid2D::new_filled(output_shape, T::zero(), None);
                 tile_raster.grid_blit_from(dataset_raster)?;
                 tile_raster
@@ -357,7 +357,6 @@ where
                         info.params.clone(),
                         tile.spatial_bounds(),
                         tile.tile_size_in_pixels(),
-                        tile.tile_geo_transform(),
                     )
                     .await?,
                 ))
@@ -528,7 +527,7 @@ where
 mod tests {
     use super::*;
     use crate::engine::{MockExecutionContext, MockQueryContext, QueryRectangle};
-    use crate::util::gdal::add_ndvi_data_set;
+    use crate::util::gdal::{add_ndvi_data_set, raster_dir};
     use crate::util::Result;
     use geoengine_datatypes::primitives::{Measurement, SpatialResolution, TimeGranularity};
     use geoengine_datatypes::raster::{TileInformation, TilingStrategy};
@@ -578,8 +577,7 @@ mod tests {
     ) -> Result<Grid2D<u8>> {
         GdalSourceProcessor::<u8>::load_tile_data(
             &GdalDataSetParameters {
-                file_path:
-                    "../operators/test-data/raster/modis_ndvi/MOD13A2_M_NDVI_2014-01-01.TIFF".into(),
+                file_path: raster_dir().join("modis_ndvi/MOD13A2_M_NDVI_2014-01-01.TIFF"),
                 rasterband_channel: 1,
                 geo_transform: GeoTransform {
                     origin_coordinate: (-180., 90.).into(),
@@ -591,11 +589,6 @@ mod tests {
             },
             output_bounds,
             output_shape,
-            GeoTransform {
-                origin_coordinate: Default::default(),
-                x_pixel_size: output_bounds.size_x() / output_shape.axis_size_x() as f64,
-                y_pixel_size: -output_bounds.size_y() / output_shape.axis_size_y() as f64,
-            },
         )
     }
 
@@ -806,22 +799,39 @@ mod tests {
         let x = load_ndvi_jan_2014(output_shape, output_bounds).unwrap();
 
         assert_eq!(x.data.len(), 64);
-
-        // TODO: compare actual data
-        // assert_eq!(x.data, &[] as &[u8]);
+        assert_eq!(
+            x.data,
+            &[
+                255, 255, 255, 255, 255, 255, 255, 255, 255, 75, 37, 255, 44, 34, 39, 32, 255, 86,
+                255, 255, 255, 30, 96, 255, 255, 255, 255, 255, 90, 255, 255, 255, 255, 255, 202,
+                255, 193, 255, 255, 255, 255, 255, 89, 255, 111, 255, 255, 255, 255, 255, 255, 255,
+                255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255
+            ]
+        );
     }
 
     #[test]
     fn test_load_tile_data_overlaps_dataset_bounds() {
         let output_shape: GridShape2D = [8, 8].into();
-        let output_bounds = BoundingBox2D::new_unchecked((-360., 0.).into(), (0., 180.).into());
+        // shift world bbox one pixel up and to the left
+        let (x_size, y_size) = (45., 22.5);
+        let output_bounds = BoundingBox2D::new_unchecked(
+            (-180. - x_size, -90. + y_size).into(),
+            (180. - x_size, 90. + y_size).into(),
+        );
 
         let x = load_ndvi_jan_2014(output_shape, output_bounds).unwrap();
 
         assert_eq!(x.data.len(), 64);
-
-        // TODO: compare actual data
-        // assert_eq!(x.data, &[] as &[u8]);
+        assert_eq!(
+            x.data,
+            &[
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 0, 255, 75, 37, 255,
+                44, 34, 39, 0, 255, 86, 255, 255, 255, 30, 96, 0, 255, 255, 255, 255, 90, 255, 255,
+                0, 255, 255, 202, 255, 193, 255, 255, 0, 255, 255, 89, 255, 111, 255, 255, 0, 255,
+                255, 255, 255, 255, 255, 255
+            ]
+        );
     }
 
     #[tokio::test]

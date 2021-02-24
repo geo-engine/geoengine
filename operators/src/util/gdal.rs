@@ -11,8 +11,10 @@ use crate::{
     source::{FileNotFoundHandling, GdalDataSetParameters, GdalMetaDataRegular},
 };
 
+/// # Panics
+/// If current dir is not accessible
 // TODO: better way for determining raster directory
-fn raster_dir() -> std::path::PathBuf {
+pub fn raster_dir() -> std::path::PathBuf {
     let mut current_path = std::env::current_dir().unwrap();
 
     if current_path.ends_with("services") {
