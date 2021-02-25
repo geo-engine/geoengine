@@ -828,7 +828,7 @@ mod tests {
         use crate::operations::reproject::{CoordinateProjection, CoordinateProjector};
         use crate::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
 
-        use crate::operations::reproject::tests::{
+        use crate::util::well_known_data::{
             COLOGNE_EPSG_4326, COLOGNE_EPSG_900_913, HAMBURG_EPSG_4326, HAMBURG_EPSG_900_913,
             MARBURG_EPSG_4326, MARBURG_EPSG_900_913,
         };
