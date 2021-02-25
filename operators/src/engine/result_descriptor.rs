@@ -160,6 +160,30 @@ impl ResultDescriptor for PlotResultDescriptor {
         *self
     }
 }
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub enum TypedResultDescriptor {
+    Plot(PlotResultDescriptor),
+    Raster(RasterResultDescriptor),
+    Vector(VectorResultDescriptor),
+}
+
+impl From<PlotResultDescriptor> for TypedResultDescriptor {
+    fn from(value: PlotResultDescriptor) -> Self {
+        Self::Plot(value)
+    }
+}
+
+impl From<RasterResultDescriptor> for TypedResultDescriptor {
+    fn from(value: RasterResultDescriptor) -> Self {
+        Self::Raster(value)
+    }
+}
+
+impl From<VectorResultDescriptor> for TypedResultDescriptor {
+    fn from(value: VectorResultDescriptor) -> Self {
+        Self::Vector(value)
+    }
+}
 
 #[cfg(test)]
 mod tests {

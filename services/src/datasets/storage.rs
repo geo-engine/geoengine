@@ -6,9 +6,9 @@ use crate::util::user_input::{UserInput, Validated};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DataSetId, DataSetProviderId, InternalDataSetId};
 use geoengine_datatypes::util::Identifier;
-use geoengine_operators::engine::{RasterResultDescriptor, VectorResultDescriptor};
-use geoengine_operators::mock::MockDataSetDataSourceLoadingInfo;
-use geoengine_operators::source::OgrSourceDataset;
+use geoengine_operators::{engine::StaticMetaData, source::OgrSourceDataset};
+use geoengine_operators::{engine::TypedResultDescriptor, mock::MockDataSetDataSourceLoadingInfo};
+use geoengine_operators::{engine::VectorResultDescriptor, source::GdalMetaDataRegular};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use std::path::PathBuf;
@@ -18,26 +18,8 @@ pub struct DataSet {
     pub id: DataSetId,
     pub name: String,
     pub description: String,
-    pub result_descriptor: DataSetResultDescriptor,
+    pub result_descriptor: TypedResultDescriptor,
     pub source_operator: String,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
-pub enum DataSetResultDescriptor {
-    Raster(RasterResultDescriptor),
-    Vector(VectorResultDescriptor),
-}
-
-impl From<RasterResultDescriptor> for DataSetResultDescriptor {
-    fn from(value: RasterResultDescriptor) -> Self {
-        Self::Raster(value)
-    }
-}
-
-impl From<VectorResultDescriptor> for DataSetResultDescriptor {
-    fn from(value: VectorResultDescriptor) -> Self {
-        Self::Vector(value)
-    }
 }
 
 impl DataSet {
@@ -53,23 +35,11 @@ impl DataSet {
     }
 }
 
-impl From<AddDataSet> for DataSet {
-    fn from(value: AddDataSet) -> Self {
-        Self {
-            id: DataSetId::Internal(InternalDataSetId::new()),
-            name: value.name,
-            description: value.description,
-            result_descriptor: value.result_descriptor,
-            source_operator: value.source_operator,
-        }
-    }
-}
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AddDataSet {
+    pub id: Option<DataSetId>,
     pub name: String,
     pub description: String,
-    pub result_descriptor: DataSetResultDescriptor,
     pub source_operator: String,
 }
 
@@ -86,7 +56,7 @@ pub struct ImportDataSet {
     pub description: String,
     pub data_type: LayerInfo,
     pub source_operator: String,
-    pub result_descriptor: DataSetResultDescriptor,
+    pub result_descriptor: TypedResultDescriptor,
 }
 
 impl From<ImportDataSet> for DataSet {
@@ -164,6 +134,20 @@ pub enum VectorLoadingInfo {
     Ogr(OgrSourceDataset),
 }
 
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct DataSetDefinition {
+    pub properties: AddDataSet,
+    pub meta_data: MetaDataDefinition,
+}
+
+#[allow(clippy::large_enum_variant)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub enum MetaDataDefinition {
+    MockMetaData(StaticMetaData<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>),
+    OgrMetaData(StaticMetaData<OgrSourceDataset, VectorResultDescriptor>),
+    GdalMetaDataRegular(GdalMetaDataRegular),
+}
+
 /// Handling of data sets provided by geo engine internally, staged and by external providers
 #[async_trait]
 pub trait DataSetDb: DataSetStore + DataSetProvider + DataSetProviderDb + Send + Sync {}
@@ -209,6 +193,8 @@ pub trait DataSetStore: DataSetStorer {
         data_set: Validated<AddDataSet>,
         meta_data: Self::StorageType,
     ) -> Result<DataSetId>;
+
+    fn wrap_meta_data(&self, meta: MetaDataDefinition) -> Self::StorageType;
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]

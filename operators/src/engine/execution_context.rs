@@ -9,6 +9,7 @@ use crate::util::Result;
 use geoengine_datatypes::dataset::DataSetId;
 use geoengine_datatypes::raster::GridShape;
 use geoengine_datatypes::raster::TilingSpecification;
+use serde::{Deserialize, Serialize};
 use std::any::Any;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -110,7 +111,7 @@ where
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StaticMetaData<L, R>
 where
     L: Debug + Clone + Send + Sync + 'static,

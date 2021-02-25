@@ -79,4 +79,8 @@ impl DataSetStore for PostgresDataSetDb {
     ) -> Result<DataSetId> {
         todo!()
     }
+
+    fn wrap_meta_data(&self, _meta: super::storage::MetaDataDefinition) -> Self::StorageType {
+        todo!()
+    }
 }

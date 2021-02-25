@@ -170,3 +170,9 @@ impl From<serde_json::Error> for Error {
         Self::SerdeJson { source: e }
     }
 }
+
+impl From<std::io::Error> for Error {
+    fn from(e: std::io::Error) -> Self {
+        Self::Io { source: e }
+    }
+}

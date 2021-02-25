@@ -18,7 +18,8 @@ pub use query_processor::{
     TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorQueryProcessor,
 };
 pub use result_descriptor::{
-    PlotResultDescriptor, RasterResultDescriptor, ResultDescriptor, VectorResultDescriptor,
+    PlotResultDescriptor, RasterResultDescriptor, ResultDescriptor, TypedResultDescriptor,
+    VectorResultDescriptor,
 };
 
 mod clonable_operator;
