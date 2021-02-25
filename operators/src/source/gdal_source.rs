@@ -19,10 +19,8 @@ use serde::{Deserialize, Serialize};
 use futures::stream::{self, BoxStream, StreamExt};
 
 use crate::engine::{MetaData, QueryRectangle};
-use geoengine_datatypes::dataset::DataSetId;
-use geoengine_datatypes::raster::{
-    GeoTransform, Grid2D, GridShape2D, Pixel, RasterDataType, RasterTile2D,
-};
+use geoengine_datatypes::raster::{GeoTransform, Grid2D, Pixel, RasterDataType, RasterTile2D};
+use geoengine_datatypes::{dataset::DataSetId, raster::TileInformation};
 use geoengine_datatypes::{
     primitives::{
         BoundingBox2D, SpatialBounded, TimeInstance, TimeInterval, TimeStep, TimeStepIter,
@@ -209,12 +207,11 @@ where
     /// A method to async load single tiles from a GDAL dataset.
     ///
     pub async fn load_tile_data_async(
-        loading_info: GdalDataSetParameters,
-        output_bounds: BoundingBox2D,
-        output_shape: GridShape2D,
+        data_set_params: GdalDataSetParameters,
+        tile_information: TileInformation,
     ) -> Result<Grid2D<T>> {
         tokio::task::spawn_blocking(move || {
-            Self::load_tile_data(&loading_info, output_bounds, output_shape)
+            Self::load_tile_data(&data_set_params, tile_information)
         })
         .await
         .context(error::TokioJoin)?
@@ -224,30 +221,27 @@ where
     /// A method to load single tiles from a GDAL dataset.
     ///
     pub fn load_tile_data(
-        loading_info: &GdalDataSetParameters,
-        output_bounds: BoundingBox2D,
-        output_shape: GridShape2D,
+        data_set_params: &GdalDataSetParameters,
+        tile_information: TileInformation,
     ) -> Result<Grid2D<T>> {
-        let dataset_bounds = loading_info.bbox;
-        let geo_transform = loading_info.geo_transform;
+        let dataset_bounds = data_set_params.bbox;
+        let geo_transform = data_set_params.geo_transform;
 
-        let output_geo_transform = GeoTransform {
-            origin_coordinate: output_bounds.upper_left(),
-            x_pixel_size: output_bounds.size_x() / output_shape.axis_size_x() as f64,
-            y_pixel_size: -output_bounds.size_y() / output_shape.axis_size_y() as f64,
-        };
+        let output_bounds = tile_information.spatial_bounds();
+        let output_shape = tile_information.tile_size_in_pixels();
+        let output_geo_transform = tile_information.tile_geo_transform();
 
-        let dataset_result = GdalDataset::open(&loading_info.file_path);
+        let dataset_result = GdalDataset::open(&data_set_params.file_path);
 
         if dataset_result.is_err() {
             // TODO: check if Gdal error is actually file not found
-            return match loading_info.file_not_found_handling {
+            return match data_set_params.file_not_found_handling {
                 FileNotFoundHandling::NoData => {
                     // TODO: fill with actual no data
                     Ok(Grid2D::new_filled(output_shape, T::zero(), None))
                 }
                 FileNotFoundHandling::Error => Err(crate::error::Error::CouldNotOpenGdalDataSet {
-                    file_path: loading_info.file_path.to_string_lossy().to_string(),
+                    file_path: data_set_params.file_path.to_string_lossy().to_string(),
                 }),
             };
         };
@@ -258,7 +252,7 @@ where
 
         // get the requested raster band of the dataset …
         let rasterband: GdalRasterBand =
-            dataset.rasterband(loading_info.rasterband_channel as isize)?;
+            dataset.rasterband(data_set_params.rasterband_channel as isize)?;
 
         // dataset spatial relations
         let dataset_contains_tile = dataset_bounds.contains_bbox(&output_bounds);
@@ -353,12 +347,7 @@ where
                 Ok(RasterTile2D::new_with_tile_info(
                     info.time,
                     tile,
-                    Self::load_tile_data_async(
-                        info.params.clone(),
-                        tile.spatial_bounds(),
-                        tile.tile_size_in_pixels(),
-                    )
-                    .await?,
+                    Self::load_tile_data_async(info.params.clone(), tile).await?,
                 ))
             })
             .boxed()
@@ -587,8 +576,7 @@ mod tests {
                 bbox: BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
                 file_not_found_handling: FileNotFoundHandling::NoData,
             },
-            output_bounds,
-            output_shape,
+            TileInformation::with_bbox_and_shape(output_bounds, output_shape),
         )
     }
 
