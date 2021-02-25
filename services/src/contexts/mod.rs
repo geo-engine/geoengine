@@ -15,21 +15,21 @@ use crate::datasets::storage::DataSetDb;
 
 use crate::users::user::UserId;
 use crate::util::config;
-use crate::util::config::{get_config_element, GdalSource};
+use crate::util::config::get_config_element;
 use geoengine_datatypes::dataset::DataSetId;
 use geoengine_datatypes::primitives::Coordinate2D;
 use geoengine_datatypes::raster::GridShape2D;
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_operators::concurrency::{ThreadPool, ThreadPoolContext};
 use geoengine_operators::engine::{
-    ExecutionContext, MetaData, MetaDataProvider, QueryContext, VectorResultDescriptor,
+    ExecutionContext, MetaData, MetaDataProvider, QueryContext, RasterResultDescriptor,
+    VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDataSetDataSourceLoadingInfo;
-use geoengine_operators::source::OgrSourceDataset;
+use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 pub use in_memory::InMemoryContext;
 #[cfg(feature = "postgres")]
 pub use postgres::PostgresContext;
-use std::path::PathBuf;
 
 type Db<T> = Arc<RwLock<T>>;
 
@@ -89,16 +89,11 @@ impl<D> ExecutionContext for ExecutionContextImpl<D>
 where
     D: DataSetDb
         + MetaDataProvider<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>
-        + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor>,
+        + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor>
+        + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor>,
 {
     fn thread_pool(&self) -> ThreadPoolContext {
         self.thread_pool.create_context()
-    }
-
-    fn raster_data_root(&self) -> std::result::Result<PathBuf, geoengine_operators::error::Error> {
-        Ok(get_config_element::<GdalSource>()
-            .map_err(|_| geoengine_operators::error::Error::RasterRootPathNotConfigured)?
-            .raster_data_root_path)
     }
 
     fn tiling_specification(&self) -> TilingSpecification {
@@ -162,6 +157,38 @@ where
         data_set: &DataSetId,
     ) -> Result<
         Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor>>,
+        geoengine_operators::error::Error,
+    > {
+        futures::executor::block_on(async {
+            match data_set {
+                DataSetId::Internal(_) => self.data_set_db.read().await.meta_data(data_set),
+                DataSetId::Staging(_) => todo!(),
+                DataSetId::External(external) => self
+                    .data_set_db
+                    .read()
+                    .await
+                    .data_set_provider(self.user, external.provider)
+                    .await
+                    .map_err(|e| geoengine_operators::error::Error::DataSetMetaData {
+                        source: Box::new(e),
+                    })?
+                    .meta_data(data_set),
+            }
+        })
+    }
+}
+
+// TODO: use macro(?) for delegating meta_data function to DataSetDB to avoid redundant code
+impl<D> MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor> for ExecutionContextImpl<D>
+where
+    D: DataSetDb + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor>,
+{
+    // TODO: make async
+    fn meta_data(
+        &self,
+        data_set: &DataSetId,
+    ) -> Result<
+        Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor>>,
         geoengine_operators::error::Error,
     > {
         futures::executor::block_on(async {

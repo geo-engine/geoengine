@@ -207,7 +207,12 @@ impl TimeStep {
                     ref_date_time.year() + (ref_date_time.month() as i32 + snapped_months) / 12
                 };
 
-                let snapped_month = (ref_date_time.month() as i32 + snapped_months).rem_euclid(12);
+                let mut snapped_month =
+                    (ref_date_time.month() as i32 + snapped_months).rem_euclid(12);
+
+                if snapped_month == 0 {
+                    snapped_month = 12;
+                }
 
                 NaiveDate::from_ymd(snapped_year, snapped_month as u32, ref_date_time.day())
                     .and_time(ref_date_time.time())
@@ -707,6 +712,17 @@ mod tests {
             "2000-01-01T00:00:00.0",
             "2001-01-01T11:11:11.0",
             "2000-08-01T00:00:00.0",
+        );
+    }
+
+    #[test]
+    fn time_snap_month_wrap2() {
+        test_snap(
+            TimeGranularity::Months,
+            1,
+            "2014-01-01T00:00:00.0",
+            "2013-12-01T00:00:00.0",
+            "2013-12-01T00:00:00.0",
         );
     }
 

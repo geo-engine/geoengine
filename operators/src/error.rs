@@ -139,6 +139,8 @@ pub enum Error {
         source: chrono::format::ParseError,
     },
 
+    TimeInstanceNotDisplayable,
+
     DataSetMetaData {
         source: Box<dyn std::error::Error + Send + Sync>,
     },
@@ -156,6 +158,18 @@ pub enum Error {
     InvalidDataSetId,
     DataSetLoadingInfoProviderMismatch,
     UnknownDataSetId,
+
+    // TODO: this error should not be propagated to user
+    #[snafu(display("Could not open gdal data set for file path {:?}", file_path))]
+    CouldNotOpenGdalDataSet {
+        file_path: String,
+    },
+
+    FilePathNotRepresentableAsString,
+
+    TokioJoin {
+        source: tokio::task::JoinError,
+    },
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {

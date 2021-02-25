@@ -166,7 +166,7 @@ pub enum VectorLoadingInfo {
 
 /// Handling of data sets provided by geo engine internally, staged and by external providers
 #[async_trait]
-pub trait DataSetDb: DataSetProvider + DataSetProviderDb + Send + Sync {}
+pub trait DataSetDb: DataSetStore + DataSetProvider + DataSetProviderDb + Send + Sync {}
 
 /// Storage and access of external data set providers
 #[async_trait]
