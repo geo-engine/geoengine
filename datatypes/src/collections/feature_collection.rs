@@ -1336,7 +1336,7 @@ where
         // get the coordinates
         let coords_ref = self.coordinates();
         // reproject them...
-        let projected_coords = projector.project_coordinate_slice_copy(coords_ref)?;
+        let projected_coords = projector.project_coordinates(coords_ref)?;
 
         // transform the coordinates into a byte slice and create a Buffer from it.
         let coords_buffer = unsafe {
