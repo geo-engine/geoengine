@@ -341,6 +341,12 @@ impl PartialOrd for TimeInterval {
     }
 }
 
+impl From<TimeInstance> for TimeInterval {
+    fn from(time_instance: TimeInstance) -> Self {
+        Self::new_unchecked(time_instance, time_instance)
+    }
+}
+
 impl ArrowTyped for TimeInterval {
     type ArrowArray = arrow::array::FixedSizeListArray;
     // TODO: use date if dates out-of-range is fixed for us
@@ -443,6 +449,7 @@ impl ArrowTyped for TimeInterval {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::NaiveDate;
 
     #[test]
     fn to_geo_json_event() {
@@ -474,6 +481,41 @@ mod tests {
                 "end": "+262143-12-31T23:59:59.999+00:00",
                 "type": "Interval",
             })
+        );
+    }
+
+    #[test]
+    fn duration_millis() {
+        assert_eq!(TimeInterval::default().duration_ms(), u64::MAX);
+
+        let time_interval = TimeInterval::new(
+            TimeInstance::from(NaiveDate::from_ymd(1990, 1, 1).and_hms(0, 0, 0)),
+            TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0)),
+        )
+        .unwrap();
+
+        assert_eq!(time_interval.duration_ms(), 315_532_800_000);
+
+        assert_eq!(
+            TimeInterval::new(-1, i64::MAX).unwrap().duration_ms(),
+            9_223_372_036_854_775_808
+        );
+        assert_eq!(
+            TimeInterval::new(0, i64::MAX).unwrap().duration_ms(),
+            9_223_372_036_854_775_807
+        );
+
+        assert_eq!(
+            TimeInterval::new(i64::MIN, -1).unwrap().duration_ms(),
+            9_223_372_036_854_775_807
+        );
+        assert_eq!(
+            TimeInterval::new(i64::MIN, 0).unwrap().duration_ms(),
+            9_223_372_036_854_775_808
+        );
+        assert_eq!(
+            TimeInterval::new(i64::MIN, 1).unwrap().duration_ms(),
+            9_223_372_036_854_775_809
         );
     }
 }
