@@ -4,26 +4,16 @@ use arrow::{
     datatypes::DataType,
 };
 
+use crate::collections::{
+    FeatureCollection, FeatureCollectionInfos, FeatureCollectionRowBuilder,
+    GeoFeatureCollectionRowBuilder, GeometryCollection, GeometryRandomAccess, IntoGeometryIterator,
+};
+use crate::primitives::{Coordinate2D, MultiPoint, MultiPointRef};
 use crate::util::arrow::downcast_array;
-use crate::{
-    collections::{
-        FeatureCollection, FeatureCollectionInfos, FeatureCollectionRowBuilder,
-        GeoFeatureCollectionRowBuilder, GeometryCollection, GeometryRandomAccess,
-        IntoGeometryIterator,
-    },
-    operations::reproject::Reproject,
-};
-use crate::{
-    operations::reproject::CoordinateProjection,
-    primitives::{Coordinate2D, MultiPoint, MultiPointRef},
-};
-use crate::{
-    primitives::TimeInterval,
-    util::{arrow::ArrowTyped, Result},
-};
+use crate::util::{arrow::ArrowTyped, Result};
 use std::{slice, sync::Arc};
 
-use super::feature_collection::struct_array_from_data;
+use super::geo_feature_collection::ReplaceRawArrayCoords;
 
 /// This collection contains temporal multi points and miscellaneous data.
 pub type MultiPointCollection = FeatureCollection<MultiPoint>;
@@ -192,98 +182,31 @@ impl GeometryCollection for MultiPointCollection {
     }
 }
 
-impl<P> Reproject<P> for MultiPointCollection
-where
-    P: CoordinateProjection,
-{
-    type Out = MultiPointCollection;
-
-    fn reproject(&self, projector: &P) -> Result<Self::Out> {
-        // get the coordinates
-        let coords_ref = self.coordinates();
-        // reproject them...
-        let pc = projector.project_coordinate_slice_copy(coords_ref)?;
-
-        // transform the coordinates into a byte slice and create a Buffer from it.
-        let coords_buffer = unsafe {
-            let coord_bytes: &[u8] = std::slice::from_raw_parts(
-                pc.as_ptr().cast::<u8>(),
-                pc.len() * std::mem::size_of::<Coordinate2D>(),
-            );
-            Buffer::from(coord_bytes)
-        };
-
-        // get the offsets (reuse)
-        let geometries_ref = self
-            .table
-            .column_by_name(Self::GEOMETRY_COLUMN_NAME)
-            .expect("There must exist a geometry column");
-        let geometries: &ListArray = downcast_array(geometries_ref);
+impl ReplaceRawArrayCoords for MultiPointCollection {
+    fn replace_raw_coords(array_ref: &Arc<dyn Array>, new_coords: Buffer) -> Arc<ArrayData> {
+        let geometries: &ListArray = downcast_array(array_ref);
         let offset_array = geometries.data();
         let offsets_buffer = &offset_array.buffers()[0];
+        let num_features = (offsets_buffer.len() / std::mem::size_of::<i32>()) - 1;
 
-        let points_array = ArrayData::builder(MultiPoint::arrow_data_type())
-            .len(self.len())
+        let num_coords = new_coords.len() / std::mem::size_of::<Coordinate2D>();
+        let num_floats = num_coords * 2;
+
+        ArrayData::builder(MultiPoint::arrow_data_type())
+            .len(num_features)
             .add_buffer(offsets_buffer.clone())
             .add_child_data(
                 ArrayData::builder(Coordinate2D::arrow_data_type())
-                    .len(pc.len())
+                    .len(num_coords)
                     .add_child_data(
                         ArrayData::builder(DataType::Float64)
-                            .len(pc.len() * 2)
-                            .add_buffer(coords_buffer)
+                            .len(num_floats)
+                            .add_buffer(new_coords)
                             .build(),
                     )
                     .build(),
             )
-            .build();
-
-        let mut columns = Vec::<arrow::datatypes::Field>::with_capacity(self.table.num_columns());
-        let mut column_values =
-            Vec::<arrow::array::ArrayRef>::with_capacity(self.table.num_columns());
-
-        // copy geometry data if feature collection is geo collection
-        // if CollectionType::IS_GEOMETRY {
-        columns.push(arrow::datatypes::Field::new(
-            Self::GEOMETRY_COLUMN_NAME,
-            MultiPoint::arrow_data_type(),
-            false,
-        ));
-        column_values.push(Arc::new(ListArray::from(points_array)));
-        // }
-
-        // copy time data
-        columns.push(arrow::datatypes::Field::new(
-            Self::TIME_COLUMN_NAME,
-            TimeInterval::arrow_data_type(),
-            false,
-        ));
-        column_values.push(
-            self.table
-                .column_by_name(Self::TIME_COLUMN_NAME)
-                .expect("The time column must exist")
-                .clone(),
-        );
-
-        // copy remaining attribute data
-        for (column_name, column_type) in &self.types {
-            columns.push(arrow::datatypes::Field::new(
-                &column_name,
-                column_type.arrow_data_type(),
-                column_type.nullable(),
-            ));
-            column_values.push(
-                self.table
-                    .column_by_name(&column_name)
-                    .expect("The attribute column must exist")
-                    .clone(),
-            );
-        }
-
-        Ok(Self::new_from_internals(
-            struct_array_from_data(columns, column_values, self.table.len()),
-            self.types.clone(),
-        ))
+            .build()
     }
 }
 
@@ -292,6 +215,7 @@ mod tests {
     use super::*;
 
     use crate::collections::{BuilderProvider, FeatureCollectionModifications, ToGeoJson};
+    use crate::operations::reproject::Reproject;
     use crate::primitives::{
         DataRef, FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue, MultiPointAccess,
         TimeInterval,

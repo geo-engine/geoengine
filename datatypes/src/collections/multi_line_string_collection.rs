@@ -1,20 +1,10 @@
+use crate::collections::{
+    FeatureCollection, FeatureCollectionInfos, FeatureCollectionRowBuilder,
+    GeoFeatureCollectionRowBuilder, GeometryCollection, GeometryRandomAccess, IntoGeometryIterator,
+};
+use crate::primitives::{Coordinate2D, MultiLineString, MultiLineStringAccess, MultiLineStringRef};
+use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::Result;
-use crate::{
-    collections::{
-        FeatureCollection, FeatureCollectionInfos, FeatureCollectionRowBuilder,
-        GeoFeatureCollectionRowBuilder, GeometryCollection, GeometryRandomAccess,
-        IntoGeometryIterator,
-    },
-    operations::reproject::Reproject,
-};
-use crate::{
-    operations::reproject::CoordinateProjection,
-    primitives::{Coordinate2D, MultiLineString, MultiLineStringAccess, MultiLineStringRef},
-};
-use crate::{
-    primitives::TimeInterval,
-    util::arrow::{downcast_array, ArrowTyped},
-};
 use arrow::{
     array::{Array, ArrayData, FixedSizeListArray, Float64Array, ListArray},
     buffer::Buffer,
@@ -22,7 +12,7 @@ use arrow::{
 };
 use std::{slice, sync::Arc};
 
-use super::feature_collection::struct_array_from_data;
+use super::geo_feature_collection::ReplaceRawArrayCoords;
 
 /// This collection contains temporal `MultiLineString`s and miscellaneous data.
 pub type MultiLineStringCollection = FeatureCollection<MultiLineString>;
@@ -237,35 +227,12 @@ impl GeoFeatureCollectionRowBuilder<MultiLineString>
     }
 }
 
-impl<P> Reproject<P> for MultiLineStringCollection
-where
-    P: CoordinateProjection,
-{
-    type Out = MultiLineStringCollection;
-
-    fn reproject(&self, projector: &P) -> Result<Self::Out> {
-        // get the coordinates
-        let coords_ref = self.coordinates();
-        // reproject them...
-        let projected_coords = projector.project_coordinate_slice_copy(coords_ref)?;
-
-        // transform the coordinates into a byte slice and create a Buffer from it.
-        let coords_buffer = unsafe {
-            let coord_bytes: &[u8] = std::slice::from_raw_parts(
-                projected_coords.as_ptr().cast::<u8>(),
-                projected_coords.len() * std::mem::size_of::<Coordinate2D>(),
-            );
-            Buffer::from(coord_bytes)
-        };
-
-        // get the offsets (reuse)
-        let geometries_ref = self
-            .table
-            .column_by_name(Self::GEOMETRY_COLUMN_NAME)
-            .expect("There must exist a geometry column");
-        let geometries: &ListArray = downcast_array(geometries_ref);
+impl ReplaceRawArrayCoords for MultiLineStringCollection {
+    fn replace_raw_coords(array_ref: &Arc<dyn Array>, new_coords: Buffer) -> Arc<ArrayData> {
+        let geometries: &ListArray = downcast_array(array_ref);
 
         let feature_offset_array = geometries.data();
+
         let feature_offsets_buffer = &feature_offset_array.buffers()[0];
         let num_features = (feature_offsets_buffer.len() / std::mem::size_of::<i32>()) - 1;
 
@@ -273,10 +240,10 @@ where
         let line_offsets_buffer = &line_offsets_array.buffers()[0];
         let num_lines = (line_offsets_buffer.len() / std::mem::size_of::<i32>()) - 1;
 
-        let num_coords = coords_buffer.len() / std::mem::size_of::<Coordinate2D>();
+        let num_coords = new_coords.len() / std::mem::size_of::<Coordinate2D>();
         let num_floats = num_coords * 2;
 
-        let multi_line_string_array = ArrayData::builder(MultiLineString::arrow_data_type())
+        ArrayData::builder(MultiLineString::arrow_data_type())
             .len(num_features)
             .add_buffer(feature_offsets_buffer.clone())
             .add_child_data(
@@ -289,61 +256,14 @@ where
                             .add_child_data(
                                 ArrayData::builder(DataType::Float64)
                                     .len(num_floats)
-                                    .add_buffer(coords_buffer)
+                                    .add_buffer(new_coords)
                                     .build(),
                             )
                             .build(),
                     )
                     .build(),
             )
-            .build();
-
-        let mut columns = Vec::<arrow::datatypes::Field>::with_capacity(self.table.num_columns());
-        let mut column_values =
-            Vec::<arrow::array::ArrayRef>::with_capacity(self.table.num_columns());
-
-        // copy geometry data if feature collection is geo collection
-        // if CollectionType::IS_GEOMETRY {
-        columns.push(arrow::datatypes::Field::new(
-            Self::GEOMETRY_COLUMN_NAME,
-            MultiLineString::arrow_data_type(),
-            false,
-        ));
-        column_values.push(Arc::new(ListArray::from(multi_line_string_array)));
-        // }
-
-        // copy time data
-        columns.push(arrow::datatypes::Field::new(
-            Self::TIME_COLUMN_NAME,
-            TimeInterval::arrow_data_type(),
-            false,
-        ));
-        column_values.push(
-            self.table
-                .column_by_name(Self::TIME_COLUMN_NAME)
-                .expect("The time column must exist")
-                .clone(),
-        );
-
-        // copy remaining attribute data
-        for (column_name, column_type) in &self.types {
-            columns.push(arrow::datatypes::Field::new(
-                &column_name,
-                column_type.arrow_data_type(),
-                column_type.nullable(),
-            ));
-            column_values.push(
-                self.table
-                    .column_by_name(&column_name)
-                    .expect("The attribute column must exist")
-                    .clone(),
-            );
-        }
-
-        Ok(Self::new_from_internals(
-            struct_array_from_data(columns, column_values, self.table.len()),
-            self.types.clone(),
-        ))
+            .build()
     }
 }
 
@@ -607,7 +527,7 @@ mod tests {
 
     #[test]
     fn reproject_multi_lines_epsg4326_epsg900913_collection() {
-        use crate::operations::reproject::{CoordinateProjection, CoordinateProjector};
+        use crate::operations::reproject::{CoordinateProjection, CoordinateProjector, Reproject};
         use crate::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
 
         use crate::util::well_known_data::{

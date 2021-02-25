@@ -1,9 +1,12 @@
-use arrow::array::{
-    as_primitive_array, as_string_array, Array, ArrayData, ArrayRef, BooleanArray, ListArray,
-    StructArray,
-};
 use arrow::datatypes::{DataType, Field, Float64Type, Int64Type};
 use arrow::error::ArrowError;
+use arrow::{
+    array::{
+        as_primitive_array, as_string_array, Array, ArrayData, ArrayRef, BooleanArray, ListArray,
+        StructArray,
+    },
+    buffer::Buffer,
+};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
@@ -15,9 +18,6 @@ use std::mem;
 use std::ops::{Bound, RangeBounds};
 use std::sync::Arc;
 
-use crate::collections::{error, IntoGeometryIterator, VectorDataType, VectorDataTyped};
-use crate::collections::{FeatureCollectionError, IntoGeometryOptionsIterator};
-use crate::json_map;
 use crate::primitives::{
     CategoricalDataRef, DecimalDataRef, FeatureData, FeatureDataRef, FeatureDataType,
     FeatureDataValue, Geometry, NumberDataRef, TextDataRef, TimeInterval,
@@ -25,6 +25,17 @@ use crate::primitives::{
 use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::helpers::SomeIter;
 use crate::util::Result;
+use crate::{
+    collections::{error, IntoGeometryIterator, VectorDataType, VectorDataTyped},
+    operations::reproject::Reproject,
+};
+use crate::{
+    collections::{FeatureCollectionError, IntoGeometryOptionsIterator},
+    operations::reproject::CoordinateProjection,
+};
+use crate::{json_map, primitives::Coordinate2D};
+
+use super::{geo_feature_collection::ReplaceRawArrayCoords, GeometryCollection};
 
 #[allow(clippy::unsafe_derive_deserialize)]
 #[derive(Debug, Deserialize, Serialize)]
@@ -1310,6 +1321,86 @@ mod struct_serde {
 
             self.visit_byte_buf(bytes)
         }
+    }
+}
+
+impl<P, G> Reproject<P> for FeatureCollection<G>
+where
+    P: CoordinateProjection,
+    G: Geometry + ArrowTyped,
+    Self: ReplaceRawArrayCoords + GeometryCollection,
+{
+    type Out = Self;
+
+    fn reproject(&self, projector: &P) -> Result<Self::Out> {
+        // get the coordinates
+        let coords_ref = self.coordinates();
+        // reproject them...
+        let projected_coords = projector.project_coordinate_slice_copy(coords_ref)?;
+
+        // transform the coordinates into a byte slice and create a Buffer from it.
+        let coords_buffer = unsafe {
+            let coord_bytes: &[u8] = std::slice::from_raw_parts(
+                projected_coords.as_ptr().cast::<u8>(),
+                projected_coords.len() * std::mem::size_of::<Coordinate2D>(),
+            );
+            Buffer::from(coord_bytes)
+        };
+
+        // get the offsets (reuse)
+        let geometries_ref = self
+            .table
+            .column_by_name(Self::GEOMETRY_COLUMN_NAME)
+            .expect("There must exist a geometry column");
+
+        let multi_polygon_array = Self::replace_raw_coords(geometries_ref, coords_buffer);
+
+        let mut columns = Vec::<arrow::datatypes::Field>::with_capacity(self.table.num_columns());
+        let mut column_values =
+            Vec::<arrow::array::ArrayRef>::with_capacity(self.table.num_columns());
+
+        // copy geometry data if feature collection is geo collection
+        // if CollectionType::IS_GEOMETRY {
+        columns.push(arrow::datatypes::Field::new(
+            Self::GEOMETRY_COLUMN_NAME,
+            G::arrow_data_type(),
+            false,
+        ));
+        column_values.push(Arc::new(ListArray::from(multi_polygon_array)));
+        // }
+
+        // copy time data
+        columns.push(arrow::datatypes::Field::new(
+            Self::TIME_COLUMN_NAME,
+            TimeInterval::arrow_data_type(),
+            false,
+        ));
+        column_values.push(
+            self.table
+                .column_by_name(Self::TIME_COLUMN_NAME)
+                .expect("The time column must exist")
+                .clone(),
+        );
+
+        // copy remaining attribute data
+        for (column_name, column_type) in &self.types {
+            columns.push(arrow::datatypes::Field::new(
+                &column_name,
+                column_type.arrow_data_type(),
+                column_type.nullable(),
+            ));
+            column_values.push(
+                self.table
+                    .column_by_name(&column_name)
+                    .expect("The attribute column must exist")
+                    .clone(),
+            );
+        }
+
+        Ok(Self::new_from_internals(
+            struct_array_from_data(columns, column_values, self.table.len()),
+            self.types.clone(),
+        ))
     }
 }
 
