@@ -1,4 +1,7 @@
-use crate::{datasets::add_from_directory::add_data_sets_from_directory, error::Result};
+use crate::{
+    datasets::add_from_directory::add_data_sets_from_directory, error::Result,
+    util::dataset_defs_dir,
+};
 use crate::{
     projects::hashmap_projectdb::HashMapProjectDb, users::hashmap_userdb::HashMapUserDb,
     users::session::Session, workflows::registry::HashMapRegistry,
@@ -28,7 +31,7 @@ impl InMemoryContext {
     #[allow(clippy::too_many_lines)]
     pub async fn new_with_data() -> Self {
         let mut db = HashMapDataSetDb::default();
-        add_data_sets_from_directory(&mut db, "services/test-data/dataset_defs".into()).await;
+        add_data_sets_from_directory(&mut db, dataset_defs_dir()).await;
 
         InMemoryContext {
             data_set_db: Arc::new(RwLock::new(db)),
