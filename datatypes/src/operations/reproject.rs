@@ -31,7 +31,6 @@ pub struct CoordinateProjector {
     p: Proj,
 }
 
-// TODO: move Proj impl into a separate module?
 impl CoordinateProjection for CoordinateProjector {
     fn from_known_srs(from: SpatialReference, to: SpatialReference) -> Result<Self> {
         let p = Proj::new_known_crs(&from.to_string(), &to.to_string(), None)
