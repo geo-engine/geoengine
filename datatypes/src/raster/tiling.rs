@@ -134,6 +134,18 @@ impl TileInformation {
         }
     }
 
+    pub fn with_bbox_and_shape(bbox: BoundingBox2D, shape: GridShape2D) -> Self {
+        Self {
+            tile_size_in_pixels: shape,
+            global_tile_position: [0, 0].into(),
+            global_geo_transform: GeoTransform {
+                origin_coordinate: bbox.upper_left(),
+                x_pixel_size: bbox.size_x() / shape.axis_size_x() as f64,
+                y_pixel_size: -bbox.size_y() / shape.axis_size_y() as f64,
+            },
+        }
+    }
+
     #[allow(clippy::unused_self)]
     pub fn local_upper_left_pixel_idx(&self) -> GridIdx2D {
         [0, 0].into()

@@ -165,10 +165,12 @@ mod tests {
     };
     use crate::mock::MockFeatureCollectionSource;
     use crate::source::{GdalSource, GdalSourceParameters};
+    use crate::util::gdal::add_ndvi_data_set;
     use chrono::NaiveDate;
     use float_cmp::approx_eq;
     use futures::StreamExt;
     use geoengine_datatypes::collections::{FeatureCollectionInfos, MultiPointCollection};
+    use geoengine_datatypes::dataset::DataSetId;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureDataRef, MultiPoint, SpatialResolution, TimeInterval,
     };
@@ -201,27 +203,12 @@ mod tests {
         assert_eq!(deserialized.params, raster_vector_join.params);
     }
 
-    fn ndvi_source() -> Box<dyn RasterOperator> {
+    fn ndvi_source(id: DataSetId) -> Box<dyn RasterOperator> {
         let gdal_source = GdalSource {
-            params: GdalSourceParameters {
-                dataset_id: "modis_ndvi".to_string(),
-                channel: None,
-            },
+            params: GdalSourceParameters { data_set: id },
         };
 
         gdal_source.boxed()
-    }
-
-    fn raster_dir() -> std::path::PathBuf {
-        let mut current_path = std::env::current_dir().unwrap();
-
-        if !current_path.ends_with("operators") {
-            current_path = current_path.join("operators");
-        }
-
-        current_path = current_path.join("test-data/raster");
-
-        current_path
     }
 
     #[tokio::test]
@@ -249,21 +236,19 @@ mod tests {
         )
         .boxed();
 
+        let mut exe_ctc = MockExecutionContext::default();
+        let ndvi_id = add_ndvi_data_set(&mut exe_ctc);
+
         let operator = RasterVectorJoin {
             params: RasterVectorJoinParams {
                 names: vec!["ndvi".to_string()],
                 aggregation: AggregationMethod::First,
             },
-            raster_sources: vec![ndvi_source()],
+            raster_sources: vec![ndvi_source(ndvi_id.clone())],
             vector_sources: vec![point_source],
         };
 
-        let execution_context = MockExecutionContext {
-            raster_data_root: raster_dir(),
-            ..Default::default()
-        };
-
-        let operator = operator.boxed().initialize(&execution_context).unwrap();
+        let operator = operator.boxed().initialize(&exe_ctc).unwrap();
 
         let query_processor = operator.query_processor().unwrap().multi_point().unwrap();
 
@@ -318,21 +303,19 @@ mod tests {
         )
         .boxed();
 
+        let mut exe_ctc = MockExecutionContext::default();
+        let ndvi_id = add_ndvi_data_set(&mut exe_ctc);
+
         let operator = RasterVectorJoin {
             params: RasterVectorJoinParams {
                 names: vec!["ndvi".to_string()],
                 aggregation: AggregationMethod::Mean,
             },
-            raster_sources: vec![ndvi_source()],
+            raster_sources: vec![ndvi_source(ndvi_id.clone())],
             vector_sources: vec![point_source],
         };
 
-        let execution_context = MockExecutionContext {
-            raster_data_root: raster_dir(),
-            ..Default::default()
-        };
-
-        let operator = operator.boxed().initialize(&execution_context).unwrap();
+        let operator = operator.boxed().initialize(&exe_ctc).unwrap();
 
         let query_processor = operator.query_processor().unwrap().multi_point().unwrap();
 

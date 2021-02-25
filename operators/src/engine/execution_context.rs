@@ -1,8 +1,10 @@
 use crate::concurrency::{ThreadPool, ThreadPoolContext};
-use crate::engine::{QueryRectangle, ResultDescriptor, VectorResultDescriptor};
+use crate::engine::{
+    QueryRectangle, RasterResultDescriptor, ResultDescriptor, VectorResultDescriptor,
+};
 use crate::error::Error;
 use crate::mock::MockDataSetDataSourceLoadingInfo;
-use crate::source::OgrSourceDataset;
+use crate::source::{GdalLoadingInfo, OgrSourceDataset};
 use crate::util::Result;
 use geoengine_datatypes::dataset::DataSetId;
 use geoengine_datatypes::raster::GridShape;
@@ -10,7 +12,6 @@ use geoengine_datatypes::raster::TilingSpecification;
 use std::any::Any;
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::path::PathBuf;
 
 /// A context that provides certain utility access during operator initialization
 pub trait ExecutionContext:
@@ -18,9 +19,9 @@ pub trait ExecutionContext:
     + Sync
     + MetaDataProvider<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>
     + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor>
+    + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor>
 {
     fn thread_pool(&self) -> ThreadPoolContext;
-    fn raster_data_root(&self) -> Result<PathBuf>; // TODO: remove once GdalSource uses MetaData
     fn tiling_specification(&self) -> TilingSpecification;
 }
 
@@ -51,7 +52,6 @@ where
 }
 
 pub struct MockExecutionContext {
-    pub raster_data_root: PathBuf,
     pub thread_pool: ThreadPool,
     pub meta_data: HashMap<DataSetId, Box<dyn Any + Send + Sync>>,
     pub tiling_specification: TilingSpecification,
@@ -60,7 +60,6 @@ pub struct MockExecutionContext {
 impl Default for MockExecutionContext {
     fn default() -> Self {
         Self {
-            raster_data_root: "../operators/test-data/raster".into(),
             thread_pool: ThreadPool::default(),
             meta_data: HashMap::default(),
             tiling_specification: TilingSpecification {
@@ -87,10 +86,6 @@ impl MockExecutionContext {
 impl ExecutionContext for MockExecutionContext {
     fn thread_pool(&self) -> ThreadPoolContext {
         self.thread_pool.create_context()
-    }
-
-    fn raster_data_root(&self) -> Result<PathBuf> {
-        Ok(self.raster_data_root.clone())
     }
 
     fn tiling_specification(&self) -> TilingSpecification {

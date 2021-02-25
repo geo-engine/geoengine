@@ -106,7 +106,7 @@ mod tests {
     use crate::handlers::{handle_rejection, ErrorResponse};
     use crate::util::tests::{
         check_allowed_http_methods, check_allowed_http_methods2, create_session_helper,
-        register_workflow_helper,
+        register_ndvi_workflow_helper,
     };
     use crate::util::IdResponse;
     use crate::workflows::registry::WorkflowRegistry;
@@ -261,7 +261,7 @@ mod tests {
 
         let session = create_session_helper(&ctx).await;
 
-        let (workflow, id) = register_workflow_helper(&ctx).await;
+        let (workflow, id) = register_ndvi_workflow_helper(&ctx).await;
 
         let res = warp::test::request()
             .method(method)
@@ -293,7 +293,7 @@ mod tests {
     async fn load_missing_header() {
         let ctx = InMemoryContext::default();
 
-        let (_, id) = register_workflow_helper(&ctx).await;
+        let (_, id) = register_ndvi_workflow_helper(&ctx).await;
 
         let res = warp::test::request()
             .method("GET")
