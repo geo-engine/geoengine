@@ -518,8 +518,11 @@ mod tests {
     use crate::engine::{MockExecutionContext, MockQueryContext, QueryRectangle};
     use crate::util::gdal::{add_ndvi_data_set, raster_dir};
     use crate::util::Result;
-    use geoengine_datatypes::{primitives::{Measurement, SpatialResolution, TimeGranularity}, raster::GridShape2D};
     use geoengine_datatypes::raster::{TileInformation, TilingStrategy};
+    use geoengine_datatypes::{
+        primitives::{Measurement, SpatialResolution, TimeGranularity},
+        raster::GridShape2D,
+    };
     use geoengine_datatypes::{raster::GridIdx2D, spatial_reference::SpatialReference};
 
     async fn query_gdal_source(
