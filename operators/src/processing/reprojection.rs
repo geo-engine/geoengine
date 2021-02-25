@@ -18,7 +18,7 @@ use crate::{
     util::Result,
 };
 
-use super::query_rewrite::QueryRewriteProcessor;
+use super::map_query::MapQueryProcessor;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ReprojectionParams {
@@ -83,7 +83,7 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
         match self.vector_sources[0].query_processor()? {
             // TODO: use macro for that
             TypedVectorQueryProcessor::Data(source) => Ok(TypedVectorQueryProcessor::Data(
-                QueryRewriteProcessor::new(source, move |query| {
+                MapQueryProcessor::new(source, move |query| {
                     query_rewrite_fn(query, state.0, state.1)
                 })
                 .boxed(),
@@ -142,7 +142,7 @@ fn query_rewrite_fn(
 impl<Q, G> VectorQueryProcessor for ReprojectionProcessor<Q, G>
 where
     Q: VectorQueryProcessor<VectorType = G>,
-    G: 'static + Reproject<CoordinateProjector> + Sync + Send,
+    G: Reproject<CoordinateProjector> + Sync + Send,
 {
     type VectorType = G::Out;
 
@@ -171,45 +171,75 @@ where
 
 #[cfg(test)]
 mod tests {
+
+    use geoengine_datatypes::{
+        collections::{MultiLineStringCollection, MultiPointCollection, MultiPolygonCollection},
+        primitives::{
+            BoundingBox2D, MultiLineString, MultiPoint, MultiPolygon, SpatialResolution,
+            TimeInterval,
+        },
+        spatial_reference::SpatialReferenceAuthority,
+        util::well_known_data::{
+            COLOGNE_EPSG_4326, COLOGNE_EPSG_900_913, HAMBURG_EPSG_4326, HAMBURG_EPSG_900_913,
+            MARBURG_EPSG_4326, MARBURG_EPSG_900_913,
+        },
+    };
+
+    use crate::engine::{MockExecutionContext, MockQueryContext, QueryProcessor};
+    use crate::mock::MockFeatureCollectionSource;
+    use futures::StreamExt;
+
     use super::*;
 
-    #[test]
     #[tokio::test]
     async fn multi_point() -> Result<()> {
         let points = MultiPointCollection::from_data(
-            MultiPoint::many(vec![(0.001, 0.1), (1.0, 1.1), (2.0, 3.1)]).unwrap(),
+            MultiPoint::many(vec![
+                MARBURG_EPSG_4326,
+                COLOGNE_EPSG_4326,
+                HAMBURG_EPSG_4326,
+            ])
+            .unwrap(),
+            vec![TimeInterval::new_unchecked(0, 1); 3],
+            Default::default(),
+        )?;
+
+        let projected_points = MultiPointCollection::from_data(
+            MultiPoint::many(vec![
+                MARBURG_EPSG_900_913,
+                COLOGNE_EPSG_900_913,
+                HAMBURG_EPSG_900_913,
+            ])
+            .unwrap(),
             vec![TimeInterval::new_unchecked(0, 1); 3],
             Default::default(),
         )?;
 
         let point_source = MockFeatureCollectionSource::single(points.clone()).boxed();
 
-        let polygon_source =
-            MockFeatureCollectionSource::single(MultiPolygonCollection::from_data(
-                vec![MultiPolygon::new(vec![vec![vec![
-                    (0.0, 0.0).into(),
-                    (10.0, 0.0).into(),
-                    (10.0, 10.0).into(),
-                    (0.0, 10.0).into(),
-                    (0.0, 0.0).into(),
-                ]]])?],
-                vec![TimeInterval::new_unchecked(0, 1); 1],
-                Default::default(),
-            )?)
-            .boxed();
+        let target_spatial_reference =
+            SpatialReference::new(SpatialReferenceAuthority::Epsg, 900913);
 
-        let operator = PointInPolygonFilter {
-            vector_sources: vec![point_source, polygon_source],
+        let initialized_operator = Reprojection {
+            vector_sources: vec![point_source],
             raster_sources: vec![],
-            params: (),
+            params: ReprojectionParams {
+                target_spatial_reference,
+            },
         }
         .boxed()
         .initialize(&MockExecutionContext::default())?;
 
-        let query_processor = operator.query_processor()?.multi_point().unwrap();
+        let query_processor = initialized_operator.query_processor()?;
+
+        let query_processor = query_processor.multi_point().unwrap();
 
         let query_rectangle = QueryRectangle {
-            bbox: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
+            bbox: BoundingBox2D::new(
+                (COLOGNE_EPSG_4326.x, MARBURG_EPSG_4326.y).into(),
+                (MARBURG_EPSG_4326.x, HAMBURG_EPSG_4326.y).into(),
+            )
+            .unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
@@ -224,7 +254,145 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        assert_eq!(result[0], points);
+        assert_eq!(result[0], projected_points);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn multi_lines() -> Result<()> {
+        let lines = MultiLineStringCollection::from_data(
+            vec![MultiLineString::new(vec![vec![
+                MARBURG_EPSG_4326,
+                COLOGNE_EPSG_4326,
+                HAMBURG_EPSG_4326,
+            ]])
+            .unwrap()],
+            vec![TimeInterval::new_unchecked(0, 1); 1],
+            Default::default(),
+        )?;
+
+        let projected_lines = MultiLineStringCollection::from_data(
+            vec![MultiLineString::new(vec![vec![
+                MARBURG_EPSG_900_913,
+                COLOGNE_EPSG_900_913,
+                HAMBURG_EPSG_900_913,
+            ]])
+            .unwrap()],
+            vec![TimeInterval::new_unchecked(0, 1); 1],
+            Default::default(),
+        )?;
+
+        let lines_source = MockFeatureCollectionSource::single(lines.clone()).boxed();
+
+        let target_spatial_reference =
+            SpatialReference::new(SpatialReferenceAuthority::Epsg, 900913);
+
+        let initialized_operator = Reprojection {
+            vector_sources: vec![lines_source],
+            raster_sources: vec![],
+            params: ReprojectionParams {
+                target_spatial_reference,
+            },
+        }
+        .boxed()
+        .initialize(&MockExecutionContext::default())?;
+
+        let query_processor = initialized_operator.query_processor()?;
+
+        let query_processor = query_processor.multi_line_string().unwrap();
+
+        let query_rectangle = QueryRectangle {
+            bbox: BoundingBox2D::new(
+                (COLOGNE_EPSG_4326.x, MARBURG_EPSG_4326.y).into(),
+                (MARBURG_EPSG_4326.x, HAMBURG_EPSG_4326.y).into(),
+            )
+            .unwrap(),
+            time_interval: TimeInterval::default(),
+            spatial_resolution: SpatialResolution::zero_point_one(),
+        };
+        let ctx = MockQueryContext::new(usize::MAX);
+
+        let query = query_processor.query(query_rectangle, &ctx);
+
+        let result = query
+            .map(Result::unwrap)
+            .collect::<Vec<MultiLineStringCollection>>()
+            .await;
+
+        assert_eq!(result.len(), 1);
+
+        assert_eq!(result[0], projected_lines);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn multi_polygons() -> Result<()> {
+        let polygons = MultiPolygonCollection::from_data(
+            vec![MultiPolygon::new(vec![vec![vec![
+                MARBURG_EPSG_4326,
+                COLOGNE_EPSG_4326,
+                HAMBURG_EPSG_4326,
+                MARBURG_EPSG_4326,
+            ]]])
+            .unwrap()],
+            vec![TimeInterval::new_unchecked(0, 1); 1],
+            Default::default(),
+        )?;
+
+        let projected_polygons = MultiPolygonCollection::from_data(
+            vec![MultiPolygon::new(vec![vec![vec![
+                MARBURG_EPSG_900_913,
+                COLOGNE_EPSG_900_913,
+                HAMBURG_EPSG_900_913,
+                MARBURG_EPSG_900_913,
+            ]]])
+            .unwrap()],
+            vec![TimeInterval::new_unchecked(0, 1); 1],
+            Default::default(),
+        )?;
+
+        let polygon_source = MockFeatureCollectionSource::single(polygons.clone()).boxed();
+
+        let target_spatial_reference =
+            SpatialReference::new(SpatialReferenceAuthority::Epsg, 900913);
+
+        let initialized_operator = Reprojection {
+            vector_sources: vec![polygon_source],
+            raster_sources: vec![],
+            params: ReprojectionParams {
+                target_spatial_reference,
+            },
+        }
+        .boxed()
+        .initialize(&MockExecutionContext::default())?;
+
+        let query_processor = initialized_operator.query_processor()?;
+
+        let query_processor = query_processor.multi_polygon().unwrap();
+
+        let query_rectangle = QueryRectangle {
+            bbox: BoundingBox2D::new(
+                (COLOGNE_EPSG_4326.x, MARBURG_EPSG_4326.y).into(),
+                (MARBURG_EPSG_4326.x, HAMBURG_EPSG_4326.y).into(),
+            )
+            .unwrap(),
+            time_interval: TimeInterval::default(),
+            spatial_resolution: SpatialResolution::zero_point_one(),
+        };
+        let ctx = MockQueryContext::new(usize::MAX);
+
+        let query = query_processor.query(query_rectangle, &ctx);
+
+        let result = query
+            .map(Result::unwrap)
+            .collect::<Vec<MultiPolygonCollection>>()
+            .await;
+
+        assert_eq!(result.len(), 1);
+
+        assert_eq!(result[0], projected_polygons);
 
         Ok(())
     }
