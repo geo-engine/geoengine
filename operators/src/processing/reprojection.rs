@@ -218,7 +218,7 @@ mod tests {
         let point_source = MockFeatureCollectionSource::single(points.clone()).boxed();
 
         let target_spatial_reference =
-            SpatialReference::new(SpatialReferenceAuthority::Epsg, 900913);
+            SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
 
         let initialized_operator = Reprojection {
             vector_sources: vec![point_source],
@@ -286,7 +286,7 @@ mod tests {
         let lines_source = MockFeatureCollectionSource::single(lines.clone()).boxed();
 
         let target_spatial_reference =
-            SpatialReference::new(SpatialReferenceAuthority::Epsg, 900913);
+            SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
 
         let initialized_operator = Reprojection {
             vector_sources: vec![lines_source],
@@ -356,7 +356,7 @@ mod tests {
         let polygon_source = MockFeatureCollectionSource::single(polygons.clone()).boxed();
 
         let target_spatial_reference =
-            SpatialReference::new(SpatialReferenceAuthority::Epsg, 900913);
+            SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
 
         let initialized_operator = Reprojection {
             vector_sources: vec![polygon_source],
