@@ -222,7 +222,7 @@ where
 }
 
 #[cfg(test)]
-pub(crate) mod tests {
+mod tests {
     use crate::spatial_reference::SpatialReferenceAuthority;
     use crate::util::well_known_data::{
         COLOGNE_EPSG_4326, COLOGNE_EPSG_900_913, HAMBURG_EPSG_4326, HAMBURG_EPSG_900_913,
