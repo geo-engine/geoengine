@@ -21,10 +21,10 @@ where
         let scale_y = (raster_y_size as f64) / f64::from(height);
 
         let image_buffer = if let Some(no_data_value) = self.no_data_value {
-            let no_data_fn = |p: P| p == no_data_value;
+            let no_data_fn = move |p: P| p == no_data_value;
             create_rgba_image(self, width, height, colorizer, scale_x, scale_y, no_data_fn)
         } else {
-            let no_data_fn = |_| false;
+            let no_data_fn = move |_| false;
             create_rgba_image(self, width, height, colorizer, scale_x, scale_y, no_data_fn)
         };
 
