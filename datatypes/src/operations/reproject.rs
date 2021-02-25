@@ -4,8 +4,8 @@ use crate::{
     error,
     primitives::{
         BoundingBox2D, Coordinate2D, Line, MultiLineString, MultiLineStringAccess,
-        MultiLineStringRef, MultiPoint, MultiPointAccess, MultiPolygon, MultiPolygonAccess,
-        MultiPolygonRef, SpatialBounded,
+        MultiLineStringRef, MultiPoint, MultiPointAccess, MultiPointRef, MultiPolygon,
+        MultiPolygonAccess, MultiPolygonRef, SpatialBounded,
     },
     spatial_reference::SpatialReference,
     util::Result,
@@ -25,18 +25,22 @@ pub trait CoordinateProjection {
     ) -> Result<Vec<Coordinate2D>>;
 }
 
-pub struct CoordinateProjector(Proj);
+pub struct CoordinateProjector {
+    pub from: SpatialReference,
+    pub to: SpatialReference,
+    p: Proj,
+}
 
 // TODO: move Proj impl into a separate module?
 impl CoordinateProjection for CoordinateProjector {
     fn from_known_srs(from: SpatialReference, to: SpatialReference) -> Result<Self> {
-        Proj::new_known_crs(&from.to_string(), &to.to_string(), None)
-            .ok_or(error::Error::NoCoordinateProjector { from, to })
-            .map(CoordinateProjector)
+        let p = Proj::new_known_crs(&from.to_string(), &to.to_string(), None)
+            .ok_or(error::Error::NoCoordinateProjector { from, to })?;
+        Ok(CoordinateProjector { from, to, p })
     }
 
     fn project_coordinate(&self, c: Coordinate2D) -> Result<Coordinate2D> {
-        self.0.convert(c).map_err(Into::into)
+        self.p.convert(c).map_err(Into::into)
     }
 
     fn project_coordinate_slice_copy<A: AsRef<[Coordinate2D]>>(
@@ -46,9 +50,26 @@ impl CoordinateProjection for CoordinateProjector {
         let c_ref = coords.as_ref();
 
         let mut cc = Vec::from(c_ref);
-        self.0.convert_array(&mut cc)?;
+        self.p.convert_array(&mut cc)?;
 
         Ok(cc)
+    }
+}
+
+impl Clone for CoordinateProjector {
+    fn clone(&self) -> Self {
+        CoordinateProjector {
+            from: self.from,
+            to: self.to,
+            p: Proj::new_known_crs(&self.from.to_string(), &self.to.to_string(), None)
+                .expect("worked before"),
+        }
+    }
+}
+
+impl AsRef<CoordinateProjector> for CoordinateProjector {
+    fn as_ref(&self) -> &CoordinateProjector {
+        self
     }
 }
 
@@ -68,9 +89,19 @@ where
     }
 }
 
-impl<P, A> Reproject<P> for A
+impl<P> Reproject<P> for MultiPoint
 where
-    A: MultiPointAccess,
+    P: CoordinateProjection,
+{
+    type Out = MultiPoint;
+    fn reproject(&self, projector: &P) -> Result<MultiPoint> {
+        let ps: Result<Vec<Coordinate2D>> = projector.project_coordinate_slice_copy(self.points());
+        ps.and_then(MultiPoint::new)
+    }
+}
+
+impl<'g, P> Reproject<P> for MultiPointRef<'g>
+where
     P: CoordinateProjection,
 {
     type Out = MultiPoint;
