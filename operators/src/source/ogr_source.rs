@@ -899,18 +899,18 @@ impl FeatureCollectionBuilderGeometryHandler<NoGeometry>
 
 #[cfg(test)]
 mod tests {
-    use futures::TryStreamExt;
-    use serde_json::json;
-
-    use geoengine_datatypes::collections::{DataCollection, MultiPointCollection};
-    use geoengine_datatypes::primitives::{BoundingBox2D, FeatureData, SpatialResolution};
+    use super::*;
 
     use crate::engine::{MockExecutionContext, MockQueryContext, StaticMetaData};
-
-    use super::*;
+    use futures::TryStreamExt;
+    use geoengine_datatypes::collections::{
+        DataCollection, GeometryCollection, MultiPointCollection, MultiPolygonCollection,
+    };
     use geoengine_datatypes::dataset::InternalDataSetId;
+    use geoengine_datatypes::primitives::{BoundingBox2D, FeatureData, SpatialResolution};
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
     use geoengine_datatypes::util::Identifier;
+    use serde_json::json;
 
     #[test]
     fn specification_serde() {
@@ -3010,5 +3010,87 @@ mod tests {
         assert_eq!(result.len(), 1);
 
         assert!(result[0].is_empty());
+    }
+
+    #[tokio::test]
+    async fn polygon_gpkg() {
+        let dataset = DataSetId::Internal(InternalDataSetId::new());
+        let mut exe_ctx = MockExecutionContext::default();
+        exe_ctx.add_meta_data(
+            dataset.clone(),
+            Box::new(StaticMetaData {
+                loading_info: OgrSourceDataset {
+                    file_name: "test-data/vector/data/germany_polygon.gpkg".into(),
+                    layer_name: "test_germany".to_owned(),
+                    data_type: Some(VectorDataType::MultiPolygon),
+                    time: OgrSourceDatasetTimeType::None,
+                    columns: Some(OgrSourceColumnSpec {
+                        x: "".to_owned(),
+                        y: None,
+                        numeric: vec![],
+                        decimal: vec![],
+                        textual: vec![],
+                    }),
+                    default_geometry: None,
+                    force_ogr_time_filter: false,
+                    on_error: OgrSourceErrorSpec::Abort,
+                    provenance: None,
+                },
+                result_descriptor: VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPolygon,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: Default::default(),
+                },
+            }),
+        );
+
+        let source = OgrSource {
+            params: OgrSourceParameters {
+                data_set: dataset,
+                attribute_projection: None,
+            },
+        }
+        .boxed()
+        .initialize(&exe_ctx)
+        .unwrap();
+
+        assert_eq!(
+            source.result_descriptor().data_type,
+            VectorDataType::MultiPolygon
+        );
+        assert_eq!(
+            source.result_descriptor().spatial_reference,
+            SpatialReference::epsg_4326().into()
+        );
+
+        let query_processor = source.query_processor().unwrap().multi_polygon().unwrap();
+
+        let query_bbox = BoundingBox2D::new((-180.0, -90.0).into(), (180.00, 90.0).into()).unwrap();
+
+        let context = MockQueryContext::new(0);
+        let query = query_processor.query(
+            QueryRectangle {
+                bbox: query_bbox,
+                time_interval: Default::default(),
+                spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
+            },
+            &context,
+        );
+
+        let result: Vec<MultiPolygonCollection> = query.try_collect().await.unwrap();
+
+        assert_eq!(result.len(), 1);
+        let result = result.into_iter().next().unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result.feature_offsets().len(), 2);
+        assert_eq!(result.polygon_offsets().len(), 23);
+        assert_eq!(result.ring_offsets().len(), 23);
+        assert_eq!(result.coordinates().len(), 3027);
+
+        assert_eq!(
+            result.coordinates()[0],
+            (13.815_724_731_000_074, 48.766_430_156_000_055).into()
+        );
     }
 }
