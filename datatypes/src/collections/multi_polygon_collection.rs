@@ -749,6 +749,7 @@ mod tests {
     fn reproject_multi_lines_epsg4326_epsg900913_collection() {
         use crate::operations::reproject::Reproject;
         use crate::operations::reproject::{CoordinateProjection, CoordinateProjector};
+        use crate::primitives::FeatureData;
         use crate::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
 
         use crate::util::well_known_data::{
@@ -760,10 +761,8 @@ mod tests {
         let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
         let projector = CoordinateProjector::from_known_srs(from, to).unwrap();
 
-        let mut builder = MultiPolygonCollection::builder().finish_header();
-
-        builder
-            .push_geometry(
+        let collection = MultiPolygonCollection::from_slices(
+            &[
                 MultiPolygon::new(vec![
                     vec![vec![
                         HAMBURG_EPSG_4326,
@@ -779,10 +778,6 @@ mod tests {
                     ]],
                 ])
                 .unwrap(),
-            )
-            .unwrap();
-        builder
-            .push_geometry(
                 MultiPolygon::new(vec![vec![vec![
                     MARBURG_EPSG_4326,
                     COLOGNE_EPSG_4326,
@@ -790,21 +785,14 @@ mod tests {
                     MARBURG_EPSG_4326,
                 ]]])
                 .unwrap(),
-            )
-            .unwrap();
+            ],
+            &[TimeInterval::default(), TimeInterval::default()],
+            &[("A", FeatureData::Decimal(vec![1, 2]))],
+        )
+        .unwrap();
 
-        for _ in 0..2 {
-            builder.push_time_interval(TimeInterval::default()).unwrap();
-
-            builder.finish_row();
-        }
-
-        let collection = builder.build().unwrap();
-
-        let mut builder = MultiPolygonCollection::builder().finish_header();
-
-        builder
-            .push_geometry(
+        let expected_collection = MultiPolygonCollection::from_slices(
+            &[
                 MultiPolygon::new(vec![
                     vec![vec![
                         HAMBURG_EPSG_900_913,
@@ -820,10 +808,6 @@ mod tests {
                     ]],
                 ])
                 .unwrap(),
-            )
-            .unwrap();
-        builder
-            .push_geometry(
                 MultiPolygon::new(vec![vec![vec![
                     MARBURG_EPSG_900_913,
                     COLOGNE_EPSG_900_913,
@@ -831,16 +815,11 @@ mod tests {
                     MARBURG_EPSG_900_913,
                 ]]])
                 .unwrap(),
-            )
-            .unwrap();
-
-        for _ in 0..2 {
-            builder.push_time_interval(TimeInterval::default()).unwrap();
-
-            builder.finish_row();
-        }
-
-        let expected_collection = builder.build().unwrap();
+            ],
+            &[TimeInterval::default(), TimeInterval::default()],
+            &[("A", FeatureData::Decimal(vec![1, 2]))],
+        )
+        .unwrap();
 
         let proj_collection = collection.reproject(&projector).unwrap();
 

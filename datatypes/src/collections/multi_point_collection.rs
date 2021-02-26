@@ -187,7 +187,7 @@ impl ReplaceRawArrayCoords for MultiPointCollection {
         let geometries: &ListArray = downcast_array(array_ref);
         let offset_array = geometries.data();
         let offsets_buffer = &offset_array.buffers()[0];
-        let num_features = (offsets_buffer.len() / std::mem::size_of::<i32>()) - 1;
+        let num_features = offset_array.len();
 
         let num_coords = new_coords.len() / std::mem::size_of::<Coordinate2D>();
         let num_floats = num_coords * 2;
