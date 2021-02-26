@@ -1,6 +1,4 @@
-use std::marker::PhantomData;
-
-use futures::TryStreamExt;
+use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::{
     operations::reproject::{CoordinateProjection, CoordinateProjector, Reproject},
     spatial_reference::SpatialReference,
@@ -156,14 +154,12 @@ where
         Box::pin(
             self.source
                 .vector_query(rewritten_query, ctx)
-                .map_ok(move |collection| {
-                    collection
-                        .reproject(
-                            CoordinateProjector::from_known_srs(self.from, self.to)
-                                .unwrap()
-                                .as_ref(),
-                        )
-                        .unwrap()
+                .map(move |collection_result| {
+                    collection_result.and_then(|collection| {
+                        CoordinateProjector::from_known_srs(self.from, self.to)
+                            .and_then(|projector| collection.reproject(projector.as_ref()))
+                            .map_err(Into::into)
+                    })
                 }),
         )
     }
