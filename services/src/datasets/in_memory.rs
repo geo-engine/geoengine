@@ -8,13 +8,19 @@ use crate::error::Result;
 use crate::users::user::UserId;
 use crate::util::user_input::Validated;
 use async_trait::async_trait;
-use geoengine_datatypes::dataset::{DataSetId, DataSetProviderId, InternalDataSetId};
+use geoengine_datatypes::{
+    dataset::{DataSetId, DataSetProviderId, InternalDataSetId},
+    util::Identifier,
+};
 use geoengine_operators::engine::{
-    MetaData, MetaDataProvider, RasterResultDescriptor, StaticMetaData, VectorResultDescriptor,
+    MetaData, MetaDataProvider, RasterResultDescriptor, StaticMetaData, TypedResultDescriptor,
+    VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDataSetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, GdalMetaDataRegular, OgrSourceDataset};
 use std::collections::HashMap;
+
+use super::storage::MetaDataDefinition;
 
 #[derive(Default)]
 pub struct HashMapDataSetDb {
@@ -58,28 +64,41 @@ impl DataSetProviderDb for HashMapDataSetDb {
 }
 
 pub trait HashMapStorable: Send + Sync {
-    fn store(&self, id: InternalDataSetId, db: &mut HashMapDataSetDb);
+    fn store(&self, id: InternalDataSetId, db: &mut HashMapDataSetDb) -> TypedResultDescriptor;
 }
 
 impl DataSetStorer for HashMapDataSetDb {
     type StorageType = Box<dyn HashMapStorable>;
 }
 
+impl HashMapStorable for MetaDataDefinition {
+    fn store(&self, id: InternalDataSetId, db: &mut HashMapDataSetDb) -> TypedResultDescriptor {
+        match self {
+            MetaDataDefinition::MockMetaData(d) => d.store(id, db),
+            MetaDataDefinition::OgrMetaData(d) => d.store(id, db),
+            MetaDataDefinition::GdalMetaDataRegular(d) => d.store(id, db),
+        }
+    }
+}
+
 impl HashMapStorable for StaticMetaData<OgrSourceDataset, VectorResultDescriptor> {
-    fn store(&self, id: InternalDataSetId, db: &mut HashMapDataSetDb) {
+    fn store(&self, id: InternalDataSetId, db: &mut HashMapDataSetDb) -> TypedResultDescriptor {
         db.ogr_data_sets.insert(id, self.clone());
+        self.result_descriptor.clone().into()
     }
 }
 
 impl HashMapStorable for StaticMetaData<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor> {
-    fn store(&self, id: InternalDataSetId, db: &mut HashMapDataSetDb) {
+    fn store(&self, id: InternalDataSetId, db: &mut HashMapDataSetDb) -> TypedResultDescriptor {
         db.mock_data_sets.insert(id, self.clone());
+        self.result_descriptor.clone().into()
     }
 }
 
 impl HashMapStorable for GdalMetaDataRegular {
-    fn store(&self, id: InternalDataSetId, db: &mut HashMapDataSetDb) {
+    fn store(&self, id: InternalDataSetId, db: &mut HashMapDataSetDb) -> TypedResultDescriptor {
         db.gdal_data_sets.insert(id, self.clone());
+        self.result_descriptor.clone().into()
     }
 }
 
@@ -91,11 +110,26 @@ impl DataSetStore for HashMapDataSetDb {
         data_set: Validated<AddDataSet>,
         meta_data: Box<dyn HashMapStorable>,
     ) -> Result<DataSetId> {
-        let d: DataSet = data_set.user_input.into();
-        let id = d.id.clone();
-        meta_data.store(id.internal().expect("from AddDataSet"), self);
+        let data_set = data_set.user_input;
+        let id = data_set
+            .id
+            .unwrap_or_else(|| InternalDataSetId::new().into());
+        let result_descriptor = meta_data.store(id.internal().expect("from AddDataSet"), self);
+
+        let d: DataSet = DataSet {
+            id: id.clone(),
+            name: data_set.name,
+            description: data_set.description,
+            result_descriptor,
+            source_operator: data_set.source_operator,
+        };
         self.data_sets.push(d);
+
         Ok(id)
+    }
+
+    fn wrap_meta_data(&self, meta: MetaDataDefinition) -> Self::StorageType {
+        Box::new(meta)
     }
 }
 
@@ -231,10 +265,10 @@ mod tests {
         };
 
         let ds = AddDataSet {
+            id: None,
             name: "OgrDataSet".to_string(),
             description: "My Ogr data set".to_string(),
             source_operator: "OgrSource".to_string(),
-            result_descriptor: descriptor.clone().into(),
         };
 
         let meta = StaticMetaData {

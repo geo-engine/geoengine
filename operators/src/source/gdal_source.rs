@@ -80,7 +80,7 @@ pub struct GdalLoadingInfoPart {
     pub params: GdalDataSetParameters,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct GdalDataSetParameters {
     pub file_path: PathBuf,
     pub rasterband_channel: usize,
@@ -90,7 +90,7 @@ pub struct GdalDataSetParameters {
 }
 
 /// How to handle file not found errors
-#[derive(Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum FileNotFoundHandling {
     NoData, // output tiles filled with nodata
     Error,  // return error tile
@@ -102,7 +102,7 @@ pub enum FileNotFoundHandling {
 // TODO: `start` is actually more a reference time, because the time series also goes in
 //        negative direction. Maybe it would be better to have a real start and end time, then
 //        everything before start and after end is just one big nodata raster instead of many
-#[derive(Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct GdalMetaDataRegular {
     pub result_descriptor: RasterResultDescriptor,
     pub params: GdalDataSetParameters,

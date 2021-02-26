@@ -61,10 +61,10 @@ mod tests {
         };
 
         let ds = AddDataSet {
+            id: None,
             name: "OgrDataSet".to_string(),
             description: "My Ogr data set".to_string(),
             source_operator: "OgrSource".to_string(),
-            result_descriptor: descriptor.clone().into(),
         };
 
         let meta = StaticMetaData {

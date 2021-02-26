@@ -1,6 +1,4 @@
-use crate::datasets::storage::{
-    AddDataSetProvider, AddMockDataSetProvider, DataSet, DataSetResultDescriptor,
-};
+use crate::datasets::storage::{AddDataSetProvider, AddMockDataSetProvider, DataSet};
 use crate::error;
 use crate::error::Result;
 use crate::users::user::UserId;
@@ -9,7 +7,8 @@ use crate::util::user_input::{UserInput, Validated};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::DataSetId;
 use geoengine_operators::engine::{
-    MetaData, MetaDataProvider, RasterResultDescriptor, ResultDescriptor, VectorResultDescriptor,
+    MetaData, MetaDataProvider, RasterResultDescriptor, ResultDescriptor, TypedResultDescriptor,
+    VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDataSetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
@@ -23,7 +22,7 @@ pub struct DataSetListing {
     pub description: String,
     pub tags: Vec<String>,
     pub source_operator: String,
-    pub result_descriptor: DataSetResultDescriptor,
+    pub result_descriptor: TypedResultDescriptor,
     // TODO: meta data like bounds, resolution
 }
 
