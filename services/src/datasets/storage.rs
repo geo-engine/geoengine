@@ -194,6 +194,8 @@ pub trait DataSetStore: DataSetStorer {
         meta_data: Self::StorageType,
     ) -> Result<DataSetId>;
 
+    /// turn given `meta` data definition into the corresponding `StorageType` for the `DataSetStore`
+    /// for use in the `add_data_set` method
     fn wrap_meta_data(&self, meta: MetaDataDefinition) -> Self::StorageType;
 }
 
