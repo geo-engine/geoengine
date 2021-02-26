@@ -256,7 +256,7 @@ impl HistogramRasterQueryProcessor {
         // TODO: compute only number of buckets if possible
 
         call_on_generic_raster_processor!(&self.input, processor => {
-            process_metadata(processor.query(query, ctx), self.metadata).await
+            process_metadata(processor.query(query, ctx)?, self.metadata).await
         })
     }
 
@@ -276,7 +276,7 @@ impl HistogramRasterQueryProcessor {
         .map_err(Error::from)?;
 
         call_on_generic_raster_processor!(&self.input, processor => {
-            let mut query = processor.query(query, ctx);
+            let mut query = processor.query(query, ctx)?;
 
             while let Some(tile) = query.next().await {
                 let tile = tile?;
@@ -325,7 +325,7 @@ impl HistogramVectorQueryProcessor {
         // TODO: compute only number of buckets if possible
 
         call_on_generic_vector_processor!(&self.input, processor => {
-            process_metadata(processor.query(query, ctx), &self.column_name, self.metadata).await
+            process_metadata(processor.query(query, ctx)?, &self.column_name, self.metadata).await
         })
     }
 
@@ -345,7 +345,7 @@ impl HistogramVectorQueryProcessor {
         .map_err(Error::from)?;
 
         call_on_generic_vector_processor!(&self.input, processor => {
-            let mut query = processor.query(query, ctx);
+            let mut query = processor.query(query, ctx)?;
 
             while let Some(collection) = query.next().await {
                 let collection = collection?;

@@ -27,16 +27,18 @@ impl QueryProcessor for MockPointSourceProcessor {
         &'a self,
         _query: QueryRectangle,
         ctx: &'a dyn QueryContext,
-    ) -> BoxStream<'a, Result<MultiPointCollection>> {
+    ) -> Result<BoxStream<'a, Result<MultiPointCollection>>> {
         let chunk_size = ctx.chunk_byte_size() / std::mem::size_of::<Coordinate2D>();
-        stream::iter(self.points.chunks(chunk_size).map(move |chunk| {
-            Ok(MultiPointCollection::from_data(
-                chunk.iter().map(Into::into).collect(),
-                vec![TimeInterval::default(); chunk.len()],
-                HashMap::new(),
-            )?)
-        }))
-        .boxed()
+        Ok(
+            stream::iter(self.points.chunks(chunk_size).map(move |chunk| {
+                Ok(MultiPointCollection::from_data(
+                    chunk.iter().map(Into::into).collect(),
+                    vec![TimeInterval::default(); chunk.len()],
+                    HashMap::new(),
+                )?)
+            }))
+            .boxed(),
+        )
     }
 }
 
@@ -131,7 +133,7 @@ mod tests {
         };
         let ctx = MockQueryContext::new(2 * std::mem::size_of::<Coordinate2D>());
 
-        let stream = point_processor.vector_query(query_rectangle, &ctx);
+        let stream = point_processor.vector_query(query_rectangle, &ctx).unwrap();
 
         let blocking_stream = block_on_stream(stream);
         let collections: Vec<MultiPointCollection> = blocking_stream.map(Result::unwrap).collect();

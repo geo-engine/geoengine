@@ -346,10 +346,10 @@ where
         &'a self,
         query: QueryRectangle,
         ctx: &'a dyn QueryContext,
-    ) -> BoxStream<'a, Result<Self::VectorType>> {
+    ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
         let result_stream =
             self.left_processor
-                .query(query, ctx)
+                .query(query, ctx)?
                 .flat_map(move |left_collection| {
                     // This implementation is a nested-loop join
 
@@ -358,7 +358,10 @@ where
                         Err(e) => return stream::once(async { Err(e) }).boxed(),
                     };
 
-                    let data_query = self.right_processor.query(query, ctx);
+                    let data_query = match self.right_processor.query(query, ctx) {
+                        Ok(data_query) => data_query,
+                        Err(e) => return stream::once(async { Err(e) }).boxed(),
+                    };
 
                     data_query
                         .flat_map(move |right_collection| {
@@ -376,7 +379,7 @@ where
                         .boxed()
                 });
 
-        FeatureCollectionChunkMerger::new(result_stream.fuse(), ctx.chunk_byte_size()).boxed()
+        Ok(FeatureCollectionChunkMerger::new(result_stream.fuse(), ctx.chunk_byte_size()).boxed())
     }
 }
 
@@ -437,7 +440,7 @@ mod tests {
             ),
         );
 
-        block_on_stream(processor.vector_query(query_rectangle, &ctx))
+        block_on_stream(processor.vector_query(query_rectangle, &ctx).unwrap())
             .collect::<Result<_>>()
             .unwrap()
     }

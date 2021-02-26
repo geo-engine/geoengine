@@ -378,12 +378,9 @@ impl QueryProcessor for CsvSourceProcessor {
         &self,
         query: QueryRectangle,
         _ctx: &'a dyn QueryContext,
-    ) -> BoxStream<'a, Result<Self::Output>> {
-        // TODO: properly propagate error
+    ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         // TODO: properly handle chunk_size
-        CsvSourceStream::new(self.params.clone(), query.bbox, 10)
-            .expect("could not create csv source")
-            .boxed()
+        Ok(CsvSourceStream::new(self.params.clone(), query.bbox, 10)?.boxed())
     }
 }
 
@@ -552,7 +549,7 @@ x,y
         };
         let ctx = MockQueryContext::new(10 * 8 * 2);
 
-        let r: Vec<Result<MultiPointCollection>> = p.query(query, &ctx).collect().await;
+        let r: Vec<Result<MultiPointCollection>> = p.query(query, &ctx).unwrap().collect().await;
 
         assert_eq!(r.len(), 1);
 

@@ -261,6 +261,7 @@ mod tests {
                 },
                 &MockQueryContext::new(0),
             )
+            .unwrap()
             .map(Result::unwrap)
             .collect::<Vec<MultiPointCollection>>()
             .await;
@@ -328,6 +329,7 @@ mod tests {
                 },
                 &MockQueryContext::new(0),
             )
+            .unwrap()
             .map(Result::unwrap)
             .collect::<Vec<MultiPointCollection>>()
             .await;

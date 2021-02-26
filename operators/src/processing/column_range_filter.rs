@@ -129,12 +129,12 @@ where
         &'a self,
         query: QueryRectangle,
         ctx: &'a dyn QueryContext,
-    ) -> BoxStream<'a, Result<Self::VectorType>> {
+    ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
         let column_name = self.column.clone();
         let ranges = self.ranges.clone();
         let keep_nulls = self.keep_nulls;
 
-        let filter_stream = self.source.query(query, ctx).map(move |collection| {
+        let filter_stream = self.source.query(query, ctx)?.map(move |collection| {
             let collection = collection?;
 
             // TODO: do transformation work only once
@@ -169,7 +169,7 @@ where
         let merged_chunks_stream =
             FeatureCollectionChunkMerger::new(filter_stream.fuse(), ctx.chunk_byte_size());
 
-        merged_chunks_stream.boxed()
+        Ok(merged_chunks_stream.boxed())
     }
 }
 
@@ -264,7 +264,7 @@ mod tests {
 
         let ctx = MockQueryContext::new(2 * std::mem::size_of::<Coordinate2D>());
 
-        let stream = point_processor.vector_query(query_rectangle, &ctx);
+        let stream = point_processor.vector_query(query_rectangle, &ctx).unwrap();
 
         let collections: Vec<MultiPointCollection> = stream.map(Result::unwrap).collect().await;
 

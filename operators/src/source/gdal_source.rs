@@ -363,13 +363,13 @@ where
         &'a self,
         query: crate::engine::QueryRectangle,
         _ctx: &'a dyn crate::engine::QueryContext,
-    ) -> BoxStream<Result<RasterTile2D<T>>> {
-        let meta_data = self.meta_data.loading_info(query).unwrap(); // TODO: change when query signature returns Result
+    ) -> Result<BoxStream<Result<RasterTile2D<T>>>> {
+        let meta_data = self.meta_data.loading_info(query)?;
 
-        stream::iter(meta_data.info.into_iter())
+        Ok(stream::iter(meta_data.info.into_iter())
             .map(move |info| self.tile_stream(query, info))
             .flatten()
-            .boxed()
+            .boxed())
     }
 }
 
@@ -559,6 +559,7 @@ mod tests {
                 },
                 query_ctx,
             )
+            .unwrap()
             .collect()
             .await
     }

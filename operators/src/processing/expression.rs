@@ -241,12 +241,13 @@ where
         &'b self,
         query: QueryRectangle,
         ctx: &'b dyn QueryContext,
-    ) -> BoxStream<'b, Result<RasterTile2D<TO>>> {
+    ) -> Result<BoxStream<'b, Result<RasterTile2D<TO>>>> {
         // TODO: validate that tiles actually fit together
         let mut cl_program = self.cl_program.clone();
-        self.source_a
-            .query(query, ctx)
-            .zip(self.source_b.query(query, ctx))
+        Ok(self
+            .source_a
+            .query(query, ctx)?
+            .zip(self.source_b.query(query, ctx)?)
             .map(move |(a, b)| match (a, b) {
                 (Ok(a), Ok(b)) => {
                     let mut out = Grid2D::new(
@@ -277,7 +278,7 @@ where
                 }
                 _ => unimplemented!(),
             })
-            .boxed()
+            .boxed())
     }
 }
 
@@ -314,14 +315,16 @@ mod tests {
         let p = o.query_processor().unwrap().get_i8().unwrap();
 
         let ctx = MockQueryContext::new(1);
-        let q = p.query(
-            QueryRectangle {
-                bbox: BoundingBox2D::new_unchecked((1., 2.).into(), (3., 4.).into()),
-                time_interval: Default::default(),
-                spatial_resolution: SpatialResolution::one(),
-            },
-            &ctx,
-        );
+        let q = p
+            .query(
+                QueryRectangle {
+                    bbox: BoundingBox2D::new_unchecked((1., 2.).into(), (3., 4.).into()),
+                    time_interval: Default::default(),
+                    spatial_resolution: SpatialResolution::one(),
+                },
+                &ctx,
+            )
+            .unwrap();
 
         let c: Vec<Result<RasterTile2D<i8>>> = q.collect().await;
 
