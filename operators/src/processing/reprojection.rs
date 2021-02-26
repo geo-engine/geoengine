@@ -107,21 +107,21 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
     }
 }
 
-struct ReprojectionProcessor<Q, G> {
+struct ReprojectionProcessor<Q, G>
+where
+    Q: VectorQueryProcessor<VectorType = G>,
+{
     source: Q,
     from: SpatialReference,
     to: SpatialReference,
-    geom_type: PhantomData<G>,
 }
 
-impl<Q, G> ReprojectionProcessor<Q, G> {
+impl<Q, G> ReprojectionProcessor<Q, G>
+where
+    Q: VectorQueryProcessor<VectorType = G>,
+{
     pub fn new(source: Q, from: SpatialReference, to: SpatialReference) -> Self {
-        Self {
-            source,
-            from,
-            to,
-            geom_type: PhantomData,
-        }
+        Self { source, from, to }
     }
 }
 
