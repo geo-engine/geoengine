@@ -8,10 +8,11 @@ CMD ["/sbin/my_init"]
 
 # Install dependencies
 RUN install_clean \
-        build-essential \
-        libgdal-dev gdal-bin \
-        ocl-icd-opencl-dev \
-        pocl-opencl-icd \
+    build-essential \
+    libgdal-dev gdal-bin \
+    ocl-icd-opencl-dev \
+    pocl-opencl-icd \
+    cmake sqlite3 libtiff-dev libclang-dev \
     && \
     curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain nightly -y
 
