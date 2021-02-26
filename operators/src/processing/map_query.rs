@@ -2,7 +2,7 @@ use crate::{engine::QueryProcessor, util::Result};
 
 use crate::engine::{QueryContext, QueryRectangle};
 
-/// This `QueryProcessor` allows to rewrite a query. It does not change the data. Results of the chuldren are forwarded.
+/// This `QueryProcessor` allows to rewrite a query. It does not change the data. Results of the children are forwarded.
 pub(crate) struct MapQueryProcessor<S, Q> {
     source: S,
     query_fn: Q,
