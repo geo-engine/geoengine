@@ -1,4 +1,4 @@
-use futures::{StreamExt, TryStreamExt};
+use futures::StreamExt;
 use geoengine_datatypes::{
     operations::reproject::{CoordinateProjection, CoordinateProjector, Reproject},
     spatial_reference::SpatialReference,
