@@ -96,6 +96,31 @@ pub enum FileNotFoundHandling {
     Error,  // return error tile
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct GdalMetaDataStatic {
+    pub params: GdalDataSetParameters,
+    pub result_descriptor: RasterResultDescriptor,
+}
+
+impl MetaData<GdalLoadingInfo, RasterResultDescriptor> for GdalMetaDataStatic {
+    fn loading_info(&self, _query: QueryRectangle) -> Result<GdalLoadingInfo> {
+        Ok(GdalLoadingInfo {
+            info: vec![GdalLoadingInfoPart {
+                time: TimeInterval::default(),
+                params: self.params.clone(),
+            }],
+        })
+    }
+
+    fn result_descriptor(&self) -> Result<RasterResultDescriptor> {
+        Ok(self.result_descriptor.clone())
+    }
+
+    fn box_clone(&self) -> Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor>> {
+        Box::new(self.clone())
+    }
+}
+
 /// Meta data for a regular time series that begins (is anchored) at `start` with multiple gdal data
 /// sets `step` time apart. The `placeholder` in the file path of the data set is replaced with the
 /// queried time in specified `time_format`.

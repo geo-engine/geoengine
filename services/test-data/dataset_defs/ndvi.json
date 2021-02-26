@@ -13,7 +13,7 @@
                 "measurement": "unitless"
             },
             "params": {
-                "file_path": "/home/michael/rust-projects/geoengine/operators/test-data/raster/modis_ndvi/MOD13A2_M_NDVI_%%%_START_TIME_%%%.TIFF",
+                "file_path": "operators/test-data/raster/modis_ndvi/MOD13A2_M_NDVI_%%%_START_TIME_%%%.TIFF",
                 "rasterband_channel": 1,
                 "geo_transform": {
                     "origin_coordinate": {

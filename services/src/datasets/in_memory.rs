@@ -16,8 +16,8 @@ use geoengine_operators::engine::{
     MetaData, MetaDataProvider, RasterResultDescriptor, StaticMetaData, TypedResultDescriptor,
     VectorResultDescriptor,
 };
-use geoengine_operators::mock::MockDataSetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, GdalMetaDataRegular, OgrSourceDataset};
+use geoengine_operators::{mock::MockDataSetDataSourceLoadingInfo, source::GdalMetaDataStatic};
 use std::collections::HashMap;
 
 use super::storage::MetaDataDefinition;
@@ -31,7 +31,8 @@ pub struct HashMapDataSetDb {
         InternalDataSetId,
         StaticMetaData<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>,
     >,
-    gdal_data_sets: HashMap<InternalDataSetId, GdalMetaDataRegular>,
+    gdal_data_sets:
+        HashMap<InternalDataSetId, Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor>>>,
 }
 
 impl DataSetDb for HashMapDataSetDb {}
@@ -77,6 +78,7 @@ impl HashMapStorable for MetaDataDefinition {
             MetaDataDefinition::MockMetaData(d) => d.store(id, db),
             MetaDataDefinition::OgrMetaData(d) => d.store(id, db),
             MetaDataDefinition::GdalMetaDataRegular(d) => d.store(id, db),
+            MetaDataDefinition::GdalStatic(d) => d.store(id, db),
         }
     }
 }
@@ -97,7 +99,14 @@ impl HashMapStorable for StaticMetaData<MockDataSetDataSourceLoadingInfo, Vector
 
 impl HashMapStorable for GdalMetaDataRegular {
     fn store(&self, id: InternalDataSetId, db: &mut HashMapDataSetDb) -> TypedResultDescriptor {
-        db.gdal_data_sets.insert(id, self.clone());
+        db.gdal_data_sets.insert(id, Box::new(self.clone()));
+        self.result_descriptor.clone().into()
+    }
+}
+
+impl HashMapStorable for GdalMetaDataStatic {
+    fn store(&self, id: InternalDataSetId, db: &mut HashMapDataSetDb) -> TypedResultDescriptor {
+        db.gdal_data_sets.insert(id, Box::new(self.clone()));
         self.result_descriptor.clone().into()
     }
 }
@@ -226,18 +235,17 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor> for HashMapDataSe
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor>>,
         geoengine_operators::error::Error,
     > {
-        Ok(Box::new(
-            self.gdal_data_sets
-                .get(&data_set.internal().ok_or(
-                    geoengine_operators::error::Error::DataSetMetaData {
-                        source: Box::new(error::Error::DataSetIdTypeMissMatch),
-                    },
-                )?)
-                .ok_or(geoengine_operators::error::Error::DataSetMetaData {
-                    source: Box::new(error::Error::UnknownDataSetId),
-                })?
-                .clone(),
-        ))
+        Ok(self
+            .gdal_data_sets
+            .get(&data_set.internal().ok_or(
+                geoengine_operators::error::Error::DataSetMetaData {
+                    source: Box::new(error::Error::DataSetIdTypeMissMatch),
+                },
+            )?)
+            .ok_or(geoengine_operators::error::Error::DataSetMetaData {
+                source: Box::new(error::Error::UnknownDataSetId),
+            })?
+            .clone())
     }
 }
 
