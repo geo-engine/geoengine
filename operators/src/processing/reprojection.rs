@@ -18,14 +18,20 @@ use crate::{
 
 use super::map_query::MapQueryProcessor;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct ReprojectionParams {
     pub target_spatial_reference: SpatialReference,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+pub struct ReprojectionState {
+    source_srs: SpatialReference,
+    target_srs: SpatialReference,
+}
+
 pub type Reprojection = Operator<ReprojectionParams>;
 pub type InitializedReprojection =
-    InitializedOperatorImpl<(), VectorResultDescriptor, (SpatialReference, SpatialReference)>;
+    InitializedOperatorImpl<(), VectorResultDescriptor, ReprojectionState>;
 
 #[typetag::serde]
 impl VectorOperator for Reprojection {
@@ -61,10 +67,10 @@ impl VectorOperator for Reprojection {
             columns: in_desc.columns.clone(),
         };
 
-        let state = (
-            Option::from(in_desc.spatial_reference).unwrap(),
-            self.params.target_spatial_reference,
-        );
+        let state = ReprojectionState {
+            source_srs: Option::from(in_desc.spatial_reference).unwrap(),
+            target_srs: self.params.target_spatial_reference,
+        };
 
         Ok(
             InitializedReprojection::new((), out_desc, vec![], initialized_vector_sources, state)
@@ -79,26 +85,40 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
         let state = self.state;
         match self.vector_sources[0].query_processor()? {
-            // TODO: use macro for that
             TypedVectorQueryProcessor::Data(source) => Ok(TypedVectorQueryProcessor::Data(
                 MapQueryProcessor::new(source, move |query| {
-                    query_rewrite_fn(query, state.0, state.1)
+                    query_rewrite_fn(query, state.source_srs, state.target_srs)
                 })
                 .boxed(),
             )),
             TypedVectorQueryProcessor::MultiPoint(source) => {
                 Ok(TypedVectorQueryProcessor::MultiPoint(
-                    ReprojectionProcessor::new(source, self.state.0, self.state.1).boxed(),
+                    ReprojectionProcessor::new(
+                        source,
+                        self.state.source_srs,
+                        self.state.target_srs,
+                    )
+                    .boxed(),
                 ))
             }
             TypedVectorQueryProcessor::MultiLineString(source) => {
                 Ok(TypedVectorQueryProcessor::MultiLineString(
-                    ReprojectionProcessor::new(source, self.state.0, self.state.1).boxed(),
+                    ReprojectionProcessor::new(
+                        source,
+                        self.state.source_srs,
+                        self.state.target_srs,
+                    )
+                    .boxed(),
                 ))
             }
             TypedVectorQueryProcessor::MultiPolygon(source) => {
                 Ok(TypedVectorQueryProcessor::MultiPolygon(
-                    ReprojectionProcessor::new(source, self.state.0, self.state.1).boxed(),
+                    ReprojectionProcessor::new(
+                        source,
+                        self.state.source_srs,
+                        self.state.target_srs,
+                    )
+                    .boxed(),
                 ))
             }
         }
