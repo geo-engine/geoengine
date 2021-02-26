@@ -1353,7 +1353,7 @@ where
             .column_by_name(Self::GEOMETRY_COLUMN_NAME)
             .expect("There must exist a geometry column");
 
-        let multi_polygon_array = Self::replace_raw_coords(geometries_ref, coords_buffer);
+        let feature_array = Self::replace_raw_coords(geometries_ref, coords_buffer);
 
         let mut columns = Vec::<arrow::datatypes::Field>::with_capacity(self.table.num_columns());
         let mut column_values =
