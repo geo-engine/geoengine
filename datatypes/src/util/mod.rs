@@ -1,6 +1,7 @@
 pub mod arrow;
 pub mod helpers;
 mod identifiers;
+pub mod well_known_data;
 
 pub use self::identifiers::Identifier;
 pub mod ranges;

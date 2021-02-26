@@ -1,3 +1,10 @@
+use std::sync::Arc;
+
+use arrow::{
+    array::{Array, ArrayData},
+    buffer::Buffer,
+};
+
 use crate::primitives::{Coordinate2D, GeometryRef};
 
 /// This trait allows iterating over the geometries of a feature collection
@@ -31,4 +38,8 @@ pub trait GeometryCollection {
     fn coordinates(&self) -> &[Coordinate2D];
 
     fn feature_offsets(&self) -> &[i32];
+}
+
+pub trait ReplaceRawArrayCoords {
+    fn replace_raw_coords(array_ref: &Arc<dyn Array>, new_coord_buffer: Buffer) -> Arc<ArrayData>;
 }

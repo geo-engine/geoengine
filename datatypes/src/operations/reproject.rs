@@ -4,8 +4,8 @@ use crate::{
     error,
     primitives::{
         BoundingBox2D, Coordinate2D, Line, MultiLineString, MultiLineStringAccess,
-        MultiLineStringRef, MultiPoint, MultiPointAccess, MultiPolygon, MultiPolygonAccess,
-        MultiPolygonRef, SpatialBounded,
+        MultiLineStringRef, MultiPoint, MultiPointAccess, MultiPointRef, MultiPolygon,
+        MultiPolygonAccess, MultiPolygonRef, SpatialBounded,
     },
     spatial_reference::SpatialReference,
     util::Result,
@@ -15,28 +15,58 @@ pub trait CoordinateProjection {
     fn from_known_srs(from: SpatialReference, to: SpatialReference) -> Result<Self>
     where
         Self: Sized;
+    /// project a single coord
     fn project_coordinate(&self, c: Coordinate2D) -> Result<Coordinate2D>;
 
-    // TODO: add for performance
-    // fn project_coordinate_slice_inplace(&self, coords: &mut [Coordinate2D]) -> Result<&mut [Coordinate2D]>;
-    // fn project_coordinate_slice_copy<A: AsRef<[Coordinate2D]>>(&self, coords: A) -> Result<Vec<[Coordinate2D]>>;
+    /// project a set of coords
+    fn project_coordinates<A: AsRef<[Coordinate2D]>>(&self, coords: A)
+        -> Result<Vec<Coordinate2D>>;
 }
 
-pub struct CoordinateProjector(Proj);
+pub struct CoordinateProjector {
+    pub from: SpatialReference,
+    pub to: SpatialReference,
+    p: Proj,
+}
 
-// TODO: move Proj impl into a separate module?
 impl CoordinateProjection for CoordinateProjector {
     fn from_known_srs(from: SpatialReference, to: SpatialReference) -> Result<Self> {
-        Proj::new_known_crs(&from.to_string(), &to.to_string(), None)
-            .ok_or(error::Error::NoCoordinateProjector { from, to })
-            .map(CoordinateProjector)
+        let p = Proj::new_known_crs(&from.to_string(), &to.to_string(), None)
+            .ok_or(error::Error::NoCoordinateProjector { from, to })?;
+        Ok(CoordinateProjector { from, to, p })
     }
 
     fn project_coordinate(&self, c: Coordinate2D) -> Result<Coordinate2D> {
-        self.0
-            .convert((c.x, c.y))
-            .map_err(Into::into)
-            .map(Into::into)
+        self.p.convert(c).map_err(Into::into)
+    }
+
+    fn project_coordinates<A: AsRef<[Coordinate2D]>>(
+        &self,
+        coords: A,
+    ) -> Result<Vec<Coordinate2D>> {
+        let c_ref = coords.as_ref();
+
+        let mut cc = Vec::from(c_ref);
+        self.p.convert_array(&mut cc)?;
+
+        Ok(cc)
+    }
+}
+
+impl Clone for CoordinateProjector {
+    fn clone(&self) -> Self {
+        CoordinateProjector {
+            from: self.from,
+            to: self.to,
+            p: Proj::new_known_crs(&self.from.to_string(), &self.to.to_string(), None)
+                .expect("worked before"),
+        }
+    }
+}
+
+impl AsRef<CoordinateProjector> for CoordinateProjector {
+    fn as_ref(&self) -> &CoordinateProjector {
+        self
     }
 }
 
@@ -56,18 +86,24 @@ where
     }
 }
 
-impl<P, A> Reproject<P> for A
+impl<P> Reproject<P> for MultiPoint
 where
-    A: MultiPointAccess,
     P: CoordinateProjection,
 {
     type Out = MultiPoint;
     fn reproject(&self, projector: &P) -> Result<MultiPoint> {
-        let ps: Result<Vec<Coordinate2D>> = self
-            .points()
-            .iter()
-            .map(|&c| c.reproject(projector))
-            .collect();
+        let ps: Result<Vec<Coordinate2D>> = projector.project_coordinates(self.points());
+        ps.and_then(MultiPoint::new)
+    }
+}
+
+impl<'g, P> Reproject<P> for MultiPointRef<'g>
+where
+    P: CoordinateProjection,
+{
+    type Out = MultiPoint;
+    fn reproject(&self, projector: &P) -> Result<MultiPoint> {
+        let ps: Result<Vec<Coordinate2D>> = projector.project_coordinates(self.points());
         ps.and_then(MultiPoint::new)
     }
 }
@@ -95,7 +131,7 @@ where
         let ls: Result<Vec<Vec<Coordinate2D>>> = self
             .lines()
             .iter()
-            .map(|line| line.iter().map(|&c| c.reproject(projector)).collect())
+            .map(|line| projector.project_coordinates(line))
             .collect();
         ls.and_then(MultiLineString::new)
     }
@@ -110,7 +146,7 @@ where
         let ls: Result<Vec<Vec<Coordinate2D>>> = self
             .lines()
             .iter()
-            .map(|line| line.iter().map(|&c| c.reproject(projector)).collect())
+            .map(|line| projector.project_coordinates(line))
             .collect();
         ls.and_then(MultiLineString::new)
     }
@@ -127,7 +163,7 @@ where
             .iter()
             .map(|poly| {
                 poly.iter()
-                    .map(|ring| ring.iter().map(|&c| c.reproject(projector)).collect())
+                    .map(|ring| projector.project_coordinates(ring))
                     .collect()
             })
             .collect();
@@ -146,7 +182,7 @@ where
             .iter()
             .map(|poly| {
                 poly.iter()
-                    .map(|ring| ring.iter().map(|&c| c.reproject(projector)).collect())
+                    .map(|ring| projector.project_coordinates(ring))
                     .collect()
             })
             .collect();
@@ -185,50 +221,13 @@ where
 #[cfg(test)]
 mod tests {
     use crate::spatial_reference::SpatialReferenceAuthority;
+    use crate::util::well_known_data::{
+        COLOGNE_EPSG_4326, COLOGNE_EPSG_900_913, HAMBURG_EPSG_4326, HAMBURG_EPSG_900_913,
+        MARBURG_EPSG_4326, MARBURG_EPSG_900_913,
+    };
     use float_cmp::approx_eq;
 
     use super::*;
-
-    // coordinates used for the tests in EPSG:4326
-    // and reprojected with proj cs2cs to EPSG:900913
-    //
-    // cs2cs -d 10  EPSG:4326 EPSG:900913
-    // 50.8021728 8.7667933
-    // 975914.9660458824       6586374.7028446598 0.0000000000
-    // 50.937531 6.9602786
-    // 774814.6695313191       6610251.1099264193 0.0000000000
-    // 53.565278 10.001389
-    // 1113349.5307054475      7088251.2962248782 0.0000000000
-
-    const MARBURG_EPSG_4326: Coordinate2D = Coordinate2D {
-        x: 8.766_793_3,
-        y: 50.802_172_8,
-    };
-
-    const MARBURG_EPSG_900_913: Coordinate2D = Coordinate2D {
-        x: 975_914.966_045_882,
-        y: 6_586_374.702_844_659,
-    };
-
-    const COLOGNE_EPSG_4326: Coordinate2D = Coordinate2D {
-        x: 6.960_278_6,
-        y: 50.937_531,
-    };
-
-    const COLOGNE_EPSG_900_913: Coordinate2D = Coordinate2D {
-        x: 774_814.669_531_319,
-        y: 6_610_251.109_926_419,
-    };
-
-    const HAMBURG_EPSG_4326: Coordinate2D = Coordinate2D {
-        x: 10.001_389,
-        y: 53.565_278,
-    };
-
-    const HAMBURG_EPSG_900_913: Coordinate2D = Coordinate2D {
-        x: 1_113_349.530_705_447,
-        y: 7_088_251.296_224_878,
-    };
 
     #[test]
     fn new_proj() {
