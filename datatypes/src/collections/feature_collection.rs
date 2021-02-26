@@ -1366,7 +1366,7 @@ where
             G::arrow_data_type(),
             false,
         ));
-        column_values.push(Arc::new(ListArray::from(multi_polygon_array)));
+        column_values.push(Arc::new(ListArray::from(feature_array)));
         // }
 
         // copy time data
