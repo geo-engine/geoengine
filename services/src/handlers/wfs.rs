@@ -717,8 +717,17 @@ x;y
         .unwrap()
     }
 
+    fn dir_up() {
+        let mut dir = std::env::current_dir().unwrap();
+        dir.pop();
+
+        std::env::set_current_dir(dir).unwrap();
+    }
+
     #[tokio::test]
     async fn raster_vector_join() {
+        dir_up();
+
         let ctx = InMemoryContext::default();
 
         let ndvi_id = add_dataset_definition_to_datasets(
