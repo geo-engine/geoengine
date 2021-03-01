@@ -99,7 +99,7 @@ impl PlotQueryProcessor for StatisticsQueryProcessor {
         for (i, raster_processor) in self.rasters.iter().enumerate() {
             queries.push(
                 call_on_generic_raster_processor!(raster_processor, processor => {
-                    processor.query(query, ctx)
+                    processor.query(query, ctx)?
                              .map(move |r| r.map(|tile| (i, tile.convert::<f64>())))
                              .boxed()
                 }),

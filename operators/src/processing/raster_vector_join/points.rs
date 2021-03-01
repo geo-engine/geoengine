@@ -61,7 +61,7 @@ impl RasterPointJoinProcessor {
                 spatial_resolution: query.spatial_resolution,
             };
 
-            let mut rasters = raster_processor.raster_query(query, ctx);
+            let mut rasters = raster_processor.raster_query(query, ctx)?;
 
             // TODO: optimize geo access (only specific tiles, etc.)
 
@@ -132,9 +132,9 @@ impl VectorQueryProcessor for RasterPointJoinProcessor {
         &'a self,
         query: QueryRectangle,
         ctx: &'a dyn QueryContext,
-    ) -> BoxStream<'a, Result<Self::VectorType>> {
-        self.points
-            .query(query, ctx)
+    ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
+        let stream = self.points
+            .query(query, ctx)?
             .and_then(async move |mut points| {
 
                 for (raster, new_column_name) in self.raster_processors.iter().zip(&self.column_names) {
@@ -145,7 +145,9 @@ impl VectorQueryProcessor for RasterPointJoinProcessor {
 
                 Ok(points)
             })
-            .boxed()
+            .boxed();
+
+        Ok(stream)
     }
 }
 

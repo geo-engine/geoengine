@@ -45,12 +45,12 @@ where
         &'a self,
         query: crate::engine::QueryRectangle,
         ctx: &'a dyn crate::engine::QueryContext,
-    ) -> futures::stream::BoxStream<'a, crate::util::Result<Self::Output>> {
-        let point_stream = self.point_source.vector_query(query, ctx);
-        point_stream
+    ) -> Result<futures::stream::BoxStream<'a, crate::util::Result<Self::Output>>> {
+        let point_stream = self.point_source.vector_query(query, ctx)?;
+        Ok(point_stream
             .then(async move |collection| {
                 let collection = collection?;
-                let mut raster_stream = self.raster_source.raster_query(query, ctx);
+                let mut raster_stream = self.raster_source.raster_query(query, ctx)?;
                 let raster_future = raster_stream.next().await;
                 let raster_tile: RasterTile2D<T> =
                     raster_future.ok_or(crate::error::Error::QueryProcessor)??;
@@ -62,7 +62,7 @@ where
                 )?;
                 Ok(collection)
             })
-            .boxed()
+            .boxed())
     }
 }
 
@@ -359,7 +359,7 @@ mod tests {
         };
         let ctx = MockQueryContext::new(2 * std::mem::size_of::<Coordinate2D>());
 
-        let stream = point_processor.vector_query(query_rectangle, &ctx);
+        let stream = point_processor.vector_query(query_rectangle, &ctx).unwrap();
 
         let blocking_stream = block_on_stream(stream);
         let collections: Vec<MultiPointCollection> = blocking_stream.map(Result::unwrap).collect();

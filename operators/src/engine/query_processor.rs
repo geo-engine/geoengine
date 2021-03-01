@@ -16,7 +16,7 @@ pub trait QueryProcessor {
         &'a self,
         query: QueryRectangle,
         ctx: &'a dyn QueryContext,
-    ) -> BoxStream<'a, Result<Self::Output>>;
+    ) -> Result<BoxStream<'a, Result<Self::Output>>>;
 }
 
 /// An instantiation of a raster operator that produces a stream of raster results for a query
@@ -27,7 +27,7 @@ pub trait RasterQueryProcessor: Sync + Send {
         &'a self,
         query: QueryRectangle,
         ctx: &'a dyn QueryContext,
-    ) -> BoxStream<'a, Result<RasterTile2D<Self::RasterType>>>;
+    ) -> Result<BoxStream<'a, Result<RasterTile2D<Self::RasterType>>>>;
 
     fn boxed(self) -> Box<dyn RasterQueryProcessor<RasterType = Self::RasterType>>
     where
@@ -47,7 +47,7 @@ where
         &'a self,
         query: QueryRectangle,
         ctx: &'a dyn QueryContext,
-    ) -> BoxStream<'a, Result<RasterTile2D<Self::RasterType>>> {
+    ) -> Result<BoxStream<'a, Result<RasterTile2D<Self::RasterType>>>> {
         self.query(query, ctx)
     }
 }
@@ -59,7 +59,7 @@ pub trait VectorQueryProcessor: Sync + Send {
         &'a self,
         query: QueryRectangle,
         ctx: &'a dyn QueryContext,
-    ) -> BoxStream<'a, Result<Self::VectorType>>;
+    ) -> Result<BoxStream<'a, Result<Self::VectorType>>>;
 
     fn boxed(self) -> Box<dyn VectorQueryProcessor<VectorType = Self::VectorType>>
     where
@@ -79,7 +79,7 @@ where
         &'a self,
         query: QueryRectangle,
         ctx: &'a dyn QueryContext,
-    ) -> BoxStream<'a, Result<Self::VectorType>> {
+    ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
         self.query(query, ctx)
     }
 }
@@ -111,7 +111,7 @@ impl<T> QueryProcessor for Box<dyn QueryProcessor<Output = T>> {
         &'a self,
         query: QueryRectangle,
         ctx: &'a dyn QueryContext,
-    ) -> BoxStream<'a, Result<Self::Output>> {
+    ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         self.as_ref().query(query, ctx)
     }
 }
@@ -126,7 +126,7 @@ where
         &'a self,
         query: QueryRectangle,
         ctx: &'a dyn QueryContext,
-    ) -> BoxStream<'a, Result<Self::Output>> {
+    ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         self.as_ref().raster_query(query, ctx)
     }
 }
@@ -140,7 +140,7 @@ where
         &'a self,
         query: QueryRectangle,
         ctx: &'a dyn QueryContext,
-    ) -> BoxStream<'a, Result<Self::Output>> {
+    ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         self.as_ref().vector_query(query, ctx)
     }
 }

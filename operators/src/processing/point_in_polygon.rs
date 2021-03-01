@@ -146,18 +146,18 @@ impl VectorQueryProcessor for PointInPolygonFilterProcessor {
         &'a self,
         query: QueryRectangle,
         ctx: &'a dyn QueryContext,
-    ) -> BoxStream<'a, Result<Self::VectorType>> {
+    ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
         // TODO: multi-threading
 
         let filtered_stream = self
             .points
-            .query(query, ctx)
+            .query(query, ctx)?
             .and_then(move |points| async move {
                 let initial_filter = BooleanArray::from(vec![false; points.len()]);
 
                 let filter = self
                     .polygons
-                    .query(query, ctx)
+                    .query(query, ctx)?
                     .fold(Ok(initial_filter), |filter, polygons| async {
                         let polygons = polygons?;
 
@@ -172,7 +172,10 @@ impl VectorQueryProcessor for PointInPolygonFilterProcessor {
                 points.filter(filter).map_err(Into::into)
             });
 
-        FeatureCollectionChunkMerger::new(filtered_stream.fuse(), ctx.chunk_byte_size()).boxed()
+        Ok(
+            FeatureCollectionChunkMerger::new(filtered_stream.fuse(), ctx.chunk_byte_size())
+                .boxed(),
+        )
     }
 }
 
@@ -551,7 +554,7 @@ mod tests {
         };
         let ctx = MockQueryContext::new(usize::MAX);
 
-        let query = query_processor.query(query_rectangle, &ctx);
+        let query = query_processor.query(query_rectangle, &ctx).unwrap();
 
         let result = query
             .map(Result::unwrap)
@@ -597,7 +600,7 @@ mod tests {
         };
         let ctx = MockQueryContext::new(usize::MAX);
 
-        let query = query_processor.query(query_rectangle, &ctx);
+        let query = query_processor.query(query_rectangle, &ctx).unwrap();
 
         let result = query
             .map(Result::unwrap)
@@ -656,7 +659,7 @@ mod tests {
         };
         let ctx = MockQueryContext::new(usize::MAX);
 
-        let query = query_processor.query(query_rectangle, &ctx);
+        let query = query_processor.query(query_rectangle, &ctx).unwrap();
 
         let result = query
             .map(Result::unwrap)
@@ -734,7 +737,9 @@ mod tests {
         let ctx_one_chunk = MockQueryContext::new(usize::MAX);
         let ctx_minimal_chunks = MockQueryContext::new(0);
 
-        let query = query_processor.query(query_rectangle, &ctx_minimal_chunks);
+        let query = query_processor
+            .query(query_rectangle, &ctx_minimal_chunks)
+            .unwrap();
 
         let result = query
             .map(Result::unwrap)
@@ -746,7 +751,9 @@ mod tests {
         assert_eq!(result[0], points1.filter(vec![true, false])?);
         assert_eq!(result[1], points2);
 
-        let query = query_processor.query(query_rectangle, &ctx_one_chunk);
+        let query = query_processor
+            .query(query_rectangle, &ctx_one_chunk)
+            .unwrap();
 
         let result = query
             .map(Result::unwrap)

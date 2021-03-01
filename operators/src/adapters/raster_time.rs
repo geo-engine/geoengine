@@ -326,9 +326,9 @@ mod tests {
             .get_u8()
             .unwrap();
 
-        let source_a = |query_rect| qp1.query(query_rect, &query_ctx);
+        let source_a = |query_rect| qp1.query(query_rect, &query_ctx).unwrap();
 
-        let source_b = |query_rect| qp2.query(query_rect, &query_ctx);
+        let source_b = |query_rect| qp2.query(query_rect, &query_ctx).unwrap();
 
         let adapter = RasterTimeAdapter::new(source_a, source_b, query_rect);
 
