@@ -257,7 +257,7 @@ where
         // get the no_data_value. TODO: move to dataset parameters? Keep in mind, that this can change for each time step.
         // We also need to ge metadata from the dataset (for each tile) e.g. scale + offset.
         let no_data_value = rasterband.no_data_value().map(T::from_);
-        let fill_value = no_data_value.unwrap_or(T::zero());
+        let fill_value = no_data_value.unwrap_or_else(T::zero);
 
         // dataset spatial relations
         let dataset_contains_tile = dataset_bounds.contains_bbox(&output_bounds);
@@ -938,11 +938,13 @@ mod tests {
 
         assert_eq!(c.len(), 4);
 
+        let tile_1 = &c[0];
+
         assert_eq!(
-            c[0].time,
+            tile_1.time,
             TimeInterval::new_unchecked(1_385_856_000_000, 1_388_534_400_000)
         );
 
-        assert!(!c[0].grid_array.data.iter().any(|p| *p != 0)); // TODO: use actual no data value
+        assert!(!tile_1.grid_array.data.iter().any(|p| *p != 0)); // TODO: the NDVI data has no NO DATA value. Currently, we fill empty areas with 0 if there is no NO DATA. We have to add a strategy to fix this since we meight add empty areas through the tiling approach.
     }
 }
