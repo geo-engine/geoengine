@@ -291,7 +291,7 @@ where
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         Ok(OgrSourceStream::new(
-            self.dataset_information.loading_info(query)?, // TODO: handle error
+            self.dataset_information.loading_info(query)?,
             query,
             ctx.chunk_byte_size(),
         )
