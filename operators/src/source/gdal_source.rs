@@ -254,6 +254,11 @@ where
         let rasterband: GdalRasterBand =
             dataset.rasterband(data_set_params.rasterband_channel as isize)?;
 
+        // get the no_data_value. TODO: move to dataset parameters? Keep in mind, that this can change for each time step.
+        // We also need to ge metadata from the dataset (for each tile) e.g. scale + offset.
+        let no_data_value = rasterband.no_data_value().map(T::from_);
+        let fill_value = no_data_value.unwrap_or(T::zero());
+
         // dataset spatial relations
         let dataset_contains_tile = dataset_bounds.contains_bbox(&output_bounds);
 
@@ -262,7 +267,7 @@ where
         let result_raster = match (dataset_contains_tile, dataset_intersects_tile) {
             (_, false) => {
                 // TODO: refactor tile to hold an Option<GridData> and this will be empty in this case
-                Grid2D::new_filled(output_shape, T::zero(), None)
+                Grid2D::new_filled(output_shape, fill_value, no_data_value)
             }
             (true, true) => {
                 let dataset_idx_ul =
@@ -275,6 +280,7 @@ where
                     &rasterband,
                     &GridBoundingBox2D::new(dataset_idx_ul, dataset_idx_lr)?,
                     output_shape,
+                    no_data_value,
                 )?
             }
             (false, true) => {
@@ -299,10 +305,10 @@ where
                     &rasterband,
                     &GridBoundingBox2D::new(dataset_idx_ul, dataset_idx_lr)?,
                     GridBoundingBox2D::new(tile_idx_ul, tile_idx_lr)?,
+                    no_data_value,
                 )?;
 
-                // TODO: fill with actual no data
-                let mut tile_raster = Grid2D::new_filled(output_shape, T::zero(), None);
+                let mut tile_raster = Grid2D::new_filled(output_shape, fill_value, no_data_value);
                 tile_raster.grid_blit_from(dataset_raster)?;
                 tile_raster
             }
@@ -497,6 +503,7 @@ fn read_as_raster<
     rasterband: &GdalRasterBand,
     dataset_grid_box: &GridBoundingBox2D,
     tile_grid: D,
+    no_data_value: Option<T>,
 ) -> Result<Grid<D, T>>
 where
     T: Pixel + GdalType,
@@ -509,7 +516,7 @@ where
         (dataset_x_size, dataset_y_size), // pixelspace size
         (tile_x_size, tile_y_size),       // requested raster size
     )?;
-    Grid::new(tile_grid, buffer.data, None).map_err(Into::into)
+    Grid::new(tile_grid, buffer.data, no_data_value).map_err(Into::into)
 }
 
 #[cfg(test)]
