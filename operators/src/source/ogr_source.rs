@@ -1,4 +1,3 @@
-use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::iter::Peekable;
 use std::marker::PhantomData;
@@ -7,6 +6,10 @@ use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::mpsc::{self, Receiver, SyncSender, TryRecvError, TrySendError};
 use std::task::Poll;
+use std::{
+    collections::{HashMap, HashSet},
+    iter::Fuse,
+};
 
 use chrono::DateTime;
 use futures::stream::BoxStream;
@@ -376,7 +379,7 @@ where
 
         let time_extractor = Self::initialize_time_extractors(dataset_information);
 
-        let mut features = layer.features().peekable();
+        let mut features = layer.features().fuse().peekable();
 
         if features.peek().is_none() {
             // emit empty dataset and finish
@@ -576,7 +579,7 @@ where
 
     #[allow(clippy::too_many_arguments)]
     fn compute_batch(
-        feature_iterator: &mut Peekable<FeatureIterator<'_>>,
+        feature_iterator: &mut Peekable<Fuse<FeatureIterator<'_>>>,
         feature_collection_builder: FeatureCollectionBuilder<G>,
         dataset_information: &OgrSourceDataset,
         data_types: &HashMap<String, FeatureDataType>,
@@ -3089,7 +3092,7 @@ mod tests {
 
         let query_bbox = BoundingBox2D::new((-180.0, -90.0).into(), (180.00, 90.0).into()).unwrap();
 
-        let context = MockQueryContext::new(0);
+        let context = MockQueryContext::new(1024 * 1024);
         let query = query_processor
             .query(
                 QueryRectangle {
