@@ -319,13 +319,18 @@ fn get_feature_mock(_request: &GetFeature) -> Result<Box<dyn warp::Reply>, warp:
 
 #[cfg(test)]
 mod tests {
-    use geoengine_operators::source::CsvSourceParameters;
-
     use super::*;
+
+    use crate::datasets::storage::{DataSetDefinition, DataSetStore};
     use crate::handlers::{handle_rejection, ErrorResponse};
+    use crate::users::user::UserId;
     use crate::util::tests::check_allowed_http_methods;
+    use crate::util::user_input::UserInput;
     use crate::{contexts::InMemoryContext, workflows::workflow::Workflow};
+    use geoengine_datatypes::dataset::DataSetId;
+    use geoengine_datatypes::util::Identifier;
     use geoengine_operators::engine::TypedOperator;
+    use geoengine_operators::source::CsvSourceParameters;
     use geoengine_operators::source::{CsvGeometrySpecification, CsvSource, CsvTimeSpecification};
     use serde_json::json;
     use std::io::{Seek, SeekFrom, Write};
@@ -693,5 +698,111 @@ x;y
             .await;
 
         ErrorResponse::assert(&res, 400, "InvalidQuery", "Invalid query string.");
+    }
+
+    async fn add_dataset_definition_to_datasets(
+        ctx: &InMemoryContext,
+        dataset_definition: &str,
+    ) -> DataSetId {
+        let def: DataSetDefinition = serde_json::from_str(dataset_definition).unwrap();
+
+        let mut db = ctx.data_set_db_ref_mut().await;
+
+        db.add_data_set(
+            UserId::new(),
+            def.properties.validated().unwrap(),
+            Box::new(def.meta_data),
+        )
+        .await
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn raster_vector_join() {
+        let ctx = InMemoryContext::default();
+
+        let ndvi_id = add_dataset_definition_to_datasets(
+            &ctx,
+            include_str!("../../test-data/dataset_defs/ndvi.json"),
+        )
+        .await;
+        let ne_10m_ports_id = add_dataset_definition_to_datasets(
+            &ctx,
+            include_str!("../../test-data/dataset_defs/points_with_time.json"),
+        )
+        .await;
+
+        let workflow = serde_json::json!({
+            "type": "Vector",
+            "operator": {
+                "type": "RasterVectorJoin",
+                "params": {
+                    "names": [
+                        "NDVI"
+                    ],
+                    "aggregation": "first"
+                },
+                "vector_sources": [
+                    {
+                        "type": "OgrSource",
+                        "params": {
+                            "data_set": ne_10m_ports_id,
+                            "attribute_projection": null
+                        }
+                    }
+                ],
+                "raster_sources": [
+                    {
+                        "type": "GdalSource",
+                        "params": {
+                            "data_set": ndvi_id,
+                        }
+                    }
+                ]
+            }
+        });
+
+        let json = serde_json::to_string(&workflow).unwrap();
+
+        let params = &[
+            ("request", "GetFeature"),
+            ("service", "WFS"),
+            ("version", "2.0.0"),
+            ("typeNames", &format!("json:{}", json)),
+            ("bbox", "-90,-180,90,180"),
+            ("srsName", "EPSG:4326"),
+            ("time", "2014-04-01T12:00:00.000Z/2014-04-01T12:00:00.000Z"),
+        ];
+        let url = format!("/wfs?{}", &serde_urlencoded::to_string(params).unwrap());
+
+        let response = warp::test::request()
+            .method("GET")
+            .path(&url)
+            .reply(&wfs_handler(ctx).recover(handle_rejection))
+            .await;
+
+        let body: serde_json::Value = serde_json::from_slice(&response.body().to_vec()).unwrap();
+
+        assert_eq!(
+            body,
+            serde_json::json!({
+                "type": "FeatureCollection",
+                "features": [{
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [12.843_159, 47.825_724]
+                    },
+                    "properties": {
+                        "NDVI": 228
+                    },
+                    "when": {
+                        "start": "2014-04-01T00:00:00+00:00",
+                        "end": "2014-07-01T00:00:00+00:00",
+                        "type": "Interval"
+                    }
+                }]
+            })
+        );
     }
 }
