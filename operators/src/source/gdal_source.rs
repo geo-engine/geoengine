@@ -98,6 +98,7 @@ pub enum FileNotFoundHandling {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct GdalMetaDataStatic {
+    pub time: Option<TimeInterval>,
     pub params: GdalDataSetParameters,
     pub result_descriptor: RasterResultDescriptor,
 }
@@ -106,7 +107,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor> for GdalMetaDataStatic {
     fn loading_info(&self, _query: QueryRectangle) -> Result<GdalLoadingInfo> {
         Ok(GdalLoadingInfo {
             info: vec![GdalLoadingInfoPart {
-                time: TimeInterval::default(),
+                time: self.time.unwrap_or_else(TimeInterval::default),
                 params: self.params.clone(),
             }],
         })
