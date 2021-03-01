@@ -116,21 +116,18 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor> for GdalMetaDataRegular {
     fn loading_info(&self, query: QueryRectangle) -> Result<GdalLoadingInfo> {
         let snapped_start = self
             .step
-            .snap_relative(self.start, query.time_interval.start())
-            .expect("is a valid time");
+            .snap_relative(self.start, query.time_interval.start())?;
 
         let snapped_interval =
             TimeInterval::new_unchecked(snapped_start, query.time_interval.end()); // TODO: snap end?
 
-        let time_iterator = TimeStepIter::new_with_interval_incl_start(snapped_interval, self.step)
-            .expect("is a valid interval");
+        let time_iterator =
+            TimeStepIter::new_with_interval_incl_start(snapped_interval, self.step)?;
 
-        let time_interval_iterator = time_iterator
+        let info: Result<Vec<_>> = time_iterator
             .try_as_intervals(self.step)
-            .map(|ti| ti.expect("is a valid time"));
-
-        let info: Result<Vec<_>> = time_interval_iterator
             .map(|time| {
+                let time = time?;
                 Ok(GdalLoadingInfoPart {
                     time,
                     params: self.params.replace_time_placeholder(
