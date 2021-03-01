@@ -67,7 +67,6 @@ impl VectorOperator for PointInPolygonFilter {
         );
 
         Ok(InitializedPointInPolygonFilter::new(
-            (),
             vector_sources[0].result_descriptor().clone(),
             vec![],
             vector_sources,
@@ -77,7 +76,7 @@ impl VectorOperator for PointInPolygonFilter {
     }
 }
 
-pub type InitializedPointInPolygonFilter = InitializedOperatorImpl<(), VectorResultDescriptor, ()>;
+pub type InitializedPointInPolygonFilter = InitializedOperatorImpl<VectorResultDescriptor, ()>;
 
 impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
     for InitializedPointInPolygonFilter

@@ -99,7 +99,6 @@ impl VectorOperator for MockDataSetDataSource {
     ) -> Result<Box<InitializedVectorOperator>> {
         let loading_info = context.meta_data(&self.params.data_set)?;
         Ok(Box::new(InitializedOperatorImpl {
-            params: self.params.clone(),
             raster_sources: vec![],
             vector_sources: vec![],
             result_descriptor: loading_info.result_descriptor()?,
@@ -110,7 +109,6 @@ impl VectorOperator for MockDataSetDataSource {
 
 impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
     for InitializedOperatorImpl<
-        MockDataSetDataSourceParams,
         VectorResultDescriptor,
         Box<dyn MetaData<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>>,
     >

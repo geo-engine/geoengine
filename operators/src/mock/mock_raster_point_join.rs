@@ -149,18 +149,17 @@ impl VectorOperator for MockRasterPointJoinOperator {
         };
 
         Ok(InitializedOperatorImpl::new(
-            self.params,
             result_descriptor,
             raster_sources,
             vector_sources,
-            (),
+            self.params,
         )
         .boxed())
     }
 }
 
 impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
-    for InitializedOperatorImpl<MockRasterPointJoinParams, VectorResultDescriptor, ()>
+    for InitializedOperatorImpl<VectorResultDescriptor, MockRasterPointJoinParams>
 {
     fn query_processor(&self) -> Result<crate::engine::TypedVectorQueryProcessor> {
         let raster_source = self.raster_sources[0].query_processor()?;
@@ -173,7 +172,7 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
                 Box::new(create_binary_raster_vector::<u8, MultiPointCollection>(
                     r,
                     point_source,
-                    self.params.clone(),
+                    self.state.clone(),
                 ))
             }
             _ => panic!(),

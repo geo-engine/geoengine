@@ -41,7 +41,6 @@ impl PlotOperator for Statistics {
         );
 
         Ok(InitializedStatistics {
-            params: (),
             result_descriptor: PlotResultDescriptor {},
             raster_sources: self
                 .raster_sources
@@ -60,7 +59,7 @@ impl PlotOperator for Statistics {
 }
 
 /// The initialization of `Statistics`
-pub type InitializedStatistics = InitializedOperatorImpl<(), PlotResultDescriptor, ()>;
+pub type InitializedStatistics = InitializedOperatorImpl<PlotResultDescriptor, ()>;
 
 impl InitializedOperator<PlotResultDescriptor, TypedPlotQueryProcessor> for InitializedStatistics {
     fn query_processor(&self) -> Result<TypedPlotQueryProcessor> {

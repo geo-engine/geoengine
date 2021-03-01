@@ -188,10 +188,10 @@ pub enum OgrSourceErrorSpec {
 #[derive(Clone, Debug)]
 pub struct OgrSourceState {
     dataset_information: Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor>>,
+    params: OgrSourceParameters,
 }
 
-pub type InitializedOgrSource =
-    InitializedOperatorImpl<OgrSourceParameters, VectorResultDescriptor, OgrSourceState>;
+pub type InitializedOgrSource = InitializedOperatorImpl<VectorResultDescriptor, OgrSourceState>;
 
 #[typetag::serde]
 impl VectorOperator for OgrSource {
@@ -203,12 +203,12 @@ impl VectorOperator for OgrSource {
             context.meta_data(&self.params.data_set)?;
 
         Ok(InitializedOgrSource::new(
-            self.params,
             info.result_descriptor()?,
             vec![],
             vec![],
             OgrSourceState {
                 dataset_information: info,
+                params: self.params,
             },
         )
         .boxed())

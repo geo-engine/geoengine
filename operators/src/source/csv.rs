@@ -148,9 +148,9 @@ impl VectorOperator for CsvSource {
         context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<InitializedVectorOperator>> {
         InitializedOperatorImpl::create(
-            self.params,
+            &self.params,
             context,
-            |_, _, _, _| Ok(()),
+            |_, _, _, _| Ok(self.params.clone()),
             |_, _, _, _, _| {
                 Ok(VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint, // TODO: get as user input
@@ -166,12 +166,12 @@ impl VectorOperator for CsvSource {
 }
 
 impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
-    for InitializedOperatorImpl<CsvSourceParameters, VectorResultDescriptor, ()>
+    for InitializedOperatorImpl<VectorResultDescriptor, CsvSourceParameters>
 {
     fn query_processor(&self) -> Result<crate::engine::TypedVectorQueryProcessor> {
         Ok(TypedVectorQueryProcessor::MultiPoint(
             CsvSourceProcessor {
-                params: self.params.clone(),
+                params: self.state.clone(),
             }
             .boxed(),
         ))
