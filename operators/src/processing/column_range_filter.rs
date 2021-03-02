@@ -51,9 +51,9 @@ impl VectorOperator for ColumnRangeFilter {
         );
 
         InitializedColumnRangeFilter::create(
-            self.params,
+            &self.params,
             context,
-            |_, _, _, _| Ok(()),
+            |p, _, _, _| Ok(p.clone()),
             |_, _, _, _, vector_sources| Ok(vector_sources[0].result_descriptor().clone()),
             self.raster_sources,
             self.vector_sources,
@@ -63,7 +63,7 @@ impl VectorOperator for ColumnRangeFilter {
 }
 
 pub type InitializedColumnRangeFilter =
-    InitializedOperatorImpl<ColumnRangeFilterParams, VectorResultDescriptor, ()>;
+    InitializedOperatorImpl<VectorResultDescriptor, ColumnRangeFilterParams>;
 
 impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
     for InitializedColumnRangeFilter
@@ -72,21 +72,21 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
         match self.vector_sources[0].query_processor()? {
             // TODO: use macro for that
             TypedVectorQueryProcessor::Data(source) => Ok(TypedVectorQueryProcessor::Data(
-                ColumnRangeFilterProcessor::new(source, self.params.clone()).boxed(),
+                ColumnRangeFilterProcessor::new(source, self.state.clone()).boxed(),
             )),
             TypedVectorQueryProcessor::MultiPoint(source) => {
                 Ok(TypedVectorQueryProcessor::MultiPoint(
-                    ColumnRangeFilterProcessor::new(source, self.params.clone()).boxed(),
+                    ColumnRangeFilterProcessor::new(source, self.state.clone()).boxed(),
                 ))
             }
             TypedVectorQueryProcessor::MultiLineString(source) => {
                 Ok(TypedVectorQueryProcessor::MultiLineString(
-                    ColumnRangeFilterProcessor::new(source, self.params.clone()).boxed(),
+                    ColumnRangeFilterProcessor::new(source, self.state.clone()).boxed(),
                 ))
             }
             TypedVectorQueryProcessor::MultiPolygon(source) => {
                 Ok(TypedVectorQueryProcessor::MultiPolygon(
-                    ColumnRangeFilterProcessor::new(source, self.params.clone()).boxed(),
+                    ColumnRangeFilterProcessor::new(source, self.state.clone()).boxed(),
                 ))
             }
         }

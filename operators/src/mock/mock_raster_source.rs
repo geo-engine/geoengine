@@ -64,9 +64,9 @@ impl RasterOperator for MockRasterSource {
         context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<InitializedRasterOperator>> {
         InitializedOperatorImpl::create(
-            self.params,
+            &self.params,
             context,
-            |_, _, _, _| Ok(()),
+            |_, _, _, _| Ok(self.params.clone()),
             |params, _, _, _, _| Ok(params.result_descriptor.clone()),
             vec![],
             vec![],
@@ -76,7 +76,7 @@ impl RasterOperator for MockRasterSource {
 }
 
 impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
-    for InitializedOperatorImpl<MockRasterSourceParams, RasterResultDescriptor, ()>
+    for InitializedOperatorImpl<RasterResultDescriptor, MockRasterSourceParams>
 {
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         fn converted<From, To>(
@@ -96,7 +96,7 @@ impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
 
         Ok(call_generic_raster_processor!(
             self.result_descriptor().data_type,
-            converted(&self.params.data)
+            converted(&self.state.data)
         ))
     }
 }

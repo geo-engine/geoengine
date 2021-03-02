@@ -116,18 +116,17 @@ impl VectorOperator for RasterVectorJoin {
         });
 
         Ok(InitializedRasterVectorJoin {
-            params: self.params,
             raster_sources,
             result_descriptor,
             vector_sources: vec![vector_source],
-            state: (),
+            state: self.params,
         }
         .boxed())
     }
 }
 
 pub type InitializedRasterVectorJoin =
-    InitializedOperatorImpl<RasterVectorJoinParams, VectorResultDescriptor, ()>;
+    InitializedOperatorImpl<VectorResultDescriptor, RasterVectorJoinParams>;
 
 impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
     for InitializedRasterVectorJoin
@@ -145,8 +144,8 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
                 RasterPointJoinProcessor::new(
                     points,
                     typed_raster_processors,
-                    self.params.names.clone(),
-                    self.params.aggregation,
+                    self.state.names.clone(),
+                    self.state.aggregation,
                 )
                 .boxed(),
             ),

@@ -32,7 +32,7 @@ pub struct ReprojectionState {
 
 pub type Reprojection = Operator<ReprojectionParams>;
 pub type InitializedReprojection =
-    InitializedOperatorImpl<(), VectorResultDescriptor, ReprojectionState>;
+    InitializedOperatorImpl<VectorResultDescriptor, ReprojectionState>;
 
 #[typetag::serde]
 impl VectorOperator for Reprojection {
@@ -74,7 +74,7 @@ impl VectorOperator for Reprojection {
         };
 
         Ok(
-            InitializedReprojection::new((), out_desc, vec![], initialized_vector_sources, state)
+            InitializedReprojection::new(out_desc, vec![], initialized_vector_sources, state)
                 .boxed(),
         )
     }

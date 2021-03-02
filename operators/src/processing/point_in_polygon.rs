@@ -1,5 +1,6 @@
 use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
+use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
 use geoengine_datatypes::collections::{
@@ -67,17 +68,19 @@ impl VectorOperator for PointInPolygonFilter {
         );
 
         Ok(InitializedPointInPolygonFilter::new(
-            (),
             vector_sources[0].result_descriptor().clone(),
             vec![],
             vector_sources,
-            (),
+            PointInPolygonFilterState,
         )
         .boxed())
     }
 }
 
-pub type InitializedPointInPolygonFilter = InitializedOperatorImpl<(), VectorResultDescriptor, ()>;
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy)]
+pub struct PointInPolygonFilterState;
+pub type InitializedPointInPolygonFilter =
+    InitializedOperatorImpl<VectorResultDescriptor, PointInPolygonFilterState>;
 
 impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
     for InitializedPointInPolygonFilter

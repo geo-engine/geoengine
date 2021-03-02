@@ -96,29 +96,22 @@ macro_rules! impl_mock_feature_collection_source {
                 };
 
                 Ok(
-                    InitializedOperatorImpl::new(
-                        self.params,
-                        result_descriptor,
-                        vec![],
-                        vec![],
-                        (),
-                    )
-                    .boxed(),
+                    InitializedOperatorImpl::new(result_descriptor, vec![], vec![], self.params)
+                        .boxed(),
                 )
             }
         }
 
         impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
             for InitializedOperatorImpl<
-                MockFeatureCollectionSourceParams<$geometry>,
                 VectorResultDescriptor,
-                (),
+                MockFeatureCollectionSourceParams<$geometry>,
             >
         {
             fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
                 Ok(TypedVectorQueryProcessor::$output(
                     MockFeatureCollectionSourceProcessor {
-                        collections: self.params.collections.clone(),
+                        collections: self.state.collections.clone(),
                     }
                     .boxed(),
                 ))

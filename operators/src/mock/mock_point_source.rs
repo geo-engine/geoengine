@@ -56,9 +56,9 @@ impl VectorOperator for MockPointSource {
         context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedVectorOperator>> {
         InitializedOperatorImpl::create(
-            self.params,
+            &self.params,
             context,
-            |_, _, _, _| Ok(()),
+            |_, _, _, _| Ok(self.params.clone()),
             |_, _, _, _, _| {
                 Ok(VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -74,12 +74,12 @@ impl VectorOperator for MockPointSource {
 }
 
 impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
-    for InitializedOperatorImpl<MockPointSourceParams, VectorResultDescriptor, ()>
+    for InitializedOperatorImpl<VectorResultDescriptor, MockPointSourceParams>
 {
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
         Ok(TypedVectorQueryProcessor::MultiPoint(
             MockPointSourceProcessor {
-                points: self.params.points.clone(),
+                points: self.state.points.clone(),
             }
             .boxed(),
         ))
