@@ -235,13 +235,15 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor> for HashMapDataSe
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor>>,
         geoengine_operators::error::Error,
     > {
+        let id = data_set
+            .internal()
+            .ok_or(geoengine_operators::error::Error::DataSetMetaData {
+                source: Box::new(error::Error::DataSetIdTypeMissMatch),
+            })?;
+
         Ok(self
             .gdal_data_sets
-            .get(&data_set.internal().ok_or(
-                geoengine_operators::error::Error::DataSetMetaData {
-                    source: Box::new(error::Error::DataSetIdTypeMissMatch),
-                },
-            )?)
+            .get(&id)
             .ok_or(geoengine_operators::error::Error::DataSetMetaData {
                 source: Box::new(error::Error::UnknownDataSetId),
             })?
