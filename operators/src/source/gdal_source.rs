@@ -87,6 +87,7 @@ pub struct GdalDataSetParameters {
     pub geo_transform: GeoTransform,
     pub bbox: BoundingBox2D, // the bounding box of the data set containing the raster data
     pub file_not_found_handling: FileNotFoundHandling,
+    pub no_data_value: Option<f64>,
 }
 
 /// How to handle file not found errors
@@ -173,11 +174,9 @@ impl GdalDataSetParameters {
             .replace(placeholder, &time_string);
 
         Ok(Self {
-            file_path: file_path.into(),
-            rasterband_channel: self.rasterband_channel,
-            geo_transform: self.geo_transform,
-            bbox: self.bbox,
             file_not_found_handling: FileNotFoundHandling::NoData,
+            file_path: file_path.into(),
+            ..*self
         })
     }
 }
@@ -254,9 +253,9 @@ where
         let rasterband: GdalRasterBand =
             dataset.rasterband(data_set_params.rasterband_channel as isize)?;
 
-        // get the no_data_value. TODO: move to dataset parameters? Keep in mind, that this can change for each time step.
-        // We also need to ge metadata from the dataset (for each tile) e.g. scale + offset.
-        let no_data_value = rasterband.no_data_value().map(T::from_);
+        // TODO: We also need to get metadata from the dataset (for each tile) e.g. scale + offset.
+        let no_data_value = data_set_params.no_data_value.map(T::from_);
+        // TODO: ensure that there is a no_data_value
         let fill_value = no_data_value.unwrap_or_else(T::zero);
 
         // dataset spatial relations
@@ -585,6 +584,7 @@ mod tests {
                 },
                 bbox: BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
                 file_not_found_handling: FileNotFoundHandling::NoData,
+                no_data_value: Some(0.),
             },
             TileInformation::with_bbox_and_shape(output_bounds, output_shape),
         )
@@ -759,6 +759,7 @@ mod tests {
                 geo_transform: Default::default(),
                 bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (1., 1.).into()),
                 file_not_found_handling: FileNotFoundHandling::NoData,
+                no_data_value: Some(0.),
             },
             placeholder: "%TIME%".to_string(),
             time_format: "%f".to_string(),
@@ -945,6 +946,6 @@ mod tests {
             TimeInterval::new_unchecked(1_385_856_000_000, 1_388_534_400_000)
         );
 
-        assert!(!tile_1.grid_array.data.iter().any(|p| *p != 0)); // TODO: the NDVI data has no NO DATA value. Currently, we fill empty areas with 0 if there is no NO DATA. We have to add a strategy to fix this since we meight add empty areas through the tiling approach.
+        assert!(!tile_1.grid_array.data.iter().any(|p| *p != 0)); // TODO: the NDVI data has no NO DATA value. Currently, we fill empty areas with 0 if there is no NO DATA. We have to add a strategy to fix this since we might add empty areas through the tiling approach.
     }
 }
