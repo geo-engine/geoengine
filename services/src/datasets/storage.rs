@@ -7,11 +7,13 @@ use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DataSetId, DataSetProviderId, InternalDataSetId};
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::{engine::StaticMetaData, source::OgrSourceDataset};
-use geoengine_operators::{engine::TypedResultDescriptor, mock::MockDataSetDataSourceLoadingInfo};
+use geoengine_operators::{
+    engine::TypedResultDescriptor, mock::MockDataSetDataSourceLoadingInfo,
+    source::GdalMetaDataStatic,
+};
 use geoengine_operators::{engine::VectorResultDescriptor, source::GdalMetaDataRegular};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
-use std::path::PathBuf;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DataSet {
@@ -115,25 +117,6 @@ impl UserInput for DataSetProviderListOptions {
         todo!()
     }
 }
-
-#[allow(clippy::large_enum_variant)] // TODO: box?
-pub enum DataSetLoadingInfo {
-    Raster(RasterLoadingInfo),
-    Vector(VectorLoadingInfo),
-}
-
-pub struct GdalLoadingInfo {
-    pub file: PathBuf,
-}
-
-pub type RasterLoadingInfo = GdalLoadingInfo;
-
-#[allow(clippy::large_enum_variant)] // TODO: box?
-pub enum VectorLoadingInfo {
-    Mock(MockDataSetDataSourceLoadingInfo),
-    Ogr(OgrSourceDataset),
-}
-
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct DataSetDefinition {
     pub properties: AddDataSet,
@@ -146,6 +129,7 @@ pub enum MetaDataDefinition {
     MockMetaData(StaticMetaData<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>),
     OgrMetaData(StaticMetaData<OgrSourceDataset, VectorResultDescriptor>),
     GdalMetaDataRegular(GdalMetaDataRegular),
+    GdalStatic(GdalMetaDataStatic),
 }
 
 /// Handling of data sets provided by geo engine internally, staged and by external providers
