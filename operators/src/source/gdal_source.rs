@@ -232,12 +232,16 @@ where
 
         let dataset_result = GdalDataset::open(&data_set_params.file_path);
 
+        // TODO: We also need to get metadata from the dataset (for each tile) e.g. scale + offset.
+        let no_data_value = data_set_params.no_data_value.map(T::from_);
+        // TODO: ensure that there is a no_data_value
+        let fill_value = no_data_value.unwrap_or_else(T::zero);
+
         if dataset_result.is_err() {
             // TODO: check if Gdal error is actually file not found
             return match data_set_params.file_not_found_handling {
                 FileNotFoundHandling::NoData => {
-                    // TODO: fill with actual no data
-                    Ok(Grid2D::new_filled(output_shape, T::zero(), None))
+                    Ok(Grid2D::new_filled(output_shape, fill_value, no_data_value))
                 }
                 FileNotFoundHandling::Error => Err(crate::error::Error::CouldNotOpenGdalDataSet {
                     file_path: data_set_params.file_path.to_string_lossy().to_string(),
@@ -252,11 +256,6 @@ where
         // get the requested raster band of the dataset …
         let rasterband: GdalRasterBand =
             dataset.rasterband(data_set_params.rasterband_channel as isize)?;
-
-        // TODO: We also need to get metadata from the dataset (for each tile) e.g. scale + offset.
-        let no_data_value = data_set_params.no_data_value.map(T::from_);
-        // TODO: ensure that there is a no_data_value
-        let fill_value = no_data_value.unwrap_or_else(T::zero);
 
         // dataset spatial relations
         let dataset_contains_tile = dataset_bounds.contains_bbox(&output_bounds);
