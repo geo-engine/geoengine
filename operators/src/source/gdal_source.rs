@@ -87,10 +87,11 @@ pub struct GdalDataSetParameters {
     pub geo_transform: GeoTransform,
     pub bbox: BoundingBox2D, // the bounding box of the data set containing the raster data
     pub file_not_found_handling: FileNotFoundHandling,
+    pub no_data_value: Option<f64>,
 }
 
 /// How to handle file not found errors
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub enum FileNotFoundHandling {
     NoData, // output tiles filled with nodata
     Error,  // return error tile
@@ -196,11 +197,9 @@ impl GdalDataSetParameters {
             .replace(placeholder, &time_string);
 
         Ok(Self {
-            file_path: file_path.into(),
-            rasterband_channel: self.rasterband_channel,
-            geo_transform: self.geo_transform,
-            bbox: self.bbox,
             file_not_found_handling: FileNotFoundHandling::NoData,
+            file_path: file_path.into(),
+            ..*self
         })
     }
 }
@@ -256,12 +255,16 @@ where
 
         let dataset_result = GdalDataset::open(&data_set_params.file_path);
 
+        // TODO: We also need to get metadata from the dataset (for each tile) e.g. scale + offset.
+        let no_data_value = data_set_params.no_data_value.map(T::from_);
+        // TODO: ensure that there is a no_data_value
+        let fill_value = no_data_value.unwrap_or_else(T::zero);
+
         if dataset_result.is_err() {
             // TODO: check if Gdal error is actually file not found
             return match data_set_params.file_not_found_handling {
                 FileNotFoundHandling::NoData => {
-                    // TODO: fill with actual no data
-                    Ok(Grid2D::new_filled(output_shape, T::zero(), None))
+                    Ok(Grid2D::new_filled(output_shape, fill_value, no_data_value))
                 }
                 FileNotFoundHandling::Error => Err(crate::error::Error::CouldNotOpenGdalDataSet {
                     file_path: data_set_params.file_path.to_string_lossy().to_string(),
@@ -285,7 +288,7 @@ where
         let result_raster = match (dataset_contains_tile, dataset_intersects_tile) {
             (_, false) => {
                 // TODO: refactor tile to hold an Option<GridData> and this will be empty in this case
-                Grid2D::new_filled(output_shape, T::zero(), None)
+                Grid2D::new_filled(output_shape, fill_value, no_data_value)
             }
             (true, true) => {
                 let dataset_idx_ul =
@@ -298,6 +301,7 @@ where
                     &rasterband,
                     &GridBoundingBox2D::new(dataset_idx_ul, dataset_idx_lr)?,
                     output_shape,
+                    no_data_value,
                 )?
             }
             (false, true) => {
@@ -322,10 +326,10 @@ where
                     &rasterband,
                     &GridBoundingBox2D::new(dataset_idx_ul, dataset_idx_lr)?,
                     GridBoundingBox2D::new(tile_idx_ul, tile_idx_lr)?,
+                    no_data_value,
                 )?;
 
-                // TODO: fill with actual no data
-                let mut tile_raster = Grid2D::new_filled(output_shape, T::zero(), None);
+                let mut tile_raster = Grid2D::new_filled(output_shape, fill_value, no_data_value);
                 tile_raster.grid_blit_from(dataset_raster)?;
                 tile_raster
             }
@@ -520,6 +524,7 @@ fn read_as_raster<
     rasterband: &GdalRasterBand,
     dataset_grid_box: &GridBoundingBox2D,
     tile_grid: D,
+    no_data_value: Option<T>,
 ) -> Result<Grid<D, T>>
 where
     T: Pixel + GdalType,
@@ -532,7 +537,7 @@ where
         (dataset_x_size, dataset_y_size), // pixelspace size
         (tile_x_size, tile_y_size),       // requested raster size
     )?;
-    Grid::new(tile_grid, buffer.data, None).map_err(Into::into)
+    Grid::new(tile_grid, buffer.data, no_data_value).map_err(Into::into)
 }
 
 #[cfg(test)]
@@ -602,6 +607,7 @@ mod tests {
                 },
                 bbox: BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
                 file_not_found_handling: FileNotFoundHandling::NoData,
+                no_data_value: Some(0.),
             },
             TileInformation::with_bbox_and_shape(output_bounds, output_shape),
         )
@@ -763,6 +769,33 @@ mod tests {
     }
 
     #[test]
+    fn replace_time_placeholder() {
+        let params = GdalDataSetParameters {
+            file_path: "/foo/bar_%TIME%.tiff".into(),
+            rasterband_channel: 0,
+            geo_transform: Default::default(),
+            bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (1., 1.).into()),
+            file_not_found_handling: FileNotFoundHandling::NoData,
+            no_data_value: Some(0.),
+        };
+        let replaced = params
+            .replace_time_placeholder("%TIME%", "%f", TimeInstance::from_millis(22))
+            .unwrap();
+        assert_eq!(
+            replaced.file_path.to_string_lossy(),
+            "/foo/bar_022000000.tiff".to_string()
+        );
+        assert_eq!(params.rasterband_channel, replaced.rasterband_channel);
+        assert_eq!(params.geo_transform, replaced.geo_transform);
+        assert_eq!(params.bbox, replaced.bbox);
+        assert_eq!(
+            params.file_not_found_handling,
+            replaced.file_not_found_handling
+        );
+        assert_eq!(params.no_data_value, replaced.no_data_value);
+    }
+
+    #[test]
     fn test_regular_meta_data() {
         let meta_data = GdalMetaDataRegular {
             result_descriptor: RasterResultDescriptor {
@@ -776,6 +809,7 @@ mod tests {
                 geo_transform: Default::default(),
                 bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (1., 1.).into()),
                 file_not_found_handling: FileNotFoundHandling::NoData,
+                no_data_value: Some(0.),
             },
             placeholder: "%TIME%".to_string(),
             time_format: "%f".to_string(),
@@ -785,6 +819,15 @@ mod tests {
                 step: 11,
             },
         };
+
+        assert_eq!(
+            meta_data.result_descriptor().unwrap(),
+            RasterResultDescriptor {
+                data_type: RasterDataType::U8,
+                spatial_reference: SpatialReference::epsg_4326().into(),
+                measurement: Measurement::Unitless,
+            }
+        );
 
         assert_eq!(
             meta_data
@@ -823,6 +866,7 @@ mod tests {
                 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255
             ]
         );
+        assert_eq!(x.no_data_value, Some(0));
     }
 
     #[test]
@@ -955,11 +999,13 @@ mod tests {
 
         assert_eq!(c.len(), 4);
 
+        let tile_1 = &c[0];
+
         assert_eq!(
-            c[0].time,
+            tile_1.time,
             TimeInterval::new_unchecked(1_385_856_000_000, 1_388_534_400_000)
         );
 
-        assert!(!c[0].grid_array.data.iter().any(|p| *p != 0)); // TODO: use actual no data value
+        assert!(!tile_1.grid_array.data.iter().any(|p| *p != 0)); // TODO: the NDVI data has no NO DATA value. Currently, we fill empty areas with 0 if there is no NO DATA. We have to add a strategy to fix this since we might add empty areas through the tiling approach.
     }
 }
