@@ -109,7 +109,6 @@ impl PlotOperator for Histogram {
         }
 
         Ok(InitializedHistogram {
-            params: self.params,
             result_descriptor: PlotResultDescriptor {},
             raster_sources: self
                 .raster_sources
@@ -117,24 +116,24 @@ impl PlotOperator for Histogram {
                 .map(|o| o.initialize(context))
                 .collect::<Result<Vec<_>>>()?,
             vector_sources,
-            state: (),
+            state: self.params,
         }
         .boxed())
     }
 }
 
 /// The initialization of `Histogram`
-pub type InitializedHistogram = InitializedOperatorImpl<HistogramParams, PlotResultDescriptor, ()>;
+pub type InitializedHistogram = InitializedOperatorImpl<PlotResultDescriptor, HistogramParams>;
 
 impl InitializedOperator<PlotResultDescriptor, TypedPlotQueryProcessor> for InitializedHistogram {
     fn query_processor(&self) -> Result<TypedPlotQueryProcessor> {
-        let (min, max) = if let HistogramBounds::Values { min, max } = self.params.bounds {
+        let (min, max) = if let HistogramBounds::Values { min, max } = self.state.bounds {
             (Some(min), Some(max))
         } else {
             (None, None)
         };
         let metadata = HistogramMetadataOptions {
-            number_of_buckets: self.params.buckets,
+            number_of_buckets: self.state.buckets,
             min,
             max,
         };
@@ -147,7 +146,7 @@ impl InitializedOperator<PlotResultDescriptor, TypedPlotQueryProcessor> for Init
                     input: raster_source.query_processor()?,
                     measurement: raster_source.result_descriptor().measurement.clone(),
                     metadata,
-                    interactive: self.params.interactive,
+                    interactive: self.state.interactive,
                 }
                 .boxed(),
             ))
@@ -157,10 +156,10 @@ impl InitializedOperator<PlotResultDescriptor, TypedPlotQueryProcessor> for Init
             Ok(TypedPlotQueryProcessor::JsonVega(
                 HistogramVectorQueryProcessor {
                     input: vector_source.query_processor()?,
-                    column_name: self.params.column_name.clone().expect("checked in param"),
+                    column_name: self.state.column_name.clone().expect("checked in param"),
                     measurement: Measurement::Unitless, // TODO: incorporate measurement once it is there
                     metadata,
-                    interactive: self.params.interactive,
+                    interactive: self.state.interactive,
                 }
                 .boxed(),
             ))
@@ -256,7 +255,7 @@ impl HistogramRasterQueryProcessor {
         // TODO: compute only number of buckets if possible
 
         call_on_generic_raster_processor!(&self.input, processor => {
-            process_metadata(processor.query(query, ctx), self.metadata).await
+            process_metadata(processor.query(query, ctx)?, self.metadata).await
         })
     }
 
@@ -276,7 +275,7 @@ impl HistogramRasterQueryProcessor {
         .map_err(Error::from)?;
 
         call_on_generic_raster_processor!(&self.input, processor => {
-            let mut query = processor.query(query, ctx);
+            let mut query = processor.query(query, ctx)?;
 
             while let Some(tile) = query.next().await {
                 let tile = tile?;
@@ -325,7 +324,7 @@ impl HistogramVectorQueryProcessor {
         // TODO: compute only number of buckets if possible
 
         call_on_generic_vector_processor!(&self.input, processor => {
-            process_metadata(processor.query(query, ctx), &self.column_name, self.metadata).await
+            process_metadata(processor.query(query, ctx)?, &self.column_name, self.metadata).await
         })
     }
 
@@ -345,7 +344,7 @@ impl HistogramVectorQueryProcessor {
         .map_err(Error::from)?;
 
         call_on_generic_vector_processor!(&self.input, processor => {
-            let mut query = processor.query(query, ctx);
+            let mut query = processor.query(query, ctx)?;
 
             while let Some(collection) = query.next().await {
                 let collection = collection?;

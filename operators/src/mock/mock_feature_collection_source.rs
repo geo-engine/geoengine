@@ -31,11 +31,11 @@ where
         &'a self,
         _query: QueryRectangle,
         _ctx: &'a dyn QueryContext,
-    ) -> BoxStream<'a, Result<Self::Output>> {
+    ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         // TODO: chunk it up
         // let chunk_size = ctx.chunk_byte_size / std::mem::size_of::<Coordinate2D>();
 
-        stream::iter(self.collections.iter().map(|c| Ok(c.clone()))).boxed()
+        Ok(stream::iter(self.collections.iter().map(|c| Ok(c.clone()))).boxed())
     }
 }
 
@@ -96,29 +96,22 @@ macro_rules! impl_mock_feature_collection_source {
                 };
 
                 Ok(
-                    InitializedOperatorImpl::new(
-                        self.params,
-                        result_descriptor,
-                        vec![],
-                        vec![],
-                        (),
-                    )
-                    .boxed(),
+                    InitializedOperatorImpl::new(result_descriptor, vec![], vec![], self.params)
+                        .boxed(),
                 )
             }
         }
 
         impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
             for InitializedOperatorImpl<
-                MockFeatureCollectionSourceParams<$geometry>,
                 VectorResultDescriptor,
-                (),
+                MockFeatureCollectionSourceParams<$geometry>,
             >
         {
             fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
                 Ok(TypedVectorQueryProcessor::$output(
                     MockFeatureCollectionSourceProcessor {
-                        collections: self.params.collections.clone(),
+                        collections: self.state.collections.clone(),
                     }
                     .boxed(),
                 ))
@@ -269,7 +262,7 @@ mod tests {
         };
         let ctx = MockQueryContext::new(2 * std::mem::size_of::<Coordinate2D>());
 
-        let stream = processor.vector_query(query_rectangle, &ctx);
+        let stream = processor.vector_query(query_rectangle, &ctx).unwrap();
 
         let blocking_stream = block_on_stream(stream);
 

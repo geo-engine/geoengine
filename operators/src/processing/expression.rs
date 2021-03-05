@@ -113,20 +113,14 @@ impl RasterOperator for Expression {
         };
 
         Ok(
-            InitializedOperatorImpl::new(
-                self.params,
-                result_descriptor,
-                raster_sources,
-                vec![],
-                (),
-            )
-            .boxed(),
+            InitializedOperatorImpl::new(result_descriptor, raster_sources, vec![], self.params)
+                .boxed(),
         )
     }
 }
 
 impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
-    for InitializedOperatorImpl<ExpressionParams, RasterResultDescriptor, ()>
+    for InitializedOperatorImpl<RasterResultDescriptor, ExpressionParams>
 {
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         // TODO: handle different number of sources
@@ -137,13 +131,13 @@ impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
                 let b = b.query_processor()?;
 
                 call_bi_generic_processor!(a, b, (p_a, p_b) => {
-                    let res = call_generic_raster_processor!(self.params.output_type, ExpressionQueryProcessor::new(
+                    let res = call_generic_raster_processor!(self.state.output_type, ExpressionQueryProcessor::new(
                                 &SafeExpression {
-                                    expression: self.params.expression.clone(),
+                                    expression: self.state.expression.clone(),
                                 },
                                 p_a,
                                 p_b,
-                                self.params.output_no_data_value.try_into()?
+                                self.state.output_no_data_value.try_into()?
                             )
                             .boxed());
                     Ok(res)
@@ -241,12 +235,13 @@ where
         &'b self,
         query: QueryRectangle,
         ctx: &'b dyn QueryContext,
-    ) -> BoxStream<'b, Result<RasterTile2D<TO>>> {
+    ) -> Result<BoxStream<'b, Result<RasterTile2D<TO>>>> {
         // TODO: validate that tiles actually fit together
         let mut cl_program = self.cl_program.clone();
-        self.source_a
-            .query(query, ctx)
-            .zip(self.source_b.query(query, ctx))
+        Ok(self
+            .source_a
+            .query(query, ctx)?
+            .zip(self.source_b.query(query, ctx)?)
             .map(move |(a, b)| match (a, b) {
                 (Ok(a), Ok(b)) => {
                     let mut out = Grid2D::new(
@@ -277,7 +272,7 @@ where
                 }
                 _ => unimplemented!(),
             })
-            .boxed()
+            .boxed())
     }
 }
 
@@ -314,14 +309,16 @@ mod tests {
         let p = o.query_processor().unwrap().get_i8().unwrap();
 
         let ctx = MockQueryContext::new(1);
-        let q = p.query(
-            QueryRectangle {
-                bbox: BoundingBox2D::new_unchecked((1., 2.).into(), (3., 4.).into()),
-                time_interval: Default::default(),
-                spatial_resolution: SpatialResolution::one(),
-            },
-            &ctx,
-        );
+        let q = p
+            .query(
+                QueryRectangle {
+                    bbox: BoundingBox2D::new_unchecked((1., 2.).into(), (3., 4.).into()),
+                    time_interval: Default::default(),
+                    spatial_resolution: SpatialResolution::one(),
+                },
+                &ctx,
+            )
+            .unwrap();
 
         let c: Vec<Result<RasterTile2D<i8>>> = q.collect().await;
 

@@ -121,14 +121,13 @@ impl VectorOperator for VectorJoin {
             });
 
         Ok(InitializedVectorJoin::new(
+            result_descriptor,
+            vec![],
+            vector_sources,
             InitializedVectorJoinParams {
                 join_type: self.params.join_type.clone(),
                 column_translation_table,
             },
-            result_descriptor,
-            vec![],
-            vector_sources,
-            (),
         )
         .boxed())
     }
@@ -142,13 +141,13 @@ pub struct InitializedVectorJoinParams {
 }
 
 pub type InitializedVectorJoin =
-    InitializedOperatorImpl<InitializedVectorJoinParams, VectorResultDescriptor, ()>;
+    InitializedOperatorImpl<VectorResultDescriptor, InitializedVectorJoinParams>;
 
 impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
     for InitializedVectorJoin
 {
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
-        match &self.params.join_type {
+        match &self.state.join_type {
             VectorJoinType::EquiGeoToData {
                 left_column,
                 right_column,
@@ -170,7 +169,7 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
                                 right_processor,
                                 left_column.clone(),
                                 right_column.clone(),
-                                self.params.column_translation_table.clone(),
+                                self.state.column_translation_table.clone(),
                             )
                             .boxed(),
                         )
@@ -182,7 +181,7 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
                                 right_processor,
                                 left_column.clone(),
                                 right_column.clone(),
-                                self.params.column_translation_table.clone(),
+                                self.state.column_translation_table.clone(),
                             )
                             .boxed(),
                         )
@@ -194,7 +193,7 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
                                 right_processor,
                                 left_column.clone(),
                                 right_column.clone(),
-                                self.params.column_translation_table.clone(),
+                                self.state.column_translation_table.clone(),
                             )
                             .boxed(),
                         )

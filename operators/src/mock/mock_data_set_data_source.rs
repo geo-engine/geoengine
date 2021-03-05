@@ -67,20 +67,20 @@ impl QueryProcessor for MockDataSetDataSourceProcessor {
         &'a self,
         query: QueryRectangle,
         _ctx: &'a dyn QueryContext,
-    ) -> BoxStream<'a, Result<MultiPointCollection>> {
+    ) -> Result<BoxStream<'a, Result<MultiPointCollection>>> {
         // TODO: split into `chunk_byte_size`d chunks
         // let chunk_size = ctx.chunk_byte_size() / std::mem::size_of::<Coordinate2D>();
 
-        let loading_info = self.loading_info.loading_info(query).unwrap();
+        let loading_info = self.loading_info.loading_info(query)?;
 
-        stream::once(async move {
+        Ok(stream::once(async move {
             Ok(MultiPointCollection::from_data(
                 loading_info.points.iter().map(Into::into).collect(),
                 vec![TimeInterval::default(); loading_info.points.len()],
                 HashMap::new(),
             )?)
         })
-        .boxed()
+        .boxed())
     }
 }
 
@@ -99,7 +99,6 @@ impl VectorOperator for MockDataSetDataSource {
     ) -> Result<Box<InitializedVectorOperator>> {
         let loading_info = context.meta_data(&self.params.data_set)?;
         Ok(Box::new(InitializedOperatorImpl {
-            params: self.params.clone(),
             raster_sources: vec![],
             vector_sources: vec![],
             result_descriptor: loading_info.result_descriptor()?,
@@ -110,7 +109,6 @@ impl VectorOperator for MockDataSetDataSource {
 
 impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
     for InitializedOperatorImpl<
-        MockDataSetDataSourceParams,
         VectorResultDescriptor,
         Box<dyn MetaData<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>>,
     >
@@ -166,7 +164,7 @@ mod tests {
         };
         let ctx = MockQueryContext::new(2 * std::mem::size_of::<Coordinate2D>());
 
-        let stream = point_processor.vector_query(query_rectangle, &ctx);
+        let stream = point_processor.vector_query(query_rectangle, &ctx).unwrap();
 
         let blocking_stream = block_on_stream(stream);
         let collections: Vec<MultiPointCollection> = blocking_stream.map(Result::unwrap).collect();

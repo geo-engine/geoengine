@@ -67,7 +67,6 @@ impl PlotOperator for MeanRasterPixelValuesOverTime {
         );
 
         Ok(InitializedMeanRasterPixelValuesOverTime {
-            params: self.params,
             result_descriptor: PlotResultDescriptor {},
             raster_sources: self
                 .raster_sources
@@ -75,7 +74,7 @@ impl PlotOperator for MeanRasterPixelValuesOverTime {
                 .map(|o| o.initialize(context))
                 .collect::<Result<Vec<_>>>()?,
             vector_sources: vec![],
-            state: (),
+            state: self.params,
         }
         .boxed())
     }
@@ -83,19 +82,19 @@ impl PlotOperator for MeanRasterPixelValuesOverTime {
 
 /// The initialization of `MeanRasterPixelValuesOverTime`
 pub type InitializedMeanRasterPixelValuesOverTime =
-    InitializedOperatorImpl<MeanRasterPixelValuesOverTimeParams, PlotResultDescriptor, ()>;
+    InitializedOperatorImpl<PlotResultDescriptor, MeanRasterPixelValuesOverTimeParams>;
 
 impl InitializedOperator<PlotResultDescriptor, TypedPlotQueryProcessor>
     for InitializedMeanRasterPixelValuesOverTime
 {
     fn query_processor(&self) -> Result<TypedPlotQueryProcessor> {
         let input_processor = self.raster_sources[0].query_processor()?;
-        let time_position = self.params.time_position;
+        let time_position = self.state.time_position;
         let measurement = self.raster_sources[0]
             .result_descriptor()
             .measurement
             .clone();
-        let draw_area = self.params.area;
+        let draw_area = self.state.area;
 
         let processor = call_on_generic_raster_processor!(input_processor, raster => {
             MeanRasterPixelValuesOverTimeQueryProcessor { raster, time_position, measurement, draw_area }.boxed()
@@ -127,7 +126,7 @@ impl<P: Pixel> PlotQueryProcessor for MeanRasterPixelValuesOverTimeQueryProcesso
         ctx: &'a dyn QueryContext,
     ) -> Result<Self::OutputFormat> {
         let means =
-            Self::calculate_means(self.raster.query(query, ctx), self.time_position).await?;
+            Self::calculate_means(self.raster.query(query, ctx)?, self.time_position).await?;
 
         let plot = Self::generate_plot(means, self.measurement.clone(), self.draw_area)?;
 

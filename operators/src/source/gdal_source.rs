@@ -97,6 +97,32 @@ pub enum FileNotFoundHandling {
     Error,  // return error tile
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct GdalMetaDataStatic {
+    pub time: Option<TimeInterval>,
+    pub params: GdalDataSetParameters,
+    pub result_descriptor: RasterResultDescriptor,
+}
+
+impl MetaData<GdalLoadingInfo, RasterResultDescriptor> for GdalMetaDataStatic {
+    fn loading_info(&self, _query: QueryRectangle) -> Result<GdalLoadingInfo> {
+        Ok(GdalLoadingInfo {
+            info: vec![GdalLoadingInfoPart {
+                time: self.time.unwrap_or_else(TimeInterval::default),
+                params: self.params.clone(),
+            }],
+        })
+    }
+
+    fn result_descriptor(&self) -> Result<RasterResultDescriptor> {
+        Ok(self.result_descriptor.clone())
+    }
+
+    fn box_clone(&self) -> Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor>> {
+        Box::new(self.clone())
+    }
+}
+
 /// Meta data for a regular time series that begins (is anchored) at `start` with multiple gdal data
 /// sets `step` time apart. The `placeholder` in the file path of the data set is replaced with the
 /// queried time in specified `time_format`.
@@ -117,21 +143,18 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor> for GdalMetaDataRegular {
     fn loading_info(&self, query: QueryRectangle) -> Result<GdalLoadingInfo> {
         let snapped_start = self
             .step
-            .snap_relative(self.start, query.time_interval.start())
-            .expect("is a valid time");
+            .snap_relative(self.start, query.time_interval.start())?;
 
         let snapped_interval =
             TimeInterval::new_unchecked(snapped_start, query.time_interval.end()); // TODO: snap end?
 
-        let time_iterator = TimeStepIter::new_with_interval_incl_start(snapped_interval, self.step)
-            .expect("is a valid interval");
+        let time_iterator =
+            TimeStepIter::new_with_interval_incl_start(snapped_interval, self.step)?;
 
-        let time_interval_iterator = time_iterator
+        let info: Result<Vec<_>> = time_iterator
             .try_as_intervals(self.step)
-            .map(|ti| ti.expect("is a valid time"));
-
-        let info: Result<Vec<_>> = time_interval_iterator
             .map(|time| {
+                let time = time?;
                 Ok(GdalLoadingInfoPart {
                     time,
                     params: self.params.replace_time_placeholder(
@@ -367,13 +390,13 @@ where
         &'a self,
         query: crate::engine::QueryRectangle,
         _ctx: &'a dyn crate::engine::QueryContext,
-    ) -> BoxStream<Result<RasterTile2D<T>>> {
-        let meta_data = self.meta_data.loading_info(query).unwrap(); // TODO: change when query signature returns Result
+    ) -> Result<BoxStream<Result<RasterTile2D<T>>>> {
+        let meta_data = self.meta_data.loading_info(query)?;
 
-        stream::iter(meta_data.info.into_iter())
+        Ok(stream::iter(meta_data.info.into_iter())
             .map(move |info| self.tile_stream(query, info))
             .flatten()
-            .boxed()
+            .boxed())
     }
 }
 
@@ -564,6 +587,7 @@ mod tests {
                 },
                 query_ctx,
             )
+            .unwrap()
             .collect()
             .await
     }

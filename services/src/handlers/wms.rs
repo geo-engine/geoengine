@@ -216,7 +216,7 @@ async fn raster_stream_to_png_bytes<T, C: QueryContext>(
 where
     T: Pixel,
 {
-    let tile_stream = processor.raster_query(query_rect, &query_ctx);
+    let tile_stream = processor.raster_query(query_rect, &query_ctx)?;
 
     let x_query_resolution = query_rect.bbox.size_x() / f64::from(request.width);
     let y_query_resolution = query_rect.bbox.size_y() / f64::from(request.height);

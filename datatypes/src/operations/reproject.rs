@@ -357,7 +357,6 @@ mod tests {
 
         let mp = MultiPolygon::new(cs).unwrap();
         let rp = mp.reproject(&p).unwrap();
-        dbg!(&mp, &rp);
 
         assert!(approx_eq!(
             f64,

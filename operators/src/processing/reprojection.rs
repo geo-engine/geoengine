@@ -17,6 +17,7 @@ use crate::{
 };
 
 use super::map_query::MapQueryProcessor;
+use futures::stream::BoxStream;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct ReprojectionParams {
@@ -31,7 +32,7 @@ pub struct ReprojectionState {
 
 pub type Reprojection = Operator<ReprojectionParams>;
 pub type InitializedReprojection =
-    InitializedOperatorImpl<(), VectorResultDescriptor, ReprojectionState>;
+    InitializedOperatorImpl<VectorResultDescriptor, ReprojectionState>;
 
 #[typetag::serde]
 impl VectorOperator for Reprojection {
@@ -73,7 +74,7 @@ impl VectorOperator for Reprojection {
         };
 
         Ok(
-            InitializedReprojection::new((), out_desc, vec![], initialized_vector_sources, state)
+            InitializedReprojection::new(out_desc, vec![], initialized_vector_sources, state)
                 .boxed(),
         )
     }
@@ -148,13 +149,13 @@ fn query_rewrite_fn(
     query: QueryRectangle,
     from: SpatialReference,
     to: SpatialReference,
-) -> QueryRectangle {
-    let projector = CoordinateProjector::from_known_srs(to, from).unwrap();
+) -> Result<QueryRectangle> {
+    let projector = CoordinateProjector::from_known_srs(to, from)?;
     // TODO: change the resolution...
-    QueryRectangle {
+    Ok(QueryRectangle {
         bbox: query.bbox.reproject(&projector).unwrap(),
         ..query
-    }
+    })
 }
 
 impl<Q, G> VectorQueryProcessor for ReprojectionProcessor<Q, G>
@@ -168,20 +169,20 @@ where
         &'a self,
         query: QueryRectangle,
         ctx: &'a dyn QueryContext,
-    ) -> futures::stream::BoxStream<'a, Result<Self::VectorType>> {
-        let rewritten_query = query_rewrite_fn(query, self.from, self.to);
+    ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
+        let rewritten_query = query_rewrite_fn(query, self.from, self.to)?;
 
-        Box::pin(
-            self.source
-                .vector_query(rewritten_query, ctx)
-                .map(move |collection_result| {
-                    collection_result.and_then(|collection| {
-                        CoordinateProjector::from_known_srs(self.from, self.to)
-                            .and_then(|projector| collection.reproject(projector.as_ref()))
-                            .map_err(Into::into)
-                    })
-                }),
-        )
+        Ok(self
+            .source
+            .vector_query(rewritten_query, ctx)?
+            .map(move |collection_result| {
+                collection_result.and_then(|collection| {
+                    CoordinateProjector::from_known_srs(self.from, self.to)
+                        .and_then(|projector| collection.reproject(projector.as_ref()))
+                        .map_err(Into::into)
+                })
+            })
+            .boxed())
     }
 }
 
@@ -261,7 +262,7 @@ mod tests {
         };
         let ctx = MockQueryContext::new(usize::MAX);
 
-        let query = query_processor.query(query_rectangle, &ctx);
+        let query = query_processor.query(query_rectangle, &ctx).unwrap();
 
         let result = query
             .map(Result::unwrap)
@@ -329,7 +330,7 @@ mod tests {
         };
         let ctx = MockQueryContext::new(usize::MAX);
 
-        let query = query_processor.query(query_rectangle, &ctx);
+        let query = query_processor.query(query_rectangle, &ctx).unwrap();
 
         let result = query
             .map(Result::unwrap)
@@ -399,7 +400,7 @@ mod tests {
         };
         let ctx = MockQueryContext::new(usize::MAX);
 
-        let query = query_processor.query(query_rectangle, &ctx);
+        let query = query_processor.query(query_rectangle, &ctx).unwrap();
 
         let result = query
             .map(Result::unwrap)
