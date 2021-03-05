@@ -91,7 +91,7 @@ pub struct GdalDataSetParameters {
 }
 
 /// How to handle file not found errors
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub enum FileNotFoundHandling {
     NoData, // output tiles filled with nodata
     Error,  // return error tile
@@ -769,6 +769,33 @@ mod tests {
     }
 
     #[test]
+    fn replace_time_placeholder() {
+        let params = GdalDataSetParameters {
+            file_path: "/foo/bar_%TIME%.tiff".into(),
+            rasterband_channel: 0,
+            geo_transform: Default::default(),
+            bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (1., 1.).into()),
+            file_not_found_handling: FileNotFoundHandling::NoData,
+            no_data_value: Some(0.),
+        };
+        let replaced = params
+            .replace_time_placeholder("%TIME%", "%f", TimeInstance::from_millis(22))
+            .unwrap();
+        assert_eq!(
+            replaced.file_path.to_string_lossy(),
+            "/foo/bar_022000000.tiff".to_string()
+        );
+        assert_eq!(params.rasterband_channel, replaced.rasterband_channel);
+        assert_eq!(params.geo_transform, replaced.geo_transform);
+        assert_eq!(params.bbox, replaced.bbox);
+        assert_eq!(
+            params.file_not_found_handling,
+            replaced.file_not_found_handling
+        );
+        assert_eq!(params.no_data_value, replaced.no_data_value);
+    }
+
+    #[test]
     fn test_regular_meta_data() {
         let meta_data = GdalMetaDataRegular {
             result_descriptor: RasterResultDescriptor {
@@ -839,6 +866,7 @@ mod tests {
                 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255
             ]
         );
+        assert_eq!(x.no_data_value, Some(0));
     }
 
     #[test]
