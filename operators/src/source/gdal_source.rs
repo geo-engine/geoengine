@@ -770,6 +770,15 @@ mod tests {
         };
 
         assert_eq!(
+            meta_data.result_descriptor().unwrap(),
+            RasterResultDescriptor {
+                data_type: RasterDataType::U8,
+                spatial_reference: SpatialReference::epsg_4326().into(),
+                measurement: Measurement::Unitless,
+            }
+        );
+
+        assert_eq!(
             meta_data
                 .loading_info(QueryRectangle {
                     bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (1., 1.).into()),
