@@ -1,5 +1,5 @@
 use crate::collections::{FeatureCollection, FeatureCollectionInfos, IntoGeometryOptionsIterator};
-use crate::primitives::{NoGeometry, TimeInterval, FeatureDataValue};
+use crate::primitives::{FeatureDataValue, NoGeometry, TimeInterval};
 
 /// This collection contains temporal data without geographical features.
 pub type DataCollection = FeatureCollection<NoGeometry>;
@@ -18,8 +18,7 @@ pub enum DataCollectionIteratorReturnType {
     FeatureDataValue(FeatureDataValue),
 }
 
-pub struct DataCollectionIterator<'a>
-{
+pub struct DataCollectionIterator<'a> {
     collection: &'a DataCollection,
     column_names: Vec<&'a str>,
     time_intervals: &'a [TimeInterval],
@@ -36,11 +35,17 @@ impl<'a> Iterator for DataCollectionIterator<'a> {
         }
 
         let res = match self.cur_col {
-            0 => {
-                Self::Item::TimeInterval(*self.time_intervals.get(self.cur_row).expect("already checked"))
-            },
+            0 => Self::Item::TimeInterval(
+                *self
+                    .time_intervals
+                    .get(self.cur_row)
+                    .expect("already checked"),
+            ),
             _ => {
-                let column_name = self.column_names.get(self.cur_col).expect("already checked");
+                let column_name = self
+                    .column_names
+                    .get(self.cur_col)
+                    .expect("already checked");
                 let data = self.collection.data(column_name).expect("already checked");
                 Self::Item::FeatureDataValue(data.get_unchecked(self.cur_row))
             }
