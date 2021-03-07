@@ -8,7 +8,7 @@ use crate::collections::{
     FeatureCollection, FeatureCollectionInfos, FeatureCollectionRowBuilder,
     GeoFeatureCollectionRowBuilder, GeometryCollection, GeometryRandomAccess, IntoGeometryIterator,
 };
-use crate::primitives::{Coordinate2D, MultiPoint, MultiPointRef};
+use crate::primitives::{Coordinate2D, FeatureDataValue, MultiPoint, MultiPointRef, TimeInterval};
 use crate::util::arrow::downcast_array;
 use crate::util::{arrow::ArrowTyped, Result};
 use std::{slice, sync::Arc};
@@ -86,6 +86,72 @@ impl<'l> Iterator for MultiPointIterator<'l> {
 
     fn count(self) -> usize {
         self.length - self.index
+    }
+}
+
+pub enum MultiPointCollectionIteratorReturnType<'a> {
+    MultiPointRef(MultiPointRef<'a>),
+    TimeInterval(TimeInterval),
+    FeatureDataValue(FeatureDataValue),
+}
+
+pub struct MultiPointCollectionIterator<'a> {
+    collection: &'a MultiPointCollection,
+    column_names: Vec<&'a str>,
+    geometries: MultiPointIterator<'a>,
+    time_intervals: &'a [TimeInterval],
+    cur_row: usize,
+    cur_col: usize,
+}
+
+impl<'a> Iterator for MultiPointCollectionIterator<'a> {
+    type Item = MultiPointCollectionIteratorReturnType<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.cur_row == self.time_intervals.len() {
+            return None;
+        }
+
+        let res = match self.cur_col {
+            0 => Self::Item::MultiPointRef(self.geometries.next().expect("already checked")),
+            1 => Self::Item::TimeInterval(
+                *self
+                    .time_intervals
+                    .get(self.cur_row)
+                    .expect("already checked"),
+            ),
+            _ => {
+                let column_name = self
+                    .column_names
+                    .get(self.cur_col)
+                    .expect("already checked");
+                let data = self.collection.data(column_name).expect("already checked");
+                Self::Item::FeatureDataValue(data.get_unchecked(self.cur_row))
+            }
+        };
+        self.cur_col += 1;
+
+        if self.cur_col == self.column_names.len() {
+            self.cur_col = 0;
+            self.cur_row += 1;
+        }
+        Some(res)
+    }
+}
+
+impl<'a> IntoIterator for &'a MultiPointCollection {
+    type Item = MultiPointCollectionIteratorReturnType<'a>;
+    type IntoIter = MultiPointCollectionIterator<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        MultiPointCollectionIterator {
+            collection: self,
+            column_names: self.table.column_names(),
+            geometries: self.geometries(),
+            time_intervals: self.time_intervals(),
+            cur_row: 0,
+            cur_col: 0,
+        }
     }
 }
 

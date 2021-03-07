@@ -2,7 +2,10 @@ use crate::collections::{
     FeatureCollection, FeatureCollectionInfos, FeatureCollectionRowBuilder,
     GeoFeatureCollectionRowBuilder, GeometryCollection, GeometryRandomAccess, IntoGeometryIterator,
 };
-use crate::primitives::{Coordinate2D, MultiLineString, MultiLineStringAccess, MultiLineStringRef};
+use crate::primitives::{
+    Coordinate2D, FeatureDataValue, MultiLineString, MultiLineStringAccess, MultiLineStringRef,
+    TimeInterval,
+};
 use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::Result;
 use arrow::{
@@ -155,6 +158,72 @@ impl<'l> Iterator for MultiLineStringIterator<'l> {
 
     fn count(self) -> usize {
         self.length - self.index
+    }
+}
+
+pub enum MultiLineStringCollectionIteratorReturnType<'a> {
+    MultiLineStringRef(MultiLineStringRef<'a>),
+    TimeInterval(TimeInterval),
+    FeatureDataValue(FeatureDataValue),
+}
+
+pub struct MultiLineStringCollectionIterator<'a> {
+    collection: &'a MultiLineStringCollection,
+    column_names: Vec<&'a str>,
+    geometries: MultiLineStringIterator<'a>,
+    time_intervals: &'a [TimeInterval],
+    cur_row: usize,
+    cur_col: usize,
+}
+
+impl<'a> Iterator for MultiLineStringCollectionIterator<'a> {
+    type Item = MultiLineStringCollectionIteratorReturnType<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.cur_row == self.time_intervals.len() {
+            return None;
+        }
+
+        let res = match self.cur_col {
+            0 => Self::Item::MultiLineStringRef(self.geometries.next().expect("already checked")),
+            1 => Self::Item::TimeInterval(
+                *self
+                    .time_intervals
+                    .get(self.cur_row)
+                    .expect("already checked"),
+            ),
+            _ => {
+                let column_name = self
+                    .column_names
+                    .get(self.cur_col)
+                    .expect("already checked");
+                let data = self.collection.data(column_name).expect("already checked");
+                Self::Item::FeatureDataValue(data.get_unchecked(self.cur_row))
+            }
+        };
+        self.cur_col += 1;
+
+        if self.cur_col == self.column_names.len() {
+            self.cur_col = 0;
+            self.cur_row += 1;
+        }
+        Some(res)
+    }
+}
+
+impl<'a> IntoIterator for &'a MultiLineStringCollection {
+    type Item = MultiLineStringCollectionIteratorReturnType<'a>;
+    type IntoIter = MultiLineStringCollectionIterator<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        MultiLineStringCollectionIterator {
+            collection: self,
+            column_names: self.table.column_names(),
+            geometries: self.geometries(),
+            time_intervals: self.time_intervals(),
+            cur_row: 0,
+            cur_col: 0,
+        }
     }
 }
 
