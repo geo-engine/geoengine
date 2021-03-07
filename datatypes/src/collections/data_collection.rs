@@ -1,5 +1,5 @@
 use crate::collections::{FeatureCollection, FeatureCollectionInfos, IntoGeometryOptionsIterator};
-use crate::primitives::NoGeometry;
+use crate::primitives::{NoGeometry, TimeInterval, FeatureDataValue};
 
 /// This collection contains temporal data without geographical features.
 pub type DataCollection = FeatureCollection<NoGeometry>;
@@ -10,6 +10,63 @@ impl<'i> IntoGeometryOptionsIterator<'i> for DataCollection {
 
     fn geometry_options(&'i self) -> Self::GeometryOptionIterator {
         std::iter::repeat(None).take(self.len())
+    }
+}
+
+pub enum DataCollectionIteratorReturnType {
+    TimeInterval(TimeInterval),
+    FeatureDataValue(FeatureDataValue),
+}
+
+pub struct DataCollectionIterator<'a>
+{
+    collection: &'a DataCollection,
+    column_names: Vec<&'a str>,
+    time_intervals: &'a [TimeInterval],
+    cur_row: usize,
+    cur_col: usize,
+}
+
+impl<'a> Iterator for DataCollectionIterator<'a> {
+    type Item = DataCollectionIteratorReturnType;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.cur_row == self.time_intervals.len() {
+            return None;
+        }
+
+        let res = match self.cur_col {
+            0 => {
+                Self::Item::TimeInterval(*self.time_intervals.get(self.cur_row).expect("already checked"))
+            },
+            _ => {
+                let column_name = self.column_names.get(self.cur_col).expect("already checked");
+                let data = self.collection.data(column_name).expect("already checked");
+                Self::Item::FeatureDataValue(data.get_unchecked(self.cur_row))
+            }
+        };
+        self.cur_col += 1;
+
+        if self.cur_col == self.column_names.len() {
+            self.cur_col = 0;
+            self.cur_row += 1;
+        }
+        Some(res)
+    }
+}
+
+impl<'a> IntoIterator for &'a DataCollection {
+    type Item = DataCollectionIteratorReturnType;
+    type IntoIter = DataCollectionIterator<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        DataCollectionIterator {
+            collection: self,
+            column_names: self.table.column_names(),
+            time_intervals: self.time_intervals(),
+            cur_row: 0,
+            cur_col: 0,
+        }
     }
 }
 
