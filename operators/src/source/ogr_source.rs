@@ -32,13 +32,16 @@ use geoengine_datatypes::primitives::{
 use geoengine_datatypes::provenance::ProvenanceInformation;
 use geoengine_datatypes::util::arrow::ArrowTyped;
 
-use crate::engine::{
-    InitializedOperator, InitializedOperatorImpl, MetaData, QueryContext, QueryProcessor,
-    QueryRectangle, SourceOperator, TypedVectorQueryProcessor, VectorOperator,
-    VectorQueryProcessor, VectorResultDescriptor,
-};
 use crate::error::Error;
 use crate::util::Result;
+use crate::{
+    engine::{
+        InitializedOperator, InitializedOperatorImpl, MetaData, QueryContext, QueryProcessor,
+        QueryRectangle, SourceOperator, TypedVectorQueryProcessor, VectorOperator,
+        VectorQueryProcessor, VectorResultDescriptor,
+    },
+    error,
+};
 use geoengine_datatypes::dataset::DataSetId;
 use std::convert::{TryFrom, TryInto};
 
@@ -361,6 +364,50 @@ where
         }
     }
 
+    fn open_gdal_dataset(dataset_info: &OgrSourceDataset) -> Result<Dataset> {
+        // TODO: reliably detect CSV files or allow defining them as such in params
+        if let Some(ext) = dataset_info.file_name.extension() {
+            if ext == "csv" || ext == "tsv" {
+                let columns = dataset_info
+                    .columns
+                    .as_ref()
+                    .ok_or(error::Error::OgrSourceColumnsSpecMissing)?;
+
+                // TODO: make column x optional or allow other indication for data collection
+                if columns.x.is_empty() {
+                    return Ok(Dataset::open(&dataset_info.file_name)?);
+                }
+
+                if let Some(y) = &columns.y {
+                    return Ok(Dataset::open_ex(
+                        &dataset_info.file_name,
+                        None,
+                        None,
+                        Some(&[
+                            &("X_POSSIBLE_NAMES=".to_owned() + &columns.x),
+                            &("Y_POSSIBLE_NAMES=".to_owned() + y),
+                            "AUTODETECT_TYPE=YES",
+                        ]),
+                        None,
+                    )?);
+                }
+
+                return Ok(Dataset::open_ex(
+                    &dataset_info.file_name,
+                    None,
+                    None,
+                    Some(&[
+                        &("GEOM_POSSIBLE_NAMES=".to_owned() + &columns.x),
+                        "AUTODETECT_TYPE=YES",
+                    ]),
+                    None,
+                )?);
+            }
+        }
+
+        Ok(Dataset::open(&dataset_info.file_name)?)
+    }
+
     fn compute_thread(
         work_query: &mut WorkQuery,
         dataset_information: &OgrSourceDataset,
@@ -369,9 +416,8 @@ where
         query_rectangle: &QueryRectangle,
         chunk_byte_size: usize,
     ) -> Result<()> {
-        // TODO: add opening options, e.g. for CSV
         // TODO: add OGR time filter if forced
-        let mut dataset = Dataset::open(&dataset_information.file_name)?;
+        let mut dataset = Self::open_gdal_dataset(&dataset_information)?;
         let layer = dataset.layer_by_name(&dataset_information.layer_name)?;
 
         let (data_types, feature_collection_builder) =
@@ -3119,5 +3165,95 @@ mod tests {
             result.coordinates()[0],
             (13.815_724_731_000_074, 48.766_430_156_000_055).into()
         );
+    }
+
+    #[tokio::test]
+    async fn points_csv() {
+        let dataset = DataSetId::Internal(InternalDataSetId::new());
+        let mut exe_ctx = MockExecutionContext::default();
+        exe_ctx.add_meta_data(
+            dataset.clone(),
+            Box::new(StaticMetaData {
+                loading_info: OgrSourceDataset {
+                    file_name: "test-data/vector/data/points.csv".into(),
+                    layer_name: "points".to_owned(),
+                    data_type: Some(VectorDataType::MultiPoint),
+                    time: OgrSourceDatasetTimeType::None,
+                    columns: Some(OgrSourceColumnSpec {
+                        x: "x".to_owned(),
+                        y: Some("y".to_owned()),
+                        numeric: vec!["num".to_owned()],
+                        decimal: vec![],
+                        textual: vec!["txt".to_owned()],
+                    }),
+                    default_geometry: None,
+                    force_ogr_time_filter: false,
+                    on_error: OgrSourceErrorSpec::Abort,
+                    provenance: None,
+                },
+                result_descriptor: VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: Default::default(),
+                },
+            }),
+        );
+
+        let source = OgrSource {
+            params: OgrSourceParameters {
+                data_set: dataset,
+                attribute_projection: None,
+            },
+        }
+        .boxed()
+        .initialize(&exe_ctx)
+        .unwrap();
+
+        assert_eq!(
+            source.result_descriptor().data_type,
+            VectorDataType::MultiPoint
+        );
+        assert_eq!(
+            source.result_descriptor().spatial_reference,
+            SpatialReference::epsg_4326().into()
+        );
+
+        let query_processor = source.query_processor().unwrap().multi_point().unwrap();
+
+        let query_bbox = BoundingBox2D::new((-180.0, -90.0).into(), (180.00, 90.0).into()).unwrap();
+
+        let context = MockQueryContext::new(1024 * 1024);
+        let query = query_processor
+            .query(
+                QueryRectangle {
+                    bbox: query_bbox,
+                    time_interval: Default::default(),
+                    spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
+                },
+                &context,
+            )
+            .unwrap();
+
+        let result: Vec<MultiPointCollection> = query.try_collect().await.unwrap();
+
+        assert_eq!(result.len(), 1);
+        let result = result.into_iter().next().unwrap();
+
+        let pc = MultiPointCollection::from_data(
+            MultiPoint::many(vec![vec![(1.1, 2.2)], vec![(3.3, 4.4)]]).unwrap(),
+            vec![TimeInterval::default(), TimeInterval::default()],
+            {
+                let mut map = HashMap::new();
+                map.insert("num".into(), FeatureData::Number(vec![42., 815.]));
+                map.insert(
+                    "txt".into(),
+                    FeatureData::Text(vec!["foo".to_owned(), "bar".to_owned()]),
+                );
+                map
+            },
+        )
+        .unwrap();
+
+        assert_eq!(result, pc);
     }
 }
