@@ -2,7 +2,8 @@ use crate::datasets::storage::AddDataSet;
 use crate::datasets::storage::DataSetStore;
 use crate::handlers::ErrorResponse;
 use crate::projects::project::{
-    CreateProject, Layer, LayerInfo, LayerUpdate, ProjectId, RasterInfo, STRectangle, UpdateProject,
+    CreateProject, Layer, LayerUpdate, ProjectId, RasterSymbology, STRectangle, Symbology,
+    UpdateProject,
 };
 use crate::projects::projectdb::ProjectDb;
 use crate::users::session::Session;
@@ -96,10 +97,11 @@ pub fn update_project_helper(project: ProjectId) -> UpdateProject {
         layers: Some(vec![LayerUpdate::UpdateOrInsert(Layer {
             workflow: WorkflowId::new(),
             name: "L1".to_string(),
-            info: LayerInfo::Raster(RasterInfo {
+            visibility: Default::default(),
+            symbology: Symbology::Raster(RasterSymbology {
+                opacity: 1.0,
                 colorizer: Colorizer::Rgba,
             }),
-            visibility: Default::default(),
         })]),
         plots: None,
         bounds: None,

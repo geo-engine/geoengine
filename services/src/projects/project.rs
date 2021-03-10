@@ -5,13 +5,13 @@ use crate::util::user_input::UserInput;
 use crate::workflows::workflow::WorkflowId;
 use crate::{error, util::config::get_config_element};
 use chrono::{DateTime, Utc};
-use geoengine_datatypes::identifier;
 use geoengine_datatypes::primitives::{
     BoundingBox2D, Coordinate2D, SpatialBounded, TemporalBounded, TimeGranularity, TimeInterval,
     TimeStep,
 };
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use geoengine_datatypes::util::Identifier;
+use geoengine_datatypes::{identifier, operations::image::RgbaColor};
 use geoengine_datatypes::{operations::image::Colorizer, primitives::TimeInstance};
 use geoengine_operators::string_token;
 #[cfg(feature = "postgres")]
@@ -194,15 +194,15 @@ pub struct Layer {
     // TODO: LayerId?
     pub workflow: WorkflowId,
     pub name: String,
-    pub info: LayerInfo,
     pub visibility: LayerVisibility,
+    pub symbology: Symbology,
 }
 
 impl Layer {
     pub fn layer_type(&self) -> LayerType {
-        match self.info {
-            LayerInfo::Raster(_) => LayerType::Raster,
-            LayerInfo::Vector(_) => LayerType::Vector,
+        match self.symbology {
+            Symbology::Raster(_) => LayerType::Raster,
+            Symbology::Vector(_) => LayerType::Vector,
         }
     }
 }
@@ -213,21 +213,74 @@ pub enum LayerType {
     Raster,
     Vector,
 }
-
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
-pub enum LayerInfo {
-    Raster(RasterInfo),
-    Vector(VectorInfo),
+#[allow(clippy::large_enum_variant)]
+pub enum Symbology {
+    Raster(RasterSymbology),
+    Vector(VectorSymbology),
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
-pub struct RasterInfo {
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+pub struct RasterSymbology {
+    pub opacity: f64,
     pub colorizer: Colorizer,
 }
 
+impl Eq for RasterSymbology {}
+
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
-pub struct VectorInfo {
-    // TODO add vector layer specific info
+pub enum VectorSymbology {
+    Point(PointSymbology),
+    Line(LineSymbology),
+    Polygon(PolygonSymbology),
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+pub struct PointSymbology {
+    pub radius: Option<NumberParam>,
+    pub clustered: Option<bool>,
+    pub stroke_color: ColorParam,
+    pub fill_color: ColorParam,
+    pub stroke_width: NumberParam,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+pub struct LineSymbology {
+    pub stroke_color: ColorParam,
+    pub stroke_width: NumberParam,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+pub struct PolygonSymbology {
+    pub stroke_color: ColorParam,
+    pub fill_color: ColorParam,
+    pub stroke_width: NumberParam,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+pub enum NumberParam {
+    Static(usize),
+    Derived(DerivedNumber),
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+pub struct DerivedNumber {
+    pub attribute: String,
+    pub factor: f64,
+}
+
+impl Eq for DerivedNumber {}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+pub enum ColorParam {
+    Static(RgbaColor),
+    Derived(DerivedColor),
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+pub struct DerivedColor {
+    pub attribute: String,
+    pub colorizer: Colorizer,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
@@ -529,12 +582,15 @@ mod tests {
                 &json!({
                     "workflow": workflow.clone(),
                     "name": "L2",
-                    "info": {
-                        "Vector": {},
-                    },
                     "visibility": {
                         "data": true,
                         "legend": false,
+                    },
+                    "symbology": {
+                        "Raster": {
+                            "opacity": 1.0,
+                            "colorizer": "Rgba"
+                        }
                     }
                 })
                 .to_string()
@@ -543,11 +599,14 @@ mod tests {
             LayerUpdate::UpdateOrInsert(Layer {
                 workflow,
                 name: "L2".to_string(),
-                info: LayerInfo::Vector(VectorInfo {}),
                 visibility: LayerVisibility {
                     data: true,
                     legend: false,
-                }
+                },
+                symbology: Symbology::Raster(RasterSymbology {
+                    opacity: 1.0,
+                    colorizer: Colorizer::Rgba,
+                })
             })
         );
     }
@@ -564,16 +623,20 @@ mod tests {
                 LayerUpdate::UpdateOrInsert(Layer {
                     workflow: WorkflowId::new(),
                     name: "vector layer".to_string(),
-                    info: LayerInfo::Vector(VectorInfo {}),
                     visibility: Default::default(),
+                    symbology: Symbology::Raster(RasterSymbology {
+                        opacity: 1.0,
+                        colorizer: Colorizer::Rgba,
+                    }),
                 }),
                 LayerUpdate::UpdateOrInsert(Layer {
                     workflow: WorkflowId::new(),
                     name: "raster layer".to_string(),
-                    info: LayerInfo::Raster(RasterInfo {
+                    visibility: Default::default(),
+                    symbology: Symbology::Raster(RasterSymbology {
+                        opacity: 1.0,
                         colorizer: Colorizer::Rgba,
                     }),
-                    visibility: Default::default(),
                 }),
             ]),
             plots: None,
