@@ -1,4 +1,3 @@
-use std::fmt::Debug;
 use std::iter::Peekable;
 use std::marker::PhantomData;
 use std::path::PathBuf;
@@ -10,6 +9,7 @@ use std::{
     collections::{HashMap, HashSet},
     iter::Fuse,
 };
+use std::{ffi::OsStr, fmt::Debug};
 
 use chrono::DateTime;
 use futures::stream::BoxStream;
@@ -364,48 +364,49 @@ where
         }
     }
 
-    fn open_gdal_dataset(dataset_info: &OgrSourceDataset) -> Result<Dataset> {
-        // TODO: reliably detect CSV files or allow defining them as such in params
-        if let Some(ext) = dataset_info.file_name.extension() {
-            if ext == "csv" || ext == "tsv" {
-                let columns = dataset_info
-                    .columns
-                    .as_ref()
-                    .ok_or(error::Error::OgrSourceColumnsSpecMissing)?;
+    fn open_csv_dataset(dataset_info: &OgrSourceDataset) -> Result<Dataset> {
+        let columns = dataset_info
+            .columns
+            .as_ref()
+            .ok_or(error::Error::OgrSourceColumnsSpecMissing)?;
 
-                // TODO: make column x optional or allow other indication for data collection
-                if columns.x.is_empty() {
-                    return Ok(Dataset::open(&dataset_info.file_name)?);
-                }
-
-                if let Some(y) = &columns.y {
-                    return Ok(Dataset::open_ex(
-                        &dataset_info.file_name,
-                        None,
-                        None,
-                        Some(&[
-                            &("X_POSSIBLE_NAMES=".to_owned() + &columns.x),
-                            &("Y_POSSIBLE_NAMES=".to_owned() + y),
-                            "AUTODETECT_TYPE=YES",
-                        ]),
-                        None,
-                    )?);
-                }
-
-                return Ok(Dataset::open_ex(
-                    &dataset_info.file_name,
-                    None,
-                    None,
-                    Some(&[
-                        &("GEOM_POSSIBLE_NAMES=".to_owned() + &columns.x),
-                        "AUTODETECT_TYPE=YES",
-                    ]),
-                    None,
-                )?);
-            }
+        // TODO: make column x optional or allow other indication for data collection
+        if columns.x.is_empty() {
+            return Ok(Dataset::open(&dataset_info.file_name)?);
         }
 
-        Ok(Dataset::open(&dataset_info.file_name)?)
+        if let Some(y) = &columns.y {
+            return Ok(Dataset::open_ex(
+                &dataset_info.file_name,
+                None,
+                None,
+                Some(&[
+                    &format!("X_POSSIBLE_NAMES={}", columns.x),
+                    &format!("Y_POSSIBLE_NAMES={}", y),
+                    "AUTODETECT_TYPE=YES",
+                ]),
+                None,
+            )?);
+        }
+
+        Ok(Dataset::open_ex(
+            &dataset_info.file_name,
+            None,
+            None,
+            Some(&[
+                &format!("GEOM_POSSIBLE_NAMES={}", columns.x),
+                "AUTODETECT_TYPE=YES",
+            ]),
+            None,
+        )?)
+    }
+
+    fn open_gdal_dataset(dataset_info: &OgrSourceDataset) -> Result<Dataset> {
+        // TODO: reliably detect CSV files or allow defining them as such in params
+        match dataset_info.file_name.extension().and_then(OsStr::to_str) {
+            Some("csv") | Some("tsv") => Self::open_csv_dataset(dataset_info),
+            _ => Ok(Dataset::open(&dataset_info.file_name)?),
+        }
     }
 
     fn compute_thread(
