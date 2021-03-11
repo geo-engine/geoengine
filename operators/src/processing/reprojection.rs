@@ -1,6 +1,8 @@
 use futures::StreamExt;
 use geoengine_datatypes::{
-    operations::reproject::{CoordinateProjection, CoordinateProjector, Reproject},
+    operations::reproject::{
+        suggest_pixel_size_from_diag_cross, CoordinateProjection, CoordinateProjector, Reproject,
+    },
     spatial_reference::SpatialReference,
 };
 use serde::{Deserialize, Serialize};
@@ -94,7 +96,7 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
             )),
             TypedVectorQueryProcessor::MultiPoint(source) => {
                 Ok(TypedVectorQueryProcessor::MultiPoint(
-                    ReprojectionProcessor::new(
+                    VectorReprojectionProcessor::new(
                         source,
                         self.state.source_srs,
                         self.state.target_srs,
@@ -104,7 +106,7 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
             }
             TypedVectorQueryProcessor::MultiLineString(source) => {
                 Ok(TypedVectorQueryProcessor::MultiLineString(
-                    ReprojectionProcessor::new(
+                    VectorReprojectionProcessor::new(
                         source,
                         self.state.source_srs,
                         self.state.target_srs,
@@ -114,7 +116,7 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
             }
             TypedVectorQueryProcessor::MultiPolygon(source) => {
                 Ok(TypedVectorQueryProcessor::MultiPolygon(
-                    ReprojectionProcessor::new(
+                    VectorReprojectionProcessor::new(
                         source,
                         self.state.source_srs,
                         self.state.target_srs,
@@ -126,7 +128,7 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
     }
 }
 
-struct ReprojectionProcessor<Q, G>
+struct VectorReprojectionProcessor<Q, G>
 where
     Q: VectorQueryProcessor<VectorType = G>,
 {
@@ -135,7 +137,7 @@ where
     to: SpatialReference,
 }
 
-impl<Q, G> ReprojectionProcessor<Q, G>
+impl<Q, G> VectorReprojectionProcessor<Q, G>
 where
     Q: VectorQueryProcessor<VectorType = G>,
 {
@@ -151,14 +153,17 @@ fn query_rewrite_fn(
     to: SpatialReference,
 ) -> Result<QueryRectangle> {
     let projector = CoordinateProjector::from_known_srs(to, from)?;
-    // TODO: change the resolution...
+    let p_bbox = query.bbox.reproject(&projector)?;
+    let p_spatial_resolution =
+        suggest_pixel_size_from_diag_cross(query.bbox, query.spatial_resolution, &projector)?;
     Ok(QueryRectangle {
-        bbox: query.bbox.reproject(&projector).unwrap(),
-        ..query
+        bbox: p_bbox,
+        spatial_resolution: p_spatial_resolution,
+        time_interval: query.time_interval,
     })
 }
 
-impl<Q, G> VectorQueryProcessor for ReprojectionProcessor<Q, G>
+impl<Q, G> VectorQueryProcessor for VectorReprojectionProcessor<Q, G>
 where
     Q: VectorQueryProcessor<VectorType = G>,
     G: Reproject<CoordinateProjector> + Sync + Send,

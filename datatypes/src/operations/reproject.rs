@@ -499,7 +499,7 @@ mod tests {
         .unwrap();
 
         let sugg_pixel_size =
-            suggest_pixel_size_like_gdal(bbox, spatial_resolution, projector).unwrap();
+            suggest_pixel_size_like_gdal(bbox, spatial_resolution, &projector).unwrap();
 
         assert_eq!(sugg_pixel_size.x, sugg_pixel_size.y);
         assert!(approx_eq!(
@@ -543,7 +543,7 @@ mod tests {
         .unwrap();
 
         let sugg_pixel_size =
-            suggest_pixel_size_from_diag_cross(bbox, spatial_resolution, projector).unwrap();
+            suggest_pixel_size_from_diag_cross(bbox, spatial_resolution, &projector).unwrap();
 
         assert_eq!(sugg_pixel_size.x, sugg_pixel_size.y);
         assert!(approx_eq!(
