@@ -79,6 +79,19 @@ impl TimeInterval {
         })
     }
 
+    /// Creates a new time interval from a single input that implements `Into<TimeInstance>`.
+    /// After instanciation, start and end are equal.
+    pub fn new_instant<A>(start_and_end: A) -> Self
+    where
+        A: Into<TimeInstance>,
+    {
+        let start_and_end = start_and_end.into();
+        Self {
+            start: start_and_end,
+            end: start_and_end,
+        }
+    }
+
     /// Creates a new time interval without bound checks from inputs implementing Into<TimeInstance>
     ///
     /// # Examples
