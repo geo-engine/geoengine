@@ -170,6 +170,8 @@ pub enum Error {
     TokioJoin {
         source: tokio::task::JoinError,
     },
+
+    OgrSourceColumnsSpecMissing,
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {
