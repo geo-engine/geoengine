@@ -5,7 +5,7 @@ use crate::{
     primitives::{
         BoundingBox2D, Coordinate2D, Line, MultiLineString, MultiLineStringAccess,
         MultiLineStringRef, MultiPoint, MultiPointAccess, MultiPointRef, MultiPolygon,
-        MultiPolygonAccess, MultiPolygonRef, SpatialBounded,
+        MultiPolygonAccess, MultiPolygonRef, SpatialBounded, SpatialResolution,
     },
     spatial_reference::SpatialReference,
     util::Result,
@@ -218,8 +218,84 @@ where
     }
 }
 
+/// This method calculates a suggested pixel size for the translation of a raster into a different projection.
+/// The source raster is described using a `BoundingBox2D` and a pixel size as `SpatialResolution`.
+/// A suggested pixel size is calculated using the approach used by GDAL:
+/// The upper left and the lower right coordinates of the bounding box are projected in the target SRS.
+/// Then, the distance between both points in the target SRS is devided by the distance in pixels of the source.
+pub fn suggest_pixel_size_like_gdal<P: CoordinateProjection>(
+    bbox: BoundingBox2D,
+    spatial_resolution: SpatialResolution,
+    projector: &P,
+) -> Result<SpatialResolution> {
+    // calculate the number of pixels per axis
+    let x_pixels = (bbox.size_x() / spatial_resolution.x).abs();
+    let y_pixels = (bbox.size_y() / spatial_resolution.y).abs();
+    // get the diagonal distance between bbox edges
+    let diag_pixels: f64 = (x_pixels * x_pixels + y_pixels * y_pixels).sqrt();
+
+    // reproject the upper left and lower right coordinates to the target srs.
+    // NOTE: the edges of the projected bbox might differ.
+    let proj_ul_coord = bbox.upper_left().reproject(projector)?;
+    let proj_lr_coord = bbox.lower_right().reproject(projector)?;
+
+    // calculate the distance between upper left and lower right coordinate in srs units
+    let proj_ul_lr_vector = proj_ul_coord - proj_lr_coord;
+    let proj_ul_lr_distance = (proj_ul_lr_vector.x * proj_ul_lr_vector.x
+        + proj_ul_lr_vector.y * proj_ul_lr_vector.y)
+        .sqrt();
+
+    // derive the pixel size by deviding srs unit distance by pixel distance in the source bbox
+    let proj_ul_lr_pixel_size = proj_ul_lr_distance / diag_pixels;
+    Ok(SpatialResolution::new_unchecked(
+        proj_ul_lr_pixel_size,
+        proj_ul_lr_pixel_size,
+    ))
+}
+
+/// This approach uses the GDAL way to suggest the pixel size. However, we check both diagonals and take the smaller one.
+pub fn suggest_pixel_size_from_diag_cross<P: CoordinateProjection>(
+    bbox: BoundingBox2D,
+    spatial_resolution: SpatialResolution,
+    projector: &P,
+) -> Result<SpatialResolution> {
+    // calculate the number of pixels per axis
+    let x_pixels = (bbox.size_x() / spatial_resolution.x).abs();
+    let y_pixels = (bbox.size_y() / spatial_resolution.y).abs();
+
+    let diag_pixels: f64 = (x_pixels * x_pixels + y_pixels * y_pixels).sqrt();
+
+    let proj_ul_coord = bbox.upper_left().reproject(projector)?;
+    let proj_lr_coord = bbox.lower_right().reproject(projector)?;
+
+    let proj_ul_lr_vector = proj_ul_coord - proj_lr_coord;
+    let proj_ul_lr_distance = (proj_ul_lr_vector.x * proj_ul_lr_vector.x
+        + proj_ul_lr_vector.y * proj_ul_lr_vector.y)
+        .sqrt();
+
+    let proj_ul_lr_pixel_size = proj_ul_lr_distance / diag_pixels;
+
+    let proj_ll_coord = bbox.lower_left().reproject(projector)?;
+    let proj_ur_coord = bbox.upper_right().reproject(projector)?;
+
+    let proj_ll_ur_vector = proj_ll_coord - proj_ur_coord;
+    let proj_ll_ur_distance = (proj_ll_ur_vector.x * proj_ll_ur_vector.x
+        + proj_ll_ur_vector.y * proj_ll_ur_vector.y)
+        .sqrt();
+
+    let proj_ll_ur_pixel_size = proj_ll_ur_distance / diag_pixels;
+
+    let min_pixel_size = proj_ll_ur_pixel_size.min(proj_ul_lr_pixel_size);
+
+    Ok(SpatialResolution::new_unchecked(
+        min_pixel_size,
+        min_pixel_size,
+    ))
+}
+
 #[cfg(test)]
 mod tests {
+
     use crate::spatial_reference::SpatialReferenceAuthority;
     use crate::util::well_known_data::{
         COLOGNE_EPSG_4326, COLOGNE_EPSG_900_913, HAMBURG_EPSG_4326, HAMBURG_EPSG_900_913,
@@ -388,5 +464,93 @@ mod tests {
             rp.polygons()[0][0][2].y,
             HAMBURG_EPSG_900_913.y
         ));
+    }
+
+    #[test]
+    fn suggest_pixel_size_gdal() {
+        // This test uses the specs of the SRTM tile "srtm_38_03.tif"
+        let ul_c = (5.0, 50.0).into();
+        let lr_c = (10.0, 45.0).into();
+        let x_pixels: f64 = 6000.;
+        let y_pixels = 6000.;
+
+        let bbox = BoundingBox2D::new_upper_left_lower_right(ul_c, lr_c).unwrap();
+
+        let spatial_resolution =
+            SpatialResolution::new_unchecked(bbox.size_x() / x_pixels, bbox.size_y() / y_pixels);
+
+        assert!(approx_eq!(
+            f64,
+            spatial_resolution.x,
+            0.000833333,
+            epsilon = 0.0000001
+        ));
+        assert!(approx_eq!(
+            f64,
+            spatial_resolution.y,
+            0.000833333,
+            epsilon = 0.0000001
+        ));
+
+        let projector = CoordinateProjector::from_known_srs(
+            SpatialReference::epsg_4326(),
+            SpatialReference::new(SpatialReferenceAuthority::Epsg, 32632), //EPSG4326 --> UTM 32 N
+        )
+        .unwrap();
+
+        let sugg_pixel_size =
+            suggest_pixel_size_like_gdal(bbox, spatial_resolution, projector).unwrap();
+
+        assert_eq!(sugg_pixel_size.x, sugg_pixel_size.y);
+        assert!(approx_eq!(
+            f64,
+            sugg_pixel_size.x,
+            79.0889744506905, // this is the pixel size GDAL generates when reprojecting the SRTM tile.
+            epsilon = 0.0000001
+        ))
+    }
+
+    #[test]
+    fn suggest_pixel_size_cross() {
+        // This test uses the specs of the SRTM tile "srtm_38_03.tif"
+        let ul_c = (5.0, 50.0).into();
+        let lr_c = (10.0, 45.0).into();
+        let x_pixels: f64 = 6000.;
+        let y_pixels = 6000.;
+
+        let bbox = BoundingBox2D::new_upper_left_lower_right(ul_c, lr_c).unwrap();
+
+        let spatial_resolution =
+            SpatialResolution::new_unchecked(bbox.size_x() / x_pixels, bbox.size_y() / y_pixels);
+
+        assert!(approx_eq!(
+            f64,
+            spatial_resolution.x,
+            0.000833333,
+            epsilon = 0.0000001
+        ));
+        assert!(approx_eq!(
+            f64,
+            spatial_resolution.y,
+            0.000833333,
+            epsilon = 0.0000001
+        ));
+
+        let projector = CoordinateProjector::from_known_srs(
+            SpatialReference::epsg_4326(),
+            SpatialReference::new(SpatialReferenceAuthority::Epsg, 32632), //EPSG4326 --> UTM 32 N
+        )
+        .unwrap();
+
+        let sugg_pixel_size =
+            suggest_pixel_size_from_diag_cross(bbox, spatial_resolution, projector).unwrap();
+
+        assert_eq!(sugg_pixel_size.x, sugg_pixel_size.y);
+        assert!(approx_eq!(
+            f64,
+            sugg_pixel_size.x,
+            79.0889744506905, // this is the pixel size GDAL generates when reprojecting the SRTM tile.
+            epsilon = 0.0000001
+        ))
     }
 }
