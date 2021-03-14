@@ -1,10 +1,9 @@
 use crate::collections::{
-    FeatureCollection, FeatureCollectionInfos, FeatureCollectionRowBuilder,
-    GeoFeatureCollectionRowBuilder, GeometryCollection, GeometryRandomAccess, IntoGeometryIterator,
+    FeatureCollection, FeatureCollectionInfos, FeatureCollectionIterator, FeatureCollectionRow,
+    FeatureCollectionRowBuilder, GeoFeatureCollectionRowBuilder, GeometryCollection,
+    GeometryRandomAccess, IntoGeometryIterator,
 };
-use crate::primitives::{
-    Coordinate2D, FeatureDataValue, MultiPolygon, MultiPolygonAccess, MultiPolygonRef, TimeInterval,
-};
+use crate::primitives::{Coordinate2D, MultiPolygon, MultiPolygonAccess, MultiPolygonRef};
 use crate::util::Result;
 use crate::{
     primitives::MultiLineString,
@@ -122,6 +121,24 @@ impl<'l> IntoGeometryIterator<'l> for MultiPolygonCollection {
     }
 }
 
+impl<'a> IntoIterator for &'a MultiPolygonCollection {
+    type Item = FeatureCollectionRow<MultiPolygonRef<'a>>;
+    type IntoIter = FeatureCollectionIterator<'a, MultiPolygonIterator<'a>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        FeatureCollectionIterator {
+            geometries: self.geometries(),
+            time_intervals: self.time_intervals().iter(),
+            data: self
+                .column_names()
+                .filter(|x| !MultiPolygonCollection::is_reserved_name(x))
+                .map(|x| (x.to_string(), self.data(x).unwrap()))
+                .collect(),
+            row_num: 0,
+        }
+    }
+}
+
 /// A collection iterator for multi points
 pub struct MultiPolygonIterator<'l> {
     geometry_column: &'l ListArray,
@@ -193,72 +210,6 @@ impl<'l> Iterator for MultiPolygonIterator<'l> {
 
     fn count(self) -> usize {
         self.length - self.index
-    }
-}
-
-pub enum MultiPolygonCollectionIteratorReturnType<'a> {
-    MultiPolygonRef(MultiPolygonRef<'a>),
-    TimeInterval(TimeInterval),
-    FeatureDataValue(FeatureDataValue),
-}
-
-pub struct MultiPolygonCollectionIterator<'a> {
-    collection: &'a MultiPolygonCollection,
-    column_names: Vec<&'a str>,
-    geometries: MultiPolygonIterator<'a>,
-    time_intervals: &'a [TimeInterval],
-    cur_row: usize,
-    cur_col: usize,
-}
-
-impl<'a> Iterator for MultiPolygonCollectionIterator<'a> {
-    type Item = MultiPolygonCollectionIteratorReturnType<'a>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.cur_row == self.time_intervals.len() {
-            return None;
-        }
-
-        let res = match self.cur_col {
-            0 => Self::Item::MultiPolygonRef(self.geometries.next().expect("already checked")),
-            1 => Self::Item::TimeInterval(
-                *self
-                    .time_intervals
-                    .get(self.cur_row)
-                    .expect("already checked"),
-            ),
-            _ => {
-                let column_name = self
-                    .column_names
-                    .get(self.cur_col)
-                    .expect("already checked");
-                let data = self.collection.data(column_name).expect("already checked");
-                Self::Item::FeatureDataValue(data.get_unchecked(self.cur_row))
-            }
-        };
-        self.cur_col += 1;
-
-        if self.cur_col == self.column_names.len() {
-            self.cur_col = 0;
-            self.cur_row += 1;
-        }
-        Some(res)
-    }
-}
-
-impl<'a> IntoIterator for &'a MultiPolygonCollection {
-    type Item = MultiPolygonCollectionIteratorReturnType<'a>;
-    type IntoIter = MultiPolygonCollectionIterator<'a>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        MultiPolygonCollectionIterator {
-            collection: self,
-            column_names: self.table.column_names(),
-            geometries: self.geometries(),
-            time_intervals: self.time_intervals(),
-            cur_row: 0,
-            cur_col: 0,
-        }
     }
 }
 

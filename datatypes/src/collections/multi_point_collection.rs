@@ -5,10 +5,11 @@ use arrow::{
 };
 
 use crate::collections::{
-    FeatureCollection, FeatureCollectionInfos, FeatureCollectionRowBuilder,
-    GeoFeatureCollectionRowBuilder, GeometryCollection, GeometryRandomAccess, IntoGeometryIterator,
+    FeatureCollection, FeatureCollectionInfos, FeatureCollectionIterator, FeatureCollectionRow,
+    FeatureCollectionRowBuilder, GeoFeatureCollectionRowBuilder, GeometryCollection,
+    GeometryRandomAccess, IntoGeometryIterator,
 };
-use crate::primitives::{Coordinate2D, FeatureDataValue, MultiPoint, MultiPointRef, TimeInterval};
+use crate::primitives::{Coordinate2D, MultiPoint, MultiPointRef};
 use crate::util::arrow::downcast_array;
 use crate::util::{arrow::ArrowTyped, Result};
 use std::{slice, sync::Arc};
@@ -31,6 +32,24 @@ impl<'l> IntoGeometryIterator<'l> for MultiPointCollection {
         );
 
         Self::GeometryIterator::new(geometry_column, self.len())
+    }
+}
+
+impl<'a> IntoIterator for &'a MultiPointCollection {
+    type Item = FeatureCollectionRow<MultiPointRef<'a>>;
+    type IntoIter = FeatureCollectionIterator<'a, MultiPointIterator<'a>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        FeatureCollectionIterator {
+            geometries: self.geometries(),
+            time_intervals: self.time_intervals().iter(),
+            data: self
+                .column_names()
+                .filter(|x| !MultiPointCollection::is_reserved_name(x))
+                .map(|x| (x.to_string(), self.data(x).unwrap()))
+                .collect(),
+            row_num: 0,
+        }
     }
 }
 
@@ -86,72 +105,6 @@ impl<'l> Iterator for MultiPointIterator<'l> {
 
     fn count(self) -> usize {
         self.length - self.index
-    }
-}
-
-pub enum MultiPointCollectionIteratorReturnType<'a> {
-    MultiPointRef(MultiPointRef<'a>),
-    TimeInterval(TimeInterval),
-    FeatureDataValue(FeatureDataValue),
-}
-
-pub struct MultiPointCollectionIterator<'a> {
-    collection: &'a MultiPointCollection,
-    column_names: Vec<&'a str>,
-    geometries: MultiPointIterator<'a>,
-    time_intervals: &'a [TimeInterval],
-    cur_row: usize,
-    cur_col: usize,
-}
-
-impl<'a> Iterator for MultiPointCollectionIterator<'a> {
-    type Item = MultiPointCollectionIteratorReturnType<'a>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.cur_row == self.time_intervals.len() {
-            return None;
-        }
-
-        let res = match self.cur_col {
-            0 => Self::Item::MultiPointRef(self.geometries.next().expect("already checked")),
-            1 => Self::Item::TimeInterval(
-                *self
-                    .time_intervals
-                    .get(self.cur_row)
-                    .expect("already checked"),
-            ),
-            _ => {
-                let column_name = self
-                    .column_names
-                    .get(self.cur_col)
-                    .expect("already checked");
-                let data = self.collection.data(column_name).expect("already checked");
-                Self::Item::FeatureDataValue(data.get_unchecked(self.cur_row))
-            }
-        };
-        self.cur_col += 1;
-
-        if self.cur_col == self.column_names.len() {
-            self.cur_col = 0;
-            self.cur_row += 1;
-        }
-        Some(res)
-    }
-}
-
-impl<'a> IntoIterator for &'a MultiPointCollection {
-    type Item = MultiPointCollectionIteratorReturnType<'a>;
-    type IntoIter = MultiPointCollectionIterator<'a>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        MultiPointCollectionIterator {
-            collection: self,
-            column_names: self.table.column_names(),
-            geometries: self.geometries(),
-            time_intervals: self.time_intervals(),
-            cur_row: 0,
-            cur_col: 0,
-        }
     }
 }
 
@@ -1256,5 +1209,66 @@ mod tests {
         let proj_pc = pc.reproject(&projector).unwrap();
 
         assert_eq!(proj_pc, pc_expected)
+    }
+
+    #[test]
+    fn iterator() {
+        let collection = MultiPointCollection::from_data(
+            MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1), (2.0, 3.1)]).unwrap(),
+            vec![TimeInterval::new_unchecked(0, 1); 3],
+            [
+                (
+                    "foo".to_string(),
+                    FeatureData::NullableDecimal(vec![Some(0), None, Some(2)]),
+                ),
+                (
+                    "bar".to_string(),
+                    FeatureData::Text(vec!["a".into(), "b".into(), "c".into()]),
+                ),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+        )
+        .unwrap();
+        let mut iter = (&collection).into_iter();
+
+        let row = iter.next().unwrap();
+        assert_eq!(&[Coordinate2D::new(0.0, 0.1)], row.geometry.points());
+        assert_eq!(TimeInterval::new_unchecked(0, 1), row.time_interval);
+        assert_eq!(
+            Some(&FeatureDataValue::NullableDecimal(Some(0))),
+            row.data.get("foo")
+        );
+        assert_eq!(
+            Some(&FeatureDataValue::NullableText(Some("a".to_string()))),
+            row.data.get("bar")
+        );
+
+        let row = iter.next().unwrap();
+        assert_eq!(&[Coordinate2D::new(1.0, 1.1)], row.geometry.points());
+        assert_eq!(TimeInterval::new_unchecked(0, 1), row.time_interval);
+        assert_eq!(
+            Some(&FeatureDataValue::NullableDecimal(None)),
+            row.data.get("foo")
+        );
+        assert_eq!(
+            Some(&FeatureDataValue::NullableText(Some("b".to_string()))),
+            row.data.get("bar")
+        );
+
+        let row = iter.next().unwrap();
+        assert_eq!(&[Coordinate2D::new(2.0, 3.1)], row.geometry.points());
+        assert_eq!(TimeInterval::new_unchecked(0, 1), row.time_interval);
+        assert_eq!(
+            Some(&FeatureDataValue::NullableDecimal(Some(2))),
+            row.data.get("foo")
+        );
+        assert_eq!(
+            Some(&FeatureDataValue::NullableText(Some("c".to_string()))),
+            row.data.get("bar")
+        );
+
+        assert!(iter.next().is_none());
     }
 }

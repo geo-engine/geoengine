@@ -714,6 +714,45 @@ where
     }
 }
 
+#[derive(Debug)]
+pub struct FeatureCollectionRow<Geometry> {
+    pub geometry: Geometry,
+    pub time_interval: TimeInterval,
+    pub data: HashMap<String, FeatureDataValue>,
+}
+
+pub struct FeatureCollectionIterator<'a, T> {
+    pub geometries: T,
+    pub time_intervals: std::slice::Iter<'a, TimeInterval>,
+    pub data: HashMap<String, FeatureDataRef<'a>>,
+    pub row_num: usize,
+}
+
+impl<'a, T, Geometry> Iterator for FeatureCollectionIterator<'a, T>
+where
+    T: std::iter::Iterator<Item = Geometry>,
+    Geometry: crate::primitives::GeometryRef,
+{
+    type Item = FeatureCollectionRow<Geometry>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let res = self
+            .time_intervals
+            .next()
+            .map(|time_interval| FeatureCollectionRow {
+                geometry: self.geometries.next().unwrap(),
+                time_interval: *time_interval,
+                data: self
+                    .data
+                    .iter()
+                    .map(|(key, value)| (key.to_string(), value.get_unchecked(self.row_num)))
+                    .collect(),
+            });
+        self.row_num += 1;
+        res
+    }
+}
+
 /// Transform an object to the `GeoJson` format
 pub trait ToGeoJson<'i> {
     /// Serialize the feature collection to a geo json string
