@@ -1,9 +1,8 @@
 use ndarray::{array, Array2};
 use std::collections::HashMap;
-use vega_lite_3::{
-    BinEnum, EncodingBuilder, Mark, Padding, SelectionDefBuilder, SelectionDefType, Showable,
-    SingleDefUnitChannel, StandardType, VegaliteBuilder, X2ClassBuilder, XClassBuilder,
-    YClassBuilder,
+use vega_lite_4::{
+    BinEnum, EdEncodingBuilder, Mark, Padding, SelectionDefBuilder, SelectionDefType, Showable,
+    SingleDefUnitChannel, Type, VegaliteBuilder, X2ClassBuilder, XClassBuilder, YClassBuilder,
 };
 
 fn main() {
@@ -32,11 +31,11 @@ fn main() {
         .data(values)
         .mark(Mark::Bar)
         .encoding(
-            EncodingBuilder::default()
+            EdEncodingBuilder::default()
                 .x(XClassBuilder::default()
                     .field("data.0")
                     .title("X Axis Label")
-                    .def_type(StandardType::Quantitative)
+                    .position_def_type(Type::Quantitative)
                     .bin(BinEnum::Binned)
                     .build()
                     .unwrap())
@@ -44,7 +43,7 @@ fn main() {
                 .y(YClassBuilder::default()
                     .field("data.2")
                     .title("Y Axis Label")
-                    .def_type(StandardType::Quantitative)
+                    .position_def_type(Type::Quantitative)
                     .build()
                     .unwrap())
                 .build()

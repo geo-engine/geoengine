@@ -32,20 +32,20 @@ where
     T: Pixel,
 {
     type Output = RasterTile2D<T>;
-    fn query(
-        &self,
+    fn query<'a>(
+        &'a self,
         query: crate::engine::QueryRectangle,
-        _ctx: crate::engine::QueryContext,
-    ) -> futures::stream::BoxStream<crate::util::Result<Self::Output>> {
+        _ctx: &'a dyn crate::engine::QueryContext,
+    ) -> Result<futures::stream::BoxStream<crate::util::Result<Self::Output>>> {
         // TODO: filter spatially w.r.t. query rectangle
-        stream::iter(
+        Ok(stream::iter(
             self.data
                 .iter()
                 .filter(move |t| t.time.intersects(&query.time_interval))
                 .cloned()
                 .map(Result::Ok),
         )
-        .boxed()
+        .boxed())
     }
 }
 
@@ -61,13 +61,13 @@ pub type MockRasterSource = SourceOperator<MockRasterSourceParams>;
 impl RasterOperator for MockRasterSource {
     fn initialize(
         self: Box<Self>,
-        context: &crate::engine::ExecutionContext,
+        context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<InitializedRasterOperator>> {
         InitializedOperatorImpl::create(
-            self.params,
+            &self.params,
             context,
-            |_, _, _, _| Ok(()),
-            |params, _, _, _, _| Ok(params.result_descriptor),
+            |_, _, _, _| Ok(self.params.clone()),
+            |params, _, _, _, _| Ok(params.result_descriptor.clone()),
             vec![],
             vec![],
         )
@@ -76,7 +76,7 @@ impl RasterOperator for MockRasterSource {
 }
 
 impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
-    for InitializedOperatorImpl<MockRasterSourceParams, RasterResultDescriptor, ()>
+    for InitializedOperatorImpl<RasterResultDescriptor, MockRasterSourceParams>
 {
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         fn converted<From, To>(
@@ -96,7 +96,7 @@ impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
 
         Ok(call_generic_raster_processor!(
             self.result_descriptor().data_type,
-            converted(&self.params.data)
+            converted(&self.state.data)
         ))
     }
 }
@@ -104,7 +104,8 @@ impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::MockExecutionContextCreator;
+    use crate::engine::MockExecutionContext;
+    use geoengine_datatypes::primitives::Measurement;
     use geoengine_datatypes::raster::RasterDataType;
     use geoengine_datatypes::{
         primitives::TimeInterval,
@@ -131,7 +132,8 @@ mod tests {
                 data: vec![raster_tile],
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::wgs84().into(),
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    measurement: Measurement::Unitless,
                 },
             },
         }
@@ -166,7 +168,8 @@ mod tests {
                 }],
                 "result_descriptor": {
                     "data_type": "U8",
-                    "spatial_reference": "EPSG:4326"
+                    "spatial_reference": "EPSG:4326",
+                    "measurement": "unitless",
                 }
             }
         })
@@ -175,8 +178,7 @@ mod tests {
 
         let deserialized: Box<dyn RasterOperator> = serde_json::from_str(&serialized).unwrap();
 
-        let execution_context_creator = MockExecutionContextCreator::default();
-        let execution_context = execution_context_creator.context();
+        let execution_context = MockExecutionContext::default();
 
         let initialized = deserialized.initialize(&execution_context).unwrap();
 

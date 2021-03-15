@@ -104,7 +104,7 @@ impl BufferArgument {
 }
 
 /// Specifies input and output types of an Open CL program and compiles the source into a reusable `CompiledCLProgram`
-pub struct CLProgram {
+pub struct ClProgram {
     input_rasters: Vec<RasterArgument>,
     output_rasters: Vec<RasterArgument>,
     input_features: Vec<VectorArgument>,
@@ -115,7 +115,7 @@ pub struct CLProgram {
     iteration_type: IterationType,
 }
 
-impl CLProgram {
+impl ClProgram {
     pub fn new(iteration_type: IterationType) -> Self {
         Self {
             input_rasters: vec![],
@@ -202,15 +202,15 @@ typedef struct {
         s
     }
 
-    pub fn compile(self, source: &str, kernel_name: &str) -> Result<CompiledCLProgram> {
+    pub fn compile(self, source: &str, kernel_name: &str) -> Result<CompiledClProgram> {
         match self.iteration_type {
             IterationType::Raster => ensure!(
                 !self.input_rasters.is_empty() && !self.output_rasters.is_empty(),
-                error::CLInvalidInputsForIterationType
+                error::ClInvalidInputsForIterationType
             ),
             IterationType::VectorFeatures | IterationType::VectorCoordinates => ensure!(
                 !self.input_features.is_empty() && !self.output_features.is_empty(),
-                error::CLInvalidInputsForIterationType
+                error::ClInvalidInputsForIterationType
             ),
             IterationType::Generic(_) => {
                 // nothing to check
@@ -237,7 +237,7 @@ typedef struct {
 
         // TODO: create kernel builder here once it is cloneable <https://github.com/cogciprocate/ocl/issues/190>
 
-        Ok(CompiledCLProgram::new(
+        Ok(CompiledClProgram::new(
             ctx,
             program,
             kernel_name.to_string(),
@@ -308,7 +308,7 @@ struct FeatureOutputBuffers {
 /// This struct accepts concrete raster and vector data that correspond to the specified arguments.
 /// It can be executed by the `CompiledCLProgram`s `run` method, holds the output buffers and
 /// is consumed once the kernel execution is completed
-pub struct CLProgramRunnable<'a> {
+pub struct ClProgramRunnable<'a> {
     input_raster_types: Vec<RasterArgument>,
     output_raster_types: Vec<RasterArgument>,
     input_rasters: Vec<Option<&'a TypedGrid2D>>,
@@ -328,7 +328,7 @@ pub struct CLProgramRunnable<'a> {
     generic_output_buffers: Vec<SliceOutputBuffer>,
 }
 
-impl<'a> CLProgramRunnable<'a> {
+impl<'a> ClProgramRunnable<'a> {
     fn new(
         input_raster_types: Vec<RasterArgument>,
         output_raster_types: Vec<RasterArgument>,
@@ -371,11 +371,11 @@ impl<'a> CLProgramRunnable<'a> {
     pub fn set_input_raster(&mut self, idx: usize, raster: &'a TypedGrid2D) -> Result<()> {
         ensure!(
             idx < self.input_raster_types.len(),
-            error::CLProgramInvalidRasterIndex
+            error::ClProgramInvalidRasterIndex
         );
         ensure!(
             raster.raster_data_type() == self.input_raster_types[idx].data_type,
-            error::CLProgramInvalidRasterDataType
+            error::ClProgramInvalidRasterDataType
         );
         self.input_rasters[idx] = Some(raster);
         Ok(())
@@ -384,11 +384,11 @@ impl<'a> CLProgramRunnable<'a> {
     pub fn set_output_raster(&mut self, idx: usize, raster: &'a mut TypedGrid2D) -> Result<()> {
         ensure!(
             idx < self.input_raster_types.len(),
-            error::CLProgramInvalidRasterIndex
+            error::ClProgramInvalidRasterIndex
         );
         ensure!(
             raster.raster_data_type() == self.output_raster_types[idx].data_type,
-            error::CLProgramInvalidRasterDataType
+            error::ClProgramInvalidRasterDataType
         );
         self.output_rasters[idx] = Some(raster);
         Ok(())
@@ -401,11 +401,11 @@ impl<'a> CLProgramRunnable<'a> {
     ) -> Result<()> {
         ensure!(
             idx < self.generic_input_types.len(),
-            error::CLProgramInvalidGenericIndex
+            error::ClProgramInvalidGenericIndex
         );
         ensure!(
             T::TYPE == self.generic_input_types[idx].data_type,
-            error::CLProgramInvalidGenericDataType
+            error::ClProgramInvalidGenericDataType
         );
 
         self.generic_input[idx] = Some(T::create_typed_slice_ref(data));
@@ -415,7 +415,7 @@ impl<'a> CLProgramRunnable<'a> {
     pub fn set_generic_working_memory_len(&mut self, idx: usize, len: usize) -> Result<()> {
         ensure!(
             idx < self.generic_working_memory_types.len(),
-            error::CLProgramInvalidGenericIndex
+            error::ClProgramInvalidGenericIndex
         );
 
         self.generic_working_memory_lengths[idx] = Some(len);
@@ -429,11 +429,11 @@ impl<'a> CLProgramRunnable<'a> {
     ) -> Result<()> {
         ensure!(
             idx < self.generic_output_types.len(),
-            error::CLProgramInvalidGenericIndex
+            error::ClProgramInvalidGenericIndex
         );
         ensure!(
             T::TYPE == self.generic_output_types[idx].data_type,
-            error::CLProgramInvalidGenericDataType
+            error::ClProgramInvalidGenericDataType
         );
         self.generic_output[idx] = Some(T::create_typed_slice_mut(data));
         Ok(())
@@ -446,17 +446,17 @@ impl<'a> CLProgramRunnable<'a> {
     ) -> Result<()> {
         ensure!(
             idx < self.input_feature_types.len(),
-            error::CLProgramInvalidFeaturesIndex
+            error::ClProgramInvalidFeaturesIndex
         );
         ensure!(
             features.vector_data_type() == self.input_feature_types[idx].vector_type,
-            error::CLProgramInvalidVectorDataType
+            error::ClProgramInvalidVectorDataType
         );
 
         let columns_ok = call_generic_features!(features, f =>  self.input_feature_types[idx]
             .columns
             .iter().all(|c| f.column_type(&c.name).map_or(false, |to| to == c.data_type)));
-        ensure!(columns_ok, error::CLProgramInvalidColumn);
+        ensure!(columns_ok, error::ClProgramInvalidColumn);
 
         self.input_features[idx] = Some(features);
         Ok(())
@@ -469,11 +469,11 @@ impl<'a> CLProgramRunnable<'a> {
     ) -> Result<()> {
         ensure!(
             idx < self.output_feature_types.len(),
-            error::CLProgramInvalidFeaturesIndex
+            error::ClProgramInvalidFeaturesIndex
         );
         ensure!(
             features.output_type == self.output_feature_types[idx].vector_type,
-            error::CLProgramInvalidVectorDataType
+            error::ClProgramInvalidVectorDataType
         );
 
         let input_types = features.column_types();
@@ -483,7 +483,7 @@ impl<'a> CLProgramRunnable<'a> {
                     .get(&column.name)
                     .map_or(false, |input_type| input_type == &column.data_type)
             }),
-            error::CLProgramInvalidColumn
+            error::ClProgramInvalidColumn
         );
 
         self.output_features[idx] = Some(features);
@@ -501,7 +501,7 @@ impl<'a> CLProgramRunnable<'a> {
                 .len(coordinates.len())
                 .copy_host_slice(unsafe {
                     std::slice::from_raw_parts(
-                        coordinates.as_ptr() as *const Double2,
+                        coordinates.as_ptr().cast::<Double2>(),
                         coordinates.len(),
                     )
                 })
@@ -518,7 +518,7 @@ impl<'a> CLProgramRunnable<'a> {
 
         ensure!(
             self.input_features.iter().all(Option::is_some),
-            error::CLProgramUnspecifiedFeatures
+            error::ClProgramUnspecifiedFeatures
         );
 
         for (idx, (features, argument)) in self
@@ -596,7 +596,7 @@ impl<'a> CLProgramRunnable<'a> {
                     .len(time_intervals.len())
                     .copy_host_slice(unsafe {
                         std::slice::from_raw_parts(
-                            time_intervals.as_ptr() as *const Long2,
+                            time_intervals.as_ptr().cast::<Long2>(),
                             time_intervals.len(),
                         )
                     })
@@ -890,7 +890,7 @@ impl<'a> CLProgramRunnable<'a> {
     fn set_raster_arguments(&mut self, kernel: &Kernel, queue: &Queue) -> Result<()> {
         ensure!(
             self.input_rasters.iter().all(Option::is_some),
-            error::CLProgramUnspecifiedRaster
+            error::ClProgramUnspecifiedRaster
         );
 
         for (idx, raster) in self.input_rasters.iter().enumerate() {
@@ -986,17 +986,17 @@ impl<'a> CLProgramRunnable<'a> {
     fn set_generic_arguments(&mut self, kernel: &Kernel, queue: &Queue) -> Result<()> {
         ensure!(
             self.generic_input.iter().all(Option::is_some),
-            error::CLProgramUnspecifiedGenericBuffer
+            error::ClProgramUnspecifiedGenericBuffer
         );
         ensure!(
             self.generic_working_memory_lengths
                 .iter()
                 .all(Option::is_some),
-            error::CLProgramUnspecifiedGenericBuffer
+            error::ClProgramUnspecifiedGenericBuffer
         );
         ensure!(
             self.generic_output.iter().all(Option::is_some),
-            error::CLProgramUnspecifiedGenericBuffer
+            error::ClProgramUnspecifiedGenericBuffer
         );
 
         for (idx, data) in self.generic_input.iter().enumerate() {
@@ -1177,14 +1177,14 @@ impl<'a> CLProgramRunnable<'a> {
                     let num_bytes = bit_util::ceil(nulls.len(), 8);
                     let mut arrow_buffer =
                         MutableBuffer::new(num_bytes).with_bitset(num_bytes, false);
-                    let null_slice = arrow_buffer.data_mut();
+                    let null_slice = arrow_buffer.as_slice_mut();
 
                     for (i, null) in nulls.iter().enumerate() {
                         if *null != 0 {
                             bit_util::set_bit(null_slice, i);
                         }
                     }
-                    Some(arrow_buffer.freeze())
+                    Some(arrow_buffer.into())
                 } else {
                     None
                 };
@@ -1208,14 +1208,14 @@ impl<'a> CLProgramRunnable<'a> {
                     let num_bytes = bit_util::ceil(nulls.len(), 8);
                     let mut arrow_buffer =
                         MutableBuffer::new(num_bytes).with_bitset(num_bytes, false);
-                    let null_slice = arrow_buffer.data_mut();
+                    let null_slice = arrow_buffer.as_slice_mut();
 
                     for (i, null) in nulls.iter().enumerate() {
                         if *null != 0 {
                             bit_util::set_bit(null_slice, i);
                         }
                     }
-                    Some(arrow_buffer.freeze())
+                    Some(arrow_buffer.into())
                 } else {
                     None
                 };
@@ -1239,15 +1239,14 @@ impl<'a> CLProgramRunnable<'a> {
         len: usize,
     ) -> Result<arrow::buffer::Buffer> {
         let mut arrow_buffer = MutableBuffer::new(len * std::mem::size_of::<T>());
-        arrow_buffer.resize(len * std::mem::size_of::<T>()).unwrap();
+        arrow_buffer.resize(len * std::mem::size_of::<T>());
 
-        let dest = unsafe {
-            std::slice::from_raw_parts_mut(arrow_buffer.data_mut().as_ptr() as *mut T, len)
-        };
+        let dest =
+            unsafe { std::slice::from_raw_parts_mut(arrow_buffer.as_mut_ptr().cast::<T>(), len) };
 
         ocl_buffer.read(dest).enq()?;
 
-        Ok(arrow_buffer.freeze())
+        Ok(arrow_buffer.into())
     }
 }
 
@@ -1292,7 +1291,7 @@ impl RasterInfo {
 
 /// Allows running kernels on different inputs and outputs
 #[derive(Clone)]
-pub struct CompiledCLProgram {
+pub struct CompiledClProgram {
     ctx: Context,
     program: Program,
     kernel_name: String,
@@ -1306,9 +1305,9 @@ pub struct CompiledCLProgram {
     generic_output_types: Vec<BufferArgument>,
 }
 
-unsafe impl Send for CompiledCLProgram {}
+unsafe impl Send for CompiledClProgram {}
 
-impl CompiledCLProgram {
+impl CompiledClProgram {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         ctx: Context,
@@ -1338,8 +1337,8 @@ impl CompiledCLProgram {
         }
     }
 
-    pub fn runnable<'b>(&self) -> CLProgramRunnable<'b> {
-        CLProgramRunnable::new(
+    pub fn runnable<'b>(&self) -> ClProgramRunnable<'b> {
+        ClProgramRunnable::new(
             self.input_raster_types.clone(),
             self.output_raster_types.clone(),
             self.input_feature_types.clone(),
@@ -1369,7 +1368,7 @@ impl CompiledCLProgram {
         };
     }
 
-    fn work_size(&self, runnable: &CLProgramRunnable) -> SpatialDims {
+    fn work_size(&self, runnable: &ClProgramRunnable) -> SpatialDims {
         match self.iteration_type {
             IterationType::Raster => call_generic_grid_2d!(runnable.output_rasters[0].as_ref()
                 .expect("checked"), raster => SpatialDims::Two(raster.shape.axis_size_x(), raster.shape.axis_size_y())),
@@ -1389,7 +1388,7 @@ impl CompiledCLProgram {
         }
     }
 
-    pub fn run(&mut self, mut runnable: CLProgramRunnable) -> Result<()> {
+    pub fn run(&mut self, mut runnable: ClProgramRunnable) -> Result<()> {
         // TODO: select correct device
         let queue = Queue::new(&self.ctx, self.ctx.devices()[0], None)?;
 
@@ -1686,7 +1685,7 @@ __kernel void add(
     out_data[idx] = in_data0[idx] + in_data1[idx];
 }"#;
 
-        let mut cl_program = CLProgram::new(IterationType::Raster);
+        let mut cl_program = ClProgram::new(IterationType::Raster);
         cl_program.add_input_raster(RasterArgument::new(in0.raster_data_type()));
         cl_program.add_input_raster(RasterArgument::new(in1.raster_data_type()));
         cl_program.add_output_raster(RasterArgument::new(out.raster_data_type()));
@@ -1735,7 +1734,7 @@ __kernel void add(
     out_data[idx] = in_data0[idx] + in_data1[idx];
 }"#;
 
-        let mut cl_program = CLProgram::new(IterationType::Raster);
+        let mut cl_program = ClProgram::new(IterationType::Raster);
         cl_program.add_input_raster(RasterArgument::new(in0.raster_data_type()));
         cl_program.add_input_raster(RasterArgument::new(in1.raster_data_type()));
         cl_program.add_output_raster(RasterArgument::new(out.raster_data_type()));
@@ -1772,7 +1771,7 @@ __kernel void no_data(
     out_data[idx] = in_info->no_data;
 }"#;
 
-        let mut cl_program = CLProgram::new(IterationType::Raster);
+        let mut cl_program = ClProgram::new(IterationType::Raster);
         cl_program.add_input_raster(RasterArgument::new(in0.raster_data_type()));
         cl_program.add_output_raster(RasterArgument::new(out.raster_data_type()));
 
@@ -1814,7 +1813,7 @@ __kernel void no_data(
     }
 }"#;
 
-        let mut cl_program = CLProgram::new(IterationType::Raster);
+        let mut cl_program = ClProgram::new(IterationType::Raster);
         cl_program.add_input_raster(RasterArgument::new(in0.raster_data_type()));
         cl_program.add_output_raster(RasterArgument::new(out.raster_data_type()));
 
@@ -1858,7 +1857,7 @@ __kernel void no_data(
     }
 }"#;
 
-        let mut cl_program = CLProgram::new(IterationType::Raster);
+        let mut cl_program = ClProgram::new(IterationType::Raster);
         cl_program.add_input_raster(RasterArgument::new(in0.raster_data_type()));
         cl_program.add_output_raster(RasterArgument::new(out.raster_data_type()));
 
@@ -1889,7 +1888,7 @@ __kernel void gid(
     out_data[idx] = idx;
 }"#;
 
-        let mut cl_program = CLProgram::new(IterationType::Raster);
+        let mut cl_program = ClProgram::new(IterationType::Raster);
         cl_program.add_input_raster(RasterArgument::new(in0.raster_data_type()));
         cl_program.add_output_raster(RasterArgument::new(out.raster_data_type()));
 
@@ -1946,7 +1945,7 @@ __kernel void gid(
                 }
             }"#;
 
-        let mut cl_program = CLProgram::new(IterationType::VectorCoordinates);
+        let mut cl_program = ClProgram::new(IterationType::VectorCoordinates);
         cl_program.add_input_features(VectorArgument::new(
             input.vector_data_type(),
             vec![],
@@ -2028,7 +2027,7 @@ __kernel void gid(
                 }
             }"#;
 
-        let mut cl_program = CLProgram::new(IterationType::VectorCoordinates);
+        let mut cl_program = ClProgram::new(IterationType::VectorCoordinates);
         cl_program.add_input_features(VectorArgument::new(
             VectorDataType::MultiPoint,
             vec![],
@@ -2102,7 +2101,7 @@ __kernel void gid(
                 }
             }"#;
 
-        let mut cl_program = CLProgram::new(IterationType::VectorCoordinates);
+        let mut cl_program = ClProgram::new(IterationType::VectorCoordinates);
         cl_program.add_input_features(VectorArgument::new(
             input.vector_data_type(),
             vec![],
@@ -2198,7 +2197,7 @@ __kernel void gid(
                 }
             }"#;
 
-        let mut cl_program = CLProgram::new(IterationType::VectorCoordinates);
+        let mut cl_program = ClProgram::new(IterationType::VectorCoordinates);
         cl_program.add_input_features(VectorArgument::new(
             input.vector_data_type(),
             vec![],
@@ -2304,7 +2303,7 @@ __kernel void gid(
                 }
             }"#;
 
-        let mut cl_program = CLProgram::new(IterationType::VectorCoordinates);
+        let mut cl_program = ClProgram::new(IterationType::VectorCoordinates);
         cl_program.add_input_features(VectorArgument::new(
             input.vector_data_type(),
             vec![],
@@ -2350,7 +2349,7 @@ __kernel void gid(
                 OUT_GENERIC0[idx] = IN_GENERIC0[idx] * 2;
             }"#;
 
-        let mut cl_program = CLProgram::new(IterationType::Generic(6));
+        let mut cl_program = ClProgram::new(IterationType::Generic(6));
         cl_program.add_generic_input::<i32>();
         cl_program.add_generic_output::<i32>();
 
@@ -2390,7 +2389,7 @@ __kernel void gid(
                 }
             }"#;
 
-        let mut cl_program = CLProgram::new(IterationType::Generic(6));
+        let mut cl_program = ClProgram::new(IterationType::Generic(6));
         cl_program.add_generic_input::<i32>();
         cl_program.add_generic_working_memory::<i64>();
         cl_program.add_generic_output::<i32>();
@@ -2460,17 +2459,14 @@ __kernel void nop(__global int* buffer) {
         assert_eq!(vec, &[0, 1, 2, 3]);
 
         let mut arrow_buffer = MutableBuffer::new(len * std::mem::size_of::<i32>());
-        arrow_buffer
-            .resize(len * std::mem::size_of::<i32>())
-            .unwrap();
+        arrow_buffer.resize(len * std::mem::size_of::<i32>());
 
-        let dest = unsafe {
-            std::slice::from_raw_parts_mut(arrow_buffer.data_mut().as_ptr() as *mut i32, len)
-        };
+        let dest =
+            unsafe { std::slice::from_raw_parts_mut(arrow_buffer.as_mut_ptr().cast::<i32>(), len) };
 
         ocl_buffer.read(dest).enq().unwrap();
 
-        let arrow_buffer = arrow_buffer.freeze();
+        let arrow_buffer = arrow_buffer.into();
 
         let data = ArrayData::builder(DataType::Int32)
             .len(len)
@@ -2479,7 +2475,7 @@ __kernel void nop(__global int* buffer) {
 
         let array = Arc::new(PrimitiveArray::<Int32Type>::from(data));
 
-        assert_eq!(array.value_slice(0, len), &[0, 1, 2, 3]);
+        assert_eq!(array.values(), &[0, 1, 2, 3]);
     }
 
     #[test]
@@ -2519,7 +2515,7 @@ __kernel void columns(
     OUT_COLLECTION0_NULLS_foo[idx] = IN_COLLECTION0_NULLS_foo[idx];
 }"#;
 
-        let mut cl_program = CLProgram::new(IterationType::VectorFeatures);
+        let mut cl_program = ClProgram::new(IterationType::VectorFeatures);
         cl_program.add_input_features(VectorArgument::new(
             input.vector_data_type(),
             vec![ColumnArgument::new("foo".into(), FeatureDataType::Number)],
@@ -2595,7 +2591,7 @@ __kernel void columns(
     }
 }"#;
 
-        let mut cl_program = CLProgram::new(IterationType::VectorFeatures);
+        let mut cl_program = ClProgram::new(IterationType::VectorFeatures);
         cl_program.add_input_features(VectorArgument::new(
             input.vector_data_type(),
             vec![ColumnArgument::new("foo".into(), FeatureDataType::Number)],

@@ -3,13 +3,13 @@ use crate::engine::{
     QueryContext, QueryProcessor, QueryRectangle, RasterOperator, RasterQueryProcessor,
     RasterResultDescriptor, TypedRasterQueryProcessor,
 };
-use crate::opencl::{CLProgram, CompiledCLProgram, IterationType, RasterArgument};
+use crate::opencl::{ClProgram, CompiledClProgram, IterationType, RasterArgument};
 use crate::util::Result;
 use crate::{call_bi_generic_processor, call_generic_raster_processor};
 use futures::stream::BoxStream;
 use futures::StreamExt;
+use geoengine_datatypes::primitives::Measurement;
 use geoengine_datatypes::raster::{Grid2D, Pixel, RasterDataType, RasterTile2D, TypedValue};
-use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::collections::HashSet;
@@ -22,11 +22,13 @@ use std::marker::PhantomData;
 ///     calculations.
 /// * `output_type` is the data type of the produced raster tiles.
 /// * `output_no_data_value` is the no data value of the output raster
+/// * `output_measurement` is the measurement description of the output
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct ExpressionParams {
     pub expression: String,
     pub output_type: RasterDataType,
     pub output_no_data_value: TypedValue,
+    pub output_measurement: Option<Measurement>,
 }
 
 // TODO: custom type or simple string?
@@ -57,7 +59,7 @@ impl Expression {
 impl RasterOperator for Expression {
     fn initialize(
         self: Box<Self>,
-        context: &crate::engine::ExecutionContext,
+        context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<InitializedRasterOperator>> {
         ensure!(
             Self::is_allowed_expression(&self.params.expression),
@@ -70,26 +72,55 @@ impl RasterOperator for Expression {
                 found: self.vector_sources.len()
             }
         );
+        ensure!(
+            !self.raster_sources.is_empty(),
+            crate::error::InvalidNumberOfRasterInputs {
+                expected: 1..9,
+                found: self.raster_sources.len()
+            }
+        );
 
-        InitializedOperatorImpl::create(
-            self.params,
-            context,
-            |_, _, _, _| Ok(()),
-            |params, _, _, _, _| {
-                Ok(RasterResultDescriptor {
-                    data_type: params.output_type,
-                    spatial_reference: SpatialReferenceOption::Unreferenced, // TODO
-                })
-            },
-            self.raster_sources,
-            vec![],
+        let raster_sources = self
+            .raster_sources
+            .into_iter()
+            .map(|source| source.initialize(context))
+            .collect::<Result<Vec<_>>>()?;
+
+        let spatial_reference = raster_sources[0].result_descriptor().spatial_reference;
+
+        for other_spatial_refenence in raster_sources
+            .iter()
+            .skip(1)
+            .map(|source| source.result_descriptor().spatial_reference)
+        {
+            ensure!(
+                spatial_reference == other_spatial_refenence,
+                crate::error::InvalidSpatialReference {
+                    expected: spatial_reference,
+                    found: other_spatial_refenence,
+                }
+            );
+        }
+
+        let result_descriptor = RasterResultDescriptor {
+            data_type: self.params.output_type,
+            spatial_reference,
+            measurement: self
+                .params
+                .output_measurement
+                .as_ref()
+                .map_or(Measurement::Unitless, Measurement::clone),
+        };
+
+        Ok(
+            InitializedOperatorImpl::new(result_descriptor, raster_sources, vec![], self.params)
+                .boxed(),
         )
-        .map(InitializedOperatorImpl::boxed)
     }
 }
 
 impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
-    for InitializedOperatorImpl<ExpressionParams, RasterResultDescriptor, ()>
+    for InitializedOperatorImpl<RasterResultDescriptor, ExpressionParams>
 {
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         // TODO: handle different number of sources
@@ -100,13 +131,13 @@ impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
                 let b = b.query_processor()?;
 
                 call_bi_generic_processor!(a, b, (p_a, p_b) => {
-                    let res = call_generic_raster_processor!(self.params.output_type, ExpressionQueryProcessor::new(
+                    let res = call_generic_raster_processor!(self.state.output_type, ExpressionQueryProcessor::new(
                                 &SafeExpression {
-                                    expression: self.params.expression.clone(),
+                                    expression: self.state.expression.clone(),
                                 },
                                 p_a,
                                 p_b,
-                                self.params.output_no_data_value.try_into()?
+                                self.state.output_no_data_value.try_into()?
                             )
                             .boxed());
                     Ok(res)
@@ -126,7 +157,7 @@ where
     pub source_a: Box<dyn RasterQueryProcessor<RasterType = T1>>,
     pub source_b: Box<dyn RasterQueryProcessor<RasterType = T2>>,
     pub phantom_data: PhantomData<TO>,
-    pub cl_program: CompiledCLProgram,
+    pub cl_program: CompiledClProgram,
     pub no_data_value: TO,
 }
 
@@ -151,7 +182,7 @@ where
         }
     }
 
-    fn create_cl_program(expression: &SafeExpression) -> CompiledCLProgram {
+    fn create_cl_program(expression: &SafeExpression) -> CompiledClProgram {
         // TODO: generate code for arbitrary amount of inputs
         let source = r#"
 __kernel void expressionkernel(
@@ -183,7 +214,7 @@ __kernel void expressionkernel(
 }"#
         .replace("%%%EXPRESSION%%%", &expression.expression);
 
-        let mut cl_program = CLProgram::new(IterationType::Raster);
+        let mut cl_program = ClProgram::new(IterationType::Raster);
         cl_program.add_input_raster(RasterArgument::new(T1::TYPE));
         cl_program.add_input_raster(RasterArgument::new(T2::TYPE));
         cl_program.add_output_raster(RasterArgument::new(TO::TYPE));
@@ -200,16 +231,17 @@ where
 {
     type Output = RasterTile2D<TO>;
 
-    fn query(
-        &self,
+    fn query<'b>(
+        &'b self,
         query: QueryRectangle,
-        ctx: QueryContext,
-    ) -> BoxStream<Result<RasterTile2D<TO>>> {
+        ctx: &'b dyn QueryContext,
+    ) -> Result<BoxStream<'b, Result<RasterTile2D<TO>>>> {
         // TODO: validate that tiles actually fit together
         let mut cl_program = self.cl_program.clone();
-        self.source_a
-            .query(query, ctx)
-            .zip(self.source_b.query(query, ctx))
+        Ok(self
+            .source_a
+            .query(query, ctx)?
+            .zip(self.source_b.query(query, ctx)?)
             .map(move |(a, b)| match (a, b) {
                 (Ok(a), Ok(b)) => {
                     let mut out = Grid2D::new(
@@ -240,16 +272,18 @@ where
                 }
                 _ => unimplemented!(),
             })
-            .boxed()
+            .boxed())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::MockExecutionContextCreator;
+    use crate::engine::{MockExecutionContext, MockQueryContext};
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
-    use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution, TimeInterval};
+    use geoengine_datatypes::primitives::{
+        BoundingBox2D, Measurement, SpatialResolution, TimeInterval,
+    };
     use geoengine_datatypes::raster::TileInformation;
     use geoengine_datatypes::spatial_reference::SpatialReference;
 
@@ -263,24 +297,28 @@ mod tests {
                 expression: "A+B".to_string(),
                 output_type: RasterDataType::I8,
                 output_no_data_value: TypedValue::I8(42),
+                output_measurement: Some(Measurement::Unitless),
             },
             raster_sources: vec![a, b],
             vector_sources: vec![],
         }
         .boxed()
-        .initialize(&MockExecutionContextCreator::default().context())
+        .initialize(&MockExecutionContext::default())
         .unwrap();
 
         let p = o.query_processor().unwrap().get_i8().unwrap();
 
-        let q = p.query(
-            QueryRectangle {
-                bbox: BoundingBox2D::new_unchecked((1., 2.).into(), (3., 4.).into()),
-                time_interval: Default::default(),
-                spatial_resolution: SpatialResolution::one(),
-            },
-            QueryContext { chunk_byte_size: 1 },
-        );
+        let ctx = MockQueryContext::new(1);
+        let q = p
+            .query(
+                QueryRectangle {
+                    bbox: BoundingBox2D::new_unchecked((1., 2.).into(), (3., 4.).into()),
+                    time_interval: Default::default(),
+                    spatial_resolution: SpatialResolution::one(),
+                },
+                &ctx,
+            )
+            .unwrap();
 
         let c: Vec<Result<RasterTile2D<i8>>> = q.collect().await;
 
@@ -310,7 +348,8 @@ mod tests {
                 data: vec![raster_tile],
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::I8,
-                    spatial_reference: SpatialReference::wgs84().into(),
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    measurement: Measurement::Unitless,
                 },
             },
         }

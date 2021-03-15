@@ -5,45 +5,45 @@ use warp::{http::Response, Filter};
 use crate::error;
 use crate::error::Result;
 use crate::handlers::Context;
-use crate::ogc::wfs::request::{GetCapabilities, GetFeature, TypeNames, WFSRequest};
+use crate::ogc::wfs::request::{GetCapabilities, GetFeature, TypeNames, WfsRequest};
+use crate::users::session::Session;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use futures::StreamExt;
-use geoengine_datatypes::collections::ToGeoJson;
 use geoengine_datatypes::primitives::{
     FeatureData, Geometry, MultiPoint, TimeInstance, TimeInterval,
 };
+use geoengine_datatypes::{collections::ToGeoJson, spatial_reference::SpatialReferenceOption};
 use geoengine_datatypes::{
     collections::{FeatureCollection, MultiPointCollection},
     primitives::SpatialResolution,
 };
 use geoengine_operators::engine::{
-    MockExecutionContextCreator, QueryContext, QueryRectangle, TypedVectorQueryProcessor,
-    VectorQueryProcessor,
+    QueryContext, QueryRectangle, ResultDescriptor, TypedVectorQueryProcessor, VectorQueryProcessor,
 };
 use serde_json::json;
 use std::str::FromStr;
 
-pub fn wfs_handler<C: Context>(
+pub(crate) fn wfs_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::get()
-        .and(warp::path!("wfs"))
-        .and(warp::query::<WFSRequest>())
+    warp::path!("wfs")
+        .and(warp::get())
+        .and(warp::query::<WfsRequest>())
         .and(warp::any().map(move || ctx.clone()))
         .and_then(wfs)
 }
 
 // TODO: move into handler once async closures are available?
 async fn wfs<C: Context>(
-    request: WFSRequest,
+    request: WfsRequest,
     ctx: C,
 ) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
     // TODO: authentication
     // TODO: more useful error output than "invalid query string"
     match request {
-        WFSRequest::GetCapabilities(request) => get_capabilities(&request),
-        WFSRequest::GetFeature(request) => get_feature(&request, &ctx).await,
+        WfsRequest::GetCapabilities(request) => get_capabilities(&request),
+        WfsRequest::GetFeature(request) => get_feature(&request, &ctx).await,
         _ => Ok(Box::new(
             warp::http::StatusCode::NOT_IMPLEMENTED.into_response(),
         )),
@@ -176,18 +176,34 @@ async fn get_feature<C: Context>(
             return Err(error::Error::InvalidNamespace.into());
         }
         None => {
-            return Err(error::Error::InvalidWFSTypeNames.into());
+            return Err(error::Error::InvalidWfsTypeNames.into());
         }
     };
 
     let operator = workflow.operator.get_vector().context(error::Operator)?;
 
-    // TODO: use global context parameters
-    let execution_context_creator = MockExecutionContextCreator::default();
-    let execution_context = execution_context_creator.context();
+    // TODO: use correct session when WFS uses authenticated access
+    let execution_context = ctx.execution_context(&Session::mock())?;
     let initialized = operator
         .initialize(&execution_context)
         .context(error::Operator)?;
+
+    // handle request and workflow crs matching
+    let workflow_spatial_ref = initialized.result_descriptor().spatial_reference();
+    let request_spatial_ref: SpatialReferenceOption = request.srs_name.into();
+    // TODO: use a default spatial reference if it is not set?
+    snafu::ensure!(
+        request_spatial_ref.is_spatial_ref(),
+        error::InvalidSpatialReference
+    );
+    // TODO: inject projection Operator
+    snafu::ensure!(
+        workflow_spatial_ref == request_spatial_ref,
+        error::SpatialReferenceMissmatch {
+            found: request_spatial_ref,
+            expected: workflow_spatial_ref,
+        }
+    );
 
     let processor = initialized.query_processor().context(error::Operator)?;
 
@@ -199,23 +215,20 @@ async fn get_feature<C: Context>(
         }),
         spatial_resolution: SpatialResolution::zero_point_one(),
     };
-    let query_ctx = QueryContext {
-        // TODO: use production config and test config sizes here
-        chunk_byte_size: 1024,
-    };
+    let query_ctx = ctx.query_context()?;
 
     let json = match processor {
         TypedVectorQueryProcessor::Data(p) => {
-            vector_stream_to_geojson(p, query_rect, query_ctx).await
+            vector_stream_to_geojson(p, query_rect, &query_ctx).await
         }
         TypedVectorQueryProcessor::MultiPoint(p) => {
-            vector_stream_to_geojson(p, query_rect, query_ctx).await
+            vector_stream_to_geojson(p, query_rect, &query_ctx).await
         }
         TypedVectorQueryProcessor::MultiLineString(p) => {
-            vector_stream_to_geojson(p, query_rect, query_ctx).await
+            vector_stream_to_geojson(p, query_rect, &query_ctx).await
         }
         TypedVectorQueryProcessor::MultiPolygon(p) => {
-            vector_stream_to_geojson(p, query_rect, query_ctx).await
+            vector_stream_to_geojson(p, query_rect, &query_ctx).await
         }
     }?;
 
@@ -223,14 +236,14 @@ async fn get_feature<C: Context>(
         Response::builder()
             .header("Content-Type", "application/json")
             .body(json.to_string())
-            .context(error::HTTP)?,
+            .context(error::Http)?,
     ))
 }
 
 async fn vector_stream_to_geojson<G>(
     processor: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
     query_rect: QueryRectangle,
-    query_ctx: QueryContext,
+    query_ctx: &dyn QueryContext,
 ) -> Result<serde_json::Value>
 where
     G: Geometry + 'static,
@@ -239,7 +252,7 @@ where
     let features: Vec<serde_json::Value> = Vec::new();
 
     // TODO: more efficient merging of the partial feature collections
-    let stream = processor.vector_query(query_rect, query_ctx);
+    let stream = processor.vector_query(query_rect, query_ctx)?;
 
     let features = stream
         .fold(
@@ -306,14 +319,22 @@ fn get_feature_mock(_request: &GetFeature) -> Result<Box<dyn warp::Reply>, warp:
 
 #[cfg(test)]
 mod tests {
-    use geoengine_operators::source::CsvSourceParameters;
-
     use super::*;
+
+    use crate::datasets::storage::{DataSetDefinition, DataSetStore};
+    use crate::handlers::{handle_rejection, ErrorResponse};
+    use crate::users::user::UserId;
+    use crate::util::tests::check_allowed_http_methods;
+    use crate::util::user_input::UserInput;
     use crate::{contexts::InMemoryContext, workflows::workflow::Workflow};
+    use geoengine_datatypes::dataset::DataSetId;
+    use geoengine_datatypes::util::Identifier;
     use geoengine_operators::engine::TypedOperator;
+    use geoengine_operators::source::CsvSourceParameters;
     use geoengine_operators::source::{CsvGeometrySpecification, CsvSource, CsvTimeSpecification};
     use serde_json::json;
     use std::io::{Seek, SeekFrom, Write};
+    use warp::hyper::body::Bytes;
     use xml::ParserConfig;
 
     #[tokio::test]
@@ -409,15 +430,19 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn get_capabilities() {
+    async fn get_capabilities_test_helper(method: &str) -> Response<Bytes> {
         let ctx = InMemoryContext::default();
 
-        let res = warp::test::request()
-            .method("GET")
+        warp::test::request()
+            .method(method)
             .path("/wfs?request=GetCapabilities&service=WFS")
-            .reply(&wfs_handler(ctx))
-            .await;
+            .reply(&wfs_handler(ctx).recover(handle_rejection))
+            .await
+    }
+
+    #[tokio::test]
+    async fn get_capabilities() {
+        let res = get_capabilities_test_helper("GET").await;
 
         assert_eq!(res.status(), 200);
 
@@ -430,7 +455,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn get_feature_registry() {
+    async fn get_capabilities_invalid_method() {
+        check_allowed_http_methods(get_capabilities_test_helper, &["GET"]).await;
+    }
+
+    async fn get_feature_registry_test_helper(method: &str) -> Response<Bytes> {
         let mut temp_file = tempfile::NamedTempFile::new().unwrap();
         write!(
             temp_file,
@@ -468,11 +497,17 @@ x;y
             .await
             .unwrap();
 
-        let res = warp::test::request()
-            .method("GET")
-            .path(&format!("/wfs?request=GetFeature&service=WFS&version=2.0.0&typeNames=registry:{}&bbox=-90,-180,90,180&crs=EPSG:4326", id.to_string()))
-            .reply(&wfs_handler(ctx))
-            .await;
+        warp::test::request()
+            .method(method)
+            .path(&format!("/wfs?request=GetFeature&service=WFS&version=2.0.0&typeNames=registry:{}&bbox=-90,-180,90,180&srsName=EPSG:4326", id.to_string()))
+            .reply(&wfs_handler(ctx).recover(handle_rejection))
+            .await
+    }
+
+    #[tokio::test]
+    async fn get_feature_registry() {
+        let res = get_feature_registry_test_helper("GET").await;
+
         let body: String = String::from_utf8(res.body().to_vec()).unwrap();
         assert_eq!(
             body,
@@ -522,7 +557,24 @@ x;y
     }
 
     #[tokio::test]
-    async fn get_feature_json() {
+    async fn get_feature_registry_invalid_method() {
+        check_allowed_http_methods(get_feature_registry_test_helper, &["GET"]).await;
+    }
+
+    #[tokio::test]
+    async fn get_feature_registry_missing_fields() {
+        let ctx = InMemoryContext::default();
+
+        let res = warp::test::request()
+            .method("GET")
+            .path("/wfs?request=GetFeature&service=WFS&version=2.0.0&bbox=-90,-180,90,180&crs=EPSG:4326")
+            .reply(&wfs_handler(ctx).recover(handle_rejection))
+            .await;
+
+        ErrorResponse::assert(&res, 400, "InvalidQuery", "Invalid query string.");
+    }
+
+    async fn get_feature_json_test_helper(method: &str) -> Response<Bytes> {
         let mut temp_file = tempfile::NamedTempFile::new().unwrap();
         write!(
             temp_file,
@@ -560,14 +612,20 @@ x;y
             ("version", "2.0.0"),
             ("typeNames", &format!("json:{}", json)),
             ("bbox", "-90,-180,90,180"),
-            ("crs", "EPSG:4326"),
+            ("srsName", "EPSG:4326"),
         ];
         let url = format!("/wfs?{}", &serde_urlencoded::to_string(params).unwrap());
-        let res = warp::test::request()
-            .method("GET")
+        warp::test::request()
+            .method(method)
             .path(&url)
-            .reply(&wfs_handler(ctx))
-            .await;
+            .reply(&wfs_handler(ctx).recover(handle_rejection))
+            .await
+    }
+
+    #[tokio::test]
+    async fn get_feature_json() {
+        let res = get_feature_json_test_helper("GET").await;
+
         let body: String = String::from_utf8(res.body().to_vec()).unwrap();
         assert_eq!(
             body,
@@ -614,5 +672,146 @@ x;y
             .to_string()
         );
         assert_eq!(res.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn get_feature_json_invalid_method() {
+        check_allowed_http_methods(get_feature_json_test_helper, &["GET"]).await;
+    }
+
+    #[tokio::test]
+    async fn get_feature_json_missing_fields() {
+        let ctx = InMemoryContext::default();
+
+        let params = &[
+            ("request", "GetFeature"),
+            ("service", "WFS"),
+            ("version", "2.0.0"),
+            ("bbox", "-90,-180,90,180"),
+            ("crs", "EPSG:4326"),
+        ];
+        let url = format!("/wfs?{}", &serde_urlencoded::to_string(params).unwrap());
+        let res = warp::test::request()
+            .method("GET")
+            .path(&url)
+            .reply(&wfs_handler(ctx).recover(handle_rejection))
+            .await;
+
+        ErrorResponse::assert(&res, 400, "InvalidQuery", "Invalid query string.");
+    }
+
+    async fn add_dataset_definition_to_datasets(
+        ctx: &InMemoryContext,
+        dataset_definition: &str,
+    ) -> DataSetId {
+        let def: DataSetDefinition = serde_json::from_str(dataset_definition).unwrap();
+
+        let mut db = ctx.data_set_db_ref_mut().await;
+
+        db.add_data_set(
+            UserId::new(),
+            def.properties.validated().unwrap(),
+            Box::new(def.meta_data),
+        )
+        .await
+        .unwrap()
+    }
+
+    fn dir_up() {
+        let mut dir = std::env::current_dir().unwrap();
+        dir.pop();
+
+        std::env::set_current_dir(dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn raster_vector_join() {
+        dir_up();
+
+        let ctx = InMemoryContext::default();
+
+        let ndvi_id = add_dataset_definition_to_datasets(
+            &ctx,
+            include_str!("../../test-data/dataset_defs/ndvi.json"),
+        )
+        .await;
+        let ne_10m_ports_id = add_dataset_definition_to_datasets(
+            &ctx,
+            include_str!("../../test-data/dataset_defs/points_with_time.json"),
+        )
+        .await;
+
+        let workflow = serde_json::json!({
+            "type": "Vector",
+            "operator": {
+                "type": "RasterVectorJoin",
+                "params": {
+                    "names": [
+                        "NDVI"
+                    ],
+                    "aggregation": "first"
+                },
+                "vector_sources": [
+                    {
+                        "type": "OgrSource",
+                        "params": {
+                            "data_set": ne_10m_ports_id,
+                            "attribute_projection": null
+                        }
+                    }
+                ],
+                "raster_sources": [
+                    {
+                        "type": "GdalSource",
+                        "params": {
+                            "data_set": ndvi_id,
+                        }
+                    }
+                ]
+            }
+        });
+
+        let json = serde_json::to_string(&workflow).unwrap();
+
+        let params = &[
+            ("request", "GetFeature"),
+            ("service", "WFS"),
+            ("version", "2.0.0"),
+            ("typeNames", &format!("json:{}", json)),
+            ("bbox", "-90,-180,90,180"),
+            ("srsName", "EPSG:4326"),
+            ("time", "2014-04-01T12:00:00.000Z/2014-04-01T12:00:00.000Z"),
+        ];
+        let url = format!("/wfs?{}", &serde_urlencoded::to_string(params).unwrap());
+
+        let response = warp::test::request()
+            .method("GET")
+            .path(&url)
+            .reply(&wfs_handler(ctx).recover(handle_rejection))
+            .await;
+
+        let body: serde_json::Value = serde_json::from_slice(&response.body().to_vec()).unwrap();
+
+        assert_eq!(
+            body,
+            serde_json::json!({
+                "type": "FeatureCollection",
+                "features": [{
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [12.843_159, 47.825_724]
+                    },
+                    "properties": {
+                        "NDVI": 228
+                    },
+                    "when": {
+                        "start": "2014-04-01T00:00:00+00:00",
+                        "end": "2014-07-01T00:00:00+00:00",
+                        "type": "Interval"
+                    }
+                }]
+            })
+        );
     }
 }

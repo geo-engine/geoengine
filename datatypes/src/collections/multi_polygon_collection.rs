@@ -1,12 +1,21 @@
 use crate::collections::{
     FeatureCollection, FeatureCollectionInfos, FeatureCollectionRowBuilder,
-    GeoFeatureCollectionRowBuilder, GeometryCollection, IntoGeometryIterator,
+    GeoFeatureCollectionRowBuilder, GeometryCollection, GeometryRandomAccess, IntoGeometryIterator,
 };
 use crate::primitives::{Coordinate2D, MultiPolygon, MultiPolygonAccess, MultiPolygonRef};
-use crate::util::arrow::downcast_array;
 use crate::util::Result;
-use arrow::array::{Array, FixedSizeListArray, Float64Array, ListArray};
-use std::slice;
+use crate::{
+    primitives::MultiLineString,
+    util::arrow::{downcast_array, ArrowTyped},
+};
+use arrow::{
+    array::{Array, ArrayData, FixedSizeListArray, Float64Array, ListArray},
+    buffer::Buffer,
+    datatypes::DataType,
+};
+use std::{slice, sync::Arc};
+
+use super::geo_feature_collection::ReplaceRawArrayCoords;
 
 /// This collection contains temporal multi polygons and miscellaneous data.
 pub type MultiPolygonCollection = FeatureCollection<MultiPolygon>;
@@ -35,7 +44,7 @@ impl GeometryCollection for MultiPolygonCollection {
 
         unsafe {
             slice::from_raw_parts(
-                floats.raw_values() as *const Coordinate2D,
+                floats.values().as_ptr().cast::<Coordinate2D>(),
                 number_of_coordinates,
             )
         }
@@ -52,7 +61,7 @@ impl GeometryCollection for MultiPolygonCollection {
         let data = geometries.data();
         let buffer = &data.buffers()[0];
 
-        unsafe { slice::from_raw_parts(buffer.raw_data() as *const i32, geometries.len() + 1) }
+        unsafe { slice::from_raw_parts(buffer.as_ptr().cast::<i32>(), geometries.len() + 1) }
     }
 }
 
@@ -71,7 +80,7 @@ impl MultiPolygonCollection {
         let data = polygons.data();
         let buffer = &data.buffers()[0];
 
-        unsafe { slice::from_raw_parts(buffer.raw_data() as *const i32, polygons.len() + 1) }
+        unsafe { slice::from_raw_parts(buffer.as_ptr().cast::<i32>(), polygons.len() + 1) }
     }
 
     #[allow(clippy::cast_ptr_alignment)]
@@ -91,7 +100,7 @@ impl MultiPolygonCollection {
         let data = rings.data();
         let buffer = &data.buffers()[0];
 
-        unsafe { slice::from_raw_parts(buffer.raw_data() as *const i32, rings.len() + 1) }
+        unsafe { slice::from_raw_parts(buffer.as_ptr().cast::<i32>(), rings.len() + 1) }
     }
 }
 
@@ -161,7 +170,7 @@ impl<'l> Iterator for MultiPolygonIterator<'l> {
                 ring_refs.push(unsafe {
                     #[allow(clippy::cast_ptr_alignment)]
                     slice::from_raw_parts(
-                        float_array.raw_values() as *const Coordinate2D,
+                        float_array.values().as_ptr().cast::<Coordinate2D>(),
                         number_of_coordinates,
                     )
                 });
@@ -182,6 +191,59 @@ impl<'l> Iterator for MultiPolygonIterator<'l> {
 
     fn count(self) -> usize {
         self.length - self.index
+    }
+}
+
+impl<'l> GeometryRandomAccess<'l> for MultiPolygonCollection {
+    type GeometryType = MultiPolygonRef<'l>;
+
+    fn geometry_at(&'l self, index: usize) -> Option<Self::GeometryType> {
+        let geometry_column: &ListArray = downcast_array(
+            &self
+                .table
+                .column_by_name(MultiPolygonCollection::GEOMETRY_COLUMN_NAME)
+                .expect("Column must exist since it is in the metadata"),
+        );
+
+        if index >= self.len() {
+            return None;
+        }
+
+        let polygon_array_ref = geometry_column.value(index);
+        let polygon_array: &ListArray = downcast_array(&polygon_array_ref);
+
+        let number_of_polygons = polygon_array.len();
+        let mut polygon_refs = Vec::with_capacity(number_of_polygons);
+
+        for polygon_index in 0..number_of_polygons {
+            let ring_array_ref = polygon_array.value(polygon_index);
+            let ring_array: &ListArray = downcast_array(&ring_array_ref);
+
+            let number_of_rings = ring_array.len();
+            let mut ring_refs = Vec::with_capacity(number_of_rings);
+
+            for ring_index in 0..number_of_rings {
+                let coordinate_array_ref = ring_array.value(ring_index);
+                let coordinate_array: &FixedSizeListArray = downcast_array(&coordinate_array_ref);
+
+                let number_of_coordinates = coordinate_array.len();
+
+                let float_array_ref = coordinate_array.value(0);
+                let float_array: &Float64Array = downcast_array(&float_array_ref);
+
+                ring_refs.push(unsafe {
+                    #[allow(clippy::cast_ptr_alignment)]
+                    slice::from_raw_parts(
+                        float_array.values().as_ptr().cast::<Coordinate2D>(),
+                        number_of_coordinates,
+                    )
+                });
+            }
+
+            polygon_refs.push(ring_refs);
+        }
+
+        Some(MultiPolygonRef::new_unchecked(polygon_refs))
     }
 }
 
@@ -212,6 +274,55 @@ impl GeoFeatureCollectionRowBuilder<MultiPolygon> for FeatureCollectionRowBuilde
         self.geometries_builder.append(true)?;
 
         Ok(())
+    }
+}
+
+impl ReplaceRawArrayCoords for MultiPolygonCollection {
+    fn replace_raw_coords(array_ref: &Arc<dyn Array>, new_coords: Buffer) -> Arc<ArrayData> {
+        let geometries: &ListArray = downcast_array(array_ref);
+
+        let feature_offset_array = geometries.data();
+        let feature_offsets_buffer = &feature_offset_array.buffers()[0];
+        let num_features = (feature_offsets_buffer.len() / std::mem::size_of::<i32>()) - 1;
+
+        let polygon_offsets_array = &feature_offset_array.child_data()[0];
+        let polygon_offsets_buffer = &polygon_offsets_array.buffers()[0];
+        let num_polygons = (polygon_offsets_buffer.len() / std::mem::size_of::<i32>()) - 1;
+
+        let ring_offsets_array = &polygon_offsets_array.child_data()[0];
+        let ring_offsets_buffer = &ring_offsets_array.buffers()[0];
+        let num_rings = (ring_offsets_buffer.len() / std::mem::size_of::<i32>()) - 1;
+
+        let num_coords = new_coords.len() / std::mem::size_of::<Coordinate2D>();
+        let num_floats = num_coords * 2;
+
+        ArrayData::builder(MultiPolygon::arrow_data_type())
+            .len(num_features)
+            .add_buffer(feature_offsets_buffer.clone())
+            .add_child_data(
+                ArrayData::builder(MultiLineString::arrow_data_type())
+                    .len(num_polygons)
+                    .add_buffer(polygon_offsets_buffer.clone())
+                    .add_child_data(
+                        ArrayData::builder(Coordinate2D::arrow_list_data_type())
+                            .len(num_rings)
+                            .add_buffer(ring_offsets_buffer.clone())
+                            .add_child_data(
+                                ArrayData::builder(Coordinate2D::arrow_data_type())
+                                    .len(num_coords)
+                                    .add_child_data(
+                                        ArrayData::builder(DataType::Float64)
+                                            .len(num_floats)
+                                            .add_buffer(new_coords)
+                                            .build(),
+                                    )
+                                    .build(),
+                            )
+                            .build(),
+                    )
+                    .build(),
+            )
+            .build()
     }
 }
 
@@ -632,5 +743,86 @@ mod tests {
             ]]
         );
         assert!(geometry_iter.next().is_none());
+    }
+
+    #[test]
+    fn reproject_multi_lines_epsg4326_epsg900913_collection() {
+        use crate::operations::reproject::Reproject;
+        use crate::operations::reproject::{CoordinateProjection, CoordinateProjector};
+        use crate::primitives::FeatureData;
+        use crate::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
+
+        use crate::util::well_known_data::{
+            COLOGNE_EPSG_4326, COLOGNE_EPSG_900_913, HAMBURG_EPSG_4326, HAMBURG_EPSG_900_913,
+            MARBURG_EPSG_4326, MARBURG_EPSG_900_913,
+        };
+
+        let from = SpatialReference::epsg_4326();
+        let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
+        let projector = CoordinateProjector::from_known_srs(from, to).unwrap();
+
+        let collection = MultiPolygonCollection::from_slices(
+            &[
+                MultiPolygon::new(vec![
+                    vec![vec![
+                        HAMBURG_EPSG_4326,
+                        MARBURG_EPSG_4326,
+                        COLOGNE_EPSG_4326,
+                        HAMBURG_EPSG_4326,
+                    ]],
+                    vec![vec![
+                        COLOGNE_EPSG_4326,
+                        HAMBURG_EPSG_4326,
+                        MARBURG_EPSG_4326,
+                        COLOGNE_EPSG_4326,
+                    ]],
+                ])
+                .unwrap(),
+                MultiPolygon::new(vec![vec![vec![
+                    MARBURG_EPSG_4326,
+                    COLOGNE_EPSG_4326,
+                    HAMBURG_EPSG_4326,
+                    MARBURG_EPSG_4326,
+                ]]])
+                .unwrap(),
+            ],
+            &[TimeInterval::default(), TimeInterval::default()],
+            &[("A", FeatureData::Decimal(vec![1, 2]))],
+        )
+        .unwrap();
+
+        let expected_collection = MultiPolygonCollection::from_slices(
+            &[
+                MultiPolygon::new(vec![
+                    vec![vec![
+                        HAMBURG_EPSG_900_913,
+                        MARBURG_EPSG_900_913,
+                        COLOGNE_EPSG_900_913,
+                        HAMBURG_EPSG_900_913,
+                    ]],
+                    vec![vec![
+                        COLOGNE_EPSG_900_913,
+                        HAMBURG_EPSG_900_913,
+                        MARBURG_EPSG_900_913,
+                        COLOGNE_EPSG_900_913,
+                    ]],
+                ])
+                .unwrap(),
+                MultiPolygon::new(vec![vec![vec![
+                    MARBURG_EPSG_900_913,
+                    COLOGNE_EPSG_900_913,
+                    HAMBURG_EPSG_900_913,
+                    MARBURG_EPSG_900_913,
+                ]]])
+                .unwrap(),
+            ],
+            &[TimeInterval::default(), TimeInterval::default()],
+            &[("A", FeatureData::Decimal(vec![1, 2]))],
+        )
+        .unwrap();
+
+        let proj_collection = collection.reproject(&projector).unwrap();
+
+        assert_eq!(proj_collection, expected_collection)
     }
 }

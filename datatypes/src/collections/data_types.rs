@@ -1,19 +1,20 @@
+use std::collections::hash_map::Keys;
+use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
+use std::ops::RangeBounds;
 
 use serde::{Deserialize, Serialize};
 
 use crate::collections::{
     DataCollection, FeatureCollectionError, FeatureCollectionInfos, FeatureCollectionModifications,
-    FilterArray, GeometryCollection, MultiLineStringCollection, MultiPointCollection,
-    MultiPolygonCollection, ToGeoJson,
+    FilterArray, FilteredColumnNameIter, GeometryCollection, MultiLineStringCollection,
+    MultiPointCollection, MultiPolygonCollection, ToGeoJson,
 };
 use crate::error::Error;
 use crate::primitives::{
     Coordinate2D, FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue, TimeInterval,
 };
 use crate::util::Result;
-use std::collections::HashMap;
-use std::ops::RangeBounds;
 
 /// An enum that contains all possible vector data types
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Deserialize, Serialize, Copy, Clone)]
@@ -313,7 +314,8 @@ impl FeatureCollectionInfos for TypedFeatureCollection {
     impl_function_by_forwarding_ref!(fn time_intervals(&self) -> &[TimeInterval]);
     impl_function_by_forwarding_ref!(fn column_types(&self) -> HashMap<String, FeatureDataType>);
     impl_function_by_forwarding_ref!(fn byte_size(&self) -> usize);
-    impl_function_by_forwarding_ref!(fn column_names_of_type(&self, column_type: FeatureDataType) -> Vec<String>);
+    impl_function_by_forwarding_ref!(fn column_names_of_type(&self, column_type: FeatureDataType) -> FilteredColumnNameIter);
+    impl_function_by_forwarding_ref!(fn column_names(&self) -> Keys<String, FeatureDataType>);
 }
 
 impl<'c> FeatureCollectionInfos for TypedFeatureCollectionRef<'c> {
@@ -324,7 +326,8 @@ impl<'c> FeatureCollectionInfos for TypedFeatureCollectionRef<'c> {
     impl_function_by_forwarding_ref2!(fn time_intervals(&self) -> &[TimeInterval]);
     impl_function_by_forwarding_ref2!(fn column_types(&self) -> HashMap<String, FeatureDataType>);
     impl_function_by_forwarding_ref2!(fn byte_size(&self) -> usize);
-    impl_function_by_forwarding_ref2!(fn column_names_of_type(&self, column_type: FeatureDataType) -> Vec<String>);
+    impl_function_by_forwarding_ref2!(fn column_names_of_type(&self, column_type: FeatureDataType) -> FilteredColumnNameIter);
+    impl_function_by_forwarding_ref2!(fn column_names(&self) -> Keys<String, FeatureDataType>);
 }
 
 impl ToGeoJson<'_> for TypedFeatureCollection {
@@ -394,6 +397,9 @@ impl FeatureCollectionModifications for TypedFeatureCollection {
 
     impl_mod_function_by_forwarding_ref!(fn remove_columns(&self, removed_column_names: &[&str]) -> Result<Self::Output>);
 
+    impl_mod_function_by_forwarding_ref!(fn rename_columns<S1, S2>(&self, renamings: &[(S1, S2)]) -> Result<Self::Output>
+                                         where S1: AsRef<str>, S2: AsRef<str>);
+
     impl_mod_function_by_forwarding_ref!(fn column_range_filter<R>(&self, column: &str, ranges: &[R], keep_nulls: bool) -> Result<Self::Output>
                                          where R: RangeBounds<FeatureDataValue>);
 
@@ -416,6 +422,8 @@ impl FeatureCollectionModifications for TypedFeatureCollection {
             _ => return Err(FeatureCollectionError::WrongDataType.into()),
         })
     }
+
+    impl_mod_function_by_forwarding_ref!(fn sort_by_time_asc(&self) -> Result<Self::Output>);
 }
 
 impl<'c> FeatureCollectionModifications for TypedFeatureCollectionRef<'c> {
@@ -426,6 +434,9 @@ impl<'c> FeatureCollectionModifications for TypedFeatureCollectionRef<'c> {
     impl_mod_function_by_forwarding_ref2!(fn add_columns(&self, new_columns: &[(&str, FeatureData)]) -> Result<Self::Output>);
 
     impl_mod_function_by_forwarding_ref2!(fn remove_columns(&self, removed_column_names: &[&str]) -> Result<Self::Output>);
+
+    impl_mod_function_by_forwarding_ref2!(fn rename_columns<S1, S2>(&self, renamings: &[(S1, S2)]) -> Result<Self::Output>
+                                          where S1: AsRef<str>, S2: AsRef<str>);
 
     impl_mod_function_by_forwarding_ref2!(fn column_range_filter<R>(&self, column: &str, ranges: &[R], keep_nulls: bool) -> Result<Self::Output>
                                           where R: RangeBounds<FeatureDataValue>);
@@ -450,6 +461,8 @@ impl<'c> FeatureCollectionModifications for TypedFeatureCollectionRef<'c> {
             _ => return Err(FeatureCollectionError::WrongDataType.into()),
         })
     }
+
+    impl_mod_function_by_forwarding_ref2!(fn sort_by_time_asc(&self) -> Result<Self::Output>);
 }
 
 #[cfg(test)]

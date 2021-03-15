@@ -130,7 +130,7 @@ mod tests {
     use super::*;
 
     use crate::engine::{
-        MockExecutionContextCreator, QueryContext, QueryProcessor, QueryRectangle,
+        MockExecutionContext, MockQueryContext, QueryProcessor, QueryRectangle,
         TypedVectorQueryProcessor, VectorOperator,
     };
     use crate::error::Error;
@@ -157,7 +157,7 @@ mod tests {
 
         let source = source
             .boxed()
-            .initialize(&MockExecutionContextCreator::default().context())
+            .initialize(&MockExecutionContext::default())
             .unwrap();
 
         let processor =
@@ -172,17 +172,16 @@ mod tests {
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
-        let cx = QueryContext {
-            chunk_byte_size: std::mem::size_of::<Coordinate2D>() * 2,
-        };
+        let cx = MockQueryContext::new(std::mem::size_of::<Coordinate2D>() * 2);
 
         let number_of_source_chunks = processor
-            .query(qrect, cx)
+            .query(qrect, &cx)
+            .unwrap()
             .fold(0_usize, async move |i, _| i + 1)
             .await;
         assert_eq!(number_of_source_chunks, 5);
 
-        let stream = processor.query(qrect, cx);
+        let stream = processor.query(qrect, &cx).unwrap();
 
         let chunk_byte_size = MultiPointCollection::from_data(
             MultiPoint::many(coordinates[0..5].to_vec()).unwrap(),
@@ -228,7 +227,7 @@ mod tests {
     async fn empty() {
         let source = MockFeatureCollectionSource::single(DataCollection::empty())
             .boxed()
-            .initialize(&MockExecutionContextCreator::default().context())
+            .initialize(&MockExecutionContext::default())
             .unwrap();
 
         let processor =
@@ -243,11 +242,12 @@ mod tests {
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
-        let cx = QueryContext { chunk_byte_size: 0 };
+        let cx = MockQueryContext::new(0);
 
-        let collections = FeatureCollectionChunkMerger::new(processor.query(qrect, cx).fuse(), 0)
-            .collect::<Vec<Result<DataCollection>>>()
-            .await;
+        let collections =
+            FeatureCollectionChunkMerger::new(processor.query(qrect, &cx).unwrap().fuse(), 0)
+                .collect::<Vec<Result<DataCollection>>>()
+                .await;
 
         assert_eq!(collections.len(), 0);
     }
@@ -299,7 +299,7 @@ mod tests {
         );
     }
 
-    #[tokio::test(max_threads = 1)] // TODO: #[tokio::test(flavor = "current_thread")]
+    #[tokio::test(flavor = "current_thread")]
     async fn interleaving_pendings() {
         let mut stream_history: Vec<Poll<Option<Result<MultiPointCollection>>>> = vec![
             Poll::Pending,

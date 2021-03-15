@@ -1,4 +1,4 @@
-use bb8_postgres::bb8::{ManageConnection, RunError};
+use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use snafu::Snafu;
 use strum::IntoStaticStr;
 use warp::reject::Reject;
@@ -13,7 +13,7 @@ pub enum Error {
     Operator {
         source: geoengine_operators::error::Error,
     },
-    HTTP {
+    Http {
         source: warp::http::Error,
     },
     Uuid {
@@ -22,7 +22,7 @@ pub enum Error {
     SerdeJson {
         source: serde_json::Error,
     },
-    IO {
+    Io {
         source: std::io::Error,
     },
     TokioJoin {
@@ -35,48 +35,69 @@ pub enum Error {
 
     TokioChannelSend,
 
+    #[snafu(display("Unable to parse query string: {}", source))]
     UnableToParseQueryString {
         source: serde_urlencoded::de::Error,
     },
 
     ServerStartup,
 
-    #[snafu(display("Registration failed: {:?}", reason))]
+    #[snafu(display("Registration failed: {}", reason))]
     RegistrationFailed {
         reason: String,
     },
+    #[snafu(display("Tried to create duplicate: {}", reason))]
+    Duplicate {
+        reason: String,
+    },
+    #[snafu(display("User does not exist or password is wrong."))]
     LoginFailed,
     LogoutFailed,
-    SessionDoesNotExist,
+    #[snafu(display("The session id is invalid."))]
     InvalidSession,
+    #[snafu(display("Header with authorization token not provided."))]
     MissingAuthorizationHeader,
+    #[snafu(display("Authentication scheme must be Bearer."))]
     InvalidAuthorizationScheme,
 
-    #[snafu(display("Authorization error {:?}", source))]
+    #[snafu(display("Authorization error: {:?}", source))]
     Authorization {
         source: Box<Error>,
     },
-
+    #[snafu(display("Failed to create the project."))]
     ProjectCreateFailed,
+    #[snafu(display("Failed to list projects."))]
     ProjectListFailed,
+    #[snafu(display("The project failed to load."))]
     ProjectLoadFailed,
+    #[snafu(display("Failed to update the project."))]
     ProjectUpdateFailed,
+    #[snafu(display("Failed to delete the project."))]
     ProjectDeleteFailed,
     PermissionFailed,
-    ProjectDBUnauthorized,
+    ProjectDbUnauthorized,
 
     InvalidNamespace,
 
-    InvalidWFSTypeNames,
+    InvalidSpatialReference,
+    #[snafu(display("SpatialReferenceMissmatch: Found {}, expected: {}", found, expected))]
+    SpatialReferenceMissmatch {
+        found: SpatialReferenceOption,
+        expected: SpatialReferenceOption,
+    },
+
+    InvalidWfsTypeNames,
 
     NoWorkflowForGivenId,
 
+    #[cfg(feature = "postgres")]
     TokioPostgres {
         source: bb8_postgres::tokio_postgres::Error,
     },
 
     TokioPostgresTimeout,
 
+    #[snafu(display("Identifier does not have the right format."))]
     InvalidUuid,
     SessionNotInitialized,
 
@@ -95,6 +116,22 @@ pub enum Error {
     },
 
     MissingSettingsDirectory,
+
+    DataSetIdTypeMissMatch,
+    UnknownDataSetId,
+    UnknownProviderId,
+
+    #[snafu(display("Parameter {} must have length between {} and {}", parameter, min, max))]
+    InvalidStringLength {
+        parameter: String,
+        min: usize,
+        max: usize,
+    },
+
+    #[snafu(display("Limit must be <= {}", limit))]
+    InvalidListLimit {
+        limit: usize,
+    },
 }
 
 impl Reject for Error {}
@@ -111,23 +148,31 @@ impl From<geoengine_operators::error::Error> for Error {
     }
 }
 
-impl From<Error> for warp::Rejection {
-    fn from(e: Error) -> Self {
-        warp::reject::custom(e)
-    }
-}
-
-impl From<RunError<<bb8_postgres::PostgresConnectionManager<bb8_postgres::tokio_postgres::NoTls> as ManageConnection>::Error>> for Error {
-    fn from(e: RunError<<bb8_postgres::PostgresConnectionManager<bb8_postgres::tokio_postgres::NoTls> as ManageConnection>::Error>) -> Self {
+#[cfg(feature = "postgres")]
+impl From<bb8_postgres::bb8::RunError<<bb8_postgres::PostgresConnectionManager<bb8_postgres::tokio_postgres::NoTls> as bb8_postgres::bb8::ManageConnection>::Error>> for Error {
+    fn from(e: bb8_postgres::bb8::RunError<<bb8_postgres::PostgresConnectionManager<bb8_postgres::tokio_postgres::NoTls> as bb8_postgres::bb8::ManageConnection>::Error>) -> Self {
         match e {
-            RunError::User(e) => Self::TokioPostgres { source: e },
-            RunError::TimedOut => Self::TokioPostgresTimeout,
+            bb8_postgres::bb8::RunError::User(e) => Self::TokioPostgres { source: e },
+            bb8_postgres::bb8::RunError::TimedOut => Self::TokioPostgresTimeout,
         }
     }
 }
 
+#[cfg(feature = "postgres")]
 impl From<bb8_postgres::tokio_postgres::error::Error> for Error {
     fn from(e: bb8_postgres::tokio_postgres::error::Error) -> Self {
         Self::TokioPostgres { source: e }
+    }
+}
+
+impl From<serde_json::Error> for Error {
+    fn from(e: serde_json::Error) -> Self {
+        Self::SerdeJson { source: e }
+    }
+}
+
+impl From<std::io::Error> for Error {
+    fn from(e: std::io::Error) -> Self {
+        Self::Io { source: e }
     }
 }

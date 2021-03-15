@@ -1,6 +1,6 @@
 use std::convert::TryFrom;
 
-use arrow::array::{ArrayBuilder, BooleanArray, PrimitiveArrayOps};
+use arrow::array::{ArrayBuilder, BooleanArray};
 use arrow::error::ArrowError;
 use geo::algorithm::intersects::Intersects;
 use serde::{Deserialize, Serialize};
@@ -8,17 +8,17 @@ use snafu::ensure;
 
 use crate::collections::VectorDataType;
 use crate::error::Error;
-use crate::primitives::{error, BoundingBox2D, GeometryRef, PrimitivesError, TypedGeometry};
+use crate::primitives::{
+    error, BoundingBox2D, GeometryRef, MultiPoint, PrimitivesError, TypedGeometry,
+};
 use crate::primitives::{Coordinate2D, Geometry};
 use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::Result;
 
 /// A trait that allows a common access to lines of `MultiLineString`s and its references
-pub trait MultiLineStringAccess<L>
-where
-    L: AsRef<[Coordinate2D]>,
-{
-    fn lines(&self) -> &[L];
+pub trait MultiLineStringAccess {
+    type L: AsRef<[Coordinate2D]>;
+    fn lines(&self) -> &[Self::L];
 }
 
 /// A representation of a simple feature multi line string
@@ -42,7 +42,8 @@ impl MultiLineString {
     }
 }
 
-impl MultiLineStringAccess<Vec<Coordinate2D>> for MultiLineString {
+impl MultiLineStringAccess for MultiLineString {
+    type L = Vec<Coordinate2D>;
     fn lines(&self) -> &[Vec<Coordinate2D>] {
         &self.coordinates
     }
@@ -67,9 +68,9 @@ impl Geometry for MultiLineString {
     }
 }
 
-impl Into<geo::MultiLineString<f64>> for &MultiLineString {
-    fn into(self) -> geo::MultiLineString<f64> {
-        let line_strings = self
+impl From<&MultiLineString> for geo::MultiLineString<f64> {
+    fn from(geometry: &MultiLineString) -> geo::MultiLineString<f64> {
+        let line_strings = geometry
             .coordinates
             .iter()
             .map(|coordinates| {
@@ -106,9 +107,7 @@ impl ArrowTyped for MultiLineString {
     >;
 
     fn arrow_data_type() -> arrow::datatypes::DataType {
-        arrow::datatypes::DataType::List(
-            arrow::datatypes::DataType::List(Coordinate2D::arrow_data_type().into()).into(),
-        )
+        MultiPoint::arrow_list_data_type()
     }
 
     fn builder_byte_size(builder: &mut Self::ArrowBuilder) -> usize {
@@ -154,9 +153,7 @@ impl ArrowTyped for MultiLineString {
                         let floats_ref = coordinates.value(coordinate_index);
                         let floats: &Float64Array = downcast_array(&floats_ref);
 
-                        coordinate_builder
-                            .values()
-                            .append_slice(floats.value_slice(0, 2))?;
+                        coordinate_builder.values().append_slice(floats.values())?;
 
                         coordinate_builder.append(true)?;
                     }
@@ -199,9 +196,7 @@ impl ArrowTyped for MultiLineString {
                     let floats_ref = coordinates.value(coordinate_index);
                     let floats: &Float64Array = downcast_array(&floats_ref);
 
-                    coordinate_builder
-                        .values()
-                        .append_slice(floats.value_slice(0, 2))?;
+                    coordinate_builder.values().append_slice(floats.values())?;
 
                     coordinate_builder.append(true)?;
                 }
@@ -264,27 +259,48 @@ impl<'g> MultiLineStringRef<'g> {
     }
 }
 
-impl<'g> MultiLineStringAccess<&'g [Coordinate2D]> for MultiLineStringRef<'g> {
+impl<'g> MultiLineStringAccess for MultiLineStringRef<'g> {
+    type L = &'g [Coordinate2D];
     fn lines(&self) -> &[&'g [Coordinate2D]] {
         &self.point_coordinates
     }
 }
 
-impl<'g> Into<geojson::Geometry> for MultiLineStringRef<'g> {
-    fn into(self) -> geojson::Geometry {
-        geojson::Geometry::new(match self.point_coordinates.len() {
+impl<'g> From<MultiLineStringRef<'g>> for geojson::Geometry {
+    fn from(geometry: MultiLineStringRef<'g>) -> geojson::Geometry {
+        geojson::Geometry::new(match geometry.point_coordinates.len() {
             1 => {
-                let coordinates = self.point_coordinates[0];
+                let coordinates = geometry.point_coordinates[0];
                 let positions = coordinates.iter().map(|c| vec![c.x, c.y]).collect();
                 geojson::Value::LineString(positions)
             }
             _ => geojson::Value::MultiLineString(
-                self.point_coordinates
+                geometry
+                    .point_coordinates
                     .iter()
                     .map(|&coordinates| coordinates.iter().map(|c| vec![c.x, c.y]).collect())
                     .collect(),
             ),
         })
+    }
+}
+
+impl<'g> From<MultiLineStringRef<'g>> for MultiLineString {
+    fn from(multi_line_string_ref: MultiLineStringRef<'g>) -> Self {
+        MultiLineString::from(&multi_line_string_ref)
+    }
+}
+
+impl<'g> From<&MultiLineStringRef<'g>> for MultiLineString {
+    fn from(multi_line_string_ref: &MultiLineStringRef<'g>) -> Self {
+        MultiLineString::new_unchecked(
+            multi_line_string_ref
+                .point_coordinates
+                .iter()
+                .cloned()
+                .map(ToOwned::to_owned)
+                .collect(),
+        )
     }
 }
 
@@ -294,9 +310,7 @@ mod tests {
 
     #[test]
     fn access() {
-        fn aggregate<T: MultiLineStringAccess<L>, L: AsRef<[Coordinate2D]>>(
-            multi_line_string: &T,
-        ) -> (usize, usize) {
+        fn aggregate<T: MultiLineStringAccess>(multi_line_string: &T) -> (usize, usize) {
             let number_of_lines = multi_line_string.lines().len();
             let number_of_coordinates = multi_line_string
                 .lines()

@@ -14,8 +14,8 @@ struct Opts {
 
 #[derive(Clap)]
 enum Protocol {
-    WMS,
-    WFS,
+    Wms,
+    Wfs,
 }
 
 /// Example of a client communicating with the geo engine
@@ -24,8 +24,8 @@ async fn main() -> Result<(), Error> {
     let opts: Opts = Opts::parse();
 
     let static_files_directory = Path::new(file!()).with_file_name(match opts.protocol {
-        Protocol::WMS => "openlayers-wms-static/",
-        Protocol::WFS => "openlayers-wfs-static/",
+        Protocol::Wms => "openlayers-wms-static/",
+        Protocol::Wfs => "openlayers-wfs-static/",
     });
 
     let (shutdown_tx, shutdown_rx) = oneshot::channel();

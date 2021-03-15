@@ -1,3 +1,16 @@
+use arrow::datatypes::{DataType, Field, Float64Type, Int64Type};
+use arrow::error::ArrowError;
+use arrow::{
+    array::{
+        as_primitive_array, as_string_array, Array, ArrayData, ArrayRef, BooleanArray, ListArray,
+        StructArray,
+    },
+    buffer::Buffer,
+};
+use serde::{Deserialize, Serialize};
+use snafu::ensure;
+
+use std::collections::hash_map;
 use std::collections::{HashMap, HashSet};
 use std::convert::{TryFrom, TryInto};
 use std::marker::PhantomData;
@@ -5,18 +18,6 @@ use std::mem;
 use std::ops::{Bound, RangeBounds};
 use std::sync::Arc;
 
-use arrow::array::{
-    as_primitive_array, as_string_array, Array, ArrayData, ArrayRef, BooleanArray, Float64Array,
-    ListArray, PrimitiveArrayOps, StructArray,
-};
-use arrow::datatypes::{DataType, Field, Float64Type, Int64Type};
-use arrow::error::ArrowError;
-use serde::{Deserialize, Serialize};
-use snafu::ensure;
-
-use crate::collections::{error, IntoGeometryIterator, VectorDataType, VectorDataTyped};
-use crate::collections::{FeatureCollectionError, IntoGeometryOptionsIterator};
-use crate::json_map;
 use crate::primitives::{
     CategoricalDataRef, DecimalDataRef, FeatureData, FeatureDataRef, FeatureDataType,
     FeatureDataValue, Geometry, NumberDataRef, TextDataRef, TimeInterval,
@@ -24,6 +25,17 @@ use crate::primitives::{
 use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::helpers::SomeIter;
 use crate::util::Result;
+use crate::{
+    collections::{error, IntoGeometryIterator, VectorDataType, VectorDataTyped},
+    operations::reproject::Reproject,
+};
+use crate::{
+    collections::{FeatureCollectionError, IntoGeometryOptionsIterator},
+    operations::reproject::CoordinateProjection,
+};
+use crate::{json_map, primitives::Coordinate2D};
+
+use super::{geo_feature_collection::ReplaceRawArrayCoords, GeometryCollection};
 
 #[allow(clippy::unsafe_derive_deserialize)]
 #[derive(Debug, Deserialize, Serialize)]
@@ -127,6 +139,20 @@ pub trait FeatureCollectionModifications {
     /// This method fails if the columns do not match
     ///
     fn append(&self, other: &Self) -> Result<Self::Output>;
+
+    /// Rename column `old_column_name` to `new_column_name`.
+    fn rename_column(&self, old_column_name: &str, new_column_name: &str) -> Result<Self::Output> {
+        self.rename_columns(&[(old_column_name, new_column_name)])
+    }
+
+    /// Rename selected columns with (from, to) tuples.
+    fn rename_columns<S1, S2>(&self, renamings: &[(S1, S2)]) -> Result<Self::Output>
+    where
+        S1: AsRef<str>,
+        S2: AsRef<str>;
+
+    /// Sorts the features in this collection by their timestamps ascending.
+    fn sort_by_time_asc(&self) -> Result<Self::Output>;
 }
 
 impl<CollectionType> FeatureCollectionModifications for FeatureCollection<CollectionType>
@@ -486,7 +512,7 @@ where
                         downcast_array(array_a),
                         downcast_array(array_b),
                     )?),
-                    _ => arrow::compute::concat(&[array_a.clone(), array_b.clone()])?,
+                    _ => arrow::compute::concat(&[array_a.as_ref(), array_b.as_ref()])?,
                 },
             ));
         }
@@ -495,6 +521,133 @@ where
             new_data.into(),
             self.types.clone(),
         ))
+    }
+
+    fn rename_columns<S1, S2>(&self, renamings: &[(S1, S2)]) -> Result<Self::Output>
+    where
+        S1: AsRef<str>,
+        S2: AsRef<str>,
+    {
+        let mut rename_map: HashMap<&str, &str> = HashMap::with_capacity(renamings.len());
+        let mut value_set: HashSet<&str> = HashSet::with_capacity(renamings.len());
+
+        for (old_column_name, new_column_name) in renamings {
+            let old_column_name = old_column_name.as_ref();
+            let new_column_name = new_column_name.as_ref();
+
+            ensure!(
+                !Self::is_reserved_name(new_column_name),
+                error::CannotAccessReservedColumn {
+                    name: new_column_name.to_string(),
+                }
+            );
+            ensure!(
+                self.table.column_by_name(old_column_name).is_some(),
+                error::ColumnDoesNotExist {
+                    name: old_column_name.to_string(),
+                }
+            );
+            ensure!(
+                self.table.column_by_name(new_column_name).is_none(),
+                error::ColumnAlreadyExists {
+                    name: new_column_name.to_string(),
+                }
+            );
+
+            if let Some(duplicate) = rename_map.insert(old_column_name, new_column_name) {
+                return Err(FeatureCollectionError::ColumnDuplicate {
+                    name: duplicate.to_string(),
+                }
+                .into());
+            }
+
+            if !value_set.insert(new_column_name) {
+                return Err(FeatureCollectionError::ColumnDuplicate {
+                    name: new_column_name.to_string(),
+                }
+                .into());
+            }
+        }
+
+        let mut columns = Vec::<arrow::datatypes::Field>::with_capacity(self.table.num_columns());
+        let mut column_values =
+            Vec::<arrow::array::ArrayRef>::with_capacity(self.table.num_columns());
+        let mut types = HashMap::<String, FeatureDataType>::with_capacity(self.table.num_columns());
+
+        // copy geometry data if feature collection is geo collection
+        if CollectionType::IS_GEOMETRY {
+            columns.push(arrow::datatypes::Field::new(
+                Self::GEOMETRY_COLUMN_NAME,
+                CollectionType::arrow_data_type(),
+                false,
+            ));
+            column_values.push(
+                self.table
+                    .column_by_name(Self::GEOMETRY_COLUMN_NAME)
+                    .expect("The geometry column must exist")
+                    .clone(),
+            );
+        }
+
+        // copy time data
+        columns.push(arrow::datatypes::Field::new(
+            Self::TIME_COLUMN_NAME,
+            TimeInterval::arrow_data_type(),
+            false,
+        ));
+        column_values.push(
+            self.table
+                .column_by_name(Self::TIME_COLUMN_NAME)
+                .expect("The time column must exist")
+                .clone(),
+        );
+
+        // copy remaining attribute data
+        for (old_column_name, column_type) in &self.types {
+            let new_column_name: &str = rename_map
+                .get(&old_column_name.as_str())
+                .unwrap_or(&old_column_name.as_str());
+
+            columns.push(arrow::datatypes::Field::new(
+                new_column_name,
+                column_type.arrow_data_type(),
+                column_type.nullable(),
+            ));
+            column_values.push(
+                self.table
+                    .column_by_name(old_column_name)
+                    .expect("The attribute column must exist")
+                    .clone(),
+            );
+
+            types.insert(new_column_name.to_string(), self.types[old_column_name]);
+        }
+
+        Ok(Self::new_from_internals(
+            struct_array_from_data(columns, column_values, self.table.len()),
+            types,
+        ))
+    }
+
+    #[allow(clippy::too_many_lines)]
+    fn sort_by_time_asc(&self) -> Result<Self::Output> {
+        let time_column = self
+            .table
+            .column_by_name(Self::TIME_COLUMN_NAME)
+            .expect("must exist");
+
+        let sort_options = Some(arrow::compute::SortOptions {
+            descending: false,
+            nulls_first: false,
+        });
+
+        let sort_indices = arrow::compute::sort_to_indices(time_column, sort_options)?;
+
+        let table_ref = arrow::compute::take(&self.table, &sort_indices, None)?;
+
+        let table = StructArray::from(table_ref.data());
+
+        Ok(Self::new_from_internals(table, self.types.clone()))
     }
 }
 
@@ -522,8 +675,11 @@ pub trait FeatureCollectionInfos {
     /// Get a copy of the column type information
     fn column_types(&self) -> HashMap<String, FeatureDataType>;
 
+    /// Return the column names of all attributes
+    fn column_names(&self) -> hash_map::Keys<String, FeatureDataType>;
+
     /// Return the names of the columns of this type
-    fn column_names_of_type(&self, column_type: FeatureDataType) -> Vec<String>;
+    fn column_names_of_type(&self, column_type: FeatureDataType) -> FilteredColumnNameIter;
 
     /// Retrieve column data
     ///
@@ -538,6 +694,24 @@ pub trait FeatureCollectionInfos {
 
     /// Returns the byte-size of this collection
     fn byte_size(&self) -> usize;
+}
+
+pub struct ColumnNamesIter<'i, I>
+where
+    I: Iterator<Item = &'i str> + 'i,
+{
+    iter: I,
+}
+
+impl<'i, I> Iterator for ColumnNamesIter<'i, I>
+where
+    I: Iterator<Item = &'i str> + 'i,
+{
+    type Item = I::Item;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next()
+    }
 }
 
 /// Transform an object to the `GeoJson` format
@@ -694,7 +868,7 @@ where
 
         unsafe {
             std::slice::from_raw_parts(
-                timestamps.raw_values() as *const crate::primitives::TimeInterval,
+                timestamps.values().as_ptr().cast::<TimeInterval>(),
                 number_of_time_intervals,
             )
         }
@@ -718,17 +892,35 @@ where
         table_size + map_size
     }
 
-    fn column_names_of_type(&self, column_type: FeatureDataType) -> Vec<String> {
-        self.types
-            .iter()
-            .filter_map(|(k, v)| {
-                if v == &column_type {
-                    Some(k.clone())
-                } else {
-                    None
-                }
-            })
-            .collect()
+    fn column_names_of_type(&self, column_type: FeatureDataType) -> FilteredColumnNameIter {
+        FilteredColumnNameIter {
+            iter: self.types.iter(),
+            column_type,
+        }
+    }
+
+    fn column_names(&self) -> hash_map::Keys<String, FeatureDataType> {
+        self.types.keys()
+    }
+}
+
+pub struct FilteredColumnNameIter<'i> {
+    iter: hash_map::Iter<'i, String, FeatureDataType>,
+    column_type: FeatureDataType,
+}
+
+impl<'i> Iterator for FilteredColumnNameIter<'i> {
+    type Item = &'i str;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let column_type = &self.column_type;
+        self.iter.find_map(|(k, v)| {
+            if v == column_type {
+                Some(k.as_str())
+            } else {
+                None
+            }
+        })
     }
 }
 
@@ -848,6 +1040,27 @@ where
         ))
     }
 
+    /// A convenient method for creating feature collections in tests
+    pub fn from_slices<F, T, DK, DV>(
+        features: &[F],
+        time_intervals: &[T],
+        data: &[(DK, DV)],
+    ) -> Result<Self>
+    where
+        F: Into<CollectionType> + Clone,
+        T: Into<TimeInterval> + Clone,
+        DK: Into<String> + Clone,
+        DV: Into<FeatureData> + Clone,
+    {
+        Self::from_data(
+            features.iter().cloned().map(Into::into).collect(),
+            time_intervals.iter().cloned().map(Into::into).collect(),
+            data.iter()
+                .map(|(k, v)| (k.clone().into(), v.clone().into()))
+                .collect(),
+        )
+    }
+
     /// Checks for name conflicts with reserved names
     pub(super) fn is_reserved_name(name: &str) -> bool {
         name == Self::GEOMETRY_COLUMN_NAME || name == Self::TIME_COLUMN_NAME
@@ -864,62 +1077,11 @@ impl<CollectionType> Clone for FeatureCollection<CollectionType> {
     }
 }
 
-impl<CollectionType> VectorDataTyped for FeatureCollection<CollectionType>
-where
-    CollectionType: Geometry,
-{
-    fn vector_data_type(&self) -> VectorDataType {
-        CollectionType::DATA_TYPE
-    }
-}
-
 impl<CollectionType> PartialEq for FeatureCollection<CollectionType>
 where
     CollectionType: Geometry + ArrowTyped,
 {
-    #[allow(clippy::too_many_lines)] // TODO: split function
     fn eq(&self, other: &Self) -> bool {
-        /// compares two `f64` typed columns
-        /// treats `f64::NAN` values as if they are equal
-        fn f64_column_equals(a: &Float64Array, b: &Float64Array) -> bool {
-            if (a.len() != b.len()) || (a.null_count() != b.null_count()) {
-                return false;
-            }
-            let number_of_values = a.len();
-
-            if a.null_count() == 0 {
-                let a_values: &[f64] = a.value_slice(0, number_of_values);
-                let b_values: &[f64] = a.value_slice(0, number_of_values);
-
-                for (&v1, &v2) in a_values.iter().zip(b_values) {
-                    match (v1.is_nan(), v2.is_nan()) {
-                        (true, true) => continue,
-                        (false, false) if float_cmp::approx_eq!(f64, v1, v2) => continue,
-                        _ => return false,
-                    }
-                }
-            } else {
-                for i in 0..number_of_values {
-                    match (a.is_null(i), b.is_null(i)) {
-                        (true, true) => continue,
-                        (false, false) => (), // need to compare values
-                        _ => return false,
-                    };
-
-                    let v1: f64 = a.value(i);
-                    let v2: f64 = b.value(i);
-
-                    match (v1.is_nan(), v2.is_nan()) {
-                        (true, true) => continue,
-                        (false, false) if float_cmp::approx_eq!(f64, v1, v2) => continue,
-                        _ => return false,
-                    }
-                }
-            }
-
-            true
-        }
-
         if self.types != other.types {
             return false;
         }
@@ -934,126 +1096,21 @@ where
             let c1 = self.table.column_by_name(key).expect("column must exist");
             let c2 = other.table.column_by_name(key).expect("column must exist");
 
-            match (c1.data_type(), c2.data_type()) {
-                (DataType::Float64, DataType::Float64) => {
-                    if !f64_column_equals(downcast_array(c1), downcast_array(c2)) {
-                        return false;
-                    }
-                }
-                (DataType::List(_), DataType::List(_)) => {
-                    // TODO: remove special treatment for geometry types on next arrow version
-
-                    match CollectionType::DATA_TYPE {
-                        VectorDataType::Data => {}
-                        VectorDataType::MultiPoint => {
-                            if !c1.equals(c2.as_ref()) {
-                                return false;
-                            }
-                        }
-                        VectorDataType::MultiLineString => {
-                            let c1_feature_offsets = c1.data();
-                            let c2_feature_offsets = c2.data();
-                            let c1_lines_offsets = c1_feature_offsets.child_data().first().unwrap();
-                            let c2_lines_offsets = c2_feature_offsets.child_data().first().unwrap();
-                            let c1_coordinates = c1_lines_offsets
-                                .child_data()
-                                .first()
-                                .unwrap()
-                                .child_data()
-                                .first()
-                                .unwrap();
-                            let c2_coordinates = c2_lines_offsets
-                                .child_data()
-                                .first()
-                                .unwrap()
-                                .child_data()
-                                .first()
-                                .unwrap();
-
-                            let feature_offsets_eq = || {
-                                c1_feature_offsets.buffers()[0].data()
-                                    == c2_feature_offsets.buffers()[0].data()
-                            };
-
-                            let lines_offsets_eq = || {
-                                c1_lines_offsets.buffers()[0].data()
-                                    == c2_lines_offsets.buffers()[0].data()
-                            };
-
-                            let coordinates_eq = || {
-                                c1_coordinates.buffers()[0].data()
-                                    == c2_coordinates.buffers()[0].data()
-                            };
-
-                            if !feature_offsets_eq() || !lines_offsets_eq() || !coordinates_eq() {
-                                return false;
-                            }
-                        }
-                        VectorDataType::MultiPolygon => {
-                            let c1_feature_offsets = c1.data();
-                            let c2_feature_offsets = c2.data();
-                            let c1_polygons_offsets =
-                                c1_feature_offsets.child_data().first().unwrap();
-                            let c2_polygons_offsets =
-                                c2_feature_offsets.child_data().first().unwrap();
-                            let c1_rings_offsets =
-                                c1_polygons_offsets.child_data().first().unwrap();
-                            let c2_rings_offsets =
-                                c2_polygons_offsets.child_data().first().unwrap();
-                            let c1_coordinates = c1_rings_offsets
-                                .child_data()
-                                .first()
-                                .unwrap()
-                                .child_data()
-                                .first()
-                                .unwrap();
-                            let c2_coordinates = c2_rings_offsets
-                                .child_data()
-                                .first()
-                                .unwrap()
-                                .child_data()
-                                .first()
-                                .unwrap();
-
-                            let feature_offsets_eq = || {
-                                c1_feature_offsets.buffers()[0].data()
-                                    == c2_feature_offsets.buffers()[0].data()
-                            };
-
-                            let polygons_offsets_eq = || {
-                                c1_polygons_offsets.buffers()[0].data()
-                                    == c2_polygons_offsets.buffers()[0].data()
-                            };
-
-                            let rings_offsets_eq = || {
-                                c1_rings_offsets.buffers()[0].data()
-                                    == c2_rings_offsets.buffers()[0].data()
-                            };
-
-                            let coordinates_eq = || {
-                                c1_coordinates.buffers()[0].data()
-                                    == c2_coordinates.buffers()[0].data()
-                            };
-
-                            if !feature_offsets_eq()
-                                || !polygons_offsets_eq()
-                                || !rings_offsets_eq()
-                                || !coordinates_eq()
-                            {
-                                return false;
-                            }
-                        }
-                    }
-                }
-                _ => {
-                    if !c1.equals(c2.as_ref()) {
-                        return false;
-                    }
-                }
+            if c1 != c2 {
+                return false;
             }
         }
 
         true
+    }
+}
+
+impl<CollectionType> VectorDataTyped for FeatureCollection<CollectionType>
+where
+    CollectionType: Geometry,
+{
+    fn vector_data_type(&self) -> VectorDataType {
+        CollectionType::DATA_TYPE
     }
 }
 
@@ -1177,13 +1234,13 @@ where
 
 /// Custom serializer for Arrow's `StructArray`
 mod struct_serde {
-    use std::fmt::Formatter;
-    use std::io::Cursor;
-
     use arrow::record_batch::RecordBatch;
     use serde::de::{SeqAccess, Visitor};
     use serde::ser::Error;
     use serde::{Deserializer, Serializer};
+
+    use std::fmt::Formatter;
+    use std::io::Cursor;
 
     use super::*;
 
@@ -1267,11 +1324,92 @@ mod struct_serde {
     }
 }
 
+impl<P, G> Reproject<P> for FeatureCollection<G>
+where
+    P: CoordinateProjection,
+    G: Geometry + ArrowTyped,
+    Self: ReplaceRawArrayCoords + GeometryCollection,
+{
+    type Out = Self;
+
+    fn reproject(&self, projector: &P) -> Result<Self::Out> {
+        // get the coordinates
+        let coords_ref = self.coordinates();
+        // reproject them...
+        let projected_coords = projector.project_coordinates(coords_ref)?;
+
+        // transform the coordinates into a byte slice and create a Buffer from it.
+        let coords_buffer = unsafe {
+            let coord_bytes: &[u8] = std::slice::from_raw_parts(
+                projected_coords.as_ptr().cast::<u8>(),
+                projected_coords.len() * std::mem::size_of::<Coordinate2D>(),
+            );
+            Buffer::from(coord_bytes)
+        };
+
+        // get the offsets (reuse)
+        let geometries_ref = self
+            .table
+            .column_by_name(Self::GEOMETRY_COLUMN_NAME)
+            .expect("There must exist a geometry column");
+
+        let feature_array = Self::replace_raw_coords(geometries_ref, coords_buffer);
+
+        let mut columns = Vec::<arrow::datatypes::Field>::with_capacity(self.table.num_columns());
+        let mut column_values =
+            Vec::<arrow::array::ArrayRef>::with_capacity(self.table.num_columns());
+
+        // copy geometry data if feature collection is geo collection
+        // if CollectionType::IS_GEOMETRY {
+        columns.push(arrow::datatypes::Field::new(
+            Self::GEOMETRY_COLUMN_NAME,
+            G::arrow_data_type(),
+            false,
+        ));
+        column_values.push(Arc::new(ListArray::from(feature_array)));
+        // }
+
+        // copy time data
+        columns.push(arrow::datatypes::Field::new(
+            Self::TIME_COLUMN_NAME,
+            TimeInterval::arrow_data_type(),
+            false,
+        ));
+        column_values.push(
+            self.table
+                .column_by_name(Self::TIME_COLUMN_NAME)
+                .expect("The time column must exist")
+                .clone(),
+        );
+
+        // copy remaining attribute data
+        for (column_name, column_type) in &self.types {
+            columns.push(arrow::datatypes::Field::new(
+                &column_name,
+                column_type.arrow_data_type(),
+                column_type.nullable(),
+            ));
+            column_values.push(
+                self.table
+                    .column_by_name(&column_name)
+                    .expect("The attribute column must exist")
+                    .clone(),
+            );
+        }
+
+        Ok(Self::new_from_internals(
+            struct_array_from_data(columns, column_values, self.table.len()),
+            self.types.clone(),
+        ))
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::primitives::{MultiPoint, NoGeometry};
-
     use super::*;
+
+    use crate::collections::DataCollection;
+    use crate::primitives::{MultiPoint, NoGeometry};
 
     #[test]
     fn is_reserved_name() {
@@ -1323,5 +1461,25 @@ mod tests {
                     + time_interval_size(i)
             );
         }
+    }
+
+    #[test]
+    fn rename_columns_fails() {
+        let collection = DataCollection::from_data(
+            vec![],
+            vec![TimeInterval::new(0, 1).unwrap(); 1],
+            [
+                ("foo".to_string(), FeatureData::Decimal(vec![1])),
+                ("bar".to_string(), FeatureData::Decimal(vec![2])),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+        )
+        .unwrap();
+
+        assert!(collection
+            .rename_columns(&[("foo", "baz"), ("bar", "baz")])
+            .is_err());
     }
 }

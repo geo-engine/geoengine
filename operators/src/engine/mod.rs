@@ -1,25 +1,33 @@
 pub use clonable_operator::{
     CloneableInitializedOperator, CloneableInitializedRasterOperator,
-    CloneableInitializedVectorOperator, CloneableRasterOperator, CloneableVectorOperator,
+    CloneableInitializedVectorOperator, CloneablePlotOperator, CloneableRasterOperator,
+    CloneableVectorOperator,
 };
-pub use execution_context::{ExecutionContext, MockExecutionContextCreator};
+pub use execution_context::{
+    ExecutionContext, MetaData, MetaDataProvider, MockExecutionContext, StaticMetaData,
+};
 pub use operator::{
-    InitializedOperator, InitializedOperatorBase, InitializedRasterOperator,
-    InitializedVectorOperator, RasterOperator, TypedOperator, VectorOperator,
+    InitializedOperator, InitializedOperatorBase, InitializedPlotOperator,
+    InitializedRasterOperator, InitializedVectorOperator, PlotOperator, RasterOperator,
+    TypedOperator, VectorOperator,
 };
 pub use operator_impl::{InitializedOperatorImpl, Operator, SourceOperator};
-pub use query::{QueryContext, QueryRectangle};
+pub use query::{MockQueryContext, QueryContext, QueryRectangle};
 pub use query_processor::{
-    QueryProcessor, RasterQueryProcessor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
-    VectorQueryProcessor,
+    PlotQueryProcessor, QueryProcessor, RasterQueryProcessor, TypedPlotQueryProcessor,
+    TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorQueryProcessor,
 };
-pub use result_descriptor::{RasterResultDescriptor, ResultDescriptor, VectorResultDescriptor};
+pub use result_descriptor::{
+    PlotResultDescriptor, RasterResultDescriptor, ResultDescriptor, TypedResultDescriptor,
+    VectorResultDescriptor,
+};
 
 mod clonable_operator;
 mod execution_context;
 mod operator;
 mod operator_impl;
 mod query;
+#[macro_use]
 mod query_processor;
 mod result_descriptor;
 
@@ -75,6 +83,22 @@ macro_rules! call_on_generic_raster_processor {
             $crate::engine::TypedRasterQueryProcessor::I64($processor_var) => $function_call,
             $crate::engine::TypedRasterQueryProcessor::F32($processor_var) => $function_call,
             $crate::engine::TypedRasterQueryProcessor::F64($processor_var) => $function_call,
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! call_on_generic_vector_processor {
+    ($typed_vector:expr, $processor_var:ident => $function_call:expr) => {
+        match $typed_vector {
+            $crate::engine::TypedVectorQueryProcessor::Data($processor_var) => $function_call,
+            $crate::engine::TypedVectorQueryProcessor::MultiPoint($processor_var) => $function_call,
+            $crate::engine::TypedVectorQueryProcessor::MultiLineString($processor_var) => {
+                $function_call
+            }
+            $crate::engine::TypedVectorQueryProcessor::MultiPolygon($processor_var) => {
+                $function_call
+            }
         }
     };
 }

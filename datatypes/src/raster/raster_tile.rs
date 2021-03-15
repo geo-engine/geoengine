@@ -1,10 +1,12 @@
 use super::{
     GeoTransform, Grid, GridBounds, GridIdx, GridIdx2D, GridIndexAccess, GridIndexAccessMut,
-    GridShape2D, GridShape3D, GridSize, GridSpaceToLinearSpace, Raster,
+    GridShape2D, GridShape3D, GridSize, GridSpaceToLinearSpace, Raster, TileInformation,
 };
-use crate::primitives::{BoundingBox2D, SpatialBounded, TemporalBounded, TimeInterval};
+use crate::primitives::{
+    BoundingBox2D, Coordinate2D, SpatialBounded, TemporalBounded, TimeInterval,
+};
 use crate::raster::data_type::FromPrimitive;
-use crate::raster::Pixel;
+use crate::raster::{CoordinatePixelAccess, Pixel};
 use crate::util::Result;
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
@@ -113,99 +115,25 @@ where
             self.global_geo_transform,
         )
     }
-}
 
-/// The `TileInformation` is used to represent the spatial position of each tile
-#[derive(PartialEq, Debug, Copy, Clone, Serialize, Deserialize)]
-pub struct TileInformation {
-    pub tile_size_in_pixels: GridShape2D,
-    pub global_tile_position: GridIdx2D,
-    pub global_geo_transform: GeoTransform,
-}
-
-impl TileInformation {
-    pub fn new(
-        global_tile_position: GridIdx2D,
-        tile_size_in_pixels: GridShape2D,
-        global_geo_transform: GeoTransform,
-    ) -> Self {
-        Self {
-            global_tile_position,
-            tile_size_in_pixels,
-            global_geo_transform,
-        }
-    }
-
-    #[allow(clippy::unused_self)]
-    pub fn local_upper_left_idx(&self) -> GridIdx2D {
-        [0, 0].into()
-    }
-
-    pub fn local_lower_left_idx(&self) -> GridIdx2D {
-        [self.tile_size_in_pixels.axis_size_y() as isize - 1, 0].into()
-    }
-
-    pub fn local_upper_right_idx(&self) -> GridIdx2D {
-        [0, self.tile_size_in_pixels.axis_size_x() as isize - 1].into()
-    }
-
-    pub fn local_lower_right_idx(&self) -> GridIdx2D {
-        let GridIdx([y, _]) = self.local_lower_left_idx();
-        let GridIdx([_, x]) = self.local_upper_right_idx();
-        [y, x].into()
-    }
-
-    pub fn global_tile_position(&self) -> GridIdx2D {
-        self.global_tile_position
-    }
-
-    pub fn global_upper_left_idx(&self) -> GridIdx2D {
-        let [tile_size_y, tile_size_x] = self.tile_size_in_pixels.into_inner();
-        self.global_tile_position() * [tile_size_y as isize, tile_size_x as isize]
-    }
-
-    pub fn global_upper_right_idx(&self) -> GridIdx2D {
-        self.global_upper_left_idx() + self.local_upper_right_idx()
-    }
-
-    pub fn global_lower_right_idx(&self) -> GridIdx2D {
-        self.global_upper_left_idx() + self.local_lower_right_idx()
-    }
-
-    pub fn global_lower_left_idx(&self) -> GridIdx2D {
-        self.global_upper_left_idx() + self.local_lower_left_idx()
-    }
-
-    pub fn tile_size_in_pixels(&self) -> GridShape2D {
-        self.tile_size_in_pixels
-    }
-
-    pub fn local_to_global_idx(&self, local_pixel_position: GridIdx2D) -> GridIdx2D {
-        self.global_upper_left_idx() + local_pixel_position
-    }
-
+    /// Use this geo transform to transform `Coordinate2D` into local grid indices and vice versa.
+    #[inline]
     pub fn tile_geo_transform(&self) -> GeoTransform {
+        let global_upper_left_idx = self.tile_position
+            * [
+                self.grid_array.axis_size_y() as isize,
+                self.grid_array.axis_size_x() as isize,
+            ];
+
         let tile_upper_left_coord = self
             .global_geo_transform
-            .grid_idx_to_coordinate_2d(self.global_upper_left_idx());
+            .grid_idx_to_coordinate_2d(global_upper_left_idx);
 
         GeoTransform::new(
             tile_upper_left_coord,
             self.global_geo_transform.x_pixel_size,
             self.global_geo_transform.y_pixel_size,
         )
-    }
-}
-
-impl SpatialBounded for TileInformation {
-    fn spatial_bounds(&self) -> BoundingBox2D {
-        let top_left_coord = self
-            .global_geo_transform
-            .grid_idx_to_coordinate_2d(self.global_upper_left_idx());
-        let lower_right_coord = self
-            .global_geo_transform
-            .grid_idx_to_coordinate_2d(self.global_lower_right_idx() + 1); // we need the border of the lower right pixel.
-        BoundingBox2D::new_upper_left_lower_right_unchecked(top_left_coord, lower_right_coord)
     }
 }
 
@@ -281,11 +209,106 @@ where
     }
 }
 
+impl<D, A, P> CoordinatePixelAccess<P> for RasterTile<D, P>
+where
+    D: GridSize + GridSpaceToLinearSpace<IndexArray = A> + GridBounds<IndexArray = A> + Clone,
+    A: AsRef<[isize]> + Into<GridIdx<A>> + Clone,
+    P: Pixel,
+    Self: GridIndexAccess<P, GridIdx2D>,
+{
+    fn pixel_value_at_coord(&self, coordinate: Coordinate2D) -> Result<P> {
+        // TODO: benchmark the impact of creating the `GeoTransform`s
+
+        let grid_index = self
+            .tile_geo_transform()
+            .coordinate_to_grid_idx_2d(coordinate);
+
+        self.get_at_grid_index(grid_index)
+    }
+
+    fn pixel_value_at_coord_unchecked(&self, coordinate: Coordinate2D) -> P {
+        let grid_index = self
+            .tile_geo_transform()
+            .coordinate_to_grid_idx_2d(coordinate);
+
+        self.get_at_grid_index_unchecked(grid_index)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::primitives::Coordinate2D;
 
     use super::*;
+    use crate::raster::Grid2D;
+
+    #[test]
+    fn coordinate_pixel_access() {
+        fn validate_coordinate<C: Into<Coordinate2D> + Copy>(
+            raster_tile: &RasterTile2D<i32>,
+            coordinate: C,
+        ) {
+            let coordinate: Coordinate2D = coordinate.into();
+
+            let tile_geo_transform = raster_tile.tile_information().tile_geo_transform();
+
+            let value_a = raster_tile.pixel_value_at_coord(coordinate);
+
+            let value_b = raster_tile
+                .get_at_grid_index(tile_geo_transform.coordinate_to_grid_idx_2d(coordinate));
+
+            match (value_a, value_b) {
+                (Ok(a), Ok(b)) => assert_eq!(a, b),
+                (Err(e1), Err(e2)) => assert_eq!(format!("{:?}", e1), format!("{:?}", e2)),
+                (Err(e), _) | (_, Err(e)) => panic!("{}", e.to_string()),
+            };
+        }
+
+        let raster_tile = RasterTile2D::new_with_tile_info(
+            TimeInterval::default(),
+            TileInformation {
+                global_geo_transform: Default::default(),
+                global_tile_position: [0, 0].into(),
+                tile_size_in_pixels: [3, 2].into(),
+            },
+            Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap(),
+        );
+
+        validate_coordinate(&raster_tile, (0.0, 0.0));
+        validate_coordinate(&raster_tile, (1.0, 0.0));
+
+        assert_eq!(
+            raster_tile.pixel_value_at_coord_unchecked((0.0, 0.0).into()),
+            1
+        );
+        assert_eq!(
+            raster_tile.pixel_value_at_coord_unchecked((1.0, 0.0).into()),
+            2
+        );
+
+        let raster_tile = RasterTile2D::new_with_tile_info(
+            TimeInterval::default(),
+            TileInformation {
+                global_geo_transform: Default::default(),
+                global_tile_position: [1, 1].into(),
+                tile_size_in_pixels: [3, 2].into(),
+            },
+            Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap(),
+        );
+
+        validate_coordinate(&raster_tile, (0.0, 0.0));
+        validate_coordinate(&raster_tile, (2.0, -3.0));
+        validate_coordinate(&raster_tile, (3.0, -3.0));
+
+        assert_eq!(
+            raster_tile.pixel_value_at_coord_unchecked((2.0, -3.0).into()),
+            1
+        );
+        assert_eq!(
+            raster_tile.pixel_value_at_coord_unchecked((3.0, -3.0).into()),
+            2
+        );
+    }
 
     #[test]
     fn tile_information_new() {
@@ -316,7 +339,7 @@ mod tests {
             GridShape2D::from([100, 100]),
             GeoTransform::default(),
         );
-        assert_eq!(ti.local_upper_left_idx(), GridIdx([0, 0]));
+        assert_eq!(ti.local_upper_left_pixel_idx(), GridIdx([0, 0]));
     }
 
     #[test]
@@ -326,7 +349,7 @@ mod tests {
             GridShape2D::from([100, 100]),
             GeoTransform::default(),
         );
-        assert_eq!(ti.local_lower_left_idx(), GridIdx([99, 0]));
+        assert_eq!(ti.local_lower_left_pixel_idx(), GridIdx([99, 0]));
     }
 
     #[test]
@@ -336,7 +359,7 @@ mod tests {
             GridShape2D::from([100, 100]),
             GeoTransform::default(),
         );
-        assert_eq!(ti.local_upper_right_idx(), GridIdx([0, 99]));
+        assert_eq!(ti.local_upper_right_pixel_idx(), GridIdx([0, 99]));
     }
 
     #[test]
@@ -346,7 +369,7 @@ mod tests {
             GridShape2D::from([100, 100]),
             GeoTransform::default(),
         );
-        assert_eq!(ti.local_lower_right_idx(), GridIdx([99, 99]));
+        assert_eq!(ti.local_lower_right_pixel_idx(), GridIdx([99, 99]));
     }
 
     #[test]
@@ -356,7 +379,7 @@ mod tests {
             GridShape2D::from([100, 100]),
             GeoTransform::default(),
         );
-        assert_eq!(ti.global_upper_left_idx(), GridIdx([0, 0]));
+        assert_eq!(ti.global_upper_left_pixel_idx(), GridIdx([0, 0]));
     }
 
     #[test]
@@ -366,7 +389,7 @@ mod tests {
             GridShape2D::from([100, 1000]),
             GeoTransform::default(),
         );
-        assert_eq!(ti.global_upper_left_idx(), GridIdx([-200, 3000]));
+        assert_eq!(ti.global_upper_left_pixel_idx(), GridIdx([-200, 3000]));
     }
 
     #[test]
@@ -376,7 +399,7 @@ mod tests {
             GridShape2D::from([100, 100]),
             GeoTransform::default(),
         );
-        assert_eq!(ti.global_upper_right_idx(), GridIdx([0, 99]));
+        assert_eq!(ti.global_upper_right_pixel_idx(), GridIdx([0, 99]));
     }
 
     #[test]
@@ -386,7 +409,7 @@ mod tests {
             GridShape2D::from([100, 1000]),
             GeoTransform::default(),
         );
-        assert_eq!(ti.global_upper_right_idx(), GridIdx([-200, 3999]));
+        assert_eq!(ti.global_upper_right_pixel_idx(), GridIdx([-200, 3999]));
     }
 
     #[test]
@@ -396,7 +419,7 @@ mod tests {
             GridShape2D::from([100, 100]),
             GeoTransform::default(),
         );
-        assert_eq!(ti.global_lower_right_idx(), GridIdx([99, 99]));
+        assert_eq!(ti.global_lower_right_pixel_idx(), GridIdx([99, 99]));
     }
 
     #[test]
@@ -406,7 +429,7 @@ mod tests {
             GridShape2D::from([100, 1000]),
             GeoTransform::default(),
         );
-        assert_eq!(ti.global_lower_right_idx(), GridIdx([-101, 3999]));
+        assert_eq!(ti.global_lower_right_pixel_idx(), GridIdx([-101, 3999]));
     }
 
     #[test]
@@ -416,7 +439,7 @@ mod tests {
             GridShape2D::from([100, 100]),
             GeoTransform::default(),
         );
-        assert_eq!(ti.global_lower_left_idx(), GridIdx([99, 0]));
+        assert_eq!(ti.global_lower_left_pixel_idx(), GridIdx([99, 0]));
     }
 
     #[test]
@@ -426,7 +449,7 @@ mod tests {
             GridShape2D::from([100, 1000]),
             GeoTransform::default(),
         );
-        assert_eq!(ti.global_lower_left_idx(), GridIdx([-101, 3000]));
+        assert_eq!(ti.global_lower_left_pixel_idx(), GridIdx([-101, 3000]));
     }
 
     #[test]
@@ -436,7 +459,10 @@ mod tests {
             GridShape2D::from([100, 100]),
             GeoTransform::default(),
         );
-        assert_eq!(ti.local_to_global_idx(GridIdx([25, 75])), GridIdx([25, 75]));
+        assert_eq!(
+            ti.local_to_global_pixel_idx(GridIdx([25, 75])),
+            GridIdx([25, 75])
+        );
     }
 
     #[test]
@@ -447,7 +473,7 @@ mod tests {
             GeoTransform::default(),
         );
         assert_eq!(
-            ti.local_to_global_idx(GridIdx([25, 75])),
+            ti.local_to_global_pixel_idx(GridIdx([25, 75])),
             GridIdx([-175, 3075])
         );
     }

@@ -1,11 +1,15 @@
+use std::convert::Infallible;
+
 use snafu::Snafu;
 
-use crate::collections::FeatureCollectionError;
+use crate::{
+    collections::FeatureCollectionError, primitives::TimeInstance,
+    spatial_reference::SpatialReference,
+};
 use crate::{
     primitives::{Coordinate2D, PrimitivesError, TimeInterval},
     raster::RasterDataType,
 };
-use std::convert::Infallible;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility = "pub(crate)")]
@@ -13,6 +17,16 @@ pub enum Error {
     #[snafu(display("Arrow internal error: {:?}", source))]
     ArrowInternal {
         source: arrow::error::ArrowError,
+    },
+
+    #[snafu(display("ProjInternal error: {:?}", source))]
+    ProjInternal {
+        source: proj::ProjError,
+    },
+    #[snafu(display("No CoordinateProjector available for: {:?} --> {:?}", from, to))]
+    NoCoordinateProjector {
+        from: SpatialReference,
+        to: SpatialReference,
     },
 
     #[snafu(display("Field is reserved or already in use: {}", name))]
@@ -145,11 +159,24 @@ pub enum Error {
     },
     InvalidTypedGridConversion,
     InvalidTypedValueConversion,
+
+    InvalidUuid,
+
+    #[snafu(display("NoDateTimeValid: {:?}", time_instance))]
+    NoDateTimeValid {
+        time_instance: TimeInstance,
+    },
 }
 
 impl From<arrow::error::ArrowError> for Error {
     fn from(source: arrow::error::ArrowError) -> Self {
         Error::ArrowInternal { source }
+    }
+}
+
+impl From<proj::ProjError> for Error {
+    fn from(source: proj::ProjError) -> Self {
+        Error::ProjInternal { source }
     }
 }
 

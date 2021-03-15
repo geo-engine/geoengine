@@ -7,10 +7,11 @@ use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::collections::HashMap;
 use std::convert::TryFrom;
+use std::str::FromStr;
 
 /// A colorizer specifies a mapping between raster values and an output image
 /// There are different variants that perform different kinds of mapping.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
 pub enum Colorizer {
     LinearGradient {
         breakpoints: Breakpoints,
@@ -97,7 +98,10 @@ impl Colorizer {
 
     /// A palette maps values as classes to a certain color.
     /// Unmapped values results in the NO DATA color
-    pub fn palette(colors: Palette, no_data_color: RgbaColor) -> Result<Self> {
+    pub fn palette(
+        colors: HashMap<NotNan<f64>, RgbaColor>,
+        no_data_color: RgbaColor,
+    ) -> Result<Self> {
         ensure!(
             !colors.is_empty() && colors.len() <= 256,
             error::Colorizer {
@@ -106,7 +110,7 @@ impl Colorizer {
         );
 
         Ok(Self::Palette {
-            colors,
+            colors: Palette(colors),
             no_data_color,
         })
     }
@@ -383,7 +387,7 @@ impl<'c> ColorMapper<'c> {
                 no_data_color,
             } => {
                 if let Ok(value) = NotNan::<f64>::new(value.as_()) {
-                    *color_map.get(&value).unwrap_or(no_data_color)
+                    *color_map.0.get(&value).unwrap_or(no_data_color)
                 } else {
                     *no_data_color
                 }
@@ -394,7 +398,7 @@ impl<'c> ColorMapper<'c> {
 }
 
 /// A container type for breakpoints that specify a value to color mapping
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
 pub struct Breakpoint {
     pub value: NotNan<f64>,
     pub color: RgbaColor,
@@ -429,10 +433,41 @@ pub type Breakpoints = Vec<Breakpoint>;
 /// A map from value to color
 ///
 /// It is assumed that is has at least one and at most 256 entries.
-pub type Palette = HashMap<NotNan<f64>, RgbaColor>;
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "SerializablePalette", into = "SerializablePalette")]
+pub struct Palette(HashMap<NotNan<f64>, RgbaColor>);
+
+/// A type that is solely for serde's serializability.
+/// You cannot serialize floats as JSON map keys.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SerializablePalette(HashMap<String, RgbaColor>);
+
+impl From<Palette> for SerializablePalette {
+    fn from(palette: Palette) -> Self {
+        Self(
+            palette
+                .0
+                .into_iter()
+                .map(|(k, v)| (k.to_string(), v))
+                .collect(),
+        )
+    }
+}
+
+impl TryFrom<SerializablePalette> for Palette {
+    type Error = <NotNan<f64> as FromStr>::Err;
+
+    fn try_from(palette: SerializablePalette) -> Result<Self, Self::Error> {
+        let mut inner = HashMap::<NotNan<f64>, RgbaColor>::with_capacity(palette.0.len());
+        for (k, v) in palette.0 {
+            inner.insert(k.parse()?, v);
+        }
+        Ok(Self(inner))
+    }
+}
 
 /// `RgbaColor` defines a 32 bit RGB color with alpha value
-#[derive(Copy, Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Copy, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct RgbaColor([u8; 4]);
 
 impl RgbaColor {
@@ -478,6 +513,10 @@ impl RgbaColor {
     ///
     /// assert_eq!(RgbaColor::black().factor_add(RgbaColor::white(), 0.5), RgbaColor::new(128, 128, 128, 255));
     /// ```
+    ///
+    /// # Panics
+    /// On debug, if factor is not in [0, 1]
+    ///
     #[allow(unstable_name_collisions)]
     pub fn factor_add(self, other: Self, factor: f64) -> Self {
         debug_assert!((0.0..=1.0).contains(&factor));
@@ -494,30 +533,11 @@ impl RgbaColor {
     }
 }
 
-// TODO: use float's clamp function once it is stable
-trait Clamp: Sized + PartialOrd {
-    /// Restrict a value to a certain interval unless it is NaN.
-    /// taken from std-lib nightly
-    fn clamp(self, min: Self, max: Self) -> Self {
-        assert!(min <= max);
-        let mut x = self;
-        if x < min {
-            x = min;
-        }
-        if x > max {
-            x = max;
-        }
-        x
-    }
-}
-
-impl Clamp for f64 {}
-
-impl Into<image::Rgba<u8>> for RgbaColor {
+impl From<RgbaColor> for image::Rgba<u8> {
     /// Transform an `RgbaColor` to its counterpart from the image crate
-    fn into(self) -> image::Rgba<u8> {
+    fn from(color: RgbaColor) -> image::Rgba<u8> {
         // [r, g, b, a]
-        image::Rgba(self.0)
+        image::Rgba(color.0)
     }
 }
 
@@ -578,5 +598,40 @@ mod tests {
         assert_eq!(color_table[3], RgbaColor::new(v2, v2, v2, 255)); // at 76
 
         assert_eq!(color_table[4], RgbaColor::white());
+    }
+
+    #[test]
+    fn serialized_palette() {
+        let colorizer = Colorizer::palette(
+            [
+                (1.0.try_into().unwrap(), RgbaColor::white()),
+                (2.0.try_into().unwrap(), RgbaColor::black()),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+            RgbaColor::transparent(),
+        )
+        .unwrap();
+
+        let serialized_colorizer = serde_json::to_value(&colorizer).unwrap();
+
+        assert_eq!(
+            serialized_colorizer,
+            serde_json::json!({
+                "Palette": {
+                    "colors": {
+                        "1": [255, 255, 255, 255],
+                        "2": [0, 0, 0, 255]
+                    },
+                    "no_data_color": [0, 0, 0, 0]
+                }
+            })
+        );
+
+        assert_eq!(
+            serde_json::from_str::<Colorizer>(&serialized_colorizer.to_string()).unwrap(),
+            colorizer
+        );
     }
 }

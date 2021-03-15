@@ -1,15 +1,20 @@
-use crate::contexts::{Context, InMemoryContext, PostgresContext};
+#[cfg(feature = "postgres")]
+use crate::contexts::PostgresContext;
+use crate::contexts::{Context, InMemoryContext};
 use crate::error;
 use crate::error::{Error, Result};
 use crate::handlers;
 use crate::handlers::handle_rejection;
 use crate::util::config;
 use crate::util::config::{get_config_element, Backend};
+#[cfg(feature = "postgres")]
 use bb8_postgres::tokio_postgres;
+#[cfg(feature = "postgres")]
 use bb8_postgres::tokio_postgres::NoTls;
 use snafu::ResultExt;
 use std::net::SocketAddr;
 use std::path::PathBuf;
+#[cfg(feature = "postgres")]
 use std::str::FromStr;
 use tokio::signal;
 use tokio::sync::oneshot::{Receiver, Sender};
@@ -41,6 +46,12 @@ macro_rules! boxed_on_debug {
     };
 }
 
+/// Starts the webserver for the Geo Engine API.
+///
+/// # Panics
+///  * may panic if the `Postgres` backend is chosen without compiling the `postgres` feature
+///
+///
 pub async fn start_server(
     shutdown_rx: Option<Receiver<()>>,
     static_files_dir: Option<PathBuf>,
@@ -68,21 +79,26 @@ pub async fn start_server(
                 shutdown_rx,
                 static_files_dir,
                 bind_address,
-                InMemoryContext::default(),
+                InMemoryContext::new_with_data().await,
             )
             .await
         }
         Backend::Postgres => {
-            eprintln!("Using Postgres backend"); // TODO: log
-            let ctx = PostgresContext::new(
-                tokio_postgres::config::Config::from_str(
-                    &get_config_element::<config::Postgres>()?.config_string,
-                )?,
-                NoTls,
-            )
-            .await?;
+            #[cfg(feature = "postgres")]
+            {
+                eprintln!("Using Postgres backend"); // TODO: log
+                let ctx = PostgresContext::new(
+                    tokio_postgres::config::Config::from_str(
+                        &get_config_element::<config::Postgres>()?.config_string,
+                    )?,
+                    NoTls,
+                )
+                .await?;
 
-            start(shutdown_rx, static_files_dir, bind_address, ctx).await
+                start(shutdown_rx, static_files_dir, bind_address, ctx).await
+            }
+            #[cfg(not(feature = "postgres"))]
+            panic!("Postgres backend was selected but the postgres feature wasn't activated during compilation")
         }
     }
 }
@@ -100,6 +116,7 @@ where
     let handler = combine!(
         handlers::workflows::register_workflow_handler(ctx.clone()),
         handlers::workflows::load_workflow_handler(ctx.clone()),
+        handlers::workflows::get_workflow_metadata_handler(ctx.clone()),
         handlers::users::register_user_handler(ctx.clone()),
         handlers::users::anonymous_handler(ctx.clone()),
         handlers::users::login_handler(ctx.clone()),
@@ -111,12 +128,15 @@ where
         handlers::projects::list_projects_handler(ctx.clone()),
         handlers::projects::update_project_handler(ctx.clone()),
         handlers::projects::delete_project_handler(ctx.clone()),
+        handlers::projects::load_project_handler(ctx.clone()),
         handlers::projects::project_versions_handler(ctx.clone()),
         handlers::projects::add_permission_handler(ctx.clone()),
         handlers::projects::remove_permission_handler(ctx.clone()),
         handlers::projects::list_permissions_handler(ctx.clone()),
+        handlers::datasets::list_datasets_handler(ctx.clone()),
         handlers::wms::wms_handler(ctx.clone()),
         handlers::wfs::wfs_handler(ctx.clone()),
+        handlers::plots::get_plot_handler(ctx.clone()),
         serve_static_directory(static_files_dir)
     )
     .recover(handle_rejection);
@@ -140,6 +160,7 @@ fn serve_static_directory(
     let has_path = path.is_some();
 
     warp::path("static")
+        .and(warp::get())
         .and_then(move || async move {
             if has_path {
                 Ok(())
@@ -168,7 +189,7 @@ mod tests {
     use super::*;
     use tokio::sync::oneshot;
 
-    /// Test the werbserver startup to ensure that tokio and warp are working properly
+    /// Test the webserver startup to ensure that `tokio` and `warp` are working properly
     #[tokio::test]
     async fn webserver_start() -> Result<(), Error> {
         let (shutdown_tx, shutdown_rx) = oneshot::channel();

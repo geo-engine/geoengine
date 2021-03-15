@@ -4,8 +4,9 @@ use snafu::ensure;
 
 use crate::error;
 use crate::error::{Error, Result};
-use crate::util::identifiers::Identifier;
 use crate::util::user_input::UserInput;
+use geoengine_datatypes::identifier;
+use geoengine_datatypes::util::Identifier;
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
 pub struct UserRegistration {

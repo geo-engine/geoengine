@@ -1,11 +1,10 @@
 use crate::engine::QueryRectangle;
-use crate::source::TilingStrategy;
 use crate::util::Result;
 use futures::stream::{FusedStream, Zip};
 use futures::Stream;
 use futures::{ready, StreamExt};
 use geoengine_datatypes::primitives::{BoundingBox2D, TimeInstance, TimeInterval};
-use geoengine_datatypes::raster::{GridSize, Pixel, RasterTile2D, TileInformation};
+use geoengine_datatypes::raster::{GridSize, Pixel, RasterTile2D, TileInformation, TilingStrategy};
 use pin_project::pin_project;
 use std::cmp::min;
 use std::pin::Pin;
@@ -76,12 +75,11 @@ where
     fn number_of_tiles_in_bbox(tile_info: &TileInformation, bbox: BoundingBox2D) -> usize {
         // TODO: get tiling strategy from stream or execution context instead of creating it here
         let strat = TilingStrategy {
-            bounding_box: bbox,
-            tile_pixel_size: tile_info.tile_size_in_pixels,
+            tile_size_in_pixels: tile_info.tile_size_in_pixels,
             geo_transform: tile_info.global_geo_transform,
         };
 
-        strat.tile_grid_box().number_of_elements()
+        strat.tile_grid_box(bbox).number_of_elements()
     }
 }
 
@@ -170,14 +168,13 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::concurrency::ThreadPool;
     use crate::engine::{
-        ExecutionContext, QueryContext, QueryProcessor, QueryRectangle, RasterOperator,
+        MockExecutionContext, MockQueryContext, QueryProcessor, QueryRectangle, RasterOperator,
         RasterResultDescriptor,
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;
-    use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution};
+    use geoengine_datatypes::primitives::{BoundingBox2D, Measurement, SpatialResolution};
     use geoengine_datatypes::raster::{Grid, RasterDataType};
     use geoengine_datatypes::spatial_reference::SpatialReference;
 
@@ -217,7 +214,8 @@ mod tests {
                 ],
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::wgs84().into(),
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    measurement: Measurement::Unitless,
                 },
             },
         }
@@ -295,23 +293,20 @@ mod tests {
                 ],
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::wgs84().into(),
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    measurement: Measurement::Unitless,
                 },
             },
         }
         .boxed();
 
-        let thread_pool = ThreadPool::new(2);
-        let exe_ctx = ExecutionContext {
-            raster_data_root: Default::default(),
-            thread_pool: thread_pool.create_context(),
-        };
+        let exe_ctx = MockExecutionContext::default();
         let query_rect = QueryRectangle {
             bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (1., 1.).into()),
             time_interval: TimeInterval::new_unchecked(0, 10),
             spatial_resolution: SpatialResolution::one(),
         };
-        let query_ctx = QueryContext {
+        let query_ctx = MockQueryContext {
             chunk_byte_size: 1024 * 1024,
         };
 
@@ -331,9 +326,9 @@ mod tests {
             .get_u8()
             .unwrap();
 
-        let source_a = |query_rect| qp1.query(query_rect, query_ctx);
+        let source_a = |query_rect| qp1.query(query_rect, &query_ctx).unwrap();
 
-        let source_b = |query_rect| qp2.query(query_rect, query_ctx);
+        let source_b = |query_rect| qp2.query(query_rect, &query_ctx).unwrap();
 
         let adapter = RasterTimeAdapter::new(source_a, source_b, query_rect);
 

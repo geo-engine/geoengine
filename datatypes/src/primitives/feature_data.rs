@@ -17,7 +17,7 @@ pub enum FeatureDataType {
     Text,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub enum FeatureData {
     Categorical(Vec<u8>), // TODO: add names to categories
     NullableCategorical(Vec<Option<u8>>),
@@ -29,7 +29,7 @@ pub enum FeatureData {
     NullableText(Vec<Option<String>>),
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub enum FeatureDataValue {
     Categorical(u8),
     NullableCategorical(Option<u8>),
@@ -79,6 +79,16 @@ impl<'f> FeatureDataRef<'f> {
             FeatureDataRef::Categorical(data_ref) => data_ref.has_nulls(),
         }
     }
+
+    /// Get the `FeatureDataValue` value at position `i`
+    pub fn get_unchecked(&self, i: usize) -> FeatureDataValue {
+        match self {
+            FeatureDataRef::Text(data_ref) => data_ref.get_unchecked(i),
+            FeatureDataRef::Number(data_ref) => data_ref.get_unchecked(i),
+            FeatureDataRef::Decimal(data_ref) => data_ref.get_unchecked(i),
+            FeatureDataRef::Categorical(data_ref) => data_ref.get_unchecked(i),
+        }
+    }
 }
 
 /// Common methods for feature data references
@@ -119,11 +129,13 @@ where
 
     /// Is any of the data elements null?
     fn has_nulls(&self) -> bool;
+
+    fn get_unchecked(&self, i: usize) -> FeatureDataValue;
 }
 
 #[derive(Clone, Debug)]
 pub struct NumberDataRef<'f> {
-    buffer: arrow::buffer::Buffer,
+    buffer: &'f [f64],
     valid_bitmap: &'f Option<arrow::bitmap::Bitmap>,
 }
 
@@ -145,25 +157,34 @@ impl<'f> DataRef<'f, f64> for NumberDataRef<'f> {
     fn has_nulls(&self) -> bool {
         self.valid_bitmap.is_some()
     }
+
+    fn get_unchecked(&self, i: usize) -> FeatureDataValue {
+        if self.has_nulls() {
+            FeatureDataValue::NullableNumber(if self.is_null(i) {
+                None
+            } else {
+                Some(self.as_ref()[i])
+            })
+        } else {
+            FeatureDataValue::Number(self.as_ref()[i])
+        }
+    }
 }
 
 impl AsRef<[f64]> for NumberDataRef<'_> {
     fn as_ref(&self) -> &[f64] {
-        unsafe { self.buffer.typed_data() }
+        self.buffer
     }
 }
 
-impl<'f> Into<FeatureDataRef<'f>> for NumberDataRef<'f> {
-    fn into(self) -> FeatureDataRef<'f> {
-        FeatureDataRef::Number(self)
+impl<'f> From<NumberDataRef<'f>> for FeatureDataRef<'f> {
+    fn from(data_ref: NumberDataRef<'f>) -> FeatureDataRef<'f> {
+        FeatureDataRef::Number(data_ref)
     }
 }
 
 impl<'f> NumberDataRef<'f> {
-    pub fn new(
-        buffer: arrow::buffer::Buffer,
-        null_bitmap: &'f Option<arrow::bitmap::Bitmap>,
-    ) -> Self {
+    pub fn new(buffer: &'f [f64], null_bitmap: &'f Option<arrow::bitmap::Bitmap>) -> Self {
         Self {
             buffer,
             valid_bitmap: null_bitmap,
@@ -173,15 +194,12 @@ impl<'f> NumberDataRef<'f> {
 
 #[derive(Clone, Debug)]
 pub struct DecimalDataRef<'f> {
-    buffer: arrow::buffer::Buffer,
+    buffer: &'f [i64],
     valid_bitmap: &'f Option<arrow::bitmap::Bitmap>,
 }
 
 impl<'f> DecimalDataRef<'f> {
-    pub fn new(
-        buffer: arrow::buffer::Buffer,
-        null_bitmap: &'f Option<arrow::bitmap::Bitmap>,
-    ) -> Self {
+    pub fn new(buffer: &'f [i64], null_bitmap: &'f Option<arrow::bitmap::Bitmap>) -> Self {
         Self {
             buffer,
             valid_bitmap: null_bitmap,
@@ -207,17 +225,29 @@ impl<'f> DataRef<'f, i64> for DecimalDataRef<'f> {
     fn has_nulls(&self) -> bool {
         self.valid_bitmap.is_some()
     }
+
+    fn get_unchecked(&self, i: usize) -> FeatureDataValue {
+        if self.has_nulls() {
+            FeatureDataValue::NullableDecimal(if self.is_null(i) {
+                None
+            } else {
+                Some(self.as_ref()[i])
+            })
+        } else {
+            FeatureDataValue::Decimal(self.as_ref()[i])
+        }
+    }
 }
 
 impl AsRef<[i64]> for DecimalDataRef<'_> {
     fn as_ref(&self) -> &[i64] {
-        unsafe { self.buffer.typed_data() }
+        self.buffer
     }
 }
 
-impl<'f> Into<FeatureDataRef<'f>> for DecimalDataRef<'f> {
-    fn into(self) -> FeatureDataRef<'f> {
-        FeatureDataRef::Decimal(self)
+impl<'f> From<DecimalDataRef<'f>> for FeatureDataRef<'f> {
+    fn from(data_ref: DecimalDataRef<'f>) -> FeatureDataRef<'f> {
+        FeatureDataRef::Decimal(data_ref)
     }
 }
 
@@ -231,7 +261,7 @@ fn null_bitmap_to_bools(null_bitmap: &Option<Bitmap>, len: usize) -> Vec<bool> {
 
 #[derive(Clone, Debug)]
 pub struct CategoricalDataRef<'f> {
-    buffer: arrow::buffer::Buffer,
+    buffer: &'f [u8],
     valid_bitmap: &'f Option<arrow::bitmap::Bitmap>,
 }
 
@@ -253,25 +283,34 @@ impl<'f> DataRef<'f, u8> for CategoricalDataRef<'f> {
     fn has_nulls(&self) -> bool {
         self.valid_bitmap.is_some()
     }
+
+    fn get_unchecked(&self, i: usize) -> FeatureDataValue {
+        if self.has_nulls() {
+            FeatureDataValue::NullableCategorical(if self.is_null(i) {
+                None
+            } else {
+                Some(self.as_ref()[i])
+            })
+        } else {
+            FeatureDataValue::Categorical(self.as_ref()[i])
+        }
+    }
 }
 
 impl AsRef<[u8]> for CategoricalDataRef<'_> {
     fn as_ref(&self) -> &[u8] {
-        self.buffer.data()
+        self.buffer
     }
 }
 
-impl<'f> Into<FeatureDataRef<'f>> for CategoricalDataRef<'f> {
-    fn into(self) -> FeatureDataRef<'f> {
-        FeatureDataRef::Categorical(self)
+impl<'f> From<CategoricalDataRef<'f>> for FeatureDataRef<'f> {
+    fn from(data_ref: CategoricalDataRef<'f>) -> FeatureDataRef<'f> {
+        FeatureDataRef::Categorical(data_ref)
     }
 }
 
 impl<'f> CategoricalDataRef<'f> {
-    pub fn new(
-        buffer: arrow::buffer::Buffer,
-        null_bitmap: &'f Option<arrow::bitmap::Bitmap>,
-    ) -> Self {
+    pub fn new(buffer: &'f [u8], null_bitmap: &'f Option<arrow::bitmap::Bitmap>) -> Self {
         Self {
             buffer,
             valid_bitmap: null_bitmap,
@@ -322,7 +361,7 @@ pub struct TextDataRef<'f> {
 
 impl<'f> AsRef<[u8]> for TextDataRef<'f> {
     fn as_ref(&self) -> &[u8] {
-        self.data_buffer.data()
+        self.data_buffer.as_slice()
     }
 }
 
@@ -341,7 +380,7 @@ impl<'r> DataRef<'r, u8> for TextDataRef<'r> {
 
             let text = unsafe {
                 byte_ptr_to_str(
-                    self.data_buffer.slice(start as usize).raw_data(),
+                    self.data_buffer.slice(start as usize).as_ptr(),
                     (end - start) as usize,
                 )
             };
@@ -395,6 +434,16 @@ impl<'r> DataRef<'r, u8> for TextDataRef<'r> {
     fn has_nulls(&self) -> bool {
         self.valid_bitmap.is_some()
     }
+
+    fn get_unchecked(&self, i: usize) -> FeatureDataValue {
+        let text = self.text_at(i).expect("unchecked").map(ToString::to_string);
+
+        if self.has_nulls() {
+            FeatureDataValue::NullableText(text)
+        } else {
+            FeatureDataValue::Text(text.expect("cannot be null"))
+        }
+    }
 }
 
 impl<'r> From<TextDataRef<'r>> for FeatureDataRef<'r> {
@@ -443,7 +492,7 @@ impl<'r> TextDataRef<'r> {
 
         let text = unsafe {
             byte_ptr_to_str(
-                self.data_buffer.slice(start as usize).raw_data(),
+                self.data_buffer.slice(start as usize).as_ptr(),
                 (end - start) as usize,
             )
         };

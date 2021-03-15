@@ -1,3 +1,30 @@
+use crate::primitives::Coordinate2D;
+use crate::util::Result;
+
+use super::primitives::{SpatialBounded, TemporalBounded};
+
+pub use self::data_type::{
+    DynamicRasterDataType, FromPrimitive, Pixel, RasterDataType, StaticRasterDataType, TypedValue,
+};
+pub use self::geo_transform::{GdalGeoTransform, GeoTransform};
+pub use self::grid::{
+    Grid, Grid1D, Grid2D, Grid3D, GridShape, GridShape1D, GridShape2D, GridShape3D,
+};
+pub use self::grid_bounds::{
+    GridBoundingBox, GridBoundingBox1D, GridBoundingBox2D, GridBoundingBox3D,
+};
+pub use self::grid_index::{GridIdx, GridIdx1D, GridIdx2D, GridIdx3D};
+pub use self::grid_traits::{
+    BoundedGrid, GridBounds, GridContains, GridIndexAccess, GridIndexAccessMut, GridIntersection,
+    GridSize, GridSpaceToLinearSpace,
+};
+pub use self::grid_typed::{TypedGrid, TypedGrid2D, TypedGrid3D};
+pub use self::operations::{blit::Blit, grid_blit::GridBlit};
+pub use self::raster_tile::{RasterTile, RasterTile2D, RasterTile3D};
+pub use self::tiling::{TileInformation, TilingSpecification, TilingStrategy};
+pub use self::typed_raster_conversion::TypedRasterConversion;
+pub use self::typed_raster_tile::{TypedRasterTile2D, TypedRasterTile3D};
+
 mod data_type;
 mod geo_transform;
 mod grid;
@@ -10,28 +37,9 @@ mod macros_raster;
 mod macros_raster_tile;
 mod operations;
 mod raster_tile;
+mod tiling;
 mod typed_raster_conversion;
 mod typed_raster_tile;
-
-pub use self::data_type::{
-    DynamicRasterDataType, FromPrimitive, Pixel, RasterDataType, StaticRasterDataType, TypedValue,
-};
-pub use self::geo_transform::{GdalGeoTransform, GeoTransform};
-
-pub use self::operations::{blit::Blit, grid_blit::GridBlit};
-
-pub use self::grid_index::{GridIdx, GridIdx1D, GridIdx2D, GridIdx3D};
-pub use self::grid_traits::{
-    BoundedGrid, GridBounds, GridContains, GridIndexAccess, GridIndexAccessMut, GridIntersection,
-    GridSize, GridSpaceToLinearSpace,
-};
-pub use self::grid_typed::{TypedGrid, TypedGrid2D, TypedGrid3D};
-pub use self::typed_raster_conversion::TypedRasterConversion;
-pub use self::typed_raster_tile::{TypedRasterTile2D, TypedRasterTile3D};
-use super::primitives::{SpatialBounded, TemporalBounded};
-pub use grid::{Grid, Grid1D, Grid2D, Grid3D, GridShape, GridShape1D, GridShape2D, GridShape3D};
-pub use grid_bounds::{GridBoundingBox, GridBoundingBox1D, GridBoundingBox2D, GridBoundingBox3D};
-pub use raster_tile::{RasterTile, RasterTile2D, RasterTile3D, TileInformation};
 
 pub trait Raster<D, T: Pixel, C>: SpatialBounded + TemporalBounded {
     /// returns the grid dimension object of type D: `GridDimension`
@@ -44,9 +52,11 @@ pub trait Raster<D, T: Pixel, C>: SpatialBounded + TemporalBounded {
     fn geo_transform(&self) -> GeoTransform;
 }
 
-pub trait CoordinatePixelAccess<T>
+pub trait CoordinatePixelAccess<P>
 where
-    T: Pixel,
+    P: Pixel,
 {
-    fn pixel_value_at_coord(&self, coordinate: (f64, f64)) -> T;
+    fn pixel_value_at_coord(&self, coordinate: Coordinate2D) -> Result<P>;
+
+    fn pixel_value_at_coord_unchecked(&self, coordinate: Coordinate2D) -> P;
 }

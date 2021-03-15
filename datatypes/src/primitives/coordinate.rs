@@ -1,16 +1,20 @@
 use crate::util::arrow::ArrowTyped;
 use arrow::array::{ArrayBuilder, BooleanArray, Float64Builder};
-use arrow::datatypes::DataType;
+use arrow::datatypes::{DataType, Field};
 use arrow::error::ArrowError;
-use geo::Coordinate;
 use ocl::OclPrm;
+#[cfg(feature = "postgres")]
 use postgres_types::{FromSql, ToSql};
+use proj::Coord;
 use serde::{Deserialize, Serialize};
-use std::{fmt, slice};
+use std::{
+    fmt,
+    ops::{Add, Div, Mul, Sub},
+    slice,
+};
 
-#[derive(
-    Clone, Copy, Debug, Deserialize, PartialEq, PartialOrd, Serialize, Default, ToSql, FromSql,
-)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, PartialOrd, Serialize, Default)]
+#[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
 #[repr(C)]
 pub struct Coordinate2D {
     pub x: f64,
@@ -36,6 +40,20 @@ impl Coordinate2D {
     ///
     pub fn new(x: f64, y: f64) -> Self {
         Self { x, y }
+    }
+
+    pub fn min_elements(&self, other: Self) -> Self {
+        Coordinate2D {
+            x: self.x.min(other.x),
+            y: self.y.min(other.y),
+        }
+    }
+
+    pub fn max_elements(&self, other: Self) -> Self {
+        Coordinate2D {
+            x: self.x.max(other.x),
+            y: self.y.max(other.y),
+        }
     }
 }
 
@@ -91,7 +109,7 @@ impl From<[f64; 2]> for Coordinate2D {
     }
 }
 
-impl Into<(f64, f64)> for Coordinate2D {
+impl From<Coordinate2D> for (f64, f64) {
     /// # Examples
     ///
     /// ```
@@ -105,32 +123,46 @@ impl Into<(f64, f64)> for Coordinate2D {
     /// assert_eq!(y, 0.04);
     /// ```
     ///
-    fn into(self) -> (f64, f64) {
-        (self.x, self.y)
+    fn from(coordinate: Coordinate2D) -> (f64, f64) {
+        (coordinate.x, coordinate.y)
     }
 }
 
-impl Into<[f64; 2]> for Coordinate2D {
-    fn into(self) -> [f64; 2] {
-        [self.x, self.y]
+impl From<Coordinate2D> for [f64; 2] {
+    fn from(coordinate: Coordinate2D) -> [f64; 2] {
+        [coordinate.x, coordinate.y]
     }
 }
 
-impl<'c> Into<&'c [f64]> for &'c Coordinate2D {
-    fn into(self) -> &'c [f64] {
-        unsafe { slice::from_raw_parts(self as *const Coordinate2D as *const f64, 2) }
+impl<'c> From<&'c Coordinate2D> for &'c [f64] {
+    fn from(coordinate: &'c Coordinate2D) -> &'c [f64] {
+        unsafe { slice::from_raw_parts((coordinate as *const Coordinate2D).cast::<f64>(), 2) }
     }
 }
 
-impl Into<geo::Coordinate<f64>> for Coordinate2D {
-    fn into(self) -> Coordinate<f64> {
-        (&self).into()
+impl From<Coordinate2D> for geo::Coordinate<f64> {
+    fn from(coordinate: Coordinate2D) -> geo::Coordinate<f64> {
+        Self::from(&coordinate)
     }
 }
 
-impl Into<geo::Coordinate<f64>> for &Coordinate2D {
-    fn into(self) -> Coordinate<f64> {
-        geo::Coordinate::from((self.x, self.y))
+impl From<&Coordinate2D> for geo::Coordinate<f64> {
+    fn from(coordinate: &Coordinate2D) -> geo::Coordinate<f64> {
+        geo::Coordinate::from((coordinate.x, coordinate.y))
+    }
+}
+
+impl Coord<f64> for Coordinate2D {
+    fn x(&self) -> f64 {
+        self.x
+    }
+
+    fn y(&self) -> f64 {
+        self.y
+    }
+
+    fn from_xy(x: f64, y: f64) -> Self {
+        Coordinate2D::new(x, y)
     }
 }
 
@@ -139,7 +171,9 @@ impl ArrowTyped for Coordinate2D {
     type ArrowBuilder = arrow::array::FixedSizeListBuilder<Float64Builder>;
 
     fn arrow_data_type() -> DataType {
-        arrow::datatypes::DataType::FixedSizeList(Box::new(arrow::datatypes::DataType::Float64), 2)
+        let nullable = true; // TODO: should actually be false, but arrow's builders set it to `true` currently
+
+        DataType::FixedSizeList(Box::new(Field::new("item", DataType::Float64, nullable)), 2)
     }
 
     fn builder_byte_size(builder: &mut Self::ArrowBuilder) -> usize {
@@ -174,8 +208,72 @@ impl ArrowTyped for Coordinate2D {
 
 impl AsRef<[f64]> for Coordinate2D {
     fn as_ref(&self) -> &[f64] {
-        let raw_ptr = self as *const Coordinate2D as *const f64;
+        let raw_ptr = (self as *const Coordinate2D).cast::<f64>();
         unsafe { std::slice::from_raw_parts(raw_ptr, 2) }
+    }
+}
+
+impl Add for Coordinate2D {
+    type Output = Coordinate2D;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Coordinate2D::new(self.x + rhs.x, self.y + rhs.y)
+    }
+}
+
+impl Add<f64> for Coordinate2D {
+    type Output = Coordinate2D;
+
+    fn add(self, rhs: f64) -> Self::Output {
+        Coordinate2D::new(self.x + rhs, self.y + rhs)
+    }
+}
+
+impl Sub for Coordinate2D {
+    type Output = Coordinate2D;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        Coordinate2D::new(self.x - rhs.x, self.y - rhs.y)
+    }
+}
+
+impl Sub<f64> for Coordinate2D {
+    type Output = Coordinate2D;
+
+    fn sub(self, rhs: f64) -> Self::Output {
+        Coordinate2D::new(self.x - rhs, self.y - rhs)
+    }
+}
+
+impl Mul for Coordinate2D {
+    type Output = Coordinate2D;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        Coordinate2D::new(self.x * rhs.x, self.y * rhs.y)
+    }
+}
+
+impl Mul<f64> for Coordinate2D {
+    type Output = Coordinate2D;
+
+    fn mul(self, rhs: f64) -> Self::Output {
+        Coordinate2D::new(self.x * rhs, self.y * rhs)
+    }
+}
+
+impl Div for Coordinate2D {
+    type Output = Coordinate2D;
+
+    fn div(self, rhs: Self) -> Self::Output {
+        Coordinate2D::new(self.x / rhs.x, self.y / rhs.y)
+    }
+}
+
+impl Div<f64> for Coordinate2D {
+    type Output = Coordinate2D;
+
+    fn div(self, rhs: f64) -> Self::Output {
+        Coordinate2D::new(self.x / rhs, self.y / rhs)
     }
 }
 
@@ -188,5 +286,53 @@ mod test {
     fn byte_size() {
         assert_eq!(mem::size_of::<Coordinate2D>(), 2 * mem::size_of::<f64>());
         assert_eq!(mem::size_of::<Coordinate2D>(), 2 * 8);
+    }
+
+    #[test]
+    fn add() {
+        let res = Coordinate2D { x: 4., y: 9. } + Coordinate2D { x: 1., y: 1. };
+        assert_eq!(res, Coordinate2D { x: 5., y: 10. })
+    }
+
+    #[test]
+    fn add_scalar() {
+        let res = Coordinate2D { x: 4., y: 9. } + 1.;
+        assert_eq!(res, Coordinate2D { x: 5., y: 10. })
+    }
+
+    #[test]
+    fn sub() {
+        let res = Coordinate2D { x: 4., y: 9. } - Coordinate2D { x: 1., y: 1. };
+        assert_eq!(res, Coordinate2D { x: 3., y: 8. })
+    }
+
+    #[test]
+    fn sub_scalar() {
+        let res = Coordinate2D { x: 4., y: 9. } - 1.;
+        assert_eq!(res, Coordinate2D { x: 3., y: 8. })
+    }
+
+    #[test]
+    fn mul() {
+        let res = Coordinate2D { x: 4., y: 9. } * Coordinate2D { x: 2., y: 2. };
+        assert_eq!(res, Coordinate2D { x: 8., y: 18. })
+    }
+
+    #[test]
+    fn mul_scalar() {
+        let res = Coordinate2D { x: 4., y: 9. } * 2.;
+        assert_eq!(res, Coordinate2D { x: 8., y: 18. })
+    }
+
+    #[test]
+    fn div() {
+        let res = Coordinate2D { x: 4., y: 8. } / Coordinate2D { x: 2., y: 2. };
+        assert_eq!(res, Coordinate2D { x: 2., y: 4. })
+    }
+
+    #[test]
+    fn div_scalar() {
+        let res = Coordinate2D { x: 4., y: 8. } / 2.;
+        assert_eq!(res, Coordinate2D { x: 2., y: 4. })
     }
 }

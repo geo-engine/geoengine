@@ -1,7 +1,7 @@
-use crate::primitives::Coordinate2D;
+use crate::primitives::{BoundingBox2D, Coordinate2D};
 use serde::{Deserialize, Serialize};
 
-use super::{GridIdx, GridIdx2D};
+use super::{GridBoundingBox2D, GridIdx, GridIdx2D};
 
 /// This is a typedef for the `GDAL GeoTransform`. It represents an affine transformation matrix.
 pub type GdalGeoTransform = [f64; 6];
@@ -25,6 +25,7 @@ impl GeoTransform {
     /// let geo_transform = GeoTransform::new((0.0, 0.0).into(), 1.0, -1.0);
     /// ```
     ///
+    #[inline]
     pub fn new(origin_coordinate: Coordinate2D, x_pixel_size: f64, y_pixel_size: f64) -> Self {
         Self {
             origin_coordinate,
@@ -42,7 +43,7 @@ impl GeoTransform {
     ///
     /// let geo_transform = GeoTransform::new_with_coordinate_x_y(0.0, 1.0, 0.0, -1.0);
     /// ```
-    ///
+    #[inline]
     pub fn new_with_coordinate_x_y(
         origin_coordinate_x: f64,
         x_pixel_size: f64,
@@ -69,6 +70,7 @@ impl GeoTransform {
     /// assert_eq!(geo_transform.grid_idx_to_coordinate_2d([0, 0].into()), (0.0, 0.0).into())
     /// ```
     ///
+    #[inline]
     pub fn grid_idx_to_coordinate_2d(&self, grid_index: GridIdx2D) -> Coordinate2D {
         let GridIdx([.., grid_index_y, grid_index_x]) = grid_index;
         let coord_x = self.origin_coordinate.x + (grid_index_x as f64) * self.x_pixel_size;
@@ -88,10 +90,19 @@ impl GeoTransform {
     /// assert_eq!(geo_transform.coordinate_to_grid_idx_2d((0.0, 0.0).into()), [0, 0].into())
     /// ```
     ///
+    #[inline]
     pub fn coordinate_to_grid_idx_2d(&self, coord: Coordinate2D) -> GridIdx2D {
         let grid_x_index = ((coord.x - self.origin_coordinate.x) / self.x_pixel_size) as isize;
         let grid_y_index = ((coord.y - self.origin_coordinate.y) / self.y_pixel_size) as isize;
         [grid_y_index, grid_x_index].into()
+    }
+
+    /// Transform a `BoundingBox2D` into a `GridBoundingBox`
+    #[inline]
+    pub fn pixel_box(&self, bounding_box: BoundingBox2D) -> GridBoundingBox2D {
+        let start = self.coordinate_to_grid_idx_2d(bounding_box.upper_left());
+        let end = self.coordinate_to_grid_idx_2d(bounding_box.lower_right());
+        GridBoundingBox2D::new_unchecked(start, end)
     }
 }
 
@@ -114,15 +125,15 @@ impl From<GdalGeoTransform> for GeoTransform {
     }
 }
 
-impl Into<GdalGeoTransform> for GeoTransform {
-    fn into(self) -> GdalGeoTransform {
+impl From<GeoTransform> for GdalGeoTransform {
+    fn from(geo_transform: GeoTransform) -> GdalGeoTransform {
         [
-            self.origin_coordinate.x,
-            self.x_pixel_size,
+            geo_transform.origin_coordinate.x,
+            geo_transform.x_pixel_size,
             0.0, // self.x_rotation,
-            self.origin_coordinate.y,
+            geo_transform.origin_coordinate.y,
             0.0, // self.y_rotation,
-            self.y_pixel_size,
+            geo_transform.y_pixel_size,
         ]
     }
 }

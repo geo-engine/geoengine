@@ -1,16 +1,19 @@
 use crate::error;
+#[cfg(feature = "postgres")]
 use postgres_types::private::BytesMut;
+#[cfg(feature = "postgres")]
 use postgres_types::{FromSql, IsNull, ToSql, Type};
 use serde::de::Visitor;
-use serde::export::Formatter;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use snafu::{Error, ResultExt};
+#[cfg(feature = "postgres")]
+use snafu::Error;
+use snafu::ResultExt;
+use std::fmt::Formatter;
 use std::str::FromStr;
 
 /// A spatial reference authority that is part of a spatial reference definition
-#[derive(
-    Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, ToSql, FromSql,
-)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
 #[serde(rename_all = "SCREAMING-KEBAB-CASE")]
 pub enum SpatialReferenceAuthority {
     Epsg,
@@ -35,7 +38,8 @@ impl std::fmt::Display for SpatialReferenceAuthority {
 }
 
 /// A spatial reference consists of an authority and a code
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, ToSql, FromSql)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
+#[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
 pub struct SpatialReference {
     authority: SpatialReferenceAuthority,
     code: u32,
@@ -47,7 +51,7 @@ impl SpatialReference {
     }
 
     /// the WGS 84 spatial reference system
-    pub fn wgs84() -> Self {
+    pub fn epsg_4326() -> Self {
         Self::new(SpatialReferenceAuthority::Epsg, 4326)
     }
 }
@@ -136,6 +140,20 @@ pub enum SpatialReferenceOption {
     Unreferenced,
 }
 
+impl SpatialReferenceOption {
+    pub fn is_spatial_ref(self) -> bool {
+        match self {
+            SpatialReferenceOption::SpatialReference(_) => true,
+            SpatialReferenceOption::Unreferenced => false,
+        }
+    }
+
+    pub fn is_unreferenced(self) -> bool {
+        !self.is_spatial_ref()
+    }
+}
+
+#[cfg(feature = "postgres")]
 impl ToSql for SpatialReferenceOption {
     fn to_sql(&self, ty: &Type, out: &mut BytesMut) -> Result<IsNull, Box<dyn Error + Sync + Send>>
     where
@@ -166,6 +184,7 @@ impl ToSql for SpatialReferenceOption {
     }
 }
 
+#[cfg(feature = "postgres")]
 impl<'a> FromSql<'a> for SpatialReferenceOption {
     fn from_sql(ty: &Type, raw: &'a [u8]) -> Result<Self, Box<dyn Error + Sync + Send>> {
         Ok(SpatialReferenceOption::SpatialReference(
@@ -191,9 +210,9 @@ impl std::fmt::Display for SpatialReferenceOption {
     }
 }
 
-impl Into<SpatialReferenceOption> for SpatialReference {
-    fn into(self) -> SpatialReferenceOption {
-        SpatialReferenceOption::SpatialReference(self)
+impl From<SpatialReference> for SpatialReferenceOption {
+    fn from(spatial_reference: SpatialReference) -> Self {
+        Self::SpatialReference(spatial_reference)
     }
 }
 
@@ -212,6 +231,15 @@ impl Serialize for SpatialReferenceOption {
         S: Serializer,
     {
         serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl From<SpatialReferenceOption> for Option<SpatialReference> {
+    fn from(s_ref: SpatialReferenceOption) -> Self {
+        match s_ref {
+            SpatialReferenceOption::SpatialReference(s) => Some(s),
+            SpatialReferenceOption::Unreferenced => None,
+        }
     }
 }
 
@@ -358,5 +386,47 @@ mod tests {
         );
 
         assert!(serde_json::from_str::<SpatialReferenceOption>("\"foo:bar\"").is_err());
+    }
+
+    #[test]
+    fn is_spatial_ref() {
+        let s_ref = SpatialReferenceOption::from(SpatialReference::epsg_4326());
+        assert!(s_ref.is_spatial_ref());
+        assert!(!s_ref.is_unreferenced());
+    }
+
+    #[test]
+    fn is_unreferenced() {
+        let s_ref = SpatialReferenceOption::Unreferenced;
+        assert!(s_ref.is_unreferenced());
+        assert!(!s_ref.is_spatial_ref());
+    }
+
+    #[test]
+    fn from_option_some() {
+        let s_ref: SpatialReferenceOption = Some(SpatialReference::epsg_4326()).into();
+        assert_eq!(
+            s_ref,
+            SpatialReferenceOption::SpatialReference(SpatialReference::epsg_4326())
+        );
+    }
+
+    #[test]
+    fn from_option_none() {
+        let s_ref: SpatialReferenceOption = None.into();
+        assert_eq!(s_ref, SpatialReferenceOption::Unreferenced);
+    }
+
+    #[test]
+    fn into_option_some() {
+        let s_ref: Option<SpatialReference> =
+            SpatialReferenceOption::SpatialReference(SpatialReference::epsg_4326()).into();
+        assert_eq!(s_ref, Some(SpatialReference::epsg_4326()));
+    }
+
+    #[test]
+    fn into_option_none() {
+        let s_ref: Option<SpatialReference> = SpatialReferenceOption::Unreferenced.into();
+        assert_eq!(s_ref, None);
     }
 }

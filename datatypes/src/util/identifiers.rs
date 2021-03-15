@@ -1,5 +1,3 @@
-use serde::{Deserialize, Serialize};
-
 pub trait Identifier: Sized {
     /// Create a new (random) identifier
     fn new() -> Self;
@@ -11,7 +9,7 @@ macro_rules! identifier {
         #[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, Clone, Copy, Hash)]
         pub struct $id_name(pub uuid::Uuid);
 
-        impl crate::util::identifiers::Identifier for $id_name {
+        impl crate::util::Identifier for $id_name {
             fn new() -> Self {
                 Self(uuid::Uuid::new_v4())
             }
@@ -33,6 +31,7 @@ macro_rules! identifier {
             }
         }
 
+        #[cfg(feature = "postgres")]
         impl<'a> postgres_types::FromSql<'a> for $id_name {
             fn from_sql(
                 ty: &postgres_types::Type,
@@ -46,6 +45,7 @@ macro_rules! identifier {
             }
         }
 
+        #[cfg(feature = "postgres")]
         impl postgres_types::ToSql for $id_name {
             fn to_sql(
                 &self,
@@ -74,18 +74,4 @@ macro_rules! identifier {
             }
         }
     };
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
-pub struct IdResponse<T: Identifier> {
-    pub id: T,
-}
-
-impl<T> IdResponse<T>
-where
-    T: Identifier,
-{
-    pub fn from_id(id: T) -> Self {
-        Self { id }
-    }
 }

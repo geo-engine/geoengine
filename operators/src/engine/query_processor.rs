@@ -1,27 +1,33 @@
 use super::query::{QueryContext, QueryRectangle};
 use crate::util::Result;
+use async_trait::async_trait;
 use futures::stream::BoxStream;
 use geoengine_datatypes::collections::{
     DataCollection, MultiLineStringCollection, MultiPolygonCollection,
 };
+use geoengine_datatypes::plots::{PlotData, PlotOutputFormat};
 use geoengine_datatypes::raster::Pixel;
 use geoengine_datatypes::{collections::MultiPointCollection, raster::RasterTile2D};
 
 /// An instantiation of an operator that produces a stream of results for a query
 pub trait QueryProcessor {
     type Output;
-    fn query(&self, query: QueryRectangle, ctx: QueryContext) -> BoxStream<Result<Self::Output>>;
+    fn query<'a>(
+        &'a self,
+        query: QueryRectangle,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<Self::Output>>>;
 }
 
 /// An instantiation of a raster operator that produces a stream of raster results for a query
 pub trait RasterQueryProcessor: Sync + Send {
     type RasterType: Pixel;
 
-    fn raster_query(
-        &self,
+    fn raster_query<'a>(
+        &'a self,
         query: QueryRectangle,
-        ctx: QueryContext,
-    ) -> BoxStream<Result<RasterTile2D<Self::RasterType>>>;
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<RasterTile2D<Self::RasterType>>>>;
 
     fn boxed(self) -> Box<dyn RasterQueryProcessor<RasterType = Self::RasterType>>
     where
@@ -37,11 +43,11 @@ where
     T: Pixel,
 {
     type RasterType = T;
-    fn raster_query(
-        &self,
+    fn raster_query<'a>(
+        &'a self,
         query: QueryRectangle,
-        ctx: QueryContext,
-    ) -> BoxStream<Result<RasterTile2D<Self::RasterType>>> {
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<RasterTile2D<Self::RasterType>>>> {
         self.query(query, ctx)
     }
 }
@@ -49,11 +55,11 @@ where
 /// An instantiation of a vector operator that produces a stream of vector results for a query
 pub trait VectorQueryProcessor: Sync + Send {
     type VectorType;
-    fn vector_query(
-        &self,
+    fn vector_query<'a>(
+        &'a self,
         query: QueryRectangle,
-        ctx: QueryContext,
-    ) -> BoxStream<Result<Self::VectorType>>;
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<Self::VectorType>>>;
 
     fn boxed(self) -> Box<dyn VectorQueryProcessor<VectorType = Self::VectorType>>
     where
@@ -69,18 +75,43 @@ where
 {
     type VectorType = VD;
 
-    fn vector_query(
-        &self,
+    fn vector_query<'a>(
+        &'a self,
         query: QueryRectangle,
-        ctx: QueryContext,
-    ) -> BoxStream<Result<Self::VectorType>> {
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
         self.query(query, ctx)
+    }
+}
+
+/// An instantiation of a plot operator that produces a stream of vector results for a query
+#[async_trait]
+pub trait PlotQueryProcessor: Sync + Send {
+    type OutputFormat;
+
+    fn plot_type(&self) -> &'static str;
+
+    async fn plot_query<'a>(
+        &'a self,
+        query: QueryRectangle,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<Self::OutputFormat>;
+
+    fn boxed(self) -> Box<dyn PlotQueryProcessor<OutputFormat = Self::OutputFormat>>
+    where
+        Self: Sized + 'static,
+    {
+        Box::new(self)
     }
 }
 
 impl<T> QueryProcessor for Box<dyn QueryProcessor<Output = T>> {
     type Output = T;
-    fn query(&self, query: QueryRectangle, ctx: QueryContext) -> BoxStream<Result<Self::Output>> {
+    fn query<'a>(
+        &'a self,
+        query: QueryRectangle,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         self.as_ref().query(query, ctx)
     }
 }
@@ -91,7 +122,11 @@ where
 {
     type Output = RasterTile2D<T>;
 
-    fn query(&self, query: QueryRectangle, ctx: QueryContext) -> BoxStream<Result<Self::Output>> {
+    fn query<'a>(
+        &'a self,
+        query: QueryRectangle,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         self.as_ref().raster_query(query, ctx)
     }
 }
@@ -101,7 +136,11 @@ where
     V: 'static,
 {
     type Output = V;
-    fn query(&self, query: QueryRectangle, ctx: QueryContext) -> BoxStream<Result<Self::Output>> {
+    fn query<'a>(
+        &'a self,
+        query: QueryRectangle,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         self.as_ref().vector_query(query, ctx)
     }
 }
@@ -230,4 +269,79 @@ impl TypedVectorQueryProcessor {
             None
         }
     }
+}
+
+/// An enum that contains all possible query processor variants
+pub enum TypedPlotQueryProcessor {
+    JsonPlain(Box<dyn PlotQueryProcessor<OutputFormat = serde_json::Value>>),
+    JsonVega(Box<dyn PlotQueryProcessor<OutputFormat = PlotData>>),
+    ImagePng(Box<dyn PlotQueryProcessor<OutputFormat = Vec<u8>>>),
+}
+
+impl From<&TypedPlotQueryProcessor> for PlotOutputFormat {
+    fn from(typed_processor: &TypedPlotQueryProcessor) -> Self {
+        match typed_processor {
+            TypedPlotQueryProcessor::JsonPlain(_) => PlotOutputFormat::JsonPlain,
+            TypedPlotQueryProcessor::JsonVega(_) => PlotOutputFormat::JsonVega,
+            TypedPlotQueryProcessor::ImagePng(_) => PlotOutputFormat::ImagePng,
+        }
+    }
+}
+
+impl TypedPlotQueryProcessor {
+    pub fn plot_type(&self) -> &'static str {
+        match self {
+            TypedPlotQueryProcessor::JsonPlain(p) => p.plot_type(),
+            TypedPlotQueryProcessor::JsonVega(p) => p.plot_type(),
+            TypedPlotQueryProcessor::ImagePng(p) => p.plot_type(),
+        }
+    }
+
+    pub fn json_plain(
+        self,
+    ) -> Option<Box<dyn PlotQueryProcessor<OutputFormat = serde_json::Value>>> {
+        if let TypedPlotQueryProcessor::JsonPlain(p) = self {
+            Some(p)
+        } else {
+            None
+        }
+    }
+
+    pub fn json_vega(self) -> Option<Box<dyn PlotQueryProcessor<OutputFormat = PlotData>>> {
+        if let TypedPlotQueryProcessor::JsonVega(p) = self {
+            Some(p)
+        } else {
+            None
+        }
+    }
+
+    pub fn image_png(self) -> Option<Box<dyn PlotQueryProcessor<OutputFormat = Vec<u8>>>> {
+        if let TypedPlotQueryProcessor::ImagePng(p) = self {
+            Some(p)
+        } else {
+            None
+        }
+    }
+}
+
+/// Maps a `TypedVectorQueryProcessor` to another `TypedVectorQueryProcessor` by calling a function on its variant.
+/// Call via `map_typed_vector_query_processor!(input, processor => function)`.
+#[macro_export]
+macro_rules! map_typed_vector_query_processor {
+    ($input:expr, $processor:ident => $function_call:expr) => {
+        map_typed_vector_query_processor!(
+            @variants $input, $processor => $function_call,
+            Data, MultiPoint, MultiLineString, MultiPolygon
+        )
+    };
+
+    (@variants $input:expr, $processor:ident => $function_call:expr, $($variant:tt),+) => {
+        match $input {
+            $(
+                $crate::engine::TypedVectorQueryProcessor::$variant($processor) => {
+                    $crate::engine::TypedVectorQueryProcessor::$variant($function_call)
+                }
+            )+
+        }
+    };
 }

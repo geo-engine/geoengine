@@ -1,13 +1,13 @@
 use crate::error;
 use crate::error::Result;
 use crate::projects::project::{
-    CreateProject, LoadVersion, Project, ProjectId, ProjectListOptions, ProjectListing,
+    CreateProject, LoadVersion, Plot, Project, ProjectId, ProjectListOptions, ProjectListing,
     ProjectVersion, ProjectVersionId, UpdateProject, UserProjectPermission,
 };
-use crate::projects::projectdb::ProjectDB;
+use crate::projects::projectdb::ProjectDb;
 use crate::users::user::UserId;
-use crate::util::identifiers::Identifier;
 use crate::util::user_input::Validated;
+use crate::util::Identifier;
 use crate::workflows::workflow::WorkflowId;
 use async_trait::async_trait;
 use bb8_postgres::PostgresConnectionManager;
@@ -19,8 +19,10 @@ use snafu::ResultExt;
 
 use super::project::{Layer, LayerInfo, LayerType, ProjectPermission, RasterInfo, VectorInfo};
 use crate::contexts::PostgresContext;
+use bb8_postgres::bb8::PooledConnection;
+use bb8_postgres::tokio_postgres::Transaction;
 
-pub struct PostgresProjectDB<Tls>
+pub struct PostgresProjectDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -30,7 +32,7 @@ where
     conn_pool: Pool<PostgresConnectionManager<Tls>>,
 }
 
-impl<Tls> PostgresProjectDB<Tls>
+impl<Tls> PostgresProjectDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -40,10 +42,100 @@ where
     pub fn new(conn_pool: Pool<PostgresConnectionManager<Tls>>) -> Self {
         Self { conn_pool }
     }
+
+    async fn list_plots(
+        &self,
+        conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
+        project_version_id: &ProjectVersionId,
+    ) -> Result<Vec<String>> {
+        let stmt = conn
+            .prepare(
+                "
+                    SELECT name
+                    FROM project_version_plots
+                    WHERE project_version_id = $1;
+                ",
+            )
+            .await?;
+
+        let plot_rows = conn.query(&stmt, &[project_version_id]).await?;
+        let plot_names = plot_rows.iter().map(|row| row.get(0)).collect();
+
+        Ok(plot_names)
+    }
+
+    async fn load_plots(
+        &self,
+        conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
+        project_version_id: &ProjectVersionId,
+    ) -> Result<Vec<Plot>> {
+        let stmt = conn
+            .prepare(
+                "
+                SELECT  
+                    name, workflow_id
+                FROM project_version_plots
+                WHERE project_version_id = $1
+                ORDER BY plot_index ASC
+                ",
+            )
+            .await?;
+
+        let rows = conn.query(&stmt, &[project_version_id]).await?;
+
+        let plots = rows
+            .into_iter()
+            .map(|row| Plot {
+                workflow: WorkflowId(row.get(2)),
+                name: row.get(1),
+            })
+            .collect();
+
+        Ok(plots)
+    }
+
+    async fn update_plots(
+        &self,
+        trans: &Transaction<'_>,
+        project_id: &ProjectId,
+        project_version_id: &ProjectVersionId,
+        plots: &[Plot],
+    ) -> Result<()> {
+        for (idx, plot) in plots.iter().enumerate() {
+            let stmt = trans
+                .prepare(
+                    "
+                    INSERT INTO project_version_plots (
+                        project_id,
+                        project_version_id,
+                        plot_index,
+                        name,
+                        workflow_id)
+                    VALUES ($1, $2, $3, $4, $5);
+                    ",
+                )
+                .await?;
+
+            trans
+                .execute(
+                    &stmt,
+                    &[
+                        project_id,
+                        project_version_id,
+                        &(idx as i32),
+                        &plot.name,
+                        &plot.workflow,
+                    ],
+                )
+                .await?;
+        }
+
+        Ok(())
+    }
 }
 
 #[async_trait]
-impl<Tls> ProjectDB for PostgresProjectDB<Tls>
+impl<Tls> ProjectDb for PostgresProjectDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -110,6 +202,7 @@ where
                 name,
                 description,
                 layer_names,
+                plot_names: self.list_plots(&conn, &project_version_id).await?,
                 changed,
             });
         }
@@ -147,6 +240,7 @@ where
             p.name, 
             p.description,
             p.bounds,
+            p.time_step,
             p.changed,
             p.author_user_id
         FROM user_project_permissions u JOIN project_versions p ON (u.project_id = p.project_id)
@@ -165,6 +259,7 @@ where
             p.name, 
             p.description,
             p.bounds,
+            p.time_step,
             p.changed,
             p.author_user_id
         FROM user_project_permissions u JOIN project_versions p ON (u.project_id = p.project_id)
@@ -180,14 +275,15 @@ where
         let name = row.get(2);
         let description = row.get(3);
         let bounds = row.get(4);
-        let changed = row.get(5);
-        let author_id = UserId(row.get(6));
+        let time_step = row.get(5);
+        let changed = row.get(6);
+        let author_id = UserId(row.get(7));
 
         let stmt = conn
             .prepare(
                 "
         SELECT  
-            layer_type, name, workflow_id, raster_colorizer
+            layer_type, name, workflow_id, raster_colorizer, visibility
         FROM project_version_layers
         WHERE project_version_id = $1
         ORDER BY layer_index ASC",
@@ -210,6 +306,7 @@ where
                 workflow: WorkflowId(row.get(3)),
                 name: row.get(1),
                 info,
+                visibility: row.get(5),
             });
         }
 
@@ -223,7 +320,9 @@ where
             name,
             description,
             layers,
+            plots: self.load_plots(&conn, &version_id).await?,
             bounds,
+            time_step,
         })
     }
 
@@ -252,10 +351,11 @@ where
                     name,
                     description,
                     bounds,
+                    time_step,
                     author_user_id,
                     changed,
                     latest)
-                    VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, TRUE);",
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, TRUE);",
             )
             .await?;
 
@@ -268,6 +368,7 @@ where
                     &project.name,
                     &project.description,
                     &project.bounds,
+                    &project.time_step,
                     &user,
                 ],
             )
@@ -311,7 +412,7 @@ where
             .await?;
         trans.execute(&stmt, &[&project.id]).await?;
 
-        let project = project.update_project(update, user);
+        let project = project.update_project(update, user)?;
 
         let stmt = trans
             .prepare(
@@ -322,10 +423,11 @@ where
                     name,
                     description,
                     bounds,
+                    time_step,
                     author_user_id,
                     changed,
                     latest)
-                VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, TRUE);",
+                VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, TRUE);",
             )
             .await?;
 
@@ -338,6 +440,7 @@ where
                     &project.name,
                     &project.description,
                     &project.bounds,
+                    &project.time_step,
                     &user,
                 ],
             )
@@ -354,8 +457,9 @@ where
                     layer_type,
                     name,
                     workflow_id,
-                    raster_colorizer)
-                VALUES ($1, $2, $3, $4, $5, $6, $7);",
+                    raster_colorizer,
+                    visibility)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8);",
                 )
                 .await?;
 
@@ -376,10 +480,14 @@ where
                         &layer.name,
                         &layer.workflow,
                         &raster_colorizer,
+                        &layer.visibility,
                     ],
                 )
                 .await?;
         }
+
+        self.update_plots(&trans, &project.id, &project.version.id, &project.plots)
+            .await?;
 
         trans.commit().await?;
 

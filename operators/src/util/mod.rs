@@ -1,4 +1,8 @@
+pub mod gdal;
 pub mod input;
+pub mod math;
+pub mod number_statistics;
+pub mod string_token;
 
 use crate::error::Error;
 use std::ops::Deref;

@@ -9,7 +9,7 @@ use async_trait::async_trait;
 
 /// Storage of user projects
 #[async_trait]
-pub trait ProjectDB: Send + Sync {
+pub trait ProjectDb: Send + Sync {
     // TODO: pass session instead of UserIdentification?
 
     /// List all data sets accessible to `user` that match the `options`

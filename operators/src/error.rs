@@ -1,4 +1,6 @@
 use chrono::ParseError;
+use geoengine_datatypes::dataset::DataSetId;
+use geoengine_datatypes::primitives::FeatureDataType;
 use snafu::Snafu;
 use std::ops::Range;
 
@@ -36,24 +38,27 @@ pub enum Error {
     },
 
     // TODO: use something more general than `Range`, e.g. `dyn RangeBounds` that can, however not be made into an object
-    #[snafu(display(
-        "InvalidNumberOfRasterInputsError: expected \"[{} .. {}]\" found \"{}\"",
-        expected.start, expected.end,
-        found
-    ))]
+    #[snafu(display("InvalidNumberOfRasterInputsError: expected \"[{} .. {}]\" found \"{}\"", expected.start, expected.end, found))]
     InvalidNumberOfRasterInputs {
         expected: Range<usize>,
         found: usize,
     },
 
-    #[snafu(display(
-        "InvalidNumberOfVectorInputsError: expected \"[{} .. {}]\" found \"{}\"",
-        expected.start, expected.end,
-        found
-    ))]
+    #[snafu(display("InvalidNumberOfVectorInputsError: expected \"[{} .. {}]\" found \"{}\"", expected.start, expected.end, found))]
     InvalidNumberOfVectorInputs {
         expected: Range<usize>,
         found: usize,
+    },
+
+    #[snafu(display("InvalidNumberOfVectorInputsError: expected \"[{} .. {}]\" found \"{}\"", expected.start, expected.end, found))]
+    InvalidNumberOfInputs {
+        expected: Range<usize>,
+        found: usize,
+    },
+
+    #[snafu(display("Column {} does not exist", column))]
+    ColumnDoesNotExist {
+        column: String,
     },
 
     #[snafu(display("GdalError: {}", source))]
@@ -62,7 +67,7 @@ pub enum Error {
     },
 
     #[snafu(display("IOError: {}", source))]
-    IO {
+    Io {
         source: std::io::Error,
     },
 
@@ -71,31 +76,31 @@ pub enum Error {
         source: serde_json::Error,
     },
 
-    OCL {
+    Ocl {
         ocl_error: ocl::error::Error,
     },
 
-    CLProgramInvalidRasterIndex,
+    ClProgramInvalidRasterIndex,
 
-    CLProgramInvalidRasterDataType,
+    ClProgramInvalidRasterDataType,
 
-    CLProgramInvalidFeaturesIndex,
+    ClProgramInvalidFeaturesIndex,
 
-    CLProgramInvalidVectorDataType,
+    ClProgramInvalidVectorDataType,
 
-    CLProgramInvalidGenericIndex,
+    ClProgramInvalidGenericIndex,
 
-    CLProgramInvalidGenericDataType,
+    ClProgramInvalidGenericDataType,
 
-    CLProgramUnspecifiedRaster,
+    ClProgramUnspecifiedRaster,
 
-    CLProgramUnspecifiedFeatures,
+    ClProgramUnspecifiedFeatures,
 
-    CLProgramUnspecifiedGenericBuffer,
+    ClProgramUnspecifiedGenericBuffer,
 
-    CLProgramInvalidColumn,
+    ClProgramInvalidColumn,
 
-    CLInvalidInputsForIterationType,
+    ClInvalidInputsForIterationType,
 
     InvalidExpression,
 
@@ -103,7 +108,14 @@ pub enum Error {
         expected: String,
         found: String,
     },
+
     InvalidOperatorType,
+
+    #[snafu(display("Column types do not match: {:?} - {:?}", left, right))]
+    ColumnTypeMismatch {
+        left: FeatureDataType,
+        right: FeatureDataType,
+    },
 
     UnknownDataset {
         name: String,
@@ -127,9 +139,39 @@ pub enum Error {
         source: chrono::format::ParseError,
     },
 
+    TimeInstanceNotDisplayable,
+
+    DataSetMetaData {
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
+
     Arrow {
         source: arrow::error::ArrowError,
     },
+
+    NoDataSetWithGivenId {
+        id: DataSetId,
+    },
+
+    RasterRootPathNotConfigured, // TODO: remove when GdalSource uses LoadingInfo
+
+    InvalidDataSetId,
+    DataSetLoadingInfoProviderMismatch,
+    UnknownDataSetId,
+
+    // TODO: this error should not be propagated to user
+    #[snafu(display("Could not open gdal data set for file path {:?}", file_path))]
+    CouldNotOpenGdalDataSet {
+        file_path: String,
+    },
+
+    FilePathNotRepresentableAsString,
+
+    TokioJoin {
+        source: tokio::task::JoinError,
+    },
+
+    OgrSourceColumnsSpecMissing,
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {
@@ -148,7 +190,7 @@ impl From<gdal::errors::GdalError> for Error {
 
 impl From<std::io::Error> for Error {
     fn from(io_error: std::io::Error) -> Self {
-        Self::IO { source: io_error }
+        Self::Io { source: io_error }
     }
 }
 
@@ -168,7 +210,7 @@ impl From<chrono::format::ParseError> for Error {
 
 impl From<ocl::Error> for Error {
     fn from(ocl_error: ocl::Error) -> Self {
-        Self::OCL { ocl_error }
+        Self::Ocl { ocl_error }
     }
 }
 

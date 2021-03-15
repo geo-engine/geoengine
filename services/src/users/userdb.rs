@@ -6,7 +6,7 @@ use crate::util::user_input::Validated;
 use async_trait::async_trait;
 
 #[async_trait]
-pub trait UserDB: Send + Sync {
+pub trait UserDb: Send + Sync {
     /// Registers a user by providing `UserRegistration` parameters
     ///
     /// # Errors

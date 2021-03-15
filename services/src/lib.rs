@@ -18,14 +18,17 @@
     clippy::type_repetition_in_bounds,
     clippy::wildcard_imports
 )]
+// enable some restriction lints
+#![warn(clippy::print_stdout, clippy::print_stderr, clippy::dbg_macro)]
 
-#[macro_use]
-pub mod util;
 pub mod contexts;
+pub mod datasets;
 pub mod error;
 pub mod handlers;
 pub mod ogc;
 pub mod projects;
 pub mod server;
 pub mod users;
+#[macro_use]
+pub mod util;
 pub mod workflows;
