@@ -128,8 +128,8 @@ impl TileInformation {
         global_geo_transform: GeoTransform,
     ) -> Self {
         Self {
-            global_tile_position,
             tile_size_in_pixels,
+            global_tile_position,
             global_geo_transform,
         }
     }
