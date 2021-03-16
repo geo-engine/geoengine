@@ -1,11 +1,15 @@
+use std::convert::Infallible;
+
 use snafu::Snafu;
 
-use crate::collections::FeatureCollectionError;
+use crate::{
+    collections::FeatureCollectionError, primitives::TimeInstance,
+    spatial_reference::SpatialReference,
+};
 use crate::{
     primitives::{Coordinate2D, PrimitivesError, TimeInterval},
     raster::RasterDataType,
 };
-use std::convert::Infallible;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility = "pub(crate)")]
@@ -13,6 +17,16 @@ pub enum Error {
     #[snafu(display("Arrow internal error: {:?}", source))]
     ArrowInternal {
         source: arrow::error::ArrowError,
+    },
+
+    #[snafu(display("ProjInternal error: {:?}", source))]
+    ProjInternal {
+        source: proj::ProjError,
+    },
+    #[snafu(display("No CoordinateProjector available for: {:?} --> {:?}", from, to))]
+    NoCoordinateProjector {
+        from: SpatialReference,
+        to: SpatialReference,
     },
 
     #[snafu(display("Field is reserved or already in use: {}", name))]
@@ -37,15 +51,26 @@ pub enum Error {
     },
 
     #[snafu(display(
-        "{} is not a valid index in the dimension {} with size {}",
+        "{:?} is not a valid index in the bounds {:?}, {:?} ",
         index,
-        dimension,
-        dimension_size
+        min_index,
+        max_index,
     ))]
     GridIndexOutOfBounds {
-        index: usize,
-        dimension: usize,
-        dimension_size: usize,
+        index: Vec<isize>,
+        min_index: Vec<isize>,
+        max_index: Vec<isize>,
+    },
+
+    #[snafu(display("Invalid GridIndex ({:?}), reason: \"{}\".", grid_index, description))]
+    InvalidGridIndex {
+        grid_index: Vec<usize>,
+        description: &'static str,
+    },
+
+    #[snafu(display("Invalid raster operation. Reason: \"{}\".", description))]
+    InvalidRasterOperation {
+        description: &'static str,
     },
 
     #[snafu(display(
@@ -114,21 +139,44 @@ pub enum Error {
         a: RasterDataType,
         b: RasterDataType,
     },
-
-    #[snafu(display("InvalidProjectionString: {}", projection_string))]
-    InvalidProjectionString {
-        projection_string: String,
+    #[snafu(display(
+        "Invalid Grid bounds: Each eleemnt in {:?} must be <= the corresponding element in {:?}.",
+        min,
+        max
+    ))]
+    InvalidGridBounds {
+        min: Vec<isize>,
+        max: Vec<isize>,
+    },
+    #[snafu(display("InvalidSpatialReferenceString: {}", spatial_reference_string))]
+    InvalidSpatialReferenceString {
+        spatial_reference_string: String,
     },
 
     #[snafu(display("ParseU32: {}", source))]
     ParseU32 {
         source: <u32 as std::str::FromStr>::Err,
     },
+    InvalidTypedGridConversion,
+    InvalidTypedValueConversion,
+
+    InvalidUuid,
+
+    #[snafu(display("NoDateTimeValid: {:?}", time_instance))]
+    NoDateTimeValid {
+        time_instance: TimeInstance,
+    },
 }
 
 impl From<arrow::error::ArrowError> for Error {
     fn from(source: arrow::error::ArrowError) -> Self {
         Error::ArrowInternal { source }
+    }
+}
+
+impl From<proj::ProjError> for Error {
+    fn from(source: proj::ProjError) -> Self {
+        Error::ProjInternal { source }
     }
 }
 

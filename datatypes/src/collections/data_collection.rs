@@ -1,4 +1,4 @@
-use crate::collections::{FeatureCollection, IntoGeometryOptionsIterator};
+use crate::collections::{FeatureCollection, FeatureCollectionInfos, IntoGeometryOptionsIterator};
 use crate::primitives::NoGeometry;
 
 /// This collection contains temporal data without geographical features.
@@ -18,9 +18,9 @@ mod tests {
     use super::*;
 
     use crate::collections::BuilderProvider;
+    use crate::collections::FeatureCollectionModifications;
     use crate::primitives::{
-        FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue, NullableDataRef,
-        TimeInterval,
+        DataRef, FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue, TimeInterval,
     };
 
     #[test]
@@ -79,7 +79,7 @@ mod tests {
     fn columns() {
         let mut builder = DataCollection::builder();
         builder
-            .add_column("a".into(), FeatureDataType::NullableDecimal)
+            .add_column("a".into(), FeatureDataType::Decimal)
             .unwrap();
         let mut builder = builder.finish_header();
 
@@ -110,7 +110,7 @@ mod tests {
 
         assert_eq!(collection.len(), 3);
 
-        if let FeatureDataRef::NullableDecimal(a_column) = collection.data("a").unwrap() {
+        if let FeatureDataRef::Decimal(a_column) = collection.data("a").unwrap() {
             assert_eq!(a_column.as_ref()[0], 42);
             assert_eq!(a_column.nulls()[1], true);
             assert_eq!(a_column.as_ref()[2], 1337);
@@ -131,11 +131,71 @@ mod tests {
         assert!(collection.remove_column("a").is_err());
 
         if let FeatureDataRef::Text(b_column) = collection.data("b").unwrap() {
-            assert_eq!(b_column.text_at(0).unwrap(), "this");
-            assert_eq!(b_column.text_at(1).unwrap(), "is");
-            assert_eq!(b_column.text_at(2).unwrap(), "magic");
+            assert_eq!(b_column.text_at(0).unwrap().unwrap(), "this");
+            assert_eq!(b_column.text_at(1).unwrap().unwrap(), "is");
+            assert_eq!(b_column.text_at(2).unwrap().unwrap(), "magic");
         } else {
             panic!("wrong type");
         }
     }
+
+    #[test]
+    fn rename_column() {
+        let collection = DataCollection::from_data(
+            vec![],
+            vec![TimeInterval::default(); 3],
+            [
+                ("foo".to_string(), FeatureData::Decimal(vec![1, 2, 3])),
+                (
+                    "bar".to_string(),
+                    FeatureData::Text(vec!["a".to_string(), "b".to_string(), "c".to_string()]),
+                ),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            vec!["bar", "foo"],
+            collection.column_types().keys().into_sorted_vec()
+        );
+
+        assert_eq!(
+            vec!["baz", "foo"],
+            collection
+                .rename_column("bar", "baz")
+                .unwrap()
+                .column_types()
+                .keys()
+                .into_sorted_vec()
+        );
+
+        assert_eq!(
+            vec!["baz", "foz"],
+            collection
+                .rename_columns(&[("foo", "foz"), ("bar", "baz")])
+                .unwrap()
+                .column_types()
+                .keys()
+                .into_sorted_vec()
+        );
+
+        assert!(collection.rename_column("foo", "bar").is_err());
+    }
+
+    trait IntoSortedVec: Iterator {
+        fn into_sorted_vec(self) -> Vec<Self::Item>
+        where
+            Self: Sized,
+            Self::Item: Ord,
+        {
+            let mut v: Vec<Self::Item> = self.collect();
+            v.sort();
+            v
+        }
+    }
+
+    impl<T: ?Sized> IntoSortedVec for T where T: Iterator {}
 }

@@ -7,10 +7,14 @@ use snafu::Snafu;
 pub enum PrimitivesError {
     UnallowedEmpty,
     UnclosedPolygonRing,
+    InvalidSpatialResolution {
+        value: f64,
+    },
     #[snafu(display("Arrow internal error: {:?}", source))]
     ArrowInternal {
         source: ArrowError,
     },
+    InvalidConversion,
 }
 
 impl From<PrimitivesError> for Error {

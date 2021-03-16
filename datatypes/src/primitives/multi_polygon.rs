@@ -1,20 +1,26 @@
-use crate::collections::VectorDataType;
-use crate::primitives::{error, GeometryRef};
-use crate::primitives::{Coordinate2D, Geometry};
-use crate::util::arrow::{downcast_array, ArrowTyped};
-use crate::util::Result;
-use arrow::array::BooleanArray;
+use std::convert::TryFrom;
+
+use arrow::array::{ArrayBuilder, BooleanArray};
 use arrow::error::ArrowError;
+use geo::intersects::Intersects;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
+use crate::collections::VectorDataType;
+use crate::error::Error;
+use crate::primitives::{
+    error, BoundingBox2D, GeometryRef, MultiLineString, PrimitivesError, TypedGeometry,
+};
+use crate::primitives::{Coordinate2D, Geometry};
+use crate::util::arrow::{downcast_array, ArrowTyped};
+use crate::util::Result;
+use arrow::datatypes::DataType;
+
 /// A trait that allows a common access to polygons of `MultiPolygon`s and its references
-pub trait MultiPolygonAccess<R, L>
-where
-    R: AsRef<[L]>,
-    L: AsRef<[Coordinate2D]>,
-{
-    fn polygons(&self) -> &[R];
+pub trait MultiPolygonAccess {
+    type L: AsRef<[Coordinate2D]>;
+    type R: AsRef<[Self::L]>;
+    fn polygons(&self) -> &[Self::R];
 }
 
 type Ring = Vec<Coordinate2D>;
@@ -69,14 +75,61 @@ impl MultiPolygon {
     }
 }
 
-impl MultiPolygonAccess<Polygon, Ring> for MultiPolygon {
-    fn polygons(&self) -> &[Polygon] {
+impl MultiPolygonAccess for MultiPolygon {
+    type R = Polygon;
+    type L = Ring;
+    fn polygons(&self) -> &[Self::R] {
         &self.polygons
     }
 }
 
 impl Geometry for MultiPolygon {
     const DATA_TYPE: VectorDataType = VectorDataType::MultiPolygon;
+
+    fn intersects_bbox(&self, bbox: &BoundingBox2D) -> bool {
+        let geo_multi_polygon: geo::MultiPolygon<f64> = self.into();
+        let geo_rect: geo::Rect<f64> = bbox.into();
+
+        for polygon in geo_multi_polygon {
+            if polygon.intersects(&geo_rect) {
+                return true;
+            }
+        }
+
+        false
+    }
+}
+
+impl From<&MultiPolygon> for geo::MultiPolygon<f64> {
+    fn from(geometry: &MultiPolygon) -> geo::MultiPolygon<f64> {
+        let polygons: Vec<geo::Polygon<f64>> = geometry
+            .polygons()
+            .iter()
+            .map(|polygon| {
+                let mut line_strings: Vec<geo::LineString<f64>> = polygon
+                    .iter()
+                    .map(|ring| geo::LineString(ring.iter().map(Into::into).collect()))
+                    .collect();
+
+                let exterior = line_strings.remove(0);
+
+                geo::Polygon::new(exterior, line_strings)
+            })
+            .collect();
+        geo::MultiPolygon(polygons)
+    }
+}
+
+impl TryFrom<TypedGeometry> for MultiPolygon {
+    type Error = Error;
+
+    fn try_from(value: TypedGeometry) -> Result<Self, Self::Error> {
+        if let TypedGeometry::MultiPolygon(geometry) = value {
+            Ok(geometry)
+        } else {
+            Err(PrimitivesError::InvalidConversion.into())
+        }
+    }
 }
 
 impl AsRef<[Polygon]> for MultiPolygon {
@@ -93,13 +146,29 @@ impl ArrowTyped for MultiPolygon {
         >,
     >;
 
-    fn arrow_data_type() -> arrow::datatypes::DataType {
-        arrow::datatypes::DataType::List(
-            arrow::datatypes::DataType::List(
-                arrow::datatypes::DataType::List(Coordinate2D::arrow_data_type().into()).into(),
-            )
-            .into(),
-        )
+    fn arrow_data_type() -> DataType {
+        MultiLineString::arrow_list_data_type()
+    }
+
+    fn builder_byte_size(builder: &mut Self::ArrowBuilder) -> usize {
+        let multi_polygon_indices_size = builder.len() * std::mem::size_of::<i32>();
+
+        let ring_builder = builder.values();
+        let ring_indices_size = ring_builder.len() * std::mem::size_of::<i32>();
+
+        let line_builder = ring_builder.values();
+        let line_indices_size = line_builder.len() * std::mem::size_of::<i32>();
+
+        let point_builder = line_builder.values();
+        let point_indices_size = point_builder.len() * std::mem::size_of::<i32>();
+
+        let coordinates_size = Coordinate2D::builder_byte_size(point_builder);
+
+        multi_polygon_indices_size
+            + ring_indices_size
+            + line_indices_size
+            + point_indices_size
+            + coordinates_size
     }
 
     fn arrow_builder(_capacity: usize) -> Self::ArrowBuilder {
@@ -137,9 +206,7 @@ impl ArrowTyped for MultiPolygon {
                             let floats_ref = coordinates.value(coordinate_index);
                             let floats: &Float64Array = downcast_array(&floats_ref);
 
-                            coordinate_builder
-                                .values()
-                                .append_slice(floats.value_slice(0, 2))?;
+                            coordinate_builder.values().append_slice(floats.values())?;
 
                             coordinate_builder.append(true)?;
                         }
@@ -191,9 +258,7 @@ impl ArrowTyped for MultiPolygon {
                         let floats_ref = coordinates.value(coordinate_index);
                         let floats: &Float64Array = downcast_array(&floats_ref);
 
-                        coordinate_builder
-                            .values()
-                            .append_slice(floats.value_slice(0, 2))?;
+                        coordinate_builder.values().append_slice(floats.values())?;
 
                         coordinate_builder.append(true)?;
                     }
@@ -281,17 +346,20 @@ impl<'g> MultiPolygonRef<'g> {
     }
 }
 
-impl<'g> MultiPolygonAccess<PolygonRef<'g>, RingRef<'g>> for MultiPolygonRef<'g> {
-    fn polygons(&self) -> &[PolygonRef<'g>] {
+impl<'g> MultiPolygonAccess for MultiPolygonRef<'g> {
+    type R = PolygonRef<'g>;
+    type L = RingRef<'g>;
+
+    fn polygons(&self) -> &[Self::R] {
         &self.polygons
     }
 }
 
-impl<'g> Into<geojson::Geometry> for MultiPolygonRef<'g> {
-    fn into(self) -> geojson::Geometry {
-        geojson::Geometry::new(match self.polygons.len() {
+impl<'g> From<MultiPolygonRef<'g>> for geojson::Geometry {
+    fn from(geometry: MultiPolygonRef<'g>) -> geojson::Geometry {
+        geojson::Geometry::new(match geometry.polygons.len() {
             1 => {
-                let polygon = &self.polygons[0];
+                let polygon = &geometry.polygons[0];
                 geojson::Value::Polygon(
                     polygon
                         .iter()
@@ -300,7 +368,8 @@ impl<'g> Into<geojson::Geometry> for MultiPolygonRef<'g> {
                 )
             }
             _ => geojson::Value::MultiPolygon(
-                self.polygons
+                geometry
+                    .polygons
                     .iter()
                     .map(|polygon| {
                         polygon
@@ -314,27 +383,43 @@ impl<'g> Into<geojson::Geometry> for MultiPolygonRef<'g> {
     }
 }
 
+impl<'g> From<MultiPolygonRef<'g>> for MultiPolygon {
+    fn from(multi_point_ref: MultiPolygonRef<'g>) -> Self {
+        MultiPolygon::from(&multi_point_ref)
+    }
+}
+
+impl<'g> From<&MultiPolygonRef<'g>> for MultiPolygon {
+    fn from(multi_point_ref: &MultiPolygonRef<'g>) -> Self {
+        MultiPolygon::new_unchecked(
+            multi_point_ref
+                .polygons
+                .iter()
+                .map(|polygon| polygon.iter().cloned().map(ToOwned::to_owned).collect())
+                .collect(),
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn access() {
-        fn aggregate<T: MultiPolygonAccess<R, L>, R: AsRef<[L]>, L: AsRef<[Coordinate2D]>>(
-            multi_line_string: &T,
-        ) -> (usize, usize, usize) {
+        fn aggregate<T: MultiPolygonAccess>(multi_line_string: &T) -> (usize, usize, usize) {
             let number_of_polygons = multi_line_string.polygons().len();
             let number_of_rings = multi_line_string
                 .polygons()
                 .iter()
                 .map(AsRef::as_ref)
-                .map(<[L]>::len)
+                .map(<[_]>::len)
                 .sum();
             let number_of_coordinates = multi_line_string
                 .polygons()
                 .iter()
                 .map(AsRef::as_ref)
-                .flat_map(<[L]>::iter)
+                .flat_map(<[_]>::iter)
                 .map(AsRef::as_ref)
                 .map(<[Coordinate2D]>::len)
                 .sum();

@@ -6,11 +6,11 @@ use crate::engine::{
 use crate::engine::{QueryContext, QueryProcessor, QueryRectangle};
 use crate::util::Result;
 use futures::stream::{self, BoxStream, StreamExt};
-use geoengine_datatypes::collections::FeatureCollection;
+use geoengine_datatypes::collections::{FeatureCollection, FeatureCollectionInfos};
 use geoengine_datatypes::primitives::{
     Geometry, MultiLineString, MultiPoint, MultiPolygon, NoGeometry,
 };
-use geoengine_datatypes::projection::Projection;
+use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use serde::{Deserialize, Serialize};
 
@@ -18,21 +18,24 @@ pub struct MockFeatureCollectionSourceProcessor<G>
 where
     G: Geometry + ArrowTyped,
 {
-    collection: FeatureCollection<G>,
+    collections: Vec<FeatureCollection<G>>,
 }
 
 impl<G> QueryProcessor for MockFeatureCollectionSourceProcessor<G>
 where
-    G: Geometry + ArrowTyped + Send + Sync,
+    G: Geometry + ArrowTyped + Send + Sync + 'static,
 {
     type Output = FeatureCollection<G>;
 
-    fn query(&self, _query: QueryRectangle, _ctx: QueryContext) -> BoxStream<Result<Self::Output>> {
+    fn query<'a>(
+        &'a self,
+        _query: QueryRectangle,
+        _ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         // TODO: chunk it up
         // let chunk_size = ctx.chunk_byte_size / std::mem::size_of::<Coordinate2D>();
 
-        let collection = self.collection.clone();
-        stream::once(async move { Ok(collection) }).boxed()
+        Ok(stream::iter(self.collections.iter().map(|c| Ok(c.clone()))).boxed())
     }
 }
 
@@ -41,10 +44,25 @@ pub struct MockFeatureCollectionSourceParams<G>
 where
     G: Geometry + ArrowTyped,
 {
-    pub collection: FeatureCollection<G>,
+    pub collections: Vec<FeatureCollection<G>>,
 }
 
 pub type MockFeatureCollectionSource<G> = SourceOperator<MockFeatureCollectionSourceParams<G>>;
+
+impl<G> MockFeatureCollectionSource<G>
+where
+    G: Geometry + ArrowTyped,
+{
+    pub fn single(collection: FeatureCollection<G>) -> Self {
+        Self::multiple(vec![collection])
+    }
+
+    pub fn multiple(collections: Vec<FeatureCollection<G>>) -> Self {
+        Self {
+            params: MockFeatureCollectionSourceParams { collections },
+        }
+    }
+}
 
 // TODO: use single implementation once
 //      "deserialization of generic impls is not supported yet; use #[typetag::serialize] to generate serialization only"
@@ -69,36 +87,31 @@ macro_rules! impl_mock_feature_collection_source {
         impl VectorOperator for $newtype {
             fn initialize(
                 self: Box<Self>,
-                context: ExecutionContext,
+                _context: &dyn ExecutionContext,
             ) -> Result<Box<InitializedVectorOperator>> {
-                InitializedOperatorImpl::create(
-                    self.params,
-                    context,
-                    |_, _, _, _| Ok(()),
-                    |_, _, _, _, _| {
-                        Ok(VectorResultDescriptor {
-                            data_type: <$geometry>::DATA_TYPE,
-                            projection: Projection::wgs84().into(), // TODO: get from `FeatureCollection`
-                        })
-                    },
-                    vec![],
-                    vec![],
+                let result_descriptor = VectorResultDescriptor {
+                    data_type: <$geometry>::DATA_TYPE,
+                    spatial_reference: SpatialReference::epsg_4326().into(), // TODO: get from `FeatureCollection`
+                    columns: self.params.collections[0].column_types(),
+                };
+
+                Ok(
+                    InitializedOperatorImpl::new(result_descriptor, vec![], vec![], self.params)
+                        .boxed(),
                 )
-                .map(InitializedOperatorImpl::boxed)
             }
         }
 
         impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
             for InitializedOperatorImpl<
-                MockFeatureCollectionSourceParams<$geometry>,
                 VectorResultDescriptor,
-                (),
+                MockFeatureCollectionSourceParams<$geometry>,
             >
         {
             fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
                 Ok(TypedVectorQueryProcessor::$output(
                     MockFeatureCollectionSourceProcessor {
-                        collection: self.params.collection.clone(),
+                        collections: self.state.collections.clone(),
                     }
                     .boxed(),
                 ))
@@ -115,9 +128,10 @@ impl_mock_feature_collection_source!(MultiPolygon, MultiPolygon);
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::{MockExecutionContext, MockQueryContext};
     use futures::executor::block_on_stream;
-    use geoengine_datatypes::collections::MultiPointCollection;
     use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, FeatureData, TimeInterval};
+    use geoengine_datatypes::{collections::MultiPointCollection, primitives::SpatialResolution};
 
     #[test]
     fn serde() {
@@ -134,66 +148,66 @@ mod tests {
         )
         .unwrap();
 
-        let source = MockFeatureCollectionSource {
-            params: MockFeatureCollectionSourceParams { collection },
-        }
-        .boxed();
+        let source = MockFeatureCollectionSource::single(collection).boxed();
 
         let serialized = serde_json::to_string(&source).unwrap();
         let collection_bytes = [
-            65, 82, 82, 79, 87, 49, 0, 0, 144, 1, 0, 0, 16, 0, 0, 0, 0, 0, 10, 0, 14, 0, 12, 0, 11,
+            65, 82, 82, 79, 87, 49, 0, 0, 180, 1, 0, 0, 16, 0, 0, 0, 0, 0, 10, 0, 14, 0, 12, 0, 11,
             0, 4, 0, 10, 0, 0, 0, 20, 0, 0, 0, 0, 0, 0, 1, 3, 0, 10, 0, 12, 0, 0, 0, 8, 0, 4, 0,
-            10, 0, 0, 0, 8, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 180, 0, 0, 0, 72, 0, 0, 0,
-            20, 0, 0, 0, 16, 0, 20, 0, 16, 0, 14, 0, 15, 0, 4, 0, 0, 0, 8, 0, 16, 0, 0, 0, 16, 0,
-            0, 0, 24, 0, 0, 0, 0, 0, 1, 2, 20, 0, 0, 0, 176, 255, 255, 255, 64, 0, 0, 0, 0, 0, 0,
-            1, 0, 0, 0, 0, 6, 0, 0, 0, 102, 111, 111, 98, 97, 114, 0, 0, 168, 255, 255, 255, 24, 0,
-            0, 0, 12, 0, 0, 0, 0, 0, 0, 16, 60, 0, 0, 0, 1, 0, 0, 0, 12, 0, 0, 0, 102, 255, 255,
-            255, 2, 0, 0, 0, 152, 255, 255, 255, 0, 0, 0, 2, 16, 0, 0, 0, 24, 0, 0, 0, 8, 0, 12, 0,
-            4, 0, 11, 0, 8, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 6, 0, 0, 0, 95, 95, 116,
-            105, 109, 101, 0, 0, 16, 0, 20, 0, 16, 0, 0, 0, 15, 0, 4, 0, 0, 0, 8, 0, 16, 0, 0, 0,
-            28, 0, 0, 0, 12, 0, 0, 0, 0, 0, 0, 12, 128, 0, 0, 0, 1, 0, 0, 0, 28, 0, 0, 0, 4, 0, 4,
-            0, 4, 0, 0, 0, 16, 0, 16, 0, 0, 0, 0, 0, 7, 0, 8, 0, 0, 0, 12, 0, 16, 0, 0, 0, 0, 0, 0,
-            16, 24, 0, 0, 0, 4, 0, 0, 0, 1, 0, 0, 0, 36, 0, 0, 0, 0, 0, 6, 0, 8, 0, 4, 0, 6, 0, 0,
-            0, 2, 0, 0, 0, 16, 0, 18, 0, 0, 0, 0, 0, 7, 0, 8, 0, 0, 0, 12, 0, 16, 0, 0, 0, 0, 0, 0,
-            3, 16, 0, 0, 0, 20, 0, 0, 0, 0, 0, 6, 0, 8, 0, 6, 0, 6, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0,
-            0, 10, 0, 0, 0, 95, 95, 103, 101, 111, 109, 101, 116, 114, 121, 0, 0, 16, 0, 0, 0, 12,
-            0, 26, 0, 24, 0, 23, 0, 4, 0, 8, 0, 12, 0, 0, 0, 32, 0, 0, 0, 184, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 3, 3, 0, 10, 0, 24, 0, 12, 0, 8, 0, 4, 0, 10, 0, 0, 0, 124, 0, 0,
-            0, 16, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 6, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0,
-            0, 0, 0, 0, 16, 0, 0, 0, 0, 0, 0, 0, 24, 0, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0,
-            32, 0, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 40, 0, 0, 0, 0, 0, 0, 0, 48, 0, 0, 0,
-            0, 0, 0, 0, 88, 0, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 96, 0, 0, 0, 0, 0, 0, 0,
-            8, 0, 0, 0, 0, 0, 0, 0, 104, 0, 0, 0, 0, 0, 0, 0, 48, 0, 0, 0, 0, 0, 0, 0, 152, 0, 0,
-            0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 160, 0, 0, 0, 0, 0, 0, 0, 24, 0, 0, 0, 0, 0, 0,
+            10, 0, 0, 0, 8, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 180, 0, 0, 0, 56, 0, 0, 0,
+            4, 0, 0, 0, 52, 255, 255, 255, 16, 0, 0, 0, 24, 0, 0, 0, 0, 0, 1, 2, 20, 0, 0, 0, 172,
+            255, 255, 255, 64, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 6, 0, 0, 0, 102, 111, 111, 98, 97,
+            114, 0, 0, 152, 255, 255, 255, 24, 0, 0, 0, 12, 0, 0, 0, 0, 0, 0, 16, 76, 0, 0, 0, 1,
+            0, 0, 0, 12, 0, 0, 0, 82, 255, 255, 255, 2, 0, 0, 0, 136, 255, 255, 255, 24, 0, 0, 0,
+            32, 0, 0, 0, 0, 0, 1, 2, 28, 0, 0, 0, 8, 0, 12, 0, 4, 0, 11, 0, 8, 0, 0, 0, 64, 0, 0,
+            0, 0, 0, 0, 1, 0, 0, 0, 0, 4, 0, 0, 0, 105, 116, 101, 109, 0, 0, 0, 0, 6, 0, 0, 0, 95,
+            95, 116, 105, 109, 101, 0, 0, 16, 0, 20, 0, 16, 0, 0, 0, 15, 0, 4, 0, 0, 0, 8, 0, 16,
+            0, 0, 0, 28, 0, 0, 0, 12, 0, 0, 0, 0, 0, 0, 12, 160, 0, 0, 0, 1, 0, 0, 0, 28, 0, 0, 0,
+            4, 0, 4, 0, 4, 0, 0, 0, 16, 0, 20, 0, 16, 0, 14, 0, 15, 0, 4, 0, 0, 0, 8, 0, 16, 0, 0,
+            0, 32, 0, 0, 0, 12, 0, 0, 0, 0, 0, 1, 16, 96, 0, 0, 0, 1, 0, 0, 0, 36, 0, 0, 0, 0, 0,
+            6, 0, 8, 0, 4, 0, 6, 0, 0, 0, 2, 0, 0, 0, 16, 0, 22, 0, 16, 0, 14, 0, 15, 0, 4, 0, 0,
+            0, 8, 0, 16, 0, 0, 0, 24, 0, 0, 0, 28, 0, 0, 0, 0, 0, 1, 3, 24, 0, 0, 0, 0, 0, 6, 0, 8,
+            0, 6, 0, 6, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 4, 0, 0, 0, 105, 116, 101, 109, 0, 0, 0,
+            0, 4, 0, 0, 0, 105, 116, 101, 109, 0, 0, 0, 0, 10, 0, 0, 0, 95, 95, 103, 101, 111, 109,
+            101, 116, 114, 121, 0, 0, 0, 0, 0, 0, 92, 1, 0, 0, 16, 0, 0, 0, 12, 0, 26, 0, 24, 0,
+            23, 0, 4, 0, 8, 0, 12, 0, 0, 0, 32, 0, 0, 0, 184, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 3, 3, 0, 10, 0, 24, 0, 12, 0, 8, 0, 4, 0, 10, 0, 0, 0, 124, 0, 0, 0, 16, 0, 0, 0,
+            3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0,
+            16, 0, 0, 0, 0, 0, 0, 0, 24, 0, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 32, 0, 0, 0,
+            0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 40, 0, 0, 0, 0, 0, 0, 0, 48, 0, 0, 0, 0, 0, 0, 0,
+            88, 0, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 96, 0, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0,
+            0, 0, 0, 0, 104, 0, 0, 0, 0, 0, 0, 0, 48, 0, 0, 0, 0, 0, 0, 0, 152, 0, 0, 0, 0, 0, 0,
+            0, 8, 0, 0, 0, 0, 0, 0, 0, 160, 0, 0, 0, 0, 0, 0, 0, 24, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 7, 0, 0, 0,
             0, 0, 0, 0, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 154, 153, 153, 153, 153,
             153, 185, 63, 0, 0, 0, 0, 0, 0, 240, 63, 154, 153, 153, 153, 153, 153, 241, 63, 0, 0,
             0, 0, 0, 0, 0, 64, 205, 204, 204, 204, 204, 204, 8, 64, 7, 0, 0, 0, 0, 0, 0, 0, 255, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 16,
-            0, 0, 0, 12, 0, 18, 0, 16, 0, 12, 0, 8, 0, 4, 0, 12, 0, 0, 0, 128, 1, 0, 0, 156, 1, 0,
-            0, 16, 0, 0, 0, 3, 0, 10, 0, 12, 0, 0, 0, 8, 0, 4, 0, 10, 0, 0, 0, 8, 0, 0, 0, 8, 0, 0,
-            0, 0, 0, 0, 0, 3, 0, 0, 0, 180, 0, 0, 0, 72, 0, 0, 0, 20, 0, 0, 0, 16, 0, 20, 0, 16, 0,
-            14, 0, 15, 0, 4, 0, 0, 0, 8, 0, 16, 0, 0, 0, 16, 0, 0, 0, 24, 0, 0, 0, 0, 0, 1, 2, 20,
-            0, 0, 0, 176, 255, 255, 255, 64, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 6, 0, 0, 0, 102, 111,
-            111, 98, 97, 114, 0, 0, 168, 255, 255, 255, 24, 0, 0, 0, 12, 0, 0, 0, 0, 0, 0, 16, 60,
-            0, 0, 0, 1, 0, 0, 0, 12, 0, 0, 0, 102, 255, 255, 255, 2, 0, 0, 0, 152, 255, 255, 255,
-            0, 0, 0, 2, 16, 0, 0, 0, 24, 0, 0, 0, 8, 0, 12, 0, 4, 0, 11, 0, 8, 0, 0, 0, 64, 0, 0,
-            0, 0, 0, 0, 1, 0, 0, 0, 0, 6, 0, 0, 0, 95, 95, 116, 105, 109, 101, 0, 0, 16, 0, 20, 0,
-            16, 0, 0, 0, 15, 0, 4, 0, 0, 0, 8, 0, 16, 0, 0, 0, 28, 0, 0, 0, 12, 0, 0, 0, 0, 0, 0,
-            12, 128, 0, 0, 0, 1, 0, 0, 0, 28, 0, 0, 0, 4, 0, 4, 0, 4, 0, 0, 0, 16, 0, 16, 0, 0, 0,
-            0, 0, 7, 0, 8, 0, 0, 0, 12, 0, 16, 0, 0, 0, 0, 0, 0, 16, 24, 0, 0, 0, 4, 0, 0, 0, 1, 0,
-            0, 0, 36, 0, 0, 0, 0, 0, 6, 0, 8, 0, 4, 0, 6, 0, 0, 0, 2, 0, 0, 0, 16, 0, 18, 0, 0, 0,
-            0, 0, 7, 0, 8, 0, 0, 0, 12, 0, 16, 0, 0, 0, 0, 0, 0, 3, 16, 0, 0, 0, 20, 0, 0, 0, 0, 0,
-            6, 0, 8, 0, 6, 0, 6, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 10, 0, 0, 0, 95, 95, 103, 101,
-            111, 109, 101, 116, 114, 121, 0, 0, 1, 0, 0, 0, 152, 1, 0, 0, 0, 0, 0, 0, 92, 1, 0, 0,
-            0, 0, 0, 0, 184, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 184, 1, 0, 0, 65, 82, 82,
-            79, 87, 49,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 16, 0, 0, 0, 12, 0, 18, 0, 16, 0, 12, 0, 8, 0, 4, 0, 12, 0, 0, 0, 160, 1, 0,
+            0, 188, 1, 0, 0, 16, 0, 0, 0, 3, 0, 10, 0, 12, 0, 0, 0, 8, 0, 4, 0, 10, 0, 0, 0, 8, 0,
+            0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 180, 0, 0, 0, 56, 0, 0, 0, 4, 0, 0, 0, 52,
+            255, 255, 255, 16, 0, 0, 0, 24, 0, 0, 0, 0, 0, 1, 2, 20, 0, 0, 0, 172, 255, 255, 255,
+            64, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 6, 0, 0, 0, 102, 111, 111, 98, 97, 114, 0, 0, 152,
+            255, 255, 255, 24, 0, 0, 0, 12, 0, 0, 0, 0, 0, 0, 16, 76, 0, 0, 0, 1, 0, 0, 0, 12, 0,
+            0, 0, 82, 255, 255, 255, 2, 0, 0, 0, 136, 255, 255, 255, 24, 0, 0, 0, 32, 0, 0, 0, 0,
+            0, 1, 2, 28, 0, 0, 0, 8, 0, 12, 0, 4, 0, 11, 0, 8, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 1, 0,
+            0, 0, 0, 4, 0, 0, 0, 105, 116, 101, 109, 0, 0, 0, 0, 6, 0, 0, 0, 95, 95, 116, 105, 109,
+            101, 0, 0, 16, 0, 20, 0, 16, 0, 0, 0, 15, 0, 4, 0, 0, 0, 8, 0, 16, 0, 0, 0, 28, 0, 0,
+            0, 12, 0, 0, 0, 0, 0, 0, 12, 160, 0, 0, 0, 1, 0, 0, 0, 28, 0, 0, 0, 4, 0, 4, 0, 4, 0,
+            0, 0, 16, 0, 20, 0, 16, 0, 14, 0, 15, 0, 4, 0, 0, 0, 8, 0, 16, 0, 0, 0, 32, 0, 0, 0,
+            12, 0, 0, 0, 0, 0, 1, 16, 96, 0, 0, 0, 1, 0, 0, 0, 36, 0, 0, 0, 0, 0, 6, 0, 8, 0, 4, 0,
+            6, 0, 0, 0, 2, 0, 0, 0, 16, 0, 22, 0, 16, 0, 14, 0, 15, 0, 4, 0, 0, 0, 8, 0, 16, 0, 0,
+            0, 24, 0, 0, 0, 28, 0, 0, 0, 0, 0, 1, 3, 24, 0, 0, 0, 0, 0, 6, 0, 8, 0, 6, 0, 6, 0, 0,
+            0, 0, 0, 2, 0, 0, 0, 0, 0, 4, 0, 0, 0, 105, 116, 101, 109, 0, 0, 0, 0, 4, 0, 0, 0, 105,
+            116, 101, 109, 0, 0, 0, 0, 10, 0, 0, 0, 95, 95, 103, 101, 111, 109, 101, 116, 114, 121,
+            0, 0, 1, 0, 0, 0, 192, 1, 0, 0, 0, 0, 0, 0, 96, 1, 0, 0, 0, 0, 0, 0, 184, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 216, 1, 0, 0, 65, 82, 82, 79, 87, 49,
         ]
         .to_vec();
         assert_eq!(
@@ -201,18 +215,18 @@ mod tests {
             serde_json::json!({
                 "type": "MockFeatureCollectionSourceMultiPoint",
                 "params": {
-                    "collection": {
+                    "collections": [{
                         "table": collection_bytes,
                         "types": {
-                            "foobar": "NullableDecimal"
+                            "foobar": "Decimal"
                         },
-                    }
+                    }]
                 }
             })
             .to_string()
         );
 
-        let _: Box<dyn VectorOperator> = serde_json::from_str(&serialized).unwrap();
+        let _operator: Box<dyn VectorOperator> = serde_json::from_str(&serialized).unwrap();
     }
 
     #[test]
@@ -230,14 +244,9 @@ mod tests {
         )
         .unwrap();
 
-        let source = MockFeatureCollectionSource {
-            params: MockFeatureCollectionSourceParams {
-                collection: collection.clone(),
-            },
-        }
-        .boxed();
+        let source = MockFeatureCollectionSource::single(collection.clone()).boxed();
 
-        let source = source.initialize(ExecutionContext).unwrap();
+        let source = source.initialize(&MockExecutionContext::default()).unwrap();
 
         let processor =
             if let Ok(TypedVectorQueryProcessor::MultiPoint(p)) = source.query_processor() {
@@ -249,12 +258,11 @@ mod tests {
         let query_rectangle = QueryRectangle {
             bbox: BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
             time_interval: TimeInterval::default(),
+            spatial_resolution: SpatialResolution::zero_point_one(),
         };
-        let ctx = QueryContext {
-            chunk_byte_size: 2 * std::mem::size_of::<Coordinate2D>(),
-        };
+        let ctx = MockQueryContext::new(2 * std::mem::size_of::<Coordinate2D>());
 
-        let stream = processor.vector_query(query_rectangle, ctx);
+        let stream = processor.vector_query(query_rectangle, &ctx).unwrap();
 
         let blocking_stream = block_on_stream(stream);
 

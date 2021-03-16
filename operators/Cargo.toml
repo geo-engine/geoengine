@@ -9,24 +9,28 @@ authors = [
 edition = "2018"
 
 [dependencies]
+# arrow = { version = "3.0", features = ["simd"] } TODO: activate when version is patched
+arrow = { version = "3.0" }
+async-trait = "0.1"
 chrono = "0.4"
+crossbeam = "0.8"
 csv = "1.1"
-geoengine-datatypes = { path = "../datatypes" }
-float-cmp = "0.6"
+float-cmp = "0.8"
 futures = "0.3"
-failure = "0.1" # TODO: remove this!
-gdal = { version = "0.6", features = ["gdal_2_2"] }
-geo = "0.12"
+gdal = { version = "0.7", features = ["datetime"] }
+geo = "0.17"
+geoengine-datatypes = { path = "../datatypes" }
+lazy_static = "1.4"
+num_cpus = "1.13" # TODO: remove and switch to std::thread::available_concurrency() when it is available
 num-traits = "0.2"
-ocl = "0.19"
-paste = "1.0" # TODO remove, once https://doc.rust-lang.org/core/macro.concat_idents.html is stable
-pin-project = "0.4"
+ocl = { git = "https://github.com/michaelmattig/ocl", branch = "tentative_master" }  # TODO: use crates.io version once it builds again
+paste = "1.0"
+pin-project = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-typetag = "0.1"
 snafu = "0.6"
-tokio = { version = "0.2", features = ["macros", "blocking"] }
-warp = "0.2" # TODO: remove and get tokio test to work without it
+tokio = { version = "1.1", features = ["macros", "rt"] }
+typetag = "0.1"
 
 [dev-dependencies]
 criterion = "0.3"

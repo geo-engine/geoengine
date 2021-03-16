@@ -1,7 +1,7 @@
-use crate::ogc::util::{parse_bbox, parse_time};
+use crate::ogc::util::{parse_bbox, parse_time_option};
 use crate::util::from_str_option;
 use geoengine_datatypes::primitives::{BoundingBox2D, TimeInterval};
-use geoengine_datatypes::projection::Projection;
+use geoengine_datatypes::spatial_reference::SpatialReference;
 use serde::{Deserialize, Serialize};
 
 // TODO: ignore case for field names
@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 #[serde(tag = "request")]
 // TODO: evaluate overhead of large enum variant and maybe refactor it
 #[allow(clippy::pub_enum_variant_names, clippy::large_enum_variant)]
-pub enum WFSRequest {
+pub enum WfsRequest {
     GetCapabilities(GetCapabilities),
     DescribeFeatureType(DescribeFeatureType),
     GetFeature(GetFeature),
@@ -54,9 +54,9 @@ pub struct GetFeature {
     #[serde(deserialize_with = "parse_bbox")]
     pub bbox: BoundingBox2D,
     #[serde(default)]
-    #[serde(deserialize_with = "parse_time")]
+    #[serde(deserialize_with = "parse_time_option")]
     pub time: Option<TimeInterval>,
-    pub srs_name: Option<Projection>,
+    pub srs_name: Option<SpatialReference>,
     pub namespaces: Option<String>, // TODO e.g. xmlns(dog=http://www.example.com/namespaces/dog)
     #[serde(default)]
     #[serde(deserialize_with = "from_str_option")]
@@ -135,14 +135,14 @@ where
 mod tests {
     use super::*;
     use geoengine_datatypes::primitives::Coordinate2D;
-    use geoengine_datatypes::projection::ProjectionAuthority;
+    use geoengine_datatypes::spatial_reference::SpatialReferenceAuthority;
 
     #[test]
     fn deserialize_get_feature() {
         let query = "request=GetFeature&service=WFS&version=2.0.0&typeNames=ns:test&bbox=1,2,3,4";
-        let parsed: WFSRequest = serde_urlencoded::from_str(query).unwrap();
+        let parsed: WfsRequest = serde_urlencoded::from_str(query).unwrap();
 
-        let request = WFSRequest::GetFeature(GetFeature {
+        let request = WfsRequest::GetFeature(GetFeature {
             version: "2.0.0".into(),
             time: None,
             srs_name: None,
@@ -186,12 +186,12 @@ mod tests {
             ("propertyName","P1,P2"),
         ];
         let query = serde_urlencoded::to_string(params).unwrap();
-        let parsed: WFSRequest = serde_urlencoded::from_str(&query).unwrap();
+        let parsed: WfsRequest = serde_urlencoded::from_str(&query).unwrap();
 
-        let request = WFSRequest::GetFeature(GetFeature {
+        let request = WfsRequest::GetFeature(GetFeature {
             version: "2.0.0".into(),
-            time: Some(TimeInterval::new(946_684_800, 946_771_200).unwrap()),
-            srs_name: Some(Projection::new(ProjectionAuthority::Epsg, 4326)),
+            time: Some(TimeInterval::new(946_684_800_000, 946_771_200_000).unwrap()),
+            srs_name: Some(SpatialReference::new(SpatialReferenceAuthority::Epsg, 4326)),
             namespaces: Some("xmlns(dog=http://www.example.com/namespaces/dog)".into()),
             count: Some(10),
             sort_by: Some("Name[+A]".into()),
@@ -227,9 +227,9 @@ mod tests {
         ];
         let url = serde_urlencoded::to_string(params).unwrap();
 
-        let parsed: WFSRequest = serde_urlencoded::from_str(&url).unwrap();
+        let parsed: WfsRequest = serde_urlencoded::from_str(&url).unwrap();
 
-        let request = WFSRequest::GetFeature(GetFeature {
+        let request = WfsRequest::GetFeature(GetFeature {
             version: "2.0.0".into(),
             time: None,
             srs_name: None,

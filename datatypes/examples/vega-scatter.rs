@@ -1,7 +1,6 @@
 use ndarray::{array, Array2};
-use vega_lite_3::{
-    EncodingBuilder, Mark, Padding, Showable, StandardType, VegaliteBuilder, XClassBuilder,
-    YClassBuilder,
+use vega_lite_4::{
+    EdEncodingBuilder, Mark, Padding, Showable, Type, VegaliteBuilder, XClassBuilder, YClassBuilder,
 };
 
 fn main() {
@@ -16,17 +15,17 @@ fn main() {
         .data(values)
         .mark(Mark::Point)
         .encoding(
-            EncodingBuilder::default()
+            EdEncodingBuilder::default()
                 .x(XClassBuilder::default()
                     .field("data.0")
                     .title("X Axis Label")
-                    .def_type(StandardType::Quantitative)
+                    .position_def_type(Type::Quantitative)
                     .build()
                     .unwrap())
                 .y(YClassBuilder::default()
                     .field("data.1")
                     .title("Y Axis Label")
-                    .def_type(StandardType::Quantitative)
+                    .position_def_type(Type::Quantitative)
                     .build()
                     .unwrap())
                 .build()

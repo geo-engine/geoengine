@@ -1,12 +1,16 @@
 use std::any::Any;
 
 use arrow::array::{Array, ArrayBuilder, ArrayRef, BooleanArray};
-use arrow::datatypes::DataType;
+use arrow::datatypes::{DataType, Field};
 use arrow::error::ArrowError;
 
 /// Helper function to downcast an arrow array
 ///
 /// The caller must be sure of its type, otherwise it panics
+///
+/// # Panics
+/// Panics if `array` is not of type `T`
+///
 pub fn downcast_array<T: Any>(array: &ArrayRef) -> &T {
     array.as_any().downcast_ref().unwrap() // must obey type
 }
@@ -14,6 +18,10 @@ pub fn downcast_array<T: Any>(array: &ArrayRef) -> &T {
 /// Helper function to downcast an arrow array
 ///
 /// The caller must be sure of its type, otherwise it panics
+///
+/// # Panics
+/// Panics if `array` is not of type `T`
+///
 pub fn downcast_dyn_array<T: Any>(array: &dyn Array) -> &T {
     array.as_any().downcast_ref().unwrap() // must obey type
 }
@@ -21,6 +29,9 @@ pub fn downcast_dyn_array<T: Any>(array: &dyn Array) -> &T {
 /// Helper function to downcast a mutable arrow array from a builder
 ///
 /// The caller must be sure of its type, otherwise it panics
+/// # Panics
+/// Panics if `array` is not of type `T`
+///
 pub fn downcast_mut_array<T: Any>(array: &mut dyn ArrayBuilder) -> &mut T {
     array.as_any_mut().downcast_mut().unwrap() // must obey type
 }
@@ -32,6 +43,18 @@ pub trait ArrowTyped {
 
     /// Return the specific arrow data type
     fn arrow_data_type() -> DataType;
+
+    fn arrow_list_data_type() -> DataType {
+        let nullable = true; // TODO: should actually be false, but arrow's builders set it to `true` currently
+        DataType::List(Box::new(Field::new(
+            "item",
+            Self::arrow_data_type(),
+            nullable,
+        )))
+    }
+
+    /// Computes the byte size of the builder
+    fn builder_byte_size(builder: &mut Self::ArrowBuilder) -> usize;
 
     /// Return a builder for the arrow data type
     fn arrow_builder(capacity: usize) -> Self::ArrowBuilder;

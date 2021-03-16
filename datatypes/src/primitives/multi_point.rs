@@ -1,13 +1,18 @@
-use crate::collections::VectorDataType;
-use crate::primitives::{error, GeometryRef};
-use crate::primitives::{Coordinate2D, Geometry};
-use crate::util::arrow::{downcast_array, ArrowTyped};
-use crate::util::Result;
-use arrow::array::BooleanArray;
+use std::convert::{TryFrom, TryInto};
+
+use arrow::array::{ArrayBuilder, BooleanArray};
 use arrow::error::ArrowError;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
-use std::convert::{TryFrom, TryInto};
+
+use crate::collections::VectorDataType;
+use crate::error::Error;
+use crate::primitives::{error, BoundingBox2D, GeometryRef, PrimitivesError, TypedGeometry};
+use crate::primitives::{Coordinate2D, Geometry};
+use crate::util::arrow::{downcast_array, ArrowTyped};
+use crate::util::Result;
+
+use super::SpatialBounded;
 
 /// A trait that allows a common access to points of `MultiPoint`s and its references
 pub trait MultiPointAccess {
@@ -35,13 +40,10 @@ impl MultiPoint {
         M: TryInto<MultiPoint, Error = E>,
         E: Into<crate::error::Error>,
     {
-        let mut multi_points = Vec::with_capacity(raw_multi_points.len());
-
-        for multi_point in raw_multi_points {
-            multi_points.push(multi_point.try_into().map_err(Into::into)?);
-        }
-
-        Ok(multi_points)
+        raw_multi_points
+            .into_iter()
+            .map(|m| m.try_into().map_err(Into::into))
+            .collect()
     }
 }
 
@@ -53,6 +55,22 @@ impl MultiPointAccess for MultiPoint {
 
 impl Geometry for MultiPoint {
     const DATA_TYPE: VectorDataType = VectorDataType::MultiPoint;
+
+    fn intersects_bbox(&self, bbox: &BoundingBox2D) -> bool {
+        self.coordinates.iter().any(|c| bbox.contains_coordinate(c))
+    }
+}
+
+impl TryFrom<TypedGeometry> for MultiPoint {
+    type Error = Error;
+
+    fn try_from(value: TypedGeometry) -> Result<Self, Self::Error> {
+        if let TypedGeometry::MultiPoint(geometry) = value {
+            Ok(geometry)
+        } else {
+            Err(PrimitivesError::InvalidConversion.into())
+        }
+    }
 }
 
 impl AsRef<[Coordinate2D]> for MultiPoint {
@@ -97,7 +115,18 @@ impl ArrowTyped for MultiPoint {
     type ArrowBuilder = arrow::array::ListBuilder<<Coordinate2D as ArrowTyped>::ArrowBuilder>;
 
     fn arrow_data_type() -> arrow::datatypes::DataType {
-        arrow::datatypes::DataType::List(Box::new(Coordinate2D::arrow_data_type()))
+        Coordinate2D::arrow_list_data_type()
+    }
+
+    fn builder_byte_size(builder: &mut Self::ArrowBuilder) -> usize {
+        let multi_point_indices_size = builder.len() * std::mem::size_of::<i32>();
+
+        let point_builder = builder.values();
+        let point_indices_size = point_builder.len() * std::mem::size_of::<i32>();
+
+        let coordinates_size = Coordinate2D::builder_byte_size(point_builder);
+
+        multi_point_indices_size + point_indices_size + coordinates_size
     }
 
     fn arrow_builder(capacity: usize) -> Self::ArrowBuilder {
@@ -121,7 +150,7 @@ impl ArrowTyped for MultiPoint {
                     let floats: &Float64Array = downcast_array(&floats_ref);
 
                     let new_floats = new_points.values();
-                    new_floats.append_slice(floats.value_slice(0, 2))?;
+                    new_floats.append_slice(floats.values())?;
 
                     new_points.append(true)?;
                 }
@@ -154,7 +183,7 @@ impl ArrowTyped for MultiPoint {
                     let old_floats: &Float64Array = downcast_array(&old_floats_array);
 
                     let float_builder = coordinate_builder.values();
-                    float_builder.append_slice(old_floats.value_slice(0, 2))?;
+                    float_builder.append_slice(old_floats.values())?;
 
                     coordinate_builder.append(true)?;
                 }
@@ -212,15 +241,16 @@ impl<'g> MultiPointAccess for MultiPointRef<'g> {
     }
 }
 
-impl<'g> Into<geojson::Geometry> for MultiPointRef<'g> {
-    fn into(self) -> geojson::Geometry {
-        geojson::Geometry::new(match self.point_coordinates.len() {
+impl<'g> From<MultiPointRef<'g>> for geojson::Geometry {
+    fn from(geometry: MultiPointRef<'g>) -> geojson::Geometry {
+        geojson::Geometry::new(match geometry.point_coordinates.len() {
             1 => {
-                let floats: [f64; 2] = self.point_coordinates[0].into();
+                let floats: [f64; 2] = geometry.point_coordinates[0].into();
                 geojson::Value::Point(floats.to_vec())
             }
             _ => geojson::Value::MultiPoint(
-                self.point_coordinates
+                geometry
+                    .point_coordinates
                     .iter()
                     .map(|&c| {
                         let floats: [f64; 2] = c.into();
@@ -229,6 +259,28 @@ impl<'g> Into<geojson::Geometry> for MultiPointRef<'g> {
                     .collect(),
             ),
         })
+    }
+}
+
+impl<'g> From<MultiPointRef<'g>> for MultiPoint {
+    fn from(multi_point_ref: MultiPointRef<'g>) -> Self {
+        MultiPoint::from(&multi_point_ref)
+    }
+}
+
+impl<'g> From<&MultiPointRef<'g>> for MultiPoint {
+    fn from(multi_point_ref: &MultiPointRef<'g>) -> Self {
+        MultiPoint::new_unchecked(multi_point_ref.point_coordinates.to_owned())
+    }
+}
+
+impl<A> SpatialBounded for A
+where
+    A: MultiPointAccess,
+{
+    fn spatial_bounds(&self) -> BoundingBox2D {
+        BoundingBox2D::from_coord_ref_iter(self.points())
+            .expect("there must be at least one cordinate in a multipoint")
     }
 }
 
@@ -254,5 +306,33 @@ mod tests {
         float_cmp::approx_eq!(f64, x, 1.0);
         float_cmp::approx_eq!(f64, y, 1.2);
         assert_eq!(aggregate(&multi_point), aggregate(&multi_point_ref));
+    }
+
+    #[test]
+    fn intersects_bbox() -> Result<()> {
+        let bbox = BoundingBox2D::new((0.0, 0.0).into(), (1.0, 1.0).into())?;
+
+        assert!(MultiPoint::new(vec![(0.5, 0.5).into()])?.intersects_bbox(&bbox));
+        assert!(MultiPoint::new(vec![(1.0, 1.0).into()])?.intersects_bbox(&bbox));
+        assert!(MultiPoint::new(vec![(0.5, 0.5).into(), (1.5, 1.5).into()])?.intersects_bbox(&bbox));
+        assert!(!MultiPoint::new(vec![(1.1, 1.1).into()])?.intersects_bbox(&bbox));
+        assert!(
+            !MultiPoint::new(vec![(-0.1, -0.1).into(), (1.1, 1.1).into()])?.intersects_bbox(&bbox)
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn spatial_bounds() {
+        let expected = BoundingBox2D::new_unchecked((0., 0.).into(), (1., 1.).into());
+        let coordinates: Vec<Coordinate2D> = Vec::from([
+            (1., 0.4).into(),
+            (0.8, 0.0).into(),
+            (0.3, 0.1).into(),
+            (0.0, 1.0).into(),
+        ]);
+        let mp = MultiPoint { coordinates };
+        assert_eq!(mp.spatial_bounds(), expected)
     }
 }

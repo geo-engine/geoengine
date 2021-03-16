@@ -1,200 +1,396 @@
+use crate::error;
 use crate::error::Result;
-use crate::handlers::{authenticate, DB};
+use crate::handlers::{authenticate, Context};
+use crate::projects::project::{ProjectId, STRectangle};
 use crate::users::session::Session;
 use crate::users::user::{UserCredentials, UserRegistration};
-use crate::users::userdb::UserDB;
+use crate::users::userdb::UserDb;
 use crate::util::user_input::UserInput;
-use std::sync::Arc;
+use crate::util::IdResponse;
+use snafu::ResultExt;
+use uuid::Uuid;
 use warp::reply::Reply;
 use warp::Filter;
 
-pub fn register_user_handler<T: UserDB>(
-    user_db: DB<T>,
-) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    warp::post()
-        .and(warp::path!("user" / "register"))
+pub(crate) fn register_user_handler<C: Context>(
+    ctx: C,
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
+    warp::path("user")
+        .and(warp::post())
         .and(warp::body::json())
-        .and(warp::any().map(move || Arc::clone(&user_db)))
+        .and(warp::any().map(move || ctx.clone()))
         .and_then(register_user)
 }
 
 // TODO: move into handler once async closures are available?
-async fn register_user<T: UserDB>(
+async fn register_user<C: Context>(
     user: UserRegistration,
-    user_db: DB<T>,
+    ctx: C,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let user = user.validated()?;
-    let id = user_db.write().await.register(user)?;
-    Ok(warp::reply::json(&id))
+    let id = ctx.user_db_ref_mut().await.register(user).await?;
+    Ok(warp::reply::json(&IdResponse::from(id)))
 }
 
-pub fn login_handler<T: UserDB>(
-    user_db: DB<T>,
+pub(crate) fn anonymous_handler<C: Context>(
+    ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    warp::post()
-        .and(warp::path!("user" / "login"))
+    warp::path!("anonymous")
+        .and(warp::post())
+        .and(warp::any().map(move || ctx.clone()))
+        .and_then(anonymous)
+}
+
+// TODO: move into handler once async closures are available?
+async fn anonymous<C: Context>(ctx: C) -> Result<impl warp::Reply, warp::Rejection> {
+    let session = ctx.user_db_ref_mut().await.anonymous().await?;
+    Ok(warp::reply::json(&session))
+}
+
+pub(crate) fn login_handler<C: Context>(
+    ctx: C,
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
+    warp::path("login")
+        .and(warp::post())
         .and(warp::body::json())
-        .and(warp::any().map(move || Arc::clone(&user_db.clone())))
+        .and(warp::any().map(move || ctx.clone()))
         .and_then(login)
 }
 
 // TODO: move into handler once async closures are available?
-async fn login<T: UserDB>(
+async fn login<C: Context>(
     user: UserCredentials,
-    user_db: DB<T>,
+    ctx: C,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    let mut db = user_db.write().await;
-    match db.login(user) {
-        Ok(id) => Ok(warp::reply::json(&id).into_response()),
-        Err(_) => Ok(warp::http::StatusCode::UNAUTHORIZED.into_response()),
-    }
+    let session = ctx
+        .user_db_ref_mut()
+        .await
+        .login(user)
+        .await
+        .map_err(Box::new)
+        .context(error::Authorization)?;
+    Ok(warp::reply::json(&session).into_response())
 }
 
-pub fn logout_handler<T: UserDB>(
-    user_db: DB<T>,
-) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    warp::post()
-        .and(warp::path!("user" / "logout"))
-        .and(authenticate(user_db.clone()))
-        .and(warp::any().map(move || Arc::clone(&user_db.clone())))
+pub(crate) fn logout_handler<C: Context>(
+    ctx: C,
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
+    warp::path("logout")
+        .and(warp::post())
+        .and(authenticate(ctx.clone()))
+        .and(warp::any().map(move || ctx.clone()))
         .and_then(logout)
 }
 
 // TODO: move into handler once async closures are available?
-async fn logout<T: UserDB>(
+async fn logout<C: Context>(session: Session, ctx: C) -> Result<impl warp::Reply, warp::Rejection> {
+    ctx.user_db_ref_mut().await.logout(session.id).await?;
+    Ok(warp::reply().into_response())
+}
+
+pub(crate) fn session_handler<C: Context>(
+    ctx: C,
+) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+    warp::path("session")
+        .and(warp::get())
+        .and(authenticate(ctx))
+        .and_then(session)
+}
+
+// TODO: move into handler once async closures are available?
+async fn session(session: Session) -> Result<impl warp::Reply, warp::Rejection> {
+    Ok(warp::reply::json(&session))
+}
+
+pub(crate) fn session_project_handler<C: Context>(
+    ctx: C,
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
+    warp::path!("session" / "project" / Uuid)
+        .map(ProjectId)
+        .and(warp::post())
+        .and(authenticate(ctx.clone()))
+        .and(warp::any().map(move || ctx.clone()))
+        .and_then(session_project)
+}
+
+// TODO: move into handler once async closures are available?
+async fn session_project<C: Context>(
+    project: ProjectId,
     session: Session,
-    user_db: DB<T>,
+    ctx: C,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    let mut db = user_db.write().await;
-    match db.logout(session.token) {
-        Ok(_) => Ok(warp::reply().into_response()),
-        Err(_) => Ok(warp::http::StatusCode::UNAUTHORIZED.into_response()),
-    }
+    ctx.user_db_ref_mut()
+        .await
+        .set_session_project(&session, project)
+        .await?;
+
+    Ok(warp::reply())
+}
+
+pub(crate) fn session_view_handler<C: Context>(
+    ctx: C,
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
+    warp::path!("session" / "view")
+        .and(warp::post())
+        .and(authenticate(ctx.clone()))
+        .and(warp::any().map(move || ctx.clone()))
+        .and(warp::body::json())
+        .and_then(session_view)
+}
+
+// TODO: move into handler once async closures are available?
+async fn session_view<C: Context>(
+    session: Session,
+    ctx: C,
+    view: STRectangle,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    ctx.user_db_ref_mut()
+        .await
+        .set_session_view(&session, view)
+        .await?;
+
+    Ok(warp::reply())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::handlers::handle_rejection;
-    use crate::users::hashmap_userdb::HashMapUserDB;
+    use crate::handlers::ErrorResponse;
+    use crate::projects::project::STRectangle;
+    use crate::users::session::Session;
     use crate::users::user::UserId;
-    use crate::users::userdb::UserDB;
+    use crate::users::userdb::UserDb;
+    use crate::util::tests::{
+        check_allowed_http_methods, create_project_helper, create_session_helper,
+    };
     use crate::util::user_input::Validated;
-    use tokio::sync::RwLock;
+    use crate::{contexts::InMemoryContext, handlers::handle_rejection};
+    use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
+    use serde_json::json;
+    use warp::http::Response;
+    use warp::hyper::body::Bytes;
 
-    #[tokio::test]
-    async fn register() {
-        let user_db = Arc::new(RwLock::new(HashMapUserDB::default()));
-
+    async fn register_test_helper<C: Context>(
+        ctx: C,
+        method: &str,
+        email: &str,
+    ) -> Response<Bytes> {
         let user = UserRegistration {
-            email: "foo@bar.de".to_string(),
+            email: email.to_string(),
             password: "secret123".to_string(),
             real_name: " Foo Bar".to_string(),
         };
 
         // register user
-        let res = warp::test::request()
-            .method("POST")
-            .path("/user/register")
+        warp::test::request()
+            .method(method)
+            .path("/user")
             .header("Content-Length", "0")
             .json(&user)
-            .reply(&register_user_handler(user_db.clone()))
-            .await;
+            .reply(&register_user_handler(ctx).recover(handle_rejection))
+            .await
+    }
+
+    #[tokio::test]
+    async fn register() {
+        let ctx = InMemoryContext::default();
+
+        let res = register_test_helper(ctx, "POST", "foo@bar.de").await;
 
         assert_eq!(res.status(), 200);
 
-        let body: String = String::from_utf8(res.body().to_vec()).unwrap();
-        assert!(serde_json::from_str::<UserId>(&body).is_ok());
+        let body = std::str::from_utf8(&res.body()).unwrap();
+        assert!(serde_json::from_str::<IdResponse<UserId>>(&body).is_ok());
     }
 
     #[tokio::test]
     async fn register_fail() {
-        let user_db = Arc::new(RwLock::new(HashMapUserDB::default()));
+        let ctx = InMemoryContext::default();
 
-        let user = UserRegistration {
-            email: "notanemail".to_string(),
-            password: "secret123".to_string(),
-            real_name: " Foo Bar".to_string(),
-        };
+        let res = register_test_helper(ctx, "POST", "notanemail").await;
+
+        ErrorResponse::assert(
+            &res,
+            400,
+            "RegistrationFailed",
+            "Registration failed: Invalid e-mail address",
+        );
+    }
+
+    #[tokio::test]
+    async fn register_duplicate_email() {
+        let ctx = InMemoryContext::default();
+
+        register_test_helper(ctx.clone(), "POST", "foo@bar.de").await;
+
+        // register user
+        let res = register_test_helper(ctx, "POST", "foo@bar.de").await;
+
+        ErrorResponse::assert(
+            &res,
+            409,
+            "Duplicate",
+            "Tried to create duplicate: E-mail already exists",
+        );
+    }
+
+    #[tokio::test]
+    async fn register_invalid_method() {
+        let ctx = InMemoryContext::default();
+
+        check_allowed_http_methods(
+            |method| register_test_helper(ctx.clone(), method, "foo@bar.de"),
+            &["POST"],
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn register_invalid_body() {
+        let ctx = InMemoryContext::default();
 
         // register user
         let res = warp::test::request()
             .method("POST")
-            .path("/user/register")
+            .path("/user")
             .header("Content-Length", "0")
-            .json(&user)
-            .reply(&register_user_handler(user_db.clone()).recover(handle_rejection))
+            .body("no json")
+            .reply(&register_user_handler(ctx).recover(handle_rejection))
             .await;
 
-        assert_eq!(res.status(), 400);
+        ErrorResponse::assert(
+            &res,
+            400,
+            "BodyDeserializeError",
+            "expected ident at line 1 column 2",
+        );
+    }
+
+    #[tokio::test]
+    async fn register_missing_fields() {
+        let ctx = InMemoryContext::default();
+
+        let user = json!({
+            "password": "secret123",
+            "real_name": " Foo Bar",
+        });
+
+        // register user
+        let res = warp::test::request()
+            .method("POST")
+            .path("/user")
+            .header("Content-Length", "0")
+            .json(&user)
+            .reply(&register_user_handler(ctx).recover(handle_rejection))
+            .await;
+
+        ErrorResponse::assert(
+            &res,
+            400,
+            "BodyDeserializeError",
+            "missing field `email` at line 1 column 47",
+        );
+    }
+
+    #[tokio::test]
+    async fn register_invalid_type() {
+        let ctx = InMemoryContext::default();
+
+        // register user
+        let res = warp::test::request()
+            .method("POST")
+            .path("/user")
+            .header("Content-Length", "0")
+            .header("Content-Type", "text/html")
+            .reply(&register_user_handler(ctx).recover(handle_rejection))
+            .await;
+
+        ErrorResponse::assert(
+            &res,
+            415,
+            "UnsupportedMediaType",
+            "Unsupported content type header.",
+        );
+    }
+
+    async fn login_test_helper(method: &str, password: &str) -> Response<Bytes> {
+        let ctx = InMemoryContext::default();
+
+        let user = Validated {
+            user_input: UserRegistration {
+                email: "foo@bar.de".to_string(),
+                password: "secret123".to_string(),
+                real_name: " Foo Bar".to_string(),
+            },
+        };
+
+        ctx.user_db().write().await.register(user).await.unwrap();
+
+        let credentials = UserCredentials {
+            email: "foo@bar.de".to_string(),
+            password: password.to_string(),
+        };
+
+        warp::test::request()
+            .method(method)
+            .path("/login")
+            .header("Content-Length", "0")
+            .json(&credentials)
+            .reply(&login_handler(ctx).recover(handle_rejection))
+            .await
     }
 
     #[tokio::test]
     async fn login() {
-        let user_db = Arc::new(RwLock::new(HashMapUserDB::default()));
-
-        let user = Validated {
-            user_input: UserRegistration {
-                email: "foo@bar.de".to_string(),
-                password: "secret123".to_string(),
-                real_name: " Foo Bar".to_string(),
-            },
-        };
-
-        user_db.write().await.register(user).unwrap();
-
-        let credentials = UserCredentials {
-            email: "foo@bar.de".to_string(),
-            password: "secret123".to_string(),
-        };
-
-        let res = warp::test::request()
-            .method("POST")
-            .path("/user/login")
-            .header("Content-Length", "0")
-            .json(&credentials)
-            .reply(&login_handler(user_db.clone()))
-            .await;
+        let res = login_test_helper("POST", "secret123").await;
 
         assert_eq!(res.status(), 200);
 
-        let body: String = String::from_utf8(res.body().to_vec()).unwrap();
-        let _id: Session = serde_json::from_str(&body).unwrap();
+        let body = std::str::from_utf8(&res.body()).unwrap();
+        let _id: Session = serde_json::from_str(body).unwrap();
     }
 
     #[tokio::test]
     async fn login_fail() {
-        let user_db = Arc::new(RwLock::new(HashMapUserDB::default()));
+        let res = login_test_helper("POST", "wrong").await;
 
-        let user = Validated {
-            user_input: UserRegistration {
-                email: "foo@bar.de".to_string(),
-                password: "secret123".to_string(),
-                real_name: " Foo Bar".to_string(),
-            },
-        };
-
-        user_db.write().await.register(user).unwrap();
-
-        let credentials = UserCredentials {
-            email: "foo@bar.de".to_string(),
-            password: "wrong".to_string(),
-        };
-
-        let res = warp::test::request()
-            .method("POST")
-            .path("/user/login")
-            .header("Content-Length", "0")
-            .json(&credentials)
-            .reply(&login_handler(user_db.clone()))
-            .await;
-
-        assert_eq!(res.status(), 401);
+        ErrorResponse::assert(
+            &res,
+            401,
+            "LoginFailed",
+            "User does not exist or password is wrong.",
+        );
     }
 
     #[tokio::test]
-    async fn logout() {
-        let user_db = Arc::new(RwLock::new(HashMapUserDB::default()));
+    async fn login_invalid_method() {
+        check_allowed_http_methods(|method| login_test_helper(method, "secret123"), &["POST"])
+            .await;
+    }
+
+    #[tokio::test]
+    async fn login_invalid_body() {
+        let ctx = InMemoryContext::default();
+
+        let res = warp::test::request()
+            .method("POST")
+            .path("/login")
+            .header("Content-Length", "0")
+            .body("no json")
+            .reply(&login_handler(ctx).recover(handle_rejection))
+            .await;
+
+        ErrorResponse::assert(
+            &res,
+            400,
+            "BodyDeserializeError",
+            "expected ident at line 1 column 2",
+        );
+    }
+
+    #[tokio::test]
+    async fn login_missing_fields() {
+        let ctx = InMemoryContext::default();
 
         let user = Validated {
             user_input: UserRegistration {
@@ -204,21 +400,69 @@ mod tests {
             },
         };
 
-        user_db.write().await.register(user).unwrap();
+        ctx.user_db().write().await.register(user).await.unwrap();
+
+        let credentials = json!({
+            "email": "foo@bar.de",
+        });
+
+        let res = warp::test::request()
+            .method("POST")
+            .path("/login")
+            .header("Content-Length", "0")
+            .json(&credentials)
+            .reply(&login_handler(ctx).recover(handle_rejection))
+            .await;
+
+        ErrorResponse::assert(
+            &res,
+            400,
+            "BodyDeserializeError",
+            "missing field `password` at line 1 column 22",
+        );
+    }
+
+    async fn logout_test_helper(method: &str) -> Response<Bytes> {
+        let ctx = InMemoryContext::default();
+
+        let user = Validated {
+            user_input: UserRegistration {
+                email: "foo@bar.de".to_string(),
+                password: "secret123".to_string(),
+                real_name: " Foo Bar".to_string(),
+            },
+        };
+
+        ctx.user_db().write().await.register(user).await.unwrap();
 
         let credentials = UserCredentials {
             email: "foo@bar.de".to_string(),
             password: "secret123".to_string(),
         };
 
-        let session = user_db.write().await.login(credentials).unwrap();
+        let session = ctx
+            .user_db()
+            .write()
+            .await
+            .login(credentials)
+            .await
+            .unwrap();
 
-        let res = warp::test::request()
-            .method("POST")
-            .path("/user/logout")
-            .header("Authorization", session.token.to_string())
-            .reply(&logout_handler(user_db.clone()))
-            .await;
+        warp::test::request()
+            .method(method)
+            .path("/logout")
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
+            .body("no json")
+            .reply(&logout_handler(ctx).recover(handle_rejection))
+            .await
+    }
+
+    #[tokio::test]
+    async fn logout() {
+        let res = logout_test_helper("POST").await;
 
         assert_eq!(res.status(), 200);
         assert_eq!(res.body(), "");
@@ -226,45 +470,203 @@ mod tests {
 
     #[tokio::test]
     async fn logout_missing_header() {
-        let user_db = Arc::new(RwLock::new(HashMapUserDB::default()));
+        let ctx = InMemoryContext::default();
 
         let res = warp::test::request()
             .method("POST")
-            .path("/user/logout")
-            .reply(&logout_handler(user_db.clone()))
+            .path("/logout")
+            .reply(&logout_handler(ctx).recover(handle_rejection))
             .await;
 
-        assert_eq!(res.status(), 400);
-        assert_eq!(res.body(), "Missing request header \"authorization\"");
+        ErrorResponse::assert(
+            &res,
+            401,
+            "MissingAuthorizationHeader",
+            "Header with authorization token not provided.",
+        );
     }
 
     #[tokio::test]
     async fn logout_wrong_token() {
-        let user_db = Arc::new(RwLock::new(HashMapUserDB::default()));
+        let ctx = InMemoryContext::default();
 
         let res = warp::test::request()
             .method("POST")
-            .path("/user/logout")
-            .header("Authorization", "7e855f3c-b0cd-46d1-b5b3-19e6e3f9ea5")
-            .reply(&logout_handler(user_db.clone()))
+            .path("/logout")
+            .header(
+                "Authorization",
+                format!("Bearer {}", "6ecff667-258e-4108-9dc9-93cb8c64793c"),
+            )
+            .reply(&logout_handler(ctx).recover(handle_rejection))
             .await;
 
-        assert_eq!(res.status(), 404); // TODO: 401?
-        assert_eq!(res.body(), "");
+        ErrorResponse::assert(&res, 401, "InvalidSession", "The session id is invalid.");
+    }
+
+    #[tokio::test]
+    async fn logout_wrong_scheme() {
+        let ctx = InMemoryContext::default();
+
+        let res = warp::test::request()
+            .method("POST")
+            .path("/logout")
+            .header("Authorization", "7e855f3c-b0cd-46d1-b5b3-19e6e3f9ea5")
+            .reply(&logout_handler(ctx).recover(handle_rejection))
+            .await;
+
+        ErrorResponse::assert(
+            &res,
+            401,
+            "InvalidAuthorizationScheme",
+            "Authentication scheme must be Bearer.",
+        );
     }
 
     #[tokio::test]
     async fn logout_invalid_token() {
-        let user_db = Arc::new(RwLock::new(HashMapUserDB::default()));
+        let ctx = InMemoryContext::default();
 
         let res = warp::test::request()
             .method("POST")
-            .path("/user/logout")
-            .header("Authorization", "no uuid")
-            .reply(&logout_handler(user_db.clone()))
+            .path("/logout")
+            .header("Authorization", format!("Bearer {}", "no uuid"))
+            .reply(&logout_handler(ctx).recover(handle_rejection))
             .await;
 
-        assert_eq!(res.status(), 404); // TODO: 400?
-        assert_eq!(res.body(), "");
+        ErrorResponse::assert(
+            &res,
+            401,
+            "InvalidUuid",
+            "Identifier does not have the right format.",
+        );
+    }
+
+    #[tokio::test]
+    async fn logout_invalid_method() {
+        check_allowed_http_methods(logout_test_helper, &["POST"]).await;
+    }
+
+    #[tokio::test]
+    async fn session() {
+        let ctx = InMemoryContext::default();
+
+        let session = create_session_helper(&ctx).await;
+
+        let res = warp::test::request()
+            .method("GET")
+            .path("/session")
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
+            .reply(&session_handler(ctx.clone()).recover(handle_rejection))
+            .await;
+
+        let body = std::str::from_utf8(&res.body()).unwrap();
+        let session: Session = serde_json::from_str(body).unwrap();
+
+        ctx.user_db()
+            .write()
+            .await
+            .logout(session.id)
+            .await
+            .unwrap();
+
+        let res = warp::test::request()
+            .method("GET")
+            .path("/session")
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
+            .reply(&session_handler(ctx).recover(handle_rejection))
+            .await;
+
+        ErrorResponse::assert(&res, 401, "InvalidSession", "The session id is invalid.");
+    }
+
+    #[tokio::test]
+    async fn session_view_project() {
+        let ctx = InMemoryContext::default();
+
+        let (session, project) = create_project_helper(&ctx).await;
+
+        let res = warp::test::request()
+            .method("POST")
+            .path(&format!("/session/project/{}", project.to_string()))
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
+            .reply(&session_project_handler(ctx.clone()).recover(handle_rejection))
+            .await;
+
+        assert_eq!(res.status(), 200);
+
+        assert_eq!(
+            ctx.user_db()
+                .read()
+                .await
+                .session(session.id)
+                .await
+                .unwrap()
+                .project,
+            Some(project)
+        );
+
+        let rect =
+            STRectangle::new_unchecked(SpatialReferenceOption::Unreferenced, 0., 0., 1., 1., 0, 1);
+        let res = warp::test::request()
+            .method("POST")
+            .header("Content-Length", "0")
+            .path("/session/view")
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
+            .json(&rect)
+            .reply(&session_view_handler(ctx.clone()).recover(handle_rejection))
+            .await;
+
+        assert_eq!(res.status(), 200);
+
+        assert_eq!(
+            ctx.user_db()
+                .read()
+                .await
+                .session(session.id)
+                .await
+                .unwrap()
+                .view,
+            Some(rect)
+        );
+    }
+
+    async fn anonymous_test_helper(method: &str) -> Response<Bytes> {
+        let ctx = InMemoryContext::default();
+
+        warp::test::request()
+            .method(method)
+            .path("/anonymous")
+            .reply(&anonymous_handler(ctx).recover(handle_rejection))
+            .await
+    }
+
+    #[tokio::test]
+    async fn anonymous() {
+        let res = anonymous_test_helper("POST").await;
+
+        assert_eq!(res.status(), 200);
+
+        let body = std::str::from_utf8(&res.body()).unwrap();
+        let session = serde_json::from_str::<Session>(&body).unwrap();
+
+        assert!(session.user.real_name.is_none());
+        assert!(session.user.email.is_none());
+    }
+
+    #[tokio::test]
+    async fn anonymous_invalid_method() {
+        check_allowed_http_methods(anonymous_test_helper, &["POST"]).await;
     }
 }

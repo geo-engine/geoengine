@@ -1,7 +1,7 @@
-use std::fs::File;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
+use std::{fs::File, sync::atomic::AtomicBool};
 
 use csv::{Position, Reader, StringRecord};
 use futures::stream::BoxStream;
@@ -15,7 +15,7 @@ use geoengine_datatypes::collections::{
 };
 use geoengine_datatypes::{
     primitives::{BoundingBox2D, Coordinate2D, TimeInterval},
-    projection::Projection,
+    spatial_reference::SpatialReference,
 };
 
 use crate::engine::{
@@ -25,6 +25,7 @@ use crate::engine::{
 };
 use crate::error;
 use crate::util::Result;
+use std::sync::atomic::Ordering;
 
 /// Parameters for the CSV Source Operator
 ///
@@ -33,7 +34,7 @@ use crate::util::Result;
 /// ```rust
 /// use serde_json::{Result, Value};
 /// use geoengine_operators::source::{CsvSourceParameters, CsvSource};
-/// use geoengine_operators::source::csv::{CsvGeometrySpecification, CsvTimeSpecification};
+/// use geoengine_operators::source::{CsvGeometrySpecification, CsvTimeSpecification};
 ///
 /// let json_string = r#"
 ///     {
@@ -72,6 +73,7 @@ pub struct CsvSourceParameters {
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum CsvGeometrySpecification {
+    #[allow(clippy::upper_case_acronyms)]
     XY { x: String, y: String },
 }
 
@@ -131,13 +133,10 @@ pub struct CsvSourceStream {
     parameters: CsvSourceParameters,
     bbox: BoundingBox2D,
     chunk_size: usize,
-    state: Arc<Mutex<CsvSourceStreamState>>,
-}
-
-pub struct CsvSourceStreamState {
-    csv_reader: ReaderState,
+    reader_state: Arc<Mutex<ReaderState>>,
+    thread_is_computing: Arc<AtomicBool>,
     #[allow(clippy::option_option)]
-    poll_result: Option<Option<Result<MultiPointCollection>>>,
+    poll_result: Arc<Mutex<Option<Option<Result<MultiPointCollection>>>>>,
 }
 
 pub type CsvSource = SourceOperator<CsvSourceParameters>;
@@ -146,16 +145,17 @@ pub type CsvSource = SourceOperator<CsvSourceParameters>;
 impl VectorOperator for CsvSource {
     fn initialize(
         self: Box<Self>,
-        context: crate::engine::ExecutionContext,
+        context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<InitializedVectorOperator>> {
         InitializedOperatorImpl::create(
-            self.params,
+            &self.params,
             context,
-            |_, _, _, _| Ok(()),
+            |_, _, _, _| Ok(self.params.clone()),
             |_, _, _, _, _| {
                 Ok(VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint, // TODO: get as user input
-                    projection: Projection::wgs84().into(), // TODO: get as user input
+                    spatial_reference: SpatialReference::epsg_4326().into(), // TODO: get as user input
+                    columns: Default::default(), // TODO: get when source allows loading other columns
                 })
             },
             vec![],
@@ -166,12 +166,12 @@ impl VectorOperator for CsvSource {
 }
 
 impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
-    for InitializedOperatorImpl<CsvSourceParameters, VectorResultDescriptor, ()>
+    for InitializedOperatorImpl<VectorResultDescriptor, CsvSourceParameters>
 {
     fn query_processor(&self) -> Result<crate::engine::TypedVectorQueryProcessor> {
         Ok(TypedVectorQueryProcessor::MultiPoint(
             CsvSourceProcessor {
-                params: self.params.clone(),
+                params: self.state.clone(),
             }
             .boxed(),
         ))
@@ -200,16 +200,15 @@ impl CsvSourceStream {
         );
 
         Ok(Self {
-            state: Arc::new(Mutex::new(CsvSourceStreamState {
-                poll_result: None,
-                csv_reader: ReaderState::Untouched(
-                    csv::ReaderBuilder::new()
-                        .delimiter(parameters.field_separator as u8)
-                        .has_headers(true)
-                        .from_path(parameters.file_path.as_path())
-                        .context(error::CsvSourceReader {})?,
-                ),
-            })),
+            reader_state: Arc::new(Mutex::new(ReaderState::Untouched(
+                csv::ReaderBuilder::new()
+                    .delimiter(parameters.field_separator as u8)
+                    .has_headers(true)
+                    .from_path(parameters.file_path.as_path())
+                    .context(error::CsvSourceReader {})?,
+            ))),
+            thread_is_computing: Arc::new(AtomicBool::new(false)),
+            poll_result: Arc::new(Mutex::new(None)),
             parameters,
             bbox,
             chunk_size,
@@ -262,7 +261,7 @@ impl CsvSourceStream {
                 details: "Cannot find x index key",
             })?
             .parse()
-            .map_err(|_| error::Error::CsvSource {
+            .map_err(|_error| error::Error::CsvSource {
                 details: "Cannot parse x coordinate".to_string(),
             })?;
         let y: f64 = row
@@ -271,7 +270,7 @@ impl CsvSourceStream {
                 details: "Cannot find y index key",
             })?
             .parse()
-            .map_err(|_| error::Error::CsvSource {
+            .map_err(|_error| error::Error::CsvSource {
                 details: "Cannot parse y coordinate".to_string(),
             })?;
 
@@ -286,26 +285,37 @@ impl Stream for CsvSourceStream {
     type Item = Result<MultiPointCollection>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let mut state = self.state.lock().unwrap(); // TODO: handle lock poisoning
-        if state.poll_result.is_some() {
-            let x = state.poll_result.take().unwrap();
+        // TODO: handle lock poisoning on multiple occasions
+
+        if self.thread_is_computing.load(Ordering::Relaxed) {
+            return Poll::Pending;
+        }
+
+        let mut poll_result = self.poll_result.lock().unwrap();
+        if poll_result.is_some() {
+            let x = poll_result.take().unwrap();
             return Poll::Ready(x);
         }
-        drop(state);
 
-        let state_ref = self.state.clone();
+        self.thread_is_computing.store(true, Ordering::Relaxed);
+
+        let is_working = self.thread_is_computing.clone();
+        let reader_state = self.reader_state.clone();
+        let poll_result = self.poll_result.clone();
+
         let bbox = self.bbox;
         let chunk_size = self.chunk_size;
         let parameters = self.parameters.clone();
         let waker = cx.waker().clone();
-        tokio::spawn(async move {
-            let mut state = state_ref.lock().unwrap(); // TODO
+
+        tokio::task::spawn_blocking(move || {
+            let mut csv_reader = reader_state.lock().unwrap();
             let computation_result = || -> Result<Option<MultiPointCollection>> {
                 // TODO: is clone necessary?
                 let geometry_specification = parameters.geometry.clone();
-                state.csv_reader.setup_once(geometry_specification)?;
+                csv_reader.setup_once(geometry_specification)?;
 
-                let (header, records) = match &mut state.csv_reader {
+                let (header, records) = match &mut *csv_reader {
                     ReaderState::OnGoing { header, records } => (header, records),
                     ReaderState::Error => return Ok(None),
                     _ => unreachable!(),
@@ -342,12 +352,12 @@ impl Stream for CsvSourceStream {
                 }
             }();
 
-            // TODO
-            state.poll_result = Some(match computation_result {
+            *poll_result.lock().unwrap() = Some(match computation_result {
                 Ok(Some(collection)) => Some(Ok(collection)),
                 Ok(None) => None,
                 Err(e) => Some(Err(e)),
             });
+            is_working.store(false, Ordering::Relaxed);
 
             waker.wake();
         });
@@ -364,16 +374,13 @@ struct CsvSourceProcessor {
 impl QueryProcessor for CsvSourceProcessor {
     type Output = MultiPointCollection;
 
-    fn query(
+    fn query<'a>(
         &self,
         query: QueryRectangle,
-        _ctx: QueryContext,
-    ) -> BoxStream<'_, Result<Self::Output>> {
-        // TODO: properly propagate error
+        _ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         // TODO: properly handle chunk_size
-        CsvSourceStream::new(self.params.clone(), query.bbox, 10)
-            .expect("could not create csv source")
-            .boxed()
+        Ok(CsvSourceStream::new(self.params.clone(), query.bbox, 10)?.boxed())
     }
 }
 
@@ -394,7 +401,11 @@ struct ParsedRow {
 mod tests {
     use std::io::{Seek, SeekFrom, Write};
 
+    use geoengine_datatypes::primitives::SpatialResolution;
+
     use super::*;
+    use crate::engine::MockQueryContext;
+    use geoengine_datatypes::collections::{FeatureCollectionInfos, ToGeoJson};
 
     #[tokio::test]
     async fn read_points() {
@@ -534,12 +545,11 @@ x,y
                 Coordinate2D::new(3., 3.),
             ),
             time_interval: TimeInterval::new_unchecked(0, 1),
+            spatial_resolution: SpatialResolution::zero_point_one(),
         };
-        let ctx = QueryContext {
-            chunk_byte_size: 10 * 8 * 2,
-        };
+        let ctx = MockQueryContext::new(10 * 8 * 2);
 
-        let r: Vec<Result<MultiPointCollection>> = p.query(query, ctx).collect().await;
+        let r: Vec<Result<MultiPointCollection>> = p.query(query, &ctx).unwrap().collect().await;
 
         assert_eq!(r.len(), 1);
 
@@ -624,6 +634,6 @@ x;y
             .to_string()
         );
 
-        let _: Box<dyn VectorOperator> = serde_json::from_str(&operator_json).unwrap();
+        let _operator: Box<dyn VectorOperator> = serde_json::from_str(&operator_json).unwrap();
     }
 }

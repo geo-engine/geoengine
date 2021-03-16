@@ -1,15 +1,82 @@
 use crate::collections::{
-    FeatureCollection, FeatureCollectionRowBuilder, GeoFeatureCollectionRowBuilder,
-    IntoGeometryIterator,
+    FeatureCollection, FeatureCollectionInfos, FeatureCollectionRowBuilder,
+    GeoFeatureCollectionRowBuilder, GeometryCollection, GeometryRandomAccess, IntoGeometryIterator,
 };
 use crate::primitives::{Coordinate2D, MultiLineString, MultiLineStringAccess, MultiLineStringRef};
-use crate::util::arrow::downcast_array;
+use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::Result;
-use arrow::array::{Array, FixedSizeListArray, Float64Array, ListArray};
-use std::slice;
+use arrow::{
+    array::{Array, ArrayData, FixedSizeListArray, Float64Array, ListArray},
+    buffer::Buffer,
+    datatypes::DataType,
+};
+use std::{slice, sync::Arc};
+
+use super::geo_feature_collection::ReplaceRawArrayCoords;
 
 /// This collection contains temporal `MultiLineString`s and miscellaneous data.
 pub type MultiLineStringCollection = FeatureCollection<MultiLineString>;
+
+impl GeometryCollection for MultiLineStringCollection {
+    fn coordinates(&self) -> &[Coordinate2D] {
+        let geometries_ref = self
+            .table
+            .column_by_name(Self::GEOMETRY_COLUMN_NAME)
+            .expect("There must exist a geometry column");
+        let geometries: &ListArray = downcast_array(geometries_ref);
+
+        let line_strings_ref = geometries.values();
+        let line_strings: &ListArray = downcast_array(&line_strings_ref);
+
+        let coordinates_ref = line_strings.values();
+        let coordinates: &FixedSizeListArray = downcast_array(&coordinates_ref);
+
+        let number_of_coordinates = coordinates.data().len();
+
+        let floats_ref = coordinates.values();
+        let floats: &Float64Array = downcast_array(&floats_ref);
+
+        unsafe {
+            slice::from_raw_parts(
+                floats.values().as_ptr().cast::<Coordinate2D>(),
+                number_of_coordinates,
+            )
+        }
+    }
+
+    #[allow(clippy::cast_ptr_alignment)]
+    fn feature_offsets(&self) -> &[i32] {
+        let geometries_ref = self
+            .table
+            .column_by_name(Self::GEOMETRY_COLUMN_NAME)
+            .expect("There must exist a geometry column");
+        let geometries: &ListArray = downcast_array(geometries_ref);
+
+        let data = geometries.data();
+        let buffer = &data.buffers()[0];
+
+        unsafe { slice::from_raw_parts(buffer.as_ptr().cast::<i32>(), geometries.len() + 1) }
+    }
+}
+
+impl MultiLineStringCollection {
+    #[allow(clippy::cast_ptr_alignment)]
+    pub fn line_string_offsets(&self) -> &[i32] {
+        let geometries_ref = self
+            .table
+            .column_by_name(Self::GEOMETRY_COLUMN_NAME)
+            .expect("There must exist a geometry column");
+        let geometries: &ListArray = downcast_array(geometries_ref);
+
+        let line_strings_ref = geometries.values();
+        let line_strings: &ListArray = downcast_array(&line_strings_ref);
+
+        let data = line_strings.data();
+        let buffer = &data.buffers()[0];
+
+        unsafe { slice::from_raw_parts(buffer.as_ptr().cast::<i32>(), line_strings.len() + 1) }
+    }
+}
 
 impl<'l> IntoGeometryIterator<'l> for MultiLineStringCollection {
     type GeometryIterator = MultiLineStringIterator<'l>;
@@ -70,7 +137,7 @@ impl<'l> Iterator for MultiLineStringIterator<'l> {
             line_coordinate_slices.push(unsafe {
                 #[allow(clippy::cast_ptr_alignment)]
                 slice::from_raw_parts(
-                    float_array.raw_values() as *const Coordinate2D,
+                    float_array.values().as_ptr().cast::<Coordinate2D>(),
                     number_of_coordinates,
                 )
             });
@@ -88,6 +155,49 @@ impl<'l> Iterator for MultiLineStringIterator<'l> {
 
     fn count(self) -> usize {
         self.length - self.index
+    }
+}
+
+impl<'l> GeometryRandomAccess<'l> for MultiLineStringCollection {
+    type GeometryType = MultiLineStringRef<'l>;
+
+    fn geometry_at(&'l self, index: usize) -> Option<Self::GeometryType> {
+        let geometry_column: &ListArray = downcast_array(
+            &self
+                .table
+                .column_by_name(MultiLineStringCollection::GEOMETRY_COLUMN_NAME)
+                .expect("Column must exist since it is in the metadata"),
+        );
+
+        if index >= self.len() {
+            return None;
+        }
+
+        let line_array_ref = geometry_column.value(index);
+        let line_array: &ListArray = downcast_array(&line_array_ref);
+
+        let number_of_lines = line_array.len();
+        let mut line_coordinate_slices = Vec::with_capacity(number_of_lines);
+
+        for line_index in 0..number_of_lines {
+            let coordinate_array_ref = line_array.value(line_index);
+            let coordinate_array: &FixedSizeListArray = downcast_array(&coordinate_array_ref);
+
+            let number_of_coordinates = coordinate_array.len();
+
+            let float_array_ref = coordinate_array.value(0);
+            let float_array: &Float64Array = downcast_array(&float_array_ref);
+
+            line_coordinate_slices.push(unsafe {
+                #[allow(clippy::cast_ptr_alignment)]
+                slice::from_raw_parts(
+                    float_array.values().as_ptr().cast::<Coordinate2D>(),
+                    number_of_coordinates,
+                )
+            });
+        }
+
+        Some(MultiLineStringRef::new_unchecked(line_coordinate_slices))
     }
 }
 
@@ -117,11 +227,51 @@ impl GeoFeatureCollectionRowBuilder<MultiLineString>
     }
 }
 
+impl ReplaceRawArrayCoords for MultiLineStringCollection {
+    fn replace_raw_coords(array_ref: &Arc<dyn Array>, new_coords: Buffer) -> Arc<ArrayData> {
+        let geometries: &ListArray = downcast_array(array_ref);
+
+        let feature_offset_array = geometries.data();
+
+        let feature_offsets_buffer = &feature_offset_array.buffers()[0];
+        let num_features = feature_offset_array.len();
+
+        let line_offsets_array = &feature_offset_array.child_data()[0];
+        let line_offsets_buffer = &line_offsets_array.buffers()[0];
+        let num_lines = line_offsets_array.len();
+
+        let num_coords = new_coords.len() / std::mem::size_of::<Coordinate2D>();
+        let num_floats = num_coords * 2;
+
+        ArrayData::builder(MultiLineString::arrow_data_type())
+            .len(num_features)
+            .add_buffer(feature_offsets_buffer.clone())
+            .add_child_data(
+                ArrayData::builder(Coordinate2D::arrow_list_data_type())
+                    .len(num_lines)
+                    .add_buffer(line_offsets_buffer.clone())
+                    .add_child_data(
+                        ArrayData::builder(Coordinate2D::arrow_data_type())
+                            .len(num_coords)
+                            .add_child_data(
+                                ArrayData::builder(DataType::Float64)
+                                    .len(num_floats)
+                                    .add_buffer(new_coords)
+                                    .build(),
+                            )
+                            .build(),
+                    )
+                    .build(),
+            )
+            .build()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    use crate::collections::BuilderProvider;
+    use crate::collections::{BuilderProvider, FeatureCollectionModifications};
     use crate::primitives::TimeInterval;
 
     #[test]
@@ -220,6 +370,39 @@ mod tests {
             ]
         );
         assert!(geometry_iter.next().is_none());
+    }
+
+    #[test]
+    #[allow(clippy::eq_op)]
+    fn equals() {
+        let mut builder = MultiLineStringCollection::builder().finish_header();
+
+        builder
+            .push_geometry(
+                MultiLineString::new(vec![vec![(0.0, 0.1).into(), (1.0, 1.1).into()]]).unwrap(),
+            )
+            .unwrap();
+        builder
+            .push_geometry(
+                MultiLineString::new(vec![
+                    vec![(4.0, 4.1).into(), (5.0, 5.1).into(), (6.0, 6.1).into()],
+                    vec![(7.0, 7.1).into(), (8.0, 8.1).into(), (9.0, 9.1).into()],
+                ])
+                .unwrap(),
+            )
+            .unwrap();
+
+        for _ in 0..2 {
+            builder.push_time_interval(TimeInterval::default()).unwrap();
+
+            builder.finish_row();
+        }
+
+        let collection = builder.build().unwrap();
+
+        assert_eq!(collection, collection);
+
+        assert_ne!(collection, collection.filter(vec![true, false]).unwrap());
     }
 
     #[test]
@@ -340,5 +523,58 @@ mod tests {
             ]
         );
         assert!(geometry_iter.next().is_none());
+    }
+
+    #[test]
+    fn reproject_multi_lines_epsg4326_epsg900913_collection() {
+        use crate::operations::reproject::{CoordinateProjection, CoordinateProjector, Reproject};
+        use crate::primitives::FeatureData;
+        use crate::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
+
+        use crate::util::well_known_data::{
+            COLOGNE_EPSG_4326, COLOGNE_EPSG_900_913, HAMBURG_EPSG_4326, HAMBURG_EPSG_900_913,
+            MARBURG_EPSG_4326, MARBURG_EPSG_900_913,
+        };
+
+        let from = SpatialReference::epsg_4326();
+        let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
+        let projector = CoordinateProjector::from_known_srs(from, to).unwrap();
+
+        let collection = MultiLineStringCollection::from_slices(
+            &[
+                MultiLineString::new(vec![vec![MARBURG_EPSG_4326, HAMBURG_EPSG_4326]]).unwrap(),
+                MultiLineString::new(vec![
+                    vec![COLOGNE_EPSG_4326, MARBURG_EPSG_4326, HAMBURG_EPSG_4326],
+                    vec![HAMBURG_EPSG_4326, COLOGNE_EPSG_4326],
+                ])
+                .unwrap(),
+            ],
+            &[TimeInterval::default(), TimeInterval::default()],
+            &[("A", FeatureData::Decimal(vec![1, 2]))],
+        )
+        .unwrap();
+
+        let expected_collection = MultiLineStringCollection::from_slices(
+            &[
+                MultiLineString::new(vec![vec![MARBURG_EPSG_900_913, HAMBURG_EPSG_900_913]])
+                    .unwrap(),
+                MultiLineString::new(vec![
+                    vec![
+                        COLOGNE_EPSG_900_913,
+                        MARBURG_EPSG_900_913,
+                        HAMBURG_EPSG_900_913,
+                    ],
+                    vec![HAMBURG_EPSG_900_913, COLOGNE_EPSG_900_913],
+                ])
+                .unwrap(),
+            ],
+            &[TimeInterval::default(), TimeInterval::default()],
+            &[("A", FeatureData::Decimal(vec![1, 2]))],
+        )
+        .unwrap();
+
+        let proj_collection = collection.reproject(&projector).unwrap();
+
+        assert_eq!(proj_collection, expected_collection)
     }
 }

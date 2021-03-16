@@ -5,7 +5,7 @@ use arrow::array::{
 };
 use arrow::buffer::{Buffer, MutableBuffer};
 use arrow::compute::kernels::filter::filter;
-use arrow::datatypes::{DataType, DateUnit, Field, Schema};
+use arrow::datatypes::{DataType, DateUnit, Field};
 use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval};
 use ocl::ProQue;
 use std::{mem, slice};
@@ -46,17 +46,12 @@ fn null_values() {
     assert_eq!(primitive_array.len(), 5);
     assert_eq!(primitive_array.null_count(), 1);
 
-    let buffer = primitive_array.values();
+    let data = primitive_array.values();
 
-    let underlying_data = buffer.data();
-    assert_eq!(underlying_data.len(), 5 * 4);
+    assert_eq!(data.len(), 5);
 
-    let casted_data = unsafe { buffer.typed_data::<i32>() };
-
-    assert_eq!(casted_data.len(), 5);
-
-    assert_eq!(&casted_data[0..1], &[1]);
-    assert_eq!(&casted_data[2..5], &[3, 4, 5]);
+    assert_eq!(&data[0..1], &[1]);
+    assert_eq!(&data[2..5], &[3, 4, 5]);
 }
 
 #[test]
@@ -77,7 +72,7 @@ fn null_bytes() {
         assert_eq!(null_bitmap.len(), 1);
 
         assert_eq!(
-            null_bitmap.clone().into_buffer().data(), // must clone bitmap because there is no way to get a reference to the data
+            null_bitmap.clone().into_buffer().as_slice(), // must clone bitmap because there is no way to get a reference to the data
             &[0b0000_1001] // right most bit is first element, 1 = valid value, 0 = null or unset
         );
     }
@@ -102,12 +97,9 @@ fn offset() {
 
     assert_eq!(subarray.len(), 2);
     assert_eq!(subarray.offset(), 2);
-    assert_eq!(
-        unsafe { typed_subarray.values().typed_data::<f64>() }.len(),
-        5
-    ); // does NOT point to sub-slice
+    assert_eq!(typed_subarray.values().len(), 2);
 
-    assert_eq!(array.value_slice(2, 2), &[20., 9.4]);
+    assert_eq!(typed_subarray.values(), &[20., 9.4]);
 }
 
 #[test]
@@ -175,7 +167,7 @@ fn strings2() {
     assert_eq!(array.value(3), "other");
     assert_eq!(array.value(4), "side");
 
-    assert_eq!(array.value_data().data(), b"hellofromtheotherside");
+    assert_eq!(array.value_data().as_slice(), b"hellofromtheotherside");
     assert_eq!(
         unsafe { array.value_offsets().typed_data::<i32>() },
         &[0, 5, 9, 12, 17, 21]
@@ -210,7 +202,7 @@ fn list() {
             .as_any()
             .downcast_ref::<Int32Array>()
             .unwrap()
-            .value_slice(0, 5),
+            .values(),
         &[0, 1, 2, 3, 4],
     );
     assert_eq!(
@@ -249,7 +241,7 @@ fn fixed_size_list() {
             .as_any()
             .downcast_ref::<Int32Array>()
             .unwrap()
-            .value_slice(0, array.len() * array.value_length() as usize),
+            .values(),
         &[0, 1, 2, 3, 4, 5],
     );
 }
@@ -297,7 +289,7 @@ fn binary() {
     assert_eq!(
         unsafe {
             slice::from_raw_parts(
-                array.value_data().raw_data() as *const TimeInterval,
+                array.value_data().as_ptr() as *const TimeInterval,
                 array.len(),
             )
         },
@@ -337,7 +329,7 @@ fn ocl() {
 
     let ocl_buffer = pro_que
         .buffer_builder()
-        .copy_host_slice(array.value_slice(0, array.len()))
+        .copy_host_slice(array.values())
         .build()
         .unwrap();
 
@@ -357,18 +349,18 @@ fn ocl() {
     let result = {
         let buffer = MutableBuffer::new(ocl_buffer.len() * mem::size_of::<i32>());
         let buffer_raw: &mut [i32] =
-            unsafe { slice::from_raw_parts_mut(buffer.raw_data() as *mut i32, ocl_buffer.len()) };
+            unsafe { slice::from_raw_parts_mut(buffer.as_ptr() as *mut i32, ocl_buffer.len()) };
         ocl_buffer.read(buffer_raw).enq().unwrap();
 
         let data = ArrayData::builder(DataType::Int32)
             .len(ocl_buffer.len())
-            .add_buffer(buffer.freeze())
+            .add_buffer(buffer.into())
             .build();
 
         Int32Array::from(data)
     };
 
-    assert_eq!(result.value_slice(0, result.len()), &[11, 12, 13, 14, 15]);
+    assert_eq!(result.values(), &[11, 12, 13, 14, 15]);
 }
 
 #[test]
@@ -385,20 +377,20 @@ fn serialize() {
     assert_eq!(array.len(), 5);
 
     // no serialization of arrays by now
-    let json = serde_json::to_string(array.value_slice(0, array.len())).unwrap();
+    let json = serde_json::to_string(array.values()).unwrap();
 
     assert_eq!(json, "[1,2,3,4,5]");
 }
 
 #[test]
 fn table() {
-    let schema = Schema::new(vec![
+    let schema = vec![
         Field::new("feature_start", DataType::UInt64, false),
         Field::new("time_start", DataType::Date64(DateUnit::Millisecond), false),
-    ]);
+    ];
 
     let array = {
-        let mut builder = StructBuilder::from_schema(schema, 5);
+        let mut builder = StructBuilder::from_fields(schema, 5);
 
         for &(feature_start, time) in &[(0_u64, 0_i64), (1, 10), (2, 20), (3, 30), (4, 40)] {
             builder
@@ -425,7 +417,7 @@ fn table() {
             .as_any()
             .downcast_ref::<UInt64Array>()
             .unwrap()
-            .value_slice(0, array.len()),
+            .values(),
         &[0, 1, 2, 3, 4]
     );
     assert_eq!(
@@ -435,7 +427,7 @@ fn table() {
             .as_any()
             .downcast_ref::<Date64Array>()
             .unwrap()
-            .value_slice(0, array.len()),
+            .values(),
         &[0, 10, 20, 30, 40]
     );
 }
@@ -523,27 +515,32 @@ fn multipoints() {
     use arrow::datatypes::ToByteSlice;
 
     let array = {
-        let data = ArrayData::builder(DataType::List(
-            DataType::FixedSizeList(DataType::Float64.into(), 2).into(),
-        ))
+        let data = ArrayData::builder(DataType::List(Box::new(Field::new(
+            "",
+            DataType::FixedSizeList(Box::new(Field::new("", DataType::Float64, false)), 2),
+            false,
+        ))))
         .len(2) // number of multipoints
         .add_buffer(Buffer::from(&[0_i32, 2, 5].to_byte_slice()))
         .add_child_data(
-            ArrayData::builder(DataType::FixedSizeList(DataType::Float64.into(), 2))
-                .len(5) // number of coordinates
-                .add_child_data(
-                    ArrayData::builder(DataType::Float64)
-                        .len(10) // number of floats
-                        .add_buffer(Buffer::from(
-                            &[
-                                1_f64, 2., 11., 12., 21., 22., 31., 32., 41., 42., 51., 52., 61.,
-                                62., 71., 72., 81., 82., 91., 92.,
-                            ]
-                            .to_byte_slice(),
-                        ))
-                        .build(),
-                )
-                .build(),
+            ArrayData::builder(DataType::FixedSizeList(
+                Box::new(Field::new("", DataType::Float64, false)),
+                2,
+            ))
+            .len(5) // number of coordinates
+            .add_child_data(
+                ArrayData::builder(DataType::Float64)
+                    .len(10) // number of floats
+                    .add_buffer(Buffer::from(
+                        &[
+                            1_f64, 2., 11., 12., 21., 22., 31., 32., 41., 42., 51., 52., 61., 62.,
+                            71., 72., 81., 82., 91., 92.,
+                        ]
+                        .to_byte_slice(),
+                    ))
+                    .build(),
+            )
+            .build(),
         )
         .build();
 
@@ -564,7 +561,7 @@ fn multipoints() {
         .as_any()
         .downcast_ref::<Float64Array>()
         .unwrap()
-        .value_slice(0, 10);
+        .values();
     assert_eq!(floats.len(), 10);
     let coordinates: &[Coordinate2D] =
         unsafe { slice::from_raw_parts(floats.as_ptr() as *const Coordinate2D, floats.len()) };
@@ -623,7 +620,7 @@ fn multipoint_builder() {
     let coordinates_ref = first_multi_point.values();
     let coordinates: &Float64Array = coordinates_ref.as_any().downcast_ref().unwrap();
 
-    assert_eq!(coordinates.value_slice(0, 2 * 2), &[0.0, 0.1, 1.0, 1.1]);
+    assert_eq!(&coordinates.values()[0..2 * 2], &[0.0, 0.1, 1.0, 1.1]);
 
     let second_multi_point_ref = multi_point.value(1);
     let second_multi_point: &arrow::array::FixedSizeListArray =
@@ -700,4 +697,36 @@ fn multipoint_builder_bytes() {
         floats,
         &[(2.0, 2.1).into(), (3.0, 3.1).into(), (4.0, 4.1).into()]
     );
+}
+
+#[test]
+#[allow(clippy::eq_op)]
+fn float_equality() {
+    let mut floats = Float64Builder::new(3);
+    floats.append_value(4.0).unwrap();
+    floats.append_null().unwrap();
+    floats.append_value(f64::NAN).unwrap();
+
+    let floats = floats.finish();
+
+    assert_eq!(floats, floats);
+
+    let mut floats2 = Float64Builder::new(3);
+    floats2.append_value(4.0).unwrap();
+    floats2.append_null().unwrap();
+    floats2.append_value(f64::NAN).unwrap();
+
+    let floats2 = floats2.finish();
+
+    assert_eq!(floats, floats2);
+
+    let mut floats3 = Float64Builder::new(3);
+    floats3.append_value(f64::NAN).unwrap();
+    floats3.append_null().unwrap();
+    floats3.append_value(4.0).unwrap();
+
+    let floats3 = floats3.finish();
+
+    assert_ne!(floats, floats3);
+    assert_ne!(floats2, floats3);
 }

@@ -24,6 +24,10 @@ pub enum FeatureCollectionError {
         name: String,
     },
 
+    ColumnDuplicate {
+        name: String,
+    },
+
     EmptyPredicate,
 
     Primitives {
@@ -41,6 +45,11 @@ pub enum FeatureCollectionError {
     },
 
     WrongDataType,
+
+    MissingColumnArray,
+
+    MissingTime,
+    MissingGeo,
 }
 
 impl From<FeatureCollectionError> for Error {

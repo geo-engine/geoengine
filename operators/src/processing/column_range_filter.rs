@@ -9,7 +9,9 @@ use crate::util::input::StringOrNumberRange;
 use crate::util::Result;
 use futures::stream::BoxStream;
 use futures::StreamExt;
-use geoengine_datatypes::collections::FeatureCollection;
+use geoengine_datatypes::collections::{
+    FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
+};
 use geoengine_datatypes::primitives::{FeatureDataType, FeatureDataValue, Geometry};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use serde::{Deserialize, Serialize};
@@ -30,7 +32,7 @@ pub type ColumnRangeFilter = Operator<ColumnRangeFilterParams>;
 impl VectorOperator for ColumnRangeFilter {
     fn initialize(
         self: Box<Self>,
-        context: ExecutionContext,
+        context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedVectorOperator>> {
         // TODO: create generic validate util
         ensure!(
@@ -49,10 +51,10 @@ impl VectorOperator for ColumnRangeFilter {
         );
 
         InitializedColumnRangeFilter::create(
-            self.params,
+            &self.params,
             context,
-            |_, _, _, _| Ok(()),
-            |_, _, _, _, vector_sources| Ok(vector_sources[0].result_descriptor()),
+            |p, _, _, _| Ok(p.clone()),
+            |_, _, _, _, vector_sources| Ok(vector_sources[0].result_descriptor().clone()),
             self.raster_sources,
             self.vector_sources,
         )
@@ -61,7 +63,7 @@ impl VectorOperator for ColumnRangeFilter {
 }
 
 pub type InitializedColumnRangeFilter =
-    InitializedOperatorImpl<ColumnRangeFilterParams, VectorResultDescriptor, ()>;
+    InitializedOperatorImpl<VectorResultDescriptor, ColumnRangeFilterParams>;
 
 impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
     for InitializedColumnRangeFilter
@@ -70,21 +72,21 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
         match self.vector_sources[0].query_processor()? {
             // TODO: use macro for that
             TypedVectorQueryProcessor::Data(source) => Ok(TypedVectorQueryProcessor::Data(
-                ColumnRangeFilterProcessor::new(source, self.params.clone()).boxed(),
+                ColumnRangeFilterProcessor::new(source, self.state.clone()).boxed(),
             )),
             TypedVectorQueryProcessor::MultiPoint(source) => {
                 Ok(TypedVectorQueryProcessor::MultiPoint(
-                    ColumnRangeFilterProcessor::new(source, self.params.clone()).boxed(),
+                    ColumnRangeFilterProcessor::new(source, self.state.clone()).boxed(),
                 ))
             }
             TypedVectorQueryProcessor::MultiLineString(source) => {
                 Ok(TypedVectorQueryProcessor::MultiLineString(
-                    ColumnRangeFilterProcessor::new(source, self.params.clone()).boxed(),
+                    ColumnRangeFilterProcessor::new(source, self.state.clone()).boxed(),
                 ))
             }
             TypedVectorQueryProcessor::MultiPolygon(source) => {
                 Ok(TypedVectorQueryProcessor::MultiPolygon(
-                    ColumnRangeFilterProcessor::new(source, self.params.clone()).boxed(),
+                    ColumnRangeFilterProcessor::new(source, self.state.clone()).boxed(),
                 ))
             }
         }
@@ -123,42 +125,40 @@ where
 {
     type VectorType = FeatureCollection<G>;
 
-    fn vector_query(
-        &self,
+    fn vector_query<'a>(
+        &'a self,
         query: QueryRectangle,
-        ctx: QueryContext,
-    ) -> BoxStream<Result<Self::VectorType>> {
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
         let column_name = self.column.clone();
         let ranges = self.ranges.clone();
         let keep_nulls = self.keep_nulls;
 
-        let filter_stream = self.source.query(query, ctx).map(move |collection| {
+        let filter_stream = self.source.query(query, ctx)?.map(move |collection| {
             let collection = collection?;
 
             // TODO: do transformation work only once
             let ranges: Result<Vec<RangeInclusive<FeatureDataValue>>> =
                 match collection.column_type(&column_name)? {
-                    FeatureDataType::Text | FeatureDataType::NullableText => ranges
+                    FeatureDataType::Text => ranges
                         .iter()
                         .cloned()
                         .map(|range| range.into_string_range().map(Into::into))
                         .collect(),
-                    FeatureDataType::Number | FeatureDataType::NullableNumber => ranges
+                    FeatureDataType::Number => ranges
                         .iter()
                         .cloned()
                         .map(|range| range.into_number_range().map(Into::into))
                         .collect(),
-                    FeatureDataType::Decimal | FeatureDataType::NullableDecimal => ranges
+                    FeatureDataType::Decimal => ranges
                         .iter()
                         .cloned()
                         .map(|range| range.into_decimal_range().map(Into::into))
                         .collect(),
-                    FeatureDataType::Categorical | FeatureDataType::NullableCategorical => {
-                        Err(error::Error::InvalidType {
-                            expected: "text, number, or decimal".to_string(),
-                            found: "categorical".to_string(),
-                        })
-                    }
+                    FeatureDataType::Categorical => Err(error::Error::InvalidType {
+                        expected: "text, number, or decimal".to_string(),
+                        found: "categorical".to_string(),
+                    }),
                 };
 
             collection
@@ -167,17 +167,19 @@ where
         });
 
         let merged_chunks_stream =
-            FeatureCollectionChunkMerger::new(filter_stream.fuse(), ctx.chunk_byte_size);
+            FeatureCollectionChunkMerger::new(filter_stream.fuse(), ctx.chunk_byte_size());
 
-        merged_chunks_stream.boxed()
+        Ok(merged_chunks_stream.boxed())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mock::{MockFeatureCollectionSource, MockFeatureCollectionSourceParams};
-    use geoengine_datatypes::collections::MultiPointCollection;
+    use crate::engine::{MockExecutionContext, MockQueryContext};
+    use crate::mock::MockFeatureCollectionSource;
+    use geoengine_datatypes::collections::{FeatureCollectionModifications, MultiPointCollection};
+    use geoengine_datatypes::primitives::SpatialResolution;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, FeatureData, MultiPoint, TimeInterval,
     };
@@ -214,7 +216,7 @@ mod tests {
             .to_string()
         );
 
-        let _: Box<dyn VectorOperator> = serde_json::from_str(&serialized).unwrap();
+        let _operator: Box<dyn VectorOperator> = serde_json::from_str(&serialized).unwrap();
     }
 
     #[tokio::test]
@@ -234,12 +236,7 @@ mod tests {
         )
         .unwrap();
 
-        let source = MockFeatureCollectionSource {
-            params: MockFeatureCollectionSourceParams {
-                collection: collection.clone(),
-            },
-        }
-        .boxed();
+        let source = MockFeatureCollectionSource::single(collection.clone()).boxed();
 
         let filter = ColumnRangeFilter {
             params: ColumnRangeFilterParams {
@@ -252,7 +249,7 @@ mod tests {
         }
         .boxed();
 
-        let initialized = filter.initialize(ExecutionContext).unwrap();
+        let initialized = filter.initialize(&MockExecutionContext::default()).unwrap();
 
         let point_processor = match initialized.query_processor() {
             Ok(TypedVectorQueryProcessor::MultiPoint(processor)) => processor,
@@ -262,11 +259,12 @@ mod tests {
         let query_rectangle = QueryRectangle {
             bbox: BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
             time_interval: TimeInterval::default(),
+            spatial_resolution: SpatialResolution::zero_point_one(),
         };
-        let ctx = QueryContext {
-            chunk_byte_size: 2 * std::mem::size_of::<Coordinate2D>(),
-        };
-        let stream = point_processor.vector_query(query_rectangle, ctx);
+
+        let ctx = MockQueryContext::new(2 * std::mem::size_of::<Coordinate2D>());
+
+        let stream = point_processor.vector_query(query_rectangle, &ctx).unwrap();
 
         let collections: Vec<MultiPointCollection> = stream.map(Result::unwrap).collect().await;
 

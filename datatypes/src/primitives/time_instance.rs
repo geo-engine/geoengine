@@ -1,5 +1,12 @@
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
+#[cfg(feature = "postgres")]
+use postgres_types::private::BytesMut;
+#[cfg(feature = "postgres")]
+use postgres_types::{FromSql, IsNull, ToSql, Type};
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "postgres")]
+use snafu::Error;
+use std::ops::Add;
 
 #[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Debug)]
 #[repr(C)]
@@ -50,14 +57,58 @@ impl From<DateTime<Utc>> for TimeInstance {
     }
 }
 
-impl Into<TimeInstance> for i64 {
-    fn into(self) -> TimeInstance {
-        TimeInstance::from_millis(self)
+impl From<i64> for TimeInstance {
+    fn from(milliseconds: i64) -> Self {
+        TimeInstance::from_millis(milliseconds)
     }
 }
 
-impl Into<i64> for TimeInstance {
-    fn into(self) -> i64 {
-        self.inner()
+impl From<TimeInstance> for i64 {
+    fn from(time_instance: TimeInstance) -> Self {
+        time_instance.inner()
+    }
+}
+
+#[cfg(feature = "postgres")]
+impl ToSql for TimeInstance {
+    fn to_sql(&self, ty: &Type, out: &mut BytesMut) -> Result<IsNull, Box<dyn Error + Sync + Send>>
+    where
+        Self: Sized,
+    {
+        self.as_utc_date_time().unwrap().to_sql(ty, out)
+    }
+
+    fn accepts(ty: &Type) -> bool
+    where
+        Self: Sized,
+    {
+        <DateTime<Utc> as ToSql>::accepts(ty)
+    }
+
+    fn to_sql_checked(
+        &self,
+        ty: &Type,
+        out: &mut BytesMut,
+    ) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
+        self.as_utc_date_time().unwrap().to_sql_checked(ty, out)
+    }
+}
+
+#[cfg(feature = "postgres")]
+impl<'a> FromSql<'a> for TimeInstance {
+    fn from_sql(ty: &Type, raw: &'a [u8]) -> Result<Self, Box<dyn Error + Sync + Send>> {
+        DateTime::<Utc>::from_sql(ty, raw).map(Into::into)
+    }
+
+    fn accepts(ty: &Type) -> bool {
+        <DateTime<Utc> as FromSql>::accepts(ty)
+    }
+}
+
+impl Add<i64> for TimeInstance {
+    type Output = Self;
+
+    fn add(self, rhs: i64) -> Self::Output {
+        (self.0 + rhs).into()
     }
 }

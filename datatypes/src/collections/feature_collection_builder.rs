@@ -1,3 +1,4 @@
+use crate::collections::batch_builder::RawFeatureCollectionBuilder;
 use crate::collections::{error, FeatureCollection, FeatureCollectionError};
 use crate::primitives::{FeatureDataType, FeatureDataValue, Geometry, TimeInterval};
 use crate::util::arrow::{downcast_mut_array, ArrowTyped};
@@ -42,7 +43,7 @@ where
 }
 
 /// A default implementation of a feature collection builder
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FeatureCollectionBuilder<CollectionType>
 where
     CollectionType: Geometry + ArrowTyped,
@@ -53,7 +54,7 @@ where
 
 impl<CollectionType> FeatureCollectionBuilder<CollectionType>
 where
-    CollectionType: Geometry + ArrowTyped,
+    CollectionType: Geometry + ArrowTyped + 'static,
 {
     /// Adds a column to the collection.
     ///
@@ -94,8 +95,22 @@ where
                 .collect(),
             types: self.types,
             rows: 0,
+            string_bytes: 0,
             _collection_type: PhantomData,
         }
+    }
+
+    pub fn batch_builder(
+        self,
+        num_features: usize,
+        num_coords: usize,
+    ) -> RawFeatureCollectionBuilder {
+        RawFeatureCollectionBuilder::new(
+            CollectionType::DATA_TYPE,
+            self.types,
+            num_features,
+            num_coords,
+        )
     }
 }
 
@@ -110,6 +125,7 @@ where
     types: HashMap<String, FeatureDataType>,
     rows: usize,
     _collection_type: PhantomData<CollectionType>,
+    string_bytes: usize, // TODO: remove when `StringBuilder` is able to output those
 }
 
 impl<CollectionType> FeatureCollectionRowBuilder<CollectionType>
@@ -175,10 +191,14 @@ where
                 number_builder.append_option(value)?;
             }
             FeatureDataValue::Text(value) => {
+                self.string_bytes += value.as_bytes().len();
+
                 let string_builder: &mut StringBuilder = downcast_mut_array(data_builder.as_mut());
                 string_builder.append_value(&value)?;
             }
             FeatureDataValue::NullableText(value) => {
+                self.string_bytes += value.as_ref().map_or(0, |s| s.as_bytes().len());
+
                 let string_builder: &mut StringBuilder = downcast_mut_array(data_builder.as_mut());
                 if let Some(v) = &value {
                     string_builder.append_value(&v)?;
@@ -222,6 +242,41 @@ where
     /// Checks whether there was no row finished yet
     pub fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+
+    /// Outputs the number of bytes that is occupied in the builder buffers
+    ///
+    /// # Panics
+    /// * if the data type is unknown or unexpected which must not be the case
+    ///
+    pub fn byte_size(&mut self) -> usize {
+        let geometry_size = CollectionType::builder_byte_size(&mut self.geometries_builder);
+        let time_intervals_size = TimeInterval::builder_byte_size(&mut self.time_intervals_builder);
+
+        let attributes_size = self
+            .builders
+            .values()
+            .map(|builder| {
+                let data_type_size = if builder.as_any().is::<Float64Builder>() {
+                    std::mem::size_of::<f64>()
+                } else if builder.as_any().is::<Int64Builder>() {
+                    std::mem::size_of::<i64>()
+                } else if builder.as_any().is::<UInt8Builder>() {
+                    std::mem::size_of::<u8>()
+                } else if builder.as_any().is::<StringBuilder>() {
+                    0 // TODO: how to get this dynamic value
+                } else {
+                    unreachable!("This type is not an attribute type");
+                };
+
+                let values_size = builder.len() * data_type_size;
+                let null_size_estimate = builder.len() / 8;
+
+                values_size + null_size_estimate + self.string_bytes
+            })
+            .sum::<usize>();
+
+        geometry_size + time_intervals_size + attributes_size
     }
 
     /// Build the feature collection
@@ -273,7 +328,7 @@ where
         builders.push(Box::new(self.time_intervals_builder));
 
         for (column_name, builder) in self.builders.drain() {
-            let column_type = self.types.get(&column_name).unwrap(); // column must exist
+            let column_type = self.types.get(&column_name).expect("column must exist");
             columns.push(Field::new(
                 &column_name,
                 column_type.arrow_data_type(),

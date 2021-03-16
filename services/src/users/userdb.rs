@@ -1,16 +1,27 @@
 use crate::error::Result;
-use crate::users::session::{Session, SessionToken};
+use crate::projects::project::{ProjectId, STRectangle};
+use crate::users::session::{Session, SessionId};
 use crate::users::user::{UserCredentials, UserId, UserRegistration};
 use crate::util::user_input::Validated;
+use async_trait::async_trait;
 
-pub trait UserDB: Send + Sync {
+#[async_trait]
+pub trait UserDb: Send + Sync {
     /// Registers a user by providing `UserRegistration` parameters
     ///
     /// # Errors
     ///
     /// This call fails if the `UserRegistration` is invalid.
     ///
-    fn register(&mut self, user: Validated<UserRegistration>) -> Result<UserId>;
+    async fn register(&mut self, user: Validated<UserRegistration>) -> Result<UserId>;
+
+    /// Creates session for anonymous user
+    ///
+    /// # Errors
+    ///
+    /// This call fails if the `UserRegistration` is invalid.
+    ///
+    async fn anonymous(&mut self) -> Result<Session>;
 
     /// Creates a `Session` by providing `UserCredentials`
     ///
@@ -18,21 +29,37 @@ pub trait UserDB: Send + Sync {
     ///
     /// This call fails if the `UserCredentials` are invalid.
     ///
-    fn login(&mut self, user: UserCredentials) -> Result<Session>;
+    async fn login(&mut self, user: UserCredentials) -> Result<Session>;
 
     /// Removes a session from the `UserDB`
     ///
     /// # Errors
     ///
-    /// This call fails if the token is invalid.
+    /// This call fails if the session is invalid.
     ///
-    fn logout(&mut self, session: SessionToken) -> Result<()>;
+    async fn logout(&mut self, session: SessionId) -> Result<()>;
 
-    /// Creates a new `UserDB` session
+    /// Get session by id
     ///
     /// # Errors
     ///
-    /// This call fails if the token is invalid.
+    /// This call fails if the session is invalid.
     ///
-    fn session(&self, token: SessionToken) -> Result<Session>;
+    async fn session(&self, session: SessionId) -> Result<Session>;
+
+    /// Sets the session project
+    ///
+    /// # Errors
+    ///
+    /// This call fails if the session is invalid
+    ///
+    async fn set_session_project(&mut self, session: &Session, project: ProjectId) -> Result<()>;
+
+    /// Sets the session view
+    ///
+    /// # Errors
+    ///
+    /// This call fails if the session is invalid
+    ///
+    async fn set_session_view(&mut self, session: &Session, view: STRectangle) -> Result<()>;
 }

@@ -2,7 +2,9 @@ use crate::util::Result;
 use futures::ready;
 use futures::stream::FusedStream;
 use futures::Stream;
-use geoengine_datatypes::collections::FeatureCollection;
+use geoengine_datatypes::collections::{
+    FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
+};
 use geoengine_datatypes::primitives::Geometry;
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use pin_project::pin_project;
@@ -28,7 +30,7 @@ where
 impl<St, G> FeatureCollectionChunkMerger<St, G>
 where
     St: Stream<Item = Result<FeatureCollection<G>>> + FusedStream,
-    G: Geometry + ArrowTyped,
+    G: Geometry + ArrowTyped + 'static,
 {
     pub fn new(stream: St, chunk_size_bytes: usize) -> Self {
         Self {
@@ -82,7 +84,7 @@ where
 impl<St, G> Stream for FeatureCollectionChunkMerger<St, G>
 where
     St: Stream<Item = Result<FeatureCollection<G>>> + FusedStream,
-    G: Geometry + ArrowTyped,
+    G: Geometry + ArrowTyped + 'static,
 {
     type Item = St::Item;
 
@@ -116,7 +118,7 @@ where
 impl<St, G> FusedStream for FeatureCollectionChunkMerger<St, G>
 where
     St: Stream<Item = Result<FeatureCollection<G>>> + FusedStream,
-    G: Geometry + ArrowTyped,
+    G: Geometry + ArrowTyped + 'static,
 {
     fn is_terminated(&self) -> bool {
         self.stream.is_terminated() && self.accum.is_none()
@@ -128,17 +130,17 @@ mod tests {
     use super::*;
 
     use crate::engine::{
-        ExecutionContext, QueryContext, QueryProcessor, QueryRectangle, TypedVectorQueryProcessor,
-        VectorOperator,
+        MockExecutionContext, MockQueryContext, QueryProcessor, QueryRectangle,
+        TypedVectorQueryProcessor, VectorOperator,
     };
     use crate::error::Error;
-    use crate::mock::{
-        MockFeatureCollectionSource, MockFeatureCollectionSourceParams, MockPointSource,
-        MockPointSourceParams,
-    };
+    use crate::mock::{MockFeatureCollectionSource, MockPointSource, MockPointSourceParams};
     use futures::{StreamExt, TryStreamExt};
-    use geoengine_datatypes::collections::{DataCollection, MultiPointCollection};
     use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, MultiPoint, TimeInterval};
+    use geoengine_datatypes::{
+        collections::{DataCollection, MultiPointCollection},
+        primitives::SpatialResolution,
+    };
 
     #[tokio::test]
     async fn simple() {
@@ -153,7 +155,10 @@ mod tests {
             },
         };
 
-        let source = source.boxed().initialize(ExecutionContext).unwrap();
+        let source = source
+            .boxed()
+            .initialize(&MockExecutionContext::default())
+            .unwrap();
 
         let processor =
             if let TypedVectorQueryProcessor::MultiPoint(p) = source.query_processor().unwrap() {
@@ -165,18 +170,18 @@ mod tests {
         let qrect = QueryRectangle {
             bbox: BoundingBox2D::new((0.0, 0.0).into(), (10.0, 10.0).into()).unwrap(),
             time_interval: Default::default(),
+            spatial_resolution: SpatialResolution::zero_point_one(),
         };
-        let cx = QueryContext {
-            chunk_byte_size: std::mem::size_of::<Coordinate2D>() * 2,
-        };
+        let cx = MockQueryContext::new(std::mem::size_of::<Coordinate2D>() * 2);
 
         let number_of_source_chunks = processor
-            .query(qrect, cx)
+            .query(qrect, &cx)
+            .unwrap()
             .fold(0_usize, async move |i, _| i + 1)
             .await;
         assert_eq!(number_of_source_chunks, 5);
 
-        let stream = processor.query(qrect, cx);
+        let stream = processor.query(qrect, &cx).unwrap();
 
         let chunk_byte_size = MultiPointCollection::from_data(
             MultiPoint::many(coordinates[0..5].to_vec()).unwrap(),
@@ -220,14 +225,10 @@ mod tests {
 
     #[tokio::test]
     async fn empty() {
-        let source = MockFeatureCollectionSource {
-            params: MockFeatureCollectionSourceParams {
-                collection: DataCollection::empty(),
-            },
-        }
-        .boxed()
-        .initialize(ExecutionContext)
-        .unwrap();
+        let source = MockFeatureCollectionSource::single(DataCollection::empty())
+            .boxed()
+            .initialize(&MockExecutionContext::default())
+            .unwrap();
 
         let processor =
             if let TypedVectorQueryProcessor::Data(p) = source.query_processor().unwrap() {
@@ -239,12 +240,14 @@ mod tests {
         let qrect = QueryRectangle {
             bbox: BoundingBox2D::new((0.0, 0.0).into(), (0.0, 0.0).into()).unwrap(),
             time_interval: Default::default(),
+            spatial_resolution: SpatialResolution::zero_point_one(),
         };
-        let cx = QueryContext { chunk_byte_size: 0 };
+        let cx = MockQueryContext::new(0);
 
-        let collections = FeatureCollectionChunkMerger::new(processor.query(qrect, cx).fuse(), 0)
-            .collect::<Vec<Result<DataCollection>>>()
-            .await;
+        let collections =
+            FeatureCollectionChunkMerger::new(processor.query(qrect, &cx).unwrap().fuse(), 0)
+                .collect::<Vec<Result<DataCollection>>>()
+                .await;
 
         assert_eq!(collections.len(), 0);
     }
@@ -296,7 +299,7 @@ mod tests {
         );
     }
 
-    #[tokio::test(max_threads = 1)]
+    #[tokio::test(flavor = "current_thread")]
     async fn interleaving_pendings() {
         let mut stream_history: Vec<Poll<Option<Result<MultiPointCollection>>>> = vec![
             Poll::Pending,
@@ -323,7 +326,7 @@ mod tests {
         let stream = futures::stream::poll_fn(move |cx| {
             let item = stream_history.pop().unwrap_or(Poll::Ready(None));
 
-            if let Poll::Pending = item {
+            if item.is_pending() {
                 cx.waker().wake_by_ref();
             }
 

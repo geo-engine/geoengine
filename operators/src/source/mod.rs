@@ -1,5 +1,15 @@
-pub mod csv;
-pub mod gdal_source;
+mod csv;
+mod gdal_source;
+mod ogr_source;
 
-pub use self::csv::{CsvSource, CsvSourceParameters, CsvSourceStream};
-pub use self::gdal_source::{GdalSource, GdalSourceParameters};
+pub use self::csv::{
+    CsvGeometrySpecification, CsvSource, CsvSourceParameters, CsvSourceStream, CsvTimeSpecification,
+};
+pub use self::gdal_source::{
+    FileNotFoundHandling, GdalDataSetParameters, GdalLoadingInfo, GdalMetaDataRegular,
+    GdalMetaDataStatic, GdalSource, GdalSourceParameters, GdalSourceProcessor,
+};
+pub use self::ogr_source::{
+    OgrSource, OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceErrorSpec,
+    OgrSourceParameters,
+};

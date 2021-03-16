@@ -1,14 +1,16 @@
-use crate::collections::VectorDataType;
-use crate::primitives::{Geometry, GeometryRef};
-use crate::util::arrow::ArrowTyped;
-use arrow::array::{
-    Array, ArrayBuilder, ArrayDataRef, ArrayEqual, ArrayRef, BooleanArray, JsonEqual,
-};
+use std::any::Any;
+use std::convert::TryFrom;
+
+use arrow::array::{Array, ArrayBuilder, ArrayDataRef, ArrayRef, BooleanArray, JsonEqual};
 use arrow::datatypes::DataType;
 use arrow::error::ArrowError;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::any::Any;
+
+use crate::collections::VectorDataType;
+use crate::error::Error;
+use crate::primitives::{BoundingBox2D, Geometry, GeometryRef, PrimitivesError, TypedGeometry};
+use crate::util::arrow::ArrowTyped;
 
 /// A zero-sized placeholder struct for situations where a geometry is necessary.
 /// Currently, this is only required for `FeatureCollection` implementations.
@@ -18,9 +20,25 @@ pub struct NoGeometry;
 impl Geometry for NoGeometry {
     const IS_GEOMETRY: bool = false;
     const DATA_TYPE: VectorDataType = VectorDataType::Data;
+
+    fn intersects_bbox(&self, _bbox: &BoundingBox2D) -> bool {
+        true
+    }
 }
 
 impl GeometryRef for NoGeometry {}
+
+impl TryFrom<TypedGeometry> for NoGeometry {
+    type Error = Error;
+
+    fn try_from(value: TypedGeometry) -> Result<Self, Self::Error> {
+        if let TypedGeometry::Data(geometry) = value {
+            Ok(geometry)
+        } else {
+            Err(PrimitivesError::InvalidConversion.into())
+        }
+    }
+}
 
 impl ArrowTyped for NoGeometry {
     type ArrowArray = NoArrowArray;
@@ -28,6 +46,10 @@ impl ArrowTyped for NoGeometry {
 
     fn arrow_data_type() -> DataType {
         unreachable!("There is no data type since there is no geometry")
+    }
+
+    fn builder_byte_size(_builder: &mut Self::ArrowBuilder) -> usize {
+        0
     }
 
     fn arrow_builder(_capacity: usize) -> Self::ArrowBuilder {
@@ -56,8 +78,8 @@ impl ArrowTyped for NoGeometry {
     }
 }
 
-impl Into<geojson::Geometry> for NoGeometry {
-    fn into(self) -> geojson::Geometry {
+impl From<NoGeometry> for geojson::Geometry {
+    fn from(_: NoGeometry) -> geojson::Geometry {
         unreachable!("There is no geometry since there is no geometry")
     }
 }
@@ -78,6 +100,14 @@ impl Array for NoArrowArray {
     fn data_ref(&self) -> &ArrayDataRef {
         unreachable!("There is no implementation since there is no geometry")
     }
+
+    fn get_buffer_memory_size(&self) -> usize {
+        0
+    }
+
+    fn get_array_memory_size(&self) -> usize {
+        0
+    }
 }
 
 impl ArrayBuilder for NoArrowArray {
@@ -86,14 +116,6 @@ impl ArrayBuilder for NoArrowArray {
     }
 
     fn is_empty(&self) -> bool {
-        unreachable!("There is no implementation since there is no geometry")
-    }
-
-    fn append_data(&mut self, _data: &[ArrayDataRef]) -> Result<(), ArrowError> {
-        unreachable!("There is no implementation since there is no geometry")
-    }
-
-    fn data_type(&self) -> DataType {
         unreachable!("There is no implementation since there is no geometry")
     }
 
@@ -116,22 +138,6 @@ impl ArrayBuilder for NoArrowArray {
 
 impl JsonEqual for NoArrowArray {
     fn equals_json(&self, _json: &[&Value]) -> bool {
-        unreachable!("There is no implementation since there is no geometry")
-    }
-}
-
-impl ArrayEqual for NoArrowArray {
-    fn equals(&self, _other: &dyn Array) -> bool {
-        unreachable!("There is no implementation since there is no geometry")
-    }
-
-    fn range_equals(
-        &self,
-        _other: &dyn Array,
-        _start_idx: usize,
-        _end_idx: usize,
-        _other_start_idx: usize,
-    ) -> bool {
         unreachable!("There is no implementation since there is no geometry")
     }
 }

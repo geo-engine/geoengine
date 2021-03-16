@@ -2,37 +2,44 @@ name: CI
 
 on:
   push:
-    branches: [ master ]
+    branches: [master]
   pull_request:
-    branches: [ master ]
+    branches: [master]
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
 
 jobs:
   build:
-
     runs-on: ${{matrix.os}}
+
+    services:
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_USER: geoengine
+          POSTGRES_PASSWORD: geoengine
+          POSTGRES_DB: geoengine
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+
     strategy:
       matrix:
         os:
-          - ubuntu-18.04
+          - ubuntu-20.04
+        features: ["", "--all-features"]
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v1
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: nightly
-          components: clippy, rustfmt
-          override: true
+        uses: actions/checkout@v2
+      - name: APT update
+        run: sudo apt-get update
+      - name: Install lld
+        run: sudo apt-get install lld
       - name: Install OpenCL
-        run: |
-          sudo apt-get update
-          sudo apt-get install ocl-icd-opencl-dev pocl-opencl-icd
-          sudo ln -s /usr/lib/llvm-6.0/lib/clang/6.0.1 /usr/lib/llvm-6.0/lib/clang/6.0.0
+        run: sudo apt-get install ocl-icd-opencl-dev pocl-opencl-icd
       - name: Install GDAL
         run: |
-          sudo apt-get update
           sudo apt-get install libgdal-dev gdal-bin build-essential
           export C_INCLUDE_PATH=/usr/include/gdal:$C_INCLUDE_PATH
           export CPLUS_INCLUDE_PATH=/usr/include/gdal:$CPLUS_INCLUDE_PATH
@@ -50,14 +57,46 @@ jobs:
         uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          args: --all-targets --all-features -- -D warnings
+          args: --all-targets ${{ matrix.features }} -- -D warnings
       - name: Build
         uses: actions-rs/cargo@v1
         with:
           command: build
-          args: --all-features --verbose
+          args: ${{ matrix.features }} --verbose
       - name: Run tests
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --all-features --verbose
+          args: ${{ matrix.features }} --verbose
+
+  coverage:
+    runs-on: ubuntu-20.04
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+      - name: APT update
+        run: sudo apt-get update
+      - name: Install lld
+        run: sudo apt-get install lld
+      - name: Install OpenCL
+        run: sudo apt-get install ocl-icd-opencl-dev pocl-opencl-icd
+      - name: Install GDAL
+        run: |
+          sudo apt-get install libgdal-dev gdal-bin build-essential
+          export C_INCLUDE_PATH=/usr/include/gdal:$C_INCLUDE_PATH
+          export CPLUS_INCLUDE_PATH=/usr/include/gdal:$CPLUS_INCLUDE_PATH
+          sudo ldconfig
+      - name: Setup building
+        run: |
+          export CC="clang-9"
+          export CXX="clang++-9"
+      - name: Generate code coverage
+        run: |
+          cargo install cargo-tarpaulin
+          cargo tarpaulin --verbose --workspace --timeout 120 --out Lcov
+      - name: Upload coverage to Coveralls
+        uses: coverallsapp/github-action@v1.1.1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path-to-lcov: lcov.info

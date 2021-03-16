@@ -1,10 +1,13 @@
-use super::Coordinate2D;
+use super::{Coordinate2D, SpatialBounded};
 use crate::error;
 use crate::util::Result;
+#[cfg(feature = "postgres")]
+use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
 #[derive(Copy, Clone, Serialize, Deserialize, PartialEq, Debug)]
+#[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
 #[repr(C)]
 /// The bounding box of a geometry.
 /// Note: may degenerate to a point!
@@ -244,11 +247,11 @@ impl BoundingBox2D {
     }
 
     fn contains_x(&self, other_bbox: &Self) -> bool {
-        crate::util::ranges::value_in_range(
+        crate::util::ranges::value_in_range_inclusive(
             other_bbox.lower_left().x,
             self.lower_left().x,
             self.upper_right().x,
-        ) && crate::util::ranges::value_in_range(
+        ) && crate::util::ranges::value_in_range_inclusive(
             other_bbox.upper_right().x,
             self.lower_left().x,
             self.upper_right().x,
@@ -256,11 +259,11 @@ impl BoundingBox2D {
     }
 
     fn contains_y(&self, other_bbox: &Self) -> bool {
-        crate::util::ranges::value_in_range(
+        crate::util::ranges::value_in_range_inclusive(
             other_bbox.lower_left().y,
             self.lower_left().y,
             self.upper_right().y,
-        ) && crate::util::ranges::value_in_range(
+        ) && crate::util::ranges::value_in_range_inclusive(
             other_bbox.upper_right().y,
             self.lower_left().y,
             self.upper_right().y,
@@ -290,11 +293,11 @@ impl BoundingBox2D {
     }
 
     fn overlap_x(&self, other_bbox: &Self) -> bool {
-        crate::util::ranges::value_in_range(
+        crate::util::ranges::value_in_range_inclusive(
             self.lower_left().x,
             other_bbox.lower_left().x,
             other_bbox.upper_right().x,
-        ) || crate::util::ranges::value_in_range(
+        ) || crate::util::ranges::value_in_range_inclusive(
             other_bbox.lower_left().x,
             self.lower_left().x,
             self.upper_right().x,
@@ -302,11 +305,11 @@ impl BoundingBox2D {
     }
 
     fn overlap_y(&self, other_bbox: &Self) -> bool {
-        crate::util::ranges::value_in_range(
+        crate::util::ranges::value_in_range_inclusive(
             self.lower_left().y,
             other_bbox.lower_left().y,
             other_bbox.upper_right().y,
-        ) || crate::util::ranges::value_in_range(
+        ) || crate::util::ranges::value_in_range_inclusive(
             other_bbox.lower_left().y,
             self.lower_left().y,
             self.upper_right().y,
@@ -357,7 +360,7 @@ impl BoundingBox2D {
     /// ```
     ///
     pub fn intersection(&self, other_bbox: &Self) -> Option<Self> {
-        if self.overlaps_bbox(other_bbox) {
+        if self.intersects_bbox(other_bbox) {
             let ll_x = f64::max(
                 self.lower_left_coordinate.x,
                 other_bbox.lower_left_coordinate.x,
@@ -383,11 +386,63 @@ impl BoundingBox2D {
             None
         }
     }
+
+    pub fn extend_with_coord(&mut self, coord: Coordinate2D) {
+        self.lower_left_coordinate = self.lower_left_coordinate.min_elements(coord);
+        self.upper_right_coordinate = self.upper_right_coordinate.max_elements(coord);
+    }
+
+    pub fn from_coord_iter<I: IntoIterator<Item = Coordinate2D>>(iter: I) -> Option<Self> {
+        let mut iterator = iter.into_iter();
+
+        let first = iterator.next().map(|c| BoundingBox2D::new_unchecked(c, c));
+
+        first.map(|mut f| {
+            for c in iterator {
+                f.extend_with_coord(c);
+            }
+            f
+        })
+    }
+
+    pub fn from_coord_ref_iter<'l, I: IntoIterator<Item = &'l Coordinate2D>>(
+        iter: I,
+    ) -> Option<Self> {
+        let mut iterator = iter.into_iter();
+
+        let first = iterator.next().map(|&c| BoundingBox2D::new_unchecked(c, c));
+
+        first.map(|mut f| {
+            for &c in iterator {
+                f.extend_with_coord(c);
+            }
+            f
+        })
+    }
+}
+
+impl From<BoundingBox2D> for geo::Rect<f64> {
+    fn from(bbox: BoundingBox2D) -> geo::Rect<f64> {
+        Self::from(&bbox)
+    }
+}
+
+impl From<&BoundingBox2D> for geo::Rect<f64> {
+    fn from(bbox: &BoundingBox2D) -> geo::Rect<f64> {
+        geo::Rect::new(bbox.lower_left_coordinate, bbox.upper_right_coordinate)
+    }
+}
+
+impl SpatialBounded for BoundingBox2D {
+    fn spatial_bounds(&self) -> BoundingBox2D {
+        *self
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::primitives::{BoundingBox2D, Coordinate2D};
+
+    use crate::primitives::{BoundingBox2D, Coordinate2D, SpatialBounded};
     #[test]
     #[allow(clippy::float_cmp)]
     fn bounding_box_new() {
@@ -837,5 +892,55 @@ mod tests {
             upper_right_coordinate: Coordinate2D { x: 180.0, y: 90.0 },
         };
         assert!(!query.intersects_bbox(&tile_0_5));
+    }
+
+    #[test]
+    fn intersects_inner() {
+        let bbox = BoundingBox2D::new((0.0, 0.0).into(), (15.0, 15.0).into()).unwrap();
+        let bbox2 = BoundingBox2D::new((5.0, 5.0).into(), (10.0, 10.0).into()).unwrap();
+
+        assert_eq!(bbox.intersection(&bbox2), Some(bbox2));
+    }
+
+    #[test]
+    fn spatial_bounds() {
+        let bbox = BoundingBox2D::new_unchecked((0., 0.).into(), (1., 1.).into());
+        assert_eq!(bbox, bbox.spatial_bounds())
+    }
+
+    #[test]
+    fn add_coord_outside() {
+        let mut bbox = BoundingBox2D::new_unchecked((0., 0.).into(), (1., 1.).into());
+        bbox.extend_with_coord(Coordinate2D::new(-1., 1.5));
+        let expect = BoundingBox2D::new_unchecked((-1., 0.).into(), (1., 1.5).into());
+        assert_eq!(bbox, expect)
+    }
+
+    #[test]
+    fn from_coord_iter() {
+        let expected = BoundingBox2D::new_unchecked((0., 0.).into(), (1., 1.).into());
+
+        let coordinates: Vec<Coordinate2D> = Vec::from([
+            (1., 0.4).into(),
+            (0.8, 0.0).into(),
+            (0.3, 0.1).into(),
+            (0.0, 1.0).into(),
+        ]);
+        let bbox = BoundingBox2D::from_coord_iter(coordinates).unwrap();
+        assert_eq!(bbox, expected)
+    }
+
+    #[test]
+    fn from_coord_ref_iter() {
+        let expected = BoundingBox2D::new_unchecked((0., 0.).into(), (1., 1.).into());
+
+        let coordinates: Vec<Coordinate2D> = Vec::from([
+            (1., 0.4).into(),
+            (0.8, 0.0).into(),
+            (0.3, 0.1).into(),
+            (0.0, 1.0).into(),
+        ]);
+        let bbox = BoundingBox2D::from_coord_ref_iter(coordinates.iter()).unwrap();
+        assert_eq!(bbox, expected)
     }
 }

@@ -32,12 +32,20 @@ where
     T: Pixel,
 {
     type Output = RasterTile2D<T>;
-    fn query(
-        &self,
-        _query: crate::engine::QueryRectangle,
-        _ctx: crate::engine::QueryContext,
-    ) -> futures::stream::BoxStream<crate::util::Result<Self::Output>> {
-        stream::iter(self.data.iter().cloned().map(Result::Ok)).boxed()
+    fn query<'a>(
+        &'a self,
+        query: crate::engine::QueryRectangle,
+        _ctx: &'a dyn crate::engine::QueryContext,
+    ) -> Result<futures::stream::BoxStream<crate::util::Result<Self::Output>>> {
+        // TODO: filter spatially w.r.t. query rectangle
+        Ok(stream::iter(
+            self.data
+                .iter()
+                .filter(move |t| t.time.intersects(&query.time_interval))
+                .cloned()
+                .map(Result::Ok),
+        )
+        .boxed())
     }
 }
 
@@ -53,13 +61,13 @@ pub type MockRasterSource = SourceOperator<MockRasterSourceParams>;
 impl RasterOperator for MockRasterSource {
     fn initialize(
         self: Box<Self>,
-        context: crate::engine::ExecutionContext,
+        context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<InitializedRasterOperator>> {
         InitializedOperatorImpl::create(
-            self.params,
+            &self.params,
             context,
-            |_, _, _, _| Ok(()),
-            |params, _, _, _, _| Ok(params.result_descriptor),
+            |_, _, _, _| Ok(self.params.clone()),
+            |params, _, _, _, _| Ok(params.result_descriptor.clone()),
             vec![],
             vec![],
         )
@@ -68,7 +76,7 @@ impl RasterOperator for MockRasterSource {
 }
 
 impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
-    for InitializedOperatorImpl<MockRasterSourceParams, RasterResultDescriptor, ()>
+    for InitializedOperatorImpl<RasterResultDescriptor, MockRasterSourceParams>
 {
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         fn converted<From, To>(
@@ -88,7 +96,7 @@ impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
 
         Ok(call_generic_raster_processor!(
             self.result_descriptor().data_type,
-            converted(&self.params.data)
+            converted(&self.state.data)
         ))
     }
 }
@@ -96,43 +104,36 @@ impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::ExecutionContext;
+    use crate::engine::MockExecutionContext;
+    use geoengine_datatypes::primitives::Measurement;
     use geoengine_datatypes::raster::RasterDataType;
     use geoengine_datatypes::{
         primitives::TimeInterval,
-        projection::Projection,
-        raster::{Raster2D, TileInformation},
+        raster::{Grid2D, TileInformation},
+        spatial_reference::SpatialReference,
     };
 
     #[test]
     fn serde() {
-        let raster = Raster2D::new(
-            [3, 2].into(),
-            vec![1, 2, 3, 4, 5, 6],
-            None,
-            Default::default(),
-            Default::default(),
-        )
-        .unwrap();
+        let raster = Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap();
 
-        let raster_tile = RasterTile2D {
-            time: TimeInterval::default(),
-            tile: TileInformation {
-                geo_transform: Default::default(),
-                global_pixel_position: [0, 0].into(),
-                global_size_in_tiles: [1, 2].into(),
+        let raster_tile = RasterTile2D::new_with_tile_info(
+            TimeInterval::default(),
+            TileInformation {
+                global_geo_transform: Default::default(),
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
-            data: raster,
-        };
+            raster,
+        );
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
                 data: vec![raster_tile],
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
-                    projection: Projection::wgs84().into(),
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    measurement: Measurement::Unitless,
                 },
             },
         }
@@ -148,51 +149,27 @@ mod tests {
                         "start": -9_223_372_036_854_775_808_i64,
                         "end": 9_223_372_036_854_775_807_i64
                     },
-                    "tile": {
-                        "global_size_in_tiles": {
-                            "dimension_size": [1, 2]
+                    "tile_position": [0, 0],
+                    "global_geo_transform": {
+                        "origin_coordinate": {
+                            "x": 0.0,
+                            "y": 0.0
                         },
-                        "global_tile_position": {
-                            "dimension_size": [0, 0]
-                        },
-                        "global_pixel_position": {
-                            "dimension_size": [0, 0]
-                        },
-                        "tile_size_in_pixels": {
-                            "dimension_size": [3, 2]
-                        },
-                        "geo_transform": {
-                            "upper_left_coordinate": {
-                                "x": 0.0,
-                                "y": 0.0
-                            },
-                            "x_pixel_size": 1.0,
-                            "y_pixel_size": -1.0
-                        }
+                        "x_pixel_size": 1.0,
+                        "y_pixel_size": -1.0
                     },
-                    "data": {
-                        "grid_dimension": {
-                            "dimension_size": [3, 2]
+                    "grid_array": {
+                        "shape": {
+                            "shape_array": [3, 2]
                         },
-                        "data_container": [1, 2, 3, 4, 5, 6],
-                        "no_data_value": null,
-                        "geo_transform": {
-                            "upper_left_coordinate": {
-                                "x": 0.0,
-                                "y": 0.0
-                            },
-                            "x_pixel_size": 1.0,
-                            "y_pixel_size": -1.0
-                        },
-                        "temporal_bounds": {
-                            "start": -9_223_372_036_854_775_808_i64,
-                            "end": 9_223_372_036_854_775_807_i64
-                        }
+                        "data": [1, 2, 3, 4, 5, 6],
+                        "no_data_value": null
                     }
                 }],
                 "result_descriptor": {
                     "data_type": "U8",
-                    "projection": "EPSG:4326"
+                    "spatial_reference": "EPSG:4326",
+                    "measurement": "unitless",
                 }
             }
         })
@@ -201,9 +178,9 @@ mod tests {
 
         let deserialized: Box<dyn RasterOperator> = serde_json::from_str(&serialized).unwrap();
 
-        let execution_context = ExecutionContext;
+        let execution_context = MockExecutionContext::default();
 
-        let initialized = deserialized.initialize(execution_context).unwrap();
+        let initialized = deserialized.initialize(&execution_context).unwrap();
 
         match initialized.query_processor().unwrap() {
             crate::engine::TypedRasterQueryProcessor::U8(..) => {}

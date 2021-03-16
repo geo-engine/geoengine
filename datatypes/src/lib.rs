@@ -18,12 +18,16 @@
     clippy::type_repetition_in_bounds,
     clippy::wildcard_imports
 )]
+// enable some restriction lints
+#![warn(clippy::print_stdout, clippy::print_stderr, clippy::dbg_macro)]
 
 pub mod collections;
+pub mod dataset;
 pub mod error;
 pub mod operations;
 pub mod plots;
 pub mod primitives;
-pub mod projection;
+pub mod provenance;
 pub mod raster;
+pub mod spatial_reference;
 pub mod util;

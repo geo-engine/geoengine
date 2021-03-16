@@ -4,3 +4,8 @@ members = [
     "operators",
     "services",
 ]
+
+# Rust does not inline across crates if link-time optimization (LTO) is off, which it is by default.
+# TODO: Maybe https://rust-lang.github.io/rust-clippy/stable/index.html#missing_inline_in_public_items is more suitable
+[profile.release]
+lto = true

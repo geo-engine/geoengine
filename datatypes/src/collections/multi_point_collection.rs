@@ -1,13 +1,19 @@
-use arrow::array::{Array, FixedSizeListArray, Float64Array, ListArray};
+use arrow::{
+    array::{Array, ArrayData, FixedSizeListArray, Float64Array, ListArray},
+    buffer::Buffer,
+    datatypes::DataType,
+};
 
 use crate::collections::{
-    FeatureCollection, FeatureCollectionRowBuilder, GeoFeatureCollectionRowBuilder,
-    IntoGeometryIterator,
+    FeatureCollection, FeatureCollectionInfos, FeatureCollectionRowBuilder,
+    GeoFeatureCollectionRowBuilder, GeometryCollection, GeometryRandomAccess, IntoGeometryIterator,
 };
 use crate::primitives::{Coordinate2D, MultiPoint, MultiPointRef};
 use crate::util::arrow::downcast_array;
-use crate::util::Result;
-use std::slice;
+use crate::util::{arrow::ArrowTyped, Result};
+use std::{slice, sync::Arc};
+
+use super::geo_feature_collection::ReplaceRawArrayCoords;
 
 /// This collection contains temporal multi points and miscellaneous data.
 pub type MultiPointCollection = FeatureCollection<MultiPoint>;
@@ -62,7 +68,10 @@ impl<'l> Iterator for MultiPointIterator<'l> {
         let floats: &Float64Array = downcast_array(&floats_ref);
 
         let multi_point = MultiPointRef::new_unchecked(unsafe {
-            slice::from_raw_parts(floats.raw_values() as *const Coordinate2D, number_of_points)
+            slice::from_raw_parts(
+                floats.values().as_ptr().cast::<Coordinate2D>(),
+                number_of_points,
+            )
         });
 
         self.index += 1; // increment!
@@ -77,6 +86,40 @@ impl<'l> Iterator for MultiPointIterator<'l> {
 
     fn count(self) -> usize {
         self.length - self.index
+    }
+}
+
+impl<'l> GeometryRandomAccess<'l> for MultiPointCollection {
+    type GeometryType = MultiPointRef<'l>;
+
+    fn geometry_at(&'l self, index: usize) -> Option<Self::GeometryType> {
+        let geometry_column: &ListArray = downcast_array(
+            &self
+                .table
+                .column_by_name(MultiPointCollection::GEOMETRY_COLUMN_NAME)
+                .expect("Column must exist since it is in the metadata"),
+        );
+
+        if index >= self.len() {
+            return None;
+        }
+
+        let multi_point_array_ref = geometry_column.value(index);
+        let multi_point_array: &FixedSizeListArray = downcast_array(&multi_point_array_ref);
+
+        let number_of_points = multi_point_array.len();
+
+        let floats_ref = multi_point_array.value(0);
+        let floats: &Float64Array = downcast_array(&floats_ref);
+
+        let multi_point = MultiPointRef::new_unchecked(unsafe {
+            slice::from_raw_parts(
+                floats.values().as_ptr().cast::<Coordinate2D>(),
+                number_of_points,
+            )
+        });
+
+        Some(multi_point)
     }
 }
 
@@ -100,15 +143,84 @@ impl GeoFeatureCollectionRowBuilder<MultiPoint> for FeatureCollectionRowBuilder<
     }
 }
 
+impl GeometryCollection for MultiPointCollection {
+    fn coordinates(&self) -> &[Coordinate2D] {
+        let geometries_ref = self
+            .table
+            .column_by_name(Self::GEOMETRY_COLUMN_NAME)
+            .expect("There must exist a geometry column");
+        let geometries: &ListArray = downcast_array(geometries_ref);
+
+        let coordinates_ref = geometries.values();
+        let coordinates: &FixedSizeListArray = downcast_array(&coordinates_ref);
+
+        let number_of_coordinates = coordinates.data().len();
+
+        let floats_ref = coordinates.values();
+        let floats: &Float64Array = downcast_array(&floats_ref);
+
+        unsafe {
+            slice::from_raw_parts(
+                floats.values().as_ptr().cast::<Coordinate2D>(),
+                number_of_coordinates,
+            )
+        }
+    }
+
+    #[allow(clippy::cast_ptr_alignment)]
+    fn feature_offsets(&self) -> &[i32] {
+        let geometries_ref = self
+            .table
+            .column_by_name(Self::GEOMETRY_COLUMN_NAME)
+            .expect("There must exist a geometry column");
+        let geometries: &ListArray = downcast_array(geometries_ref);
+
+        let data = geometries.data();
+        let buffer = &data.buffers()[0];
+
+        unsafe { slice::from_raw_parts(buffer.as_ptr().cast::<i32>(), geometries.len() + 1) }
+    }
+}
+
+impl ReplaceRawArrayCoords for MultiPointCollection {
+    fn replace_raw_coords(array_ref: &Arc<dyn Array>, new_coords: Buffer) -> Arc<ArrayData> {
+        let geometries: &ListArray = downcast_array(array_ref);
+        let offset_array = geometries.data();
+        let offsets_buffer = &offset_array.buffers()[0];
+        let num_features = offset_array.len();
+
+        let num_coords = new_coords.len() / std::mem::size_of::<Coordinate2D>();
+        let num_floats = num_coords * 2;
+
+        ArrayData::builder(MultiPoint::arrow_data_type())
+            .len(num_features)
+            .add_buffer(offsets_buffer.clone())
+            .add_child_data(
+                ArrayData::builder(Coordinate2D::arrow_data_type())
+                    .len(num_coords)
+                    .add_child_data(
+                        ArrayData::builder(DataType::Float64)
+                            .len(num_floats)
+                            .add_buffer(new_coords)
+                            .build(),
+                    )
+                    .build(),
+            )
+            .build()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    use crate::collections::BuilderProvider;
+    use crate::collections::{BuilderProvider, FeatureCollectionModifications, ToGeoJson};
+    use crate::operations::reproject::Reproject;
     use crate::primitives::{
-        FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue, MultiPointAccess,
-        NullableDataRef, TimeInterval,
+        DataRef, FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue, MultiPointAccess,
+        TimeInterval,
     };
+    use float_cmp::approx_eq;
     use serde_json::{from_str, json};
     use std::collections::HashMap;
 
@@ -151,7 +263,7 @@ mod tests {
             unreachable!();
         }
 
-        if let FeatureDataRef::NullableNumber(numbers) = pc.data("number_nulls").unwrap() {
+        if let FeatureDataRef::Number(numbers) = pc.data("number_nulls").unwrap() {
             assert_eq!(numbers.as_ref()[0], 0.);
             assert_eq!(numbers.as_ref()[2], 2.);
             assert_eq!(numbers.nulls(), vec![false, true, false]);
@@ -378,11 +490,11 @@ mod tests {
         }
 
         if let Ok(FeatureDataRef::Text(data_ref)) = collection_c.data("bar") {
-            assert_eq!(data_ref.text_at(0).unwrap(), "a");
-            assert_eq!(data_ref.text_at(1).unwrap(), "b");
-            assert_eq!(data_ref.text_at(2).unwrap(), "c");
-            assert_eq!(data_ref.text_at(3).unwrap(), "d");
-            assert_eq!(data_ref.text_at(4).unwrap(), "e");
+            assert_eq!(data_ref.text_at(0).unwrap().unwrap(), "a");
+            assert_eq!(data_ref.text_at(1).unwrap().unwrap(), "b");
+            assert_eq!(data_ref.text_at(2).unwrap().unwrap(), "c");
+            assert_eq!(data_ref.text_at(3).unwrap().unwrap(), "d");
+            assert_eq!(data_ref.text_at(4).unwrap().unwrap(), "e");
         } else {
             panic!("wrong data type");
         }
@@ -397,7 +509,7 @@ mod tests {
                 .add_column("foo".into(), FeatureDataType::Number)
                 .unwrap();
             builder
-                .add_column("bar".into(), FeatureDataType::NullableText)
+                .add_column("bar".into(), FeatureDataType::Text)
                 .unwrap();
             let mut builder = builder.finish_header();
 
@@ -602,6 +714,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::eq_op)]
     fn nan_equals() {
         let collection = {
             let mut builder = MultiPointCollection::builder();
@@ -632,11 +745,12 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::eq_op)]
     fn null_equals() {
         let collection = {
             let mut builder = MultiPointCollection::builder();
             builder
-                .add_column("number".into(), FeatureDataType::NullableNumber)
+                .add_column("number".into(), FeatureDataType::Number)
                 .unwrap();
             let mut builder = builder.finish_header();
 
@@ -863,5 +977,218 @@ mod tests {
         let deserialized: MultiPointCollection = serde_json::from_str(&serialized).unwrap();
 
         assert_eq!(collection, deserialized);
+    }
+
+    #[test]
+    fn coordinates() {
+        let pc = MultiPointCollection::from_data(
+            MultiPoint::many(vec![
+                vec![(0., 0.)],
+                vec![(1., 1.), (1.1, 1.1)],
+                vec![(2., 2.)],
+            ])
+            .unwrap(),
+            vec![
+                TimeInterval::new_unchecked(0, 1),
+                TimeInterval::new_unchecked(1, 2),
+                TimeInterval::new_unchecked(2, 3),
+            ],
+            {
+                let mut map = HashMap::new();
+                map.insert("numbers".into(), FeatureData::Number(vec![0., 1., 2.]));
+                map.insert(
+                    "number_nulls".into(),
+                    FeatureData::NullableNumber(vec![Some(0.), None, Some(2.)]),
+                );
+                map
+            },
+        )
+        .unwrap();
+
+        let coords = pc.coordinates();
+        assert_eq!(coords.len(), 4);
+        assert_eq!(
+            coords,
+            &[
+                [0., 0.].into(),
+                [1., 1.].into(),
+                [1.1, 1.1].into(),
+                [2., 2.].into(),
+            ]
+        );
+
+        let offsets = pc.feature_offsets();
+        assert_eq!(offsets.len(), 4);
+        assert_eq!(offsets, &[0, 1, 3, 4]);
+    }
+
+    #[test]
+    fn sort_by_time_asc() {
+        let collection = MultiPointCollection::from_data(
+            MultiPoint::many(vec![
+                vec![(0., 0.)],
+                vec![(1., 1.), (1.1, 1.1)],
+                vec![(2., 2.)],
+            ])
+            .unwrap(),
+            vec![
+                TimeInterval::new_unchecked(1, 5),
+                TimeInterval::new_unchecked(0, 3),
+                TimeInterval::new_unchecked(1, 3),
+            ],
+            {
+                let mut map = HashMap::new();
+                map.insert("numbers".into(), FeatureData::Number(vec![0., 1., 2.]));
+                map.insert(
+                    "number_nulls".into(),
+                    FeatureData::NullableNumber(vec![Some(0.), None, Some(2.)]),
+                );
+                map
+            },
+        )
+        .unwrap();
+
+        let expected_collection = MultiPointCollection::from_data(
+            MultiPoint::many(vec![
+                vec![(1., 1.), (1.1, 1.1)],
+                vec![(2., 2.)],
+                vec![(0., 0.)],
+            ])
+            .unwrap(),
+            vec![
+                TimeInterval::new_unchecked(0, 3),
+                TimeInterval::new_unchecked(1, 3),
+                TimeInterval::new_unchecked(1, 5),
+            ],
+            {
+                let mut map = HashMap::new();
+                map.insert("numbers".into(), FeatureData::Number(vec![1., 2., 0.]));
+                map.insert(
+                    "number_nulls".into(),
+                    FeatureData::NullableNumber(vec![None, Some(2.), Some(0.)]),
+                );
+                map
+            },
+        )
+        .unwrap();
+
+        let sorted_collection = collection.sort_by_time_asc().unwrap();
+
+        assert_eq!(sorted_collection, expected_collection);
+    }
+
+    #[test]
+    fn reproject_epsg4326_epsg900913() {
+        use crate::operations::reproject::{CoordinateProjection, CoordinateProjector};
+        use crate::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
+
+        use crate::util::well_known_data::{
+            COLOGNE_EPSG_4326, COLOGNE_EPSG_900_913, HAMBURG_EPSG_4326, HAMBURG_EPSG_900_913,
+            MARBURG_EPSG_4326, MARBURG_EPSG_900_913,
+        };
+
+        let from = SpatialReference::epsg_4326();
+        let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
+        let projector = CoordinateProjector::from_known_srs(from, to).unwrap();
+
+        let pc = MultiPointCollection::from_data(
+            MultiPoint::many(vec![
+                vec![MARBURG_EPSG_4326, COLOGNE_EPSG_4326],
+                vec![HAMBURG_EPSG_4326],
+            ])
+            .unwrap(),
+            vec![
+                TimeInterval::new_unchecked(0, 1),
+                TimeInterval::new_unchecked(1, 2),
+            ],
+            {
+                let mut map = HashMap::new();
+                map.insert("numbers".into(), FeatureData::Number(vec![0., 1.]));
+                map.insert(
+                    "number_nulls".into(),
+                    FeatureData::NullableNumber(vec![Some(0.), None]),
+                );
+                map
+            },
+        )
+        .unwrap();
+
+        let proj_pc = pc.reproject(&projector).unwrap();
+
+        let coords = proj_pc.coordinates();
+        assert_eq!(coords.len(), 3);
+        assert!(approx_eq!(f64, coords[0].x, MARBURG_EPSG_900_913.x));
+        assert!(approx_eq!(f64, coords[0].y, MARBURG_EPSG_900_913.y));
+        assert!(approx_eq!(f64, coords[1].x, COLOGNE_EPSG_900_913.x));
+        assert!(approx_eq!(f64, coords[1].y, COLOGNE_EPSG_900_913.y));
+        assert!(approx_eq!(f64, coords[2].x, HAMBURG_EPSG_900_913.x));
+        assert!(approx_eq!(f64, coords[2].y, HAMBURG_EPSG_900_913.y));
+
+        let offsets = proj_pc.feature_offsets();
+        assert_eq!(offsets.len(), 3);
+        assert_eq!(offsets, &[0, 2, 3]);
+    }
+
+    #[test]
+    fn reproject_epsg4326_epsg900913_collections_equal() {
+        use crate::operations::reproject::{CoordinateProjection, CoordinateProjector};
+        use crate::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
+
+        use crate::util::well_known_data::{
+            COLOGNE_EPSG_4326, COLOGNE_EPSG_900_913, HAMBURG_EPSG_4326, HAMBURG_EPSG_900_913,
+            MARBURG_EPSG_4326, MARBURG_EPSG_900_913,
+        };
+
+        let from = SpatialReference::epsg_4326();
+        let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
+        let projector = CoordinateProjector::from_known_srs(from, to).unwrap();
+
+        let pc = MultiPointCollection::from_data(
+            MultiPoint::many(vec![
+                vec![MARBURG_EPSG_4326, COLOGNE_EPSG_4326],
+                vec![HAMBURG_EPSG_4326],
+            ])
+            .unwrap(),
+            vec![
+                TimeInterval::new_unchecked(0, 1),
+                TimeInterval::new_unchecked(1, 2),
+            ],
+            {
+                let mut map = HashMap::new();
+                map.insert("numbers".into(), FeatureData::Number(vec![0., 1.]));
+                map.insert(
+                    "number_nulls".into(),
+                    FeatureData::NullableNumber(vec![Some(0.), None]),
+                );
+                map
+            },
+        )
+        .unwrap();
+
+        let pc_expected = MultiPointCollection::from_data(
+            MultiPoint::many(vec![
+                vec![MARBURG_EPSG_900_913, COLOGNE_EPSG_900_913],
+                vec![HAMBURG_EPSG_900_913],
+            ])
+            .unwrap(),
+            vec![
+                TimeInterval::new_unchecked(0, 1),
+                TimeInterval::new_unchecked(1, 2),
+            ],
+            {
+                let mut map = HashMap::new();
+                map.insert("numbers".into(), FeatureData::Number(vec![0., 1.]));
+                map.insert(
+                    "number_nulls".into(),
+                    FeatureData::NullableNumber(vec![Some(0.), None]),
+                );
+                map
+            },
+        )
+        .unwrap();
+
+        let proj_pc = pc.reproject(&projector).unwrap();
+
+        assert_eq!(proj_pc, pc_expected)
     }
 }

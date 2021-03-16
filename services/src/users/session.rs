@@ -1,53 +1,43 @@
-use core::fmt;
-use std::str::FromStr;
-
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
-use crate::error;
-use crate::error::Result;
-use crate::users::user::{User, UserId};
+use crate::projects::project::{ProjectId, STRectangle};
+use crate::users::user::UserId;
+use crate::util::Identifier;
+use chrono::{DateTime, Utc};
+use geoengine_datatypes::identifier;
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
-pub struct SessionToken {
-    token: Uuid,
+identifier!(SessionId);
+
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+pub struct UserInfo {
+    pub id: UserId,
+    pub email: Option<String>,
+    pub real_name: Option<String>,
 }
 
-impl FromStr for SessionToken {
-    type Err = error::Error;
-
-    fn from_str(token: &str) -> Result<Self> {
-        Uuid::parse_str(token)
-            .map(|id| Self { token: id })
-            .map_err(|_| error::Error::InvalidSessionToken)
-    }
-}
-
-impl Default for SessionToken {
-    fn default() -> Self {
-        Self {
-            token: Uuid::new_v4(),
-        }
-    }
-}
-
-impl fmt::Display for SessionToken {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.token)
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct Session {
-    pub user: UserId,
-    pub token: SessionToken,
+    pub id: SessionId,
+    pub user: UserInfo,
+    pub created: DateTime<Utc>,
+    pub valid_until: DateTime<Utc>,
+    pub project: Option<ProjectId>,
+    pub view: Option<STRectangle>,
 }
 
 impl Session {
-    pub fn new(user: &User) -> Session {
+    pub fn mock() -> Self {
         Self {
-            user: user.id,
-            token: SessionToken::default(),
+            id: SessionId::new(),
+            user: UserInfo {
+                id: UserId::new(),
+                email: None,
+                real_name: None,
+            },
+            created: chrono::Utc::now(),
+            valid_until: chrono::Utc::now(),
+            project: None,
+            view: None,
         }
     }
 }

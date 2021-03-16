@@ -1,0 +1,11 @@
+[postgres]
+config_string = "postgresql://geoengine:geoengine@localhost:5432"
+
+[operators.gdal_source]
+raster_data_root_path = "../operators/test-data/raster" # relative to sub crate directory for tests
+
+[raster.tiling_specification]
+    origin_coordinate_x = 0.0
+    origin_coordinate_y = 0.0
+    tile_shape_pixels_x = 600
+    tile_shape_pixels_y = 600
