@@ -5,14 +5,16 @@ use crate::util::user_input::UserInput;
 use crate::workflows::workflow::WorkflowId;
 use crate::{error, util::config::get_config_element};
 use chrono::{DateTime, Utc};
-use geoengine_datatypes::primitives::{
-    BoundingBox2D, Coordinate2D, SpatialBounded, TemporalBounded, TimeGranularity, TimeInterval,
-    TimeStep,
-};
-use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
-use geoengine_datatypes::util::Identifier;
 use geoengine_datatypes::{identifier, operations::image::RgbaColor};
 use geoengine_datatypes::{operations::image::Colorizer, primitives::TimeInstance};
+use geoengine_datatypes::{
+    primitives::{BoundingBox2D, Coordinate2D, TimeGranularity, TimeInterval, TimeStep},
+    spatial_reference::SpatialReferenceOption,
+};
+use geoengine_datatypes::{
+    primitives::{SpatialBounded, TemporalBounded},
+    util::Identifier,
+};
 use geoengine_operators::string_token;
 #[cfg(feature = "postgres")]
 use postgres_types::{FromSql, ToSql};
@@ -236,25 +238,59 @@ pub enum VectorSymbology {
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
-pub struct PointSymbology {
-    pub radius: Option<NumberParam>,
-    pub clustered: Option<bool>,
-    pub stroke_color: ColorParam,
+pub struct TextSymbology {
+    pub attribute: String,
     pub fill_color: ColorParam,
-    pub stroke_width: NumberParam,
+    pub stroke: StrokeParam,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+pub struct PointSymbology {
+    pub radius: NumberParam,
+    pub clustered: bool,
+
+    pub fill_color: ColorParam,
+
+    pub stroke: StrokeParam,
+
+    pub text: Option<TextSymbology>,
+}
+
+impl Default for PointSymbology {
+    fn default() -> Self {
+        Self {
+            radius: NumberParam::Static(10),
+            clustered: false,
+            fill_color: ColorParam::Static(RgbaColor::white()),
+            stroke: StrokeParam {
+                width: NumberParam::Static(1),
+                color: ColorParam::Static(RgbaColor::black()),
+            },
+            text: None,
+        }
+    }
+}
+
+impl From<PointSymbology> for Symbology {
+    fn from(value: PointSymbology) -> Self {
+        Symbology::Vector(VectorSymbology::Point(value))
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 pub struct LineSymbology {
-    pub stroke_color: ColorParam,
-    pub stroke_width: NumberParam,
+    pub stroke: StrokeParam,
+
+    pub text: Option<TextSymbology>,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 pub struct PolygonSymbology {
-    pub stroke_color: ColorParam,
     pub fill_color: ColorParam,
-    pub stroke_width: NumberParam,
+
+    pub stroke: StrokeParam,
+
+    pub text: Option<TextSymbology>,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
@@ -267,6 +303,14 @@ pub enum NumberParam {
 pub struct DerivedNumber {
     pub attribute: String,
     pub factor: f64,
+    pub default_value: f64,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+pub struct StrokeParam {
+    pub width: NumberParam,
+    pub color: ColorParam,
+    // TODO: dash
 }
 
 impl Eq for DerivedNumber {}
@@ -659,5 +703,57 @@ mod tests {
 
         let _update_project: UpdateProject =
             serde_json::from_reader(serialized.as_bytes()).unwrap();
+    }
+
+    #[test]
+    fn serialize_symbology() {
+        let symbology = Symbology::Vector(VectorSymbology::Point(PointSymbology {
+            radius: NumberParam::Static(1),
+            clustered: true,
+            fill_color: ColorParam::Derived(DerivedColor {
+                attribute: "foo".to_owned(),
+                colorizer: Colorizer::Rgba,
+            }),
+            stroke: StrokeParam {
+                width: NumberParam::Static(1),
+                color: ColorParam::Static(RgbaColor::black()),
+            },
+            text: None,
+        }));
+
+        assert_eq!(
+            serde_json::to_string(&symbology).unwrap(),
+            json!({
+                "Vector": {
+                    "Point": {
+                        "radius": {
+                            "Static": 1
+                        },
+                        "clustered": true,
+                        "fill_color": {
+                            "Derived": {
+                                "attribute": "foo",
+                                "colorizer": "Rgba"
+                            }
+                        },
+                        "stroke": {
+                            "width": {
+                                "Static": 1
+                            },
+                            "color": {
+                                "Static": [
+                                    0,
+                                    0,
+                                    0,
+                                    255
+                                ]
+                            }
+                        },
+                        "text": null
+                    }
+                }
+            })
+            .to_string(),
+        );
     }
 }
