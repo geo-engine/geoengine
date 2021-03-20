@@ -715,8 +715,8 @@ where
 }
 
 #[derive(Debug)]
-pub struct FeatureCollectionRow<Geometry> {
-    pub geometry: Geometry,
+pub struct FeatureCollectionRow<GeometryRef> {
+    pub geometry: GeometryRef,
     pub time_interval: TimeInterval,
     pub data: HashMap<String, FeatureDataValue>,
 }
@@ -728,12 +728,12 @@ pub struct FeatureCollectionIterator<'a, T> {
     pub row_num: usize,
 }
 
-impl<'a, T, Geometry> Iterator for FeatureCollectionIterator<'a, T>
+impl<'a, T, GeometryRef> Iterator for FeatureCollectionIterator<'a, T>
 where
-    T: std::iter::Iterator<Item = Geometry>,
-    Geometry: crate::primitives::GeometryRef,
+    T: std::iter::Iterator<Item = GeometryRef>,
+    GeometryRef: crate::primitives::GeometryRef,
 {
-    type Item = FeatureCollectionRow<Geometry>;
+    type Item = FeatureCollectionRow<GeometryRef>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let res = self
