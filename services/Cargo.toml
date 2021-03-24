@@ -34,6 +34,9 @@ tokio = { version = "1.1", features = ["macros", "signal", "sync", "rt-multi-thr
 uuid = { version = "0.8", features = ["serde", "v4", "v5"] }
 warp = "0.3"
 num-traits = "0.2"
+mime = "0.3"
+mpart-async = "0.5"
+bytes = "1.0"
 
 [dev-dependencies]
 clap = "3.0.0-beta.1"

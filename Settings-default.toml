@@ -23,3 +23,6 @@ tile_shape_pixels_y = 600
 
 [query_context]
 chunk_byte_size = 1048576 # TODO: find reasonable default
+
+[upload]
+path = "upload"

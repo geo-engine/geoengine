@@ -165,3 +165,12 @@ pub struct DataSetService {
 impl ConfigElement for DataSetService {
     const KEY: &'static str = "dataset_service";
 }
+
+#[derive(Debug, Deserialize)]
+pub struct Upload {
+    pub path: PathBuf,
+}
+
+impl ConfigElement for Upload {
+    const KEY: &'static str = "upload";
+}

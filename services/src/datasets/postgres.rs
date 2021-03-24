@@ -1,3 +1,4 @@
+use super::upload::{Upload, UploadDb, UploadId};
 use crate::datasets::listing::{DataSetListOptions, DataSetListing, DataSetProvider};
 use crate::datasets::storage::{
     AddDataSet, AddDataSetProvider, DataSetDb, DataSetProviderDb, DataSetProviderListOptions,
@@ -81,6 +82,17 @@ impl DataSetStore for PostgresDataSetDb {
     }
 
     fn wrap_meta_data(&self, _meta: super::storage::MetaDataDefinition) -> Self::StorageType {
+        todo!()
+    }
+}
+
+#[async_trait]
+impl UploadDb for PostgresDataSetDb {
+    async fn get_upload(&self, _user: UserId, _upload: UploadId) -> Result<Upload> {
+        todo!()
+    }
+
+    async fn create_upload(&mut self, _user: UserId, _upload: Upload) -> Result<()> {
         todo!()
     }
 }
