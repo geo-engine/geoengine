@@ -33,7 +33,10 @@ async fn upload<C: Context>(
     mime: Mime,
     body: impl Stream<Item = Result<impl Buf, warp::Error>> + Unpin,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    let boundary = mime.get_param("boundary").map(|v| v.to_string()).unwrap();
+    let boundary = mime
+        .get_param("boundary")
+        .map(|v| v.to_string())
+        .ok_or(error::Error::MultiPartBoundaryMissing)?;
 
     let mut stream = MultipartStream::new(
         boundary,

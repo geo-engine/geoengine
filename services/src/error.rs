@@ -136,6 +136,7 @@ pub enum Error {
     UploadFieldMissingFileName,
     UnknownUploadId,
     PathIsNotAFile,
+    MultiPartBoundaryMissing,
 }
 
 impl Reject for Error {}
