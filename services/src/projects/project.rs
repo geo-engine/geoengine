@@ -723,7 +723,6 @@ mod tests {
                         "radius": {
                             "Static": 1
                         },
-                        "clustered": true,
                         "fill_color": {
                             "Derived": {
                                 "attribute": "foo",
