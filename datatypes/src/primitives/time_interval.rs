@@ -1,7 +1,7 @@
-use crate::error;
 use crate::primitives::TimeInstance;
 use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::Result;
+use crate::{error, util::ranges::value_in_range};
 use arrow::array::{Array, ArrayBuilder, BooleanArray};
 use arrow::datatypes::{DataType, Field};
 use arrow::error::ArrowError;
@@ -188,7 +188,9 @@ impl TimeInterval {
     /// ```
     ///
     pub fn intersects(&self, other: &Self) -> bool {
-        self.start < other.end && self.end > other.start
+        other == self
+            || value_in_range(self.start, other.start, other.end)
+            || value_in_range(other.start, self.start, self.end)
     }
 
     /// Unites this interval with another one.
