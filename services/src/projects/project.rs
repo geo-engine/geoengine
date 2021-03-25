@@ -247,12 +247,8 @@ pub struct TextSymbology {
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 pub struct PointSymbology {
     pub radius: NumberParam,
-    pub clustered: bool,
-
     pub fill_color: ColorParam,
-
     pub stroke: StrokeParam,
-
     pub text: Option<TextSymbology>,
 }
 
@@ -260,7 +256,6 @@ impl Default for PointSymbology {
     fn default() -> Self {
         Self {
             radius: NumberParam::Static(10),
-            clustered: false,
             fill_color: ColorParam::Static(RgbaColor::white()),
             stroke: StrokeParam {
                 width: NumberParam::Static(1),
@@ -709,7 +704,6 @@ mod tests {
     fn serialize_symbology() {
         let symbology = Symbology::Vector(VectorSymbology::Point(PointSymbology {
             radius: NumberParam::Static(1),
-            clustered: true,
             fill_color: ColorParam::Derived(DerivedColor {
                 attribute: "foo".to_owned(),
                 colorizer: Colorizer::Rgba,
