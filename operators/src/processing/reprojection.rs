@@ -3,7 +3,6 @@ use geoengine_datatypes::{
     operations::reproject::{
         suggest_pixel_size_from_diag_cross, CoordinateProjection, CoordinateProjector, Reproject,
     },
-    raster::Pixel,
     spatial_reference::SpatialReference,
 };
 use serde::{Deserialize, Serialize};
@@ -12,8 +11,8 @@ use snafu::ensure;
 use crate::{
     engine::{
         ExecutionContext, InitializedOperator, InitializedOperatorImpl, InitializedVectorOperator,
-        Operator, QueryContext, QueryRectangle, RasterQueryProcessor, TypedVectorQueryProcessor,
-        VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+        Operator, QueryContext, QueryRectangle, TypedVectorQueryProcessor, VectorOperator,
+        VectorQueryProcessor, VectorResultDescriptor,
     },
     error,
     util::Result,
@@ -189,41 +188,6 @@ where
                 })
             })
             .boxed())
-    }
-}
-
-struct RasterReprojectionProcessor<Q, P>
-where
-    Q: RasterQueryProcessor<RasterType = P>,
-{
-    source: Q,
-    from: SpatialReference,
-    to: SpatialReference,
-}
-
-impl<Q, P> RasterReprojectionProcessor<Q, P>
-where
-    Q: RasterQueryProcessor<RasterType = P>,
-{
-    pub fn new(source: Q, from: SpatialReference, to: SpatialReference) -> Self {
-        Self { source, from, to }
-    }
-}
-
-impl<Q, P> RasterQueryProcessor for RasterReprojectionProcessor<Q, P>
-where
-    Q: RasterQueryProcessor<RasterType = P>,
-    P: Pixel,
-{
-    type RasterType = P;
-
-    fn raster_query<'a>(
-        &'a self,
-        query: QueryRectangle,
-        ctx: &'a dyn QueryContext,
-    ) -> Result<BoxStream<'a, Result<geoengine_datatypes::raster::RasterTile2D<Self::RasterType>>>>
-    {
-        todo!()
     }
 }
 
