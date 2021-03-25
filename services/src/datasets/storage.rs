@@ -1,6 +1,5 @@
 use crate::datasets::listing::{DataSetListing, DataSetProvider};
 use crate::error::Result;
-use crate::projects::project::LayerInfo;
 use crate::users::user::UserId;
 use crate::util::user_input::{UserInput, Validated};
 use async_trait::async_trait;
@@ -56,7 +55,6 @@ impl UserInput for AddDataSet {
 pub struct ImportDataSet {
     pub name: String,
     pub description: String,
-    pub data_type: LayerInfo,
     pub source_operator: String,
     pub result_descriptor: TypedResultDescriptor,
 }

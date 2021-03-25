@@ -186,10 +186,9 @@ where
                             layer_index integer NOT NULL,
                             project_id UUID REFERENCES projects(id) ON DELETE CASCADE NOT NULL,
                             project_version_id UUID REFERENCES project_versions(id) ON DELETE CASCADE NOT NULL,                            
-                            layer_type "LayerType" NOT NULL,
                             name character varying (256) NOT NULL,
                             workflow_id UUID NOT NULL, -- TODO: REFERENCES workflows(id)
-                            raster_colorizer json,
+                            symbology json,
                             visibility "LayerVisibility" NOT NULL,
                             PRIMARY KEY (project_id, layer_index)            
                         );
@@ -332,10 +331,11 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::projects::project::PointSymbology;
     use crate::projects::project::{
-        CreateProject, Layer, LayerInfo, LayerUpdate, LoadVersion, OrderBy, Plot, PlotUpdate,
-        ProjectFilter, ProjectId, ProjectListOptions, ProjectListing, ProjectPermission,
-        STRectangle, UpdateProject, UserProjectPermission, VectorInfo,
+        CreateProject, Layer, LayerUpdate, LoadVersion, OrderBy, Plot, PlotUpdate, ProjectFilter,
+        ProjectId, ProjectListOptions, ProjectListing, ProjectPermission, STRectangle,
+        UpdateProject, UserProjectPermission,
     };
     use crate::projects::projectdb::ProjectDb;
     use crate::users::user::{UserCredentials, UserId, UserRegistration};
@@ -555,7 +555,7 @@ mod tests {
             layers: Some(vec![LayerUpdate::UpdateOrInsert(Layer {
                 workflow: layer_workflow_id,
                 name: "TestLayer".into(),
-                info: LayerInfo::Vector(VectorInfo {}),
+                symbology: PointSymbology::default().into(),
                 visibility: Default::default(),
             })]),
             plots: Some(vec![PlotUpdate::UpdateOrInsert(Plot {

@@ -26,6 +26,7 @@ pub enum Colorizer {
     Palette {
         colors: Palette,
         no_data_color: RgbaColor,
+        default_color: RgbaColor,
     },
     Rgba,
 }
@@ -101,6 +102,7 @@ impl Colorizer {
     pub fn palette(
         colors: HashMap<NotNan<f64>, RgbaColor>,
         no_data_color: RgbaColor,
+        default_color: RgbaColor,
     ) -> Result<Self> {
         ensure!(
             !colors.is_empty() && colors.len() <= 256,
@@ -112,6 +114,7 @@ impl Colorizer {
         Ok(Self::Palette {
             colors: Palette(colors),
             no_data_color,
+            default_color,
         })
     }
 
@@ -265,9 +268,11 @@ impl Colorizer {
             Self::Palette {
                 colors,
                 no_data_color,
+                default_color,
             } => ColorMapper::ColorMap {
                 color_map: colors,
                 no_data_color: *no_data_color,
+                default_color: *default_color,
             },
             Self::Rgba => ColorMapper::Rgba,
         }
@@ -350,6 +355,7 @@ pub enum ColorMapper<'c> {
     ColorMap {
         color_map: &'c Palette,
         no_data_color: RgbaColor,
+        default_color: RgbaColor,
     },
     Rgba,
 }
@@ -385,9 +391,10 @@ impl<'c> ColorMapper<'c> {
             ColorMapper::ColorMap {
                 color_map,
                 no_data_color,
+                default_color,
             } => {
                 if let Ok(value) = NotNan::<f64>::new(value.as_()) {
-                    *color_map.0.get(&value).unwrap_or(no_data_color)
+                    *color_map.0.get(&value).unwrap_or(default_color)
                 } else {
                     *no_data_color
                 }
@@ -611,6 +618,7 @@ mod tests {
             .cloned()
             .collect(),
             RgbaColor::transparent(),
+            RgbaColor::transparent(),
         )
         .unwrap();
 
@@ -624,7 +632,8 @@ mod tests {
                         "1": [255, 255, 255, 255],
                         "2": [0, 0, 0, 255]
                     },
-                    "no_data_color": [0, 0, 0, 0]
+                    "no_data_color": [0, 0, 0, 0],
+                    "default_color": [0, 0, 0, 0]
                 }
             })
         );

@@ -17,7 +17,7 @@ use bb8_postgres::{
 };
 use snafu::ResultExt;
 
-use super::project::{Layer, LayerInfo, LayerType, ProjectPermission, RasterInfo, VectorInfo};
+use super::project::{Layer, ProjectPermission};
 use crate::contexts::PostgresContext;
 use bb8_postgres::bb8::PooledConnection;
 use bb8_postgres::tokio_postgres::Transaction;
@@ -283,7 +283,7 @@ where
             .prepare(
                 "
         SELECT  
-            layer_type, name, workflow_id, raster_colorizer, visibility
+            name, workflow_id, symbology, visibility
         FROM project_version_layers
         WHERE project_version_id = $1
         ORDER BY layer_index ASC",
@@ -294,19 +294,11 @@ where
 
         let mut layers = vec![];
         for row in rows {
-            let layer_type = row.get(1);
-            let info = match layer_type {
-                LayerType::Raster => LayerInfo::Raster(RasterInfo {
-                    colorizer: serde_json::from_value(row.get(4)).context(error::SerdeJson)?, // TODO: default serializer on error?
-                }),
-                LayerType::Vector => LayerInfo::Vector(VectorInfo {}),
-            };
-
             layers.push(Layer {
-                workflow: WorkflowId(row.get(3)),
-                name: row.get(1),
-                info,
-                visibility: row.get(5),
+                workflow: WorkflowId(row.get(1)),
+                name: row.get(0),
+                symbology: serde_json::from_value(row.get(2)).context(error::SerdeJson)?,
+                visibility: row.get(3),
             });
         }
 
@@ -454,20 +446,15 @@ where
                     project_id,
                     project_version_id,
                     layer_index,
-                    layer_type,
                     name,
                     workflow_id,
-                    raster_colorizer,
+                    symbology,
                     visibility)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8);",
+                VALUES ($1, $2, $3, $4, $5, $6, $7);",
                 )
                 .await?;
 
-            let raster_colorizer = if let LayerInfo::Raster(info) = &layer.info {
-                Some(serde_json::to_value(&info.colorizer).context(error::SerdeJson)?)
-            } else {
-                None
-            };
+            let symbology = serde_json::to_value(&layer.symbology).context(error::SerdeJson)?;
 
             trans
                 .execute(
@@ -476,10 +463,9 @@ where
                         &project.id,
                         &project.version.id,
                         &(idx as i32),
-                        &layer.layer_type(),
                         &layer.name,
                         &layer.workflow,
-                        &raster_colorizer,
+                        &symbology,
                         &layer.visibility,
                     ],
                 )
