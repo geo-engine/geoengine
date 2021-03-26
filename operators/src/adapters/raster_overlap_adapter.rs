@@ -164,6 +164,8 @@ where
         let t_end = r.time.end();
         let _old_t_end = this.time_end.replace(t_end);
 
+        //TODO:  if end = start then +1
+
         *this.current_spatial_tile += 1;
 
         Poll::Ready(Some(Ok(r)))
