@@ -71,15 +71,6 @@ where
             no_data_value,
         }
     }
-    /*
-        fn meh(&mut self) {
-            let qs = self
-                .source
-                .raster_query(self.query_rect, self.query_ctx)
-                .unwrap();
-            self.query_stream = Some(qs);
-        }
-    */
 }
 
 impl<T, Q, QC, FoldF, FoldFut> FusedStream for RasterOverlapAdapter<'_, T, Q, QC, FoldF, FoldFut>

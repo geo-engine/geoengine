@@ -482,14 +482,14 @@ mod tests {
         assert!(approx_eq!(
             f64,
             spatial_resolution.x,
-            0.000833333,
-            epsilon = 0.0000001
+            0.000_833_333,
+            epsilon = 0.000_000_1
         ));
         assert!(approx_eq!(
             f64,
             spatial_resolution.y,
-            0.000833333,
-            epsilon = 0.0000001
+            0.000_833_333,
+            epsilon = 0.000_000_1
         ));
 
         let projector = CoordinateProjector::from_known_srs(
@@ -505,8 +505,8 @@ mod tests {
         assert!(approx_eq!(
             f64,
             sugg_pixel_size.x,
-            79.0889744506905, // this is the pixel size GDAL generates when reprojecting the SRTM tile.
-            epsilon = 0.0000001
+            79.088_974_450_690_5, // this is the pixel size GDAL generates when reprojecting the SRTM tile.
+            epsilon = 0.000_000_1
         ))
     }
 
@@ -526,14 +526,14 @@ mod tests {
         assert!(approx_eq!(
             f64,
             spatial_resolution.x,
-            0.000833333,
-            epsilon = 0.0000001
+            0.000_833_333,
+            epsilon = 0.000_000_1
         ));
         assert!(approx_eq!(
             f64,
             spatial_resolution.y,
-            0.000833333,
-            epsilon = 0.0000001
+            0.000_833_333,
+            epsilon = 0.000_000_1
         ));
 
         let projector = CoordinateProjector::from_known_srs(
@@ -549,8 +549,8 @@ mod tests {
         assert!(approx_eq!(
             f64,
             sugg_pixel_size.x,
-            79.0889744506905, // this is the pixel size GDAL generates when reprojecting the SRTM tile.
-            epsilon = 0.0000001
+            79.088_974_450_690_5, // this is the pixel size GDAL generates when reprojecting the SRTM tile.
+            epsilon = 0.000_000_1
         ))
     }
 }
