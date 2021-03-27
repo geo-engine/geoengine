@@ -7,10 +7,6 @@ use crate::{
         MultiLineStringRef, MultiPoint, MultiPointAccess, MultiPointRef, MultiPolygon,
         MultiPolygonAccess, MultiPolygonRef, SpatialBounded, SpatialResolution,
     },
-    raster::{
-        CoordinatePixelAccess, GridBoundingBox2D, GridBounds, GridIdx, GridIdx2D,
-        GridIndexAccessMut, Pixel, RasterTile2D,
-    },
     spatial_reference::SpatialReference,
     util::Result,
 };
@@ -297,66 +293,31 @@ pub fn suggest_pixel_size_from_diag_cross<P: CoordinateProjection>(
     ))
 }
 
-pub fn insert_projected_pixels<T: Pixel, P: CoordinateProjection>(
-    target: &mut RasterTile2D<T>,
-    source: &RasterTile2D<T>,
-    projector: &P,
-    inverse_projector: &P,
-) -> Result<()> {
-    // transform the source bounds into the crs of the target to check if they intersect
-    let bounds_in_target = source.spatial_bounds().reproject(inverse_projector)?;
-
-    // intersect both tiles. Only if there is an intersection, we need to do something.
-    if let Some(intersection) = target.spatial_bounds().intersection(&bounds_in_target) {
-        // get the targets geo transform.
-        let tgf = target.tile_geo_transform();
-        // derive a no_data_value for pixels without a "partner".
-        let no_data_value = target
-            .grid_array
-            .no_data_value
-            .unwrap_or_else(|| T::from_(0.0));
-        // calculate the pixel area in the target tile we can update with the source tile.
-        let px_bounds = GridBoundingBox2D::new(
-            tgf.coordinate_to_grid_idx_2d(intersection.upper_left()),
-            tgf.coordinate_to_grid_idx_2d(intersection.lower_right()),
-        )?;
-        // get the pixels idxses
-        let GridIdx([y_s, x_s]) = px_bounds.min_index();
-        let GridIdx([y_e, x_e]) = px_bounds.max_index();
-
-        // now for each line do the following:
-        for y in y_s..y_e {
-            // generate an iterator of all pixel idxs in the line. (this is still relative to the tile geo transform).
-
-            // store the pixels and the pixel coordinates as individual Vec.
-            let (t_l_idx, t_coords) = (x_s..x_e)
-                .map(move |x| [y, x])
-                .map(GridIdx::from)
-                // map the idxs to coordinates
-                .map(|local_px_idx| (local_px_idx, tgf.grid_idx_to_coordinate_2d(local_px_idx)))
-                .unzip::<GridIdx2D, Coordinate2D, Vec<GridIdx2D>, Vec<Coordinate2D>>();
-
-            // try to transform all pixel coords at once..
-            if let Ok(s_scoords) = projector.project_coordinates(t_coords) {
-                // if it works, get the pixel values from the source tile, nodata will stay the same value.
-                let s_px_values = s_scoords
-                    .iter()
-                    // if we can not access a pixel, fill it with nodata. TODO: is this even possible?
-                    .map(|&c| source.pixel_value_at_coord(c).ok().unwrap_or(no_data_value));
-
-                // now zip pixel idx (target) and pixel values (source) and insert the values in target.
-                t_l_idx
-                    .iter()
-                    .zip(s_px_values)
-                    .try_for_each(|(&idx, v)| target.set_at_grid_index(idx, v))?;
-            } else {
-                dbg!("could not transform all coords, fallback to  single coords here?");
-            }
-        }
-    } else {
-        dbg!("there was no intersection");
+pub fn project_coordinates_fail_tolarant<P: CoordinateProjection>(
+    i: &[Coordinate2D],
+    p: &P,
+) -> Vec<Option<Coordinate2D>> {
+    if let Ok(projected_all) = p.project_coordinates(&i) {
+        dbg!(projected_all.len());
+        return projected_all
+            .into_iter()
+            .map(Some)
+            .collect::<Vec<Option<Coordinate2D>>>();
     }
-    Ok(())
+
+    let individual_projected: Vec<Option<Coordinate2D>> = i
+        .iter()
+        .map(|&c| (c, c.reproject(p)))
+        .inspect(|(c, c_p)| {
+            dbg!(c, c_p);
+        })
+        .map(|(_, c_p)| c_p.ok())
+        .collect();
+    dbg!(
+        individual_projected.iter().filter(|c| c.is_some()).count(),
+        i.len()
+    );
+    individual_projected
 }
 
 #[cfg(test)]
