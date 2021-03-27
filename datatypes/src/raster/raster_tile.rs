@@ -172,7 +172,7 @@ where
         self.grid_array.inner_ref()
     }
     fn geo_transform(&self) -> GeoTransform {
-        self.tile_information().global_geo_transform
+        self.global_geo_transform
     }
 }
 
