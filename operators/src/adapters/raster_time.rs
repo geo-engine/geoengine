@@ -139,7 +139,7 @@ where
 
                 Poll::Ready(Some(Ok(Self::align_tiles(tile_a, tile_b))))
             }
-            Some((Ok(_), Err(e))) | Some((Err(e), Ok(_))) | Some((Err(e), Err(_))) => {
+            Some((Ok(_), Err(e)) | (Err(e), Ok(_) | Err(_))) => {
                 *ended = true;
                 Poll::Ready(Some(Err(e)))
             }

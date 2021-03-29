@@ -96,13 +96,13 @@ impl PlotOperator for Histogram {
                         column: column_name.to_string(),
                     });
                 }
-                Some(FeatureDataType::Categorical) | Some(FeatureDataType::Text) => {
+                Some(FeatureDataType::Categorical | FeatureDataType::Text) => {
                     // TODO: incorporate categorical data
                     return Err(Error::InvalidOperatorSpec {
                         reason: format!("column `{}` must be numerical", column_name),
                     });
                 }
-                Some(FeatureDataType::Decimal) | Some(FeatureDataType::Number) => {
+                Some(FeatureDataType::Decimal | FeatureDataType::Number) => {
                     // okay
                 }
             }

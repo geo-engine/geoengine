@@ -404,7 +404,7 @@ where
     fn open_gdal_dataset(dataset_info: &OgrSourceDataset) -> Result<Dataset> {
         // TODO: reliably detect CSV files or allow defining them as such in params
         match dataset_info.file_name.extension().and_then(OsStr::to_str) {
-            Some("csv") | Some("tsv") => Self::open_csv_dataset(dataset_info),
+            Some("csv" | "tsv") => Self::open_csv_dataset(dataset_info),
             _ => Ok(Dataset::open(&dataset_info.file_name)?),
         }
     }
