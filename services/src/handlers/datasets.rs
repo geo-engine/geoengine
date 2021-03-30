@@ -1,16 +1,25 @@
 use crate::contexts::Context;
-use crate::datasets::listing::DataSetListOptions;
-use crate::datasets::listing::DataSetProvider;
+use crate::datasets::storage::DataSetStore;
+use crate::datasets::{
+    listing::DataSetProvider,
+    storage::{CreateDataSet, MetaDataDefinition},
+    upload::Upload,
+};
+use crate::error::Result;
 use crate::handlers::authenticate;
 use crate::users::session::Session;
 use crate::util::user_input::UserInput;
+use crate::{
+    datasets::{listing::DataSetListOptions, upload::UploadDb},
+    util::IdResponse,
+};
 use warp::Filter;
 
 pub(crate) fn list_datasets_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::get()
-        .and(warp::path("datasets"))
+    warp::path("datasets")
+        .and(warp::get())
         .and(authenticate(ctx.clone()))
         .and(warp::any().map(move || ctx.clone()))
         .and(warp::query())
@@ -32,6 +41,62 @@ async fn list_datasets<C: Context>(
     Ok(warp::reply::json(&list))
 }
 
+pub(crate) fn create_dataset_handler<C: Context>(
+    ctx: C,
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
+    warp::path("dataset")
+        .and(warp::post())
+        .and(authenticate(ctx.clone()))
+        .and(warp::any().map(move || ctx.clone()))
+        .and(warp::body::json())
+        .and_then(create_dataset)
+}
+
+// TODO: move into handler once async closures are available?
+async fn create_dataset<C: Context>(
+    session: Session,
+    ctx: C,
+    create: CreateDataSet,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let upload = ctx
+        .data_set_db_ref()
+        .await
+        .get_upload(session.user.id, create.upload)
+        .await?;
+
+    let mut definition = create.definition;
+
+    adjust_user_path_to_upload_path(&mut definition.meta_data, &upload)?;
+
+    let mut db = ctx.data_set_db_ref_mut().await;
+    let meta_data = db.wrap_meta_data(definition.meta_data);
+    let id = db
+        .add_data_set(
+            session.user.id,
+            definition.properties.validated()?,
+            meta_data,
+        )
+        .await?;
+
+    Ok(warp::reply::json(&IdResponse::from(id)))
+}
+
+fn adjust_user_path_to_upload_path(meta: &mut MetaDataDefinition, upload: &Upload) -> Result<()> {
+    match meta {
+        crate::datasets::storage::MetaDataDefinition::MockMetaData(_) => {}
+        crate::datasets::storage::MetaDataDefinition::OgrMetaData(m) => {
+            m.loading_info.file_name = upload.adjust_file_path(&m.loading_info.file_name)?
+        }
+        crate::datasets::storage::MetaDataDefinition::GdalMetaDataRegular(m) => {
+            m.params.file_path = upload.adjust_file_path(&m.params.file_path)?
+        }
+        crate::datasets::storage::MetaDataDefinition::GdalStatic(m) => {
+            m.params.file_path = upload.adjust_file_path(&m.params.file_path)?
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -49,7 +114,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_list_datasets() -> Result<()> {
-        // TODO: use new tests helpers once they are merged
         let ctx = InMemoryContext::default();
 
         let session = create_session_helper(&ctx).await;
@@ -133,5 +197,72 @@ mod tests {
         );
 
         Ok(())
+    }
+
+    #[tokio::test]
+    async fn create_data_set() {
+        let ctx = InMemoryContext::default();
+
+        let session = create_session_helper(&ctx).await;
+
+        let s = r#"{
+            "upload": "1f7e3e75-4d20-4c91-9497-7f4df7604b62",
+            "definition": {
+                "properties": {
+                    "id": null,
+                    "name": "Uploaded Natural Earth 10m Ports",
+                    "description": "Ports from Natural Earth",
+                    "source_operator": "OgrSource"
+                },
+                "meta_data": {
+                    "OgrMetaData": {
+                        "loading_info": {
+                            "file_name": "operators/test-data/vector/data/ne_10m_ports/ne_10m_ports.shp",
+                            "layer_name": "ne_10m_ports",
+                            "data_type": "MultiPoint",
+                            "time": "none",
+                            "columns": {
+                                "x": "",
+                                "y": null,
+                                "numeric": ["natlscale"],
+                                "decimal": ["scalerank"],
+                                "textual": ["featurecla", "name", "website"]
+                            },
+                            "default_geometry": null,
+                            "force_ogr_time_filter": false,
+                            "on_error": "skip",
+                            "provenance": null
+                        },
+                        "result_descriptor": {
+                            "data_type": "MultiPoint",
+                            "spatial_reference": "EPSG:4326",
+                            "columns": {
+                                "website": "Text",
+                                "name": "Text",
+                                "natlscale": "Number",
+                                "scalerank": "Decimal",
+                                "featurecla": "Text"
+                            }
+                        }
+                    }
+                }
+            }
+        }"#;
+
+        let res = warp::test::request()
+            .method("POST")
+            .path("/dataset")
+            .header("Content-Length", "0")
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id.to_string()),
+            )
+            .body(s)
+            .reply(&create_dataset_handler(ctx))
+            .await;
+
+        assert_eq!(res.status(), 500);
+
+        // TODO: add a success test case once it is clear how to upload data from within a test
     }
 }

@@ -134,9 +134,11 @@ where
         handlers::projects::remove_permission_handler(ctx.clone()),
         handlers::projects::list_permissions_handler(ctx.clone()),
         handlers::datasets::list_datasets_handler(ctx.clone()),
+        handlers::datasets::create_dataset_handler(ctx.clone()),
         handlers::wms::wms_handler(ctx.clone()),
         handlers::wfs::wfs_handler(ctx.clone()),
         handlers::plots::get_plot_handler(ctx.clone()),
+        handlers::upload::upload_handler(ctx.clone()),
         serve_static_directory(static_files_dir)
     )
     .recover(handle_rejection);

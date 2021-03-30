@@ -132,6 +132,11 @@ pub enum Error {
     InvalidListLimit {
         limit: usize,
     },
+
+    UploadFieldMissingFileName,
+    UnknownUploadId,
+    PathIsNotAFile,
+    MultiPartBoundaryMissing,
 }
 
 impl Reject for Error {}

@@ -1,4 +1,6 @@
 use crate::datasets::listing::{DataSetListing, DataSetProvider};
+use crate::datasets::upload::UploadDb;
+use crate::datasets::upload::UploadId;
 use crate::error::Result;
 use crate::users::user::UserId;
 use crate::util::user_input::{UserInput, Validated};
@@ -121,6 +123,12 @@ pub struct DataSetDefinition {
     pub meta_data: MetaDataDefinition,
 }
 
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct CreateDataSet {
+    pub upload: UploadId,
+    pub definition: DataSetDefinition,
+}
+
 #[allow(clippy::large_enum_variant)]
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub enum MetaDataDefinition {
@@ -132,7 +140,10 @@ pub enum MetaDataDefinition {
 
 /// Handling of data sets provided by geo engine internally, staged and by external providers
 #[async_trait]
-pub trait DataSetDb: DataSetStore + DataSetProvider + DataSetProviderDb + Send + Sync {}
+pub trait DataSetDb:
+    DataSetStore + DataSetProvider + DataSetProviderDb + UploadDb + Send + Sync
+{
+}
 
 /// Storage and access of external data set providers
 #[async_trait]

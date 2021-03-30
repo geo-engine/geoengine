@@ -15,6 +15,7 @@ use warp::{Filter, Rejection, Reply};
 pub mod datasets;
 pub mod plots;
 pub mod projects;
+pub mod upload;
 pub mod users;
 pub mod wfs;
 pub mod wms;
