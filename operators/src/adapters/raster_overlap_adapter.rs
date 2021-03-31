@@ -1,13 +1,13 @@
 use crate::engine::{QueryContext, QueryRectangle, RasterQueryProcessor};
 use crate::error;
 use crate::util::Result;
+use futures::Stream;
 use futures::{
     ready,
     stream::{BoxStream, TryFold},
-    TryFuture, TryStreamExt,
+    FutureExt, TryFuture, TryStreamExt,
 };
 use futures::{stream::FusedStream, Future};
-use futures::{Stream, TryFutureExt};
 use geoengine_datatypes::{
     error::Error::{GridIndexOutOfBounds, InvalidGridIndex},
     operations::reproject::{
@@ -37,7 +37,9 @@ pub type RasterFold<'a, T, FoldFuture, FoldMethod, FoldCompanion> = TryFold<
     FoldMethod,
 >;
 
-/// This adapter allows to generate a tile stream using sub-querys. This is done using a `TileSubQuery`. The sub-query is resolved for each produced tile.
+/// This adapter allows to generate a tile stream using sub-querys.
+/// This is done using a `TileSubQuery`.
+/// The sub-query is resolved for each produced tile.
 #[pin_project(project = RasterOverlapAdapterProjection)]
 pub struct RasterOverlapAdapter<'a, PixelType, RasterProcessorType, QueryContextType, SubQuery>
 where
@@ -46,16 +48,20 @@ where
     QueryContextType: QueryContext,
     SubQuery: TileSubQuery<PixelType>,
 {
-    // The `QueryRectangle` the adapter is queried with
+    /// The `QueryRectangle` the adapter is queried with
     query_rect: QueryRectangle,
-    // A `TimeInstance` currently queried inside the operator.
+    /// This `TimeInstance` is the point in time currently queried in the sub-query
     time_start: Option<TimeInstance>,
+    /// This `TimeInstance` is the latest point in time seen from the tiles produced by the sub-query
     time_end: Option<TimeInstance>,
-    // TODO: calculate at start when tiling info is available before querying first tile
-    spatial_tiles: Vec<TileInformation>,
-    current_spatial_tile: usize,
+    /// The `TileInformation` of all tiles the produces stream will contain
+    tiles_to_produce: Vec<TileInformation>, // TODO: change to IntoIterator<Item = TileInformation>
+    current_spatial_tile: usize, // TODO: change into current_tile_iterator
+    /// The `RasterQueryProcessor` to answer the sub-queries
     source: &'a RasterProcessorType,
+    /// The `QueryContext` to use for sub-queries
     query_ctx: &'a QueryContextType,
+    /// This is the `Future` which flattens the sub-query streams into single tiles
     #[pin]
     running_future: Option<
         RasterFold<
@@ -66,7 +72,9 @@ where
             SubQuery::FoldCompanion,
         >,
     >,
+    /// remember when the operator is done
     ended: bool,
+    /// The `TileSubQuery` defined what this adapter does.
     sub_query: SubQuery,
 }
 
@@ -88,12 +96,11 @@ where
         let tx: Vec<TileInformation> = tiling_strat
             .tile_information_iterator(query_rect.bbox)
             .collect();
-        dbg!(&tx);
 
         Self {
             source,
             query_rect,
-            spatial_tiles: tx, // TODO: no unwrap, actually if there are empty intersections the tiling strategy has a bug.
+            tiles_to_produce: tx,
             current_spatial_tile: 0,
             time_start: Some(query_rect.time_interval.start()),
             time_end: None,
@@ -139,9 +146,11 @@ where
         let mut this = self.project();
 
         if this.running_future.as_ref().is_none() {
-            if *this.current_spatial_tile >= this.spatial_tiles.len() {
+            if *this.current_spatial_tile >= this.tiles_to_produce.len() {
                 *this.current_spatial_tile = 0;
-                *this.time_start = *this.time_end;
+
+                // TODO: check if there is time progress. If not increase start by minimal step.
+
                 *this.time_end = None;
             }
 
@@ -149,8 +158,8 @@ where
                 if t_start >= this.query_rect.time_interval.end() {
                     *this.ended = true;
                 } else {
-                    // TODO: maybe this whole block should also be a future!
-                    let current_spatial_tile_info = this.spatial_tiles[*this.current_spatial_tile];
+                    let current_spatial_tile_info =
+                        this.tiles_to_produce[*this.current_spatial_tile];
 
                     let fold_tile_spec = TileInformation {
                         tile_size_in_pixels: current_spatial_tile_info.tile_size_in_pixels,
@@ -163,6 +172,8 @@ where
                         *this.query_rect,
                         t_start,
                     )?;
+
+                    // TODO: this schould also be a future. We can chain it with the query if we find a way to store it in the running future
                     let accu = this.sub_query.new_fold_accu(fold_tile_spec, tqr)?;
 
                     let qs = this.source.raster_query(tqr, *this.query_ctx)?;
@@ -187,17 +198,9 @@ where
         // set the running future to None --> will create a new one in the next call
         this.running_future.set(None);
 
-        // update the end_time from the produced tile (should/must not change within a tile run?)
+        // update the end_time from the produced tile
         let t_end = r.0.time.end();
-        let old_t_end = this.time_end.replace(t_end);
-
-        if let Some(old_t) = old_t_end {
-            if t_end == old_t {
-                let _ = this.time_end.replace(t_end + 1);
-            }
-        }
-
-        //TODO:  if end = start then +1
+        let _old_t_end = this.time_end.replace(t_end);
 
         *this.current_spatial_tile += 1;
 
@@ -213,7 +216,7 @@ where
     T: Pixel,
 {
     let (mut accu_tile, unused) = accu;
-    let t_union = accu_tile.time.union(&tile.time).unwrap();
+    let t_union = accu_tile.time.union(&tile.time)?;
     match accu_tile.blit(tile) {
         Ok(_) => {
             accu_tile.time = t_union;
@@ -233,12 +236,14 @@ where
 pub fn fold_by_blit_future<T>(
     accu: (RasterTile2D<T>, ()),
     tile: RasterTile2D<T>,
-) -> impl TryFuture<Ok = (RasterTile2D<T>, ()), Error = error::Error>
+) -> impl Future<Output = Result<(RasterTile2D<T>, ())>>
 where
     T: Pixel,
 {
-    tokio::task::spawn_blocking(|| fold_by_blit_impl(accu, tile).unwrap()).err_into()
-    // halp!! how to remove the unwrap???
+    tokio::task::spawn_blocking(|| fold_by_blit_impl(accu, tile)).then(async move |x| match x {
+        Ok(r) => r,
+        Err(e) => Err(e.into()),
+    })
 }
 
 #[allow(dead_code)]
@@ -249,7 +254,12 @@ pub fn fold_by_coordinate_lookup_future<T>(
 where
     T: Pixel,
 {
-    tokio::task::spawn_blocking(|| fold_by_coordinate_lookup_impl(accu, tile).unwrap()).err_into()
+    tokio::task::spawn_blocking(|| fold_by_coordinate_lookup_impl(accu, tile)).then(
+        async move |x| match x {
+            Ok(r) => r,
+            Err(e) => Err(e.into()),
+        },
+    )
 }
 
 #[allow(dead_code)]
@@ -262,7 +272,7 @@ where
     T: Pixel,
 {
     let (mut accu_tile, accu_companion) = accu;
-    let t_union = accu_tile.time.union(&tile.time).unwrap();
+    let t_union = accu_tile.time.union(&tile.time)?;
 
     match insert_projected_pixels(&mut accu_tile, &tile, accu_companion.iter()) {
         Ok(_) => {
@@ -301,6 +311,7 @@ pub fn insert_projected_pixels<'a, T: Pixel, I: Iterator<Item = &'a (GridIdx2D, 
     Ok(())
 }
 
+/// This trait defines the behavior of the `RasterOverlapAdapter`.
 pub trait TileSubQuery<T>: Send
 where
     T: Pixel,
@@ -310,14 +321,19 @@ where
         + Fn((RasterTile2D<T>, Self::FoldCompanion), RasterTile2D<T>) -> Self::FoldFuture;
     type FoldCompanion: Clone + Send;
 
+    /// The no-data-value to use in the resulting `RasterTile2D`
     fn result_no_data_value(&self) -> Option<T>;
+    /// The initial fill-value of the accumulator (`RasterTile2D`).
     fn initial_fill_value(&self) -> T;
 
+    /// This method geneerates a new accumulator which is used to fold the `Stream` of `RasterTile2D` of a sub-query.
     fn new_fold_accu(
         &self,
         tile_info: TileInformation,
         query_rect: QueryRectangle,
     ) -> Result<(RasterTile2D<T>, Self::FoldCompanion)>;
+
+    /// This method generates a `QueryRectangle` for a tile-specific sub-query
     fn tile_query_rectangle(
         &self,
         tile_info: TileInformation,
@@ -325,6 +341,7 @@ where
         start_time: TimeInstance,
     ) -> Result<QueryRectangle>;
 
+    /// This method generates the method which combines the accumulator and each tile of the sub-query stream in the `TryFold` stream adapter.
     fn fold_method(&self) -> Self::FoldMethod;
 }
 
