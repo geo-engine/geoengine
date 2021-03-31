@@ -81,6 +81,8 @@ pub trait DataSetProvider:
         user: UserId,
         options: Validated<DataSetListOptions>,
     ) -> Result<Vec<DataSetListing>>;
+
+    async fn load(&self, user: UserId, dataset: &DataSetId) -> Result<DataSet>;
 }
 
 pub enum TypedDataSetProvider {
@@ -134,6 +136,10 @@ impl DataSetProvider for MockDataSetProvider {
         _user: UserId,
         _options: Validated<DataSetListOptions>,
     ) -> Result<Vec<DataSetListing>> {
+        todo!()
+    }
+
+    async fn load(&self, _user: UserId, _dataset: &DataSetId) -> Result<DataSet> {
         todo!()
     }
 }

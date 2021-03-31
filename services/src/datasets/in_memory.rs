@@ -181,6 +181,16 @@ impl DataSetProvider for HashMapDataSetDb {
 
         Ok(list)
     }
+
+    async fn load(&self, _user: UserId, dataset: &DataSetId) -> Result<DataSet> {
+        // TODO: permissions
+
+        self.data_sets
+            .iter()
+            .find(|d| d.id == *dataset)
+            .cloned()
+            .ok_or(error::Error::UnknownDataSetId)
+    }
 }
 
 impl MetaDataProvider<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>

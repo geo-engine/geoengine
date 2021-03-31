@@ -1,4 +1,7 @@
-use super::upload::{Upload, UploadDb, UploadId};
+use super::{
+    storage::DataSet,
+    upload::{Upload, UploadDb, UploadId},
+};
 use crate::datasets::listing::{DataSetListOptions, DataSetListing, DataSetProvider};
 use crate::datasets::storage::{
     AddDataSet, AddDataSetProvider, DataSetDb, DataSetProviderDb, DataSetProviderListOptions,
@@ -50,6 +53,10 @@ impl DataSetProvider for PostgresDataSetDb {
         _user: UserId,
         _options: Validated<DataSetListOptions>,
     ) -> Result<Vec<DataSetListing>> {
+        todo!()
+    }
+
+    async fn load(&self, _user: UserId, _dataset: &DataSetId) -> Result<DataSet> {
         todo!()
     }
 }

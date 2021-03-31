@@ -1,6 +1,7 @@
 use crate::datasets::listing::{DataSetListing, DataSetProvider};
 use crate::datasets::upload::UploadDb;
 use crate::datasets::upload::UploadId;
+use crate::error;
 use crate::error::Result;
 use crate::users::user::UserId;
 use crate::util::user_input::{UserInput, Validated};
@@ -14,6 +15,7 @@ use geoengine_operators::{
 };
 use geoengine_operators::{engine::VectorResultDescriptor, source::GdalMetaDataRegular};
 use serde::{Deserialize, Serialize};
+use snafu::ensure;
 use std::fmt::Debug;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -129,8 +131,28 @@ pub struct CreateDataSet {
     pub definition: DataSetDefinition,
 }
 
-#[allow(clippy::large_enum_variant)]
 #[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct AutoCreateDataSet {
+    pub upload: UploadId,
+    pub dataset_name: String,
+    pub dataset_description: String,
+    pub main_file: String,
+}
+
+impl UserInput for AutoCreateDataSet {
+    fn validate(&self) -> Result<()> {
+        // TODO: more sophisticated input validation
+        ensure!(
+            !self.main_file.contains('/') && !self.main_file.contains(".."),
+            error::InvalidUploadFileName
+        );
+
+        Ok(())
+    }
+}
+
+#[allow(clippy::large_enum_variant)]
+#[derive(PartialEq, Deserialize, Serialize, Debug, Clone)]
 pub enum MetaDataDefinition {
     MockMetaData(StaticMetaData<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>),
     OgrMetaData(StaticMetaData<OgrSourceDataset, VectorResultDescriptor>),
