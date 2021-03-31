@@ -3,16 +3,19 @@ use geoengine_datatypes::{
     operations::reproject::{
         suggest_pixel_size_from_diag_cross, CoordinateProjection, CoordinateProjector, Reproject,
     },
+    raster::{Pixel, TilingSpecification},
     spatial_reference::SpatialReference,
 };
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
 use crate::{
+    adapters::{fold_by_coordinate_lookup_future, RasterOverlapAdapter, TileReprojectionSubQuery},
     engine::{
-        ExecutionContext, InitializedOperator, InitializedOperatorImpl, InitializedVectorOperator,
-        Operator, QueryContext, QueryRectangle, TypedVectorQueryProcessor, VectorOperator,
-        VectorQueryProcessor, VectorResultDescriptor,
+        ExecutionContext, InitializedOperator, InitializedOperatorImpl, InitializedRasterOperator,
+        InitializedVectorOperator, Operator, QueryContext, QueryRectangle, RasterOperator,
+        RasterQueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor,
+        TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
     },
     error,
     util::Result,
@@ -27,14 +30,24 @@ pub struct ReprojectionParams {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
-pub struct ReprojectionState {
+pub struct VectorReprojectionState {
     source_srs: SpatialReference,
     target_srs: SpatialReference,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+pub struct RasterReprojectionState {
+    source_srs: SpatialReference,
+    target_srs: SpatialReference,
+    tiling_spec: TilingSpecification,
+}
+
 pub type Reprojection = Operator<ReprojectionParams>;
-pub type InitializedReprojection =
-    InitializedOperatorImpl<VectorResultDescriptor, ReprojectionState>;
+pub type InitializedVectorReprojection =
+    InitializedOperatorImpl<VectorResultDescriptor, VectorReprojectionState>;
+
+pub type InitializedRasterReprojection =
+    InitializedOperatorImpl<RasterResultDescriptor, RasterReprojectionState>;
 
 #[typetag::serde]
 impl VectorOperator for Reprojection {
@@ -70,20 +83,20 @@ impl VectorOperator for Reprojection {
             columns: in_desc.columns.clone(),
         };
 
-        let state = ReprojectionState {
+        let state = VectorReprojectionState {
             source_srs: Option::from(in_desc.spatial_reference).unwrap(),
             target_srs: self.params.target_spatial_reference,
         };
 
         Ok(
-            InitializedReprojection::new(out_desc, vec![], initialized_vector_sources, state)
+            InitializedVectorReprojection::new(out_desc, vec![], initialized_vector_sources, state)
                 .boxed(),
         )
     }
 }
 
 impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
-    for InitializedReprojection
+    for InitializedVectorReprojection
 {
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
         let state = self.state;
@@ -191,9 +204,239 @@ where
     }
 }
 
+#[typetag::serde]
+impl RasterOperator for Reprojection {
+    fn initialize(
+        self: Box<Self>,
+        context: &dyn ExecutionContext,
+    ) -> Result<Box<InitializedRasterOperator>> {
+        ensure!(
+            self.vector_sources.is_empty(),
+            crate::error::InvalidNumberOfVectorInputs {
+                expected: 0..0,
+                found: self.vector_sources.len()
+            }
+        );
+        ensure!(
+            !self.raster_sources.is_empty(),
+            crate::error::InvalidNumberOfRasterInputs {
+                expected: 1..1,
+                found: self.raster_sources.len()
+            }
+        );
+
+        let initialized_raster_sources = self
+            .raster_sources
+            .into_iter()
+            .map(|o| o.initialize(context))
+            .collect::<Result<Vec<Box<InitializedRasterOperator>>>>()?;
+
+        let in_desc: &RasterResultDescriptor = initialized_raster_sources[0].result_descriptor();
+        let out_desc = RasterResultDescriptor {
+            spatial_reference: self.params.target_spatial_reference.into(),
+            data_type: in_desc.data_type,
+            measurement: in_desc.measurement.clone(),
+        };
+
+        let state = RasterReprojectionState {
+            source_srs: Option::from(in_desc.spatial_reference).unwrap(),
+            target_srs: self.params.target_spatial_reference,
+            tiling_spec: context.tiling_specification(),
+        };
+
+        Ok(
+            InitializedRasterReprojection::new(out_desc, initialized_raster_sources, vec![], state)
+                .boxed(),
+        )
+    }
+}
+
+impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
+    for InitializedRasterReprojection
+{
+    fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
+        let q = self.raster_sources[0].query_processor()?;
+
+        let s = self.state;
+        // let rd = self.result_descriptor;
+
+        Ok(match self.result_descriptor.data_type {
+            geoengine_datatypes::raster::RasterDataType::U8 => {
+                let qt = q.get_u8().unwrap();
+                TypedRasterQueryProcessor::U8(Box::new(RasterReprojectionProcessor::new(
+                    qt,
+                    s.source_srs,
+                    s.target_srs,
+                    s.tiling_spec,
+                    0,
+                )))
+            }
+            geoengine_datatypes::raster::RasterDataType::U16 => {
+                let qt = q.get_u16().unwrap();
+                TypedRasterQueryProcessor::U16(Box::new(RasterReprojectionProcessor::new(
+                    qt,
+                    s.source_srs,
+                    s.target_srs,
+                    s.tiling_spec,
+                    0,
+                )))
+            }
+
+            geoengine_datatypes::raster::RasterDataType::U32 => {
+                let qt = q.get_u32().unwrap();
+                TypedRasterQueryProcessor::U32(Box::new(RasterReprojectionProcessor::new(
+                    qt,
+                    s.source_srs,
+                    s.target_srs,
+                    s.tiling_spec,
+                    0,
+                )))
+            }
+            geoengine_datatypes::raster::RasterDataType::U64 => {
+                let qt = q.get_u64().unwrap();
+                TypedRasterQueryProcessor::U64(Box::new(RasterReprojectionProcessor::new(
+                    qt,
+                    s.source_srs,
+                    s.target_srs,
+                    s.tiling_spec,
+                    0,
+                )))
+            }
+            geoengine_datatypes::raster::RasterDataType::I8 => {
+                let qt = q.get_i8().unwrap();
+                TypedRasterQueryProcessor::I8(Box::new(RasterReprojectionProcessor::new(
+                    qt,
+                    s.source_srs,
+                    s.target_srs,
+                    s.tiling_spec,
+                    0,
+                )))
+            }
+            geoengine_datatypes::raster::RasterDataType::I16 => {
+                let qt = q.get_i16().unwrap();
+                TypedRasterQueryProcessor::I16(Box::new(RasterReprojectionProcessor::new(
+                    qt,
+                    s.source_srs,
+                    s.target_srs,
+                    s.tiling_spec,
+                    0,
+                )))
+            }
+            geoengine_datatypes::raster::RasterDataType::I32 => {
+                let qt = q.get_i32().unwrap();
+                TypedRasterQueryProcessor::I32(Box::new(RasterReprojectionProcessor::new(
+                    qt,
+                    s.source_srs,
+                    s.target_srs,
+                    s.tiling_spec,
+                    0,
+                )))
+            }
+            geoengine_datatypes::raster::RasterDataType::I64 => {
+                let qt = q.get_i64().unwrap();
+                TypedRasterQueryProcessor::I64(Box::new(RasterReprojectionProcessor::new(
+                    qt,
+                    s.source_srs,
+                    s.target_srs,
+                    s.tiling_spec,
+                    0,
+                )))
+            }
+            geoengine_datatypes::raster::RasterDataType::F32 => {
+                let qt = q.get_f32().unwrap();
+                TypedRasterQueryProcessor::F32(Box::new(RasterReprojectionProcessor::new(
+                    qt,
+                    s.source_srs,
+                    s.target_srs,
+                    s.tiling_spec,
+                    0.,
+                )))
+            }
+            geoengine_datatypes::raster::RasterDataType::F64 => {
+                let qt = q.get_f64().unwrap();
+                TypedRasterQueryProcessor::F64(Box::new(RasterReprojectionProcessor::new(
+                    qt,
+                    s.source_srs,
+                    s.target_srs,
+                    s.tiling_spec,
+                    0.,
+                )))
+            }
+        })
+    }
+}
+
+struct RasterReprojectionProcessor<Q, P>
+where
+    Q: RasterQueryProcessor<RasterType = P>,
+{
+    source: Q,
+    from: SpatialReference,
+    to: SpatialReference,
+    tiling_spec: TilingSpecification,
+    no_data_and_fill_value: P,
+}
+
+impl<Q, P> RasterReprojectionProcessor<Q, P>
+where
+    Q: RasterQueryProcessor<RasterType = P>,
+{
+    pub fn new(
+        source: Q,
+        from: SpatialReference,
+        to: SpatialReference,
+        tiling_spec: TilingSpecification,
+        no_data_and_fill_value: P,
+    ) -> Self {
+        Self {
+            source,
+            from,
+            to,
+            tiling_spec,
+            no_data_and_fill_value,
+        }
+    }
+}
+
+impl<Q, P> RasterQueryProcessor for RasterReprojectionProcessor<Q, P>
+where
+    Q: RasterQueryProcessor<RasterType = P>,
+    P: Pixel,
+{
+    type RasterType = P;
+
+    fn raster_query<'a>(
+        &'a self,
+        query: QueryRectangle,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<geoengine_datatypes::raster::RasterTile2D<Self::RasterType>>>>
+    {
+        let tiling_strat = self
+            .tiling_spec
+            .strategy(query.spatial_resolution.x, -query.spatial_resolution.y);
+
+        let sub_query_spec = TileReprojectionSubQuery {
+            in_srs: self.from,
+            out_srs: self.to,
+            no_data_and_fill_value: self.no_data_and_fill_value,
+            fold_fn: fold_by_coordinate_lookup_future,
+        };
+        let s = RasterOverlapAdapter::<'a, P, _, _>::new(
+            &self.source,
+            query,
+            tiling_strat,
+            ctx,
+            sub_query_spec,
+        );
+
+        Ok(s.boxed())
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
+    use crate::engine::VectorOperator;
     use geoengine_datatypes::{
         collections::{MultiLineStringCollection, MultiPointCollection, MultiPolygonCollection},
         primitives::{
@@ -207,7 +450,7 @@ mod tests {
         },
     };
 
-    use crate::engine::{MockExecutionContext, MockQueryContext, QueryProcessor};
+    use crate::engine::{MockExecutionContext, MockQueryContext, VectorQueryProcessor};
     use crate::mock::MockFeatureCollectionSource;
     use futures::StreamExt;
 
@@ -242,14 +485,13 @@ mod tests {
         let target_spatial_reference =
             SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
 
-        let initialized_operator = Reprojection {
+        let initialized_operator = VectorOperator::boxed(Reprojection {
             vector_sources: vec![point_source],
             raster_sources: vec![],
             params: ReprojectionParams {
                 target_spatial_reference,
             },
-        }
-        .boxed()
+        })
         .initialize(&MockExecutionContext::default())?;
 
         let query_processor = initialized_operator.query_processor()?;
@@ -267,7 +509,7 @@ mod tests {
         };
         let ctx = MockQueryContext::new(usize::MAX);
 
-        let query = query_processor.query(query_rectangle, &ctx).unwrap();
+        let query = query_processor.vector_query(query_rectangle, &ctx).unwrap();
 
         let result = query
             .map(Result::unwrap)
@@ -310,14 +552,13 @@ mod tests {
         let target_spatial_reference =
             SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
 
-        let initialized_operator = Reprojection {
+        let initialized_operator = VectorOperator::boxed(Reprojection {
             vector_sources: vec![lines_source],
             raster_sources: vec![],
             params: ReprojectionParams {
                 target_spatial_reference,
             },
-        }
-        .boxed()
+        })
         .initialize(&MockExecutionContext::default())?;
 
         let query_processor = initialized_operator.query_processor()?;
@@ -335,7 +576,7 @@ mod tests {
         };
         let ctx = MockQueryContext::new(usize::MAX);
 
-        let query = query_processor.query(query_rectangle, &ctx).unwrap();
+        let query = query_processor.vector_query(query_rectangle, &ctx).unwrap();
 
         let result = query
             .map(Result::unwrap)
@@ -380,14 +621,13 @@ mod tests {
         let target_spatial_reference =
             SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
 
-        let initialized_operator = Reprojection {
+        let initialized_operator = VectorOperator::boxed(Reprojection {
             vector_sources: vec![polygon_source],
             raster_sources: vec![],
             params: ReprojectionParams {
                 target_spatial_reference,
             },
-        }
-        .boxed()
+        })
         .initialize(&MockExecutionContext::default())?;
 
         let query_processor = initialized_operator.query_processor()?;
@@ -405,7 +645,7 @@ mod tests {
         };
         let ctx = MockQueryContext::new(usize::MAX);
 
-        let query = query_processor.query(query_rectangle, &ctx).unwrap();
+        let query = query_processor.vector_query(query_rectangle, &ctx).unwrap();
 
         let result = query
             .map(Result::unwrap)
