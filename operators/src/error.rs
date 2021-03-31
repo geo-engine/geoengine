@@ -219,3 +219,9 @@ impl From<arrow::error::ArrowError> for Error {
         Error::Arrow { source }
     }
 }
+
+impl From<tokio::task::JoinError> for Error {
+    fn from(source: tokio::task::JoinError) -> Self {
+        Error::TokioJoin { source }
+    }
+}
