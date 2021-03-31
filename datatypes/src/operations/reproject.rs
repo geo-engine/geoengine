@@ -293,6 +293,9 @@ pub fn suggest_pixel_size_from_diag_cross<P: CoordinateProjection>(
     ))
 }
 
+/// Tries to reproject all coordinates at once. If this fails, tries to reproject coordinate by coordinate.
+/// If this still fails, it returns some for individual coordinates.
+/// Otherwise, returns a vector of `Some(Coordinate2d)`.
 pub fn project_coordinates_fail_tolarant<P: CoordinateProjection>(
     i: &[Coordinate2D],
     p: &P,
