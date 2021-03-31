@@ -588,10 +588,7 @@ mod tests {
 
         let res = warp::test::request()
             .method("GET")
-            .path(&format!(
-                "/dataset?{}",
-                &serde_urlencoded::to_string([("id", id),]).unwrap()
-            ))
+            .path(&format!("/dataset/internal/{}", id.internal().unwrap()))
             .header("Content-Length", "0")
             .header(
                 "Authorization",
@@ -601,6 +598,28 @@ mod tests {
             .await;
 
         assert_eq!(res.status(), 200);
+
+        let body: String = String::from_utf8(res.body().to_vec()).unwrap();
+
+        assert_eq!(
+            body,
+            json!({
+                "id": {
+                    "Internal": id.internal().unwrap()
+                },
+                "name": "OgrDataSet",
+                "description": "My Ogr data set",
+                "result_descriptor": {
+                    "Vector": {
+                        "data_type": "Data",
+                        "spatial_reference": "",
+                        "columns": {}
+                    }
+                },
+                "source_operator": "OgrSource"
+            })
+            .to_string()
+        );
 
         Ok(())
     }
