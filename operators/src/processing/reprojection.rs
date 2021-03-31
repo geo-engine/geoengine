@@ -254,11 +254,12 @@ impl RasterOperator for Reprojection {
 impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
     for InitializedRasterReprojection
 {
+    // i know there is a macro somewhere
+    #[allow(clippy::clippy::too_many_lines)]
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         let q = self.raster_sources[0].query_processor()?;
 
         let s = self.state;
-        // let rd = self.result_descriptor;
 
         Ok(match self.result_descriptor.data_type {
             geoengine_datatypes::raster::RasterDataType::U8 => {

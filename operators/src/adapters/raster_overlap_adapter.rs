@@ -37,6 +37,9 @@ pub type RasterFold<'a, T, FoldFuture, FoldMethod, FoldCompanion> = TryFold<
     FoldMethod,
 >;
 
+pub type RasterFoldOption<'a, T, FoldFuture, FoldMethod, FoldCompanion> =
+    Option<RasterFold<'a, T, FoldFuture, FoldMethod, FoldCompanion>>;
+
 /// This adapter allows to generate a tile stream using sub-querys.
 /// This is done using a `TileSubQuery`.
 /// The sub-query is resolved for each produced tile.
@@ -62,14 +65,12 @@ where
     query_ctx: &'a dyn QueryContext,
     /// This is the `Future` which flattens the sub-query streams into single tiles
     #[pin]
-    running_future: Option<
-        RasterFold<
-            'a,
-            PixelType,
-            SubQuery::FoldFuture,
-            SubQuery::FoldMethod,
-            SubQuery::FoldCompanion,
-        >,
+    running_future: RasterFoldOption<
+        'a,
+        PixelType,
+        SubQuery::FoldFuture,
+        SubQuery::FoldMethod,
+        SubQuery::FoldCompanion,
     >,
     /// remember when the operator is done
     ended: bool,
@@ -144,7 +145,7 @@ where
         if this.running_future.as_ref().is_none() {
             if *this.current_spatial_tile >= this.tiles_to_produce.len() {
                 *this.current_spatial_tile = 0;
-
+                *this.time_start = *this.time_end;
                 // TODO: check if there is time progress. If not increase start by minimal step.
 
                 *this.time_end = None;
@@ -260,6 +261,7 @@ where
 
 #[allow(dead_code)]
 #[allow(clippy::type_complexity)]
+#[allow(clippy::clippy::needless_pass_by_value)]
 pub fn fold_by_coordinate_lookup_impl<T>(
     accu: (RasterTile2D<T>, Vec<(GridIdx2D, Coordinate2D)>),
     tile: RasterTile2D<T>,
@@ -425,6 +427,7 @@ where
         self.no_data_and_fill_value
     }
 
+    #[allow(clippy::clippy::type_complexity)]
     fn new_fold_accu(
         &self,
         tile_info: TileInformation,
