@@ -41,11 +41,10 @@ pub type RasterFold<'a, T, FoldFuture, FoldMethod, FoldCompanion> = TryFold<
 /// This is done using a `TileSubQuery`.
 /// The sub-query is resolved for each produced tile.
 #[pin_project(project = RasterOverlapAdapterProjection)]
-pub struct RasterOverlapAdapter<'a, PixelType, RasterProcessorType, QueryContextType, SubQuery>
+pub struct RasterOverlapAdapter<'a, PixelType, RasterProcessorType, SubQuery>
 where
     PixelType: Pixel,
     RasterProcessorType: RasterQueryProcessor<RasterType = PixelType>,
-    QueryContextType: QueryContext,
     SubQuery: TileSubQuery<PixelType>,
 {
     /// The `QueryRectangle` the adapter is queried with
@@ -60,7 +59,7 @@ where
     /// The `RasterQueryProcessor` to answer the sub-queries
     source: &'a RasterProcessorType,
     /// The `QueryContext` to use for sub-queries
-    query_ctx: &'a QueryContextType,
+    query_ctx: &'a dyn QueryContext,
     /// This is the `Future` which flattens the sub-query streams into single tiles
     #[pin]
     running_future: Option<
@@ -78,19 +77,18 @@ where
     sub_query: SubQuery,
 }
 
-impl<'a, PixelType, RasterProcessorType, QueryContextType, SubQuery>
-    RasterOverlapAdapter<'a, PixelType, RasterProcessorType, QueryContextType, SubQuery>
+impl<'a, PixelType, RasterProcessorType, SubQuery>
+    RasterOverlapAdapter<'a, PixelType, RasterProcessorType, SubQuery>
 where
     PixelType: Pixel,
     RasterProcessorType: RasterQueryProcessor<RasterType = PixelType>,
-    QueryContextType: QueryContext,
     SubQuery: TileSubQuery<PixelType>,
 {
     pub fn new(
         source: &'a RasterProcessorType,
         query_rect: QueryRectangle,
         tiling_strat: TilingStrategy,
-        query_ctx: &'a QueryContextType,
+        query_ctx: &'a dyn QueryContext,
         sub_query: SubQuery,
     ) -> Self {
         let tx: Vec<TileInformation> = tiling_strat
@@ -112,12 +110,11 @@ where
     }
 }
 
-impl<PixelType, RasterProcessorType, QueryContextType, SubQuery> FusedStream
-    for RasterOverlapAdapter<'_, PixelType, RasterProcessorType, QueryContextType, SubQuery>
+impl<PixelType, RasterProcessorType, SubQuery> FusedStream
+    for RasterOverlapAdapter<'_, PixelType, RasterProcessorType, SubQuery>
 where
     PixelType: Pixel,
     RasterProcessorType: RasterQueryProcessor<RasterType = PixelType>,
-    QueryContextType: QueryContext,
     SubQuery: TileSubQuery<PixelType>,
 {
     fn is_terminated(&self) -> bool {
@@ -125,12 +122,11 @@ where
     }
 }
 
-impl<'a, PixelType, RasterProcessorType, QueryContextType, SubQuery> Stream
-    for RasterOverlapAdapter<'a, PixelType, RasterProcessorType, QueryContextType, SubQuery>
+impl<'a, PixelType, RasterProcessorType, SubQuery> Stream
+    for RasterOverlapAdapter<'a, PixelType, RasterProcessorType, SubQuery>
 where
     PixelType: Pixel,
     RasterProcessorType: RasterQueryProcessor<RasterType = PixelType>,
-    QueryContextType: QueryContext,
     SubQuery: TileSubQuery<PixelType>,
 {
     type Item = Result<RasterTile2D<PixelType>>;
@@ -405,14 +401,14 @@ where
 }
 
 #[derive(Debug)]
-pub struct RasterProjectionStateGenerator<T, F> {
+pub struct TileReprojectionSubQuery<T, F> {
     pub in_srs: SpatialReference,
     pub out_srs: SpatialReference,
-    pub no_data_value: T,
+    pub no_data_and_fill_value: T,
     pub fold_fn: F,
 }
 
-impl<T, FoldM, FoldF> TileSubQuery<T> for RasterProjectionStateGenerator<T, FoldM>
+impl<T, FoldM, FoldF> TileSubQuery<T> for TileReprojectionSubQuery<T, FoldM>
 where
     T: Pixel,
     FoldM: Send
@@ -422,11 +418,11 @@ where
         + TryFuture<Ok = (RasterTile2D<T>, Vec<(GridIdx2D, Coordinate2D)>), Error = error::Error>,
 {
     fn result_no_data_value(&self) -> Option<T> {
-        Some(self.no_data_value)
+        Some(self.no_data_and_fill_value)
     }
 
     fn initial_fill_value(&self) -> T {
-        self.no_data_value
+        self.no_data_and_fill_value
     }
 
     fn new_fold_accu(
@@ -652,10 +648,10 @@ mod tests {
 
         let qp = op.query_processor().unwrap().get_u8().unwrap();
 
-        let state_gen = RasterProjectionStateGenerator {
+        let state_gen = TileReprojectionSubQuery {
             in_srs: projection,
             out_srs: projection,
-            no_data_value: no_data_v,
+            no_data_and_fill_value: no_data_v,
             fold_fn: fold_by_coordinate_lookup_future,
         };
         let a = RasterOverlapAdapter::new(&qp, query_rect, tiling_strat, &query_ctx, state_gen);
