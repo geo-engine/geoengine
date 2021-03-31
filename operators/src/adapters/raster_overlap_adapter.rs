@@ -1,10 +1,22 @@
 use crate::engine::{QueryContext, QueryRectangle, RasterQueryProcessor};
 use crate::error;
 use crate::util::Result;
-use futures::{ready, stream::BoxStream, StreamExt};
-use futures::{stream::Fold, Stream};
+use futures::{
+    ready,
+    stream::{BoxStream, TryFold},
+    TryFuture, TryStreamExt,
+};
 use futures::{stream::FusedStream, Future};
-use geoengine_datatypes::error::Error::{GridIndexOutOfBounds, InvalidGridIndex};
+use futures::{Stream, TryFutureExt};
+use geoengine_datatypes::{
+    error::Error::{GridIndexOutOfBounds, InvalidGridIndex},
+    operations::reproject::{
+        project_coordinates_fail_tolarant, CoordinateProjection, CoordinateProjector, Reproject,
+    },
+    primitives::{SpatialBounded, TimeInterval},
+    raster::{grid_idx_iter_2d, BoundedGrid, Grid2D},
+    spatial_reference::SpatialReference,
+};
 use geoengine_datatypes::{
     primitives::{Coordinate2D, TimeInstance},
     raster::{
@@ -12,57 +24,66 @@ use geoengine_datatypes::{
         TileInformation, TilingStrategy,
     },
 };
+
 use pin_project::pin_project;
 use std::task::Poll;
 
 use std::pin::Pin;
 
-type RasterStream<'a, T> = BoxStream<'a, Result<RasterTile2D<T>>>;
-type AccuType<T, X> = Result<(RasterTile2D<T>, X)>;
+pub type RasterFold<'a, T, FoldFuture, FoldMethod, FoldCompanion> = TryFold<
+    BoxStream<'a, Result<RasterTile2D<T>>>,
+    FoldFuture,
+    (RasterTile2D<T>, FoldCompanion),
+    FoldMethod,
+>;
 
-pub type RasterFold<'a, T, FoldFut, FoldF, X> =
-    Fold<RasterStream<'a, T>, FoldFut, AccuType<T, X>, FoldF>;
-
+/// This adapter allows to generate a tile stream using sub-querys. This is done using a `TileSubQuery`. The sub-query is resolved for each produced tile.
 #[pin_project(project = RasterOverlapAdapterProjection)]
-pub struct RasterOverlapAdapter<'a, T, Q, QC, FoldF, FoldFut, XF, X, QF>
+pub struct RasterOverlapAdapter<'a, PixelType, RasterProcessorType, QueryContextType, SubQuery>
 where
-    T: Pixel,
-    Q: RasterQueryProcessor<RasterType = T>,
-    QC: QueryContext,
+    PixelType: Pixel,
+    RasterProcessorType: RasterQueryProcessor<RasterType = PixelType>,
+    QueryContextType: QueryContext,
+    SubQuery: TileSubQuery<PixelType>,
 {
+    // The `QueryRectangle` the adapter is queried with
     query_rect: QueryRectangle,
+    // A `TimeInstance` currently queried inside the operator.
     time_start: Option<TimeInstance>,
     time_end: Option<TimeInstance>,
     // TODO: calculate at start when tiling info is available before querying first tile
     spatial_tiles: Vec<TileInformation>,
     current_spatial_tile: usize,
-    source: &'a Q,
-    query_ctx: &'a QC,
+    source: &'a RasterProcessorType,
+    query_ctx: &'a QueryContextType,
     #[pin]
-    running_future: Option<RasterFold<'a, T, FoldFut, FoldF, X>>,
+    running_future: Option<
+        RasterFold<
+            'a,
+            PixelType,
+            SubQuery::FoldFuture,
+            SubQuery::FoldMethod,
+            SubQuery::FoldCompanion,
+        >,
+    >,
     ended: bool,
-    fold_fn: FoldF,
-    accu_creator: XF,
-    tile_query_rewrite: QF,
+    sub_query: SubQuery,
 }
 
-impl<'a, T, Q, QC, FoldF, FoldFut, XF, X, QF>
-    RasterOverlapAdapter<'a, T, Q, QC, FoldF, FoldFut, XF, X, QF>
+impl<'a, PixelType, RasterProcessorType, QueryContextType, SubQuery>
+    RasterOverlapAdapter<'a, PixelType, RasterProcessorType, QueryContextType, SubQuery>
 where
-    T: Pixel,
-    Q: RasterQueryProcessor<RasterType = T>,
-    QC: QueryContext,
-    FoldFut: Future<Output = Result<(RasterTile2D<T>, X)>>,
-    FoldF: Clone + Fn(Result<(RasterTile2D<T>, X)>, Result<RasterTile2D<T>>) -> FoldFut,
+    PixelType: Pixel,
+    RasterProcessorType: RasterQueryProcessor<RasterType = PixelType>,
+    QueryContextType: QueryContext,
+    SubQuery: TileSubQuery<PixelType>,
 {
     pub fn new(
-        source: &'a Q,
+        source: &'a RasterProcessorType,
         query_rect: QueryRectangle,
         tiling_strat: TilingStrategy,
-        query_ctx: &'a QC,
-        fold_fn: FoldF,
-        accu_creator: XF,
-        tile_query_rewrite: QF,
+        query_ctx: &'a QueryContextType,
+        sub_query: SubQuery,
     ) -> Self {
         let tx: Vec<TileInformation> = tiling_strat
             .tile_information_iterator(query_rect.bbox)
@@ -79,47 +100,33 @@ where
             running_future: None,
             query_ctx,
             ended: false,
-            fold_fn,
-            accu_creator,
-            tile_query_rewrite,
+            sub_query,
         }
     }
 }
 
-impl<T, Q, QC, FoldF, FoldFut, XF, X, QF> FusedStream
-    for RasterOverlapAdapter<'_, T, Q, QC, FoldF, FoldFut, XF, X, QF>
+impl<PixelType, RasterProcessorType, QueryContextType, SubQuery> FusedStream
+    for RasterOverlapAdapter<'_, PixelType, RasterProcessorType, QueryContextType, SubQuery>
 where
-    T: Pixel,
-    Q: RasterQueryProcessor<RasterType = T>,
-    QC: QueryContext,
-    XF: Clone + Fn(TileInformation, QueryRectangle) -> Result<(RasterTile2D<T>, X)>,
-    X: Clone + Send,
-
-    FoldFut: Future<Output = Result<(RasterTile2D<T>, X)>>,
-    FoldF: Clone + Fn(Result<(RasterTile2D<T>, X)>, Result<RasterTile2D<T>>) -> FoldFut,
-
-    QF: Clone + Fn(&TileInformation, &QueryRectangle, TimeInstance) -> Result<QueryRectangle>,
+    PixelType: Pixel,
+    RasterProcessorType: RasterQueryProcessor<RasterType = PixelType>,
+    QueryContextType: QueryContext,
+    SubQuery: TileSubQuery<PixelType>,
 {
     fn is_terminated(&self) -> bool {
         self.ended
     }
 }
 
-impl<'a, T, Q, QC, FoldF, FoldFut, XF, X, QF> Stream
-    for RasterOverlapAdapter<'a, T, Q, QC, FoldF, FoldFut, XF, X, QF>
+impl<'a, PixelType, RasterProcessorType, QueryContextType, SubQuery> Stream
+    for RasterOverlapAdapter<'a, PixelType, RasterProcessorType, QueryContextType, SubQuery>
 where
-    T: Pixel,
-    Q: RasterQueryProcessor<RasterType = T>,
-    QC: QueryContext,
-    XF: Clone + Fn(TileInformation, QueryRectangle) -> Result<(RasterTile2D<T>, X)>,
-    X: Clone + Send,
-
-    FoldFut: Future<Output = Result<(RasterTile2D<T>, X)>>,
-    FoldF: Clone + Fn(Result<(RasterTile2D<T>, X)>, Result<RasterTile2D<T>>) -> FoldFut,
-
-    QF: Clone + Fn(&TileInformation, &QueryRectangle, TimeInstance) -> Result<QueryRectangle>,
+    PixelType: Pixel,
+    RasterProcessorType: RasterQueryProcessor<RasterType = PixelType>,
+    QueryContextType: QueryContext,
+    SubQuery: TileSubQuery<PixelType>,
 {
-    type Item = Result<RasterTile2D<T>>;
+    type Item = Result<RasterTile2D<PixelType>>;
 
     fn poll_next(
         self: Pin<&mut Self>,
@@ -151,17 +158,16 @@ where
                         global_geo_transform: current_spatial_tile_info.global_geo_transform,
                     };
 
-                    let tqr = (this.tile_query_rewrite)(
-                        &current_spatial_tile_info,
-                        &this.query_rect,
+                    let tqr = this.sub_query.tile_query_rectangle(
+                        fold_tile_spec,
+                        *this.query_rect,
                         t_start,
                     )?;
+                    let accu = this.sub_query.new_fold_accu(fold_tile_spec, tqr)?;
 
                     let qs = this.source.raster_query(tqr, *this.query_ctx)?;
 
-                    let accu = (this.accu_creator)(fold_tile_spec, tqr);
-
-                    let ttf = qs.fold(accu, this.fold_fn.clone());
+                    let ttf = qs.try_fold(accu, this.sub_query.fold_method());
 
                     this.running_future.set(Some(ttf));
                 }
@@ -183,7 +189,13 @@ where
 
         // update the end_time from the produced tile (should/must not change within a tile run?)
         let t_end = r.0.time.end();
-        let _old_t_end = this.time_end.replace(t_end);
+        let old_t_end = this.time_end.replace(t_end);
+
+        if let Some(old_t) = old_t_end {
+            if t_end == old_t {
+                let _ = this.time_end.replace(t_end + 1);
+            }
+        }
 
         //TODO:  if end = start then +1
 
@@ -193,66 +205,71 @@ where
     }
 }
 
-#[allow(dead_code)]
-pub fn fold_by_blit<T, X>(
-    accu: AccuType<T, X>,
-    tile: Result<RasterTile2D<T>>,
-) -> futures::future::Ready<AccuType<T, X>>
+pub fn fold_by_blit_impl<T>(
+    accu: (RasterTile2D<T>, ()),
+    tile: RasterTile2D<T>,
+) -> Result<(RasterTile2D<T>, ())>
 where
     T: Pixel,
-    X: Clone,
 {
-    let result: Result<(RasterTile2D<T>, X)> = match (accu, tile) {
-        (Ok((mut raster2d, unused)), Ok(t)) => {
-            let t_union = raster2d.time.union(&t.time).unwrap();
-            match raster2d.blit(t) {
-                Ok(_) => {
-                    raster2d.time = t_union;
-                    Ok((raster2d, unused))
-                }
-                Err(_error) => {
-                    // Err(error.into())
-                    // dbg!("Skipping non-overlapping area tiles in blit method. This schould be a bug!!!", error);
-                    Ok((raster2d, unused))
-                }
-            }
+    let (mut accu_tile, unused) = accu;
+    let t_union = accu_tile.time.union(&tile.time).unwrap();
+    match accu_tile.blit(tile) {
+        Ok(_) => {
+            accu_tile.time = t_union;
+            Ok((accu_tile, unused))
         }
-        (Err(error), _) | (_, Err(error)) => Err(error),
-    };
-
-    match result {
-        Ok(updated_raster2d) => futures::future::ok(updated_raster2d),
-        Err(error) => futures::future::err(error),
+        Err(error) => {
+            dbg!(
+                "Skipping non-overlapping area tiles in blit method. This schould not happen but the MockSource produces all tiles!!!",
+                error
+            );
+            Ok((accu_tile, unused))
+        }
     }
 }
 
 #[allow(dead_code)]
-#[allow(clippy::type_complexity)]
-pub fn fold_by_coordinate_lookup<T>(
-    accu: AccuType<T, Vec<(GridIdx2D, Coordinate2D)>>,
-    tile: Result<RasterTile2D<T>>,
-) -> futures::future::Ready<AccuType<T, Vec<(GridIdx2D, Coordinate2D)>>>
+pub fn fold_by_blit_future<T>(
+    accu: (RasterTile2D<T>, ()),
+    tile: RasterTile2D<T>,
+) -> impl TryFuture<Ok = (RasterTile2D<T>, ()), Error = error::Error>
 where
     T: Pixel,
 {
-    let result: AccuType<T, Vec<(GridIdx2D, Coordinate2D)>> = match (accu, tile) {
-        (Ok((mut raster2d, lookup)), Ok(t)) => {
-            let t_union = raster2d.time.union(&t.time).unwrap();
+    tokio::task::spawn_blocking(|| fold_by_blit_impl(accu, tile).unwrap()).err_into()
+    // halp!! how to remove the unwrap???
+}
 
-            match insert_projected_pixels(&mut raster2d, &t, lookup.iter()) {
-                Ok(_) => {
-                    raster2d.time = t_union;
-                    Ok((raster2d, lookup))
-                }
-                Err(error) => Err(error),
-            }
+#[allow(dead_code)]
+pub fn fold_by_coordinate_lookup_future<T>(
+    accu: (RasterTile2D<T>, Vec<(GridIdx2D, Coordinate2D)>),
+    tile: RasterTile2D<T>,
+) -> impl TryFuture<Ok = (RasterTile2D<T>, Vec<(GridIdx2D, Coordinate2D)>), Error = error::Error>
+where
+    T: Pixel,
+{
+    tokio::task::spawn_blocking(|| fold_by_coordinate_lookup_impl(accu, tile).unwrap()).err_into()
+}
+
+#[allow(dead_code)]
+#[allow(clippy::type_complexity)]
+pub fn fold_by_coordinate_lookup_impl<T>(
+    accu: (RasterTile2D<T>, Vec<(GridIdx2D, Coordinate2D)>),
+    tile: RasterTile2D<T>,
+) -> Result<(RasterTile2D<T>, Vec<(GridIdx2D, Coordinate2D)>)>
+where
+    T: Pixel,
+{
+    let (mut accu_tile, accu_companion) = accu;
+    let t_union = accu_tile.time.union(&tile.time).unwrap();
+
+    match insert_projected_pixels(&mut accu_tile, &tile, accu_companion.iter()) {
+        Ok(_) => {
+            accu_tile.time = t_union;
+            Ok((accu_tile, accu_companion))
         }
-        (Err(error), _) | (_, Err(error)) => Err(error),
-    };
-
-    match result {
-        Ok(updated_raster2d) => futures::future::ok(updated_raster2d),
-        Err(error) => futures::future::err(error),
+        Err(error) => Err(error),
     }
 }
 
@@ -261,10 +278,12 @@ pub fn insert_projected_pixels<'a, T: Pixel, I: Iterator<Item = &'a (GridIdx2D, 
     source: &RasterTile2D<T>,
     local_target_idx_source_coordinate_map: I,
 ) -> Result<()> {
+    // TODO: it would be better to run the pixel wise stuff in insert_projected_pixels in parallel...
     for (idx, coord) in local_target_idx_source_coordinate_map {
         match source.pixel_value_at_coord(*coord) {
             Ok(px_value) => target.set_at_grid_index(*idx, px_value)?,
             Err(e) => match e {
+                // todo: fail in new lookup
                 GridIndexOutOfBounds {
                     index: _,
                     min_index: _,
@@ -282,14 +301,179 @@ pub fn insert_projected_pixels<'a, T: Pixel, I: Iterator<Item = &'a (GridIdx2D, 
     Ok(())
 }
 
+pub trait TileSubQuery<T>: Send
+where
+    T: Pixel,
+{
+    type FoldFuture: TryFuture<Ok = (RasterTile2D<T>, Self::FoldCompanion), Error = error::Error>;
+    type FoldMethod: Clone
+        + Fn((RasterTile2D<T>, Self::FoldCompanion), RasterTile2D<T>) -> Self::FoldFuture;
+    type FoldCompanion: Clone + Send;
+
+    fn result_no_data_value(&self) -> Option<T>;
+    fn initial_fill_value(&self) -> T;
+
+    fn new_fold_accu(
+        &self,
+        tile_info: TileInformation,
+        query_rect: QueryRectangle,
+    ) -> Result<(RasterTile2D<T>, Self::FoldCompanion)>;
+    fn tile_query_rectangle(
+        &self,
+        tile_info: TileInformation,
+        query_rect: QueryRectangle,
+        start_time: TimeInstance,
+    ) -> Result<QueryRectangle>;
+
+    fn fold_method(&self) -> Self::FoldMethod;
+}
+
+#[derive(Debug, Clone)]
+pub struct TileSubQueryIdentity<F> {
+    fold_fn: F,
+}
+
+impl<T, FoldM, FoldF> TileSubQuery<T> for TileSubQueryIdentity<FoldM>
+where
+    T: Pixel,
+    FoldM: Send + Clone + Fn((RasterTile2D<T>, ()), RasterTile2D<T>) -> FoldF,
+    FoldF: TryFuture<Ok = (RasterTile2D<T>, ()), Error = error::Error>,
+{
+    fn result_no_data_value(&self) -> Option<T> {
+        Some(T::from_(0))
+    }
+
+    fn initial_fill_value(&self) -> T {
+        T::from_(0)
+    }
+
+    fn new_fold_accu(
+        &self,
+        tile_info: TileInformation,
+        query_rect: QueryRectangle,
+    ) -> Result<(RasterTile2D<T>, ())> {
+        let output_raster = Grid2D::new_filled(
+            tile_info.tile_size_in_pixels,
+            self.initial_fill_value(),
+            self.result_no_data_value(),
+        );
+        Ok((
+            RasterTile2D::new_with_tile_info(query_rect.time_interval, tile_info, output_raster),
+            (),
+        ))
+    }
+
+    fn tile_query_rectangle(
+        &self,
+        tile_info: TileInformation,
+        query_rect: QueryRectangle,
+        start_time: TimeInstance,
+    ) -> Result<QueryRectangle> {
+        Ok(QueryRectangle {
+            bbox: tile_info.spatial_bounds(),
+            spatial_resolution: query_rect.spatial_resolution,
+            time_interval: TimeInterval::new_instant(start_time),
+        })
+    }
+
+    fn fold_method(&self) -> Self::FoldMethod {
+        self.fold_fn.clone()
+    }
+
+    type FoldFuture = FoldF;
+
+    type FoldMethod = FoldM;
+
+    type FoldCompanion = ();
+}
+
+#[derive(Debug)]
+pub struct RasterProjectionStateGenerator<T, F> {
+    pub in_srs: SpatialReference,
+    pub out_srs: SpatialReference,
+    pub no_data_value: T,
+    pub fold_fn: F,
+}
+
+impl<T, FoldM, FoldF> TileSubQuery<T> for RasterProjectionStateGenerator<T, FoldM>
+where
+    T: Pixel,
+    FoldM: Send
+        + Clone
+        + Fn((RasterTile2D<T>, Vec<(GridIdx2D, Coordinate2D)>), RasterTile2D<T>) -> FoldF,
+    FoldF: Send
+        + TryFuture<Ok = (RasterTile2D<T>, Vec<(GridIdx2D, Coordinate2D)>), Error = error::Error>,
+{
+    fn result_no_data_value(&self) -> Option<T> {
+        Some(self.no_data_value)
+    }
+
+    fn initial_fill_value(&self) -> T {
+        self.no_data_value
+    }
+
+    fn new_fold_accu(
+        &self,
+        tile_info: TileInformation,
+        query_rect: QueryRectangle,
+    ) -> Result<(RasterTile2D<T>, Vec<(GridIdx2D, Coordinate2D)>)> {
+        let output_raster = Grid2D::new_filled(
+            tile_info.tile_size_in_pixels,
+            self.initial_fill_value(),
+            self.result_no_data_value(),
+        );
+        let idxs: Vec<GridIdx2D> = grid_idx_iter_2d(&output_raster.bounding_box()).collect();
+        let coords: Vec<Coordinate2D> = idxs
+            .iter()
+            .map(|&i| tile_info.tile_geo_transform().grid_idx_to_coordinate_2d(i))
+            .collect();
+
+        let proj = CoordinateProjector::from_known_srs(self.in_srs, self.out_srs)?;
+        let projected_coords = project_coordinates_fail_tolarant(&coords, &proj);
+
+        let accu_companion: Vec<(GridIdx2D, Coordinate2D)> = idxs
+            .into_iter()
+            .zip(projected_coords.into_iter())
+            .filter_map(|(i, c)| c.map(|c| (i, c)))
+            .collect();
+
+        Ok((
+            RasterTile2D::new_with_tile_info(query_rect.time_interval, tile_info, output_raster),
+            accu_companion,
+        ))
+    }
+
+    fn tile_query_rectangle(
+        &self,
+        tile_info: TileInformation,
+        query_rect: QueryRectangle,
+        start_time: TimeInstance,
+    ) -> Result<QueryRectangle> {
+        let proj = CoordinateProjector::from_known_srs(self.in_srs, self.out_srs)?;
+
+        Ok(QueryRectangle {
+            bbox: tile_info.spatial_bounds().reproject(&proj)?,
+            spatial_resolution: query_rect.spatial_resolution,
+            time_interval: TimeInterval::new_instant(start_time),
+        })
+    }
+
+    type FoldFuture = FoldF;
+
+    type FoldMethod = FoldM;
+
+    type FoldCompanion = Vec<(GridIdx2D, Coordinate2D)>;
+
+    fn fold_method(&self) -> Self::FoldMethod {
+        self.fold_fn.clone()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::{
-        operations::reproject::{
-            project_coordinates_fail_tolarant, CoordinateProjection, CoordinateProjector, Reproject,
-        },
-        primitives::{BoundingBox2D, Measurement, SpatialBounded, SpatialResolution, TimeInterval},
-        raster::{grid_idx_iter_2d, BoundedGrid, Grid, Grid2D, GridShape, RasterDataType},
+        primitives::{BoundingBox2D, Measurement, SpatialResolution, TimeInterval},
+        raster::{Grid, GridShape, RasterDataType},
         spatial_reference::SpatialReference,
     };
 
@@ -297,6 +481,7 @@ mod tests {
     use crate::engine::{MockExecutionContext, MockQueryContext};
     use crate::engine::{RasterOperator, RasterResultDescriptor};
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
+    use futures::StreamExt;
 
     #[tokio::test]
     async fn identity() {
@@ -360,39 +545,16 @@ mod tests {
 
         let op = mrs1.initialize(&exe_ctx).unwrap();
 
-        // would be nice to get from result descriptor
-        let no_data_v = Some(0_u8); // op.result_descriptor().no_data_value;
-
         let qp = op.query_processor().unwrap().get_u8().unwrap();
-
-        let accu_creator = |tile_spec: TileInformation, query_rect: QueryRectangle| {
-            let output_raster = Grid2D::new_filled(tile_spec.tile_size_in_pixels, 0, no_data_v);
-            Ok((
-                RasterTile2D::new_with_tile_info(
-                    query_rect.time_interval,
-                    tile_spec,
-                    output_raster,
-                ),
-                (),
-            ))
-        };
-
-        let tqr = |tile: &TileInformation, qr: &QueryRectangle, time: TimeInstance| {
-            Ok(QueryRectangle {
-                bbox: tile.spatial_bounds(),
-                spatial_resolution: qr.spatial_resolution,
-                time_interval: TimeInterval::new_instant(time),
-            })
-        };
 
         let a = RasterOverlapAdapter::new(
             &qp,
             query_rect,
             tiling_strat,
             &query_ctx,
-            fold_by_blit,
-            accu_creator,
-            tqr,
+            TileSubQueryIdentity {
+                fold_fn: fold_by_blit_future,
+            },
         );
         let res = a
             .map(Result::unwrap)
@@ -469,56 +631,17 @@ mod tests {
         let op = mrs1.initialize(&exe_ctx).unwrap();
 
         // would be nice to get from result descriptor
-        let no_data_v = Some(0_u8); // op.result_descriptor().no_data_value;
+        let no_data_v = 0_u8; // op.result_descriptor().no_data_value;
 
         let qp = op.query_processor().unwrap().get_u8().unwrap();
 
-        let accu_creator = |tile_spec: TileInformation, query_rect: QueryRectangle| {
-            let output_raster = Grid2D::new_filled(tile_spec.tile_size_in_pixels, 0, no_data_v);
-            let idxs: Vec<GridIdx2D> = grid_idx_iter_2d(&output_raster.bounding_box()).collect();
-            let coords: Vec<Coordinate2D> = idxs
-                .iter()
-                .map(|&i| tile_spec.tile_geo_transform().grid_idx_to_coordinate_2d(i))
-                .collect();
-
-            let proj = CoordinateProjector::from_known_srs(projection, projection)?;
-            let projected_coords = project_coordinates_fail_tolarant(&coords, &proj);
-
-            let accu_companion: Vec<(GridIdx2D, Coordinate2D)> = idxs
-                .into_iter()
-                .zip(projected_coords.into_iter())
-                .filter_map(|(i, c)| c.map(|c| (i, c)))
-                .collect();
-
-            Ok((
-                RasterTile2D::new_with_tile_info(
-                    query_rect.time_interval,
-                    tile_spec,
-                    output_raster,
-                ),
-                accu_companion,
-            ))
+        let state_gen = RasterProjectionStateGenerator {
+            in_srs: projection,
+            out_srs: projection,
+            no_data_value: no_data_v,
+            fold_fn: fold_by_coordinate_lookup_future,
         };
-
-        let tqr = |tile: &TileInformation, qr: &QueryRectangle, time: TimeInstance| {
-            let proj = CoordinateProjector::from_known_srs(projection, projection)?;
-
-            Ok(QueryRectangle {
-                bbox: tile.spatial_bounds().reproject(&proj)?,
-                spatial_resolution: qr.spatial_resolution,
-                time_interval: TimeInterval::new_instant(time),
-            })
-        };
-
-        let a = RasterOverlapAdapter::new(
-            &qp,
-            query_rect,
-            tiling_strat,
-            &query_ctx,
-            fold_by_coordinate_lookup,
-            accu_creator,
-            tqr,
-        );
+        let a = RasterOverlapAdapter::new(&qp, query_rect, tiling_strat, &query_ctx, state_gen);
         let res = a
             .map(Result::unwrap)
             .collect::<Vec<RasterTile2D<u8>>>()
