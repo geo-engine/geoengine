@@ -220,16 +220,8 @@ where
     }
 }
 
-/// This method calculates a suggested pixel size for the translation of a raster into a different projection.
-/// The source raster is described using a `BoundingBox2D` and a pixel size as `SpatialResolution`.
-/// A suggested pixel size is calculated using the approach used by GDAL:
-/// The upper left and the lower right coordinates of the bounding box are projected in the target SRS.
-/// Then, the distance between both points in the target SRS is devided by the distance in pixels of the source.
-pub fn suggest_pixel_size_like_gdal<P: CoordinateProjection>(
-    bbox: BoundingBox2D,
-    spatial_resolution: SpatialResolution,
-    projector: &P,
-) -> Result<SpatialResolution> {
+#[inline]
+fn diag_pixel_dist(bbox: BoundingBox2D, spatial_resolution: SpatialResolution) -> Result<f64> {
     ensure!(
         !(bbox.size_x().is_zero() || bbox.size_y().is_zero()),
         error::EmptySpatialBounds {
@@ -241,19 +233,44 @@ pub fn suggest_pixel_size_like_gdal<P: CoordinateProjection>(
     // calculate the number of pixels per axis
     let x_pixels = (bbox.size_x() / spatial_resolution.x).abs();
     let y_pixels = (bbox.size_y() / spatial_resolution.y).abs();
-    // get the diagonal distance between bbox edges
-    let diag_pixels: f64 = (x_pixels * x_pixels + y_pixels * y_pixels).sqrt();
 
+    let diag_pixels: f64 = (x_pixels * x_pixels + y_pixels * y_pixels).sqrt();
+    Ok(diag_pixels)
+}
+
+#[inline]
+fn projected_diag_distance<P: CoordinateProjection>(
+    edge_a: Coordinate2D,
+    edge_b: Coordinate2D,
+    projector: &P,
+) -> Result<f64> {
     // reproject the upper left and lower right coordinates to the target srs.
     // NOTE: the edges of the projected bbox might differ.
-    let proj_ul_coord = bbox.upper_left().reproject(projector)?;
-    let proj_lr_coord = bbox.lower_right().reproject(projector)?;
+    let proj_ul_coord = edge_a.reproject(projector)?;
+    let proj_lr_coord = edge_b.reproject(projector)?;
 
     // calculate the distance between upper left and lower right coordinate in srs units
     let proj_ul_lr_vector = proj_ul_coord - proj_lr_coord;
     let proj_ul_lr_distance = (proj_ul_lr_vector.x * proj_ul_lr_vector.x
         + proj_ul_lr_vector.y * proj_ul_lr_vector.y)
         .sqrt();
+    Ok(proj_ul_lr_distance)
+}
+
+/// This method calculates a suggested pixel size for the translation of a raster into a different projection.
+/// The source raster is described using a `BoundingBox2D` and a pixel size as `SpatialResolution`.
+/// A suggested pixel size is calculated using the approach used by GDAL:
+/// The upper left and the lower right coordinates of the bounding box are projected in the target SRS.
+/// Then, the distance between both points in the target SRS is devided by the distance in pixels of the source.
+pub fn suggest_pixel_size_like_gdal<P: CoordinateProjection>(
+    bbox: BoundingBox2D,
+    spatial_resolution: SpatialResolution,
+    projector: &P,
+) -> Result<SpatialResolution> {
+    let diag_pixels = diag_pixel_dist(bbox, spatial_resolution)?;
+
+    let proj_ul_lr_distance =
+        projected_diag_distance(bbox.upper_left(), bbox.lower_right(), projector)?;
 
     // derive the pixel size by deviding srs unit distance by pixel distance in the source bbox
     let proj_ul_lr_pixel_size = proj_ul_lr_distance / diag_pixels;
@@ -269,36 +286,15 @@ pub fn suggest_pixel_size_from_diag_cross<P: CoordinateProjection>(
     spatial_resolution: SpatialResolution,
     projector: &P,
 ) -> Result<SpatialResolution> {
-    ensure!(
-        !(bbox.size_x().is_zero() || bbox.size_y().is_zero()),
-        error::EmptySpatialBounds {
-            lower_left_coordinate: bbox.lower_left(),
-            upper_right_coordinate: bbox.upper_right(),
-        }
-    );
-    // calculate the number of pixels per axis
-    let x_pixels = (bbox.size_x() / spatial_resolution.x).abs();
-    let y_pixels = (bbox.size_y() / spatial_resolution.y).abs();
+    let diag_pixels = diag_pixel_dist(bbox, spatial_resolution)?;
 
-    let diag_pixels: f64 = (x_pixels * x_pixels + y_pixels * y_pixels).sqrt();
-
-    let proj_ul_coord = bbox.upper_left().reproject(projector)?;
-    let proj_lr_coord = bbox.lower_right().reproject(projector)?;
-
-    let proj_ul_lr_vector = proj_ul_coord - proj_lr_coord;
-    let proj_ul_lr_distance = (proj_ul_lr_vector.x * proj_ul_lr_vector.x
-        + proj_ul_lr_vector.y * proj_ul_lr_vector.y)
-        .sqrt();
+    let proj_ul_lr_distance =
+        projected_diag_distance(bbox.upper_left(), bbox.lower_right(), projector)?;
 
     let proj_ul_lr_pixel_size = proj_ul_lr_distance / diag_pixels;
 
-    let proj_ll_coord = bbox.lower_left().reproject(projector)?;
-    let proj_ur_coord = bbox.upper_right().reproject(projector)?;
-
-    let proj_ll_ur_vector = proj_ll_coord - proj_ur_coord;
-    let proj_ll_ur_distance = (proj_ll_ur_vector.x * proj_ll_ur_vector.x
-        + proj_ll_ur_vector.y * proj_ll_ur_vector.y)
-        .sqrt();
+    let proj_ll_ur_distance =
+        projected_diag_distance(bbox.lower_left(), bbox.upper_right(), projector)?;
 
     let proj_ll_ur_pixel_size = proj_ll_ur_distance / diag_pixels;
 
@@ -311,14 +307,13 @@ pub fn suggest_pixel_size_from_diag_cross<P: CoordinateProjection>(
 }
 
 /// Tries to reproject all coordinates at once. If this fails, tries to reproject coordinate by coordinate.
-/// If this still fails, it returns some for individual coordinates.
-/// Otherwise, returns a vector of `Some(Coordinate2d)`.
+/// It returns all coordinates in input order.
+/// In case of success it returns `Some(Coordinate2D)` and `None` otherwise.
 pub fn project_coordinates_fail_tolarant<P: CoordinateProjection>(
     i: &[Coordinate2D],
     p: &P,
 ) -> Vec<Option<Coordinate2D>> {
     if let Ok(projected_all) = p.project_coordinates(&i) {
-        dbg!(projected_all.len());
         return projected_all
             .into_iter()
             .map(Some)
@@ -333,10 +328,11 @@ pub fn project_coordinates_fail_tolarant<P: CoordinateProjection>(
         })
         .map(|(_, c_p)| c_p.ok())
         .collect();
-    dbg!(
-        individual_projected.iter().filter(|c| c.is_some()).count(),
-        i.len()
-    );
+    // For debuging use this to find oput how many coordinates could be transformed.
+    //dbg!(
+    //    individual_projected.iter().filter(|c| c.is_some()).count(),
+    //    i.len()
+    //);
     individual_projected
 }
 
