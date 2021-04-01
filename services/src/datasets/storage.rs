@@ -163,6 +163,18 @@ pub enum MetaDataDefinition {
     GdalStatic(GdalMetaDataStatic),
 }
 
+impl MetaDataDefinition {
+    pub fn source_operator_type(&self) -> &str {
+        match self {
+            MetaDataDefinition::MockMetaData(_) => "MockDataSetDataSource",
+            MetaDataDefinition::OgrMetaData(_) => "OgrSource",
+            MetaDataDefinition::GdalMetaDataRegular(_) | MetaDataDefinition::GdalStatic(_) => {
+                "GdalSource"
+            }
+        }
+    }
+}
+
 /// Handling of data sets provided by geo engine internally, staged and by external providers
 #[async_trait]
 pub trait DataSetDb:

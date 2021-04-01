@@ -28,7 +28,7 @@ use geoengine_operators::{
     engine::{StaticMetaData, VectorResultDescriptor},
     source::{OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType},
 };
-use snafu::ResultExt;
+use snafu::{OptionExt, ResultExt};
 use uuid::Uuid;
 use warp::Filter;
 
@@ -171,7 +171,7 @@ async fn auto_create_dataset<C: Context>(
         id: None,
         name: create.dataset_name,
         description: create.dataset_description,
-        source_operator: "OgrSource".to_owned(),
+        source_operator: meta_data.source_operator_type().to_owned(),
     };
 
     let mut db = ctx.data_set_db_ref_mut().await;
@@ -230,10 +230,11 @@ fn auto_detect_dataset(main_file_path: &Path) -> Result<MetaDataDefinition> {
 
 fn detect_vector_type(layer: &Layer) -> Result<VectorDataType> {
     let ogr_type = layer
-        .feature(0)
-        .ok_or(error::Error::EmptyDataSetCannotBeImported)?
-        .geometry()
-        .geometry_type();
+        .defn()
+        .geom_fields()
+        .next()
+        .context(error::EmptyDataSetCannotBeImported)?
+        .field_type();
 
     VectorDataType::try_from_ogr_type_code(ogr_type).context(error::DataType)
 }
