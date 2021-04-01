@@ -1,4 +1,5 @@
 use crate::error;
+use gdal::spatial_ref::SpatialRef;
 #[cfg(feature = "postgres")]
 use postgres_types::private::BytesMut;
 #[cfg(feature = "postgres")]
@@ -8,8 +9,8 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 #[cfg(feature = "postgres")]
 use snafu::Error;
 use snafu::ResultExt;
-use std::fmt::Formatter;
 use std::str::FromStr;
+use std::{convert::TryFrom, fmt::Formatter};
 
 /// A spatial reference authority that is part of a spatial reference definition
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
@@ -131,6 +132,17 @@ impl FromStr for SpatialReference {
                 spatial_reference_string: s.into(),
             }),
         }
+    }
+}
+
+impl TryFrom<SpatialRef> for SpatialReference {
+    type Error = error::Error;
+
+    fn try_from(value: SpatialRef) -> Result<Self, Self::Error> {
+        Ok(SpatialReference::new(
+            SpatialReferenceAuthority::from_str(&value.auth_name()?)?,
+            value.auth_code()? as u32,
+        ))
     }
 }
 
