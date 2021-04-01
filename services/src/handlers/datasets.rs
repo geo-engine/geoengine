@@ -246,45 +246,14 @@ struct Columns {
 
 fn detect_columns(layer: &Layer) -> HashMap<String, FeatureDataType> {
     let mut columns = HashMap::default();
-    // TODO: avoid reading ALL of the data
-    for feature in layer.features() {
-        for (name, value) in feature.fields() {
-            #[allow(clippy::match_same_arms)]
-            match value {
-                gdal::vector::FieldValue::IntegerValue(_)
-                | gdal::vector::FieldValue::Integer64Value(_) => {
-                    // only store as integer if there is no other value type present in the column
-                    #[allow(clippy::map_entry)]
-                    if !columns.contains_key(&name) {
-                        columns.insert(name, FeatureDataType::Decimal);
-                    }
-                }
-                gdal::vector::FieldValue::RealValue(_) => {
-                    if let Some(column) = columns.get(&name) {
-                        if *column == FeatureDataType::Decimal {
-                            // migrate integer column to float
-                            columns.insert(name, FeatureDataType::Number);
-                        }
-                    } else {
-                        columns.insert(name, FeatureDataType::Number);
-                    }
-                }
-                gdal::vector::FieldValue::StringValue(_) => {
-                    columns.insert(name, FeatureDataType::Text);
-                }
-                gdal::vector::FieldValue::DateValue(_)
-                | gdal::vector::FieldValue::DateTimeValue(_) => {
-                    // TODO: ensure all feature's field by this name are a date/datetime
-                    // TODO: auto detect if this is start/end date/datetime
-                }
-                gdal::vector::FieldValue::IntegerListValue(_)
-                | gdal::vector::FieldValue::Integer64ListValue(_)
-                | gdal::vector::FieldValue::RealListValue(_)
-                | gdal::vector::FieldValue::StringListValue(_) => {
-                    // TODO: handle lists
-                }
-            }
+
+    for field in layer.defn().fields() {
+        let field_type = field.field_type();
+        if let Ok(data_type) = FeatureDataType::try_from_ogr_field_type_code(field_type) {
+            columns.insert(field.name(), data_type);
         }
+
+        // TODO: handle time columns
     }
 
     columns

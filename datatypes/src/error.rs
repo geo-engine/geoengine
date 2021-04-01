@@ -172,6 +172,7 @@ pub enum Error {
         source: gdal::errors::GdalError,
     },
     NoMatchingVectorDataTypeForOgrGeometryType,
+    NoMatchingFeatureDataTypeForOgrFieldType,
 }
 
 impl From<arrow::error::ArrowError> for Error {
