@@ -85,6 +85,7 @@ where
     RasterProcessorType: RasterQueryProcessor<RasterType = PixelType>,
     SubQuery: TileSubQuery<PixelType>,
 {
+    /// Creates a new `RasterOverlapAdapter` and initialize all the internal things.
     pub fn new(
         source: &'a RasterProcessorType,
         query_rect: QueryRectangle,
@@ -143,12 +144,20 @@ where
         let mut this = self.project();
 
         if this.running_future.as_ref().is_none() {
+            // there is no future running / stream processing
             if *this.current_spatial_tile >= this.tiles_to_produce.len() {
+                // we iterated through all the tiles, now we need to move time forward
                 *this.current_spatial_tile = 0;
-                *this.time_start = *this.time_end;
-                // TODO: check if there is time progress. If not increase start by minimal step.
 
-                *this.time_end = None;
+                // make time progress
+                let (n_t_start, n_t_end) = match (*this.time_start, *this.time_end) {
+                    (Some(t_start), Some(t_end)) if t_start == t_end => (Some(t_start + 1), None),
+                    (Some(t_start), Some(t_end)) if t_start < t_end => (Some(t_end), None),
+                    (_, _) => (None, None),
+                };
+
+                *this.time_start = n_t_start;
+                *this.time_end = n_t_end;
             }
 
             if let Some(t_start) = *this.time_start {
