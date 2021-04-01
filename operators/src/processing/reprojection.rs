@@ -443,9 +443,10 @@ mod tests {
     use geoengine_datatypes::{
         collections::{MultiLineStringCollection, MultiPointCollection, MultiPolygonCollection},
         primitives::{
-            BoundingBox2D, MultiLineString, MultiPoint, MultiPolygon, SpatialResolution,
-            TimeInterval,
+            BoundingBox2D, Measurement, MultiLineString, MultiPoint, MultiPolygon,
+            SpatialResolution, TimeInterval,
         },
+        raster::{Grid, GridShape, RasterDataType, RasterTile2D},
         spatial_reference::SpatialReferenceAuthority,
         util::well_known_data::{
             COLOGNE_EPSG_4326, COLOGNE_EPSG_900_913, HAMBURG_EPSG_4326, HAMBURG_EPSG_900_913,
@@ -455,6 +456,7 @@ mod tests {
 
     use crate::engine::{MockExecutionContext, MockQueryContext, VectorQueryProcessor};
     use crate::mock::MockFeatureCollectionSource;
+    use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;
 
     use super::*;
@@ -658,6 +660,94 @@ mod tests {
         assert_eq!(result.len(), 1);
 
         assert_eq!(result[0], projected_polygons);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn raster_identity() -> Result<()> {
+        let projection = SpatialReference::new(
+            geoengine_datatypes::spatial_reference::SpatialReferenceAuthority::Epsg,
+            4326,
+        );
+
+        let data = vec![
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [-1, 0].into(),
+                global_geo_transform: Default::default(),
+                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4], Some(0)).unwrap(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [-1, 1].into(),
+                global_geo_transform: Default::default(),
+                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10], Some(0)).unwrap(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(5, 10),
+                tile_position: [-1, 0].into(),
+                global_geo_transform: Default::default(),
+                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16], Some(0)).unwrap(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(5, 10),
+                tile_position: [-1, 1].into(),
+                global_geo_transform: Default::default(),
+                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22], Some(0)).unwrap(),
+            },
+        ];
+
+        let mrs1 = MockRasterSource {
+            params: MockRasterSourceParams {
+                data: data.clone(),
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U8,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    measurement: Measurement::Unitless,
+                },
+            },
+        }
+        .boxed();
+
+        let mut exe_ctx = MockExecutionContext::default();
+        exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {
+            // we need a smaller tile size
+            shape_array: [2, 2],
+        };
+
+        let query_ctx = MockQueryContext {
+            chunk_byte_size: 1024 * 1024,
+        };
+
+        let initialized_operator = RasterOperator::boxed(Reprojection {
+            vector_sources: vec![],
+            raster_sources: vec![mrs1],
+            params: ReprojectionParams {
+                target_spatial_reference: projection, // This test will do a identity reprojhection
+            },
+        })
+        .initialize(&exe_ctx)?;
+
+        let qp = initialized_operator
+            .query_processor()
+            .unwrap()
+            .get_u8()
+            .unwrap();
+
+        let query_rect = QueryRectangle {
+            bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (3., 1.).into()),
+            time_interval: TimeInterval::new_unchecked(0, 10),
+            spatial_resolution: SpatialResolution::one(),
+        };
+
+        let a = qp.raster_query(query_rect, &query_ctx)?;
+
+        let res = a
+            .map(Result::unwrap)
+            .collect::<Vec<RasterTile2D<u8>>>()
+            .await;
+        assert_eq!(data, res);
 
         Ok(())
     }
