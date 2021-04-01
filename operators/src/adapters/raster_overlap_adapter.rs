@@ -21,7 +21,7 @@ use geoengine_datatypes::{
     primitives::{Coordinate2D, TimeInstance},
     raster::{
         Blit, CoordinatePixelAccess, GridIdx2D, GridIndexAccessMut, Pixel, RasterTile2D,
-        TileInformation, TilingStrategy,
+        TileInformation,
     },
 };
 
