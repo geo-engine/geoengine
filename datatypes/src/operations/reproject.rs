@@ -323,9 +323,9 @@ pub fn project_coordinates_fail_tolarant<P: CoordinateProjection>(
     let individual_projected: Vec<Option<Coordinate2D>> = i
         .iter()
         .map(|&c| (c, c.reproject(p)))
-        .inspect(|(c, c_p)| {
-            dbg!(c, c_p);
-        })
+        //.inspect(|(c, c_p)| {
+        //    dbg!(c, c_p);
+        //})
         .map(|(_, c_p)| c_p.ok())
         .collect();
     // For debuging use this to find oput how many coordinates could be transformed.

@@ -269,7 +269,7 @@ impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
-                    0,
+                    0_u8,
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::U16 => {
@@ -279,7 +279,7 @@ impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
-                    0,
+                    0_u16,
                 )))
             }
 
@@ -290,7 +290,7 @@ impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
-                    0,
+                    0_u32,
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::U64 => {
@@ -300,7 +300,7 @@ impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
-                    0,
+                    0_u64,
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::I8 => {
@@ -310,7 +310,7 @@ impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
-                    0,
+                    0_i8,
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::I16 => {
@@ -320,7 +320,7 @@ impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
-                    0,
+                    0_i16,
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::I32 => {
@@ -330,7 +330,7 @@ impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
-                    0,
+                    0_i32,
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::I64 => {
@@ -340,7 +340,7 @@ impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
-                    0,
+                    0_i64,
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::F32 => {
@@ -350,7 +350,7 @@ impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
-                    0.,
+                    0_f32,
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::F64 => {
@@ -360,7 +360,7 @@ impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
-                    0.,
+                    0_f64,
                 )))
             }
         })
@@ -439,14 +439,18 @@ where
 #[cfg(test)]
 mod tests {
 
-    use crate::engine::VectorOperator;
+    use crate::{
+        engine::VectorOperator,
+        source::{GdalSource, GdalSourceParameters},
+        util::gdal::add_ndvi_data_set,
+    };
     use geoengine_datatypes::{
         collections::{MultiLineStringCollection, MultiPointCollection, MultiPolygonCollection},
         primitives::{
             BoundingBox2D, Measurement, MultiLineString, MultiPoint, MultiPolygon,
             SpatialResolution, TimeInterval,
         },
-        raster::{Grid, GridShape, RasterDataType, RasterTile2D},
+        raster::{Grid, GridShape, GridShape2D, GridSize, RasterDataType, RasterTile2D},
         spatial_reference::SpatialReferenceAuthority,
         util::well_known_data::{
             COLOGNE_EPSG_4326, COLOGNE_EPSG_900_913, HAMBURG_EPSG_4326, HAMBURG_EPSG_900_913,
@@ -748,6 +752,73 @@ mod tests {
             .collect::<Vec<RasterTile2D<u8>>>()
             .await;
         assert_eq!(data, res);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn raster_ndvi() -> Result<()> {
+        let mut exe_ctx = MockExecutionContext::default();
+        let query_ctx = MockQueryContext::default();
+        let id = add_ndvi_data_set(&mut exe_ctx);
+
+        let output_shape: GridShape2D = [256, 256].into();
+        let output_bounds = BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into());
+        let time_interval = TimeInterval::new_unchecked(1_388_534_400_000, 1_388_534_400_001);
+        // 2014-01-01
+
+        let gdal_op = GdalSource {
+            params: GdalSourceParameters {
+                data_set: id.clone(),
+            },
+        }
+        .boxed();
+
+        let projection = SpatialReference::new(
+            geoengine_datatypes::spatial_reference::SpatialReferenceAuthority::Epsg,
+            4326,
+        );
+
+        let initialized_operator = RasterOperator::boxed(Reprojection {
+            vector_sources: vec![],
+            raster_sources: vec![gdal_op],
+            params: ReprojectionParams {
+                target_spatial_reference: projection, // This test will do a identity reprojhection
+            },
+        })
+        .initialize(&exe_ctx)?;
+
+        let x_query_resolution = output_bounds.size_x() / output_shape.axis_size_x() as f64;
+        let y_query_resolution = output_bounds.size_y() / output_shape.axis_size_y() as f64;
+        let spatial_resolution =
+            SpatialResolution::new_unchecked(x_query_resolution, y_query_resolution);
+
+        let qp = initialized_operator
+            .query_processor()
+            .unwrap()
+            .get_u8()
+            .unwrap();
+
+        let qs = qp
+            .raster_query(
+                QueryRectangle {
+                    bbox: output_bounds,
+                    time_interval,
+                    spatial_resolution,
+                },
+                &query_ctx,
+            )
+            .unwrap();
+
+        let _res = qs
+            .map(Result::unwrap)
+            .collect::<Vec<RasterTile2D<u8>>>()
+            .await;
+
+        // TODO: check against original data
+        //for t in res {
+        //    dbg!(&t.tile_information());
+        //}
 
         Ok(())
     }

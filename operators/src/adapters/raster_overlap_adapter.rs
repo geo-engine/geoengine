@@ -233,11 +233,12 @@ where
             accu_tile.time = t_union;
             Ok((accu_tile, unused))
         }
-        Err(error) => {
-            dbg!(
-                "Skipping non-overlapping area tiles in blit method. This schould not happen but the MockSource produces all tiles!!!",
-                error
-            );
+        Err(_error) => {
+            // Ignore lookup errors
+            //dbg!(
+            //    "Skipping non-overlapping area tiles in blit method. This schould not happen but the MockSource produces all tiles!!!",
+            //    error
+            //);
             Ok((accu_tile, unused))
         }
     }
