@@ -160,7 +160,7 @@ where
 }
 
 /// this method performs the reverse transformation of a query rectangle
-fn query_rewrite_fn(
+pub fn query_rewrite_fn(
     query: QueryRectangle,
     from: SpatialReference,
     to: SpatialReference,
@@ -254,7 +254,7 @@ impl RasterOperator for Reprojection {
 impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
     for InitializedRasterReprojection
 {
-    // i know there is a macro somewhere
+    // i know there is a macro somewhere. we need to re-work this when we have the no-data value anyway.
     #[allow(clippy::clippy::too_many_lines)]
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         let q = self.raster_sources[0].query_processor()?;
@@ -412,20 +412,22 @@ where
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<geoengine_datatypes::raster::RasterTile2D<Self::RasterType>>>>
     {
-        let tiling_strat = self
-            .tiling_spec
-            .strategy(query.spatial_resolution.x, -query.spatial_resolution.y);
+        // we need a resolution for the sub-querys. And since we don't want this to change for tiles, we precompute it for the complete bbox and pass it to the sub-query spec.
+        let projector = CoordinateProjector::from_known_srs(self.from, self.to)?;
+        let p_spatial_resolution =
+            suggest_pixel_size_from_diag_cross(query.bbox, query.spatial_resolution, &projector)?;
 
         let sub_query_spec = TileReprojectionSubQuery {
             in_srs: self.from,
             out_srs: self.to,
             no_data_and_fill_value: self.no_data_and_fill_value,
             fold_fn: fold_by_coordinate_lookup_future,
+            in_spatial_res: p_spatial_resolution,
         };
         let s = RasterOverlapAdapter::<'a, P, _, _>::new(
             &self.source,
             query,
-            tiling_strat,
+            self.tiling_spec,
             ctx,
             sub_query_spec,
         );

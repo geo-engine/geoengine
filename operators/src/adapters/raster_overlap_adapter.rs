@@ -13,8 +13,8 @@ use geoengine_datatypes::{
     operations::reproject::{
         project_coordinates_fail_tolarant, CoordinateProjection, CoordinateProjector, Reproject,
     },
-    primitives::{SpatialBounded, TimeInterval},
-    raster::{grid_idx_iter_2d, BoundedGrid, Grid2D},
+    primitives::{SpatialBounded, SpatialResolution, TimeInterval},
+    raster::{grid_idx_iter_2d, BoundedGrid, Grid2D, TilingSpecification},
     spatial_reference::SpatialReference,
 };
 use geoengine_datatypes::{
@@ -89,10 +89,15 @@ where
     pub fn new(
         source: &'a RasterProcessorType,
         query_rect: QueryRectangle,
-        tiling_strat: TilingStrategy,
+        tiling_spec: TilingSpecification,
         query_ctx: &'a dyn QueryContext,
         sub_query: SubQuery,
     ) -> Self {
+        let tiling_strat = tiling_spec.strategy(
+            query_rect.spatial_resolution.x,
+            -query_rect.spatial_resolution.y,
+        );
+
         let tx: Vec<TileInformation> = tiling_strat
             .tile_information_iterator(query_rect.bbox)
             .collect();
@@ -418,6 +423,7 @@ pub struct TileReprojectionSubQuery<T, F> {
     pub out_srs: SpatialReference,
     pub no_data_and_fill_value: T,
     pub fold_fn: F,
+    pub in_spatial_res: SpatialResolution,
 }
 
 impl<T, FoldM, FoldF> TileSubQuery<T> for TileReprojectionSubQuery<T, FoldM>
@@ -472,14 +478,14 @@ where
     fn tile_query_rectangle(
         &self,
         tile_info: TileInformation,
-        query_rect: QueryRectangle,
+        _query_rect: QueryRectangle,
         start_time: TimeInstance,
     ) -> Result<QueryRectangle> {
         let proj = CoordinateProjector::from_known_srs(self.in_srs, self.out_srs)?;
 
         Ok(QueryRectangle {
             bbox: tile_info.spatial_bounds().reproject(&proj)?,
-            spatial_resolution: query_rect.spatial_resolution,
+            spatial_resolution: self.in_spatial_res,
             time_interval: TimeInterval::new_instant(start_time),
         })
     }
@@ -564,10 +570,7 @@ mod tests {
         let query_ctx = MockQueryContext {
             chunk_byte_size: 1024 * 1024,
         };
-        let tiling_strat = exe_ctx.tiling_specification.strategy(
-            query_rect.spatial_resolution.x,
-            -query_rect.spatial_resolution.y,
-        );
+        let tiling_strat = exe_ctx.tiling_specification;
 
         let op = mrs1.initialize(&exe_ctx).unwrap();
 
@@ -649,10 +652,7 @@ mod tests {
         let query_ctx = MockQueryContext {
             chunk_byte_size: 1024 * 1024,
         };
-        let tiling_strat = exe_ctx.tiling_specification.strategy(
-            query_rect.spatial_resolution.x,
-            -query_rect.spatial_resolution.y,
-        );
+        let tiling_strat = exe_ctx.tiling_specification;
 
         let op = mrs1.initialize(&exe_ctx).unwrap();
 
@@ -666,6 +666,7 @@ mod tests {
             out_srs: projection,
             no_data_and_fill_value: no_data_v,
             fold_fn: fold_by_coordinate_lookup_future,
+            in_spatial_res: query_rect.spatial_resolution,
         };
         let a = RasterOverlapAdapter::new(&qp, query_rect, tiling_strat, &query_ctx, state_gen);
         let res = a
