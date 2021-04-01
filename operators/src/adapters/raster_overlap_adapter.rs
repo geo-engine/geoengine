@@ -479,13 +479,17 @@ where
     fn tile_query_rectangle(
         &self,
         tile_info: TileInformation,
-        _query_rect: QueryRectangle,
+        query_rect: QueryRectangle,
         start_time: TimeInstance,
     ) -> Result<QueryRectangle> {
-        let proj = CoordinateProjector::from_known_srs(self.in_srs, self.out_srs)?;
+        let proj = CoordinateProjector::from_known_srs(self.out_srs, self.in_srs)?;
 
         Ok(QueryRectangle {
-            bbox: tile_info.spatial_bounds().reproject(&proj)?,
+            bbox: tile_info
+                .spatial_bounds()
+                .intersection(&query_rect.bbox)
+                .expect("should not be empty")
+                .reproject(&proj)?,
             spatial_resolution: self.in_spatial_res,
             time_interval: TimeInterval::new_instant(start_time),
         })

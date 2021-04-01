@@ -214,6 +214,7 @@ where
             .chain(left_line)
             .collect();
 
+        // TODO: this should use the fail_tolarant reprojection and fail only if there are not enough coordinates after reprojection. This could also require us to use a grid instead of bounds. The good news is that the Grid can already provide this.
         MultiPoint::new_unchecked(cs)
             .reproject(projector)
             .map(|mp| mp.spatial_bounds())

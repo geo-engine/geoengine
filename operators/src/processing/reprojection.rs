@@ -413,7 +413,7 @@ where
     ) -> Result<BoxStream<'a, Result<geoengine_datatypes::raster::RasterTile2D<Self::RasterType>>>>
     {
         // we need a resolution for the sub-querys. And since we don't want this to change for tiles, we precompute it for the complete bbox and pass it to the sub-query spec.
-        let projector = CoordinateProjector::from_known_srs(self.from, self.to)?;
+        let projector = CoordinateProjector::from_known_srs(self.to, self.from)?;
         let p_spatial_resolution =
             suggest_pixel_size_from_diag_cross(query.bbox, query.spatial_resolution, &projector)?;
 
@@ -757,7 +757,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn raster_ndvi() -> Result<()> {
+    async fn raster_ndvi_ident() -> Result<()> {
         let mut exe_ctx = MockExecutionContext::default();
         let query_ctx = MockQueryContext::default();
         let id = add_ndvi_data_set(&mut exe_ctx);
@@ -819,6 +819,76 @@ mod tests {
         //for t in res {
         //    dbg!(&t.tile_information());
         //}
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn raster_ndvi_3857() -> Result<()> {
+        let mut exe_ctx = MockExecutionContext::default();
+        let query_ctx = MockQueryContext::default();
+        let id = add_ndvi_data_set(&mut exe_ctx);
+
+        let output_shape: GridShape2D = [256, 256].into();
+        let output_bounds = BoundingBox2D::new_unchecked(
+            (-20_000_000., -20_000_000.).into(),
+            (20_000_000., 20_000_000.).into(),
+        );
+        let time_interval = TimeInterval::new_unchecked(1_388_534_400_000, 1_388_534_400_001);
+        // 2014-01-01
+
+        let gdal_op = GdalSource {
+            params: GdalSourceParameters {
+                data_set: id.clone(),
+            },
+        }
+        .boxed();
+
+        let projection = SpatialReference::new(
+            geoengine_datatypes::spatial_reference::SpatialReferenceAuthority::Epsg,
+            3857,
+        );
+
+        let initialized_operator = RasterOperator::boxed(Reprojection {
+            vector_sources: vec![],
+            raster_sources: vec![gdal_op],
+            params: ReprojectionParams {
+                target_spatial_reference: projection, // This test will do a identity reprojhection
+            },
+        })
+        .initialize(&exe_ctx)?;
+
+        let x_query_resolution = output_bounds.size_x() / output_shape.axis_size_x() as f64;
+        let y_query_resolution = output_bounds.size_y() / output_shape.axis_size_y() as f64;
+        let spatial_resolution =
+            SpatialResolution::new_unchecked(x_query_resolution, y_query_resolution);
+
+        let qp = initialized_operator
+            .query_processor()
+            .unwrap()
+            .get_u8()
+            .unwrap();
+
+        let qs = qp
+            .raster_query(
+                QueryRectangle {
+                    bbox: output_bounds,
+                    time_interval,
+                    spatial_resolution,
+                },
+                &query_ctx,
+            )
+            .unwrap();
+
+        let res = qs
+            .map(Result::unwrap)
+            .collect::<Vec<RasterTile2D<u8>>>()
+            .await;
+
+        // TODO: check against reference  data
+        for t in res {
+            dbg!(&t.tile_information());
+        }
 
         Ok(())
     }
