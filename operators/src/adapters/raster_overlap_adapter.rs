@@ -290,6 +290,7 @@ where
     }
 }
 
+/// This method takes two tiles and a map from `GridIdx2D` to `Coordinate2D`. Then for all `GridIdx2D` we set the values from the corresponding coordinate in the source tile.
 pub fn insert_projected_pixels<'a, T: Pixel, I: Iterator<Item = &'a (GridIdx2D, Coordinate2D)>>(
     target: &mut RasterTile2D<T>,
     source: &RasterTile2D<T>,
@@ -300,7 +301,7 @@ pub fn insert_projected_pixels<'a, T: Pixel, I: Iterator<Item = &'a (GridIdx2D, 
         match source.pixel_value_at_coord(*coord) {
             Ok(px_value) => target.set_at_grid_index(*idx, px_value)?,
             Err(e) => match e {
-                // todo: fail in new lookup
+                // Ignore errors where a coordinate is not inside a source tile. This is by design.
                 GridIndexOutOfBounds {
                     index: _,
                     min_index: _,
