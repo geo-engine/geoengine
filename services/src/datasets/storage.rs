@@ -142,8 +142,11 @@ pub struct AutoCreateDataSet {
 impl UserInput for AutoCreateDataSet {
     fn validate(&self) -> Result<()> {
         // TODO: more sophisticated input validation
+        ensure!(!self.dataset_name.is_empty(), error::InvalidDatasetName);
         ensure!(
-            !self.main_file.contains('/') && !self.main_file.contains(".."),
+            !self.main_file.is_empty()
+                && !self.main_file.contains('/')
+                && !self.main_file.contains(".."),
             error::InvalidUploadFileName
         );
 

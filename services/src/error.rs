@@ -138,6 +138,7 @@ pub enum Error {
     PathIsNotAFile,
     MultiPartBoundaryMissing,
     InvalidUploadFileName,
+    InvalidDatasetName,
     DataSetHasNoAutoImportableLayer,
     #[snafu(display("GdalError: {}", source))]
     Gdal {
