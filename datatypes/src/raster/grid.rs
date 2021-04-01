@@ -230,6 +230,7 @@ impl GridBounds for GridShape3D {
     }
 }
 
+/// Method to generate an `Iterator` over all `GridIdx2D` in `GridBounds`
 pub fn grid_idx_iter_2d<D>(t: &D) -> impl Iterator<Item = GridIdx2D>
 where
     D: GridBounds<IndexArray = [isize; 2]>,
