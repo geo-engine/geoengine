@@ -16,6 +16,7 @@ use std::convert::{TryFrom, TryInto};
 use std::marker::PhantomData;
 use std::mem;
 use std::ops::{Bound, RangeBounds};
+use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::primitives::{
@@ -715,16 +716,26 @@ where
 }
 
 #[derive(Debug)]
-pub struct FeatureCollectionRow<GeometryRef> {
+pub struct FeatureCollectionRow<'a, GeometryRef> {
     pub geometry: GeometryRef,
     pub time_interval: TimeInterval,
-    pub data: HashMap<String, FeatureDataValue>,
+    pub data: Rc<HashMap<String, FeatureDataRef<'a>>>,
+    pub row_num: usize,
+}
+
+impl<'a, GeometryRef> FeatureCollectionRow<'a, GeometryRef> {
+    pub fn get(&self, column_name: &str) -> FeatureDataValue {
+        self.data
+            .get(column_name)
+            .unwrap()
+            .get_unchecked(self.row_num)
+    }
 }
 
 pub struct FeatureCollectionIterator<'a, T> {
     pub geometries: T,
     pub time_intervals: std::slice::Iter<'a, TimeInterval>,
-    pub data: HashMap<String, FeatureDataRef<'a>>,
+    pub data: Rc<HashMap<String, FeatureDataRef<'a>>>,
     pub row_num: usize,
 }
 
@@ -733,7 +744,7 @@ where
     T: std::iter::Iterator<Item = GeometryRef>,
     GeometryRef: crate::primitives::GeometryRef,
 {
-    type Item = FeatureCollectionRow<GeometryRef>;
+    type Item = FeatureCollectionRow<'a, GeometryRef>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let res = self
@@ -742,11 +753,8 @@ where
             .map(|time_interval| FeatureCollectionRow {
                 geometry: self.geometries.next().unwrap(),
                 time_interval: *time_interval,
-                data: self
-                    .data
-                    .iter()
-                    .map(|(key, value)| (key.to_string(), value.get_unchecked(self.row_num)))
-                    .collect(),
+                data: Rc::clone(&self.data),
+                row_num: self.row_num,
             });
         self.row_num += 1;
         res

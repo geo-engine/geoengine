@@ -14,6 +14,7 @@ use arrow::{
     buffer::Buffer,
     datatypes::DataType,
 };
+use std::rc::Rc;
 use std::{slice, sync::Arc};
 
 use super::geo_feature_collection::ReplaceRawArrayCoords;
@@ -122,18 +123,19 @@ impl<'l> IntoGeometryIterator<'l> for MultiPolygonCollection {
 }
 
 impl<'a> IntoIterator for &'a MultiPolygonCollection {
-    type Item = FeatureCollectionRow<MultiPolygonRef<'a>>;
+    type Item = FeatureCollectionRow<'a, MultiPolygonRef<'a>>;
     type IntoIter = FeatureCollectionIterator<'a, MultiPolygonIterator<'a>>;
 
     fn into_iter(self) -> Self::IntoIter {
         FeatureCollectionIterator {
             geometries: self.geometries(),
             time_intervals: self.time_intervals().iter(),
-            data: self
-                .column_names()
-                .filter(|x| !MultiPolygonCollection::is_reserved_name(x))
-                .map(|x| (x.to_string(), self.data(x).unwrap()))
-                .collect(),
+            data: Rc::new(
+                self.column_names()
+                    .filter(|x| !MultiPolygonCollection::is_reserved_name(x))
+                    .map(|x| (x.to_string(), self.data(x).unwrap()))
+                    .collect(),
+            ),
             row_num: 0,
         }
     }

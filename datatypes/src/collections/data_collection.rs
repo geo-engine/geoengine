@@ -3,6 +3,7 @@ use crate::collections::{
     IntoGeometryOptionsIterator,
 };
 use crate::primitives::NoGeometry;
+use std::rc::Rc;
 
 /// This collection contains temporal data without geographical features.
 pub type DataCollection = FeatureCollection<NoGeometry>;
@@ -17,18 +18,19 @@ impl<'i> IntoGeometryOptionsIterator<'i> for DataCollection {
 }
 
 impl<'a> IntoIterator for &'a DataCollection {
-    type Item = FeatureCollectionRow<NoGeometry>;
+    type Item = FeatureCollectionRow<'a, NoGeometry>;
     type IntoIter = FeatureCollectionIterator<'a, std::iter::Repeat<NoGeometry>>;
 
     fn into_iter(self) -> Self::IntoIter {
         FeatureCollectionIterator {
             geometries: std::iter::repeat(NoGeometry),
             time_intervals: self.time_intervals().iter(),
-            data: self
-                .column_names()
-                .filter(|x| !DataCollection::is_reserved_name(x))
-                .map(|x| (x.to_string(), self.data(x).unwrap()))
-                .collect(),
+            data: Rc::new(
+                self.column_names()
+                    .filter(|x| !DataCollection::is_reserved_name(x))
+                    .map(|x| (x.to_string(), self.data(x).unwrap()))
+                    .collect(),
+            ),
             row_num: 0,
         }
     }
