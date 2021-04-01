@@ -166,6 +166,16 @@ pub enum Error {
     NoDateTimeValid {
         time_instance: TimeInstance,
     },
+
+    #[snafu(display(
+        "The supplied spatial bounds are empty: {} {}",
+        lower_left_coordinate,
+        upper_right_coordinate
+    ))]
+    EmptySpatialBounds {
+        lower_left_coordinate: Coordinate2D,
+        upper_right_coordinate: Coordinate2D,
+    },
 }
 
 impl From<arrow::error::ArrowError> for Error {

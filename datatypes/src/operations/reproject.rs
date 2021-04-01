@@ -1,4 +1,6 @@
+use num_traits::Zero;
 use proj::Proj;
+use snafu::ensure;
 
 use crate::{
     error,
@@ -228,6 +230,14 @@ pub fn suggest_pixel_size_like_gdal<P: CoordinateProjection>(
     spatial_resolution: SpatialResolution,
     projector: &P,
 ) -> Result<SpatialResolution> {
+    ensure!(
+        !(bbox.size_x().is_zero() || bbox.size_y().is_zero()),
+        error::EmptySpatialBounds {
+            lower_left_coordinate: bbox.lower_left(),
+            upper_right_coordinate: bbox.upper_right(),
+        }
+    );
+
     // calculate the number of pixels per axis
     let x_pixels = (bbox.size_x() / spatial_resolution.x).abs();
     let y_pixels = (bbox.size_y() / spatial_resolution.y).abs();
@@ -259,6 +269,13 @@ pub fn suggest_pixel_size_from_diag_cross<P: CoordinateProjection>(
     spatial_resolution: SpatialResolution,
     projector: &P,
 ) -> Result<SpatialResolution> {
+    ensure!(
+        !(bbox.size_x().is_zero() || bbox.size_y().is_zero()),
+        error::EmptySpatialBounds {
+            lower_left_coordinate: bbox.lower_left(),
+            upper_right_coordinate: bbox.upper_right(),
+        }
+    );
     // calculate the number of pixels per axis
     let x_pixels = (bbox.size_x() / spatial_resolution.x).abs();
     let y_pixels = (bbox.size_y() / spatial_resolution.y).abs();
