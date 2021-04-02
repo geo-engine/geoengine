@@ -13,8 +13,8 @@ use std::ops::Add;
 pub struct TimeInstance(i64);
 
 impl TimeInstance {
-    pub const MIN_VISUALIZABLE_VALUE: i64 = -8_334_632_851_200_001 + 1;
-    pub const MAX_VISUALIZABLE_VALUE: i64 = 8_210_298_412_800_000 - 1;
+    pub const MIN_VALUE: i64 = -8_334_632_851_200_001 + 1;
+    pub const MAX_VALUE: i64 = 8_210_298_412_800_000 - 1;
 
     pub fn from_millis(millis: i64) -> Self {
         TimeInstance(millis)
@@ -29,9 +29,9 @@ impl TimeInstance {
     }
 
     pub fn as_rfc3339(self) -> String {
-        if self.inner() < TimeInstance::MIN_VISUALIZABLE_VALUE {
+        if self.inner() < TimeInstance::MIN_VALUE {
             "-262144-01-01T00:00:00+00:00".into()
-        } else if self.inner() > TimeInstance::MAX_VISUALIZABLE_VALUE {
+        } else if self.inner() > TimeInstance::MAX_VALUE {
             "+262143-12-31T23:59:59.999+00:00".into()
         } else {
             self.as_utc_date_time()

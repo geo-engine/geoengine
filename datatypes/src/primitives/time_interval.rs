@@ -24,6 +24,8 @@ pub struct TimeInterval {
 impl Default for TimeInterval {
     /// The default time interval is always valid.
     ///
+    /// It aligns with `chrono`'s minimum and maximum datetime.
+    ///
     /// # Examples
     ///
     /// ```
@@ -35,8 +37,8 @@ impl Default for TimeInterval {
     /// ```
     fn default() -> Self {
         Self {
-            start: i64::min_value().into(),
-            end: i64::max_value().into(),
+            start: chrono::MIN_DATETIME.into(),
+            end: chrono::MAX_DATETIME.into(),
         }
     }
 }
@@ -66,6 +68,7 @@ impl TimeInterval {
     {
         let start_instant = start.into();
         let end_instant = end.into();
+
         ensure!(
             start_instant <= end_instant,
             error::TimeIntervalEndBeforeStart {
@@ -73,6 +76,17 @@ impl TimeInterval {
                 end: end_instant
             }
         );
+        ensure!(
+            start_instant.inner() >= TimeInstance::MIN_VALUE
+                && end_instant.inner() <= TimeInstance::MAX_VALUE,
+            error::TimeIntervalOutOfBounds {
+                start: start_instant.inner(),
+                end: end_instant.inner(),
+                min: TimeInstance::MIN_VALUE,
+                max: TimeInstance::MAX_VALUE,
+            }
+        );
+
         Ok(Self {
             start: start_instant,
             end: end_instant,
@@ -499,7 +513,10 @@ mod tests {
 
     #[test]
     fn duration_millis() {
-        assert_eq!(TimeInterval::default().duration_ms(), u64::MAX);
+        assert_eq!(
+            TimeInterval::default().duration_ms(),
+            16_544_931_263_999_999
+        );
 
         let time_interval = TimeInterval::new(
             TimeInstance::from(NaiveDate::from_ymd(1990, 1, 1).and_hms(0, 0, 0)),
@@ -510,25 +527,35 @@ mod tests {
         assert_eq!(time_interval.duration_ms(), 315_532_800_000);
 
         assert_eq!(
-            TimeInterval::new(-1, i64::MAX).unwrap().duration_ms(),
-            9_223_372_036_854_775_808
+            TimeInterval::new(-1, TimeInstance::MAX_VALUE)
+                .unwrap()
+                .duration_ms(),
+            8_210_298_412_800_000
         );
         assert_eq!(
-            TimeInterval::new(0, i64::MAX).unwrap().duration_ms(),
-            9_223_372_036_854_775_807
+            TimeInterval::new(0, TimeInstance::MAX_VALUE)
+                .unwrap()
+                .duration_ms(),
+            8_210_298_412_799_999
         );
 
         assert_eq!(
-            TimeInterval::new(i64::MIN, -1).unwrap().duration_ms(),
-            9_223_372_036_854_775_807
+            TimeInterval::new(TimeInstance::MIN_VALUE, -1)
+                .unwrap()
+                .duration_ms(),
+            8_334_632_851_199_999
         );
         assert_eq!(
-            TimeInterval::new(i64::MIN, 0).unwrap().duration_ms(),
-            9_223_372_036_854_775_808
+            TimeInterval::new(TimeInstance::MIN_VALUE, 0)
+                .unwrap()
+                .duration_ms(),
+            8_334_632_851_200_000
         );
         assert_eq!(
-            TimeInterval::new(i64::MIN, 1).unwrap().duration_ms(),
-            9_223_372_036_854_775_809
+            TimeInterval::new(TimeInstance::MIN_VALUE, 1)
+                .unwrap()
+                .duration_ms(),
+            8_334_632_851_200_001
         );
     }
 }
