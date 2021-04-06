@@ -41,17 +41,16 @@ impl<'a> IntoIterator for &'a MultiPointCollection {
     type IntoIter = FeatureCollectionIterator<'a, MultiPointIterator<'a>>;
 
     fn into_iter(self) -> Self::IntoIter {
-        FeatureCollectionIterator {
-            geometries: self.geometries(),
-            time_intervals: self.time_intervals().iter(),
-            data: Rc::new(
+        FeatureCollectionIterator::new(
+            self.geometries(),
+            self.time_intervals().iter(),
+            Rc::new(
                 self.column_names()
                     .filter(|x| !MultiPointCollection::is_reserved_name(x))
                     .map(|x| (x.to_string(), self.data(x).unwrap()))
                     .collect(),
             ),
-            row_num: 0,
-        }
+        )
     }
 }
 
@@ -1239,36 +1238,37 @@ mod tests {
         assert_eq!(&[Coordinate2D::new(0.0, 0.1)], row.geometry.points());
         assert_eq!(TimeInterval::new_unchecked(0, 1), row.time_interval);
         assert_eq!(
-            Some(&FeatureDataValue::NullableDecimal(Some(0))),
-            row.data.get("foo")
+            Some(FeatureDataValue::NullableDecimal(Some(0))),
+            row.get("foo")
         );
         assert_eq!(
-            Some(&FeatureDataValue::NullableText(Some("a".to_string()))),
-            row.data.get("bar")
+            Some(FeatureDataValue::NullableText(Some("a".to_string()))),
+            row.get("bar")
         );
 
         let row = iter.next().unwrap();
         assert_eq!(&[Coordinate2D::new(1.0, 1.1)], row.geometry.points());
         assert_eq!(TimeInterval::new_unchecked(0, 1), row.time_interval);
+
         assert_eq!(
-            Some(&FeatureDataValue::NullableDecimal(None)),
-            row.data.get("foo")
+            Some(FeatureDataValue::NullableDecimal(None)),
+            row.get("foo")
         );
         assert_eq!(
-            Some(&FeatureDataValue::NullableText(Some("b".to_string()))),
-            row.data.get("bar")
+            Some(FeatureDataValue::NullableText(Some("b".to_string()))),
+            row.get("bar")
         );
 
         let row = iter.next().unwrap();
         assert_eq!(&[Coordinate2D::new(2.0, 3.1)], row.geometry.points());
         assert_eq!(TimeInterval::new_unchecked(0, 1), row.time_interval);
         assert_eq!(
-            Some(&FeatureDataValue::NullableDecimal(Some(2))),
-            row.data.get("foo")
+            Some(FeatureDataValue::NullableDecimal(Some(2))),
+            row.get("foo")
         );
         assert_eq!(
-            Some(&FeatureDataValue::NullableText(Some("c".to_string()))),
-            row.data.get("bar")
+            Some(FeatureDataValue::NullableText(Some("c".to_string()))),
+            row.get("bar")
         );
 
         assert!(iter.next().is_none());

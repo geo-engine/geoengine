@@ -22,17 +22,16 @@ impl<'a> IntoIterator for &'a DataCollection {
     type IntoIter = FeatureCollectionIterator<'a, std::iter::Repeat<NoGeometry>>;
 
     fn into_iter(self) -> Self::IntoIter {
-        FeatureCollectionIterator {
-            geometries: std::iter::repeat(NoGeometry),
-            time_intervals: self.time_intervals().iter(),
-            data: Rc::new(
+        FeatureCollectionIterator::new(
+            std::iter::repeat(NoGeometry),
+            self.time_intervals().iter(),
+            Rc::new(
                 self.column_names()
                     .filter(|x| !DataCollection::is_reserved_name(x))
                     .map(|x| (x.to_string(), self.data(x).unwrap()))
                     .collect(),
             ),
-            row_num: 0,
-        }
+        )
     }
 }
 
@@ -230,28 +229,28 @@ mod tests {
         let row = iter.next().unwrap();
         assert_eq!(NoGeometry, row.geometry);
         assert_eq!(TimeInterval::default(), row.time_interval);
-        assert_eq!(Some(&FeatureDataValue::Decimal(1)), row.data.get("foo"));
+        assert_eq!(Some(FeatureDataValue::Decimal(1)), row.get("foo"));
         assert_eq!(
-            Some(&FeatureDataValue::NullableText(Some("a".to_string()))),
-            row.data.get("bar")
+            Some(FeatureDataValue::NullableText(Some("a".to_string()))),
+            row.get("bar")
         );
 
         let row = iter.next().unwrap();
         assert_eq!(NoGeometry, row.geometry);
         assert_eq!(TimeInterval::default(), row.time_interval);
-        assert_eq!(Some(&FeatureDataValue::Decimal(2)), row.data.get("foo"));
+        assert_eq!(Some(FeatureDataValue::Decimal(2)), row.get("foo"));
         assert_eq!(
-            Some(&FeatureDataValue::NullableText(Some("b".to_string()))),
-            row.data.get("bar")
+            Some(FeatureDataValue::NullableText(Some("b".to_string()))),
+            row.get("bar")
         );
 
         let row = iter.next().unwrap();
         assert_eq!(NoGeometry, row.geometry);
         assert_eq!(TimeInterval::default(), row.time_interval);
-        assert_eq!(Some(&FeatureDataValue::Decimal(3)), row.data.get("foo"));
+        assert_eq!(Some(FeatureDataValue::Decimal(3)), row.get("foo"));
         assert_eq!(
-            Some(&FeatureDataValue::NullableText(Some("c".to_string()))),
-            row.data.get("bar")
+            Some(FeatureDataValue::NullableText(Some("c".to_string()))),
+            row.get("bar")
         );
 
         assert!(iter.next().is_none());

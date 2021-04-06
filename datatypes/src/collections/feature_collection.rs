@@ -719,24 +719,42 @@ where
 pub struct FeatureCollectionRow<'a, GeometryRef> {
     pub geometry: GeometryRef,
     pub time_interval: TimeInterval,
-    pub data: Rc<HashMap<String, FeatureDataRef<'a>>>,
-    pub row_num: usize,
+    data: Rc<HashMap<String, FeatureDataRef<'a>>>,
+    row_num: usize,
 }
 
 impl<'a, GeometryRef> FeatureCollectionRow<'a, GeometryRef> {
-    pub fn get(&self, column_name: &str) -> FeatureDataValue {
+    pub fn get(&self, column_name: &str) -> Option<FeatureDataValue> {
         self.data
             .get(column_name)
-            .unwrap()
-            .get_unchecked(self.row_num)
+            .map(|col| col.get_unchecked(self.row_num))
     }
 }
 
 pub struct FeatureCollectionIterator<'a, T> {
-    pub geometries: T,
-    pub time_intervals: std::slice::Iter<'a, TimeInterval>,
-    pub data: Rc<HashMap<String, FeatureDataRef<'a>>>,
-    pub row_num: usize,
+    geometries: T,
+    time_intervals: std::slice::Iter<'a, TimeInterval>,
+    data: Rc<HashMap<String, FeatureDataRef<'a>>>,
+    row_num: usize,
+}
+
+impl<'a, T, GeometryRef> FeatureCollectionIterator<'a, T>
+where
+    T: std::iter::Iterator<Item = GeometryRef>,
+    GeometryRef: crate::primitives::GeometryRef,
+{
+    pub fn new(
+        geometries: T,
+        time_intervals: std::slice::Iter<'a, TimeInterval>,
+        data: Rc<HashMap<String, FeatureDataRef<'a>>>,
+    ) -> Self {
+        FeatureCollectionIterator {
+            geometries,
+            time_intervals,
+            data,
+            row_num: 0,
+        }
+    }
 }
 
 impl<'a, T, GeometryRef> Iterator for FeatureCollectionIterator<'a, T>
