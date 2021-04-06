@@ -222,7 +222,10 @@ where
 }
 
 #[inline]
-fn diag_pixel_dist(bbox: BoundingBox2D, spatial_resolution: SpatialResolution) -> Result<f64> {
+fn euclidian_pixel_distance(
+    bbox: BoundingBox2D,
+    spatial_resolution: SpatialResolution,
+) -> Result<f64> {
     ensure!(
         !(bbox.size_x().is_zero() || bbox.size_y().is_zero()),
         error::EmptySpatialBounds {
@@ -268,7 +271,7 @@ pub fn suggest_pixel_size_like_gdal<P: CoordinateProjection>(
     spatial_resolution: SpatialResolution,
     projector: &P,
 ) -> Result<SpatialResolution> {
-    let diag_pixels = diag_pixel_dist(bbox, spatial_resolution)?;
+    let diag_pixels = euclidian_pixel_distance(bbox, spatial_resolution)?;
 
     let proj_ul_lr_distance =
         projected_diag_distance(bbox.upper_left(), bbox.lower_right(), projector)?;
@@ -287,7 +290,7 @@ pub fn suggest_pixel_size_from_diag_cross<P: CoordinateProjection>(
     spatial_resolution: SpatialResolution,
     projector: &P,
 ) -> Result<SpatialResolution> {
-    let diag_pixels = diag_pixel_dist(bbox, spatial_resolution)?;
+    let diag_pixels = euclidian_pixel_distance(bbox, spatial_resolution)?;
 
     let proj_ul_lr_distance =
         projected_diag_distance(bbox.upper_left(), bbox.lower_right(), projector)?;
