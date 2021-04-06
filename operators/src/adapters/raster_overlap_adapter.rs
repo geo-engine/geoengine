@@ -604,10 +604,7 @@ mod tests {
 
     #[tokio::test]
     async fn identity_projection() {
-        let projection = SpatialReference::new(
-            geoengine_datatypes::spatial_reference::SpatialReferenceAuthority::Epsg,
-            4326,
-        );
+        let projection = SpatialReference::epsg_4326();
 
         let data = vec![
             RasterTile2D {
