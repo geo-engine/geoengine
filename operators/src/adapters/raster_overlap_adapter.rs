@@ -48,7 +48,7 @@ pub struct RasterOverlapAdapter<'a, PixelType, RasterProcessorType, SubQuery>
 where
     PixelType: Pixel,
     RasterProcessorType: RasterQueryProcessor<RasterType = PixelType>,
-    SubQuery: TileSubQuery<PixelType>,
+    SubQuery: SubQueryTileAggregator<PixelType>,
 {
     /// The `QueryRectangle` the adapter is queried with
     query_rect: QueryRectangle,
@@ -83,7 +83,7 @@ impl<'a, PixelType, RasterProcessorType, SubQuery>
 where
     PixelType: Pixel,
     RasterProcessorType: RasterQueryProcessor<RasterType = PixelType>,
-    SubQuery: TileSubQuery<PixelType>,
+    SubQuery: SubQueryTileAggregator<PixelType>,
 {
     /// Creates a new `RasterOverlapAdapter` and initialize all the internal things.
     pub fn new(
@@ -122,7 +122,7 @@ impl<PixelType, RasterProcessorType, SubQuery> FusedStream
 where
     PixelType: Pixel,
     RasterProcessorType: RasterQueryProcessor<RasterType = PixelType>,
-    SubQuery: TileSubQuery<PixelType>,
+    SubQuery: SubQueryTileAggregator<PixelType>,
 {
     fn is_terminated(&self) -> bool {
         self.ended
@@ -134,7 +134,7 @@ impl<'a, PixelType, RasterProcessorType, SubQuery> Stream
 where
     PixelType: Pixel,
     RasterProcessorType: RasterQueryProcessor<RasterType = PixelType>,
-    SubQuery: TileSubQuery<PixelType>,
+    SubQuery: SubQueryTileAggregator<PixelType>,
 {
     type Item = Result<RasterTile2D<PixelType>>;
 
@@ -331,7 +331,7 @@ pub fn insert_projected_pixels<'a, T: Pixel, I: Iterator<Item = &'a (GridIdx2D, 
 }
 
 /// This trait defines the behavior of the `RasterOverlapAdapter`.
-pub trait TileSubQuery<T>: Send
+pub trait SubQueryTileAggregator<T>: Send
 where
     T: Pixel,
 {
@@ -369,7 +369,7 @@ pub struct TileSubQueryIdentity<F> {
     fold_fn: F,
 }
 
-impl<T, FoldM, FoldF> TileSubQuery<T> for TileSubQueryIdentity<FoldM>
+impl<T, FoldM, FoldF> SubQueryTileAggregator<T> for TileSubQueryIdentity<FoldM>
 where
     T: Pixel,
     FoldM: Send + Clone + Fn((RasterTile2D<T>, ()), RasterTile2D<T>) -> FoldF,
@@ -432,7 +432,7 @@ pub struct TileReprojectionSubQuery<T, F> {
     pub in_spatial_res: SpatialResolution,
 }
 
-impl<T, FoldM, FoldF> TileSubQuery<T> for TileReprojectionSubQuery<T, FoldM>
+impl<T, FoldM, FoldF> SubQueryTileAggregator<T> for TileReprojectionSubQuery<T, FoldM>
 where
     T: Pixel,
     FoldM: Send
