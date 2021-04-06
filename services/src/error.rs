@@ -117,8 +117,8 @@ pub enum Error {
 
     MissingSettingsDirectory,
 
-    DataSetIdTypeMissMatch,
-    UnknownDataSetId,
+    DatasetIdTypeMissMatch,
+    UnknownDatasetId,
     UnknownProviderId,
 
     #[snafu(display("Parameter {} must have length between {} and {}", parameter, min, max))]
@@ -139,12 +139,12 @@ pub enum Error {
     MultiPartBoundaryMissing,
     InvalidUploadFileName,
     InvalidDatasetName,
-    DataSetHasNoAutoImportableLayer,
+    DatasetHasNoAutoImportableLayer,
     #[snafu(display("GdalError: {}", source))]
     Gdal {
         source: gdal::errors::GdalError,
     },
-    EmptyDataSetCannotBeImported,
+    EmptyDatasetCannotBeImported,
 }
 
 impl Reject for Error {}

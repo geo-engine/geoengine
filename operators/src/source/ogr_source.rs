@@ -42,12 +42,12 @@ use crate::{
     },
     error,
 };
-use geoengine_datatypes::dataset::DataSetId;
+use geoengine_datatypes::dataset::DatasetId;
 use std::convert::{TryFrom, TryInto};
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct OgrSourceParameters {
-    pub data_set: DataSetId,
+    pub dataset: DatasetId,
     pub attribute_projection: Option<Vec<String>>,
 }
 
@@ -206,7 +206,7 @@ impl VectorOperator for OgrSource {
         context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<crate::engine::InitializedVectorOperator>> {
         let info: Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor>> =
-            context.meta_data(&self.params.data_set)?;
+            context.meta_data(&self.params.dataset)?;
 
         Ok(InitializedOgrSource::new(
             info.result_descriptor()?,
@@ -956,7 +956,7 @@ mod tests {
     use geoengine_datatypes::collections::{
         DataCollection, GeometryCollection, MultiPointCollection, MultiPolygonCollection,
     };
-    use geoengine_datatypes::dataset::InternalDataSetId;
+    use geoengine_datatypes::dataset::InternalDatasetId;
     use geoengine_datatypes::primitives::{BoundingBox2D, FeatureData, SpatialResolution};
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
     use geoengine_datatypes::util::Identifier;
@@ -1271,10 +1271,10 @@ mod tests {
 
     #[tokio::test]
     async fn ne_10m_ports_bbox_filter() -> Result<()> {
-        let data_set = DataSetId::Internal(InternalDataSetId::new());
+        let dataset = DatasetId::Internal(InternalDatasetId::new());
         let mut exe_ctx = MockExecutionContext::default();
         exe_ctx.add_meta_data(
-            data_set.clone(),
+            dataset.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: "test-data/vector/data/ne_10m_ports/ne_10m_ports.shp".into(),
@@ -1297,7 +1297,7 @@ mod tests {
 
         let source = OgrSource {
             params: OgrSourceParameters {
-                data_set,
+                dataset,
                 attribute_projection: None,
             },
         }
@@ -1359,7 +1359,7 @@ mod tests {
 
     #[tokio::test]
     async fn ne_10m_ports_columns() -> Result<()> {
-        let id = DataSetId::Internal(InternalDataSetId::new());
+        let id = DatasetId::Internal(InternalDatasetId::new());
         let mut exe_ctx = MockExecutionContext::default();
         exe_ctx.add_meta_data(
             id.clone(),
@@ -1404,7 +1404,7 @@ mod tests {
 
         let source = OgrSource {
             params: OgrSourceParameters {
-                data_set: id.clone(),
+                dataset: id.clone(),
                 attribute_projection: None,
             },
         }
@@ -1534,7 +1534,7 @@ mod tests {
 
     #[tokio::test]
     async fn ne_10m_ports() -> Result<()> {
-        let id = DataSetId::Internal(InternalDataSetId::new());
+        let id = DatasetId::Internal(InternalDatasetId::new());
         let mut exe_ctx = MockExecutionContext::default();
         exe_ctx.add_meta_data(
             id.clone(),
@@ -1560,7 +1560,7 @@ mod tests {
 
         let source = OgrSource {
             params: OgrSourceParameters {
-                data_set: id.clone(),
+                dataset: id.clone(),
                 attribute_projection: None,
             },
         }
@@ -2778,7 +2778,7 @@ mod tests {
 
     #[tokio::test]
     async fn chunked() -> Result<()> {
-        let id = DataSetId::Internal(InternalDataSetId::new());
+        let id = DatasetId::Internal(InternalDatasetId::new());
         let mut exe_ctx = MockExecutionContext::default();
         exe_ctx.add_meta_data(
             id.clone(),
@@ -2804,7 +2804,7 @@ mod tests {
 
         let source = OgrSource {
             params: OgrSourceParameters {
-                data_set: id.clone(),
+                dataset: id.clone(),
                 attribute_projection: None,
             },
         }
@@ -3017,10 +3017,10 @@ mod tests {
 
     #[tokio::test]
     async fn empty() {
-        let data_set = DataSetId::Internal(InternalDataSetId::new());
+        let dataset = DatasetId::Internal(InternalDatasetId::new());
         let mut exe_ctx = MockExecutionContext::default();
         exe_ctx.add_meta_data(
-            data_set.clone(),
+            dataset.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: "test-data/vector/data/ne_10m_ports/ne_10m_ports.shp".into(),
@@ -3043,7 +3043,7 @@ mod tests {
 
         let source = OgrSource {
             params: OgrSourceParameters {
-                data_set,
+                dataset,
                 attribute_projection: None,
             },
         }
@@ -3086,7 +3086,7 @@ mod tests {
 
     #[tokio::test]
     async fn polygon_gpkg() {
-        let dataset = DataSetId::Internal(InternalDataSetId::new());
+        let dataset = DatasetId::Internal(InternalDatasetId::new());
         let mut exe_ctx = MockExecutionContext::default();
         exe_ctx.add_meta_data(
             dataset.clone(),
@@ -3118,7 +3118,7 @@ mod tests {
 
         let source = OgrSource {
             params: OgrSourceParameters {
-                data_set: dataset,
+                dataset: dataset,
                 attribute_projection: None,
             },
         }
@@ -3170,7 +3170,7 @@ mod tests {
 
     #[tokio::test]
     async fn points_csv() {
-        let dataset = DataSetId::Internal(InternalDataSetId::new());
+        let dataset = DatasetId::Internal(InternalDatasetId::new());
         let mut exe_ctx = MockExecutionContext::default();
         exe_ctx.add_meta_data(
             dataset.clone(),
@@ -3202,7 +3202,7 @@ mod tests {
 
         let source = OgrSource {
             params: OgrSourceParameters {
-                data_set: dataset,
+                dataset: dataset,
                 attribute_projection: None,
             },
         }

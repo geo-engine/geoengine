@@ -1,5 +1,5 @@
 use geoengine_datatypes::{
-    dataset::{DataSetId, InternalDataSetId},
+    dataset::{DatasetId, InternalDatasetId},
     primitives::{BoundingBox2D, Measurement, TimeGranularity, TimeStep},
     raster::{GeoTransform, RasterDataType},
     spatial_reference::SpatialReference,
@@ -8,7 +8,7 @@ use geoengine_datatypes::{
 
 use crate::{
     engine::{MockExecutionContext, RasterResultDescriptor},
-    source::{FileNotFoundHandling, GdalDataSetParameters, GdalMetaDataRegular},
+    source::{FileNotFoundHandling, GdalDatasetParameters, GdalMetaDataRegular},
 };
 
 /// # Panics
@@ -39,7 +39,7 @@ pub fn create_ndvi_meta_data() -> GdalMetaDataRegular {
         },
         placeholder: "%%%_START_TIME_%%%".to_string(),
         time_format: "%Y-%m-%d".to_string(),
-        params: GdalDataSetParameters {
+        params: GdalDatasetParameters {
             file_path: raster_dir().join("modis_ndvi/MOD13A2_M_NDVI_%%%_START_TIME_%%%.TIFF"),
             rasterband_channel: 1,
             geo_transform: GeoTransform {
@@ -60,8 +60,8 @@ pub fn create_ndvi_meta_data() -> GdalMetaDataRegular {
 }
 
 // TODO: move test helper somewhere else?
-pub fn add_ndvi_data_set(ctx: &mut MockExecutionContext) -> DataSetId {
-    let id: DataSetId = InternalDataSetId::new().into();
+pub fn add_ndvi_dataset(ctx: &mut MockExecutionContext) -> DatasetId {
+    let id: DatasetId = InternalDatasetId::new().into();
     ctx.add_meta_data(id.clone(), Box::new(create_ndvi_meta_data()));
     id
 }
