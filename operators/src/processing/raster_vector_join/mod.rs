@@ -166,7 +166,6 @@ mod tests {
     use crate::source::{GdalSource, GdalSourceParameters};
     use crate::util::gdal::add_ndvi_data_set;
     use chrono::NaiveDate;
-    use float_cmp::approx_eq;
     use futures::StreamExt;
     use geoengine_datatypes::collections::{FeatureCollectionInfos, MultiPointCollection};
     use geoengine_datatypes::dataset::DataSetId;
@@ -342,9 +341,14 @@ mod tests {
         };
 
         // these values are taken from loading the tiff in QGIS
-        approx_eq!(f64, data.as_ref()[0], (54. + 52.) / 2.);
-        approx_eq!(f64, data.as_ref()[1], (55. + 55.) / 2.);
-        approx_eq!(f64, data.as_ref()[2], (51. + 50.) / 2.);
-        approx_eq!(f64, data.as_ref()[3], (55. + 53.) / 2.);
+        assert_eq!(
+            data.as_ref(),
+            &[
+                (54. + 52.) / 2.,
+                (55. + 55.) / 2.,
+                (51. + 50.) / 2.,
+                (55. + 53.) / 2.,
+            ]
+        );
     }
 }
