@@ -98,14 +98,14 @@ where
             -query_rect.spatial_resolution.y,
         );
 
-        let tx: Vec<TileInformation> = tiling_strat
+        let tiles_to_produce: Vec<TileInformation> = tiling_strat
             .tile_information_iterator(query_rect.bbox)
             .collect();
 
         Self {
             source,
             query_rect,
-            tiles_to_produce: tx,
+            tiles_to_produce,
             current_spatial_tile: 0,
             time_start: Some(query_rect.time_interval.start()),
             time_end: None,
