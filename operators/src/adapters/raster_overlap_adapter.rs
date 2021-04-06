@@ -340,7 +340,7 @@ where
     /// The initial fill-value of the accumulator (`RasterTile2D`).
     fn initial_fill_value(&self) -> T;
 
-    /// This method geneerates a new accumulator which is used to fold the `Stream` of `RasterTile2D` of a sub-query.
+    /// This method generates a new accumulator which is used to fold the `Stream` of `RasterTile2D` of a sub-query.
     fn new_fold_accu(
         &self,
         tile_info: TileInformation,
