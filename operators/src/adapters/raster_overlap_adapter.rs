@@ -178,30 +178,35 @@ where
                         global_geo_transform: current_spatial_tile_info.global_geo_transform,
                     };
 
-                    let tqr = this.sub_query.tile_query_rectangle(
+                    let tile_query_rectangle = this.sub_query.tile_query_rectangle(
                         fold_tile_spec,
                         *this.query_rect,
                         t_start,
                     )?;
 
                     // TODO: this schould also be a future. We can chain it with the query if we find a way to store it in the running future
-                    let accu = this.sub_query.new_fold_accu(fold_tile_spec, tqr)?;
+                    let tile_folding_accu = this
+                        .sub_query
+                        .new_fold_accu(fold_tile_spec, tile_query_rectangle)?;
 
-                    let qs = this.source.raster_query(tqr, *this.query_ctx)?;
+                    let tile_query_stream = this
+                        .source
+                        .raster_query(tile_query_rectangle, *this.query_ctx)?;
 
-                    let ttf = qs.try_fold(accu, this.sub_query.fold_method());
+                    let tile_folding_stream =
+                        tile_query_stream.try_fold(tile_folding_accu, this.sub_query.fold_method());
 
-                    this.running_future.set(Some(ttf));
+                    this.running_future.set(Some(tile_folding_stream));
                 }
             }
         }
 
-        let rv = match this.running_future.as_mut().as_pin_mut() {
+        let future_result = match this.running_future.as_mut().as_pin_mut() {
             Some(fut) => ready!(fut.poll(cx)),
             None => return Poll::Ready(None),
         };
 
-        let r = match rv {
+        let tile_result = match future_result {
             Ok(tile) => tile,
             Err(err) => return Poll::Ready(Some(Err(err))),
         };
@@ -210,12 +215,12 @@ where
         this.running_future.set(None);
 
         // update the end_time from the produced tile
-        let t_end = r.0.time.end();
+        let t_end = tile_result.0.time.end();
         let _old_t_end = this.time_end.replace(t_end);
 
         *this.current_spatial_tile += 1;
 
-        Poll::Ready(Some(Ok(r.0)))
+        Poll::Ready(Some(Ok(tile_result.0)))
     }
 }
 
