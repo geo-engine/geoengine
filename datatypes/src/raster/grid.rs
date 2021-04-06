@@ -231,12 +231,12 @@ impl GridBounds for GridShape3D {
 }
 
 /// Method to generate an `Iterator` over all `GridIdx2D` in `GridBounds`
-pub fn grid_idx_iter_2d<D>(t: &D) -> impl Iterator<Item = GridIdx2D>
+pub fn grid_idx_iter_2d<B>(bounds: &B) -> impl Iterator<Item = GridIdx2D>
 where
-    D: GridBounds<IndexArray = [isize; 2]>,
+    B: GridBounds<IndexArray = [isize; 2]>,
 {
-    let GridIdx([y_s, x_s]) = t.min_index();
-    let GridIdx([y_e, x_e]) = t.max_index();
+    let GridIdx([y_s, x_s]) = bounds.min_index();
+    let GridIdx([y_e, x_e]) = bounds.max_index();
 
     (y_s..=y_e).flat_map(move |y| (x_s..=x_e).map(move |x| [y, x].into()))
 }
