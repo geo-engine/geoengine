@@ -3118,7 +3118,7 @@ mod tests {
 
         let source = OgrSource {
             params: OgrSourceParameters {
-                dataset: dataset,
+                dataset,
                 attribute_projection: None,
             },
         }
@@ -3202,7 +3202,7 @@ mod tests {
 
         let source = OgrSource {
             params: OgrSourceParameters {
-                dataset: dataset,
+                dataset,
                 attribute_projection: None,
             },
         }
