@@ -17,6 +17,7 @@ postgres = ["postgres-types"]
 arrow = { version = "3.0" }
 chrono = "0.4"
 float-cmp = "0.8"
+gdal = { version = "0.7" }
 geo = "0.17"
 proj = "0.22"
 geojson = "0.22"

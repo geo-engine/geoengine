@@ -20,7 +20,10 @@ use geoengine_operators::source::{GdalLoadingInfo, GdalMetaDataRegular, OgrSourc
 use geoengine_operators::{mock::MockDataSetDataSourceLoadingInfo, source::GdalMetaDataStatic};
 use std::collections::HashMap;
 
-use super::storage::MetaDataDefinition;
+use super::{
+    storage::MetaDataDefinition,
+    upload::{Upload, UploadDb, UploadId},
+};
 
 #[derive(Default)]
 pub struct HashMapDataSetDb {
@@ -33,6 +36,7 @@ pub struct HashMapDataSetDb {
     >,
     gdal_data_sets:
         HashMap<InternalDataSetId, Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor>>>,
+    uploads: HashMap<UploadId, Upload>,
 }
 
 impl DataSetDb for HashMapDataSetDb {}
@@ -176,6 +180,16 @@ impl DataSetProvider for HashMapDataSetDb {
             .collect();
 
         Ok(list)
+    }
+
+    async fn load(&self, _user: UserId, dataset: &DataSetId) -> Result<DataSet> {
+        // TODO: permissions
+
+        self.data_sets
+            .iter()
+            .find(|d| d.id == *dataset)
+            .cloned()
+            .ok_or(error::Error::UnknownDataSetId)
     }
 }
 
@@ -345,6 +359,23 @@ mod tests {
             }
         );
 
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl UploadDb for HashMapDataSetDb {
+    async fn get_upload(&self, _user: UserId, upload: UploadId) -> Result<Upload> {
+        // TODO: user permission
+        self.uploads
+            .get(&upload)
+            .map(Clone::clone)
+            .ok_or(error::Error::UnknownUploadId)
+    }
+
+    async fn create_upload(&mut self, _user: UserId, upload: Upload) -> Result<()> {
+        // TODO: user permission
+        self.uploads.insert(upload.id, upload);
         Ok(())
     }
 }

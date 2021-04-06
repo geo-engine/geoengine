@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 // TODO: generify this to support all data types
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct MockDataSetDataSourceLoadingInfo {
     pub points: Vec<Coordinate2D>,
 }

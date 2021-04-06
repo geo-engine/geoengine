@@ -2,6 +2,7 @@ use crate::error;
 use crate::primitives::PrimitivesError;
 use crate::util::Result;
 use arrow::bitmap::Bitmap;
+use gdal::vector::OGRFieldType;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use snafu::ensure;
@@ -15,6 +16,17 @@ pub enum FeatureDataType {
     Decimal,
     Number,
     Text,
+}
+
+impl FeatureDataType {
+    pub fn try_from_ogr_field_type_code(code: u32) -> Result<Self> {
+        Ok(match code {
+            OGRFieldType::OFTInteger | OGRFieldType::OFTInteger64 => Self::Decimal,
+            OGRFieldType::OFTReal => Self::Number,
+            OGRFieldType::OFTString => Self::Text,
+            _ => return Err(error::Error::NoMatchingFeatureDataTypeForOgrFieldType),
+        })
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]

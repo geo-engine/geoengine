@@ -244,7 +244,9 @@ async fn list_permissions<C: Context>(
 mod tests {
     use super::*;
     use crate::handlers::{handle_rejection, ErrorResponse};
-    use crate::projects::project::{LayerUpdate, LayerVisibility, Plot, PlotUpdate, VectorInfo};
+    use crate::projects::project::{
+        LayerUpdate, LayerVisibility, Plot, PlotUpdate, RasterSymbology, Symbology,
+    };
     use crate::users::session::Session;
     use crate::users::user::UserRegistration;
     use crate::users::userdb::UserDb;
@@ -257,8 +259,8 @@ mod tests {
     use crate::{
         contexts::InMemoryContext,
         projects::project::{
-            Layer, LayerInfo, Project, ProjectId, ProjectListing, ProjectPermission,
-            ProjectVersion, RasterInfo, STRectangle, UpdateProject,
+            Layer, Project, ProjectId, ProjectListing, ProjectPermission, ProjectVersion,
+            STRectangle, UpdateProject,
         },
     };
     use geoengine_datatypes::operations::image::Colorizer;
@@ -728,10 +730,11 @@ mod tests {
             "layers": vec![LayerUpdate::UpdateOrInsert(Layer {
                 workflow: WorkflowId::new(),
                 name: "L1".to_string(),
-                info: LayerInfo::Raster(RasterInfo {
-                    colorizer: Colorizer::Rgba,
-                }),
                 visibility: Default::default(),
+                symbology: Symbology::Raster(RasterSymbology {
+                    opacity: 1.0,
+                    colorizer: Colorizer::Rgba,
+                })
             })],
             "bounds": None::<String>,
             "time_step": None::<String>,
@@ -753,7 +756,7 @@ mod tests {
             &res,
             400,
             "BodyDeserializeError",
-            "missing field `id` at line 1 column 227",
+            "missing field `id` at line 1 column 246",
         );
     }
 
@@ -797,23 +800,27 @@ mod tests {
         let layer_1 = Layer {
             workflow: WorkflowId::new(),
             name: "L1".to_string(),
-            info: LayerInfo::Raster(RasterInfo {
-                colorizer: Colorizer::Rgba,
-            }),
             visibility: LayerVisibility {
                 data: true,
                 legend: false,
             },
+            symbology: Symbology::Raster(RasterSymbology {
+                opacity: 1.0,
+                colorizer: Colorizer::Rgba,
+            }),
         };
 
         let layer_2 = Layer {
             workflow: WorkflowId::new(),
             name: "L2".to_string(),
-            info: LayerInfo::Vector(VectorInfo {}),
             visibility: LayerVisibility {
                 data: false,
                 legend: true,
             },
+            symbology: Symbology::Raster(RasterSymbology {
+                opacity: 1.0,
+                colorizer: Colorizer::Rgba,
+            }),
         };
 
         // add first layer
