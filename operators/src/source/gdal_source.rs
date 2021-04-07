@@ -152,9 +152,8 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor> for GdalMetaDataRegular {
             TimeStepIter::new_with_interval_incl_start(snapped_interval, self.step)?;
 
         let info: Result<Vec<_>> = time_iterator
-            .try_as_intervals(self.step)
+            .into_intervals(self.step, query.time_interval.end())
             .map(|time| {
-                let time = time?;
                 Ok(GdalLoadingInfoPart {
                     time,
                     params: self.params.replace_time_placeholder(

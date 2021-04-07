@@ -180,6 +180,12 @@ pub enum Error {
     NoDateTimeValid {
         time_instance: TimeInstance,
     },
+
+    DateTimeOutOfBounds {
+        year: i32,
+        month: u32,
+        day: u32,
+    },
 }
 
 impl From<arrow::error::ArrowError> for Error {
