@@ -216,7 +216,7 @@ where
 
         // update the end_time from the produced tile
         let t_end = tile_result.0.time.end();
-        let _old_t_end = this.time_end.replace(t_end);
+        this.time_end.replace(t_end);
 
         *this.current_spatial_tile += 1;
 
