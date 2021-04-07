@@ -1,41 +1,41 @@
 use crate::identifier;
 use serde::{Deserialize, Serialize};
 
-identifier!(DataSetProviderId);
+identifier!(DatasetProviderId);
 
-identifier!(InternalDataSetId);
+identifier!(InternalDatasetId);
 
-identifier!(StagingDataSetId);
+identifier!(StagingDatasetId);
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize)]
-pub enum DataSetId {
-    Internal(InternalDataSetId),
-    Staging(StagingDataSetId),
-    External(ExternalDataSetId),
+pub enum DatasetId {
+    Internal(InternalDatasetId),
+    Staging(StagingDatasetId),
+    External(ExternalDatasetId),
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize)]
-pub struct ExternalDataSetId {
-    pub provider: DataSetProviderId,
+pub struct ExternalDatasetId {
+    pub provider: DatasetProviderId,
     pub id: String, // TODO: generic or enum?
 }
 
-impl DataSetId {
-    pub fn internal(&self) -> Option<InternalDataSetId> {
+impl DatasetId {
+    pub fn internal(&self) -> Option<InternalDatasetId> {
         if let Self::Internal(id) = self {
             return Some(*id);
         }
         None
     }
 
-    pub fn staging(&self) -> Option<StagingDataSetId> {
+    pub fn staging(&self) -> Option<StagingDatasetId> {
         if let Self::Staging(id) = self {
             return Some(*id);
         }
         None
     }
 
-    pub fn external(&self) -> Option<ExternalDataSetId> {
+    pub fn external(&self) -> Option<ExternalDatasetId> {
         if let Self::External(id) = self {
             return Some(id.clone());
         }
@@ -43,20 +43,20 @@ impl DataSetId {
     }
 }
 
-impl From<InternalDataSetId> for DataSetId {
-    fn from(value: InternalDataSetId) -> Self {
-        DataSetId::Internal(value)
+impl From<InternalDatasetId> for DatasetId {
+    fn from(value: InternalDatasetId) -> Self {
+        DatasetId::Internal(value)
     }
 }
 
-impl From<StagingDataSetId> for DataSetId {
-    fn from(value: StagingDataSetId) -> Self {
-        DataSetId::Staging(value)
+impl From<StagingDatasetId> for DatasetId {
+    fn from(value: StagingDatasetId) -> Self {
+        DatasetId::Staging(value)
     }
 }
 
-impl From<ExternalDataSetId> for DataSetId {
-    fn from(value: ExternalDataSetId) -> Self {
-        DataSetId::External(value)
+impl From<ExternalDatasetId> for DatasetId {
+    fn from(value: ExternalDatasetId) -> Self {
+        DatasetId::External(value)
     }
 }

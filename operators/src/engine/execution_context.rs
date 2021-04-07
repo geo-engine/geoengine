@@ -3,10 +3,10 @@ use crate::engine::{
     QueryRectangle, RasterResultDescriptor, ResultDescriptor, VectorResultDescriptor,
 };
 use crate::error::Error;
-use crate::mock::MockDataSetDataSourceLoadingInfo;
+use crate::mock::MockDatasetDataSourceLoadingInfo;
 use crate::source::{GdalLoadingInfo, OgrSourceDataset};
 use crate::util::Result;
-use geoengine_datatypes::dataset::DataSetId;
+use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::raster::GridShape;
 use geoengine_datatypes::raster::TilingSpecification;
 use serde::{Deserialize, Serialize};
@@ -18,7 +18,7 @@ use std::fmt::Debug;
 pub trait ExecutionContext:
     Send
     + Sync
-    + MetaDataProvider<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>
+    + MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>
     + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor>
     + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor>
 {
@@ -30,7 +30,7 @@ pub trait MetaDataProvider<L, R>
 where
     R: ResultDescriptor,
 {
-    fn meta_data(&self, data_set: &DataSetId) -> Result<Box<dyn MetaData<L, R>>>;
+    fn meta_data(&self, dataset: &DatasetId) -> Result<Box<dyn MetaData<L, R>>>;
 }
 
 pub trait MetaData<L, R>: Debug + Send + Sync
@@ -54,7 +54,7 @@ where
 
 pub struct MockExecutionContext {
     pub thread_pool: ThreadPool,
-    pub meta_data: HashMap<DataSetId, Box<dyn Any + Send + Sync>>,
+    pub meta_data: HashMap<DatasetId, Box<dyn Any + Send + Sync>>,
     pub tiling_specification: TilingSpecification,
 }
 
@@ -74,13 +74,13 @@ impl Default for MockExecutionContext {
 }
 
 impl MockExecutionContext {
-    pub fn add_meta_data<L, R>(&mut self, data_set: DataSetId, meta_data: Box<dyn MetaData<L, R>>)
+    pub fn add_meta_data<L, R>(&mut self, dataset: DatasetId, meta_data: Box<dyn MetaData<L, R>>)
     where
         L: Send + Sync + 'static,
         R: Send + Sync + 'static + ResultDescriptor,
     {
         self.meta_data
-            .insert(data_set, Box::new(meta_data) as Box<dyn Any + Send + Sync>);
+            .insert(dataset, Box::new(meta_data) as Box<dyn Any + Send + Sync>);
     }
 }
 
@@ -99,19 +99,19 @@ where
     L: 'static,
     R: 'static + ResultDescriptor,
 {
-    fn meta_data(&self, data_set: &DataSetId) -> Result<Box<dyn MetaData<L, R>>> {
+    fn meta_data(&self, dataset: &DatasetId) -> Result<Box<dyn MetaData<L, R>>> {
         let meta_data = self
             .meta_data
-            .get(data_set)
-            .ok_or(Error::UnknownDataSetId)?
+            .get(dataset)
+            .ok_or(Error::UnknownDatasetId)?
             .downcast_ref::<Box<dyn MetaData<L, R>>>()
-            .ok_or(Error::DataSetLoadingInfoProviderMismatch)?;
+            .ok_or(Error::DatasetLoadingInfoProviderMismatch)?;
 
         Ok(meta_data.clone())
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct StaticMetaData<L, R>
 where
     L: Debug + Clone + Send + Sync + 'static,

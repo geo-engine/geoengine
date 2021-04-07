@@ -15,7 +15,7 @@ use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use super::{Context, Db};
 use crate::contexts::{ExecutionContextImpl, QueryContextImpl};
-use crate::datasets::postgres::PostgresDataSetDb;
+use crate::datasets::postgres::PostgresDatasetDb;
 use crate::projects::project::{ProjectId, ProjectPermission};
 use crate::users::user::UserId;
 
@@ -273,9 +273,9 @@ where
     type UserDB = PostgresUserDb<Tls>;
     type ProjectDB = PostgresProjectDb<Tls>;
     type WorkflowRegistry = PostgresWorkflowRegistry<Tls>;
-    type DataSetDB = PostgresDataSetDb;
+    type DatasetDB = PostgresDatasetDb;
     type QueryContext = QueryContextImpl;
-    type ExecutionContext = ExecutionContextImpl<PostgresDataSetDb>;
+    type ExecutionContext = ExecutionContextImpl<PostgresDatasetDb>;
 
     fn user_db(&self) -> Db<Self::UserDB> {
         self.user_db.clone()
@@ -307,15 +307,15 @@ where
         self.workflow_registry.write().await
     }
 
-    fn data_set_db(&self) -> Db<Self::DataSetDB> {
+    fn dataset_db(&self) -> Db<Self::DatasetDB> {
         todo!()
     }
 
-    async fn data_set_db_ref(&self) -> RwLockReadGuard<'_, Self::DataSetDB> {
+    async fn dataset_db_ref(&self) -> RwLockReadGuard<'_, Self::DatasetDB> {
         todo!()
     }
 
-    async fn data_set_db_ref_mut(&self) -> RwLockWriteGuard<'_, Self::DataSetDB> {
+    async fn dataset_db_ref_mut(&self) -> RwLockWriteGuard<'_, Self::DatasetDB> {
         todo!()
     }
 

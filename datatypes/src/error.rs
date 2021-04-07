@@ -186,6 +186,15 @@ pub enum Error {
         month: u32,
         day: u32,
     },
+
+    #[snafu(display("GdalError: {}", source))]
+    Gdal {
+        source: gdal::errors::GdalError,
+    },
+
+    NoMatchingVectorDataTypeForOgrGeometryType,
+
+    NoMatchingFeatureDataTypeForOgrFieldType,
 }
 
 impl From<arrow::error::ArrowError> for Error {
@@ -203,5 +212,11 @@ impl From<proj::ProjError> for Error {
 impl From<Infallible> for Error {
     fn from(_: Infallible) -> Self {
         unreachable!("This function cannot be called on a non-failing type")
+    }
+}
+
+impl From<gdal::errors::GdalError> for Error {
+    fn from(gdal_error: gdal::errors::GdalError) -> Self {
+        Self::Gdal { source: gdal_error }
     }
 }

@@ -12,7 +12,7 @@ use async_trait::async_trait;
 pub trait ProjectDb: Send + Sync {
     // TODO: pass session instead of UserIdentification?
 
-    /// List all data sets accessible to `user` that match the `options`
+    /// List all datasets accessible to `user` that match the `options`
     async fn list(
         &self,
         user: UserId,

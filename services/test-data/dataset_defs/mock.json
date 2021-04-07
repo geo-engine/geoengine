@@ -1,25 +1,25 @@
 {
-    "properties": {
-        "id": null,
-        "name": "Mock",
-        "description": "A mock data set",
-        "source_operator": "MockDataSetDataSource"
-    },
-    "meta_data": {
-        "MockMetaData": {
-            "loading_info": {
-                "points": [
-                    {
-                        "x": 1.0,
-                        "y": 2.0
-                    }
-                ]
-            },
-            "result_descriptor": {
-                "data_type": "MultiPoint",
-                "spatial_reference": "EPSG:4326",
-                "columns": {}
-            }
-        }
+  "properties": {
+    "id": null,
+    "name": "Mock",
+    "description": "A mock dataset",
+    "source_operator": "MockDatasetDataSource"
+  },
+  "meta_data": {
+    "MockMetaData": {
+      "loading_info": {
+        "points": [
+          {
+            "x": 1.0,
+            "y": 2.0
+          }
+        ]
+      },
+      "result_descriptor": {
+        "data_type": "MultiPoint",
+        "spatial_reference": "EPSG:4326",
+        "columns": {}
+      }
     }
+  }
 }

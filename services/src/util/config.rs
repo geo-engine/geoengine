@@ -158,11 +158,11 @@ impl ConfigElement for QueryContext {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct DataSetService {
+pub struct DatasetService {
     pub list_limit: u32,
 }
 
-impl ConfigElement for DataSetService {
+impl ConfigElement for DatasetService {
     const KEY: &'static str = "dataset_service";
 }
 
