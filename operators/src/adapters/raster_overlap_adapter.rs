@@ -466,7 +466,7 @@ where
             .map(|&i| tile_info.tile_geo_transform().grid_idx_to_coordinate_2d(i))
             .collect();
 
-        let proj = CoordinateProjector::from_known_srs(self.in_srs, self.out_srs)?;
+        let proj = CoordinateProjector::from_known_srs(self.out_srs, self.in_srs)?;
         let projected_coords = project_coordinates_fail_tolarant(&coords, &proj);
 
         let accu_companion: Vec<(GridIdx2D, Coordinate2D)> = idxs
