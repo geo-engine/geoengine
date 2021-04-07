@@ -731,35 +731,42 @@ impl<'a, GeometryRef> FeatureCollectionRow<'a, GeometryRef> {
     }
 }
 
-pub struct FeatureCollectionIterator<'a, T> {
-    geometries: T,
+pub struct FeatureCollectionIterator<'a, GeometryIter> {
+    geometries: GeometryIter,
     time_intervals: std::slice::Iter<'a, TimeInterval>,
     data: Rc<HashMap<String, FeatureDataRef<'a>>>,
     row_num: usize,
 }
 
-impl<'a, T, GeometryRef> FeatureCollectionIterator<'a, T>
+impl<'a, GeometryIter, GeometryRef> FeatureCollectionIterator<'a, GeometryIter>
 where
-    T: std::iter::Iterator<Item = GeometryRef>,
+    GeometryIter: std::iter::Iterator<Item = GeometryRef>,
     GeometryRef: crate::primitives::GeometryRef,
 {
-    pub fn new(
-        geometries: T,
-        time_intervals: std::slice::Iter<'a, TimeInterval>,
-        data: Rc<HashMap<String, FeatureDataRef<'a>>>,
+    // unwrap can never throw because reserved columns are filtered previously
+    #![allow(clippy::missing_panics_doc)]
+    pub fn new<CollectionType: Geometry + ArrowTyped>(
+        collection: &'a FeatureCollection<CollectionType>,
+        geometries: GeometryIter,
     ) -> Self {
         FeatureCollectionIterator {
             geometries,
-            time_intervals,
-            data,
+            time_intervals: collection.time_intervals().iter(),
+            data: Rc::new(
+                collection
+                    .column_names()
+                    .filter(|x| !FeatureCollection::<CollectionType>::is_reserved_name(x))
+                    .map(|x| (x.to_string(), collection.data(x).unwrap()))
+                    .collect(),
+            ),
             row_num: 0,
         }
     }
 }
 
-impl<'a, T, GeometryRef> Iterator for FeatureCollectionIterator<'a, T>
+impl<'a, GeometryIter, GeometryRef> Iterator for FeatureCollectionIterator<'a, GeometryIter>
 where
-    T: std::iter::Iterator<Item = GeometryRef>,
+    GeometryIter: std::iter::Iterator<Item = GeometryRef>,
     GeometryRef: crate::primitives::GeometryRef,
 {
     type Item = FeatureCollectionRow<'a, GeometryRef>;

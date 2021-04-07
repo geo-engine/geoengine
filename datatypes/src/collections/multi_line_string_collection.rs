@@ -11,7 +11,6 @@ use arrow::{
     buffer::Buffer,
     datatypes::DataType,
 };
-use std::rc::Rc;
 use std::{slice, sync::Arc};
 
 use super::geo_feature_collection::ReplaceRawArrayCoords;
@@ -101,16 +100,7 @@ impl<'a> IntoIterator for &'a MultiLineStringCollection {
     type IntoIter = FeatureCollectionIterator<'a, MultiLineStringIterator<'a>>;
 
     fn into_iter(self) -> Self::IntoIter {
-        FeatureCollectionIterator::new(
-            self.geometries(),
-            self.time_intervals().iter(),
-            Rc::new(
-                self.column_names()
-                    .filter(|x| !MultiLineStringCollection::is_reserved_name(x))
-                    .map(|x| (x.to_string(), self.data(x).unwrap()))
-                    .collect(),
-            ),
-        )
+        FeatureCollectionIterator::new::<MultiLineString>(self, self.geometries())
     }
 }
 

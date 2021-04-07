@@ -12,7 +12,6 @@ use crate::collections::{
 use crate::primitives::{Coordinate2D, MultiPoint, MultiPointRef};
 use crate::util::arrow::downcast_array;
 use crate::util::{arrow::ArrowTyped, Result};
-use std::rc::Rc;
 use std::{slice, sync::Arc};
 
 use super::geo_feature_collection::ReplaceRawArrayCoords;
@@ -41,16 +40,7 @@ impl<'a> IntoIterator for &'a MultiPointCollection {
     type IntoIter = FeatureCollectionIterator<'a, MultiPointIterator<'a>>;
 
     fn into_iter(self) -> Self::IntoIter {
-        FeatureCollectionIterator::new(
-            self.geometries(),
-            self.time_intervals().iter(),
-            Rc::new(
-                self.column_names()
-                    .filter(|x| !MultiPointCollection::is_reserved_name(x))
-                    .map(|x| (x.to_string(), self.data(x).unwrap()))
-                    .collect(),
-            ),
-        )
+        FeatureCollectionIterator::new::<MultiPoint>(self, self.geometries())
     }
 }
 
