@@ -372,7 +372,7 @@ mod tests {
         .boxed();
 
         let mut exe_ctc = MockExecutionContext::default();
-        let ndvi_id = add_ndvi_data_set(&mut exe_ctc);
+        let ndvi_id = add_ndvi_dataset(&mut exe_ctc);
 
         let operator = RasterVectorJoin {
             params: RasterVectorJoinParams {
