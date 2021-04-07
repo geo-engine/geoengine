@@ -764,11 +764,9 @@ mod tests {
         exe_ctx.tiling_specification =
             TilingSpecification::new((0.0, 0.0).into(), [450, 450].into());
 
-        let output_shape: GridShape2D = [1800, 3600].into();
-        let output_bounds = BoundingBox2D::new_unchecked(
-            (-20_000_000., -20_000_000.).into(),
-            (20_000_000., 20_000_000.).into(),
-        );
+        let output_shape: GridShape2D = [900, 1800].into();
+        let output_bounds =
+            BoundingBox2D::new_unchecked((0., 0.).into(), (20_000_000., 20_000_000.).into());
         let time_interval = TimeInterval::new_unchecked(1_388_534_400_000, 1_388_534_400_001);
         // 2014-01-01
 
@@ -827,7 +825,7 @@ mod tests {
             include_bytes!(
                 "../../test-data/raster/modis_ndvi/projected_3857/MOD13A2_M_NDVI_2014-04-01_tile-20.rst"
             ) as &[u8],
-            res[20].grid_array.data.as_slice()
+            res[8].grid_array.data.as_slice()
         );
 
         Ok(())
