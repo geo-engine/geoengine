@@ -446,7 +446,6 @@ mod tests {
     };
     use geoengine_datatypes::{
         collections::{MultiLineStringCollection, MultiPointCollection, MultiPolygonCollection},
-        operations::image::{Colorizer, RgbaColor, ToPng},
         primitives::{
             BoundingBox2D, Measurement, MultiLineString, MultiPoint, MultiPolygon,
             SpatialResolution, TimeInterval,
@@ -463,8 +462,6 @@ mod tests {
     use crate::mock::MockFeatureCollectionSource;
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;
-
-    use std::convert::TryInto;
 
     use super::*;
 
@@ -823,46 +820,15 @@ mod tests {
             .collect::<Vec<RasterTile2D<u8>>>()
             .await;
 
-        let colorizer = Colorizer::linear_gradient(
-            vec![
-                (0.0, RgbaColor::new(0, 0, 0, 255)).try_into().unwrap(),
-                (255.0, RgbaColor::new(255, 255, 255, 255))
-                    .try_into()
-                    .unwrap(),
-            ],
-            RgbaColor::transparent(),
-            RgbaColor::pink(),
-        )
-        .unwrap();
-
-        // TODO: check against reference  data
-        for (i, t) in res.iter().enumerate() {
-            dbg!(&t.tile_information());
-            dbg!(&t.grid_array.shape);
-
-            let (min, max) = t
-                .grid_array
-                .data
-                .iter()
-                .fold((255_u8, 0_u8), |x, &a| (a.min(x.0), a.max(x.1)));
-
-            dbg!(min, max);
-
-            let tile_shape = &t.grid_array.shape;
-
-            let png = t.to_png(
-                tile_shape.axis_size_y() as u32,
-                tile_shape.axis_size_x() as u32,
-                &colorizer,
-            );
-
-            let mut p = std::path::PathBuf::from("/tmp/foo");
-            p.set_file_name(format!("meh_{}.png", i));
-            std::fs::write(p.as_path(), png.unwrap()).expect("Unable to write file");
-            p.set_file_name(format!("meh_{}.pgw", i));
-            let loc_geo = t.tile_geo_transform();
-            std::fs::write(p.as_path(), loc_geo.worldfile_string()).expect("Unable to write file");
-        }
+        // This check is against a tile produced by the operator itself. It was visually validated. TODO: rebuild when open issues are solved.
+        // A perfect validation would be against a GDAL output generated like this:
+        // gdalwarp -t_srs EPSG:3857 -tr 11111.11111111 11111.11111111 -r near -te 0.0 5011111.111111112 5000000.0 10011111.111111112 -te_srs EPSG:3857 -of GTiff ./MOD13A2_M_NDVI_2014-04-01.TIFF ./MOD13A2_M_NDVI_2014-04-01_tile-20.rst
+        assert_eq!(
+            include_bytes!(
+                "../../test-data/raster/modis_ndvi/projected_3857/MOD13A2_M_NDVI_2014-04-01_tile-20.rst"
+            ) as &[u8],
+            res[20].grid_array.data.as_slice()
+        );
 
         Ok(())
     }
