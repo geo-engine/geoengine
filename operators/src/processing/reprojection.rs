@@ -442,7 +442,7 @@ mod tests {
     use crate::{
         engine::VectorOperator,
         source::{GdalSource, GdalSourceParameters},
-        util::gdal::add_ndvi_data_set,
+        util::gdal::add_ndvi_dataset,
     };
     use geoengine_datatypes::{
         collections::{MultiLineStringCollection, MultiPointCollection, MultiPolygonCollection},
@@ -760,7 +760,7 @@ mod tests {
     async fn raster_ndvi_3857() -> Result<()> {
         let mut exe_ctx = MockExecutionContext::default();
         let query_ctx = MockQueryContext::default();
-        let id = add_ndvi_data_set(&mut exe_ctx);
+        let id = add_ndvi_dataset(&mut exe_ctx);
         exe_ctx.tiling_specification =
             TilingSpecification::new((0.0, 0.0).into(), [450, 450].into());
 
@@ -774,7 +774,7 @@ mod tests {
 
         let gdal_op = GdalSource {
             params: GdalSourceParameters {
-                data_set: id.clone(),
+                dataset: id.clone(),
             },
         }
         .boxed();
