@@ -1,6 +1,7 @@
 use crate::collections::{
-    FeatureCollection, FeatureCollectionInfos, FeatureCollectionRowBuilder,
-    GeoFeatureCollectionRowBuilder, GeometryCollection, GeometryRandomAccess, IntoGeometryIterator,
+    FeatureCollection, FeatureCollectionInfos, FeatureCollectionIterator, FeatureCollectionRow,
+    FeatureCollectionRowBuilder, GeoFeatureCollectionRowBuilder, GeometryCollection,
+    GeometryRandomAccess, IntoGeometryIterator,
 };
 use crate::primitives::{Coordinate2D, MultiPolygon, MultiPolygonAccess, MultiPolygonRef};
 use crate::util::Result;
@@ -117,6 +118,15 @@ impl<'l> IntoGeometryIterator<'l> for MultiPolygonCollection {
         );
 
         Self::GeometryIterator::new(geometry_column, self.len())
+    }
+}
+
+impl<'a> IntoIterator for &'a MultiPolygonCollection {
+    type Item = FeatureCollectionRow<'a, MultiPolygonRef<'a>>;
+    type IntoIter = FeatureCollectionIterator<'a, MultiPolygonIterator<'a>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        FeatureCollectionIterator::new::<MultiPolygon>(self, self.geometries())
     }
 }
 
