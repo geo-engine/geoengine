@@ -321,13 +321,13 @@ fn get_feature_mock(_request: &GetFeature) -> Result<Box<dyn warp::Reply>, warp:
 mod tests {
     use super::*;
 
-    use crate::datasets::storage::{DataSetDefinition, DataSetStore};
+    use crate::datasets::storage::{DatasetDefinition, DatasetStore};
     use crate::handlers::{handle_rejection, ErrorResponse};
     use crate::users::user::UserId;
     use crate::util::tests::check_allowed_http_methods;
     use crate::util::user_input::UserInput;
     use crate::{contexts::InMemoryContext, workflows::workflow::Workflow};
-    use geoengine_datatypes::dataset::DataSetId;
+    use geoengine_datatypes::dataset::DatasetId;
     use geoengine_datatypes::util::Identifier;
     use geoengine_operators::engine::TypedOperator;
     use geoengine_operators::source::CsvSourceParameters;
@@ -703,12 +703,12 @@ x;y
     async fn add_dataset_definition_to_datasets(
         ctx: &InMemoryContext,
         dataset_definition: &str,
-    ) -> DataSetId {
-        let def: DataSetDefinition = serde_json::from_str(dataset_definition).unwrap();
+    ) -> DatasetId {
+        let def: DatasetDefinition = serde_json::from_str(dataset_definition).unwrap();
 
-        let mut db = ctx.data_set_db_ref_mut().await;
+        let mut db = ctx.dataset_db_ref_mut().await;
 
-        db.add_data_set(
+        db.add_dataset(
             UserId::new(),
             def.properties.validated().unwrap(),
             Box::new(def.meta_data),
@@ -755,7 +755,7 @@ x;y
                     {
                         "type": "OgrSource",
                         "params": {
-                            "data_set": ne_10m_ports_id,
+                            "dataset": ne_10m_ports_id,
                             "attribute_projection": null
                         }
                     }
@@ -764,7 +764,7 @@ x;y
                     {
                         "type": "GdalSource",
                         "params": {
-                            "data_set": ndvi_id,
+                            "dataset": ndvi_id,
                         }
                     }
                 ]

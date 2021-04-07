@@ -6,7 +6,7 @@ pub use self::csv::{
     CsvGeometrySpecification, CsvSource, CsvSourceParameters, CsvSourceStream, CsvTimeSpecification,
 };
 pub use self::gdal_source::{
-    FileNotFoundHandling, GdalDataSetParameters, GdalLoadingInfo, GdalMetaDataRegular,
+    FileNotFoundHandling, GdalDatasetParameters, GdalLoadingInfo, GdalMetaDataRegular,
     GdalMetaDataStatic, GdalSource, GdalSourceParameters, GdalSourceProcessor,
 };
 pub use self::ogr_source::{

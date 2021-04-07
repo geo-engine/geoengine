@@ -506,7 +506,7 @@ mod tests {
         OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceErrorSpec,
     };
     use geoengine_datatypes::collections::{DataCollection, VectorDataType};
-    use geoengine_datatypes::dataset::{DataSetId, InternalDataSetId};
+    use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureData, NoGeometry, SpatialResolution, TimeInterval,
     };
@@ -846,7 +846,7 @@ mod tests {
 
     #[tokio::test]
     async fn textual_attribute() {
-        let dataset_id = InternalDataSetId::new();
+        let dataset_id = InternalDatasetId::new();
 
         let workflow = serde_json::json!({
             "type": "Histogram",
@@ -858,7 +858,7 @@ mod tests {
             "vector_sources": [{
                 "type": "OgrSource",
                 "params": {
-                    "data_set": {
+                    "dataset": {
                         "Internal": dataset_id
                     },
                     "attribute_projection": null
@@ -869,7 +869,7 @@ mod tests {
 
         let mut execution_context = MockExecutionContext::default();
         execution_context.add_meta_data(
-            DataSetId::Internal(dataset_id),
+            DatasetId::Internal(dataset_id),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: "operators/test-data/vector/data/ne_10m_ports/ne_10m_ports.shp"

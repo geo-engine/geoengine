@@ -1,90 +1,90 @@
 use super::{
-    storage::DataSet,
+    storage::Dataset,
     upload::{Upload, UploadDb, UploadId},
 };
-use crate::datasets::listing::{DataSetListOptions, DataSetListing, DataSetProvider};
+use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider};
 use crate::datasets::storage::{
-    AddDataSet, AddDataSetProvider, DataSetDb, DataSetProviderDb, DataSetProviderListOptions,
-    DataSetProviderListing, DataSetStore, DataSetStorer,
+    AddDataset, AddDatasetProvider, DatasetDb, DatasetProviderDb, DatasetProviderListOptions,
+    DatasetProviderListing, DatasetStore, DatasetStorer,
 };
 use crate::error::Result;
 use crate::users::user::UserId;
 use crate::util::user_input::Validated;
 use async_trait::async_trait;
-use geoengine_datatypes::dataset::{DataSetId, DataSetProviderId};
+use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId};
 use geoengine_operators::engine::{MetaData, MetaDataProvider, ResultDescriptor};
 
 // TODO: implement in separate PR, need placeholder here to satisfy bounds of `Context`
-pub struct PostgresDataSetDb {}
+pub struct PostgresDatasetDb {}
 
-impl DataSetDb for PostgresDataSetDb {}
+impl DatasetDb for PostgresDatasetDb {}
 
 #[async_trait]
-impl DataSetProviderDb for PostgresDataSetDb {
-    async fn add_data_set_provider(
+impl DatasetProviderDb for PostgresDatasetDb {
+    async fn add_dataset_provider(
         &mut self,
         _user: UserId,
-        _provider: Validated<AddDataSetProvider>,
-    ) -> Result<DataSetProviderId> {
+        _provider: Validated<AddDatasetProvider>,
+    ) -> Result<DatasetProviderId> {
         todo!()
     }
 
-    async fn list_data_set_providers(
+    async fn list_dataset_providers(
         &self,
         _user: UserId,
-        _options: Validated<DataSetProviderListOptions>,
-    ) -> Result<Vec<DataSetProviderListing>> {
+        _options: Validated<DatasetProviderListOptions>,
+    ) -> Result<Vec<DatasetProviderListing>> {
         todo!()
     }
 
-    async fn data_set_provider(
+    async fn dataset_provider(
         &self,
         _user: UserId,
-        _provider: DataSetProviderId,
-    ) -> Result<&dyn DataSetProvider> {
+        _provider: DatasetProviderId,
+    ) -> Result<&dyn DatasetProvider> {
         todo!()
     }
 }
 
 #[async_trait]
-impl DataSetProvider for PostgresDataSetDb {
+impl DatasetProvider for PostgresDatasetDb {
     async fn list(
         &self,
         _user: UserId,
-        _options: Validated<DataSetListOptions>,
-    ) -> Result<Vec<DataSetListing>> {
+        _options: Validated<DatasetListOptions>,
+    ) -> Result<Vec<DatasetListing>> {
         todo!()
     }
 
-    async fn load(&self, _user: UserId, _dataset: &DataSetId) -> Result<DataSet> {
+    async fn load(&self, _user: UserId, _dataset: &DatasetId) -> Result<Dataset> {
         todo!()
     }
 }
 
-impl<L, R> MetaDataProvider<L, R> for PostgresDataSetDb
+impl<L, R> MetaDataProvider<L, R> for PostgresDatasetDb
 where
     R: ResultDescriptor,
 {
     fn meta_data(
         &self,
-        _data_set: &DataSetId,
+        _dataset: &DatasetId,
     ) -> std::result::Result<Box<dyn MetaData<L, R>>, geoengine_operators::error::Error> {
         todo!()
     }
 }
 
-impl DataSetStorer for PostgresDataSetDb {
+impl DatasetStorer for PostgresDatasetDb {
     type StorageType = i32; // placeholder
 }
 
 #[async_trait]
-impl DataSetStore for PostgresDataSetDb {
-    async fn add_data_set(
+impl DatasetStore for PostgresDatasetDb {
+    async fn add_dataset(
         &mut self,
         _user: UserId,
-        _data_set: Validated<AddDataSet>,
+        _dataset: Validated<AddDataset>,
         _meta_data: i32,
-    ) -> Result<DataSetId> {
+    ) -> Result<DatasetId> {
         todo!()
     }
 
@@ -94,7 +94,7 @@ impl DataSetStore for PostgresDataSetDb {
 }
 
 #[async_trait]
-impl UploadDb for PostgresDataSetDb {
+impl UploadDb for PostgresDatasetDb {
     async fn get_upload(&self, _user: UserId, _upload: UploadId) -> Result<Upload> {
         todo!()
     }

@@ -164,12 +164,12 @@ mod tests {
     };
     use crate::mock::MockFeatureCollectionSource;
     use crate::source::{GdalSource, GdalSourceParameters};
-    use crate::util::gdal::add_ndvi_data_set;
+    use crate::util::gdal::add_ndvi_dataset;
     use chrono::NaiveDate;
     use float_cmp::approx_eq;
     use futures::StreamExt;
     use geoengine_datatypes::collections::{FeatureCollectionInfos, MultiPointCollection};
-    use geoengine_datatypes::dataset::DataSetId;
+    use geoengine_datatypes::dataset::DatasetId;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureDataRef, MultiPoint, SpatialResolution, TimeInterval,
     };
@@ -202,9 +202,9 @@ mod tests {
         assert_eq!(deserialized.params, raster_vector_join.params);
     }
 
-    fn ndvi_source(id: DataSetId) -> Box<dyn RasterOperator> {
+    fn ndvi_source(id: DatasetId) -> Box<dyn RasterOperator> {
         let gdal_source = GdalSource {
-            params: GdalSourceParameters { data_set: id },
+            params: GdalSourceParameters { dataset: id },
         };
 
         gdal_source.boxed()
@@ -236,7 +236,7 @@ mod tests {
         .boxed();
 
         let mut exe_ctc = MockExecutionContext::default();
-        let ndvi_id = add_ndvi_data_set(&mut exe_ctc);
+        let ndvi_id = add_ndvi_dataset(&mut exe_ctc);
 
         let operator = RasterVectorJoin {
             params: RasterVectorJoinParams {
@@ -304,7 +304,7 @@ mod tests {
         .boxed();
 
         let mut exe_ctc = MockExecutionContext::default();
-        let ndvi_id = add_ndvi_data_set(&mut exe_ctc);
+        let ndvi_id = add_ndvi_dataset(&mut exe_ctc);
 
         let operator = RasterVectorJoin {
             params: RasterVectorJoinParams {
