@@ -1,10 +1,10 @@
 use std::{collections::HashMap, convert::TryInto, path::Path};
 
-use crate::datasets::storage::{AddDataSet, DataSetStore};
+use crate::datasets::storage::{AddDataset, DatasetStore};
 use crate::datasets::upload::UploadRootPath;
 use crate::datasets::{
-    listing::DataSetProvider,
-    storage::{CreateDataSet, MetaDataDefinition},
+    listing::DatasetProvider,
+    storage::{CreateDataset, MetaDataDefinition},
     upload::Upload,
 };
 use crate::error;
@@ -12,15 +12,15 @@ use crate::error::Result;
 use crate::handlers::authenticate;
 use crate::users::session::Session;
 use crate::util::user_input::UserInput;
-use crate::{contexts::Context, datasets::storage::AutoCreateDataSet};
+use crate::{contexts::Context, datasets::storage::AutoCreateDataset};
 use crate::{
-    datasets::{listing::DataSetListOptions, upload::UploadDb},
+    datasets::{listing::DatasetListOptions, upload::UploadDb},
     util::IdResponse,
 };
 use gdal::{vector::Layer, Dataset};
 use geoengine_datatypes::{
     collections::VectorDataType,
-    dataset::{DataSetId, InternalDataSetId},
+    dataset::{DatasetId, InternalDatasetId},
     primitives::FeatureDataType,
     spatial_reference::SpatialReference,
 };
@@ -47,11 +47,11 @@ pub(crate) fn list_datasets_handler<C: Context>(
 async fn list_datasets<C: Context>(
     session: Session,
     ctx: C,
-    options: DataSetListOptions,
+    options: DatasetListOptions,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let options = options.validated()?;
     let list = ctx
-        .data_set_db_ref()
+        .dataset_db_ref()
         .await
         .list(session.user.id, options)
         .await?;
@@ -62,7 +62,7 @@ pub(crate) fn get_dataset_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::path!("dataset" / "internal" / Uuid)
-        .map(|id: Uuid| (DataSetId::Internal(InternalDataSetId(id))))
+        .map(|id: Uuid| (DatasetId::Internal(InternalDatasetId(id))))
         .and(warp::get())
         .and(authenticate(ctx.clone()))
         .and(warp::any().map(move || ctx.clone()))
@@ -71,12 +71,12 @@ pub(crate) fn get_dataset_handler<C: Context>(
 
 // TODO: move into handler once async closures are available?
 async fn get_dataset<C: Context>(
-    dataset: DataSetId,
+    dataset: DatasetId,
     session: Session,
     ctx: C,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let dataset = ctx
-        .data_set_db_ref()
+        .dataset_db_ref()
         .await
         .load(session.user.id, &dataset)
         .await?;
@@ -98,10 +98,10 @@ pub(crate) fn create_dataset_handler<C: Context>(
 async fn create_dataset<C: Context>(
     session: Session,
     ctx: C,
-    create: CreateDataSet,
+    create: CreateDataset,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let upload = ctx
-        .data_set_db_ref()
+        .dataset_db_ref()
         .await
         .get_upload(session.user.id, create.upload)
         .await?;
@@ -110,10 +110,10 @@ async fn create_dataset<C: Context>(
 
     adjust_user_path_to_upload_path(&mut definition.meta_data, &upload)?;
 
-    let mut db = ctx.data_set_db_ref_mut().await;
+    let mut db = ctx.dataset_db_ref_mut().await;
     let meta_data = db.wrap_meta_data(definition.meta_data);
     let id = db
-        .add_data_set(
+        .add_dataset(
             session.user.id,
             definition.properties.validated()?,
             meta_data,
@@ -154,10 +154,10 @@ pub(crate) fn auto_create_dataset_handler<C: Context>(
 async fn auto_create_dataset<C: Context>(
     session: Session,
     ctx: C,
-    create: AutoCreateDataSet,
+    create: AutoCreateDataset,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let upload = ctx
-        .data_set_db_ref()
+        .dataset_db_ref()
         .await
         .get_upload(session.user.id, create.upload)
         .await?;
@@ -167,17 +167,17 @@ async fn auto_create_dataset<C: Context>(
     let main_file_path = upload.id.root_path()?.join(&create.main_file);
     let meta_data = auto_detect_dataset(&main_file_path)?;
 
-    let properties = AddDataSet {
+    let properties = AddDataset {
         id: None,
         name: create.dataset_name,
         description: create.dataset_description,
         source_operator: meta_data.source_operator_type().to_owned(),
     };
 
-    let mut db = ctx.data_set_db_ref_mut().await;
+    let mut db = ctx.dataset_db_ref_mut().await;
     let meta_data = db.wrap_meta_data(meta_data);
     let id = db
-        .add_data_set(session.user.id, properties.validated()?, meta_data)
+        .add_dataset(session.user.id, properties.validated()?, meta_data)
         .await?;
 
     Ok(warp::reply::json(&IdResponse::from(id)))
@@ -190,7 +190,7 @@ fn auto_detect_dataset(main_file_path: &Path) -> Result<MetaDataDefinition> {
             layer
         } else {
             // TODO: handle Raster datasets as well
-            return Err(crate::error::Error::DataSetHasNoAutoImportableLayer);
+            return Err(crate::error::Error::DatasetHasNoAutoImportableLayer);
         }
     };
     let vector_type = detect_vector_type(&layer)?;
@@ -233,7 +233,7 @@ fn detect_vector_type(layer: &Layer) -> Result<VectorDataType> {
         .defn()
         .geom_fields()
         .next()
-        .context(error::EmptyDataSetCannotBeImported)?
+        .context(error::EmptyDatasetCannotBeImported)?
         .field_type();
 
     VectorDataType::try_from_ogr_type_code(ogr_type).context(error::DataType)
@@ -294,7 +294,7 @@ mod tests {
 
     use super::*;
     use crate::contexts::InMemoryContext;
-    use crate::datasets::storage::{AddDataSet, DataSetStore};
+    use crate::datasets::storage::{AddDataset, DatasetStore};
     use crate::error::Result;
     use crate::users::user::UserId;
     use crate::util::tests::create_session_helper;
@@ -317,10 +317,10 @@ mod tests {
             columns: Default::default(),
         };
 
-        let ds = AddDataSet {
+        let ds = AddDataset {
             id: None,
-            name: "OgrDataSet".to_string(),
-            description: "My Ogr data set".to_string(),
+            name: "OgrDataset".to_string(),
+            description: "My Ogr dataset".to_string(),
             source_operator: "OgrSource".to_string(),
         };
 
@@ -340,9 +340,9 @@ mod tests {
         };
 
         let id = ctx
-            .data_set_db_ref_mut()
+            .dataset_db_ref_mut()
             .await
-            .add_data_set(UserId::new(), ds.validated()?, Box::new(meta))
+            .add_dataset(UserId::new(), ds.validated()?, Box::new(meta))
             .await?;
 
         let res = warp::test::request()
@@ -374,8 +374,8 @@ mod tests {
                 "id": {
                     "Internal": id.internal().unwrap()
                 },
-                "name": "OgrDataSet",
-                "description": "My Ogr data set",
+                "name": "OgrDataset",
+                "description": "My Ogr dataset",
                 "tags": [],
                 "source_operator": "OgrSource",
                 "result_descriptor": {
@@ -393,7 +393,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn create_data_set() {
+    async fn create_dataset() {
         let ctx = InMemoryContext::default();
 
         let session = create_session_helper(&ctx).await;
@@ -528,10 +528,10 @@ mod tests {
             columns: Default::default(),
         };
 
-        let ds = AddDataSet {
+        let ds = AddDataset {
             id: None,
-            name: "OgrDataSet".to_string(),
-            description: "My Ogr data set".to_string(),
+            name: "OgrDataset".to_string(),
+            description: "My Ogr dataset".to_string(),
             source_operator: "OgrSource".to_string(),
         };
 
@@ -551,9 +551,9 @@ mod tests {
         };
 
         let id = ctx
-            .data_set_db_ref_mut()
+            .dataset_db_ref_mut()
             .await
-            .add_data_set(UserId::new(), ds.validated()?, Box::new(meta))
+            .add_dataset(UserId::new(), ds.validated()?, Box::new(meta))
             .await?;
 
         let res = warp::test::request()
@@ -577,8 +577,8 @@ mod tests {
                 "id": {
                     "Internal": id.internal().unwrap()
                 },
-                "name": "OgrDataSet",
-                "description": "My Ogr data set",
+                "name": "OgrDataset",
+                "description": "My Ogr dataset",
                 "result_descriptor": {
                     "Vector": {
                         "data_type": "Data",

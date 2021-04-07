@@ -1,5 +1,5 @@
 use crate::{
-    datasets::add_from_directory::add_data_sets_from_directory, error::Result,
+    datasets::add_from_directory::add_datasets_from_directory, error::Result,
     util::dataset_defs_dir,
 };
 use crate::{
@@ -11,7 +11,7 @@ use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use super::{Context, Db};
 use crate::contexts::{ExecutionContextImpl, QueryContextImpl};
-use crate::datasets::in_memory::HashMapDataSetDb;
+use crate::datasets::in_memory::HashMapDatasetDb;
 use crate::util::config;
 use geoengine_operators::concurrency::ThreadPool;
 use std::sync::Arc;
@@ -22,7 +22,7 @@ pub struct InMemoryContext {
     user_db: Db<HashMapUserDb>,
     project_db: Db<HashMapProjectDb>,
     workflow_registry: Db<HashMapRegistry>,
-    data_set_db: Db<HashMapDataSetDb>,
+    dataset_db: Db<HashMapDatasetDb>,
     session: Option<Session>,
     thread_pool: Arc<ThreadPool>,
 }
@@ -30,11 +30,11 @@ pub struct InMemoryContext {
 impl InMemoryContext {
     #[allow(clippy::too_many_lines)]
     pub async fn new_with_data() -> Self {
-        let mut db = HashMapDataSetDb::default();
-        add_data_sets_from_directory(&mut db, dataset_defs_dir()).await;
+        let mut db = HashMapDatasetDb::default();
+        add_datasets_from_directory(&mut db, dataset_defs_dir()).await;
 
         InMemoryContext {
-            data_set_db: Arc::new(RwLock::new(db)),
+            dataset_db: Arc::new(RwLock::new(db)),
             ..Default::default()
         }
     }
@@ -45,9 +45,9 @@ impl Context for InMemoryContext {
     type UserDB = HashMapUserDb;
     type ProjectDB = HashMapProjectDb;
     type WorkflowRegistry = HashMapRegistry;
-    type DataSetDB = HashMapDataSetDb;
+    type DatasetDB = HashMapDatasetDb;
     type QueryContext = QueryContextImpl;
-    type ExecutionContext = ExecutionContextImpl<HashMapDataSetDb>;
+    type ExecutionContext = ExecutionContextImpl<HashMapDatasetDb>;
 
     fn user_db(&self) -> Db<Self::UserDB> {
         self.user_db.clone()
@@ -79,14 +79,14 @@ impl Context for InMemoryContext {
         self.workflow_registry.write().await
     }
 
-    fn data_set_db(&self) -> Db<Self::DataSetDB> {
-        self.data_set_db.clone()
+    fn dataset_db(&self) -> Db<Self::DatasetDB> {
+        self.dataset_db.clone()
     }
-    async fn data_set_db_ref(&self) -> RwLockReadGuard<'_, Self::DataSetDB> {
-        self.data_set_db.read().await
+    async fn dataset_db_ref(&self) -> RwLockReadGuard<'_, Self::DatasetDB> {
+        self.dataset_db.read().await
     }
-    async fn data_set_db_ref_mut(&self) -> RwLockWriteGuard<'_, Self::DataSetDB> {
-        self.data_set_db.write().await
+    async fn dataset_db_ref_mut(&self) -> RwLockWriteGuard<'_, Self::DatasetDB> {
+        self.dataset_db.write().await
     }
 
     fn query_context(&self) -> Result<Self::QueryContext> {
@@ -97,8 +97,8 @@ impl Context for InMemoryContext {
     }
 
     fn execution_context(&self, session: &Session) -> Result<Self::ExecutionContext> {
-        Ok(ExecutionContextImpl::<HashMapDataSetDb> {
-            data_set_db: self.data_set_db.clone(),
+        Ok(ExecutionContextImpl::<HashMapDatasetDb> {
+            dataset_db: self.dataset_db.clone(),
             thread_pool: self.thread_pool.clone(),
             user: session.user.id,
         })

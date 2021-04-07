@@ -1,23 +1,23 @@
-use crate::datasets::storage::{AddDataSetProvider, AddMockDataSetProvider, DataSet};
+use crate::datasets::storage::{AddDatasetProvider, AddMockDatasetProvider, Dataset};
 use crate::error;
 use crate::error::Result;
 use crate::users::user::UserId;
-use crate::util::config::{get_config_element, DataSetService};
+use crate::util::config::{get_config_element, DatasetService};
 use crate::util::user_input::{UserInput, Validated};
 use async_trait::async_trait;
-use geoengine_datatypes::dataset::DataSetId;
+use geoengine_datatypes::dataset::DatasetId;
 use geoengine_operators::engine::{
     MetaData, MetaDataProvider, RasterResultDescriptor, ResultDescriptor, TypedResultDescriptor,
     VectorResultDescriptor,
 };
-use geoengine_operators::mock::MockDataSetDataSourceLoadingInfo;
+use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
-pub struct DataSetListing {
-    pub id: DataSetId,
+pub struct DatasetListing {
+    pub id: DatasetId,
     pub name: String,
     pub description: String,
     pub tags: Vec<String>,
@@ -27,7 +27,7 @@ pub struct DataSetListing {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct DataSetListOptions {
+pub struct DatasetListOptions {
     // TODO: permissions
     pub filter: Option<String>,
     pub order: OrderBy,
@@ -35,9 +35,9 @@ pub struct DataSetListOptions {
     pub limit: u32,
 }
 
-impl UserInput for DataSetListOptions {
+impl UserInput for DatasetListOptions {
     fn validate(&self) -> Result<()> {
-        let limit = get_config_element::<DataSetService>()?.list_limit;
+        let limit = get_config_element::<DatasetService>()?.list_limit;
         ensure!(
             self.limit <= limit,
             error::InvalidListLimit {
@@ -66,12 +66,12 @@ pub enum OrderBy {
     NameDesc,
 }
 
-/// Listing of stored data sets
+/// Listing of stored datasets
 #[async_trait]
-pub trait DataSetProvider:
+pub trait DatasetProvider:
     Send
     + Sync
-    + MetaDataProvider<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>
+    + MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>
     + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor>
     + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor>
 {
@@ -79,67 +79,67 @@ pub trait DataSetProvider:
     async fn list(
         &self,
         user: UserId,
-        options: Validated<DataSetListOptions>,
-    ) -> Result<Vec<DataSetListing>>;
+        options: Validated<DatasetListOptions>,
+    ) -> Result<Vec<DatasetListing>>;
 
-    async fn load(&self, user: UserId, dataset: &DataSetId) -> Result<DataSet>;
+    async fn load(&self, user: UserId, dataset: &DatasetId) -> Result<Dataset>;
 }
 
-pub enum TypedDataSetProvider {
-    Mock(MockDataSetProvider), // wcs, ...
+pub enum TypedDatasetProvider {
+    Mock(MockDatasetProvider), // wcs, ...
 }
 
-impl TypedDataSetProvider {
-    pub fn new(input: AddDataSetProvider) -> Self {
+impl TypedDatasetProvider {
+    pub fn new(input: AddDatasetProvider) -> Self {
         match input {
-            AddDataSetProvider::AddMockDataSetProvider(add) => {
-                Self::Mock(MockDataSetProvider::new(add))
+            AddDatasetProvider::AddMockDatasetProvider(add) => {
+                Self::Mock(MockDatasetProvider::new(add))
             }
         }
     }
 
-    pub fn into_box(self) -> Box<dyn DataSetProvider> {
+    pub fn into_box(self) -> Box<dyn DatasetProvider> {
         match self {
-            TypedDataSetProvider::Mock(provider) => Box::new(provider),
+            TypedDatasetProvider::Mock(provider) => Box::new(provider),
         }
     }
 }
 
-pub struct MockDataSetProvider {
-    pub data_sets: Vec<DataSet>,
+pub struct MockDatasetProvider {
+    pub datasets: Vec<Dataset>,
 }
 
-impl MockDataSetProvider {
-    fn new(input: AddMockDataSetProvider) -> Self {
+impl MockDatasetProvider {
+    fn new(input: AddMockDatasetProvider) -> Self {
         Self {
-            data_sets: input.data_sets,
+            datasets: input.datasets,
         }
     }
 }
 
-impl<L, R> MetaDataProvider<L, R> for MockDataSetProvider
+impl<L, R> MetaDataProvider<L, R> for MockDatasetProvider
 where
     R: ResultDescriptor,
 {
     fn meta_data(
         &self,
-        _data_set: &DataSetId,
+        _dataset: &DatasetId,
     ) -> std::result::Result<Box<dyn MetaData<L, R>>, geoengine_operators::error::Error> {
         todo!()
     }
 }
 
 #[async_trait]
-impl DataSetProvider for MockDataSetProvider {
+impl DatasetProvider for MockDatasetProvider {
     async fn list(
         &self,
         _user: UserId,
-        _options: Validated<DataSetListOptions>,
-    ) -> Result<Vec<DataSetListing>> {
+        _options: Validated<DatasetListOptions>,
+    ) -> Result<Vec<DatasetListing>> {
         todo!()
     }
 
-    async fn load(&self, _user: UserId, _dataset: &DataSetId) -> Result<DataSet> {
+    async fn load(&self, _user: UserId, _dataset: &DatasetId) -> Result<Dataset> {
         todo!()
     }
 }
