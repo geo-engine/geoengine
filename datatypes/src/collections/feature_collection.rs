@@ -743,8 +743,6 @@ where
     GeometryIter: std::iter::Iterator<Item = GeometryRef>,
     GeometryRef: crate::primitives::GeometryRef,
 {
-    // unwrap can never throw because reserved columns are filtered previously
-    #![allow(clippy::missing_panics_doc)]
     pub fn new<CollectionType: Geometry + ArrowTyped>(
         collection: &'a FeatureCollection<CollectionType>,
         geometries: GeometryIter,
@@ -756,7 +754,12 @@ where
                 collection
                     .column_names()
                     .filter(|x| !FeatureCollection::<CollectionType>::is_reserved_name(x))
-                    .map(|x| (x.to_string(), collection.data(x).unwrap()))
+                    .map(|x| {
+                        (
+                            x.to_string(),
+                            collection.data(x).expect("reserved columns were filtered"),
+                        )
+                    })
                     .collect(),
             ),
             row_num: 0,
