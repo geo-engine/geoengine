@@ -77,13 +77,12 @@ impl TimeInterval {
             }
         );
         ensure!(
-            start_instant.inner() >= TimeInstance::MIN_VALUE
-                && end_instant.inner() <= TimeInstance::MAX_VALUE,
+            start_instant >= TimeInstance::MIN && end_instant <= TimeInstance::MAX,
             error::TimeIntervalOutOfBounds {
-                start: start_instant.inner(),
-                end: end_instant.inner(),
-                min: TimeInstance::MIN_VALUE,
-                max: TimeInstance::MAX_VALUE,
+                start: start_instant,
+                end: end_instant,
+                min: TimeInstance::MIN,
+                max: TimeInstance::MAX,
             }
         );
 
@@ -527,35 +526,43 @@ mod tests {
         assert_eq!(time_interval.duration_ms(), 315_532_800_000);
 
         assert_eq!(
-            TimeInterval::new(-1, TimeInstance::MAX_VALUE)
+            TimeInterval::new(-1, TimeInstance::MAX)
                 .unwrap()
                 .duration_ms(),
             8_210_298_412_800_000
         );
         assert_eq!(
-            TimeInterval::new(0, TimeInstance::MAX_VALUE)
+            TimeInterval::new(0, TimeInstance::MAX)
                 .unwrap()
                 .duration_ms(),
             8_210_298_412_799_999
         );
 
         assert_eq!(
-            TimeInterval::new(TimeInstance::MIN_VALUE, -1)
+            TimeInterval::new(TimeInstance::MIN, -1)
                 .unwrap()
                 .duration_ms(),
             8_334_632_851_199_999
         );
         assert_eq!(
-            TimeInterval::new(TimeInstance::MIN_VALUE, 0)
+            TimeInterval::new(TimeInstance::MIN, 0)
                 .unwrap()
                 .duration_ms(),
             8_334_632_851_200_000
         );
         assert_eq!(
-            TimeInterval::new(TimeInstance::MIN_VALUE, 1)
+            TimeInterval::new(TimeInstance::MIN, 1)
                 .unwrap()
                 .duration_ms(),
             8_334_632_851_200_001
         );
+    }
+
+    #[test]
+    fn bounds() {
+        let t = TimeInterval::default();
+
+        assert_eq!(t.start(), TimeInstance::MIN);
+        assert_eq!(t.end(), TimeInstance::MAX);
     }
 }

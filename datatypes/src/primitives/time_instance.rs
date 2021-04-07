@@ -13,10 +13,7 @@ use std::ops::Add;
 pub struct TimeInstance(i64);
 
 impl TimeInstance {
-    pub const MIN_VALUE: i64 = -8_334_632_851_200_001 + 1;
-    pub const MAX_VALUE: i64 = 8_210_298_412_800_000 - 1;
-
-    pub fn from_millis(millis: i64) -> Self {
+    pub const fn from_millis(millis: i64) -> Self {
         TimeInstance(millis)
     }
 
@@ -29,20 +26,20 @@ impl TimeInstance {
     }
 
     pub fn as_rfc3339(self) -> String {
-        if self.inner() < TimeInstance::MIN_VALUE {
-            "-262144-01-01T00:00:00+00:00".into()
-        } else if self.inner() > TimeInstance::MAX_VALUE {
-            "+262143-12-31T23:59:59.999+00:00".into()
-        } else {
-            self.as_utc_date_time()
-                .expect("TimeInstance is not valid")
-                .to_rfc3339()
-        }
+        let instance = self.clamp(TimeInstance::MIN, TimeInstance::MAX);
+
+        instance
+            .as_utc_date_time()
+            .expect("TimeInstance is not valid")
+            .to_rfc3339()
     }
 
-    pub fn inner(self) -> i64 {
+    pub const fn inner(self) -> i64 {
         self.0
     }
+
+    pub const MIN: Self = TimeInstance::from_millis(-8_334_632_851_200_001 + 1);
+    pub const MAX: Self = TimeInstance::from_millis(8_210_298_412_800_000 - 1);
 }
 
 impl From<NaiveDateTime> for TimeInstance {

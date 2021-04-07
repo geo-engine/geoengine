@@ -52,16 +52,16 @@ pub enum Error {
 
     #[snafu(display(
         "{} must be larger than {} and {} must be smaller than {}",
-        start,
-        min,
-        end,
-        max
+        start.inner(),
+        min.inner(),
+        end.inner(),
+        max.inner()
     ))]
     TimeIntervalOutOfBounds {
-        start: i64,
-        end: i64,
-        min: i64,
-        max: i64,
+        start: TimeInstance,
+        end: TimeInstance,
+        min: TimeInstance,
+        max: TimeInstance,
     },
 
     #[snafu(display(
