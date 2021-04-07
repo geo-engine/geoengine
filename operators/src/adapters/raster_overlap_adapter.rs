@@ -463,7 +463,11 @@ where
         let idxs: Vec<GridIdx2D> = grid_idx_iter_2d(&output_raster.bounding_box()).collect();
         let coords: Vec<Coordinate2D> = idxs
             .iter()
-            .map(|&i| tile_info.tile_geo_transform().grid_idx_to_coordinate_2d(i))
+            .map(|&i| {
+                tile_info
+                    .tile_geo_transform()
+                    .grid_idx_to_upper_left_coordinate_2d(i)
+            })
             .collect();
 
         let proj = CoordinateProjector::from_known_srs(self.out_srs, self.in_srs)?;

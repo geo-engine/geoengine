@@ -446,6 +446,7 @@ mod tests {
     };
     use geoengine_datatypes::{
         collections::{MultiLineStringCollection, MultiPointCollection, MultiPolygonCollection},
+        operations::image::{Colorizer, RgbaColor, ToPng},
         primitives::{
             BoundingBox2D, Measurement, MultiLineString, MultiPoint, MultiPolygon,
             SpatialResolution, TimeInterval,
@@ -462,6 +463,8 @@ mod tests {
     use crate::mock::MockFeatureCollectionSource;
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;
+
+    use std::convert::TryInto;
 
     use super::*;
 
@@ -757,79 +760,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn raster_ndvi_ident() -> Result<()> {
-        let mut exe_ctx = MockExecutionContext::default();
-        let query_ctx = MockQueryContext::default();
-        let id = add_ndvi_data_set(&mut exe_ctx);
-
-        let output_shape: GridShape2D = [256, 256].into();
-        let output_bounds = BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into());
-        let time_interval = TimeInterval::new_unchecked(1_388_534_400_000, 1_388_534_400_001);
-        // 2014-01-01
-
-        let gdal_op = GdalSource {
-            params: GdalSourceParameters {
-                data_set: id.clone(),
-            },
-        }
-        .boxed();
-
-        let projection = SpatialReference::new(
-            geoengine_datatypes::spatial_reference::SpatialReferenceAuthority::Epsg,
-            4326,
-        );
-
-        let initialized_operator = RasterOperator::boxed(Reprojection {
-            vector_sources: vec![],
-            raster_sources: vec![gdal_op],
-            params: ReprojectionParams {
-                target_spatial_reference: projection, // This test will do a identity reprojhection
-            },
-        })
-        .initialize(&exe_ctx)?;
-
-        let x_query_resolution = output_bounds.size_x() / output_shape.axis_size_x() as f64;
-        let y_query_resolution = output_bounds.size_y() / output_shape.axis_size_y() as f64;
-        let spatial_resolution =
-            SpatialResolution::new_unchecked(x_query_resolution, y_query_resolution);
-
-        let qp = initialized_operator
-            .query_processor()
-            .unwrap()
-            .get_u8()
-            .unwrap();
-
-        let qs = qp
-            .raster_query(
-                QueryRectangle {
-                    bbox: output_bounds,
-                    time_interval,
-                    spatial_resolution,
-                },
-                &query_ctx,
-            )
-            .unwrap();
-
-        let _res = qs
-            .map(Result::unwrap)
-            .collect::<Vec<RasterTile2D<u8>>>()
-            .await;
-
-        // TODO: check against original data
-        //for t in res {
-        //    dbg!(&t.tile_information());
-        //}
-
-        Ok(())
-    }
-
-    #[tokio::test]
     async fn raster_ndvi_3857() -> Result<()> {
         let mut exe_ctx = MockExecutionContext::default();
         let query_ctx = MockQueryContext::default();
         let id = add_ndvi_data_set(&mut exe_ctx);
+        exe_ctx.tiling_specification =
+            TilingSpecification::new((0.0, 0.0).into(), [450, 450].into());
 
-        let output_shape: GridShape2D = [256, 256].into();
+        let output_shape: GridShape2D = [1800, 3600].into();
         let output_bounds = BoundingBox2D::new_unchecked(
             (-20_000_000., -20_000_000.).into(),
             (20_000_000., 20_000_000.).into(),
@@ -853,13 +791,13 @@ mod tests {
             vector_sources: vec![],
             raster_sources: vec![gdal_op],
             params: ReprojectionParams {
-                target_spatial_reference: projection, // This test will do a identity reprojhection
+                target_spatial_reference: projection,
             },
         })
         .initialize(&exe_ctx)?;
 
         let x_query_resolution = output_bounds.size_x() / output_shape.axis_size_x() as f64;
-        let y_query_resolution = output_bounds.size_y() / output_shape.axis_size_y() as f64;
+        let y_query_resolution = output_bounds.size_y() / (output_shape.axis_size_y() * 2) as f64; // *2 to account for the dataset aspect ratio 2:1
         let spatial_resolution =
             SpatialResolution::new_unchecked(x_query_resolution, y_query_resolution);
 
@@ -885,9 +823,45 @@ mod tests {
             .collect::<Vec<RasterTile2D<u8>>>()
             .await;
 
+        let colorizer = Colorizer::linear_gradient(
+            vec![
+                (0.0, RgbaColor::new(0, 0, 0, 255)).try_into().unwrap(),
+                (255.0, RgbaColor::new(255, 255, 255, 255))
+                    .try_into()
+                    .unwrap(),
+            ],
+            RgbaColor::transparent(),
+            RgbaColor::pink(),
+        )
+        .unwrap();
+
         // TODO: check against reference  data
-        for t in res {
+        for (i, t) in res.iter().enumerate() {
             dbg!(&t.tile_information());
+            dbg!(&t.grid_array.shape);
+
+            let (min, max) = t
+                .grid_array
+                .data
+                .iter()
+                .fold((255_u8, 0_u8), |x, &a| (a.min(x.0), a.max(x.1)));
+
+            dbg!(min, max);
+
+            let tile_shape = &t.grid_array.shape;
+
+            let png = t.to_png(
+                tile_shape.axis_size_y() as u32,
+                tile_shape.axis_size_x() as u32,
+                &colorizer,
+            );
+
+            let mut p = std::path::PathBuf::from("/tmp/foo");
+            p.set_file_name(format!("meh_{}.png", i));
+            std::fs::write(p.as_path(), png.unwrap()).expect("Unable to write file");
+            p.set_file_name(format!("meh_{}.pgw", i));
+            let loc_geo = t.tile_geo_transform();
+            std::fs::write(p.as_path(), loc_geo.worldfile_string()).expect("Unable to write file");
         }
 
         Ok(())
