@@ -779,7 +779,7 @@ mod tests {
             no_data_value: Some(0.),
         };
         let replaced = params
-            .replace_time_placeholder("%TIME%", "%f", TimeInstance::from_millis(22))
+            .replace_time_placeholder("%TIME%", "%f", TimeInstance::from_millis_unchecked(22))
             .unwrap();
         assert_eq!(
             replaced.file_path.to_string_lossy(),
@@ -813,7 +813,7 @@ mod tests {
             },
             placeholder: "%TIME%".to_string(),
             time_format: "%f".to_string(),
-            start: 11.into(),
+            start: TimeInstance::from_millis_unchecked(11),
             step: TimeStep {
                 granularity: TimeGranularity::Millis,
                 step: 11,

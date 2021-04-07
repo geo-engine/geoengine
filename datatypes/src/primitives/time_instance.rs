@@ -1,19 +1,35 @@
+use crate::primitives::error;
+use crate::util::Result;
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 #[cfg(feature = "postgres")]
 use postgres_types::private::BytesMut;
 #[cfg(feature = "postgres")]
 use postgres_types::{FromSql, IsNull, ToSql, Type};
 use serde::{Deserialize, Serialize};
+use snafu::ensure;
 #[cfg(feature = "postgres")]
 use snafu::Error;
-use std::ops::Add;
+use std::{convert::TryFrom, ops::Add};
 
 #[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Debug)]
 #[repr(C)]
 pub struct TimeInstance(i64);
 
 impl TimeInstance {
-    pub const fn from_millis(millis: i64) -> Self {
+    pub fn from_millis(millis: i64) -> Result<Self> {
+        ensure!(
+            Self::MIN.inner() <= millis && millis <= Self::MAX.inner(),
+            error::InvalidTimeInstance {
+                min: Self::MIN,
+                max: Self::MAX,
+                is: millis
+            }
+        );
+
+        Ok(TimeInstance(millis))
+    }
+
+    pub const fn from_millis_unchecked(millis: i64) -> Self {
         TimeInstance(millis)
     }
 
@@ -38,24 +54,26 @@ impl TimeInstance {
         self.0
     }
 
-    pub const MIN: Self = TimeInstance::from_millis(-8_334_632_851_200_001 + 1);
-    pub const MAX: Self = TimeInstance::from_millis(8_210_298_412_800_000 - 1);
+    pub const MIN: Self = TimeInstance::from_millis_unchecked(-8_334_632_851_200_001 + 1);
+    pub const MAX: Self = TimeInstance::from_millis_unchecked(8_210_298_412_800_000 - 1);
 }
 
 impl From<NaiveDateTime> for TimeInstance {
     fn from(date_time: NaiveDateTime) -> Self {
-        TimeInstance::from_millis(date_time.timestamp_millis())
+        TimeInstance::from_millis(date_time.timestamp_millis()).expect("valid for chrono datetimes")
     }
 }
 
 impl From<DateTime<Utc>> for TimeInstance {
     fn from(date_time: DateTime<Utc>) -> Self {
-        TimeInstance::from_millis(date_time.timestamp_millis())
+        TimeInstance::from_millis(date_time.timestamp_millis()).expect("valid for chrono datetimes")
     }
 }
 
-impl From<i64> for TimeInstance {
-    fn from(milliseconds: i64) -> Self {
+impl TryFrom<i64> for TimeInstance {
+    type Error = crate::error::Error;
+
+    fn try_from(milliseconds: i64) -> Result<Self> {
         TimeInstance::from_millis(milliseconds)
     }
 }
@@ -106,6 +124,6 @@ impl Add<i64> for TimeInstance {
     type Output = Self;
 
     fn add(self, rhs: i64) -> Self::Output {
-        (self.0 + rhs).into()
+        TimeInstance::from_millis_unchecked(self.0 + rhs)
     }
 }

@@ -1,4 +1,4 @@
-use std::{cmp::max, ops::Add};
+use std::{cmp::max, convert::TryInto, ops::Add};
 
 use chrono::{Datelike, Duration, NaiveDate};
 use error::Error::NoDateTimeValid;
@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "postgres")]
 use postgres_types::{FromSql, ToSql};
 
-use crate::error;
+use crate::error::{self, Error};
 use crate::primitives::TimeInstance;
 use crate::util::Result;
 
@@ -150,11 +150,14 @@ impl TimeStep {
     /// # Errors
     /// This method uses chrono and therefore fails if a `TimeInstance` is outside chronos valid date range.
     ///
-    pub fn snap_relative(
-        self,
-        reference: TimeInstance,
-        time_to_snap: TimeInstance,
-    ) -> Result<TimeInstance> {
+    pub fn snap_relative<T>(self, reference: T, time_to_snap: T) -> Result<TimeInstance>
+    where
+        T: TryInto<TimeInstance>,
+        Error: From<T::Error>,
+    {
+        let reference = reference.try_into()?;
+        let time_to_snap = time_to_snap.try_into()?;
+
         let ref_date_time = reference.as_naive_date_time().ok_or(NoDateTimeValid {
             time_instance: reference,
         })?;
@@ -955,10 +958,8 @@ mod tests {
 
         // snap with reference 2014-01-01T00:00:00 and time_to_snap 1970-01-01T00:00:00
         assert_eq!(
-            time_snapper
-                .snap_relative(1_388_534_400_000.into(), 0.into())
-                .unwrap(),
-            0.into()
+            time_snapper.snap_relative(1_388_534_400_000, 0).unwrap(),
+            TimeInstance::from_millis_unchecked(0)
         )
     }
 

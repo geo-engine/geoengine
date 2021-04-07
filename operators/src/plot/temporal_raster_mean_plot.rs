@@ -162,7 +162,7 @@ impl<P: Pixel> MeanRasterPixelValuesOverTimeQueryProcessor<P> {
     ) -> TimeInstance {
         match time_position {
             MeanRasterPixelValuesOverTimePosition::Start => time_interval.start(),
-            MeanRasterPixelValuesOverTimePosition::Center => TimeInstance::from_millis(
+            MeanRasterPixelValuesOverTimePosition::Center => TimeInstance::from_millis_unchecked(
                 average_floor(time_interval.start().inner(), time_interval.end().inner()),
             ),
             MeanRasterPixelValuesOverTimePosition::End => time_interval.end(),

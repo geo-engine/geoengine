@@ -9,8 +9,8 @@ use arrow::error::ArrowError;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
-use std::cmp::Ordering;
 use std::fmt::{Debug, Display};
+use std::{cmp::Ordering, convert::TryInto};
 
 /// Stores time intervals in ms in close-open semantic [start, end)
 #[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
@@ -63,11 +63,13 @@ impl TimeInterval {
     ///
     pub fn new<A, B>(start: A, end: B) -> Result<Self>
     where
-        A: Into<TimeInstance>,
-        B: Into<TimeInstance>,
+        A: TryInto<TimeInstance>,
+        B: TryInto<TimeInstance>,
+        error::Error: From<A::Error>,
+        error::Error: From<B::Error>,
     {
-        let start_instant = start.into();
-        let end_instant = end.into();
+        let start_instant = start.try_into()?;
+        let end_instant = end.try_into()?;
 
         ensure!(
             start_instant <= end_instant,
@@ -117,14 +119,19 @@ impl TimeInterval {
     /// assert_eq!(time_unchecked, TimeInterval::new(0, 1).unwrap());
     /// ```
     ///
+    /// # Panics
+    /// Panics if start and end are not compatible to [chrono].
+    ///
     pub fn new_unchecked<A, B>(start: A, end: B) -> Self
     where
-        A: Into<TimeInstance>,
-        B: Into<TimeInstance>,
+        A: TryInto<TimeInstance>,
+        B: TryInto<TimeInstance>,
+        A::Error: Debug,
+        B::Error: Debug,
     {
         Self {
-            start: start.into(),
-            end: end.into(),
+            start: start.try_into().unwrap(),
+            end: end.try_into().unwrap(),
         }
     }
 
@@ -492,8 +499,11 @@ mod tests {
             })
         );
         assert_eq!(
-            TimeInterval::new_unchecked(min_visualizable_value - 1, max_visualizable_value + 1)
-                .to_geo_json_event(),
+            TimeInterval::new_unchecked(
+                TimeInstance::from_millis_unchecked(min_visualizable_value - 1),
+                TimeInstance::from_millis_unchecked(max_visualizable_value + 1)
+            )
+            .to_geo_json_event(),
             serde_json::json!({
                 "start": "-262144-01-01T00:00:00+00:00",
                 "end": "+262143-12-31T23:59:59.999+00:00",
@@ -501,7 +511,11 @@ mod tests {
             })
         );
         assert_eq!(
-            TimeInterval::new_unchecked(i64::MIN, i64::MAX).to_geo_json_event(),
+            TimeInterval::new_unchecked(
+                TimeInstance::from_millis_unchecked(i64::MIN),
+                TimeInstance::from_millis_unchecked(i64::MAX)
+            )
+            .to_geo_json_event(),
             serde_json::json!({
                 "start": "-262144-01-01T00:00:00+00:00",
                 "end": "+262143-12-31T23:59:59.999+00:00",
