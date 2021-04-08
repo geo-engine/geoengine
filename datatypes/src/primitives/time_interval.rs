@@ -37,8 +37,8 @@ impl Default for TimeInterval {
     /// ```
     fn default() -> Self {
         Self {
-            start: chrono::MIN_DATETIME.into(),
-            end: chrono::MAX_DATETIME.into(),
+            start: TimeInstance::MIN,
+            end: TimeInstance::MAX,
         }
     }
 }

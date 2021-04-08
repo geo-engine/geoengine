@@ -127,3 +127,14 @@ impl Add<i64> for TimeInstance {
         TimeInstance::from_millis_unchecked(self.0 + rhs)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bounds_wrt_chrono() {
+        assert_eq!(TimeInstance::MIN, TimeInstance::from(chrono::MIN_DATETIME));
+        assert_eq!(TimeInstance::MAX, TimeInstance::from(chrono::MAX_DATETIME));
+    }
+}
