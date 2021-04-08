@@ -58,6 +58,7 @@ impl GeoTransform {
     }
 
     /// Transforms a grid coordinate (row, column) ~ (y, x) into a SRS coordinate (x,y)
+    /// The resulting coordinate is the upper left coordinate of the pixel
     /// See GDAL documentation for more details (including the two ignored parameters): <https://gdal.org/user/raster_data_model.html>
     ///
     /// # Examples
@@ -67,11 +68,11 @@ impl GeoTransform {
     /// use geoengine_datatypes::primitives::{Coordinate2D};
     ///
     /// let geo_transform = GeoTransform::new_with_coordinate_x_y(0.0, 1.0, 0.0, -1.0);
-    /// assert_eq!(geo_transform.grid_idx_to_coordinate_2d([0, 0].into()), (0.0, 0.0).into())
+    /// assert_eq!(geo_transform.grid_idx_to_upper_left_coordinate_2d([0, 0].into()), (0.0, 0.0).into())
     /// ```
     ///
     #[inline]
-    pub fn grid_idx_to_coordinate_2d(&self, grid_index: GridIdx2D) -> Coordinate2D {
+    pub fn grid_idx_to_upper_left_coordinate_2d(&self, grid_index: GridIdx2D) -> Coordinate2D {
         let GridIdx([.., grid_index_y, grid_index_x]) = grid_index;
         let coord_x = self.origin_coordinate.x + (grid_index_x as f64) * self.x_pixel_size;
         let coord_y = self.origin_coordinate.y + (grid_index_y as f64) * self.y_pixel_size;
@@ -103,6 +104,19 @@ impl GeoTransform {
         let start = self.coordinate_to_grid_idx_2d(bounding_box.upper_left());
         let end = self.coordinate_to_grid_idx_2d(bounding_box.lower_right());
         GridBoundingBox2D::new_unchecked(start, end)
+    }
+
+    /// create the worldfile content for this `GeoTransform`
+    pub fn worldfile_string(&self) -> String {
+        format!(
+            "{}\n{}\n{}\n{}\n{}\n{}",
+            self.x_pixel_size,
+            0.,
+            0.,
+            self.y_pixel_size,
+            self.origin_coordinate.x + (self.x_pixel_size / 2.),
+            self.origin_coordinate.y - (self.y_pixel_size / 2.)
+        )
     }
 }
 
@@ -167,15 +181,15 @@ mod tests {
     fn geo_transform_grid_2d_to_coordinate_2d() {
         let geo_transform = GeoTransform::new_with_coordinate_x_y(5.0, 1.0, 5.0, -1.0);
         assert_eq!(
-            geo_transform.grid_idx_to_coordinate_2d(GridIdx2D::new([0, 0])),
+            geo_transform.grid_idx_to_upper_left_coordinate_2d(GridIdx2D::new([0, 0])),
             (5.0, 5.0).into()
         );
         assert_eq!(
-            geo_transform.grid_idx_to_coordinate_2d(GridIdx2D::new([1, 1])),
+            geo_transform.grid_idx_to_upper_left_coordinate_2d(GridIdx2D::new([1, 1])),
             (6.0, 4.0).into()
         );
         assert_eq!(
-            geo_transform.grid_idx_to_coordinate_2d(GridIdx2D::new([2, 2])),
+            geo_transform.grid_idx_to_upper_left_coordinate_2d(GridIdx2D::new([2, 2])),
             (7.0, 3.0).into()
         );
     }

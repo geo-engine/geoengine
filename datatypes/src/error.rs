@@ -167,6 +167,15 @@ pub enum Error {
         time_instance: TimeInstance,
     },
 
+    #[snafu(display(
+        "The supplied spatial bounds are empty: {} {}",
+        lower_left_coordinate,
+        upper_right_coordinate
+    ))]
+    EmptySpatialBounds {
+        lower_left_coordinate: Coordinate2D,
+        upper_right_coordinate: Coordinate2D,
+    },
     #[snafu(display("GdalError: {}", source))]
     Gdal {
         source: gdal::errors::GdalError,

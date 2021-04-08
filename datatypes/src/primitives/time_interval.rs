@@ -1,7 +1,7 @@
-use crate::error;
 use crate::primitives::TimeInstance;
 use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::Result;
+use crate::{error, util::ranges::value_in_range};
 use arrow::array::{Array, ArrayBuilder, BooleanArray};
 use arrow::datatypes::{DataType, Field};
 use arrow::error::ArrowError;
@@ -188,7 +188,9 @@ impl TimeInterval {
     /// ```
     ///
     pub fn intersects(&self, other: &Self) -> bool {
-        self.start < other.end && self.end > other.start
+        other == self
+            || value_in_range(self.start, other.start, other.end)
+            || value_in_range(other.start, self.start, self.end)
     }
 
     /// Unites this interval with another one.
@@ -530,5 +532,69 @@ mod tests {
             TimeInterval::new(i64::MIN, 1).unwrap().duration_ms(),
             9_223_372_036_854_775_809
         );
+    }
+
+    #[test]
+    fn intersects_same() {
+        let a = TimeInterval::new(2, 4).unwrap();
+        let b = TimeInterval::new(2, 4).unwrap();
+
+        assert!(a.intersects(&b))
+    }
+
+    #[test]
+    fn intersects_before() {
+        let a = TimeInterval::new(1, 2).unwrap();
+        let b = TimeInterval::new(2, 3).unwrap();
+
+        assert!(!a.intersects(&b))
+    }
+
+    #[test]
+    fn intersects_overlap_left() {
+        let a = TimeInterval::new(1, 3).unwrap();
+        let b = TimeInterval::new(2, 4).unwrap();
+
+        assert!(a.intersects(&b))
+    }
+
+    #[test]
+    fn intersects_inside() {
+        let a = TimeInterval::new(3, 4).unwrap();
+        let b = TimeInterval::new(2, 4).unwrap();
+
+        assert!(a.intersects(&b))
+    }
+
+    #[test]
+    fn intersects_inside_instance_a() {
+        let a = TimeInterval::new_instant(3);
+        let b = TimeInterval::new(2, 4).unwrap();
+
+        assert!(a.intersects(&b))
+    }
+
+    #[test]
+    fn intersects_inside_instance_b() {
+        let a = TimeInterval::new_instant(3);
+        let b = TimeInterval::new(2, 4).unwrap();
+
+        assert!(b.intersects(&a))
+    }
+
+    #[test]
+    fn intersects_overlap_right() {
+        let a = TimeInterval::new(1, 3).unwrap();
+        let b = TimeInterval::new(2, 4).unwrap();
+
+        assert!(b.intersects(&a))
+    }
+
+    #[test]
+    fn intersects_after() {
+        let a = TimeInterval::new(1, 2).unwrap();
+        let b = TimeInterval::new(2, 3).unwrap();
+
+        assert!(!b.intersects(&a))
     }
 }
