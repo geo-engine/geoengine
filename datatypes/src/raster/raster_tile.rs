@@ -127,7 +127,7 @@ where
 
         let tile_upper_left_coord = self
             .global_geo_transform
-            .grid_idx_to_coordinate_2d(global_upper_left_idx);
+            .grid_idx_to_upper_left_coordinate_2d(global_upper_left_idx);
 
         GeoTransform::new(
             tile_upper_left_coord,
@@ -172,7 +172,7 @@ where
         self.grid_array.inner_ref()
     }
     fn geo_transform(&self) -> GeoTransform {
-        self.tile_information().global_geo_transform
+        self.global_geo_transform
     }
 }
 

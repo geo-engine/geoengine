@@ -1,6 +1,7 @@
 use crate::collections::{
-    FeatureCollection, FeatureCollectionInfos, FeatureCollectionRowBuilder,
-    GeoFeatureCollectionRowBuilder, GeometryCollection, GeometryRandomAccess, IntoGeometryIterator,
+    FeatureCollection, FeatureCollectionInfos, FeatureCollectionIterator, FeatureCollectionRow,
+    FeatureCollectionRowBuilder, GeoFeatureCollectionRowBuilder, GeometryCollection,
+    GeometryRandomAccess, IntoGeometryIterator,
 };
 use crate::primitives::{Coordinate2D, MultiLineString, MultiLineStringAccess, MultiLineStringRef};
 use crate::util::arrow::{downcast_array, ArrowTyped};
@@ -91,6 +92,15 @@ impl<'l> IntoGeometryIterator<'l> for MultiLineStringCollection {
         );
 
         Self::GeometryIterator::new(geometry_column, self.len())
+    }
+}
+
+impl<'a> IntoIterator for &'a MultiLineStringCollection {
+    type Item = FeatureCollectionRow<'a, MultiLineStringRef<'a>>;
+    type IntoIter = FeatureCollectionIterator<'a, MultiLineStringIterator<'a>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        FeatureCollectionIterator::new::<MultiLineString>(self, self.geometries())
     }
 }
 

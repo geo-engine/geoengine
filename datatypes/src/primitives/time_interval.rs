@@ -1,7 +1,7 @@
-use crate::error;
 use crate::primitives::TimeInstance;
 use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::Result;
+use crate::{error, util::ranges::value_in_range};
 use arrow::array::{Array, ArrayBuilder, BooleanArray};
 use arrow::datatypes::{DataType, Field};
 use arrow::error::ArrowError;
@@ -96,15 +96,16 @@ impl TimeInterval {
 
     /// Creates a new time interval from a single input that implements `Into<TimeInstance>`.
     /// After instanciation, start and end are equal.
-    pub fn new_instant<A>(start_and_end: A) -> Self
+    pub fn new_instant<A>(start_and_end: A) -> Result<Self>
     where
-        A: Into<TimeInstance>,
+        A: TryInto<TimeInstance>,
+        error::Error: From<A::Error>,
     {
-        let start_and_end = start_and_end.into();
-        Self {
+        let start_and_end = start_and_end.try_into()?;
+        Ok(Self {
             start: start_and_end,
             end: start_and_end,
-        }
+        })
     }
 
     /// Creates a new time interval without bound checks from inputs implementing Into<TimeInstance>
@@ -208,7 +209,9 @@ impl TimeInterval {
     /// ```
     ///
     pub fn intersects(&self, other: &Self) -> bool {
-        self.start < other.end && self.end > other.start
+        other == self
+            || value_in_range(self.start, other.start, other.end)
+            || value_in_range(other.start, self.start, self.end)
     }
 
     /// Unites this interval with another one.
@@ -578,5 +581,69 @@ mod tests {
 
         assert_eq!(t.start(), TimeInstance::MIN);
         assert_eq!(t.end(), TimeInstance::MAX);
+    }
+
+    #[test]
+    fn intersects_same() {
+        let a = TimeInterval::new(2, 4).unwrap();
+        let b = TimeInterval::new(2, 4).unwrap();
+
+        assert!(a.intersects(&b))
+    }
+
+    #[test]
+    fn intersects_before() {
+        let a = TimeInterval::new(1, 2).unwrap();
+        let b = TimeInterval::new(2, 3).unwrap();
+
+        assert!(!a.intersects(&b))
+    }
+
+    #[test]
+    fn intersects_overlap_left() {
+        let a = TimeInterval::new(1, 3).unwrap();
+        let b = TimeInterval::new(2, 4).unwrap();
+
+        assert!(a.intersects(&b))
+    }
+
+    #[test]
+    fn intersects_inside() {
+        let a = TimeInterval::new(3, 4).unwrap();
+        let b = TimeInterval::new(2, 4).unwrap();
+
+        assert!(a.intersects(&b))
+    }
+
+    #[test]
+    fn intersects_inside_instance_a() {
+        let a = TimeInterval::new_instant(3).unwrap();
+        let b = TimeInterval::new(2, 4).unwrap();
+
+        assert!(a.intersects(&b))
+    }
+
+    #[test]
+    fn intersects_inside_instance_b() {
+        let a = TimeInterval::new_instant(3).unwrap();
+        let b = TimeInterval::new(2, 4).unwrap();
+
+        assert!(b.intersects(&a))
+    }
+
+    #[test]
+    fn intersects_overlap_right() {
+        let a = TimeInterval::new(1, 3).unwrap();
+        let b = TimeInterval::new(2, 4).unwrap();
+
+        assert!(b.intersects(&a))
+    }
+
+    #[test]
+    fn intersects_after() {
+        let a = TimeInterval::new(1, 2).unwrap();
+        let b = TimeInterval::new(2, 3).unwrap();
+
+        assert!(!b.intersects(&a))
     }
 }

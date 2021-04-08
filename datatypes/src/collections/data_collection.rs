@@ -1,4 +1,7 @@
-use crate::collections::{FeatureCollection, FeatureCollectionInfos, IntoGeometryOptionsIterator};
+use crate::collections::{
+    FeatureCollection, FeatureCollectionInfos, FeatureCollectionIterator, FeatureCollectionRow,
+    IntoGeometryOptionsIterator,
+};
 use crate::primitives::NoGeometry;
 
 /// This collection contains temporal data without geographical features.
@@ -10,6 +13,15 @@ impl<'i> IntoGeometryOptionsIterator<'i> for DataCollection {
 
     fn geometry_options(&'i self) -> Self::GeometryOptionIterator {
         std::iter::repeat(None).take(self.len())
+    }
+}
+
+impl<'a> IntoIterator for &'a DataCollection {
+    type Item = FeatureCollectionRow<'a, NoGeometry>;
+    type IntoIter = FeatureCollectionIterator<'a, std::iter::Repeat<NoGeometry>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        FeatureCollectionIterator::new::<NoGeometry>(self, std::iter::repeat(NoGeometry))
     }
 }
 
@@ -183,6 +195,55 @@ mod tests {
         );
 
         assert!(collection.rename_column("foo", "bar").is_err());
+    }
+
+    #[test]
+    fn iterator() {
+        let collection = DataCollection::from_data(
+            vec![],
+            vec![TimeInterval::default(); 3],
+            [
+                ("foo".to_string(), FeatureData::Decimal(vec![1, 2, 3])),
+                (
+                    "bar".to_string(),
+                    FeatureData::Text(vec!["a".to_string(), "b".to_string(), "c".to_string()]),
+                ),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+        )
+        .unwrap();
+        let mut iter = (&collection).into_iter();
+
+        let row = iter.next().unwrap();
+        assert_eq!(NoGeometry, row.geometry);
+        assert_eq!(TimeInterval::default(), row.time_interval);
+        assert_eq!(Some(FeatureDataValue::Decimal(1)), row.get("foo"));
+        assert_eq!(
+            Some(FeatureDataValue::NullableText(Some("a".to_string()))),
+            row.get("bar")
+        );
+
+        let row = iter.next().unwrap();
+        assert_eq!(NoGeometry, row.geometry);
+        assert_eq!(TimeInterval::default(), row.time_interval);
+        assert_eq!(Some(FeatureDataValue::Decimal(2)), row.get("foo"));
+        assert_eq!(
+            Some(FeatureDataValue::NullableText(Some("b".to_string()))),
+            row.get("bar")
+        );
+
+        let row = iter.next().unwrap();
+        assert_eq!(NoGeometry, row.geometry);
+        assert_eq!(TimeInterval::default(), row.time_interval);
+        assert_eq!(Some(FeatureDataValue::Decimal(3)), row.get("foo"));
+        assert_eq!(
+            Some(FeatureDataValue::NullableText(Some("c".to_string()))),
+            row.get("bar")
+        );
+
+        assert!(iter.next().is_none());
     }
 
     trait IntoSortedVec: Iterator {

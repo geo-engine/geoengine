@@ -6,7 +6,7 @@ use crate::error;
 use crate::util::Result;
 
 use super::{
-    BoundedGrid, GridBoundingBox, GridBounds, GridContains, GridIdx, GridIndexAccess,
+    BoundedGrid, GridBoundingBox, GridBounds, GridContains, GridIdx, GridIdx2D, GridIndexAccess,
     GridIndexAccessMut, GridSize, GridSpaceToLinearSpace,
 };
 
@@ -228,6 +228,17 @@ impl GridBounds for GridShape3D {
         let [z_size, y_size, x_size] = self.shape_array;
         GridIdx([z_size as isize, y_size as isize, x_size as isize]) - 1
     }
+}
+
+/// Method to generate an `Iterator` over all `GridIdx2D` in `GridBounds`
+pub fn grid_idx_iter_2d<B>(bounds: &B) -> impl Iterator<Item = GridIdx2D>
+where
+    B: GridBounds<IndexArray = [isize; 2]>,
+{
+    let GridIdx([y_s, x_s]) = bounds.min_index();
+    let GridIdx([y_e, x_e]) = bounds.max_index();
+
+    (y_s..=y_e).flat_map(move |y| (x_s..=x_e).map(move |x| [y, x].into()))
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]

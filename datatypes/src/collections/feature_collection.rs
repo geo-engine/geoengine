@@ -16,6 +16,7 @@ use std::convert::{TryFrom, TryInto};
 use std::marker::PhantomData;
 use std::mem;
 use std::ops::{Bound, RangeBounds};
+use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::primitives::{
@@ -711,6 +712,80 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next()
+    }
+}
+
+#[derive(Debug)]
+pub struct FeatureCollectionRow<'a, GeometryRef> {
+    pub geometry: GeometryRef,
+    pub time_interval: TimeInterval,
+    data: Rc<HashMap<String, FeatureDataRef<'a>>>,
+    row_num: usize,
+}
+
+impl<'a, GeometryRef> FeatureCollectionRow<'a, GeometryRef> {
+    pub fn get(&self, column_name: &str) -> Option<FeatureDataValue> {
+        self.data
+            .get(column_name)
+            .map(|col| col.get_unchecked(self.row_num))
+    }
+}
+
+pub struct FeatureCollectionIterator<'a, GeometryIter> {
+    geometries: GeometryIter,
+    time_intervals: std::slice::Iter<'a, TimeInterval>,
+    data: Rc<HashMap<String, FeatureDataRef<'a>>>,
+    row_num: usize,
+}
+
+impl<'a, GeometryIter, GeometryRef> FeatureCollectionIterator<'a, GeometryIter>
+where
+    GeometryIter: std::iter::Iterator<Item = GeometryRef>,
+    GeometryRef: crate::primitives::GeometryRef,
+{
+    pub fn new<CollectionType: Geometry + ArrowTyped>(
+        collection: &'a FeatureCollection<CollectionType>,
+        geometries: GeometryIter,
+    ) -> Self {
+        FeatureCollectionIterator {
+            geometries,
+            time_intervals: collection.time_intervals().iter(),
+            data: Rc::new(
+                collection
+                    .column_names()
+                    .filter(|x| !FeatureCollection::<CollectionType>::is_reserved_name(x))
+                    .map(|x| {
+                        (
+                            x.to_string(),
+                            collection.data(x).expect("reserved columns were filtered"),
+                        )
+                    })
+                    .collect(),
+            ),
+            row_num: 0,
+        }
+    }
+}
+
+impl<'a, GeometryIter, GeometryRef> Iterator for FeatureCollectionIterator<'a, GeometryIter>
+where
+    GeometryIter: std::iter::Iterator<Item = GeometryRef>,
+    GeometryRef: crate::primitives::GeometryRef,
+{
+    type Item = FeatureCollectionRow<'a, GeometryRef>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let res = self
+            .time_intervals
+            .next()
+            .map(|time_interval| FeatureCollectionRow {
+                geometry: self.geometries.next().unwrap(),
+                time_interval: *time_interval,
+                data: Rc::clone(&self.data),
+                row_num: self.row_num,
+            });
+        self.row_num += 1;
+        res
     }
 }
 
