@@ -495,15 +495,15 @@ where
         match time_format {
             OgrSourceTimeFormat::Iso => Box::new(move |date: &str| {
                 let date_time = DateTime::parse_from_rfc3339(date)?;
-                Ok(date_time.timestamp_millis().into())
+                Ok(date_time.timestamp_millis().try_into()?)
             }),
             OgrSourceTimeFormat::Custom { custom_format } => Box::new(move |date: &str| {
                 let date_time = DateTime::parse_from_str(date, &custom_format)?;
-                Ok(date_time.timestamp_millis().into())
+                Ok(date_time.timestamp_millis().try_into()?)
             }),
             OgrSourceTimeFormat::Seconds => Box::new(move |date: &str| {
                 let date_time = DateTime::parse_from_str(date, "%C")?;
-                Ok(date_time.timestamp_millis().into())
+                Ok(date_time.timestamp_millis().try_into()?)
             }),
         }
     }

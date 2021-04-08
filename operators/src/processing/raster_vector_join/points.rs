@@ -1,11 +1,14 @@
 use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
 
-use geoengine_datatypes::collections::{
-    FeatureCollectionInfos, FeatureCollectionModifications, GeometryRandomAccess,
-    MultiPointCollection,
-};
 use geoengine_datatypes::raster::{GridIndexAccess, Pixel, RasterDataType};
+use geoengine_datatypes::{
+    collections::{
+        FeatureCollectionInfos, FeatureCollectionModifications, GeometryRandomAccess,
+        MultiPointCollection,
+    },
+    raster::Raster,
+};
 
 use crate::engine::{
     QueryContext, QueryProcessor, QueryRectangle, RasterQueryProcessor, TypedRasterQueryProcessor,
@@ -80,11 +83,20 @@ impl RasterPointJoinProcessor {
                         // try to get the pixel if the coordinate is within the current tile
                         if let Ok(pixel) = raster.get_at_grid_index(grid_idx) {
                             // finally, attach value to feature
-                            aggregator.add_value(
-                                feature_index,
-                                pixel,
-                                time_span.time_interval.duration_ms() as u64,
-                            );
+
+                            let is_no_data = raster
+                                .no_data_value()
+                                .map_or(false, |no_data| pixel == no_data);
+
+                            if is_no_data {
+                                aggregator.add_null(feature_index);
+                            } else {
+                                aggregator.add_value(
+                                    feature_index,
+                                    pixel,
+                                    time_span.time_interval.duration_ms() as u64,
+                                );
+                            }
                         }
                     }
                 }

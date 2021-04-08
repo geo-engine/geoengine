@@ -408,7 +408,7 @@ where
         Ok(QueryRectangle {
             bbox: tile_info.spatial_bounds(),
             spatial_resolution: query_rect.spatial_resolution,
-            time_interval: TimeInterval::new_instant(start_time),
+            time_interval: TimeInterval::new_instant(start_time)?,
         })
     }
 
@@ -500,7 +500,7 @@ where
                 .expect("should not be empty")
                 .reproject(&proj)?,
             spatial_resolution: self.in_spatial_res,
-            time_interval: TimeInterval::new_instant(start_time),
+            time_interval: TimeInterval::new_instant(start_time)?,
         })
     }
 

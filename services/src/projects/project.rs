@@ -1,3 +1,5 @@
+use std::{convert::TryInto, fmt::Debug};
+
 use crate::error::{Error, Result};
 use crate::users::user::UserId;
 use crate::util::config::ProjectService;
@@ -138,8 +140,10 @@ impl STRectangle {
         time_stop: B,
     ) -> Result<Self>
     where
-        A: Into<TimeInstance>,
-        B: Into<TimeInstance>,
+        A: TryInto<TimeInstance>,
+        B: TryInto<TimeInstance>,
+        geoengine_datatypes::error::Error: From<A::Error>,
+        geoengine_datatypes::error::Error: From<B::Error>,
         S: Into<SpatialReferenceOption>,
     {
         Ok(Self {
@@ -163,8 +167,10 @@ impl STRectangle {
         time_stop: B,
     ) -> Self
     where
-        A: Into<TimeInstance>,
-        B: Into<TimeInstance>,
+        A: TryInto<TimeInstance>,
+        B: TryInto<TimeInstance>,
+        A::Error: Debug,
+        B::Error: Debug,
         S: Into<SpatialReferenceOption>,
     {
         Self {

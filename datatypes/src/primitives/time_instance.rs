@@ -1,22 +1,35 @@
+use crate::primitives::error;
+use crate::util::Result;
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 #[cfg(feature = "postgres")]
 use postgres_types::private::BytesMut;
 #[cfg(feature = "postgres")]
 use postgres_types::{FromSql, IsNull, ToSql, Type};
 use serde::{Deserialize, Serialize};
+use snafu::ensure;
 #[cfg(feature = "postgres")]
 use snafu::Error;
-use std::ops::Add;
+use std::{convert::TryFrom, ops::Add};
 
 #[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Debug)]
 #[repr(C)]
 pub struct TimeInstance(i64);
 
 impl TimeInstance {
-    pub const MIN_VISUALIZABLE_VALUE: i64 = -8_334_632_851_200_001 + 1;
-    pub const MAX_VISUALIZABLE_VALUE: i64 = 8_210_298_412_800_000 - 1;
+    pub fn from_millis(millis: i64) -> Result<Self> {
+        ensure!(
+            Self::MIN.inner() <= millis && millis <= Self::MAX.inner(),
+            error::InvalidTimeInstance {
+                min: Self::MIN,
+                max: Self::MAX,
+                is: millis
+            }
+        );
 
-    pub fn from_millis(millis: i64) -> Self {
+        Ok(TimeInstance(millis))
+    }
+
+    pub const fn from_millis_unchecked(millis: i64) -> Self {
         TimeInstance(millis)
     }
 
@@ -29,36 +42,38 @@ impl TimeInstance {
     }
 
     pub fn as_rfc3339(self) -> String {
-        if self.inner() < TimeInstance::MIN_VISUALIZABLE_VALUE {
-            "-262144-01-01T00:00:00+00:00".into()
-        } else if self.inner() > TimeInstance::MAX_VISUALIZABLE_VALUE {
-            "+262143-12-31T23:59:59.999+00:00".into()
-        } else {
-            self.as_utc_date_time()
-                .expect("TimeInstance is not valid")
-                .to_rfc3339()
-        }
+        let instance = self.clamp(TimeInstance::MIN, TimeInstance::MAX);
+
+        instance
+            .as_utc_date_time()
+            .expect("TimeInstance is not valid")
+            .to_rfc3339()
     }
 
-    pub fn inner(self) -> i64 {
+    pub const fn inner(self) -> i64 {
         self.0
     }
+
+    pub const MIN: Self = TimeInstance::from_millis_unchecked(-8_334_632_851_200_001 + 1);
+    pub const MAX: Self = TimeInstance::from_millis_unchecked(8_210_298_412_800_000 - 1);
 }
 
 impl From<NaiveDateTime> for TimeInstance {
     fn from(date_time: NaiveDateTime) -> Self {
-        TimeInstance::from_millis(date_time.timestamp_millis())
+        TimeInstance::from_millis(date_time.timestamp_millis()).expect("valid for chrono datetimes")
     }
 }
 
 impl From<DateTime<Utc>> for TimeInstance {
     fn from(date_time: DateTime<Utc>) -> Self {
-        TimeInstance::from_millis(date_time.timestamp_millis())
+        TimeInstance::from_millis(date_time.timestamp_millis()).expect("valid for chrono datetimes")
     }
 }
 
-impl From<i64> for TimeInstance {
-    fn from(milliseconds: i64) -> Self {
+impl TryFrom<i64> for TimeInstance {
+    type Error = crate::error::Error;
+
+    fn try_from(milliseconds: i64) -> Result<Self> {
         TimeInstance::from_millis(milliseconds)
     }
 }
@@ -109,6 +124,17 @@ impl Add<i64> for TimeInstance {
     type Output = Self;
 
     fn add(self, rhs: i64) -> Self::Output {
-        (self.0 + rhs).into()
+        TimeInstance::from_millis_unchecked(self.0 + rhs)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bounds_wrt_chrono() {
+        assert_eq!(TimeInstance::MIN, TimeInstance::from(chrono::MIN_DATETIME));
+        assert_eq!(TimeInstance::MAX, TimeInstance::from(chrono::MAX_DATETIME));
     }
 }

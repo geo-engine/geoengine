@@ -51,6 +51,20 @@ pub enum Error {
     },
 
     #[snafu(display(
+        "{} must be larger than {} and {} must be smaller than {}",
+        start.inner(),
+        min.inner(),
+        end.inner(),
+        max.inner()
+    ))]
+    TimeIntervalOutOfBounds {
+        start: TimeInstance,
+        end: TimeInstance,
+        min: TimeInstance,
+        max: TimeInstance,
+    },
+
+    #[snafu(display(
         "{:?} is not a valid index in the bounds {:?}, {:?} ",
         index,
         min_index,
@@ -167,6 +181,12 @@ pub enum Error {
         time_instance: TimeInstance,
     },
 
+    DateTimeOutOfBounds {
+        year: i32,
+        month: u32,
+        day: u32,
+    },
+
     #[snafu(display(
         "The supplied spatial bounds are empty: {} {}",
         lower_left_coordinate,
@@ -176,11 +196,14 @@ pub enum Error {
         lower_left_coordinate: Coordinate2D,
         upper_right_coordinate: Coordinate2D,
     },
+
     #[snafu(display("GdalError: {}", source))]
     Gdal {
         source: gdal::errors::GdalError,
     },
+
     NoMatchingVectorDataTypeForOgrGeometryType,
+
     NoMatchingFeatureDataTypeForOgrFieldType,
 }
 

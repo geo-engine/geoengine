@@ -70,7 +70,56 @@ type GdalMetaData = Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor>>;
 #[derive(Debug, Clone)]
 pub struct GdalLoadingInfo {
     /// partitions of dataset sorted by time
-    pub info: Vec<GdalLoadingInfoPart>, // TODO: iterator?
+    pub info: GdalLoadingInfoPartIterator,
+}
+
+#[derive(Debug, Clone)]
+pub enum GdalLoadingInfoPartIterator {
+    Static {
+        parts: std::vec::IntoIter<GdalLoadingInfoPart>,
+    },
+    Dynamic {
+        time_step_iter: TimeStepIter,
+        params: GdalDatasetParameters,
+        placeholder: String,
+        time_format: String,
+        step: TimeStep,
+        max_t2: TimeInstance,
+    },
+}
+
+impl Iterator for GdalLoadingInfoPartIterator {
+    type Item = Result<GdalLoadingInfoPart>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            GdalLoadingInfoPartIterator::Static { parts } => parts.next().map(Result::Ok),
+            GdalLoadingInfoPartIterator::Dynamic {
+                time_step_iter,
+                params,
+                placeholder,
+                time_format,
+                step,
+                max_t2,
+            } => {
+                let t1 = time_step_iter.next()?;
+
+                let t2 = t1 + *step;
+                let t2 = t2.unwrap_or(*max_t2);
+
+                let time_interval = TimeInterval::new_unchecked(t1, t2);
+
+                let loading_info_part = params
+                    .replace_time_placeholder(placeholder, time_format, time_interval.start())
+                    .map(|loading_info_part_params| GdalLoadingInfoPart {
+                        time: time_interval,
+                        params: loading_info_part_params,
+                    });
+
+                Some(loading_info_part)
+            }
+        }
+    }
 }
 
 /// one temporal slice of the dataset that requires reading from exactly one Gdal dataset
@@ -107,10 +156,13 @@ pub struct GdalMetaDataStatic {
 impl MetaData<GdalLoadingInfo, RasterResultDescriptor> for GdalMetaDataStatic {
     fn loading_info(&self, _query: QueryRectangle) -> Result<GdalLoadingInfo> {
         Ok(GdalLoadingInfo {
-            info: vec![GdalLoadingInfoPart {
-                time: self.time.unwrap_or_else(TimeInterval::default),
-                params: self.params.clone(),
-            }],
+            info: GdalLoadingInfoPartIterator::Static {
+                parts: vec![GdalLoadingInfoPart {
+                    time: self.time.unwrap_or_else(TimeInterval::default),
+                    params: self.params.clone(),
+                }]
+                .into_iter(),
+            },
         })
     }
 
@@ -151,22 +203,16 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor> for GdalMetaDataRegular {
         let time_iterator =
             TimeStepIter::new_with_interval_incl_start(snapped_interval, self.step)?;
 
-        let info: Result<Vec<_>> = time_iterator
-            .try_as_intervals(self.step)
-            .map(|time| {
-                let time = time?;
-                Ok(GdalLoadingInfoPart {
-                    time,
-                    params: self.params.replace_time_placeholder(
-                        &self.placeholder,
-                        &self.time_format,
-                        time.start(),
-                    )?,
-                })
-            })
-            .collect();
-
-        Ok(GdalLoadingInfo { info: info? })
+        Ok(GdalLoadingInfo {
+            info: GdalLoadingInfoPartIterator::Dynamic {
+                time_step_iter: time_iterator,
+                params: self.params.clone(),
+                placeholder: self.placeholder.clone(),
+                time_format: self.time_format.clone(),
+                step: self.step,
+                max_t2: query.time_interval.end(),
+            },
+        })
     }
 
     fn result_descriptor(&self) -> Result<RasterResultDescriptor> {
@@ -391,10 +437,14 @@ where
     ) -> Result<BoxStream<Result<RasterTile2D<T>>>> {
         let meta_data = self.meta_data.loading_info(query)?;
 
-        Ok(stream::iter(meta_data.info.into_iter())
-            .map(move |info| self.tile_stream(query, info))
-            .flatten()
-            .boxed())
+        let stream = stream::iter(meta_data.info)
+            .map(move |info| match info {
+                Ok(info) => self.tile_stream(query, info),
+                Err(err) => stream::once(async { Result::Err(err) }).boxed(),
+            })
+            .flatten();
+
+        Ok(stream.boxed())
     }
 }
 
@@ -777,7 +827,7 @@ mod tests {
             no_data_value: Some(0.),
         };
         let replaced = params
-            .replace_time_placeholder("%TIME%", "%f", TimeInstance::from_millis(22))
+            .replace_time_placeholder("%TIME%", "%f", TimeInstance::from_millis_unchecked(22))
             .unwrap();
         assert_eq!(
             replaced.file_path.to_string_lossy(),
@@ -811,7 +861,7 @@ mod tests {
             },
             placeholder: "%TIME%".to_string(),
             time_format: "%f".to_string(),
-            start: 11.into(),
+            start: TimeInstance::from_millis_unchecked(11),
             step: TimeStep {
                 granularity: TimeGranularity::Millis,
                 step: 11,
@@ -836,8 +886,7 @@ mod tests {
                 })
                 .unwrap()
                 .info
-                .iter()
-                .map(|p| p.params.file_path.to_str().unwrap())
+                .map(|p| p.unwrap().params.file_path.to_str().unwrap().to_owned())
                 .collect::<Vec<_>>(),
             &[
                 "/foo/bar_000000000.tiff",

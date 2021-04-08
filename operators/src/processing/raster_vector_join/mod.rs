@@ -166,12 +166,11 @@ mod tests {
     use crate::source::{GdalSource, GdalSourceParameters};
     use crate::util::gdal::add_ndvi_dataset;
     use chrono::NaiveDate;
-    use float_cmp::approx_eq;
     use futures::StreamExt;
     use geoengine_datatypes::collections::{FeatureCollectionInfos, MultiPointCollection};
     use geoengine_datatypes::dataset::DatasetId;
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, FeatureDataRef, MultiPoint, SpatialResolution, TimeInterval,
+        BoundingBox2D, DataRef, FeatureDataRef, MultiPoint, SpatialResolution, TimeInterval,
     };
     use serde_json::json;
 
@@ -342,9 +341,76 @@ mod tests {
         };
 
         // these values are taken from loading the tiff in QGIS
-        approx_eq!(f64, data.as_ref()[0], (54. + 52.) / 2.);
-        approx_eq!(f64, data.as_ref()[1], (55. + 55.) / 2.);
-        approx_eq!(f64, data.as_ref()[2], (51. + 50.) / 2.);
-        approx_eq!(f64, data.as_ref()[3], (55. + 53.) / 2.);
+        assert_eq!(
+            data.as_ref(),
+            &[
+                (54. + 52.) / 2.,
+                (55. + 55.) / 2.,
+                (51. + 50.) / 2.,
+                (55. + 53.) / 2.,
+            ]
+        );
+    }
+
+    #[tokio::test]
+    #[allow(clippy::float_cmp)]
+    async fn ndvi_with_default_time() {
+        let point_source = MockFeatureCollectionSource::single(
+            MultiPointCollection::from_data(
+                MultiPoint::many(vec![
+                    (-13.95, 20.05),
+                    (-14.05, 20.05),
+                    (-13.95, 19.95),
+                    (-14.05, 19.95),
+                ])
+                .unwrap(),
+                vec![TimeInterval::default(); 4],
+                Default::default(),
+            )
+            .unwrap(),
+        )
+        .boxed();
+
+        let mut exe_ctc = MockExecutionContext::default();
+        let ndvi_id = add_ndvi_dataset(&mut exe_ctc);
+
+        let operator = RasterVectorJoin {
+            params: RasterVectorJoinParams {
+                names: vec!["ndvi".to_string()],
+                aggregation: AggregationMethod::Mean,
+            },
+            raster_sources: vec![ndvi_source(ndvi_id.clone())],
+            vector_sources: vec![point_source],
+        };
+
+        let operator = operator.boxed().initialize(&exe_ctc).unwrap();
+
+        let query_processor = operator.query_processor().unwrap().multi_point().unwrap();
+
+        let result = query_processor
+            .query(
+                QueryRectangle {
+                    bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    time_interval: TimeInterval::default(),
+                    spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
+                },
+                &MockQueryContext::new(0),
+            )
+            .unwrap()
+            .map(Result::unwrap)
+            .collect::<Vec<MultiPointCollection>>()
+            .await;
+
+        assert_eq!(result.len(), 1);
+
+        let data = if let FeatureDataRef::Number(data) = result[0].data("ndvi").unwrap() {
+            data
+        } else {
+            unreachable!();
+        };
+
+        assert_eq!(data.as_ref(), &[0., 0., 0., 0.]);
+
+        assert_eq!(data.nulls(), vec![true, true, true, true]);
     }
 }

@@ -1,6 +1,6 @@
 use geoengine_datatypes::{
     dataset::{DatasetId, InternalDatasetId},
-    primitives::{BoundingBox2D, Measurement, TimeGranularity, TimeStep},
+    primitives::{BoundingBox2D, Measurement, TimeGranularity, TimeInstance, TimeStep},
     raster::{GeoTransform, RasterDataType},
     spatial_reference::SpatialReference,
     util::Identifier,
@@ -30,9 +30,10 @@ pub fn raster_dir() -> std::path::PathBuf {
 }
 
 // TODO: move test helper somewhere else?
+#[allow(clippy::missing_panics_doc)]
 pub fn create_ndvi_meta_data() -> GdalMetaDataRegular {
     GdalMetaDataRegular {
-        start: 1_388_534_400_000.into(),
+        start: TimeInstance::from_millis(1_388_534_400_000).unwrap(),
         step: TimeStep {
             granularity: TimeGranularity::Months,
             step: 1,
