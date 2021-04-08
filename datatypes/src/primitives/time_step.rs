@@ -165,37 +165,37 @@ impl TimeStep {
         let snapped_date_time = match self.granularity {
             TimeGranularity::Millis => {
                 let diff_duration = time_to_snap_date_time - ref_date_time;
-                let snapped_millis = (diff_duration.num_milliseconds() as f64 / self.step as f64)
-                    .floor() as i64
-                    * self.step as i64;
+                let snapped_millis =
+                    (diff_duration.num_milliseconds() as f64 / f64::from(self.step)).floor() as i64
+                        * i64::from(self.step);
                 ref_date_time + Duration::milliseconds(snapped_millis)
             }
             TimeGranularity::Seconds => {
                 let diff_duration = time_to_snap_date_time - ref_date_time;
-                let snapped_seconds = (diff_duration.num_seconds() as f64 / self.step as f64)
+                let snapped_seconds = (diff_duration.num_seconds() as f64 / f64::from(self.step))
                     .floor() as i64
-                    * self.step as i64;
+                    * i64::from(self.step);
                 ref_date_time + Duration::seconds(snapped_seconds)
             }
             TimeGranularity::Minutes => {
                 let diff_duration = time_to_snap_date_time - ref_date_time;
-                let snapped_minutes = (diff_duration.num_minutes() as f64 / self.step as f64)
+                let snapped_minutes = (diff_duration.num_minutes() as f64 / f64::from(self.step))
                     .floor() as i64
-                    * self.step as i64;
+                    * i64::from(self.step);
                 ref_date_time + Duration::minutes(snapped_minutes)
             }
             TimeGranularity::Hours => {
                 let diff_duration = time_to_snap_date_time - ref_date_time;
-                let snapped_hours = (diff_duration.num_hours() as f64 / self.step as f64).floor()
-                    as i64
-                    * self.step as i64;
+                let snapped_hours = (diff_duration.num_hours() as f64 / f64::from(self.step))
+                    .floor() as i64
+                    * i64::from(self.step);
                 ref_date_time + Duration::hours(snapped_hours)
             }
             TimeGranularity::Days => {
                 let diff_duration = time_to_snap_date_time - ref_date_time;
-                let snapped_days = (diff_duration.num_days() as f64 / self.step as f64).floor()
+                let snapped_days = (diff_duration.num_days() as f64 / f64::from(self.step)).floor()
                     as i64
-                    * self.step as i64;
+                    * i64::from(self.step);
                 ref_date_time + Duration::days(snapped_days)
             }
             TimeGranularity::Months => {
@@ -204,8 +204,8 @@ impl TimeStep {
                     + (time_to_snap_date_time.month() as i32 - ref_date_time.month() as i32);
 
                 // get the difference in time steps
-                let snapped_months =
-                    (diff_months as f64 / self.step as f64).floor() as i32 * self.step as i32;
+                let snapped_months = (f64::from(diff_months) / f64::from(self.step)).floor() as i32
+                    * self.step as i32;
 
                 let snapped_year = if snapped_months.is_negative() {
                     ref_date_time.year() + (ref_date_time.month() as i32 + snapped_months - 12) / 12
@@ -226,7 +226,7 @@ impl TimeStep {
             TimeGranularity::Years => {
                 let diff = (time_to_snap_date_time.year() - ref_date_time.year()) as i32;
                 let snapped_year = ref_date_time.year()
-                    + ((diff as f64 / self.step as f64).floor() as i32 * self.step as i32);
+                    + ((f64::from(diff) / f64::from(self.step)).floor() as i32 * self.step as i32);
 
                 NaiveDate::from_ymd(snapped_year, ref_date_time.month(), ref_date_time.day())
                     .and_time(ref_date_time.time())
