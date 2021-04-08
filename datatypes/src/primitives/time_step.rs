@@ -274,6 +274,7 @@ impl Add<TimeStep> for TimeInstance {
 }
 
 /// An `Iterator` to iterate over time in steps
+#[derive(Debug, Clone)]
 pub struct TimeStepIter {
     reference_time: TimeInstance,
     time_step: TimeStep,
