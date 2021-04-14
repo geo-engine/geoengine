@@ -214,7 +214,7 @@ async fn suggest_meta_data<C: Context>(
 
     let main_file = suggest
         .main_file
-        .or(suggest_main_file(&upload))
+        .or_else(|| suggest_main_file(&upload))
         .ok_or(error::Error::NoMainFileCandidateFound)?;
 
     let main_file_path = upload.id.root_path()?.join(&main_file);
@@ -335,8 +335,7 @@ fn detect_time_type(layer: &Layer, columns: &Columns) -> OgrSourceDatasetTimeTyp
         let is_date = feature
             .field(column)
             .ok()
-            .map(FieldValue::into_string)
-            .flatten()
+            .and_then(FieldValue::into_string)
             .map(|s| DateTime::parse_from_rfc3339(&s))
             .is_some();
         if is_date {
@@ -355,10 +354,9 @@ fn detect_time_type(layer: &Layer, columns: &Columns) -> OgrSourceDatasetTimeTyp
     let duration = columns
         .decimal
         .iter()
-        .filter(|c| known_duration.contains(&c.as_ref()))
-        .next();
+        .find(|c| known_duration.contains(&c.as_ref()));
 
-    return match (start, end, duration) {
+    match (start, end, duration) {
         (Some(start), Some(end), _) => OgrSourceDatasetTimeType::StartEnd {
             start_field: start.clone(),
             start_format: OgrSourceTimeFormat::Iso,
@@ -376,7 +374,7 @@ fn detect_time_type(layer: &Layer, columns: &Columns) -> OgrSourceDatasetTimeTyp
             duration: 0,
         },
         _ => OgrSourceDatasetTimeType::None,
-    };
+    }
 }
 
 fn detect_vector_type(layer: &Layer) -> Result<VectorDataType> {
