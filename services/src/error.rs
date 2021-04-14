@@ -145,6 +145,7 @@ pub enum Error {
         source: gdal::errors::GdalError,
     },
     EmptyDatasetCannotBeImported,
+    NoMainFileCandidateFound,
 }
 
 impl Reject for Error {}

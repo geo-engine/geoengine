@@ -1,6 +1,6 @@
 use std::{collections::HashMap, convert::TryInto, path::Path};
 
-use crate::datasets::storage::{AddDataset, DatasetStore};
+use crate::datasets::storage::{AddDataset, DatasetStore, MetaDataSuggestion, SuggestMetaData};
 use crate::datasets::upload::UploadRootPath;
 use crate::datasets::{
     listing::DatasetProvider,
@@ -17,7 +17,11 @@ use crate::{
     datasets::{listing::DatasetListOptions, upload::UploadDb},
     util::IdResponse,
 };
-use gdal::{vector::Layer, Dataset};
+use chrono::DateTime;
+use gdal::{
+    vector::{FieldValue, Layer},
+    Dataset,
+};
 use geoengine_datatypes::{
     collections::VectorDataType,
     dataset::{DatasetId, InternalDatasetId},
@@ -26,7 +30,9 @@ use geoengine_datatypes::{
 };
 use geoengine_operators::{
     engine::{StaticMetaData, VectorResultDescriptor},
-    source::{OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType},
+    source::{
+        OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceTimeFormat,
+    },
 };
 use snafu::{OptionExt, ResultExt};
 use uuid::Uuid;
@@ -165,7 +171,7 @@ async fn auto_create_dataset<C: Context>(
     let create = create.validated()?.user_input;
 
     let main_file_path = upload.id.root_path()?.join(&create.main_file);
-    let meta_data = auto_detect_dataset(&main_file_path)?;
+    let meta_data = auto_detect_meta_data_definition(&main_file_path)?;
 
     let properties = AddDataset {
         id: None,
@@ -183,7 +189,59 @@ async fn auto_create_dataset<C: Context>(
     Ok(warp::reply::json(&IdResponse::from(id)))
 }
 
-fn auto_detect_dataset(main_file_path: &Path) -> Result<MetaDataDefinition> {
+pub(crate) fn suggest_meta_data_handler<C: Context>(
+    ctx: C,
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
+    warp::path!("dataset" / "suggest")
+        .and(warp::get())
+        .and(authenticate(ctx.clone()))
+        .and(warp::any().map(move || ctx.clone()))
+        .and(warp::query())
+        .and_then(suggest_meta_data)
+}
+
+// TODO: move into handler once async closures are available?
+async fn suggest_meta_data<C: Context>(
+    session: Session,
+    ctx: C,
+    suggest: SuggestMetaData,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let upload = ctx
+        .dataset_db_ref()
+        .await
+        .get_upload(session.user.id, suggest.upload)
+        .await?;
+
+    let main_file = suggest
+        .main_file
+        .or(suggest_main_file(&upload))
+        .ok_or(error::Error::NoMainFileCandidateFound)?;
+
+    let main_file_path = upload.id.root_path()?.join(&main_file);
+
+    let meta_data = auto_detect_meta_data_definition(&main_file_path)?;
+
+    Ok(warp::reply::json(&MetaDataSuggestion {
+        main_file,
+        meta_data,
+    }))
+}
+
+fn suggest_main_file(upload: &Upload) -> Option<String> {
+    let known_extensions = ["csv", "shp", "json", "geojson", "gpkg"]; // TODO: rasters
+
+    let mut sorted_files = upload.files.clone();
+    sorted_files.sort_by(|a, b| b.byte_size.cmp(&a.byte_size));
+
+    for file in sorted_files {
+        if known_extensions.iter().any(|ext| file.name.ends_with(ext)) {
+            return Some(file.name);
+        }
+    }
+    None
+}
+
+fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDefinition> {
     let mut dataset = Dataset::open(&main_file_path).context(error::Gdal)?;
     let layer = {
         if let Ok(layer) = dataset.layer(0) {
@@ -201,13 +259,14 @@ fn auto_detect_dataset(main_file_path: &Path) -> Result<MetaDataDefinition> {
         .context(error::DataType)?;
     let columns_map = detect_columns(&layer);
     let columns_vecs = column_map_to_column_vecs(&columns_map);
+    let time = detect_time_type(&layer, &columns_vecs);
 
     Ok(MetaDataDefinition::OgrMetaData(StaticMetaData {
         loading_info: OgrSourceDataset {
             file_name: main_file_path.into(),
             layer_name: layer.name(),
             data_type: Some(vector_type),
-            time: OgrSourceDatasetTimeType::None, // TODO: auto detect time type and corresponding columns
+            time,
             columns: Some(OgrSourceColumnSpec {
                 x: "".to_owned(), // TODO: for csv-files: try to find wkt/xy columns
                 y: None,
@@ -226,6 +285,98 @@ fn auto_detect_dataset(main_file_path: &Path) -> Result<MetaDataDefinition> {
             columns: columns_map,
         },
     }))
+}
+
+fn detect_time_type(layer: &Layer, columns: &Columns) -> OgrSourceDatasetTimeType {
+    let feature = layer.features().next();
+    if feature.is_none() {
+        return OgrSourceDatasetTimeType::None;
+    }
+    let feature = feature.expect("checked before");
+
+    let known_start = [
+        "start",
+        "time",
+        "begin",
+        "date",
+        "time_start",
+        "start time",
+        "date_start",
+        "start date",
+        "datetime",
+        "date_time",
+        "date time",
+        "event",
+        "timestamp",
+    ];
+    let known_end = [
+        "end",
+        "stop",
+        "time2",
+        "date2",
+        "time_end",
+        "time_stop",
+        "time end",
+        "time stop",
+        "end time",
+        "stop time",
+        "date_end",
+        "date_stop",
+        "date end",
+        "date stop",
+        "end date",
+        "stop date",
+    ];
+    let known_duration = ["duration", "length", "valid for", "valid_for"];
+
+    let mut start = None;
+    let mut end = None;
+    for column in &(columns.textual) {
+        let is_date = feature
+            .field(column)
+            .ok()
+            .map(FieldValue::into_string)
+            .flatten()
+            .map(|s| DateTime::parse_from_rfc3339(&s))
+            .is_some();
+        if is_date {
+            if known_start.contains(&column.as_ref()) && start.is_none() {
+                start = Some(column);
+            } else if known_end.contains(&column.as_ref()) && end.is_none() {
+                end = Some(column);
+            }
+
+            if start.is_some() && end.is_some() {
+                break;
+            }
+        }
+    }
+
+    let duration = columns
+        .decimal
+        .iter()
+        .filter(|c| known_duration.contains(&c.as_ref()))
+        .next();
+
+    return match (start, end, duration) {
+        (Some(start), Some(end), _) => OgrSourceDatasetTimeType::StartEnd {
+            start_field: start.clone(),
+            start_format: OgrSourceTimeFormat::Iso,
+            end_field: end.clone(),
+            end_format: OgrSourceTimeFormat::Iso,
+        },
+        (Some(start), None, Some(duration)) => OgrSourceDatasetTimeType::StartDuration {
+            start_field: start.clone(),
+            start_format: OgrSourceTimeFormat::Iso,
+            duration_field: duration.clone(),
+        },
+        (Some(start), None, None) => OgrSourceDatasetTimeType::Start {
+            start_field: start.clone(),
+            start_format: OgrSourceTimeFormat::Iso,
+            duration: 0,
+        },
+        _ => OgrSourceDatasetTimeType::None,
+    };
 }
 
 fn detect_vector_type(layer: &Layer) -> Result<VectorDataType> {
@@ -253,8 +404,6 @@ fn detect_columns(layer: &Layer) -> HashMap<String, FeatureDataType> {
         if let Ok(data_type) = FeatureDataType::try_from_ogr_field_type_code(field_type) {
             columns.insert(field.name(), data_type);
         }
-
-        // TODO: handle time columns
     }
 
     columns
@@ -461,7 +610,7 @@ mod tests {
 
     #[test]
     fn it_auto_detects() {
-        let mut meta_data = auto_detect_dataset(
+        let mut meta_data = auto_detect_meta_data_definition(
             &PathBuf::from_str("../operators/test-data/vector/data/ne_10m_ports/ne_10m_ports.shp")
                 .unwrap(),
         )
@@ -507,6 +656,61 @@ mod tests {
                         ("website".to_string(), FeatureDataType::Text),
                         ("natlscale".to_string(), FeatureDataType::Number),
                         ("featurecla".to_string(), FeatureDataType::Text),
+                    ]
+                    .iter()
+                    .cloned()
+                    .collect(),
+                },
+            })
+        )
+    }
+
+    #[test]
+    fn it_detects_time() {
+        let mut meta_data = auto_detect_meta_data_definition(
+            &PathBuf::from_str("../operators/test-data/vector/data/points_with_iso_time.json")
+                .unwrap(),
+        )
+        .unwrap();
+
+        if let MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data {
+            if let Some(columns) = &mut meta_data.loading_info.columns {
+                columns.textual.sort();
+            }
+        }
+
+        assert_eq!(
+            meta_data,
+            MetaDataDefinition::OgrMetaData(StaticMetaData {
+                loading_info: OgrSourceDataset {
+                    file_name: "../operators/test-data/vector/data/points_with_iso_time.json"
+                        .into(),
+                    layer_name: "points_with_iso_time".to_string(),
+                    data_type: Some(VectorDataType::MultiPoint),
+                    time: OgrSourceDatasetTimeType::StartEnd {
+                        start_field: "time_start".to_owned(),
+                        start_format: OgrSourceTimeFormat::Iso,
+                        end_field: "time_end".to_owned(),
+                        end_format: OgrSourceTimeFormat::Iso,
+                    },
+                    columns: Some(OgrSourceColumnSpec {
+                        x: "".to_string(),
+                        y: None,
+                        numeric: vec![],
+                        decimal: vec![],
+                        textual: vec!["time_end".to_owned(), "time_start".to_owned()],
+                    }),
+                    default_geometry: None,
+                    force_ogr_time_filter: false,
+                    on_error: OgrSourceErrorSpec::Skip,
+                    provenance: None,
+                },
+                result_descriptor: VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: [
+                        ("time_end".to_string(), FeatureDataType::Text),
+                        ("time_start".to_string(), FeatureDataType::Text),
                     ]
                     .iter()
                     .cloned()

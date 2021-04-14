@@ -137,6 +137,7 @@ where
         handlers::datasets::get_dataset_handler(ctx.clone()),
         handlers::datasets::auto_create_dataset_handler(ctx.clone()),
         handlers::datasets::create_dataset_handler(ctx.clone()),
+        handlers::datasets::suggest_meta_data_handler(ctx.clone()),
         handlers::wms::wms_handler(ctx.clone()),
         handlers::wfs::wfs_handler(ctx.clone()),
         handlers::plots::get_plot_handler(ctx.clone()),
