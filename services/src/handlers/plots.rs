@@ -115,6 +115,7 @@ struct WrappedPlotOutput {
 #[cfg(test)]
 mod tests {
     use chrono::NaiveDate;
+    use num_traits::AsPrimitive;
     use serde_json::json;
 
     use geoengine_datatypes::primitives::Measurement;
@@ -136,6 +137,8 @@ mod tests {
     use warp::hyper::body::Bytes;
 
     fn example_raster_source() -> Box<dyn RasterOperator> {
+        let no_data_value = None;
+
         MockRasterSource {
             params: MockRasterSourceParams {
                 data: vec![RasterTile2D::new_with_tile_info(
@@ -145,12 +148,13 @@ mod tests {
                         global_tile_position: [0, 0].into(),
                         tile_size_in_pixels: [3, 2].into(),
                     },
-                    Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap(),
+                    Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], no_data_value).unwrap(),
                 )],
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
+                    no_data_value: no_data_value.map(AsPrimitive::as_),
                 },
             },
         }
