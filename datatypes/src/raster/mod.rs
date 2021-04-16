@@ -47,6 +47,11 @@ pub trait Raster<D, T: Pixel, C>: SpatialBounded + TemporalBounded {
     fn dimension(&self) -> D;
     /// returns the optional  no-data value used for the raster
     fn no_data_value(&self) -> Option<T>;
+    // Checks whether the value is no data
+    fn is_no_data(&self, value: T) -> bool {
+        self.no_data_value()
+            .map_or(false, |no_data_value| value == no_data_value)
+    }
     /// returns a reference to the data container used to hold the pixels / cells of the raster
     fn data_container(&self) -> &C;
     /// returns a reference to the geo transform describing the origin of the raster and the pixel size

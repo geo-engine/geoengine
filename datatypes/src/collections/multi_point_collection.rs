@@ -1263,4 +1263,52 @@ mod tests {
 
         assert!(iter.next().is_none());
     }
+
+    #[test]
+    fn replace_time() {
+        let collection = MultiPointCollection::from_data(
+            MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1), (2.0, 3.1)]).unwrap(),
+            vec![TimeInterval::default(); 3],
+            [
+                (
+                    "foo".to_string(),
+                    FeatureData::NullableDecimal(vec![Some(0), None, Some(2)]),
+                ),
+                (
+                    "bar".to_string(),
+                    FeatureData::Text(vec!["a".into(), "b".into(), "c".into()]),
+                ),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+        )
+        .unwrap();
+
+        let new_time_intervals = vec![
+            TimeInterval::new(0, 1).unwrap(),
+            TimeInterval::new(1, 2).unwrap(),
+            TimeInterval::new(2, 3).unwrap(),
+        ];
+
+        let new_collection = collection.replace_time(&new_time_intervals).unwrap();
+
+        assert_eq!(collection.len(), new_collection.len());
+
+        assert_eq!(
+            collection.geometries().collect::<Vec<_>>(),
+            new_collection.geometries().collect::<Vec<_>>()
+        );
+
+        assert_eq!(
+            collection.data("foo").unwrap(),
+            new_collection.data("foo").unwrap()
+        );
+        assert_eq!(
+            collection.data("bar").unwrap(),
+            new_collection.data("bar").unwrap()
+        );
+
+        assert_eq!(new_collection.time_intervals(), new_time_intervals);
+    }
 }
