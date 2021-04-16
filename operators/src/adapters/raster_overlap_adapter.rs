@@ -166,7 +166,10 @@ where
             }
 
             if let Some(t_start) = *this.time_start {
-                if t_start >= this.query_rect.time_interval.end() {
+                if !(this.query_rect.time_interval.is_instant()
+                    && t_start == this.query_rect.time_interval.start())
+                    && t_start >= this.query_rect.time_interval.end()
+                {
                     *this.ended = true;
                 } else {
                     let current_spatial_tile_info =

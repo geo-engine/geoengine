@@ -299,6 +299,10 @@ impl TimeInterval {
     pub fn duration_ms(&self) -> u64 {
         self.end.inner().wrapping_sub(self.start.inner()) as u64
     }
+
+    pub fn is_instant(&self) -> bool {
+        self.start == self.end
+    }
 }
 
 impl Debug for TimeInterval {
