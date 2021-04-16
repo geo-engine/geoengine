@@ -335,14 +335,194 @@ impl VectorQueryProcessor for RasterPointJoinProcessor {
 mod tests {
     use super::*;
 
-    use crate::engine::{MockExecutionContext, VectorOperator};
+    use crate::engine::MockQueryContext;
+    use crate::engine::{MockExecutionContext, RasterOperator, VectorOperator};
     use crate::mock::MockFeatureCollectionSource;
+    use crate::source::{GdalSource, GdalSourceParameters};
     use crate::util::gdal::add_ndvi_dataset;
     use chrono::NaiveDate;
+    use geoengine_datatypes::primitives::BoundingBox2D;
+    use geoengine_datatypes::primitives::SpatialResolution;
     use geoengine_datatypes::primitives::{MultiPoint, TimeInterval};
 
-    #[test]
-    fn test_name() {
+    #[tokio::test]
+    async fn both_instant() {
+        let time_instant =
+            TimeInterval::new_instant(NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0)).unwrap();
+
+        let points = MockFeatureCollectionSource::single(
+            MultiPointCollection::from_data(
+                MultiPoint::many(vec![
+                    (-13.95, 20.05),
+                    (-14.05, 20.05),
+                    (-13.95, 19.95),
+                    (-14.05, 19.95),
+                ])
+                .unwrap(),
+                vec![time_instant; 4],
+                Default::default(),
+            )
+            .unwrap(),
+        )
+        .boxed();
+
+        let mut execution_context = MockExecutionContext::default();
+
+        let raster_source = GdalSource {
+            params: GdalSourceParameters {
+                dataset: add_ndvi_dataset(&mut execution_context),
+            },
+        }
+        .boxed();
+
+        let points = points
+            .initialize(&execution_context)
+            .unwrap()
+            .query_processor()
+            .unwrap()
+            .multi_point()
+            .unwrap();
+
+        let rasters = raster_source
+            .initialize(&execution_context)
+            .unwrap()
+            .query_processor()
+            .unwrap();
+
+        let processor =
+            RasterPointJoinProcessor::new(points, vec![rasters], vec!["ndvi".to_owned()]);
+
+        let mut result = processor
+            .vector_query(
+                QueryRectangle {
+                    bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    time_interval: time_instant,
+                    spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
+                },
+                &MockQueryContext::new(usize::MAX),
+            )
+            .unwrap()
+            .map(Result::unwrap)
+            .collect::<Vec<MultiPointCollection>>()
+            .await;
+
+        // dbg!(result);
+
+        assert_eq!(result.len(), 1);
+
+        let result = result.remove(0);
+
+        assert_eq!(
+            result,
+            MultiPointCollection::from_slices(
+                &MultiPoint::many(vec![
+                    (-13.95, 20.05),
+                    (-14.05, 20.05),
+                    (-13.95, 19.95),
+                    (-14.05, 19.95),
+                ])
+                .unwrap(),
+                &[time_instant; 4],
+                // these values are taken from loading the tiff in QGIS
+                &[("ndvi", FeatureData::Decimal(vec![54, 55, 51, 55]))],
+            )
+            .unwrap()
+        )
+    }
+
+    #[tokio::test]
+    async fn points_instant() {
+        let points = MockFeatureCollectionSource::single(
+            MultiPointCollection::from_data(
+                MultiPoint::many(vec![
+                    (-13.95, 20.05),
+                    (-14.05, 20.05),
+                    (-13.95, 19.95),
+                    (-14.05, 19.95),
+                ])
+                .unwrap(),
+                vec![
+                    TimeInterval::new_instant(NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0))
+                        .unwrap();
+                    4
+                ],
+                Default::default(),
+            )
+            .unwrap(),
+        )
+        .boxed();
+
+        let mut execution_context = MockExecutionContext::default();
+
+        let raster_source = GdalSource {
+            params: GdalSourceParameters {
+                dataset: add_ndvi_dataset(&mut execution_context),
+            },
+        }
+        .boxed();
+
+        let points = points
+            .initialize(&execution_context)
+            .unwrap()
+            .query_processor()
+            .unwrap()
+            .multi_point()
+            .unwrap();
+
+        let rasters = raster_source
+            .initialize(&execution_context)
+            .unwrap()
+            .query_processor()
+            .unwrap();
+
+        let processor =
+            RasterPointJoinProcessor::new(points, vec![rasters], vec!["ndvi".to_owned()]);
+
+        let mut result = processor
+            .vector_query(
+                QueryRectangle {
+                    bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    time_interval: TimeInterval::new(
+                        NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
+                        NaiveDate::from_ymd(2014, 3, 1).and_hms(0, 0, 0),
+                    )
+                    .unwrap(),
+                    spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
+                },
+                &MockQueryContext::new(usize::MAX),
+            )
+            .unwrap()
+            .map(Result::unwrap)
+            .collect::<Vec<MultiPointCollection>>()
+            .await;
+
+        // dbg!(result);
+
+        assert_eq!(result.len(), 1);
+
+        let result = result.remove(0);
+
+        assert_eq!(
+            result,
+            MultiPointCollection::from_slices(
+                &MultiPoint::many(vec![
+                    (-13.95, 20.05),
+                    (-14.05, 20.05),
+                    (-13.95, 19.95),
+                    (-14.05, 19.95),
+                ])
+                .unwrap(),
+                &[TimeInterval::new_instant(NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0))
+                    .unwrap(); 4],
+                // these values are taken from loading the tiff in QGIS
+                &[("ndvi", FeatureData::Decimal(vec![54, 55, 51, 55]))],
+            )
+            .unwrap()
+        )
+    }
+
+    #[tokio::test]
+    async fn raster_instant() {
         let points = MockFeatureCollectionSource::single(
             MultiPointCollection::from_data(
                 MultiPoint::many(vec![
@@ -355,7 +535,7 @@ mod tests {
                 vec![
                     TimeInterval::new(
                         NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
-                        NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
+                        NaiveDate::from_ymd(2014, 3, 1).and_hms(0, 0, 0),
                     )
                     .unwrap();
                     4
@@ -368,7 +548,12 @@ mod tests {
 
         let mut execution_context = MockExecutionContext::default();
 
-        let _ndvi_id = add_ndvi_dataset(&mut execution_context);
+        let raster_source = GdalSource {
+            params: GdalSourceParameters {
+                dataset: add_ndvi_dataset(&mut execution_context),
+            },
+        }
+        .boxed();
 
         let points = points
             .initialize(&execution_context)
@@ -378,6 +563,167 @@ mod tests {
             .multi_point()
             .unwrap();
 
-        let _processor = RasterPointJoinProcessor::new(points, vec![], vec!["ndvi".to_owned()]);
+        let rasters = raster_source
+            .initialize(&execution_context)
+            .unwrap()
+            .query_processor()
+            .unwrap();
+
+        let processor =
+            RasterPointJoinProcessor::new(points, vec![rasters], vec!["ndvi".to_owned()]);
+
+        let mut result = processor
+            .vector_query(
+                QueryRectangle {
+                    bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    time_interval: TimeInterval::new_instant(
+                        NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
+                    )
+                    .unwrap(),
+                    spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
+                },
+                &MockQueryContext::new(usize::MAX),
+            )
+            .unwrap()
+            .map(Result::unwrap)
+            .collect::<Vec<MultiPointCollection>>()
+            .await;
+
+        // dbg!(result);
+
+        assert_eq!(result.len(), 1);
+
+        let result = result.remove(0);
+
+        assert_eq!(
+            result,
+            MultiPointCollection::from_slices(
+                &MultiPoint::many(vec![
+                    (-13.95, 20.05),
+                    (-14.05, 20.05),
+                    (-13.95, 19.95),
+                    (-14.05, 19.95),
+                ])
+                .unwrap(),
+                &[TimeInterval::new(
+                    NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
+                    NaiveDate::from_ymd(2014, 2, 1).and_hms(0, 0, 0),
+                )
+                .unwrap(); 4],
+                // these values are taken from loading the tiff in QGIS
+                &[("ndvi", FeatureData::Decimal(vec![54, 55, 51, 55]))],
+            )
+            .unwrap()
+        )
+    }
+
+    #[tokio::test]
+    async fn both_ranges() {
+        let points = MockFeatureCollectionSource::single(
+            MultiPointCollection::from_data(
+                MultiPoint::many(vec![
+                    (-13.95, 20.05),
+                    (-14.05, 20.05),
+                    (-13.95, 19.95),
+                    (-14.05, 19.95),
+                ])
+                .unwrap(),
+                vec![
+                    TimeInterval::new(
+                        NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
+                        NaiveDate::from_ymd(2014, 3, 1).and_hms(0, 0, 0),
+                    )
+                    .unwrap();
+                    4
+                ],
+                Default::default(),
+            )
+            .unwrap(),
+        )
+        .boxed();
+
+        let mut execution_context = MockExecutionContext::default();
+
+        let raster_source = GdalSource {
+            params: GdalSourceParameters {
+                dataset: add_ndvi_dataset(&mut execution_context),
+            },
+        }
+        .boxed();
+
+        let points = points
+            .initialize(&execution_context)
+            .unwrap()
+            .query_processor()
+            .unwrap()
+            .multi_point()
+            .unwrap();
+
+        let rasters = raster_source
+            .initialize(&execution_context)
+            .unwrap()
+            .query_processor()
+            .unwrap();
+
+        let processor =
+            RasterPointJoinProcessor::new(points, vec![rasters], vec!["ndvi".to_owned()]);
+
+        let mut result = processor
+            .vector_query(
+                QueryRectangle {
+                    bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    time_interval: TimeInterval::new(
+                        NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
+                        NaiveDate::from_ymd(2014, 3, 1).and_hms(0, 0, 0),
+                    )
+                    .unwrap(),
+                    spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
+                },
+                &MockQueryContext::new(usize::MAX),
+            )
+            .unwrap()
+            .map(Result::unwrap)
+            .collect::<Vec<MultiPointCollection>>()
+            .await;
+
+        // dbg!(result);
+
+        assert_eq!(result.len(), 1);
+
+        let result = result.remove(0);
+
+        let t1 = TimeInterval::new(
+            NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
+            NaiveDate::from_ymd(2014, 2, 1).and_hms(0, 0, 0),
+        )
+        .unwrap();
+        let t2 = TimeInterval::new(
+            NaiveDate::from_ymd(2014, 2, 1).and_hms(0, 0, 0),
+            NaiveDate::from_ymd(2014, 3, 1).and_hms(0, 0, 0),
+        )
+        .unwrap();
+        assert_eq!(
+            result,
+            MultiPointCollection::from_slices(
+                &MultiPoint::many(vec![
+                    (-13.95, 20.05),
+                    (-14.05, 20.05),
+                    (-13.95, 19.95),
+                    (-14.05, 19.95),
+                    (-13.95, 20.05),
+                    (-14.05, 20.05),
+                    (-13.95, 19.95),
+                    (-14.05, 19.95),
+                ])
+                .unwrap(),
+                &[t1, t1, t1, t1, t2, t2, t2, t2],
+                // these values are taken from loading the tiff in QGIS
+                &[(
+                    "ndvi",
+                    FeatureData::Decimal(vec![54, 55, 51, 55, 52, 55, 50, 53])
+                )],
+            )
+            .unwrap()
+        )
     }
 }
