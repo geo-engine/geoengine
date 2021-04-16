@@ -5,3 +5,5 @@ mod point_in_polygon;
 mod raster_vector_join;
 mod reprojection;
 mod vector_join;
+
+pub use reprojection::{Reprojection, ReprojectionParams};
