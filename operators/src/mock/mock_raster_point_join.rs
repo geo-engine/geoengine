@@ -196,6 +196,7 @@ mod tests {
         raster::{Grid2D, RasterDataType, TileInformation},
         spatial_reference::SpatialReference,
     };
+    use num_traits::AsPrimitive;
 
     #[test]
     #[allow(clippy::too_many_lines)]
@@ -206,7 +207,8 @@ mod tests {
         }
         .boxed();
 
-        let raster = Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap();
+        let no_data_value = None;
+        let raster = Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], no_data_value).unwrap();
 
         let raster_tile = RasterTile2D::new_with_tile_info(
             TimeInterval::default(),
@@ -225,6 +227,7 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
+                    no_data_value: no_data_value.map(AsPrimitive::as_),
                 },
             },
         }
@@ -274,7 +277,8 @@ mod tests {
                     "result_descriptor": {
                         "data_type": "U8",
                         "spatial_reference": "EPSG:4326",
-                        "measurement": "unitless"
+                        "measurement": "unitless",
+                        "no_data_value": null
                     }
                 }
             }],
@@ -308,7 +312,8 @@ mod tests {
         }
         .boxed();
 
-        let raster = Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap();
+        let no_data_value = None;
+        let raster = Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], no_data_value).unwrap();
 
         let raster_tile = RasterTile2D::new_with_tile_info(
             TimeInterval::default(),
@@ -327,6 +332,7 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
+                    no_data_value: no_data_value.map(AsPrimitive::as_),
                 },
             },
         }

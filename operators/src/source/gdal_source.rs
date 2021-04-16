@@ -845,11 +845,14 @@ mod tests {
 
     #[test]
     fn test_regular_meta_data() {
+        let no_data_value = Some(0.);
+
         let meta_data = GdalMetaDataRegular {
             result_descriptor: RasterResultDescriptor {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 measurement: Measurement::Unitless,
+                no_data_value,
             },
             params: GdalDatasetParameters {
                 file_path: "/foo/bar_%TIME%.tiff".into(),
@@ -857,7 +860,7 @@ mod tests {
                 geo_transform: Default::default(),
                 bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (1., 1.).into()),
                 file_not_found_handling: FileNotFoundHandling::NoData,
-                no_data_value: Some(0.),
+                no_data_value,
             },
             placeholder: "%TIME%".to_string(),
             time_format: "%f".to_string(),
@@ -874,6 +877,7 @@ mod tests {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 measurement: Measurement::Unitless,
+                no_data_value: Some(0.)
             }
         );
 

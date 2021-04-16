@@ -1,14 +1,4 @@
-use futures::StreamExt;
-use geoengine_datatypes::{
-    operations::reproject::{
-        suggest_pixel_size_from_diag_cross, CoordinateProjection, CoordinateProjector, Reproject,
-    },
-    raster::{Pixel, TilingSpecification},
-    spatial_reference::SpatialReference,
-};
-use serde::{Deserialize, Serialize};
-use snafu::ensure;
-
+use super::map_query::MapQueryProcessor;
 use crate::{
     adapters::{fold_by_coordinate_lookup_future, RasterOverlapAdapter, TileReprojectionSubQuery},
     engine::{
@@ -20,9 +10,18 @@ use crate::{
     error,
     util::Result,
 };
-
-use super::map_query::MapQueryProcessor;
 use futures::stream::BoxStream;
+use futures::StreamExt;
+use geoengine_datatypes::{
+    operations::reproject::{
+        suggest_pixel_size_from_diag_cross, CoordinateProjection, CoordinateProjector, Reproject,
+    },
+    raster::{Pixel, TilingSpecification},
+    spatial_reference::SpatialReference,
+};
+use num_traits::AsPrimitive;
+use serde::{Deserialize, Serialize};
+use snafu::ensure;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct ReprojectionParams {
@@ -40,6 +39,7 @@ pub struct RasterReprojectionState {
     source_srs: SpatialReference,
     target_srs: SpatialReference,
     tiling_spec: TilingSpecification,
+    out_no_data_value: f64,
 }
 
 pub type Reprojection = Operator<ReprojectionParams>;
@@ -232,16 +232,20 @@ impl RasterOperator for Reprojection {
             .collect::<Result<Vec<Box<InitializedRasterOperator>>>>()?;
 
         let in_desc: &RasterResultDescriptor = initialized_raster_sources[0].result_descriptor();
+        let out_no_data_value = in_desc.no_data_value.unwrap_or(0.); // TODO: add option to force a no_data_value
+
         let out_desc = RasterResultDescriptor {
             spatial_reference: self.params.target_spatial_reference.into(),
             data_type: in_desc.data_type,
             measurement: in_desc.measurement.clone(),
+            no_data_value: Some(out_no_data_value),
         };
 
         let state = RasterReprojectionState {
             source_srs: Option::from(in_desc.spatial_reference).unwrap(),
             target_srs: self.params.target_spatial_reference,
             tiling_spec: context.tiling_specification(),
+            out_no_data_value,
         };
 
         Ok(
@@ -269,7 +273,7 @@ impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
-                    0_u8,
+                    s.out_no_data_value.as_(),
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::U16 => {
@@ -279,7 +283,7 @@ impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
-                    0_u16,
+                    s.out_no_data_value.as_(),
                 )))
             }
 
@@ -290,7 +294,7 @@ impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
-                    0_u32,
+                    s.out_no_data_value.as_(),
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::U64 => {
@@ -300,7 +304,7 @@ impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
-                    0_u64,
+                    s.out_no_data_value.as_(),
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::I8 => {
@@ -310,7 +314,7 @@ impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
-                    0_i8,
+                    s.out_no_data_value.as_(),
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::I16 => {
@@ -320,7 +324,7 @@ impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
-                    0_i16,
+                    s.out_no_data_value.as_(),
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::I32 => {
@@ -330,7 +334,7 @@ impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
-                    0_i32,
+                    s.out_no_data_value.as_(),
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::I64 => {
@@ -340,7 +344,7 @@ impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
-                    0_i64,
+                    s.out_no_data_value.as_(),
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::F32 => {
@@ -350,7 +354,7 @@ impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
-                    0_f32,
+                    s.out_no_data_value.as_(),
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::F64 => {
@@ -360,7 +364,7 @@ impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
                     s.source_srs,
                     s.target_srs,
                     s.tiling_spec,
-                    0_f64,
+                    s.out_no_data_value.as_(),
                 )))
             }
         })
@@ -675,30 +679,32 @@ mod tests {
             4326,
         );
 
+        let no_data_value = Some(0);
+
         let data = vec![
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 0].into(),
                 global_geo_transform: Default::default(),
-                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4], Some(0)).unwrap(),
+                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4], no_data_value).unwrap(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 1].into(),
                 global_geo_transform: Default::default(),
-                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10], Some(0)).unwrap(),
+                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10], no_data_value).unwrap(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 0].into(),
                 global_geo_transform: Default::default(),
-                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16], Some(0)).unwrap(),
+                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16], no_data_value).unwrap(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 1].into(),
                 global_geo_transform: Default::default(),
-                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22], Some(0)).unwrap(),
+                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22], no_data_value).unwrap(),
             },
         ];
 
@@ -709,6 +715,7 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
+                    no_data_value: no_data_value.map(AsPrimitive::as_),
                 },
             },
         }
