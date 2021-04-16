@@ -44,71 +44,6 @@ impl RasterPointJoinProcessor {
         }
     }
 
-    // fn extract_raster_values<P: Pixel>(
-    //     points: &MultiPointCollection,
-    //     raster: &RasterTile2D<P>,
-    //     new_column_name: &str,
-    // ) -> Result<MultiPointCollection> {
-    //     let mut valid: Vec<bool> = vec![false; points.len()];
-    //     let mut values = Vec::with_capacity(points.len());
-    //     let mut time_intervals = Vec::with_capacity(points.len());
-
-    //     for row in points {
-    //         let time_interval = match row.time_interval.intersect(&raster.time) {
-    //             Some(t) => t,
-    //             None => continue,
-    //         };
-
-    //         let mut value_option: Option<P> = None;
-    //         for &coordinate in row.geometry.points() {
-    //             let value = match raster.pixel_value_at_coord(coordinate) {
-    //                 Ok(value) => value,
-    //                 Err(_) => continue, // TODO: is it okay to ignore null values?
-    //             };
-
-    //             if raster.is_no_data(value) {
-    //                 continue; // TODO: is it okay to ignore null values?
-    //             }
-
-    //             value_option = Some(value);
-
-    //             // TODO: aggregate multiple extracted values for one multi point before inserting it
-    //             break;
-    //         }
-
-    //         if let Some(value) = value_option {
-    //             valid[row.index()] = true;
-    //             time_intervals.push(time_interval);
-    //             values.push(value);
-    //         }
-    //     }
-
-    //     // TODO: directly save values in vector of correct type
-    //     // TODO: handle classified values
-    //     let feature_data = match P::TYPE {
-    //         RasterDataType::U8
-    //         | RasterDataType::U16
-    //         | RasterDataType::U32
-    //         | RasterDataType::U64
-    //         | RasterDataType::I8
-    //         | RasterDataType::I16
-    //         | RasterDataType::I32
-    //         | RasterDataType::I64 => {
-    //             FeatureData::Decimal(values.into_iter().map(AsPrimitive::as_).collect())
-    //         }
-    //         RasterDataType::F32 | RasterDataType::F64 => {
-    //             FeatureData::Number(values.into_iter().map(AsPrimitive::as_).collect())
-    //         }
-    //     };
-
-    //     let points = points.filter(valid)?;
-
-    //     let points = points.replace_time(&time_intervals)?;
-    //     let points = points.add_column(new_column_name, feature_data)?;
-
-    //     Ok(points)
-    // }
-
     fn process_collections<'a>(
         points: BoxStream<'a, Result<MultiPointCollection>>,
         raster_processor: &'a TypedRasterQueryProcessor,
@@ -145,7 +80,18 @@ impl RasterPointJoinProcessor {
         query: QueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> BoxStream<'a, Result<MultiPointCollection>> {
-        // TODO: intersection bbox of collection with qrect
+        // make qrect smaller wrt. points
+        let query = QueryRectangle {
+            bbox: points
+                .bbox()
+                .and_then(|bbox| bbox.intersection(&query.bbox))
+                .unwrap_or(query.bbox),
+            time_interval: points
+                .time_bounds()
+                .and_then(|time| time.intersect(&query.time_interval))
+                .unwrap_or(query.time_interval),
+            spatial_resolution: query.spatial_resolution,
+        };
 
         let raster_query = match raster_processor.raster_query(query, ctx) {
             Ok(q) => q,
@@ -153,11 +99,10 @@ impl RasterPointJoinProcessor {
         };
 
         let points = Arc::new(points);
-        let accum_points = points.clone();
 
         let collection_stream = raster_query
             .time_multi_fold(
-                move || Ok(PointRasterJoiner::new(&accum_points)),
+                move || Ok(PointRasterJoiner::new()),
                 move |accum, raster| {
                     let points = points.clone();
                     async move {
@@ -179,8 +124,8 @@ struct PointRasterJoiner<P: Pixel> {
 }
 
 impl<P: Pixel> PointRasterJoiner<P> {
-    fn new(_points: &MultiPointCollection) -> Self {
-        // TODO: do initialization here
+    fn new() -> Self {
+        // TODO: is it possible to do the initialization here?
 
         Self {
             values: vec![],
@@ -232,7 +177,7 @@ impl<P: Pixel> PointRasterJoiner<P> {
             self.initialize(points, &raster.time)?;
         };
 
-        // TODO: avoid looking up coordinates again and again if they already have a value
+        // TODO: avoid iterating over coordinates that already have a value
 
         for (&coordinate, value_option) in points.coordinates().iter().zip(self.values.iter_mut()) {
             if value_option.is_some() {
@@ -275,11 +220,6 @@ impl<P: Pixel> PointRasterJoiner<P> {
                 FeatureData::NullableNumber(self.typed_values(points))
             }
         };
-
-        // match self.points {
-        //     Some(points) => Ok(points.add_column(new_column_name, feature_data)?),
-        //     None => Err(Error::EmptyInput), // TODO: maybe output empty dataset or just nulls
-        // }
 
         Ok(points.add_column(new_column_name, feature_data)?)
     }
@@ -406,8 +346,6 @@ mod tests {
             .collect::<Vec<MultiPointCollection>>()
             .await;
 
-        // dbg!(result);
-
         assert_eq!(result.len(), 1);
 
         let result = result.remove(0);
@@ -427,7 +365,7 @@ mod tests {
                 &[("ndvi", FeatureData::Decimal(vec![54, 55, 51, 55]))],
             )
             .unwrap()
-        )
+        );
     }
 
     #[tokio::test]
@@ -496,8 +434,6 @@ mod tests {
             .collect::<Vec<MultiPointCollection>>()
             .await;
 
-        // dbg!(result);
-
         assert_eq!(result.len(), 1);
 
         let result = result.remove(0);
@@ -518,7 +454,7 @@ mod tests {
                 &[("ndvi", FeatureData::Decimal(vec![54, 55, 51, 55]))],
             )
             .unwrap()
-        )
+        );
     }
 
     #[tokio::test]
@@ -589,8 +525,6 @@ mod tests {
             .collect::<Vec<MultiPointCollection>>()
             .await;
 
-        // dbg!(result);
-
         assert_eq!(result.len(), 1);
 
         let result = result.remove(0);
@@ -614,7 +548,7 @@ mod tests {
                 &[("ndvi", FeatureData::Decimal(vec![54, 55, 51, 55]))],
             )
             .unwrap()
-        )
+        );
     }
 
     #[tokio::test]
@@ -686,8 +620,6 @@ mod tests {
             .collect::<Vec<MultiPointCollection>>()
             .await;
 
-        // dbg!(result);
-
         assert_eq!(result.len(), 1);
 
         let result = result.remove(0);
@@ -724,6 +656,6 @@ mod tests {
                 )],
             )
             .unwrap()
-        )
+        );
     }
 }

@@ -299,6 +299,14 @@ impl TimeInterval {
     pub fn duration_ms(&self) -> u64 {
         self.end.inner().wrapping_sub(self.start.inner()) as u64
     }
+
+    /// Merges two time intervals such that it outs the smaller min and the larger max.
+    pub fn merge(&self, other: &Self) -> TimeInterval {
+        Self {
+            start: self.start.min(other.start),
+            end: self.end.max(other.end),
+        }
+    }
 }
 
 impl Debug for TimeInterval {
@@ -645,5 +653,13 @@ mod tests {
         let b = TimeInterval::new(2, 3).unwrap();
 
         assert!(!b.intersects(&a))
+    }
+
+    #[test]
+    fn merge() {
+        let a = TimeInterval::new(1, 2).unwrap();
+        let b = TimeInterval::new(2, 3).unwrap();
+
+        assert_eq!(a.merge(&b), TimeInterval::new_unchecked(1, 3));
     }
 }

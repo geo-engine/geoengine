@@ -5,7 +5,7 @@ use arrow::{
     buffer::Buffer,
 };
 
-use crate::primitives::{Coordinate2D, GeometryRef};
+use crate::primitives::{BoundingBox2D, Coordinate2D, GeometryRef};
 
 /// This trait allows iterating over the geometries of a feature collection
 pub trait IntoGeometryIterator<'a> {
@@ -38,6 +38,10 @@ pub trait GeometryCollection {
     fn coordinates(&self) -> &[Coordinate2D];
 
     fn feature_offsets(&self) -> &[i32];
+
+    fn bbox(&self) -> Option<BoundingBox2D> {
+        BoundingBox2D::from_coord_ref_iter(self.coordinates())
+    }
 }
 
 pub trait ReplaceRawArrayCoords {

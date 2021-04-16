@@ -759,6 +759,15 @@ pub trait FeatureCollectionInfos {
     /// Retrieve time intervals
     fn time_intervals(&self) -> &[TimeInterval];
 
+    /// Calculate the collection bounds over all time intervals,
+    /// i.e., an interval of the smallest and largest time start and end.
+    fn time_bounds(&self) -> Option<TimeInterval> {
+        self.time_intervals()
+            .iter()
+            .copied()
+            .reduce(|t1, t2| t1.merge(&t2))
+    }
+
     /// Returns the byte-size of this collection
     fn byte_size(&self) -> usize;
 }
