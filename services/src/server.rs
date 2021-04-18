@@ -187,17 +187,65 @@ pub async fn interrupt_handler(shutdown_tx: Sender<()>, callback: Option<fn()>) 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::handlers::ErrorResponse;
     use tokio::sync::oneshot;
 
     /// Test the webserver startup to ensure that `tokio` and `warp` are working properly
     #[tokio::test]
-    async fn webserver_start() -> Result<(), Error> {
+    async fn webserver_start() {
         let (shutdown_tx, shutdown_rx) = oneshot::channel();
 
-        let server = start_server(Some(shutdown_rx), None);
+        let (server, _) =
+            tokio::join!(start_server(Some(shutdown_rx), None), queries(shutdown_tx),);
+        server.expect("server run");
+    }
+
+    async fn queries(shutdown_tx: Sender<()>) {
+        let web_config: config::Web = get_config_element().unwrap();
+        let base_url = format!(
+            "http://{}/",
+            web_config
+                .external_address
+                .unwrap_or(web_config.bind_address)
+        );
+
+        assert_eq!(wait_for_server(&base_url).await, true);
+        issue_queries(&base_url).await;
 
         shutdown_tx.send(()).unwrap();
+    }
 
-        server.await
+    async fn issue_queries(base_url: &str) {
+        let client = reqwest::Client::new();
+        let body = client
+            .post(&format!("{}{}", base_url, "user"))
+            .body("no json")
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+
+        assert_eq!(
+            serde_json::from_str::<ErrorResponse>(&body).unwrap(),
+            ErrorResponse {
+                error: "BodyDeserializeError".to_string(),
+                message: "expected ident at line 1 column 2".to_string()
+            }
+        );
+    }
+
+    const WAIT_SERVER_RETRIES: i32 = 5;
+    const WAIT_SERVER_RETRY_INTERVAL: u64 = 1;
+
+    async fn wait_for_server(base_url: &str) -> bool {
+        for _ in 0..WAIT_SERVER_RETRIES {
+            if reqwest::get(base_url).await.is_ok() {
+                return true;
+            }
+            std::thread::sleep(std::time::Duration::from_secs(WAIT_SERVER_RETRY_INTERVAL));
+        }
+        return false;
     }
 }

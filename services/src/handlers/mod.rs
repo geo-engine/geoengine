@@ -69,6 +69,13 @@ pub async fn handle_rejection(err: Rejection) -> Result<impl Reply, Rejection> {
                 e.to_string(),
             ),
         }
+    } else if let Some(e) = err.find::<warp::filters::body::BodyDeserializeError>() {
+        (
+            StatusCode::BAD_REQUEST,
+            "BodyDeserializeError".to_string(),
+            e.source()
+                .map_or("Bad Request".to_string(), ToString::to_string),
+        )
     } else if err.find::<MethodNotAllowed>().is_some() {
         (
             StatusCode::METHOD_NOT_ALLOWED,
@@ -80,15 +87,6 @@ pub async fn handle_rejection(err: Rejection) -> Result<impl Reply, Rejection> {
             StatusCode::UNSUPPORTED_MEDIA_TYPE,
             "UnsupportedMediaType".to_string(),
             "Unsupported content type header.".to_string(),
-        )
-    } else if let Some(e) = err.find::<warp::filters::body::BodyDeserializeError>() {
-        // serde_json deserialization errors
-
-        (
-            StatusCode::BAD_REQUEST,
-            "BodyDeserializeError".to_string(),
-            e.source()
-                .map_or("Bad Request".to_string(), ToString::to_string),
         )
     } else if err.find::<InvalidQuery>().is_some() {
         (
