@@ -401,6 +401,7 @@ mod tests {
                             measurement: "radiation".to_string(),
                             unit: None,
                         },
+                        no_data_value: None,
                     },
                 },
             }
@@ -438,7 +439,8 @@ mod tests {
                         "measurement": "radiation",
                         "unit": null
                     }
-                }
+                },
+                "no_data_value": null
             })
         );
     }

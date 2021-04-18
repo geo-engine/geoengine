@@ -2,6 +2,8 @@ use crate::error::Error;
 use arrow::error::ArrowError;
 use snafu::Snafu;
 
+use super::TimeInstance;
+
 #[derive(Debug, Snafu)]
 #[snafu(visibility = "pub(crate)")]
 pub enum PrimitivesError {
@@ -15,6 +17,13 @@ pub enum PrimitivesError {
         source: ArrowError,
     },
     InvalidConversion,
+
+    #[snafu(display("Time instance must be between {} and {}, but is {}", min.inner(), max.inner(), is))]
+    InvalidTimeInstance {
+        min: TimeInstance,
+        max: TimeInstance,
+        is: i64,
+    },
 }
 
 impl From<PrimitivesError> for Error {

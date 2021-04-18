@@ -34,8 +34,9 @@ impl<T: Pixel> Blit<RasterTile2D<T>> for RasterTile2D<T> {
             })?;
 
         let offset = self
-            .global_geo_transform
+            .tile_geo_transform()
             .coordinate_to_grid_idx_2d(source.spatial_bounds().upper_left());
+
         let source_bounds = source.grid_array.bounding_box();
         let shifted_bounds = GridBoundingBox::new_unchecked(
             source_bounds.min_index() + offset,

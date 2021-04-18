@@ -1,3 +1,5 @@
+use crate::error;
+use gdal::vector::OGRwkbGeometryType;
 use std::collections::hash_map::Keys;
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
@@ -24,6 +26,25 @@ pub enum VectorDataType {
     MultiPoint,
     MultiLineString,
     MultiPolygon,
+}
+
+impl VectorDataType {
+    pub fn try_from_ogr_type_code(code: u32) -> Result<Self> {
+        Ok(match code {
+            OGRwkbGeometryType::wkbPoint | OGRwkbGeometryType::wkbMultiPoint => {
+                VectorDataType::MultiPoint
+            }
+            OGRwkbGeometryType::wkbLineString | OGRwkbGeometryType::wkbMultiLineString => {
+                VectorDataType::MultiLineString
+            }
+            OGRwkbGeometryType::wkbPolygon | OGRwkbGeometryType::wkbMultiPolygon => {
+                VectorDataType::MultiPolygon
+            }
+            _ => {
+                return Err(error::Error::NoMatchingVectorDataTypeForOgrGeometryType);
+            }
+        })
+    }
 }
 
 impl std::fmt::Display for VectorDataType {

@@ -1,8 +1,9 @@
-use crate::datasets::storage::AddDataSet;
-use crate::datasets::storage::DataSetStore;
+use crate::datasets::storage::AddDataset;
+use crate::datasets::storage::DatasetStore;
 use crate::handlers::ErrorResponse;
 use crate::projects::project::{
-    CreateProject, Layer, LayerInfo, LayerUpdate, ProjectId, RasterInfo, STRectangle, UpdateProject,
+    CreateProject, Layer, LayerUpdate, ProjectId, RasterSymbology, STRectangle, Symbology,
+    UpdateProject,
 };
 use crate::projects::projectdb::ProjectDb;
 use crate::users::session::Session;
@@ -15,9 +16,9 @@ use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use crate::{
     contexts::{Context, InMemoryContext},
-    datasets::storage::{DataSetDefinition, MetaDataDefinition},
+    datasets::storage::{DatasetDefinition, MetaDataDefinition},
 };
-use geoengine_datatypes::dataset::DataSetId;
+use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::operations::image::Colorizer;
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use geoengine_operators::engine::{RasterOperator, TypedOperator};
@@ -96,10 +97,11 @@ pub fn update_project_helper(project: ProjectId) -> UpdateProject {
         layers: Some(vec![LayerUpdate::UpdateOrInsert(Layer {
             workflow: WorkflowId::new(),
             name: "L1".to_string(),
-            info: LayerInfo::Raster(RasterInfo {
+            visibility: Default::default(),
+            symbology: Symbology::Raster(RasterSymbology {
+                opacity: 1.0,
                 colorizer: Colorizer::Rgba,
             }),
-            visibility: Default::default(),
         })]),
         plots: None,
         bounds: None,
@@ -109,12 +111,12 @@ pub fn update_project_helper(project: ProjectId) -> UpdateProject {
 
 #[allow(clippy::missing_panics_doc)]
 pub async fn register_ndvi_workflow_helper(ctx: &InMemoryContext) -> (Workflow, WorkflowId) {
-    let data_set = add_ndvi_to_datasets(ctx).await;
+    let dataset = add_ndvi_to_datasets(ctx).await;
 
     let workflow = Workflow {
         operator: TypedOperator::Raster(
             GdalSource {
-                params: GdalSourceParameters { data_set },
+                params: GdalSourceParameters { dataset },
             }
             .boxed(),
         ),
@@ -131,9 +133,9 @@ pub async fn register_ndvi_workflow_helper(ctx: &InMemoryContext) -> (Workflow, 
     (workflow, id)
 }
 
-pub async fn add_ndvi_to_datasets(ctx: &InMemoryContext) -> DataSetId {
-    let ndvi = DataSetDefinition {
-        properties: AddDataSet {
+pub async fn add_ndvi_to_datasets(ctx: &InMemoryContext) -> DatasetId {
+    let ndvi = DatasetDefinition {
+        properties: AddDataset {
             id: None,
             name: "NDVI".to_string(),
             description: "NDVI data from MODIS".to_string(),
@@ -142,9 +144,9 @@ pub async fn add_ndvi_to_datasets(ctx: &InMemoryContext) -> DataSetId {
         meta_data: MetaDataDefinition::GdalMetaDataRegular(create_ndvi_meta_data()),
     };
 
-    ctx.data_set_db_ref_mut()
+    ctx.dataset_db_ref_mut()
         .await
-        .add_data_set(
+        .add_dataset(
             UserId::new(),
             ndvi.properties
                 .validated()

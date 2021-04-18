@@ -20,7 +20,7 @@ use futures::stream::{self, BoxStream, StreamExt};
 
 use crate::engine::{MetaData, QueryRectangle};
 use geoengine_datatypes::raster::{GeoTransform, Grid2D, Pixel, RasterDataType, RasterTile2D};
-use geoengine_datatypes::{dataset::DataSetId, raster::TileInformation};
+use geoengine_datatypes::{dataset::DatasetId, raster::TileInformation};
 use geoengine_datatypes::{
     primitives::{
         BoundingBox2D, SpatialBounded, TimeInstance, TimeInterval, TimeStep, TimeStepIter,
@@ -38,7 +38,7 @@ use geoengine_datatypes::{
 /// ```rust
 /// use serde_json::{Result, Value};
 /// use geoengine_operators::source::{GdalSource, GdalSourceParameters};
-/// use geoengine_datatypes::dataset::InternalDataSetId;
+/// use geoengine_datatypes::dataset::InternalDatasetId;
 /// use geoengine_datatypes::util::Identifier;
 /// use std::str::FromStr;
 ///
@@ -46,7 +46,7 @@ use geoengine_datatypes::{
 ///     {
 ///         "type": "GdalSource",
 ///         "params": {
-///             "data_set": {
+///             "dataset": {
 ///                 "Internal": "a626c880-1c41-489b-9e19-9596d129859c"
 ///             }
 ///         }
@@ -56,36 +56,85 @@ use geoengine_datatypes::{
 ///
 /// assert_eq!(operator, GdalSource {
 ///     params: GdalSourceParameters {
-///         data_set: InternalDataSetId::from_str("a626c880-1c41-489b-9e19-9596d129859c").unwrap().into()
+///         dataset: InternalDatasetId::from_str("a626c880-1c41-489b-9e19-9596d129859c").unwrap().into()
 ///     },
 /// });
 /// ```
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub struct GdalSourceParameters {
-    pub data_set: DataSetId,
+    pub dataset: DatasetId,
 }
 
 type GdalMetaData = Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor>>;
 
 #[derive(Debug, Clone)]
 pub struct GdalLoadingInfo {
-    /// partitions of data set sorted by time
-    pub info: Vec<GdalLoadingInfoPart>, // TODO: iterator?
+    /// partitions of dataset sorted by time
+    pub info: GdalLoadingInfoPartIterator,
 }
 
-/// one temporal slice of the data set that requires reading from exactly one Gdal data set
+#[derive(Debug, Clone)]
+pub enum GdalLoadingInfoPartIterator {
+    Static {
+        parts: std::vec::IntoIter<GdalLoadingInfoPart>,
+    },
+    Dynamic {
+        time_step_iter: TimeStepIter,
+        params: GdalDatasetParameters,
+        placeholder: String,
+        time_format: String,
+        step: TimeStep,
+        max_t2: TimeInstance,
+    },
+}
+
+impl Iterator for GdalLoadingInfoPartIterator {
+    type Item = Result<GdalLoadingInfoPart>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            GdalLoadingInfoPartIterator::Static { parts } => parts.next().map(Result::Ok),
+            GdalLoadingInfoPartIterator::Dynamic {
+                time_step_iter,
+                params,
+                placeholder,
+                time_format,
+                step,
+                max_t2,
+            } => {
+                let t1 = time_step_iter.next()?;
+
+                let t2 = t1 + *step;
+                let t2 = t2.unwrap_or(*max_t2);
+
+                let time_interval = TimeInterval::new_unchecked(t1, t2);
+
+                let loading_info_part = params
+                    .replace_time_placeholder(placeholder, time_format, time_interval.start())
+                    .map(|loading_info_part_params| GdalLoadingInfoPart {
+                        time: time_interval,
+                        params: loading_info_part_params,
+                    });
+
+                Some(loading_info_part)
+            }
+        }
+    }
+}
+
+/// one temporal slice of the dataset that requires reading from exactly one Gdal dataset
 #[derive(Debug, Clone)]
 pub struct GdalLoadingInfoPart {
     pub time: TimeInterval,
-    pub params: GdalDataSetParameters,
+    pub params: GdalDatasetParameters,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct GdalDataSetParameters {
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
+pub struct GdalDatasetParameters {
     pub file_path: PathBuf,
     pub rasterband_channel: usize,
     pub geo_transform: GeoTransform,
-    pub bbox: BoundingBox2D, // the bounding box of the data set containing the raster data
+    pub bbox: BoundingBox2D, // the bounding box of the dataset containing the raster data
     pub file_not_found_handling: FileNotFoundHandling,
     pub no_data_value: Option<f64>,
 }
@@ -97,20 +146,23 @@ pub enum FileNotFoundHandling {
     Error,  // return error tile
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
 pub struct GdalMetaDataStatic {
     pub time: Option<TimeInterval>,
-    pub params: GdalDataSetParameters,
+    pub params: GdalDatasetParameters,
     pub result_descriptor: RasterResultDescriptor,
 }
 
 impl MetaData<GdalLoadingInfo, RasterResultDescriptor> for GdalMetaDataStatic {
     fn loading_info(&self, _query: QueryRectangle) -> Result<GdalLoadingInfo> {
         Ok(GdalLoadingInfo {
-            info: vec![GdalLoadingInfoPart {
-                time: self.time.unwrap_or_else(TimeInterval::default),
-                params: self.params.clone(),
-            }],
+            info: GdalLoadingInfoPartIterator::Static {
+                parts: vec![GdalLoadingInfoPart {
+                    time: self.time.unwrap_or_else(TimeInterval::default),
+                    params: self.params.clone(),
+                }]
+                .into_iter(),
+            },
         })
     }
 
@@ -124,15 +176,15 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor> for GdalMetaDataStatic {
 }
 
 /// Meta data for a regular time series that begins (is anchored) at `start` with multiple gdal data
-/// sets `step` time apart. The `placeholder` in the file path of the data set is replaced with the
+/// sets `step` time apart. The `placeholder` in the file path of the dataset is replaced with the
 /// queried time in specified `time_format`.
 // TODO: `start` is actually more a reference time, because the time series also goes in
 //        negative direction. Maybe it would be better to have a real start and end time, then
 //        everything before start and after end is just one big nodata raster instead of many
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
 pub struct GdalMetaDataRegular {
     pub result_descriptor: RasterResultDescriptor,
-    pub params: GdalDataSetParameters,
+    pub params: GdalDatasetParameters,
     pub placeholder: String,
     pub time_format: String,
     pub start: TimeInstance,
@@ -151,22 +203,16 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor> for GdalMetaDataRegular {
         let time_iterator =
             TimeStepIter::new_with_interval_incl_start(snapped_interval, self.step)?;
 
-        let info: Result<Vec<_>> = time_iterator
-            .try_as_intervals(self.step)
-            .map(|time| {
-                let time = time?;
-                Ok(GdalLoadingInfoPart {
-                    time,
-                    params: self.params.replace_time_placeholder(
-                        &self.placeholder,
-                        &self.time_format,
-                        time.start(),
-                    )?,
-                })
-            })
-            .collect();
-
-        Ok(GdalLoadingInfo { info: info? })
+        Ok(GdalLoadingInfo {
+            info: GdalLoadingInfoPartIterator::Dynamic {
+                time_step_iter: time_iterator,
+                params: self.params.clone(),
+                placeholder: self.placeholder.clone(),
+                time_format: self.time_format.clone(),
+                step: self.step,
+                max_t2: query.time_interval.end(),
+            },
+        })
     }
 
     fn result_descriptor(&self) -> Result<RasterResultDescriptor> {
@@ -178,7 +224,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor> for GdalMetaDataRegular {
     }
 }
 
-impl GdalDataSetParameters {
+impl GdalDatasetParameters {
     pub fn replace_time_placeholder(
         &self,
         placeholder: &str,
@@ -229,45 +275,43 @@ where
     /// A method to async load single tiles from a GDAL dataset.
     ///
     pub async fn load_tile_data_async(
-        data_set_params: GdalDataSetParameters,
+        dataset_params: GdalDatasetParameters,
         tile_information: TileInformation,
     ) -> Result<Grid2D<T>> {
-        tokio::task::spawn_blocking(move || {
-            Self::load_tile_data(&data_set_params, tile_information)
-        })
-        .await
-        .context(error::TokioJoin)?
+        tokio::task::spawn_blocking(move || Self::load_tile_data(&dataset_params, tile_information))
+            .await
+            .context(error::TokioJoin)?
     }
 
     ///
     /// A method to load single tiles from a GDAL dataset.
     ///
     pub fn load_tile_data(
-        data_set_params: &GdalDataSetParameters,
+        dataset_params: &GdalDatasetParameters,
         tile_information: TileInformation,
     ) -> Result<Grid2D<T>> {
-        let dataset_bounds = data_set_params.bbox;
-        let geo_transform = data_set_params.geo_transform;
+        let dataset_bounds = dataset_params.bbox;
+        let geo_transform = dataset_params.geo_transform;
 
         let output_bounds = tile_information.spatial_bounds();
         let output_shape = tile_information.tile_size_in_pixels();
         let output_geo_transform = tile_information.tile_geo_transform();
 
-        let dataset_result = GdalDataset::open(&data_set_params.file_path);
+        let dataset_result = GdalDataset::open(&dataset_params.file_path);
 
         // TODO: We also need to get metadata from the dataset (for each tile) e.g. scale + offset.
-        let no_data_value = data_set_params.no_data_value.map(T::from_);
+        let no_data_value = dataset_params.no_data_value.map(T::from_);
         // TODO: ensure that there is a no_data_value
         let fill_value = no_data_value.unwrap_or_else(T::zero);
 
         if dataset_result.is_err() {
             // TODO: check if Gdal error is actually file not found
-            return match data_set_params.file_not_found_handling {
+            return match dataset_params.file_not_found_handling {
                 FileNotFoundHandling::NoData => {
                     Ok(Grid2D::new_filled(output_shape, fill_value, no_data_value))
                 }
-                FileNotFoundHandling::Error => Err(crate::error::Error::CouldNotOpenGdalDataSet {
-                    file_path: data_set_params.file_path.to_string_lossy().to_string(),
+                FileNotFoundHandling::Error => Err(crate::error::Error::CouldNotOpenGdalDataset {
+                    file_path: dataset_params.file_path.to_string_lossy().to_string(),
                 }),
             };
         };
@@ -278,7 +322,7 @@ where
 
         // get the requested raster band of the dataset …
         let rasterband: GdalRasterBand =
-            dataset.rasterband(data_set_params.rasterband_channel as isize)?;
+            dataset.rasterband(dataset_params.rasterband_channel as isize)?;
 
         // dataset spatial relations
         let dataset_contains_tile = dataset_bounds.contains_bbox(&output_bounds);
@@ -393,10 +437,14 @@ where
     ) -> Result<BoxStream<Result<RasterTile2D<T>>>> {
         let meta_data = self.meta_data.loading_info(query)?;
 
-        Ok(stream::iter(meta_data.info.into_iter())
-            .map(move |info| self.tile_stream(query, info))
-            .flatten()
-            .boxed())
+        let stream = stream::iter(meta_data.info)
+            .map(move |info| match info {
+                Ok(info) => self.tile_stream(query, info),
+                Err(err) => stream::once(async { Result::Err(err) }).boxed(),
+            })
+            .flatten();
+
+        Ok(stream.boxed())
     }
 }
 
@@ -408,7 +456,7 @@ impl RasterOperator for GdalSource {
         self: Box<Self>,
         context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<InitializedRasterOperator>> {
-        let meta_data: GdalMetaData = context.meta_data(&self.params.data_set)?;
+        let meta_data: GdalMetaData = context.meta_data(&self.params.dataset)?;
 
         Ok(InitializedGdalSourceOperator {
             result_descriptor: meta_data.result_descriptor()?,
@@ -544,7 +592,7 @@ where
 mod tests {
     use super::*;
     use crate::engine::{MockExecutionContext, MockQueryContext, QueryRectangle};
-    use crate::util::gdal::{add_ndvi_data_set, raster_dir};
+    use crate::util::gdal::{add_ndvi_dataset, raster_dir};
     use crate::util::Result;
     use geoengine_datatypes::raster::{TileInformation, TilingStrategy};
     use geoengine_datatypes::{
@@ -556,14 +604,14 @@ mod tests {
     async fn query_gdal_source(
         exe_ctx: &mut MockExecutionContext,
         query_ctx: &MockQueryContext,
-        id: DataSetId,
+        id: DatasetId,
         output_shape: GridShape2D,
         output_bounds: BoundingBox2D,
         time_interval: TimeInterval,
     ) -> Vec<Result<RasterTile2D<u8>>> {
         let op = GdalSource {
             params: GdalSourceParameters {
-                data_set: id.clone(),
+                dataset: id.clone(),
             },
         }
         .boxed();
@@ -597,7 +645,7 @@ mod tests {
         output_bounds: BoundingBox2D,
     ) -> Result<Grid2D<u8>> {
         GdalSourceProcessor::<u8>::load_tile_data(
-            &GdalDataSetParameters {
+            &GdalDatasetParameters {
                 file_path: raster_dir().join("modis_ndvi/MOD13A2_M_NDVI_2014-01-01.TIFF"),
                 rasterband_channel: 1,
                 geo_transform: GeoTransform {
@@ -770,7 +818,7 @@ mod tests {
 
     #[test]
     fn replace_time_placeholder() {
-        let params = GdalDataSetParameters {
+        let params = GdalDatasetParameters {
             file_path: "/foo/bar_%TIME%.tiff".into(),
             rasterband_channel: 0,
             geo_transform: Default::default(),
@@ -779,7 +827,7 @@ mod tests {
             no_data_value: Some(0.),
         };
         let replaced = params
-            .replace_time_placeholder("%TIME%", "%f", TimeInstance::from_millis(22))
+            .replace_time_placeholder("%TIME%", "%f", TimeInstance::from_millis_unchecked(22))
             .unwrap();
         assert_eq!(
             replaced.file_path.to_string_lossy(),
@@ -797,23 +845,26 @@ mod tests {
 
     #[test]
     fn test_regular_meta_data() {
+        let no_data_value = Some(0.);
+
         let meta_data = GdalMetaDataRegular {
             result_descriptor: RasterResultDescriptor {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 measurement: Measurement::Unitless,
+                no_data_value,
             },
-            params: GdalDataSetParameters {
+            params: GdalDatasetParameters {
                 file_path: "/foo/bar_%TIME%.tiff".into(),
                 rasterband_channel: 0,
                 geo_transform: Default::default(),
                 bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (1., 1.).into()),
                 file_not_found_handling: FileNotFoundHandling::NoData,
-                no_data_value: Some(0.),
+                no_data_value,
             },
             placeholder: "%TIME%".to_string(),
             time_format: "%f".to_string(),
-            start: 11.into(),
+            start: TimeInstance::from_millis_unchecked(11),
             step: TimeStep {
                 granularity: TimeGranularity::Millis,
                 step: 11,
@@ -826,6 +877,7 @@ mod tests {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 measurement: Measurement::Unitless,
+                no_data_value: Some(0.)
             }
         );
 
@@ -838,8 +890,7 @@ mod tests {
                 })
                 .unwrap()
                 .info
-                .iter()
-                .map(|p| p.params.file_path.to_str().unwrap())
+                .map(|p| p.unwrap().params.file_path.to_str().unwrap().to_owned())
                 .collect::<Vec<_>>(),
             &[
                 "/foo/bar_000000000.tiff",
@@ -897,7 +948,7 @@ mod tests {
     async fn test_query_single_time_slice() {
         let mut exe_ctx = MockExecutionContext::default();
         let query_ctx = MockQueryContext::default();
-        let id = add_ndvi_data_set(&mut exe_ctx);
+        let id = add_ndvi_dataset(&mut exe_ctx);
 
         let output_shape: GridShape2D = [256, 256].into();
         let output_bounds = BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into());
@@ -946,7 +997,7 @@ mod tests {
     async fn test_query_multi_time_slices() {
         let mut exe_ctx = MockExecutionContext::default();
         let query_ctx = MockQueryContext::default();
-        let id = add_ndvi_data_set(&mut exe_ctx);
+        let id = add_ndvi_dataset(&mut exe_ctx);
 
         let output_shape: GridShape2D = [256, 256].into();
         let output_bounds = BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into());
@@ -980,7 +1031,7 @@ mod tests {
     async fn test_nodata() {
         let mut exe_ctx = MockExecutionContext::default();
         let query_ctx = MockQueryContext::default();
-        let id = add_ndvi_data_set(&mut exe_ctx);
+        let id = add_ndvi_dataset(&mut exe_ctx);
 
         let output_shape: GridShape2D = [256, 256].into();
         let output_bounds = BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into());

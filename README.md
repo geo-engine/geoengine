@@ -15,15 +15,17 @@ This workspace contains the Geo Engine crates.
 
 ```
 # Build essentials
-sudo apt install build-essential
+apt install build-essential
+# lld linker
+apt install clang lld
 # GDAL
-sudo apt install libgdal-dev gdal-bin
+apt install libgdal-dev gdal-bin
 # OpenCL
-sudo apt install ocl-icd-opencl-dev
+apt install ocl-icd-opencl-dev
 # (optional) OpenCL POCL
-sudo apt install pocl-opencl-icd
+apt install pocl-opencl-icd
 # Proj build dependencies (if libproj >= 7.2 not installed)
-sudo apt install cmake sqlite3
+apt install cmake sqlite3
 ```
 
 ### Lints
@@ -63,12 +65,12 @@ Copy `Settings-default.toml` to `Settings.toml` and edit per your requirements.
 
 Build:
 
-`sudo docker build --file=dev.Dockerfile --tag=geoengine:0.0.1 .`
+`docker build --file=dev.Dockerfile --tag=geoengine:0.0.1 .`
 
 Execute:
 
-`sudo docker container run --detach --name geoengine --publish 127.0.0.1:3030:8080 geoengine:0.0.1`
+`docker container run --detach --name geoengine --publish 127.0.0.1:3030:8080 geoengine:0.0.1`
 
 Inspect the container:
 
-`sudo docker exec -it geoengine bash`
+`docker exec -it geoengine bash`

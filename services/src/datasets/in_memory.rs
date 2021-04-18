@@ -1,7 +1,7 @@
-use crate::datasets::listing::{DataSetListOptions, DataSetListing, DataSetProvider, OrderBy};
+use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider, OrderBy};
 use crate::datasets::storage::{
-    AddDataSet, AddDataSetProvider, DataSet, DataSetDb, DataSetProviderDb,
-    DataSetProviderListOptions, DataSetProviderListing, DataSetStore, DataSetStorer,
+    AddDataset, AddDatasetProvider, Dataset, DatasetDb, DatasetProviderDb,
+    DatasetProviderListOptions, DatasetProviderListing, DatasetStore, DatasetStorer,
 };
 use crate::error;
 use crate::error::Result;
@@ -9,7 +9,7 @@ use crate::users::user::UserId;
 use crate::util::user_input::Validated;
 use async_trait::async_trait;
 use geoengine_datatypes::{
-    dataset::{DataSetId, DataSetProviderId, InternalDataSetId},
+    dataset::{DatasetId, DatasetProviderId, InternalDatasetId},
     util::Identifier,
 };
 use geoengine_operators::engine::{
@@ -17,63 +17,67 @@ use geoengine_operators::engine::{
     VectorResultDescriptor,
 };
 use geoengine_operators::source::{GdalLoadingInfo, GdalMetaDataRegular, OgrSourceDataset};
-use geoengine_operators::{mock::MockDataSetDataSourceLoadingInfo, source::GdalMetaDataStatic};
+use geoengine_operators::{mock::MockDatasetDataSourceLoadingInfo, source::GdalMetaDataStatic};
 use std::collections::HashMap;
 
-use super::storage::MetaDataDefinition;
+use super::{
+    storage::MetaDataDefinition,
+    upload::{Upload, UploadDb, UploadId},
+};
 
 #[derive(Default)]
-pub struct HashMapDataSetDb {
-    data_sets: Vec<DataSet>,
-    ogr_data_sets:
-        HashMap<InternalDataSetId, StaticMetaData<OgrSourceDataset, VectorResultDescriptor>>,
-    mock_data_sets: HashMap<
-        InternalDataSetId,
-        StaticMetaData<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>,
+pub struct HashMapDatasetDb {
+    datasets: Vec<Dataset>,
+    ogr_datasets:
+        HashMap<InternalDatasetId, StaticMetaData<OgrSourceDataset, VectorResultDescriptor>>,
+    mock_datasets: HashMap<
+        InternalDatasetId,
+        StaticMetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>,
     >,
-    gdal_data_sets:
-        HashMap<InternalDataSetId, Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor>>>,
+    gdal_datasets:
+        HashMap<InternalDatasetId, Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor>>>,
+    uploads: HashMap<UploadId, Upload>,
 }
 
-impl DataSetDb for HashMapDataSetDb {}
+impl DatasetDb for HashMapDatasetDb {}
 
 #[async_trait]
-impl DataSetProviderDb for HashMapDataSetDb {
-    async fn add_data_set_provider(
+impl DatasetProviderDb for HashMapDatasetDb {
+    async fn add_dataset_provider(
         &mut self,
         _user: UserId,
-        _provider: Validated<AddDataSetProvider>,
-    ) -> Result<DataSetProviderId> {
+        _provider: Validated<AddDatasetProvider>,
+    ) -> Result<DatasetProviderId> {
         todo!()
     }
 
-    async fn list_data_set_providers(
+    async fn list_dataset_providers(
         &self,
         _user: UserId,
-        _options: Validated<DataSetProviderListOptions>,
-    ) -> Result<Vec<DataSetProviderListing>> {
+        _options: Validated<DatasetProviderListOptions>,
+    ) -> Result<Vec<DatasetProviderListing>> {
         todo!()
     }
 
-    async fn data_set_provider(
+    async fn dataset_provider(
         &self,
         _user: UserId,
-        _provider: DataSetProviderId,
-    ) -> Result<&dyn DataSetProvider> {
+        _provider: DatasetProviderId,
+    ) -> Result<&dyn DatasetProvider> {
         todo!()
     }
 }
 
 pub trait HashMapStorable: Send + Sync {
-    fn store(&self, id: InternalDataSetId, db: &mut HashMapDataSetDb) -> TypedResultDescriptor;
+    fn store(&self, id: InternalDatasetId, db: &mut HashMapDatasetDb) -> TypedResultDescriptor;
 }
 
-impl DataSetStorer for HashMapDataSetDb {
+impl DatasetStorer for HashMapDatasetDb {
     type StorageType = Box<dyn HashMapStorable>;
 }
 
 impl HashMapStorable for MetaDataDefinition {
-    fn store(&self, id: InternalDataSetId, db: &mut HashMapDataSetDb) -> TypedResultDescriptor {
+    fn store(&self, id: InternalDatasetId, db: &mut HashMapDatasetDb) -> TypedResultDescriptor {
         match self {
             MetaDataDefinition::MockMetaData(d) => d.store(id, db),
             MetaDataDefinition::OgrMetaData(d) => d.store(id, db),
@@ -84,55 +88,55 @@ impl HashMapStorable for MetaDataDefinition {
 }
 
 impl HashMapStorable for StaticMetaData<OgrSourceDataset, VectorResultDescriptor> {
-    fn store(&self, id: InternalDataSetId, db: &mut HashMapDataSetDb) -> TypedResultDescriptor {
-        db.ogr_data_sets.insert(id, self.clone());
+    fn store(&self, id: InternalDatasetId, db: &mut HashMapDatasetDb) -> TypedResultDescriptor {
+        db.ogr_datasets.insert(id, self.clone());
         self.result_descriptor.clone().into()
     }
 }
 
-impl HashMapStorable for StaticMetaData<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor> {
-    fn store(&self, id: InternalDataSetId, db: &mut HashMapDataSetDb) -> TypedResultDescriptor {
-        db.mock_data_sets.insert(id, self.clone());
+impl HashMapStorable for StaticMetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor> {
+    fn store(&self, id: InternalDatasetId, db: &mut HashMapDatasetDb) -> TypedResultDescriptor {
+        db.mock_datasets.insert(id, self.clone());
         self.result_descriptor.clone().into()
     }
 }
 
 impl HashMapStorable for GdalMetaDataRegular {
-    fn store(&self, id: InternalDataSetId, db: &mut HashMapDataSetDb) -> TypedResultDescriptor {
-        db.gdal_data_sets.insert(id, Box::new(self.clone()));
+    fn store(&self, id: InternalDatasetId, db: &mut HashMapDatasetDb) -> TypedResultDescriptor {
+        db.gdal_datasets.insert(id, Box::new(self.clone()));
         self.result_descriptor.clone().into()
     }
 }
 
 impl HashMapStorable for GdalMetaDataStatic {
-    fn store(&self, id: InternalDataSetId, db: &mut HashMapDataSetDb) -> TypedResultDescriptor {
-        db.gdal_data_sets.insert(id, Box::new(self.clone()));
+    fn store(&self, id: InternalDatasetId, db: &mut HashMapDatasetDb) -> TypedResultDescriptor {
+        db.gdal_datasets.insert(id, Box::new(self.clone()));
         self.result_descriptor.clone().into()
     }
 }
 
 #[async_trait]
-impl DataSetStore for HashMapDataSetDb {
-    async fn add_data_set(
+impl DatasetStore for HashMapDatasetDb {
+    async fn add_dataset(
         &mut self,
         _user: UserId,
-        data_set: Validated<AddDataSet>,
+        dataset: Validated<AddDataset>,
         meta_data: Box<dyn HashMapStorable>,
-    ) -> Result<DataSetId> {
-        let data_set = data_set.user_input;
-        let id = data_set
+    ) -> Result<DatasetId> {
+        let dataset = dataset.user_input;
+        let id = dataset
             .id
-            .unwrap_or_else(|| InternalDataSetId::new().into());
-        let result_descriptor = meta_data.store(id.internal().expect("from AddDataSet"), self);
+            .unwrap_or_else(|| InternalDatasetId::new().into());
+        let result_descriptor = meta_data.store(id.internal().expect("from AddDataset"), self);
 
-        let d: DataSet = DataSet {
+        let d: Dataset = Dataset {
             id: id.clone(),
-            name: data_set.name,
-            description: data_set.description,
+            name: dataset.name,
+            description: dataset.description,
             result_descriptor,
-            source_operator: data_set.source_operator,
+            source_operator: dataset.source_operator,
         };
-        self.data_sets.push(d);
+        self.datasets.push(d);
 
         Ok(id)
     }
@@ -143,24 +147,24 @@ impl DataSetStore for HashMapDataSetDb {
 }
 
 #[async_trait]
-impl DataSetProvider for HashMapDataSetDb {
+impl DatasetProvider for HashMapDatasetDb {
     async fn list(
         &self,
         _user: UserId,
-        options: Validated<DataSetListOptions>,
-    ) -> Result<Vec<DataSetListing>> {
+        options: Validated<DatasetListOptions>,
+    ) -> Result<Vec<DatasetListing>> {
         // TODO: permissions
 
-        // TODO: include data sets from external data set providers
+        // TODO: include datasets from external dataset providers
         let options = options.user_input;
 
         let mut list: Vec<_> = if let Some(filter) = &options.filter {
-            self.data_sets
+            self.datasets
                 .iter()
                 .filter(|d| d.name.contains(filter) || d.description.contains(filter))
                 .collect()
         } else {
-            self.data_sets.iter().collect()
+            self.datasets.iter().collect()
         };
 
         match options.order {
@@ -172,80 +176,90 @@ impl DataSetProvider for HashMapDataSetDb {
             .into_iter()
             .skip(options.offset as usize)
             .take(options.limit as usize)
-            .map(DataSet::listing)
+            .map(Dataset::listing)
             .collect();
 
         Ok(list)
     }
+
+    async fn load(&self, _user: UserId, dataset: &DatasetId) -> Result<Dataset> {
+        // TODO: permissions
+
+        self.datasets
+            .iter()
+            .find(|d| d.id == *dataset)
+            .cloned()
+            .ok_or(error::Error::UnknownDatasetId)
+    }
 }
 
-impl MetaDataProvider<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>
-    for HashMapDataSetDb
+impl MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>
+    for HashMapDatasetDb
 {
     fn meta_data(
         &self,
-        data_set: &DataSetId,
+        dataset: &DatasetId,
     ) -> Result<
-        Box<dyn MetaData<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>>,
+        Box<dyn MetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>>,
         geoengine_operators::error::Error,
     > {
         Ok(Box::new(
-            self.mock_data_sets
-                .get(&data_set.internal().ok_or(
-                    geoengine_operators::error::Error::DataSetMetaData {
-                        source: Box::new(error::Error::DataSetIdTypeMissMatch),
+            self.mock_datasets
+                .get(&dataset.internal().ok_or(
+                    geoengine_operators::error::Error::DatasetMetaData {
+                        source: Box::new(error::Error::DatasetIdTypeMissMatch),
                     },
                 )?)
-                .ok_or(geoengine_operators::error::Error::DataSetMetaData {
-                    source: Box::new(error::Error::UnknownDataSetId),
+                .ok_or(geoengine_operators::error::Error::DatasetMetaData {
+                    source: Box::new(error::Error::UnknownDatasetId),
                 })?
                 .clone(),
         ))
     }
 }
 
-impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor> for HashMapDataSetDb {
+impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor> for HashMapDatasetDb {
     fn meta_data(
         &self,
-        data_set: &DataSetId,
+        dataset: &DatasetId,
     ) -> Result<
         Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor>>,
         geoengine_operators::error::Error,
     > {
         Ok(Box::new(
-            self.ogr_data_sets
-                .get(&data_set.internal().ok_or(
-                    geoengine_operators::error::Error::DataSetMetaData {
-                        source: Box::new(error::Error::DataSetIdTypeMissMatch),
+            self.ogr_datasets
+                .get(&dataset.internal().ok_or(
+                    geoengine_operators::error::Error::DatasetMetaData {
+                        source: Box::new(error::Error::DatasetIdTypeMissMatch),
                     },
                 )?)
-                .ok_or(geoengine_operators::error::Error::DataSetMetaData {
-                    source: Box::new(error::Error::UnknownDataSetId),
+                .ok_or(geoengine_operators::error::Error::DatasetMetaData {
+                    source: Box::new(error::Error::UnknownDatasetId),
                 })?
                 .clone(),
         ))
     }
 }
 
-impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor> for HashMapDataSetDb {
+impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor> for HashMapDatasetDb {
     fn meta_data(
         &self,
-        data_set: &DataSetId,
+        dataset: &DatasetId,
     ) -> Result<
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor>>,
         geoengine_operators::error::Error,
     > {
-        let id = data_set
+        let id = dataset
             .internal()
-            .ok_or(geoengine_operators::error::Error::DataSetMetaData {
-                source: Box::new(error::Error::DataSetIdTypeMissMatch),
+            .ok_or(geoengine_operators::error::Error::DatasetMetaData {
+                source: Box::new(error::Error::DatasetIdTypeMissMatch),
             })?;
 
         Ok(self
-            .gdal_data_sets
+            .gdal_datasets
             .get(&id)
-            .ok_or(geoengine_operators::error::Error::DataSetMetaData {
-                source: Box::new(error::Error::UnknownDataSetId),
+            .ok_or(geoengine_operators::error::Error::DatasetMetaData {
+                source: Box::new(error::Error::UnknownDatasetId),
             })?
             .clone())
     }
@@ -274,10 +288,10 @@ mod tests {
             columns: Default::default(),
         };
 
-        let ds = AddDataSet {
+        let ds = AddDataset {
             id: None,
-            name: "OgrDataSet".to_string(),
-            description: "My Ogr data set".to_string(),
+            name: "OgrDataset".to_string(),
+            description: "My Ogr dataset".to_string(),
             source_operator: "OgrSource".to_string(),
         };
 
@@ -297,9 +311,9 @@ mod tests {
         };
 
         let id = ctx
-            .data_set_db_ref_mut()
+            .dataset_db_ref_mut()
             .await
-            .add_data_set(session.user.id, ds.validated()?, Box::new(meta))
+            .add_dataset(session.user.id, ds.validated()?, Box::new(meta))
             .await?;
 
         let exe_ctx = ctx.execution_context(&session)?;
@@ -317,11 +331,11 @@ mod tests {
         );
 
         let ds = ctx
-            .data_set_db_ref()
+            .dataset_db_ref()
             .await
             .list(
                 session.user.id,
-                DataSetListOptions {
+                DatasetListOptions {
                     filter: None,
                     order: OrderBy::NameAsc,
                     offset: 0,
@@ -335,16 +349,33 @@ mod tests {
 
         assert_eq!(
             ds[0],
-            DataSetListing {
+            DatasetListing {
                 id,
-                name: "OgrDataSet".to_string(),
-                description: "My Ogr data set".to_string(),
+                name: "OgrDataset".to_string(),
+                description: "My Ogr dataset".to_string(),
                 tags: vec![],
                 source_operator: "OgrSource".to_string(),
                 result_descriptor: descriptor.into()
             }
         );
 
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl UploadDb for HashMapDatasetDb {
+    async fn get_upload(&self, _user: UserId, upload: UploadId) -> Result<Upload> {
+        // TODO: user permission
+        self.uploads
+            .get(&upload)
+            .map(Clone::clone)
+            .ok_or(error::Error::UnknownUploadId)
+    }
+
+    async fn create_upload(&mut self, _user: UserId, upload: Upload) -> Result<()> {
+        // TODO: user permission
+        self.uploads.insert(upload.id, upload);
         Ok(())
     }
 }

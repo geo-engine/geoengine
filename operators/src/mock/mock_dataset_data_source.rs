@@ -8,22 +8,22 @@ use futures::stream;
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::collections::{MultiPointCollection, VectorDataType};
-use geoengine_datatypes::dataset::DataSetId;
+use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval};
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 // TODO: generify this to support all data types
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MockDataSetDataSourceLoadingInfo {
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
+pub struct MockDatasetDataSourceLoadingInfo {
     pub points: Vec<Coordinate2D>,
 }
 
-impl MetaData<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>
-    for MockDataSetDataSourceLoadingInfo
+impl MetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>
+    for MockDatasetDataSourceLoadingInfo
 {
-    fn loading_info(&self, _query: QueryRectangle) -> Result<MockDataSetDataSourceLoadingInfo> {
+    fn loading_info(&self, _query: QueryRectangle) -> Result<MockDatasetDataSourceLoadingInfo> {
         Ok(self.clone()) // TODO: intersect points with query rectangle
     }
 
@@ -37,31 +37,31 @@ impl MetaData<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>
 
     fn box_clone(
         &self,
-    ) -> Box<dyn MetaData<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>> {
+    ) -> Box<dyn MetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>> {
         Box::new(self.clone())
     }
 }
 
-// impl LoadingInfoProvider<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>
+// impl LoadingInfoProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>
 //     for MockExecutionContext
 // {
 //     fn loading_info(
 //         &self,
-//         _data_set: &DataSetId,
-//     ) -> Result<Box<dyn LoadingInfo<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>>>
+//         _dataset: &DatasetId,
+//     ) -> Result<Box<dyn LoadingInfo<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>>>
 //     {
 //         Ok(Box::new(self.loading_info.as_ref().unwrap().clone())
 //             as Box<
-//                 dyn LoadingInfo<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>,
+//                 dyn LoadingInfo<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>,
 //             >)
 //     }
 // }
 
-pub struct MockDataSetDataSourceProcessor {
-    loading_info: Box<dyn MetaData<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>>,
+pub struct MockDatasetDataSourceProcessor {
+    loading_info: Box<dyn MetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>>,
 }
 
-impl QueryProcessor for MockDataSetDataSourceProcessor {
+impl QueryProcessor for MockDatasetDataSourceProcessor {
     type Output = MultiPointCollection;
     fn query<'a>(
         &'a self,
@@ -85,19 +85,19 @@ impl QueryProcessor for MockDataSetDataSourceProcessor {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct MockDataSetDataSourceParams {
-    pub data_set: DataSetId,
+pub struct MockDatasetDataSourceParams {
+    pub dataset: DatasetId,
 }
 
-pub type MockDataSetDataSource = SourceOperator<MockDataSetDataSourceParams>;
+pub type MockDatasetDataSource = SourceOperator<MockDatasetDataSourceParams>;
 
 #[typetag::serde]
-impl VectorOperator for MockDataSetDataSource {
+impl VectorOperator for MockDatasetDataSource {
     fn initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedVectorOperator>> {
-        let loading_info = context.meta_data(&self.params.data_set)?;
+        let loading_info = context.meta_data(&self.params.dataset)?;
         Ok(Box::new(InitializedOperatorImpl {
             raster_sources: vec![],
             vector_sources: vec![],
@@ -110,12 +110,12 @@ impl VectorOperator for MockDataSetDataSource {
 impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
     for InitializedOperatorImpl<
         VectorResultDescriptor,
-        Box<dyn MetaData<MockDataSetDataSourceLoadingInfo, VectorResultDescriptor>>,
+        Box<dyn MetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>>,
     >
 {
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
         Ok(TypedVectorQueryProcessor::MultiPoint(
-            MockDataSetDataSourceProcessor {
+            MockDatasetDataSourceProcessor {
                 loading_info: self.state.clone(),
             }
             .boxed(),
@@ -129,7 +129,7 @@ mod tests {
     use crate::engine::{MockExecutionContext, MockQueryContext};
     use futures::executor::block_on_stream;
     use geoengine_datatypes::collections::FeatureCollectionInfos;
-    use geoengine_datatypes::dataset::InternalDataSetId;
+    use geoengine_datatypes::dataset::InternalDatasetId;
     use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution};
     use geoengine_datatypes::util::Identifier;
 
@@ -137,16 +137,16 @@ mod tests {
     fn test() {
         let mut execution_context = MockExecutionContext::default();
 
-        let id = DataSetId::Internal(InternalDataSetId::new());
+        let id = DatasetId::Internal(InternalDatasetId::new());
         execution_context.add_meta_data(
             id.clone(),
-            Box::new(MockDataSetDataSourceLoadingInfo {
+            Box::new(MockDatasetDataSourceLoadingInfo {
                 points: vec![Coordinate2D::new(1., 2.); 3],
             }),
         );
 
-        let mps = MockDataSetDataSource {
-            params: MockDataSetDataSourceParams { data_set: id },
+        let mps = MockDatasetDataSource {
+            params: MockDatasetDataSourceParams { dataset: id },
         }
         .boxed();
         let initialized = mps.initialize(&execution_context).unwrap();

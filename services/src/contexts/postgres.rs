@@ -15,7 +15,7 @@ use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use super::{Context, Db};
 use crate::contexts::{ExecutionContextImpl, QueryContextImpl};
-use crate::datasets::postgres::PostgresDataSetDb;
+use crate::datasets::postgres::PostgresDatasetDb;
 use crate::projects::project::{ProjectId, ProjectPermission};
 use crate::users::user::UserId;
 
@@ -186,10 +186,9 @@ where
                             layer_index integer NOT NULL,
                             project_id UUID REFERENCES projects(id) ON DELETE CASCADE NOT NULL,
                             project_version_id UUID REFERENCES project_versions(id) ON DELETE CASCADE NOT NULL,                            
-                            layer_type "LayerType" NOT NULL,
                             name character varying (256) NOT NULL,
                             workflow_id UUID NOT NULL, -- TODO: REFERENCES workflows(id)
-                            raster_colorizer json,
+                            symbology json,
                             visibility "LayerVisibility" NOT NULL,
                             PRIMARY KEY (project_id, layer_index)            
                         );
@@ -274,9 +273,9 @@ where
     type UserDB = PostgresUserDb<Tls>;
     type ProjectDB = PostgresProjectDb<Tls>;
     type WorkflowRegistry = PostgresWorkflowRegistry<Tls>;
-    type DataSetDB = PostgresDataSetDb;
+    type DatasetDB = PostgresDatasetDb;
     type QueryContext = QueryContextImpl;
-    type ExecutionContext = ExecutionContextImpl<PostgresDataSetDb>;
+    type ExecutionContext = ExecutionContextImpl<PostgresDatasetDb>;
 
     fn user_db(&self) -> Db<Self::UserDB> {
         self.user_db.clone()
@@ -308,15 +307,15 @@ where
         self.workflow_registry.write().await
     }
 
-    fn data_set_db(&self) -> Db<Self::DataSetDB> {
+    fn dataset_db(&self) -> Db<Self::DatasetDB> {
         todo!()
     }
 
-    async fn data_set_db_ref(&self) -> RwLockReadGuard<'_, Self::DataSetDB> {
+    async fn dataset_db_ref(&self) -> RwLockReadGuard<'_, Self::DatasetDB> {
         todo!()
     }
 
-    async fn data_set_db_ref_mut(&self) -> RwLockWriteGuard<'_, Self::DataSetDB> {
+    async fn dataset_db_ref_mut(&self) -> RwLockWriteGuard<'_, Self::DatasetDB> {
         todo!()
     }
 
@@ -332,10 +331,11 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::projects::project::PointSymbology;
     use crate::projects::project::{
-        CreateProject, Layer, LayerInfo, LayerUpdate, LoadVersion, OrderBy, Plot, PlotUpdate,
-        ProjectFilter, ProjectId, ProjectListOptions, ProjectListing, ProjectPermission,
-        STRectangle, UpdateProject, UserProjectPermission, VectorInfo,
+        CreateProject, Layer, LayerUpdate, LoadVersion, OrderBy, Plot, PlotUpdate, ProjectFilter,
+        ProjectId, ProjectListOptions, ProjectListing, ProjectPermission, STRectangle,
+        UpdateProject, UserProjectPermission,
     };
     use crate::projects::projectdb::ProjectDb;
     use crate::users::user::{UserCredentials, UserId, UserRegistration};
@@ -555,7 +555,7 @@ mod tests {
             layers: Some(vec![LayerUpdate::UpdateOrInsert(Layer {
                 workflow: layer_workflow_id,
                 name: "TestLayer".into(),
-                info: LayerInfo::Vector(VectorInfo {}),
+                symbology: PointSymbology::default().into(),
                 visibility: Default::default(),
             })]),
             plots: Some(vec![PlotUpdate::UpdateOrInsert(Plot {

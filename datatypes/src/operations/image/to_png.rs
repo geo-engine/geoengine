@@ -189,6 +189,7 @@ mod tests {
             .cloned()
             .collect(),
             RgbaColor::transparent(),
+            RgbaColor::transparent(),
         )
         .unwrap();
 

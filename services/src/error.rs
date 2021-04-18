@@ -117,8 +117,8 @@ pub enum Error {
 
     MissingSettingsDirectory,
 
-    DataSetIdTypeMissMatch,
-    UnknownDataSetId,
+    DatasetIdTypeMissMatch,
+    UnknownDatasetId,
     UnknownProviderId,
 
     #[snafu(display("Parameter {} must have length between {} and {}", parameter, min, max))]
@@ -132,6 +132,19 @@ pub enum Error {
     InvalidListLimit {
         limit: usize,
     },
+
+    UploadFieldMissingFileName,
+    UnknownUploadId,
+    PathIsNotAFile,
+    MultiPartBoundaryMissing,
+    InvalidUploadFileName,
+    InvalidDatasetName,
+    DatasetHasNoAutoImportableLayer,
+    #[snafu(display("GdalError: {}", source))]
+    Gdal {
+        source: gdal::errors::GdalError,
+    },
+    EmptyDatasetCannotBeImported,
 }
 
 impl Reject for Error {}
@@ -174,5 +187,11 @@ impl From<serde_json::Error> for Error {
 impl From<std::io::Error> for Error {
     fn from(e: std::io::Error) -> Self {
         Self::Io { source: e }
+    }
+}
+
+impl From<gdal::errors::GdalError> for Error {
+    fn from(gdal_error: gdal::errors::GdalError) -> Self {
+        Self::Gdal { source: gdal_error }
     }
 }

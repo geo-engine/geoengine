@@ -1,11 +1,14 @@
 use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
 
-use geoengine_datatypes::collections::{
-    FeatureCollectionInfos, FeatureCollectionModifications, GeometryRandomAccess,
-    MultiPointCollection,
-};
 use geoengine_datatypes::raster::{GridIndexAccess, Pixel, RasterDataType};
+use geoengine_datatypes::{
+    collections::{
+        FeatureCollectionInfos, FeatureCollectionModifications, GeometryRandomAccess,
+        MultiPointCollection,
+    },
+    raster::Raster,
+};
 
 use crate::engine::{
     QueryContext, QueryProcessor, QueryRectangle, RasterQueryProcessor, TypedRasterQueryProcessor,
@@ -80,11 +83,20 @@ impl RasterPointJoinProcessor {
                         // try to get the pixel if the coordinate is within the current tile
                         if let Ok(pixel) = raster.get_at_grid_index(grid_idx) {
                             // finally, attach value to feature
-                            aggregator.add_value(
-                                feature_index,
-                                pixel,
-                                time_span.time_interval.duration_ms() as u64,
-                            );
+
+                            let is_no_data = raster
+                                .no_data_value()
+                                .map_or(false, |no_data| pixel == no_data);
+
+                            if is_no_data {
+                                aggregator.add_null(feature_index);
+                            } else {
+                                aggregator.add_value(
+                                    feature_index,
+                                    pixel,
+                                    time_span.time_interval.duration_ms() as u64,
+                                );
+                            }
                         }
                     }
                 }
@@ -163,9 +175,11 @@ mod tests {
     };
     use geoengine_datatypes::raster::{Grid2D, RasterTile2D, TileInformation};
     use geoengine_datatypes::spatial_reference::SpatialReference;
+    use num_traits::AsPrimitive;
 
     #[tokio::test]
     async fn extract_raster_values_single_raster() {
+        let no_data_value = None;
         let raster_tile = RasterTile2D::new_with_tile_info(
             TimeInterval::default(),
             TileInformation {
@@ -173,7 +187,7 @@ mod tests {
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
-            Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap(),
+            Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], no_data_value).unwrap(),
         );
 
         let raster_source = MockRasterSource {
@@ -183,6 +197,7 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
+                    no_data_value: no_data_value.map(AsPrimitive::as_),
                 },
             },
         }
@@ -232,6 +247,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::float_cmp)]
     async fn extract_raster_values_two_raster_timesteps() {
+        let no_data_value = None;
         let raster_tile_a = RasterTile2D::new_with_tile_info(
             TimeInterval::new(0, 10).unwrap(),
             TileInformation {
@@ -239,7 +255,7 @@ mod tests {
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
-            Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1], None).unwrap(),
+            Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1], no_data_value).unwrap(),
         );
         let raster_tile_b = RasterTile2D::new_with_tile_info(
             TimeInterval::new(10, 20).unwrap(),
@@ -248,7 +264,7 @@ mod tests {
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
-            Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap(),
+            Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], no_data_value).unwrap(),
         );
 
         let raster_source = MockRasterSource {
@@ -258,6 +274,7 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
+                    no_data_value: no_data_value.map(AsPrimitive::as_),
                 },
             },
         }

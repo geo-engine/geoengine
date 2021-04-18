@@ -8,7 +8,8 @@ pub use self::data_type::{
 };
 pub use self::geo_transform::{GdalGeoTransform, GeoTransform};
 pub use self::grid::{
-    Grid, Grid1D, Grid2D, Grid3D, GridShape, GridShape1D, GridShape2D, GridShape3D,
+    grid_idx_iter_2d, Grid, Grid1D, Grid2D, Grid3D, GridShape, GridShape1D, GridShape2D,
+    GridShape3D,
 };
 pub use self::grid_bounds::{
     GridBoundingBox, GridBoundingBox1D, GridBoundingBox2D, GridBoundingBox3D,

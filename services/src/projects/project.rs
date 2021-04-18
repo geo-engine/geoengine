@@ -1,3 +1,5 @@
+use std::{convert::TryInto, fmt::Debug};
+
 use crate::error::{Error, Result};
 use crate::users::user::UserId;
 use crate::util::config::ProjectService;
@@ -5,14 +7,16 @@ use crate::util::user_input::UserInput;
 use crate::workflows::workflow::WorkflowId;
 use crate::{error, util::config::get_config_element};
 use chrono::{DateTime, Utc};
-use geoengine_datatypes::identifier;
-use geoengine_datatypes::primitives::{
-    BoundingBox2D, Coordinate2D, SpatialBounded, TemporalBounded, TimeGranularity, TimeInterval,
-    TimeStep,
-};
-use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
-use geoengine_datatypes::util::Identifier;
+use geoengine_datatypes::{identifier, operations::image::RgbaColor};
 use geoengine_datatypes::{operations::image::Colorizer, primitives::TimeInstance};
+use geoengine_datatypes::{
+    primitives::{BoundingBox2D, Coordinate2D, TimeGranularity, TimeInterval, TimeStep},
+    spatial_reference::SpatialReferenceOption,
+};
+use geoengine_datatypes::{
+    primitives::{SpatialBounded, TemporalBounded},
+    util::Identifier,
+};
 use geoengine_operators::string_token;
 #[cfg(feature = "postgres")]
 use postgres_types::{FromSql, ToSql};
@@ -136,8 +140,10 @@ impl STRectangle {
         time_stop: B,
     ) -> Result<Self>
     where
-        A: Into<TimeInstance>,
-        B: Into<TimeInstance>,
+        A: TryInto<TimeInstance>,
+        B: TryInto<TimeInstance>,
+        geoengine_datatypes::error::Error: From<A::Error>,
+        geoengine_datatypes::error::Error: From<B::Error>,
         S: Into<SpatialReferenceOption>,
     {
         Ok(Self {
@@ -161,8 +167,10 @@ impl STRectangle {
         time_stop: B,
     ) -> Self
     where
-        A: Into<TimeInstance>,
-        B: Into<TimeInstance>,
+        A: TryInto<TimeInstance>,
+        B: TryInto<TimeInstance>,
+        A::Error: Debug,
+        B::Error: Debug,
         S: Into<SpatialReferenceOption>,
     {
         Self {
@@ -194,15 +202,15 @@ pub struct Layer {
     // TODO: LayerId?
     pub workflow: WorkflowId,
     pub name: String,
-    pub info: LayerInfo,
     pub visibility: LayerVisibility,
+    pub symbology: Symbology,
 }
 
 impl Layer {
     pub fn layer_type(&self) -> LayerType {
-        match self.info {
-            LayerInfo::Raster(_) => LayerType::Raster,
-            LayerInfo::Vector(_) => LayerType::Vector,
+        match self.symbology {
+            Symbology::Raster(_) => LayerType::Raster,
+            Symbology::Vector(_) => LayerType::Vector,
         }
     }
 }
@@ -213,21 +221,111 @@ pub enum LayerType {
     Raster,
     Vector,
 }
-
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
-pub enum LayerInfo {
-    Raster(RasterInfo),
-    Vector(VectorInfo),
+#[allow(clippy::large_enum_variant)]
+pub enum Symbology {
+    Raster(RasterSymbology),
+    Vector(VectorSymbology),
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
-pub struct RasterInfo {
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+pub struct RasterSymbology {
+    pub opacity: f64,
     pub colorizer: Colorizer,
 }
 
+impl Eq for RasterSymbology {}
+
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
-pub struct VectorInfo {
-    // TODO add vector layer specific info
+pub enum VectorSymbology {
+    Point(PointSymbology),
+    Line(LineSymbology),
+    Polygon(PolygonSymbology),
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+pub struct TextSymbology {
+    pub attribute: String,
+    pub fill_color: ColorParam,
+    pub stroke: StrokeParam,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+pub struct PointSymbology {
+    pub radius: NumberParam,
+    pub fill_color: ColorParam,
+    pub stroke: StrokeParam,
+    pub text: Option<TextSymbology>,
+}
+
+impl Default for PointSymbology {
+    fn default() -> Self {
+        Self {
+            radius: NumberParam::Static(10),
+            fill_color: ColorParam::Static(RgbaColor::white()),
+            stroke: StrokeParam {
+                width: NumberParam::Static(1),
+                color: ColorParam::Static(RgbaColor::black()),
+            },
+            text: None,
+        }
+    }
+}
+
+impl From<PointSymbology> for Symbology {
+    fn from(value: PointSymbology) -> Self {
+        Symbology::Vector(VectorSymbology::Point(value))
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+pub struct LineSymbology {
+    pub stroke: StrokeParam,
+
+    pub text: Option<TextSymbology>,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+pub struct PolygonSymbology {
+    pub fill_color: ColorParam,
+
+    pub stroke: StrokeParam,
+
+    pub text: Option<TextSymbology>,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+pub enum NumberParam {
+    Static(usize),
+    Derived(DerivedNumber),
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+pub struct DerivedNumber {
+    pub attribute: String,
+    pub factor: f64,
+    pub default_value: f64,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+pub struct StrokeParam {
+    pub width: NumberParam,
+    pub color: ColorParam,
+    // TODO: dash
+}
+
+impl Eq for DerivedNumber {}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+pub enum ColorParam {
+    Static(RgbaColor),
+    Derived(DerivedColor),
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+pub struct DerivedColor {
+    pub attribute: String,
+    pub colorizer: Colorizer,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
@@ -529,12 +627,15 @@ mod tests {
                 &json!({
                     "workflow": workflow.clone(),
                     "name": "L2",
-                    "info": {
-                        "Vector": {},
-                    },
                     "visibility": {
                         "data": true,
                         "legend": false,
+                    },
+                    "symbology": {
+                        "Raster": {
+                            "opacity": 1.0,
+                            "colorizer": "Rgba"
+                        }
                     }
                 })
                 .to_string()
@@ -543,11 +644,14 @@ mod tests {
             LayerUpdate::UpdateOrInsert(Layer {
                 workflow,
                 name: "L2".to_string(),
-                info: LayerInfo::Vector(VectorInfo {}),
                 visibility: LayerVisibility {
                     data: true,
                     legend: false,
-                }
+                },
+                symbology: Symbology::Raster(RasterSymbology {
+                    opacity: 1.0,
+                    colorizer: Colorizer::Rgba,
+                })
             })
         );
     }
@@ -564,16 +668,20 @@ mod tests {
                 LayerUpdate::UpdateOrInsert(Layer {
                     workflow: WorkflowId::new(),
                     name: "vector layer".to_string(),
-                    info: LayerInfo::Vector(VectorInfo {}),
                     visibility: Default::default(),
+                    symbology: Symbology::Raster(RasterSymbology {
+                        opacity: 1.0,
+                        colorizer: Colorizer::Rgba,
+                    }),
                 }),
                 LayerUpdate::UpdateOrInsert(Layer {
                     workflow: WorkflowId::new(),
                     name: "raster layer".to_string(),
-                    info: LayerInfo::Raster(RasterInfo {
+                    visibility: Default::default(),
+                    symbology: Symbology::Raster(RasterSymbology {
+                        opacity: 1.0,
                         colorizer: Colorizer::Rgba,
                     }),
-                    visibility: Default::default(),
                 }),
             ]),
             plots: None,
@@ -596,5 +704,55 @@ mod tests {
 
         let _update_project: UpdateProject =
             serde_json::from_reader(serialized.as_bytes()).unwrap();
+    }
+
+    #[test]
+    fn serialize_symbology() {
+        let symbology = Symbology::Vector(VectorSymbology::Point(PointSymbology {
+            radius: NumberParam::Static(1),
+            fill_color: ColorParam::Derived(DerivedColor {
+                attribute: "foo".to_owned(),
+                colorizer: Colorizer::Rgba,
+            }),
+            stroke: StrokeParam {
+                width: NumberParam::Static(1),
+                color: ColorParam::Static(RgbaColor::black()),
+            },
+            text: None,
+        }));
+
+        assert_eq!(
+            serde_json::to_string(&symbology).unwrap(),
+            json!({
+                "Vector": {
+                    "Point": {
+                        "radius": {
+                            "Static": 1
+                        },
+                        "fill_color": {
+                            "Derived": {
+                                "attribute": "foo",
+                                "colorizer": "Rgba"
+                            }
+                        },
+                        "stroke": {
+                            "width": {
+                                "Static": 1
+                            },
+                            "color": {
+                                "Static": [
+                                    0,
+                                    0,
+                                    0,
+                                    255
+                                ]
+                            }
+                        },
+                        "text": null
+                    }
+                }
+            })
+            .to_string(),
+        );
     }
 }

@@ -713,9 +713,7 @@ mod tests {
         let ring1_coords = [2.0, 2.1, 3.0, 3.1, 2.0, 3.1, 2.0, 2.1];
         let ring3_coords = [4.0, 4.1, 6.0, 6.1, 4.0, 6.1, 4.0, 4.1];
         let ring4_coords = [5.0, 5.1, 6.0, 6.1, 5.0, 6.1, 5.0, 5.1];
-        let coords: Vec<f64> = [ring0_coords, ring1_coords, ring3_coords, ring4_coords]
-            .concat()
-            .to_vec();
+        let coords: Vec<f64> = [ring0_coords, ring1_coords, ring3_coords, ring4_coords].concat();
         let ring_offsets: Vec<i32> = vec![0, 4, 8, 12, 16];
         let polygon_offsets: Vec<i32> = vec![0, 2, 3, 4];
         let feature_offsets: Vec<i32> = vec![0, 2, 3];

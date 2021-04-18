@@ -74,11 +74,12 @@ mod tests {
     #[test]
     fn parse_time_normal() {
         assert_eq!(
-            TimeInterval::new_instant(Utc.ymd(1970, 1, 2).and_hms_milli(9, 10, 11, 12)),
+            TimeInterval::new_instant(Utc.ymd(1970, 1, 2).and_hms_milli(9, 10, 11, 12)).unwrap(),
             parse_time(to_deserializer("1970-01-02T09:10:11.012+00:00")).unwrap()
         );
         assert_eq!(
-            TimeInterval::new_instant(Utc.ymd(2020, 12, 31).and_hms_milli(23, 59, 59, 999)),
+            TimeInterval::new_instant(Utc.ymd(2020, 12, 31).and_hms_milli(23, 59, 59, 999))
+                .unwrap(),
             parse_time(to_deserializer("2020-12-31T23:59:59.999Z")).unwrap()
         );
 
@@ -95,7 +96,7 @@ mod tests {
         );
 
         assert_eq!(
-            TimeInterval::new_instant(Utc.ymd(2019, 1, 1).and_hms_milli(0, 0, 0, 0)),
+            TimeInterval::new_instant(Utc.ymd(2019, 1, 1).and_hms_milli(0, 0, 0, 0)).unwrap(),
             parse_time(to_deserializer(
                 "2019-01-01T00:00:00.000Z/2019-01-01T00:00:00.000Z"
             ))
@@ -106,11 +107,11 @@ mod tests {
     #[test]
     fn parse_time_medieval() {
         assert_eq!(
-            TimeInterval::new_instant(Utc.ymd(600, 1, 2).and_hms_milli(9, 10, 11, 12)),
+            TimeInterval::new_instant(Utc.ymd(600, 1, 2).and_hms_milli(9, 10, 11, 12)).unwrap(),
             parse_time(to_deserializer("600-01-02T09:10:11.012+00:00")).unwrap()
         );
         assert_eq!(
-            TimeInterval::new_instant(Utc.ymd(600, 1, 2).and_hms_milli(9, 10, 11, 12)),
+            TimeInterval::new_instant(Utc.ymd(600, 1, 2).and_hms_milli(9, 10, 11, 12)).unwrap(),
             parse_time(to_deserializer("600-01-02T09:10:11.012Z")).unwrap()
         );
     }
@@ -118,19 +119,19 @@ mod tests {
     #[test]
     fn parse_time_bc() {
         assert_eq!(
-            TimeInterval::new_instant(Utc.ymd(-600, 1, 2).and_hms_milli(9, 10, 11, 12)),
+            TimeInterval::new_instant(Utc.ymd(-600, 1, 2).and_hms_milli(9, 10, 11, 12)).unwrap(),
             parse_time(to_deserializer("-600-01-02T09:10:11.012+00:00")).unwrap()
         );
         assert_eq!(
-            TimeInterval::new_instant(Utc.ymd(-600, 1, 2).and_hms_milli(9, 10, 11, 12)),
+            TimeInterval::new_instant(Utc.ymd(-600, 1, 2).and_hms_milli(9, 10, 11, 12)).unwrap(),
             parse_time(to_deserializer("-0600-01-02T09:10:11.012+00:00")).unwrap()
         );
         assert_eq!(
-            TimeInterval::new_instant(Utc.ymd(-600, 1, 2).and_hms_milli(9, 10, 11, 12)),
+            TimeInterval::new_instant(Utc.ymd(-600, 1, 2).and_hms_milli(9, 10, 11, 12)).unwrap(),
             parse_time(to_deserializer("-00600-01-02T09:10:11.012+00:00")).unwrap()
         );
         assert_eq!(
-            TimeInterval::new_instant(Utc.ymd(-600, 1, 2).and_hms_milli(9, 10, 11, 0)),
+            TimeInterval::new_instant(Utc.ymd(-600, 1, 2).and_hms_milli(9, 10, 11, 0)).unwrap(),
             parse_time(to_deserializer("-00600-01-02T09:10:11.0Z")).unwrap()
         );
     }
@@ -138,7 +139,7 @@ mod tests {
     #[test]
     fn parse_time_with_offset() {
         assert_eq!(
-            TimeInterval::new_instant(Utc.ymd(-600, 1, 2).and_hms_milli(8, 10, 11, 0)),
+            TimeInterval::new_instant(Utc.ymd(-600, 1, 2).and_hms_milli(8, 10, 11, 0)).unwrap(),
             parse_time(to_deserializer("-00600-01-02T09:10:11.0+01:00")).unwrap()
         );
     }

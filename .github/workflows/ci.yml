@@ -2,15 +2,14 @@ name: CI
 
 on:
   push:
-    branches: [ master ]
+    branches: [master]
   pull_request:
-    branches: [ master ]
+    branches: [master]
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
 jobs:
   build:
-
     runs-on: ${{matrix.os}}
 
     services:
@@ -28,19 +27,19 @@ jobs:
       matrix:
         os:
           - ubuntu-20.04
-        features:
-          ["", "--all-features"]
+        features: ["", "--all-features"]
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
+      - name: APT update
+        run: sudo apt-get update
+      - name: Install lld
+        run: sudo apt-get install lld
       - name: Install OpenCL
-        run: |
-          sudo apt-get update
-          sudo apt-get install ocl-icd-opencl-dev pocl-opencl-icd
+        run: sudo apt-get install ocl-icd-opencl-dev pocl-opencl-icd
       - name: Install GDAL
         run: |
-          sudo apt-get update
           sudo apt-get install libgdal-dev gdal-bin build-essential
           export C_INCLUDE_PATH=/usr/include/gdal:$C_INCLUDE_PATH
           export CPLUS_INCLUDE_PATH=/usr/include/gdal:$CPLUS_INCLUDE_PATH
@@ -69,22 +68,21 @@ jobs:
         with:
           command: test
           args: ${{ matrix.features }} --verbose
-  
+
   coverage:
-    runs-on: ubuntu-20.04    
-    
+    runs-on: ubuntu-20.04
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
-        with:
-          fetch-depth: 0
+      - name: APT update
+        run: sudo apt-get update
+      - name: Install lld
+        run: sudo apt-get install lld
       - name: Install OpenCL
-        run: |
-          sudo apt-get update
-          sudo apt-get install ocl-icd-opencl-dev pocl-opencl-icd
+        run: sudo apt-get install ocl-icd-opencl-dev pocl-opencl-icd
       - name: Install GDAL
         run: |
-          sudo apt-get update
           sudo apt-get install libgdal-dev gdal-bin build-essential
           export C_INCLUDE_PATH=/usr/include/gdal:$C_INCLUDE_PATH
           export CPLUS_INCLUDE_PATH=/usr/include/gdal:$CPLUS_INCLUDE_PATH

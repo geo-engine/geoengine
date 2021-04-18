@@ -1,5 +1,5 @@
 use chrono::ParseError;
-use geoengine_datatypes::dataset::DataSetId;
+use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::primitives::FeatureDataType;
 use snafu::Snafu;
 use std::ops::Range;
@@ -141,7 +141,7 @@ pub enum Error {
 
     TimeInstanceNotDisplayable,
 
-    DataSetMetaData {
+    DatasetMetaData {
         source: Box<dyn std::error::Error + Send + Sync>,
     },
 
@@ -149,19 +149,19 @@ pub enum Error {
         source: arrow::error::ArrowError,
     },
 
-    NoDataSetWithGivenId {
-        id: DataSetId,
+    NoDatasetWithGivenId {
+        id: DatasetId,
     },
 
     RasterRootPathNotConfigured, // TODO: remove when GdalSource uses LoadingInfo
 
-    InvalidDataSetId,
-    DataSetLoadingInfoProviderMismatch,
-    UnknownDataSetId,
+    InvalidDatasetId,
+    DatasetLoadingInfoProviderMismatch,
+    UnknownDatasetId,
 
     // TODO: this error should not be propagated to user
-    #[snafu(display("Could not open gdal data set for file path {:?}", file_path))]
-    CouldNotOpenGdalDataSet {
+    #[snafu(display("Could not open gdal dataset for file path {:?}", file_path))]
+    CouldNotOpenGdalDataset {
         file_path: String,
     },
 
@@ -217,5 +217,11 @@ impl From<ocl::Error> for Error {
 impl From<arrow::error::ArrowError> for Error {
     fn from(source: arrow::error::ArrowError) -> Self {
         Error::Arrow { source }
+    }
+}
+
+impl From<tokio::task::JoinError> for Error {
+    fn from(source: tokio::task::JoinError) -> Self {
+        Error::TokioJoin { source }
     }
 }

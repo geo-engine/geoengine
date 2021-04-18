@@ -9,14 +9,11 @@ pub mod tests;
 pub mod user_input;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
-pub struct IdResponse<T: Identifier> {
+pub struct IdResponse<T> {
     pub id: T,
 }
 
-impl<T> From<T> for IdResponse<T>
-where
-    T: Identifier,
-{
+impl<T> From<T> for IdResponse<T> {
     fn from(id: T) -> Self {
         Self { id }
     }

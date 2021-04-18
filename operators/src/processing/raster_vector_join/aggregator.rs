@@ -9,16 +9,19 @@ pub trait Aggregator {
     fn new(number_of_features: usize) -> Self;
 
     // TODO: add values for slice
-    // TODO: think about NODATA / nulls
     fn add_value<P>(&mut self, feature_idx: usize, pixel: P, weight: u64)
     where
         P: Pixel + AsPrimitive<Self::Output>;
+
+    fn add_null(&mut self, feature_idx: usize);
 
     fn feature_data_type() -> FeatureDataType;
 
     fn data(&self) -> &[Self::Output];
 
-    fn into_data(self) -> Vec<Self::Output>;
+    fn nulls(&self) -> &[bool];
+
+    fn into_data(self) -> Vec<Option<Self::Output>>;
 
     fn into_typed(self) -> TypedAggregator;
 
@@ -51,6 +54,14 @@ impl TypedAggregator {
         }
     }
 
+    pub fn add_null(&mut self, feature_idx: usize) {
+        match self {
+            TypedAggregator::FirstValueNumber(aggregator) => aggregator.add_null(feature_idx),
+            TypedAggregator::FirstValueDecimal(aggregator) => aggregator.add_null(feature_idx),
+            TypedAggregator::MeanNumber(aggregator) => aggregator.add_null(feature_idx),
+        }
+    }
+
     // pub fn feature_data_type(&self) -> FeatureDataType {
     //     match self {
     //         TypedAggregator::FirstValueNumber(_) => FirstValueNumberAggregator::feature_data_type(),
@@ -64,12 +75,23 @@ impl TypedAggregator {
     pub fn into_data(self) -> FeatureData {
         match self {
             TypedAggregator::FirstValueNumber(aggregator) => {
-                FeatureData::Number(aggregator.into_data())
+                FeatureData::NullableNumber(aggregator.into_data())
             }
             TypedAggregator::FirstValueDecimal(aggregator) => {
-                FeatureData::Decimal(aggregator.into_data())
+                FeatureData::NullableDecimal(aggregator.into_data())
             }
-            TypedAggregator::MeanNumber(aggregator) => FeatureData::Number(aggregator.into_data()),
+            TypedAggregator::MeanNumber(aggregator) => {
+                FeatureData::NullableNumber(aggregator.into_data())
+            }
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn nulls(&self) -> &[bool] {
+        match self {
+            TypedAggregator::FirstValueNumber(aggregator) => aggregator.nulls(),
+            TypedAggregator::FirstValueDecimal(aggregator) => aggregator.nulls(),
+            TypedAggregator::MeanNumber(aggregator) => aggregator.nulls(),
         }
     }
 
@@ -90,7 +112,9 @@ pub type FirstValueDecimalAggregator = FirstValueAggregator<i64>;
 pub struct FirstValueAggregator<T> {
     values: Vec<T>,
     pristine: Vec<bool>,
+    null: Vec<bool>,
     number_of_pristine_values: usize,
+    number_of_non_null_values: usize,
 }
 
 impl<T> Aggregator for FirstValueAggregator<T>
@@ -103,7 +127,9 @@ where
         Self {
             values: vec![T::zero(); number_of_features],
             pristine: vec![true; number_of_features],
+            null: vec![false; number_of_features],
             number_of_pristine_values: number_of_features,
+            number_of_non_null_values: number_of_features,
         }
     }
 
@@ -111,8 +137,22 @@ where
     where
         P: Pixel + AsPrimitive<Self::Output>,
     {
+        if self.null[feature_idx] {
+            return;
+        }
+
         if self.pristine[feature_idx] {
             self.values[feature_idx] = pixel.as_();
+            self.pristine[feature_idx] = false;
+            self.number_of_pristine_values -= 1;
+        }
+    }
+
+    fn add_null(&mut self, feature_idx: usize) {
+        if !self.null[feature_idx] {
+            self.null[feature_idx] = true;
+            self.number_of_non_null_values -= 1;
+
             self.pristine[feature_idx] = false;
             self.number_of_pristine_values -= 1;
         }
@@ -126,8 +166,16 @@ where
         &self.values
     }
 
-    fn into_data(self) -> Vec<Self::Output> {
+    fn nulls(&self) -> &[bool] {
+        &self.null
+    }
+
+    fn into_data(self) -> Vec<Option<Self::Output>> {
         self.values
+            .into_iter()
+            .zip(self.null)
+            .map(|(value, is_null)| if is_null { None } else { Some(value) })
+            .collect()
     }
 
     fn into_typed(self) -> TypedAggregator {
@@ -135,7 +183,7 @@ where
     }
 
     fn is_satisfied(&self) -> bool {
-        self.number_of_pristine_values == 0
+        self.number_of_pristine_values == 0 || self.number_of_non_null_values == 0
     }
 }
 
@@ -170,6 +218,8 @@ impl FirstValueOutputType for f64 {
 pub struct MeanValueAggregator {
     means: Vec<f64>,
     sum_weights: Vec<f64>,
+    null: Vec<bool>,
+    number_of_non_null_values: usize,
 }
 
 impl Aggregator for MeanValueAggregator {
@@ -179,6 +229,8 @@ impl Aggregator for MeanValueAggregator {
         Self {
             means: vec![0.; number_of_features],
             sum_weights: vec![0.; number_of_features],
+            null: vec![false; number_of_features],
+            number_of_non_null_values: number_of_features,
         }
     }
 
@@ -187,6 +239,10 @@ impl Aggregator for MeanValueAggregator {
         P: Pixel + AsPrimitive<Self::Output>,
     {
         debug_assert!(weight > 0, "weights must be positive and non-zero");
+
+        if self.null[feature_idx] {
+            return;
+        }
 
         let value: f64 = pixel.as_();
         let weight: f64 = weight.as_();
@@ -198,6 +254,13 @@ impl Aggregator for MeanValueAggregator {
         self.means[feature_idx] += (value - old_mean) / (old_normalized_weight + 1.);
     }
 
+    fn add_null(&mut self, feature_idx: usize) {
+        if !self.null[feature_idx] {
+            self.null[feature_idx] = true;
+            self.number_of_non_null_values -= 1;
+        }
+    }
+
     fn feature_data_type() -> FeatureDataType {
         FeatureDataType::Number
     }
@@ -206,8 +269,16 @@ impl Aggregator for MeanValueAggregator {
         &self.means
     }
 
-    fn into_data(self) -> Vec<Self::Output> {
+    fn nulls(&self) -> &[bool] {
+        &self.null
+    }
+
+    fn into_data(self) -> Vec<Option<Self::Output>> {
         self.means
+            .into_iter()
+            .zip(self.null)
+            .map(|(value, is_null)| if is_null { None } else { Some(value) })
+            .collect()
     }
 
     fn into_typed(self) -> TypedAggregator {
@@ -215,7 +286,7 @@ impl Aggregator for MeanValueAggregator {
     }
 
     fn is_satisfied(&self) -> bool {
-        false
+        self.number_of_non_null_values == 0
     }
 }
 
@@ -276,7 +347,10 @@ mod tests {
             unreachable!();
         }
 
-        assert_eq!(aggregator.into_data(), FeatureData::Decimal(vec![2, 4]));
+        assert_eq!(
+            aggregator.into_data(),
+            FeatureData::NullableDecimal(vec![Some(2), Some(4)])
+        );
     }
 
     #[test]
@@ -296,5 +370,19 @@ mod tests {
         aggregator.add_value(1, 4., 1);
 
         assert!(aggregator.is_satisfied());
+    }
+
+    #[test]
+    fn nulls() {
+        let mut aggregator = FirstValueDecimalAggregator::new(2).into_typed();
+
+        assert!(!aggregator.is_satisfied());
+
+        aggregator.add_null(0);
+        aggregator.add_null(1);
+
+        assert!(aggregator.is_satisfied());
+
+        assert_eq!(aggregator.nulls(), &[true, true]);
     }
 }

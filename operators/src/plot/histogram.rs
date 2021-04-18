@@ -96,13 +96,13 @@ impl PlotOperator for Histogram {
                         column: column_name.to_string(),
                     });
                 }
-                Some(FeatureDataType::Categorical) | Some(FeatureDataType::Text) => {
+                Some(FeatureDataType::Categorical | FeatureDataType::Text) => {
                     // TODO: incorporate categorical data
                     return Err(Error::InvalidOperatorSpec {
                         reason: format!("column `{}` must be numerical", column_name),
                     });
                 }
-                Some(FeatureDataType::Decimal) | Some(FeatureDataType::Number) => {
+                Some(FeatureDataType::Decimal | FeatureDataType::Number) => {
                     // okay
                 }
             }
@@ -506,13 +506,14 @@ mod tests {
         OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceErrorSpec,
     };
     use geoengine_datatypes::collections::{DataCollection, VectorDataType};
-    use geoengine_datatypes::dataset::{DataSetId, InternalDataSetId};
+    use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureData, NoGeometry, SpatialResolution, TimeInterval,
     };
     use geoengine_datatypes::raster::{Grid2D, RasterDataType, RasterTile2D, TileInformation};
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::Identifier;
+    use num_traits::AsPrimitive;
     use serde_json::json;
 
     #[test]
@@ -599,6 +600,7 @@ mod tests {
     }
 
     fn mock_raster_source() -> Box<dyn RasterOperator> {
+        let no_data_value = None;
         MockRasterSource {
             params: MockRasterSourceParams {
                 data: vec![RasterTile2D::new_with_tile_info(
@@ -608,12 +610,13 @@ mod tests {
                         global_tile_position: [0, 0].into(),
                         tile_size_in_pixels: [3, 2].into(),
                     },
-                    Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap(),
+                    Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], no_data_value).unwrap(),
                 )],
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
+                    no_data_value: no_data_value.map(AsPrimitive::as_),
                 },
             },
         }
@@ -846,7 +849,7 @@ mod tests {
 
     #[tokio::test]
     async fn textual_attribute() {
-        let dataset_id = InternalDataSetId::new();
+        let dataset_id = InternalDatasetId::new();
 
         let workflow = serde_json::json!({
             "type": "Histogram",
@@ -858,7 +861,7 @@ mod tests {
             "vector_sources": [{
                 "type": "OgrSource",
                 "params": {
-                    "data_set": {
+                    "dataset": {
                         "Internal": dataset_id
                     },
                     "attribute_projection": null
@@ -869,7 +872,7 @@ mod tests {
 
         let mut execution_context = MockExecutionContext::default();
         execution_context.add_meta_data(
-            DataSetId::Internal(dataset_id),
+            DatasetId::Internal(dataset_id),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: "operators/test-data/vector/data/ne_10m_ports/ne_10m_ports.shp"

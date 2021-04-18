@@ -128,8 +128,8 @@ impl TileInformation {
         global_geo_transform: GeoTransform,
     ) -> Self {
         Self {
-            global_tile_position,
             tile_size_in_pixels,
+            global_tile_position,
             global_geo_transform,
         }
     }
@@ -197,7 +197,7 @@ impl TileInformation {
     pub fn tile_geo_transform(&self) -> GeoTransform {
         let tile_upper_left_coord = self
             .global_geo_transform
-            .grid_idx_to_coordinate_2d(self.global_upper_left_pixel_idx());
+            .grid_idx_to_upper_left_coordinate_2d(self.global_upper_left_pixel_idx());
 
         GeoTransform::new(
             tile_upper_left_coord,
@@ -211,10 +211,10 @@ impl SpatialBounded for TileInformation {
     fn spatial_bounds(&self) -> BoundingBox2D {
         let top_left_coord = self
             .global_geo_transform
-            .grid_idx_to_coordinate_2d(self.global_upper_left_pixel_idx());
+            .grid_idx_to_upper_left_coordinate_2d(self.global_upper_left_pixel_idx());
         let lower_right_coord = self
             .global_geo_transform
-            .grid_idx_to_coordinate_2d(self.global_lower_right_pixel_idx() + 1); // we need the border of the lower right pixel.
+            .grid_idx_to_upper_left_coordinate_2d(self.global_lower_right_pixel_idx() + 1); // we need the border of the lower right pixel.
         BoundingBox2D::new_upper_left_lower_right_unchecked(top_left_coord, lower_right_coord)
     }
 }

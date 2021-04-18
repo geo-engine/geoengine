@@ -1,7 +1,7 @@
-use crate::error;
 use crate::primitives::TimeInstance;
 use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::Result;
+use crate::{error, util::ranges::value_in_range};
 use arrow::array::{Array, ArrayBuilder, BooleanArray};
 use arrow::datatypes::{DataType, Field};
 use arrow::error::ArrowError;
@@ -9,8 +9,8 @@ use arrow::error::ArrowError;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
-use std::cmp::Ordering;
 use std::fmt::{Debug, Display};
+use std::{cmp::Ordering, convert::TryInto};
 
 /// Stores time intervals in ms in close-open semantic [start, end)
 #[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
@@ -24,6 +24,8 @@ pub struct TimeInterval {
 impl Default for TimeInterval {
     /// The default time interval is always valid.
     ///
+    /// It aligns with `chrono`'s minimum and maximum datetime.
+    ///
     /// # Examples
     ///
     /// ```
@@ -35,8 +37,8 @@ impl Default for TimeInterval {
     /// ```
     fn default() -> Self {
         Self {
-            start: i64::min_value().into(),
-            end: i64::max_value().into(),
+            start: TimeInstance::MIN,
+            end: TimeInstance::MAX,
         }
     }
 }
@@ -61,11 +63,14 @@ impl TimeInterval {
     ///
     pub fn new<A, B>(start: A, end: B) -> Result<Self>
     where
-        A: Into<TimeInstance>,
-        B: Into<TimeInstance>,
+        A: TryInto<TimeInstance>,
+        B: TryInto<TimeInstance>,
+        error::Error: From<A::Error>,
+        error::Error: From<B::Error>,
     {
-        let start_instant = start.into();
-        let end_instant = end.into();
+        let start_instant = start.try_into()?;
+        let end_instant = end.try_into()?;
+
         ensure!(
             start_instant <= end_instant,
             error::TimeIntervalEndBeforeStart {
@@ -73,6 +78,16 @@ impl TimeInterval {
                 end: end_instant
             }
         );
+        ensure!(
+            start_instant >= TimeInstance::MIN && end_instant <= TimeInstance::MAX,
+            error::TimeIntervalOutOfBounds {
+                start: start_instant,
+                end: end_instant,
+                min: TimeInstance::MIN,
+                max: TimeInstance::MAX,
+            }
+        );
+
         Ok(Self {
             start: start_instant,
             end: end_instant,
@@ -81,15 +96,16 @@ impl TimeInterval {
 
     /// Creates a new time interval from a single input that implements `Into<TimeInstance>`.
     /// After instanciation, start and end are equal.
-    pub fn new_instant<A>(start_and_end: A) -> Self
+    pub fn new_instant<A>(start_and_end: A) -> Result<Self>
     where
-        A: Into<TimeInstance>,
+        A: TryInto<TimeInstance>,
+        error::Error: From<A::Error>,
     {
-        let start_and_end = start_and_end.into();
-        Self {
+        let start_and_end = start_and_end.try_into()?;
+        Ok(Self {
             start: start_and_end,
             end: start_and_end,
-        }
+        })
     }
 
     /// Creates a new time interval without bound checks from inputs implementing Into<TimeInstance>
@@ -104,14 +120,19 @@ impl TimeInterval {
     /// assert_eq!(time_unchecked, TimeInterval::new(0, 1).unwrap());
     /// ```
     ///
+    /// # Panics
+    /// Panics if start and end are not compatible to [chrono].
+    ///
     pub fn new_unchecked<A, B>(start: A, end: B) -> Self
     where
-        A: Into<TimeInstance>,
-        B: Into<TimeInstance>,
+        A: TryInto<TimeInstance>,
+        B: TryInto<TimeInstance>,
+        A::Error: Debug,
+        B::Error: Debug,
     {
         Self {
-            start: start.into(),
-            end: end.into(),
+            start: start.try_into().unwrap(),
+            end: end.try_into().unwrap(),
         }
     }
 
@@ -188,7 +209,9 @@ impl TimeInterval {
     /// ```
     ///
     pub fn intersects(&self, other: &Self) -> bool {
-        self.start < other.end && self.end > other.start
+        other == self
+            || value_in_range(self.start, other.start, other.end)
+            || value_in_range(other.start, self.start, self.end)
     }
 
     /// Unites this interval with another one.
@@ -479,8 +502,11 @@ mod tests {
             })
         );
         assert_eq!(
-            TimeInterval::new_unchecked(min_visualizable_value - 1, max_visualizable_value + 1)
-                .to_geo_json_event(),
+            TimeInterval::new_unchecked(
+                TimeInstance::from_millis_unchecked(min_visualizable_value - 1),
+                TimeInstance::from_millis_unchecked(max_visualizable_value + 1)
+            )
+            .to_geo_json_event(),
             serde_json::json!({
                 "start": "-262144-01-01T00:00:00+00:00",
                 "end": "+262143-12-31T23:59:59.999+00:00",
@@ -488,7 +514,11 @@ mod tests {
             })
         );
         assert_eq!(
-            TimeInterval::new_unchecked(i64::MIN, i64::MAX).to_geo_json_event(),
+            TimeInterval::new_unchecked(
+                TimeInstance::from_millis_unchecked(i64::MIN),
+                TimeInstance::from_millis_unchecked(i64::MAX)
+            )
+            .to_geo_json_event(),
             serde_json::json!({
                 "start": "-262144-01-01T00:00:00+00:00",
                 "end": "+262143-12-31T23:59:59.999+00:00",
@@ -499,7 +529,10 @@ mod tests {
 
     #[test]
     fn duration_millis() {
-        assert_eq!(TimeInterval::default().duration_ms(), u64::MAX);
+        assert_eq!(
+            TimeInterval::default().duration_ms(),
+            16_544_931_263_999_999
+        );
 
         let time_interval = TimeInterval::new(
             TimeInstance::from(NaiveDate::from_ymd(1990, 1, 1).and_hms(0, 0, 0)),
@@ -510,25 +543,107 @@ mod tests {
         assert_eq!(time_interval.duration_ms(), 315_532_800_000);
 
         assert_eq!(
-            TimeInterval::new(-1, i64::MAX).unwrap().duration_ms(),
-            9_223_372_036_854_775_808
+            TimeInterval::new(-1, TimeInstance::MAX)
+                .unwrap()
+                .duration_ms(),
+            8_210_298_412_800_000
         );
         assert_eq!(
-            TimeInterval::new(0, i64::MAX).unwrap().duration_ms(),
-            9_223_372_036_854_775_807
+            TimeInterval::new(0, TimeInstance::MAX)
+                .unwrap()
+                .duration_ms(),
+            8_210_298_412_799_999
         );
 
         assert_eq!(
-            TimeInterval::new(i64::MIN, -1).unwrap().duration_ms(),
-            9_223_372_036_854_775_807
+            TimeInterval::new(TimeInstance::MIN, -1)
+                .unwrap()
+                .duration_ms(),
+            8_334_632_851_199_999
         );
         assert_eq!(
-            TimeInterval::new(i64::MIN, 0).unwrap().duration_ms(),
-            9_223_372_036_854_775_808
+            TimeInterval::new(TimeInstance::MIN, 0)
+                .unwrap()
+                .duration_ms(),
+            8_334_632_851_200_000
         );
         assert_eq!(
-            TimeInterval::new(i64::MIN, 1).unwrap().duration_ms(),
-            9_223_372_036_854_775_809
+            TimeInterval::new(TimeInstance::MIN, 1)
+                .unwrap()
+                .duration_ms(),
+            8_334_632_851_200_001
         );
+    }
+
+    #[test]
+    fn bounds() {
+        let t = TimeInterval::default();
+
+        assert_eq!(t.start(), TimeInstance::MIN);
+        assert_eq!(t.end(), TimeInstance::MAX);
+    }
+
+    #[test]
+    fn intersects_same() {
+        let a = TimeInterval::new(2, 4).unwrap();
+        let b = TimeInterval::new(2, 4).unwrap();
+
+        assert!(a.intersects(&b))
+    }
+
+    #[test]
+    fn intersects_before() {
+        let a = TimeInterval::new(1, 2).unwrap();
+        let b = TimeInterval::new(2, 3).unwrap();
+
+        assert!(!a.intersects(&b))
+    }
+
+    #[test]
+    fn intersects_overlap_left() {
+        let a = TimeInterval::new(1, 3).unwrap();
+        let b = TimeInterval::new(2, 4).unwrap();
+
+        assert!(a.intersects(&b))
+    }
+
+    #[test]
+    fn intersects_inside() {
+        let a = TimeInterval::new(3, 4).unwrap();
+        let b = TimeInterval::new(2, 4).unwrap();
+
+        assert!(a.intersects(&b))
+    }
+
+    #[test]
+    fn intersects_inside_instance_a() {
+        let a = TimeInterval::new_instant(3).unwrap();
+        let b = TimeInterval::new(2, 4).unwrap();
+
+        assert!(a.intersects(&b))
+    }
+
+    #[test]
+    fn intersects_inside_instance_b() {
+        let a = TimeInterval::new_instant(3).unwrap();
+        let b = TimeInterval::new(2, 4).unwrap();
+
+        assert!(b.intersects(&a))
+    }
+
+    #[test]
+    fn intersects_overlap_right() {
+        let a = TimeInterval::new(1, 3).unwrap();
+        let b = TimeInterval::new(2, 4).unwrap();
+
+        assert!(b.intersects(&a))
+    }
+
+    #[test]
+    fn intersects_after() {
+        let a = TimeInterval::new(1, 2).unwrap();
+        let b = TimeInterval::new(2, 3).unwrap();
+
+        assert!(!b.intersects(&a))
     }
 }
