@@ -23,9 +23,7 @@ impl FeatureDataType {
         Ok(match code {
             OGRFieldType::OFTInteger | OGRFieldType::OFTInteger64 => Self::Decimal,
             OGRFieldType::OFTReal => Self::Number,
-            OGRFieldType::OFTString | OGRFieldType::OFTDate | OGRFieldType::OFTDateTime => {
-                Self::Text
-            }
+            OGRFieldType::OFTString => Self::Text,
             _ => return Err(error::Error::NoMatchingFeatureDataTypeForOgrFieldType),
         })
     }

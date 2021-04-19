@@ -146,6 +146,7 @@ pub enum Error {
     },
     EmptyDatasetCannotBeImported,
     NoMainFileCandidateFound,
+    NoFeatureDataTypeForColumnDataType,
 }
 
 impl Reject for Error {}

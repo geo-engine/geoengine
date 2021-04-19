@@ -1,4 +1,8 @@
-use std::{collections::HashMap, convert::TryInto, path::Path};
+use std::{
+    collections::HashMap,
+    convert::{TryFrom, TryInto},
+    path::Path,
+};
 
 use crate::datasets::storage::{AddDataset, DatasetStore, MetaDataSuggestion, SuggestMetaData};
 use crate::datasets::upload::UploadRootPath;
@@ -18,6 +22,7 @@ use crate::{
     util::IdResponse,
 };
 use chrono::DateTime;
+use gdal::vector::OGRFieldType;
 use gdal::{
     vector::{FieldValue, Layer},
     Dataset,
@@ -282,7 +287,10 @@ fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDef
         result_descriptor: VectorResultDescriptor {
             data_type: vector_type,
             spatial_reference: spatial_reference.into(),
-            columns: columns_map,
+            columns: columns_map
+                .into_iter()
+                .filter_map(|(k, v)| v.try_into().map(|v| (k, v)).ok())
+                .collect(),
         },
     }))
 }
@@ -331,7 +339,7 @@ fn detect_time_type(layer: &Layer, columns: &Columns) -> OgrSourceDatasetTimeTyp
 
     let mut start = None;
     let mut end = None;
-    for column in &(columns.textual) {
+    for column in columns.textual.iter().chain(&(columns.date)) {
         let is_date = feature
             .field(column)
             .ok()
@@ -392,39 +400,63 @@ struct Columns {
     decimal: Vec<String>,
     numeric: Vec<String>,
     textual: Vec<String>,
+    date: Vec<String>,
 }
 
-fn detect_columns(layer: &Layer) -> HashMap<String, FeatureDataType> {
+enum ColumnDataType {
+    Decimal,
+    Number,
+    Text,
+    Date,
+    Unknown,
+}
+
+impl TryFrom<ColumnDataType> for FeatureDataType {
+    type Error = error::Error;
+
+    fn try_from(value: ColumnDataType) -> Result<Self, Self::Error> {
+        match value {
+            ColumnDataType::Decimal => Ok(FeatureDataType::Decimal),
+            ColumnDataType::Number => Ok(FeatureDataType::Number),
+            ColumnDataType::Text => Ok(FeatureDataType::Text),
+            _ => Err(error::Error::NoFeatureDataTypeForColumnDataType),
+        }
+    }
+}
+
+fn detect_columns(layer: &Layer) -> HashMap<String, ColumnDataType> {
     let mut columns = HashMap::default();
 
     for field in layer.defn().fields() {
         let field_type = field.field_type();
-        if let Ok(data_type) = FeatureDataType::try_from_ogr_field_type_code(field_type) {
-            columns.insert(field.name(), data_type);
-        }
+
+        let data_type = match field_type {
+            OGRFieldType::OFTInteger | OGRFieldType::OFTInteger64 => ColumnDataType::Decimal,
+            OGRFieldType::OFTReal => ColumnDataType::Number,
+            OGRFieldType::OFTString => ColumnDataType::Text,
+            OGRFieldType::OFTDate | OGRFieldType::OFTDateTime => ColumnDataType::Date,
+            _ => ColumnDataType::Unknown,
+        };
+
+        columns.insert(field.name(), data_type);
     }
 
     columns
 }
 
-fn column_map_to_column_vecs(columns: &HashMap<String, FeatureDataType>) -> Columns {
+fn column_map_to_column_vecs(columns: &HashMap<String, ColumnDataType>) -> Columns {
     let mut decimal = Vec::new();
     let mut numeric = Vec::new();
     let mut textual = Vec::new();
+    let mut date = Vec::new();
 
     for (k, v) in columns {
         match v {
-            FeatureDataType::Categorical => { // TODO
-            }
-            FeatureDataType::Decimal => {
-                decimal.push(k.clone());
-            }
-            FeatureDataType::Number => {
-                numeric.push(k.clone());
-            }
-            FeatureDataType::Text => {
-                textual.push(k.clone());
-            }
+            ColumnDataType::Decimal => decimal.push(k.clone()),
+            ColumnDataType::Number => numeric.push(k.clone()),
+            ColumnDataType::Text => textual.push(k.clone()),
+            ColumnDataType::Date => date.push(k.clone()),
+            _ => {}
         }
     }
 
@@ -432,6 +464,7 @@ fn column_map_to_column_vecs(columns: &HashMap<String, FeatureDataType>) -> Colu
         decimal,
         numeric,
         textual,
+        date,
     }
 }
 
