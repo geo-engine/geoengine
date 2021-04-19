@@ -190,7 +190,7 @@ impl<P: Pixel> PointRasterJoiner<P> {
             };
 
             if raster.is_no_data(value) {
-                continue; // TODO: is it okay to treat no data the same as not found?
+                continue; // value is NODATA, so we leave it being `None`
             }
 
             *value_option = Some(value);
