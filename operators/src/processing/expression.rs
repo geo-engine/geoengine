@@ -9,12 +9,12 @@ use crate::{call_bi_generic_processor, call_generic_raster_processor};
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::primitives::Measurement;
-use geoengine_datatypes::raster::{Grid2D, Pixel, RasterDataType, RasterTile2D, TypedValue};
+use geoengine_datatypes::raster::{Grid2D, Pixel, RasterDataType, RasterTile2D};
+use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::collections::HashSet;
 use std::convert::TryFrom;
-use std::convert::TryInto;
 use std::marker::PhantomData;
 
 /// Parameters for the `Expression` operator.
@@ -27,7 +27,7 @@ use std::marker::PhantomData;
 pub struct ExpressionParams {
     pub expression: String,
     pub output_type: RasterDataType,
-    pub output_no_data_value: TypedValue,
+    pub output_no_data_value: f64,
     pub output_measurement: Option<Measurement>,
 }
 
@@ -110,6 +110,7 @@ impl RasterOperator for Expression {
                 .output_measurement
                 .as_ref()
                 .map_or(Measurement::Unitless, Measurement::clone),
+            no_data_value: Some(self.params.output_no_data_value), // TODO: is it possible to have none?
         };
 
         Ok(
@@ -137,7 +138,7 @@ impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
                                 },
                                 p_a,
                                 p_b,
-                                self.state.output_no_data_value.try_into()?
+                                self.state.output_no_data_value.as_()
                             )
                             .boxed());
                     Ok(res)
@@ -289,6 +290,9 @@ mod tests {
 
     #[tokio::test]
     async fn basic() {
+        let no_data_value = 42;
+        let no_data_value_option = Some(no_data_value);
+
         let a = make_raster();
         let b = make_raster();
 
@@ -296,7 +300,7 @@ mod tests {
             params: ExpressionParams {
                 expression: "A+B".to_string(),
                 output_type: RasterDataType::I8,
-                output_no_data_value: TypedValue::I8(42),
+                output_no_data_value: no_data_value.as_(), //  cast no_data_valuee to f64
                 output_measurement: Some(Measurement::Unitless),
             },
             raster_sources: vec![a, b],
@@ -326,12 +330,18 @@ mod tests {
 
         assert_eq!(
             c[0].as_ref().unwrap().grid_array,
-            Grid2D::new([3, 2].into(), vec![2, 4, 6, 8, 10, 12], Some(42),).unwrap()
+            Grid2D::new(
+                [3, 2].into(),
+                vec![2, 4, 6, 8, 10, 12],
+                no_data_value_option,
+            )
+            .unwrap()
         );
     }
 
     fn make_raster() -> Box<dyn RasterOperator> {
-        let raster = Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap();
+        let no_data_value = None;
+        let raster = Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], no_data_value).unwrap();
 
         let raster_tile = RasterTile2D::new_with_tile_info(
             TimeInterval::default(),
@@ -350,6 +360,7 @@ mod tests {
                     data_type: RasterDataType::I8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
+                    no_data_value: no_data_value.map(AsPrimitive::as_),
                 },
             },
         }

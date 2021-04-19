@@ -36,11 +36,12 @@ pub trait ResultDescriptor: Clone + Serialize {
 }
 
 /// A `ResultDescriptor` for raster queries
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RasterResultDescriptor {
     pub data_type: RasterDataType,
     pub spatial_reference: SpatialReferenceOption,
     pub measurement: Measurement,
+    pub no_data_value: Option<f64>,
 }
 
 impl ResultDescriptor for RasterResultDescriptor {
@@ -60,8 +61,8 @@ impl ResultDescriptor for RasterResultDescriptor {
     {
         Self {
             data_type: f(&self.data_type),
-            spatial_reference: self.spatial_reference,
             measurement: self.measurement.clone(),
+            ..*self
         }
     }
 
@@ -70,9 +71,9 @@ impl ResultDescriptor for RasterResultDescriptor {
         F: Fn(&SpatialReferenceOption) -> SpatialReferenceOption,
     {
         Self {
-            data_type: self.data_type,
             spatial_reference: f(&self.spatial_reference),
             measurement: self.measurement.clone(),
+            ..*self
         }
     }
 }

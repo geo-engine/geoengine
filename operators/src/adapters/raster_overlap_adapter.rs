@@ -528,33 +528,35 @@ mod tests {
     use crate::engine::{RasterOperator, RasterResultDescriptor};
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;
+    use num_traits::AsPrimitive;
 
     #[tokio::test]
     async fn identity() {
+        let no_data_value = Some(0);
         let data = vec![
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 0].into(),
                 global_geo_transform: Default::default(),
-                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4], Some(0)).unwrap(),
+                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4], no_data_value).unwrap(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 1].into(),
                 global_geo_transform: Default::default(),
-                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10], Some(0)).unwrap(),
+                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10], no_data_value).unwrap(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 0].into(),
                 global_geo_transform: Default::default(),
-                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16], Some(0)).unwrap(),
+                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16], no_data_value).unwrap(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 1].into(),
                 global_geo_transform: Default::default(),
-                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22], Some(0)).unwrap(),
+                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22], no_data_value).unwrap(),
             },
         ];
 
@@ -565,6 +567,7 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
+                    no_data_value: no_data_value.map(AsPrimitive::as_),
                 },
             },
         }
@@ -609,31 +612,32 @@ mod tests {
     #[tokio::test]
     async fn identity_projection() {
         let projection = SpatialReference::epsg_4326();
+        let no_data_value = Some(0);
 
         let data = vec![
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 0].into(),
                 global_geo_transform: Default::default(),
-                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4], Some(0)).unwrap(),
+                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4], no_data_value).unwrap(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 1].into(),
                 global_geo_transform: Default::default(),
-                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10], Some(0)).unwrap(),
+                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10], no_data_value).unwrap(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 0].into(),
                 global_geo_transform: Default::default(),
-                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16], Some(0)).unwrap(),
+                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16], no_data_value).unwrap(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 1].into(),
                 global_geo_transform: Default::default(),
-                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22], Some(0)).unwrap(),
+                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22], no_data_value).unwrap(),
             },
         ];
 
@@ -644,6 +648,7 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
+                    no_data_value: no_data_value.map(AsPrimitive::as_),
                 },
             },
         }
@@ -667,8 +672,12 @@ mod tests {
 
         let op = mrs1.initialize(&exe_ctx).unwrap();
 
-        // would be nice to get from result descriptor
-        let no_data_v = 0_u8; // op.result_descriptor().no_data_value;
+        let raster_res_desc: &RasterResultDescriptor = op.result_descriptor();
+
+        let no_data_v = raster_res_desc
+            .no_data_value
+            .map(AsPrimitive::as_)
+            .expect("must be 0 since we specified it above");
 
         let qp = op.query_processor().unwrap().get_u8().unwrap();
 

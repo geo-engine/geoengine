@@ -177,9 +177,11 @@ mod tests {
     use geoengine_datatypes::primitives::{BoundingBox2D, Measurement, SpatialResolution};
     use geoengine_datatypes::raster::{Grid, RasterDataType};
     use geoengine_datatypes::spatial_reference::SpatialReference;
+    use num_traits::AsPrimitive;
 
     #[tokio::test]
     async fn adapter() {
+        let no_data_value = Some(0);
         let mrs1 = MockRasterSource {
             params: MockRasterSourceParams {
                 data: vec![
@@ -187,35 +189,48 @@ mod tests {
                         time: TimeInterval::new_unchecked(0, 5),
                         tile_position: [0, 0].into(),
                         global_geo_transform: Default::default(),
-                        grid_array: Grid::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], Some(0))
+                        grid_array: Grid::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], no_data_value)
                             .unwrap(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(0, 5),
                         tile_position: [0, 1].into(),
                         global_geo_transform: Default::default(),
-                        grid_array: Grid::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12], Some(0))
-                            .unwrap(),
+                        grid_array: Grid::new(
+                            [3, 2].into(),
+                            vec![7, 8, 9, 10, 11, 12],
+                            no_data_value,
+                        )
+                        .unwrap(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(5, 10),
                         tile_position: [0, 0].into(),
                         global_geo_transform: Default::default(),
-                        grid_array: Grid::new([3, 2].into(), vec![13, 14, 15, 16, 17, 18], Some(0))
-                            .unwrap(),
+                        grid_array: Grid::new(
+                            [3, 2].into(),
+                            vec![13, 14, 15, 16, 17, 18],
+                            no_data_value,
+                        )
+                        .unwrap(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(5, 10),
                         tile_position: [0, 1].into(),
                         global_geo_transform: Default::default(),
-                        grid_array: Grid::new([3, 2].into(), vec![19, 20, 21, 22, 23, 24], Some(0))
-                            .unwrap(),
+                        grid_array: Grid::new(
+                            [3, 2].into(),
+                            vec![19, 20, 21, 22, 23, 24],
+                            no_data_value,
+                        )
+                        .unwrap(),
                     },
                 ],
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
+                    no_data_value: no_data_value.map(AsPrimitive::as_),
                 },
             },
         }
@@ -231,7 +246,7 @@ mod tests {
                         grid_array: Grid::new(
                             [3, 2].into(),
                             vec![101, 102, 103, 104, 105, 106],
-                            Some(0),
+                            no_data_value,
                         )
                         .unwrap(),
                     },
@@ -242,7 +257,7 @@ mod tests {
                         grid_array: Grid::new(
                             [3, 2].into(),
                             vec![107, 108, 109, 110, 111, 112],
-                            Some(0),
+                            no_data_value,
                         )
                         .unwrap(),
                     },
@@ -253,7 +268,7 @@ mod tests {
                         grid_array: Grid::new(
                             [3, 2].into(),
                             vec![113, 114, 115, 116, 117, 118],
-                            Some(0),
+                            no_data_value,
                         )
                         .unwrap(),
                     },
@@ -264,7 +279,7 @@ mod tests {
                         grid_array: Grid::new(
                             [3, 2].into(),
                             vec![119, 120, 121, 122, 123, 124],
-                            Some(0),
+                            no_data_value,
                         )
                         .unwrap(),
                     },
@@ -275,7 +290,7 @@ mod tests {
                         grid_array: Grid::new(
                             [3, 2].into(),
                             vec![125, 126, 127, 128, 129, 130],
-                            Some(0),
+                            no_data_value,
                         )
                         .unwrap(),
                     },
@@ -286,7 +301,7 @@ mod tests {
                         grid_array: Grid::new(
                             [3, 2].into(),
                             vec![131, 132, 133, 134, 135, 136],
-                            Some(0),
+                            no_data_value,
                         )
                         .unwrap(),
                     },
@@ -295,6 +310,7 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
+                    no_data_value: no_data_value.map(AsPrimitive::as_),
                 },
             },
         }

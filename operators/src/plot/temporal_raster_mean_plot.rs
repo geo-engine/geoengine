@@ -259,6 +259,7 @@ mod tests {
     };
     use geoengine_datatypes::raster::{Grid2D, RasterDataType, TileInformation};
     use geoengine_datatypes::spatial_reference::SpatialReference;
+    use num_traits::AsPrimitive;
     use serde_json::json;
 
     #[test]
@@ -350,6 +351,8 @@ mod tests {
         assert_eq!(time_intervals.len(), values_vec.len());
         assert!(values_vec.iter().all(|v| v.len() == 6));
 
+        let no_data_value = None;
+
         let mut tiles = Vec::with_capacity(time_intervals.len());
         for (time_interval, values) in time_intervals.into_iter().zip(values_vec) {
             tiles.push(RasterTile2D::new_with_tile_info(
@@ -359,7 +362,7 @@ mod tests {
                     global_tile_position: [0, 0].into(),
                     tile_size_in_pixels: [3, 2].into(),
                 },
-                Grid2D::new([3, 2].into(), values, None).unwrap(),
+                Grid2D::new([3, 2].into(), values, no_data_value).unwrap(),
             ));
         }
 
@@ -370,6 +373,7 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
+                    no_data_value: no_data_value.map(AsPrimitive::as_),
                 },
             },
         }
