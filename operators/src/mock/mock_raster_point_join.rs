@@ -58,7 +58,7 @@ where
                 let pixel: f64 = pixel.as_();
                 let collection = collection.add_column(
                     &self.feature_name,
-                    FeatureData::Number(vec![pixel; collection.len()]),
+                    FeatureData::Float(vec![pixel; collection.len()]),
                 )?;
                 Ok(collection)
             })
@@ -132,7 +132,7 @@ impl VectorOperator for MockRasterPointJoinOperator {
         let result_descriptor = {
             let mut columns = vector_sources[0].result_descriptor().columns.clone();
             if columns
-                .insert(self.params.feature_name.clone(), FeatureDataType::Number)
+                .insert(self.params.feature_name.clone(), FeatureDataType::Float)
                 .is_some()
             {
                 return Err(geoengine_datatypes::error::Error::ColumnNameConflict {
@@ -373,7 +373,7 @@ mod tests {
         assert_eq!(collections[1].len(), 1);
 
         let column = collections[0].data(&new_column_name).unwrap();
-        let numbers = if let FeatureDataRef::Number(numbers) = column {
+        let numbers = if let FeatureDataRef::Float(numbers) = column {
             numbers
         } else {
             panic!()
@@ -382,7 +382,7 @@ mod tests {
         assert_eq!(numbers.as_ref(), &[1.0, 1.0]);
 
         let column = collections[1].data(&new_column_name).unwrap();
-        let numbers = if let FeatureDataRef::Number(numbers) = column {
+        let numbers = if let FeatureDataRef::Float(numbers) = column {
             numbers
         } else {
             panic!()

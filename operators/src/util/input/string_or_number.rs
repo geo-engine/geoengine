@@ -8,8 +8,8 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 #[derive(Debug, Clone, PartialEq)]
 pub enum StringOrNumber {
     String(String),
-    Number(f64),
-    Decimal(i64),
+    Float(f64),
+    Int(i64),
 }
 
 impl Serialize for StringOrNumber {
@@ -19,8 +19,8 @@ impl Serialize for StringOrNumber {
     {
         match self {
             StringOrNumber::String(v) => serializer.serialize_str(v),
-            StringOrNumber::Number(v) => serializer.serialize_f64(*v),
-            StringOrNumber::Decimal(v) => serializer.serialize_i64(*v),
+            StringOrNumber::Float(v) => serializer.serialize_f64(*v),
+            StringOrNumber::Int(v) => serializer.serialize_i64(*v),
         }
     }
 }
@@ -46,7 +46,7 @@ impl<'de> Visitor<'de> for StringOrNumberDeserializer {
     where
         E: serde::de::Error,
     {
-        Ok(StringOrNumber::Decimal(v))
+        Ok(StringOrNumber::Int(v))
     }
 
     fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
@@ -60,7 +60,7 @@ impl<'de> Visitor<'de> for StringOrNumberDeserializer {
     where
         E: serde::de::Error,
     {
-        Ok(StringOrNumber::Number(v))
+        Ok(StringOrNumber::Float(v))
     }
 
     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
@@ -80,13 +80,13 @@ impl<'de> Visitor<'de> for StringOrNumberDeserializer {
 
 impl From<f64> for StringOrNumber {
     fn from(v: f64) -> Self {
-        StringOrNumber::Number(v)
+        StringOrNumber::Float(v)
     }
 }
 
 impl From<i64> for StringOrNumber {
     fn from(v: i64) -> Self {
-        StringOrNumber::Decimal(v)
+        StringOrNumber::Int(v)
     }
 }
 
@@ -119,8 +119,8 @@ impl TryFrom<&StringOrNumber> for f64 {
                 expected: "number".to_string(),
                 found: "string".to_string(),
             }),
-            StringOrNumber::Number(v) => Ok(*v),
-            StringOrNumber::Decimal(v) => Ok(*v as f64),
+            StringOrNumber::Float(v) => Ok(*v),
+            StringOrNumber::Int(v) => Ok(*v as f64),
         }
     }
 }
@@ -142,8 +142,8 @@ impl TryFrom<&StringOrNumber> for i64 {
                 expected: "number".to_string(),
                 found: "string".to_string(),
             }),
-            StringOrNumber::Number(v) => Ok(*v as i64),
-            StringOrNumber::Decimal(v) => Ok(*v),
+            StringOrNumber::Float(v) => Ok(*v as i64),
+            StringOrNumber::Int(v) => Ok(*v),
         }
     }
 }
@@ -154,12 +154,10 @@ impl TryFrom<StringOrNumber> for String {
     fn try_from(value: StringOrNumber) -> Result<Self, Self::Error> {
         match value {
             StringOrNumber::String(v) => Ok(v),
-            StringOrNumber::Number(_) | StringOrNumber::Decimal(_) => {
-                Err(error::Error::InvalidType {
-                    expected: "string".to_string(),
-                    found: "number".to_string(),
-                })
-            }
+            StringOrNumber::Float(_) | StringOrNumber::Int(_) => Err(error::Error::InvalidType {
+                expected: "string".to_string(),
+                found: "number".to_string(),
+            }),
         }
     }
 }
@@ -178,12 +176,10 @@ impl<'v> TryFrom<&'v StringOrNumber> for &'v str {
     fn try_from(value: &'v StringOrNumber) -> Result<Self, Self::Error> {
         match value {
             StringOrNumber::String(v) => Ok(v),
-            StringOrNumber::Number(_) | StringOrNumber::Decimal(_) => {
-                Err(error::Error::InvalidType {
-                    expected: "string".to_string(),
-                    found: "number".to_string(),
-                })
-            }
+            StringOrNumber::Float(_) | StringOrNumber::Int(_) => Err(error::Error::InvalidType {
+                expected: "string".to_string(),
+                found: "number".to_string(),
+            }),
         }
     }
 }
@@ -201,12 +197,12 @@ mod tests {
         );
 
         assert_eq!(
-            serde_json::to_string(&StringOrNumber::Number(1337.)).unwrap(),
+            serde_json::to_string(&StringOrNumber::Float(1337.)).unwrap(),
             "1337.0"
         );
 
         assert_eq!(
-            serde_json::to_string(&StringOrNumber::Decimal(42)).unwrap(),
+            serde_json::to_string(&StringOrNumber::Int(42)).unwrap(),
             "42"
         );
     }
@@ -220,12 +216,12 @@ mod tests {
 
         assert_eq!(
             serde_json::from_str::<StringOrNumber>("1337.0").unwrap(),
-            StringOrNumber::Number(1337.)
+            StringOrNumber::Float(1337.)
         );
 
         assert_eq!(
             serde_json::from_str::<StringOrNumber>("42").unwrap(),
-            StringOrNumber::Decimal(42)
+            StringOrNumber::Int(42)
         );
     }
 
@@ -241,21 +237,18 @@ mod tests {
             "foobar"
         );
 
-        assert_eq!(f64::try_from(StringOrNumber::Number(1337.)).unwrap(), 1337.);
-        assert_eq!(
-            f64::try_from(&StringOrNumber::Number(1337.)).unwrap(),
-            1337.
-        );
+        assert_eq!(f64::try_from(StringOrNumber::Float(1337.)).unwrap(), 1337.);
+        assert_eq!(f64::try_from(&StringOrNumber::Float(1337.)).unwrap(), 1337.);
 
-        assert_eq!(i64::try_from(StringOrNumber::Number(1337.)).unwrap(), 1337);
-        assert_eq!(i64::try_from(&StringOrNumber::Number(1337.)).unwrap(), 1337);
+        assert_eq!(i64::try_from(StringOrNumber::Float(1337.)).unwrap(), 1337);
+        assert_eq!(i64::try_from(&StringOrNumber::Float(1337.)).unwrap(), 1337);
 
-        assert_eq!(i64::try_from(StringOrNumber::Decimal(42)).unwrap(), 42);
+        assert_eq!(i64::try_from(StringOrNumber::Int(42)).unwrap(), 42);
 
-        assert_eq!(f64::try_from(StringOrNumber::Decimal(42)).unwrap(), 42.);
+        assert_eq!(f64::try_from(StringOrNumber::Int(42)).unwrap(), 42.);
 
-        assert!(String::try_from(StringOrNumber::Number(1337.)).is_err());
-        assert!(String::try_from(StringOrNumber::Decimal(42)).is_err());
+        assert!(String::try_from(StringOrNumber::Float(1337.)).is_err());
+        assert!(String::try_from(StringOrNumber::Int(42)).is_err());
 
         assert!(i64::try_from(StringOrNumber::String("foobar".to_string())).is_err());
         assert!(f64::try_from(StringOrNumber::String("foobar".to_string())).is_err());

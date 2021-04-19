@@ -299,8 +299,8 @@ struct ColumnBuffer<T: OclPrm> {
 
 struct FeatureOutputBuffers {
     geo: Option<FeatureGeoOutputBuffer>,
-    numbers: Vec<ColumnBuffer<f64>>,
-    decimals: Vec<ColumnBuffer<i64>>,
+    floats: Vec<ColumnBuffer<f64>>,
+    ints: Vec<ColumnBuffer<i64>>,
     // TODO: categories, strings
     time: Option<Buffer<Long2>>,
 }
@@ -626,22 +626,22 @@ impl<'a> ClProgramRunnable<'a> {
                     None
                 };
                 match data {
-                    FeatureDataRef::Number(numbers) => Self::set_feature_column_input_argument(
+                    FeatureDataRef::Float(value) => Self::set_feature_column_input_argument(
                         kernel,
                         queue,
                         idx,
                         &column,
                         len,
-                        numbers.as_ref(),
+                        value.as_ref(),
                         nulls.as_ref().map(AsRef::as_ref),
                     )?,
-                    FeatureDataRef::Decimal(decimals) => Self::set_feature_column_input_argument(
+                    FeatureDataRef::Int(value) => Self::set_feature_column_input_argument(
                         kernel,
                         queue,
                         idx,
                         &column,
                         len,
-                        decimals.as_ref(),
+                        value.as_ref(),
                         nulls.as_ref().map(AsRef::as_ref),
                     )?,
                     _ => todo!(), // TODO: strings, categories
@@ -776,12 +776,12 @@ impl<'a> ClProgramRunnable<'a> {
                 None
             };
 
-            let mut numbers = Vec::new();
-            let mut decimals = Vec::new();
+            let mut floats = Vec::new();
+            let mut ints = Vec::new();
             for column in &argument.columns {
                 match column.data_type {
-                    FeatureDataType::Number => Self::set_feature_column_output_argument::<f64>(
-                        &mut numbers,
+                    FeatureDataType::Float => Self::set_feature_column_output_argument::<f64>(
+                        &mut floats,
                         kernel,
                         queue,
                         idx,
@@ -789,8 +789,8 @@ impl<'a> ClProgramRunnable<'a> {
                         features.num_features(),
                         true,
                     ),
-                    FeatureDataType::Decimal => Self::set_feature_column_output_argument::<i64>(
-                        &mut decimals,
+                    FeatureDataType::Int => Self::set_feature_column_output_argument::<i64>(
+                        &mut ints,
                         kernel,
                         queue,
                         idx,
@@ -804,8 +804,8 @@ impl<'a> ClProgramRunnable<'a> {
 
             self.feature_output_buffers.push(FeatureOutputBuffers {
                 geo: geo_buffers,
-                numbers,
-                decimals,
+                floats,
+                ints,
                 time,
             })
         }
@@ -1165,7 +1165,7 @@ impl<'a> ClProgramRunnable<'a> {
                 builder.set_default_time_intervals()?;
             }
 
-            for column_buffer in output_buffers.numbers {
+            for column_buffer in output_buffers.floats {
                 let values_buffer =
                     Self::read_ocl_to_arrow_buffer(&column_buffer.values, builder.num_features())?;
 
@@ -1196,7 +1196,7 @@ impl<'a> ClProgramRunnable<'a> {
                 )?;
             }
 
-            for column_buffer in output_buffers.decimals {
+            for column_buffer in output_buffers.ints {
                 let values_buffer =
                     Self::read_ocl_to_arrow_buffer(&column_buffer.values, builder.num_features())?;
 
@@ -1628,11 +1628,11 @@ impl CompiledClProgram {
         null_name: String,
     ) {
         match column_type {
-            FeatureDataType::Number => {
+            FeatureDataType::Float => {
                 kernel.arg_named(name, None::<&Buffer<f64>>);
                 kernel.arg_named(null_name, None::<&Buffer<i8>>);
             }
-            FeatureDataType::Decimal => {
+            FeatureDataType::Int => {
                 kernel.arg_named(name, None::<&Buffer<i64>>);
                 kernel.arg_named(null_name, None::<&Buffer<i8>>);
             }
@@ -2489,7 +2489,7 @@ __kernel void nop(__global int* buffer) {
                     TimeInterval::new_unchecked(1, 2),
                     TimeInterval::new_unchecked(2, 3),
                 ],
-                [("foo".to_string(), FeatureData::Number(vec![0., 1., 2.]))]
+                [("foo".to_string(), FeatureData::Float(vec![0., 1., 2.]))]
                     .iter()
                     .cloned()
                     .collect(),
@@ -2499,7 +2499,7 @@ __kernel void nop(__global int* buffer) {
 
         let mut builder = FeatureCollection::<NoGeometry>::builder();
         builder
-            .add_column("foo".into(), FeatureDataType::Number)
+            .add_column("foo".into(), FeatureDataType::Float)
             .unwrap();
         let mut out = builder.batch_builder(3, 4);
 
@@ -2518,13 +2518,13 @@ __kernel void columns(
         let mut cl_program = ClProgram::new(IterationType::VectorFeatures);
         cl_program.add_input_features(VectorArgument::new(
             input.vector_data_type(),
-            vec![ColumnArgument::new("foo".into(), FeatureDataType::Number)],
+            vec![ColumnArgument::new("foo".into(), FeatureDataType::Float)],
             false,
             false,
         ));
         cl_program.add_output_features(VectorArgument::new(
             VectorDataType::Data,
-            vec![ColumnArgument::new("foo".into(), FeatureDataType::Number)],
+            vec![ColumnArgument::new("foo".into(), FeatureDataType::Float)],
             false,
             false,
         ));
@@ -2541,7 +2541,7 @@ __kernel void columns(
             .data("foo")
             .unwrap()
         {
-            FeatureDataRef::Number(numbers) => assert_eq!(numbers.as_ref(), &[1., 2., 3.]),
+            FeatureDataRef::Float(numbers) => assert_eq!(numbers.as_ref(), &[1., 2., 3.]),
             _ => panic!(),
         }
     }
@@ -2559,7 +2559,7 @@ __kernel void columns(
                 ],
                 [(
                     "foo".to_string(),
-                    FeatureData::NullableNumber(vec![Some(0.), None, Some(2.)]),
+                    FeatureData::NullableFloat(vec![Some(0.), None, Some(2.)]),
                 )]
                 .iter()
                 .cloned()
@@ -2570,7 +2570,7 @@ __kernel void columns(
 
         let mut builder = FeatureCollection::<NoGeometry>::builder();
         builder
-            .add_column("foo".into(), FeatureDataType::Number)
+            .add_column("foo".into(), FeatureDataType::Float)
             .unwrap();
         let mut out = builder.batch_builder(3, 4);
 
@@ -2594,13 +2594,13 @@ __kernel void columns(
         let mut cl_program = ClProgram::new(IterationType::VectorFeatures);
         cl_program.add_input_features(VectorArgument::new(
             input.vector_data_type(),
-            vec![ColumnArgument::new("foo".into(), FeatureDataType::Number)],
+            vec![ColumnArgument::new("foo".into(), FeatureDataType::Float)],
             false,
             false,
         ));
         cl_program.add_output_features(VectorArgument::new(
             VectorDataType::Data,
-            vec![ColumnArgument::new("foo".into(), FeatureDataType::Number)],
+            vec![ColumnArgument::new("foo".into(), FeatureDataType::Float)],
             false,
             false,
         ));
@@ -2620,7 +2620,7 @@ __kernel void columns(
             .data("foo")
             .unwrap()
         {
-            FeatureDataRef::Number(numbers) => {
+            FeatureDataRef::Float(numbers) => {
                 assert_eq!(numbers.as_ref(), &[0., 1337., 0.]);
                 assert_eq!(numbers.nulls().as_slice(), &[true, false, true])
             }

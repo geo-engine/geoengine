@@ -149,15 +149,15 @@ impl Default for OgrSourceTimeFormat {
 /// A mapping of the columns to data, time, space. Columns that are not listed are skipped when parsing.
 ///  - x: the name of the column containing the x coordinate (or the wkt string) [if CSV file]
 ///  - y: the name of the column containing the y coordinate [if CSV file with y column]
-///  - numeric: an array of column names containing numeric values
-///  - decimal: an array of column names containing decimal values
+///  - float: an array of column names containing float values
+///  - int: an array of column names containing int values
 ///  - textual: an array of column names containing alpha-numeric values
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct OgrSourceColumnSpec {
     pub x: String,
     pub y: Option<String>,
-    pub numeric: Vec<String>,
-    pub decimal: Vec<String>,
+    pub int: Vec<String>,
+    pub float: Vec<String>,
     pub textual: Vec<String>,
 }
 
@@ -170,9 +170,8 @@ impl OgrSourceColumnSpec {
                 return;
             };
 
-        self.numeric
-            .retain(|attribute| attributes.contains(attribute));
-        self.decimal
+        self.int.retain(|attribute| attributes.contains(attribute));
+        self.float
             .retain(|attribute| attributes.contains(attribute));
         self.textual
             .retain(|attribute| attributes.contains(attribute));
@@ -602,16 +601,16 @@ where
         // TODO: what to do if there is nothing specified?
         if let Some(ref column_spec) = dataset_information.columns {
             // TODO: error handling instead of unwrap
-            for attribute in &column_spec.numeric {
-                data_types.insert(attribute.clone(), FeatureDataType::Number);
+            for attribute in &column_spec.int {
+                data_types.insert(attribute.clone(), FeatureDataType::Float);
                 feature_collection_builder
-                    .add_column(attribute.clone(), FeatureDataType::Number)
+                    .add_column(attribute.clone(), FeatureDataType::Float)
                     .unwrap();
             }
-            for attribute in &column_spec.decimal {
-                data_types.insert(attribute.clone(), FeatureDataType::Decimal);
+            for attribute in &column_spec.float {
+                data_types.insert(attribute.clone(), FeatureDataType::Int);
                 feature_collection_builder
-                    .add_column(attribute.clone(), FeatureDataType::Decimal)
+                    .add_column(attribute.clone(), FeatureDataType::Int)
                     .unwrap();
             }
             for attribute in &column_spec.textual {
@@ -716,8 +715,8 @@ where
 
                     builder.push_data(&column, FeatureDataValue::NullableText(text_option))?;
                 }
-                FeatureDataType::Number => {
-                    let number_option = match field {
+                FeatureDataType::Float => {
+                    let value_option = match field {
                         Ok(FieldValue::IntegerValue(v)) => Some(f64::from(v)),
                         Ok(FieldValue::StringValue(s)) => f64::from_str(&s).ok(),
                         Ok(FieldValue::RealValue(v)) => Some(v),
@@ -725,10 +724,10 @@ where
                         Err(_) => None, // TODO: log error
                     };
 
-                    builder.push_data(&column, FeatureDataValue::NullableNumber(number_option))?;
+                    builder.push_data(&column, FeatureDataValue::NullableFloat(value_option))?;
                 }
-                FeatureDataType::Decimal => {
-                    let decimal_option = match field {
+                FeatureDataType::Int => {
+                    let value_option = match field {
                         Ok(FieldValue::IntegerValue(v)) => Some(i64::from(v)), // TODO: PR for allowing i64 in OGR?
                         Ok(FieldValue::StringValue(s)) => i64::from_str(&s).ok(),
                         Ok(FieldValue::RealValue(v)) => Some(v as i64),
@@ -736,8 +735,7 @@ where
                         Err(_) => None, // TODO: log error
                     };
 
-                    builder
-                        .push_data(&column, FeatureDataValue::NullableDecimal(decimal_option))?;
+                    builder.push_data(&column, FeatureDataValue::NullableInt(value_option))?;
                 }
                 FeatureDataType::Categorical => todo!("implement"),
             }
@@ -978,8 +976,8 @@ mod tests {
             columns: Some(OgrSourceColumnSpec {
                 x: "x".to_string(),
                 y: Some("y".to_string()),
-                numeric: vec!["num".to_string()],
-                decimal: vec!["dec1".to_string(), "dec2".to_string()],
+                float: vec!["num".to_string()],
+                int: vec!["dec1".to_string(), "dec2".to_string()],
                 textual: vec!["text".to_string()],
             }),
             default_geometry: Some(TypedGeometry::MultiPoint(
@@ -1015,8 +1013,8 @@ mod tests {
                 "columns": {
                     "x": "x",
                     "y": "y",
-                    "numeric": ["num"],
-                    "decimal": ["dec1", "dec2"],
+                    "int": ["dec1", "dec2"],
+                    "float": ["num"],
                     "textual": ["text"]
                 },
                 "default_geometry":{"MultiPoint":{"coordinates":[{"x":0.0,"y":0.0}]}},
@@ -1049,8 +1047,8 @@ mod tests {
                 "columns": {
                     "x": "x",
                     "y": "y",
-                    "numeric": ["num"],
-                    "decimal": ["dec1", "dec2"],
+                    "int": ["dec1", "dec2"],
+                    "float": ["num"],
                     "textual": ["text"]
                 },
                 "default_geometry":{"MultiPoint":{"coordinates":[{"x":0.0,"y":0.0}]}},
@@ -1372,8 +1370,8 @@ mod tests {
                     columns: Some(OgrSourceColumnSpec {
                         x: "".to_string(),
                         y: None,
-                        numeric: vec!["natlscale".to_string()],
-                        decimal: vec!["scalerank".to_string()],
+                        int: vec!["natlscale".to_string()],
+                        float: vec!["scalerank".to_string()],
                         textual: vec![
                             "featurecla".to_string(),
                             "name".to_string(),
@@ -1389,9 +1387,9 @@ mod tests {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     columns: [
-                        ("natlscale".to_string(), FeatureDataType::Number),
-                        ("scalerank".to_string(), FeatureDataType::Decimal),
-                        ("featurecla".to_string(), FeatureDataType::Decimal),
+                        ("natlscale".to_string(), FeatureDataType::Float),
+                        ("scalerank".to_string(), FeatureDataType::Int),
+                        ("featurecla".to_string(), FeatureDataType::Int),
                         ("name".to_string(), FeatureDataType::Text),
                         ("website".to_string(), FeatureDataType::Text),
                     ]
@@ -1452,14 +1450,14 @@ mod tests {
             (4.292_873_969, 51.927_222_22),
         ])?;
 
-        let natlscale = FeatureData::NullableNumber(
+        let natlscale = FeatureData::NullableFloat(
             [5.0_f64, 5.0, 5.0, 10.0, 20.0, 20.0, 30.0, 30.0, 30.0, 30.0]
                 .iter()
                 .map(|v| Some(*v))
                 .collect(),
         );
 
-        let scalerank = FeatureData::NullableDecimal(
+        let scalerank = FeatureData::NullableInt(
             [8, 8, 8, 7, 6, 6, 5, 5, 5, 5]
                 .iter()
                 .map(|v| Some(*v))
@@ -2701,8 +2699,8 @@ mod tests {
             columns: Some(OgrSourceColumnSpec {
                 x: "".to_string(),
                 y: None,
-                decimal: vec!["a".to_string()],
-                numeric: vec!["b".to_string()],
+                float: vec!["a".to_string()],
+                int: vec!["b".to_string()],
                 textual: vec!["c".to_string()],
             }),
             default_geometry: None,
@@ -2717,8 +2715,8 @@ mod tests {
                 data_type: VectorDataType::MultiPoint,
                 spatial_reference: SpatialReferenceOption::Unreferenced,
                 columns: [
-                    ("a".to_string(), FeatureDataType::Decimal),
-                    ("b".to_string(), FeatureDataType::Number),
+                    ("a".to_string(), FeatureDataType::Int),
+                    ("b".to_string(), FeatureDataType::Float),
                     ("c".to_string(), FeatureDataType::Text),
                 ]
                 .iter()
@@ -2753,11 +2751,11 @@ mod tests {
                 [
                     (
                         "a".to_string(),
-                        FeatureData::NullableDecimal(vec![Some(1), Some(2)])
+                        FeatureData::NullableInt(vec![Some(1), Some(2)])
                     ),
                     (
                         "b".to_string(),
-                        FeatureData::NullableNumber(vec![Some(5.4), None])
+                        FeatureData::NullableFloat(vec![Some(5.4), None])
                     ),
                     (
                         "c".to_string(),
@@ -3099,8 +3097,8 @@ mod tests {
                     columns: Some(OgrSourceColumnSpec {
                         x: "".to_owned(),
                         y: None,
-                        numeric: vec![],
-                        decimal: vec![],
+                        int: vec![],
+                        float: vec![],
                         textual: vec![],
                     }),
                     default_geometry: None,
@@ -3183,8 +3181,8 @@ mod tests {
                     columns: Some(OgrSourceColumnSpec {
                         x: "x".to_owned(),
                         y: Some("y".to_owned()),
-                        numeric: vec!["num".to_owned()],
-                        decimal: vec![],
+                        int: vec!["num".to_owned()],
+                        float: vec![],
                         textual: vec!["txt".to_owned()],
                     }),
                     default_geometry: None,
@@ -3245,7 +3243,7 @@ mod tests {
             vec![TimeInterval::default(), TimeInterval::default()],
             {
                 let mut map = HashMap::new();
-                map.insert("num".into(), FeatureData::Number(vec![42., 815.]));
+                map.insert("num".into(), FeatureData::Float(vec![42., 815.]));
                 map.insert(
                     "txt".into(),
                     FeatureData::Text(vec!["foo".to_owned(), "bar".to_owned()]),
