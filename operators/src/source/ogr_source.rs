@@ -1358,6 +1358,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn ne_10m_ports_columns() -> Result<()> {
         let id = DatasetId::Internal(InternalDatasetId::new());
         let mut exe_ctx = MockExecutionContext::default();
@@ -1533,6 +1534,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn ne_10m_ports() -> Result<()> {
         let id = DatasetId::Internal(InternalDatasetId::new());
         let mut exe_ctx = MockExecutionContext::default();
@@ -2777,6 +2779,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn chunked() -> Result<()> {
         let id = DatasetId::Internal(InternalDatasetId::new());
         let mut exe_ctx = MockExecutionContext::default();

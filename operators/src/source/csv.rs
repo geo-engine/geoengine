@@ -318,7 +318,7 @@ impl Stream for CsvSourceStream {
                 let (header, records) = match &mut *csv_reader {
                     ReaderState::OnGoing { header, records } => (header, records),
                     ReaderState::Error => return Ok(None),
-                    _ => unreachable!(),
+                    ReaderState::Untouched(_) => unreachable!(),
                 };
 
                 let mut builder = MultiPointCollection::builder().finish_header();
