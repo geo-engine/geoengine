@@ -299,6 +299,15 @@ impl TimeInterval {
     pub fn duration_ms(&self) -> u64 {
         self.end.inner().wrapping_sub(self.start.inner()) as u64
     }
+
+    /// Extends a time interval with the bounds of another time interval.
+    /// The result has the smaller `start` and the larger `end`.
+    pub fn extend(&self, other: &Self) -> TimeInterval {
+        Self {
+            start: self.start.min(other.start),
+            end: self.end.max(other.end),
+        }
+    }
 }
 
 impl Debug for TimeInterval {
@@ -645,5 +654,13 @@ mod tests {
         let b = TimeInterval::new(2, 3).unwrap();
 
         assert!(!b.intersects(&a))
+    }
+
+    #[test]
+    fn extend() {
+        let a = TimeInterval::new(1, 2).unwrap();
+        let b = TimeInterval::new(2, 3).unwrap();
+
+        assert_eq!(a.extend(&b), TimeInterval::new_unchecked(1, 3));
     }
 }

@@ -215,6 +215,7 @@ impl ArrowTyped for MultiPoint {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub struct MultiPointRef<'g> {
     point_coordinates: &'g [Coordinate2D],
 }

@@ -54,7 +54,7 @@ pub enum FeatureDataValue {
     NullableText(Option<String>),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum FeatureDataRef<'f> {
     Categorical(CategoricalDataRef<'f>),
     Int(IntDataRef<'f>),
@@ -146,7 +146,7 @@ where
     fn get_unchecked(&self, i: usize) -> FeatureDataValue;
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct FloatDataRef<'f> {
     buffer: &'f [f64],
     valid_bitmap: &'f Option<arrow::bitmap::Bitmap>,
@@ -205,7 +205,7 @@ impl<'f> FloatDataRef<'f> {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct IntDataRef<'f> {
     buffer: &'f [i64],
     valid_bitmap: &'f Option<arrow::bitmap::Bitmap>,
@@ -272,7 +272,7 @@ fn null_bitmap_to_bools(null_bitmap: &Option<Bitmap>, len: usize) -> Vec<bool> {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct CategoricalDataRef<'f> {
     buffer: &'f [u8],
     valid_bitmap: &'f Option<arrow::bitmap::Bitmap>,
@@ -365,7 +365,7 @@ unsafe fn byte_ptr_to_str<'d>(bytes: *const u8, length: usize) -> &'d str {
 /// assert!(text_data_ref.text_at(3).is_err());
 /// ```
 ///
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct TextDataRef<'f> {
     data_buffer: arrow::buffer::Buffer,
     offsets_buffer: arrow::buffer::Buffer,
