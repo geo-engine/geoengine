@@ -17,42 +17,36 @@ use pin_project::pin_project;
 
 #[must_use = "streams do nothing unless polled"]
 #[pin_project(project = RasterTimeSubStreamAdapterProjection)]
-pub struct RasterTimeMultiFold<St, P, A, AInit, F, Fut>
-where
-    St: Stream<Item = Result<RasterTile2D<P>>>,
-    P: Pixel,
-    AInit: FnMut() -> A,
-    F: FnMut(A, St::Item) -> Fut,
-    Fut: Future<Output = A>,
-{
+pub struct RasterTimeMultiFold<St, Accum, AccumInitFn, FoldFn, Fut> {
     #[pin]
     stream: St,
 
-    accumulator_initializer: AInit,
-    f: F,
+    accum_init_fn: AccumInitFn,
+    fold_fn: FoldFn,
 
-    accum: Option<A>,
+    accum: Option<Accum>,
     time: Option<TimeInterval>,
 
     #[pin]
     future: Option<Fut>,
 }
 
-impl<St, P, A, AInit, F, Fut> RasterTimeMultiFold<St, P, A, AInit, F, Fut>
+impl<St, P, Accum, AccumInitFn, FoldFn, Fut>
+    RasterTimeMultiFold<St, Accum, AccumInitFn, FoldFn, Fut>
 where
     St: Stream<Item = Result<RasterTile2D<P>>>,
     P: Pixel,
-    AInit: FnMut() -> A,
-    F: FnMut(A, St::Item) -> Fut,
-    Fut: Future<Output = A>,
+    AccumInitFn: FnMut() -> Accum,
+    FoldFn: FnMut(Accum, St::Item) -> Fut,
+    Fut: Future<Output = Accum>,
 {
-    pub fn new(stream: St, mut accumulator_initializer: AInit, f: F) -> Self {
-        let accum = accumulator_initializer();
+    pub fn new(stream: St, mut accum_init_fn: AccumInitFn, fold_fn: FoldFn) -> Self {
+        let accum = accum_init_fn();
 
         Self {
             stream,
-            accumulator_initializer,
-            f,
+            accum_init_fn,
+            fold_fn,
             accum: Some(accum),
             future: None,
             time: None,
@@ -60,15 +54,16 @@ where
     }
 }
 
-impl<St, P, A, AInit, F, Fut> Stream for RasterTimeMultiFold<St, P, A, AInit, F, Fut>
+impl<St, P, Accum, AccumInitFn, FoldFn, Fut> Stream
+    for RasterTimeMultiFold<St, Accum, AccumInitFn, FoldFn, Fut>
 where
     St: Stream<Item = Result<RasterTile2D<P>>>,
     P: Pixel,
-    AInit: FnMut() -> A,
-    F: FnMut(A, St::Item) -> Fut,
-    Fut: Future<Output = A>,
+    AccumInitFn: FnMut() -> Accum,
+    FoldFn: FnMut(Accum, St::Item) -> Fut,
+    Fut: Future<Output = Accum>,
 {
-    type Item = A;
+    type Item = Accum;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         if self.is_terminated() {
@@ -77,7 +72,7 @@ where
 
         let mut this = self.project();
 
-        let value: A = loop {
+        let value: Accum = loop {
             if let Some(fut) = this.future.as_mut().as_pin_mut() {
                 // we're currently processing a future to produce a new accum value
                 *this.accum = Some(ready!(fut.poll(cx)));
@@ -112,28 +107,27 @@ where
             if time_does_not_match {
                 // set new time and process tile
                 *this.time = raster_tile.as_ref().map(|tile| tile.time).ok();
-                this.future.set(Some((this.f)(
-                    (this.accumulator_initializer)(),
-                    raster_tile,
-                )));
+                this.future
+                    .set(Some((this.fold_fn)((this.accum_init_fn)(), raster_tile)));
 
                 break accum;
             }
 
-            this.future.set(Some((this.f)(accum, raster_tile)));
+            this.future.set(Some((this.fold_fn)(accum, raster_tile)));
         };
 
         Poll::Ready(Some(value))
     }
 }
 
-impl<St, P, A, AInit, F, Fut> FusedStream for RasterTimeMultiFold<St, P, A, AInit, F, Fut>
+impl<St, P, Accum, AccumInitFn, FoldFn, Fut> FusedStream
+    for RasterTimeMultiFold<St, Accum, AccumInitFn, FoldFn, Fut>
 where
     St: Stream<Item = Result<RasterTile2D<P>>>,
     P: Pixel,
-    AInit: FnMut() -> A,
-    F: FnMut(A, St::Item) -> Fut,
-    Fut: Future<Output = A>,
+    AccumInitFn: FnMut() -> Accum,
+    FoldFn: FnMut(Accum, St::Item) -> Fut,
+    Fut: Future<Output = Accum>,
 {
     fn is_terminated(&self) -> bool {
         self.future.is_none() && self.accum.is_none()

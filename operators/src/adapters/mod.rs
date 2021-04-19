@@ -28,7 +28,7 @@ where
         self,
         accumulator_initializer: AInit,
         f: F,
-    ) -> RasterTimeMultiFold<Self, P, A, AInit, F, Fut>
+    ) -> RasterTimeMultiFold<Self, A, AInit, F, Fut>
     where
         Self: Sized,
         AInit: FnMut() -> A,
