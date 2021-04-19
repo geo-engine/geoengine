@@ -1,5 +1,6 @@
 mod aggregator;
 mod points;
+mod points_aggregated;
 mod util;
 
 use crate::engine::{
@@ -11,6 +12,7 @@ use crate::error;
 use crate::util::Result;
 
 use crate::processing::raster_vector_join::points::RasterPointJoinProcessor;
+use crate::processing::raster_vector_join::points_aggregated::RasterPointAggregateJoinProcessor;
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::primitives::FeatureDataType;
 use geoengine_datatypes::raster::RasterDataType;
@@ -37,6 +39,7 @@ pub struct RasterVectorJoinParams {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy)]
 #[serde(rename_all = "snake_case")]
 pub enum AggregationMethod {
+    None,
     First,
     Mean,
 }
@@ -95,7 +98,7 @@ impl VectorOperator for RasterVectorJoin {
             let mut columns = columns.clone();
             for (i, new_column_name) in self.params.names.iter().enumerate() {
                 let feature_data_type = match self.params.aggregation {
-                    AggregationMethod::First => {
+                    AggregationMethod::First | AggregationMethod::None => {
                         match raster_sources[i].result_descriptor().data_type {
                             RasterDataType::U8
                             | RasterDataType::U16
@@ -140,15 +143,25 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
 
         Ok(match self.vector_sources[0].query_processor()? {
             TypedVectorQueryProcessor::Data(_) => unreachable!(),
-            TypedVectorQueryProcessor::MultiPoint(points) => TypedVectorQueryProcessor::MultiPoint(
-                RasterPointJoinProcessor::new(
-                    points,
-                    typed_raster_processors,
-                    self.state.names.clone(),
-                    self.state.aggregation,
-                )
-                .boxed(),
-            ),
+            TypedVectorQueryProcessor::MultiPoint(points) => {
+                TypedVectorQueryProcessor::MultiPoint(match self.state.aggregation {
+                    AggregationMethod::None => RasterPointJoinProcessor::new(
+                        points,
+                        typed_raster_processors,
+                        self.state.names.clone(),
+                    )
+                    .boxed(),
+                    AggregationMethod::First | AggregationMethod::Mean => {
+                        RasterPointAggregateJoinProcessor::new(
+                            points,
+                            typed_raster_processors,
+                            self.state.names.clone(),
+                            self.state.aggregation,
+                        )
+                        .boxed()
+                    }
+                })
+            }
             TypedVectorQueryProcessor::MultiLineString(_)
             | TypedVectorQueryProcessor::MultiPolygon(_) => todo!("implement"),
         })
