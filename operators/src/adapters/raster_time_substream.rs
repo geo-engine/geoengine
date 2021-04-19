@@ -73,6 +73,9 @@ where
         let mut this = self.project();
 
         let value: Accum = loop {
+            // Retrieve either results from the future or more data from the stream
+            // Stops when there is something to output or when the stream is empty.
+
             if let Some(fut) = this.future.as_mut().as_pin_mut() {
                 // we're currently processing a future to produce a new accum value
                 *this.accum = Some(ready!(fut.poll(cx)));
@@ -110,6 +113,7 @@ where
                 this.future
                     .set(Some((this.fold_fn)((this.accum_init_fn)(), raster_tile)));
 
+                // return the result from the previous time step
                 break accum;
             }
 
