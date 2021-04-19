@@ -765,7 +765,7 @@ pub trait FeatureCollectionInfos {
         self.time_intervals()
             .iter()
             .copied()
-            .reduce(|t1, t2| t1.merge(&t2))
+            .reduce(|t1, t2| t1.extend(&t2))
     }
 
     /// Returns the byte-size of this collection
