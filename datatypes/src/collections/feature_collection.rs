@@ -1112,7 +1112,7 @@ where
     ///     vec![TimeInterval::new_unchecked(0, 1), TimeInterval::new_unchecked(0, 1)],
     ///     {
     ///         let mut map = HashMap::new();
-    ///         map.insert("number".into(), FeatureData::Number(vec![0., 1.]));
+    ///         map.insert("float".into(), FeatureData::Float(vec![0., 1.]));
     ///         map
     ///     },
     /// ).unwrap();
