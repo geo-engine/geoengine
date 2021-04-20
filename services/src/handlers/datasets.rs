@@ -32,6 +32,35 @@ use snafu::{OptionExt, ResultExt};
 use uuid::Uuid;
 use warp::Filter;
 
+/// Lists available [Datasets](crate::datasets::listing::DatasetListing).
+/// 
+/// # Example
+/// 
+/// ```text
+/// GET /datasets?filter=Germany&offset=0&limit=2&order=NameAsc
+/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
+/// ```
+/// Response:
+/// ```
+/// [
+///   {
+///     "id": {
+///       "Internal": "3d6e65ff-46a6-4f68-9cf0-15900b91c11f"
+///     },
+///     "name": "Germany",
+///     "description": "Boundaries of Germany",
+///     "tags": [],
+///     "source_operator": "OgrSource",
+///     "result_descriptor": {
+///       "Vector": {
+///         "data_type": "MultiPolygon",
+///         "spatial_reference": "EPSG:4326",
+///         "columns": {}
+///       }
+///     }
+///   }
+/// ]
+/// ```
 pub(crate) fn list_datasets_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
@@ -58,6 +87,32 @@ async fn list_datasets<C: Context>(
     Ok(warp::reply::json(&list))
 }
 
+/// Retrieves details about a [Dataset](crate::datasets::listing::DatasetListing) using the internal id.
+/// 
+/// # Example
+/// 
+/// ```text
+/// GET /dataset/internal/3d6e65ff-46a6-4f68-9cf0-15900b91c11f
+/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
+/// ```
+/// Response:
+/// ```
+/// {
+///   "id": {
+///     "Internal": "3d6e65ff-46a6-4f68-9cf0-15900b91c11f"
+///   },
+///   "name": "Germany",
+///   "description": "Boundaries of Germany",
+///   "result_descriptor": {
+///     "Vector": {
+///       "data_type": "MultiPolygon",
+///       "spatial_reference": "EPSG:4326",
+///       "columns": {}
+///     }
+///   },
+///   "source_operator": "OgrSource"
+/// }
+/// ```
 pub(crate) fn get_dataset_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {

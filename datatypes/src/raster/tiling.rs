@@ -82,7 +82,7 @@ impl TilingStrategy {
         GridBoundingBox2D::new_unchecked(start, end)
     }
 
-    /// generates the tile idx in [z,y,x] order for the tiles intersecting the bounding box
+    /// generates the tile idx in \[z,y,x\] order for the tiles intersecting the bounding box
     /// the iterator moves once along the x-axis and then increases the y-axis
     pub fn tile_idx_iterator(
         &self,

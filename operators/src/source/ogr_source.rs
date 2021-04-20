@@ -57,9 +57,9 @@ pub type OgrSource = SourceOperator<OgrSourceParameters>;
 ///  - `layer_name`: name of the layer to load
 ///  - `time`: the type of the time attribute(s)
 ///  - `columns`: a mapping of the columns to data, time, space. Columns that are not listed are skipped when parsing.
-///  - `default`: wkt definition of the default point/line/polygon as a string [optional]
+///  - `default`: wkt definition of the default point/line/polygon as a string (optional)
 ///  - `force_ogr_time_filter`: bool. force external time filter via ogr layer, even though data types don't match. Might not work
-///    (result: empty collection), but has better performance for wfs requests [optional, false if not provided]
+///    (result: empty collection), but has better performance for wfs requests (optional, false if not provided)
 ///  - `on_error`: specify the type of error handling
 ///  - `provenance`: specify the provenance of a file
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]

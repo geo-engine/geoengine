@@ -1,6 +1,6 @@
 /// This macro allows specifying a JSON Map inplace for convenience.
 ///
-/// The code is taken and modified from maplit (https://github.com/bluss/maplit/blob/master/src/lib.rs).
+/// The code is taken and modified from maplit (<https://github.com/bluss/maplit/blob/master/src/lib.rs>).
 ///
 /// # Examples
 ///

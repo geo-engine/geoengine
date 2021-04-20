@@ -9,6 +9,37 @@ use crate::util::IdResponse;
 use uuid::Uuid;
 use warp::Filter;
 
+/// Create a new project for the user by providing [CreateProject].
+/// 
+/// # Example
+/// 
+/// ```
+/// POST /project
+/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
+/// 
+/// {
+///   "name": "Test",
+///   "description": "Foo",
+///   "bounds": {
+///     "spatial_reference": "EPSG:4326",
+///     "bounding_box": {
+///       "lower_left_coordinate": { "x": 0, "y": 0 },
+///       "upper_right_coordinate": { "x": 1, "y": 1 }
+///     },
+///     "time_interval": { "start": 0, "end": 1 }
+///   },
+///   "timeStep": {
+///     "step": 1,
+///     "granularity": "Months"
+///   }
+/// }
+/// ```
+/// Response:
+/// ```
+/// {
+///   "id": "1a5ff8ca-7a6c-4276-9b79-c4333da823d1"
+/// }
+/// ```
 pub(crate) fn create_project_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
@@ -35,6 +66,27 @@ async fn create_project<C: Context>(
     Ok(warp::reply::json(&IdResponse::from(id)))
 }
 
+/// List all projects accessible to the user that match the [ProjectListOptions].
+/// 
+/// # Example
+/// 
+/// ```text
+/// GET /projects?permissions=%5B%22Read%22,%20%22Write%22,%20%22Owner%22%5Dorder=NameAsc&offset=0&limit=2
+/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
+/// ```
+/// Response:
+/// ```
+/// [
+///   {
+///     "id": "1a5ff8ca-7a6c-4276-9b79-c4333da823d1",
+///     "name": "Test",
+///     "description": "Foo",
+///     "layer_names": [],
+///     "plot_names": [],
+///     "changed": "2021-04-19T14:53:40.920303Z"
+///   }
+/// ]
+/// ```
 pub(crate) fn list_projects_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
@@ -61,6 +113,51 @@ async fn list_projects<C: Context>(
     Ok(warp::reply::json(&listing))
 }
 
+/// Retrieves details about a [project](crate::projects::project::Project).
+/// If no version is specified, it loads the latest version.
+/// 
+/// # Example
+/// 
+/// ```text
+/// GET /project/1a5ff8ca-7a6c-4276-9b79-c4333da823d1/[version]
+/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
+/// ```
+/// Response:
+/// ```
+/// {
+///   "id": "1a5ff8ca-7a6c-4276-9b79-c4333da823d1",
+///   "version": {
+///     "id": "1f394fd8-6c63-447f-a557-a0873f109ead",
+///     "changed": "2021-04-19T14:53:40.920303Z",
+///     "author": "c378a4cd-b6c7-4d77-9a74-af7c42490513"
+///   },
+///   "name": "Test",
+///   "description": "Foo",
+///   "layers": [],
+///   "plots": [],
+///   "bounds": {
+///     "spatial_reference": "EPSG:4326",
+///     "bounding_box": {
+///       "lower_left_coordinate": {
+///         "x": 0.0,
+///         "y": 0.0
+///       },
+///       "upper_right_coordinate": {
+///         "x": 1.0,
+///         "y": 1.0
+///       }
+///     },
+///     "time_interval": {
+///       "start": 0,
+///       "end": 1
+///     }
+///   },
+///   "time_step": {
+///     "granularity": "Days",
+///     "step": 1
+///   }
+/// }
+/// ```
 pub(crate) fn load_project_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
@@ -90,6 +187,36 @@ async fn load_project<C: Context>(
     Ok(warp::reply::json(&id))
 }
 
+/// Updates a project.
+/// This will create a new version.
+/// 
+/// # Example
+/// 
+/// ```
+/// PATCH /project/1a5ff8ca-7a6c-4276-9b79-c4333da823d1/
+/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
+/// 
+/// {
+///   "id": "1a5ff8ca-7a6c-4276-9b79-c4333da823d1",
+///   "name": "TestUpdate",
+///   "layers": [
+///     {
+///       "workflow": "36019e9d-9d11-41c1-b532-8397132600ad",
+///       "name": "L1",
+///       "visibility": {
+///         "data": true,
+///         "legend": false
+///       },
+///       "symbology": {
+///         "Raster": {
+///           "opacity": 1.0,
+///           "colorizer": "Rgba"
+///         }
+///       }
+///     }
+///   ]
+/// }
+/// ```
 pub(crate) fn update_project_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
@@ -118,6 +245,14 @@ async fn update_project<C: Context>(
     Ok(warp::reply())
 }
 
+/// Deletes a project.
+/// 
+/// # Example
+/// 
+/// ```text
+/// DELETE /project/1a5ff8ca-7a6c-4276-9b79-c4333da823d1
+/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
+/// ```
 pub(crate) fn delete_project_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
@@ -142,6 +277,31 @@ async fn delete_project<C: Context>(
     Ok(warp::reply())
 }
 
+/// Lists all [versions](crate::projects::project::ProjectVersion) of a project.
+/// 
+/// # Example
+/// 
+/// ```text
+/// GET /project/versions
+/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
+/// 
+/// "1a5ff8ca-7a6c-4276-9b79-c4333da823d1"
+/// ```
+/// Response:
+/// ```
+/// [
+///   {
+///     "id": "093a51d8-701b-4946-9ef9-ca02eb5b4b68",
+///     "changed": "2021-04-20T06:13:05.012932100Z",
+///     "author": "bbfb9b6b-bf5e-4eb9-8cd0-377c2ac96a0d"
+///   },
+///   {
+///     "id": "f1d1f18d-4645-4c12-bd58-3b506ac96f14",
+///     "changed": "2021-04-20T06:13:59.285867500Z",
+///     "author": "bbfb9b6b-bf5e-4eb9-8cd0-377c2ac96a0d"
+///   }
+/// ]
+/// ```
 pub(crate) fn project_versions_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
@@ -215,6 +375,24 @@ async fn remove_permission<C: Context>(
     Ok(warp::reply())
 }
 
+/// Shows the access rights the user has for a given project.
+/// 
+/// # Example
+/// 
+/// ```text
+/// GET /project/1a5ff8ca-7a6c-4276-9b79-c4333da823d1/permissions
+/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
+/// ```
+/// Response:
+/// ```
+/// [
+///   {
+///     "user": "bbfb9b6b-bf5e-4eb9-8cd0-377c2ac96a0d",
+///     "project": "1a5ff8ca-7a6c-4276-9b79-c4333da823d1",
+///     "permission": "Owner"
+///   }
+/// ]
+/// ```
 pub(crate) fn list_permissions_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {

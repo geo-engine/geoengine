@@ -14,6 +14,29 @@ use mime::Mime;
 use mpart_async::server::MultipartStream;
 use snafu::ResultExt;
 
+/// Uploads files.
+/// 
+/// # Example
+/// 
+/// ```
+/// POST /upload
+/// Authorization: Bearer 4f0d02f9-68e8-46fb-9362-80f862b7db54
+/// Content-Type: multipart/form-data; boundary=---------------------------10196671711503402186283068890
+/// 
+/// ---------------------------10196671711503402186283068890
+/// Content-Disposition: form-data; name="files[]"; filename="bar.txt"
+/// bar
+/// ---------------------------10196671711503402186283068890
+/// Content-Disposition: form-data; name="files[]"; filename="foo.txt"
+/// foo
+/// ---------------------------10196671711503402186283068890
+/// ```
+/// Response:
+/// ```
+/// {
+///   "id": "420b06de-0a7e-45cb-9c1c-ea901b46ab69"
+/// }
+/// ```
 pub(crate) fn upload_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {

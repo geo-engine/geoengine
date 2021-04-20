@@ -26,6 +26,86 @@ pub(crate) struct GetPlot {
     pub spatial_resolution: SpatialResolution,
 }
 
+/// Generates a [plot](WrappedPlotOutput).
+/// 
+/// # Example
+/// 
+/// 1. Create a statistics workflow.
+/// 
+/// ```
+/// POST /workflow
+/// Authorization: Bearer 4f0d02f9-68e8-46fb-9362-80f862b7db54
+/// 
+/// {
+///   "type": "Plot",
+///   "operator": {
+///     "type": "Statistics",
+///     "params": {},
+///     "raster_sources": [
+///       {
+///         "type": "MockRasterSource",
+///         "params": {
+///           "data": [
+///             {
+///               "time": {
+///                 "start": -8334632851200000,
+///                 "end": 8210298412799999
+///               },
+///               "tile_position": [0, 0],
+///               "global_geo_transform": {
+///                 "origin_coordinate": { "x": 0.0, "y": 0.0 },
+///                 "x_pixel_size": 1.0,
+///                 "y_pixel_size": -1.0
+///               },
+///               "grid_array": {
+///                 "shape": {
+///                   "shape_array": [3, 2]
+///                 },
+///                 "data": [1, 2, 3, 4, 5, 6]
+///               }
+///             }
+///           ],
+///           "result_descriptor": {
+///             "data_type": "U8",
+///             "spatial_reference": "EPSG:4326",
+///             "measurement": "unitless"
+///           }
+///         }
+///       }
+///     ],
+///     "vector_sources": []
+///   }
+/// }
+/// ```
+/// Response:
+/// ```
+/// {
+///   "id": "aab19e05-9603-51c9-a913-ab0240fecd42"
+/// }
+/// ```
+/// 
+/// 2. Generate the plot.
+/// ```text
+/// GET /plot/aab19e05-9603-51c9-a913-ab0240fecd42?bbox=-180,-90,180,90&time=2020-01-01T00%3A00%3A00.0Z&spatial_resolution=0.1,0.1
+/// Authorization: Bearer 4f0d02f9-68e8-46fb-9362-80f862b7db54
+/// ```
+/// Response:
+/// ```
+/// {
+///   "output_format": "JsonPlain",
+///   "plot_type": "Statistics",
+///   "data": [
+///     {
+///       "pixel_count": 6,
+///       "nan_count": 0,
+///       "min": 1.0,
+///       "max": 6.0,
+///       "mean": 3.5,
+///       "stddev": 1.707825127659933
+///     }
+///   ]
+/// }
+/// ```
 pub(crate) fn get_plot_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
