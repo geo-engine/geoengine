@@ -27,15 +27,15 @@ pub(crate) struct GetPlot {
 }
 
 /// Generates a [plot](WrappedPlotOutput).
-/// 
+///
 /// # Example
-/// 
+///
 /// 1. Create a statistics workflow.
-/// 
-/// ```
+///
+/// ```text
 /// POST /workflow
 /// Authorization: Bearer 4f0d02f9-68e8-46fb-9362-80f862b7db54
-/// 
+///
 /// {
 ///   "type": "Plot",
 ///   "operator": {
@@ -78,19 +78,19 @@ pub(crate) struct GetPlot {
 /// }
 /// ```
 /// Response:
-/// ```
+/// ```text
 /// {
 ///   "id": "aab19e05-9603-51c9-a913-ab0240fecd42"
 /// }
 /// ```
-/// 
+///
 /// 2. Generate the plot.
 /// ```text
 /// GET /plot/aab19e05-9603-51c9-a913-ab0240fecd42?bbox=-180,-90,180,90&time=2020-01-01T00%3A00%3A00.0Z&spatial_resolution=0.1,0.1
 /// Authorization: Bearer 4f0d02f9-68e8-46fb-9362-80f862b7db54
 /// ```
 /// Response:
-/// ```
+/// ```text
 /// {
 ///   "output_format": "JsonPlain",
 ///   "plot_type": "Statistics",

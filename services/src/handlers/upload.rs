@@ -15,14 +15,14 @@ use mpart_async::server::MultipartStream;
 use snafu::ResultExt;
 
 /// Uploads files.
-/// 
+///
 /// # Example
-/// 
-/// ```
+///
+/// ```text
 /// POST /upload
 /// Authorization: Bearer 4f0d02f9-68e8-46fb-9362-80f862b7db54
 /// Content-Type: multipart/form-data; boundary=---------------------------10196671711503402186283068890
-/// 
+///
 /// ---------------------------10196671711503402186283068890
 /// Content-Disposition: form-data; name="files[]"; filename="bar.txt"
 /// bar
@@ -32,7 +32,7 @@ use snafu::ResultExt;
 /// ---------------------------10196671711503402186283068890
 /// ```
 /// Response:
-/// ```
+/// ```text
 /// {
 ///   "id": "420b06de-0a7e-45cb-9c1c-ea901b46ab69"
 /// }

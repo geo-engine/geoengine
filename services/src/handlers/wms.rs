@@ -70,14 +70,14 @@ async fn wms<C: Context>(
 }
 
 /// Gets details about the web map service provider and lists available operations.
-/// 
+///
 /// # Example
-/// 
+///
 /// ```text
 /// GET /wms?request=GetCapabilities&service=WMS
 /// ```
 /// Response:
-/// ```
+/// ```xml
 /// <WMS_Capabilities xmlns="http://www.opengis.net/wms" xmlns:sld="http://www.opengis.net/sld" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="1.3.0" xsi:schemaLocation="http://www.opengis.net/wms http://schemas.opengis.net/wms/1.3.0/capabilities_1_3_0.xsd http://www.opengis.net/sld http://schemas.opengis.net/sld/1.1.0/sld_capabilities.xsd">
 ///   <Service>
 ///   <Name>WMS</Name>
@@ -188,10 +188,10 @@ fn get_capabilities(_request: &GetCapabilities) -> Result<Box<dyn warp::Reply>, 
 }
 
 /// Renders a map as raster image.
-/// 
+///
 /// # Example
-/// 
-/// ```
+///
+/// ```text
 /// GET /wms?request=GetMap&service=WMS&version=2.0.0&layers=mock_raster&bbox=1,2,3,4&width=100&height=100&crs=EPSG%3A4326&styles=ssss&format=image%2Fpng
 /// ```
 /// Response:

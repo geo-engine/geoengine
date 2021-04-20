@@ -51,15 +51,15 @@ async fn wfs<C: Context>(
 }
 
 /// Gets details about the web feature service provider and lists available operations.
-/// 
+///
 /// # Example
-/// 
+///
 /// ```text
 /// GET /wfs?request=GetCapabilities
 /// Authorization: Bearer e9da345c-b1df-464b-901c-0335a0419227
 /// ```
 /// Response:
-/// ```
+/// ```xml
 /// <?xml version="1.0" encoding="UTF-8"?>
 /// <wfs:WFS_Capabilities version="2.0.0"
 /// xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"

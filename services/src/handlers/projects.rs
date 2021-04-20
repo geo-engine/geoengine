@@ -9,14 +9,14 @@ use crate::util::IdResponse;
 use uuid::Uuid;
 use warp::Filter;
 
-/// Create a new project for the user by providing [CreateProject].
-/// 
+/// Create a new project for the user by providing [`CreateProject`].
+///
 /// # Example
-/// 
-/// ```
+///
+/// ```text
 /// POST /project
 /// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
-/// 
+///
 /// {
 ///   "name": "Test",
 ///   "description": "Foo",
@@ -35,7 +35,7 @@ use warp::Filter;
 /// }
 /// ```
 /// Response:
-/// ```
+/// ```text
 /// {
 ///   "id": "1a5ff8ca-7a6c-4276-9b79-c4333da823d1"
 /// }
@@ -66,16 +66,16 @@ async fn create_project<C: Context>(
     Ok(warp::reply::json(&IdResponse::from(id)))
 }
 
-/// List all projects accessible to the user that match the [ProjectListOptions].
-/// 
+/// List all projects accessible to the user that match the [`ProjectListOptions`].
+///
 /// # Example
-/// 
+///
 /// ```text
 /// GET /projects?permissions=%5B%22Read%22,%20%22Write%22,%20%22Owner%22%5Dorder=NameAsc&offset=0&limit=2
 /// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
 /// ```
 /// Response:
-/// ```
+/// ```text
 /// [
 ///   {
 ///     "id": "1a5ff8ca-7a6c-4276-9b79-c4333da823d1",
@@ -115,15 +115,15 @@ async fn list_projects<C: Context>(
 
 /// Retrieves details about a [project](crate::projects::project::Project).
 /// If no version is specified, it loads the latest version.
-/// 
+///
 /// # Example
-/// 
+///
 /// ```text
 /// GET /project/1a5ff8ca-7a6c-4276-9b79-c4333da823d1/[version]
 /// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
 /// ```
 /// Response:
-/// ```
+/// ```text
 /// {
 ///   "id": "1a5ff8ca-7a6c-4276-9b79-c4333da823d1",
 ///   "version": {
@@ -189,13 +189,13 @@ async fn load_project<C: Context>(
 
 /// Updates a project.
 /// This will create a new version.
-/// 
+///
 /// # Example
-/// 
-/// ```
+///
+/// ```text
 /// PATCH /project/1a5ff8ca-7a6c-4276-9b79-c4333da823d1/
 /// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
-/// 
+///
 /// {
 ///   "id": "1a5ff8ca-7a6c-4276-9b79-c4333da823d1",
 ///   "name": "TestUpdate",
@@ -246,9 +246,9 @@ async fn update_project<C: Context>(
 }
 
 /// Deletes a project.
-/// 
+///
 /// # Example
-/// 
+///
 /// ```text
 /// DELETE /project/1a5ff8ca-7a6c-4276-9b79-c4333da823d1
 /// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
@@ -278,17 +278,17 @@ async fn delete_project<C: Context>(
 }
 
 /// Lists all [versions](crate::projects::project::ProjectVersion) of a project.
-/// 
+///
 /// # Example
-/// 
+///
 /// ```text
 /// GET /project/versions
 /// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
-/// 
+///
 /// "1a5ff8ca-7a6c-4276-9b79-c4333da823d1"
 /// ```
 /// Response:
-/// ```
+/// ```text
 /// [
 ///   {
 ///     "id": "093a51d8-701b-4946-9ef9-ca02eb5b4b68",
@@ -376,15 +376,15 @@ async fn remove_permission<C: Context>(
 }
 
 /// Shows the access rights the user has for a given project.
-/// 
+///
 /// # Example
-/// 
+///
 /// ```text
 /// GET /project/1a5ff8ca-7a6c-4276-9b79-c4333da823d1/permissions
 /// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
 /// ```
 /// Response:
-/// ```
+/// ```text
 /// [
 ///   {
 ///     "user": "bbfb9b6b-bf5e-4eb9-8cd0-377c2ac96a0d",

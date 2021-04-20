@@ -12,13 +12,13 @@ use geoengine_operators::call_on_typed_operator;
 use snafu::ResultExt;
 
 /// Registers a new [Workflow].
-/// 
+///
 /// # Example
-/// 
-/// ```
+///
+/// ```text
 /// POST /workflow
 /// Authorization: Bearer e9da345c-b1df-464b-901c-0335a0419227
-/// 
+///
 /// {
 ///   "type": "Vector",
 ///   "operator": {
@@ -33,7 +33,7 @@ use snafu::ResultExt;
 /// }
 /// ```
 /// Response:
-/// ```
+/// ```text
 /// {
 ///   "id": "cee25e8c-18a0-5f1b-a504-0bc30de21e06"
 /// }
@@ -63,17 +63,16 @@ async fn register_workflow<C: Context>(
     Ok(warp::reply::json(&IdResponse::from(id)))
 }
 
-
 /// Retrieves an existing [Workflow] using its id.
-/// 
+///
 /// # Example
-/// 
+///
 /// ```text
 /// GET /workflow/cee25e8c-18a0-5f1b-a504-0bc30de21e06
 /// Authorization: Bearer e9da345c-b1df-464b-901c-0335a0419227
 /// ```
 /// Response:
-/// ```
+/// ```text
 /// {
 ///   "type": "Vector",
 ///   "operator": {
@@ -118,15 +117,15 @@ async fn load_workflow<C: Context>(
 }
 
 /// Gets the metadata of a workflow.
-/// 
+///
 /// # Example
-/// 
+///
 /// ```text
 /// GET /workflow/cee25e8c-18a0-5f1b-a504-0bc30de21e06/metadata
 /// Authorization: Bearer e9da345c-b1df-464b-901c-0335a0419227
 /// ```
 /// Response:
-/// ```
+/// ```text
 /// {
 ///   "data_type": "MultiPoint",
 ///   "spatial_reference": "EPSG:4326",

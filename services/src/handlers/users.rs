@@ -12,29 +12,29 @@ use uuid::Uuid;
 use warp::reply::Reply;
 use warp::Filter;
 
-/// Registers a user by providing [UserRegistration] parameters.
+/// Registers a user by providing [`UserRegistration`] parameters.
 ///
 /// # Example
-/// 
-/// ```
+///
+/// ```text
 /// POST /user
-/// 
+///
 /// {
-///	  "email": "foo@bar.de",
+///   "email": "foo@bar.de",
 ///   "password": "secret123",
-///	  "real_name": "Foo Bar"
+///   "real_name": "Foo Bar"
 /// }
 /// ```
 /// Response:
-/// ```
+/// ```text
 /// {
 ///   "id": "f33429a5-d207-4e59-827d-fc48f9630c9c"
 /// }
 /// ```
-/// 
+///
 /// # Errors
-/// 
-/// This call fails if the [UserRegistration] is invalid
+///
+/// This call fails if the [`UserRegistration`] is invalid
 /// or an account with the given e-mail already exists.
 pub(crate) fn register_user_handler<C: Context>(
     ctx: C,
@@ -59,12 +59,12 @@ async fn register_user<C: Context>(
 /// Creates session for anonymous user.
 ///
 /// # Example
-/// 
-/// ```
+///
+/// ```text
 /// POST /anonymous
 /// ```
 /// Response:
-/// ```
+/// ```text
 /// {
 ///   "id": "2fee8652-3192-4d3e-8adc-14257064224a",
 ///   "user": {
@@ -93,20 +93,20 @@ async fn anonymous<C: Context>(ctx: C) -> Result<impl warp::Reply, warp::Rejecti
     Ok(warp::reply::json(&session))
 }
 
-/// Creates a session by providing [UserCredentials].
-/// 
+/// Creates a session by providing [`UserCredentials`].
+///
 /// # Example
-/// 
-/// ```
+///
+/// ```text
 /// POST /login
-/// 
+///
 /// {
 ///   "email": "foo@bar.de",
-///	  "password": "secret123"
+///   "password": "secret123"
 /// }
 /// ```
 /// Response:
-/// ```
+/// ```text
 /// {
 ///   "id": "fc9b5dc2-a1eb-400f-aeed-a7845d9935c9",
 ///   "user": {
@@ -120,10 +120,10 @@ async fn anonymous<C: Context>(ctx: C) -> Result<impl warp::Reply, warp::Rejecti
 ///   "view": null
 /// }
 /// ```
-/// 
+///
 /// # Errors
 ///
-/// This call fails if the [UserCredentials] are invalid.
+/// This call fails if the [`UserCredentials`] are invalid.
 pub(crate) fn login_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
@@ -150,14 +150,14 @@ async fn login<C: Context>(
 }
 
 /// Ends a session.
-/// 
+///
 /// # Example
-/// 
+///
 /// ```text
 /// POST /logout
 /// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
 /// ```
-/// 
+///
 /// # Errors
 ///
 /// This call fails if the session is invalid.
@@ -178,15 +178,15 @@ async fn logout<C: Context>(session: Session, ctx: C) -> Result<impl warp::Reply
 }
 
 /// Retrieves details about the [Session].
-/// 
+///
 /// # Example
-/// 
+///
 /// ```text
 /// GET /session
 /// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
 /// ```
 /// Response:
-/// ```
+/// ```text
 /// {
 ///   "id": "29fb1e93-7b6b-466f-952a-fdde87736c62",
 ///   "user": {
@@ -200,7 +200,7 @@ async fn logout<C: Context>(session: Session, ctx: C) -> Result<impl warp::Reply
 ///   "view": null
 /// }
 /// ```
-/// 
+///
 /// # Errors
 ///
 /// This call fails if the session is invalid.
@@ -219,14 +219,14 @@ async fn session(session: Session) -> Result<impl warp::Reply, warp::Rejection> 
 }
 
 /// Sets the active project of the session.
-/// 
+///
 /// # Example
-/// 
+///
 /// ```text
 /// POST /session/project/c8d88d83-d409-46f7-bab2-815bba87ccd8
 /// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
 /// ```
-/// 
+///
 /// # Errors
 ///
 /// This call fails if the session is invalid.
@@ -256,13 +256,13 @@ async fn session_project<C: Context>(
 }
 
 /// Sets the active view of the session.
-/// 
+///
 /// # Example
-/// 
-/// ```
+///
+/// ```text
 /// POST /session/view
 /// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
-/// 
+///
 /// {
 ///   "spatial_reference": "",
 ///   "bounding_box": {
@@ -275,7 +275,7 @@ async fn session_project<C: Context>(
 ///   }
 /// }
 /// ```
-/// 
+///
 /// # Errors
 ///
 /// This call fails if the session is invalid.

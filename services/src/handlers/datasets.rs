@@ -33,15 +33,15 @@ use uuid::Uuid;
 use warp::Filter;
 
 /// Lists available [Datasets](crate::datasets::listing::DatasetListing).
-/// 
+///
 /// # Example
-/// 
+///
 /// ```text
 /// GET /datasets?filter=Germany&offset=0&limit=2&order=NameAsc
 /// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
 /// ```
 /// Response:
-/// ```
+/// ```text
 /// [
 ///   {
 ///     "id": {
@@ -88,15 +88,15 @@ async fn list_datasets<C: Context>(
 }
 
 /// Retrieves details about a [Dataset](crate::datasets::listing::DatasetListing) using the internal id.
-/// 
+///
 /// # Example
-/// 
+///
 /// ```text
 /// GET /dataset/internal/3d6e65ff-46a6-4f68-9cf0-15900b91c11f
 /// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
 /// ```
 /// Response:
-/// ```
+/// ```text
 /// {
 ///   "id": {
 ///     "Internal": "3d6e65ff-46a6-4f68-9cf0-15900b91c11f"
