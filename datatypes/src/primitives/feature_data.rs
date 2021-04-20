@@ -11,18 +11,19 @@ use std::slice;
 use std::str;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub enum FeatureDataType {
     Categorical,
-    Decimal,
-    Number,
+    Int,
+    Float,
     Text,
 }
 
 impl FeatureDataType {
     pub fn try_from_ogr_field_type_code(code: u32) -> Result<Self> {
         Ok(match code {
-            OGRFieldType::OFTInteger | OGRFieldType::OFTInteger64 => Self::Decimal,
-            OGRFieldType::OFTReal => Self::Number,
+            OGRFieldType::OFTInteger | OGRFieldType::OFTInteger64 => Self::Int,
+            OGRFieldType::OFTReal => Self::Float,
             OGRFieldType::OFTString => Self::Text,
             _ => return Err(error::Error::NoMatchingFeatureDataTypeForOgrFieldType),
         })
@@ -33,10 +34,10 @@ impl FeatureDataType {
 pub enum FeatureData {
     Categorical(Vec<u8>), // TODO: add names to categories
     NullableCategorical(Vec<Option<u8>>),
-    Decimal(Vec<i64>),
-    NullableDecimal(Vec<Option<i64>>),
-    Number(Vec<f64>),
-    NullableNumber(Vec<Option<f64>>),
+    Int(Vec<i64>),
+    NullableInt(Vec<Option<i64>>),
+    Float(Vec<f64>),
+    NullableFloat(Vec<Option<f64>>),
     Text(Vec<String>),
     NullableText(Vec<Option<String>>),
 }
@@ -45,10 +46,10 @@ pub enum FeatureData {
 pub enum FeatureDataValue {
     Categorical(u8),
     NullableCategorical(Option<u8>),
-    Decimal(i64),
-    NullableDecimal(Option<i64>),
-    Number(f64),
-    NullableNumber(Option<f64>),
+    Int(i64),
+    NullableInt(Option<i64>),
+    Float(f64),
+    NullableFloat(Option<f64>),
     Text(String),
     NullableText(Option<String>),
 }
@@ -56,8 +57,8 @@ pub enum FeatureDataValue {
 #[derive(Clone, Debug, PartialEq)]
 pub enum FeatureDataRef<'f> {
     Categorical(CategoricalDataRef<'f>),
-    Decimal(DecimalDataRef<'f>),
-    Number(NumberDataRef<'f>),
+    Int(IntDataRef<'f>),
+    Float(FloatDataRef<'f>),
     Text(TextDataRef<'f>),
 }
 
@@ -66,8 +67,8 @@ impl<'f> FeatureDataRef<'f> {
     pub fn json_values(&self) -> Box<dyn Iterator<Item = serde_json::Value> + '_> {
         match self {
             FeatureDataRef::Text(data_ref) => data_ref.json_values(),
-            FeatureDataRef::Number(data_ref) => data_ref.json_values(),
-            FeatureDataRef::Decimal(data_ref) => data_ref.json_values(),
+            FeatureDataRef::Float(data_ref) => data_ref.json_values(),
+            FeatureDataRef::Int(data_ref) => data_ref.json_values(),
             FeatureDataRef::Categorical(data_ref) => data_ref.json_values(),
         }
     }
@@ -76,8 +77,8 @@ impl<'f> FeatureDataRef<'f> {
     pub fn nulls(&self) -> Vec<bool> {
         match self {
             FeatureDataRef::Text(data_ref) => data_ref.nulls(),
-            FeatureDataRef::Number(data_ref) => data_ref.nulls(),
-            FeatureDataRef::Decimal(data_ref) => data_ref.nulls(),
+            FeatureDataRef::Float(data_ref) => data_ref.nulls(),
+            FeatureDataRef::Int(data_ref) => data_ref.nulls(),
             FeatureDataRef::Categorical(data_ref) => data_ref.nulls(),
         }
     }
@@ -86,8 +87,8 @@ impl<'f> FeatureDataRef<'f> {
     pub fn has_nulls(&self) -> bool {
         match self {
             FeatureDataRef::Text(data_ref) => data_ref.has_nulls(),
-            FeatureDataRef::Number(data_ref) => data_ref.has_nulls(),
-            FeatureDataRef::Decimal(data_ref) => data_ref.has_nulls(),
+            FeatureDataRef::Float(data_ref) => data_ref.has_nulls(),
+            FeatureDataRef::Int(data_ref) => data_ref.has_nulls(),
             FeatureDataRef::Categorical(data_ref) => data_ref.has_nulls(),
         }
     }
@@ -96,8 +97,8 @@ impl<'f> FeatureDataRef<'f> {
     pub fn get_unchecked(&self, i: usize) -> FeatureDataValue {
         match self {
             FeatureDataRef::Text(data_ref) => data_ref.get_unchecked(i),
-            FeatureDataRef::Number(data_ref) => data_ref.get_unchecked(i),
-            FeatureDataRef::Decimal(data_ref) => data_ref.get_unchecked(i),
+            FeatureDataRef::Float(data_ref) => data_ref.get_unchecked(i),
+            FeatureDataRef::Int(data_ref) => data_ref.get_unchecked(i),
             FeatureDataRef::Categorical(data_ref) => data_ref.get_unchecked(i),
         }
     }
@@ -146,12 +147,12 @@ where
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct NumberDataRef<'f> {
+pub struct FloatDataRef<'f> {
     buffer: &'f [f64],
     valid_bitmap: &'f Option<arrow::bitmap::Bitmap>,
 }
 
-impl<'f> DataRef<'f, f64> for NumberDataRef<'f> {
+impl<'f> DataRef<'f, f64> for FloatDataRef<'f> {
     fn json_value(value: &f64) -> serde_json::Value {
         (*value).into()
     }
@@ -172,30 +173,30 @@ impl<'f> DataRef<'f, f64> for NumberDataRef<'f> {
 
     fn get_unchecked(&self, i: usize) -> FeatureDataValue {
         if self.has_nulls() {
-            FeatureDataValue::NullableNumber(if self.is_null(i) {
+            FeatureDataValue::NullableFloat(if self.is_null(i) {
                 None
             } else {
                 Some(self.as_ref()[i])
             })
         } else {
-            FeatureDataValue::Number(self.as_ref()[i])
+            FeatureDataValue::Float(self.as_ref()[i])
         }
     }
 }
 
-impl AsRef<[f64]> for NumberDataRef<'_> {
+impl AsRef<[f64]> for FloatDataRef<'_> {
     fn as_ref(&self) -> &[f64] {
         self.buffer
     }
 }
 
-impl<'f> From<NumberDataRef<'f>> for FeatureDataRef<'f> {
-    fn from(data_ref: NumberDataRef<'f>) -> FeatureDataRef<'f> {
-        FeatureDataRef::Number(data_ref)
+impl<'f> From<FloatDataRef<'f>> for FeatureDataRef<'f> {
+    fn from(data_ref: FloatDataRef<'f>) -> FeatureDataRef<'f> {
+        FeatureDataRef::Float(data_ref)
     }
 }
 
-impl<'f> NumberDataRef<'f> {
+impl<'f> FloatDataRef<'f> {
     pub fn new(buffer: &'f [f64], null_bitmap: &'f Option<arrow::bitmap::Bitmap>) -> Self {
         Self {
             buffer,
@@ -205,12 +206,12 @@ impl<'f> NumberDataRef<'f> {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct DecimalDataRef<'f> {
+pub struct IntDataRef<'f> {
     buffer: &'f [i64],
     valid_bitmap: &'f Option<arrow::bitmap::Bitmap>,
 }
 
-impl<'f> DecimalDataRef<'f> {
+impl<'f> IntDataRef<'f> {
     pub fn new(buffer: &'f [i64], null_bitmap: &'f Option<arrow::bitmap::Bitmap>) -> Self {
         Self {
             buffer,
@@ -219,7 +220,7 @@ impl<'f> DecimalDataRef<'f> {
     }
 }
 
-impl<'f> DataRef<'f, i64> for DecimalDataRef<'f> {
+impl<'f> DataRef<'f, i64> for IntDataRef<'f> {
     fn json_value(value: &i64) -> serde_json::Value {
         (*value).into()
     }
@@ -240,26 +241,26 @@ impl<'f> DataRef<'f, i64> for DecimalDataRef<'f> {
 
     fn get_unchecked(&self, i: usize) -> FeatureDataValue {
         if self.has_nulls() {
-            FeatureDataValue::NullableDecimal(if self.is_null(i) {
+            FeatureDataValue::NullableInt(if self.is_null(i) {
                 None
             } else {
                 Some(self.as_ref()[i])
             })
         } else {
-            FeatureDataValue::Decimal(self.as_ref()[i])
+            FeatureDataValue::Int(self.as_ref()[i])
         }
     }
 }
 
-impl AsRef<[i64]> for DecimalDataRef<'_> {
+impl AsRef<[i64]> for IntDataRef<'_> {
     fn as_ref(&self) -> &[i64] {
         self.buffer
     }
 }
 
-impl<'f> From<DecimalDataRef<'f>> for FeatureDataRef<'f> {
-    fn from(data_ref: DecimalDataRef<'f>) -> FeatureDataRef<'f> {
-        FeatureDataRef::Decimal(data_ref)
+impl<'f> From<IntDataRef<'f>> for FeatureDataRef<'f> {
+    fn from(data_ref: IntDataRef<'f>) -> FeatureDataRef<'f> {
+        FeatureDataRef::Int(data_ref)
     }
 }
 
@@ -517,8 +518,8 @@ impl FeatureDataType {
     pub fn arrow_data_type(self) -> arrow::datatypes::DataType {
         match self {
             Self::Text => arrow::datatypes::DataType::Utf8,
-            Self::Number => arrow::datatypes::DataType::Float64,
-            Self::Decimal => arrow::datatypes::DataType::Int64,
+            Self::Float => arrow::datatypes::DataType::Float64,
+            Self::Int => arrow::datatypes::DataType::Int64,
             Self::Categorical => arrow::datatypes::DataType::UInt8,
         }
     }
@@ -531,8 +532,8 @@ impl FeatureDataType {
     pub fn arrow_builder(self, len: usize) -> Box<dyn arrow::array::ArrayBuilder> {
         match self {
             Self::Text => Box::new(arrow::array::StringBuilder::new(len)),
-            Self::Number => Box::new(arrow::array::Float64Builder::new(len)),
-            Self::Decimal => Box::new(arrow::array::Int64Builder::new(len)),
+            Self::Float => Box::new(arrow::array::Float64Builder::new(len)),
+            Self::Int => Box::new(arrow::array::Int64Builder::new(len)),
             Self::Categorical => Box::new(arrow::array::UInt8Builder::new(len)),
         }
     }
@@ -551,10 +552,10 @@ impl FeatureData {
         match self {
             FeatureData::Text(v) => v.len(),
             FeatureData::NullableText(v) => v.len(),
-            FeatureData::Number(v) => v.len(),
-            FeatureData::NullableNumber(v) => v.len(),
-            FeatureData::Decimal(v) => v.len(),
-            FeatureData::NullableDecimal(v) => v.len(),
+            FeatureData::Float(v) => v.len(),
+            FeatureData::NullableFloat(v) => v.len(),
+            FeatureData::Int(v) => v.len(),
+            FeatureData::NullableInt(v) => v.len(),
             FeatureData::Categorical(v) => v.len(),
             FeatureData::NullableCategorical(v) => v.len(),
         }
@@ -592,27 +593,27 @@ impl FeatureData {
                 }
                 Box::new(builder)
             }
-            Self::Number(v) => {
+            Self::Float(v) => {
                 let mut builder = arrow::array::Float64Builder::new(v.len());
                 builder.append_slice(v)?;
                 Box::new(builder)
             }
-            Self::NullableNumber(v) => {
+            Self::NullableFloat(v) => {
                 let mut builder = arrow::array::Float64Builder::new(v.len());
                 for &number_option in v {
                     builder.append_option(number_option)?;
                 }
                 Box::new(builder)
             }
-            Self::Decimal(v) => {
+            Self::Int(v) => {
                 let mut builder = arrow::array::Int64Builder::new(v.len());
                 builder.append_slice(v)?;
                 Box::new(builder)
             }
-            Self::NullableDecimal(v) => {
+            Self::NullableInt(v) => {
                 let mut builder = arrow::array::Int64Builder::new(v.len());
-                for &decimal_option in v {
-                    builder.append_option(decimal_option)?;
+                for &int_option in v {
+                    builder.append_option(int_option)?;
                 }
                 Box::new(builder)
             }
@@ -623,8 +624,8 @@ impl FeatureData {
             }
             Self::NullableCategorical(v) => {
                 let mut builder = arrow::array::UInt8Builder::new(v.len());
-                for &number_option in v {
-                    builder.append_option(number_option)?;
+                for &float_option in v {
+                    builder.append_option(float_option)?;
                 }
                 Box::new(builder)
             }
@@ -636,8 +637,8 @@ impl From<&FeatureData> for FeatureDataType {
     fn from(value: &FeatureData) -> Self {
         match value {
             FeatureData::Text(_) | FeatureData::NullableText(_) => Self::Text,
-            FeatureData::Number(_) | FeatureData::NullableNumber(_) => Self::Number,
-            FeatureData::Decimal(_) | FeatureData::NullableDecimal(_) => Self::Decimal,
+            FeatureData::Float(_) | FeatureData::NullableFloat(_) => Self::Float,
+            FeatureData::Int(_) | FeatureData::NullableInt(_) => Self::Int,
             FeatureData::Categorical(_) | FeatureData::NullableCategorical(_) => Self::Categorical,
         }
     }
@@ -647,8 +648,8 @@ impl From<&FeatureDataValue> for FeatureDataType {
     fn from(value: &FeatureDataValue) -> Self {
         match value {
             FeatureDataValue::Text(_) | FeatureDataValue::NullableText(_) => Self::Text,
-            FeatureDataValue::Number(_) | FeatureDataValue::NullableNumber(_) => Self::Number,
-            FeatureDataValue::Decimal(_) | FeatureDataValue::NullableDecimal(_) => Self::Decimal,
+            FeatureDataValue::Float(_) | FeatureDataValue::NullableFloat(_) => Self::Float,
+            FeatureDataValue::Int(_) | FeatureDataValue::NullableInt(_) => Self::Int,
             FeatureDataValue::Categorical(_) | FeatureDataValue::NullableCategorical(_) => {
                 Self::Categorical
             }
@@ -660,8 +661,8 @@ impl<'f> From<&'f FeatureDataRef<'f>> for FeatureDataType {
     fn from(value: &FeatureDataRef) -> Self {
         match value {
             FeatureDataRef::Text(_) => Self::Text,
-            FeatureDataRef::Number(..) => Self::Number,
-            FeatureDataRef::Decimal(_) => Self::Decimal,
+            FeatureDataRef::Float(..) => Self::Float,
+            FeatureDataRef::Int(_) => Self::Int,
             FeatureDataRef::Categorical(_) => Self::Categorical,
         }
     }
@@ -672,8 +673,8 @@ impl TryFrom<&FeatureDataValue> for f64 {
 
     fn try_from(value: &FeatureDataValue) -> Result<Self, Self::Error> {
         Ok(match value {
-            FeatureDataValue::Number(v) => *v,
-            FeatureDataValue::NullableNumber(v) if v.is_some() => v.unwrap(),
+            FeatureDataValue::Float(v) => *v,
+            FeatureDataValue::NullableFloat(v) if v.is_some() => v.unwrap(),
             _ => return Err(crate::collections::FeatureCollectionError::WrongDataType),
         })
     }
@@ -692,8 +693,8 @@ impl TryFrom<&FeatureDataValue> for i64 {
 
     fn try_from(value: &FeatureDataValue) -> Result<i64, Self::Error> {
         Ok(match value {
-            FeatureDataValue::Decimal(v) => *v,
-            FeatureDataValue::NullableDecimal(v) if v.is_some() => v.unwrap(),
+            FeatureDataValue::Int(v) => *v,
+            FeatureDataValue::NullableInt(v) if v.is_some() => v.unwrap(),
             _ => return Err(crate::collections::FeatureCollectionError::WrongDataType),
         })
     }

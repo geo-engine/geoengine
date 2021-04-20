@@ -333,8 +333,8 @@ mod tests {
                     MultiPoint::many(vec![(0.0, 0.1)]).unwrap(),
                     vec![TimeInterval::default()],
                     [
-                        ("foo".to_string(), FeatureData::Number(vec![42.0])),
-                        ("bar".to_string(), FeatureData::Decimal(vec![23])),
+                        ("foo".to_string(), FeatureData::Float(vec![42.0])),
+                        ("bar".to_string(), FeatureData::Int(vec![23])),
                     ]
                     .iter()
                     .cloned()
@@ -377,8 +377,8 @@ mod tests {
                 "data_type": "MultiPoint",
                 "spatial_reference": "EPSG:4326",
                 "columns": {
-                    "bar": "Decimal",
-                    "foo": "Number"
+                    "bar": "int",
+                    "foo": "float"
                 }
             })
         );
@@ -460,8 +460,8 @@ mod tests {
                     MultiPoint::many(vec![(0.0, 0.1)]).unwrap(),
                     vec![TimeInterval::default()],
                     [
-                        ("foo".to_string(), FeatureData::Number(vec![42.0])),
-                        ("bar".to_string(), FeatureData::Decimal(vec![23])),
+                        ("foo".to_string(), FeatureData::Float(vec![42.0])),
+                        ("bar".to_string(), FeatureData::Int(vec![23])),
                     ]
                     .iter()
                     .cloned()

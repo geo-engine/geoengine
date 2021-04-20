@@ -211,8 +211,8 @@ fn auto_detect_dataset(main_file_path: &Path) -> Result<MetaDataDefinition> {
             columns: Some(OgrSourceColumnSpec {
                 x: "".to_owned(), // TODO: for csv-files: try to find wkt/xy columns
                 y: None,
-                numeric: columns_vecs.numeric,
-                decimal: columns_vecs.decimal,
+                int: columns_vecs.float,
+                float: columns_vecs.int,
                 textual: columns_vecs.textual,
             }),
             default_geometry: None,
@@ -240,8 +240,8 @@ fn detect_vector_type(layer: &Layer) -> Result<VectorDataType> {
 }
 
 struct Columns {
-    decimal: Vec<String>,
-    numeric: Vec<String>,
+    int: Vec<String>,
+    float: Vec<String>,
     textual: Vec<String>,
 }
 
@@ -261,19 +261,19 @@ fn detect_columns(layer: &Layer) -> HashMap<String, FeatureDataType> {
 }
 
 fn column_map_to_column_vecs(columns: &HashMap<String, FeatureDataType>) -> Columns {
-    let mut decimal = Vec::new();
-    let mut numeric = Vec::new();
+    let mut int = Vec::new();
+    let mut float = Vec::new();
     let mut textual = Vec::new();
 
     for (k, v) in columns {
         match v {
             FeatureDataType::Categorical => { // TODO
             }
-            FeatureDataType::Decimal => {
-                decimal.push(k.clone());
+            FeatureDataType::Int => {
+                int.push(k.clone());
             }
-            FeatureDataType::Number => {
-                numeric.push(k.clone());
+            FeatureDataType::Float => {
+                float.push(k.clone());
             }
             FeatureDataType::Text => {
                 textual.push(k.clone());
@@ -282,8 +282,8 @@ fn column_map_to_column_vecs(columns: &HashMap<String, FeatureDataType>) -> Colu
     }
 
     Columns {
-        decimal,
-        numeric,
+        int,
+        float,
         textual,
     }
 }
@@ -417,8 +417,8 @@ mod tests {
                             "columns": {
                                 "x": "",
                                 "y": null,
-                                "numeric": ["natlscale"],
-                                "decimal": ["scalerank"],
+                                "float": ["natlscale"],
+                                "int": ["scalerank"],
                                 "textual": ["featurecla", "name", "website"]
                             },
                             "default_geometry": null,
@@ -430,11 +430,11 @@ mod tests {
                             "data_type": "MultiPoint",
                             "spatial_reference": "EPSG:4326",
                             "columns": {
-                                "website": "Text",
-                                "name": "Text",
-                                "natlscale": "Number",
-                                "scalerank": "Decimal",
-                                "featurecla": "Text"
+                                "website": "text",
+                                "name": "text",
+                                "natlscale": "float",
+                                "scalerank": "int",
+                                "featurecla": "text"
                             }
                         }
                     }
@@ -454,7 +454,7 @@ mod tests {
             .reply(&create_dataset_handler(ctx))
             .await;
 
-        assert_eq!(res.status(), 500);
+        assert_eq!(res.status(), 500, "{:?}", res.body());
 
         // TODO: add a success test case once it is clear how to upload data from within a test
     }
@@ -485,8 +485,8 @@ mod tests {
                     columns: Some(OgrSourceColumnSpec {
                         x: "".to_string(),
                         y: None,
-                        numeric: vec!["natlscale".to_string()],
-                        decimal: vec!["scalerank".to_string()],
+                        int: vec!["natlscale".to_string()],
+                        float: vec!["scalerank".to_string()],
                         textual: vec![
                             "featurecla".to_string(),
                             "name".to_string(),
@@ -503,9 +503,9 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     columns: [
                         ("name".to_string(), FeatureDataType::Text),
-                        ("scalerank".to_string(), FeatureDataType::Decimal),
+                        ("scalerank".to_string(), FeatureDataType::Int),
                         ("website".to_string(), FeatureDataType::Text),
-                        ("natlscale".to_string(), FeatureDataType::Number),
+                        ("natlscale".to_string(), FeatureDataType::Float),
                         ("featurecla".to_string(), FeatureDataType::Text),
                     ]
                     .iter()

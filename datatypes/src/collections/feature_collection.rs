@@ -23,8 +23,8 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::primitives::{
-    CategoricalDataRef, DecimalDataRef, FeatureData, FeatureDataRef, FeatureDataType,
-    FeatureDataValue, Geometry, NumberDataRef, TextDataRef, TimeInterval,
+    CategoricalDataRef, FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue,
+    FloatDataRef, Geometry, IntDataRef, TextDataRef, TimeInterval,
 };
 use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::helpers::SomeIter;
@@ -423,7 +423,7 @@ where
         let mut filter_array = None;
 
         match column_type {
-            FeatureDataType::Number => {
+            FeatureDataType::Float => {
                 apply_filters(
                     as_primitive_array::<Float64Type>(column),
                     &mut filter_array,
@@ -434,7 +434,7 @@ where
                     arrow::compute::lt_scalar,
                 )?;
             }
-            FeatureDataType::Decimal => {
+            FeatureDataType::Int => {
                 apply_filters(
                     as_primitive_array::<Int64Type>(column),
                     &mut filter_array,
@@ -983,9 +983,9 @@ where
 
         Ok(
             match self.types.get(column_name).expect("previously checked") {
-                FeatureDataType::Number => {
+                FeatureDataType::Float => {
                     let array: &arrow::array::Float64Array = downcast_array(column);
-                    NumberDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
+                    FloatDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
                 }
                 FeatureDataType::Text => {
                     let array: &arrow::array::StringArray = downcast_array(column);
@@ -996,9 +996,9 @@ where
                     )
                     .into()
                 }
-                FeatureDataType::Decimal => {
+                FeatureDataType::Int => {
                     let array: &arrow::array::Int64Array = downcast_array(column);
-                    DecimalDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
+                    IntDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
                 }
                 FeatureDataType::Categorical => {
                     let array: &arrow::array::UInt8Array = downcast_array(column);
@@ -1112,7 +1112,7 @@ where
     ///     vec![TimeInterval::new_unchecked(0, 1), TimeInterval::new_unchecked(0, 1)],
     ///     {
     ///         let mut map = HashMap::new();
-    ///         map.insert("number".into(), FeatureData::Number(vec![0., 1.]));
+    ///         map.insert("float".into(), FeatureData::Float(vec![0., 1.]));
     ///         map
     ///     },
     /// ).unwrap();
@@ -1623,8 +1623,8 @@ mod tests {
             vec![],
             vec![TimeInterval::new(0, 1).unwrap(); 1],
             [
-                ("foo".to_string(), FeatureData::Decimal(vec![1])),
-                ("bar".to_string(), FeatureData::Decimal(vec![2])),
+                ("foo".to_string(), FeatureData::Int(vec![1])),
+                ("bar".to_string(), FeatureData::Int(vec![2])),
             ]
             .iter()
             .cloned()

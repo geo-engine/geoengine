@@ -215,9 +215,9 @@ impl<P: Pixel> PointRasterJoiner<P> {
             | RasterDataType::I8
             | RasterDataType::I16
             | RasterDataType::I32
-            | RasterDataType::I64 => FeatureData::NullableDecimal(self.typed_values(points)),
+            | RasterDataType::I64 => FeatureData::NullableInt(self.typed_values(points)),
             RasterDataType::F32 | RasterDataType::F64 => {
-                FeatureData::NullableNumber(self.typed_values(points))
+                FeatureData::NullableFloat(self.typed_values(points))
             }
         };
 
@@ -362,7 +362,7 @@ mod tests {
                 .unwrap(),
                 &[time_instant; 4],
                 // these values are taken from loading the tiff in QGIS
-                &[("ndvi", FeatureData::Decimal(vec![54, 55, 51, 55]))],
+                &[("ndvi", FeatureData::Int(vec![54, 55, 51, 55]))],
             )
             .unwrap()
         );
@@ -451,7 +451,7 @@ mod tests {
                 &[TimeInterval::new_instant(NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0))
                     .unwrap(); 4],
                 // these values are taken from loading the tiff in QGIS
-                &[("ndvi", FeatureData::Decimal(vec![54, 55, 51, 55]))],
+                &[("ndvi", FeatureData::Int(vec![54, 55, 51, 55]))],
             )
             .unwrap()
         );
@@ -545,7 +545,7 @@ mod tests {
                 )
                 .unwrap(); 4],
                 // these values are taken from loading the tiff in QGIS
-                &[("ndvi", FeatureData::Decimal(vec![54, 55, 51, 55]))],
+                &[("ndvi", FeatureData::Int(vec![54, 55, 51, 55]))],
             )
             .unwrap()
         );
@@ -652,7 +652,7 @@ mod tests {
                 // these values are taken from loading the tiff in QGIS
                 &[(
                     "ndvi",
-                    FeatureData::Decimal(vec![54, 55, 51, 55, 52, 55, 50, 53])
+                    FeatureData::Int(vec![54, 55, 51, 55, 52, 55, 50, 53])
                 )],
             )
             .unwrap()

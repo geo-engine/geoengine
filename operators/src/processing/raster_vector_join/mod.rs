@@ -107,11 +107,11 @@ impl VectorOperator for RasterVectorJoin {
                             | RasterDataType::I8
                             | RasterDataType::I16
                             | RasterDataType::I32
-                            | RasterDataType::I64 => FeatureDataType::Decimal,
-                            RasterDataType::F32 | RasterDataType::F64 => FeatureDataType::Number,
+                            | RasterDataType::I64 => FeatureDataType::Int,
+                            RasterDataType::F32 | RasterDataType::F64 => FeatureDataType::Float,
                         }
                     }
-                    AggregationMethod::Mean => FeatureDataType::Number,
+                    AggregationMethod::Mean => FeatureDataType::Float,
                 };
                 columns.insert(new_column_name.clone(), feature_data_type);
             }
@@ -279,7 +279,7 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        let data = if let FeatureDataRef::Decimal(data) = result[0].data("ndvi").unwrap() {
+        let data = if let FeatureDataRef::Int(data) = result[0].data("ndvi").unwrap() {
             data
         } else {
             unreachable!();
@@ -347,7 +347,7 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        let data = if let FeatureDataRef::Number(data) = result[0].data("ndvi").unwrap() {
+        let data = if let FeatureDataRef::Float(data) = result[0].data("ndvi").unwrap() {
             data
         } else {
             unreachable!();
@@ -416,7 +416,7 @@ mod tests {
 
         assert_eq!(result.len(), 1);
 
-        let data = if let FeatureDataRef::Number(data) = result[0].data("ndvi").unwrap() {
+        let data = if let FeatureDataRef::Float(data) = result[0].data("ndvi").unwrap() {
             data
         } else {
             unreachable!();

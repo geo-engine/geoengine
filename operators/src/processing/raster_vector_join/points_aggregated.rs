@@ -15,7 +15,7 @@ use crate::engine::{
     VectorQueryProcessor,
 };
 use crate::processing::raster_vector_join::aggregator::{
-    Aggregator, FirstValueDecimalAggregator, FirstValueNumberAggregator, MeanValueAggregator,
+    Aggregator, FirstValueFloatAggregator, FirstValueIntAggregator, MeanValueAggregator,
     TypedAggregator,
 };
 use crate::processing::raster_vector_join::util::FeatureTimeSpanIter;
@@ -126,10 +126,10 @@ impl RasterPointAggregateJoinProcessor {
                 | RasterDataType::I16
                 | RasterDataType::I32
                 | RasterDataType::I64 => {
-                    FirstValueDecimalAggregator::new(number_of_features).into_typed()
+                    FirstValueIntAggregator::new(number_of_features).into_typed()
                 }
                 RasterDataType::F32 | RasterDataType::F64 => {
-                    FirstValueNumberAggregator::new(number_of_features).into_typed()
+                    FirstValueFloatAggregator::new(number_of_features).into_typed()
                 }
             },
             AggregationMethod::Mean => MeanValueAggregator::new(number_of_features).into_typed(),
@@ -238,7 +238,7 @@ mod tests {
         .await
         .unwrap();
 
-        if let FeatureDataRef::Decimal(extracted_data) = result.data("foo").unwrap() {
+        if let FeatureDataRef::Int(extracted_data) = result.data("foo").unwrap() {
             assert_eq!(extracted_data.as_ref(), &[1, 2, 3, 4, 5, 6]);
         } else {
             unreachable!();
@@ -314,7 +314,7 @@ mod tests {
         .await
         .unwrap();
 
-        if let FeatureDataRef::Number(extracted_data) = result.data("foo").unwrap() {
+        if let FeatureDataRef::Float(extracted_data) = result.data("foo").unwrap() {
             assert_eq!(extracted_data.as_ref(), &[3.5, 3.5, 3.5, 3.5, 3.5, 3.5]);
         } else {
             unreachable!();
