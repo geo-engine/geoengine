@@ -289,7 +289,7 @@ fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDef
             spatial_reference: spatial_reference.into(),
             columns: columns_map
                 .into_iter()
-                .filter_map(|(k, v)| v.try_into().map(|v| (k, v)).ok())
+                .filter_map(|(k, v)| v.try_into().map(|v| (k, v)).ok()) // ignore all columns here that don't have a corresponding type in our collections
                 .collect(),
         },
     }))
@@ -456,7 +456,7 @@ fn column_map_to_column_vecs(columns: &HashMap<String, ColumnDataType>) -> Colum
             ColumnDataType::Number => numeric.push(k.clone()),
             ColumnDataType::Text => textual.push(k.clone()),
             ColumnDataType::Date => date.push(k.clone()),
-            _ => {}
+            ColumnDataType::Unknown => {}
         }
     }
 
