@@ -1,0 +1,40 @@
+{
+  "properties": {
+    "id": null,
+    "name": "Natural Earth 10m Ports 3857",
+    "description": "Ports from Natural Earth reprojected to EPSG:3857",
+    "source_operator": "OgrSource"
+  },
+  "meta_data": {
+    "OgrMetaData": {
+      "loading_info": {
+        "file_name": "operators/test-data/vector/data/ne_10m_ports/projected_3857/ne_10m_ports.shp",
+        "layer_name": "ne_10m_ports",
+        "data_type": "MultiPoint",
+        "time": "none",
+        "columns": {
+          "x": "",
+          "y": null,
+          "float": ["natlscale"],
+          "int": ["scalerank"],
+          "textual": ["featurecla", "name", "website"]
+        },
+        "default_geometry": null,
+        "force_ogr_time_filter": false,
+        "on_error": "skip",
+        "provenance": null
+      },
+      "result_descriptor": {
+        "data_type": "MultiPoint",
+        "spatial_reference": "EPSG:3857",
+        "columns": {
+          "website": "text",
+          "name": "text",
+          "natlscale": "int",
+          "scalerank": "float",
+          "featurecla": "text"
+        }
+      }
+    }
+  }
+}

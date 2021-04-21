@@ -43,7 +43,8 @@ pub async fn add_datasets_from_directory<D: DatasetDb>(db: &mut D, file_path: Pa
             if let Err(e) = add_dataset_definition_from_dir_entry(db, &entry).await {
                 // TODO: log
                 eprintln!(
-                    "Skipped adding dataset from directory entry: {}",
+                    "Skipped adding dataset from directory entry: {:?} error: {}",
+                    entry,
                     e.to_string()
                 );
             }

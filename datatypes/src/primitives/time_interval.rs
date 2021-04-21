@@ -298,6 +298,10 @@ impl TimeInterval {
         self.end.inner().wrapping_sub(self.start.inner()) as u64
     }
 
+    pub fn is_instant(&self) -> bool {
+        self.start == self.end
+    }
+
     /// Extends a time interval with the bounds of another time interval.
     /// The result has the smaller `start` and the larger `end`.
     pub fn extend(&self, other: &Self) -> TimeInterval {
@@ -660,5 +664,14 @@ mod tests {
         let b = TimeInterval::new(2, 3).unwrap();
 
         assert_eq!(a.extend(&b), TimeInterval::new_unchecked(1, 3));
+    }
+
+    #[test]
+    fn is_instant() {
+        let a = TimeInterval::new(1, 1).unwrap();
+        let b = TimeInterval::new(2, 3).unwrap();
+
+        assert!(a.is_instant());
+        assert!(!b.is_instant());
     }
 }

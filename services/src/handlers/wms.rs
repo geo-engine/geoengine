@@ -7,7 +7,7 @@ use geoengine_datatypes::{
     primitives::SpatialResolution,
     raster::Grid2D,
     raster::RasterTile2D,
-    spatial_reference::SpatialReferenceOption,
+    spatial_reference::SpatialReference,
 };
 use geoengine_datatypes::{
     primitives::BoundingBox2D,
@@ -25,9 +25,11 @@ use futures::StreamExt;
 use geoengine_datatypes::operations::image::RgbaColor;
 use geoengine_datatypes::primitives::{TimeInstance, TimeInterval};
 use geoengine_operators::call_on_generic_raster_processor;
+use geoengine_operators::engine::RasterOperator;
 use geoengine_operators::engine::{
     QueryContext, QueryRectangle, RasterQueryProcessor, ResultDescriptor,
 };
+use geoengine_operators::processing::{Reprojection, ReprojectionParams};
 use num_traits::AsPrimitive;
 use std::convert::TryInto;
 use std::str::FromStr;
@@ -150,33 +152,49 @@ async fn get_map<C: Context>(
     let execution_context = ctx.execution_context(&Session::mock())?;
 
     let initialized = operator
+        .clone()
         .initialize(&execution_context)
         .context(error::Operator)?;
 
     // handle request and workflow crs matching
-    let workflow_spatial_ref = initialized.result_descriptor().spatial_reference();
-    let request_spatial_ref: SpatialReferenceOption = request.crs.into();
+    let workflow_spatial_ref: Option<SpatialReference> =
+        initialized.result_descriptor().spatial_reference().into();
+    let workflow_spatial_ref = workflow_spatial_ref.ok_or(error::Error::InvalidSpatialReference)?;
+
     // TODO: use a default spatial reference if it is not set?
-    snafu::ensure!(
-        request_spatial_ref.is_spatial_ref(),
-        error::InvalidSpatialReference
-    );
-    // TODO: inject projection Operator
-    snafu::ensure!(
-        workflow_spatial_ref == request_spatial_ref,
-        error::SpatialReferenceMissmatch {
-            found: request_spatial_ref,
-            expected: workflow_spatial_ref,
-        }
-    );
+    let request_spatial_ref: SpatialReference =
+        request.crs.ok_or(error::Error::InvalidSpatialReference)?;
+
+    // perform reprojection if necessary
+    let initialized = if request_spatial_ref == workflow_spatial_ref {
+        initialized
+    } else {
+        let proj = Reprojection {
+            params: ReprojectionParams {
+                target_spatial_reference: request_spatial_ref,
+            },
+            raster_sources: vec![operator],
+            vector_sources: vec![],
+        };
+
+        // TODO: avoid re-initialization of the whole operator graph
+        Box::new(proj)
+            .initialize(&execution_context)
+            .context(error::Operator)?
+    };
 
     let processor = initialized.query_processor().context(error::Operator)?;
 
-    let query_bbox = BoundingBox2D::new(
-        (request.bbox.lower_left().y, request.bbox.lower_left().x).into(),
-        (request.bbox.upper_right().y, request.bbox.upper_right().x).into(),
-    )
-    .context(error::DataType)?; // FIXME: handle WGS84 reverse order axes
+    // TODO: use proj for determining axis order
+    let query_bbox = if request_spatial_ref == SpatialReference::epsg_4326() {
+        BoundingBox2D::new(
+            (request.bbox.lower_left().y, request.bbox.lower_left().x).into(),
+            (request.bbox.upper_right().y, request.bbox.upper_right().x).into(),
+        )
+        .context(error::DataType)?
+    } else {
+        request.bbox
+    };
     let x_query_resolution = query_bbox.size_x() / f64::from(request.width);
     let y_query_resolution = query_bbox.size_y() / f64::from(request.height);
 
