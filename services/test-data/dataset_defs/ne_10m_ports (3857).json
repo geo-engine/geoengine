@@ -15,8 +15,8 @@
         "columns": {
           "x": "",
           "y": null,
-          "numeric": ["natlscale"],
-          "decimal": ["scalerank"],
+          "float": ["natlscale"],
+          "int": ["scalerank"],
           "textual": ["featurecla", "name", "website"]
         },
         "default_geometry": null,
@@ -28,11 +28,11 @@
         "data_type": "MultiPoint",
         "spatial_reference": "EPSG:3857",
         "columns": {
-          "website": "Text",
-          "name": "Text",
-          "natlscale": "Number",
-          "scalerank": "Decimal",
-          "featurecla": "Text"
+          "website": "text",
+          "name": "text",
+          "natlscale": "int",
+          "scalerank": "float",
+          "featurecla": "text"
         }
       }
     }
