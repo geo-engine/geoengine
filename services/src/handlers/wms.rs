@@ -177,6 +177,7 @@ async fn get_map<C: Context>(
             vector_sources: vec![],
         };
 
+        // TODO: avoid re-initialization of the whole operator graph
         Box::new(proj)
             .initialize(&execution_context)
             .context(error::Operator)?

@@ -214,6 +214,7 @@ async fn get_feature<C: Context>(
             vector_sources: vec![operator],
         };
 
+        // TODO: avoid re-initialization of the whole operator graph
         Box::new(proj)
             .initialize(&execution_context)
             .context(error::Operator)?
