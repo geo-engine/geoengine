@@ -667,4 +667,13 @@ mod tests {
 
         assert_eq!(a.extend(&b), TimeInterval::new_unchecked(1, 3));
     }
+
+    #[test]
+    fn is_instant() {
+        let a = TimeInterval::new(1, 1).unwrap();
+        let b = TimeInterval::new(2, 3).unwrap();
+
+        assert!(a.is_instant());
+        assert!(!b.is_instant());
+    }
 }
