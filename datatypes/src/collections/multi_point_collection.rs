@@ -255,10 +255,10 @@ mod tests {
             ],
             {
                 let mut map = HashMap::new();
-                map.insert("numbers".into(), FeatureData::Number(vec![0., 1., 2.]));
+                map.insert("numbers".into(), FeatureData::Float(vec![0., 1., 2.]));
                 map.insert(
                     "number_nulls".into(),
-                    FeatureData::NullableNumber(vec![Some(0.), None, Some(2.)]),
+                    FeatureData::NullableFloat(vec![Some(0.), None, Some(2.)]),
                 );
                 map
             },
@@ -267,13 +267,13 @@ mod tests {
 
         assert_eq!(pc.len(), 3);
 
-        if let FeatureDataRef::Number(numbers) = pc.data("numbers").unwrap() {
+        if let FeatureDataRef::Float(numbers) = pc.data("numbers").unwrap() {
             assert_eq!(numbers.as_ref(), &[0., 1., 2.]);
         } else {
             unreachable!();
         }
 
-        if let FeatureDataRef::Number(numbers) = pc.data("number_nulls").unwrap() {
+        if let FeatureDataRef::Float(numbers) = pc.data("number_nulls").unwrap() {
             assert_eq!(numbers.as_ref()[0], 0.);
             assert_eq!(numbers.as_ref()[2], 2.);
             assert_eq!(numbers.nulls(), vec![false, true, false]);
@@ -315,7 +315,7 @@ mod tests {
     fn add_column() {
         let mut builder = MultiPointCollection::builder();
         builder
-            .add_column("foo".into(), FeatureDataType::Number)
+            .add_column("foo".into(), FeatureDataType::Float)
             .unwrap();
         let mut builder = builder.finish_header();
 
@@ -326,7 +326,7 @@ mod tests {
             .push_time_interval(TimeInterval::new_unchecked(0, 1))
             .unwrap();
         builder
-            .push_data("foo", FeatureDataValue::Number(0.))
+            .push_data("foo", FeatureDataValue::Float(0.))
             .unwrap();
         builder.finish_row();
 
@@ -337,7 +337,7 @@ mod tests {
             .push_time_interval(TimeInterval::new_unchecked(0, 1))
             .unwrap();
         builder
-            .push_data("foo", FeatureDataValue::Number(1.))
+            .push_data("foo", FeatureDataValue::Float(1.))
             .unwrap();
         builder.finish_row();
 
@@ -346,16 +346,16 @@ mod tests {
         assert_eq!(collection.len(), 2);
 
         let extended_collection = collection
-            .add_column("bar", FeatureData::Number(vec![2., 4.]))
+            .add_column("bar", FeatureData::Float(vec![2., 4.]))
             .unwrap();
 
         assert_eq!(extended_collection.len(), 2);
-        if let FeatureDataRef::Number(numbers) = extended_collection.data("foo").unwrap() {
+        if let FeatureDataRef::Float(numbers) = extended_collection.data("foo").unwrap() {
             assert_eq!(numbers.as_ref(), &[0., 1.]);
         } else {
             unreachable!();
         }
-        if let FeatureDataRef::Number(numbers) = extended_collection.data("bar").unwrap() {
+        if let FeatureDataRef::Float(numbers) = extended_collection.data("bar").unwrap() {
             assert_eq!(numbers.as_ref(), &[2., 4.]);
         } else {
             unreachable!();
@@ -367,7 +367,7 @@ mod tests {
         let collection = {
             let mut builder = MultiPointCollection::builder();
             builder
-                .add_column("foo".into(), FeatureDataType::Number)
+                .add_column("foo".into(), FeatureDataType::Float)
                 .unwrap();
             let mut builder = builder.finish_header();
 
@@ -378,7 +378,7 @@ mod tests {
                 .push_time_interval(TimeInterval::new_unchecked(0, 1))
                 .unwrap();
             builder
-                .push_data("foo", FeatureDataValue::Number(0.))
+                .push_data("foo", FeatureDataValue::Float(0.))
                 .unwrap();
             builder.finish_row();
 
@@ -389,7 +389,7 @@ mod tests {
                 .push_time_interval(TimeInterval::new_unchecked(0, 1))
                 .unwrap();
             builder
-                .push_data("foo", FeatureDataValue::Number(1.))
+                .push_data("foo", FeatureDataValue::Float(1.))
                 .unwrap();
             builder.finish_row();
 
@@ -437,7 +437,7 @@ mod tests {
                 TimeInterval::new_unchecked(2, 3),
             ],
             [
-                ("foo".to_string(), FeatureData::Decimal(vec![1, 2, 3])),
+                ("foo".to_string(), FeatureData::Int(vec![1, 2, 3])),
                 (
                     "bar".to_string(),
                     FeatureData::Text(vec!["a".to_string(), "b".to_string(), "c".to_string()]),
@@ -456,7 +456,7 @@ mod tests {
                 TimeInterval::new_unchecked(4, 5),
             ],
             [
-                ("foo".to_string(), FeatureData::Decimal(vec![4, 5])),
+                ("foo".to_string(), FeatureData::Int(vec![4, 5])),
                 (
                     "bar".to_string(),
                     FeatureData::Text(vec!["d".to_string(), "e".to_string()]),
@@ -493,7 +493,7 @@ mod tests {
             ]
         );
 
-        if let Ok(FeatureDataRef::Decimal(data_ref)) = collection_c.data("foo") {
+        if let Ok(FeatureDataRef::Int(data_ref)) = collection_c.data("foo") {
             assert_eq!(data_ref.as_ref(), &[1, 2, 3, 4, 5]);
         } else {
             panic!("wrong data type");
@@ -516,7 +516,7 @@ mod tests {
         let collection = {
             let mut builder = MultiPointCollection::builder();
             builder
-                .add_column("foo".into(), FeatureDataType::Number)
+                .add_column("foo".into(), FeatureDataType::Float)
                 .unwrap();
             builder
                 .add_column("bar".into(), FeatureDataType::Text)
@@ -530,7 +530,7 @@ mod tests {
                 .push_time_interval(TimeInterval::new_unchecked(0, 1))
                 .unwrap();
             builder
-                .push_data("foo", FeatureDataValue::Number(0.))
+                .push_data("foo", FeatureDataValue::Float(0.))
                 .unwrap();
             builder
                 .push_data(
@@ -547,7 +547,7 @@ mod tests {
                 .push_time_interval(TimeInterval::new_unchecked(1, 2))
                 .unwrap();
             builder
-                .push_data("foo", FeatureDataValue::Number(1.))
+                .push_data("foo", FeatureDataValue::Float(1.))
                 .unwrap();
             builder
                 .push_data("bar", FeatureDataValue::NullableText(None))
@@ -561,7 +561,7 @@ mod tests {
                 .push_time_interval(TimeInterval::new_unchecked(3, 4))
                 .unwrap();
             builder
-                .push_data("foo", FeatureDataValue::Number(2.))
+                .push_data("foo", FeatureDataValue::Float(2.))
                 .unwrap();
             builder
                 .push_data(
@@ -636,13 +636,13 @@ mod tests {
         let mut builder = MultiPointCollection::builder();
 
         builder
-            .add_column("foobar".to_string(), FeatureDataType::Number)
+            .add_column("foobar".to_string(), FeatureDataType::Float)
             .unwrap();
         builder
             .add_column("foobar".to_string(), FeatureDataType::Text)
             .unwrap_err();
         builder
-            .add_column("__geometry".to_string(), FeatureDataType::Number)
+            .add_column("__geometry".to_string(), FeatureDataType::Float)
             .unwrap_err();
     }
 
@@ -656,7 +656,7 @@ mod tests {
             ],
             {
                 let mut map = HashMap::new();
-                map.insert("number".into(), FeatureData::Number(vec![0., 1.]));
+                map.insert("number".into(), FeatureData::Float(vec![0., 1.]));
                 map
             },
         )
@@ -678,7 +678,7 @@ mod tests {
             ],
             {
                 let mut map = HashMap::new();
-                map.insert("number".into(), FeatureData::Number(vec![0., 1.]));
+                map.insert("number".into(), FeatureData::Float(vec![0., 1.]));
                 map
             },
         )
@@ -687,7 +687,7 @@ mod tests {
         let b = {
             let mut builder = MultiPointCollection::builder();
             builder
-                .add_column("number".into(), FeatureDataType::Number)
+                .add_column("number".into(), FeatureDataType::Float)
                 .unwrap();
             let mut builder = builder.finish_header();
 
@@ -700,7 +700,7 @@ mod tests {
                 .push_time_interval(TimeInterval::new_unchecked(0, 1))
                 .unwrap();
             builder
-                .push_data("number", FeatureDataValue::Number(0.))
+                .push_data("number", FeatureDataValue::Float(0.))
                 .unwrap();
             builder.finish_row();
             builder
@@ -710,7 +710,7 @@ mod tests {
                 .push_time_interval(TimeInterval::new_unchecked(0, 1))
                 .unwrap();
             builder
-                .push_data("number", FeatureDataValue::Number(1.))
+                .push_data("number", FeatureDataValue::Float(1.))
                 .unwrap();
             builder.finish_row();
 
@@ -729,7 +729,7 @@ mod tests {
         let collection = {
             let mut builder = MultiPointCollection::builder();
             builder
-                .add_column("number".into(), FeatureDataType::Number)
+                .add_column("number".into(), FeatureDataType::Float)
                 .unwrap();
             let mut builder = builder.finish_header();
 
@@ -742,7 +742,7 @@ mod tests {
                 .push_time_interval(TimeInterval::new_unchecked(0, 1))
                 .unwrap();
             builder
-                .push_data("number", FeatureDataValue::Number(f64::NAN))
+                .push_data("number", FeatureDataValue::Float(f64::NAN))
                 .unwrap();
             builder.finish_row();
 
@@ -760,7 +760,7 @@ mod tests {
         let collection = {
             let mut builder = MultiPointCollection::builder();
             builder
-                .add_column("number".into(), FeatureDataType::Number)
+                .add_column("number".into(), FeatureDataType::Float)
                 .unwrap();
             let mut builder = builder.finish_header();
 
@@ -771,7 +771,7 @@ mod tests {
                 .push_time_interval(TimeInterval::new_unchecked(0, 1))
                 .unwrap();
             builder
-                .push_data("number", FeatureDataValue::NullableNumber(None))
+                .push_data("number", FeatureDataValue::NullableFloat(None))
                 .unwrap();
             builder.finish_row();
 
@@ -782,7 +782,7 @@ mod tests {
     }
 
     #[test]
-    fn range_filter_decimal() {
+    fn range_filter_int() {
         let collection = MultiPointCollection::from_data(
             MultiPoint::many(vec![
                 (0.0, 0.1),
@@ -793,7 +793,7 @@ mod tests {
             ])
             .unwrap(),
             vec![TimeInterval::new_unchecked(0, 1); 5],
-            [("foo".to_string(), FeatureData::Decimal(vec![0, 1, 2, 3, 4]))]
+            [("foo".to_string(), FeatureData::Int(vec![0, 1, 2, 3, 4]))]
                 .iter()
                 .cloned()
                 .collect(),
@@ -804,7 +804,7 @@ mod tests {
             collection
                 .column_range_filter(
                     "foo",
-                    &[FeatureDataValue::Decimal(1)..=FeatureDataValue::Decimal(3)],
+                    &[FeatureDataValue::Int(1)..=FeatureDataValue::Int(3)],
                     false
                 )
                 .unwrap(),
@@ -817,7 +817,7 @@ mod tests {
             collection
                 .column_range_filter(
                     "foo",
-                    &[FeatureDataValue::Decimal(1)..FeatureDataValue::Decimal(3)],
+                    &[FeatureDataValue::Int(1)..FeatureDataValue::Int(3)],
                     false
                 )
                 .unwrap(),
@@ -831,8 +831,8 @@ mod tests {
                 .column_range_filter(
                     "foo",
                     &[
-                        (FeatureDataValue::Decimal(0)..=FeatureDataValue::Decimal(0)),
-                        (FeatureDataValue::Decimal(4)..=FeatureDataValue::Decimal(4))
+                        (FeatureDataValue::Int(0)..=FeatureDataValue::Int(0)),
+                        (FeatureDataValue::Int(4)..=FeatureDataValue::Int(4))
                     ],
                     false
                 )
@@ -857,7 +857,7 @@ mod tests {
             vec![TimeInterval::new_unchecked(0, 1); 5],
             [(
                 "foo".to_string(),
-                FeatureData::Number(vec![0., 1., 2., 3., 4.]),
+                FeatureData::Float(vec![0., 1., 2., 3., 4.]),
             )]
             .iter()
             .cloned()
@@ -867,7 +867,7 @@ mod tests {
 
         assert_eq!(
             collection
-                .column_range_filter("foo", &[FeatureDataValue::Number(1.5)..], false)
+                .column_range_filter("foo", &[FeatureDataValue::Float(1.5)..], false)
                 .unwrap(),
             collection
                 .filter(vec![false, false, true, true, true])
@@ -927,7 +927,7 @@ mod tests {
             vec![TimeInterval::new_unchecked(0, 1); 5],
             [(
                 "foo".to_string(),
-                FeatureData::NullableDecimal(vec![Some(0), None, Some(2), Some(3), Some(4)]),
+                FeatureData::NullableInt(vec![Some(0), None, Some(2), Some(3), Some(4)]),
             )]
             .iter()
             .cloned()
@@ -939,7 +939,7 @@ mod tests {
             collection
                 .column_range_filter(
                     "foo",
-                    &[FeatureDataValue::Decimal(1)..=FeatureDataValue::Decimal(3)],
+                    &[FeatureDataValue::Int(1)..=FeatureDataValue::Int(3)],
                     false
                 )
                 .unwrap(),
@@ -952,7 +952,7 @@ mod tests {
             collection
                 .column_range_filter(
                     "foo",
-                    &[FeatureDataValue::Decimal(1)..=FeatureDataValue::Decimal(3)],
+                    &[FeatureDataValue::Int(1)..=FeatureDataValue::Int(3)],
                     true
                 )
                 .unwrap(),
@@ -970,7 +970,7 @@ mod tests {
             [
                 (
                     "foo".to_string(),
-                    FeatureData::NullableDecimal(vec![Some(0), None, Some(2)]),
+                    FeatureData::NullableInt(vec![Some(0), None, Some(2)]),
                 ),
                 (
                     "bar".to_string(),
@@ -1005,10 +1005,10 @@ mod tests {
             ],
             {
                 let mut map = HashMap::new();
-                map.insert("numbers".into(), FeatureData::Number(vec![0., 1., 2.]));
+                map.insert("numbers".into(), FeatureData::Float(vec![0., 1., 2.]));
                 map.insert(
                     "number_nulls".into(),
-                    FeatureData::NullableNumber(vec![Some(0.), None, Some(2.)]),
+                    FeatureData::NullableFloat(vec![Some(0.), None, Some(2.)]),
                 );
                 map
             },
@@ -1048,10 +1048,10 @@ mod tests {
             ],
             {
                 let mut map = HashMap::new();
-                map.insert("numbers".into(), FeatureData::Number(vec![0., 1., 2.]));
+                map.insert("numbers".into(), FeatureData::Float(vec![0., 1., 2.]));
                 map.insert(
                     "number_nulls".into(),
-                    FeatureData::NullableNumber(vec![Some(0.), None, Some(2.)]),
+                    FeatureData::NullableFloat(vec![Some(0.), None, Some(2.)]),
                 );
                 map
             },
@@ -1072,10 +1072,10 @@ mod tests {
             ],
             {
                 let mut map = HashMap::new();
-                map.insert("numbers".into(), FeatureData::Number(vec![1., 2., 0.]));
+                map.insert("numbers".into(), FeatureData::Float(vec![1., 2., 0.]));
                 map.insert(
                     "number_nulls".into(),
-                    FeatureData::NullableNumber(vec![None, Some(2.), Some(0.)]),
+                    FeatureData::NullableFloat(vec![None, Some(2.), Some(0.)]),
                 );
                 map
             },
@@ -1113,10 +1113,10 @@ mod tests {
             ],
             {
                 let mut map = HashMap::new();
-                map.insert("numbers".into(), FeatureData::Number(vec![0., 1.]));
+                map.insert("numbers".into(), FeatureData::Float(vec![0., 1.]));
                 map.insert(
                     "number_nulls".into(),
-                    FeatureData::NullableNumber(vec![Some(0.), None]),
+                    FeatureData::NullableFloat(vec![Some(0.), None]),
                 );
                 map
             },
@@ -1165,10 +1165,10 @@ mod tests {
             ],
             {
                 let mut map = HashMap::new();
-                map.insert("numbers".into(), FeatureData::Number(vec![0., 1.]));
+                map.insert("numbers".into(), FeatureData::Float(vec![0., 1.]));
                 map.insert(
                     "number_nulls".into(),
-                    FeatureData::NullableNumber(vec![Some(0.), None]),
+                    FeatureData::NullableFloat(vec![Some(0.), None]),
                 );
                 map
             },
@@ -1187,10 +1187,10 @@ mod tests {
             ],
             {
                 let mut map = HashMap::new();
-                map.insert("numbers".into(), FeatureData::Number(vec![0., 1.]));
+                map.insert("numbers".into(), FeatureData::Float(vec![0., 1.]));
                 map.insert(
                     "number_nulls".into(),
-                    FeatureData::NullableNumber(vec![Some(0.), None]),
+                    FeatureData::NullableFloat(vec![Some(0.), None]),
                 );
                 map
             },
@@ -1210,7 +1210,7 @@ mod tests {
             [
                 (
                     "foo".to_string(),
-                    FeatureData::NullableDecimal(vec![Some(0), None, Some(2)]),
+                    FeatureData::NullableInt(vec![Some(0), None, Some(2)]),
                 ),
                 (
                     "bar".to_string(),
@@ -1227,10 +1227,7 @@ mod tests {
         let row = iter.next().unwrap();
         assert_eq!(&[Coordinate2D::new(0.0, 0.1)], row.geometry.points());
         assert_eq!(TimeInterval::new_unchecked(0, 1), row.time_interval);
-        assert_eq!(
-            Some(FeatureDataValue::NullableDecimal(Some(0))),
-            row.get("foo")
-        );
+        assert_eq!(Some(FeatureDataValue::NullableInt(Some(0))), row.get("foo"));
         assert_eq!(
             Some(FeatureDataValue::NullableText(Some("a".to_string()))),
             row.get("bar")
@@ -1240,10 +1237,7 @@ mod tests {
         assert_eq!(&[Coordinate2D::new(1.0, 1.1)], row.geometry.points());
         assert_eq!(TimeInterval::new_unchecked(0, 1), row.time_interval);
 
-        assert_eq!(
-            Some(FeatureDataValue::NullableDecimal(None)),
-            row.get("foo")
-        );
+        assert_eq!(Some(FeatureDataValue::NullableInt(None)), row.get("foo"));
         assert_eq!(
             Some(FeatureDataValue::NullableText(Some("b".to_string()))),
             row.get("bar")
@@ -1252,15 +1246,60 @@ mod tests {
         let row = iter.next().unwrap();
         assert_eq!(&[Coordinate2D::new(2.0, 3.1)], row.geometry.points());
         assert_eq!(TimeInterval::new_unchecked(0, 1), row.time_interval);
-        assert_eq!(
-            Some(FeatureDataValue::NullableDecimal(Some(2))),
-            row.get("foo")
-        );
+        assert_eq!(Some(FeatureDataValue::NullableInt(Some(2))), row.get("foo"));
         assert_eq!(
             Some(FeatureDataValue::NullableText(Some("c".to_string()))),
             row.get("bar")
         );
 
         assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn replace_time() {
+        let collection = MultiPointCollection::from_data(
+            MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1), (2.0, 3.1)]).unwrap(),
+            vec![TimeInterval::default(); 3],
+            [
+                (
+                    "foo".to_string(),
+                    FeatureData::NullableInt(vec![Some(0), None, Some(2)]),
+                ),
+                (
+                    "bar".to_string(),
+                    FeatureData::Text(vec!["a".into(), "b".into(), "c".into()]),
+                ),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+        )
+        .unwrap();
+
+        let new_time_intervals = vec![
+            TimeInterval::new(0, 1).unwrap(),
+            TimeInterval::new(1, 2).unwrap(),
+            TimeInterval::new(2, 3).unwrap(),
+        ];
+
+        let new_collection = collection.replace_time(&new_time_intervals).unwrap();
+
+        assert_eq!(collection.len(), new_collection.len());
+
+        assert_eq!(
+            collection.geometries().collect::<Vec<_>>(),
+            new_collection.geometries().collect::<Vec<_>>()
+        );
+
+        assert_eq!(
+            collection.data("foo").unwrap(),
+            new_collection.data("foo").unwrap()
+        );
+        assert_eq!(
+            collection.data("bar").unwrap(),
+            new_collection.data("bar").unwrap()
+        );
+
+        assert_eq!(new_collection.time_intervals(), new_time_intervals);
     }
 }

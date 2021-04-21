@@ -306,7 +306,7 @@ fn get_feature_mock(_request: &GetFeature) -> Result<Box<dyn warp::Reply>, warp:
         vec![TimeInterval::new_unchecked(0, 1); 5],
         [(
             "foo".to_string(),
-            FeatureData::NullableDecimal(vec![Some(0), None, Some(2), Some(3), Some(4)]),
+            FeatureData::NullableInt(vec![Some(0), None, Some(2), Some(3), Some(4)]),
         )]
         .iter()
         .cloned()

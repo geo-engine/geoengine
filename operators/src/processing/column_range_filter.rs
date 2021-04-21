@@ -145,18 +145,18 @@ where
                         .cloned()
                         .map(|range| range.into_string_range().map(Into::into))
                         .collect(),
-                    FeatureDataType::Number => ranges
+                    FeatureDataType::Float => ranges
                         .iter()
                         .cloned()
-                        .map(|range| range.into_number_range().map(Into::into))
+                        .map(|range| range.into_float_range().map(Into::into))
                         .collect(),
-                    FeatureDataType::Decimal => ranges
+                    FeatureDataType::Int => ranges
                         .iter()
                         .cloned()
-                        .map(|range| range.into_decimal_range().map(Into::into))
+                        .map(|range| range.into_int_range().map(Into::into))
                         .collect(),
                     FeatureDataType::Categorical => Err(error::Error::InvalidType {
-                        expected: "text, number, or decimal".to_string(),
+                        expected: "text, float, or int".to_string(),
                         found: "categorical".to_string(),
                     }),
                 };
@@ -228,7 +228,7 @@ mod tests {
             vec![TimeInterval::new(0, 1).unwrap(); 4],
             [(
                 column_name.to_string(),
-                FeatureData::Number(vec![0., 1., 2., 3.]),
+                FeatureData::Float(vec![0., 1., 2., 3.]),
             )]
             .iter()
             .cloned()

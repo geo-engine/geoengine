@@ -31,8 +31,8 @@ pub trait Aggregator {
 
 /// An aggregator wrapper for different return types
 pub enum TypedAggregator {
-    FirstValueNumber(FirstValueNumberAggregator),
-    FirstValueDecimal(FirstValueDecimalAggregator),
+    FirstValueFloat(FirstValueFloatAggregator),
+    FirstValueInt(FirstValueIntAggregator),
     MeanNumber(MeanValueAggregator),
 }
 
@@ -42,10 +42,10 @@ impl TypedAggregator {
         P: Pixel + AsPrimitive<f64> + AsPrimitive<i64>,
     {
         match self {
-            TypedAggregator::FirstValueNumber(aggregator) => {
+            TypedAggregator::FirstValueFloat(aggregator) => {
                 aggregator.add_value(feature_idx, pixel, weight)
             }
-            TypedAggregator::FirstValueDecimal(aggregator) => {
+            TypedAggregator::FirstValueInt(aggregator) => {
                 aggregator.add_value(feature_idx, pixel, weight)
             }
             TypedAggregator::MeanNumber(aggregator) => {
@@ -56,32 +56,22 @@ impl TypedAggregator {
 
     pub fn add_null(&mut self, feature_idx: usize) {
         match self {
-            TypedAggregator::FirstValueNumber(aggregator) => aggregator.add_null(feature_idx),
-            TypedAggregator::FirstValueDecimal(aggregator) => aggregator.add_null(feature_idx),
+            TypedAggregator::FirstValueFloat(aggregator) => aggregator.add_null(feature_idx),
+            TypedAggregator::FirstValueInt(aggregator) => aggregator.add_null(feature_idx),
             TypedAggregator::MeanNumber(aggregator) => aggregator.add_null(feature_idx),
         }
     }
 
-    // pub fn feature_data_type(&self) -> FeatureDataType {
-    //     match self {
-    //         TypedAggregator::FirstValueNumber(_) => FirstValueNumberAggregator::feature_data_type(),
-    //         TypedAggregator::FirstValueDecimal(_) => {
-    //             FirstValueDecimalAggregator::feature_data_type()
-    //         }
-    //         TypedAggregator::MeanNumber(_) => MeanValueAggregator::feature_data_type(),
-    //     }
-    // }
-
     pub fn into_data(self) -> FeatureData {
         match self {
-            TypedAggregator::FirstValueNumber(aggregator) => {
-                FeatureData::NullableNumber(aggregator.into_data())
+            TypedAggregator::FirstValueFloat(aggregator) => {
+                FeatureData::NullableFloat(aggregator.into_data())
             }
-            TypedAggregator::FirstValueDecimal(aggregator) => {
-                FeatureData::NullableDecimal(aggregator.into_data())
+            TypedAggregator::FirstValueInt(aggregator) => {
+                FeatureData::NullableInt(aggregator.into_data())
             }
             TypedAggregator::MeanNumber(aggregator) => {
-                FeatureData::NullableNumber(aggregator.into_data())
+                FeatureData::NullableFloat(aggregator.into_data())
             }
         }
     }
@@ -89,8 +79,8 @@ impl TypedAggregator {
     #[allow(dead_code)]
     pub fn nulls(&self) -> &[bool] {
         match self {
-            TypedAggregator::FirstValueNumber(aggregator) => aggregator.nulls(),
-            TypedAggregator::FirstValueDecimal(aggregator) => aggregator.nulls(),
+            TypedAggregator::FirstValueFloat(aggregator) => aggregator.nulls(),
+            TypedAggregator::FirstValueInt(aggregator) => aggregator.nulls(),
             TypedAggregator::MeanNumber(aggregator) => aggregator.nulls(),
         }
     }
@@ -98,15 +88,15 @@ impl TypedAggregator {
     /// Whether an aggregator needs no more values for producing the outcome
     pub fn is_satisfied(&self) -> bool {
         match self {
-            TypedAggregator::FirstValueNumber(aggregator) => aggregator.is_satisfied(),
-            TypedAggregator::FirstValueDecimal(aggregator) => aggregator.is_satisfied(),
+            TypedAggregator::FirstValueFloat(aggregator) => aggregator.is_satisfied(),
+            TypedAggregator::FirstValueInt(aggregator) => aggregator.is_satisfied(),
             TypedAggregator::MeanNumber(aggregator) => aggregator.is_satisfied(),
         }
     }
 }
 
-pub type FirstValueNumberAggregator = FirstValueAggregator<f64>;
-pub type FirstValueDecimalAggregator = FirstValueAggregator<i64>;
+pub type FirstValueFloatAggregator = FirstValueAggregator<f64>;
+pub type FirstValueIntAggregator = FirstValueAggregator<i64>;
 
 /// Aggregation function that uses only the first value occurrence
 pub struct FirstValueAggregator<T> {
@@ -196,21 +186,21 @@ pub trait FirstValueOutputType {
 
 impl FirstValueOutputType for i64 {
     fn feature_data_type() -> FeatureDataType {
-        FeatureDataType::Decimal
+        FeatureDataType::Int
     }
 
     fn typed_aggregator(aggregator: FirstValueAggregator<Self>) -> TypedAggregator {
-        TypedAggregator::FirstValueDecimal(aggregator)
+        TypedAggregator::FirstValueInt(aggregator)
     }
 }
 
 impl FirstValueOutputType for f64 {
     fn feature_data_type() -> FeatureDataType {
-        FeatureDataType::Number
+        FeatureDataType::Float
     }
 
     fn typed_aggregator(aggregator: FirstValueAggregator<Self>) -> TypedAggregator {
-        TypedAggregator::FirstValueNumber(aggregator)
+        TypedAggregator::FirstValueFloat(aggregator)
     }
 }
 
@@ -262,7 +252,7 @@ impl Aggregator for MeanValueAggregator {
     }
 
     fn feature_data_type() -> FeatureDataType {
-        FeatureDataType::Number
+        FeatureDataType::Float
     }
 
     fn data(&self) -> &[Self::Output] {
@@ -297,7 +287,7 @@ mod tests {
     #[test]
     #[allow(clippy::float_cmp)]
     fn fist_value_f64() {
-        let mut aggregator = FirstValueNumberAggregator::new(2);
+        let mut aggregator = FirstValueFloatAggregator::new(2);
 
         aggregator.add_value(0, 1, 1);
         aggregator.add_value(0, 2, 1);
@@ -309,7 +299,7 @@ mod tests {
 
     #[test]
     fn fist_value_i64() {
-        let mut aggregator = FirstValueDecimalAggregator::new(2);
+        let mut aggregator = FirstValueIntAggregator::new(2);
 
         aggregator.add_value(0, 2., 1);
         aggregator.add_value(0, 0., 1);
@@ -334,14 +324,14 @@ mod tests {
 
     #[test]
     fn typed() {
-        let mut aggregator = FirstValueDecimalAggregator::new(2).into_typed();
+        let mut aggregator = FirstValueIntAggregator::new(2).into_typed();
 
         aggregator.add_value(0, 2., 1);
         aggregator.add_value(0, 0., 1);
 
         aggregator.add_value(1, 4., 1);
 
-        if let TypedAggregator::FirstValueDecimal(ref aggregator) = aggregator {
+        if let TypedAggregator::FirstValueInt(ref aggregator) = aggregator {
             assert_eq!(aggregator.data(), &[2, 4]);
         } else {
             unreachable!();
@@ -349,13 +339,13 @@ mod tests {
 
         assert_eq!(
             aggregator.into_data(),
-            FeatureData::NullableDecimal(vec![Some(2), Some(4)])
+            FeatureData::NullableInt(vec![Some(2), Some(4)])
         );
     }
 
     #[test]
     fn satisfaction() {
-        let mut aggregator = FirstValueDecimalAggregator::new(2).into_typed();
+        let mut aggregator = FirstValueIntAggregator::new(2).into_typed();
 
         assert!(!aggregator.is_satisfied());
 
@@ -374,7 +364,7 @@ mod tests {
 
     #[test]
     fn nulls() {
-        let mut aggregator = FirstValueDecimalAggregator::new(2).into_typed();
+        let mut aggregator = FirstValueIntAggregator::new(2).into_typed();
 
         assert!(!aggregator.is_satisfied());
 

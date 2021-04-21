@@ -253,7 +253,7 @@ mod tests {
                     MultiPointCollection::from_slices(
                         &[(0.0, 0.1)],
                         &[TimeInterval::default()],
-                        &[("join_column", FeatureData::Decimal(vec![5]))],
+                        &[("join_column", FeatureData::Int(vec![5]))],
                     )
                     .unwrap(),
                 )
@@ -262,7 +262,7 @@ mod tests {
                     DataCollection::from_slices(
                         &[] as &[NoGeometry],
                         &[TimeInterval::default()],
-                        &[("join_column", FeatureData::Decimal(vec![5]))],
+                        &[("join_column", FeatureData::Int(vec![5]))],
                     )
                     .unwrap(),
                 )

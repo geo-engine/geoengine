@@ -125,27 +125,27 @@ impl Histogram {
     pub fn add_feature_data(&mut self, data: FeatureDataRef) -> Result<()> {
         // TODO: implement efficiently OpenCL version
         match data {
-            FeatureDataRef::Number(number_ref) if !number_ref.has_nulls() => {
-                for &value in number_ref.as_ref() {
+            FeatureDataRef::Float(value_ref) if !value_ref.has_nulls() => {
+                for &value in value_ref.as_ref() {
                     self.handle_data_item(value, false);
                 }
             }
-            FeatureDataRef::Number(number_ref) => {
-                for (&value, is_null) in number_ref.as_ref().iter().zip(number_ref.nulls()) {
+            FeatureDataRef::Float(value_ref) => {
+                for (&value, is_null) in value_ref.as_ref().iter().zip(value_ref.nulls()) {
                     self.handle_data_item(value, is_null);
                 }
             }
-            FeatureDataRef::Decimal(decimal_ref) if !decimal_ref.has_nulls() => {
-                for value in decimal_ref.as_ref().iter().map(|&v| v as f64) {
+            FeatureDataRef::Int(value_ref) if !value_ref.has_nulls() => {
+                for value in value_ref.as_ref().iter().map(|&v| v as f64) {
                     self.handle_data_item(value, false);
                 }
             }
-            FeatureDataRef::Decimal(decimal_ref) => {
-                for (value, is_null) in decimal_ref
+            FeatureDataRef::Int(value_ref) => {
+                for (value, is_null) in value_ref
                     .as_ref()
                     .iter()
                     .map(|&v| v as f64)
-                    .zip(decimal_ref.nulls())
+                    .zip(value_ref.nulls())
                 {
                     self.handle_data_item(value, is_null);
                 }
@@ -358,7 +358,7 @@ impl HistogramBuilder {
 mod tests {
     use super::*;
 
-    use crate::primitives::{CategoricalDataRef, DecimalDataRef, NumberDataRef};
+    use crate::primitives::{CategoricalDataRef, FloatDataRef, IntDataRef};
     use arrow::array::{Array, Float64Builder, Int64Builder, UInt8Builder};
     use num_traits::AsPrimitive;
 
@@ -387,7 +387,7 @@ mod tests {
         };
 
         histogram
-            .add_feature_data(FeatureDataRef::Number(NumberDataRef::new(
+            .add_feature_data(FeatureDataRef::Float(FloatDataRef::new(
                 data.values(),
                 data.data().null_bitmap(),
             )))
@@ -413,7 +413,7 @@ mod tests {
         };
 
         histogram
-            .add_feature_data(FeatureDataRef::Number(NumberDataRef::new(
+            .add_feature_data(FeatureDataRef::Float(FloatDataRef::new(
                 data.values(),
                 data.data_ref().null_bitmap(),
             )))
@@ -425,7 +425,7 @@ mod tests {
     }
 
     #[test]
-    fn add_feature_data_decimal() {
+    fn add_feature_data_int() {
         let mut histogram = Histogram::builder(2, 0., 3., Measurement::Unitless)
             .build()
             .unwrap();
@@ -437,7 +437,7 @@ mod tests {
         };
 
         histogram
-            .add_feature_data(FeatureDataRef::Decimal(DecimalDataRef::new(
+            .add_feature_data(FeatureDataRef::Int(IntDataRef::new(
                 data.values(),
                 data.data().null_bitmap(),
             )))
@@ -483,7 +483,7 @@ mod tests {
         };
 
         histogram
-            .add_feature_data(FeatureDataRef::Decimal(DecimalDataRef::new(
+            .add_feature_data(FeatureDataRef::Int(IntDataRef::new(
                 data.values(),
                 data.data().null_bitmap(),
             )))
@@ -507,7 +507,7 @@ mod tests {
         };
 
         histogram
-            .add_feature_data(FeatureDataRef::Number(NumberDataRef::new(
+            .add_feature_data(FeatureDataRef::Float(FloatDataRef::new(
                 data.values(),
                 data.data_ref().null_bitmap(),
             )))

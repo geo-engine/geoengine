@@ -140,7 +140,7 @@ mod tests {
             vec![TimeInterval::new_unchecked(0, 1); 3],
             [(
                 "foobar".to_string(),
-                FeatureData::NullableDecimal(vec![Some(0), None, Some(2)]),
+                FeatureData::NullableInt(vec![Some(0), None, Some(2)]),
             )]
             .iter()
             .cloned()
@@ -218,7 +218,7 @@ mod tests {
                     "collections": [{
                         "table": collection_bytes,
                         "types": {
-                            "foobar": "Decimal"
+                            "foobar": "int"
                         },
                     }]
                 }
@@ -236,7 +236,7 @@ mod tests {
             vec![TimeInterval::new_unchecked(0, 1); 3],
             [(
                 "foobar".to_string(),
-                FeatureData::NullableDecimal(vec![Some(0), None, Some(2)]),
+                FeatureData::NullableInt(vec![Some(0), None, Some(2)]),
             )]
             .iter()
             .cloned()

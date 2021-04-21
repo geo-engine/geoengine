@@ -275,8 +275,8 @@ fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDef
             columns: Some(OgrSourceColumnSpec {
                 x: "".to_owned(), // TODO: for csv-files: try to find wkt/xy columns
                 y: None,
-                numeric: columns_vecs.numeric,
-                decimal: columns_vecs.decimal,
+                int: columns_vecs.float,
+                float: columns_vecs.int,
                 textual: columns_vecs.textual,
             }),
             default_geometry: None,
@@ -360,7 +360,7 @@ fn detect_time_type(layer: &Layer, columns: &Columns) -> OgrSourceDatasetTimeTyp
     }
 
     let duration = columns
-        .decimal
+        .int
         .iter()
         .find(|c| known_duration.contains(&c.as_ref()));
 
@@ -397,15 +397,15 @@ fn detect_vector_type(layer: &Layer) -> Result<VectorDataType> {
 }
 
 struct Columns {
-    decimal: Vec<String>,
-    numeric: Vec<String>,
+    int: Vec<String>,
+    float: Vec<String>,
     textual: Vec<String>,
     date: Vec<String>,
 }
 
 enum ColumnDataType {
-    Decimal,
-    Number,
+    Int,
+    Float,
     Text,
     Date,
     Unknown,
@@ -416,8 +416,8 @@ impl TryFrom<ColumnDataType> for FeatureDataType {
 
     fn try_from(value: ColumnDataType) -> Result<Self, Self::Error> {
         match value {
-            ColumnDataType::Decimal => Ok(FeatureDataType::Decimal),
-            ColumnDataType::Number => Ok(FeatureDataType::Number),
+            ColumnDataType::Int => Ok(FeatureDataType::Int),
+            ColumnDataType::Float => Ok(FeatureDataType::Float),
             ColumnDataType::Text => Ok(FeatureDataType::Text),
             _ => Err(error::Error::NoFeatureDataTypeForColumnDataType),
         }
@@ -431,8 +431,8 @@ fn detect_columns(layer: &Layer) -> HashMap<String, ColumnDataType> {
         let field_type = field.field_type();
 
         let data_type = match field_type {
-            OGRFieldType::OFTInteger | OGRFieldType::OFTInteger64 => ColumnDataType::Decimal,
-            OGRFieldType::OFTReal => ColumnDataType::Number,
+            OGRFieldType::OFTInteger | OGRFieldType::OFTInteger64 => ColumnDataType::Int,
+            OGRFieldType::OFTReal => ColumnDataType::Float,
             OGRFieldType::OFTString => ColumnDataType::Text,
             OGRFieldType::OFTDate | OGRFieldType::OFTDateTime => ColumnDataType::Date,
             _ => ColumnDataType::Unknown,
@@ -445,15 +445,15 @@ fn detect_columns(layer: &Layer) -> HashMap<String, ColumnDataType> {
 }
 
 fn column_map_to_column_vecs(columns: &HashMap<String, ColumnDataType>) -> Columns {
-    let mut decimal = Vec::new();
-    let mut numeric = Vec::new();
+    let mut int = Vec::new();
+    let mut float = Vec::new();
     let mut textual = Vec::new();
     let mut date = Vec::new();
 
     for (k, v) in columns {
         match v {
-            ColumnDataType::Decimal => decimal.push(k.clone()),
-            ColumnDataType::Number => numeric.push(k.clone()),
+            ColumnDataType::Int => int.push(k.clone()),
+            ColumnDataType::Float => float.push(k.clone()),
             ColumnDataType::Text => textual.push(k.clone()),
             ColumnDataType::Date => date.push(k.clone()),
             ColumnDataType::Unknown => {}
@@ -461,8 +461,8 @@ fn column_map_to_column_vecs(columns: &HashMap<String, ColumnDataType>) -> Colum
     }
 
     Columns {
-        decimal,
-        numeric,
+        int,
+        float,
         textual,
         date,
     }
@@ -597,8 +597,8 @@ mod tests {
                             "columns": {
                                 "x": "",
                                 "y": null,
-                                "numeric": ["natlscale"],
-                                "decimal": ["scalerank"],
+                                "float": ["natlscale"],
+                                "int": ["scalerank"],
                                 "textual": ["featurecla", "name", "website"]
                             },
                             "default_geometry": null,
@@ -610,11 +610,11 @@ mod tests {
                             "data_type": "MultiPoint",
                             "spatial_reference": "EPSG:4326",
                             "columns": {
-                                "website": "Text",
-                                "name": "Text",
-                                "natlscale": "Number",
-                                "scalerank": "Decimal",
-                                "featurecla": "Text"
+                                "website": "text",
+                                "name": "text",
+                                "natlscale": "float",
+                                "scalerank": "int",
+                                "featurecla": "text"
                             }
                         }
                     }
@@ -634,7 +634,7 @@ mod tests {
             .reply(&create_dataset_handler(ctx))
             .await;
 
-        assert_eq!(res.status(), 500);
+        assert_eq!(res.status(), 500, "{:?}", res.body());
 
         // TODO: add a success test case once it is clear how to upload data from within a test
     }
@@ -665,8 +665,8 @@ mod tests {
                     columns: Some(OgrSourceColumnSpec {
                         x: "".to_string(),
                         y: None,
-                        numeric: vec!["natlscale".to_string()],
-                        decimal: vec!["scalerank".to_string()],
+                        int: vec!["natlscale".to_string()],
+                        float: vec!["scalerank".to_string()],
                         textual: vec![
                             "featurecla".to_string(),
                             "name".to_string(),
@@ -683,9 +683,9 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     columns: [
                         ("name".to_string(), FeatureDataType::Text),
-                        ("scalerank".to_string(), FeatureDataType::Decimal),
+                        ("scalerank".to_string(), FeatureDataType::Int),
                         ("website".to_string(), FeatureDataType::Text),
-                        ("natlscale".to_string(), FeatureDataType::Number),
+                        ("natlscale".to_string(), FeatureDataType::Float),
                         ("featurecla".to_string(), FeatureDataType::Text),
                     ]
                     .iter()
@@ -727,8 +727,8 @@ mod tests {
                     columns: Some(OgrSourceColumnSpec {
                         x: "".to_string(),
                         y: None,
-                        numeric: vec![],
-                        decimal: vec![],
+                        float: vec![],
+                        int: vec![],
                         textual: vec!["time_end".to_owned(), "time_start".to_owned()],
                     }),
                     default_geometry: None,
