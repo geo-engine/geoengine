@@ -906,7 +906,7 @@ where
                     id: None,
                     properties: Some(properties),
                     foreign_members: Some(
-                        json_map! {"when".to_string() => time_interval.to_geo_json_event()},
+                        json_map! {"when".to_string() => time_interval.as_geo_json_event()},
                     ),
                 },
             )

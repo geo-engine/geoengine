@@ -180,6 +180,7 @@ mod tests {
     use num_traits::AsPrimitive;
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn adapter() {
         let no_data_value = Some(0);
         let mrs1 = MockRasterSource {

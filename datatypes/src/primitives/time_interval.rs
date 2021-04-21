@@ -266,7 +266,7 @@ impl TimeInterval {
     /// use geoengine_datatypes::primitives::{TimeInterval, TimeInstance};
     ///
     /// assert_eq!(
-    ///     TimeInterval::new_unchecked(0, 1585069448 * 1000).to_geo_json_event(),
+    ///     TimeInterval::new_unchecked(0, 1585069448 * 1000).as_geo_json_event(),
     ///     serde_json::json!({
     ///         "start": "1970-01-01T00:00:00+00:00",
     ///         "end": "2020-03-24T17:04:08+00:00",
@@ -274,9 +274,7 @@ impl TimeInterval {
     ///     })
     /// );
     /// ```
-    pub fn to_geo_json_event(&self) -> serde_json::Value {
-        // TODO: Use proper time handling, e.g., define a BOT/EOT, …
-
+    pub fn as_geo_json_event(&self) -> serde_json::Value {
         serde_json::json!({
             "start": self.start.as_rfc3339(),
             "end": self.end.as_rfc3339(),
@@ -503,7 +501,7 @@ mod tests {
 
         assert_eq!(
             TimeInterval::new_unchecked(min_visualizable_value, max_visualizable_value)
-                .to_geo_json_event(),
+                .as_geo_json_event(),
             serde_json::json!({
                 "start": "-262144-01-01T00:00:00+00:00",
                 "end": "+262143-12-31T23:59:59.999+00:00",
@@ -515,7 +513,7 @@ mod tests {
                 TimeInstance::from_millis_unchecked(min_visualizable_value - 1),
                 TimeInstance::from_millis_unchecked(max_visualizable_value + 1)
             )
-            .to_geo_json_event(),
+            .as_geo_json_event(),
             serde_json::json!({
                 "start": "-262144-01-01T00:00:00+00:00",
                 "end": "+262143-12-31T23:59:59.999+00:00",
@@ -527,7 +525,7 @@ mod tests {
                 TimeInstance::from_millis_unchecked(i64::MIN),
                 TimeInstance::from_millis_unchecked(i64::MAX)
             )
-            .to_geo_json_event(),
+            .as_geo_json_event(),
             serde_json::json!({
                 "start": "-262144-01-01T00:00:00+00:00",
                 "end": "+262143-12-31T23:59:59.999+00:00",

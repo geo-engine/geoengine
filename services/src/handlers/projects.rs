@@ -761,6 +761,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn update_layers() {
         async fn update_and_load_latest(
             ctx: &InMemoryContext,
@@ -911,6 +912,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn update_plots() {
         async fn update_and_load_latest(
             ctx: &InMemoryContext,
