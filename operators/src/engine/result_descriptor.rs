@@ -201,7 +201,7 @@ mod tests {
 
         let columns = {
             let mut columns = HashMap::with_capacity(1);
-            columns.insert("foo".to_string(), FeatureDataType::Number);
+            columns.insert("foo".to_string(), FeatureDataType::Float);
             columns
         };
 

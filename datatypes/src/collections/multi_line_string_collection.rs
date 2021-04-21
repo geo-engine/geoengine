@@ -560,7 +560,7 @@ mod tests {
                 .unwrap(),
             ],
             &[TimeInterval::default(), TimeInterval::default()],
-            &[("A", FeatureData::Decimal(vec![1, 2]))],
+            &[("A", FeatureData::Int(vec![1, 2]))],
         )
         .unwrap();
 
@@ -579,7 +579,7 @@ mod tests {
                 .unwrap(),
             ],
             &[TimeInterval::default(), TimeInterval::default()],
-            &[("A", FeatureData::Decimal(vec![1, 2]))],
+            &[("A", FeatureData::Int(vec![1, 2]))],
         )
         .unwrap();
 

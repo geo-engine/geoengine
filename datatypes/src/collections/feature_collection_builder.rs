@@ -182,13 +182,13 @@ where
         }
 
         match data {
-            FeatureDataValue::Number(value) => {
-                let number_builder: &mut Float64Builder = downcast_mut_array(data_builder.as_mut());
-                number_builder.append_value(value)?;
+            FeatureDataValue::Float(value) => {
+                let float_builder: &mut Float64Builder = downcast_mut_array(data_builder.as_mut());
+                float_builder.append_value(value)?;
             }
-            FeatureDataValue::NullableNumber(value) => {
-                let number_builder: &mut Float64Builder = downcast_mut_array(data_builder.as_mut());
-                number_builder.append_option(value)?;
+            FeatureDataValue::NullableFloat(value) => {
+                let float_builder: &mut Float64Builder = downcast_mut_array(data_builder.as_mut());
+                float_builder.append_option(value)?;
             }
             FeatureDataValue::Text(value) => {
                 self.string_bytes += value.as_bytes().len();
@@ -206,13 +206,13 @@ where
                     string_builder.append_null()?;
                 }
             }
-            FeatureDataValue::Decimal(value) => {
-                let decimal_builder: &mut Int64Builder = downcast_mut_array(data_builder.as_mut());
-                decimal_builder.append_value(value)?;
+            FeatureDataValue::Int(value) => {
+                let int_builder: &mut Int64Builder = downcast_mut_array(data_builder.as_mut());
+                int_builder.append_value(value)?;
             }
-            FeatureDataValue::NullableDecimal(value) => {
-                let decimal_builder: &mut Int64Builder = downcast_mut_array(data_builder.as_mut());
-                decimal_builder.append_option(value)?;
+            FeatureDataValue::NullableInt(value) => {
+                let int_builder: &mut Int64Builder = downcast_mut_array(data_builder.as_mut());
+                int_builder.append_option(value)?;
             }
             FeatureDataValue::Categorical(value) => {
                 let categorical_builder: &mut UInt8Builder =

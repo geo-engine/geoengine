@@ -29,7 +29,7 @@ fn multi_point_collection_benchmarks(c: &mut Criterion) {
         b.iter(|| {
             let mut builder = MultiPointCollection::builder();
             builder
-                .add_column("number".into(), FeatureDataType::Number)
+                .add_column("number".into(), FeatureDataType::Float)
                 .unwrap();
             let mut builder = builder.finish_header();
             for i in 0..100 {
@@ -40,7 +40,7 @@ fn multi_point_collection_benchmarks(c: &mut Criterion) {
                     .push_time_interval(TimeInterval::new_unchecked(i, i + 1))
                     .unwrap();
                 builder
-                    .push_data("number", FeatureDataValue::Number(i as f64))
+                    .push_data("number", FeatureDataValue::Float(i as f64))
                     .unwrap();
                 builder.finish_row();
             }

@@ -15,16 +15,16 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 #[derive(Debug, Clone, PartialEq)]
 pub enum StringOrNumberRange {
     String(RangeInclusive<String>),
-    Number(RangeInclusive<f64>),
-    Decimal(RangeInclusive<i64>),
+    Float(RangeInclusive<f64>),
+    Int(RangeInclusive<i64>),
 }
 
 impl StringOrNumberRange {
-    pub fn into_number_range(self) -> Result<Self> {
+    pub fn into_float_range(self) -> Result<Self> {
         RangeInclusive::<f64>::try_from(self).map(Into::into)
     }
 
-    pub fn into_decimal_range(self) -> Result<Self> {
+    pub fn into_int_range(self) -> Result<Self> {
         RangeInclusive::<i64>::try_from(self).map(Into::into)
     }
 
@@ -45,11 +45,11 @@ impl Serialize for StringOrNumberRange {
                 tuple_serializer.serialize_element(range.start())?;
                 tuple_serializer.serialize_element(range.end())?;
             }
-            Self::Number(range) => {
+            Self::Float(range) => {
                 tuple_serializer.serialize_element(range.start())?;
                 tuple_serializer.serialize_element(range.end())?;
             }
-            Self::Decimal(range) => {
+            Self::Int(range) => {
                 tuple_serializer.serialize_element(range.start())?;
                 tuple_serializer.serialize_element(range.end())?;
             }
@@ -100,17 +100,15 @@ impl<'de> Visitor<'de> for StringOrNumberRangeDeserializer {
             (StringOrNumber::String(v1), StringOrNumber::String(v2)) => {
                 StringOrNumberRange::String(v1..=v2)
             }
-            (StringOrNumber::Number(v1), StringOrNumber::Number(v2)) => {
-                StringOrNumberRange::Number(v1..=v2)
+            (StringOrNumber::Float(v1), StringOrNumber::Float(v2)) => {
+                StringOrNumberRange::Float(v1..=v2)
             }
-            (StringOrNumber::Decimal(v1), StringOrNumber::Decimal(v2)) => {
-                StringOrNumberRange::Decimal(v1..=v2)
+            (StringOrNumber::Int(v1), StringOrNumber::Int(v2)) => StringOrNumberRange::Int(v1..=v2),
+            (StringOrNumber::Float(v1), StringOrNumber::Int(v2)) => {
+                StringOrNumberRange::Float(v1..=v2.as_())
             }
-            (StringOrNumber::Number(v1), StringOrNumber::Decimal(v2)) => {
-                StringOrNumberRange::Number(v1..=v2.as_())
-            }
-            (StringOrNumber::Decimal(v1), StringOrNumber::Number(v2)) => {
-                StringOrNumberRange::Number(v1.as_()..=v2)
+            (StringOrNumber::Int(v1), StringOrNumber::Float(v2)) => {
+                StringOrNumberRange::Float(v1.as_()..=v2)
             }
             _ => {
                 return Err(A::Error::invalid_type(
@@ -124,13 +122,13 @@ impl<'de> Visitor<'de> for StringOrNumberRangeDeserializer {
 
 impl From<RangeInclusive<f64>> for StringOrNumberRange {
     fn from(v: RangeInclusive<f64>) -> Self {
-        StringOrNumberRange::Number(v)
+        StringOrNumberRange::Float(v)
     }
 }
 
 impl From<RangeInclusive<i64>> for StringOrNumberRange {
     fn from(v: RangeInclusive<i64>) -> Self {
-        StringOrNumberRange::Decimal(v)
+        StringOrNumberRange::Int(v)
     }
 }
 
@@ -155,8 +153,8 @@ impl TryFrom<StringOrNumberRange> for RangeInclusive<f64> {
                 expected: "number".to_string(),
                 found: "string".to_string(),
             }),
-            StringOrNumberRange::Number(v) => Ok(v),
-            StringOrNumberRange::Decimal(v) => Ok(v.start().as_()..=v.end().as_()),
+            StringOrNumberRange::Float(v) => Ok(v),
+            StringOrNumberRange::Int(v) => Ok(v.start().as_()..=v.end().as_()),
         }
     }
 }
@@ -178,8 +176,8 @@ impl TryFrom<StringOrNumberRange> for RangeInclusive<i64> {
                 expected: "number".to_string(),
                 found: "string".to_string(),
             }),
-            StringOrNumberRange::Number(v) => Ok(v.start().as_()..=v.end().as_()),
-            StringOrNumberRange::Decimal(v) => Ok(v),
+            StringOrNumberRange::Float(v) => Ok(v.start().as_()..=v.end().as_()),
+            StringOrNumberRange::Int(v) => Ok(v),
         }
     }
 }
@@ -198,7 +196,7 @@ impl TryFrom<StringOrNumberRange> for RangeInclusive<String> {
     fn try_from(value: StringOrNumberRange) -> Result<Self, Self::Error> {
         match value {
             StringOrNumberRange::String(v) => Ok(v),
-            StringOrNumberRange::Number(_) | StringOrNumberRange::Decimal(_) => {
+            StringOrNumberRange::Float(_) | StringOrNumberRange::Int(_) => {
                 Err(error::Error::InvalidType {
                     expected: "string".to_string(),
                     found: "number".to_string(),
@@ -223,13 +221,13 @@ impl From<StringOrNumberRange> for RangeInclusive<FeatureDataValue> {
                 let (start, end) = v.into_inner();
                 FeatureDataValue::Text(start)..=FeatureDataValue::Text(end)
             }
-            StringOrNumberRange::Number(v) => {
+            StringOrNumberRange::Float(v) => {
                 let (start, end) = v.into_inner();
-                FeatureDataValue::Number(start)..=FeatureDataValue::Number(end)
+                FeatureDataValue::Float(start)..=FeatureDataValue::Float(end)
             }
-            StringOrNumberRange::Decimal(v) => {
+            StringOrNumberRange::Int(v) => {
                 let (start, end) = v.into_inner();
-                FeatureDataValue::Decimal(start)..=FeatureDataValue::Decimal(end)
+                FeatureDataValue::Int(start)..=FeatureDataValue::Int(end)
             }
         }
     }
@@ -256,12 +254,12 @@ mod tests {
         );
 
         assert_eq!(
-            serde_json::to_string(&StringOrNumberRange::Number(1337. ..=1338.)).unwrap(),
+            serde_json::to_string(&StringOrNumberRange::Float(1337. ..=1338.)).unwrap(),
             "[1337.0,1338.0]"
         );
 
         assert_eq!(
-            serde_json::to_string(&StringOrNumberRange::Decimal(42..=43)).unwrap(),
+            serde_json::to_string(&StringOrNumberRange::Int(42..=43)).unwrap(),
             "[42,43]"
         );
     }
@@ -275,22 +273,22 @@ mod tests {
 
         assert_eq!(
             serde_json::from_str::<StringOrNumberRange>("[1337.0,1338.0]").unwrap(),
-            StringOrNumberRange::Number(1337. ..=1338.)
+            StringOrNumberRange::Float(1337. ..=1338.)
         );
 
         assert_eq!(
             serde_json::from_str::<StringOrNumberRange>("[42,43]").unwrap(),
-            StringOrNumberRange::Decimal(42..=43)
+            StringOrNumberRange::Int(42..=43)
         );
 
         assert_eq!(
             serde_json::from_str::<StringOrNumberRange>("[1337.0,1338]").unwrap(),
-            StringOrNumberRange::Number(1337. ..=1338.)
+            StringOrNumberRange::Float(1337. ..=1338.)
         );
 
         assert_eq!(
             serde_json::from_str::<StringOrNumberRange>("[1337,1338.0]").unwrap(),
-            StringOrNumberRange::Number(1337. ..=1338.)
+            StringOrNumberRange::Float(1337. ..=1338.)
         );
 
         assert!(serde_json::from_str::<StringOrNumberRange>("[\"foo\",42]").is_err());
@@ -319,46 +317,45 @@ mod tests {
         );
 
         assert_eq!(
-            RangeInclusive::<f64>::try_from(StringOrNumberRange::Number(1337. ..=1338.)).unwrap(),
+            RangeInclusive::<f64>::try_from(StringOrNumberRange::Float(1337. ..=1338.)).unwrap(),
             1337. ..=1338.
         );
         assert_eq!(
-            RangeInclusive::<f64>::try_from(&StringOrNumberRange::Number(1337. ..=1338.)).unwrap(),
-            1337. ..=1338.
-        );
-
-        assert_eq!(
-            RangeInclusive::<f64>::try_from(StringOrNumberRange::Decimal(1337..=1338)).unwrap(),
-            1337. ..=1338.
-        );
-        assert_eq!(
-            RangeInclusive::<f64>::try_from(&StringOrNumberRange::Decimal(1337..=1338)).unwrap(),
+            RangeInclusive::<f64>::try_from(&StringOrNumberRange::Float(1337. ..=1338.)).unwrap(),
             1337. ..=1338.
         );
 
         assert_eq!(
-            RangeInclusive::<i64>::try_from(StringOrNumberRange::Decimal(42..=43)).unwrap(),
+            RangeInclusive::<f64>::try_from(StringOrNumberRange::Int(1337..=1338)).unwrap(),
+            1337. ..=1338.
+        );
+        assert_eq!(
+            RangeInclusive::<f64>::try_from(&StringOrNumberRange::Int(1337..=1338)).unwrap(),
+            1337. ..=1338.
+        );
+
+        assert_eq!(
+            RangeInclusive::<i64>::try_from(StringOrNumberRange::Int(42..=43)).unwrap(),
             42..=43
         );
         assert_eq!(
-            RangeInclusive::<i64>::try_from(&StringOrNumberRange::Decimal(42..=43)).unwrap(),
+            RangeInclusive::<i64>::try_from(&StringOrNumberRange::Int(42..=43)).unwrap(),
             42..=43
         );
 
         assert_eq!(
-            RangeInclusive::<i64>::try_from(StringOrNumberRange::Number(42. ..=43.)).unwrap(),
+            RangeInclusive::<i64>::try_from(StringOrNumberRange::Float(42. ..=43.)).unwrap(),
             42..=43
         );
         assert_eq!(
-            RangeInclusive::<i64>::try_from(&StringOrNumberRange::Number(42. ..=43.)).unwrap(),
+            RangeInclusive::<i64>::try_from(&StringOrNumberRange::Float(42. ..=43.)).unwrap(),
             42..=43
         );
 
         assert!(
-            RangeInclusive::<String>::try_from(StringOrNumberRange::Number(1337. ..=1338.))
-                .is_err()
+            RangeInclusive::<String>::try_from(StringOrNumberRange::Float(1337. ..=1338.)).is_err()
         );
-        assert!(RangeInclusive::<String>::try_from(StringOrNumberRange::Decimal(42..=43)).is_err());
+        assert!(RangeInclusive::<String>::try_from(StringOrNumberRange::Int(42..=43)).is_err());
 
         assert!(RangeInclusive::<i64>::try_from(StringOrNumberRange::String(
             "foo".to_string()..="bar".to_string()

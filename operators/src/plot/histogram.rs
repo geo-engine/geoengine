@@ -102,7 +102,7 @@ impl PlotOperator for Histogram {
                         reason: format!("column `{}` must be numerical", column_name),
                     });
                 }
-                Some(FeatureDataType::Decimal | FeatureDataType::Number) => {
+                Some(FeatureDataType::Int | FeatureDataType::Float) => {
                     // okay
                 }
             }
@@ -463,10 +463,10 @@ impl HistogramMetadataInProgress {
         }
 
         match values {
-            FeatureDataRef::Decimal(values) => {
+            FeatureDataRef::Int(values) => {
                 add_data_ref(self, &values);
             }
-            FeatureDataRef::Number(values) => {
+            FeatureDataRef::Float(values) => {
                 add_data_ref(self, &values);
             }
             FeatureDataRef::Categorical(_) | FeatureDataRef::Text(_) => {
@@ -723,13 +723,13 @@ mod tests {
             DataCollection::from_slices(
                 &[] as &[NoGeometry],
                 &[TimeInterval::default(); 8],
-                &[("foo", FeatureData::Decimal(vec![1, 1, 2, 2, 3, 3, 4, 4]))],
+                &[("foo", FeatureData::Int(vec![1, 1, 2, 2, 3, 3, 4, 4]))],
             )
             .unwrap(),
             DataCollection::from_slices(
                 &[] as &[NoGeometry],
                 &[TimeInterval::default(); 4],
-                &[("foo", FeatureData::Decimal(vec![5, 6, 7, 8]))],
+                &[("foo", FeatureData::Int(vec![5, 6, 7, 8]))],
             )
             .unwrap(),
         ])
@@ -788,7 +788,7 @@ mod tests {
                 &[TimeInterval::default(); 6],
                 &[(
                     "foo",
-                    FeatureData::NullableNumber(vec![
+                    FeatureData::NullableFloat(vec![
                         Some(1.),
                         Some(2.),
                         None,
@@ -883,8 +883,8 @@ mod tests {
                     columns: Some(OgrSourceColumnSpec {
                         x: "".to_string(),
                         y: None,
-                        numeric: vec!["natlscale".to_string()],
-                        decimal: vec!["scalerank".to_string()],
+                        int: vec!["natlscale".to_string()],
+                        float: vec!["scalerank".to_string()],
                         textual: vec![
                             "featurecla".to_string(),
                             "name".to_string(),
@@ -900,8 +900,8 @@ mod tests {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     columns: [
-                        ("natlscale".to_string(), FeatureDataType::Number),
-                        ("scalerank".to_string(), FeatureDataType::Decimal),
+                        ("natlscale".to_string(), FeatureDataType::Float),
+                        ("scalerank".to_string(), FeatureDataType::Int),
                         ("featurecla".to_string(), FeatureDataType::Text),
                         ("name".to_string(), FeatureDataType::Text),
                         ("website".to_string(), FeatureDataType::Text),
