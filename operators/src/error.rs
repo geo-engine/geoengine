@@ -104,6 +104,10 @@ pub enum Error {
 
     InvalidExpression,
 
+    InvalidNumberOfExpressionInputs,
+
+    InvalidNoDataValueValueForOutputDataType,
+
     InvalidType {
         expected: String,
         found: String,

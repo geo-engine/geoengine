@@ -159,6 +159,20 @@ impl UserInput for AutoCreateDataset {
     }
 }
 
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct SuggestMetaData {
+    pub upload: UploadId,
+    pub main_file: Option<String>,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct MetaDataSuggestion {
+    pub main_file: String,
+    pub meta_data: MetaDataDefinition,
+}
+
 #[allow(clippy::large_enum_variant)]
 #[derive(PartialEq, Deserialize, Serialize, Debug, Clone)]
 pub enum MetaDataDefinition {

@@ -1,11 +1,14 @@
-use crate::engine::{
-    InitializedOperator, InitializedOperatorImpl, InitializedRasterOperator, Operator,
-    QueryContext, QueryProcessor, QueryRectangle, RasterOperator, RasterQueryProcessor,
-    RasterResultDescriptor, TypedRasterQueryProcessor,
-};
 use crate::opencl::{ClProgram, CompiledClProgram, IterationType, RasterArgument};
 use crate::util::Result;
 use crate::{call_bi_generic_processor, call_generic_raster_processor};
+use crate::{
+    engine::{
+        InitializedOperator, InitializedOperatorImpl, InitializedRasterOperator, Operator,
+        QueryContext, QueryProcessor, QueryRectangle, RasterOperator, RasterQueryProcessor,
+        RasterResultDescriptor, TypedRasterQueryProcessor,
+    },
+    error::Error,
+};
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::primitives::Measurement;
@@ -80,6 +83,12 @@ impl RasterOperator for Expression {
                 found: self.raster_sources.len()
             }
         );
+        ensure!(
+            self.params
+                .output_type
+                .is_valid(self.params.output_no_data_value),
+            crate::error::InvalidNoDataValueValueForOutputDataType
+        );
 
         let raster_sources = self
             .raster_sources
@@ -145,7 +154,7 @@ impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
                     Ok(res)
                 })
             }
-            _ => unimplemented!(), // TODO: handle more than two inputs
+            _ => Err(Error::InvalidNumberOfExpressionInputs), // TODO: handle more than two inputs
         }
     }
 }
