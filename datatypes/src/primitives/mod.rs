@@ -19,7 +19,7 @@ pub use bounding_box::BoundingBox2D;
 pub use coordinate::Coordinate2D;
 pub(crate) use error::PrimitivesError;
 pub use feature_data::{
-    CategoricalDataRef, DataRef, FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue,
+    CategoryDataRef, DataRef, FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue,
     FloatDataRef, IntDataRef, TextDataRef,
 };
 pub use geometry::{Geometry, GeometryRef, TypedGeometry};

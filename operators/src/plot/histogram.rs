@@ -96,8 +96,8 @@ impl PlotOperator for Histogram {
                         column: column_name.to_string(),
                     });
                 }
-                Some(FeatureDataType::Categorical | FeatureDataType::Text) => {
-                    // TODO: incorporate categorical data
+                Some(FeatureDataType::Category | FeatureDataType::Text) => {
+                    // TODO: incorporate category data
                     return Err(Error::InvalidOperatorSpec {
                         reason: format!("column `{}` must be numerical", column_name),
                     });
@@ -469,9 +469,9 @@ impl HistogramMetadataInProgress {
             FeatureDataRef::Float(values) => {
                 add_data_ref(self, &values);
             }
-            FeatureDataRef::Categorical(_) | FeatureDataRef::Text(_) => {
+            FeatureDataRef::Category(_) | FeatureDataRef::Text(_) => {
                 // do nothing since we don't support them
-                // TODO: fill with live once we support categorical and textual types
+                // TODO: fill with live once we support category and text types
             }
         }
     }
@@ -848,7 +848,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn textual_attribute() {
+    async fn text_attribute() {
         let dataset_id = InternalDatasetId::new();
 
         let workflow = serde_json::json!({
@@ -885,7 +885,7 @@ mod tests {
                         y: None,
                         int: vec!["natlscale".to_string()],
                         float: vec!["scalerank".to_string()],
-                        textual: vec![
+                        text: vec![
                             "featurecla".to_string(),
                             "name".to_string(),
                             "website".to_string(),
@@ -918,7 +918,7 @@ mod tests {
         {
             assert_eq!(reason, "column `featurecla` must be numerical");
         } else {
-            panic!("we currently don't support textual features, but this went through");
+            panic!("we currently don't support text features, but this went through");
         }
     }
 }

@@ -16,7 +16,7 @@
           "x": "",
           "float": [],
           "int": [],
-          "textual": []
+          "text": []
         },
         "on_error": "abort"
       },

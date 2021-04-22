@@ -23,8 +23,8 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::primitives::{
-    CategoricalDataRef, FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue,
-    FloatDataRef, Geometry, IntDataRef, TextDataRef, TimeInterval,
+    CategoryDataRef, FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue, FloatDataRef,
+    Geometry, IntDataRef, TextDataRef, TimeInterval,
 };
 use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::helpers::SomeIter;
@@ -456,7 +456,7 @@ where
                     arrow::compute::lt_utf8_scalar,
                 )?;
             }
-            FeatureDataType::Categorical => {
+            FeatureDataType::Category => {
                 return Err(error::FeatureCollectionError::WrongDataType.into());
             }
         }
@@ -1000,9 +1000,9 @@ where
                     let array: &arrow::array::Int64Array = downcast_array(column);
                     IntDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
                 }
-                FeatureDataType::Categorical => {
+                FeatureDataType::Category => {
                     let array: &arrow::array::UInt8Array = downcast_array(column);
-                    CategoricalDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
+                    CategoryDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
                 }
             },
         )

@@ -214,15 +214,13 @@ where
                 let int_builder: &mut Int64Builder = downcast_mut_array(data_builder.as_mut());
                 int_builder.append_option(value)?;
             }
-            FeatureDataValue::Categorical(value) => {
-                let categorical_builder: &mut UInt8Builder =
-                    downcast_mut_array(data_builder.as_mut());
-                categorical_builder.append_value(value)?;
+            FeatureDataValue::Category(value) => {
+                let category_builder: &mut UInt8Builder = downcast_mut_array(data_builder.as_mut());
+                category_builder.append_value(value)?;
             }
-            FeatureDataValue::NullableCategorical(value) => {
-                let categorical_builder: &mut UInt8Builder =
-                    downcast_mut_array(data_builder.as_mut());
-                categorical_builder.append_option(value)?;
+            FeatureDataValue::NullableCategory(value) => {
+                let category_builder: &mut UInt8Builder = downcast_mut_array(data_builder.as_mut());
+                category_builder.append_option(value)?;
             }
         }
 

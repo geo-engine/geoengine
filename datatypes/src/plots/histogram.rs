@@ -150,17 +150,17 @@ impl Histogram {
                     self.handle_data_item(value, is_null);
                 }
             }
-            FeatureDataRef::Categorical(categorical_ref) if !categorical_ref.has_nulls() => {
-                for value in categorical_ref.as_ref().iter().map(|&v| f64::from(v)) {
+            FeatureDataRef::Category(category_ref) if !category_ref.has_nulls() => {
+                for value in category_ref.as_ref().iter().map(|&v| f64::from(v)) {
                     self.handle_data_item(value, false);
                 }
             }
-            FeatureDataRef::Categorical(categorical_ref) => {
-                for (value, is_null) in categorical_ref
+            FeatureDataRef::Category(category_ref) => {
+                for (value, is_null) in category_ref
                     .as_ref()
                     .iter()
                     .map(|&v| f64::from(v))
-                    .zip(categorical_ref.nulls())
+                    .zip(category_ref.nulls())
                 {
                     self.handle_data_item(value, is_null);
                 }
@@ -358,7 +358,7 @@ impl HistogramBuilder {
 mod tests {
     use super::*;
 
-    use crate::primitives::{CategoricalDataRef, FloatDataRef, IntDataRef};
+    use crate::primitives::{CategoryDataRef, FloatDataRef, IntDataRef};
     use arrow::array::{Array, Float64Builder, Int64Builder, UInt8Builder};
     use num_traits::AsPrimitive;
 
@@ -448,7 +448,7 @@ mod tests {
     }
 
     #[test]
-    fn add_feature_data_categorical() {
+    fn add_feature_data_category() {
         let mut histogram = Histogram::builder(2, 0., 1., Measurement::Unitless)
             .build()
             .unwrap();
@@ -460,7 +460,7 @@ mod tests {
         };
 
         histogram
-            .add_feature_data(FeatureDataRef::Categorical(CategoricalDataRef::new(
+            .add_feature_data(FeatureDataRef::Category(CategoryDataRef::new(
                 data.values(),
                 data.data().null_bitmap(),
             )))

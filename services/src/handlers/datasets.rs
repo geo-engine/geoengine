@@ -213,7 +213,7 @@ fn auto_detect_dataset(main_file_path: &Path) -> Result<MetaDataDefinition> {
                 y: None,
                 int: columns_vecs.float,
                 float: columns_vecs.int,
-                textual: columns_vecs.textual,
+                text: columns_vecs.text,
             }),
             default_geometry: None,
             force_ogr_time_filter: false,
@@ -242,7 +242,7 @@ fn detect_vector_type(layer: &Layer) -> Result<VectorDataType> {
 struct Columns {
     int: Vec<String>,
     float: Vec<String>,
-    textual: Vec<String>,
+    text: Vec<String>,
 }
 
 fn detect_columns(layer: &Layer) -> HashMap<String, FeatureDataType> {
@@ -263,11 +263,11 @@ fn detect_columns(layer: &Layer) -> HashMap<String, FeatureDataType> {
 fn column_map_to_column_vecs(columns: &HashMap<String, FeatureDataType>) -> Columns {
     let mut int = Vec::new();
     let mut float = Vec::new();
-    let mut textual = Vec::new();
+    let mut text = Vec::new();
 
     for (k, v) in columns {
         match v {
-            FeatureDataType::Categorical => { // TODO
+            FeatureDataType::Category => { // TODO
             }
             FeatureDataType::Int => {
                 int.push(k.clone());
@@ -276,16 +276,12 @@ fn column_map_to_column_vecs(columns: &HashMap<String, FeatureDataType>) -> Colu
                 float.push(k.clone());
             }
             FeatureDataType::Text => {
-                textual.push(k.clone());
+                text.push(k.clone());
             }
         }
     }
 
-    Columns {
-        int,
-        float,
-        textual,
-    }
+    Columns { int, float, text }
 }
 
 #[cfg(test)]
@@ -419,7 +415,7 @@ mod tests {
                                 "y": null,
                                 "float": ["natlscale"],
                                 "int": ["scalerank"],
-                                "textual": ["featurecla", "name", "website"]
+                                "text": ["featurecla", "name", "website"]
                             },
                             "default_geometry": null,
                             "force_ogr_time_filter": false,
@@ -469,7 +465,7 @@ mod tests {
 
         if let MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data {
             if let Some(columns) = &mut meta_data.loading_info.columns {
-                columns.textual.sort();
+                columns.text.sort();
             }
         }
 
@@ -487,7 +483,7 @@ mod tests {
                         y: None,
                         int: vec!["natlscale".to_string()],
                         float: vec!["scalerank".to_string()],
-                        textual: vec![
+                        text: vec![
                             "featurecla".to_string(),
                             "name".to_string(),
                             "website".to_string(),
