@@ -89,6 +89,8 @@ pub enum RasterDataType {
 }
 
 impl RasterDataType {
+    /// Returns true if the given `value` is valid for the `RasterDataType` variant,
+    /// i.e. it can be represented by a variable of the corresponding primitive data type
     #[allow(clippy::float_cmp)]
     #[allow(clippy::cast_lossless)]
     pub fn is_valid(self, value: f64) -> bool {
