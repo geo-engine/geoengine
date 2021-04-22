@@ -148,6 +148,7 @@ fn process_raster(number_statistics: &mut NumberStatistics, raster_tile: &Raster
 
 /// The statistics summary output type for each raster input
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct StatisticsOutput {
     pub pixel_count: usize,
     pub nan_count: usize,
@@ -197,8 +198,8 @@ mod tests {
         let serialized = json!({
             "type": "Statistics",
             "params": {},
-            "raster_sources": [],
-            "vector_sources": [],
+            "rasterSources": [],
+            "vectorSources": [],
         })
         .to_string();
 
@@ -258,8 +259,8 @@ mod tests {
         assert_eq!(
             result.to_string(),
             json!([{
-                "pixel_count": 6,
-                "nan_count": 0,
+                "pixelCount": 6,
+                "nanCount": 0,
                 "min": 1.0,
                 "max": 6.0,
                 "mean": 3.5,

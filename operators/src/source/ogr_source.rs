@@ -46,6 +46,7 @@ use geoengine_datatypes::dataset::DatasetId;
 use std::convert::{TryFrom, TryInto};
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct OgrSourceParameters {
     pub dataset: DatasetId,
     pub attribute_projection: Option<Vec<String>>,
@@ -63,6 +64,7 @@ pub type OgrSource = SourceOperator<OgrSourceParameters>;
 ///  - `on_error`: specify the type of error handling
 ///  - `provenance`: specify the provenance of a file
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct OgrSourceDataset {
     pub file_name: PathBuf,
     pub layer_name: String,
@@ -96,15 +98,17 @@ impl OgrSourceDataset {
 ///  - `start_format` and `start_format`: a mapping of a field type to a time value (cf. `OgrSourceDatasetTimeType`)
 ///  - `duration`: the duration of the time validity for all features in the file
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "camelCase")]
 pub enum OgrSourceDatasetTimeType {
     None,
+    #[serde(rename_all = "camelCase")]
     Start {
         start_field: String,
         start_format: OgrSourceTimeFormat,
         duration: u32,
     },
     #[serde(rename = "start+end")]
+    #[serde(rename_all = "camelCase")]
     StartEnd {
         start_field: String,
         start_format: OgrSourceTimeFormat,
@@ -112,6 +116,7 @@ pub enum OgrSourceDatasetTimeType {
         end_format: OgrSourceTimeFormat,
     },
     #[serde(rename = "start+duration")]
+    #[serde(rename_all = "camelCase")]
     StartDuration {
         start_field: String,
         start_format: OgrSourceTimeFormat,
@@ -133,9 +138,12 @@ impl Default for OgrSourceDatasetTimeType {
 ///   - "iso": time column contains string with ISO8601
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(tag = "format")]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "camelCase")]
 pub enum OgrSourceTimeFormat {
-    Custom { custom_format: String },
+    #[serde(rename_all = "camelCase")]
+    Custom {
+        custom_format: String,
+    },
     Seconds,
     Iso,
 }
@@ -997,15 +1005,15 @@ mod tests {
         assert_eq!(
             serialized_spec,
             json!({
-                "file_name": "foobar.csv",
-                "layer_name": "foobar",
-                "data_type": "MultiPoint",
+                "fileName": "foobar.csv",
+                "layerName": "foobar",
+                "dataType": "MultiPoint",
                 "time": {
                     "start": {
-                        "start_field": "start",
-                        "start_format": {
+                        "startField": "start",
+                        "startFormat": {
                             "format": "custom",
-                            "custom_format": "YYYY-MM-DD"
+                            "customFormat": "YYYY-MM-DD"
                         },
                         "duration": 42
                     }
@@ -1017,9 +1025,9 @@ mod tests {
                     "float": ["num"],
                     "textual": ["text"]
                 },
-                "default_geometry":{"MultiPoint":{"coordinates":[{"x":0.0,"y":0.0}]}},
-                "force_ogr_time_filter": false,
-                "on_error": "skip",
+                "defaultGeometry":{"MultiPoint":{"coordinates":[{"x":0.0,"y":0.0}]}},
+                "forceOgrTimeFilter": false,
+                "onError": "skip",
                 "provenance": {
                     "citation": "Foo Bar",
                     "license": "CC",
@@ -1031,15 +1039,15 @@ mod tests {
 
         let deserialized_spec: OgrSourceDataset = serde_json::from_str(
             &json!({
-                "file_name": "foobar.csv",
-                "layer_name": "foobar",
-                "data_type": "MultiPoint",
+                "fileName": "foobar.csv",
+                "layerName": "foobar",
+                "dataType": "MultiPoint",
                 "time": {
                     "start": {
-                        "start_field": "start",
-                        "start_format": {
+                        "startField": "start",
+                        "startFormat": {
                             "format": "custom",
-                            "custom_format": "YYYY-MM-DD"
+                            "customFormat": "YYYY-MM-DD"
                         },
                         "duration": 42
                     }
@@ -1051,9 +1059,9 @@ mod tests {
                     "float": ["num"],
                     "textual": ["text"]
                 },
-                "default_geometry":{"MultiPoint":{"coordinates":[{"x":0.0,"y":0.0}]}},
-                "force_ogr_time_filter": false,
-                "on_error": "skip",
+                "defaultGeometry":{"MultiPoint":{"coordinates":[{"x":0.0,"y":0.0}]}},
+                "forceOgrTimeFilter": false,
+                "onError": "skip",
                 "provenance": {
                     "citation": "Foo Bar",
                     "license": "CC",

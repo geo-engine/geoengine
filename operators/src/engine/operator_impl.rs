@@ -6,6 +6,7 @@ use crate::util::Result;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct Operator<P> {
     pub params: P,
     pub raster_sources: Vec<Box<dyn RasterOperator>>,

@@ -12,17 +12,21 @@ use std::str::FromStr;
 /// A colorizer specifies a mapping between raster values and an output image
 /// There are different variants that perform different kinds of mapping.
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub enum Colorizer {
+    #[serde(rename_all = "camelCase")]
     LinearGradient {
         breakpoints: Breakpoints,
         no_data_color: RgbaColor,
         default_color: RgbaColor,
     },
+    #[serde(rename_all = "camelCase")]
     LogarithmicGradient {
         breakpoints: Breakpoints,
         no_data_color: RgbaColor,
         default_color: RgbaColor,
     },
+    #[serde(rename_all = "camelCase")]
     Palette {
         colors: Palette,
         no_data_color: RgbaColor,
@@ -627,13 +631,49 @@ mod tests {
         assert_eq!(
             serialized_colorizer,
             serde_json::json!({
-                "Palette": {
+                "palette": {
                     "colors": {
                         "1": [255, 255, 255, 255],
                         "2": [0, 0, 0, 255]
                     },
-                    "no_data_color": [0, 0, 0, 0],
-                    "default_color": [0, 0, 0, 0]
+                    "noDataColor": [0, 0, 0, 0],
+                    "defaultColor": [0, 0, 0, 0]
+                }
+            })
+        );
+
+        assert_eq!(
+            serde_json::from_str::<Colorizer>(&serialized_colorizer.to_string()).unwrap(),
+            colorizer
+        );
+    }
+
+    #[test]
+    fn serialized_linear_gradient() {
+        let colorizer = Colorizer::linear_gradient(
+            vec![
+                (1.0, RgbaColor::white()).try_into().unwrap(),
+                (2.0, RgbaColor::black()).try_into().unwrap(),
+            ],
+            RgbaColor::transparent(),
+            RgbaColor::transparent(),
+        )
+        .unwrap();
+
+        let serialized_colorizer = serde_json::to_value(&colorizer).unwrap();
+        assert_eq!(
+            serialized_colorizer,
+            serde_json::json!({
+                "linearGradient": {
+                    "breakpoints": [{
+                        "value": 1.0,
+                        "color": [255, 255, 255, 255]
+                    }, {
+                        "value": 2.0,
+                        "color": [0, 0, 0, 255]
+                    }],
+                    "noDataColor": [0, 0, 0, 0],
+                    "defaultColor": [0, 0, 0, 0]
                 }
             })
         );

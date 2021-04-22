@@ -47,7 +47,7 @@ use geoengine_datatypes::{
 ///         "type": "GdalSource",
 ///         "params": {
 ///             "dataset": {
-///                 "Internal": "a626c880-1c41-489b-9e19-9596d129859c"
+///                 "internal": "a626c880-1c41-489b-9e19-9596d129859c"
 ///             }
 ///         }
 ///     }"#;
@@ -130,6 +130,7 @@ pub struct GdalLoadingInfoPart {
 }
 
 #[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct GdalDatasetParameters {
     pub file_path: PathBuf,
     pub rasterband_channel: usize,
@@ -182,6 +183,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor> for GdalMetaDataStatic {
 //        negative direction. Maybe it would be better to have a real start and end time, then
 //        everything before start and after end is just one big nodata raster instead of many
 #[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct GdalMetaDataRegular {
     pub result_descriptor: RasterResultDescriptor,
     pub params: GdalDatasetParameters,

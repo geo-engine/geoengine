@@ -20,6 +20,7 @@ use std::marker::PhantomData;
 use std::ops::RangeInclusive;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct ColumnRangeFilterParams {
     pub column: String,
     pub ranges: Vec<StringOrNumberRange>,
@@ -208,10 +209,10 @@ mod tests {
                     "ranges": [
                         [1, 2]
                     ],
-                    "keep_nulls": false
+                    "keepNulls": false
                 },
-                "raster_sources": [],
-                "vector_sources": []
+                "rasterSources": [],
+                "vectorSources": []
             })
             .to_string()
         );

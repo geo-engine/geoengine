@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct DatasetListing {
     pub id: DatasetId,
     pub name: String,

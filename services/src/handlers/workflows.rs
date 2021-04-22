@@ -374,8 +374,8 @@ mod tests {
         assert_eq!(
             serde_json::from_slice::<serde_json::Value>(res.body()).unwrap(),
             json!({
-                "data_type": "MultiPoint",
-                "spatial_reference": "EPSG:4326",
+                "dataType": "MultiPoint",
+                "spatialReference": "EPSG:4326",
                 "columns": {
                     "bar": "int",
                     "foo": "float"
@@ -432,15 +432,15 @@ mod tests {
         assert_eq!(
             serde_json::from_slice::<serde_json::Value>(res.body()).unwrap(),
             serde_json::json!({
-                "data_type": "U8",
-                "spatial_reference": "EPSG:4326",
+                "dataType": "U8",
+                "spatialReference": "EPSG:4326",
                 "measurement": {
                     "continuous": {
                         "measurement": "radiation",
                         "unit": null
                     }
                 },
-                "no_data_value": null
+                "noDataValue": null
             })
         );
     }

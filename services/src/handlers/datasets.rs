@@ -372,16 +372,16 @@ mod tests {
             body,
             json!([{
                 "id": {
-                    "Internal": id.internal().unwrap()
+                    "internal": id.internal().unwrap()
                 },
                 "name": "OgrDataset",
                 "description": "My Ogr dataset",
                 "tags": [],
-                "source_operator": "OgrSource",
-                "result_descriptor": {
-                    "Vector": {
-                        "data_type": "Data",
-                        "spatial_reference": "",
+                "sourceOperator": "OgrSource",
+                "resultDescriptor": {
+                    "vector": {
+                        "dataType": "Data",
+                        "spatialReference": "",
                         "columns": {}
                     }
                 }
@@ -405,14 +405,14 @@ mod tests {
                     "id": null,
                     "name": "Uploaded Natural Earth 10m Ports",
                     "description": "Ports from Natural Earth",
-                    "source_operator": "OgrSource"
+                    "sourceOperator": "OgrSource"
                 },
-                "meta_data": {
+                "metaData": {
                     "OgrMetaData": {
-                        "loading_info": {
-                            "file_name": "operators/test-data/vector/data/ne_10m_ports/ne_10m_ports.shp",
-                            "layer_name": "ne_10m_ports",
-                            "data_type": "MultiPoint",
+                        "loadingInfo": {
+                            "fileName": "operators/test-data/vector/data/ne_10m_ports/ne_10m_ports.shp",
+                            "layerName": "ne_10m_ports",
+                            "dataType": "MultiPoint",
                             "time": "none",
                             "columns": {
                                 "x": "",
@@ -422,13 +422,13 @@ mod tests {
                                 "textual": ["featurecla", "name", "website"]
                             },
                             "default_geometry": null,
-                            "force_ogr_time_filter": false,
-                            "on_error": "skip",
+                            "forceOgrTimeGilter": false,
+                            "onError": "skip",
                             "provenance": null
                         },
-                        "result_descriptor": {
-                            "data_type": "MultiPoint",
-                            "spatial_reference": "EPSG:4326",
+                        "resultDescriptor": {
+                            "dataType": "MultiPoint",
+                            "spatialReference": "EPSG:4326",
                             "columns": {
                                 "website": "text",
                                 "name": "text",
@@ -575,18 +575,18 @@ mod tests {
             body,
             json!({
                 "id": {
-                    "Internal": id.internal().unwrap()
+                    "internal": id.internal().unwrap()
                 },
                 "name": "OgrDataset",
                 "description": "My Ogr dataset",
-                "result_descriptor": {
-                    "Vector": {
-                        "data_type": "Data",
-                        "spatial_reference": "",
+                "resultDescriptor": {
+                    "vector": {
+                        "dataType": "Data",
+                        "spatialReference": "",
                         "columns": {}
                     }
                 },
-                "source_operator": "OgrSource"
+                "sourceOperator": "OgrSource"
             })
             .to_string()
         );

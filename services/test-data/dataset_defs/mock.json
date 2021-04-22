@@ -3,11 +3,11 @@
     "id": null,
     "name": "Mock",
     "description": "A mock dataset",
-    "source_operator": "MockDatasetDataSource"
+    "sourceOperator": "MockDatasetDataSource"
   },
-  "meta_data": {
+  "metaData": {
     "MockMetaData": {
-      "loading_info": {
+      "loadingInfo": {
         "points": [
           {
             "x": 1.0,
@@ -15,9 +15,9 @@
           }
         ]
       },
-      "result_descriptor": {
-        "data_type": "MultiPoint",
-        "spatial_reference": "EPSG:4326",
+      "resultDescriptor": {
+        "dataType": "MultiPoint",
+        "spatialReference": "EPSG:4326",
         "columns": {}
       }
     }

@@ -37,7 +37,7 @@ pub struct RasterVectorJoinParams {
 
 /// The aggregation method for extracted values
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "camelCase")]
 pub enum AggregationMethod {
     None,
     First,
@@ -204,8 +204,8 @@ mod tests {
                 "names": ["foo", "bar"],
                 "aggregation": "mean",
             },
-            "raster_sources": [],
-            "vector_sources": [],
+            "rasterSources": [],
+            "vectorSources": [],
         })
         .to_string();
 

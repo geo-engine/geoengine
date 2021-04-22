@@ -19,6 +19,7 @@ use snafu::ensure;
 use std::fmt::Debug;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct Dataset {
     pub id: DatasetId,
     pub name: String,
@@ -41,6 +42,7 @@ impl Dataset {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct AddDataset {
     pub id: Option<DatasetId>,
     pub name: String,
@@ -56,6 +58,7 @@ impl UserInput for AddDataset {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct ImportDataset {
     pub name: String,
     pub description: String,
@@ -120,6 +123,7 @@ impl UserInput for DatasetProviderListOptions {
     }
 }
 #[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct DatasetDefinition {
     pub properties: AddDataset,
     pub meta_data: MetaDataDefinition,
@@ -132,6 +136,7 @@ pub struct CreateDataset {
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct AutoCreateDataset {
     pub upload: UploadId,
     pub dataset_name: String,

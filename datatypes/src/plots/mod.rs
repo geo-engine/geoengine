@@ -22,6 +22,7 @@ pub trait Plot {
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PlotData {
     pub vega_string: String,
     pub metadata: PlotMetaData,
@@ -31,7 +32,10 @@ pub struct PlotData {
 #[serde(untagged)]
 pub enum PlotMetaData {
     None,
-    Selection { selection_name: String },
+    #[serde(rename_all = "camelCase")]
+    Selection {
+        selection_name: String,
+    },
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Serialize)]

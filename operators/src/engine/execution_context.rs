@@ -112,6 +112,7 @@ where
 }
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StaticMetaData<L, R>
 where
     L: Debug + Clone + Send + Sync + 'static,

@@ -23,6 +23,7 @@ pub type VectorJoin = Operator<VectorJoinParams>;
 
 /// A set of parameters for the `VectorJoin`
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct VectorJoinParams {
     #[serde(flatten)]
     join_type: VectorJoinType,
