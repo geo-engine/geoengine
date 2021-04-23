@@ -148,6 +148,7 @@ pub enum FileNotFoundHandling {
 }
 
 #[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct GdalMetaDataStatic {
     pub time: Option<TimeInterval>,
     pub params: GdalDatasetParameters,
