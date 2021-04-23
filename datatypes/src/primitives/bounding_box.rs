@@ -541,6 +541,10 @@ mod tests {
         let bbox = BoundingBox2D::new(ll, ur).unwrap();
 
         assert!(bbox.contains_coordinate(&(1.5, 1.5).into()));
+        assert!(bbox.contains_coordinate(&bbox.lower_left()));
+        assert!(bbox.contains_coordinate(&bbox.upper_left()));
+        assert!(bbox.contains_coordinate(&bbox.upper_right()));
+        assert!(bbox.contains_coordinate(&bbox.lower_right()));
     }
 
     #[test]
