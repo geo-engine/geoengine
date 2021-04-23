@@ -13,7 +13,7 @@ use std::str;
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum FeatureDataType {
-    Categorical,
+    Category,
     Int,
     Float,
     Text,
@@ -32,8 +32,8 @@ impl FeatureDataType {
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub enum FeatureData {
-    Categorical(Vec<u8>), // TODO: add names to categories
-    NullableCategorical(Vec<Option<u8>>),
+    Category(Vec<u8>), // TODO: add names to categories
+    NullableCategory(Vec<Option<u8>>),
     Int(Vec<i64>),
     NullableInt(Vec<Option<i64>>),
     Float(Vec<f64>),
@@ -44,8 +44,8 @@ pub enum FeatureData {
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub enum FeatureDataValue {
-    Categorical(u8),
-    NullableCategorical(Option<u8>),
+    Category(u8),
+    NullableCategory(Option<u8>),
     Int(i64),
     NullableInt(Option<i64>),
     Float(f64),
@@ -56,7 +56,7 @@ pub enum FeatureDataValue {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum FeatureDataRef<'f> {
-    Categorical(CategoricalDataRef<'f>),
+    Category(CategoryDataRef<'f>),
     Int(IntDataRef<'f>),
     Float(FloatDataRef<'f>),
     Text(TextDataRef<'f>),
@@ -69,7 +69,7 @@ impl<'f> FeatureDataRef<'f> {
             FeatureDataRef::Text(data_ref) => data_ref.json_values(),
             FeatureDataRef::Float(data_ref) => data_ref.json_values(),
             FeatureDataRef::Int(data_ref) => data_ref.json_values(),
-            FeatureDataRef::Categorical(data_ref) => data_ref.json_values(),
+            FeatureDataRef::Category(data_ref) => data_ref.json_values(),
         }
     }
 
@@ -79,7 +79,7 @@ impl<'f> FeatureDataRef<'f> {
             FeatureDataRef::Text(data_ref) => data_ref.nulls(),
             FeatureDataRef::Float(data_ref) => data_ref.nulls(),
             FeatureDataRef::Int(data_ref) => data_ref.nulls(),
-            FeatureDataRef::Categorical(data_ref) => data_ref.nulls(),
+            FeatureDataRef::Category(data_ref) => data_ref.nulls(),
         }
     }
 
@@ -89,7 +89,7 @@ impl<'f> FeatureDataRef<'f> {
             FeatureDataRef::Text(data_ref) => data_ref.has_nulls(),
             FeatureDataRef::Float(data_ref) => data_ref.has_nulls(),
             FeatureDataRef::Int(data_ref) => data_ref.has_nulls(),
-            FeatureDataRef::Categorical(data_ref) => data_ref.has_nulls(),
+            FeatureDataRef::Category(data_ref) => data_ref.has_nulls(),
         }
     }
 
@@ -99,7 +99,7 @@ impl<'f> FeatureDataRef<'f> {
             FeatureDataRef::Text(data_ref) => data_ref.get_unchecked(i),
             FeatureDataRef::Float(data_ref) => data_ref.get_unchecked(i),
             FeatureDataRef::Int(data_ref) => data_ref.get_unchecked(i),
-            FeatureDataRef::Categorical(data_ref) => data_ref.get_unchecked(i),
+            FeatureDataRef::Category(data_ref) => data_ref.get_unchecked(i),
         }
     }
 }
@@ -273,12 +273,12 @@ fn null_bitmap_to_bools(null_bitmap: &Option<Bitmap>, len: usize) -> Vec<bool> {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct CategoricalDataRef<'f> {
+pub struct CategoryDataRef<'f> {
     buffer: &'f [u8],
     valid_bitmap: &'f Option<arrow::bitmap::Bitmap>,
 }
 
-impl<'f> DataRef<'f, u8> for CategoricalDataRef<'f> {
+impl<'f> DataRef<'f, u8> for CategoryDataRef<'f> {
     fn json_value(value: &u8) -> serde_json::Value {
         (*value).into()
     }
@@ -299,30 +299,30 @@ impl<'f> DataRef<'f, u8> for CategoricalDataRef<'f> {
 
     fn get_unchecked(&self, i: usize) -> FeatureDataValue {
         if self.has_nulls() {
-            FeatureDataValue::NullableCategorical(if self.is_null(i) {
+            FeatureDataValue::NullableCategory(if self.is_null(i) {
                 None
             } else {
                 Some(self.as_ref()[i])
             })
         } else {
-            FeatureDataValue::Categorical(self.as_ref()[i])
+            FeatureDataValue::Category(self.as_ref()[i])
         }
     }
 }
 
-impl AsRef<[u8]> for CategoricalDataRef<'_> {
+impl AsRef<[u8]> for CategoryDataRef<'_> {
     fn as_ref(&self) -> &[u8] {
         self.buffer
     }
 }
 
-impl<'f> From<CategoricalDataRef<'f>> for FeatureDataRef<'f> {
-    fn from(data_ref: CategoricalDataRef<'f>) -> FeatureDataRef<'f> {
-        FeatureDataRef::Categorical(data_ref)
+impl<'f> From<CategoryDataRef<'f>> for FeatureDataRef<'f> {
+    fn from(data_ref: CategoryDataRef<'f>) -> FeatureDataRef<'f> {
+        FeatureDataRef::Category(data_ref)
     }
 }
 
-impl<'f> CategoricalDataRef<'f> {
+impl<'f> CategoryDataRef<'f> {
     pub fn new(buffer: &'f [u8], null_bitmap: &'f Option<arrow::bitmap::Bitmap>) -> Self {
         Self {
             buffer,
@@ -520,7 +520,7 @@ impl FeatureDataType {
             Self::Text => arrow::datatypes::DataType::Utf8,
             Self::Float => arrow::datatypes::DataType::Float64,
             Self::Int => arrow::datatypes::DataType::Int64,
-            Self::Categorical => arrow::datatypes::DataType::UInt8,
+            Self::Category => arrow::datatypes::DataType::UInt8,
         }
     }
 
@@ -534,7 +534,7 @@ impl FeatureDataType {
             Self::Text => Box::new(arrow::array::StringBuilder::new(len)),
             Self::Float => Box::new(arrow::array::Float64Builder::new(len)),
             Self::Int => Box::new(arrow::array::Int64Builder::new(len)),
-            Self::Categorical => Box::new(arrow::array::UInt8Builder::new(len)),
+            Self::Category => Box::new(arrow::array::UInt8Builder::new(len)),
         }
     }
 }
@@ -556,8 +556,8 @@ impl FeatureData {
             FeatureData::NullableFloat(v) => v.len(),
             FeatureData::Int(v) => v.len(),
             FeatureData::NullableInt(v) => v.len(),
-            FeatureData::Categorical(v) => v.len(),
-            FeatureData::NullableCategorical(v) => v.len(),
+            FeatureData::Category(v) => v.len(),
+            FeatureData::NullableCategory(v) => v.len(),
         }
     }
 
@@ -617,12 +617,12 @@ impl FeatureData {
                 }
                 Box::new(builder)
             }
-            Self::Categorical(v) => {
+            Self::Category(v) => {
                 let mut builder = arrow::array::UInt8Builder::new(v.len());
                 builder.append_slice(v)?;
                 Box::new(builder)
             }
-            Self::NullableCategorical(v) => {
+            Self::NullableCategory(v) => {
                 let mut builder = arrow::array::UInt8Builder::new(v.len());
                 for &float_option in v {
                     builder.append_option(float_option)?;
@@ -639,7 +639,7 @@ impl From<&FeatureData> for FeatureDataType {
             FeatureData::Text(_) | FeatureData::NullableText(_) => Self::Text,
             FeatureData::Float(_) | FeatureData::NullableFloat(_) => Self::Float,
             FeatureData::Int(_) | FeatureData::NullableInt(_) => Self::Int,
-            FeatureData::Categorical(_) | FeatureData::NullableCategorical(_) => Self::Categorical,
+            FeatureData::Category(_) | FeatureData::NullableCategory(_) => Self::Category,
         }
     }
 }
@@ -650,9 +650,7 @@ impl From<&FeatureDataValue> for FeatureDataType {
             FeatureDataValue::Text(_) | FeatureDataValue::NullableText(_) => Self::Text,
             FeatureDataValue::Float(_) | FeatureDataValue::NullableFloat(_) => Self::Float,
             FeatureDataValue::Int(_) | FeatureDataValue::NullableInt(_) => Self::Int,
-            FeatureDataValue::Categorical(_) | FeatureDataValue::NullableCategorical(_) => {
-                Self::Categorical
-            }
+            FeatureDataValue::Category(_) | FeatureDataValue::NullableCategory(_) => Self::Category,
         }
     }
 }
@@ -663,7 +661,7 @@ impl<'f> From<&'f FeatureDataRef<'f>> for FeatureDataType {
             FeatureDataRef::Text(_) => Self::Text,
             FeatureDataRef::Float(..) => Self::Float,
             FeatureDataRef::Int(_) => Self::Int,
-            FeatureDataRef::Categorical(_) => Self::Categorical,
+            FeatureDataRef::Category(_) => Self::Category,
         }
     }
 }

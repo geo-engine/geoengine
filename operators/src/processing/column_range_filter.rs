@@ -156,9 +156,9 @@ where
                         .cloned()
                         .map(|range| range.into_int_range().map(Into::into))
                         .collect(),
-                    FeatureDataType::Categorical => Err(error::Error::InvalidType {
+                    FeatureDataType::Category => Err(error::Error::InvalidType {
                         expected: "text, float, or int".to_string(),
-                        found: "categorical".to_string(),
+                        found: "category".to_string(),
                     }),
                 };
 

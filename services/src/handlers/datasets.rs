@@ -277,7 +277,7 @@ fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDef
                 y: None,
                 int: columns_vecs.float,
                 float: columns_vecs.int,
-                textual: columns_vecs.textual,
+                text: columns_vecs.text,
             }),
             default_geometry: None,
             force_ogr_time_filter: false,
@@ -339,7 +339,7 @@ fn detect_time_type(layer: &Layer, columns: &Columns) -> OgrSourceDatasetTimeTyp
 
     let mut start = None;
     let mut end = None;
-    for column in columns.textual.iter().chain(&(columns.date)) {
+    for column in columns.text.iter().chain(&(columns.date)) {
         let is_date = feature
             .field(column)
             .ok()
@@ -399,7 +399,7 @@ fn detect_vector_type(layer: &Layer) -> Result<VectorDataType> {
 struct Columns {
     int: Vec<String>,
     float: Vec<String>,
-    textual: Vec<String>,
+    text: Vec<String>,
     date: Vec<String>,
 }
 
@@ -447,14 +447,14 @@ fn detect_columns(layer: &Layer) -> HashMap<String, ColumnDataType> {
 fn column_map_to_column_vecs(columns: &HashMap<String, ColumnDataType>) -> Columns {
     let mut int = Vec::new();
     let mut float = Vec::new();
-    let mut textual = Vec::new();
+    let mut text = Vec::new();
     let mut date = Vec::new();
 
     for (k, v) in columns {
         match v {
             ColumnDataType::Int => int.push(k.clone()),
             ColumnDataType::Float => float.push(k.clone()),
-            ColumnDataType::Text => textual.push(k.clone()),
+            ColumnDataType::Text => text.push(k.clone()),
             ColumnDataType::Date => date.push(k.clone()),
             ColumnDataType::Unknown => {}
         }
@@ -463,7 +463,7 @@ fn column_map_to_column_vecs(columns: &HashMap<String, ColumnDataType>) -> Colum
     Columns {
         int,
         float,
-        textual,
+        text,
         date,
     }
 }
@@ -599,7 +599,7 @@ mod tests {
                                 "y": null,
                                 "float": ["natlscale"],
                                 "int": ["scalerank"],
-                                "textual": ["featurecla", "name", "website"]
+                                "text": ["featurecla", "name", "website"]
                             },
                             "default_geometry": null,
                             "forceOgrTimeGilter": false,
@@ -649,7 +649,7 @@ mod tests {
 
         if let MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data {
             if let Some(columns) = &mut meta_data.loading_info.columns {
-                columns.textual.sort();
+                columns.text.sort();
             }
         }
 
@@ -667,7 +667,7 @@ mod tests {
                         y: None,
                         int: vec!["natlscale".to_string()],
                         float: vec!["scalerank".to_string()],
-                        textual: vec![
+                        text: vec![
                             "featurecla".to_string(),
                             "name".to_string(),
                             "website".to_string(),
@@ -706,7 +706,7 @@ mod tests {
 
         if let MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data {
             if let Some(columns) = &mut meta_data.loading_info.columns {
-                columns.textual.sort();
+                columns.text.sort();
             }
         }
 
@@ -729,7 +729,7 @@ mod tests {
                         y: None,
                         float: vec![],
                         int: vec![],
-                        textual: vec!["time_end".to_owned(), "time_start".to_owned()],
+                        text: vec!["time_end".to_owned(), "time_start".to_owned()],
                     }),
                     default_geometry: None,
                     force_ogr_time_filter: false,

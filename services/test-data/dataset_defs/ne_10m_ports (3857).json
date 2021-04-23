@@ -17,7 +17,7 @@
           "y": null,
           "float": ["natlscale"],
           "int": ["scalerank"],
-          "textual": ["featurecla", "name", "website"]
+          "text": ["featurecla", "name", "website"]
         },
         "defaultGeometry": null,
         "forceOgrTimeFilter": false,

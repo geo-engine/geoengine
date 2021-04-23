@@ -164,7 +164,7 @@ where
                     right_time_intervals,
                 )
             }
-            (FeatureDataRef::Categorical(left), FeatureDataRef::Categorical(right)) => {
+            (FeatureDataRef::Category(left), FeatureDataRef::Category(right)) => {
                 let left_value = left.as_ref()[left_idx];
                 matches(
                     right.as_ref(),

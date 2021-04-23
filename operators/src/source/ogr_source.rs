@@ -159,14 +159,14 @@ impl Default for OgrSourceTimeFormat {
 ///  - y: the name of the column containing the y coordinate [if CSV file with y column]
 ///  - float: an array of column names containing float values
 ///  - int: an array of column names containing int values
-///  - textual: an array of column names containing alpha-numeric values
+///  - text: an array of column names containing alpha-numeric values
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct OgrSourceColumnSpec {
     pub x: String,
     pub y: Option<String>,
     pub int: Vec<String>,
     pub float: Vec<String>,
-    pub textual: Vec<String>,
+    pub text: Vec<String>,
 }
 
 impl OgrSourceColumnSpec {
@@ -181,8 +181,7 @@ impl OgrSourceColumnSpec {
         self.int.retain(|attribute| attributes.contains(attribute));
         self.float
             .retain(|attribute| attributes.contains(attribute));
-        self.textual
-            .retain(|attribute| attributes.contains(attribute));
+        self.text.retain(|attribute| attributes.contains(attribute));
     }
 }
 
@@ -621,7 +620,7 @@ where
                     .add_column(attribute.clone(), FeatureDataType::Int)
                     .unwrap();
             }
-            for attribute in &column_spec.textual {
+            for attribute in &column_spec.text {
                 data_types.insert(attribute.clone(), FeatureDataType::Text);
                 feature_collection_builder
                     .add_column(attribute.clone(), FeatureDataType::Text)
@@ -747,7 +746,7 @@ where
 
                     builder.push_data(&column, FeatureDataValue::NullableInt(value_option))?;
                 }
-                FeatureDataType::Categorical => todo!("implement"),
+                FeatureDataType::Category => todo!("implement"),
             }
         }
 
@@ -988,7 +987,7 @@ mod tests {
                 y: Some("y".to_string()),
                 float: vec!["num".to_string()],
                 int: vec!["dec1".to_string(), "dec2".to_string()],
-                textual: vec!["text".to_string()],
+                text: vec!["text".to_string()],
             }),
             default_geometry: Some(TypedGeometry::MultiPoint(
                 MultiPoint::new(vec![(0.0, 0.0).into()]).unwrap(),
@@ -1025,7 +1024,7 @@ mod tests {
                     "y": "y",
                     "int": ["dec1", "dec2"],
                     "float": ["num"],
-                    "textual": ["text"]
+                    "text": ["text"]
                 },
                 "defaultGeometry":{"MultiPoint":{"coordinates":[{"x":0.0,"y":0.0}]}},
                 "forceOgrTimeFilter": false,
@@ -1059,7 +1058,7 @@ mod tests {
                     "y": "y",
                     "int": ["dec1", "dec2"],
                     "float": ["num"],
-                    "textual": ["text"]
+                    "text": ["text"]
                 },
                 "defaultGeometry":{"MultiPoint":{"coordinates":[{"x":0.0,"y":0.0}]}},
                 "forceOgrTimeFilter": false,
@@ -1383,7 +1382,7 @@ mod tests {
                         y: None,
                         int: vec!["natlscale".to_string()],
                         float: vec!["scalerank".to_string()],
-                        textual: vec![
+                        text: vec![
                             "featurecla".to_string(),
                             "name".to_string(),
                             "website".to_string(),
@@ -2713,7 +2712,7 @@ mod tests {
                 y: None,
                 float: vec!["a".to_string()],
                 int: vec!["b".to_string()],
-                textual: vec!["c".to_string()],
+                text: vec!["c".to_string()],
             }),
             default_geometry: None,
             force_ogr_time_filter: false,
@@ -3112,7 +3111,7 @@ mod tests {
                         y: None,
                         int: vec![],
                         float: vec![],
-                        textual: vec![],
+                        text: vec![],
                     }),
                     default_geometry: None,
                     force_ogr_time_filter: false,
@@ -3196,7 +3195,7 @@ mod tests {
                         y: Some("y".to_owned()),
                         int: vec!["num".to_owned()],
                         float: vec![],
-                        textual: vec!["txt".to_owned()],
+                        text: vec!["txt".to_owned()],
                     }),
                     default_geometry: None,
                     force_ogr_time_filter: false,
