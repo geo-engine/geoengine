@@ -24,6 +24,7 @@ use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+#[serde(rename_all = "camelCase")]
 pub struct ReprojectionParams {
     pub target_spatial_reference: SpatialReference,
 }

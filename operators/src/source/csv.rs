@@ -40,8 +40,8 @@ use std::sync::atomic::Ordering;
 ///     {
 ///         "type": "CsvSource",
 ///         "params": {
-///             "file_path": "/foo/bar.csv",
-///             "field_separator": ",",
+///             "filePath": "/foo/bar.csv",
+///             "fieldSeparator": ",",
 ///             "geometry": {
 ///                 "type": "xy",
 ///                 "x": "x",
@@ -62,6 +62,7 @@ use std::sync::atomic::Ordering;
 /// });
 /// ```
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct CsvSourceParameters {
     pub file_path: PathBuf,
     pub field_separator: char,
@@ -621,8 +622,8 @@ x;y
             serde_json::json!({
                 "type": "CsvSource",
                 "params": {
-                    "file_path": temp_file.path(),
-                    "field_separator": ";",
+                    "filePath": temp_file.path(),
+                    "fieldSeparator": ";",
                     "geometry": {
                         "type": "xy",
                         "x": "x",

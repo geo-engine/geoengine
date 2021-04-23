@@ -9,6 +9,7 @@ use snafu::ensure;
 #[derive(Copy, Clone, Serialize, Deserialize, PartialEq, Debug)]
 #[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
 #[repr(C)]
+#[serde(rename_all = "camelCase")]
 /// The bounding box of a geometry.
 /// Note: may degenerate to a point!
 pub struct BoundingBox2D {

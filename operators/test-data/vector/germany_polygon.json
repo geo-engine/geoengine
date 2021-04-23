@@ -1,11 +1,11 @@
 {
-  "file_name": "test-data/vector/data/germany_polygon.gpkg",
-  "layer_name": "test_germany",
+  "fileName": "test-data/vector/data/germany_polygon.gpkg",
+  "layerName": "test_germany",
   "columns": {
     "x": "",
     "float": [],
     "int": [],
     "textual": []
   },
-  "on_error": "abort"
+  "onError": "abort"
 }

@@ -11,6 +11,7 @@ use crate::raster::Pixel;
 use crate::util::Result;
 
 #[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Histogram {
     counts: Vec<u64>,
     labels: Option<Vec<String>>,

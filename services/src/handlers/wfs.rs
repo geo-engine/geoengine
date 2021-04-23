@@ -766,16 +766,16 @@ x;y
                     ],
                     "aggregation": "first"
                 },
-                "vector_sources": [
+                "vectorSources": [
                     {
                         "type": "OgrSource",
                         "params": {
                             "dataset": ne_10m_ports_id,
-                            "attribute_projection": null
+                            "attributeProjection": null
                         }
                     }
                 ],
-                "raster_sources": [
+                "rasterSources": [
                     {
                         "type": "GdalSource",
                         "params": {

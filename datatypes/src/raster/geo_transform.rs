@@ -10,6 +10,7 @@ pub type GdalGeoTransform = [f64; 6];
 
 /// The `GeoTransform` is a more user friendly representation of the `GDAL GeoTransform` affine transformation matrix.
 #[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GeoTransform {
     pub origin_coordinate: Coordinate2D,
     pub x_pixel_size: f64,

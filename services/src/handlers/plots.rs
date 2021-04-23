@@ -17,6 +17,7 @@ use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct GetPlot {
     #[serde(deserialize_with = "parse_bbox")]
     pub bbox: BoundingBox2D,
@@ -106,6 +107,7 @@ async fn get_plot<C: Context>(
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct WrappedPlotOutput {
     output_format: PlotOutputFormat,
     plot_type: &'static str,
@@ -187,7 +189,7 @@ mod tests {
         let params = &[
             ("bbox", "-180,-90,180,90"),
             ("time", "2020-01-01T00:00:00.0Z"),
-            ("spatial_resolution", "0.1,0.1"),
+            ("spatialResolution", "0.1,0.1"),
         ];
         let url = format!(
             "/plot/{}/?{}",
@@ -211,11 +213,11 @@ mod tests {
         assert_eq!(
             result,
             json!({
-                "output_format": "JsonPlain",
-                "plot_type": "Statistics",
+                "outputFormat": "JsonPlain",
+                "plotType": "Statistics",
                 "data": [{
-                    "pixel_count": 6,
-                    "nan_count": 0,
+                    "pixelCount": 6,
+                    "nanCount": 0,
                     "min": 1.0,
                     "max": 6.0,
                     "mean": 3.5,
@@ -260,7 +262,7 @@ mod tests {
         let params = &[
             ("bbox", "-180,-90,180,90"),
             ("time", "2020-01-01T00:00:00.0Z"),
-            ("spatial_resolution", "0.1,0.1"),
+            ("spatialResolution", "0.1,0.1"),
         ];
         let url = format!(
             "/plot/{}/?{}",
@@ -284,10 +286,10 @@ mod tests {
         assert_eq!(
             result,
             json!({
-                "output_format": "JsonVega",
-                "plot_type": "Histogram",
+                "outputFormat": "JsonVega",
+                "plotType": "Histogram",
                 "data": {
-                    "vega_string": "{\"$schema\":\"https://vega.github.io/schema/vega-lite/v4.json\",\"data\":{\"values\":[{\"bin_start\":0.0,\"bin_end\":2.5,\"Frequency\":2},{\"bin_start\":2.5,\"bin_end\":5.0,\"Frequency\":2},{\"bin_start\":5.0,\"bin_end\":7.5,\"Frequency\":2},{\"bin_start\":7.5,\"bin_end\":10.0,\"Frequency\":0}]},\"mark\":\"bar\",\"encoding\":{\"x\":{\"field\":\"bin_start\",\"bin\":{\"binned\":true,\"step\":2.5},\"axis\":{\"title\":\"\"}},\"x2\":{\"field\":\"bin_end\"},\"y\":{\"field\":\"Frequency\",\"type\":\"quantitative\"}}}",
+                    "vegaString": "{\"$schema\":\"https://vega.github.io/schema/vega-lite/v4.json\",\"data\":{\"values\":[{\"bin_start\":0.0,\"bin_end\":2.5,\"Frequency\":2},{\"bin_start\":2.5,\"bin_end\":5.0,\"Frequency\":2},{\"bin_start\":5.0,\"bin_end\":7.5,\"Frequency\":2},{\"bin_start\":7.5,\"bin_end\":10.0,\"Frequency\":0}]},\"mark\":\"bar\",\"encoding\":{\"x\":{\"field\":\"bin_start\",\"bin\":{\"binned\":true,\"step\":2.5},\"axis\":{\"title\":\"\"}},\"x2\":{\"field\":\"bin_end\"},\"y\":{\"field\":\"Frequency\",\"type\":\"quantitative\"}}}",
                     "metadata": null
                 }
             })
@@ -300,7 +302,7 @@ mod tests {
         let params = &[
             ("bbox", "-180,-90,180,90"),
             ("time", "2020-01-01T00:00:00.0Z"),
-            ("spatial_resolution", "0.1,0.1"),
+            ("spatialResolution", "0.1,0.1"),
         ];
 
         assert_eq!(

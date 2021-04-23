@@ -3,14 +3,14 @@
     "id": null,
     "name": "Germany",
     "description": "Boundaries of Germany",
-    "source_operator": "OgrSource"
+    "sourceOperator": "OgrSource"
   },
-  "meta_data": {
+  "metaData": {
     "OgrMetaData": {
-      "loading_info": {
-        "file_name": "operators/test-data/vector/data/germany_polygon.gpkg",
-        "layer_name": "test_germany",
-        "data_type": "MultiPolygon",
+      "loadingInfo": {
+        "fileName": "operators/test-data/vector/data/germany_polygon.gpkg",
+        "layerName": "test_germany",
+        "dataType": "MultiPolygon",
         "time": "none",
         "columns": {
           "x": "",
@@ -18,11 +18,11 @@
           "int": [],
           "textual": []
         },
-        "on_error": "abort"
+        "onError": "abort"
       },
-      "result_descriptor": {
-        "data_type": "MultiPolygon",
-        "spatial_reference": "EPSG:4326",
+      "resultDescriptor": {
+        "dataType": "MultiPolygon",
+        "spatialReference": "EPSG:4326",
         "columns": {}
       }
     }

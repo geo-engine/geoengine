@@ -30,6 +30,7 @@ pub type Histogram = Operator<HistogramParams>;
 
 /// The parameter spec for `Histogram`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct HistogramParams {
     /// Name of the (numeric) attribute to compute the histogram on. Ignored for operation on rasters.
     pub column_name: Option<String>,
@@ -535,7 +536,7 @@ mod tests {
         let serialized = json!({
             "type": "Histogram",
             "params": {
-                "column_name": "foobar",
+                "columnName": "foobar",
                 "bounds": {
                     "min": 5.0,
                     "max": 10.0,
@@ -543,8 +544,8 @@ mod tests {
                 "buckets": 15,
                 "interactivity": false,
             },
-            "raster_sources": [],
-            "vector_sources": [],
+            "rasterSources": [],
+            "vectorSources": [],
         })
         .to_string();
 
@@ -571,8 +572,8 @@ mod tests {
             "params": {
                 "bounds": "data",
             },
-            "raster_sources": [],
-            "vector_sources": [],
+            "rasterSources": [],
+            "vectorSources": [],
         })
         .to_string();
 
@@ -854,17 +855,17 @@ mod tests {
         let workflow = serde_json::json!({
             "type": "Histogram",
             "params": {
-                "column_name": "featurecla",
+                "columnName": "featurecla",
                 "bounds": "data"
             },
-            "raster_sources": [],
-            "vector_sources": [{
+            "rasterSources": [],
+            "vectorSources": [{
                 "type": "OgrSource",
                 "params": {
                     "dataset": {
-                        "Internal": dataset_id
+                        "internal": dataset_id
                     },
-                    "attribute_projection": null
+                    "attributeProjection": null
                 }
             }]
         });
