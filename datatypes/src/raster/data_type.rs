@@ -88,6 +88,27 @@ pub enum RasterDataType {
     F64,
 }
 
+impl RasterDataType {
+    /// Returns true if the given `value` is valid for the `RasterDataType` variant,
+    /// i.e. it can be represented by a variable of the corresponding primitive data type
+    #[allow(clippy::float_cmp)]
+    #[allow(clippy::cast_lossless)]
+    pub fn is_valid(self, value: f64) -> bool {
+        match self {
+            RasterDataType::U8 => value as u8 as f64 == value,
+            RasterDataType::U16 => value as u16 as f64 == value,
+            RasterDataType::U32 => value as u32 as f64 == value,
+            RasterDataType::U64 => value as u64 as f64 == value,
+            RasterDataType::I8 => value as i8 as f64 == value,
+            RasterDataType::I16 => value as i16 as f64 == value,
+            RasterDataType::I32 => value as i32 as f64 == value,
+            RasterDataType::I64 => value as i64 as f64 == value,
+            RasterDataType::F32 => value as f32 as f64 == value,
+            RasterDataType::F64 => true,
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Deserialize, Serialize, Copy, Clone)]
 pub enum TypedValue {
     U8(u8),
@@ -284,5 +305,21 @@ impl RasterDataType {
             RasterDataType::F32 => "float",
             RasterDataType::F64 => "double",
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn valid_values() {
+        assert!(RasterDataType::U8.is_valid(0.0));
+        assert!(RasterDataType::U8.is_valid(255.0));
+        assert!(!RasterDataType::U8.is_valid(0.1));
+        assert!(!RasterDataType::U8.is_valid(-1.0));
+
+        assert!(RasterDataType::F32.is_valid(1.5));
+        assert!(!RasterDataType::F32.is_valid(f64::MIN));
     }
 }

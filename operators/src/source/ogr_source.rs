@@ -706,6 +706,7 @@ where
                 FeatureDataType::Text => {
                     let text_option = match field {
                         Ok(FieldValue::IntegerValue(v)) => Some(v.to_string()),
+                        Ok(FieldValue::Integer64Value(v)) => Some(v.to_string()),
                         Ok(FieldValue::StringValue(s)) => Some(s),
                         Ok(FieldValue::RealValue(v)) => Some(v.to_string()),
                         Ok(_) => todo!("handle other types"),
@@ -727,7 +728,8 @@ where
                 }
                 FeatureDataType::Int => {
                     let value_option = match field {
-                        Ok(FieldValue::IntegerValue(v)) => Some(i64::from(v)), // TODO: PR for allowing i64 in OGR?
+                        Ok(FieldValue::IntegerValue(v)) => Some(i64::from(v)),
+                        Ok(FieldValue::Integer64Value(v)) => Some(v),
                         Ok(FieldValue::StringValue(s)) => i64::from_str(&s).ok(),
                         Ok(FieldValue::RealValue(v)) => Some(v as i64),
                         Ok(_) => todo!("handle other types"),
