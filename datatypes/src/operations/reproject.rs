@@ -208,16 +208,20 @@ where
         let left_line = Line::new(self.lower_left(), self.upper_left())
             .with_additional_equi_spaced_coords(POINTS_PER_LINE);
 
-        let cs: Vec<Coordinate2D> = upper_line
+        let outline_coordinates: Vec<Coordinate2D> = upper_line
             .chain(right_line)
             .chain(lower_line)
             .chain(left_line)
             .collect();
 
-        // TODO: this should use the fail_tolarant reprojection and fail only if there are not enough coordinates after reprojection. This could also require us to use a grid instead of bounds. The good news is that the Grid can already provide this.
-        MultiPoint::new_unchecked(cs)
-            .reproject(projector)
-            .map(|mp| mp.spatial_bounds())
+        let proj_outline_coordinates: Vec<Coordinate2D> =
+            project_coordinates_fail_tolarant(&outline_coordinates, projector)
+                .into_iter()
+                .flatten()
+                .collect();
+
+        // TODO: check min coords or use grid? e.g. ensure!(proj_cs.len() ). fail only if there are not enough coordinates after reprojection. This could also require us to use a grid instead of bounds. The good news is that the Grid can already provide this.
+        Ok(MultiPoint::new_unchecked(proj_outline_coordinates).spatial_bounds())
     }
 }
 
