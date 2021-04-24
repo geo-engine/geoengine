@@ -297,21 +297,19 @@ pub fn suggest_pixel_size_from_diag_cross<P: CoordinateProjection>(
     let diag_pixels = euclidian_pixel_distance(bbox, spatial_resolution)?;
 
     let proj_ul_lr_distance =
-        projected_diag_distance(bbox.upper_left(), bbox.lower_right(), projector)?;
-
-    let proj_ul_lr_pixel_size = proj_ul_lr_distance / diag_pixels;
+        projected_diag_distance(bbox.upper_left(), bbox.lower_right(), projector);
 
     let proj_ll_ur_distance =
-        projected_diag_distance(bbox.lower_left(), bbox.upper_right(), projector)?;
+        projected_diag_distance(bbox.lower_left(), bbox.upper_right(), projector);
 
-    let proj_ll_ur_pixel_size = proj_ll_ur_distance / diag_pixels;
+    let min_dist_r = match (proj_ul_lr_distance, proj_ll_ur_distance) {
+        (Ok(ul_lr), Ok(ll_ur)) => Ok(ul_lr.min(ll_ur)),
+        (Ok(ul_lr), Err(_)) => Ok(ul_lr),
+        (Err(_), Ok(ll_ur)) => Ok(ll_ur),
+        (Err(e), Err(_)) => Err(e),
+    };
 
-    let min_pixel_size = proj_ll_ur_pixel_size.min(proj_ul_lr_pixel_size);
-
-    Ok(SpatialResolution::new_unchecked(
-        min_pixel_size,
-        min_pixel_size,
-    ))
+    min_dist_r.map(|d| SpatialResolution::new_unchecked(d / diag_pixels, d / diag_pixels))
 }
 
 /// Tries to reproject all coordinates at once. If this fails, tries to reproject coordinate by coordinate.
