@@ -330,6 +330,21 @@ async fn project_versions<C: Context>(
     Ok(warp::reply::json(&versions))
 }
 
+/// Add a [permission](ProjectPermission) for another user
+/// if the session user is the owner of the target project.
+///
+/// # Example
+///
+/// ```
+/// POST /project/permission/add
+/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
+///
+/// {
+///   "user": "3cbe632e-c50a-46d0-8490-f12621347bb1",
+///   "project": "aaed86a1-49d4-482d-b993-39159bb853df",
+///   "permission": "Read"
+/// }
+/// ```
 pub(crate) fn add_permission_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
@@ -354,6 +369,21 @@ async fn add_permission<C: Context>(
     Ok(warp::reply())
 }
 
+/// Removes a [permission](ProjectPermission) of another user
+/// if the session user is the owner of the target project.
+///
+/// # Example
+///
+/// ```
+/// POST /project/permission/add
+/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
+///
+/// {
+///   "user": "3cbe632e-c50a-46d0-8490-f12621347bb1",
+///   "project": "aaed86a1-49d4-482d-b993-39159bb853df",
+///   "permission": "Read"
+/// }
+/// ```
 pub(crate) fn remove_permission_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {

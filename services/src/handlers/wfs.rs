@@ -249,9 +249,9 @@ fn get_capabilities(_request: &GetCapabilities) -> Result<Box<dyn warp::Reply>, 
 }
 
 /// Retrieves feature data objects.
-/// 
+///
 ///  # Example
-/// 
+///
 /// ```
 /// GET /wfs?request=GetFeature&version=2.0.0&typeNames=test&bbox=1,2,3,4
 /// ```
