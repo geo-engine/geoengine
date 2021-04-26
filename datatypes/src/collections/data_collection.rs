@@ -124,7 +124,7 @@ mod tests {
 
         if let FeatureDataRef::Int(a_column) = collection.data("a").unwrap() {
             assert_eq!(a_column.as_ref()[0], 42);
-            assert_eq!(a_column.nulls()[1], true);
+            assert!(a_column.nulls()[1]);
             assert_eq!(a_column.as_ref()[2], 1337);
         } else {
             panic!("wrong type");

@@ -395,7 +395,7 @@ impl<'g> From<&MultiPolygonRef<'g>> for MultiPolygon {
             multi_point_ref
                 .polygons
                 .iter()
-                .map(|polygon| polygon.iter().cloned().map(ToOwned::to_owned).collect())
+                .map(|polygon| polygon.iter().copied().map(ToOwned::to_owned).collect())
                 .collect(),
         )
     }

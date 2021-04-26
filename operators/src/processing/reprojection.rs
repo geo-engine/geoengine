@@ -260,7 +260,7 @@ impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
     for InitializedRasterReprojection
 {
     // i know there is a macro somewhere. we need to re-work this when we have the no-data value anyway.
-    #[allow(clippy::clippy::too_many_lines)]
+    #[allow(clippy::too_many_lines)]
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         let q = self.raster_sources[0].query_processor()?;
 

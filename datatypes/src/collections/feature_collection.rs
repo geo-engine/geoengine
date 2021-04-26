@@ -370,7 +370,7 @@ where
         );
 
         // copy remaining attribute data
-        let removed_name_set: HashSet<&str> = removed_column_names.iter().cloned().collect();
+        let removed_name_set: HashSet<&str> = removed_column_names.iter().copied().collect();
         for (column_name, column_type) in &self.types {
             if removed_name_set.contains(column_name.as_str()) {
                 continue;

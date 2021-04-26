@@ -284,7 +284,7 @@ where
 
 #[allow(dead_code)]
 #[allow(clippy::type_complexity)]
-#[allow(clippy::clippy::needless_pass_by_value)]
+#[allow(clippy::needless_pass_by_value)]
 pub fn fold_by_coordinate_lookup_impl<T>(
     accu: (RasterTile2D<T>, Vec<(GridIdx2D, Coordinate2D)>),
     tile: RasterTile2D<T>,
@@ -452,7 +452,7 @@ where
         self.no_data_and_fill_value
     }
 
-    #[allow(clippy::clippy::type_complexity)]
+    #[allow(clippy::type_complexity)] // TODO: move Result-type into struct
     fn new_fold_accu(
         &self,
         tile_info: TileInformation,
