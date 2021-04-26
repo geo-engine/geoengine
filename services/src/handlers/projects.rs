@@ -21,12 +21,15 @@ use warp::Filter;
 ///   "name": "Test",
 ///   "description": "Foo",
 ///   "bounds": {
-///     "spatial_reference": "EPSG:4326",
-///     "bounding_box": {
-///       "lower_left_coordinate": { "x": 0, "y": 0 },
-///       "upper_right_coordinate": { "x": 1, "y": 1 }
+///     "spatialReference": "EPSG:4326",
+///     "boundingBox": {
+///       "lowerLeftCoordinate": { "x": 0, "y": 0 },
+///       "upperRightCoordinate": { "x": 1, "y": 1 }
 ///     },
-///     "time_interval": { "start": 0, "end": 1 }
+///     "timeInterval": {
+///       "start": 0,
+///       "end": 1
+///     }
 ///   },
 ///   "timeStep": {
 ///     "step": 1,
@@ -37,7 +40,7 @@ use warp::Filter;
 /// Response:
 /// ```text
 /// {
-///   "id": "1a5ff8ca-7a6c-4276-9b79-c4333da823d1"
+///   "id": "df4ad02e-0d61-4e29-90eb-dc1259c1f5b9"
 /// }
 /// ```
 pub(crate) fn create_project_handler<C: Context>(
@@ -78,12 +81,12 @@ async fn create_project<C: Context>(
 /// ```text
 /// [
 ///   {
-///     "id": "1a5ff8ca-7a6c-4276-9b79-c4333da823d1",
+///     "id": "df4ad02e-0d61-4e29-90eb-dc1259c1f5b9",
 ///     "name": "Test",
 ///     "description": "Foo",
-///     "layer_names": [],
-///     "plot_names": [],
-///     "changed": "2021-04-19T14:53:40.920303Z"
+///     "layerNames": [],
+///     "plotNames": [],
+///     "changed": "2021-04-26T14:03:51.984537900Z"
 ///   }
 /// ]
 /// ```
@@ -119,41 +122,41 @@ async fn list_projects<C: Context>(
 /// # Example
 ///
 /// ```text
-/// GET /project/1a5ff8ca-7a6c-4276-9b79-c4333da823d1/[version]
+/// GET /project/df4ad02e-0d61-4e29-90eb-dc1259c1f5b9/[version]
 /// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
 /// ```
 /// Response:
 /// ```text
 /// {
-///   "id": "1a5ff8ca-7a6c-4276-9b79-c4333da823d1",
+///   "id": "df4ad02e-0d61-4e29-90eb-dc1259c1f5b9",
 ///   "version": {
-///     "id": "1f394fd8-6c63-447f-a557-a0873f109ead",
-///     "changed": "2021-04-19T14:53:40.920303Z",
-///     "author": "c378a4cd-b6c7-4d77-9a74-af7c42490513"
+///     "id": "8f4b8683-f92c-4129-a16f-818aeeee484e",
+///     "changed": "2021-04-26T14:05:39.677390600Z",
+///     "author": "5b4466d2-8bab-4ed8-a182-722af3c80958"
 ///   },
 ///   "name": "Test",
 ///   "description": "Foo",
 ///   "layers": [],
 ///   "plots": [],
 ///   "bounds": {
-///     "spatial_reference": "EPSG:4326",
-///     "bounding_box": {
-///       "lower_left_coordinate": {
+///     "spatialReference": "EPSG:4326",
+///     "boundingBox": {
+///       "lowerLeftCoordinate": {
 ///         "x": 0.0,
 ///         "y": 0.0
 ///       },
-///       "upper_right_coordinate": {
+///       "upperRightCoordinate": {
 ///         "x": 1.0,
 ///         "y": 1.0
 ///       }
 ///     },
-///     "time_interval": {
+///     "timeInterval": {
 ///       "start": 0,
 ///       "end": 1
 ///     }
 ///   },
-///   "time_step": {
-///     "granularity": "Days",
+///   "timeStep": {
+///     "granularity": "Months",
 ///     "step": 1
 ///   }
 /// }
@@ -193,24 +196,24 @@ async fn load_project<C: Context>(
 /// # Example
 ///
 /// ```text
-/// PATCH /project/1a5ff8ca-7a6c-4276-9b79-c4333da823d1/
+/// PATCH /project/df4ad02e-0d61-4e29-90eb-dc1259c1f5b9
 /// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
 ///
 /// {
-///   "id": "1a5ff8ca-7a6c-4276-9b79-c4333da823d1",
+///   "id": "df4ad02e-0d61-4e29-90eb-dc1259c1f5b9",
 ///   "name": "TestUpdate",
 ///   "layers": [
 ///     {
-///       "workflow": "36019e9d-9d11-41c1-b532-8397132600ad",
+///       "workflow": "100ee39c-761c-4218-9d85-ec861a8f3097",
 ///       "name": "L1",
 ///       "visibility": {
 ///         "data": true,
 ///         "legend": false
 ///       },
 ///       "symbology": {
-///         "Raster": {
+///         "raster": {
 ///           "opacity": 1.0,
-///           "colorizer": "Rgba"
+///           "colorizer": "rgba"
 ///         }
 ///       }
 ///     }
@@ -250,7 +253,7 @@ async fn update_project<C: Context>(
 /// # Example
 ///
 /// ```text
-/// DELETE /project/1a5ff8ca-7a6c-4276-9b79-c4333da823d1
+/// DELETE /project/df4ad02e-0d61-4e29-90eb-dc1259c1f5b9
 /// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
 /// ```
 pub(crate) fn delete_project_handler<C: Context>(
@@ -285,20 +288,20 @@ async fn delete_project<C: Context>(
 /// GET /project/versions
 /// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
 ///
-/// "1a5ff8ca-7a6c-4276-9b79-c4333da823d1"
+/// "df4ad02e-0d61-4e29-90eb-dc1259c1f5b9"
 /// ```
 /// Response:
 /// ```text
 /// [
 ///   {
-///     "id": "093a51d8-701b-4946-9ef9-ca02eb5b4b68",
-///     "changed": "2021-04-20T06:13:05.012932100Z",
-///     "author": "bbfb9b6b-bf5e-4eb9-8cd0-377c2ac96a0d"
+///     "id": "8f4b8683-f92c-4129-a16f-818aeeee484e",
+///     "changed": "2021-04-26T14:05:39.677390600Z",
+///     "author": "5b4466d2-8bab-4ed8-a182-722af3c80958"
 ///   },
 ///   {
-///     "id": "f1d1f18d-4645-4c12-bd58-3b506ac96f14",
-///     "changed": "2021-04-20T06:13:59.285867500Z",
-///     "author": "bbfb9b6b-bf5e-4eb9-8cd0-377c2ac96a0d"
+///     "id": "ced041c7-4b1d-4d13-b076-94596be6a36a",
+///     "changed": "2021-04-26T14:13:10.901912700Z",
+///     "author": "5b4466d2-8bab-4ed8-a182-722af3c80958"
 ///   }
 /// ]
 /// ```
@@ -380,15 +383,15 @@ async fn remove_permission<C: Context>(
 /// # Example
 ///
 /// ```text
-/// GET /project/1a5ff8ca-7a6c-4276-9b79-c4333da823d1/permissions
+/// GET /project/df4ad02e-0d61-4e29-90eb-dc1259c1f5b9/permissions
 /// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
 /// ```
 /// Response:
 /// ```text
 /// [
 ///   {
-///     "user": "bbfb9b6b-bf5e-4eb9-8cd0-377c2ac96a0d",
-///     "project": "1a5ff8ca-7a6c-4276-9b79-c4333da823d1",
+///     "user": "5b4466d2-8bab-4ed8-a182-722af3c80958",
+///     "project": "df4ad02e-0d61-4e29-90eb-dc1259c1f5b9",
 ///     "permission": "Owner"
 ///   }
 /// ]

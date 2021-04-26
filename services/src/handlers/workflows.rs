@@ -127,8 +127,8 @@ async fn load_workflow<C: Context>(
 /// Response:
 /// ```text
 /// {
-///   "data_type": "MultiPoint",
-///   "spatial_reference": "EPSG:4326",
+///   "dataType": "MultiPoint",
+///   "spatialReference": "EPSG:4326",
 ///   "columns": {}
 /// }
 /// ```

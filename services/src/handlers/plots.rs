@@ -42,7 +42,7 @@ pub(crate) struct GetPlot {
 ///   "operator": {
 ///     "type": "Statistics",
 ///     "params": {},
-///     "raster_sources": [
+///     "rasterSources": [
 ///       {
 ///         "type": "MockRasterSource",
 ///         "params": {
@@ -52,53 +52,53 @@ pub(crate) struct GetPlot {
 ///                 "start": -8334632851200000,
 ///                 "end": 8210298412799999
 ///               },
-///               "tile_position": [0, 0],
-///               "global_geo_transform": {
-///                 "origin_coordinate": { "x": 0.0, "y": 0.0 },
-///                 "x_pixel_size": 1.0,
-///                 "y_pixel_size": -1.0
+///               "tilePosition": [0, 0],
+///               "globalGeoTransform": {
+///                 "originCoordinate": { "x": 0.0, "y": 0.0 },
+///                 "xPixelSize": 1.0,
+///                 "yPixelSize": -1.0
 ///               },
-///               "grid_array": {
+///               "gridArray": {
 ///                 "shape": {
-///                   "shape_array": [3, 2]
+///                   "shapeArray": [3, 2]
 ///                 },
 ///                 "data": [1, 2, 3, 4, 5, 6]
 ///               }
 ///             }
 ///           ],
-///           "result_descriptor": {
-///             "data_type": "U8",
-///             "spatial_reference": "EPSG:4326",
+///           "resultDescriptor": {
+///             "dataType": "U8",
+///             "spatialReference": "EPSG:4326",
 ///             "measurement": "unitless"
 ///           }
 ///         }
 ///       }
 ///     ],
-///     "vector_sources": []
+///     "vectorSources": []
 ///   }
 /// }
 /// ```
 /// Response:
 /// ```text
 /// {
-///   "id": "aab19e05-9603-51c9-a913-ab0240fecd42"
+///   "id": "504ed8a4-e0a4-5cef-9f91-b2ffd4a2b56b"
 /// }
 /// ```
 ///
 /// 2. Generate the plot.
 /// ```text
-/// GET /plot/aab19e05-9603-51c9-a913-ab0240fecd42?bbox=-180,-90,180,90&time=2020-01-01T00%3A00%3A00.0Z&spatial_resolution=0.1,0.1
+/// GET /plot/504ed8a4-e0a4-5cef-9f91-b2ffd4a2b56b?bbox=-180,-90,180,90&time=2020-01-01T00%3A00%3A00.0Z&spatialResolution=0.1,0.1
 /// Authorization: Bearer 4f0d02f9-68e8-46fb-9362-80f862b7db54
 /// ```
 /// Response:
 /// ```text
 /// {
-///   "output_format": "JsonPlain",
-///   "plot_type": "Statistics",
+///   "outputFormat": "JsonPlain",
+///   "plotType": "Statistics",
 ///   "data": [
 ///     {
-///       "pixel_count": 6,
-///       "nan_count": 0,
+///       "pixelCount": 6,
+///       "nanCount": 0,
 ///       "min": 1.0,
 ///       "max": 6.0,
 ///       "mean": 3.5,

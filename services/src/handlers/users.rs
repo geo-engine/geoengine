@@ -22,13 +22,13 @@ use warp::Filter;
 /// {
 ///   "email": "foo@bar.de",
 ///   "password": "secret123",
-///   "real_name": "Foo Bar"
+///   "realName": "Foo Bar"
 /// }
 /// ```
 /// Response:
 /// ```text
 /// {
-///   "id": "f33429a5-d207-4e59-827d-fc48f9630c9c"
+///   "id": "5b4466d2-8bab-4ed8-a182-722af3c80958"
 /// }
 /// ```
 ///
@@ -70,10 +70,10 @@ async fn register_user<C: Context>(
 ///   "user": {
 ///     "id": "744b83ff-2c5b-401a-b4bf-2ba7213ad5d5",
 ///     "email": null,
-///     "real_name": null
+///     "realName": null
 ///   },
 ///   "created": "2021-04-18T16:54:55.728758Z",
-///   "valid_until": "2021-04-18T17:54:55.730196200Z",
+///   "validUntil": "2021-04-18T17:54:55.730196200Z",
 ///   "project": null,
 ///   "view": null
 /// }
@@ -108,14 +108,14 @@ async fn anonymous<C: Context>(ctx: C) -> Result<impl warp::Reply, warp::Rejecti
 /// Response:
 /// ```text
 /// {
-///   "id": "fc9b5dc2-a1eb-400f-aeed-a7845d9935c9",
+///   "id": "208fa24e-7a92-4f57-a3fe-d1177d9f18ad",
 ///   "user": {
-///     "id": "f33429a5-d207-4e59-827d-fc48f9630c9c",
+///     "id": "5b4466d2-8bab-4ed8-a182-722af3c80958",
 ///     "email": "foo@bar.de",
-///     "real_name": "Foo Bar"
+///     "realName": "Foo Bar"
 ///   },
-///   "created": "2021-04-18T17:09:56.989761300Z",
-///   "valid_until": "2021-04-18T18:09:56.989767500Z",
+///   "created": "2021-04-26T13:47:10.579724800Z",
+///   "validUntil": "2021-04-26T14:47:10.579775400Z",
 ///   "project": null,
 ///   "view": null
 /// }
@@ -192,10 +192,10 @@ async fn logout<C: Context>(session: Session, ctx: C) -> Result<impl warp::Reply
 ///   "user": {
 ///     "id": "f33429a5-d207-4e59-827d-fc48f9630c9c",
 ///     "email": "foo@bar.de",
-///     "real_name": "Foo Bar"
+///     "realName": "Foo Bar"
 ///   },
 ///   "created": "2021-04-18T17:20:44.190720500Z",
-///   "valid_until": "2021-04-18T18:20:44.190726700Z",
+///   "validUntil": "2021-04-18T18:20:44.190726700Z",
 ///   "project": null,
 ///   "view": null
 /// }
@@ -264,12 +264,12 @@ async fn session_project<C: Context>(
 /// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
 ///
 /// {
-///   "spatial_reference": "",
-///   "bounding_box": {
-///     "lower_left_coordinate": { "x": 0, "y": 0 },
-///     "upper_right_coordinate": { "x": 1, "y": 1 }
+///   "spatialReference": "",
+///   "boundingBox": {
+///     "lowerLeftCoordinate": { "x": 0, "y": 0 },
+///     "upperRightCoordinate": { "x": 1, "y": 1 }
 ///   },
-///   "time_interval": {
+///   "timeInterval": {
 ///     "start": 0,
 ///     "end": 1
 ///   }

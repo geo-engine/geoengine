@@ -248,6 +248,111 @@ fn get_capabilities(_request: &GetCapabilities) -> Result<Box<dyn warp::Reply>, 
     Ok(Box::new(warp::reply::html(mock)))
 }
 
+/// Retrieves feature data objects.
+/// 
+///  # Example
+/// 
+/// ```
+/// GET /wfs?request=GetFeature&version=2.0.0&typeNames=test&bbox=1,2,3,4
+/// ```
+/// Response:
+/// ```
+/// {
+///   "type": "FeatureCollection",
+///   "features": [
+///     {
+///       "type": "Feature",
+///       "geometry": {
+///         "type": "Point",
+///         "coordinates": [
+///           0.0,
+///           0.1
+///         ]
+///       },
+///       "properties": {
+///         "foo": 0
+///       },
+///       "when": {
+///         "start": "1970-01-01T00:00:00+00:00",
+///         "end": "1970-01-01T00:00:00.001+00:00",
+///         "type": "Interval"
+///       }
+///     },
+///     {
+///       "type": "Feature",
+///       "geometry": {
+///         "type": "Point",
+///         "coordinates": [
+///           1.0,
+///           1.1
+///         ]
+///       },
+///       "properties": {
+///         "foo": null
+///       },
+///       "when": {
+///         "start": "1970-01-01T00:00:00+00:00",
+///         "end": "1970-01-01T00:00:00.001+00:00",
+///         "type": "Interval"
+///       }
+///     },
+///     {
+///       "type": "Feature",
+///       "geometry": {
+///         "type": "Point",
+///         "coordinates": [
+///           2.0,
+///           3.1
+///         ]
+///       },
+///       "properties": {
+///         "foo": 2
+///       },
+///       "when": {
+///         "start": "1970-01-01T00:00:00+00:00",
+///         "end": "1970-01-01T00:00:00.001+00:00",
+///         "type": "Interval"
+///       }
+///     },
+///     {
+///       "type": "Feature",
+///       "geometry": {
+///         "type": "Point",
+///         "coordinates": [
+///           3.0,
+///           3.1
+///         ]
+///       },
+///       "properties": {
+///         "foo": 3
+///       },
+///       "when": {
+///         "start": "1970-01-01T00:00:00+00:00",
+///         "end": "1970-01-01T00:00:00.001+00:00",
+///         "type": "Interval"
+///       }
+///     },
+///     {
+///       "type": "Feature",
+///       "geometry": {
+///         "type": "Point",
+///         "coordinates": [
+///           4.0,
+///           4.1
+///         ]
+///       },
+///       "properties": {
+///         "foo": 4
+///       },
+///       "when": {
+///         "start": "1970-01-01T00:00:00+00:00",
+///         "end": "1970-01-01T00:00:00.001+00:00",
+///         "type": "Interval"
+///       }
+///     }
+///   ]
+/// }
+/// ```
 async fn get_feature<C: Context>(
     request: &GetFeature,
     ctx: &C,

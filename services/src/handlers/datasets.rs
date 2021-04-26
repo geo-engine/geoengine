@@ -56,16 +56,16 @@ use warp::Filter;
 /// [
 ///   {
 ///     "id": {
-///       "Internal": "3d6e65ff-46a6-4f68-9cf0-15900b91c11f"
+///       "internal": "9c874b9e-cea0-4553-b727-a13cb26ae4bb"
 ///     },
 ///     "name": "Germany",
 ///     "description": "Boundaries of Germany",
 ///     "tags": [],
-///     "source_operator": "OgrSource",
-///     "result_descriptor": {
-///       "Vector": {
-///         "data_type": "MultiPolygon",
-///         "spatial_reference": "EPSG:4326",
+///     "sourceOperator": "OgrSource",
+///     "resultDescriptor": {
+///       "vector": {
+///         "dataType": "MultiPolygon",
+///         "spatialReference": "EPSG:4326",
 ///         "columns": {}
 ///       }
 ///     }
@@ -103,25 +103,25 @@ async fn list_datasets<C: Context>(
 /// # Example
 ///
 /// ```text
-/// GET /dataset/internal/3d6e65ff-46a6-4f68-9cf0-15900b91c11f
+/// GET /dataset/internal/9c874b9e-cea0-4553-b727-a13cb26ae4bb
 /// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
 /// ```
 /// Response:
 /// ```text
 /// {
 ///   "id": {
-///     "Internal": "3d6e65ff-46a6-4f68-9cf0-15900b91c11f"
+///     "internal": "9c874b9e-cea0-4553-b727-a13cb26ae4bb"
 ///   },
 ///   "name": "Germany",
 ///   "description": "Boundaries of Germany",
-///   "result_descriptor": {
-///     "Vector": {
-///       "data_type": "MultiPolygon",
-///       "spatial_reference": "EPSG:4326",
+///   "resultDescriptor": {
+///     "vector": {
+///       "dataType": "MultiPolygon",
+///       "spatialReference": "EPSG:4326",
 ///       "columns": {}
 ///     }
 ///   },
-///   "source_operator": "OgrSource"
+///   "sourceOperator": "OgrSource"
 /// }
 /// ```
 pub(crate) fn get_dataset_handler<C: Context>(
