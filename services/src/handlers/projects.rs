@@ -330,7 +330,7 @@ async fn project_versions<C: Context>(
     Ok(warp::reply::json(&versions))
 }
 
-/// Add a [permission](ProjectPermission) for another user
+/// Add a [permission](crate::projects::project::ProjectPermission) for another user
 /// if the session user is the owner of the target project.
 ///
 /// # Example
@@ -369,7 +369,7 @@ async fn add_permission<C: Context>(
     Ok(warp::reply())
 }
 
-/// Removes a [permission](ProjectPermission) of another user
+/// Removes a [permission](crate::projects::project::ProjectPermission) of another user
 /// if the session user is the owner of the target project.
 ///
 /// # Example
