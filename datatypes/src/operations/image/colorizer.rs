@@ -619,7 +619,7 @@ mod tests {
                 (2.0.try_into().unwrap(), RgbaColor::black()),
             ]
             .iter()
-            .cloned()
+            .copied()
             .collect(),
             RgbaColor::transparent(),
             RgbaColor::transparent(),

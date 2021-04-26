@@ -191,7 +191,7 @@ mod tests {
     fn serialization() {
         let raster_vector_join = RasterVectorJoin {
             params: RasterVectorJoinParams {
-                names: ["foo", "bar"].iter().cloned().map(str::to_string).collect(),
+                names: ["foo", "bar"].iter().copied().map(str::to_string).collect(),
                 aggregation: AggregationMethod::Mean,
             },
             raster_sources: vec![],

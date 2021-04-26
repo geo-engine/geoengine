@@ -214,7 +214,7 @@ mod tests {
                 .unwrap_or(web_config.bind_address)
         );
 
-        assert_eq!(wait_for_server(&base_url).await, true);
+        assert!(wait_for_server(&base_url).await);
         issue_queries(&base_url).await;
 
         shutdown_tx.send(()).unwrap();
@@ -251,6 +251,6 @@ mod tests {
             }
             std::thread::sleep(std::time::Duration::from_secs(WAIT_SERVER_RETRY_INTERVAL));
         }
-        return false;
+        false
     }
 }

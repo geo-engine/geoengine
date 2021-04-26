@@ -464,7 +464,7 @@ mod tests {
         let collection = builder.build().unwrap();
 
         assert_eq!(collection.len(), 2);
-        assert_eq!(collection.is_simple(), false);
+        assert!(!collection.is_simple());
 
         assert_eq!(
             collection.time_intervals(),
@@ -719,9 +719,9 @@ mod tests {
         assert_eq!(collection_b.len(), 1);
         assert_eq!(collection_c.len(), 2);
 
-        assert_eq!(collection_a.is_simple(), true);
-        assert_eq!(collection_b.is_simple(), true);
-        assert_eq!(collection_c.is_simple(), true);
+        assert!(collection_a.is_simple());
+        assert!(collection_b.is_simple());
+        assert!(collection_c.is_simple());
 
         let mut geometry_iter = collection_c.geometries();
         assert_eq!(
