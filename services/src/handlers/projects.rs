@@ -335,7 +335,7 @@ async fn project_versions<C: Context>(
 ///
 /// # Example
 ///
-/// ```
+/// ```text
 /// POST /project/permission/add
 /// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
 ///
@@ -374,7 +374,7 @@ async fn add_permission<C: Context>(
 ///
 /// # Example
 ///
-/// ```
+/// ```text
 /// POST /project/permission/add
 /// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
 ///

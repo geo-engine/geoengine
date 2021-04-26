@@ -252,11 +252,11 @@ fn get_capabilities(_request: &GetCapabilities) -> Result<Box<dyn warp::Reply>, 
 ///
 ///  # Example
 ///
-/// ```
+/// ```text
 /// GET /wfs?request=GetFeature&version=2.0.0&typeNames=test&bbox=1,2,3,4
 /// ```
 /// Response:
-/// ```
+/// ```text
 /// {
 ///   "type": "FeatureCollection",
 ///   "features": [
