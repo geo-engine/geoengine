@@ -91,30 +91,30 @@ mod tests {
     fn columns() {
         let mut builder = DataCollection::builder();
         builder
-            .add_column("a".into(), FeatureDataType::Decimal)
+            .add_column("a".into(), FeatureDataType::Int)
             .unwrap();
         let mut builder = builder.finish_header();
 
         builder.push_time_interval(TimeInterval::default()).unwrap();
         builder
-            .push_data("a", FeatureDataValue::NullableDecimal(Some(42)))
+            .push_data("a", FeatureDataValue::NullableInt(Some(42)))
             .unwrap();
         builder.finish_row();
         builder
             .push_time_interval(TimeInterval::new(0, 1).unwrap())
             .unwrap();
         builder
-            .push_data("a", FeatureDataValue::Number(13.37))
+            .push_data("a", FeatureDataValue::Float(13.37))
             .unwrap_err();
         builder
-            .push_data("a", FeatureDataValue::NullableDecimal(None))
+            .push_data("a", FeatureDataValue::NullableInt(None))
             .unwrap();
         builder.finish_row();
         builder
             .push_time_interval(TimeInterval::new(2, 3).unwrap())
             .unwrap();
         builder
-            .push_data("a", FeatureDataValue::NullableDecimal(Some(1337)))
+            .push_data("a", FeatureDataValue::NullableInt(Some(1337)))
             .unwrap();
         builder.finish_row();
 
@@ -122,7 +122,7 @@ mod tests {
 
         assert_eq!(collection.len(), 3);
 
-        if let FeatureDataRef::Decimal(a_column) = collection.data("a").unwrap() {
+        if let FeatureDataRef::Int(a_column) = collection.data("a").unwrap() {
             assert_eq!(a_column.as_ref()[0], 42);
             assert_eq!(a_column.nulls()[1], true);
             assert_eq!(a_column.as_ref()[2], 1337);
@@ -157,7 +157,7 @@ mod tests {
             vec![],
             vec![TimeInterval::default(); 3],
             [
-                ("foo".to_string(), FeatureData::Decimal(vec![1, 2, 3])),
+                ("foo".to_string(), FeatureData::Int(vec![1, 2, 3])),
                 (
                     "bar".to_string(),
                     FeatureData::Text(vec!["a".to_string(), "b".to_string(), "c".to_string()]),
@@ -203,7 +203,7 @@ mod tests {
             vec![],
             vec![TimeInterval::default(); 3],
             [
-                ("foo".to_string(), FeatureData::Decimal(vec![1, 2, 3])),
+                ("foo".to_string(), FeatureData::Int(vec![1, 2, 3])),
                 (
                     "bar".to_string(),
                     FeatureData::Text(vec!["a".to_string(), "b".to_string(), "c".to_string()]),
@@ -219,7 +219,7 @@ mod tests {
         let row = iter.next().unwrap();
         assert_eq!(NoGeometry, row.geometry);
         assert_eq!(TimeInterval::default(), row.time_interval);
-        assert_eq!(Some(FeatureDataValue::Decimal(1)), row.get("foo"));
+        assert_eq!(Some(FeatureDataValue::Int(1)), row.get("foo"));
         assert_eq!(
             Some(FeatureDataValue::NullableText(Some("a".to_string()))),
             row.get("bar")
@@ -228,7 +228,7 @@ mod tests {
         let row = iter.next().unwrap();
         assert_eq!(NoGeometry, row.geometry);
         assert_eq!(TimeInterval::default(), row.time_interval);
-        assert_eq!(Some(FeatureDataValue::Decimal(2)), row.get("foo"));
+        assert_eq!(Some(FeatureDataValue::Int(2)), row.get("foo"));
         assert_eq!(
             Some(FeatureDataValue::NullableText(Some("b".to_string()))),
             row.get("bar")
@@ -237,7 +237,7 @@ mod tests {
         let row = iter.next().unwrap();
         assert_eq!(NoGeometry, row.geometry);
         assert_eq!(TimeInterval::default(), row.time_interval);
-        assert_eq!(Some(FeatureDataValue::Decimal(3)), row.get("foo"));
+        assert_eq!(Some(FeatureDataValue::Int(3)), row.get("foo"));
         assert_eq!(
             Some(FeatureDataValue::NullableText(Some("c".to_string()))),
             row.get("bar")

@@ -445,6 +445,8 @@ impl FeatureCollectionModifications for TypedFeatureCollection {
     }
 
     impl_mod_function_by_forwarding_ref!(fn sort_by_time_asc(&self) -> Result<Self::Output>);
+
+    impl_mod_function_by_forwarding_ref!(fn replace_time(&self, time_intervals: &[TimeInterval]) -> Result<Self::Output>);
 }
 
 impl<'c> FeatureCollectionModifications for TypedFeatureCollectionRef<'c> {
@@ -484,6 +486,8 @@ impl<'c> FeatureCollectionModifications for TypedFeatureCollectionRef<'c> {
     }
 
     impl_mod_function_by_forwarding_ref2!(fn sort_by_time_asc(&self) -> Result<Self::Output>);
+
+    impl_mod_function_by_forwarding_ref2!(fn replace_time(&self, time_intervals: &[TimeInterval]) -> Result<Self::Output>);
 }
 
 #[cfg(test)]

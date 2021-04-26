@@ -155,7 +155,7 @@ where
         }
 
         let right_indices = match (left, right) {
-            (FeatureDataRef::Number(left), FeatureDataRef::Number(right)) => {
+            (FeatureDataRef::Float(left), FeatureDataRef::Float(right)) => {
                 let left_value = left.as_ref()[left_idx];
                 matches(
                     right.as_ref(),
@@ -164,7 +164,7 @@ where
                     right_time_intervals,
                 )
             }
-            (FeatureDataRef::Categorical(left), FeatureDataRef::Categorical(right)) => {
+            (FeatureDataRef::Category(left), FeatureDataRef::Category(right)) => {
                 let left_value = left.as_ref()[left_idx];
                 matches(
                     right.as_ref(),
@@ -173,7 +173,7 @@ where
                     right_time_intervals,
                 )
             }
-            (FeatureDataRef::Decimal(left), FeatureDataRef::Decimal(right)) => {
+            (FeatureDataRef::Int(left), FeatureDataRef::Int(right)) => {
                 let left_value = left.as_ref()[left_idx];
                 matches(
                     right.as_ref(),
@@ -450,7 +450,7 @@ mod tests {
         let left = MultiPointCollection::from_data(
             MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1)]).unwrap(),
             vec![TimeInterval::default(); 2],
-            [("foo".to_string(), FeatureData::Decimal(vec![1, 2]))]
+            [("foo".to_string(), FeatureData::Int(vec![1, 2]))]
                 .iter()
                 .cloned()
                 .collect(),
@@ -460,7 +460,7 @@ mod tests {
         let right = DataCollection::from_data(
             vec![],
             vec![TimeInterval::default(); 2],
-            [("bar".to_string(), FeatureData::Decimal(vec![2, 2]))]
+            [("bar".to_string(), FeatureData::Int(vec![2, 2]))]
                 .iter()
                 .cloned()
                 .collect(),
@@ -471,8 +471,8 @@ mod tests {
             MultiPoint::many(vec![(1.0, 1.1), (1.0, 1.1)]).unwrap(),
             vec![TimeInterval::default(); 2],
             [
-                ("foo".to_string(), FeatureData::Decimal(vec![2, 2])),
-                ("bar".to_string(), FeatureData::Decimal(vec![2, 2])),
+                ("foo".to_string(), FeatureData::Int(vec![2, 2])),
+                ("bar".to_string(), FeatureData::Int(vec![2, 2])),
             ]
             .iter()
             .cloned()
@@ -494,7 +494,7 @@ mod tests {
                 TimeInterval::new_unchecked(0, 2),
                 TimeInterval::new_unchecked(4, 5),
             ],
-            [("foo".to_string(), FeatureData::Decimal(vec![1, 2]))]
+            [("foo".to_string(), FeatureData::Int(vec![1, 2]))]
                 .iter()
                 .cloned()
                 .collect(),
@@ -507,7 +507,7 @@ mod tests {
                 TimeInterval::new_unchecked(1, 3),
                 TimeInterval::new_unchecked(5, 6),
             ],
-            [("bar".to_string(), FeatureData::Decimal(vec![1, 2]))]
+            [("bar".to_string(), FeatureData::Int(vec![1, 2]))]
                 .iter()
                 .cloned()
                 .collect(),
@@ -518,8 +518,8 @@ mod tests {
             MultiPoint::many(vec![(0.0, 0.1)]).unwrap(),
             vec![TimeInterval::new_unchecked(1, 2)],
             [
-                ("foo".to_string(), FeatureData::Decimal(vec![1])),
-                ("bar".to_string(), FeatureData::Decimal(vec![1])),
+                ("foo".to_string(), FeatureData::Int(vec![1])),
+                ("bar".to_string(), FeatureData::Int(vec![1])),
             ]
             .iter()
             .cloned()
@@ -538,7 +538,7 @@ mod tests {
         let left = MultiPointCollection::from_data(
             MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1)]).unwrap(),
             vec![TimeInterval::default(); 2],
-            [("foo".to_string(), FeatureData::Decimal(vec![1, 2]))]
+            [("foo".to_string(), FeatureData::Int(vec![1, 2]))]
                 .iter()
                 .cloned()
                 .collect(),
@@ -548,7 +548,7 @@ mod tests {
         let right = DataCollection::from_data(
             vec![],
             vec![TimeInterval::default(); 2],
-            [("foo".to_string(), FeatureData::Decimal(vec![1, 2]))]
+            [("foo".to_string(), FeatureData::Int(vec![1, 2]))]
                 .iter()
                 .cloned()
                 .collect(),
@@ -559,8 +559,8 @@ mod tests {
             MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1)]).unwrap(),
             vec![TimeInterval::default(); 2],
             [
-                ("foo".to_string(), FeatureData::Decimal(vec![1, 2])),
-                ("foo2".to_string(), FeatureData::Decimal(vec![1, 2])),
+                ("foo".to_string(), FeatureData::Int(vec![1, 2])),
+                ("foo2".to_string(), FeatureData::Int(vec![1, 2])),
             ]
             .iter()
             .cloned()
@@ -579,7 +579,7 @@ mod tests {
         let left = MultiPointCollection::from_data(
             MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1)]).unwrap(),
             vec![TimeInterval::default(); 2],
-            [("foo".to_string(), FeatureData::Decimal(vec![1, 2]))]
+            [("foo".to_string(), FeatureData::Int(vec![1, 2]))]
                 .iter()
                 .cloned()
                 .collect(),
@@ -590,7 +590,7 @@ mod tests {
             vec![],
             vec![TimeInterval::default(); 5],
             [
-                ("bar".to_string(), FeatureData::Decimal(vec![1, 1, 1, 2, 2])),
+                ("bar".to_string(), FeatureData::Int(vec![1, 1, 1, 2, 2])),
                 (
                     "baz".to_string(),
                     FeatureData::Text(vec![
@@ -619,8 +619,8 @@ mod tests {
             .unwrap(),
             vec![TimeInterval::default(); 5],
             [
-                ("foo".to_string(), FeatureData::Decimal(vec![1, 1, 1, 2, 2])),
-                ("bar".to_string(), FeatureData::Decimal(vec![1, 1, 1, 2, 2])),
+                ("foo".to_string(), FeatureData::Int(vec![1, 1, 1, 2, 2])),
+                ("bar".to_string(), FeatureData::Int(vec![1, 1, 1, 2, 2])),
                 (
                     "baz".to_string(),
                     FeatureData::Text(vec![
@@ -649,7 +649,7 @@ mod tests {
         let left = MultiPointCollection::from_data(
             MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1)]).unwrap(),
             vec![TimeInterval::default(); 2],
-            [("foo".to_string(), FeatureData::Decimal(vec![1, 2]))]
+            [("foo".to_string(), FeatureData::Int(vec![1, 2]))]
                 .iter()
                 .cloned()
                 .collect(),
@@ -659,25 +659,12 @@ mod tests {
         let right = DataCollection::from_data(
             vec![],
             vec![TimeInterval::default(); 2],
-            [("bar".to_string(), FeatureData::Decimal(vec![3, 4]))]
+            [("bar".to_string(), FeatureData::Int(vec![3, 4]))]
                 .iter()
                 .cloned()
                 .collect(),
         )
         .unwrap();
-
-        // let expected_result = MultiPointCollection::from_data(
-        //     vec![],
-        //     vec![],
-        //     [
-        //         ("foo".to_string(), FeatureData::Decimal(vec![])),
-        //         ("bar".to_string(), FeatureData::Decimal(vec![])),
-        //     ]
-        //     .iter()
-        //     .cloned()
-        //     .collect(),
-        // )
-        // .unwrap();
 
         let result = join_mock_collections(left, right, "foo", "bar", "");
 

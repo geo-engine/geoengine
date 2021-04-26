@@ -9,6 +9,7 @@ use geoengine_datatypes::identifier;
 use geoengine_datatypes::util::Identifier;
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
+#[serde(rename_all = "camelCase")]
 pub struct UserRegistration {
     pub email: String,
     pub password: String,

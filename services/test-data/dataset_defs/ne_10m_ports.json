@@ -1,48 +1,40 @@
 {
-    "properties": {
-        "id": null,
-        "name": "Natural Earth 10m Ports",
-        "description": "Ports from Natural Earth",
-        "source_operator": "OgrSource"
-    },
-    "meta_data": {
-        "OgrMetaData": {
-            "loading_info": {
-                "file_name": "operators/test-data/vector/data/ne_10m_ports/ne_10m_ports.shp",
-                "layer_name": "ne_10m_ports",
-                "data_type": "MultiPoint",
-                "time": "none",
-                "columns": {
-                    "x": "",
-                    "y": null,
-                    "numeric": [
-                        "natlscale"
-                    ],
-                    "decimal": [
-                        "scalerank"
-                    ],
-                    "textual": [
-                        "featurecla",
-                        "name",
-                        "website"
-                    ]
-                },
-                "default_geometry": null,
-                "force_ogr_time_filter": false,
-                "on_error": "skip",
-                "provenance": null
-            },
-            "result_descriptor": {
-                "data_type": "MultiPoint",
-                "spatial_reference": "EPSG:4326",
-                "columns": {
-                    "website": "Text",
-                    "name": "Text",
-                    "natlscale": "Number",
-                    "scalerank": "Decimal",
-                    "featurecla": "Text"
-                }
-            }
+  "properties": {
+    "id": null,
+    "name": "Natural Earth 10m Ports",
+    "description": "Ports from Natural Earth",
+    "sourceOperator": "OgrSource"
+  },
+  "metaData": {
+    "OgrMetaData": {
+      "loadingInfo": {
+        "fileName": "operators/test-data/vector/data/ne_10m_ports/ne_10m_ports.shp",
+        "layerName": "ne_10m_ports",
+        "dataType": "MultiPoint",
+        "time": "none",
+        "columns": {
+          "x": "",
+          "y": null,
+          "float": ["natlscale"],
+          "int": ["scalerank"],
+          "text": ["featurecla", "name", "website"]
+        },
+        "defaultGeometry": null,
+        "forceOgrTimeFilter": false,
+        "onError": "skip",
+        "provenance": null
+      },
+      "resultDescriptor": {
+        "dataType": "MultiPoint",
+        "spatialReference": "EPSG:4326",
+        "columns": {
+          "website": "text",
+          "name": "text",
+          "natlscale": "float",
+          "scalerank": "int",
+          "featurecla": "text"
         }
+      }
     }
+  }
 }

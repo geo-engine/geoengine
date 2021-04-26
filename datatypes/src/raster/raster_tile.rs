@@ -16,6 +16,7 @@ pub type RasterTile3D<T> = RasterTile<GridShape3D, T>;
 
 /// A `RasterTile2D` is the main type used to iterate over tiles of 2D raster data
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct RasterTile<D, T>
 where
     D: GridSize + GridSpaceToLinearSpace,

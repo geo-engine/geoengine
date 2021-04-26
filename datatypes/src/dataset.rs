@@ -8,6 +8,7 @@ identifier!(InternalDatasetId);
 identifier!(StagingDatasetId);
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub enum DatasetId {
     Internal(InternalDatasetId),
     Staging(StagingDatasetId),

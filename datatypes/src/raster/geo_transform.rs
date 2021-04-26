@@ -1,3 +1,5 @@
+use std::cmp::{max, min};
+
 use crate::primitives::{BoundingBox2D, Coordinate2D};
 use serde::{Deserialize, Serialize};
 
@@ -8,6 +10,7 @@ pub type GdalGeoTransform = [f64; 6];
 
 /// The `GeoTransform` is a more user friendly representation of the `GDAL GeoTransform` affine transformation matrix.
 #[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GeoTransform {
     pub origin_coordinate: Coordinate2D,
     pub x_pixel_size: f64,
@@ -79,6 +82,16 @@ impl GeoTransform {
         Coordinate2D::new(coord_x, coord_y)
     }
 
+    /// Transforms a grid coordinate (row, column) ~ (y, x) into a SRS coordinate (x,y)
+    /// The resulting coordinate is the coordinate of the center of the pixel
+    #[inline]
+    pub fn grid_idx_to_center_coordinate_2d(&self, grid_index: GridIdx2D) -> Coordinate2D {
+        let GridIdx([.., grid_index_y, grid_index_x]) = grid_index;
+        let coord_x = self.origin_coordinate.x + (grid_index_x as f64 + 0.5) * self.x_pixel_size;
+        let coord_y = self.origin_coordinate.y + (grid_index_y as f64 + 0.5) * self.y_pixel_size;
+        Coordinate2D::new(coord_x, coord_y)
+    }
+
     /// Transforms an SRS coordinate (x,y) into a grid coordinate (row, column) ~ (y, x)
     ///
     /// # Examples
@@ -101,8 +114,12 @@ impl GeoTransform {
     /// Transform a `BoundingBox2D` into a `GridBoundingBox`
     #[inline]
     pub fn pixel_box(&self, bounding_box: BoundingBox2D) -> GridBoundingBox2D {
-        let start = self.coordinate_to_grid_idx_2d(bounding_box.upper_left());
-        let end = self.coordinate_to_grid_idx_2d(bounding_box.lower_right());
+        let ul = self.coordinate_to_grid_idx_2d(bounding_box.upper_left());
+        let lr = self.coordinate_to_grid_idx_2d(bounding_box.lower_right());
+        let ul = ul.inner();
+        let lr = lr.inner();
+        let start: GridIdx2D = [min(ul[0], lr[0]), min(ul[1], lr[1])].into();
+        let end: GridIdx2D = [max(ul[0], lr[0]), max(ul[1], lr[1])].into();
         GridBoundingBox2D::new_unchecked(start, end)
     }
 
@@ -154,7 +171,7 @@ impl From<GeoTransform> for GdalGeoTransform {
 
 #[cfg(test)]
 mod tests {
-
+    use super::*;
     use crate::raster::{GeoTransform, GridIdx2D};
 
     #[test]
@@ -192,6 +209,10 @@ mod tests {
             geo_transform.grid_idx_to_upper_left_coordinate_2d(GridIdx2D::new([2, 2])),
             (7.0, 3.0).into()
         );
+        assert_eq!(
+            geo_transform.grid_idx_to_upper_left_coordinate_2d(GridIdx2D::new([-1, -1])),
+            (4.0, 6.0).into()
+        );
     }
 
     #[test]
@@ -209,5 +230,31 @@ mod tests {
             geo_transform.coordinate_to_grid_idx_2d((7.0, 3.0).into()),
             GridIdx2D::new([2, 2])
         );
+        assert_eq!(
+            geo_transform.coordinate_to_grid_idx_2d((4.0, 6.0).into()),
+            GridIdx2D::new([-1, -1])
+        );
+    }
+
+    #[test]
+    fn pixel_center() {
+        let geo_transform = GeoTransform::new_with_coordinate_x_y(5.0, 1.0, 5.0, -1.0);
+        assert_eq!(
+            geo_transform.grid_idx_to_center_coordinate_2d(GridIdx2D::new([0, 0])),
+            (5.5, 4.5).into()
+        );
+    }
+
+    #[test]
+    fn pixel_box() {
+        let geo_transform = GeoTransform::new_with_coordinate_x_y(5.0, 1.0, 5.0, -1.0);
+
+        assert_eq!(
+            geo_transform.pixel_box(BoundingBox2D::new_unchecked(
+                (6.0, 4.0).into(),
+                (7.0, 3.0).into()
+            )),
+            GridBoundingBox2D::new_unchecked(GridIdx2D::new([1, 1]), GridIdx2D::new([2, 2]))
+        )
     }
 }

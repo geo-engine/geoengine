@@ -12,6 +12,7 @@ use super::{
 
 /// An `GridShape` describes the shape of an n-dimensional array by storing the size of each axis.
 #[derive(PartialEq, Debug, Copy, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GridShape<A>
 where
     A: AsRef<[usize]>,
@@ -242,6 +243,7 @@ where
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Grid<D, T> {
     pub shape: D,
     pub data: Vec<T>,

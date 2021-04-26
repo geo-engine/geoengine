@@ -11,6 +11,7 @@ use crate::raster::Pixel;
 use crate::util::Result;
 
 #[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Histogram {
     counts: Vec<u64>,
     labels: Option<Vec<String>>,
@@ -125,42 +126,42 @@ impl Histogram {
     pub fn add_feature_data(&mut self, data: FeatureDataRef) -> Result<()> {
         // TODO: implement efficiently OpenCL version
         match data {
-            FeatureDataRef::Number(number_ref) if !number_ref.has_nulls() => {
-                for &value in number_ref.as_ref() {
+            FeatureDataRef::Float(value_ref) if !value_ref.has_nulls() => {
+                for &value in value_ref.as_ref() {
                     self.handle_data_item(value, false);
                 }
             }
-            FeatureDataRef::Number(number_ref) => {
-                for (&value, is_null) in number_ref.as_ref().iter().zip(number_ref.nulls()) {
+            FeatureDataRef::Float(value_ref) => {
+                for (&value, is_null) in value_ref.as_ref().iter().zip(value_ref.nulls()) {
                     self.handle_data_item(value, is_null);
                 }
             }
-            FeatureDataRef::Decimal(decimal_ref) if !decimal_ref.has_nulls() => {
-                for value in decimal_ref.as_ref().iter().map(|&v| v as f64) {
+            FeatureDataRef::Int(value_ref) if !value_ref.has_nulls() => {
+                for value in value_ref.as_ref().iter().map(|&v| v as f64) {
                     self.handle_data_item(value, false);
                 }
             }
-            FeatureDataRef::Decimal(decimal_ref) => {
-                for (value, is_null) in decimal_ref
+            FeatureDataRef::Int(value_ref) => {
+                for (value, is_null) in value_ref
                     .as_ref()
                     .iter()
                     .map(|&v| v as f64)
-                    .zip(decimal_ref.nulls())
+                    .zip(value_ref.nulls())
                 {
                     self.handle_data_item(value, is_null);
                 }
             }
-            FeatureDataRef::Categorical(categorical_ref) if !categorical_ref.has_nulls() => {
-                for value in categorical_ref.as_ref().iter().map(|&v| f64::from(v)) {
+            FeatureDataRef::Category(category_ref) if !category_ref.has_nulls() => {
+                for value in category_ref.as_ref().iter().map(|&v| f64::from(v)) {
                     self.handle_data_item(value, false);
                 }
             }
-            FeatureDataRef::Categorical(categorical_ref) => {
-                for (value, is_null) in categorical_ref
+            FeatureDataRef::Category(category_ref) => {
+                for (value, is_null) in category_ref
                     .as_ref()
                     .iter()
                     .map(|&v| f64::from(v))
-                    .zip(categorical_ref.nulls())
+                    .zip(category_ref.nulls())
                 {
                     self.handle_data_item(value, is_null);
                 }
@@ -358,7 +359,7 @@ impl HistogramBuilder {
 mod tests {
     use super::*;
 
-    use crate::primitives::{CategoricalDataRef, DecimalDataRef, NumberDataRef};
+    use crate::primitives::{CategoryDataRef, FloatDataRef, IntDataRef};
     use arrow::array::{Array, Float64Builder, Int64Builder, UInt8Builder};
     use num_traits::AsPrimitive;
 
@@ -387,7 +388,7 @@ mod tests {
         };
 
         histogram
-            .add_feature_data(FeatureDataRef::Number(NumberDataRef::new(
+            .add_feature_data(FeatureDataRef::Float(FloatDataRef::new(
                 data.values(),
                 data.data().null_bitmap(),
             )))
@@ -413,7 +414,7 @@ mod tests {
         };
 
         histogram
-            .add_feature_data(FeatureDataRef::Number(NumberDataRef::new(
+            .add_feature_data(FeatureDataRef::Float(FloatDataRef::new(
                 data.values(),
                 data.data_ref().null_bitmap(),
             )))
@@ -425,7 +426,7 @@ mod tests {
     }
 
     #[test]
-    fn add_feature_data_decimal() {
+    fn add_feature_data_int() {
         let mut histogram = Histogram::builder(2, 0., 3., Measurement::Unitless)
             .build()
             .unwrap();
@@ -437,7 +438,7 @@ mod tests {
         };
 
         histogram
-            .add_feature_data(FeatureDataRef::Decimal(DecimalDataRef::new(
+            .add_feature_data(FeatureDataRef::Int(IntDataRef::new(
                 data.values(),
                 data.data().null_bitmap(),
             )))
@@ -448,7 +449,7 @@ mod tests {
     }
 
     #[test]
-    fn add_feature_data_categorical() {
+    fn add_feature_data_category() {
         let mut histogram = Histogram::builder(2, 0., 1., Measurement::Unitless)
             .build()
             .unwrap();
@@ -460,7 +461,7 @@ mod tests {
         };
 
         histogram
-            .add_feature_data(FeatureDataRef::Categorical(CategoricalDataRef::new(
+            .add_feature_data(FeatureDataRef::Category(CategoryDataRef::new(
                 data.values(),
                 data.data().null_bitmap(),
             )))
@@ -483,7 +484,7 @@ mod tests {
         };
 
         histogram
-            .add_feature_data(FeatureDataRef::Decimal(DecimalDataRef::new(
+            .add_feature_data(FeatureDataRef::Int(IntDataRef::new(
                 data.values(),
                 data.data().null_bitmap(),
             )))
@@ -507,7 +508,7 @@ mod tests {
         };
 
         histogram
-            .add_feature_data(FeatureDataRef::Number(NumberDataRef::new(
+            .add_feature_data(FeatureDataRef::Float(FloatDataRef::new(
                 data.values(),
                 data.data_ref().null_bitmap(),
             )))

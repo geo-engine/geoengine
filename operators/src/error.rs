@@ -104,6 +104,10 @@ pub enum Error {
 
     InvalidExpression,
 
+    InvalidNumberOfExpressionInputs,
+
+    InvalidNoDataValueValueForOutputDataType,
+
     InvalidType {
         expected: String,
         found: String,
@@ -172,6 +176,8 @@ pub enum Error {
     },
 
     OgrSourceColumnsSpecMissing,
+
+    EmptyInput,
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {

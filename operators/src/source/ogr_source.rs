@@ -46,6 +46,7 @@ use geoengine_datatypes::dataset::DatasetId;
 use std::convert::{TryFrom, TryInto};
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct OgrSourceParameters {
     pub dataset: DatasetId,
     pub attribute_projection: Option<Vec<String>>,
@@ -63,6 +64,7 @@ pub type OgrSource = SourceOperator<OgrSourceParameters>;
 ///  - `on_error`: specify the type of error handling
 ///  - `provenance`: specify the provenance of a file
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct OgrSourceDataset {
     pub file_name: PathBuf,
     pub layer_name: String,
@@ -96,15 +98,17 @@ impl OgrSourceDataset {
 ///  - `start_format` and `start_format`: a mapping of a field type to a time value (cf. `OgrSourceDatasetTimeType`)
 ///  - `duration`: the duration of the time validity for all features in the file
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "camelCase")]
 pub enum OgrSourceDatasetTimeType {
     None,
+    #[serde(rename_all = "camelCase")]
     Start {
         start_field: String,
         start_format: OgrSourceTimeFormat,
         duration: u32,
     },
     #[serde(rename = "start+end")]
+    #[serde(rename_all = "camelCase")]
     StartEnd {
         start_field: String,
         start_format: OgrSourceTimeFormat,
@@ -112,6 +116,7 @@ pub enum OgrSourceDatasetTimeType {
         end_format: OgrSourceTimeFormat,
     },
     #[serde(rename = "start+duration")]
+    #[serde(rename_all = "camelCase")]
     StartDuration {
         start_field: String,
         start_format: OgrSourceTimeFormat,
@@ -133,9 +138,12 @@ impl Default for OgrSourceDatasetTimeType {
 ///   - "iso": time column contains string with ISO8601
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(tag = "format")]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "camelCase")]
 pub enum OgrSourceTimeFormat {
-    Custom { custom_format: String },
+    #[serde(rename_all = "camelCase")]
+    Custom {
+        custom_format: String,
+    },
     Seconds,
     Iso,
 }
@@ -149,16 +157,16 @@ impl Default for OgrSourceTimeFormat {
 /// A mapping of the columns to data, time, space. Columns that are not listed are skipped when parsing.
 ///  - x: the name of the column containing the x coordinate (or the wkt string) [if CSV file]
 ///  - y: the name of the column containing the y coordinate [if CSV file with y column]
-///  - numeric: an array of column names containing numeric values
-///  - decimal: an array of column names containing decimal values
-///  - textual: an array of column names containing alpha-numeric values
+///  - float: an array of column names containing float values
+///  - int: an array of column names containing int values
+///  - text: an array of column names containing alpha-numeric values
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct OgrSourceColumnSpec {
     pub x: String,
     pub y: Option<String>,
-    pub numeric: Vec<String>,
-    pub decimal: Vec<String>,
-    pub textual: Vec<String>,
+    pub int: Vec<String>,
+    pub float: Vec<String>,
+    pub text: Vec<String>,
 }
 
 impl OgrSourceColumnSpec {
@@ -170,12 +178,10 @@ impl OgrSourceColumnSpec {
                 return;
             };
 
-        self.numeric
+        self.int.retain(|attribute| attributes.contains(attribute));
+        self.float
             .retain(|attribute| attributes.contains(attribute));
-        self.decimal
-            .retain(|attribute| attributes.contains(attribute));
-        self.textual
-            .retain(|attribute| attributes.contains(attribute));
+        self.text.retain(|attribute| attributes.contains(attribute));
     }
 }
 
@@ -602,19 +608,19 @@ where
         // TODO: what to do if there is nothing specified?
         if let Some(ref column_spec) = dataset_information.columns {
             // TODO: error handling instead of unwrap
-            for attribute in &column_spec.numeric {
-                data_types.insert(attribute.clone(), FeatureDataType::Number);
+            for attribute in &column_spec.int {
+                data_types.insert(attribute.clone(), FeatureDataType::Float);
                 feature_collection_builder
-                    .add_column(attribute.clone(), FeatureDataType::Number)
+                    .add_column(attribute.clone(), FeatureDataType::Float)
                     .unwrap();
             }
-            for attribute in &column_spec.decimal {
-                data_types.insert(attribute.clone(), FeatureDataType::Decimal);
+            for attribute in &column_spec.float {
+                data_types.insert(attribute.clone(), FeatureDataType::Int);
                 feature_collection_builder
-                    .add_column(attribute.clone(), FeatureDataType::Decimal)
+                    .add_column(attribute.clone(), FeatureDataType::Int)
                     .unwrap();
             }
-            for attribute in &column_spec.textual {
+            for attribute in &column_spec.text {
                 data_types.insert(attribute.clone(), FeatureDataType::Text);
                 feature_collection_builder
                     .add_column(attribute.clone(), FeatureDataType::Text)
@@ -708,6 +714,7 @@ where
                 FeatureDataType::Text => {
                     let text_option = match field {
                         Ok(FieldValue::IntegerValue(v)) => Some(v.to_string()),
+                        Ok(FieldValue::Integer64Value(v)) => Some(v.to_string()),
                         Ok(FieldValue::StringValue(s)) => Some(s),
                         Ok(FieldValue::RealValue(v)) => Some(v.to_string()),
                         Ok(_) => todo!("handle other types"),
@@ -716,8 +723,8 @@ where
 
                     builder.push_data(&column, FeatureDataValue::NullableText(text_option))?;
                 }
-                FeatureDataType::Number => {
-                    let number_option = match field {
+                FeatureDataType::Float => {
+                    let value_option = match field {
                         Ok(FieldValue::IntegerValue(v)) => Some(f64::from(v)),
                         Ok(FieldValue::StringValue(s)) => f64::from_str(&s).ok(),
                         Ok(FieldValue::RealValue(v)) => Some(v),
@@ -725,21 +732,21 @@ where
                         Err(_) => None, // TODO: log error
                     };
 
-                    builder.push_data(&column, FeatureDataValue::NullableNumber(number_option))?;
+                    builder.push_data(&column, FeatureDataValue::NullableFloat(value_option))?;
                 }
-                FeatureDataType::Decimal => {
-                    let decimal_option = match field {
-                        Ok(FieldValue::IntegerValue(v)) => Some(i64::from(v)), // TODO: PR for allowing i64 in OGR?
+                FeatureDataType::Int => {
+                    let value_option = match field {
+                        Ok(FieldValue::IntegerValue(v)) => Some(i64::from(v)),
+                        Ok(FieldValue::Integer64Value(v)) => Some(v),
                         Ok(FieldValue::StringValue(s)) => i64::from_str(&s).ok(),
                         Ok(FieldValue::RealValue(v)) => Some(v as i64),
                         Ok(_) => todo!("handle other types"),
                         Err(_) => None, // TODO: log error
                     };
 
-                    builder
-                        .push_data(&column, FeatureDataValue::NullableDecimal(decimal_option))?;
+                    builder.push_data(&column, FeatureDataValue::NullableInt(value_option))?;
                 }
-                FeatureDataType::Categorical => todo!("implement"),
+                FeatureDataType::Category => todo!("implement"),
             }
         }
 
@@ -978,9 +985,9 @@ mod tests {
             columns: Some(OgrSourceColumnSpec {
                 x: "x".to_string(),
                 y: Some("y".to_string()),
-                numeric: vec!["num".to_string()],
-                decimal: vec!["dec1".to_string(), "dec2".to_string()],
-                textual: vec!["text".to_string()],
+                float: vec!["num".to_string()],
+                int: vec!["dec1".to_string(), "dec2".to_string()],
+                text: vec!["text".to_string()],
             }),
             default_geometry: Some(TypedGeometry::MultiPoint(
                 MultiPoint::new(vec![(0.0, 0.0).into()]).unwrap(),
@@ -999,15 +1006,15 @@ mod tests {
         assert_eq!(
             serialized_spec,
             json!({
-                "file_name": "foobar.csv",
-                "layer_name": "foobar",
-                "data_type": "MultiPoint",
+                "fileName": "foobar.csv",
+                "layerName": "foobar",
+                "dataType": "MultiPoint",
                 "time": {
                     "start": {
-                        "start_field": "start",
-                        "start_format": {
+                        "startField": "start",
+                        "startFormat": {
                             "format": "custom",
-                            "custom_format": "YYYY-MM-DD"
+                            "customFormat": "YYYY-MM-DD"
                         },
                         "duration": 42
                     }
@@ -1015,13 +1022,13 @@ mod tests {
                 "columns": {
                     "x": "x",
                     "y": "y",
-                    "numeric": ["num"],
-                    "decimal": ["dec1", "dec2"],
-                    "textual": ["text"]
+                    "int": ["dec1", "dec2"],
+                    "float": ["num"],
+                    "text": ["text"]
                 },
-                "default_geometry":{"MultiPoint":{"coordinates":[{"x":0.0,"y":0.0}]}},
-                "force_ogr_time_filter": false,
-                "on_error": "skip",
+                "defaultGeometry":{"MultiPoint":{"coordinates":[{"x":0.0,"y":0.0}]}},
+                "forceOgrTimeFilter": false,
+                "onError": "skip",
                 "provenance": {
                     "citation": "Foo Bar",
                     "license": "CC",
@@ -1033,15 +1040,15 @@ mod tests {
 
         let deserialized_spec: OgrSourceDataset = serde_json::from_str(
             &json!({
-                "file_name": "foobar.csv",
-                "layer_name": "foobar",
-                "data_type": "MultiPoint",
+                "fileName": "foobar.csv",
+                "layerName": "foobar",
+                "dataType": "MultiPoint",
                 "time": {
                     "start": {
-                        "start_field": "start",
-                        "start_format": {
+                        "startField": "start",
+                        "startFormat": {
                             "format": "custom",
-                            "custom_format": "YYYY-MM-DD"
+                            "customFormat": "YYYY-MM-DD"
                         },
                         "duration": 42
                     }
@@ -1049,13 +1056,13 @@ mod tests {
                 "columns": {
                     "x": "x",
                     "y": "y",
-                    "numeric": ["num"],
-                    "decimal": ["dec1", "dec2"],
-                    "textual": ["text"]
+                    "int": ["dec1", "dec2"],
+                    "float": ["num"],
+                    "text": ["text"]
                 },
-                "default_geometry":{"MultiPoint":{"coordinates":[{"x":0.0,"y":0.0}]}},
-                "force_ogr_time_filter": false,
-                "on_error": "skip",
+                "defaultGeometry":{"MultiPoint":{"coordinates":[{"x":0.0,"y":0.0}]}},
+                "forceOgrTimeFilter": false,
+                "onError": "skip",
                 "provenance": {
                     "citation": "Foo Bar",
                     "license": "CC",
@@ -1358,6 +1365,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn ne_10m_ports_columns() -> Result<()> {
         let id = DatasetId::Internal(InternalDatasetId::new());
         let mut exe_ctx = MockExecutionContext::default();
@@ -1372,9 +1380,9 @@ mod tests {
                     columns: Some(OgrSourceColumnSpec {
                         x: "".to_string(),
                         y: None,
-                        numeric: vec!["natlscale".to_string()],
-                        decimal: vec!["scalerank".to_string()],
-                        textual: vec![
+                        int: vec!["natlscale".to_string()],
+                        float: vec!["scalerank".to_string()],
+                        text: vec![
                             "featurecla".to_string(),
                             "name".to_string(),
                             "website".to_string(),
@@ -1389,9 +1397,9 @@ mod tests {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     columns: [
-                        ("natlscale".to_string(), FeatureDataType::Number),
-                        ("scalerank".to_string(), FeatureDataType::Decimal),
-                        ("featurecla".to_string(), FeatureDataType::Decimal),
+                        ("natlscale".to_string(), FeatureDataType::Float),
+                        ("scalerank".to_string(), FeatureDataType::Int),
+                        ("featurecla".to_string(), FeatureDataType::Int),
                         ("name".to_string(), FeatureDataType::Text),
                         ("website".to_string(), FeatureDataType::Text),
                     ]
@@ -1452,14 +1460,14 @@ mod tests {
             (4.292_873_969, 51.927_222_22),
         ])?;
 
-        let natlscale = FeatureData::NullableNumber(
+        let natlscale = FeatureData::NullableFloat(
             [5.0_f64, 5.0, 5.0, 10.0, 20.0, 20.0, 30.0, 30.0, 30.0, 30.0]
                 .iter()
                 .map(|v| Some(*v))
                 .collect(),
         );
 
-        let scalerank = FeatureData::NullableDecimal(
+        let scalerank = FeatureData::NullableInt(
             [8, 8, 8, 7, 6, 6, 5, 5, 5, 5]
                 .iter()
                 .map(|v| Some(*v))
@@ -1533,6 +1541,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn ne_10m_ports() -> Result<()> {
         let id = DatasetId::Internal(InternalDatasetId::new());
         let mut exe_ctx = MockExecutionContext::default();
@@ -2701,9 +2710,9 @@ mod tests {
             columns: Some(OgrSourceColumnSpec {
                 x: "".to_string(),
                 y: None,
-                decimal: vec!["a".to_string()],
-                numeric: vec!["b".to_string()],
-                textual: vec!["c".to_string()],
+                float: vec!["a".to_string()],
+                int: vec!["b".to_string()],
+                text: vec!["c".to_string()],
             }),
             default_geometry: None,
             force_ogr_time_filter: false,
@@ -2717,8 +2726,8 @@ mod tests {
                 data_type: VectorDataType::MultiPoint,
                 spatial_reference: SpatialReferenceOption::Unreferenced,
                 columns: [
-                    ("a".to_string(), FeatureDataType::Decimal),
-                    ("b".to_string(), FeatureDataType::Number),
+                    ("a".to_string(), FeatureDataType::Int),
+                    ("b".to_string(), FeatureDataType::Float),
                     ("c".to_string(), FeatureDataType::Text),
                 ]
                 .iter()
@@ -2753,11 +2762,11 @@ mod tests {
                 [
                     (
                         "a".to_string(),
-                        FeatureData::NullableDecimal(vec![Some(1), Some(2)])
+                        FeatureData::NullableInt(vec![Some(1), Some(2)])
                     ),
                     (
                         "b".to_string(),
-                        FeatureData::NullableNumber(vec![Some(5.4), None])
+                        FeatureData::NullableFloat(vec![Some(5.4), None])
                     ),
                     (
                         "c".to_string(),
@@ -2777,6 +2786,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn chunked() -> Result<()> {
         let id = DatasetId::Internal(InternalDatasetId::new());
         let mut exe_ctx = MockExecutionContext::default();
@@ -3099,9 +3109,9 @@ mod tests {
                     columns: Some(OgrSourceColumnSpec {
                         x: "".to_owned(),
                         y: None,
-                        numeric: vec![],
-                        decimal: vec![],
-                        textual: vec![],
+                        int: vec![],
+                        float: vec![],
+                        text: vec![],
                     }),
                     default_geometry: None,
                     force_ogr_time_filter: false,
@@ -3183,9 +3193,9 @@ mod tests {
                     columns: Some(OgrSourceColumnSpec {
                         x: "x".to_owned(),
                         y: Some("y".to_owned()),
-                        numeric: vec!["num".to_owned()],
-                        decimal: vec![],
-                        textual: vec!["txt".to_owned()],
+                        int: vec!["num".to_owned()],
+                        float: vec![],
+                        text: vec!["txt".to_owned()],
                     }),
                     default_geometry: None,
                     force_ogr_time_filter: false,
@@ -3245,7 +3255,7 @@ mod tests {
             vec![TimeInterval::default(), TimeInterval::default()],
             {
                 let mut map = HashMap::new();
-                map.insert("num".into(), FeatureData::Number(vec![42., 815.]));
+                map.insert("num".into(), FeatureData::Float(vec![42., 815.]));
                 map.insert(
                     "txt".into(),
                     FeatureData::Text(vec!["foo".to_owned(), "bar".to_owned()]),

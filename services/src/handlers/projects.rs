@@ -544,7 +544,7 @@ mod tests {
             &res,
             400,
             "BodyDeserializeError",
-            "missing field `name` at line 1 column 202",
+            "missing field `name` at line 1 column 195",
         );
     }
 
@@ -939,6 +939,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn update_layers() {
         async fn update_and_load_latest(
             ctx: &InMemoryContext,
@@ -1089,6 +1090,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn update_plots() {
         async fn update_and_load_latest(
             ctx: &InMemoryContext,

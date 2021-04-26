@@ -30,6 +30,7 @@ pub type Histogram = Operator<HistogramParams>;
 
 /// The parameter spec for `Histogram`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct HistogramParams {
     /// Name of the (numeric) attribute to compute the histogram on. Ignored for operation on rasters.
     pub column_name: Option<String>,
@@ -96,13 +97,13 @@ impl PlotOperator for Histogram {
                         column: column_name.to_string(),
                     });
                 }
-                Some(FeatureDataType::Categorical | FeatureDataType::Text) => {
-                    // TODO: incorporate categorical data
+                Some(FeatureDataType::Category | FeatureDataType::Text) => {
+                    // TODO: incorporate category data
                     return Err(Error::InvalidOperatorSpec {
                         reason: format!("column `{}` must be numerical", column_name),
                     });
                 }
-                Some(FeatureDataType::Decimal | FeatureDataType::Number) => {
+                Some(FeatureDataType::Int | FeatureDataType::Float) => {
                     // okay
                 }
             }
@@ -463,15 +464,15 @@ impl HistogramMetadataInProgress {
         }
 
         match values {
-            FeatureDataRef::Decimal(values) => {
+            FeatureDataRef::Int(values) => {
                 add_data_ref(self, &values);
             }
-            FeatureDataRef::Number(values) => {
+            FeatureDataRef::Float(values) => {
                 add_data_ref(self, &values);
             }
-            FeatureDataRef::Categorical(_) | FeatureDataRef::Text(_) => {
+            FeatureDataRef::Category(_) | FeatureDataRef::Text(_) => {
                 // do nothing since we don't support them
-                // TODO: fill with live once we support categorical and textual types
+                // TODO: fill with live once we support category and text types
             }
         }
     }
@@ -535,7 +536,7 @@ mod tests {
         let serialized = json!({
             "type": "Histogram",
             "params": {
-                "column_name": "foobar",
+                "columnName": "foobar",
                 "bounds": {
                     "min": 5.0,
                     "max": 10.0,
@@ -543,8 +544,8 @@ mod tests {
                 "buckets": 15,
                 "interactivity": false,
             },
-            "raster_sources": [],
-            "vector_sources": [],
+            "rasterSources": [],
+            "vectorSources": [],
         })
         .to_string();
 
@@ -571,8 +572,8 @@ mod tests {
             "params": {
                 "bounds": "data",
             },
-            "raster_sources": [],
-            "vector_sources": [],
+            "rasterSources": [],
+            "vectorSources": [],
         })
         .to_string();
 
@@ -723,13 +724,13 @@ mod tests {
             DataCollection::from_slices(
                 &[] as &[NoGeometry],
                 &[TimeInterval::default(); 8],
-                &[("foo", FeatureData::Decimal(vec![1, 1, 2, 2, 3, 3, 4, 4]))],
+                &[("foo", FeatureData::Int(vec![1, 1, 2, 2, 3, 3, 4, 4]))],
             )
             .unwrap(),
             DataCollection::from_slices(
                 &[] as &[NoGeometry],
                 &[TimeInterval::default(); 4],
-                &[("foo", FeatureData::Decimal(vec![5, 6, 7, 8]))],
+                &[("foo", FeatureData::Int(vec![5, 6, 7, 8]))],
             )
             .unwrap(),
         ])
@@ -788,7 +789,7 @@ mod tests {
                 &[TimeInterval::default(); 6],
                 &[(
                     "foo",
-                    FeatureData::NullableNumber(vec![
+                    FeatureData::NullableFloat(vec![
                         Some(1.),
                         Some(2.),
                         None,
@@ -848,23 +849,23 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn textual_attribute() {
+    async fn text_attribute() {
         let dataset_id = InternalDatasetId::new();
 
         let workflow = serde_json::json!({
             "type": "Histogram",
             "params": {
-                "column_name": "featurecla",
+                "columnName": "featurecla",
                 "bounds": "data"
             },
-            "raster_sources": [],
-            "vector_sources": [{
+            "rasterSources": [],
+            "vectorSources": [{
                 "type": "OgrSource",
                 "params": {
                     "dataset": {
-                        "Internal": dataset_id
+                        "internal": dataset_id
                     },
-                    "attribute_projection": null
+                    "attributeProjection": null
                 }
             }]
         });
@@ -883,9 +884,9 @@ mod tests {
                     columns: Some(OgrSourceColumnSpec {
                         x: "".to_string(),
                         y: None,
-                        numeric: vec!["natlscale".to_string()],
-                        decimal: vec!["scalerank".to_string()],
-                        textual: vec![
+                        int: vec!["natlscale".to_string()],
+                        float: vec!["scalerank".to_string()],
+                        text: vec![
                             "featurecla".to_string(),
                             "name".to_string(),
                             "website".to_string(),
@@ -900,8 +901,8 @@ mod tests {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     columns: [
-                        ("natlscale".to_string(), FeatureDataType::Number),
-                        ("scalerank".to_string(), FeatureDataType::Decimal),
+                        ("natlscale".to_string(), FeatureDataType::Float),
+                        ("scalerank".to_string(), FeatureDataType::Int),
                         ("featurecla".to_string(), FeatureDataType::Text),
                         ("name".to_string(), FeatureDataType::Text),
                         ("website".to_string(), FeatureDataType::Text),
@@ -918,7 +919,7 @@ mod tests {
         {
             assert_eq!(reason, "column `featurecla` must be numerical");
         } else {
-            panic!("we currently don't support textual features, but this went through");
+            panic!("we currently don't support text features, but this went through");
         }
     }
 }

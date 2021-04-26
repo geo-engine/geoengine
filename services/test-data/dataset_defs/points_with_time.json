@@ -1,40 +1,40 @@
 {
-    "properties": {
-        "id": null,
-        "name": "Points with Time",
-        "description": "Some points in Europe in 2014",
-        "source_operator": "OgrSource"
-    },
-    "meta_data": {
-        "OgrMetaData": {
-            "loading_info": {
-                "file_name": "operators/test-data/vector/data/points_with_time.json",
-                "layer_name": "points_with_time",
-                "data_type": "MultiPoint",
-                "time": {
-                    "start+end": {
-                        "start_field": "time_start",
-                        "start_format": {
-                            "format": "custom",
-                            "custom_format": "+%Y-%m-%d %H:%M:%S %z"
-                        },
-                        "end_field": "time_end",
-                        "end_format": {
-                            "format": "custom",
-                            "custom_format": "+%Y-%m-%d %H:%M:%S %z"
-                        }
-                    }
-                },
-                "default_geometry": null,
-                "force_ogr_time_filter": false,
-                "on_error": "abort",
-                "provenance": null
+  "properties": {
+    "id": null,
+    "name": "Points with Time",
+    "description": "Some points in Europe in 2014",
+    "sourceOperator": "OgrSource"
+  },
+  "metaData": {
+    "OgrMetaData": {
+      "loadingInfo": {
+        "fileName": "operators/test-data/vector/data/points_with_time.json",
+        "layerName": "points_with_time",
+        "dataType": "MultiPoint",
+        "time": {
+          "start+end": {
+            "startField": "time_start",
+            "startFormat": {
+              "format": "custom",
+              "customFormat": "+%Y-%m-%d %H:%M:%S %z"
             },
-            "result_descriptor": {
-                "data_type": "MultiPoint",
-                "spatial_reference": "EPSG:4326",
-                "columns": {}
+            "endField": "time_end",
+            "endFormat": {
+              "format": "custom",
+              "customFormat": "+%Y-%m-%d %H:%M:%S %z"
             }
-        }
+          }
+        },
+        "defaultGeometry": null,
+        "forceOgrTimeFilter": false,
+        "onError": "abort",
+        "provenance": null
+      },
+      "resultDescriptor": {
+        "dataType": "MultiPoint",
+        "spatialReference": "EPSG:4326",
+        "columns": {}
+      }
     }
+  }
 }

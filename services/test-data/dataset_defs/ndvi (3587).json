@@ -1,0 +1,47 @@
+{
+  "properties": {
+    "id": null,
+    "name": "NDVI3857",
+    "description": "NDVI data from MODIS reprojected to EPSG:3857",
+    "sourceOperator": "GdalSource"
+  },
+  "metaData": {
+    "GdalMetaDataRegular": {
+      "resultDescriptor": {
+        "dataType": "U8",
+        "spatialReference": "EPSG:3857",
+        "measurement": "unitless"
+      },
+      "params": {
+        "filePath": "operators/test-data/raster/modis_ndvi/projected_3857/MOD13A2_M_NDVI_%%%_START_TIME_%%%.TIFF",
+        "rasterbandChannel": 1,
+        "geoTransform": {
+          "originCoordinate": {
+            "x": -20037508.342789243906736,
+            "y": 19971868.880408562719822
+          },
+          "xPixelSize": 14052.95025804873876,
+          "yPixelSize": -14057.88111778840539
+        },
+        "bbox": {
+          "lowerLeftCoordinate": {
+            "x": -20037508.343,
+            "y": -19966571.375
+          },
+          "upperRightCoordinate": {
+            "x": 20027452.843,
+            "y": 19971868.88
+          }
+        },
+        "fileNotFoundHandling": "NoData"
+      },
+      "placeholder": "%%%_START_TIME_%%%",
+      "timeFormat": "%Y-%m-%d",
+      "start": 1388534400000,
+      "step": {
+        "granularity": "Months",
+        "step": 1
+      }
+    }
+  }
+}

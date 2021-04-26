@@ -9,6 +9,7 @@ use geoengine_datatypes::identifier;
 identifier!(SessionId);
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct UserInfo {
     pub id: UserId,
     pub email: Option<String>,
@@ -16,6 +17,7 @@ pub struct UserInfo {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct Session {
     pub id: SessionId,
     pub user: UserInfo,

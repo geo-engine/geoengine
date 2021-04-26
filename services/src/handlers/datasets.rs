@@ -1,6 +1,10 @@
-use std::{collections::HashMap, convert::TryInto, path::Path};
+use std::{
+    collections::HashMap,
+    convert::{TryFrom, TryInto},
+    path::Path,
+};
 
-use crate::datasets::storage::{AddDataset, DatasetStore};
+use crate::datasets::storage::{AddDataset, DatasetStore, MetaDataSuggestion, SuggestMetaData};
 use crate::datasets::upload::UploadRootPath;
 use crate::datasets::{
     listing::DatasetProvider,
@@ -17,7 +21,12 @@ use crate::{
     datasets::{listing::DatasetListOptions, upload::UploadDb},
     util::IdResponse,
 };
-use gdal::{vector::Layer, Dataset};
+use chrono::DateTime;
+use gdal::vector::OGRFieldType;
+use gdal::{
+    vector::{FieldValue, Layer},
+    Dataset,
+};
 use geoengine_datatypes::{
     collections::VectorDataType,
     dataset::{DatasetId, InternalDatasetId},
@@ -26,7 +35,9 @@ use geoengine_datatypes::{
 };
 use geoengine_operators::{
     engine::{StaticMetaData, VectorResultDescriptor},
-    source::{OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType},
+    source::{
+        OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceTimeFormat,
+    },
 };
 use snafu::{OptionExt, ResultExt};
 use uuid::Uuid;
@@ -220,7 +231,7 @@ async fn auto_create_dataset<C: Context>(
     let create = create.validated()?.user_input;
 
     let main_file_path = upload.id.root_path()?.join(&create.main_file);
-    let meta_data = auto_detect_dataset(&main_file_path)?;
+    let meta_data = auto_detect_meta_data_definition(&main_file_path)?;
 
     let properties = AddDataset {
         id: None,
@@ -238,7 +249,59 @@ async fn auto_create_dataset<C: Context>(
     Ok(warp::reply::json(&IdResponse::from(id)))
 }
 
-fn auto_detect_dataset(main_file_path: &Path) -> Result<MetaDataDefinition> {
+pub(crate) fn suggest_meta_data_handler<C: Context>(
+    ctx: C,
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
+    warp::path!("dataset" / "suggest")
+        .and(warp::get())
+        .and(authenticate(ctx.clone()))
+        .and(warp::any().map(move || ctx.clone()))
+        .and(warp::query())
+        .and_then(suggest_meta_data)
+}
+
+// TODO: move into handler once async closures are available?
+async fn suggest_meta_data<C: Context>(
+    session: Session,
+    ctx: C,
+    suggest: SuggestMetaData,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let upload = ctx
+        .dataset_db_ref()
+        .await
+        .get_upload(session.user.id, suggest.upload)
+        .await?;
+
+    let main_file = suggest
+        .main_file
+        .or_else(|| suggest_main_file(&upload))
+        .ok_or(error::Error::NoMainFileCandidateFound)?;
+
+    let main_file_path = upload.id.root_path()?.join(&main_file);
+
+    let meta_data = auto_detect_meta_data_definition(&main_file_path)?;
+
+    Ok(warp::reply::json(&MetaDataSuggestion {
+        main_file,
+        meta_data,
+    }))
+}
+
+fn suggest_main_file(upload: &Upload) -> Option<String> {
+    let known_extensions = ["csv", "shp", "json", "geojson", "gpkg"]; // TODO: rasters
+
+    let mut sorted_files = upload.files.clone();
+    sorted_files.sort_by(|a, b| b.byte_size.cmp(&a.byte_size));
+
+    for file in sorted_files {
+        if known_extensions.iter().any(|ext| file.name.ends_with(ext)) {
+            return Some(file.name);
+        }
+    }
+    None
+}
+
+fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDefinition> {
     let mut dataset = Dataset::open(&main_file_path).context(error::Gdal)?;
     let layer = {
         if let Ok(layer) = dataset.layer(0) {
@@ -256,19 +319,20 @@ fn auto_detect_dataset(main_file_path: &Path) -> Result<MetaDataDefinition> {
         .context(error::DataType)?;
     let columns_map = detect_columns(&layer);
     let columns_vecs = column_map_to_column_vecs(&columns_map);
+    let time = detect_time_type(&layer, &columns_vecs);
 
     Ok(MetaDataDefinition::OgrMetaData(StaticMetaData {
         loading_info: OgrSourceDataset {
             file_name: main_file_path.into(),
             layer_name: layer.name(),
             data_type: Some(vector_type),
-            time: OgrSourceDatasetTimeType::None, // TODO: auto detect time type and corresponding columns
+            time,
             columns: Some(OgrSourceColumnSpec {
                 x: "".to_owned(), // TODO: for csv-files: try to find wkt/xy columns
                 y: None,
-                numeric: columns_vecs.numeric,
-                decimal: columns_vecs.decimal,
-                textual: columns_vecs.textual,
+                int: columns_vecs.float,
+                float: columns_vecs.int,
+                text: columns_vecs.text,
             }),
             default_geometry: None,
             force_ogr_time_filter: false,
@@ -278,9 +342,102 @@ fn auto_detect_dataset(main_file_path: &Path) -> Result<MetaDataDefinition> {
         result_descriptor: VectorResultDescriptor {
             data_type: vector_type,
             spatial_reference: spatial_reference.into(),
-            columns: columns_map,
+            columns: columns_map
+                .into_iter()
+                .filter_map(|(k, v)| v.try_into().map(|v| (k, v)).ok()) // ignore all columns here that don't have a corresponding type in our collections
+                .collect(),
         },
     }))
+}
+
+fn detect_time_type(layer: &Layer, columns: &Columns) -> OgrSourceDatasetTimeType {
+    let feature = layer.features().next();
+    if feature.is_none() {
+        return OgrSourceDatasetTimeType::None;
+    }
+    let feature = feature.expect("checked before");
+
+    let known_start = [
+        "start",
+        "time",
+        "begin",
+        "date",
+        "time_start",
+        "start time",
+        "date_start",
+        "start date",
+        "datetime",
+        "date_time",
+        "date time",
+        "event",
+        "timestamp",
+    ];
+    let known_end = [
+        "end",
+        "stop",
+        "time2",
+        "date2",
+        "time_end",
+        "time_stop",
+        "time end",
+        "time stop",
+        "end time",
+        "stop time",
+        "date_end",
+        "date_stop",
+        "date end",
+        "date stop",
+        "end date",
+        "stop date",
+    ];
+    let known_duration = ["duration", "length", "valid for", "valid_for"];
+
+    let mut start = None;
+    let mut end = None;
+    for column in columns.text.iter().chain(&(columns.date)) {
+        let is_date = feature
+            .field(column)
+            .ok()
+            .and_then(FieldValue::into_string)
+            .map(|s| DateTime::parse_from_rfc3339(&s))
+            .is_some();
+        if is_date {
+            if known_start.contains(&column.as_ref()) && start.is_none() {
+                start = Some(column);
+            } else if known_end.contains(&column.as_ref()) && end.is_none() {
+                end = Some(column);
+            }
+
+            if start.is_some() && end.is_some() {
+                break;
+            }
+        }
+    }
+
+    let duration = columns
+        .int
+        .iter()
+        .find(|c| known_duration.contains(&c.as_ref()));
+
+    match (start, end, duration) {
+        (Some(start), Some(end), _) => OgrSourceDatasetTimeType::StartEnd {
+            start_field: start.clone(),
+            start_format: OgrSourceTimeFormat::Iso,
+            end_field: end.clone(),
+            end_format: OgrSourceTimeFormat::Iso,
+        },
+        (Some(start), None, Some(duration)) => OgrSourceDatasetTimeType::StartDuration {
+            start_field: start.clone(),
+            start_format: OgrSourceTimeFormat::Iso,
+            duration_field: duration.clone(),
+        },
+        (Some(start), None, None) => OgrSourceDatasetTimeType::Start {
+            start_field: start.clone(),
+            start_format: OgrSourceTimeFormat::Iso,
+            duration: 0,
+        },
+        _ => OgrSourceDatasetTimeType::None,
+    }
 }
 
 fn detect_vector_type(layer: &Layer) -> Result<VectorDataType> {
@@ -295,51 +452,74 @@ fn detect_vector_type(layer: &Layer) -> Result<VectorDataType> {
 }
 
 struct Columns {
-    decimal: Vec<String>,
-    numeric: Vec<String>,
-    textual: Vec<String>,
+    int: Vec<String>,
+    float: Vec<String>,
+    text: Vec<String>,
+    date: Vec<String>,
 }
 
-fn detect_columns(layer: &Layer) -> HashMap<String, FeatureDataType> {
+enum ColumnDataType {
+    Int,
+    Float,
+    Text,
+    Date,
+    Unknown,
+}
+
+impl TryFrom<ColumnDataType> for FeatureDataType {
+    type Error = error::Error;
+
+    fn try_from(value: ColumnDataType) -> Result<Self, Self::Error> {
+        match value {
+            ColumnDataType::Int => Ok(FeatureDataType::Int),
+            ColumnDataType::Float => Ok(FeatureDataType::Float),
+            ColumnDataType::Text => Ok(FeatureDataType::Text),
+            _ => Err(error::Error::NoFeatureDataTypeForColumnDataType),
+        }
+    }
+}
+
+fn detect_columns(layer: &Layer) -> HashMap<String, ColumnDataType> {
     let mut columns = HashMap::default();
 
     for field in layer.defn().fields() {
         let field_type = field.field_type();
-        if let Ok(data_type) = FeatureDataType::try_from_ogr_field_type_code(field_type) {
-            columns.insert(field.name(), data_type);
-        }
 
-        // TODO: handle time columns
+        let data_type = match field_type {
+            OGRFieldType::OFTInteger | OGRFieldType::OFTInteger64 => ColumnDataType::Int,
+            OGRFieldType::OFTReal => ColumnDataType::Float,
+            OGRFieldType::OFTString => ColumnDataType::Text,
+            OGRFieldType::OFTDate | OGRFieldType::OFTDateTime => ColumnDataType::Date,
+            _ => ColumnDataType::Unknown,
+        };
+
+        columns.insert(field.name(), data_type);
     }
 
     columns
 }
 
-fn column_map_to_column_vecs(columns: &HashMap<String, FeatureDataType>) -> Columns {
-    let mut decimal = Vec::new();
-    let mut numeric = Vec::new();
-    let mut textual = Vec::new();
+fn column_map_to_column_vecs(columns: &HashMap<String, ColumnDataType>) -> Columns {
+    let mut int = Vec::new();
+    let mut float = Vec::new();
+    let mut text = Vec::new();
+    let mut date = Vec::new();
 
     for (k, v) in columns {
         match v {
-            FeatureDataType::Categorical => { // TODO
-            }
-            FeatureDataType::Decimal => {
-                decimal.push(k.clone());
-            }
-            FeatureDataType::Number => {
-                numeric.push(k.clone());
-            }
-            FeatureDataType::Text => {
-                textual.push(k.clone());
-            }
+            ColumnDataType::Int => int.push(k.clone()),
+            ColumnDataType::Float => float.push(k.clone()),
+            ColumnDataType::Text => text.push(k.clone()),
+            ColumnDataType::Date => date.push(k.clone()),
+            ColumnDataType::Unknown => {}
         }
     }
 
     Columns {
-        decimal,
-        numeric,
-        textual,
+        int,
+        float,
+        text,
+        date,
     }
 }
 
@@ -427,16 +607,16 @@ mod tests {
             body,
             json!([{
                 "id": {
-                    "Internal": id.internal().unwrap()
+                    "internal": id.internal().unwrap()
                 },
                 "name": "OgrDataset",
                 "description": "My Ogr dataset",
                 "tags": [],
-                "source_operator": "OgrSource",
-                "result_descriptor": {
-                    "Vector": {
-                        "data_type": "Data",
-                        "spatial_reference": "",
+                "sourceOperator": "OgrSource",
+                "resultDescriptor": {
+                    "vector": {
+                        "dataType": "Data",
+                        "spatialReference": "",
                         "columns": {}
                     }
                 }
@@ -460,36 +640,36 @@ mod tests {
                     "id": null,
                     "name": "Uploaded Natural Earth 10m Ports",
                     "description": "Ports from Natural Earth",
-                    "source_operator": "OgrSource"
+                    "sourceOperator": "OgrSource"
                 },
-                "meta_data": {
+                "metaData": {
                     "OgrMetaData": {
-                        "loading_info": {
-                            "file_name": "operators/test-data/vector/data/ne_10m_ports/ne_10m_ports.shp",
-                            "layer_name": "ne_10m_ports",
-                            "data_type": "MultiPoint",
+                        "loadingInfo": {
+                            "fileName": "operators/test-data/vector/data/ne_10m_ports/ne_10m_ports.shp",
+                            "layerName": "ne_10m_ports",
+                            "dataType": "MultiPoint",
                             "time": "none",
                             "columns": {
                                 "x": "",
                                 "y": null,
-                                "numeric": ["natlscale"],
-                                "decimal": ["scalerank"],
-                                "textual": ["featurecla", "name", "website"]
+                                "float": ["natlscale"],
+                                "int": ["scalerank"],
+                                "text": ["featurecla", "name", "website"]
                             },
                             "default_geometry": null,
-                            "force_ogr_time_filter": false,
-                            "on_error": "skip",
+                            "forceOgrTimeGilter": false,
+                            "onError": "skip",
                             "provenance": null
                         },
-                        "result_descriptor": {
-                            "data_type": "MultiPoint",
-                            "spatial_reference": "EPSG:4326",
+                        "resultDescriptor": {
+                            "dataType": "MultiPoint",
+                            "spatialReference": "EPSG:4326",
                             "columns": {
-                                "website": "Text",
-                                "name": "Text",
-                                "natlscale": "Number",
-                                "scalerank": "Decimal",
-                                "featurecla": "Text"
+                                "website": "text",
+                                "name": "text",
+                                "natlscale": "float",
+                                "scalerank": "int",
+                                "featurecla": "text"
                             }
                         }
                     }
@@ -509,14 +689,14 @@ mod tests {
             .reply(&create_dataset_handler(ctx))
             .await;
 
-        assert_eq!(res.status(), 500);
+        assert_eq!(res.status(), 500, "{:?}", res.body());
 
         // TODO: add a success test case once it is clear how to upload data from within a test
     }
 
     #[test]
     fn it_auto_detects() {
-        let mut meta_data = auto_detect_dataset(
+        let mut meta_data = auto_detect_meta_data_definition(
             &PathBuf::from_str("../operators/test-data/vector/data/ne_10m_ports/ne_10m_ports.shp")
                 .unwrap(),
         )
@@ -524,7 +704,7 @@ mod tests {
 
         if let MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data {
             if let Some(columns) = &mut meta_data.loading_info.columns {
-                columns.textual.sort();
+                columns.text.sort();
             }
         }
 
@@ -540,9 +720,9 @@ mod tests {
                     columns: Some(OgrSourceColumnSpec {
                         x: "".to_string(),
                         y: None,
-                        numeric: vec!["natlscale".to_string()],
-                        decimal: vec!["scalerank".to_string()],
-                        textual: vec![
+                        int: vec!["natlscale".to_string()],
+                        float: vec!["scalerank".to_string()],
+                        text: vec![
                             "featurecla".to_string(),
                             "name".to_string(),
                             "website".to_string(),
@@ -558,10 +738,65 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     columns: [
                         ("name".to_string(), FeatureDataType::Text),
-                        ("scalerank".to_string(), FeatureDataType::Decimal),
+                        ("scalerank".to_string(), FeatureDataType::Int),
                         ("website".to_string(), FeatureDataType::Text),
-                        ("natlscale".to_string(), FeatureDataType::Number),
+                        ("natlscale".to_string(), FeatureDataType::Float),
                         ("featurecla".to_string(), FeatureDataType::Text),
+                    ]
+                    .iter()
+                    .cloned()
+                    .collect(),
+                },
+            })
+        )
+    }
+
+    #[test]
+    fn it_detects_time() {
+        let mut meta_data = auto_detect_meta_data_definition(
+            &PathBuf::from_str("../operators/test-data/vector/data/points_with_iso_time.json")
+                .unwrap(),
+        )
+        .unwrap();
+
+        if let MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data {
+            if let Some(columns) = &mut meta_data.loading_info.columns {
+                columns.text.sort();
+            }
+        }
+
+        assert_eq!(
+            meta_data,
+            MetaDataDefinition::OgrMetaData(StaticMetaData {
+                loading_info: OgrSourceDataset {
+                    file_name: "../operators/test-data/vector/data/points_with_iso_time.json"
+                        .into(),
+                    layer_name: "points_with_iso_time".to_string(),
+                    data_type: Some(VectorDataType::MultiPoint),
+                    time: OgrSourceDatasetTimeType::StartEnd {
+                        start_field: "time_start".to_owned(),
+                        start_format: OgrSourceTimeFormat::Iso,
+                        end_field: "time_end".to_owned(),
+                        end_format: OgrSourceTimeFormat::Iso,
+                    },
+                    columns: Some(OgrSourceColumnSpec {
+                        x: "".to_string(),
+                        y: None,
+                        float: vec![],
+                        int: vec![],
+                        text: vec!["time_end".to_owned(), "time_start".to_owned()],
+                    }),
+                    default_geometry: None,
+                    force_ogr_time_filter: false,
+                    on_error: OgrSourceErrorSpec::Skip,
+                    provenance: None,
+                },
+                result_descriptor: VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: [
+                        ("time_end".to_string(), FeatureDataType::Text),
+                        ("time_start".to_string(), FeatureDataType::Text),
                     ]
                     .iter()
                     .cloned()
@@ -630,18 +865,18 @@ mod tests {
             body,
             json!({
                 "id": {
-                    "Internal": id.internal().unwrap()
+                    "internal": id.internal().unwrap()
                 },
                 "name": "OgrDataset",
                 "description": "My Ogr dataset",
-                "result_descriptor": {
-                    "Vector": {
-                        "data_type": "Data",
-                        "spatial_reference": "",
+                "resultDescriptor": {
+                    "vector": {
+                        "dataType": "Data",
+                        "spatialReference": "",
                         "columns": {}
                     }
                 },
-                "source_operator": "OgrSource"
+                "sourceOperator": "OgrSource"
             })
             .to_string()
         );

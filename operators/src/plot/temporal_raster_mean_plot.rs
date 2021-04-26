@@ -23,6 +23,7 @@ pub type MeanRasterPixelValuesOverTime = Operator<MeanRasterPixelValuesOverTimeP
 
 /// The parameter spec for `MeanRasterPixelValuesOverTime`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MeanRasterPixelValuesOverTimeParams {
     /// Where should the x-axis (time) tick be positioned?
     /// At either time start, time end or in the center.
@@ -276,11 +277,11 @@ mod tests {
         let serialized = json!({
             "type": "MeanRasterPixelValuesOverTime",
             "params": {
-                "time_position": "start",
+                "timePosition": "start",
                 "area": true,
             },
-            "raster_sources": [],
-            "vector_sources": [],
+            "rasterSources": [],
+            "vectorSources": [],
         })
         .to_string();
 

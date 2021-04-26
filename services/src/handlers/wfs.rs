@@ -10,17 +10,20 @@ use crate::users::session::Session;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use futures::StreamExt;
-use geoengine_datatypes::primitives::{
-    FeatureData, Geometry, MultiPoint, TimeInstance, TimeInterval,
-};
-use geoengine_datatypes::{collections::ToGeoJson, spatial_reference::SpatialReferenceOption};
+use geoengine_datatypes::collections::ToGeoJson;
 use geoengine_datatypes::{
     collections::{FeatureCollection, MultiPointCollection},
     primitives::SpatialResolution,
 };
+use geoengine_datatypes::{
+    primitives::{FeatureData, Geometry, MultiPoint, TimeInstance, TimeInterval},
+    spatial_reference::SpatialReference,
+};
+use geoengine_operators::engine::VectorOperator;
 use geoengine_operators::engine::{
     QueryContext, QueryRectangle, ResultDescriptor, TypedVectorQueryProcessor, VectorQueryProcessor,
 };
+use geoengine_operators::processing::{Reprojection, ReprojectionParams};
 use serde_json::json;
 use std::str::FromStr;
 
@@ -282,25 +285,37 @@ async fn get_feature<C: Context>(
     // TODO: use correct session when WFS uses authenticated access
     let execution_context = ctx.execution_context(&Session::mock())?;
     let initialized = operator
+        .clone()
         .initialize(&execution_context)
         .context(error::Operator)?;
 
     // handle request and workflow crs matching
-    let workflow_spatial_ref = initialized.result_descriptor().spatial_reference();
-    let request_spatial_ref: SpatialReferenceOption = request.srs_name.into();
+    let workflow_spatial_ref: Option<SpatialReference> =
+        initialized.result_descriptor().spatial_reference().into();
+    let workflow_spatial_ref = workflow_spatial_ref.ok_or(error::Error::InvalidSpatialReference)?;
+
     // TODO: use a default spatial reference if it is not set?
-    snafu::ensure!(
-        request_spatial_ref.is_spatial_ref(),
-        error::InvalidSpatialReference
-    );
-    // TODO: inject projection Operator
-    snafu::ensure!(
-        workflow_spatial_ref == request_spatial_ref,
-        error::SpatialReferenceMissmatch {
-            found: request_spatial_ref,
-            expected: workflow_spatial_ref,
-        }
-    );
+    let request_spatial_ref: SpatialReference = request
+        .srs_name
+        .ok_or(error::Error::InvalidSpatialReference)?;
+
+    // perform reprojection if necessary
+    let initialized = if request_spatial_ref == workflow_spatial_ref {
+        initialized
+    } else {
+        let proj = Reprojection {
+            params: ReprojectionParams {
+                target_spatial_reference: request_spatial_ref,
+            },
+            raster_sources: vec![],
+            vector_sources: vec![operator],
+        };
+
+        // TODO: avoid re-initialization of the whole operator graph
+        Box::new(proj)
+            .initialize(&execution_context)
+            .context(error::Operator)?
+    };
 
     let processor = initialized.query_processor().context(error::Operator)?;
 
@@ -403,7 +418,7 @@ fn get_feature_mock(_request: &GetFeature) -> Result<Box<dyn warp::Reply>, warp:
         vec![TimeInterval::new_unchecked(0, 1); 5],
         [(
             "foo".to_string(),
-            FeatureData::NullableDecimal(vec![Some(0), None, Some(2), Some(3), Some(4)]),
+            FeatureData::NullableInt(vec![Some(0), None, Some(2), Some(3), Some(4)]),
         )]
         .iter()
         .cloned()
@@ -848,16 +863,16 @@ x;y
                     ],
                     "aggregation": "first"
                 },
-                "vector_sources": [
+                "vectorSources": [
                     {
                         "type": "OgrSource",
                         "params": {
                             "dataset": ne_10m_ports_id,
-                            "attribute_projection": null
+                            "attributeProjection": null
                         }
                     }
                 ],
-                "raster_sources": [
+                "rasterSources": [
                     {
                         "type": "GdalSource",
                         "params": {

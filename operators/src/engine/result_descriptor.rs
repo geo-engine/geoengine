@@ -37,6 +37,7 @@ pub trait ResultDescriptor: Clone + Serialize {
 
 /// A `ResultDescriptor` for raster queries
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RasterResultDescriptor {
     pub data_type: RasterDataType,
     pub spatial_reference: SpatialReferenceOption,
@@ -80,6 +81,7 @@ impl ResultDescriptor for RasterResultDescriptor {
 
 /// A `ResultDescriptor` for vector queries
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct VectorResultDescriptor {
     pub data_type: VectorDataType,
     pub spatial_reference: SpatialReferenceOption,
@@ -162,6 +164,7 @@ impl ResultDescriptor for PlotResultDescriptor {
     }
 }
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub enum TypedResultDescriptor {
     Plot(PlotResultDescriptor),
     Raster(RasterResultDescriptor),
@@ -201,7 +204,7 @@ mod tests {
 
         let columns = {
             let mut columns = HashMap::with_capacity(1);
-            columns.insert("foo".to_string(), FeatureDataType::Number);
+            columns.insert("foo".to_string(), FeatureDataType::Float);
             columns
         };
 

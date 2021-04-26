@@ -28,6 +28,7 @@ jobs:
         os:
           - ubuntu-20.04
         features: ["", "--all-features"]
+        build: ["", "--release"]
 
     steps:
       - name: Checkout code
@@ -62,7 +63,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: build
-          args: ${{ matrix.features }} --verbose
+          args: ${{ matrix.features }} ${{ matrix.build }} --verbose
       - name: Run tests
         uses: actions-rs/cargo@v1
         with:

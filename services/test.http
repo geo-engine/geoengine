@@ -4,7 +4,7 @@ Content-Type: application/json
 {
   "email": "foo@bar.de",
   "password": "secret123",
-  "real_name": "Foo Bar"
+  "realName": "Foo Bar"
 }
 
 ###
@@ -66,18 +66,18 @@ Content-Type: application/json
   "name": "Test",
   "description": "Foobar",
   "bounds": {
-    "spatial_reference": "EPSG:4326",
-    "bounding_box": {
-      "lower_left_coordinate": {
+    "spatialReference": "EPSG:4326",
+    "boundingBox": {
+      "lowerLeftCoordinate": {
         "x": -180,
         "y": -90
       },
-      "upper_right_coordinate": {
+      "upperRightCoordinate": {
         "x": 180,
         "y": 90
       }
     },
-    "time_interval": {
+    "timeInterval": {
       "start": 0,
       "end": 0
     }

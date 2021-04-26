@@ -58,7 +58,7 @@ where
                 let pixel: f64 = pixel.as_();
                 let collection = collection.add_column(
                     &self.feature_name,
-                    FeatureData::Number(vec![pixel; collection.len()]),
+                    FeatureData::Float(vec![pixel; collection.len()]),
                 )?;
                 Ok(collection)
             })
@@ -81,6 +81,7 @@ where
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct MockRasterPointJoinParams {
     pub feature_name: String,
 }
@@ -132,7 +133,7 @@ impl VectorOperator for MockRasterPointJoinOperator {
         let result_descriptor = {
             let mut columns = vector_sources[0].result_descriptor().columns.clone();
             if columns
-                .insert(self.params.feature_name.clone(), FeatureDataType::Number)
+                .insert(self.params.feature_name.clone(), FeatureDataType::Float)
                 .is_some()
             {
                 return Err(geoengine_datatypes::error::Error::ColumnNameConflict {
@@ -247,9 +248,9 @@ mod tests {
         let expected = serde_json::json!({
             "type": "MockRasterPointJoinOperator",
             "params": {
-                "feature_name": "raster_values"
+                "featureName": "raster_values"
             },
-            "raster_sources": [{
+            "rasterSources": [{
                 "type": "MockRasterSource",
                 "params": {
                     "data": [{
@@ -257,32 +258,32 @@ mod tests {
                             "start": -8_334_632_851_200_000_i64,
                             "end": 8_210_298_412_799_999_i64
                         },
-                        "tile_position": [0, 0],
-                        "global_geo_transform": {
-                            "origin_coordinate": {
+                        "tilePosition": [0, 0],
+                        "globalGeoTransform": {
+                            "originCoordinate": {
                                 "x": 0.0,
                                 "y": 0.0
                             },
-                            "x_pixel_size": 1.0,
-                            "y_pixel_size": -1.0
+                            "xPixelSize": 1.0,
+                            "yPixelSize": -1.0
                         },
-                        "grid_array": {
+                        "gridArray": {
                             "shape": {
-                                "shape_array": [3, 2]
+                                "shapeArray": [3, 2]
                             },
                             "data": [1, 2, 3, 4, 5, 6],
-                            "no_data_value": null
+                            "noDataValue": null
                         }
                     }],
-                    "result_descriptor": {
-                        "data_type": "U8",
-                        "spatial_reference": "EPSG:4326",
+                    "resultDescriptor": {
+                        "dataType": "U8",
+                        "spatialReference": "EPSG:4326",
                         "measurement": "unitless",
-                        "no_data_value": null
+                        "noDataValue": null
                     }
                 }
             }],
-            "vector_sources": [{
+            "vectorSources": [{
                 "type": "MockPointSource",
                 "params": {
                     "points": [{
@@ -373,7 +374,7 @@ mod tests {
         assert_eq!(collections[1].len(), 1);
 
         let column = collections[0].data(&new_column_name).unwrap();
-        let numbers = if let FeatureDataRef::Number(numbers) = column {
+        let numbers = if let FeatureDataRef::Float(numbers) = column {
             numbers
         } else {
             panic!()
@@ -382,7 +383,7 @@ mod tests {
         assert_eq!(numbers.as_ref(), &[1.0, 1.0]);
 
         let column = collections[1].data(&new_column_name).unwrap();
-        let numbers = if let FeatureDataRef::Number(numbers) = column {
+        let numbers = if let FeatureDataRef::Float(numbers) = column {
             numbers
         } else {
             panic!()

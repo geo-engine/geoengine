@@ -23,6 +23,7 @@ pub type VectorJoin = Operator<VectorJoinParams>;
 
 /// A set of parameters for the `VectorJoin`
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct VectorJoinParams {
     #[serde(flatten)]
     join_type: VectorJoinType,
@@ -253,7 +254,7 @@ mod tests {
                     MultiPointCollection::from_slices(
                         &[(0.0, 0.1)],
                         &[TimeInterval::default()],
-                        &[("join_column", FeatureData::Decimal(vec![5]))],
+                        &[("join_column", FeatureData::Int(vec![5]))],
                     )
                     .unwrap(),
                 )
@@ -262,7 +263,7 @@ mod tests {
                     DataCollection::from_slices(
                         &[] as &[NoGeometry],
                         &[TimeInterval::default()],
-                        &[("join_column", FeatureData::Decimal(vec![5]))],
+                        &[("join_column", FeatureData::Int(vec![5]))],
                     )
                     .unwrap(),
                 )

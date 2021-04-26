@@ -1,5 +1,8 @@
-use arrow::datatypes::{DataType, Field, Float64Type, Int64Type};
 use arrow::error::ArrowError;
+use arrow::{
+    array::FixedSizeListArray,
+    datatypes::{DataType, Field, Float64Type, Int64Type},
+};
 use arrow::{
     array::{
         as_primitive_array, as_string_array, Array, ArrayData, ArrayRef, BooleanArray, ListArray,
@@ -20,8 +23,8 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::primitives::{
-    CategoricalDataRef, DecimalDataRef, FeatureData, FeatureDataRef, FeatureDataType,
-    FeatureDataValue, Geometry, NumberDataRef, TextDataRef, TimeInterval,
+    CategoryDataRef, FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue, FloatDataRef,
+    Geometry, IntDataRef, TextDataRef, TimeInterval,
 };
 use crate::util::arrow::{downcast_array, ArrowTyped};
 use crate::util::helpers::SomeIter;
@@ -154,6 +157,9 @@ pub trait FeatureCollectionModifications {
 
     /// Sorts the features in this collection by their timestamps ascending.
     fn sort_by_time_asc(&self) -> Result<Self::Output>;
+
+    /// Replaces the current time intervals and returns an updated collection.
+    fn replace_time(&self, time_intervals: &[TimeInterval]) -> Result<Self::Output>;
 }
 
 impl<CollectionType> FeatureCollectionModifications for FeatureCollection<CollectionType>
@@ -417,7 +423,7 @@ where
         let mut filter_array = None;
 
         match column_type {
-            FeatureDataType::Number => {
+            FeatureDataType::Float => {
                 apply_filters(
                     as_primitive_array::<Float64Type>(column),
                     &mut filter_array,
@@ -428,7 +434,7 @@ where
                     arrow::compute::lt_scalar,
                 )?;
             }
-            FeatureDataType::Decimal => {
+            FeatureDataType::Int => {
                 apply_filters(
                     as_primitive_array::<Int64Type>(column),
                     &mut filter_array,
@@ -450,7 +456,7 @@ where
                     arrow::compute::lt_utf8_scalar,
                 )?;
             }
-            FeatureDataType::Categorical => {
+            FeatureDataType::Category => {
                 return Err(error::FeatureCollectionError::WrongDataType.into());
             }
         }
@@ -650,6 +656,66 @@ where
 
         Ok(Self::new_from_internals(table, self.types.clone()))
     }
+
+    fn replace_time(&self, time_intervals: &[TimeInterval]) -> Result<Self::Output> {
+        let mut time_intervals_builder = TimeInterval::arrow_builder(time_intervals.len());
+
+        for time_interval in time_intervals {
+            let date_builder = time_intervals_builder.values();
+            date_builder.append_value(time_interval.start().inner())?;
+            date_builder.append_value(time_interval.end().inner())?;
+            time_intervals_builder.append(true)?;
+        }
+
+        let time_intervals = time_intervals_builder.finish();
+
+        let mut columns = Vec::<arrow::datatypes::Field>::with_capacity(self.table.num_columns());
+        let mut column_values =
+            Vec::<arrow::array::ArrayRef>::with_capacity(self.table.num_columns());
+
+        // copy geometry data if feature collection is geo collection
+        if CollectionType::IS_GEOMETRY {
+            columns.push(arrow::datatypes::Field::new(
+                Self::GEOMETRY_COLUMN_NAME,
+                CollectionType::arrow_data_type(),
+                false,
+            ));
+            column_values.push(
+                self.table
+                    .column_by_name(Self::GEOMETRY_COLUMN_NAME)
+                    .expect("There must exist a geometry column")
+                    .clone(),
+            );
+        }
+
+        // copy time data
+        columns.push(arrow::datatypes::Field::new(
+            Self::TIME_COLUMN_NAME,
+            TimeInterval::arrow_data_type(),
+            false,
+        ));
+        column_values.push(Arc::new(FixedSizeListArray::from(time_intervals.data())));
+
+        // copy remaining attribute data
+        for (column_name, column_type) in &self.types {
+            columns.push(arrow::datatypes::Field::new(
+                &column_name,
+                column_type.arrow_data_type(),
+                column_type.nullable(),
+            ));
+            column_values.push(
+                self.table
+                    .column_by_name(&column_name)
+                    .expect("The attribute column must exist")
+                    .clone(),
+            );
+        }
+
+        Ok(Self::new_from_internals(
+            struct_array_from_data(columns, column_values, self.table.len()),
+            self.types.clone(),
+        ))
+    }
 }
 
 /// A trait for common feature collection information
@@ -693,6 +759,15 @@ pub trait FeatureCollectionInfos {
     /// Retrieve time intervals
     fn time_intervals(&self) -> &[TimeInterval];
 
+    /// Calculate the collection bounds over all time intervals,
+    /// i.e., an interval of the smallest and largest time start and end.
+    fn time_bounds(&self) -> Option<TimeInterval> {
+        self.time_intervals()
+            .iter()
+            .copied()
+            .reduce(|t1, t2| t1.extend(&t2))
+    }
+
     /// Returns the byte-size of this collection
     fn byte_size(&self) -> usize;
 }
@@ -728,6 +803,10 @@ impl<'a, GeometryRef> FeatureCollectionRow<'a, GeometryRef> {
         self.data
             .get(column_name)
             .map(|col| col.get_unchecked(self.row_num))
+    }
+
+    pub fn index(&self) -> usize {
+        self.row_num
     }
 }
 
@@ -827,7 +906,7 @@ where
                     id: None,
                     properties: Some(properties),
                     foreign_members: Some(
-                        json_map! {"when".to_string() => time_interval.to_geo_json_event()},
+                        json_map! {"when".to_string() => time_interval.as_geo_json_event()},
                     ),
                 },
             )
@@ -904,9 +983,9 @@ where
 
         Ok(
             match self.types.get(column_name).expect("previously checked") {
-                FeatureDataType::Number => {
+                FeatureDataType::Float => {
                     let array: &arrow::array::Float64Array = downcast_array(column);
-                    NumberDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
+                    FloatDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
                 }
                 FeatureDataType::Text => {
                     let array: &arrow::array::StringArray = downcast_array(column);
@@ -917,13 +996,13 @@ where
                     )
                     .into()
                 }
-                FeatureDataType::Decimal => {
+                FeatureDataType::Int => {
                     let array: &arrow::array::Int64Array = downcast_array(column);
-                    DecimalDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
+                    IntDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
                 }
-                FeatureDataType::Categorical => {
+                FeatureDataType::Category => {
                     let array: &arrow::array::UInt8Array = downcast_array(column);
-                    CategoricalDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
+                    CategoryDataRef::new(array.values(), array.data_ref().null_bitmap()).into()
                 }
             },
         )
@@ -1033,7 +1112,7 @@ where
     ///     vec![TimeInterval::new_unchecked(0, 1), TimeInterval::new_unchecked(0, 1)],
     ///     {
     ///         let mut map = HashMap::new();
-    ///         map.insert("number".into(), FeatureData::Number(vec![0., 1.]));
+    ///         map.insert("float".into(), FeatureData::Float(vec![0., 1.]));
     ///         map
     ///     },
     /// ).unwrap();
@@ -1544,8 +1623,8 @@ mod tests {
             vec![],
             vec![TimeInterval::new(0, 1).unwrap(); 1],
             [
-                ("foo".to_string(), FeatureData::Decimal(vec![1])),
-                ("bar".to_string(), FeatureData::Decimal(vec![2])),
+                ("foo".to_string(), FeatureData::Int(vec![1])),
+                ("bar".to_string(), FeatureData::Int(vec![2])),
             ]
             .iter()
             .cloned()

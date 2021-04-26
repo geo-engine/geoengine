@@ -266,7 +266,7 @@ impl TimeInterval {
     /// use geoengine_datatypes::primitives::{TimeInterval, TimeInstance};
     ///
     /// assert_eq!(
-    ///     TimeInterval::new_unchecked(0, 1585069448 * 1000).to_geo_json_event(),
+    ///     TimeInterval::new_unchecked(0, 1585069448 * 1000).as_geo_json_event(),
     ///     serde_json::json!({
     ///         "start": "1970-01-01T00:00:00+00:00",
     ///         "end": "2020-03-24T17:04:08+00:00",
@@ -274,9 +274,7 @@ impl TimeInterval {
     ///     })
     /// );
     /// ```
-    pub fn to_geo_json_event(&self) -> serde_json::Value {
-        // TODO: Use proper time handling, e.g., define a BOT/EOT, …
-
+    pub fn as_geo_json_event(&self) -> serde_json::Value {
         serde_json::json!({
             "start": self.start.as_rfc3339(),
             "end": self.end.as_rfc3339(),
@@ -298,6 +296,19 @@ impl TimeInterval {
 
     pub fn duration_ms(&self) -> u64 {
         self.end.inner().wrapping_sub(self.start.inner()) as u64
+    }
+
+    pub fn is_instant(&self) -> bool {
+        self.start == self.end
+    }
+
+    /// Extends a time interval with the bounds of another time interval.
+    /// The result has the smaller `start` and the larger `end`.
+    pub fn extend(&self, other: &Self) -> TimeInterval {
+        Self {
+            start: self.start.min(other.start),
+            end: self.end.max(other.end),
+        }
     }
 }
 
@@ -494,7 +505,7 @@ mod tests {
 
         assert_eq!(
             TimeInterval::new_unchecked(min_visualizable_value, max_visualizable_value)
-                .to_geo_json_event(),
+                .as_geo_json_event(),
             serde_json::json!({
                 "start": "-262144-01-01T00:00:00+00:00",
                 "end": "+262143-12-31T23:59:59.999+00:00",
@@ -506,7 +517,7 @@ mod tests {
                 TimeInstance::from_millis_unchecked(min_visualizable_value - 1),
                 TimeInstance::from_millis_unchecked(max_visualizable_value + 1)
             )
-            .to_geo_json_event(),
+            .as_geo_json_event(),
             serde_json::json!({
                 "start": "-262144-01-01T00:00:00+00:00",
                 "end": "+262143-12-31T23:59:59.999+00:00",
@@ -518,7 +529,7 @@ mod tests {
                 TimeInstance::from_millis_unchecked(i64::MIN),
                 TimeInstance::from_millis_unchecked(i64::MAX)
             )
-            .to_geo_json_event(),
+            .as_geo_json_event(),
             serde_json::json!({
                 "start": "-262144-01-01T00:00:00+00:00",
                 "end": "+262143-12-31T23:59:59.999+00:00",
@@ -645,5 +656,22 @@ mod tests {
         let b = TimeInterval::new(2, 3).unwrap();
 
         assert!(!b.intersects(&a))
+    }
+
+    #[test]
+    fn extend() {
+        let a = TimeInterval::new(1, 2).unwrap();
+        let b = TimeInterval::new(2, 3).unwrap();
+
+        assert_eq!(a.extend(&b), TimeInterval::new_unchecked(1, 3));
+    }
+
+    #[test]
+    fn is_instant() {
+        let a = TimeInterval::new(1, 1).unwrap();
+        let b = TimeInterval::new(2, 3).unwrap();
+
+        assert!(a.is_instant());
+        assert!(!b.is_instant());
     }
 }

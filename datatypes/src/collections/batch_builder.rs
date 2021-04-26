@@ -444,7 +444,7 @@ mod tests {
     fn no_geo() {
         let mut builder = DataCollection::builder();
         builder
-            .add_column("foo".into(), FeatureDataType::Number)
+            .add_column("foo".into(), FeatureDataType::Float)
             .unwrap();
         let mut builder = builder.batch_builder(4, 0);
         builder.set_default_time_intervals().unwrap();
@@ -476,7 +476,7 @@ mod tests {
         assert_eq!(collection.len(), 4);
 
         match collection.data("foo").unwrap() {
-            FeatureDataRef::Number(n) => {
+            FeatureDataRef::Float(n) => {
                 assert_eq!(n.as_ref()[0], 1.);
                 assert_eq!(n.as_ref()[1], 2.);
                 assert_eq!(n.as_ref()[2], 3.);

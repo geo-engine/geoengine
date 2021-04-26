@@ -27,6 +27,7 @@ use uuid::Uuid;
 identifier!(ProjectId);
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct Project {
     pub id: ProjectId,
     pub version: ProjectVersion,
@@ -123,6 +124,7 @@ impl Project {
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 #[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
 #[allow(clippy::upper_case_acronyms)]
+#[serde(rename_all = "camelCase")]
 pub struct STRectangle {
     pub spatial_reference: SpatialReferenceOption,
     pub bounding_box: BoundingBox2D,
@@ -217,12 +219,14 @@ impl Layer {
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
 #[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
+#[serde(rename_all = "camelCase")]
 pub enum LayerType {
     Raster,
     Vector,
 }
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 #[allow(clippy::large_enum_variant)]
+#[serde(rename_all = "camelCase")]
 pub enum Symbology {
     Raster(RasterSymbology),
     Vector(VectorSymbology),
@@ -237,6 +241,7 @@ pub struct RasterSymbology {
 impl Eq for RasterSymbology {}
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub enum VectorSymbology {
     Point(PointSymbology),
     Line(LineSymbology),
@@ -244,6 +249,7 @@ pub enum VectorSymbology {
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct TextSymbology {
     pub attribute: String,
     pub fill_color: ColorParam,
@@ -251,6 +257,7 @@ pub struct TextSymbology {
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct PointSymbology {
     pub radius: NumberParam,
     pub fill_color: ColorParam,
@@ -286,6 +293,7 @@ pub struct LineSymbology {
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct PolygonSymbology {
     pub fill_color: ColorParam,
 
@@ -295,12 +303,14 @@ pub struct PolygonSymbology {
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub enum NumberParam {
     Static(usize),
     Derived(DerivedNumber),
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct DerivedNumber {
     pub attribute: String,
     pub factor: f64,
@@ -317,6 +327,7 @@ pub struct StrokeParam {
 impl Eq for DerivedNumber {}
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub enum ColorParam {
     Static(RgbaColor),
     Derived(DerivedColor),
@@ -370,6 +381,7 @@ impl OrderBy {
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
+#[serde(rename_all = "camelCase")]
 pub struct ProjectListing {
     pub id: ProjectId,
     pub name: String,
@@ -406,6 +418,7 @@ impl Default for ProjectFilter {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateProject {
     pub name: String,
     pub description: String,
@@ -425,6 +438,7 @@ impl UserInput for CreateProject {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct UpdateProject {
     pub id: ProjectId,
     pub name: Option<String>,
@@ -572,18 +586,18 @@ mod tests {
     fn strectangle_serialization() {
         assert!(serde_json::from_str::<STRectangle>(
             &json!({
-                "spatial_reference": "EPSG:4326",
-                "bounding_box": {
-                  "lower_left_coordinate": {
+                "spatialReference": "EPSG:4326",
+                "boundingBox": {
+                  "lowerLeftCoordinate": {
                     "x": -180,
                     "y": -90
                   },
-                  "upper_right_coordinate": {
+                  "upperRightCoordinate": {
                     "x": 180,
                     "y": 90
                   }
                 },
-                "time_interval": {
+                "timeInterval": {
                   "start": 0,
                   "end": 0
                 }
@@ -632,9 +646,9 @@ mod tests {
                         "legend": false,
                     },
                     "symbology": {
-                        "Raster": {
+                        "raster": {
                             "opacity": 1.0,
-                            "colorizer": "Rgba"
+                            "colorizer": "rgba"
                         }
                     }
                 })
@@ -724,23 +738,23 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&symbology).unwrap(),
             json!({
-                "Vector": {
-                    "Point": {
+                "vector": {
+                    "point": {
                         "radius": {
-                            "Static": 1
+                            "static": 1
                         },
-                        "fill_color": {
-                            "Derived": {
+                        "fillColor": {
+                            "derived": {
                                 "attribute": "foo",
-                                "colorizer": "Rgba"
+                                "colorizer": "rgba"
                             }
                         },
                         "stroke": {
                             "width": {
-                                "Static": 1
+                                "static": 1
                             },
                             "color": {
-                                "Static": [
+                                "static": [
                                     0,
                                     0,
                                     0,
