@@ -32,7 +32,7 @@ impl ProjectDb for HashMapProjectDb {
             offset,
             limit,
         } = options.user_input;
-        #[allow(clippy::filter_map)]
+        #[allow(clippy::flat_map_option)]
         let mut projects = self
             .permissions
             .iter()

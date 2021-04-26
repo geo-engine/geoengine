@@ -297,7 +297,7 @@ impl<'g> From<&MultiLineStringRef<'g>> for MultiLineString {
             multi_line_string_ref
                 .point_coordinates
                 .iter()
-                .cloned()
+                .copied()
                 .map(ToOwned::to_owned)
                 .collect(),
         )
