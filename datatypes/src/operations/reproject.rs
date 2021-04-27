@@ -33,7 +33,7 @@ pub struct CoordinateProjector {
 
 impl CoordinateProjection for CoordinateProjector {
     fn from_known_srs(from: SpatialReference, to: SpatialReference) -> Result<Self> {
-        let p = Proj::new_known_crs(&from.to_string(), &to.to_string(), None)
+        let p = Proj::new_known_crs(&from.proj_string()?, &to.proj_string()?, None)
             .ok_or(error::Error::NoCoordinateProjector { from, to })?;
         Ok(CoordinateProjector { from, to, p })
     }
@@ -208,16 +208,20 @@ where
         let left_line = Line::new(self.lower_left(), self.upper_left())
             .with_additional_equi_spaced_coords(POINTS_PER_LINE);
 
-        let cs: Vec<Coordinate2D> = upper_line
+        let outline_coordinates: Vec<Coordinate2D> = upper_line
             .chain(right_line)
             .chain(lower_line)
             .chain(left_line)
             .collect();
 
-        // TODO: this should use the fail_tolarant reprojection and fail only if there are not enough coordinates after reprojection. This could also require us to use a grid instead of bounds. The good news is that the Grid can already provide this.
-        MultiPoint::new_unchecked(cs)
-            .reproject(projector)
-            .map(|mp| mp.spatial_bounds())
+        let proj_outline_coordinates: Vec<Coordinate2D> =
+            project_coordinates_fail_tolarant(&outline_coordinates, projector)
+                .into_iter()
+                .flatten()
+                .collect();
+
+        // TODO: check min coords or use grid? e.g. ensure!(proj_cs.len() ). fail only if there are not enough coordinates after reprojection. This could also require us to use a grid instead of bounds. The good news is that the Grid can already provide this.
+        Ok(MultiPoint::new_unchecked(proj_outline_coordinates).spatial_bounds())
     }
 }
 
@@ -293,21 +297,19 @@ pub fn suggest_pixel_size_from_diag_cross<P: CoordinateProjection>(
     let diag_pixels = euclidian_pixel_distance(bbox, spatial_resolution)?;
 
     let proj_ul_lr_distance =
-        projected_diag_distance(bbox.upper_left(), bbox.lower_right(), projector)?;
-
-    let proj_ul_lr_pixel_size = proj_ul_lr_distance / diag_pixels;
+        projected_diag_distance(bbox.upper_left(), bbox.lower_right(), projector);
 
     let proj_ll_ur_distance =
-        projected_diag_distance(bbox.lower_left(), bbox.upper_right(), projector)?;
+        projected_diag_distance(bbox.lower_left(), bbox.upper_right(), projector);
 
-    let proj_ll_ur_pixel_size = proj_ll_ur_distance / diag_pixels;
+    let min_dist_r = match (proj_ul_lr_distance, proj_ll_ur_distance) {
+        (Ok(ul_lr), Ok(ll_ur)) => Ok(ul_lr.min(ll_ur)),
+        (Ok(ul_lr), Err(_)) => Ok(ul_lr),
+        (Err(_), Ok(ll_ur)) => Ok(ll_ur),
+        (Err(e), Err(_)) => Err(e),
+    };
 
-    let min_pixel_size = proj_ll_ur_pixel_size.min(proj_ul_lr_pixel_size);
-
-    Ok(SpatialResolution::new_unchecked(
-        min_pixel_size,
-        min_pixel_size,
-    ))
+    min_dist_r.map(|d| SpatialResolution::new_unchecked(d / diag_pixels, d / diag_pixels))
 }
 
 /// Tries to reproject all coordinates at once. If this fails, tries to reproject coordinate by coordinate.

@@ -16,7 +16,10 @@ use std::{marker::PhantomData, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use futures::stream::{self, BoxStream, StreamExt};
+use futures::{
+    stream::{self, BoxStream, StreamExt},
+    Stream,
+};
 
 use crate::engine::{MetaData, QueryRectangle};
 use geoengine_datatypes::raster::{GeoTransform, Grid2D, Pixel, RasterDataType, RasterTile2D};
@@ -281,9 +284,21 @@ where
         dataset_params: GdalDatasetParameters,
         tile_information: TileInformation,
     ) -> Result<Grid2D<T>> {
-        tokio::task::spawn_blocking(move || Self::load_tile_data(&dataset_params, tile_information))
+        tokio::task::spawn_blocking(move || {
+            Self::load_tile_data(&dataset_params, &tile_information)
+        })
+        .await
+        .context(error::TokioJoin)?
+    }
+
+    pub async fn load_tile_async(
+        dataset_params: GdalDatasetParameters,
+        tile_information: TileInformation,
+        time: TimeInterval,
+    ) -> Result<RasterTile2D<T>> {
+        Self::load_tile_data_async(dataset_params, tile_information)
             .await
-            .context(error::TokioJoin)?
+            .map(|tile_data| RasterTile2D::new_with_tile_info(time, tile_information, tile_data))
     }
 
     ///
@@ -291,7 +306,7 @@ where
     ///
     pub fn load_tile_data(
         dataset_params: &GdalDatasetParameters,
-        tile_information: TileInformation,
+        tile_information: &TileInformation,
     ) -> Result<Grid2D<T>> {
         let dataset_bounds = dataset_params.bbox;
         let geo_transform = dataset_params.geo_transform;
@@ -392,7 +407,7 @@ where
         &self,
         query: QueryRectangle,
         info: GdalLoadingInfoPart,
-    ) -> BoxStream<Result<RasterTile2D<T>>> {
+    ) -> impl Stream<Item = Result<RasterTile2D<T>>> {
         let spatial_resolution = query.spatial_resolution;
         let geo_transform = info.params.geo_transform;
 
@@ -416,15 +431,8 @@ where
         let tiling_strategy = self.tiling_specification.strategy(x_signed, y_signed);
 
         stream::iter(tiling_strategy.tile_information_iterator(query.bbox))
-            .map(move |tile| (tile, info.clone()))
-            .then(async move |(tile, info)| {
-                Ok(RasterTile2D::new_with_tile_info(
-                    info.time,
-                    tile,
-                    Self::load_tile_data_async(info.params.clone(), tile).await?,
-                ))
-            })
-            .boxed()
+            .map(move |tile| Self::load_tile_async(info.params.clone(), tile, info.time))
+            .buffered(1) // TODO: find a good default and / or add to config.
     }
 }
 
@@ -442,7 +450,7 @@ where
 
         let stream = stream::iter(meta_data.info)
             .map(move |info| match info {
-                Ok(info) => self.tile_stream(query, info),
+                Ok(info) => self.tile_stream(query, info).boxed(),
                 Err(err) => stream::once(async { Result::Err(err) }).boxed(),
             })
             .flatten();
@@ -660,7 +668,7 @@ mod tests {
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value: Some(0.),
             },
-            TileInformation::with_bbox_and_shape(output_bounds, output_shape),
+            &TileInformation::with_bbox_and_shape(output_bounds, output_shape),
         )
     }
 

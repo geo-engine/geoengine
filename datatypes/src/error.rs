@@ -28,6 +28,13 @@ pub enum Error {
         from: SpatialReference,
         to: SpatialReference,
     },
+    #[snafu(display(
+        "Could not resolve a Proj string for this SpatialReference: {}",
+        spatial_ref
+    ))]
+    ProjStringUnresolvable {
+        spatial_ref: SpatialReference,
+    },
 
     #[snafu(display("Field is reserved or already in use: {}", name))]
     ColumnNameConflict {
