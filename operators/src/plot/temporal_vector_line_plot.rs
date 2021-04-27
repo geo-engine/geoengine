@@ -25,8 +25,11 @@ use geoengine_datatypes::{
 };
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
-use std::collections::hash_map::Entry::{Occupied, Vacant};
 use std::collections::HashMap;
+use std::{
+    cmp::Ordering,
+    collections::hash_map::Entry::{Occupied, Vacant},
+};
 
 pub const FEATURE_ATTRIBUTE_OVER_TIME_NAME: &str = "Feature Attribute over Time";
 const MAX_FEATURES: usize = 20;
@@ -245,7 +248,8 @@ impl<const LENGTH: usize> FeatureAttributeValues<LENGTH> {
     }
 
     pub fn get_data_points(mut self) -> Vec<DataPoint> {
-        self.values
+        let mut data = self
+            .values
             .drain()
             .flat_map(|(id, values)| {
                 values.into_iter().map(move |value| DataPoint {
@@ -254,7 +258,13 @@ impl<const LENGTH: usize> FeatureAttributeValues<LENGTH> {
                     value: value.value,
                 })
             })
-            .collect()
+            .collect::<Vec<_>>();
+
+        data.sort_by(|a, b| match a.series.cmp(&b.series) {
+            Ordering::Equal => a.time.cmp(&b.time),
+            other => other,
+        });
+        data
     }
 }
 
@@ -342,7 +352,7 @@ mod tests {
         assert_eq!(
             result,
             PlotData {
-                vega_string: r#"{"$schema":"https://vega.github.io/schema/vega-lite/v4.17.0.json","data":{"values":[{"x":"2014-01-01T00:00:00+00:00","y":2.0,"series":"S1"},{"x":"2014-01-01T00:00:00+00:00","y":0.0,"series":"S0"},{"x":"2014-02-01T00:00:00+00:00","y":1.0,"series":"S0"}]},"description":"Multi Line Chart","encoding":{"x":{"field":"x","title":"Time","type":"temporal"},"y":{"field":"y","title":"","type":"quantitative"},"color":{"field":"series","scale":{"scheme":"category20"}}},"mark":{"type":"line","line":true,"point":true}}"#.to_owned(),
+                vega_string: r#"{"$schema":"https://vega.github.io/schema/vega-lite/v4.17.0.json","data":{"values":[{"x":"2014-01-01T00:00:00+00:00","y":0.0,"series":"S0"},{"x":"2014-02-01T00:00:00+00:00","y":1.0,"series":"S0"},{"x":"2014-01-01T00:00:00+00:00","y":2.0,"series":"S1"}]},"description":"Multi Line Chart","encoding":{"x":{"field":"x","title":"Time","type":"temporal"},"y":{"field":"y","title":"","type":"quantitative"},"color":{"field":"series","scale":{"scheme":"category20"}}},"mark":{"type":"line","line":true,"point":true}}"#.to_owned(),
                 metadata: PlotMetaData::None,
             }
         );
