@@ -11,7 +11,7 @@ use futures::{stream::FusedStream, Future};
 use geoengine_datatypes::{
     error::Error::{GridIndexOutOfBounds, InvalidGridIndex},
     operations::reproject::{
-        project_coordinates_fail_tolarant, CoordinateProjection, CoordinateProjector, Reproject,
+        project_coordinates_fail_tolerant, CoordinateProjection, CoordinateProjector, Reproject,
     },
     primitives::{SpatialBounded, SpatialResolution, TimeInterval},
     raster::{grid_idx_iter_2d, BoundedGrid, Grid2D, TilingSpecification},
@@ -474,7 +474,7 @@ where
             .collect();
 
         let proj = CoordinateProjector::from_known_srs(self.out_srs, self.in_srs)?;
-        let projected_coords = project_coordinates_fail_tolarant(&coords, &proj);
+        let projected_coords = project_coordinates_fail_tolerant(&coords, &proj);
 
         let accu_companion: Vec<(GridIdx2D, Coordinate2D)> = idxs
             .into_iter()
