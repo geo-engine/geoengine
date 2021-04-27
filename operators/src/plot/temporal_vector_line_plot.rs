@@ -259,4 +259,92 @@ impl<const LENGTH: usize> FeatureAttributeValues<LENGTH> {
 }
 
 #[cfg(test)]
-mod tests {}
+mod tests {
+    use super::*;
+    use chrono::NaiveDate;
+    use geoengine_datatypes::{
+        collections::MultiPointCollection,
+        plots::PlotMetaData,
+        primitives::{BoundingBox2D, FeatureData, MultiPoint, SpatialResolution, TimeInterval},
+    };
+
+    use crate::{
+        engine::{MockExecutionContext, MockQueryContext, VectorOperator},
+        mock::MockFeatureCollectionSource,
+    };
+
+    #[tokio::test]
+    async fn plot() {
+        let point_source = MockFeatureCollectionSource::single(
+            MultiPointCollection::from_data(
+                MultiPoint::many(vec![
+                    vec![(-13.95, 20.05)],
+                    vec![(-14.05, 20.05)],
+                    vec![(-13.95, 20.05)],
+                ])
+                .unwrap(),
+                vec![
+                    TimeInterval::new_unchecked(
+                        NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
+                        NaiveDate::from_ymd(2014, 2, 1).and_hms(0, 0, 0),
+                    ),
+                    TimeInterval::new_unchecked(
+                        NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
+                        NaiveDate::from_ymd(2014, 3, 1).and_hms(0, 0, 0),
+                    ),
+                    TimeInterval::new_unchecked(
+                        NaiveDate::from_ymd(2014, 2, 1).and_hms(0, 0, 0),
+                        NaiveDate::from_ymd(2014, 3, 1).and_hms(0, 0, 0),
+                    ),
+                ],
+                [
+                    (
+                        "id".to_string(),
+                        FeatureData::Text(vec!["S0".to_owned(), "S1".to_owned(), "S0".to_owned()]),
+                    ),
+                    ("value".to_string(), FeatureData::Float(vec![0., 2., 1.])),
+                ]
+                .iter()
+                .cloned()
+                .collect(),
+            )
+            .unwrap(),
+        )
+        .boxed();
+
+        let exe_ctc = MockExecutionContext::default();
+
+        let operator = FeatureAttributeValuesOverTime {
+            params: FeatureAttributeValuesOverTimeParams {
+                id_column: "id".to_owned(),
+                value_column: "value".to_owned(),
+            },
+            raster_sources: vec![],
+            vector_sources: vec![point_source],
+        };
+
+        let operator = operator.boxed().initialize(&exe_ctc).unwrap();
+
+        let query_processor = operator.query_processor().unwrap().json_vega().unwrap();
+
+        let result = query_processor
+            .plot_query(
+                QueryRectangle {
+                    bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    time_interval: TimeInterval::default(),
+                    spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
+                },
+                &MockQueryContext::new(0),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            result,
+            PlotData {
+                vega_string: r#"{"$schema":"https://vega.github.io/schema/vega-lite/v4.17.0.json","data":{"values":[{"x":"2014-01-01T00:00:00+00:00","y":2.0,"series":"S1"},{"x":"2014-01-01T00:00:00+00:00","y":0.0,"series":"S0"},{"x":"2014-02-01T00:00:00+00:00","y":1.0,"series":"S0"}]},"description":"Multi Line Chart","encoding":{"x":{"field":"x","title":"Time","type":"temporal"},"y":{"field":"y","title":"","type":"quantitative"},"color":{"field":"series","scale":{"scheme":"category20"}}},"mark":{"type":"line","line":true,"point":true}}"#.to_owned(),
+                metadata: PlotMetaData::None,
+            }
+        );
+    }
+}
