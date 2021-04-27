@@ -432,7 +432,7 @@ where
 
         stream::iter(tiling_strategy.tile_information_iterator(query.bbox))
             .map(move |tile| Self::load_tile_async(info.params.clone(), tile, info.time))
-            .buffered(4) // TODO: find a good default and / or add to config.
+            .buffered(1) // TODO: find a good default and / or add to config.
     }
 }
 
