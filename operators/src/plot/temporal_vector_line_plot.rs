@@ -10,7 +10,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use futures::StreamExt;
-use geoengine_datatypes::primitives::FeatureDataValue;
+use geoengine_datatypes::primitives::{FeatureDataType, FeatureDataValue};
 use geoengine_datatypes::{
     collections::FeatureCollection,
     plots::{Plot, PlotData},
@@ -45,7 +45,7 @@ pub struct FeatureAttributeValuesOverTimeParams {
 #[typetag::serde]
 impl PlotOperator for FeatureAttributeValuesOverTime {
     fn initialize(
-        self: Box<Self>,
+        mut self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedPlotOperator>> {
         ensure!(
@@ -63,16 +63,41 @@ impl PlotOperator for FeatureAttributeValuesOverTime {
             }
         );
 
-        // TODO: check columns exist
+        let source = self.vector_sources.remove(0).initialize(context)?;
+        let result_descriptor = source.result_descriptor();
+        let columns: &HashMap<String, FeatureDataType> = &result_descriptor.columns;
+
+        ensure!(
+            columns.contains_key(&self.params.id_column),
+            error::ColumnDoesNotExist {
+                column: self.params.id_column.clone()
+            }
+        );
+
+        ensure!(
+            columns.contains_key(&self.params.value_column),
+            error::ColumnDoesNotExist {
+                column: self.params.value_column.clone()
+            }
+        );
+
+        let id_type = columns.get(&self.params.id_column).expect("checked");
+        let value_type = columns.get(&self.params.value_column).expect("checked");
+
+        ensure!(
+            id_type == &FeatureDataType::Text || id_type == &FeatureDataType::Int,
+            error::InvalidFeatureDataType,
+        );
+
+        ensure!(
+            value_type != &FeatureDataType::Text,
+            error::InvalidFeatureDataType,
+        );
 
         Ok(InitializedFeatureAttributeValuesOverTime {
             result_descriptor: PlotResultDescriptor {},
             raster_sources: vec![],
-            vector_sources: self
-                .vector_sources
-                .into_iter()
-                .map(|o| o.initialize(context))
-                .collect::<Result<Vec<_>>>()?,
+            vector_sources: vec![source],
             state: self.params,
         }
         .boxed())
