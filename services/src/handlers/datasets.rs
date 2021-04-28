@@ -714,7 +714,7 @@ mod tests {
                         y: None,
                         float: vec![],
                         int: vec![],
-                        text: vec!["time_end".to_owned(), "time_start".to_owned()],
+                        text: vec![],
                     }),
                     default_geometry: None,
                     force_ogr_time_filter: false,
@@ -724,13 +724,7 @@ mod tests {
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    columns: [
-                        ("time_end".to_string(), FeatureDataType::Text),
-                        ("time_start".to_string(), FeatureDataType::Text),
-                    ]
-                    .iter()
-                    .cloned()
-                    .collect(),
+                    columns: [].iter().cloned().collect(),
                 },
             })
         )
