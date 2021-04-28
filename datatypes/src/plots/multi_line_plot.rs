@@ -18,6 +18,8 @@ impl From<(String, TimeInstance, f64)> for DataPoint {
     }
 }
 
+/// A plot that produces a chart over time (x-axis) with multiple (colored) lines, one for each
+/// series defined by the corresponding field `series` of the given `DataPoint`s.
 pub struct MultiLineChart {
     data: Vec<DataPoint>,
     measurement: Measurement,
