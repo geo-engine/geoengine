@@ -20,9 +20,6 @@
 )]
 // enable some restriction lints
 #![warn(clippy::print_stdout, clippy::print_stderr, clippy::dbg_macro)]
-//
-// TODO: remove this and make warp use less filters
-#![recursion_limit = "256"]
 
 pub mod contexts;
 pub mod datasets;
