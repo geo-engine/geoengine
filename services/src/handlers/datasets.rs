@@ -21,12 +21,8 @@ use crate::{
     datasets::{listing::DatasetListOptions, upload::UploadDb},
     util::IdResponse,
 };
-use chrono::DateTime;
 use gdal::vector::OGRFieldType;
-use gdal::{
-    vector::{FieldValue, Layer},
-    Dataset,
-};
+use gdal::{vector::Layer, Dataset};
 use geoengine_datatypes::{
     collections::VectorDataType,
     dataset::{DatasetId, InternalDatasetId},
@@ -264,7 +260,7 @@ fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDef
         .context(error::DataType)?;
     let columns_map = detect_columns(&layer);
     let columns_vecs = column_map_to_column_vecs(&columns_map);
-    let time = detect_time_type(&layer, &columns_vecs);
+    let time = detect_time_type(&columns_vecs);
 
     Ok(MetaDataDefinition::OgrMetaData(StaticMetaData {
         loading_info: OgrSourceDataset {
@@ -295,13 +291,8 @@ fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDef
     }))
 }
 
-fn detect_time_type(layer: &Layer, columns: &Columns) -> OgrSourceDatasetTimeType {
-    let feature = layer.features().next();
-    if feature.is_none() {
-        return OgrSourceDatasetTimeType::None;
-    }
-    let feature = feature.expect("checked before");
-
+fn detect_time_type(columns: &Columns) -> OgrSourceDatasetTimeType {
+    // TODO: load candidate names from config
     let known_start = [
         "start",
         "time",
@@ -316,6 +307,7 @@ fn detect_time_type(layer: &Layer, columns: &Columns) -> OgrSourceDatasetTimeTyp
         "date time",
         "event",
         "timestamp",
+        "time_from",
     ];
     let known_end = [
         "end",
@@ -334,28 +326,21 @@ fn detect_time_type(layer: &Layer, columns: &Columns) -> OgrSourceDatasetTimeTyp
         "date stop",
         "end date",
         "stop date",
+        "time_to",
     ];
     let known_duration = ["duration", "length", "valid for", "valid_for"];
 
     let mut start = None;
     let mut end = None;
-    for column in columns.text.iter().chain(&(columns.date)) {
-        let is_date = feature
-            .field(column)
-            .ok()
-            .and_then(FieldValue::into_string)
-            .map(|s| DateTime::parse_from_rfc3339(&s))
-            .is_some();
-        if is_date {
-            if known_start.contains(&column.as_ref()) && start.is_none() {
-                start = Some(column);
-            } else if known_end.contains(&column.as_ref()) && end.is_none() {
-                end = Some(column);
-            }
+    for column in &columns.date {
+        if known_start.contains(&column.as_ref()) && start.is_none() {
+            start = Some(column);
+        } else if known_end.contains(&column.as_ref()) && end.is_none() {
+            end = Some(column);
+        }
 
-            if start.is_some() && end.is_some() {
-                break;
-            }
+        if start.is_some() && end.is_some() {
+            break;
         }
     }
 
