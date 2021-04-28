@@ -247,8 +247,8 @@ fn suggest_main_file(upload: &Upload) -> Option<String> {
 }
 
 fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDefinition> {
-    let mut dataset = Dataset::open(&main_file_path).context(error::Gdal)?;
-    let layer = {
+    let dataset = Dataset::open(&main_file_path).context(error::Gdal)?;
+    let mut layer = {
         if let Ok(layer) = dataset.layer(0) {
             layer
         } else {
@@ -264,7 +264,7 @@ fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDef
         .context(error::DataType)?;
     let columns_map = detect_columns(&layer);
     let columns_vecs = column_map_to_column_vecs(&columns_map);
-    let time = detect_time_type(&layer, &columns_vecs);
+    let time = detect_time_type(&mut layer, &columns_vecs);
 
     Ok(MetaDataDefinition::OgrMetaData(StaticMetaData {
         loading_info: OgrSourceDataset {
@@ -295,7 +295,7 @@ fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDef
     }))
 }
 
-fn detect_time_type(layer: &Layer, columns: &Columns) -> OgrSourceDatasetTimeType {
+fn detect_time_type(layer: &mut Layer, columns: &Columns) -> OgrSourceDatasetTimeType {
     let feature = layer.features().next();
     if feature.is_none() {
         return OgrSourceDatasetTimeType::None;
@@ -343,6 +343,7 @@ fn detect_time_type(layer: &Layer, columns: &Columns) -> OgrSourceDatasetTimeTyp
         let is_date = feature
             .field(column)
             .ok()
+            .flatten() // FIXME: handle NULL values?
             .and_then(FieldValue::into_string)
             .map(|s| DateTime::parse_from_rfc3339(&s))
             .is_some();

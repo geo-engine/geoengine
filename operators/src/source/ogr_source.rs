@@ -17,7 +17,7 @@ use futures::task::{Context, Waker};
 use futures::Stream;
 use futures::StreamExt;
 use gdal::vector::{Feature, FeatureIterator, FieldValue, OGRwkbGeometryType};
-use gdal::Dataset;
+use gdal::{Dataset, DatasetOptions};
 use serde::{Deserialize, Serialize};
 use tokio::task::spawn_blocking;
 
@@ -376,35 +376,31 @@ where
             .as_ref()
             .ok_or(error::Error::OgrSourceColumnsSpecMissing)?;
 
+        let mut dataset_options = DatasetOptions::default();
+
         // TODO: make column x optional or allow other indication for data collection
         if columns.x.is_empty() {
-            return Ok(Dataset::open(&dataset_info.file_name)?);
+            return Ok(Dataset::open_ex(&dataset_info.file_name, dataset_options)?);
         }
 
         if let Some(y) = &columns.y {
-            return Ok(Dataset::open_ex(
-                &dataset_info.file_name,
-                None,
-                None,
-                Some(&[
-                    &format!("X_POSSIBLE_NAMES={}", columns.x),
-                    &format!("Y_POSSIBLE_NAMES={}", y),
-                    "AUTODETECT_TYPE=YES",
-                ]),
-                None,
-            )?);
+            let open_opts = &[
+                &format!("X_POSSIBLE_NAMES={}", columns.x),
+                &format!("Y_POSSIBLE_NAMES={}", y),
+                "AUTODETECT_TYPE=YES",
+            ];
+
+            dataset_options.open_options = Some(open_opts);
+            return Ok(Dataset::open_ex(&dataset_info.file_name, dataset_options)?);
         }
 
-        Ok(Dataset::open_ex(
-            &dataset_info.file_name,
-            None,
-            None,
-            Some(&[
-                &format!("GEOM_POSSIBLE_NAMES={}", columns.x),
-                "AUTODETECT_TYPE=YES",
-            ]),
-            None,
-        )?)
+        let open_opts = &[
+            &format!("GEOM_POSSIBLE_NAMES={}", columns.x),
+            "AUTODETECT_TYPE=YES",
+        ];
+        dataset_options.open_options = Some(open_opts);
+
+        Ok(Dataset::open_ex(&dataset_info.file_name, dataset_options)?)
     }
 
     fn open_gdal_dataset(dataset_info: &OgrSourceDataset) -> Result<Dataset> {
@@ -424,8 +420,8 @@ where
         chunk_byte_size: usize,
     ) -> Result<()> {
         // TODO: add OGR time filter if forced
-        let mut dataset = Self::open_gdal_dataset(&dataset_information)?;
-        let layer = dataset.layer_by_name(&dataset_information.layer_name)?;
+        let dataset = Self::open_gdal_dataset(&dataset_information)?;
+        let mut layer = dataset.layer_by_name(&dataset_information.layer_name)?;
 
         let (data_types, feature_collection_builder) =
             Self::initialize_types_and_builder(dataset_information);
@@ -534,6 +530,7 @@ where
                 Box::new(move |feature: &Feature| {
                     let field_value = feature
                         .field(&start_field)?
+                        .unwrap() // FIXME: what to do if this is NULL == None?
                         .into_string()
                         .ok_or(Error::TimeIntervalColumnNameMissing)?;
 
@@ -554,6 +551,7 @@ where
                 Box::new(move |feature: &Feature| {
                     let start_field_value = feature
                         .field(&start_field)?
+                        .unwrap() // FIXME: what to do if this is NULL == None?
                         .into_string()
                         .ok_or(Error::TimeIntervalColumnNameMissing)?;
 
@@ -561,6 +559,7 @@ where
 
                     let end_field_value = feature
                         .field(&end_field)?
+                        .unwrap() // FIXME: what to do if this is NULL == None?
                         .into_string()
                         .ok_or(Error::TimeIntervalColumnNameMissing)?;
 
@@ -579,6 +578,7 @@ where
                 Box::new(move |feature: &Feature| {
                     let start_field_value = feature
                         .field(&start_field)?
+                        .unwrap() // FIXME: what to do if this is NULL == None?
                         .into_string()
                         .ok_or(Error::TimeIntervalColumnNameMissing)?;
 
@@ -587,6 +587,7 @@ where
                     let duration = i64::from(
                         feature
                             .field(&duration_field)?
+                            .unwrap() // FIXME: what to do if this is NULL == None?
                             .into_int()
                             .ok_or(Error::TimeIntervalColumnNameMissing)?,
                     );
@@ -713,11 +714,12 @@ where
             match data_type {
                 FeatureDataType::Text => {
                     let text_option = match field {
-                        Ok(FieldValue::IntegerValue(v)) => Some(v.to_string()),
-                        Ok(FieldValue::Integer64Value(v)) => Some(v.to_string()),
-                        Ok(FieldValue::StringValue(s)) => Some(s),
-                        Ok(FieldValue::RealValue(v)) => Some(v.to_string()),
-                        Ok(_) => todo!("handle other types"),
+                        Ok(None) => todo!("handle NULL values"),
+                        Ok(Some(FieldValue::IntegerValue(v))) => Some(v.to_string()),
+                        Ok(Some(FieldValue::Integer64Value(v))) => Some(v.to_string()),
+                        Ok(Some(FieldValue::StringValue(s))) => Some(s),
+                        Ok(Some(FieldValue::RealValue(v))) => Some(v.to_string()),
+                        Ok(Some(_)) => todo!("handle other types"),
                         Err(_) => None, // TODO: log error
                     };
 
@@ -725,10 +727,11 @@ where
                 }
                 FeatureDataType::Float => {
                     let value_option = match field {
-                        Ok(FieldValue::IntegerValue(v)) => Some(f64::from(v)),
-                        Ok(FieldValue::StringValue(s)) => f64::from_str(&s).ok(),
-                        Ok(FieldValue::RealValue(v)) => Some(v),
-                        Ok(_) => todo!("handle other types"),
+                        Ok(None) => todo!("handle NULL values"),
+                        Ok(Some(FieldValue::IntegerValue(v))) => Some(f64::from(v)),
+                        Ok(Some(FieldValue::StringValue(s))) => f64::from_str(&s).ok(),
+                        Ok(Some(FieldValue::RealValue(v))) => Some(v),
+                        Ok(Some(_)) => todo!("handle other types"),
                         Err(_) => None, // TODO: log error
                     };
 
@@ -736,11 +739,12 @@ where
                 }
                 FeatureDataType::Int => {
                     let value_option = match field {
-                        Ok(FieldValue::IntegerValue(v)) => Some(i64::from(v)),
-                        Ok(FieldValue::Integer64Value(v)) => Some(v),
-                        Ok(FieldValue::StringValue(s)) => i64::from_str(&s).ok(),
-                        Ok(FieldValue::RealValue(v)) => Some(v as i64),
-                        Ok(_) => todo!("handle other types"),
+                        Ok(None) => todo!("handle NULL values"),
+                        Ok(Some(FieldValue::IntegerValue(v))) => Some(i64::from(v)),
+                        Ok(Some(FieldValue::Integer64Value(v))) => Some(v),
+                        Ok(Some(FieldValue::StringValue(s))) => i64::from_str(&s).ok(),
+                        Ok(Some(FieldValue::RealValue(v))) => Some(v as i64),
+                        Ok(Some(_)) => todo!("handle other types"),
                         Err(_) => None, // TODO: log error
                     };
 
