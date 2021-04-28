@@ -269,7 +269,7 @@ impl<const LENGTH: usize> FeatureAttributeValues<LENGTH> {
             })
             .collect::<Vec<_>>();
 
-        data.sort_by(|a, b| match a.series.cmp(&b.series) {
+        data.sort_unstable_by(|a, b| match a.series.cmp(&b.series) {
             Ordering::Equal => a.time.cmp(&b.time),
             other => other,
         });
