@@ -225,9 +225,16 @@ impl From<(TimeInterval, f64)> for TemporalValue {
     }
 }
 
-#[derive(Default)]
 struct FeatureAttributeValues<const LENGTH: usize> {
     values: HashMap<String, Vec<TemporalValue>>,
+}
+
+impl<const LENGTH: usize> Default for FeatureAttributeValues<LENGTH> {
+    fn default() -> Self {
+        Self {
+            values: HashMap::with_capacity(LENGTH),
+        }
+    }
 }
 
 impl<const LENGTH: usize> FeatureAttributeValues<LENGTH> {
