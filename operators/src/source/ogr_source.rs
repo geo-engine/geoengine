@@ -135,7 +135,7 @@ impl Default for OgrSourceDatasetTimeType {
 ///   - format: define the format of the column
 ///   - "custom": define a custom format in the attribute `custom_format`
 ///   - "seconds": time column is numeric and contains seconds as UNIX timestamp
-///   - "auto": time column contains is readable by OGR
+///   - "auto": time is parsed by OGR
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(tag = "format")]
 #[serde(rename_all = "camelCase")]
