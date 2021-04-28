@@ -231,6 +231,8 @@ struct FeatureAttributeValues<const LENGTH: usize> {
 }
 
 impl<const LENGTH: usize> FeatureAttributeValues<LENGTH> {
+    /// Add value to the data structure. If `id` is new and there are already `LENGTH` existing
+    /// `id`-entries, the value is ignored
     pub fn add<V>(&mut self, id: String, value: V)
     where
         V: Into<TemporalValue>,
