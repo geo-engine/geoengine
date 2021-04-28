@@ -178,6 +178,8 @@ pub enum Error {
     OgrSourceColumnsSpecMissing,
 
     EmptyInput,
+
+    OgrFieldValueIsNotDateTime,
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {

@@ -367,18 +367,18 @@ fn detect_time_type(layer: &Layer, columns: &Columns) -> OgrSourceDatasetTimeTyp
     match (start, end, duration) {
         (Some(start), Some(end), _) => OgrSourceDatasetTimeType::StartEnd {
             start_field: start.clone(),
-            start_format: OgrSourceTimeFormat::Iso,
+            start_format: OgrSourceTimeFormat::Auto,
             end_field: end.clone(),
-            end_format: OgrSourceTimeFormat::Iso,
+            end_format: OgrSourceTimeFormat::Auto,
         },
         (Some(start), None, Some(duration)) => OgrSourceDatasetTimeType::StartDuration {
             start_field: start.clone(),
-            start_format: OgrSourceTimeFormat::Iso,
+            start_format: OgrSourceTimeFormat::Auto,
             duration_field: duration.clone(),
         },
         (Some(start), None, None) => OgrSourceDatasetTimeType::Start {
             start_field: start.clone(),
-            start_format: OgrSourceTimeFormat::Iso,
+            start_format: OgrSourceTimeFormat::Auto,
             duration: 0,
         },
         _ => OgrSourceDatasetTimeType::None,
@@ -720,9 +720,9 @@ mod tests {
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::StartEnd {
                         start_field: "time_start".to_owned(),
-                        start_format: OgrSourceTimeFormat::Iso,
+                        start_format: OgrSourceTimeFormat::Auto,
                         end_field: "time_end".to_owned(),
-                        end_format: OgrSourceTimeFormat::Iso,
+                        end_format: OgrSourceTimeFormat::Auto,
                     },
                     columns: Some(OgrSourceColumnSpec {
                         x: "".to_string(),
