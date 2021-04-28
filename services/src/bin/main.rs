@@ -1,6 +1,3 @@
-// TODO: remove this and make warp use less filters
-#![recursion_limit = "256"]
-
 use geoengine_services::error::Error;
 use geoengine_services::server;
 use tokio::sync::oneshot;

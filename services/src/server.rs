@@ -21,29 +21,14 @@ use tokio::sync::oneshot::{Receiver, Sender};
 use warp::fs::File;
 use warp::{Filter, Rejection};
 
-/// Helper to combine the multiple filters together with Filter::or, possibly boxing the types in
-/// the process. This greatly helps the build times for `ipfs-http`.
-/// https://github.com/seanmonstar/warp/issues/507#issuecomment-615974062
+/// Combine filters by boxing them
+/// TODO: avoid boxing while still achieving acceptable compile time
 macro_rules! combine {
   ($x:expr, $($y:expr),+) => {{
-      let filter = boxed_on_debug!($x);
-      $( let filter = boxed_on_debug!(filter.or($y)); )+
+      let filter = $x.boxed();
+      $( let filter = filter.or($y).boxed(); )+
       filter
   }}
-}
-
-#[cfg(debug_assertions)]
-macro_rules! boxed_on_debug {
-    ($x:expr) => {
-        $x.boxed()
-    };
-}
-
-#[cfg(not(debug_assertions))]
-macro_rules! boxed_on_debug {
-    ($x:expr) => {
-        $x
-    };
 }
 
 /// Starts the webserver for the Geo Engine API.
@@ -112,7 +97,6 @@ async fn start<C>(
 where
     C: Context,
 {
-    // TODO: hierarchical filters workflow -> (register, load), user -> (register, login, ...)
     let handler = combine!(
         handlers::workflows::register_workflow_handler(ctx.clone()),
         handlers::workflows::load_workflow_handler(ctx.clone()),
