@@ -530,8 +530,7 @@ where
                 Box::new(move |feature: &Feature| {
                     let field_value = feature
                         .field(&start_field)?
-                        .unwrap() // FIXME: what to do if this is NULL == None?
-                        .into_string()
+                        .and_then(|f| f.into_string())
                         .ok_or(Error::TimeIntervalColumnNameMissing)?;
 
                     let time_start = time_start_parser(&field_value)?;
@@ -551,8 +550,7 @@ where
                 Box::new(move |feature: &Feature| {
                     let start_field_value = feature
                         .field(&start_field)?
-                        .unwrap() // FIXME: what to do if this is NULL == None?
-                        .into_string()
+                        .and_then(|f| f.into_string())
                         .ok_or(Error::TimeIntervalColumnNameMissing)?;
 
                     let time_start = time_start_parser(&start_field_value)?;
@@ -578,8 +576,7 @@ where
                 Box::new(move |feature: &Feature| {
                     let start_field_value = feature
                         .field(&start_field)?
-                        .unwrap() // FIXME: what to do if this is NULL == None?
-                        .into_string()
+                        .and_then(|f| f.into_string())
                         .ok_or(Error::TimeIntervalColumnNameMissing)?;
 
                     let time_start = time_start_parser(&start_field_value)?;
@@ -587,8 +584,7 @@ where
                     let duration = i64::from(
                         feature
                             .field(&duration_field)?
-                            .unwrap() // FIXME: what to do if this is NULL == None?
-                            .into_int()
+                            .and_then(|f| f.into_int())
                             .ok_or(Error::TimeIntervalColumnNameMissing)?,
                     );
 
@@ -714,7 +710,7 @@ where
             match data_type {
                 FeatureDataType::Text => {
                     let text_option = match field {
-                        Ok(None) => todo!("handle NULL values"),
+                        Ok(None) => None,
                         Ok(Some(FieldValue::IntegerValue(v))) => Some(v.to_string()),
                         Ok(Some(FieldValue::Integer64Value(v))) => Some(v.to_string()),
                         Ok(Some(FieldValue::StringValue(s))) => Some(s),
@@ -727,7 +723,7 @@ where
                 }
                 FeatureDataType::Float => {
                     let value_option = match field {
-                        Ok(None) => todo!("handle NULL values"),
+                        Ok(None) => None,
                         Ok(Some(FieldValue::IntegerValue(v))) => Some(f64::from(v)),
                         Ok(Some(FieldValue::StringValue(s))) => f64::from_str(&s).ok(),
                         Ok(Some(FieldValue::RealValue(v))) => Some(v),
@@ -739,7 +735,7 @@ where
                 }
                 FeatureDataType::Int => {
                     let value_option = match field {
-                        Ok(None) => todo!("handle NULL values"),
+                        Ok(None) => None,
                         Ok(Some(FieldValue::IntegerValue(v))) => Some(i64::from(v)),
                         Ok(Some(FieldValue::Integer64Value(v))) => Some(v),
                         Ok(Some(FieldValue::StringValue(s))) => i64::from_str(&s).ok(),
@@ -1501,7 +1497,7 @@ mod tests {
                 "www.portofrotterdam.com",
             ]
             .iter()
-            .map(|&v| Some(v.to_string()))
+            .map(|&v| if v == "" { None } else { Some(v.to_string()) })
             .collect(),
         );
 
