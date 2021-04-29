@@ -180,6 +180,8 @@ pub enum Error {
     EmptyInput,
 
     OgrFieldValueIsNotDateTime,
+    OgrFieldValueIsNotString,
+    OgrFieldValueIsNotValidForSeconds,
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {

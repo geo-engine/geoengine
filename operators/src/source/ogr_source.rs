@@ -19,6 +19,7 @@ use futures::StreamExt;
 use gdal::vector::{Feature, FeatureIterator, FieldValue, OGRwkbGeometryType};
 use gdal::Dataset;
 use serde::{Deserialize, Serialize};
+use snafu::ResultExt;
 use tokio::task::spawn_blocking;
 
 use geoengine_datatypes::collections::{
@@ -499,26 +500,27 @@ where
         time_format: &OgrSourceTimeFormat,
     ) -> Box<dyn Fn(FieldValue) -> Result<TimeInstance> + '_> {
         match time_format {
-            OgrSourceTimeFormat::Auto => Box::new(move |field: FieldValue| {
-                // TODO: support date without time as well?
-                field
-                    .into_datetime()
-                    .map(|d| d.naive_utc().into())
-                    .ok_or(Error::OgrFieldValueIsNotDateTime)
+            OgrSourceTimeFormat::Auto => Box::new(move |field: FieldValue| match field {
+                FieldValue::DateValue(value) => Ok(value.and_hms(0, 0, 0).naive_utc().into()),
+                FieldValue::DateTimeValue(value) => Ok(value.naive_utc().into()),
+                _ => Err(Error::OgrFieldValueIsNotDateTime),
             }),
             OgrSourceTimeFormat::Custom { custom_format } => Box::new(move |field: FieldValue| {
-                let date = field
-                    .into_string()
-                    .ok_or(Error::TimeIntervalColumnNameMissing)?;
+                let date = field.into_string().ok_or(Error::OgrFieldValueIsNotString)?;
                 let date_time = DateTime::parse_from_str(&date, &custom_format)?;
                 Ok(date_time.timestamp_millis().try_into()?)
             }),
-            OgrSourceTimeFormat::Seconds => Box::new(move |field: FieldValue| {
-                let date = field
-                    .into_string()
-                    .ok_or(Error::TimeIntervalColumnNameMissing)?;
-                let date_time = DateTime::parse_from_str(&date, "%C")?;
-                Ok(date_time.timestamp_millis().try_into()?)
+            OgrSourceTimeFormat::Seconds => Box::new(move |field: FieldValue| match field {
+                FieldValue::IntegerValue(v) => {
+                    TimeInstance::from_millis(i64::from(v) * 1000).context(error::DataType)
+                }
+                FieldValue::Integer64Value(v) => {
+                    TimeInstance::from_millis(v * 1000).context(error::DataType)
+                }
+                FieldValue::StringValue(v) => DateTime::parse_from_str(&v, "%s")
+                    .context(error::TimeParse)
+                    .and_then(|d| d.timestamp_millis().try_into().context(error::DataType)),
+                _ => Err(Error::OgrFieldValueIsNotValidForSeconds),
             }),
         }
     }
