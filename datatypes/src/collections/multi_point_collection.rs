@@ -193,7 +193,7 @@ impl GeometryCollection for MultiPointCollection {
 }
 
 impl ReplaceRawArrayCoords for MultiPointCollection {
-    fn replace_raw_coords(array_ref: &Arc<dyn Array>, new_coords: Buffer) -> Arc<ArrayData> {
+    fn replace_raw_coords(array_ref: &Arc<dyn Array>, new_coords: Buffer) -> ArrayData {
         let geometries: &ListArray = downcast_array(array_ref);
         let offset_array = geometries.data();
         let offsets_buffer = &offset_array.buffers()[0];
