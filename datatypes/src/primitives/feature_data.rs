@@ -29,11 +29,8 @@ impl FeatureDataType {
         })
     }
 
-    pub fn is_numeric(&self) -> bool {
-        match self {
-            Self::Int | Self::Float => true,
-            _ => false,
-        }
+    pub fn is_numeric(self) -> bool {
+        matches!(self, Self::Int | Self::Float)
     }
 }
 

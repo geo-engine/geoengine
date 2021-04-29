@@ -1,13 +1,10 @@
+use crate::engine::{
+    ExecutionContext, InitializedOperator, InitializedOperatorImpl, InitializedPlotOperator,
+    Operator, PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryRectangle,
+    TypedPlotQueryProcessor, VectorQueryProcessor,
+};
 use crate::error;
 use crate::util::Result;
-use crate::{
-    engine::{
-        ExecutionContext, InitializedOperator, InitializedOperatorImpl, InitializedPlotOperator,
-        Operator, PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext,
-        QueryRectangle, TypedPlotQueryProcessor, VectorQueryProcessor,
-    },
-    error::Error,
-};
 use async_trait::async_trait;
 use futures::StreamExt;
 use geoengine_datatypes::primitives::{FeatureDataType, FeatureDataValue};
@@ -165,39 +162,13 @@ where
                         let values = features.data(&self.params.value_column)?;
 
                         for i in 0..features.len() {
-                            let id: String = match ids.get_unchecked(i) {
-                                FeatureDataValue::Int(v) => v.to_string(),
-                                FeatureDataValue::NullableInt(v) => v
-                                    .map(|v| v.to_string())
-                                    .ok_or(Error::FeatureDataValueMustNotBeNull)?,
-                                FeatureDataValue::Float(v) => v.to_string(),
-                                FeatureDataValue::NullableFloat(v) => v
-                                    .map(|v| v.to_string())
-                                    .ok_or(Error::FeatureDataValueMustNotBeNull)?,
-                                FeatureDataValue::Text(v) => v.clone(),
-                                FeatureDataValue::NullableText(v) => {
-                                    v.ok_or(Error::FeatureDataValueMustNotBeNull)?
-                                }
-                                FeatureDataValue::Category(v) => v.to_string(),
-                                FeatureDataValue::NullableCategory(v) => {
-                                    v.map(|v| v.to_string())
-                                        .ok_or(Error::FeatureDataValueMustNotBeNull)?
-                                }
-                            };
-
-                            let value: f64 = match values.get_unchecked(i) {
-                                FeatureDataValue::Int(v) => v as f64,
-                                FeatureDataValue::NullableInt(v) => v.map_or(0.0, |v| v as f64), // TODO: NAN better default?
-                                FeatureDataValue::Float(v) => v,
-                                FeatureDataValue::NullableFloat(v) => v.unwrap_or(0.0),
-                                FeatureDataValue::Category(v) => f64::from(v),
-                                FeatureDataValue::NullableCategory(v) => v.map_or(0.0, f64::from),
-                                _ => return Err(Error::InvalidFeatureDataType),
-                            };
-
-                            let time = features.time_intervals()[i];
-
-                            acc.add(id, (time, value));
+                            if let (Some(id), Some(value), time) = (
+                                get_value_as_string(ids.get_unchecked(i)),
+                                get_value_as_f64(&values.get_unchecked(i)),
+                                features.time_intervals()[i],
+                            ) {
+                                acc.add(id, (time, value))
+                            }
                         }
                         Ok(acc)
                     }
@@ -211,6 +182,31 @@ where
         MultiLineChart::new(data_points, measurement)
             .to_vega_embeddable(false)
             .context(error::DataType)
+    }
+}
+
+fn get_value_as_f64(value: &FeatureDataValue) -> Option<f64> {
+    match value {
+        FeatureDataValue::Int(v) => Some(*v as f64),
+        FeatureDataValue::NullableInt(v) => v.map(|v| v as f64),
+        FeatureDataValue::Float(v) => Some(*v),
+        FeatureDataValue::NullableFloat(v) => *v,
+        FeatureDataValue::Category(v) => Some(f64::from(*v)),
+        FeatureDataValue::NullableCategory(v) => v.map(f64::from),
+        _ => unreachable!(),
+    }
+}
+
+fn get_value_as_string(value: FeatureDataValue) -> Option<String> {
+    match value {
+        FeatureDataValue::Int(v) => Some(v.to_string()),
+        FeatureDataValue::NullableInt(v) => v.map(|v| v.to_string()),
+        FeatureDataValue::Float(v) => Some(v.to_string()),
+        FeatureDataValue::NullableFloat(v) => v.map(|v| v.to_string()),
+        FeatureDataValue::Text(v) => Some(v),
+        FeatureDataValue::NullableText(v) => v,
+        FeatureDataValue::Category(v) => Some(v.to_string()),
+        FeatureDataValue::NullableCategory(v) => v.map(|v| v.to_string()),
     }
 }
 
@@ -325,6 +321,106 @@ mod tests {
                         FeatureData::Text(vec!["S0".to_owned(), "S1".to_owned(), "S0".to_owned()]),
                     ),
                     ("value".to_string(), FeatureData::Float(vec![0., 2., 1.])),
+                ]
+                .iter()
+                .cloned()
+                .collect(),
+            )
+            .unwrap(),
+        )
+        .boxed();
+
+        let exe_ctc = MockExecutionContext::default();
+
+        let operator = FeatureAttributeValuesOverTime {
+            params: FeatureAttributeValuesOverTimeParams {
+                id_column: "id".to_owned(),
+                value_column: "value".to_owned(),
+            },
+            raster_sources: vec![],
+            vector_sources: vec![point_source],
+        };
+
+        let operator = operator.boxed().initialize(&exe_ctc).unwrap();
+
+        let query_processor = operator.query_processor().unwrap().json_vega().unwrap();
+
+        let result = query_processor
+            .plot_query(
+                QueryRectangle {
+                    bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    time_interval: TimeInterval::default(),
+                    spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
+                },
+                &MockQueryContext::new(0),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            result,
+            PlotData {
+                vega_string: r#"{"$schema":"https://vega.github.io/schema/vega-lite/v4.17.0.json","data":{"values":[{"x":"2014-01-01T00:00:00+00:00","y":0.0,"series":"S0"},{"x":"2014-02-01T00:00:00+00:00","y":1.0,"series":"S0"},{"x":"2014-01-01T00:00:00+00:00","y":2.0,"series":"S1"}]},"description":"Multi Line Chart","encoding":{"x":{"field":"x","title":"Time","type":"temporal"},"y":{"field":"y","title":"","type":"quantitative"},"color":{"field":"series","scale":{"scheme":"category20"}}},"mark":{"type":"line","line":true,"point":true}}"#.to_owned(),
+                metadata: PlotMetaData::None,
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn plot_with_nulls() {
+        let point_source = MockFeatureCollectionSource::single(
+            MultiPointCollection::from_data(
+                MultiPoint::many(vec![
+                    vec![(-13.95, 20.05)],
+                    vec![(-14.05, 20.05)],
+                    vec![(-13.95, 20.05)],
+                    vec![(-14.05, 20.05)],
+                    vec![(-13.95, 20.05)],
+                ])
+                .unwrap(),
+                vec![
+                    TimeInterval::new_unchecked(
+                        NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
+                        NaiveDate::from_ymd(2014, 2, 1).and_hms(0, 0, 0),
+                    ),
+                    TimeInterval::new_unchecked(
+                        NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
+                        NaiveDate::from_ymd(2014, 3, 1).and_hms(0, 0, 0),
+                    ),
+                    TimeInterval::new_unchecked(
+                        NaiveDate::from_ymd(2014, 2, 1).and_hms(0, 0, 0),
+                        NaiveDate::from_ymd(2014, 3, 1).and_hms(0, 0, 0),
+                    ),
+                    TimeInterval::new_unchecked(
+                        NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
+                        NaiveDate::from_ymd(2014, 3, 1).and_hms(0, 0, 0),
+                    ),
+                    TimeInterval::new_unchecked(
+                        NaiveDate::from_ymd(2014, 2, 1).and_hms(0, 0, 0),
+                        NaiveDate::from_ymd(2014, 3, 1).and_hms(0, 0, 0),
+                    ),
+                ],
+                [
+                    (
+                        "id".to_string(),
+                        FeatureData::NullableText(vec![
+                            Some("S0".to_owned()),
+                            Some("S1".to_owned()),
+                            Some("S0".to_owned()),
+                            None,
+                            Some("S2".to_owned()),
+                        ]),
+                    ),
+                    (
+                        "value".to_string(),
+                        FeatureData::NullableFloat(vec![
+                            Some(0.),
+                            Some(2.),
+                            Some(1.),
+                            Some(3.),
+                            None,
+                        ]),
+                    ),
                 ]
                 .iter()
                 .cloned()
