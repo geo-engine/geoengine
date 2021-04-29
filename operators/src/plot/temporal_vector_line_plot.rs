@@ -87,8 +87,11 @@ impl PlotOperator for FeatureAttributeValuesOverTime {
         let id_type = columns.get(&self.params.id_column).expect("checked");
         let value_type = columns.get(&self.params.value_column).expect("checked");
 
+        // TODO: ensure column is really an id
         ensure!(
-            id_type == &FeatureDataType::Text || id_type == &FeatureDataType::Int,
+            id_type == &FeatureDataType::Text
+                || id_type == &FeatureDataType::Int
+                || id_type == &FeatureDataType::Category,
             error::InvalidFeatureDataType,
         );
 
