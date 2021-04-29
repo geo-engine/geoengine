@@ -308,6 +308,8 @@ fn detect_time_type(columns: &Columns) -> OgrSourceDatasetTimeType {
         "event",
         "timestamp",
         "time_from",
+        "t1",
+        "t",
     ];
     let known_end = [
         "end",
@@ -327,6 +329,7 @@ fn detect_time_type(columns: &Columns) -> OgrSourceDatasetTimeType {
         "end date",
         "stop date",
         "time_to",
+        "t2",
     ];
     let known_duration = ["duration", "length", "valid for", "valid_for"];
 
