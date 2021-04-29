@@ -96,7 +96,7 @@ impl PlotOperator for FeatureAttributeValuesOverTime {
         );
 
         ensure!(
-            value_type != &FeatureDataType::Text,
+            value_type.is_numeric() || value_type == &FeatureDataType::Category,
             error::InvalidFeatureDataType,
         );
 

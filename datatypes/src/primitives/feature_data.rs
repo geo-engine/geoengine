@@ -28,6 +28,13 @@ impl FeatureDataType {
             _ => return Err(error::Error::NoMatchingFeatureDataTypeForOgrFieldType),
         })
     }
+
+    pub fn is_numeric(&self) -> bool {
+        match self {
+            Self::Int | Self::Float => true,
+            _ => false,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
