@@ -1,6 +1,7 @@
 mod histogram;
 mod statistics;
 mod temporal_raster_mean_plot;
+mod temporal_vector_line_plot;
 
 pub use self::histogram::{
     Histogram, HistogramBounds, HistogramParams, HistogramRasterQueryProcessor,

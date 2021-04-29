@@ -1,8 +1,10 @@
 mod area_line_plot;
 mod histogram;
+mod multi_line_plot;
 
 pub use area_line_plot::AreaLineChart;
 pub use histogram::{Histogram, HistogramBuilder};
+pub use multi_line_plot::{DataPoint, MultiLineChart};
 
 use crate::util::Result;
 use serde::{Deserialize, Serialize};

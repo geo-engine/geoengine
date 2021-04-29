@@ -182,6 +182,9 @@ pub enum Error {
     OgrFieldValueIsNotDateTime,
     OgrFieldValueIsNotString,
     OgrFieldValueIsNotValidForSeconds,
+
+    FeatureDataValueMustNotBeNull,
+    InvalidFeatureDataType,
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {
