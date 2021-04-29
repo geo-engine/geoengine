@@ -215,7 +215,7 @@ where
             .collect();
 
         let proj_outline_coordinates: Vec<Coordinate2D> =
-            project_coordinates_fail_tolarant(&outline_coordinates, projector)
+            project_coordinates_fail_tolerant(&outline_coordinates, projector)
                 .into_iter()
                 .flatten()
                 .collect();
@@ -315,7 +315,7 @@ pub fn suggest_pixel_size_from_diag_cross<P: CoordinateProjection>(
 /// Tries to reproject all coordinates at once. If this fails, tries to reproject coordinate by coordinate.
 /// It returns all coordinates in input order.
 /// In case of success it returns `Some(Coordinate2D)` and `None` otherwise.
-pub fn project_coordinates_fail_tolarant<P: CoordinateProjection>(
+pub fn project_coordinates_fail_tolerant<P: CoordinateProjection>(
     i: &[Coordinate2D],
     p: &P,
 ) -> Vec<Option<Coordinate2D>> {
