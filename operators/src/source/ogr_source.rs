@@ -1499,7 +1499,13 @@ mod tests {
                 "www.portofrotterdam.com",
             ]
             .iter()
-            .map(|&v| if v == "" { None } else { Some(v.to_string()) })
+            .map(|&v| {
+                if v.is_empty() {
+                    None
+                } else {
+                    Some(v.to_string())
+                }
+            })
             .collect(),
         );
 
