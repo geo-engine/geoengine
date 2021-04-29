@@ -178,6 +178,9 @@ pub enum Error {
     OgrSourceColumnsSpecMissing,
 
     EmptyInput,
+
+    FeatureDataValueMustNotBeNull,
+    InvalidFeatureDataType,
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {
