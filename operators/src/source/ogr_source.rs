@@ -17,7 +17,7 @@ use futures::task::{Context, Waker};
 use futures::Stream;
 use futures::StreamExt;
 use gdal::vector::{Feature, FeatureIterator, FieldValue, OGRwkbGeometryType};
-use gdal::Dataset;
+use gdal::{Dataset, DatasetOptions};
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use tokio::task::spawn_blocking;
@@ -377,35 +377,31 @@ where
             .as_ref()
             .ok_or(error::Error::OgrSourceColumnsSpecMissing)?;
 
+        let mut dataset_options = DatasetOptions::default();
+
         // TODO: make column x optional or allow other indication for data collection
         if columns.x.is_empty() {
-            return Ok(Dataset::open(&dataset_info.file_name)?);
+            return Ok(Dataset::open_ex(&dataset_info.file_name, dataset_options)?);
         }
 
         if let Some(y) = &columns.y {
-            return Ok(Dataset::open_ex(
-                &dataset_info.file_name,
-                None,
-                None,
-                Some(&[
-                    &format!("X_POSSIBLE_NAMES={}", columns.x),
-                    &format!("Y_POSSIBLE_NAMES={}", y),
-                    "AUTODETECT_TYPE=YES",
-                ]),
-                None,
-            )?);
+            let open_opts = &[
+                &format!("X_POSSIBLE_NAMES={}", columns.x),
+                &format!("Y_POSSIBLE_NAMES={}", y),
+                "AUTODETECT_TYPE=YES",
+            ];
+
+            dataset_options.open_options = Some(open_opts);
+            return Ok(Dataset::open_ex(&dataset_info.file_name, dataset_options)?);
         }
 
-        Ok(Dataset::open_ex(
-            &dataset_info.file_name,
-            None,
-            None,
-            Some(&[
-                &format!("GEOM_POSSIBLE_NAMES={}", columns.x),
-                "AUTODETECT_TYPE=YES",
-            ]),
-            None,
-        )?)
+        let open_opts = &[
+            &format!("GEOM_POSSIBLE_NAMES={}", columns.x),
+            "AUTODETECT_TYPE=YES",
+        ];
+        dataset_options.open_options = Some(open_opts);
+
+        Ok(Dataset::open_ex(&dataset_info.file_name, dataset_options)?)
     }
 
     fn open_gdal_dataset(dataset_info: &OgrSourceDataset) -> Result<Dataset> {
@@ -425,8 +421,8 @@ where
         chunk_byte_size: usize,
     ) -> Result<()> {
         // TODO: add OGR time filter if forced
-        let mut dataset = Self::open_gdal_dataset(&dataset_information)?;
-        let layer = dataset.layer_by_name(&dataset_information.layer_name)?;
+        let dataset = Self::open_gdal_dataset(&dataset_information)?;
+        let mut layer = dataset.layer_by_name(&dataset_information.layer_name)?;
 
         let (data_types, feature_collection_builder) =
             Self::initialize_types_and_builder(dataset_information);
@@ -544,9 +540,13 @@ where
 
                 Box::new(move |feature: &Feature| {
                     let field_value = feature.field(&start_field)?;
-                    let time_start = time_start_parser(field_value)?;
-
-                    TimeInterval::new(time_start, time_start + duration).map_err(Into::into)
+                    if let Some(field_value) = field_value {
+                        let time_start = time_start_parser(field_value)?;
+                        TimeInterval::new(time_start, time_start + duration).map_err(Into::into)
+                    } else {
+                        // TODO: throw error or use some user defined default time (like for geometries)?
+                        Ok(TimeInterval::default())
+                    }
                 })
             }
             OgrSourceDatasetTimeType::StartEnd {
@@ -560,12 +560,19 @@ where
 
                 Box::new(move |feature: &Feature| {
                     let start_field_value = feature.field(&start_field)?;
-                    let time_start = time_start_parser(start_field_value)?;
-
                     let end_field_value = feature.field(&end_field)?;
-                    let time_end = time_end_parser(end_field_value)?;
 
-                    TimeInterval::new(time_start, time_end).map_err(Into::into)
+                    if let (Some(start_field_value), Some(end_field_value)) =
+                        (start_field_value, end_field_value)
+                    {
+                        let time_start = time_start_parser(start_field_value)?;
+                        let time_end = time_end_parser(end_field_value)?;
+
+                        TimeInterval::new(time_start, time_end).map_err(Into::into)
+                    } else {
+                        // TODO: throw error or use some user defined default time (like for geometries)?
+                        Ok(TimeInterval::default())
+                    }
                 })
             }
             OgrSourceDatasetTimeType::StartDuration {
@@ -577,16 +584,23 @@ where
 
                 Box::new(move |feature: &Feature| {
                     let start_field_value = feature.field(&start_field)?;
-                    let time_start = time_start_parser(start_field_value)?;
+                    let duration_field_value = feature.field(&duration_field)?;
 
-                    let duration = i64::from(
-                        feature
-                            .field(&duration_field)?
-                            .into_int()
-                            .ok_or(Error::TimeIntervalColumnNameMissing)?,
-                    );
+                    if let (Some(start_field_value), Some(duration_field_value)) =
+                        (start_field_value, duration_field_value)
+                    {
+                        let time_start = time_start_parser(start_field_value)?;
+                        let duration = i64::from(
+                            duration_field_value
+                                .into_int()
+                                .ok_or(Error::OgrFieldValueIsNotValidForSeconds)?,
+                        );
 
-                    TimeInterval::new(time_start, time_start + duration).map_err(Into::into)
+                        TimeInterval::new(time_start, time_start + duration).map_err(Into::into)
+                    } else {
+                        // TODO: throw error or use some user defined default time (like for geometries)?
+                        Ok(TimeInterval::default())
+                    }
                 })
             }
         }
@@ -707,41 +721,47 @@ where
 
             match data_type {
                 FeatureDataType::Text => {
+                    #[allow(clippy::match_same_arms)]
                     let text_option = match field {
-                        Ok(FieldValue::IntegerValue(v)) => Some(v.to_string()),
-                        Ok(FieldValue::Integer64Value(v)) => Some(v.to_string()),
-                        Ok(FieldValue::StringValue(s)) => Some(s),
-                        Ok(FieldValue::RealValue(v)) => Some(v.to_string()),
-                        Ok(_) => todo!("handle other types"),
+                        Ok(Some(FieldValue::IntegerValue(v))) => Some(v.to_string()),
+                        Ok(Some(FieldValue::Integer64Value(v))) => Some(v.to_string()),
+                        Ok(Some(FieldValue::StringValue(s))) => Some(s),
+                        Ok(Some(FieldValue::RealValue(v))) => Some(v.to_string()),
+                        Ok(Some(_)) => return Err(Error::OgrColumnFieldTypeMismatch), // TODO: handle other types
+                        Ok(None) => None,
                         Err(_) => None, // TODO: log error
                     };
 
                     builder.push_data(&column, FeatureDataValue::NullableText(text_option))?;
                 }
                 FeatureDataType::Float => {
+                    #[allow(clippy::match_same_arms)]
                     let value_option = match field {
-                        Ok(FieldValue::IntegerValue(v)) => Some(f64::from(v)),
-                        Ok(FieldValue::StringValue(s)) => f64::from_str(&s).ok(),
-                        Ok(FieldValue::RealValue(v)) => Some(v),
-                        Ok(_) => todo!("handle other types"),
+                        Ok(Some(FieldValue::IntegerValue(v))) => Some(f64::from(v)),
+                        Ok(Some(FieldValue::StringValue(s))) => f64::from_str(&s).ok(),
+                        Ok(Some(FieldValue::RealValue(v))) => Some(v),
+                        Ok(Some(_)) => return Err(Error::OgrColumnFieldTypeMismatch), // TODO: handle other types
+                        Ok(None) => None,
                         Err(_) => None, // TODO: log error
                     };
 
                     builder.push_data(&column, FeatureDataValue::NullableFloat(value_option))?;
                 }
                 FeatureDataType::Int => {
+                    #[allow(clippy::match_same_arms)]
                     let value_option = match field {
-                        Ok(FieldValue::IntegerValue(v)) => Some(i64::from(v)),
-                        Ok(FieldValue::Integer64Value(v)) => Some(v),
-                        Ok(FieldValue::StringValue(s)) => i64::from_str(&s).ok(),
-                        Ok(FieldValue::RealValue(v)) => Some(v as i64),
-                        Ok(_) => todo!("handle other types"),
+                        Ok(Some(FieldValue::IntegerValue(v))) => Some(i64::from(v)),
+                        Ok(Some(FieldValue::Integer64Value(v))) => Some(v),
+                        Ok(Some(FieldValue::StringValue(s))) => i64::from_str(&s).ok(),
+                        Ok(Some(FieldValue::RealValue(v))) => Some(v as i64),
+                        Ok(Some(_)) => return Err(Error::OgrColumnFieldTypeMismatch), // TODO: handle other types
+                        Ok(None) => None,
                         Err(_) => None, // TODO: log error
                     };
 
                     builder.push_data(&column, FeatureDataValue::NullableInt(value_option))?;
                 }
-                FeatureDataType::Category => todo!("implement"),
+                FeatureDataType::Category => return Err(Error::OgrColumnFieldTypeMismatch), // TODO: implement
             }
         }
 
@@ -1492,7 +1512,13 @@ mod tests {
                 "www.portofrotterdam.com",
             ]
             .iter()
-            .map(|&v| Some(v.to_string()))
+            .map(|&v| {
+                if v.is_empty() {
+                    None
+                } else {
+                    Some(v.to_string())
+                }
+            })
             .collect(),
         );
 

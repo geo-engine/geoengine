@@ -18,7 +18,7 @@ arrow = { version = "4.0" }
 chrono = "0.4"
 flatbuffers = "=0.8.4" # TODO: pinned only for `arrow`, should be removed at some point
 float-cmp = "0.8"
-gdal = { version = "0.7" }
+gdal = { version = "0.8" }
 geo = "0.17"
 proj = "0.22"
 geojson = "0.22"

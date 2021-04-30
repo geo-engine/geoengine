@@ -243,7 +243,7 @@ fn suggest_main_file(upload: &Upload) -> Option<String> {
 }
 
 fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDefinition> {
-    let mut dataset = Dataset::open(&main_file_path).context(error::Gdal)?;
+    let dataset = Dataset::open(&main_file_path).context(error::Gdal)?;
     let layer = {
         if let Ok(layer) = dataset.layer(0) {
             layer

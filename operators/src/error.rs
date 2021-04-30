@@ -182,6 +182,7 @@ pub enum Error {
     OgrFieldValueIsNotDateTime,
     OgrFieldValueIsNotString,
     OgrFieldValueIsNotValidForSeconds,
+    OgrColumnFieldTypeMismatch,
 
     FeatureDataValueMustNotBeNull,
     InvalidFeatureDataType,

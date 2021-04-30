@@ -595,6 +595,7 @@ where
         (dataset_ul_x, dataset_ul_y),     // pixelspace origin
         (dataset_x_size, dataset_y_size), // pixelspace size
         (tile_x_size, tile_y_size),       // requested raster size
+        None,                             // sampling mode
     )?;
     Grid::new(tile_grid, buffer.data, no_data_value).map_err(Into::into)
 }
