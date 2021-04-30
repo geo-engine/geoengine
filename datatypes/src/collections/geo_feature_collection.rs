@@ -45,5 +45,5 @@ pub trait GeometryCollection {
 }
 
 pub trait ReplaceRawArrayCoords {
-    fn replace_raw_coords(array_ref: &Arc<dyn Array>, new_coord_buffer: Buffer) -> Arc<ArrayData>;
+    fn replace_raw_coords(array_ref: &Arc<dyn Array>, new_coord_buffer: Buffer) -> ArrayData;
 }

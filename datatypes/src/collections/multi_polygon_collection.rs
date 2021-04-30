@@ -288,7 +288,7 @@ impl GeoFeatureCollectionRowBuilder<MultiPolygon> for FeatureCollectionRowBuilde
 }
 
 impl ReplaceRawArrayCoords for MultiPolygonCollection {
-    fn replace_raw_coords(array_ref: &Arc<dyn Array>, new_coords: Buffer) -> Arc<ArrayData> {
+    fn replace_raw_coords(array_ref: &Arc<dyn Array>, new_coords: Buffer) -> ArrayData {
         let geometries: &ListArray = downcast_array(array_ref);
 
         let feature_offset_array = geometries.data();
