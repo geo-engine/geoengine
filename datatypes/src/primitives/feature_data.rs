@@ -28,6 +28,10 @@ impl FeatureDataType {
             _ => return Err(error::Error::NoMatchingFeatureDataTypeForOgrFieldType),
         })
     }
+
+    pub fn is_numeric(self) -> bool {
+        matches!(self, Self::Int | Self::Float)
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -368,7 +372,7 @@ unsafe fn byte_ptr_to_str<'d>(bytes: *const u8, length: usize) -> &'d str {
 #[derive(Clone, Debug, PartialEq)]
 pub struct TextDataRef<'f> {
     data_buffer: arrow::buffer::Buffer,
-    offsets_buffer: arrow::buffer::Buffer,
+    offsets: &'f [i32],
     valid_bitmap: &'f Option<arrow::bitmap::Bitmap>,
 }
 
@@ -380,7 +384,7 @@ impl<'f> AsRef<[u8]> for TextDataRef<'f> {
 
 impl<'r> DataRef<'r, u8> for TextDataRef<'r> {
     fn json_values(&'r self) -> Box<dyn Iterator<Item = serde_json::Value> + 'r> {
-        let offsets = self.offsets();
+        let offsets = self.offsets;
         let number_of_values = offsets.len() - 1;
 
         Box::new((0..number_of_values).map(move |pos| {
@@ -430,8 +434,8 @@ impl<'r> DataRef<'r, u8> for TextDataRef<'r> {
     /// ```
     ///
     fn nulls(&self) -> Vec<bool> {
-        let mut nulls = Vec::with_capacity(self.offsets().len() - 1);
-        for window in self.offsets().windows(2) {
+        let mut nulls = Vec::with_capacity(self.offsets.len() - 1);
+        for window in self.offsets.windows(2) {
             let (start, end) = (window[0], window[1]);
             nulls.push(start == end);
         }
@@ -468,18 +472,19 @@ impl<'r> From<TextDataRef<'r>> for FeatureDataRef<'r> {
 impl<'r> TextDataRef<'r> {
     pub fn new(
         data_buffer: arrow::buffer::Buffer,
-        offsets_buffer: arrow::buffer::Buffer,
+        offsets: &'r [i32],
         valid_bitmap: &'r Option<arrow::bitmap::Bitmap>,
     ) -> Self {
         Self {
             data_buffer,
-            offsets_buffer,
+            offsets,
             valid_bitmap,
         }
     }
 
+    /// Returns the offsets of the individual strings
     pub fn offsets(&self) -> &[i32] {
-        unsafe { self.offsets_buffer.typed_data() }
+        self.offsets
     }
 
     /// Returns the text reference at a certain position in the feature collection
@@ -490,14 +495,14 @@ impl<'r> TextDataRef<'r> {
     ///
     pub fn text_at(&self, pos: usize) -> Result<Option<&str>> {
         ensure!(
-            pos < (self.offsets().len() - 1),
+            pos < (self.offsets.len() - 1),
             error::FeatureData {
                 details: "Position must be in data range"
             }
         );
 
-        let start = self.offsets()[pos];
-        let end = self.offsets()[pos + 1];
+        let start = self.offsets[pos];
+        let end = self.offsets[pos + 1];
 
         if start == end {
             return Ok(None);
