@@ -18,7 +18,7 @@ csv = "1.1"
 flatbuffers = "=0.8.4" # TODO: pinned only for `arrow`, should be removed at some point
 float-cmp = "0.8"
 futures = "0.3"
-gdal = { version = "0.7", features = ["datetime"] }
+gdal = { version = "0.8", features = ["datetime"] }
 geo = "0.17"
 geoengine-datatypes = { path = "../datatypes" }
 lazy_static = "1.4"
