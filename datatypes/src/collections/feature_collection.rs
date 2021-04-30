@@ -648,11 +648,11 @@ where
             nulls_first: false,
         });
 
-        let sort_indices = arrow::compute::sort_to_indices(time_column, sort_options)?;
+        let sort_indices = arrow::compute::sort_to_indices(time_column, sort_options, None)?;
 
         let table_ref = arrow::compute::take(&self.table, &sort_indices, None)?;
 
-        let table = StructArray::from(table_ref.data());
+        let table = StructArray::from(table_ref.data().clone());
 
         Ok(Self::new_from_internals(table, self.types.clone()))
     }
@@ -694,7 +694,9 @@ where
             TimeInterval::arrow_data_type(),
             false,
         ));
-        column_values.push(Arc::new(FixedSizeListArray::from(time_intervals.data())));
+        column_values.push(Arc::new(FixedSizeListArray::from(
+            time_intervals.data().clone(),
+        )));
 
         // copy remaining attribute data
         for (column_name, column_type) in &self.types {
@@ -1224,7 +1226,7 @@ where
 impl<CollectionType> Clone for FeatureCollection<CollectionType> {
     fn clone(&self) -> Self {
         Self {
-            table: StructArray::from(self.table.data()),
+            table: StructArray::from(self.table.data().clone()),
             types: self.types.clone(),
             collection_type: Default::default(),
         }
@@ -1291,7 +1293,12 @@ pub fn struct_array_from_data(
 ) -> StructArray {
     StructArray::from(
         ArrayData::builder(arrow::datatypes::DataType::Struct(columns))
-            .child_data(column_values.into_iter().map(|a| a.data()).collect())
+            .child_data(
+                column_values
+                    .into_iter()
+                    .map(|a| a.data().clone())
+                    .collect(),
+            )
             .len(number_of_features)
             .build(),
     )
@@ -1601,7 +1608,7 @@ mod tests {
             empty_hash_map_size
         );
 
-        let struct_stack_size = 32;
+        let struct_stack_size = 144;
         assert_eq!(mem::size_of::<StructArray>(), struct_stack_size);
 
         let arrow_overhead_bytes = 192;

@@ -1,7 +1,7 @@
 use std::any::Any;
 use std::convert::TryFrom;
 
-use arrow::array::{Array, ArrayBuilder, ArrayDataRef, ArrayRef, BooleanArray, JsonEqual};
+use arrow::array::{Array, ArrayBuilder, ArrayData, ArrayRef, BooleanArray, JsonEqual};
 use arrow::datatypes::DataType;
 use arrow::error::ArrowError;
 use serde::{Deserialize, Serialize};
@@ -93,11 +93,11 @@ impl Array for NoArrowArray {
         unreachable!("There is no implementation since there is no geometry")
     }
 
-    fn data(&self) -> ArrayDataRef {
+    fn data(&self) -> &ArrayData {
         unreachable!("There is no implementation since there is no geometry")
     }
 
-    fn data_ref(&self) -> &ArrayDataRef {
+    fn data_ref(&self) -> &ArrayData {
         unreachable!("There is no implementation since there is no geometry")
     }
 
