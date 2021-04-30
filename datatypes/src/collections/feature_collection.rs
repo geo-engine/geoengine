@@ -1608,7 +1608,7 @@ mod tests {
             empty_hash_map_size
         );
 
-        let struct_stack_size = 32;
+        let struct_stack_size = 144;
         assert_eq!(mem::size_of::<StructArray>(), struct_stack_size);
 
         let arrow_overhead_bytes = 192;
