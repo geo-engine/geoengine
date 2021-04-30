@@ -482,6 +482,11 @@ impl<'r> TextDataRef<'r> {
         }
     }
 
+    /// Returns the offsets of the individual strings
+    pub fn offsets(&self) -> &[i32] {
+        self.offsets
+    }
+
     /// Returns the text reference at a certain position in the feature collection
     ///
     /// # Errors

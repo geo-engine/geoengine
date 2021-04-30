@@ -128,7 +128,7 @@ fn strings() {
     assert_eq!(array.len(), 5);
     assert_eq!(array.null_count(), 0);
 
-    assert_eq!(array.value_offsets(), &[0, 5, "hellofrom".len() as i32]);
+    assert_eq!(array.value_offsets(), &[0, 5, 9, 12, 17, 21]);
 
     assert_eq!(array.value(0), "hello");
     assert_eq!(array.value(1), "from");
@@ -152,7 +152,7 @@ fn strings2() {
     assert_eq!(array.len(), 5);
     assert_eq!(array.null_count(), 0);
 
-    assert_eq!(array.value_offsets(), &[0, 5, "hellofrom".len() as i32]);
+    assert_eq!(array.value_offsets(), &[0, 5, 9, 12, 17, 21]);
 
     assert_eq!(array.value_length(0), 5);
     assert_eq!(array.value_length(1), "from".len() as i32);
@@ -184,7 +184,7 @@ fn list() {
     };
 
     assert_eq!(array.len(), 2);
-    assert_eq!(array.value_offsets(), &[0, 2]);
+    assert_eq!(array.value_offsets(), &[0, 2, 5]);
     assert_eq!(array.value_length(0), 2);
     assert_eq!(array.value_length(1), 3);
 
