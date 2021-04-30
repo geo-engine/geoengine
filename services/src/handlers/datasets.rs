@@ -21,12 +21,8 @@ use crate::{
     datasets::{listing::DatasetListOptions, upload::UploadDb},
     util::IdResponse,
 };
-use chrono::DateTime;
 use gdal::vector::OGRFieldType;
-use gdal::{
-    vector::{FieldValue, Layer},
-    Dataset,
-};
+use gdal::{vector::Layer, Dataset};
 use geoengine_datatypes::{
     collections::VectorDataType,
     dataset::{DatasetId, InternalDatasetId},
@@ -248,7 +244,7 @@ fn suggest_main_file(upload: &Upload) -> Option<String> {
 
 fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDefinition> {
     let dataset = Dataset::open(&main_file_path).context(error::Gdal)?;
-    let mut layer = {
+    let layer = {
         if let Ok(layer) = dataset.layer(0) {
             layer
         } else {
@@ -264,7 +260,7 @@ fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDef
         .context(error::DataType)?;
     let columns_map = detect_columns(&layer);
     let columns_vecs = column_map_to_column_vecs(&columns_map);
-    let time = detect_time_type(&mut layer, &columns_vecs);
+    let time = detect_time_type(&columns_vecs);
 
     Ok(MetaDataDefinition::OgrMetaData(StaticMetaData {
         loading_info: OgrSourceDataset {
@@ -295,13 +291,8 @@ fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDef
     }))
 }
 
-fn detect_time_type(layer: &mut Layer, columns: &Columns) -> OgrSourceDatasetTimeType {
-    let feature = layer.features().next();
-    if feature.is_none() {
-        return OgrSourceDatasetTimeType::None;
-    }
-    let feature = feature.expect("checked before");
-
+fn detect_time_type(columns: &Columns) -> OgrSourceDatasetTimeType {
+    // TODO: load candidate names from config
     let known_start = [
         "start",
         "time",
@@ -316,6 +307,9 @@ fn detect_time_type(layer: &mut Layer, columns: &Columns) -> OgrSourceDatasetTim
         "date time",
         "event",
         "timestamp",
+        "time_from",
+        "t1",
+        "t",
     ];
     let known_end = [
         "end",
@@ -334,29 +328,22 @@ fn detect_time_type(layer: &mut Layer, columns: &Columns) -> OgrSourceDatasetTim
         "date stop",
         "end date",
         "stop date",
+        "time_to",
+        "t2",
     ];
     let known_duration = ["duration", "length", "valid for", "valid_for"];
 
     let mut start = None;
     let mut end = None;
-    for column in columns.text.iter().chain(&(columns.date)) {
-        let is_date = feature
-            .field(column)
-            .ok()
-            .flatten() // FIXME: handle NULL values?
-            .and_then(FieldValue::into_string)
-            .map(|s| DateTime::parse_from_rfc3339(&s))
-            .is_some();
-        if is_date {
-            if known_start.contains(&column.as_ref()) && start.is_none() {
-                start = Some(column);
-            } else if known_end.contains(&column.as_ref()) && end.is_none() {
-                end = Some(column);
-            }
+    for column in &columns.date {
+        if known_start.contains(&column.as_ref()) && start.is_none() {
+            start = Some(column);
+        } else if known_end.contains(&column.as_ref()) && end.is_none() {
+            end = Some(column);
+        }
 
-            if start.is_some() && end.is_some() {
-                break;
-            }
+        if start.is_some() && end.is_some() {
+            break;
         }
     }
 
@@ -368,18 +355,18 @@ fn detect_time_type(layer: &mut Layer, columns: &Columns) -> OgrSourceDatasetTim
     match (start, end, duration) {
         (Some(start), Some(end), _) => OgrSourceDatasetTimeType::StartEnd {
             start_field: start.clone(),
-            start_format: OgrSourceTimeFormat::Iso,
+            start_format: OgrSourceTimeFormat::Auto,
             end_field: end.clone(),
-            end_format: OgrSourceTimeFormat::Iso,
+            end_format: OgrSourceTimeFormat::Auto,
         },
         (Some(start), None, Some(duration)) => OgrSourceDatasetTimeType::StartDuration {
             start_field: start.clone(),
-            start_format: OgrSourceTimeFormat::Iso,
+            start_format: OgrSourceTimeFormat::Auto,
             duration_field: duration.clone(),
         },
         (Some(start), None, None) => OgrSourceDatasetTimeType::Start {
             start_field: start.clone(),
-            start_format: OgrSourceTimeFormat::Iso,
+            start_format: OgrSourceTimeFormat::Auto,
             duration: 0,
         },
         _ => OgrSourceDatasetTimeType::None,
@@ -721,16 +708,16 @@ mod tests {
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::StartEnd {
                         start_field: "time_start".to_owned(),
-                        start_format: OgrSourceTimeFormat::Iso,
+                        start_format: OgrSourceTimeFormat::Auto,
                         end_field: "time_end".to_owned(),
-                        end_format: OgrSourceTimeFormat::Iso,
+                        end_format: OgrSourceTimeFormat::Auto,
                     },
                     columns: Some(OgrSourceColumnSpec {
                         x: "".to_string(),
                         y: None,
                         float: vec![],
                         int: vec![],
-                        text: vec!["time_end".to_owned(), "time_start".to_owned()],
+                        text: vec![],
                     }),
                     default_geometry: None,
                     force_ogr_time_filter: false,
@@ -740,13 +727,7 @@ mod tests {
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    columns: [
-                        ("time_end".to_string(), FeatureDataType::Text),
-                        ("time_start".to_string(), FeatureDataType::Text),
-                    ]
-                    .iter()
-                    .cloned()
-                    .collect(),
+                    columns: [].iter().cloned().collect(),
                 },
             })
         )
