@@ -685,7 +685,7 @@ mod tests {
     }
 
     #[test]
-    fn it_detects_time() {
+    fn it_detects_time_json() {
         let mut meta_data = auto_detect_meta_data_definition(
             &PathBuf::from_str("../operators/test-data/vector/data/points_with_iso_time.json")
                 .unwrap(),
@@ -728,6 +728,154 @@ mod tests {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     columns: [].iter().cloned().collect(),
+                },
+            })
+        )
+    }
+
+    #[test]
+    fn it_detects_time_gpkg() {
+        let mut meta_data = auto_detect_meta_data_definition(
+            &PathBuf::from_str("../operators/test-data/vector/data/points_with_time.gpkg").unwrap(),
+        )
+        .unwrap();
+
+        if let MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data {
+            if let Some(columns) = &mut meta_data.loading_info.columns {
+                columns.text.sort();
+            }
+        }
+
+        assert_eq!(
+            meta_data,
+            MetaDataDefinition::OgrMetaData(StaticMetaData {
+                loading_info: OgrSourceDataset {
+                    file_name: "../operators/test-data/vector/data/points_with_time.gpkg".into(),
+                    layer_name: "points_with_time".to_string(),
+                    data_type: Some(VectorDataType::MultiPoint),
+                    time: OgrSourceDatasetTimeType::StartEnd {
+                        start_field: "time_start".to_owned(),
+                        start_format: OgrSourceTimeFormat::Auto,
+                        end_field: "time_end".to_owned(),
+                        end_format: OgrSourceTimeFormat::Auto,
+                    },
+                    columns: Some(OgrSourceColumnSpec {
+                        x: "".to_string(),
+                        y: None,
+                        float: vec![],
+                        int: vec![],
+                        text: vec![],
+                    }),
+                    default_geometry: None,
+                    force_ogr_time_filter: false,
+                    on_error: OgrSourceErrorSpec::Skip,
+                    provenance: None,
+                },
+                result_descriptor: VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: [].iter().cloned().collect(),
+                },
+            })
+        )
+    }
+
+    #[test]
+    fn it_detects_time_shp() {
+        let mut meta_data = auto_detect_meta_data_definition(
+            &PathBuf::from_str("../operators/test-data/vector/data/points_with_date.shp").unwrap(),
+        )
+        .unwrap();
+
+        if let MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data {
+            if let Some(columns) = &mut meta_data.loading_info.columns {
+                columns.text.sort();
+            }
+        }
+
+        assert_eq!(
+            meta_data,
+            MetaDataDefinition::OgrMetaData(StaticMetaData {
+                loading_info: OgrSourceDataset {
+                    file_name: "../operators/test-data/vector/data/points_with_date.shp".into(),
+                    layer_name: "points_with_date".to_string(),
+                    data_type: Some(VectorDataType::MultiPoint),
+                    time: OgrSourceDatasetTimeType::StartEnd {
+                        start_field: "time_start".to_owned(),
+                        start_format: OgrSourceTimeFormat::Auto,
+                        end_field: "time_end".to_owned(),
+                        end_format: OgrSourceTimeFormat::Auto,
+                    },
+                    columns: Some(OgrSourceColumnSpec {
+                        x: "".to_string(),
+                        y: None,
+                        float: vec![],
+                        int: vec![],
+                        text: vec![],
+                    }),
+                    default_geometry: None,
+                    force_ogr_time_filter: false,
+                    on_error: OgrSourceErrorSpec::Skip,
+                    provenance: None,
+                },
+                result_descriptor: VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: [].iter().cloned().collect(),
+                },
+            })
+        )
+    }
+
+    #[test]
+    fn it_detects_time_start_duration() {
+        let mut meta_data = auto_detect_meta_data_definition(
+            &PathBuf::from_str(
+                "../operators/test-data/vector/data/points_with_iso_start_duration.json",
+            )
+            .unwrap(),
+        )
+        .unwrap();
+
+        if let MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data {
+            if let Some(columns) = &mut meta_data.loading_info.columns {
+                columns.text.sort();
+            }
+        }
+
+        assert_eq!(
+            meta_data,
+            MetaDataDefinition::OgrMetaData(StaticMetaData {
+                loading_info: OgrSourceDataset {
+                    file_name:
+                        "../operators/test-data/vector/data/points_with_iso_start_duration.json"
+                            .into(),
+                    layer_name: "points_with_iso_start_duration".to_string(),
+                    data_type: Some(VectorDataType::MultiPoint),
+                    time: OgrSourceDatasetTimeType::StartDuration {
+                        start_field: "time_start".to_owned(),
+                        start_format: OgrSourceTimeFormat::Auto,
+                        duration_field: "duration".to_owned(),
+                    },
+                    columns: Some(OgrSourceColumnSpec {
+                        x: "".to_string(),
+                        y: None,
+                        float: vec![],
+                        int: vec!["duration".to_owned()],
+                        text: vec![],
+                    }),
+                    default_geometry: None,
+                    force_ogr_time_filter: false,
+                    on_error: OgrSourceErrorSpec::Skip,
+                    provenance: None,
+                },
+                result_descriptor: VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: [("duration".to_owned(), FeatureDataType::Int)]
+                        .iter()
+                        .cloned()
+                        .collect(),
                 },
             })
         )
