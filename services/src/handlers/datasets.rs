@@ -271,8 +271,8 @@ fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDef
             columns: Some(OgrSourceColumnSpec {
                 x: "".to_owned(), // TODO: for csv-files: try to find wkt/xy columns
                 y: None,
-                int: columns_vecs.float,
-                float: columns_vecs.int,
+                int: columns_vecs.int,
+                float: columns_vecs.float,
                 text: columns_vecs.text,
             }),
             default_geometry: None,
@@ -653,8 +653,8 @@ mod tests {
                     columns: Some(OgrSourceColumnSpec {
                         x: "".to_string(),
                         y: None,
-                        int: vec!["natlscale".to_string()],
-                        float: vec!["scalerank".to_string()],
+                        int: vec!["scalerank".to_string()],
+                        float: vec!["natlscale".to_string()],
                         text: vec![
                             "featurecla".to_string(),
                             "name".to_string(),
