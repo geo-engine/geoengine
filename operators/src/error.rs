@@ -179,6 +179,10 @@ pub enum Error {
 
     EmptyInput,
 
+    OgrFieldValueIsNotDateTime,
+    OgrFieldValueIsNotString,
+    OgrFieldValueIsNotValidForSeconds,
+
     FeatureDataValueMustNotBeNull,
     InvalidFeatureDataType,
 }

@@ -19,6 +19,7 @@ use futures::StreamExt;
 use gdal::vector::{Feature, FeatureIterator, FieldValue, OGRwkbGeometryType};
 use gdal::Dataset;
 use serde::{Deserialize, Serialize};
+use snafu::ResultExt;
 use tokio::task::spawn_blocking;
 
 use geoengine_datatypes::collections::{
@@ -135,7 +136,7 @@ impl Default for OgrSourceDatasetTimeType {
 ///   - format: define the format of the column
 ///   - "custom": define a custom format in the attribute `custom_format`
 ///   - "seconds": time column is numeric and contains seconds as UNIX timestamp
-///   - "iso": time column contains string with ISO8601
+///   - "auto": time is parsed by OGR
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(tag = "format")]
 #[serde(rename_all = "camelCase")]
@@ -145,12 +146,12 @@ pub enum OgrSourceTimeFormat {
         custom_format: String,
     },
     Seconds,
-    Iso,
+    Auto,
 }
 
 impl Default for OgrSourceTimeFormat {
     fn default() -> Self {
-        Self::Iso
+        Self::Auto
     }
 }
 
@@ -497,19 +498,29 @@ where
 
     fn create_time_parser(
         time_format: &OgrSourceTimeFormat,
-    ) -> Box<dyn Fn(&str) -> Result<TimeInstance> + '_> {
+    ) -> Box<dyn Fn(FieldValue) -> Result<TimeInstance> + '_> {
         match time_format {
-            OgrSourceTimeFormat::Iso => Box::new(move |date: &str| {
-                let date_time = DateTime::parse_from_rfc3339(date)?;
+            OgrSourceTimeFormat::Auto => Box::new(move |field: FieldValue| match field {
+                FieldValue::DateValue(value) => Ok(value.and_hms(0, 0, 0).naive_utc().into()),
+                FieldValue::DateTimeValue(value) => Ok(value.naive_utc().into()),
+                _ => Err(Error::OgrFieldValueIsNotDateTime),
+            }),
+            OgrSourceTimeFormat::Custom { custom_format } => Box::new(move |field: FieldValue| {
+                let date = field.into_string().ok_or(Error::OgrFieldValueIsNotString)?;
+                let date_time = DateTime::parse_from_str(&date, &custom_format)?;
                 Ok(date_time.timestamp_millis().try_into()?)
             }),
-            OgrSourceTimeFormat::Custom { custom_format } => Box::new(move |date: &str| {
-                let date_time = DateTime::parse_from_str(date, &custom_format)?;
-                Ok(date_time.timestamp_millis().try_into()?)
-            }),
-            OgrSourceTimeFormat::Seconds => Box::new(move |date: &str| {
-                let date_time = DateTime::parse_from_str(date, "%C")?;
-                Ok(date_time.timestamp_millis().try_into()?)
+            OgrSourceTimeFormat::Seconds => Box::new(move |field: FieldValue| match field {
+                FieldValue::IntegerValue(v) => {
+                    TimeInstance::from_millis(i64::from(v) * 1000).context(error::DataType)
+                }
+                FieldValue::Integer64Value(v) => {
+                    TimeInstance::from_millis(v * 1000).context(error::DataType)
+                }
+                FieldValue::StringValue(v) => DateTime::parse_from_str(&v, "%s")
+                    .context(error::TimeParse)
+                    .and_then(|d| d.timestamp_millis().try_into().context(error::DataType)),
+                _ => Err(Error::OgrFieldValueIsNotValidForSeconds),
             }),
         }
     }
@@ -532,12 +543,8 @@ where
                 let time_start_parser = Self::create_time_parser(start_format);
 
                 Box::new(move |feature: &Feature| {
-                    let field_value = feature
-                        .field(&start_field)?
-                        .into_string()
-                        .ok_or(Error::TimeIntervalColumnNameMissing)?;
-
-                    let time_start = time_start_parser(&field_value)?;
+                    let field_value = feature.field(&start_field)?;
+                    let time_start = time_start_parser(field_value)?;
 
                     TimeInterval::new(time_start, time_start + duration).map_err(Into::into)
                 })
@@ -552,19 +559,11 @@ where
                 let time_end_parser = Self::create_time_parser(end_format);
 
                 Box::new(move |feature: &Feature| {
-                    let start_field_value = feature
-                        .field(&start_field)?
-                        .into_string()
-                        .ok_or(Error::TimeIntervalColumnNameMissing)?;
+                    let start_field_value = feature.field(&start_field)?;
+                    let time_start = time_start_parser(start_field_value)?;
 
-                    let time_start = time_start_parser(&start_field_value)?;
-
-                    let end_field_value = feature
-                        .field(&end_field)?
-                        .into_string()
-                        .ok_or(Error::TimeIntervalColumnNameMissing)?;
-
-                    let time_end = time_end_parser(&end_field_value)?;
+                    let end_field_value = feature.field(&end_field)?;
+                    let time_end = time_end_parser(end_field_value)?;
 
                     TimeInterval::new(time_start, time_end).map_err(Into::into)
                 })
@@ -577,12 +576,8 @@ where
                 let time_start_parser = Self::create_time_parser(start_format);
 
                 Box::new(move |feature: &Feature| {
-                    let start_field_value = feature
-                        .field(&start_field)?
-                        .into_string()
-                        .ok_or(Error::TimeIntervalColumnNameMissing)?;
-
-                    let time_start = time_start_parser(&start_field_value)?;
+                    let start_field_value = feature.field(&start_field)?;
+                    let time_start = time_start_parser(start_field_value)?;
 
                     let duration = i64::from(
                         feature
