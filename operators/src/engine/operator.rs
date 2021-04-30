@@ -66,18 +66,6 @@ pub trait InitializedOperatorBase {
 
     /// Get the result descriptor of the `Operator`
     fn result_descriptor(&self) -> &Self::Descriptor;
-
-    /// Get the sources of the `Operator`
-    fn raster_sources(&self) -> &[Box<InitializedRasterOperator>];
-
-    /// Get the sources of the `Operator`
-    fn vector_sources(&self) -> &[Box<InitializedVectorOperator>];
-
-    /// Get the sources of the `Operator`
-    fn raster_sources_mut(&mut self) -> &mut [Box<InitializedRasterOperator>];
-
-    /// Get the sources of the `Operator`
-    fn vector_sources_mut(&mut self) -> &mut [Box<InitializedVectorOperator>];
 }
 
 pub type InitializedVectorOperator =
@@ -114,18 +102,6 @@ where
     fn result_descriptor(&self) -> &Self::Descriptor {
         self.as_ref().result_descriptor()
     }
-    fn raster_sources(&self) -> &[Box<InitializedRasterOperator>] {
-        self.as_ref().raster_sources()
-    }
-    fn vector_sources(&self) -> &[Box<InitializedVectorOperator>] {
-        self.as_ref().vector_sources()
-    }
-    fn raster_sources_mut(&mut self) -> &mut [Box<InitializedRasterOperator>] {
-        self.as_mut().raster_sources_mut()
-    }
-    fn vector_sources_mut(&mut self) -> &mut [Box<InitializedVectorOperator>] {
-        self.as_mut().vector_sources_mut()
-    }
 }
 
 impl<R, Q> InitializedOperatorBase for Box<dyn InitializedOperator<R, Q>>
@@ -136,18 +112,6 @@ where
     type Descriptor = R;
     fn result_descriptor(&self) -> &Self::Descriptor {
         self.as_ref().result_descriptor()
-    }
-    fn raster_sources(&self) -> &[Box<InitializedRasterOperator>] {
-        self.as_ref().raster_sources()
-    }
-    fn vector_sources(&self) -> &[Box<InitializedVectorOperator>] {
-        self.as_ref().vector_sources()
-    }
-    fn raster_sources_mut(&mut self) -> &mut [Box<InitializedRasterOperator>] {
-        self.as_mut().raster_sources_mut()
-    }
-    fn vector_sources_mut(&mut self) -> &mut [Box<InitializedVectorOperator>] {
-        self.as_mut().vector_sources_mut()
     }
 }
 

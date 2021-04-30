@@ -490,22 +490,6 @@ impl InitializedOperatorBase for InitializedGdalSourceOperator {
     fn result_descriptor(&self) -> &Self::Descriptor {
         &self.result_descriptor
     }
-
-    fn raster_sources(&self) -> &[Box<InitializedRasterOperator>] {
-        &[]
-    }
-
-    fn vector_sources(&self) -> &[Box<crate::engine::InitializedVectorOperator>] {
-        &[]
-    }
-
-    fn raster_sources_mut(&mut self) -> &mut [Box<InitializedRasterOperator>] {
-        &mut []
-    }
-
-    fn vector_sources_mut(&mut self) -> &mut [Box<crate::engine::InitializedVectorOperator>] {
-        &mut []
-    }
 }
 
 impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>

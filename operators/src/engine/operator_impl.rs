@@ -105,16 +105,4 @@ where
     fn result_descriptor(&self) -> &Self::Descriptor {
         &self.result_descriptor
     }
-    fn raster_sources(&self) -> &[Box<InitializedRasterOperator>] {
-        self.raster_sources.as_slice()
-    }
-    fn vector_sources(&self) -> &[Box<InitializedVectorOperator>] {
-        self.vector_sources.as_slice()
-    }
-    fn raster_sources_mut(&mut self) -> &mut [Box<InitializedRasterOperator>] {
-        self.raster_sources.as_mut_slice()
-    }
-    fn vector_sources_mut(&mut self) -> &mut [Box<InitializedVectorOperator>] {
-        self.vector_sources.as_mut_slice()
-    }
 }
