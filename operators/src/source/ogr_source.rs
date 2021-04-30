@@ -727,7 +727,7 @@ where
                         Ok(Some(FieldValue::Integer64Value(v))) => Some(v.to_string()),
                         Ok(Some(FieldValue::StringValue(s))) => Some(s),
                         Ok(Some(FieldValue::RealValue(v))) => Some(v.to_string()),
-                        Ok(Some(_)) => todo!("handle other types"),
+                        Ok(Some(_)) => return Err(Error::OgrColumnFieldTypeMismatch), // TODO: handle other types
                         Ok(None) => None,
                         Err(_) => None, // TODO: log error
                     };
@@ -740,7 +740,7 @@ where
                         Ok(Some(FieldValue::IntegerValue(v))) => Some(f64::from(v)),
                         Ok(Some(FieldValue::StringValue(s))) => f64::from_str(&s).ok(),
                         Ok(Some(FieldValue::RealValue(v))) => Some(v),
-                        Ok(Some(_)) => todo!("handle other types"),
+                        Ok(Some(_)) => return Err(Error::OgrColumnFieldTypeMismatch), // TODO: handle other types
                         Ok(None) => None,
                         Err(_) => None, // TODO: log error
                     };
@@ -754,14 +754,14 @@ where
                         Ok(Some(FieldValue::Integer64Value(v))) => Some(v),
                         Ok(Some(FieldValue::StringValue(s))) => i64::from_str(&s).ok(),
                         Ok(Some(FieldValue::RealValue(v))) => Some(v as i64),
-                        Ok(Some(_)) => todo!("handle other types"),
+                        Ok(Some(_)) => return Err(Error::OgrColumnFieldTypeMismatch), // TODO: handle other types
                         Ok(None) => None,
                         Err(_) => None, // TODO: log error
                     };
 
                     builder.push_data(&column, FeatureDataValue::NullableInt(value_option))?;
                 }
-                FeatureDataType::Category => todo!("implement"),
+                FeatureDataType::Category => return Err(Error::OgrColumnFieldTypeMismatch), // TODO: implement
             }
         }
 
