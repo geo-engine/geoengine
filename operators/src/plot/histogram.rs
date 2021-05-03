@@ -1,7 +1,8 @@
 use crate::engine::{
-    ExecutionContext, InitializedOperator, InitializedOperatorImpl, InitializedPlotOperator,
-    Operator, PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor,
-    QueryRectangle, TypedPlotQueryProcessor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
+    ExecutionContext, InitializedOperator, InitializedPlotOperator, InitializedRasterOperator,
+    InitializedVectorOperator, Operator, PlotOperator, PlotQueryProcessor, PlotResultDescriptor,
+    QueryContext, QueryProcessor, QueryRectangle, RasterOperator, TypedPlotQueryProcessor,
+    TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorOperator,
 };
 use crate::error;
 use crate::error::Error;
@@ -26,7 +27,7 @@ pub const HISTOGRAM_OPERATOR_NAME: &str = "Histogram";
 ///
 /// For vector inputs, it calculates the histogram on one of its attributes.
 ///
-pub type Histogram = Operator<HistogramParams>;
+pub type Histogram = Operator<HistogramParams, HistogramSources>;
 
 /// The parameter spec for `Histogram`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -41,6 +42,11 @@ pub struct HistogramParams {
     /// Whether to create an interactive output (`false` by default)
     #[serde(default)]
     pub interactive: bool,
+}
+
+pub struct HistogramSources {
+    pub feature_collection: Option<Box<dyn VectorOperator>>,
+    pub raster: Option<Box<dyn RasterOperator>>,
 }
 
 string_token!(Data, "data");
@@ -60,111 +66,128 @@ impl PlotOperator for Histogram {
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedPlotOperator>> {
+        let number_of_sources =
+            self.sources.feature_collection.map_or(0, 1) + self.sources.raster.map_or(0, 1);
+
         ensure!(
-            self.vector_sources.len() + self.raster_sources.len() == 1,
+            number_of_sources == 1,
             error::InvalidNumberOfInputs {
                 expected: 1..2,
                 found: self.vector_sources.len() + self.raster_sources.len()
             }
         );
-        ensure!(
-            self.raster_sources.is_empty() || self.params.column_name.is_none(),
-            error::InvalidOperatorSpec {
-                reason: "`column_name` must not be specified on raster input".to_string(),
+
+        match (self.sources.feature_collection, self.sources.raster) {
+            (None, None) | (Some(_), Some(_)) => {
+                return Err(Error::InvalidSourceConfiguration {
+                    reason: "You must specify either a raster or a feature collection as input",
+                });
             }
-        );
+            (None, Some(raster_source)) => {
+                Ok(
+                    InitializedHistogram::new(PlotResultDescriptor {}, self.params, raster_source)
+                        .boxed(),
+                )
+            }
+            (Some(vector_source), None) => {
+                let column_name =
+                    self.params
+                        .column_name
+                        .as_ref()
+                        .context(error::InvalidOperatorSpec {
+                            reason: "Histogram on vector input is missing `column_name` field"
+                                .to_string(),
+                        })?;
 
-        let vector_sources = self
-            .vector_sources
-            .into_iter()
-            .map(|o| o.initialize(context))
-            .collect::<Result<Vec<_>>>()?;
-        if !vector_sources.is_empty() {
-            let column_name =
-                self.params
-                    .column_name
-                    .as_ref()
-                    .context(error::InvalidOperatorSpec {
-                        reason: "Histogram on vector input is missing `column_name` field"
-                            .to_string(),
-                    })?;
+                match vector_source.result_descriptor().columns.get(column_name) {
+                    None => {
+                        return Err(Error::ColumnDoesNotExist {
+                            column: column_name.to_string(),
+                        });
+                    }
+                    Some(FeatureDataType::Category | FeatureDataType::Text) => {
+                        // TODO: incorporate category data
+                        return Err(Error::InvalidOperatorSpec {
+                            reason: format!("column `{}` must be numerical", column_name),
+                        });
+                    }
+                    Some(FeatureDataType::Int | FeatureDataType::Float) => {
+                        // okay
+                    }
+                }
 
-            let vector_result_descriptor = vector_sources[0].result_descriptor();
-
-            match vector_result_descriptor.columns.get(column_name) {
-                None => {
-                    return Err(Error::ColumnDoesNotExist {
-                        column: column_name.to_string(),
-                    });
-                }
-                Some(FeatureDataType::Category | FeatureDataType::Text) => {
-                    // TODO: incorporate category data
-                    return Err(Error::InvalidOperatorSpec {
-                        reason: format!("column `{}` must be numerical", column_name),
-                    });
-                }
-                Some(FeatureDataType::Int | FeatureDataType::Float) => {
-                    // okay
-                }
+                Ok(
+                    InitializedHistogram::new(PlotResultDescriptor {}, self.params, vector_source)
+                        .boxed(),
+                )
             }
         }
-
-        Ok(InitializedHistogram {
-            result_descriptor: PlotResultDescriptor {},
-            raster_sources: self
-                .raster_sources
-                .into_iter()
-                .map(|o| o.initialize(context))
-                .collect::<Result<Vec<_>>>()?,
-            vector_sources,
-            state: self.params,
-        }
-        .boxed())
     }
 }
 
 /// The initialization of `Histogram`
-pub type InitializedHistogram = InitializedOperatorImpl<PlotResultDescriptor, HistogramParams>;
+pub struct InitializedHistogram<Op> {
+    result_descriptor: PlotResultDescriptor,
+    metadata: HistogramMetadataOptions,
+    source: Box<Op>,
+    interactive: bool,
+    column_name: Option<String>,
+}
 
-impl InitializedOperator<PlotResultDescriptor, TypedPlotQueryProcessor> for InitializedHistogram {
-    fn query_processor(&self) -> Result<TypedPlotQueryProcessor> {
-        let (min, max) = if let HistogramBounds::Values { min, max } = self.state.bounds {
+impl<Op> InitializedHistogram<Op> {
+    pub fn new(
+        result_descriptor: PlotResultDescriptor,
+        params: HistogramParams,
+        source: Box<Op>,
+    ) -> Self {
+        let (min, max) = if let HistogramBounds::Values { min, max } = params.bounds {
             (Some(min), Some(max))
         } else {
             (None, None)
         };
-        let metadata = HistogramMetadataOptions {
-            number_of_buckets: self.state.buckets,
-            min,
-            max,
+
+        Self {
+            result_descriptor,
+            metadata: HistogramMetadataOptions {
+                number_of_buckets: params.buckets,
+                min,
+                max,
+            },
+            source,
+            interactive: params.interactive,
+            column_name: params.column_name,
+        }
+    }
+}
+
+impl InitializedOperator<PlotResultDescriptor, TypedPlotQueryProcessor>
+    for InitializedHistogram<InitializedRasterOperator>
+{
+    fn query_processor(&self) -> Result<TypedPlotQueryProcessor> {
+        let processor = HistogramRasterQueryProcessor {
+            input: self.source.query_processor()?,
+            measurement: self.source.result_descriptor().measurement.clone(),
+            metadata: self.metadata,
+            interactive: self.interactive,
         };
 
-        if self.vector_sources.is_empty() {
-            let raster_source = &self.raster_sources[0];
+        Ok(TypedPlotQueryProcessor::JsonVega(processor.boxed()))
+    }
+}
 
-            Ok(TypedPlotQueryProcessor::JsonVega(
-                HistogramRasterQueryProcessor {
-                    input: raster_source.query_processor()?,
-                    measurement: raster_source.result_descriptor().measurement.clone(),
-                    metadata,
-                    interactive: self.state.interactive,
-                }
-                .boxed(),
-            ))
-        } else {
-            let vector_source = &self.vector_sources[0];
+impl InitializedOperator<PlotResultDescriptor, TypedPlotQueryProcessor>
+    for InitializedHistogram<InitializedVectorOperator>
+{
+    fn query_processor(&self) -> Result<TypedPlotQueryProcessor> {
+        let processor = HistogramVectorQueryProcessor {
+            input: self.source.query_processor()?,
+            column_name: self.column_name.clone()?,
+            measurement: Measurement::Unitless, // TODO: incorporate measurement once it is there
+            metadata: self.metadata,
+            interactive: self.state.interactive,
+        };
 
-            Ok(TypedPlotQueryProcessor::JsonVega(
-                HistogramVectorQueryProcessor {
-                    input: vector_source.query_processor()?,
-                    column_name: self.state.column_name.clone().expect("checked in param"),
-                    measurement: Measurement::Unitless, // TODO: incorporate measurement once it is there
-                    metadata,
-                    interactive: self.state.interactive,
-                }
-                .boxed(),
-            ))
-        }
+        Ok(TypedPlotQueryProcessor::JsonVega(processor.boxed()))
     }
 }
 
@@ -529,8 +552,10 @@ mod tests {
                 buckets: Some(15),
                 interactive: false,
             },
-            raster_sources: vec![],
-            vector_sources: vec![],
+            sources: HistogramSources {
+                feature_collection: None,
+                raster: None,
+            },
         };
 
         let serialized = json!({
@@ -563,8 +588,10 @@ mod tests {
                 buckets: None,
                 interactive: false,
             },
-            raster_sources: vec![],
-            vector_sources: vec![],
+            sources: HistogramSources {
+                feature_collection: None,
+                raster: None,
+            },
         };
 
         let serialized = json!({
@@ -591,8 +618,10 @@ mod tests {
                 buckets: Some(3),
                 interactive: false,
             },
-            raster_sources: vec![mock_raster_source()],
-            vector_sources: vec![],
+            sources: HistogramSources {
+                feature_collection: None,
+                raster: Some(mock_raster_source()),
+            },
         };
 
         let execution_context = MockExecutionContext::default();
@@ -633,8 +662,10 @@ mod tests {
                 buckets: Some(3),
                 interactive: false,
             },
-            raster_sources: vec![mock_raster_source()],
-            vector_sources: vec![],
+            sources: HistogramSources {
+                feature_collection: None,
+                raster: Some(mock_raster_source()),
+            },
         };
 
         let execution_context = MockExecutionContext::default();
@@ -680,8 +711,10 @@ mod tests {
                 buckets: None,
                 interactive: false,
             },
-            raster_sources: vec![mock_raster_source()],
-            vector_sources: vec![],
+            sources: HistogramSources {
+                feature_collection: None,
+                raster: Some(mock_raster_source()),
+            },
         };
 
         let execution_context = MockExecutionContext::default();
@@ -743,8 +776,10 @@ mod tests {
                 buckets: Some(3),
                 interactive: true,
             },
-            raster_sources: vec![],
-            vector_sources: vec![vector_source],
+            sources: HistogramSources {
+                feature_collection: Some(vector_source),
+                raster: None,
+            },
         };
 
         let execution_context = MockExecutionContext::default();
@@ -810,8 +845,10 @@ mod tests {
                 buckets: None,
                 interactive: false,
             },
-            raster_sources: vec![],
-            vector_sources: vec![vector_source],
+            sources: HistogramSources {
+                feature_collection: Some(vector_source),
+                raster: None,
+            },
         };
 
         let execution_context = MockExecutionContext::default();

@@ -56,6 +56,11 @@ pub enum Error {
         found: usize,
     },
 
+    #[snafu(display("InvalidSourceConfiguration: {}", reason))]
+    InvalidSourceConfiguration {
+        reason: String,
+    },
+
     #[snafu(display("Column {} does not exist", column))]
     ColumnDoesNotExist {
         column: String,

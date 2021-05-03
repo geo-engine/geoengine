@@ -1,8 +1,7 @@
 use crate::call_generic_raster_processor;
 use crate::engine::{
-    InitializedOperator, InitializedOperatorBase, InitializedOperatorImpl,
-    InitializedRasterOperator, QueryProcessor, RasterOperator, RasterQueryProcessor,
-    RasterResultDescriptor, SourceOperator, TypedRasterQueryProcessor,
+    InitializedOperator, InitializedRasterOperator, QueryProcessor, RasterOperator,
+    RasterQueryProcessor, RasterResultDescriptor, SourceOperator, TypedRasterQueryProcessor,
 };
 use crate::util::Result;
 use futures::{stream, stream::StreamExt};
@@ -64,20 +63,21 @@ impl RasterOperator for MockRasterSource {
         self: Box<Self>,
         context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<InitializedRasterOperator>> {
-        InitializedOperatorImpl::create(
-            &self.params,
-            context,
-            |_, _, _, _| Ok(self.params.clone()),
-            |params, _, _, _, _| Ok(params.result_descriptor.clone()),
-            vec![],
-            vec![],
-        )
-        .map(InitializedOperatorImpl::boxed)
+        Ok(InitializedMockRasterSource {
+            result_descriptor: self.params.result_descriptor,
+            data: self.params.data,
+        }
+        .boxed())
     }
 }
 
+pub struct InitializedMockRasterSource {
+    result_descriptor: RasterResultDescriptor,
+    data: Vec<RasterTile2D<u8>>,
+}
+
 impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
-    for InitializedOperatorImpl<RasterResultDescriptor, MockRasterSourceParams>
+    for InitializedMockRasterSource
 {
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         fn converted<From, To>(

@@ -1,5 +1,5 @@
 use crate::engine::{
-    ExecutionContext, InitializedOperator, InitializedOperatorImpl, InitializedVectorOperator,
+    ExecutionContext, InitializedOperator, InitializedVectorOperator, ResultDescriptor,
     SourceOperator, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
     VectorResultDescriptor,
 };
@@ -64,6 +64,11 @@ where
     }
 }
 
+pub struct InitializedMockFeatureCollectionSource<R: ResultDescriptor, G: Geometry> {
+    result_descriptor: R,
+    collections: Vec<FeatureCollection<G>>,
+}
+
 // TODO: use single implementation once
 //      "deserialization of generic impls is not supported yet; use #[typetag::serialize] to generate serialization only"
 //  is solved
@@ -95,18 +100,16 @@ macro_rules! impl_mock_feature_collection_source {
                     columns: self.params.collections[0].column_types(),
                 };
 
-                Ok(
-                    InitializedOperatorImpl::new(result_descriptor, vec![], vec![], self.params)
-                        .boxed(),
-                )
+                Ok(InitializedMockFeatureCollectionSource {
+                    result_descriptor,
+                    collections: self.params.colletions,
+                }
+                .boxed())
             }
         }
 
         impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
-            for InitializedOperatorImpl<
-                VectorResultDescriptor,
-                MockFeatureCollectionSourceParams<$geometry>,
-            >
+            for InitializedMockFeatureCollectionSource<VectorResultDescriptor, $geometry>
         {
             fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
                 Ok(TypedVectorQueryProcessor::$output(

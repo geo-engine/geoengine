@@ -1,7 +1,7 @@
 use crate::engine::{
-    ExecutionContext, InitializedOperator, InitializedOperatorImpl, InitializedVectorOperator,
-    MetaData, QueryContext, QueryProcessor, QueryRectangle, SourceOperator,
-    TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+    ExecutionContext, InitializedOperator, InitializedVectorOperator, MetaData, QueryContext,
+    QueryProcessor, QueryRectangle, ResultDescriptor, SourceOperator, TypedVectorQueryProcessor,
+    VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::util::Result;
 use futures::stream;
@@ -98,20 +98,22 @@ impl VectorOperator for MockDatasetDataSource {
         context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedVectorOperator>> {
         let loading_info = context.meta_data(&self.params.dataset)?;
-        Ok(Box::new(InitializedOperatorImpl {
-            raster_sources: vec![],
-            vector_sources: vec![],
+
+        Ok(InitializedMockDatasetDataSource {
             result_descriptor: loading_info.result_descriptor()?,
-            state: loading_info,
-        }))
+            loading_info,
+        }
+        .boxed())
     }
 }
 
+struct InitializedMockDatasetDataSource<R: ResultDescriptor> {
+    result_descriptor: R,
+    loading_info: Box<dyn MetaData<MockDatasetDataSourceLoadingInfo, R>>,
+}
+
 impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
-    for InitializedOperatorImpl<
-        VectorResultDescriptor,
-        Box<dyn MetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>>,
-    >
+    for InitializedMockDatasetDataSource<VectorResultDescriptor>
 {
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
         Ok(TypedVectorQueryProcessor::MultiPoint(

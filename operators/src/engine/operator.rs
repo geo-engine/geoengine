@@ -61,13 +61,6 @@ pub trait PlotOperator: CloneablePlotOperator + Send + Sync + std::fmt::Debug {
     }
 }
 
-pub trait InitializedOperatorBase {
-    type Descriptor: ResultDescriptor + Clone;
-
-    /// Get the result descriptor of the `Operator`
-    fn result_descriptor(&self) -> &Self::Descriptor;
-}
-
 pub type InitializedVectorOperator =
     dyn InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>;
 
@@ -77,41 +70,19 @@ pub type InitializedRasterOperator =
 pub type InitializedPlotOperator =
     dyn InitializedOperator<PlotResultDescriptor, TypedPlotQueryProcessor>;
 
-pub trait InitializedOperator<R, Q>: InitializedOperatorBase<Descriptor = R> + Send + Sync
-where
-    R: ResultDescriptor,
-{
+pub trait InitializedOperator<Descriptor, Processor>: Send + Sync {
+    /// Get the result descriptor of the `Operator`
+    fn result_descriptor(&self) -> &Descriptor;
+
     /// Instantiate a `TypedVectorQueryProcessor` from a `RasterOperator`
-    fn query_processor(&self) -> Result<Q>;
+    fn query_processor(&self) -> Result<Processor>;
 
     /// Wrap a box around a `RasterOperator`
-    fn boxed(self) -> Box<dyn InitializedOperator<R, Q>>
+    fn boxed(self) -> Box<dyn InitializedOperator<Descriptor, Processor>>
     where
         Self: Sized + 'static,
     {
         Box::new(self)
-    }
-}
-
-impl<R> InitializedOperatorBase for Box<dyn InitializedOperatorBase<Descriptor = R>>
-where
-    R: ResultDescriptor + std::clone::Clone,
-{
-    type Descriptor = R;
-
-    fn result_descriptor(&self) -> &Self::Descriptor {
-        self.as_ref().result_descriptor()
-    }
-}
-
-impl<R, Q> InitializedOperatorBase for Box<dyn InitializedOperator<R, Q>>
-where
-    R: ResultDescriptor,
-    Q: QueryProcessor,
-{
-    type Descriptor = R;
-    fn result_descriptor(&self) -> &Self::Descriptor {
-        self.as_ref().result_descriptor()
     }
 }
 
@@ -120,6 +91,10 @@ where
     R: ResultDescriptor,
     Q: QueryProcessor,
 {
+    fn result_descriptor(&self) -> &R {
+        self.result_descriptor()
+    }
+
     fn query_processor(&self) -> Result<Q> {
         self.as_ref().query_processor()
     }
