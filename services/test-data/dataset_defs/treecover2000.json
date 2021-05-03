@@ -1,0 +1,43 @@
+{
+  "properties": {
+    "id": {
+      "internal": "92f0a62e-9510-4210-beeb-43146086ca63"
+    },
+    "name": "Treecover 2000",
+    "description": "Cumulated value up until 2000",
+    "sourceOperator": "GdalSource"
+  },
+  "metaData": {
+    "GdalStatic": {
+      "resultDescriptor": {
+        "dataType": "U8",
+        "spatialReference": "EPSG:4326",
+        "measurement": "unitless"
+      },
+      "params": {
+        "filePath": "/home/beilschmidt/Downloads/forest-cover-2000/Treecover2000.vrt",
+        "rasterbandChannel": 1,
+        "geoTransform": {
+          "originCoordinate": {
+            "x": -180.0,
+            "y": 80.0
+          },
+          "xPixelSize": 0.00025,
+          "yPixelSize": -0.00025
+        },
+        "bbox": {
+          "lowerLeftCoordinate": {
+            "x": -180.0,
+            "y": -60.0
+          },
+          "upperRightCoordinate": {
+            "x": 180.0,
+            "y": 80.0
+          }
+        },
+        "fileNotFoundHandling": "NoData",
+        "noDataValue": -9999.0
+      }
+    }
+  }
+}

@@ -1,0 +1,47 @@
+{
+    "properties": {
+      "id": null,
+      "name": "Sentinel 2 Band 04",
+      "description": "Sentinel 2 Band 04",
+      "sourceOperator": "GdalSource"
+    },
+    "metaData": {
+      "GdalMetaDataRegular": {
+        "resultDescriptor": {
+          "dataType": "U16",
+          "spatialReference": "EPSG:4326",
+          "measurement": "unitless"
+        },
+        "params": {
+          "filePath": "/mnt/panq/dbs_research_data/geo_data/sentinel_hub/sentinel_hub_hessen_3/sentinel_hub_20m_hessen_%%%_START_TIME_%%%.vrt",
+          "rasterbandChannel": 4,
+          "geoTransform": {
+            "originCoordinate": {
+              "x": 8.292058000000001,
+              "y": 51.363549999999996
+            },
+            "xPixelSize": 0.000285263346354,
+            "yPixelSize": -0.000187697143555
+          },
+          "bbox": {
+            "lowerLeftCoordinate": {
+              "x": 8.2920580,
+              "y": 49.8259350
+            },
+            "upperRightCoordinate": {
+              "x": 10.0447160,
+              "y": 51.3635500
+            }
+          },
+          "fileNotFoundHandling": "NoData"
+        },
+        "placeholder": "%%%_START_TIME_%%%",
+        "timeFormat": "%Y_%m",
+        "start": 154897920000,
+        "step": {
+          "granularity": "Months",
+          "step": 1
+        }
+      }
+    }
+  }
