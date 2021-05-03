@@ -618,15 +618,15 @@ where
         if let Some(ref column_spec) = dataset_information.columns {
             // TODO: error handling instead of unwrap
             for attribute in &column_spec.int {
-                data_types.insert(attribute.clone(), FeatureDataType::Float);
-                feature_collection_builder
-                    .add_column(attribute.clone(), FeatureDataType::Float)
-                    .unwrap();
-            }
-            for attribute in &column_spec.float {
                 data_types.insert(attribute.clone(), FeatureDataType::Int);
                 feature_collection_builder
                     .add_column(attribute.clone(), FeatureDataType::Int)
+                    .unwrap();
+            }
+            for attribute in &column_spec.float {
+                data_types.insert(attribute.clone(), FeatureDataType::Float);
+                feature_collection_builder
+                    .add_column(attribute.clone(), FeatureDataType::Float)
                     .unwrap();
             }
             for attribute in &column_spec.text {
