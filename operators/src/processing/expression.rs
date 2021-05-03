@@ -51,6 +51,7 @@ where
 }
 
 /// write no data as either number or "nan"
+#[allow(clippy::trivially_copy_pass_by_ref)]
 fn write_no_data<S>(x: &f64, s: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
