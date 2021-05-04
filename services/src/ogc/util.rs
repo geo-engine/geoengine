@@ -1,5 +1,7 @@
 use chrono::FixedOffset;
-use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, TimeInterval};
+use geoengine_datatypes::primitives::{
+    BoundingBox2D, Coordinate2D, SpatialResolution, TimeInterval,
+};
 use serde::de::Error;
 use serde::Deserialize;
 use std::str::FromStr;
@@ -61,6 +63,34 @@ where
             .map_err(D::Error::custom),
         _ => Err(D::Error::custom("Invalid time")),
     }
+}
+
+/// Parse a spatial resolution, format is: "resolution" or "xResolution,yResolution"
+pub fn parse_spatial_resolution_option<'de, D>(
+    deserializer: D,
+) -> Result<Option<SpatialResolution>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+
+    if s.is_empty() {
+        return Ok(None);
+    }
+
+    let split: Vec<Result<f64, std::num::ParseFloatError>> = s.split(',').map(str::parse).collect();
+
+    let spatial_resolution = match *split.as_slice() {
+        [Ok(resolution)] => {
+            SpatialResolution::new(resolution, resolution).map_err(D::Error::custom)?
+        }
+        [Ok(x_resolution), Ok(y_resolution)] => {
+            SpatialResolution::new(x_resolution, y_resolution).map_err(D::Error::custom)?
+        }
+        _ => return Err(D::Error::custom("Invalid spatial resolution")),
+    };
+
+    Ok(Some(spatial_resolution))
 }
 
 #[cfg(test)]
@@ -146,5 +176,30 @@ mod tests {
 
     fn to_deserializer(s: &str) -> StringDeserializer<serde::de::value::Error> {
         s.to_owned().into_deserializer()
+    }
+
+    #[test]
+    fn it_parses_spatial_resolution_options() {
+        assert_eq!(
+            parse_spatial_resolution_option(to_deserializer("")).unwrap(),
+            None
+        );
+
+        assert_eq!(
+            parse_spatial_resolution_option(to_deserializer("0.1")).unwrap(),
+            Some(SpatialResolution::zero_point_one())
+        );
+        assert_eq!(
+            parse_spatial_resolution_option(to_deserializer("1")).unwrap(),
+            Some(SpatialResolution::one())
+        );
+
+        assert_eq!(
+            parse_spatial_resolution_option(to_deserializer("0.1,0.2")).unwrap(),
+            Some(SpatialResolution::new(0.1, 0.2).unwrap())
+        );
+
+        assert!(parse_spatial_resolution_option(to_deserializer(",")).is_err());
+        assert!(parse_spatial_resolution_option(to_deserializer("0.1,0.2,0.3")).is_err());
     }
 }

@@ -430,7 +430,10 @@ async fn get_feature<C: Context>(
             let time = TimeInstance::from(chrono::offset::Utc::now());
             TimeInterval::new_unchecked(time, time)
         }),
-        spatial_resolution: SpatialResolution::zero_point_one(),
+        spatial_resolution: request
+            .query_resolution
+            // TODO: find a reasonable fallback, e.g., dependent on the SRS or BBox
+            .unwrap_or_else(SpatialResolution::zero_point_one),
     };
     let query_ctx = ctx.query_context()?;
 
