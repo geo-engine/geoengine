@@ -289,7 +289,7 @@ mod tests {
                 "outputFormat": "JsonVega",
                 "plotType": "Histogram",
                 "data": {
-                    "vegaString": "{\"$schema\":\"https://vega.github.io/schema/vega-lite/v4.json\",\"data\":{\"values\":[{\"bin_start\":0.0,\"bin_end\":2.5,\"Frequency\":2},{\"bin_start\":2.5,\"bin_end\":5.0,\"Frequency\":2},{\"bin_start\":5.0,\"bin_end\":7.5,\"Frequency\":2},{\"bin_start\":7.5,\"bin_end\":10.0,\"Frequency\":0}]},\"mark\":\"bar\",\"encoding\":{\"x\":{\"field\":\"bin_start\",\"bin\":{\"binned\":true,\"step\":2.5},\"axis\":{\"title\":\"\"}},\"x2\":{\"field\":\"bin_end\"},\"y\":{\"field\":\"Frequency\",\"type\":\"quantitative\"}}}",
+                    "vegaString": "{\"$schema\":\"https://vega.github.io/schema/vega-lite/v4.json\",\"data\":{\"values\":[{\"binStart\":0.0,\"binEnd\":2.5,\"Frequency\":2},{\"binStart\":2.5,\"binEnd\":5.0,\"Frequency\":2},{\"binStart\":5.0,\"binEnd\":7.5,\"Frequency\":2},{\"binStart\":7.5,\"binEnd\":10.0,\"Frequency\":0}]},\"mark\":\"bar\",\"encoding\":{\"x\":{\"field\":\"binStart\",\"bin\":{\"binned\":true,\"step\":2.5},\"axis\":{\"title\":\"\"}},\"x2\":{\"field\":\"binEnd\"},\"y\":{\"field\":\"Frequency\",\"type\":\"quantitative\"}}}",
                     "metadata": null
                 }
             })
