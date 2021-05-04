@@ -39,6 +39,35 @@ use snafu::{OptionExt, ResultExt};
 use uuid::Uuid;
 use warp::Filter;
 
+/// Lists available [Datasets](crate::datasets::listing::DatasetListing).
+///
+/// # Example
+///
+/// ```text
+/// GET /datasets?filter=Germany&offset=0&limit=2&order=NameAsc
+/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
+/// ```
+/// Response:
+/// ```text
+/// [
+///   {
+///     "id": {
+///       "internal": "9c874b9e-cea0-4553-b727-a13cb26ae4bb"
+///     },
+///     "name": "Germany",
+///     "description": "Boundaries of Germany",
+///     "tags": [],
+///     "sourceOperator": "OgrSource",
+///     "resultDescriptor": {
+///       "vector": {
+///         "dataType": "MultiPolygon",
+///         "spatialReference": "EPSG:4326",
+///         "columns": {}
+///       }
+///     }
+///   }
+/// ]
+/// ```
 pub(crate) fn list_datasets_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
@@ -65,6 +94,32 @@ async fn list_datasets<C: Context>(
     Ok(warp::reply::json(&list))
 }
 
+/// Retrieves details about a [Dataset](crate::datasets::listing::DatasetListing) using the internal id.
+///
+/// # Example
+///
+/// ```text
+/// GET /dataset/internal/9c874b9e-cea0-4553-b727-a13cb26ae4bb
+/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
+/// ```
+/// Response:
+/// ```text
+/// {
+///   "id": {
+///     "internal": "9c874b9e-cea0-4553-b727-a13cb26ae4bb"
+///   },
+///   "name": "Germany",
+///   "description": "Boundaries of Germany",
+///   "resultDescriptor": {
+///     "vector": {
+///       "dataType": "MultiPolygon",
+///       "spatialReference": "EPSG:4326",
+///       "columns": {}
+///     }
+///   },
+///   "sourceOperator": "OgrSource"
+/// }
+/// ```
 pub(crate) fn get_dataset_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
@@ -90,6 +145,58 @@ async fn get_dataset<C: Context>(
     Ok(warp::reply::json(&dataset))
 }
 
+/// Creates a new [Dataset](CreateDataset) using previously uploaded files.
+/// Information about the file contents must be manually supplied.
+///
+/// # Example
+///
+/// ```text
+/// POST /dataset
+/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
+///
+/// {
+///   "upload": "420b06de-0a7e-45cb-9c1c-ea901b46ab69",
+///   "definition": {
+///     "properties": {
+///       "name": "Germany Border",
+///       "description": "The Outline of Germany",
+///       "sourceOperator": "OgrSource"
+///     },
+///     "metaData": {
+///       "OgrMetaData": {
+///         "loadingInfo": {
+///           "fileName": "germany_polygon.gpkg",
+///           "layerName": "test_germany",
+///           "dataType": "MultiPolygon",
+///           "time": "none",
+///           "columns": {
+///             "x": "",
+///             "y": null,
+///             "text": [],
+///             "float": [],
+///             "int": []
+///           },
+///           "forceOgrTimeFilter": false,
+///           "onError": "skip"
+///         },
+///         "resultDescriptor": {
+///           "dataType": "MultiPolygon",
+///           "spatialReference": "EPSG:4326",
+///           "columns": {}
+///         }
+///       }
+///     }
+///   }
+/// }
+/// ```
+/// Response:
+/// ```text
+/// {
+///   "id": {
+///     "internal": "8d3471ab-fcf7-4c1b-bbc1-00477adf07c8"
+///   }
+/// }
+/// ```
 pub(crate) fn create_dataset_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
@@ -146,6 +253,30 @@ fn adjust_user_path_to_upload_path(meta: &mut MetaDataDefinition, upload: &Uploa
     Ok(())
 }
 
+/// Creates a new [Dataset](AutoCreateDataset) using previously uploaded files.
+/// The format of the files will be automatically detected when possible.
+///
+/// # Example
+///
+/// ```text
+/// POST /dataset
+/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
+///
+/// {
+///   "upload": "420b06de-0a7e-45cb-9c1c-ea901b46ab69",
+///   "datasetName": "Germany Border (auto)",
+///   "datasetDescription": "The Outline of Germany (auto detected format)",
+///   "mainFile": "germany_polygon.gpkg"
+/// }
+/// ```
+/// Response:
+/// ```text
+/// {
+///   "id": {
+///     "internal": "664d4b3c-c9d7-4e57-b34d-8c709c1c26e8"
+///   }
+/// }
+/// ```
 pub(crate) fn auto_create_dataset_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {

@@ -53,6 +53,103 @@ async fn wfs<C: Context>(
     }
 }
 
+/// Gets details about the web feature service provider and lists available operations.
+///
+/// # Example
+///
+/// ```text
+/// GET /wfs?request=GetCapabilities
+/// Authorization: Bearer e9da345c-b1df-464b-901c-0335a0419227
+/// ```
+/// Response:
+/// ```xml
+/// <?xml version="1.0" encoding="UTF-8"?>
+/// <wfs:WFS_Capabilities version="2.0.0"
+/// xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+/// xmlns="http://www.opengis.net/wfs/2.0"
+/// xmlns:wfs="http://www.opengis.net/wfs/2.0"
+/// xmlns:ows="http://www.opengis.net/ows/1.1"
+/// xmlns:xlink="http://www.w3.org/1999/xlink"
+/// xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:schemaLocation="http://www.opengis.net/wfs/2.0 http://schemas.opengis.net/wfs/2.0/wfs.xsd"
+/// xmlns:xml="http://www.w3.org/XML/1998/namespace">
+/// <ows:ServiceIdentification>
+///   <ows:Title>Geo Engine</ows:Title>
+///   <ows:ServiceType>WFS</ows:ServiceType>
+///   <ows:ServiceTypeVersion>2.0.0</ows:ServiceTypeVersion>
+///   <ows:Fees>NONE</ows:Fees>
+///   <ows:AccessConstraints>NONE</ows:AccessConstraints>
+/// </ows:ServiceIdentification>
+/// <ows:ServiceProvider>
+///   <ows:ProviderName>Geo Engine</ows:ProviderName>
+///   <ows:ServiceContact>
+///     <ows:ContactInfo>
+///       <ows:Address>
+///         <ows:ElectronicMailAddress>info@geoengine.de</ows:ElectronicMailAddress>
+///       </ows:Address>
+///     </ows:ContactInfo>
+///   </ows:ServiceContact>
+/// </ows:ServiceProvider>
+/// <ows:OperationsMetadata>
+///   <ows:Operation name="GetCapabilities">
+///     <ows:DCP>
+///       <ows:HTTP>
+///         <ows:Get xlink:href="http://localhost/wfs"/>
+///         <ows:Post xlink:href="http://localhost/wfs"/>
+///       </ows:HTTP>
+///     </ows:DCP>
+///     <ows:Parameter name="AcceptVersions">
+///       <ows:AllowedValues>
+///         <ows:Value>2.0.0</ows:Value>
+///       </ows:AllowedValues>
+///     </ows:Parameter>
+///     <ows:Parameter name="AcceptFormats">
+///       <ows:AllowedValues>
+///         <ows:Value>text/xml</ows:Value>
+///       </ows:AllowedValues>
+///     </ows:Parameter>
+///   </ows:Operation>
+///   <ows:Operation name="GetFeature">
+///     <ows:DCP>
+///       <ows:HTTP>
+///         <ows:Get xlink:href="http://localhost/wfs"/>
+///         <ows:Post xlink:href="http://localhost/wfs"/>
+///       </ows:HTTP>
+///     </ows:DCP>
+///     <ows:Parameter name="resultType">
+///       <ows:AllowedValues>
+///         <ows:Value>results</ows:Value>
+///         <ows:Value>hits</ows:Value>
+///       </ows:AllowedValues>
+///     </ows:Parameter>
+///     <ows:Parameter name="outputFormat">
+///       <ows:AllowedValues>
+///         <ows:Value>application/json</ows:Value>
+///         <ows:Value>json</ows:Value>
+///       </ows:AllowedValues>
+///     </ows:Parameter>
+///     <ows:Constraint name="PagingIsTransactionSafe">
+///       <ows:NoValues/>
+///       <ows:DefaultValue>FALSE</ows:DefaultValue>
+///     </ows:Constraint>
+///   </ows:Operation>
+///   <ows:Constraint name="ImplementsBasicWFS">
+///     <ows:NoValues/>
+///     <ows:DefaultValue>TRUE</ows:DefaultValue>
+///   </ows:Constraint>
+/// </ows:OperationsMetadata>
+/// <FeatureTypeList>
+///   <FeatureType>
+///     <Name>Test</Name>
+///     <Title>Test</Title>
+///     <DefaultCRS>urn:ogc:def:crs:EPSG::4326</DefaultCRS>
+///     <ows:WGS84BoundingBox>
+///       <ows:LowerCorner>-90 -180</ows:LowerCorner>
+///       <ows:UpperCorner>90 180</ows:UpperCorner>
+///     </ows:WGS84BoundingBox>
+///   </FeatureType>
+/// </FeatureTypeList>
+/// </wfs:WFS_Capabilities>
+/// ```
 #[allow(clippy::unnecessary_wraps)] // TODO: remove line once implemented fully
 fn get_capabilities(_request: &GetCapabilities) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
     // TODO: implement
@@ -151,6 +248,111 @@ fn get_capabilities(_request: &GetCapabilities) -> Result<Box<dyn warp::Reply>, 
     Ok(Box::new(warp::reply::html(mock)))
 }
 
+/// Retrieves feature data objects.
+///
+///  # Example
+///
+/// ```text
+/// GET /wfs?request=GetFeature&version=2.0.0&typeNames=test&bbox=1,2,3,4
+/// ```
+/// Response:
+/// ```text
+/// {
+///   "type": "FeatureCollection",
+///   "features": [
+///     {
+///       "type": "Feature",
+///       "geometry": {
+///         "type": "Point",
+///         "coordinates": [
+///           0.0,
+///           0.1
+///         ]
+///       },
+///       "properties": {
+///         "foo": 0
+///       },
+///       "when": {
+///         "start": "1970-01-01T00:00:00+00:00",
+///         "end": "1970-01-01T00:00:00.001+00:00",
+///         "type": "Interval"
+///       }
+///     },
+///     {
+///       "type": "Feature",
+///       "geometry": {
+///         "type": "Point",
+///         "coordinates": [
+///           1.0,
+///           1.1
+///         ]
+///       },
+///       "properties": {
+///         "foo": null
+///       },
+///       "when": {
+///         "start": "1970-01-01T00:00:00+00:00",
+///         "end": "1970-01-01T00:00:00.001+00:00",
+///         "type": "Interval"
+///       }
+///     },
+///     {
+///       "type": "Feature",
+///       "geometry": {
+///         "type": "Point",
+///         "coordinates": [
+///           2.0,
+///           3.1
+///         ]
+///       },
+///       "properties": {
+///         "foo": 2
+///       },
+///       "when": {
+///         "start": "1970-01-01T00:00:00+00:00",
+///         "end": "1970-01-01T00:00:00.001+00:00",
+///         "type": "Interval"
+///       }
+///     },
+///     {
+///       "type": "Feature",
+///       "geometry": {
+///         "type": "Point",
+///         "coordinates": [
+///           3.0,
+///           3.1
+///         ]
+///       },
+///       "properties": {
+///         "foo": 3
+///       },
+///       "when": {
+///         "start": "1970-01-01T00:00:00+00:00",
+///         "end": "1970-01-01T00:00:00.001+00:00",
+///         "type": "Interval"
+///       }
+///     },
+///     {
+///       "type": "Feature",
+///       "geometry": {
+///         "type": "Point",
+///         "coordinates": [
+///           4.0,
+///           4.1
+///         ]
+///       },
+///       "properties": {
+///         "foo": 4
+///       },
+///       "when": {
+///         "start": "1970-01-01T00:00:00+00:00",
+///         "end": "1970-01-01T00:00:00.001+00:00",
+///         "type": "Interval"
+///       }
+///     }
+///   ]
+/// }
+/// ```
 async fn get_feature<C: Context>(
     request: &GetFeature,
     ctx: &C,
