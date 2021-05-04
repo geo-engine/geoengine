@@ -1,9 +1,10 @@
-use crate::{error, util::Result};
+use crate::{error, primitives::BoundingBox2D, util::Result};
 use gdal::spatial_ref::SpatialRef;
 #[cfg(feature = "postgres")]
 use postgres_types::private::BytesMut;
 #[cfg(feature = "postgres")]
 use postgres_types::{FromSql, IsNull, ToSql, Type};
+use proj::Proj;
 use serde::de::Visitor;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 #[cfg(feature = "postgres")]
@@ -68,6 +69,19 @@ impl SpatialReference {
                 //TODO: we might need to look them up somehow! Best solution would be a registry where we can store user definexd srs strings.
             }
         }
+    }
+
+    pub fn area_of_use(self) -> Result<BoundingBox2D> {
+        let proj = Proj::new(&self.proj_string()?).ok_or(error::Error::InvalidProjDefinition)?;
+        let area = proj
+            .area_of_use()
+            .context(error::ProjInternal)?
+            .0
+            .ok_or(error::Error::NoAreaOfUseDefined)?;
+        BoundingBox2D::new(
+            (area.west, area.south).into(),
+            (area.east, area.north).into(),
+        )
     }
 }
 

@@ -1,7 +1,7 @@
 use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution, TimeInterval};
 
 /// A spatio-temporal rectangle for querying data
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub struct QueryRectangle {
     pub bbox: BoundingBox2D,
     pub time_interval: TimeInterval,

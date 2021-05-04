@@ -3,7 +3,7 @@ use proj::Proj;
 use snafu::ensure;
 
 use crate::{
-    error,
+    error::{self, Error},
     primitives::{
         BoundingBox2D, Coordinate2D, Line, MultiLineString, MultiLineStringAccess,
         MultiLineStringRef, MultiPoint, MultiPointAccess, MultiPointRef, MultiPolygon,
@@ -23,6 +23,10 @@ pub trait CoordinateProjection {
     /// project a set of coords
     fn project_coordinates<A: AsRef<[Coordinate2D]>>(&self, coords: A)
         -> Result<Vec<Coordinate2D>>;
+
+    fn source_srs(&self) -> SpatialReference;
+
+    fn target_srs(&self) -> SpatialReference;
 }
 
 pub struct CoordinateProjector {
@@ -52,6 +56,14 @@ impl CoordinateProjection for CoordinateProjector {
         self.p.convert_array(&mut cc)?;
 
         Ok(cc)
+    }
+
+    fn source_srs(&self) -> SpatialReference {
+        self.from
+    }
+
+    fn target_srs(&self) -> SpatialReference {
+        self.to
     }
 }
 
@@ -214,14 +226,60 @@ where
             .chain(left_line)
             .collect();
 
+        let proj_outline_coordinates = projector.project_coordinates(&outline_coordinates)?;
+
+        Ok(MultiPoint::new_unchecked(proj_outline_coordinates).spatial_bounds())
+    }
+}
+
+pub trait ReprojectClipped<P: CoordinateProjection> {
+    type Out;
+    /// Reproject and clip with respect to the area of use of the projection
+    fn reproject_clipped(&self, projector: &P) -> Result<Self::Out>;
+}
+
+impl<P> ReprojectClipped<P> for BoundingBox2D
+where
+    P: CoordinateProjection,
+{
+    type Out = BoundingBox2D;
+    fn reproject_clipped(&self, projector: &P) -> Result<BoundingBox2D> {
+        const POINTS_PER_LINE: i32 = 7;
+
+        let use_bbox = projector.target_srs().area_of_use()?;
+        let bbox = self
+            .intersection(&use_bbox)
+            .ok_or(Error::BboxesDoNotIntersect)?;
+
+        let upper_line = Line::new(bbox.upper_left(), bbox.upper_right())
+            .with_additional_equi_spaced_coords(POINTS_PER_LINE);
+        let right_line = Line::new(bbox.upper_right(), bbox.lower_right())
+            .with_additional_equi_spaced_coords(POINTS_PER_LINE);
+        let lower_line = Line::new(bbox.lower_right(), bbox.lower_left())
+            .with_additional_equi_spaced_coords(POINTS_PER_LINE);
+        let left_line = Line::new(bbox.lower_left(), bbox.upper_left())
+            .with_additional_equi_spaced_coords(POINTS_PER_LINE);
+
+        let outline_coordinates: Vec<Coordinate2D> = upper_line
+            .chain(right_line)
+            .chain(lower_line)
+            .chain(left_line)
+            .collect();
+
         let proj_outline_coordinates: Vec<Coordinate2D> =
             project_coordinates_fail_tolerant(&outline_coordinates, projector)
                 .into_iter()
                 .flatten()
                 .collect();
 
-        // TODO: check min coords or use grid? e.g. ensure!(proj_cs.len() ). fail only if there are not enough coordinates after reprojection. This could also require us to use a grid instead of bounds. The good news is that the Grid can already provide this.
-        Ok(MultiPoint::new_unchecked(proj_outline_coordinates).spatial_bounds())
+        let out = MultiPoint::new(proj_outline_coordinates)?.spatial_bounds();
+
+        ensure!(
+            out.size_x() > 0. && out.size_y() > 0.,
+            error::CouldNotReprojectBbox
+        );
+
+        Ok(out)
     }
 }
 
@@ -289,6 +347,7 @@ pub fn suggest_pixel_size_like_gdal<P: CoordinateProjection>(
 }
 
 /// This approach uses the GDAL way to suggest the pixel size. However, we check both diagonals and take the smaller one.
+/// This method fails if the bbox cannot be projected
 pub fn suggest_pixel_size_from_diag_cross<P: CoordinateProjection>(
     bbox: BoundingBox2D,
     spatial_resolution: SpatialResolution,
@@ -513,6 +572,24 @@ mod tests {
             rp.polygons()[0][0][2].y,
             HAMBURG_EPSG_900_913.y
         ));
+    }
+
+    #[test]
+    fn reproject_clipped_bbox_4326_3857() {
+        let bbox = BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into());
+        let p = CoordinateProjector::from_known_srs(
+            SpatialReference::epsg_4326(),
+            SpatialReference::new(SpatialReferenceAuthority::Epsg, 3857),
+        )
+        .unwrap();
+
+        let projected = bbox.reproject_clipped(&p).unwrap();
+        let expected = BoundingBox2D::new_unchecked(
+            (-20_037_508.342_789_244, -20_048_966.104_014_6).into(),
+            (20_037_508.342_789_244, 20_048_966.104_014_594).into(),
+        );
+
+        assert_eq!(projected, expected);
     }
 
     #[test]

@@ -1,6 +1,5 @@
-use std::convert::Infallible;
-
 use snafu::Snafu;
+use std::convert::Infallible;
 
 use crate::{
     collections::FeatureCollectionError, primitives::TimeInstance,
@@ -212,6 +211,12 @@ pub enum Error {
     NoMatchingVectorDataTypeForOgrGeometryType,
 
     NoMatchingFeatureDataTypeForOgrFieldType,
+
+    InvalidProjDefinition,
+    NoAreaOfUseDefined,
+    BboxesDoNotIntersect,
+
+    CouldNotReprojectBbox,
 }
 
 impl From<arrow::error::ArrowError> for Error {
