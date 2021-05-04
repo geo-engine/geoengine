@@ -1395,8 +1395,8 @@ mod tests {
                     columns: Some(OgrSourceColumnSpec {
                         x: "".to_string(),
                         y: None,
-                        int: vec!["natlscale".to_string()],
-                        float: vec!["scalerank".to_string()],
+                        int: vec!["scalerank".to_string()],
+                        float: vec!["natlscale".to_string()],
                         text: vec![
                             "featurecla".to_string(),
                             "name".to_string(),
@@ -2731,8 +2731,8 @@ mod tests {
             columns: Some(OgrSourceColumnSpec {
                 x: "".to_string(),
                 y: None,
-                float: vec!["a".to_string()],
-                int: vec!["b".to_string()],
+                float: vec!["b".to_string()],
+                int: vec!["a".to_string()],
                 text: vec!["c".to_string()],
             }),
             default_geometry: None,
@@ -3226,7 +3226,13 @@ mod tests {
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    columns: Default::default(),
+                    columns: [
+                        ("num".to_string(), FeatureDataType::Int),
+                        ("txt".to_string(), FeatureDataType::Text),
+                    ]
+                    .iter()
+                    .cloned()
+                    .collect(),
                 },
             }),
         );
@@ -3276,7 +3282,7 @@ mod tests {
             vec![TimeInterval::default(), TimeInterval::default()],
             {
                 let mut map = HashMap::new();
-                map.insert("num".into(), FeatureData::Float(vec![42., 815.]));
+                map.insert("num".into(), FeatureData::Int(vec![42, 815]));
                 map.insert(
                     "txt".into(),
                     FeatureData::Text(vec!["foo".to_owned(), "bar".to_owned()]),
