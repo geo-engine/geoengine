@@ -97,8 +97,12 @@ impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
 
         Ok(call_generic_raster_processor!(
             self.result_descriptor().data_type,
-            converted(&self.state.data)
+            converted(&self.data)
         ))
+    }
+
+    fn result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
     }
 }
 

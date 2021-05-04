@@ -19,9 +19,9 @@ use geoengine_datatypes::{
 };
 
 use crate::engine::{
-    InitializedOperator, InitializedOperatorImpl, InitializedVectorOperator, QueryContext,
-    QueryProcessor, QueryRectangle, SourceOperator, TypedVectorQueryProcessor, VectorOperator,
-    VectorQueryProcessor, VectorResultDescriptor,
+    InitializedOperator, InitializedVectorOperator, QueryContext, QueryProcessor, QueryRectangle,
+    SourceOperator, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
+    VectorResultDescriptor,
 };
 use crate::error;
 use crate::util::Result;
@@ -148,26 +148,26 @@ impl VectorOperator for CsvSource {
         self: Box<Self>,
         context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<InitializedVectorOperator>> {
-        InitializedOperatorImpl::create(
-            &self.params,
-            context,
-            |_, _, _, _| Ok(self.params.clone()),
-            |_, _, _, _, _| {
-                Ok(VectorResultDescriptor {
-                    data_type: VectorDataType::MultiPoint, // TODO: get as user input
-                    spatial_reference: SpatialReference::epsg_4326().into(), // TODO: get as user input
-                    columns: Default::default(), // TODO: get when source allows loading other columns
-                })
+        let initialized_source = InitializedCsvSource {
+            result_descriptor: VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint, // TODO: get as user input
+                spatial_reference: SpatialReference::epsg_4326().into(), // TODO: get as user input
+                columns: Default::default(), // TODO: get when source allows loading other columns
             },
-            vec![],
-            vec![],
-        )
-        .map(InitializedOperatorImpl::boxed)
+            state: self.params,
+        };
+
+        Ok(initialized_source.boxed())
     }
 }
 
+pub struct InitializedCsvSource {
+    result_descriptor: VectorResultDescriptor,
+    state: CsvSourceParameters,
+}
+
 impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
-    for InitializedOperatorImpl<VectorResultDescriptor, CsvSourceParameters>
+    for InitializedCsvSource
 {
     fn query_processor(&self) -> Result<crate::engine::TypedVectorQueryProcessor> {
         Ok(TypedVectorQueryProcessor::MultiPoint(
@@ -176,6 +176,10 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
             }
             .boxed(),
         ))
+    }
+
+    fn result_descriptor(&self) -> &VectorResultDescriptor {
+        &self.result_descriptor
     }
 }
 

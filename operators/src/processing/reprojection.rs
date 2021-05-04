@@ -2,13 +2,14 @@ use super::map_query::MapQueryProcessor;
 use crate::{
     adapters::{fold_by_coordinate_lookup_future, RasterOverlapAdapter, TileReprojectionSubQuery},
     engine::{
-        ExecutionContext, InitializedOperator, InitializedOperatorImpl, InitializedRasterOperator,
+        ExecutionContext, InitializedOperator, InitializedRasterOperator,
         InitializedVectorOperator, Operator, QueryContext, QueryRectangle, RasterOperator,
-        RasterQueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor,
-        TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+        RasterQueryProcessor, RasterResultDescriptor, SingleRasterOrVectorSource,
+        TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
+        VectorResultDescriptor,
     },
-    error,
-    util::Result,
+    error::Error,
+    util::{input::RasterOrVectorOperator, Result},
 };
 use futures::stream::BoxStream;
 use futures::StreamExt;
@@ -21,7 +22,6 @@ use geoengine_datatypes::{
 };
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
-use snafu::ensure;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 #[serde(rename_all = "camelCase")]
@@ -43,12 +43,18 @@ pub struct RasterReprojectionState {
     out_no_data_value: f64,
 }
 
-pub type Reprojection = Operator<ReprojectionParams>;
-pub type InitializedVectorReprojection =
-    InitializedOperatorImpl<VectorResultDescriptor, VectorReprojectionState>;
+pub type Reprojection = Operator<ReprojectionParams, SingleRasterOrVectorSource>;
+pub struct InitializedVectorReprojection {
+    result_descriptor: VectorResultDescriptor,
+    source: Box<InitializedVectorOperator>,
+    state: VectorReprojectionState,
+}
 
-pub type InitializedRasterReprojection =
-    InitializedOperatorImpl<RasterResultDescriptor, RasterReprojectionState>;
+pub struct InitializedRasterReprojection {
+    result_descriptor: RasterResultDescriptor,
+    source: Box<InitializedRasterOperator>,
+    state: RasterReprojectionState,
+}
 
 #[typetag::serde]
 impl VectorOperator for Reprojection {
@@ -56,28 +62,14 @@ impl VectorOperator for Reprojection {
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedVectorOperator>> {
-        ensure!(
-            self.vector_sources.len() == 1,
-            error::InvalidNumberOfVectorInputs {
-                expected: 1..2,
-                found: self.vector_sources.len()
-            }
-        );
-        ensure!(
-            self.raster_sources.is_empty(),
-            error::InvalidNumberOfRasterInputs {
-                expected: 0..1,
-                found: self.raster_sources.len()
-            }
-        );
+        let vector_operator = match self.sources.source {
+            RasterOrVectorOperator::Vector(operator) => operator,
+            RasterOrVectorOperator::Raster(_) => return Err(Error::InvalidOperatorType),
+        };
 
-        let initialized_vector_sources = self
-            .vector_sources
-            .into_iter()
-            .map(|o| o.initialize(context))
-            .collect::<Result<Vec<Box<InitializedVectorOperator>>>>()?;
+        let vector_operator = vector_operator.initialize(context)?;
 
-        let in_desc: &VectorResultDescriptor = initialized_vector_sources[0].result_descriptor();
+        let in_desc: &VectorResultDescriptor = vector_operator.result_descriptor();
         let out_desc = VectorResultDescriptor {
             spatial_reference: self.params.target_spatial_reference.into(),
             data_type: in_desc.data_type,
@@ -89,19 +81,26 @@ impl VectorOperator for Reprojection {
             target_srs: self.params.target_spatial_reference,
         };
 
-        Ok(
-            InitializedVectorReprojection::new(out_desc, vec![], initialized_vector_sources, state)
-                .boxed(),
-        )
+        let initialized_operator = InitializedVectorReprojection {
+            result_descriptor: out_desc,
+            source: vector_operator,
+            state,
+        };
+
+        Ok(initialized_operator.boxed())
     }
 }
 
 impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
     for InitializedVectorReprojection
 {
+    fn result_descriptor(&self) -> &VectorResultDescriptor {
+        &self.result_descriptor
+    }
+
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
         let state = self.state;
-        match self.vector_sources[0].query_processor()? {
+        match self.source.query_processor()? {
             TypedVectorQueryProcessor::Data(source) => Ok(TypedVectorQueryProcessor::Data(
                 MapQueryProcessor::new(source, move |query| {
                     query_rewrite_fn(query, state.source_srs, state.target_srs)
@@ -211,28 +210,14 @@ impl RasterOperator for Reprojection {
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedRasterOperator>> {
-        ensure!(
-            self.vector_sources.is_empty(),
-            crate::error::InvalidNumberOfVectorInputs {
-                expected: 0..0,
-                found: self.vector_sources.len()
-            }
-        );
-        ensure!(
-            !self.raster_sources.is_empty(),
-            crate::error::InvalidNumberOfRasterInputs {
-                expected: 1..1,
-                found: self.raster_sources.len()
-            }
-        );
+        let raster_operator = match self.sources.source {
+            RasterOrVectorOperator::Raster(operator) => operator,
+            RasterOrVectorOperator::Vector(_) => return Err(Error::InvalidOperatorType),
+        };
 
-        let initialized_raster_sources = self
-            .raster_sources
-            .into_iter()
-            .map(|o| o.initialize(context))
-            .collect::<Result<Vec<Box<InitializedRasterOperator>>>>()?;
+        let raster_operator = raster_operator.initialize(context)?;
 
-        let in_desc: &RasterResultDescriptor = initialized_raster_sources[0].result_descriptor();
+        let in_desc: &RasterResultDescriptor = raster_operator.result_descriptor();
         let out_no_data_value = in_desc.no_data_value.unwrap_or(0.); // TODO: add option to force a no_data_value
 
         let out_desc = RasterResultDescriptor {
@@ -249,20 +234,27 @@ impl RasterOperator for Reprojection {
             out_no_data_value,
         };
 
-        Ok(
-            InitializedRasterReprojection::new(out_desc, initialized_raster_sources, vec![], state)
-                .boxed(),
-        )
+        let initialized_operator = InitializedRasterReprojection {
+            result_descriptor: out_desc,
+            source: raster_operator,
+            state,
+        };
+
+        Ok(initialized_operator.boxed())
     }
 }
 
 impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
     for InitializedRasterReprojection
 {
+    fn result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
+    }
+
     // i know there is a macro somewhere. we need to re-work this when we have the no-data value anyway.
     #[allow(clippy::too_many_lines)]
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
-        let q = self.raster_sources[0].query_processor()?;
+        let q = self.source.query_processor()?;
 
         let s = self.state;
 
@@ -500,10 +492,11 @@ mod tests {
             SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
 
         let initialized_operator = VectorOperator::boxed(Reprojection {
-            vector_sources: vec![point_source],
-            raster_sources: vec![],
             params: ReprojectionParams {
                 target_spatial_reference,
+            },
+            sources: SingleRasterOrVectorSource {
+                source: point_source.into(),
             },
         })
         .initialize(&MockExecutionContext::default())?;
@@ -567,10 +560,11 @@ mod tests {
             SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
 
         let initialized_operator = VectorOperator::boxed(Reprojection {
-            vector_sources: vec![lines_source],
-            raster_sources: vec![],
             params: ReprojectionParams {
                 target_spatial_reference,
+            },
+            sources: SingleRasterOrVectorSource {
+                source: lines_source.into(),
             },
         })
         .initialize(&MockExecutionContext::default())?;
@@ -636,10 +630,11 @@ mod tests {
             SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
 
         let initialized_operator = VectorOperator::boxed(Reprojection {
-            vector_sources: vec![polygon_source],
-            raster_sources: vec![],
             params: ReprojectionParams {
                 target_spatial_reference,
+            },
+            sources: SingleRasterOrVectorSource {
+                source: polygon_source.into(),
             },
         })
         .initialize(&MockExecutionContext::default())?;
@@ -733,10 +728,11 @@ mod tests {
         };
 
         let initialized_operator = RasterOperator::boxed(Reprojection {
-            vector_sources: vec![],
-            raster_sources: vec![mrs1],
             params: ReprojectionParams {
                 target_spatial_reference: projection, // This test will do a identity reprojhection
+            },
+            sources: SingleRasterOrVectorSource {
+                source: mrs1.into(),
             },
         })
         .initialize(&exe_ctx)?;
@@ -791,10 +787,11 @@ mod tests {
         );
 
         let initialized_operator = RasterOperator::boxed(Reprojection {
-            vector_sources: vec![],
-            raster_sources: vec![gdal_op],
             params: ReprojectionParams {
                 target_spatial_reference: projection,
+            },
+            sources: SingleRasterOrVectorSource {
+                source: gdal_op.into(),
             },
         })
         .initialize(&exe_ctx)?;

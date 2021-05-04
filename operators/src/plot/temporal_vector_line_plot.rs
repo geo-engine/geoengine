@@ -1,7 +1,7 @@
 use crate::engine::{
-    ExecutionContext, InitializedOperator, InitializedOperatorImpl, InitializedPlotOperator,
+    ExecutionContext, InitializedOperator, InitializedPlotOperator, InitializedVectorOperator,
     Operator, PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryRectangle,
-    TypedPlotQueryProcessor, VectorQueryProcessor,
+    SingleVectorSource, TypedPlotQueryProcessor, VectorQueryProcessor,
 };
 use crate::error;
 use crate::util::Result;
@@ -32,7 +32,8 @@ pub const FEATURE_ATTRIBUTE_OVER_TIME_NAME: &str = "Feature Attribute over Time"
 const MAX_FEATURES: usize = 20;
 
 /// A plot that shows the value of an feature attribute over time.
-pub type FeatureAttributeValuesOverTime = Operator<FeatureAttributeValuesOverTimeParams>;
+pub type FeatureAttributeValuesOverTime =
+    Operator<FeatureAttributeValuesOverTimeParams, SingleVectorSource>;
 
 /// The parameter spec for `FeatureAttributeValuesOverTime`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -48,22 +49,7 @@ impl PlotOperator for FeatureAttributeValuesOverTime {
         mut self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedPlotOperator>> {
-        ensure!(
-            self.vector_sources.len() == 1,
-            error::InvalidNumberOfVectorInputs {
-                expected: 1..2,
-                found: self.vector_sources.len()
-            }
-        );
-        ensure!(
-            self.raster_sources.is_empty(),
-            error::InvalidNumberOfVectorInputs {
-                expected: 0..1,
-                found: self.raster_sources.len()
-            }
-        );
-
-        let source = self.vector_sources.remove(0).initialize(context)?;
+        let source = self.sources.vector.initialize(context)?;
         let result_descriptor = source.result_descriptor();
         let columns: &HashMap<String, FeatureDataType> = &result_descriptor.columns;
 
@@ -99,8 +85,7 @@ impl PlotOperator for FeatureAttributeValuesOverTime {
 
         Ok(InitializedFeatureAttributeValuesOverTime {
             result_descriptor: PlotResultDescriptor {},
-            raster_sources: vec![],
-            vector_sources: vec![source],
+            vector_source: source,
             state: self.params,
         }
         .boxed())
@@ -108,20 +93,27 @@ impl PlotOperator for FeatureAttributeValuesOverTime {
 }
 
 /// The initialization of `FeatureAttributeValuesOverTime`
-pub type InitializedFeatureAttributeValuesOverTime =
-    InitializedOperatorImpl<PlotResultDescriptor, FeatureAttributeValuesOverTimeParams>;
+pub struct InitializedFeatureAttributeValuesOverTime {
+    result_descriptor: PlotResultDescriptor,
+    vector_source: Box<InitializedVectorOperator>,
+    state: FeatureAttributeValuesOverTimeParams,
+}
 
 impl InitializedOperator<PlotResultDescriptor, TypedPlotQueryProcessor>
     for InitializedFeatureAttributeValuesOverTime
 {
     fn query_processor(&self) -> Result<TypedPlotQueryProcessor> {
-        let input_processor = self.vector_sources[0].query_processor()?;
+        let input_processor = self.vector_source.query_processor()?;
 
         let processor = call_on_generic_vector_processor!(input_processor, features => {
             FeatureAttributeValuesOverTimeQueryProcessor { params: self.state.clone(), features }.boxed()
         });
 
         Ok(TypedPlotQueryProcessor::JsonVega(processor))
+    }
+
+    fn result_descriptor(&self) -> &PlotResultDescriptor {
+        &self.result_descriptor
     }
 }
 
@@ -337,8 +329,7 @@ mod tests {
                 id_column: "id".to_owned(),
                 value_column: "value".to_owned(),
             },
-            raster_sources: vec![],
-            vector_sources: vec![point_source],
+            sources: point_source.into(),
         };
 
         let operator = operator.boxed().initialize(&exe_ctc).unwrap();
@@ -437,8 +428,7 @@ mod tests {
                 id_column: "id".to_owned(),
                 value_column: "value".to_owned(),
             },
-            raster_sources: vec![],
-            vector_sources: vec![point_source],
+            sources: point_source.into(),
         };
 
         let operator = operator.boxed().initialize(&exe_ctc).unwrap();
@@ -525,8 +515,7 @@ mod tests {
                 id_column: "id".to_owned(),
                 value_column: "value".to_owned(),
             },
-            raster_sources: vec![],
-            vector_sources: vec![point_source],
+            sources: point_source.into(),
         };
 
         let operator = operator.boxed().initialize(&exe_ctc).unwrap();

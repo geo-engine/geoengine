@@ -102,7 +102,7 @@ macro_rules! impl_mock_feature_collection_source {
 
                 Ok(InitializedMockFeatureCollectionSource {
                     result_descriptor,
-                    collections: self.params.colletions,
+                    collections: self.params.collections,
                 }
                 .boxed())
             }
@@ -114,10 +114,13 @@ macro_rules! impl_mock_feature_collection_source {
             fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
                 Ok(TypedVectorQueryProcessor::$output(
                     MockFeatureCollectionSourceProcessor {
-                        collections: self.state.collections.clone(),
+                        collections: self.collections.clone(),
                     }
                     .boxed(),
                 ))
+            }
+            fn result_descriptor(&self) -> &VectorResultDescriptor {
+                &self.result_descriptor
             }
         }
     };

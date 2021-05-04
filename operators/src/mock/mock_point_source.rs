@@ -82,6 +82,10 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
             .boxed(),
         ))
     }
+
+    fn result_descriptor(&self) -> &VectorResultDescriptor {
+        &self.result_descritor
+    }
 }
 
 #[cfg(test)]

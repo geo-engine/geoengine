@@ -18,7 +18,7 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use serde::{Deserialize, Serialize};
-use snafu::{ensure, OptionExt};
+use snafu::OptionExt;
 use std::convert::TryFrom;
 
 pub const HISTOGRAM_OPERATOR_NAME: &str = "Histogram";
@@ -44,7 +44,9 @@ pub struct HistogramParams {
     pub interactive: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HistogramSources {
+    // TODO: use either type
     pub feature_collection: Option<Box<dyn VectorOperator>>,
     pub raster: Option<Box<dyn RasterOperator>>,
 }
@@ -66,29 +68,19 @@ impl PlotOperator for Histogram {
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedPlotOperator>> {
-        let number_of_sources =
-            self.sources.feature_collection.map_or(0, 1) + self.sources.raster.map_or(0, 1);
-
-        ensure!(
-            number_of_sources == 1,
-            error::InvalidNumberOfInputs {
-                expected: 1..2,
-                found: self.vector_sources.len() + self.raster_sources.len()
-            }
-        );
-
         match (self.sources.feature_collection, self.sources.raster) {
             (None, None) | (Some(_), Some(_)) => {
                 return Err(Error::InvalidSourceConfiguration {
-                    reason: "You must specify either a raster or a feature collection as input",
+                    reason: "You must specify either a raster or a feature collection as input"
+                        .to_string(),
                 });
             }
-            (None, Some(raster_source)) => {
-                Ok(
-                    InitializedHistogram::new(PlotResultDescriptor {}, self.params, raster_source)
-                        .boxed(),
-                )
-            }
+            (None, Some(raster_source)) => Ok(InitializedHistogram::new(
+                PlotResultDescriptor {},
+                self.params,
+                raster_source.initialize(context)?,
+            )
+            .boxed()),
             (Some(vector_source), None) => {
                 let column_name =
                     self.params
@@ -98,6 +90,8 @@ impl PlotOperator for Histogram {
                             reason: "Histogram on vector input is missing `column_name` field"
                                 .to_string(),
                         })?;
+
+                let vector_source = vector_source.initialize(context)?;
 
                 match vector_source.result_descriptor().columns.get(column_name) {
                     None => {
@@ -129,7 +123,7 @@ impl PlotOperator for Histogram {
 pub struct InitializedHistogram<Op> {
     result_descriptor: PlotResultDescriptor,
     metadata: HistogramMetadataOptions,
-    source: Box<Op>,
+    source: Op,
     interactive: bool,
     column_name: Option<String>,
 }
@@ -138,7 +132,7 @@ impl<Op> InitializedHistogram<Op> {
     pub fn new(
         result_descriptor: PlotResultDescriptor,
         params: HistogramParams,
-        source: Box<Op>,
+        source: Op,
     ) -> Self {
         let (min, max) = if let HistogramBounds::Values { min, max } = params.bounds {
             (Some(min), Some(max))
@@ -161,7 +155,7 @@ impl<Op> InitializedHistogram<Op> {
 }
 
 impl InitializedOperator<PlotResultDescriptor, TypedPlotQueryProcessor>
-    for InitializedHistogram<InitializedRasterOperator>
+    for InitializedHistogram<Box<InitializedRasterOperator>>
 {
     fn query_processor(&self) -> Result<TypedPlotQueryProcessor> {
         let processor = HistogramRasterQueryProcessor {
@@ -173,21 +167,29 @@ impl InitializedOperator<PlotResultDescriptor, TypedPlotQueryProcessor>
 
         Ok(TypedPlotQueryProcessor::JsonVega(processor.boxed()))
     }
+
+    fn result_descriptor(&self) -> &PlotResultDescriptor {
+        &self.result_descriptor
+    }
 }
 
 impl InitializedOperator<PlotResultDescriptor, TypedPlotQueryProcessor>
-    for InitializedHistogram<InitializedVectorOperator>
+    for InitializedHistogram<Box<InitializedVectorOperator>>
 {
     fn query_processor(&self) -> Result<TypedPlotQueryProcessor> {
         let processor = HistogramVectorQueryProcessor {
             input: self.source.query_processor()?,
-            column_name: self.column_name.clone()?,
+            column_name: self.column_name.clone().unwrap_or_default(),
             measurement: Measurement::Unitless, // TODO: incorporate measurement once it is there
             metadata: self.metadata,
-            interactive: self.state.interactive,
+            interactive: self.interactive,
         };
 
         Ok(TypedPlotQueryProcessor::JsonVega(processor.boxed()))
+    }
+
+    fn result_descriptor(&self) -> &PlotResultDescriptor {
+        &self.result_descriptor
     }
 }
 

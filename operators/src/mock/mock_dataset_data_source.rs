@@ -118,10 +118,14 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
         Ok(TypedVectorQueryProcessor::MultiPoint(
             MockDatasetDataSourceProcessor {
-                loading_info: self.state.clone(),
+                loading_info: self.loading_info.clone(),
             }
             .boxed(),
         ))
+    }
+
+    fn result_descriptor(&self) -> &VectorResultDescriptor {
+        &self.result_descriptor
     }
 }
 
