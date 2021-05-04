@@ -24,11 +24,8 @@ use snafu::ResultExt;
 /// Content-Type: multipart/form-data; boundary=---------------------------10196671711503402186283068890
 ///
 /// ---------------------------10196671711503402186283068890
-/// Content-Disposition: form-data; name="files[]"; filename="bar.txt"
-/// bar
-/// ---------------------------10196671711503402186283068890
-/// Content-Disposition: form-data; name="files[]"; filename="foo.txt"
-/// foo
+/// Content-Disposition: form-data; name="files[]"; filename="germany_polygon.gpkg"
+/// <Insert SQLite file>
 /// ---------------------------10196671711503402186283068890
 /// ```
 /// Response:
