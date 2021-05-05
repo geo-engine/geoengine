@@ -14,8 +14,8 @@ use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::{
     operations::reproject::{
-        suggest_pixel_size_from_diag_cross, CoordinateProjection, CoordinateProjector, Reproject,
-        ReprojectClipped,
+        suggest_pixel_size_from_diag_cross, suggest_pixel_size_from_diag_cross_projected,
+        CoordinateProjection, CoordinateProjector, Reproject, ReprojectClipped,
     },
     raster::{Pixel, TilingSpecification},
     spatial_reference::SpatialReference,
@@ -174,11 +174,8 @@ pub fn query_rewrite_fn(
     let p_bbox = query.bbox.reproject_clipped(&projector_target_source)?;
     let s_bbox = p_bbox.reproject(&projector_source_target)?;
 
-    let p_spatial_resolution = suggest_pixel_size_from_diag_cross(
-        s_bbox,
-        query.spatial_resolution,
-        &projector_target_source,
-    )?;
+    let p_spatial_resolution =
+        suggest_pixel_size_from_diag_cross_projected(s_bbox, p_bbox, query.spatial_resolution)?;
     Ok(QueryRectangle {
         bbox: p_bbox,
         spatial_resolution: p_spatial_resolution,
