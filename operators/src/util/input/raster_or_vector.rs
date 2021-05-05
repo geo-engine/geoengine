@@ -1,11 +1,28 @@
 use crate::engine::{RasterOperator, TypedOperator, VectorOperator};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 
 /// It is either a `RasterOperator` or a `VectorOperator`
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
 pub enum RasterOrVectorOperator {
     Raster(Box<dyn RasterOperator>),
     Vector(Box<dyn VectorOperator>),
+}
+
+impl RasterOrVectorOperator {
+    pub fn is_raster(&self) -> bool {
+        match self {
+            RasterOrVectorOperator::Raster(_) => true,
+            RasterOrVectorOperator::Vector(_) => false,
+        }
+    }
+
+    pub fn is_vector(&self) -> bool {
+        match self {
+            RasterOrVectorOperator::Raster(_) => false,
+            RasterOrVectorOperator::Vector(_) => true,
+        }
+    }
 }
 
 impl From<RasterOrVectorOperator> for TypedOperator {
@@ -29,45 +46,11 @@ impl From<Box<dyn VectorOperator>> for RasterOrVectorOperator {
     }
 }
 
-impl Serialize for RasterOrVectorOperator {
-    fn serialize<S>(&self, serializer: S) -> Result<<S as Serializer>::Ok, <S as Serializer>::Error>
-    where
-        S: Serializer,
-    {
-        match self {
-            RasterOrVectorOperator::Raster(operator) => operator.serialize(serializer),
-            RasterOrVectorOperator::Vector(operator) => operator.serialize(serializer),
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for RasterOrVectorOperator {
-    fn deserialize<D>(deserializer: D) -> Result<Self, <D as Deserializer<'de>>::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let raster_error = match Box::<dyn RasterOperator>::deserialize(deserializer) {
-            Ok(operator) => return Ok(Self::Raster(operator)),
-            Err(error) => error,
-        };
-
-        let vector_error = match Box::<dyn VectorOperator>::deserialize(deserializer) {
-            Ok(operator) => return Ok(Self::Vector(operator)),
-            Err(error) => error,
-        };
-
-        Err(serde::de::Error::custom(format!(
-            "Unable to deserialize `RasterOperator` or `VectorOperator`: {} {}",
-            raster_error, vector_error
-        )))
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use geoengine_datatypes::{dataset::InternalDatasetId, util::Identifier};
-
     use crate::source::{GdalSource, GdalSourceParameters};
+    use geoengine_datatypes::dataset::InternalDatasetId;
+    use std::str::FromStr;
 
     use super::*;
 
@@ -76,12 +59,63 @@ mod tests {
         let operator = RasterOrVectorOperator::Raster(
             GdalSource {
                 params: GdalSourceParameters {
-                    dataset: InternalDatasetId::new().into(),
+                    dataset: InternalDatasetId::from_str("fc734022-61e0-49da-b327-257ba9d602a7")
+                        .unwrap()
+                        .into(),
                 },
             }
             .boxed(),
         );
 
-        assert_eq!(serde_json::to_string(&operator).unwrap(), "");
+        assert_eq!(
+            serde_json::to_value(&operator).unwrap(),
+            serde_json::json!({
+                "type": "GdalSource",
+                "params": {
+                    "dataset": {
+                        "internal": "fc734022-61e0-49da-b327-257ba9d602a7"
+                    }
+                }
+            })
+        );
+    }
+
+    #[test]
+    fn it_deserializes_raster_ops() {
+        let workflow = serde_json::json!({
+            "type": "GdalSource",
+            "params": {
+                "dataset": {
+                    "internal": "fc734022-61e0-49da-b327-257ba9d602a7"
+                }
+            }
+        })
+        .to_string();
+
+        let raster_or_vector_operator: RasterOrVectorOperator =
+            serde_json::from_str(&workflow).unwrap();
+
+        assert!(raster_or_vector_operator.is_raster());
+        assert!(!raster_or_vector_operator.is_vector());
+    }
+
+    #[test]
+    fn it_deserializes_vector_ops() {
+        let workflow = serde_json::json!({
+            "type": "OgrSource",
+            "params": {
+                "dataset": {
+                    "internal": "fc734022-61e0-49da-b327-257ba9d602a7"
+                },
+                "attribute_projection": null,
+            }
+        })
+        .to_string();
+
+        let raster_or_vector_operator: RasterOrVectorOperator =
+            serde_json::from_str(&workflow).unwrap();
+
+        assert!(raster_or_vector_operator.is_vector());
+        assert!(!raster_or_vector_operator.is_raster());
     }
 }

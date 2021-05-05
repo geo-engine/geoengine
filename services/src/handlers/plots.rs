@@ -171,8 +171,7 @@ mod tests {
         let workflow = Workflow {
             operator: Statistics {
                 params: StatisticsParams {},
-                raster_sources: vec![example_raster_source()],
-                vector_sources: vec![],
+                sources: vec![example_raster_source()].into(),
             }
             .boxed()
             .into(),
@@ -244,8 +243,7 @@ mod tests {
                     buckets: Some(4),
                     interactive: false,
                 },
-                raster_sources: vec![example_raster_source()],
-                vector_sources: vec![],
+                sources: example_raster_source().into(),
             }
             .boxed()
             .into(),
@@ -329,8 +327,7 @@ mod tests {
             let workflow = Workflow {
                 operator: Statistics {
                     params: StatisticsParams {},
-                    raster_sources: vec![example_raster_source()],
-                    vector_sources: vec![],
+                    sources: vec![example_raster_source()].into(),
                 }
                 .boxed()
                 .into(),

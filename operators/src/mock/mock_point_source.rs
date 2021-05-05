@@ -52,7 +52,7 @@ pub type MockPointSource = SourceOperator<MockPointSourceParams>;
 impl VectorOperator for MockPointSource {
     fn initialize(
         self: Box<Self>,
-        context: &dyn ExecutionContext,
+        _context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedVectorOperator>> {
         Ok(InitializedMockPointSource {
             result_descritor: VectorResultDescriptor {

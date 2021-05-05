@@ -1,7 +1,8 @@
 use crate::engine::{
     ExecutionContext, InitializedOperator, InitializedPlotOperator, InitializedRasterOperator,
-    Operator, PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor,
-    QueryRectangle, RasterOperator, TypedPlotQueryProcessor, TypedRasterQueryProcessor,
+    MultipleRasterSources, Operator, PlotOperator, PlotQueryProcessor, PlotResultDescriptor,
+    QueryContext, QueryProcessor, QueryRectangle, TypedPlotQueryProcessor,
+    TypedRasterQueryProcessor,
 };
 use crate::util::number_statistics::NumberStatistics;
 use crate::util::Result;
@@ -17,20 +18,13 @@ pub const STATISTICS_OPERATOR_NAME: &str = "Statistics";
 ///
 /// Does currently not use a weighted computations, so it assumes equally weighted
 /// time steps in the sources.
-pub type Statistics = Operator<StatisticsParams, StatisticsSources>;
+// TODO: implement operator also for vector data
+pub type Statistics = Operator<StatisticsParams, MultipleRasterSources>;
 
 /// The parameter spec for `Statistics`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StatisticsParams {}
-
-/// The parameter spec for `Statistics`
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct StatisticsSources {
-    rasters: Vec<Box<dyn RasterOperator>>,
-    // TODO: implement operator also for vector data
-}
 
 #[typetag::serde]
 impl PlotOperator for Statistics {
@@ -192,14 +186,15 @@ mod tests {
     fn serialization() {
         let statistics = Statistics {
             params: StatisticsParams {},
-            sources: StatisticsSources { rasters: vec![] },
+            sources: MultipleRasterSources { rasters: vec![] },
         };
 
         let serialized = json!({
             "type": "Statistics",
             "params": {},
-            "rasterSources": [],
-            "vectorSources": [],
+            "sources": {
+                "rasters": [],
+            },
         })
         .to_string();
 
@@ -234,9 +229,7 @@ mod tests {
 
         let statistics = Statistics {
             params: StatisticsParams {},
-            sources: StatisticsSources {
-                rasters: vec![raster_source],
-            },
+            sources: vec![raster_source].into(),
         };
 
         let execution_context = MockExecutionContext::default();

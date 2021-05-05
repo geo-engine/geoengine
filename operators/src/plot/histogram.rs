@@ -1,13 +1,17 @@
-use crate::engine::{
-    ExecutionContext, InitializedOperator, InitializedPlotOperator, InitializedRasterOperator,
-    InitializedVectorOperator, Operator, PlotOperator, PlotQueryProcessor, PlotResultDescriptor,
-    QueryContext, QueryProcessor, QueryRectangle, RasterOperator, TypedPlotQueryProcessor,
-    TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorOperator,
-};
 use crate::error;
 use crate::error::Error;
 use crate::string_token;
 use crate::util::Result;
+use crate::{
+    engine::{
+        ExecutionContext, InitializedOperator, InitializedPlotOperator, InitializedRasterOperator,
+        InitializedVectorOperator, Operator, PlotOperator, PlotQueryProcessor,
+        PlotResultDescriptor, QueryContext, QueryProcessor, QueryRectangle,
+        SingleRasterOrVectorSource, TypedPlotQueryProcessor, TypedRasterQueryProcessor,
+        TypedVectorQueryProcessor,
+    },
+    util::input::RasterOrVectorOperator,
+};
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::{StreamExt, TryFutureExt};
@@ -18,7 +22,7 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use serde::{Deserialize, Serialize};
-use snafu::OptionExt;
+use snafu::{ensure, OptionExt};
 use std::convert::TryFrom;
 
 pub const HISTOGRAM_OPERATOR_NAME: &str = "Histogram";
@@ -27,7 +31,7 @@ pub const HISTOGRAM_OPERATOR_NAME: &str = "Histogram";
 ///
 /// For vector inputs, it calculates the histogram on one of its attributes.
 ///
-pub type Histogram = Operator<HistogramParams, HistogramSources>;
+pub type Histogram = Operator<HistogramParams, SingleRasterOrVectorSource>;
 
 /// The parameter spec for `Histogram`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -42,13 +46,6 @@ pub struct HistogramParams {
     /// Whether to create an interactive output (`false` by default)
     #[serde(default)]
     pub interactive: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HistogramSources {
-    // TODO: use either type
-    pub feature_collection: Option<Box<dyn VectorOperator>>,
-    pub raster: Option<Box<dyn RasterOperator>>,
 }
 
 string_token!(Data, "data");
@@ -68,20 +65,24 @@ impl PlotOperator for Histogram {
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedPlotOperator>> {
-        match (self.sources.feature_collection, self.sources.raster) {
-            (None, None) | (Some(_), Some(_)) => {
-                return Err(Error::InvalidSourceConfiguration {
-                    reason: "You must specify either a raster or a feature collection as input"
-                        .to_string(),
-                });
+        Ok(match self.sources.source {
+            RasterOrVectorOperator::Raster(raster_source) => {
+                ensure!(
+                    self.params.column_name.is_none(),
+                    error::InvalidOperatorSpec {
+                        reason: "Histogram on raster input must not have `column_name` field set"
+                            .to_string(),
+                    }
+                );
+
+                InitializedHistogram::new(
+                    PlotResultDescriptor {},
+                    self.params,
+                    raster_source.initialize(context)?,
+                )
+                .boxed()
             }
-            (None, Some(raster_source)) => Ok(InitializedHistogram::new(
-                PlotResultDescriptor {},
-                self.params,
-                raster_source.initialize(context)?,
-            )
-            .boxed()),
-            (Some(vector_source), None) => {
+            RasterOrVectorOperator::Vector(vector_source) => {
                 let column_name =
                     self.params
                         .column_name
@@ -110,12 +111,10 @@ impl PlotOperator for Histogram {
                     }
                 }
 
-                Ok(
-                    InitializedHistogram::new(PlotResultDescriptor {}, self.params, vector_source)
-                        .boxed(),
-                )
+                InitializedHistogram::new(PlotResultDescriptor {}, self.params, vector_source)
+                    .boxed()
             }
-        }
+        })
     }
 }
 
@@ -531,7 +530,6 @@ mod tests {
     use crate::source::{
         OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceErrorSpec,
     };
-    use geoengine_datatypes::collections::{DataCollection, VectorDataType};
     use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureData, NoGeometry, SpatialResolution, TimeInterval,
@@ -539,6 +537,10 @@ mod tests {
     use geoengine_datatypes::raster::{Grid2D, RasterDataType, RasterTile2D, TileInformation};
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::Identifier;
+    use geoengine_datatypes::{
+        collections::{DataCollection, VectorDataType},
+        primitives::MultiPoint,
+    };
     use num_traits::AsPrimitive;
     use serde_json::json;
 
@@ -554,10 +556,9 @@ mod tests {
                 buckets: Some(15),
                 interactive: false,
             },
-            sources: HistogramSources {
-                feature_collection: None,
-                raster: None,
-            },
+            sources: MockFeatureCollectionSource::<MultiPoint>::multiple(vec![])
+                .boxed()
+                .into(),
         };
 
         let serialized = json!({
@@ -571,8 +572,14 @@ mod tests {
                 "buckets": 15,
                 "interactivity": false,
             },
-            "rasterSources": [],
-            "vectorSources": [],
+            "sources": {
+                "source": {
+                    "type": "MockFeatureCollectionSourceMultiPoint",
+                    "params": {
+                        "collections": []
+                    }
+                }
+            }
         })
         .to_string();
 
@@ -590,10 +597,9 @@ mod tests {
                 buckets: None,
                 interactive: false,
             },
-            sources: HistogramSources {
-                feature_collection: None,
-                raster: None,
-            },
+            sources: MockFeatureCollectionSource::<MultiPoint>::multiple(vec![])
+                .boxed()
+                .into(),
         };
 
         let serialized = json!({
@@ -601,8 +607,14 @@ mod tests {
             "params": {
                 "bounds": "data",
             },
-            "rasterSources": [],
-            "vectorSources": [],
+            "sources": {
+                "source": {
+                    "type": "MockFeatureCollectionSourceMultiPoint",
+                    "params": {
+                        "collections": []
+                    }
+                }
+            }
         })
         .to_string();
 
@@ -620,10 +632,7 @@ mod tests {
                 buckets: Some(3),
                 interactive: false,
             },
-            sources: HistogramSources {
-                feature_collection: None,
-                raster: Some(mock_raster_source()),
-            },
+            sources: mock_raster_source().into(),
         };
 
         let execution_context = MockExecutionContext::default();
@@ -664,10 +673,7 @@ mod tests {
                 buckets: Some(3),
                 interactive: false,
             },
-            sources: HistogramSources {
-                feature_collection: None,
-                raster: Some(mock_raster_source()),
-            },
+            sources: mock_raster_source().into(),
         };
 
         let execution_context = MockExecutionContext::default();
@@ -713,10 +719,7 @@ mod tests {
                 buckets: None,
                 interactive: false,
             },
-            sources: HistogramSources {
-                feature_collection: None,
-                raster: Some(mock_raster_source()),
-            },
+            sources: mock_raster_source().into(),
         };
 
         let execution_context = MockExecutionContext::default();
@@ -778,10 +781,7 @@ mod tests {
                 buckets: Some(3),
                 interactive: true,
             },
-            sources: HistogramSources {
-                feature_collection: Some(vector_source),
-                raster: None,
-            },
+            sources: vector_source.into(),
         };
 
         let execution_context = MockExecutionContext::default();
@@ -847,10 +847,7 @@ mod tests {
                 buckets: None,
                 interactive: false,
             },
-            sources: HistogramSources {
-                feature_collection: Some(vector_source),
-                raster: None,
-            },
+            sources: vector_source.into(),
         };
 
         let execution_context = MockExecutionContext::default();
@@ -897,16 +894,17 @@ mod tests {
                 "columnName": "featurecla",
                 "bounds": "data"
             },
-            "rasterSources": [],
-            "vectorSources": [{
-                "type": "OgrSource",
-                "params": {
-                    "dataset": {
-                        "internal": dataset_id
+            "sources": {
+                "source": {
+                    "type": "OgrSource",
+                    "params": {
+                        "dataset": {
+                            "internal": dataset_id
+                        },
+                        "attributeProjection": null
                     },
-                    "attributeProjection": null
                 }
-            }]
+            }
         });
         let histogram: Histogram = serde_json::from_value(workflow).unwrap();
 

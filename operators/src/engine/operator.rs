@@ -92,7 +92,7 @@ where
     Q: QueryProcessor,
 {
     fn result_descriptor(&self) -> &R {
-        self.result_descriptor()
+        self.as_ref().result_descriptor()
     }
 
     fn query_processor(&self) -> Result<Q> {

@@ -11,9 +11,9 @@ use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval};
 
 use crate::adapters::FeatureCollectionChunkMerger;
 use crate::engine::{
-    ExecutionContext, InitializedOperator, InitializedOperatorImpl, InitializedVectorOperator,
-    Operator, QueryContext, QueryProcessor, QueryRectangle, TypedVectorQueryProcessor,
-    VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+    ExecutionContext, InitializedOperator, InitializedVectorOperator, Operator, QueryContext,
+    QueryProcessor, QueryRectangle, TypedVectorQueryProcessor, VectorOperator,
+    VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::error;
 use crate::util::Result;
@@ -23,7 +23,16 @@ use arrow::array::BooleanArray;
 /// 1. a `MultiPointCollection` source
 /// 2. a `MultiPolygonCollection` source
 /// Then, it filters the `MultiPolygonCollection`s so that only those features are retained that are in any polygon.
-pub type PointInPolygonFilter = Operator<()>;
+pub type PointInPolygonFilter = Operator<PointInPolygonFilterParams, PointInPolygonFilterSource>;
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct PointInPolygonFilterParams {}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct PointInPolygonFilterSource {
+    points: Box<dyn VectorOperator>,
+    polygons: Box<dyn VectorOperator>,
+}
 
 #[typetag::serde]
 impl VectorOperator for PointInPolygonFilter {
@@ -31,67 +40,52 @@ impl VectorOperator for PointInPolygonFilter {
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedVectorOperator>> {
-        ensure!(
-            self.vector_sources.len() == 2,
-            error::InvalidNumberOfVectorInputs {
-                expected: 2..3,
-                found: self.vector_sources.len()
-            }
-        );
-        ensure!(
-            self.raster_sources.is_empty(),
-            error::InvalidNumberOfRasterInputs {
-                expected: 0..1,
-                found: self.raster_sources.len()
-            }
-        );
-
-        let vector_sources = self
-            .vector_sources
-            .into_iter()
-            .map(|o| o.initialize(context))
-            .collect::<Result<Vec<Box<InitializedVectorOperator>>>>()?;
+        let points = self.sources.points.initialize(context)?;
+        let polygons = self.sources.polygons.initialize(context)?;
 
         ensure!(
-            vector_sources[0].result_descriptor().data_type == VectorDataType::MultiPoint,
+            points.result_descriptor().data_type == VectorDataType::MultiPoint,
             error::InvalidType {
                 expected: VectorDataType::MultiPoint.to_string(),
-                found: vector_sources[0].result_descriptor().data_type.to_string(),
+                found: points.result_descriptor().data_type.to_string(),
             }
         );
         ensure!(
-            vector_sources[1].result_descriptor().data_type == VectorDataType::MultiPolygon,
+            polygons.result_descriptor().data_type == VectorDataType::MultiPolygon,
             error::InvalidType {
                 expected: VectorDataType::MultiPolygon.to_string(),
-                found: vector_sources[1].result_descriptor().data_type.to_string(),
+                found: polygons.result_descriptor().data_type.to_string(),
             }
         );
 
-        Ok(InitializedPointInPolygonFilter::new(
-            vector_sources[0].result_descriptor().clone(),
-            vec![],
-            vector_sources,
-            PointInPolygonFilterState,
-        )
-        .boxed())
+        let initialized_operator = InitializedPointInPolygonFilter {
+            result_descriptor: points.result_descriptor().clone(),
+            points,
+            polygons,
+        };
+
+        Ok(initialized_operator.boxed())
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy)]
-pub struct PointInPolygonFilterState;
-pub type InitializedPointInPolygonFilter =
-    InitializedOperatorImpl<VectorResultDescriptor, PointInPolygonFilterState>;
+pub struct InitializedPointInPolygonFilter {
+    points: Box<InitializedVectorOperator>,
+    polygons: Box<InitializedVectorOperator>,
+    result_descriptor: VectorResultDescriptor,
+}
 
 impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
     for InitializedPointInPolygonFilter
 {
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
-        let point_processor = self.vector_sources[0]
+        let point_processor = self
+            .points
             .query_processor()?
             .multi_point()
             .expect("checked in `PointInPolygonFilter` constructor");
 
-        let polygon_processor = self.vector_sources[1]
+        let polygon_processor = self
+            .polygons
             .query_processor()?
             .multi_polygon()
             .expect("checked in `PointInPolygonFilter` constructor");
@@ -99,6 +93,10 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
         Ok(TypedVectorQueryProcessor::MultiPoint(
             PointInPolygonFilterProcessor::new(point_processor, polygon_processor).boxed(),
         ))
+    }
+
+    fn result_descriptor(&self) -> &VectorResultDescriptor {
+        &self.result_descriptor
     }
 }
 
@@ -541,9 +539,11 @@ mod tests {
             .boxed();
 
         let operator = PointInPolygonFilter {
-            vector_sources: vec![point_source, polygon_source],
-            raster_sources: vec![],
-            params: (),
+            params: PointInPolygonFilterParams {},
+            sources: PointInPolygonFilterSource {
+                points: point_source,
+                polygons: polygon_source,
+            },
         }
         .boxed()
         .initialize(&MockExecutionContext::default())?;
@@ -587,9 +587,11 @@ mod tests {
         .boxed();
 
         let operator = PointInPolygonFilter {
-            vector_sources: vec![point_source, polygon_source],
-            raster_sources: vec![],
-            params: (),
+            params: PointInPolygonFilterParams {},
+            sources: PointInPolygonFilterSource {
+                points: point_source,
+                polygons: polygon_source,
+            },
         }
         .boxed()
         .initialize(&MockExecutionContext::default())?;
@@ -646,9 +648,11 @@ mod tests {
             .boxed();
 
         let operator = PointInPolygonFilter {
-            vector_sources: vec![point_source, polygon_source],
-            raster_sources: vec![],
-            params: (),
+            params: PointInPolygonFilterParams {},
+            sources: PointInPolygonFilterSource {
+                points: point_source,
+                polygons: polygon_source,
+            },
         }
         .boxed()
         .initialize(&MockExecutionContext::default())?;
@@ -722,9 +726,11 @@ mod tests {
         .boxed();
 
         let operator = PointInPolygonFilter {
-            vector_sources: vec![point_source, polygon_source],
-            raster_sources: vec![],
-            params: (),
+            params: PointInPolygonFilterParams {},
+            sources: PointInPolygonFilterSource {
+                points: point_source,
+                polygons: polygon_source,
+            },
         }
         .boxed()
         .initialize(&MockExecutionContext::default())?;

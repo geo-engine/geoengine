@@ -46,7 +46,7 @@ pub struct FeatureAttributeValuesOverTimeParams {
 #[typetag::serde]
 impl PlotOperator for FeatureAttributeValuesOverTime {
     fn initialize(
-        mut self: Box<Self>,
+        self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedPlotOperator>> {
         let source = self.sources.vector.initialize(context)?;

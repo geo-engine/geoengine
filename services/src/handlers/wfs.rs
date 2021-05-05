@@ -210,8 +210,7 @@ async fn get_feature<C: Context>(
             params: ReprojectionParams {
                 target_spatial_reference: request_spatial_ref,
             },
-            raster_sources: vec![],
-            vector_sources: vec![operator],
+            sources: operator.into(),
         };
 
         // TODO: avoid re-initialization of the whole operator graph
@@ -766,23 +765,21 @@ x;y
                     ],
                     "aggregation": "first"
                 },
-                "vectorSources": [
-                    {
+                "sources": {
+                    "vector": {
                         "type": "OgrSource",
                         "params": {
                             "dataset": ne_10m_ports_id,
                             "attributeProjection": null
                         }
-                    }
-                ],
-                "rasterSources": [
-                    {
+                    },
+                    "rasters": [{
                         "type": "GdalSource",
                         "params": {
                             "dataset": ndvi_id,
                         }
-                    }
-                ]
+                    }],
+                }
             }
         });
 

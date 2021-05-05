@@ -278,7 +278,16 @@ mod tests {
                 "timePosition": "start",
                 "area": true,
             },
-            "rasterSources": [],
+            "sources": {
+                "raster": {
+                    "type": "GdalSource",
+                    "params": {
+                        "dataset": {
+                            "internal": "a626c880-1c41-489b-9e19-9596d129859c"
+                        }
+                    }
+                }
+            },
             "vectorSources": [],
         })
         .to_string();

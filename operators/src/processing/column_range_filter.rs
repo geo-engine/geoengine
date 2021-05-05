@@ -1,12 +1,12 @@
-use crate::adapters::FeatureCollectionChunkMerger;
 use crate::engine::{
-    ExecutionContext, InitializedOperator, InitializedOperatorImpl, InitializedVectorOperator,
-    Operator, QueryContext, QueryProcessor, QueryRectangle, TypedVectorQueryProcessor,
-    VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+    ExecutionContext, InitializedOperator, InitializedVectorOperator, Operator, QueryContext,
+    QueryProcessor, QueryRectangle, TypedVectorQueryProcessor, VectorOperator,
+    VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::error;
 use crate::util::input::StringOrNumberRange;
 use crate::util::Result;
+use crate::{adapters::FeatureCollectionChunkMerger, engine::SingleVectorSource};
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::collections::{
@@ -15,7 +15,6 @@ use geoengine_datatypes::collections::{
 use geoengine_datatypes::primitives::{FeatureDataType, FeatureDataValue, Geometry};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use serde::{Deserialize, Serialize};
-use snafu::ensure;
 use std::marker::PhantomData;
 use std::ops::RangeInclusive;
 
@@ -27,7 +26,7 @@ pub struct ColumnRangeFilterParams {
     pub keep_nulls: bool,
 }
 
-pub type ColumnRangeFilter = Operator<ColumnRangeFilterParams>;
+pub type ColumnRangeFilter = Operator<ColumnRangeFilterParams, SingleVectorSource>;
 
 #[typetag::serde]
 impl VectorOperator for ColumnRangeFilter {
@@ -35,62 +34,36 @@ impl VectorOperator for ColumnRangeFilter {
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedVectorOperator>> {
-        // TODO: create generic validate util
-        ensure!(
-            self.vector_sources.len() == 1,
-            error::InvalidNumberOfVectorInputs {
-                expected: 1..2,
-                found: self.vector_sources.len()
-            }
-        );
-        ensure!(
-            self.raster_sources.is_empty(),
-            error::InvalidNumberOfRasterInputs {
-                expected: 0..1,
-                found: self.raster_sources.len()
-            }
-        );
+        let vector_source = self.sources.vector.initialize(context)?;
 
-        InitializedColumnRangeFilter::create(
-            &self.params,
-            context,
-            |p, _, _, _| Ok(p.clone()),
-            |_, _, _, _, vector_sources| Ok(vector_sources[0].result_descriptor().clone()),
-            self.raster_sources,
-            self.vector_sources,
-        )
-        .map(InitializedColumnRangeFilter::boxed)
+        let initialized_operator = InitializedColumnRangeFilter {
+            result_descriptor: vector_source.result_descriptor().clone(),
+            vector_source,
+            state: self.params,
+        };
+
+        Ok(initialized_operator.boxed())
     }
 }
 
-pub type InitializedColumnRangeFilter =
-    InitializedOperatorImpl<VectorResultDescriptor, ColumnRangeFilterParams>;
+pub struct InitializedColumnRangeFilter {
+    result_descriptor: VectorResultDescriptor,
+    vector_source: Box<InitializedVectorOperator>,
+    state: ColumnRangeFilterParams,
+}
 
 impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
     for InitializedColumnRangeFilter
 {
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
-        match self.vector_sources[0].query_processor()? {
-            // TODO: use macro for that
-            TypedVectorQueryProcessor::Data(source) => Ok(TypedVectorQueryProcessor::Data(
-                ColumnRangeFilterProcessor::new(source, self.state.clone()).boxed(),
-            )),
-            TypedVectorQueryProcessor::MultiPoint(source) => {
-                Ok(TypedVectorQueryProcessor::MultiPoint(
-                    ColumnRangeFilterProcessor::new(source, self.state.clone()).boxed(),
-                ))
-            }
-            TypedVectorQueryProcessor::MultiLineString(source) => {
-                Ok(TypedVectorQueryProcessor::MultiLineString(
-                    ColumnRangeFilterProcessor::new(source, self.state.clone()).boxed(),
-                ))
-            }
-            TypedVectorQueryProcessor::MultiPolygon(source) => {
-                Ok(TypedVectorQueryProcessor::MultiPolygon(
-                    ColumnRangeFilterProcessor::new(source, self.state.clone()).boxed(),
-                ))
-            }
-        }
+        Ok(map_typed_vector_query_processor!(
+            self.vector_source.query_processor()?,
+            source => ColumnRangeFilterProcessor::new(source, self.state.clone()).boxed()
+        ))
+    }
+
+    fn result_descriptor(&self) -> &VectorResultDescriptor {
+        &self.result_descriptor
     }
 }
 
@@ -180,9 +153,8 @@ mod tests {
     use crate::engine::{MockExecutionContext, MockQueryContext};
     use crate::mock::MockFeatureCollectionSource;
     use geoengine_datatypes::collections::{FeatureCollectionModifications, MultiPointCollection};
-    use geoengine_datatypes::primitives::SpatialResolution;
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, Coordinate2D, FeatureData, MultiPoint, TimeInterval,
+        BoundingBox2D, Coordinate2D, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
     };
 
     #[test]
@@ -193,8 +165,9 @@ mod tests {
                 ranges: vec![(1..=2).into()],
                 keep_nulls: false,
             },
-            vector_sources: vec![],
-            raster_sources: vec![],
+            sources: MockFeatureCollectionSource::<MultiPoint>::multiple(vec![])
+                .boxed()
+                .into(),
         }
         .boxed();
 
@@ -211,8 +184,14 @@ mod tests {
                     ],
                     "keepNulls": false
                 },
-                "rasterSources": [],
-                "vectorSources": []
+                "sources": {
+                    "vector": {
+                        "type": "MockFeatureCollectionSourceMultiPoint",
+                        "params": {
+                            "collections": []
+                        }
+                    }
+                },
             })
             .to_string()
         );
@@ -245,8 +224,7 @@ mod tests {
                 ranges: vec![(1..=2).into()],
                 keep_nulls: false,
             },
-            vector_sources: vec![source],
-            raster_sources: vec![],
+            sources: source.into(),
         }
         .boxed();
 

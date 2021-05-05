@@ -1,11 +1,14 @@
-use crate::opencl::{ClProgram, CompiledClProgram, IterationType, RasterArgument};
 use crate::util::Result;
 use crate::{call_bi_generic_processor, call_generic_raster_processor};
 use crate::{
+    engine::ExecutionContext,
+    opencl::{ClProgram, CompiledClProgram, IterationType, RasterArgument},
+};
+use crate::{
     engine::{
-        InitializedOperator, InitializedOperatorImpl, InitializedRasterOperator, Operator,
-        QueryContext, QueryProcessor, QueryRectangle, RasterOperator, RasterQueryProcessor,
-        RasterResultDescriptor, TypedRasterQueryProcessor,
+        InitializedOperator, InitializedRasterOperator, Operator, QueryContext, QueryProcessor,
+        QueryRectangle, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+        TypedRasterQueryProcessor,
     },
     error::Error,
 };
@@ -36,15 +39,12 @@ pub struct ExpressionParams {
 }
 
 // TODO: custom type or simple string?
+#[derive(Debug, Clone)]
 struct SafeExpression {
     expression: String,
 }
 
-/// The `Expression` operator calculates an expression for all pixels of the input rasters and
-/// produces raster tiles of a given output type
-pub type Expression = Operator<ExpressionParams>;
-
-impl Expression {
+impl SafeExpression {
     // TODO: also check this when creating original operator parameters
     fn is_allowed_expression(expression: &str) -> bool {
         // TODO: perform actual syntax checking
@@ -59,30 +59,64 @@ impl Expression {
     }
 }
 
+impl TryFrom<String> for SafeExpression {
+    type Error = Error;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        if Self::is_allowed_expression(&value) {
+            Ok(Self { expression: value })
+        } else {
+            Err(Error::InvalidExpression)
+        }
+    }
+}
+
+/// The `Expression` operator calculates an expression for all pixels of the input rasters and
+/// produces raster tiles of a given output type
+pub type Expression = Operator<ExpressionParams, ExpressionSources>;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExpressionSources {
+    a: Box<dyn RasterOperator>,
+    b: Option<Box<dyn RasterOperator>>,
+    c: Option<Box<dyn RasterOperator>>,
+}
+
+impl ExpressionSources {
+    fn number_of_sources(&self) -> usize {
+        let a: usize = 1;
+        let b: usize = self.b.is_some().into();
+        let c: usize = self.c.is_some().into();
+
+        a + b + c
+    }
+
+    fn initialize(self, context: &dyn ExecutionContext) -> Result<ExpressionInitializedSources> {
+        Ok(ExpressionInitializedSources {
+            a: self.a.initialize(context)?,
+            b: self.b.map(|o| o.initialize(context)).transpose()?,
+            c: self.c.map(|o| o.initialize(context)).transpose()?,
+        })
+    }
+}
+
 #[typetag::serde]
 impl RasterOperator for Expression {
     fn initialize(
         self: Box<Self>,
         context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<InitializedRasterOperator>> {
+        // TODO: handle more then exactly 2 inputs, i.e. 1-8
         ensure!(
-            Self::is_allowed_expression(&self.params.expression),
-            crate::error::InvalidExpression
-        );
-        ensure!(
-            self.vector_sources.is_empty(),
-            crate::error::InvalidNumberOfVectorInputs {
-                expected: 0..0,
-                found: self.vector_sources.len()
-            }
-        );
-        ensure!(
-            !self.raster_sources.is_empty(),
+            self.sources.number_of_sources() == 2,
             crate::error::InvalidNumberOfRasterInputs {
-                expected: 1..9,
-                found: self.raster_sources.len()
+                expected: 2..3,
+                found: self.sources.number_of_sources()
             }
         );
+
+        let expression = SafeExpression::try_from(self.params.expression)?;
+
         ensure!(
             self.params
                 .output_type
@@ -90,15 +124,11 @@ impl RasterOperator for Expression {
             crate::error::InvalidNoDataValueValueForOutputDataType
         );
 
-        let raster_sources = self
-            .raster_sources
-            .into_iter()
-            .map(|source| source.initialize(context))
-            .collect::<Result<Vec<_>>>()?;
+        let sources = self.sources.initialize(context)?;
 
-        let spatial_reference = raster_sources[0].result_descriptor().spatial_reference;
+        let spatial_reference = sources.a.result_descriptor().spatial_reference;
 
-        for other_spatial_refenence in raster_sources
+        for other_spatial_refenence in sources
             .iter()
             .skip(1)
             .map(|source| source.result_descriptor().spatial_reference)
@@ -123,39 +153,84 @@ impl RasterOperator for Expression {
             no_data_value: Some(self.params.output_no_data_value), // TODO: is it possible to have none?
         };
 
-        Ok(
-            InitializedOperatorImpl::new(result_descriptor, raster_sources, vec![], self.params)
-                .boxed(),
-        )
+        let initialized_opoerator = InitializedExpression {
+            result_descriptor,
+            sources,
+            expression,
+        };
+
+        Ok(initialized_opoerator.boxed())
+    }
+}
+
+pub struct InitializedExpression {
+    result_descriptor: RasterResultDescriptor,
+    sources: ExpressionInitializedSources,
+    expression: SafeExpression,
+}
+
+pub struct ExpressionInitializedSources {
+    a: Box<InitializedRasterOperator>,
+    b: Option<Box<InitializedRasterOperator>>,
+    c: Option<Box<InitializedRasterOperator>>,
+}
+
+impl ExpressionInitializedSources {
+    fn iter(&self) -> impl Iterator<Item = &Box<InitializedRasterOperator>> {
+        let mut sources = vec![&self.a];
+
+        if let Some(o) = self.b.as_ref() {
+            sources.push(o);
+        }
+
+        if let Some(o) = self.c.as_ref() {
+            sources.push(o);
+        }
+
+        sources.into_iter()
     }
 }
 
 impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
-    for InitializedOperatorImpl<RasterResultDescriptor, ExpressionParams>
+    for InitializedExpression
 {
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         // TODO: handle different number of sources
 
-        match *self.raster_sources.as_slice() {
-            [ref a, ref b] => {
+        match &self.sources {
+            ExpressionInitializedSources {
+                a,
+                b: Some(b),
+                c: None,
+            } => {
                 let a = a.query_processor()?;
                 let b = b.query_processor()?;
 
+                let expression = self.expression.clone();
+                let output_type = self.result_descriptor().data_type;
+                // TODO: allow processing expression without NO DATA
+                let output_no_data_value =
+                    self.result_descriptor().no_data_value.unwrap_or_default();
+
                 call_bi_generic_processor!(a, b, (p_a, p_b) => {
-                    let res = call_generic_raster_processor!(self.state.output_type, ExpressionQueryProcessor::new(
-                                &SafeExpression {
-                                    expression: self.state.expression.clone(),
-                                },
-                                p_a,
-                                p_b,
-                                self.state.output_no_data_value.as_()
-                            )
-                            .boxed());
+                    let res = call_generic_raster_processor!(
+                        output_type,
+                        ExpressionQueryProcessor::new(
+                            &expression,
+                            p_a,
+                            p_b,
+                            output_no_data_value.as_()
+                        ).boxed()
+                    );
                     Ok(res)
                 })
             }
             _ => Err(Error::InvalidNumberOfExpressionInputs), // TODO: handle more than two inputs
         }
+    }
+
+    fn result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
     }
 }
 
@@ -313,8 +388,11 @@ mod tests {
                 output_no_data_value: no_data_value.as_(), //  cast no_data_valuee to f64
                 output_measurement: Some(Measurement::Unitless),
             },
-            raster_sources: vec![a, b],
-            vector_sources: vec![],
+            sources: ExpressionSources {
+                a,
+                b: Some(b),
+                c: None,
+            },
         }
         .boxed()
         .initialize(&MockExecutionContext::default())

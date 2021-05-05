@@ -77,3 +77,19 @@ impl From<Vec<Box<dyn VectorOperator>>> for MultipleVectorSources {
         Self { vectors }
     }
 }
+
+impl From<Box<dyn VectorOperator>> for SingleRasterOrVectorSource {
+    fn from(vector: Box<dyn VectorOperator>) -> Self {
+        Self {
+            source: RasterOrVectorOperator::Vector(vector),
+        }
+    }
+}
+
+impl From<Box<dyn RasterOperator>> for SingleRasterOrVectorSource {
+    fn from(raster: Box<dyn RasterOperator>) -> Self {
+        Self {
+            source: RasterOrVectorOperator::Raster(raster),
+        }
+    }
+}

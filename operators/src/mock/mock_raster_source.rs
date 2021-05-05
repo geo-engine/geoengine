@@ -61,7 +61,7 @@ pub type MockRasterSource = SourceOperator<MockRasterSourceParams>;
 impl RasterOperator for MockRasterSource {
     fn initialize(
         self: Box<Self>,
-        context: &dyn crate::engine::ExecutionContext,
+        _context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<InitializedRasterOperator>> {
         Ok(InitializedMockRasterSource {
             result_descriptor: self.params.result_descriptor,

@@ -86,10 +86,12 @@ impl VectorOperator for RasterVectorJoin {
             .map(|source| source.initialize(context))
             .collect::<Result<Vec<_>>>()?;
 
+        let params = self.params;
+
         let result_descriptor = vector_source.result_descriptor().map_columns(|columns| {
             let mut columns = columns.clone();
-            for (i, new_column_name) in self.params.names.iter().enumerate() {
-                let feature_data_type = match self.params.aggregation {
+            for (i, new_column_name) in params.names.iter().enumerate() {
+                let feature_data_type = match params.aggregation {
                     AggregationMethod::First | AggregationMethod::None => {
                         match raster_sources[i].result_descriptor().data_type {
                             RasterDataType::U8
@@ -114,7 +116,7 @@ impl VectorOperator for RasterVectorJoin {
             result_descriptor,
             vector_source,
             raster_sources,
-            state: self.params,
+            state: params,
         }
         .boxed())
     }
@@ -206,8 +208,15 @@ mod tests {
                 "names": ["foo", "bar"],
                 "aggregation": "mean",
             },
-            "rasterSources": [],
-            "vectorSources": [],
+            "sources": {
+                "vector": {
+                    "type": "MockFeatureCollectionSourceMultiPoint",
+                    "params": {
+                        "collections": []
+                    }
+                },
+                "rasters": [],
+            },
         })
         .to_string();
 
