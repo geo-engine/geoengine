@@ -5,7 +5,7 @@ mod util;
 
 use crate::engine::{
     ExecutionContext, InitializedOperator, InitializedRasterOperator, InitializedVectorOperator,
-    OneVectorManyRasterSources, Operator, TypedVectorQueryProcessor, VectorOperator,
+    Operator, SingleVectorMultipleRasterSources, TypedVectorQueryProcessor, VectorOperator,
     VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::error;
@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
 /// An operator that attaches raster values to vector data
-pub type RasterVectorJoin = Operator<RasterVectorJoinParams, OneVectorManyRasterSources>;
+pub type RasterVectorJoin = Operator<RasterVectorJoinParams, SingleVectorMultipleRasterSources>;
 
 const MAX_NUMBER_OF_RASTER_INPUTS: usize = 8;
 
@@ -196,7 +196,7 @@ mod tests {
                 names: ["foo", "bar"].iter().copied().map(str::to_string).collect(),
                 aggregation: AggregationMethod::Mean,
             },
-            sources: OneVectorManyRasterSources {
+            sources: SingleVectorMultipleRasterSources {
                 vector: MockFeatureCollectionSource::<MultiPoint>::multiple(vec![]).boxed(),
                 rasters: vec![],
             },
@@ -266,7 +266,7 @@ mod tests {
                 names: vec!["ndvi".to_string()],
                 aggregation: AggregationMethod::First,
             },
-            sources: OneVectorManyRasterSources {
+            sources: SingleVectorMultipleRasterSources {
                 vector: point_source,
                 rasters: vec![ndvi_source(ndvi_id.clone())],
             },
@@ -336,7 +336,7 @@ mod tests {
                 names: vec!["ndvi".to_string()],
                 aggregation: AggregationMethod::Mean,
             },
-            sources: OneVectorManyRasterSources {
+            sources: SingleVectorMultipleRasterSources {
                 vector: point_source,
                 rasters: vec![ndvi_source(ndvi_id.clone())],
             },
@@ -407,7 +407,7 @@ mod tests {
                 names: vec!["ndvi".to_string()],
                 aggregation: AggregationMethod::Mean,
             },
-            sources: OneVectorManyRasterSources {
+            sources: SingleVectorMultipleRasterSources {
                 vector: point_source,
                 rasters: vec![ndvi_source(ndvi_id.clone())],
             },

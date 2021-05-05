@@ -49,7 +49,7 @@ pub struct MultipleVectorSources {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct OneVectorManyRasterSources {
+pub struct SingleVectorMultipleRasterSources {
     pub vector: Box<dyn VectorOperator>,
     pub rasters: Vec<Box<dyn RasterOperator>>,
 }

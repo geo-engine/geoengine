@@ -11,8 +11,8 @@ pub use operator::{
     InitializedVectorOperator, PlotOperator, RasterOperator, TypedOperator, VectorOperator,
 };
 pub use operator_impl::{
-    MultipleRasterSources, MultipleVectorSources, OneVectorManyRasterSources, Operator,
-    SingleRasterOrVectorSource, SingleRasterSource, SingleVectorSource, SourceOperator,
+    MultipleRasterSources, MultipleVectorSources, Operator, SingleRasterOrVectorSource,
+    SingleRasterSource, SingleVectorMultipleRasterSources, SingleVectorSource, SourceOperator,
 };
 pub use query::{MockQueryContext, QueryContext, QueryRectangle};
 pub use query_processor::{
