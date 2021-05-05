@@ -251,22 +251,24 @@ where
             SpatialReference::epsg_4326(),
             projector.source_srs(),
         )?;
-        let use_bbox = projector
-            .target_srs()
-            .area_of_use()?
-            .reproject(&area_of_use_projector)?;
-        let bbox = self
-            .intersection(&use_bbox)
+        let source_area_of_use = projector.source_srs().area_of_use()?;
+        let target_area_of_use = projector.target_srs().area_of_use()?;
+        let area_of_use = source_area_of_use
+            .intersection(&target_area_of_use)
+            .ok_or(Error::BboxesDoNotIntersect)?;
+        let area_of_use = area_of_use.reproject(&area_of_use_projector)?;
+        let clipped_bbox = self
+            .intersection(&area_of_use)
             .ok_or(Error::BboxesDoNotIntersect)?;
 
         // project points on the bbox
-        let upper_line = Line::new(bbox.upper_left(), bbox.upper_right())
+        let upper_line = Line::new(clipped_bbox.upper_left(), clipped_bbox.upper_right())
             .with_additional_equi_spaced_coords(POINTS_PER_LINE);
-        let right_line = Line::new(bbox.upper_right(), bbox.lower_right())
+        let right_line = Line::new(clipped_bbox.upper_right(), clipped_bbox.lower_right())
             .with_additional_equi_spaced_coords(POINTS_PER_LINE);
-        let lower_line = Line::new(bbox.lower_right(), bbox.lower_left())
+        let lower_line = Line::new(clipped_bbox.lower_right(), clipped_bbox.lower_left())
             .with_additional_equi_spaced_coords(POINTS_PER_LINE);
-        let left_line = Line::new(bbox.lower_left(), bbox.upper_left())
+        let left_line = Line::new(clipped_bbox.lower_left(), clipped_bbox.upper_left())
             .with_additional_equi_spaced_coords(POINTS_PER_LINE);
 
         let outline_coordinates: Vec<Coordinate2D> = upper_line
