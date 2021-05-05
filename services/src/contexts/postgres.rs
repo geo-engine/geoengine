@@ -1,4 +1,9 @@
+use super::{Context, Db};
+use crate::contexts::{ExecutionContextImpl, QueryContextImpl};
+use crate::datasets::postgres::PostgresDatasetDb;
 use crate::error::{self, Result};
+use crate::projects::project::{ProjectId, ProjectPermission};
+use crate::users::user::UserId;
 use crate::{
     projects::postgres_projectdb::PostgresProjectDb, users::postgres_userdb::PostgresUserDb,
     users::session::Session, workflows::postgres_workflow_registry::PostgresWorkflowRegistry,
@@ -12,11 +17,6 @@ use bb8_postgres::{
 };
 use std::sync::Arc;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
-use super::{Context, Db};
-use crate::contexts::{ExecutionContextImpl, QueryContextImpl};
-use crate::datasets::postgres::PostgresDatasetDb;
-use crate::projects::project::{ProjectId, ProjectPermission};
-use crate::users::user::UserId;
 
 /// A contex with references to Postgres backends of the dbs. Automatically migrates schema on instantiation
 #[derive(Clone)]
@@ -346,7 +346,9 @@ mod tests {
     use bb8_postgres::tokio_postgres::NoTls;
     use geoengine_datatypes::primitives::Coordinate2D;
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
-    use geoengine_operators::engine::{PlotOperator, TypedOperator, VectorOperator, MultipleRasterSources};
+    use geoengine_operators::engine::{
+        MultipleRasterSources, PlotOperator, TypedOperator, VectorOperator,
+    };
     use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
     use geoengine_operators::plot::{Statistics, StatisticsParams};
     use std::str::FromStr;
@@ -531,7 +533,7 @@ mod tests {
             .register(Workflow {
                 operator: Statistics {
                     params: StatisticsParams {},
-                    sources: MultipleRasterSources { rasters: vec![] }
+                    sources: MultipleRasterSources { rasters: vec![] },
                 }
                 .boxed()
                 .into(),
