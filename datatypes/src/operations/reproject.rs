@@ -246,11 +246,20 @@ where
     fn reproject_clipped(&self, projector: &P) -> Result<BoundingBox2D> {
         const POINTS_PER_LINE: i32 = 7;
 
-        let use_bbox = projector.target_srs().area_of_use()?;
+        // clip bbox to the area of use of the target projection
+        let area_of_use_projector = CoordinateProjector::from_known_srs(
+            SpatialReference::epsg_4326(),
+            projector.source_srs(),
+        )?;
+        let use_bbox = projector
+            .target_srs()
+            .area_of_use()?
+            .reproject(&area_of_use_projector)?;
         let bbox = self
             .intersection(&use_bbox)
             .ok_or(Error::BboxesDoNotIntersect)?;
 
+        // project points on the bbox
         let upper_line = Line::new(bbox.upper_left(), bbox.upper_right())
             .with_additional_equi_spaced_coords(POINTS_PER_LINE);
         let right_line = Line::new(bbox.upper_right(), bbox.lower_right())
@@ -580,6 +589,27 @@ mod tests {
         let p = CoordinateProjector::from_known_srs(
             SpatialReference::epsg_4326(),
             SpatialReference::new(SpatialReferenceAuthority::Epsg, 3857),
+        )
+        .unwrap();
+
+        let projected = bbox.reproject_clipped(&p).unwrap();
+        let expected = BoundingBox2D::new_unchecked(
+            (-20_037_508.342_789_244, -20_048_966.104_014_6).into(),
+            (20_037_508.342_789_244, 20_048_966.104_014_594).into(),
+        );
+
+        assert_eq!(projected, expected);
+    }
+
+    #[test]
+    fn reproject_clipped_bbox_3857_900913() {
+        let bbox = BoundingBox2D::new_unchecked(
+            (-20_037_508.342_789_244, -20_048_966.104_014_6).into(),
+            (20_037_508.342_789_244, 20_048_966.104_014_594).into(),
+        );
+        let p = CoordinateProjector::from_known_srs(
+            SpatialReference::new(SpatialReferenceAuthority::Epsg, 3857),
+            SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913),
         )
         .unwrap();
 
