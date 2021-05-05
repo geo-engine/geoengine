@@ -1,4 +1,9 @@
-use crate::{error, primitives::BoundingBox2D, util::Result};
+use crate::{
+    error,
+    operations::reproject::{CoordinateProjection, CoordinateProjector, Reproject},
+    primitives::BoundingBox2D,
+    util::Result,
+};
 use gdal::spatial_ref::SpatialRef;
 #[cfg(feature = "postgres")]
 use postgres_types::private::BytesMut;
@@ -71,6 +76,7 @@ impl SpatialReference {
         }
     }
 
+    /// Return the area of use in EPSG:4326 projection
     pub fn area_of_use(self) -> Result<BoundingBox2D> {
         let proj = Proj::new(&self.proj_string()?).ok_or(error::Error::InvalidProjDefinition)?;
         let area = proj
@@ -82,6 +88,15 @@ impl SpatialReference {
             (area.west, area.south).into(),
             (area.east, area.north).into(),
         )
+    }
+
+    /// Return the area of use in current projection
+    pub fn area_of_use_projected(self) -> Result<BoundingBox2D> {
+        if self == Self::epsg_4326() {
+            return self.area_of_use();
+        }
+        let p = CoordinateProjector::from_known_srs(Self::epsg_4326(), self)?;
+        self.area_of_use()?.reproject(&p)
     }
 }
 
