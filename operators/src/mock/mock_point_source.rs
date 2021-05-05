@@ -55,7 +55,7 @@ impl VectorOperator for MockPointSource {
         _context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedVectorOperator>> {
         Ok(InitializedMockPointSource {
-            result_descritor: VectorResultDescriptor {
+            result_descriptor: VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint,
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 columns: Default::default(),
@@ -67,7 +67,7 @@ impl VectorOperator for MockPointSource {
 }
 
 pub struct InitializedMockPointSource {
-    result_descritor: VectorResultDescriptor,
+    result_descriptor: VectorResultDescriptor,
     points: Vec<Coordinate2D>,
 }
 
@@ -84,7 +84,7 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
     }
 
     fn result_descriptor(&self) -> &VectorResultDescriptor {
-        &self.result_descritor
+        &self.result_descriptor
     }
 }
 
