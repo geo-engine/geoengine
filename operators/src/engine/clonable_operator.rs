@@ -86,17 +86,3 @@ pub trait CloneableInitializedVectorOperator {
 pub trait CloneableInitializedPlotOperator {
     fn clone_boxed_plot(&self) -> Box<InitializedPlotOperator>;
 }
-
-// impl<T, R, P> CloneableInitializedOperator for T
-// where
-//     R: ResultDescriptor + Clone,
-//     T: 'static + InitializedOperator<R, P> + Clone,
-//     P: Clone,
-// {
-//     type Descriptor = R;
-//     type Processor = P;
-
-//     fn clone_boxed(&self) -> Box<dyn InitializedOperator<R, P>> {
-//         Box::new(self.clone())
-//     }
-// }
