@@ -14,7 +14,8 @@ use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::{
     operations::reproject::{
-        suggest_pixel_size_from_diag_cross, CoordinateProjection, CoordinateProjector, Reproject,
+        suggest_pixel_size_from_diag_cross, suggest_pixel_size_from_diag_cross_projected,
+        CoordinateProjection, CoordinateProjector, Reproject, ReprojectClipped,
     },
     raster::{Pixel, TilingSpecification},
     spatial_reference::SpatialReference,
@@ -160,16 +161,21 @@ where
     }
 }
 
-/// this method performs the reverse transformation of a query rectangle
+/// this method performs the transformation of a query rectangle in `target` projection
+/// to a new query rectangle with coordinates in the `source` projection
 pub fn query_rewrite_fn(
     query: QueryRectangle,
-    from: SpatialReference,
-    to: SpatialReference,
+    source: SpatialReference,
+    target: SpatialReference,
 ) -> Result<QueryRectangle> {
-    let projector = CoordinateProjector::from_known_srs(to, from)?;
-    let p_bbox = query.bbox.reproject(&projector)?;
+    let projector_source_target = CoordinateProjector::from_known_srs(source, target)?;
+    let projector_target_source = CoordinateProjector::from_known_srs(target, source)?;
+
+    let p_bbox = query.bbox.reproject_clipped(&projector_target_source)?;
+    let s_bbox = p_bbox.reproject(&projector_source_target)?;
+
     let p_spatial_resolution =
-        suggest_pixel_size_from_diag_cross(query.bbox, query.spatial_resolution, &projector)?;
+        suggest_pixel_size_from_diag_cross_projected(s_bbox, p_bbox, query.spatial_resolution)?;
     Ok(QueryRectangle {
         bbox: p_bbox,
         spatial_resolution: p_spatial_resolution,
@@ -418,6 +424,7 @@ where
     ) -> Result<BoxStream<'a, Result<geoengine_datatypes::raster::RasterTile2D<Self::RasterType>>>>
     {
         // we need a resolution for the sub-querys. And since we don't want this to change for tiles, we precompute it for the complete bbox and pass it to the sub-query spec.
+        // TODO: use `rewrite_query` to determine resolution for tiles overlapping border
         let projector = CoordinateProjector::from_known_srs(self.to, self.from)?;
         let p_spatial_resolution =
             suggest_pixel_size_from_diag_cross(query.bbox, query.spatial_resolution, &projector)?;
@@ -837,5 +844,30 @@ mod tests {
         );
 
         Ok(())
+    }
+
+    #[test]
+    fn query_rewrite_4326_3857() {
+        let query = QueryRectangle {
+            bbox: BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
+            time_interval: TimeInterval::default(),
+            spatial_resolution: SpatialResolution::zero_point_one(),
+        };
+
+        let expected = BoundingBox2D::new_unchecked(
+            (-20_037_508.342_789_244, -20_048_966.104_014_6).into(),
+            (20_037_508.342_789_244, 20_048_966.104_014_594).into(),
+        );
+
+        assert_eq!(
+            expected,
+            query_rewrite_fn(
+                query,
+                SpatialReference::new(SpatialReferenceAuthority::Epsg, 3857),
+                SpatialReference::epsg_4326(),
+            )
+            .unwrap()
+            .bbox
+        );
     }
 }

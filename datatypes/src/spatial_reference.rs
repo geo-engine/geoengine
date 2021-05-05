@@ -1,9 +1,15 @@
-use crate::{error, util::Result};
+use crate::{
+    error,
+    operations::reproject::{CoordinateProjection, CoordinateProjector, Reproject},
+    primitives::BoundingBox2D,
+    util::Result,
+};
 use gdal::spatial_ref::SpatialRef;
 #[cfg(feature = "postgres")]
 use postgres_types::private::BytesMut;
 #[cfg(feature = "postgres")]
 use postgres_types::{FromSql, IsNull, ToSql, Type};
+use proj::Proj;
 use serde::de::Visitor;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 #[cfg(feature = "postgres")]
@@ -68,6 +74,36 @@ impl SpatialReference {
                 //TODO: we might need to look them up somehow! Best solution would be a registry where we can store user definexd srs strings.
             }
         }
+    }
+
+    /// Return the area of use in EPSG:4326 projection
+    pub fn area_of_use(self) -> Result<BoundingBox2D> {
+        let proj_string = match self.proj_string() {
+            Ok(s) => s,
+            Err(e) => return Err(e),
+        };
+
+        let proj = Proj::new(&proj_string).ok_or(error::Error::InvalidProjDefinition {
+            proj_definition: proj_string.clone(),
+        })?;
+        let area = proj
+            .area_of_use()
+            .context(error::ProjInternal)?
+            .0
+            .ok_or(error::Error::NoAreaOfUseDefined { proj_string })?;
+        BoundingBox2D::new(
+            (area.west, area.south).into(),
+            (area.east, area.north).into(),
+        )
+    }
+
+    /// Return the area of use in current projection
+    pub fn area_of_use_projected(self) -> Result<BoundingBox2D> {
+        if self == Self::epsg_4326() {
+            return self.area_of_use();
+        }
+        let p = CoordinateProjector::from_known_srs(Self::epsg_4326(), self)?;
+        self.area_of_use()?.reproject(&p)
     }
 }
 
