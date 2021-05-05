@@ -2,7 +2,8 @@ use snafu::Snafu;
 use std::convert::Infallible;
 
 use crate::{
-    collections::FeatureCollectionError, primitives::TimeInstance,
+    collections::FeatureCollectionError,
+    primitives::{BoundingBox2D, TimeInstance},
     spatial_reference::SpatialReference,
 };
 use crate::{
@@ -212,11 +213,20 @@ pub enum Error {
 
     NoMatchingFeatureDataTypeForOgrFieldType,
 
-    InvalidProjDefinition,
-    NoAreaOfUseDefined,
-    BboxesDoNotIntersect,
+    InvalidProjDefinition {
+        proj_definition: String,
+    },
+    NoAreaOfUseDefined {
+        proj_string: String,
+    },
+    BboxesDoNotIntersect {
+        bbox_a: BoundingBox2D,
+        bbox_b: BoundingBox2D,
+    },
 
-    CouldNotReprojectBbox,
+    OutputBboxEmpty {
+        bbox: BoundingBox2D,
+    },
 }
 
 impl From<arrow::error::ArrowError> for Error {

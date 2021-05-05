@@ -78,12 +78,19 @@ impl SpatialReference {
 
     /// Return the area of use in EPSG:4326 projection
     pub fn area_of_use(self) -> Result<BoundingBox2D> {
-        let proj = Proj::new(&self.proj_string()?).ok_or(error::Error::InvalidProjDefinition)?;
+        let proj_string = match self.proj_string() {
+            Ok(s) => s,
+            Err(e) => return Err(e),
+        };
+
+        let proj = Proj::new(&proj_string).ok_or(error::Error::InvalidProjDefinition {
+            proj_definition: proj_string.clone(),
+        })?;
         let area = proj
             .area_of_use()
             .context(error::ProjInternal)?
             .0
-            .ok_or(error::Error::NoAreaOfUseDefined)?;
+            .ok_or(error::Error::NoAreaOfUseDefined { proj_string })?;
         BoundingBox2D::new(
             (area.west, area.south).into(),
             (area.east, area.north).into(),

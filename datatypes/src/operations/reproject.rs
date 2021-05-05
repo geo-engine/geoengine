@@ -253,13 +253,19 @@ where
         )?;
         let source_area_of_use = projector.source_srs().area_of_use()?;
         let target_area_of_use = projector.target_srs().area_of_use()?;
-        let area_of_use = source_area_of_use
-            .intersection(&target_area_of_use)
-            .ok_or(Error::BboxesDoNotIntersect)?;
+        let area_of_use = source_area_of_use.intersection(&target_area_of_use).ok_or(
+            Error::BboxesDoNotIntersect {
+                bbox_a: source_area_of_use,
+                bbox_b: target_area_of_use,
+            },
+        )?;
         let area_of_use = area_of_use.reproject(&area_of_use_projector)?;
         let clipped_bbox = self
             .intersection(&area_of_use)
-            .ok_or(Error::BboxesDoNotIntersect)?;
+            .ok_or(Error::BboxesDoNotIntersect {
+                bbox_a: *self,
+                bbox_b: area_of_use,
+            })?;
 
         // project points on the bbox
         let upper_line = Line::new(clipped_bbox.upper_left(), clipped_bbox.upper_right())
@@ -287,7 +293,7 @@ where
 
         ensure!(
             out.size_x() > 0. && out.size_y() > 0.,
-            error::CouldNotReprojectBbox
+            error::OutputBboxEmpty { bbox: out }
         );
 
         Ok(out)
