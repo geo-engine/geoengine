@@ -103,7 +103,7 @@ impl RasterDataType {
             RasterDataType::I16 => value as i16 as f64 == value,
             RasterDataType::I32 => value as i32 as f64 == value,
             RasterDataType::I64 => value as i64 as f64 == value,
-            RasterDataType::F32 => value as f32 as f64 == value,
+            RasterDataType::F32 => value.is_nan() || value as f32 as f64 == value,
             RasterDataType::F64 => true,
         }
     }

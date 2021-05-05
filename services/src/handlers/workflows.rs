@@ -11,6 +11,33 @@ use crate::workflows::workflow::{Workflow, WorkflowId};
 use geoengine_operators::call_on_typed_operator;
 use snafu::ResultExt;
 
+/// Registers a new [Workflow].
+///
+/// # Example
+///
+/// ```text
+/// POST /workflow
+/// Authorization: Bearer e9da345c-b1df-464b-901c-0335a0419227
+///
+/// {
+///   "type": "Vector",
+///   "operator": {
+///     "type": "MockPointSource",
+///     "params": {
+///       "points": [
+///         { "x": 0.0, "y": 0.1 },
+///         { "x": 1.0, "y": 1.1 }
+///       ]
+///     }
+///   }
+/// }
+/// ```
+/// Response:
+/// ```text
+/// {
+///   "id": "cee25e8c-18a0-5f1b-a504-0bc30de21e06"
+/// }
+/// ```
 pub(crate) fn register_workflow_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
@@ -36,6 +63,35 @@ async fn register_workflow<C: Context>(
     Ok(warp::reply::json(&IdResponse::from(id)))
 }
 
+/// Retrieves an existing [Workflow] using its id.
+///
+/// # Example
+///
+/// ```text
+/// GET /workflow/cee25e8c-18a0-5f1b-a504-0bc30de21e06
+/// Authorization: Bearer e9da345c-b1df-464b-901c-0335a0419227
+/// ```
+/// Response:
+/// ```text
+/// {
+///   "type": "Vector",
+///   "operator": {
+///     "type": "MockPointSource",
+///     "params": {
+///       "points": [
+///         {
+///           "x": 0.0,
+///           "y": 0.1
+///         },
+///         {
+///           "x": 1.0,
+///           "y": 1.1
+///         }
+///       ]
+///     }
+///   }
+/// }
+/// ```
 pub(crate) fn load_workflow_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
@@ -60,6 +116,22 @@ async fn load_workflow<C: Context>(
     Ok(warp::reply::json(&wf).into_response())
 }
 
+/// Gets the metadata of a workflow.
+///
+/// # Example
+///
+/// ```text
+/// GET /workflow/cee25e8c-18a0-5f1b-a504-0bc30de21e06/metadata
+/// Authorization: Bearer e9da345c-b1df-464b-901c-0335a0419227
+/// ```
+/// Response:
+/// ```text
+/// {
+///   "dataType": "MultiPoint",
+///   "spatialReference": "EPSG:4326",
+///   "columns": {}
+/// }
+/// ```
 pub(crate) fn get_workflow_metadata_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {

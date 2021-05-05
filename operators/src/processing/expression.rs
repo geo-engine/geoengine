@@ -1,23 +1,23 @@
+use crate::engine::{
+    InitializedOperator, InitializedRasterOperator, Operator, QueryContext, QueryProcessor,
+    QueryRectangle, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+    TypedRasterQueryProcessor,
+};
+use crate::error::Error;
 use crate::util::Result;
 use crate::{call_bi_generic_processor, call_generic_raster_processor};
 use crate::{
     engine::ExecutionContext,
     opencl::{ClProgram, CompiledClProgram, IterationType, RasterArgument},
 };
-use crate::{
-    engine::{
-        InitializedOperator, InitializedRasterOperator, Operator, QueryContext, QueryProcessor,
-        QueryRectangle, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-        TypedRasterQueryProcessor,
-    },
-    error::Error,
-};
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::primitives::Measurement;
 use geoengine_datatypes::raster::{Grid2D, Pixel, RasterDataType, RasterTile2D};
 use num_traits::AsPrimitive;
+use serde::Serializer;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use snafu::ensure;
 use std::collections::HashSet;
 use std::convert::TryFrom;
@@ -34,8 +34,37 @@ use std::marker::PhantomData;
 pub struct ExpressionParams {
     pub expression: String,
     pub output_type: RasterDataType,
-    pub output_no_data_value: f64,
+    #[serde(deserialize_with = "parse_no_data")]
+    #[serde(serialize_with = "write_no_data")]
+    pub output_no_data_value: f64, // TODO: check value is valid for given output type during deserialization
     pub output_measurement: Option<Measurement>,
+}
+
+/// Parse no data from either number or "nan"
+pub fn parse_no_data<'de, D>(deserializer: D) -> Result<f64, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    match Value::deserialize(deserializer)? {
+        Value::Number(n) => n
+            .as_f64()
+            .ok_or_else(|| serde::de::Error::custom("Invalid no data value")),
+        Value::String(s) if s.to_lowercase() == "nan" => Ok(f64::NAN),
+        _ => Err(serde::de::Error::custom("Invalid no data value")),
+    }
+}
+
+/// write no data as either number or "nan"
+#[allow(clippy::trivially_copy_pass_by_ref)]
+fn write_no_data<S>(x: &f64, s: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    if x.is_nan() {
+        s.serialize_str("nan")
+    } else {
+        s.serialize_f64(*x)
+    }
 }
 
 // TODO: custom type or simple string?
@@ -225,7 +254,7 @@ impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
                     Ok(res)
                 })
             }
-            _ => Err(Error::InvalidNumberOfExpressionInputs), // TODO: handle more than two inputs
+            _ => Err(crate::error::Error::InvalidNumberOfExpressionInputs), // TODO: handle more than two inputs
         }
     }
 
@@ -372,6 +401,71 @@ mod tests {
     };
     use geoengine_datatypes::raster::TileInformation;
     use geoengine_datatypes::spatial_reference::SpatialReference;
+
+    #[test]
+    fn deserialize_params() {
+        let s = r#"{"expression":"1*A","outputType":"F64","outputNoDataValue":0.0,"outputMeasurement":null}"#;
+
+        assert_eq!(
+            serde_json::from_str::<ExpressionParams>(s).unwrap(),
+            ExpressionParams {
+                expression: "1*A".to_owned(),
+                output_type: RasterDataType::F64,
+                output_no_data_value: 0.0,
+                output_measurement: None,
+            }
+        );
+    }
+
+    #[test]
+    fn deserialize_params_no_data() {
+        let s = r#"{"expression":"1*A","outputType":"F64","outputNoDataValue":"nan","outputMeasurement":null}"#;
+
+        assert!(f64::is_nan(
+            serde_json::from_str::<ExpressionParams>(s)
+                .unwrap()
+                .output_no_data_value
+        ),);
+    }
+
+    #[test]
+    fn deserialize_params_missing_no_data() {
+        let s = r#"{"expression":"1*A","outputType":"F64","outputNoDataValue":null,"outputMeasurement":null}"#;
+
+        assert!(serde_json::from_str::<ExpressionParams>(s).is_err());
+    }
+
+    #[test]
+    fn serialize_params() {
+        let s = r#"{"expression":"1*A","outputType":"F64","outputNoDataValue":0.0,"outputMeasurement":null}"#;
+
+        assert_eq!(
+            s,
+            serde_json::to_string(&ExpressionParams {
+                expression: "1*A".to_owned(),
+                output_type: RasterDataType::F64,
+                output_no_data_value: 0.0,
+                output_measurement: None,
+            })
+            .unwrap()
+        );
+    }
+
+    #[test]
+    fn serialize_params_no_data() {
+        let s = r#"{"expression":"1*A","outputType":"F64","outputNoDataValue":"nan","outputMeasurement":null}"#;
+
+        assert_eq!(
+            s,
+            serde_json::to_string(&ExpressionParams {
+                expression: "1*A".to_owned(),
+                output_type: RasterDataType::F64,
+                output_no_data_value: f64::NAN,
+                output_measurement: None,
+            })
+            .unwrap()
+        );
+    }
 
     #[tokio::test]
     async fn basic() {

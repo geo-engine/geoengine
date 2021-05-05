@@ -1,6 +1,6 @@
-use crate::ogc::util::{parse_bbox, parse_time_option};
+use crate::ogc::util::{parse_bbox, parse_spatial_resolution_option, parse_time_option};
 use crate::util::from_str_option;
-use geoengine_datatypes::primitives::{BoundingBox2D, TimeInterval};
+use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution, TimeInterval};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use serde::{Deserialize, Serialize};
 
@@ -61,11 +61,15 @@ pub struct GetFeature {
     #[serde(default)]
     #[serde(deserialize_with = "from_str_option")]
     pub count: Option<u64>,
-    pub sort_by: Option<String>,     // TODO: Name[+A|+D] (asc/desc)
-    pub result_type: Option<String>, // TODO: enum: results/hits?
-    pub filter: Option<String>,      // TODO: parse filters
+    pub sort_by: Option<String>,       // TODO: Name[+A|+D] (asc/desc)
+    pub result_type: Option<String>,   // TODO: enum: results/hits?
+    pub filter: Option<String>,        // TODO: parse filters
     pub property_name: Option<String>, // TODO comma separated list
-                                     // TODO: feature_id, ...
+    // TODO: feature_id, ...
+    /// Vendor parameter for specifying a spatial query resolution
+    #[serde(default)]
+    #[serde(deserialize_with = "parse_spatial_resolution_option")]
+    pub query_resolution: Option<SpatialResolution>,
 }
 
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
@@ -157,6 +161,7 @@ mod tests {
                 feature_type: "test".into(),
             },
             property_name: None,
+            query_resolution: None,
         });
 
         assert_eq!(parsed, request);
@@ -184,6 +189,7 @@ mod tests {
   </And>
 </Filter>"),
             ("propertyName","P1,P2"),
+            ("queryResolution","0.1,0.1"),
         ];
         let query = serde_urlencoded::to_string(params).unwrap();
         let parsed: WfsRequest = serde_urlencoded::from_str(&query).unwrap();
@@ -208,6 +214,7 @@ mod tests {
                 feature_type: "test".into(),
             },
             property_name: Some("P1,P2".into()),
+            query_resolution: Some(SpatialResolution::zero_point_one()),
         });
 
         assert_eq!(parsed, request);
@@ -245,6 +252,7 @@ mod tests {
                 feature_type: op,
             },
             property_name: None,
+            query_resolution: None,
         });
 
         assert_eq!(parsed, request);

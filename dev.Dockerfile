@@ -37,7 +37,15 @@ COPY docker/dev/Settings-dev.toml /app/Settings.toml
 COPY docker/dev/service.sh /etc/service/geoengine/run
 RUN chmod +x /etc/service/geoengine/run \
     && \
-    adduser --disabled-password --gecos "" geoengine
+    adduser --disabled-password --gecos "" geoengine 
+
+# Create upload folder and chown it to the geoengine user
+RUN mkdir -p /app/upload \
+    && \
+    chown -R geoengine:geoengine /app/upload \
+    && \
+    chown -R geoengine:geoengine /app/operators/test-data/vector/data
+# the last line is a work-around to allow the ogr-source to read gpkg files from the test-data folder. The gpkg driver needs RW rights.
 
 EXPOSE 8080
 

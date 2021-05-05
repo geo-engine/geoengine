@@ -59,9 +59,9 @@ pub type OgrSource = SourceOperator<OgrSourceParameters>;
 ///  - `layer_name`: name of the layer to load
 ///  - `time`: the type of the time attribute(s)
 ///  - `columns`: a mapping of the columns to data, time, space. Columns that are not listed are skipped when parsing.
-///  - `default`: wkt definition of the default point/line/polygon as a string [optional]
+///  - `default`: wkt definition of the default point/line/polygon as a string (optional)
 ///  - `force_ogr_time_filter`: bool. force external time filter via ogr layer, even though data types don't match. Might not work
-///    (result: empty collection), but has better performance for wfs requests [optional, false if not provided]
+///    (result: empty collection), but has better performance for wfs requests (optional, false if not provided)
 ///  - `on_error`: specify the type of error handling
 ///  - `provenance`: specify the provenance of a file
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
@@ -624,15 +624,15 @@ where
         if let Some(ref column_spec) = dataset_information.columns {
             // TODO: error handling instead of unwrap
             for attribute in &column_spec.int {
-                data_types.insert(attribute.clone(), FeatureDataType::Float);
-                feature_collection_builder
-                    .add_column(attribute.clone(), FeatureDataType::Float)
-                    .unwrap();
-            }
-            for attribute in &column_spec.float {
                 data_types.insert(attribute.clone(), FeatureDataType::Int);
                 feature_collection_builder
                     .add_column(attribute.clone(), FeatureDataType::Int)
+                    .unwrap();
+            }
+            for attribute in &column_spec.float {
+                data_types.insert(attribute.clone(), FeatureDataType::Float);
+                feature_collection_builder
+                    .add_column(attribute.clone(), FeatureDataType::Float)
                     .unwrap();
             }
             for attribute in &column_spec.text {
@@ -1401,8 +1401,8 @@ mod tests {
                     columns: Some(OgrSourceColumnSpec {
                         x: "".to_string(),
                         y: None,
-                        int: vec!["natlscale".to_string()],
-                        float: vec!["scalerank".to_string()],
+                        int: vec!["scalerank".to_string()],
+                        float: vec!["natlscale".to_string()],
                         text: vec![
                             "featurecla".to_string(),
                             "name".to_string(),
@@ -2737,8 +2737,8 @@ mod tests {
             columns: Some(OgrSourceColumnSpec {
                 x: "".to_string(),
                 y: None,
-                float: vec!["a".to_string()],
-                int: vec!["b".to_string()],
+                float: vec!["b".to_string()],
+                int: vec!["a".to_string()],
                 text: vec!["c".to_string()],
             }),
             default_geometry: None,
@@ -3232,7 +3232,13 @@ mod tests {
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    columns: Default::default(),
+                    columns: [
+                        ("num".to_string(), FeatureDataType::Int),
+                        ("txt".to_string(), FeatureDataType::Text),
+                    ]
+                    .iter()
+                    .cloned()
+                    .collect(),
                 },
             }),
         );
@@ -3282,7 +3288,7 @@ mod tests {
             vec![TimeInterval::default(), TimeInterval::default()],
             {
                 let mut map = HashMap::new();
-                map.insert("num".into(), FeatureData::Float(vec![42., 815.]));
+                map.insert("num".into(), FeatureData::Int(vec![42, 815]));
                 map.insert(
                     "txt".into(),
                     FeatureData::Text(vec!["foo".to_owned(), "bar".to_owned()]),

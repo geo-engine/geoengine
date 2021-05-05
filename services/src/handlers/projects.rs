@@ -9,6 +9,40 @@ use crate::util::IdResponse;
 use uuid::Uuid;
 use warp::Filter;
 
+/// Create a new project for the user by providing [`CreateProject`].
+///
+/// # Example
+///
+/// ```text
+/// POST /project
+/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
+///
+/// {
+///   "name": "Test",
+///   "description": "Foo",
+///   "bounds": {
+///     "spatialReference": "EPSG:4326",
+///     "boundingBox": {
+///       "lowerLeftCoordinate": { "x": 0, "y": 0 },
+///       "upperRightCoordinate": { "x": 1, "y": 1 }
+///     },
+///     "timeInterval": {
+///       "start": 0,
+///       "end": 1
+///     }
+///   },
+///   "timeStep": {
+///     "step": 1,
+///     "granularity": "Months"
+///   }
+/// }
+/// ```
+/// Response:
+/// ```text
+/// {
+///   "id": "df4ad02e-0d61-4e29-90eb-dc1259c1f5b9"
+/// }
+/// ```
 pub(crate) fn create_project_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
@@ -35,6 +69,27 @@ async fn create_project<C: Context>(
     Ok(warp::reply::json(&IdResponse::from(id)))
 }
 
+/// List all projects accessible to the user that match the [`ProjectListOptions`].
+///
+/// # Example
+///
+/// ```text
+/// GET /projects?permissions=%5B%22Read%22,%20%22Write%22,%20%22Owner%22%5Dorder=NameAsc&offset=0&limit=2
+/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
+/// ```
+/// Response:
+/// ```text
+/// [
+///   {
+///     "id": "df4ad02e-0d61-4e29-90eb-dc1259c1f5b9",
+///     "name": "Test",
+///     "description": "Foo",
+///     "layerNames": [],
+///     "plotNames": [],
+///     "changed": "2021-04-26T14:03:51.984537900Z"
+///   }
+/// ]
+/// ```
 pub(crate) fn list_projects_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
@@ -61,6 +116,51 @@ async fn list_projects<C: Context>(
     Ok(warp::reply::json(&listing))
 }
 
+/// Retrieves details about a [project](crate::projects::project::Project).
+/// If no version is specified, it loads the latest version.
+///
+/// # Example
+///
+/// ```text
+/// GET /project/df4ad02e-0d61-4e29-90eb-dc1259c1f5b9/[version]
+/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
+/// ```
+/// Response:
+/// ```text
+/// {
+///   "id": "df4ad02e-0d61-4e29-90eb-dc1259c1f5b9",
+///   "version": {
+///     "id": "8f4b8683-f92c-4129-a16f-818aeeee484e",
+///     "changed": "2021-04-26T14:05:39.677390600Z",
+///     "author": "5b4466d2-8bab-4ed8-a182-722af3c80958"
+///   },
+///   "name": "Test",
+///   "description": "Foo",
+///   "layers": [],
+///   "plots": [],
+///   "bounds": {
+///     "spatialReference": "EPSG:4326",
+///     "boundingBox": {
+///       "lowerLeftCoordinate": {
+///         "x": 0.0,
+///         "y": 0.0
+///       },
+///       "upperRightCoordinate": {
+///         "x": 1.0,
+///         "y": 1.0
+///       }
+///     },
+///     "timeInterval": {
+///       "start": 0,
+///       "end": 1
+///     }
+///   },
+///   "timeStep": {
+///     "granularity": "Months",
+///     "step": 1
+///   }
+/// }
+/// ```
 pub(crate) fn load_project_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
@@ -90,6 +190,36 @@ async fn load_project<C: Context>(
     Ok(warp::reply::json(&id))
 }
 
+/// Updates a project.
+/// This will create a new version.
+///
+/// # Example
+///
+/// ```text
+/// PATCH /project/df4ad02e-0d61-4e29-90eb-dc1259c1f5b9
+/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
+///
+/// {
+///   "id": "df4ad02e-0d61-4e29-90eb-dc1259c1f5b9",
+///   "name": "TestUpdate",
+///   "layers": [
+///     {
+///       "workflow": "100ee39c-761c-4218-9d85-ec861a8f3097",
+///       "name": "L1",
+///       "visibility": {
+///         "data": true,
+///         "legend": false
+///       },
+///       "symbology": {
+///         "raster": {
+///           "opacity": 1.0,
+///           "colorizer": "rgba"
+///         }
+///       }
+///     }
+///   ]
+/// }
+/// ```
 pub(crate) fn update_project_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
@@ -118,6 +248,14 @@ async fn update_project<C: Context>(
     Ok(warp::reply())
 }
 
+/// Deletes a project.
+///
+/// # Example
+///
+/// ```text
+/// DELETE /project/df4ad02e-0d61-4e29-90eb-dc1259c1f5b9
+/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
+/// ```
 pub(crate) fn delete_project_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
@@ -142,6 +280,31 @@ async fn delete_project<C: Context>(
     Ok(warp::reply())
 }
 
+/// Lists all [versions](crate::projects::project::ProjectVersion) of a project.
+///
+/// # Example
+///
+/// ```text
+/// GET /project/versions
+/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
+///
+/// "df4ad02e-0d61-4e29-90eb-dc1259c1f5b9"
+/// ```
+/// Response:
+/// ```text
+/// [
+///   {
+///     "id": "8f4b8683-f92c-4129-a16f-818aeeee484e",
+///     "changed": "2021-04-26T14:05:39.677390600Z",
+///     "author": "5b4466d2-8bab-4ed8-a182-722af3c80958"
+///   },
+///   {
+///     "id": "ced041c7-4b1d-4d13-b076-94596be6a36a",
+///     "changed": "2021-04-26T14:13:10.901912700Z",
+///     "author": "5b4466d2-8bab-4ed8-a182-722af3c80958"
+///   }
+/// ]
+/// ```
 pub(crate) fn project_versions_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
@@ -167,6 +330,21 @@ async fn project_versions<C: Context>(
     Ok(warp::reply::json(&versions))
 }
 
+/// Add a [permission](crate::projects::project::ProjectPermission) for another user
+/// if the session user is the owner of the target project.
+///
+/// # Example
+///
+/// ```text
+/// POST /project/permission/add
+/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
+///
+/// {
+///   "user": "3cbe632e-c50a-46d0-8490-f12621347bb1",
+///   "project": "aaed86a1-49d4-482d-b993-39159bb853df",
+///   "permission": "Read"
+/// }
+/// ```
 pub(crate) fn add_permission_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
@@ -191,6 +369,21 @@ async fn add_permission<C: Context>(
     Ok(warp::reply())
 }
 
+/// Removes a [permission](crate::projects::project::ProjectPermission) of another user
+/// if the session user is the owner of the target project.
+///
+/// # Example
+///
+/// ```text
+/// POST /project/permission/add
+/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
+///
+/// {
+///   "user": "3cbe632e-c50a-46d0-8490-f12621347bb1",
+///   "project": "aaed86a1-49d4-482d-b993-39159bb853df",
+///   "permission": "Read"
+/// }
+/// ```
 pub(crate) fn remove_permission_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
@@ -215,6 +408,24 @@ async fn remove_permission<C: Context>(
     Ok(warp::reply())
 }
 
+/// Shows the access rights the user has for a given project.
+///
+/// # Example
+///
+/// ```text
+/// GET /project/df4ad02e-0d61-4e29-90eb-dc1259c1f5b9/permissions
+/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
+/// ```
+/// Response:
+/// ```text
+/// [
+///   {
+///     "user": "5b4466d2-8bab-4ed8-a182-722af3c80958",
+///     "project": "df4ad02e-0d61-4e29-90eb-dc1259c1f5b9",
+///     "permission": "Owner"
+///   }
+/// ]
+/// ```
 pub(crate) fn list_permissions_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
