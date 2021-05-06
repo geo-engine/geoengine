@@ -698,6 +698,7 @@ where
         builder.build().map_err(Into::into)
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn add_feature_to_batch(
         default_geometry: &Option<G>,
         data_types: &HashMap<String, FeatureDataType>,
