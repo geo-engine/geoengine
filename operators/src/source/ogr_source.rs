@@ -1002,6 +1002,7 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn specification_serde() {
         let spec = OgrSourceDataset {
             file_name: "foobar.csv".into(),
