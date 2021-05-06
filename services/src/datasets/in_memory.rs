@@ -304,6 +304,7 @@ mod tests {
                 columns: None,
                 default_geometry: None,
                 force_ogr_time_filter: false,
+                force_ogr_spatial_filter: false,
                 on_error: OgrSourceErrorSpec::Skip,
                 provenance: None,
             },
