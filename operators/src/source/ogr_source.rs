@@ -61,6 +61,7 @@ pub type OgrSource = SourceOperator<OgrSourceParameters>;
 ///  - `columns`: a mapping of the columns to data, time, space. Columns that are not listed are skipped when parsing.
 ///  - `default`: wkt definition of the default point/line/polygon as a string (optional)
 ///  - `force_ogr_time_filter`: bool. force external time filter via ogr layer, even though data types don't match. Might not work
+///  - `force_ogr_spatial_filter`: bool. force external spatial filter via ogr layer.
 ///    (result: empty collection), but has better performance for wfs requests (optional, false if not provided)
 ///  - `on_error`: specify the type of error handling
 ///  - `provenance`: specify the provenance of a file
@@ -76,6 +77,8 @@ pub struct OgrSourceDataset {
     pub default_geometry: Option<TypedGeometry>, // TODO: move default geometry to OgrSourceErrorSpec::Keep
     #[serde(default)]
     pub force_ogr_time_filter: bool,
+    #[serde(default)]
+    pub force_ogr_spatial_filter: bool,
     pub on_error: OgrSourceErrorSpec,
     pub provenance: Option<ProvenanceInformation>,
 }
@@ -429,6 +432,17 @@ where
         // TODO: add OGR time filter if forced
         let dataset = Self::open_gdal_dataset(&dataset_information)?;
         let mut layer = dataset.layer_by_name(&dataset_information.layer_name)?;
+        let use_ogr_spatial_filter = dataset_information.force_ogr_spatial_filter
+            || layer.has_capability(gdal::vector::LayerCaps::OLCFastSpatialFilter);
+
+        if use_ogr_spatial_filter {
+            // rectangular geometry from West, South, East and North values.
+            let filter_geometry = query_rectangle.bbox.try_into()?;
+            // TODO: log uses spatial filter
+            // TODO: use OGR_L_SetSpatialFilterRect() once GDAL crate supports it
+            // NOTE: the OGR-filter may be inaccurately allowing more features that should be returned in a "strict" fashion.
+            layer.set_spatial_filter(&filter_geometry);
+        }
 
         let (data_types, feature_collection_builder) =
             Self::initialize_types_and_builder(dataset_information);
@@ -467,6 +481,7 @@ where
                 query_rectangle,
                 &time_extractor,
                 chunk_byte_size,
+                use_ogr_spatial_filter,
             );
 
             let is_empty = batch_result
@@ -654,6 +669,7 @@ where
         query_rectangle: &QueryRectangle,
         time_extractor: &dyn Fn(&Feature) -> Result<TimeInterval>,
         chunk_byte_size: usize,
+        was_spatial_filtered_by_ogr: bool,
     ) -> Result<FeatureCollection<G>> {
         let mut builder = feature_collection_builder.finish_header();
 
@@ -673,6 +689,7 @@ where
                 &mut builder,
                 &feature,
                 dataset_information.force_ogr_time_filter,
+                was_spatial_filtered_by_ogr,
             ) {
                 match dataset_information.on_error {
                     OgrSourceErrorSpec::Skip => continue,
@@ -689,6 +706,7 @@ where
         builder.build().map_err(Into::into)
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn add_feature_to_batch(
         default_geometry: &Option<G>,
         data_types: &HashMap<String, FeatureDataType>,
@@ -697,6 +715,7 @@ where
         builder: &mut FeatureCollectionRowBuilder<G>,
         feature: &Feature,
         was_time_filtered_by_ogr: bool,
+        was_spatial_filtered_by_ogr: bool,
     ) -> Result<()> {
         let time_interval = time_extractor(&feature)?;
 
@@ -715,7 +734,7 @@ where
         };
 
         // filter out geometries that are not contained in the query's bounding box
-        if !geometry.intersects_bbox(&query_rectangle.bbox) {
+        if !was_spatial_filtered_by_ogr && !geometry.intersects_bbox(&query_rectangle.bbox) {
             return Ok(());
         }
 
@@ -991,6 +1010,7 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn specification_serde() {
         let spec = OgrSourceDataset {
             file_name: "foobar.csv".into(),
@@ -1014,6 +1034,7 @@ mod tests {
                 MultiPoint::new(vec![(0.0, 0.0).into()]).unwrap(),
             )),
             force_ogr_time_filter: false,
+            force_ogr_spatial_filter: false,
             on_error: OgrSourceErrorSpec::Skip,
             provenance: Some(ProvenanceInformation {
                 citation: "Foo Bar".to_string(),
@@ -1049,6 +1070,7 @@ mod tests {
                 },
                 "defaultGeometry":{"MultiPoint":{"coordinates":[{"x":0.0,"y":0.0}]}},
                 "forceOgrTimeFilter": false,
+                "forceOgrSpatialFilter": false,
                 "onError": "skip",
                 "provenance": {
                     "citation": "Foo Bar",
@@ -1083,6 +1105,7 @@ mod tests {
                 },
                 "defaultGeometry":{"MultiPoint":{"coordinates":[{"x":0.0,"y":0.0}]}},
                 "forceOgrTimeFilter": false,
+                "forceOgrSpatialFilter": false,
                 "onError": "skip",
                 "provenance": {
                     "citation": "Foo Bar",
@@ -1107,6 +1130,7 @@ mod tests {
             columns: None,
             default_geometry: None,
             force_ogr_time_filter: false,
+            force_ogr_spatial_filter: false,
             on_error: OgrSourceErrorSpec::Skip,
             provenance: None,
         };
@@ -1152,6 +1176,7 @@ mod tests {
             columns: None,
             default_geometry: None,
             force_ogr_time_filter: false,
+            force_ogr_spatial_filter: false,
             on_error: OgrSourceErrorSpec::Skip,
             provenance: None,
         };
@@ -1197,6 +1222,7 @@ mod tests {
             columns: None,
             default_geometry: None,
             force_ogr_time_filter: false,
+            force_ogr_spatial_filter: false,
             on_error: OgrSourceErrorSpec::Skip,
             provenance: None,
         };
@@ -1251,6 +1277,7 @@ mod tests {
                 MultiPoint::new(vec![(4.0, 4.1).into()]).unwrap(),
             )),
             force_ogr_time_filter: false,
+            force_ogr_spatial_filter: false,
             on_error: OgrSourceErrorSpec::Keep,
             provenance: None,
         };
@@ -1312,6 +1339,7 @@ mod tests {
                     columns: None,
                     default_geometry: None,
                     force_ogr_time_filter: false,
+                    force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Skip,
                     provenance: None,
                 },
@@ -1386,6 +1414,186 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn ne_10m_ports_force_spatial_filter() -> Result<()> {
+        let dataset = DatasetId::Internal(InternalDatasetId::new());
+        let mut exe_ctx = MockExecutionContext::default();
+        exe_ctx.add_meta_data(
+            dataset.clone(),
+            Box::new(StaticMetaData {
+                loading_info: OgrSourceDataset {
+                    file_name: "test-data/vector/data/ne_10m_ports/ne_10m_ports.shp".into(),
+                    layer_name: "ne_10m_ports".to_string(),
+                    data_type: Some(VectorDataType::MultiPoint),
+                    time: OgrSourceDatasetTimeType::None,
+                    columns: None,
+                    default_geometry: None,
+                    force_ogr_time_filter: false,
+                    force_ogr_spatial_filter: true,
+                    on_error: OgrSourceErrorSpec::Skip,
+                    provenance: None,
+                },
+                result_descriptor: VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: Default::default(),
+                },
+            }),
+        );
+
+        let source = OgrSource {
+            params: OgrSourceParameters {
+                dataset,
+                attribute_projection: None,
+            },
+        }
+        .boxed()
+        .initialize(&exe_ctx)?;
+
+        assert_eq!(
+            source.result_descriptor().data_type,
+            VectorDataType::MultiPoint
+        );
+        assert_eq!(
+            source.result_descriptor().spatial_reference,
+            SpatialReference::epsg_4326().into()
+        );
+
+        let query_processor = source.query_processor()?.multi_point().unwrap();
+
+        let context = MockQueryContext::new(usize::MAX);
+        let query = query_processor
+            .query(
+                QueryRectangle {
+                    bbox: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
+                    time_interval: Default::default(),
+                    spatial_resolution: SpatialResolution::new(1., 1.)?,
+                },
+                &context,
+            )
+            .unwrap();
+
+        let result: Vec<MultiPointCollection> = query.try_collect().await?;
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].len(), 10);
+
+        let coordinates = MultiPoint::many(vec![
+            (2.933_686_69, 51.23),
+            (3.204_593_64_f64, 51.336_388_89),
+            (4.651_413_428, 51.805_833_33),
+            (4.11, 51.95),
+            (4.386_160_188, 50.886_111_11),
+            (3.767_373_38, 51.114_444_44),
+            (4.293_757_362, 51.297_777_78),
+            (1.850_176_678, 50.965_833_33),
+            (2.170_906_949, 51.021_666_67),
+            (4.292_873_969, 51.927_222_22),
+        ])?;
+
+        assert_eq!(
+            result[0],
+            MultiPointCollection::from_data(
+                coordinates,
+                vec![Default::default(); 10],
+                HashMap::new(),
+            )?
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn ne_10m_ports_fast_spatial_filter() -> Result<()> {
+        let dataset = DatasetId::Internal(InternalDatasetId::new());
+        let mut exe_ctx = MockExecutionContext::default();
+        exe_ctx.add_meta_data(
+            dataset.clone(),
+            Box::new(StaticMetaData {
+                loading_info: OgrSourceDataset {
+                    file_name:
+                        "test-data/vector/data/ne_10m_ports/with_spatial_index/ne_10m_ports.gpkg"
+                            .into(),
+                    layer_name: "ne_10m_ports".to_string(),
+                    data_type: Some(VectorDataType::MultiPoint),
+                    time: OgrSourceDatasetTimeType::None,
+                    columns: None,
+                    default_geometry: None,
+                    force_ogr_time_filter: false,
+                    force_ogr_spatial_filter: false,
+                    on_error: OgrSourceErrorSpec::Skip,
+                    provenance: None,
+                },
+                result_descriptor: VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: Default::default(),
+                },
+            }),
+        );
+
+        let source = OgrSource {
+            params: OgrSourceParameters {
+                dataset,
+                attribute_projection: None,
+            },
+        }
+        .boxed()
+        .initialize(&exe_ctx)?;
+
+        assert_eq!(
+            source.result_descriptor().data_type,
+            VectorDataType::MultiPoint
+        );
+        assert_eq!(
+            source.result_descriptor().spatial_reference,
+            SpatialReference::epsg_4326().into()
+        );
+
+        let query_processor = source.query_processor()?.multi_point().unwrap();
+
+        let context = MockQueryContext::new(usize::MAX);
+        let query = query_processor
+            .query(
+                QueryRectangle {
+                    bbox: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
+                    time_interval: Default::default(),
+                    spatial_resolution: SpatialResolution::new(1., 1.)?,
+                },
+                &context,
+            )
+            .unwrap();
+
+        let result: Vec<MultiPointCollection> = query.try_collect().await?;
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].len(), 10);
+
+        let coordinates = MultiPoint::many(vec![
+            (1.850_176_678, 50.965_833_33),
+            (2.170_906_949, 51.021_666_67),
+            (2.933_686_69, 51.23),
+            (3.204_593_64_f64, 51.336_388_89),
+            (3.767_373_38, 51.114_444_44),
+            (4.11, 51.95),
+            (4.292_873_969, 51.927_222_22),
+            (4.293_757_362, 51.297_777_78),
+            (4.386_160_188, 50.886_111_11),
+            (4.651_413_428, 51.805_833_33),
+        ])?;
+
+        assert_eq!(
+            result[0],
+            MultiPointCollection::from_data(
+                coordinates,
+                vec![Default::default(); 10],
+                HashMap::new(),
+            )?
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn ne_10m_ports_columns() -> Result<()> {
         let id = DatasetId::Internal(InternalDatasetId::new());
@@ -1411,6 +1619,7 @@ mod tests {
                     }),
                     default_geometry: None,
                     force_ogr_time_filter: false,
+                    force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Skip,
                     provenance: None,
                 },
@@ -1583,6 +1792,7 @@ mod tests {
                     columns: None,
                     default_geometry: None,
                     force_ogr_time_filter: false,
+                    force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Skip,
                     provenance: None,
                 },
@@ -2743,6 +2953,7 @@ mod tests {
             }),
             default_geometry: None,
             force_ogr_time_filter: false,
+            force_ogr_spatial_filter: false,
             on_error: OgrSourceErrorSpec::Skip,
             provenance: None,
         };
@@ -2828,6 +3039,7 @@ mod tests {
                     columns: None,
                     default_geometry: None,
                     force_ogr_time_filter: false,
+                    force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Skip,
                     provenance: None,
                 },
@@ -3067,6 +3279,7 @@ mod tests {
                     columns: None,
                     default_geometry: None,
                     force_ogr_time_filter: false,
+                    force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Skip,
                     provenance: None,
                 },
@@ -3142,6 +3355,7 @@ mod tests {
                     }),
                     default_geometry: None,
                     force_ogr_time_filter: false,
+                    force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Abort,
                     provenance: None,
                 },
@@ -3226,6 +3440,7 @@ mod tests {
                     }),
                     default_geometry: None,
                     force_ogr_time_filter: false,
+                    force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Abort,
                     provenance: None,
                 },
