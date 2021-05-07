@@ -433,6 +433,8 @@ where
             // rectangular geometry from West, South, East and North values.
             let filter_geometry = query_rectangle.bbox.try_into()?;
             // TODO: log uses spatial filter
+            // TODO: use OGR_L_SetSpatialFilterRect() once GDAL crate supports it
+            // NOTE: the OGR-filter may be inaccurately allowing more features that should be returned in a "strict" fashion.
             layer.set_spatial_filter(&filter_geometry);
         }
 
