@@ -37,9 +37,9 @@ use crate::error::Error;
 use crate::util::Result;
 use crate::{
     engine::{
-        InitializedOperator, InitializedOperatorImpl, MetaData, QueryContext, QueryProcessor,
-        QueryRectangle, SourceOperator, TypedVectorQueryProcessor, VectorOperator,
-        VectorQueryProcessor, VectorResultDescriptor,
+        InitializedOperator, MetaData, QueryContext, QueryProcessor, QueryRectangle,
+        SourceOperator, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
+        VectorResultDescriptor,
     },
     error,
 };
@@ -204,7 +204,10 @@ pub struct OgrSourceState {
     params: OgrSourceParameters,
 }
 
-pub type InitializedOgrSource = InitializedOperatorImpl<VectorResultDescriptor, OgrSourceState>;
+pub struct InitializedOgrSource {
+    result_descriptor: VectorResultDescriptor,
+    state: OgrSourceState,
+}
 
 #[typetag::serde]
 impl VectorOperator for OgrSource {
@@ -215,16 +218,15 @@ impl VectorOperator for OgrSource {
         let info: Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor>> =
             context.meta_data(&self.params.dataset)?;
 
-        Ok(InitializedOgrSource::new(
-            info.result_descriptor()?,
-            vec![],
-            vec![],
-            OgrSourceState {
+        let initialized_source = InitializedOgrSource {
+            result_descriptor: info.result_descriptor()?,
+            state: OgrSourceState {
                 dataset_information: info,
                 params: self.params,
             },
-        )
-        .boxed())
+        };
+
+        Ok(initialized_source.boxed())
     }
 }
 
@@ -267,6 +269,10 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
                 OgrSourceProcessor::new(self.state.dataset_information.clone()).boxed(),
             ),
         })
+    }
+
+    fn result_descriptor(&self) -> &VectorResultDescriptor {
+        &self.result_descriptor
     }
 }
 

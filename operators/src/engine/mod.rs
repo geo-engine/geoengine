@@ -7,11 +7,13 @@ pub use execution_context::{
     ExecutionContext, MetaData, MetaDataProvider, MockExecutionContext, StaticMetaData,
 };
 pub use operator::{
-    InitializedOperator, InitializedOperatorBase, InitializedPlotOperator,
-    InitializedRasterOperator, InitializedVectorOperator, PlotOperator, RasterOperator,
-    TypedOperator, VectorOperator,
+    InitializedOperator, InitializedPlotOperator, InitializedRasterOperator,
+    InitializedVectorOperator, PlotOperator, RasterOperator, TypedOperator, VectorOperator,
 };
-pub use operator_impl::{InitializedOperatorImpl, Operator, SourceOperator};
+pub use operator_impl::{
+    MultipleRasterSources, MultipleVectorSources, Operator, SingleRasterOrVectorSource,
+    SingleRasterSource, SingleVectorMultipleRasterSources, SingleVectorSource, SourceOperator,
+};
 pub use query::{MockQueryContext, QueryContext, QueryRectangle};
 pub use query_processor::{
     PlotQueryProcessor, QueryProcessor, RasterQueryProcessor, TypedPlotQueryProcessor,

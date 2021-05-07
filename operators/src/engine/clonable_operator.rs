@@ -1,6 +1,7 @@
 use super::{
-    InitializedOperatorBase, InitializedPlotOperator, InitializedRasterOperator,
-    InitializedVectorOperator, PlotOperator, RasterOperator, ResultDescriptor, VectorOperator,
+    InitializedOperator, InitializedPlotOperator, InitializedRasterOperator,
+    InitializedVectorOperator, PlotOperator, QueryProcessor, RasterOperator, ResultDescriptor,
+    VectorOperator,
 };
 
 /// Helper trait for making boxed `RasterOperator`s cloneable
@@ -66,7 +67,9 @@ impl Clone for Box<dyn PlotOperator> {
 /// Helper trait for making boxed `InitializedOperator`s cloneable
 pub trait CloneableInitializedOperator {
     type Descriptor: ResultDescriptor;
-    fn clone_boxed(&self) -> Box<dyn InitializedOperatorBase<Descriptor = Self::Descriptor>>;
+    type Processor: QueryProcessor;
+
+    fn clone_boxed(&self) -> Box<dyn InitializedOperator<Self::Descriptor, Self::Processor>>;
 }
 
 /// Helper trait for making boxed `InitializedRasterOperator`s cloneable
@@ -82,15 +85,4 @@ pub trait CloneableInitializedVectorOperator {
 /// Helper trait for making boxed `InitializedPlotOperator`s cloneable
 pub trait CloneableInitializedPlotOperator {
     fn clone_boxed_plot(&self) -> Box<InitializedPlotOperator>;
-}
-
-impl<T, R> CloneableInitializedOperator for T
-where
-    R: ResultDescriptor + std::clone::Clone,
-    T: 'static + InitializedOperatorBase<Descriptor = R> + Clone,
-{
-    fn clone_boxed(&self) -> Box<dyn InitializedOperatorBase<Descriptor = R>> {
-        Box::new(self.clone())
-    }
-    type Descriptor = R;
 }

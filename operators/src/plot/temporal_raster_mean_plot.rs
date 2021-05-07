@@ -1,9 +1,8 @@
 use crate::engine::{
-    ExecutionContext, InitializedOperator, InitializedOperatorImpl, InitializedPlotOperator,
+    ExecutionContext, InitializedOperator, InitializedPlotOperator, InitializedRasterOperator,
     Operator, PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor,
-    QueryRectangle, RasterQueryProcessor, TypedPlotQueryProcessor,
+    QueryRectangle, RasterQueryProcessor, SingleRasterSource, TypedPlotQueryProcessor,
 };
-use crate::error;
 use crate::util::math::average_floor;
 use crate::util::Result;
 use async_trait::async_trait;
@@ -13,13 +12,13 @@ use geoengine_datatypes::plots::{AreaLineChart, Plot, PlotData};
 use geoengine_datatypes::primitives::{Measurement, TimeInstance, TimeInterval};
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use serde::{Deserialize, Serialize};
-use snafu::ensure;
 use std::collections::BTreeMap;
 
 pub const MEAN_RASTER_PIXEL_VALUES_OVER_TIME_NAME: &str = "Mean Raster Pixel Values over Time";
 
 /// A plot that shows the mean values of rasters over time as an area plot.
-pub type MeanRasterPixelValuesOverTime = Operator<MeanRasterPixelValuesOverTimeParams>;
+pub type MeanRasterPixelValuesOverTime =
+    Operator<MeanRasterPixelValuesOverTimeParams, SingleRasterSource>;
 
 /// The parameter spec for `MeanRasterPixelValuesOverTime`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -52,49 +51,30 @@ impl PlotOperator for MeanRasterPixelValuesOverTime {
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedPlotOperator>> {
-        ensure!(
-            self.vector_sources.is_empty(),
-            error::InvalidNumberOfVectorInputs {
-                expected: 0..1,
-                found: self.vector_sources.len()
-            }
-        );
-        ensure!(
-            self.raster_sources.len() == 1,
-            error::InvalidNumberOfVectorInputs {
-                expected: 1..2,
-                found: self.raster_sources.len()
-            }
-        );
-
-        Ok(InitializedMeanRasterPixelValuesOverTime {
+        let initialized_operator = InitializedMeanRasterPixelValuesOverTime {
             result_descriptor: PlotResultDescriptor {},
-            raster_sources: self
-                .raster_sources
-                .into_iter()
-                .map(|o| o.initialize(context))
-                .collect::<Result<Vec<_>>>()?,
-            vector_sources: vec![],
+            raster: self.sources.raster.initialize(context)?,
             state: self.params,
-        }
-        .boxed())
+        };
+
+        Ok(initialized_operator.boxed())
     }
 }
 
 /// The initialization of `MeanRasterPixelValuesOverTime`
-pub type InitializedMeanRasterPixelValuesOverTime =
-    InitializedOperatorImpl<PlotResultDescriptor, MeanRasterPixelValuesOverTimeParams>;
+pub struct InitializedMeanRasterPixelValuesOverTime {
+    result_descriptor: PlotResultDescriptor,
+    raster: Box<InitializedRasterOperator>,
+    state: MeanRasterPixelValuesOverTimeParams,
+}
 
 impl InitializedOperator<PlotResultDescriptor, TypedPlotQueryProcessor>
     for InitializedMeanRasterPixelValuesOverTime
 {
     fn query_processor(&self) -> Result<TypedPlotQueryProcessor> {
-        let input_processor = self.raster_sources[0].query_processor()?;
+        let input_processor = self.raster.query_processor()?;
         let time_position = self.state.time_position;
-        let measurement = self.raster_sources[0]
-            .result_descriptor()
-            .measurement
-            .clone();
+        let measurement = self.raster.result_descriptor().measurement.clone();
         let draw_area = self.state.area;
 
         let processor = call_on_generic_raster_processor!(input_processor, raster => {
@@ -102,6 +82,10 @@ impl InitializedOperator<PlotResultDescriptor, TypedPlotQueryProcessor>
         });
 
         Ok(TypedPlotQueryProcessor::JsonVega(processor))
+    }
+
+    fn result_descriptor(&self) -> &PlotResultDescriptor {
+        &self.result_descriptor
     }
 }
 
@@ -249,17 +233,25 @@ impl MeanCalculator {
 mod tests {
     use super::*;
 
-    use crate::engine::{
-        MockExecutionContext, MockQueryContext, RasterOperator, RasterResultDescriptor,
+    use crate::{
+        engine::{MockExecutionContext, MockQueryContext, RasterOperator, RasterResultDescriptor},
+        source::GdalSource,
     };
-    use crate::mock::{MockRasterSource, MockRasterSourceParams};
+    use crate::{
+        mock::{MockRasterSource, MockRasterSourceParams},
+        source::GdalSourceParameters,
+    };
     use chrono::NaiveDate;
-    use geoengine_datatypes::plots::{PlotData, PlotMetaData};
-    use geoengine_datatypes::primitives::{
-        BoundingBox2D, Measurement, SpatialResolution, TimeInterval,
-    };
     use geoengine_datatypes::raster::{Grid2D, RasterDataType, TileInformation};
     use geoengine_datatypes::spatial_reference::SpatialReference;
+    use geoengine_datatypes::{
+        dataset::InternalDatasetId,
+        plots::{PlotData, PlotMetaData},
+    };
+    use geoengine_datatypes::{
+        primitives::{BoundingBox2D, Measurement, SpatialResolution, TimeInterval},
+        util::Identifier,
+    };
     use num_traits::AsPrimitive;
     use serde_json::json;
 
@@ -270,8 +262,14 @@ mod tests {
                 time_position: MeanRasterPixelValuesOverTimePosition::Start,
                 area: true,
             },
-            raster_sources: vec![],
-            vector_sources: vec![],
+            sources: SingleRasterSource {
+                raster: GdalSource {
+                    params: GdalSourceParameters {
+                        dataset: InternalDatasetId::new().into(),
+                    },
+                }
+                .boxed(),
+            },
         };
 
         let serialized = json!({
@@ -280,7 +278,16 @@ mod tests {
                 "timePosition": "start",
                 "area": true,
             },
-            "rasterSources": [],
+            "sources": {
+                "raster": {
+                    "type": "GdalSource",
+                    "params": {
+                        "dataset": {
+                            "internal": "a626c880-1c41-489b-9e19-9596d129859c"
+                        }
+                    }
+                }
+            },
             "vectorSources": [],
         })
         .to_string();
@@ -300,15 +307,16 @@ mod tests {
                 time_position: MeanRasterPixelValuesOverTimePosition::Center,
                 area: true,
             },
-            raster_sources: vec![generate_mock_raster_source(
-                vec![TimeInterval::new(
-                    TimeInstance::from(NaiveDate::from_ymd(1990, 1, 1).and_hms(0, 0, 0)),
-                    TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0)),
-                )
-                .unwrap()],
-                vec![vec![1, 2, 3, 4, 5, 6]],
-            )],
-            vector_sources: vec![],
+            sources: SingleRasterSource {
+                raster: generate_mock_raster_source(
+                    vec![TimeInterval::new(
+                        TimeInstance::from(NaiveDate::from_ymd(1990, 1, 1).and_hms(0, 0, 0)),
+                        TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0)),
+                    )
+                    .unwrap()],
+                    vec![vec![1, 2, 3, 4, 5, 6]],
+                ),
+            },
         };
 
         let execution_context = MockExecutionContext::default();
@@ -388,31 +396,33 @@ mod tests {
                 time_position: MeanRasterPixelValuesOverTimePosition::Start,
                 area: true,
             },
-            raster_sources: vec![generate_mock_raster_source(
-                vec![
-                    TimeInterval::new(
-                        TimeInstance::from(NaiveDate::from_ymd(1990, 1, 1).and_hms(0, 0, 0)),
-                        TimeInstance::from(NaiveDate::from_ymd(1995, 1, 1).and_hms(0, 0, 0)),
-                    )
-                    .unwrap(),
-                    TimeInterval::new(
-                        TimeInstance::from(NaiveDate::from_ymd(1995, 1, 1).and_hms(0, 0, 0)),
-                        TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0)),
-                    )
-                    .unwrap(),
-                    TimeInterval::new(
-                        TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0)),
-                        TimeInstance::from(NaiveDate::from_ymd(2005, 1, 1).and_hms(0, 0, 0)),
-                    )
-                    .unwrap(),
-                ],
-                vec![
-                    vec![1, 2, 3, 4, 5, 6],
-                    vec![9, 9, 8, 8, 8, 9],
-                    vec![3, 4, 5, 6, 7, 8],
-                ],
-            )],
-            vector_sources: vec![],
+
+            sources: SingleRasterSource {
+                raster: generate_mock_raster_source(
+                    vec![
+                        TimeInterval::new(
+                            TimeInstance::from(NaiveDate::from_ymd(1990, 1, 1).and_hms(0, 0, 0)),
+                            TimeInstance::from(NaiveDate::from_ymd(1995, 1, 1).and_hms(0, 0, 0)),
+                        )
+                        .unwrap(),
+                        TimeInterval::new(
+                            TimeInstance::from(NaiveDate::from_ymd(1995, 1, 1).and_hms(0, 0, 0)),
+                            TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0)),
+                        )
+                        .unwrap(),
+                        TimeInterval::new(
+                            TimeInstance::from(NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0)),
+                            TimeInstance::from(NaiveDate::from_ymd(2005, 1, 1).and_hms(0, 0, 0)),
+                        )
+                        .unwrap(),
+                    ],
+                    vec![
+                        vec![1, 2, 3, 4, 5, 6],
+                        vec![9, 9, 8, 8, 8, 9],
+                        vec![3, 4, 5, 6, 7, 8],
+                    ],
+                ),
+            },
         };
 
         let execution_context = MockExecutionContext::default();

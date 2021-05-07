@@ -1,8 +1,7 @@
 use crate::{
     engine::{
-        InitializedOperator, InitializedOperatorBase, InitializedRasterOperator, QueryProcessor,
-        RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SourceOperator,
-        TypedRasterQueryProcessor,
+        InitializedOperator, InitializedRasterOperator, QueryProcessor, RasterOperator,
+        RasterQueryProcessor, RasterResultDescriptor, SourceOperator, TypedRasterQueryProcessor,
     },
     error::{self, Error},
     util::Result,
@@ -484,33 +483,13 @@ pub struct InitializedGdalSourceOperator {
     pub tiling_specification: TilingSpecification,
 }
 
-impl InitializedOperatorBase for InitializedGdalSourceOperator {
-    type Descriptor = RasterResultDescriptor;
-
-    fn result_descriptor(&self) -> &Self::Descriptor {
-        &self.result_descriptor
-    }
-
-    fn raster_sources(&self) -> &[Box<InitializedRasterOperator>] {
-        &[]
-    }
-
-    fn vector_sources(&self) -> &[Box<crate::engine::InitializedVectorOperator>] {
-        &[]
-    }
-
-    fn raster_sources_mut(&mut self) -> &mut [Box<InitializedRasterOperator>] {
-        &mut []
-    }
-
-    fn vector_sources_mut(&mut self) -> &mut [Box<crate::engine::InitializedVectorOperator>] {
-        &mut []
-    }
-}
-
 impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
     for InitializedGdalSourceOperator
 {
+    fn result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
+    }
+
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         Ok(match self.result_descriptor().data_type {
             RasterDataType::U8 => TypedRasterQueryProcessor::U8(
