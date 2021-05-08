@@ -14,7 +14,9 @@ use geoengine_datatypes::{
         project_coordinates_fail_tolerant, CoordinateProjection, CoordinateProjector, Reproject,
     },
     primitives::{SpatialBounded, SpatialResolution, TimeInterval},
-    raster::{grid_idx_iter_2d, BoundedGrid, Grid2D, TilingSpecification},
+    raster::{
+        grid_idx_iter_2d, BoundedGrid, Grid2D, MaterializedRasterTile2D, TilingSpecification,
+    },
     spatial_reference::SpatialReference,
 };
 use geoengine_datatypes::{
@@ -33,7 +35,7 @@ use std::pin::Pin;
 pub type RasterFold<'a, T, FoldFuture, FoldMethod, FoldCompanion> = TryFold<
     BoxStream<'a, Result<RasterTile2D<T>>>,
     FoldFuture,
-    (RasterTile2D<T>, FoldCompanion),
+    (MaterializedRasterTile2D<T>, FoldCompanion),
     FoldMethod,
 >;
 
@@ -223,14 +225,17 @@ where
 
         *this.current_spatial_tile += 1;
 
-        Poll::Ready(Some(Ok(tile_result.0)))
+        // map the returned accu into a RasterTile
+        let final_result = RasterTile2D::from(tile_result.0);
+
+        Poll::Ready(Some(Ok(final_result)))
     }
 }
 
 pub fn fold_by_blit_impl<T>(
-    accu: (RasterTile2D<T>, ()),
+    accu: (MaterializedRasterTile2D<T>, ()),
     tile: RasterTile2D<T>,
-) -> Result<(RasterTile2D<T>, ())>
+) -> Result<(MaterializedRasterTile2D<T>, ())>
 where
     T: Pixel,
 {
@@ -254,9 +259,9 @@ where
 
 #[allow(dead_code)]
 pub fn fold_by_blit_future<T>(
-    accu: (RasterTile2D<T>, ()),
+    accu: (MaterializedRasterTile2D<T>, ()),
     tile: RasterTile2D<T>,
-) -> impl Future<Output = Result<(RasterTile2D<T>, ())>>
+) -> impl Future<Output = Result<(MaterializedRasterTile2D<T>, ())>>
 where
     T: Pixel,
 {
@@ -268,9 +273,12 @@ where
 
 #[allow(dead_code)]
 pub fn fold_by_coordinate_lookup_future<T>(
-    accu: (RasterTile2D<T>, Vec<(GridIdx2D, Coordinate2D)>),
+    accu: (MaterializedRasterTile2D<T>, Vec<(GridIdx2D, Coordinate2D)>),
     tile: RasterTile2D<T>,
-) -> impl TryFuture<Ok = (RasterTile2D<T>, Vec<(GridIdx2D, Coordinate2D)>), Error = error::Error>
+) -> impl TryFuture<
+    Ok = (MaterializedRasterTile2D<T>, Vec<(GridIdx2D, Coordinate2D)>),
+    Error = error::Error,
+>
 where
     T: Pixel,
 {
@@ -286,27 +294,30 @@ where
 #[allow(clippy::type_complexity)]
 #[allow(clippy::needless_pass_by_value)]
 pub fn fold_by_coordinate_lookup_impl<T>(
-    accu: (RasterTile2D<T>, Vec<(GridIdx2D, Coordinate2D)>),
+    accu: (MaterializedRasterTile2D<T>, Vec<(GridIdx2D, Coordinate2D)>),
     tile: RasterTile2D<T>,
-) -> Result<(RasterTile2D<T>, Vec<(GridIdx2D, Coordinate2D)>)>
+) -> Result<(MaterializedRasterTile2D<T>, Vec<(GridIdx2D, Coordinate2D)>)>
 where
     T: Pixel,
 {
     let (mut accu_tile, accu_companion) = accu;
     let t_union = accu_tile.time.union(&tile.time)?;
 
+    accu_tile.time = t_union;
+
+    if tile.grid_array.is_empty() {
+        return Ok((accu_tile, accu_companion));
+    }
+
     match insert_projected_pixels(&mut accu_tile, &tile, accu_companion.iter()) {
-        Ok(_) => {
-            accu_tile.time = t_union;
-            Ok((accu_tile, accu_companion))
-        }
+        Ok(_) => Ok((accu_tile, accu_companion)),
         Err(error) => Err(error),
     }
 }
 
 /// This method takes two tiles and a map from `GridIdx2D` to `Coordinate2D`. Then for all `GridIdx2D` we set the values from the corresponding coordinate in the source tile.
 pub fn insert_projected_pixels<'a, T: Pixel, I: Iterator<Item = &'a (GridIdx2D, Coordinate2D)>>(
-    target: &mut RasterTile2D<T>,
+    target: &mut MaterializedRasterTile2D<T>,
     source: &RasterTile2D<T>,
     local_target_idx_source_coordinate_map: I,
 ) -> Result<()> {
@@ -338,9 +349,12 @@ pub trait SubQueryTileAggregator<T>: Send
 where
     T: Pixel,
 {
-    type FoldFuture: TryFuture<Ok = (RasterTile2D<T>, Self::FoldCompanion), Error = error::Error>;
+    type FoldFuture: TryFuture<
+        Ok = (MaterializedRasterTile2D<T>, Self::FoldCompanion),
+        Error = error::Error,
+    >;
     type FoldMethod: Clone
-        + Fn((RasterTile2D<T>, Self::FoldCompanion), RasterTile2D<T>) -> Self::FoldFuture;
+        + Fn((MaterializedRasterTile2D<T>, Self::FoldCompanion), RasterTile2D<T>) -> Self::FoldFuture;
     type FoldCompanion: Clone + Send;
 
     /// The no-data-value to use in the resulting `RasterTile2D`
@@ -353,7 +367,7 @@ where
         &self,
         tile_info: TileInformation,
         query_rect: QueryRectangle,
-    ) -> Result<(RasterTile2D<T>, Self::FoldCompanion)>;
+    ) -> Result<(MaterializedRasterTile2D<T>, Self::FoldCompanion)>;
 
     /// This method generates a `QueryRectangle` for a tile-specific sub-query
     fn tile_query_rectangle(
@@ -375,8 +389,8 @@ pub struct TileSubQueryIdentity<F> {
 impl<T, FoldM, FoldF> SubQueryTileAggregator<T> for TileSubQueryIdentity<FoldM>
 where
     T: Pixel,
-    FoldM: Send + Clone + Fn((RasterTile2D<T>, ()), RasterTile2D<T>) -> FoldF,
-    FoldF: TryFuture<Ok = (RasterTile2D<T>, ()), Error = error::Error>,
+    FoldM: Send + Clone + Fn((MaterializedRasterTile2D<T>, ()), RasterTile2D<T>) -> FoldF,
+    FoldF: TryFuture<Ok = (MaterializedRasterTile2D<T>, ()), Error = error::Error>,
 {
     fn result_no_data_value(&self) -> Option<T> {
         Some(T::from_(0))
@@ -390,14 +404,15 @@ where
         &self,
         tile_info: TileInformation,
         query_rect: QueryRectangle,
-    ) -> Result<(RasterTile2D<T>, ())> {
+    ) -> Result<(MaterializedRasterTile2D<T>, ())> {
         let output_raster = Grid2D::new_filled(
             tile_info.tile_size_in_pixels,
             self.initial_fill_value(),
             self.result_no_data_value(),
         );
         Ok((
-            RasterTile2D::new_with_tile_info(query_rect.time_interval, tile_info, output_raster),
+            RasterTile2D::new_with_tile_info(query_rect.time_interval, tile_info, output_raster)
+                .into_materialized_tile(),
             (),
         ))
     }
@@ -440,9 +455,12 @@ where
     T: Pixel,
     FoldM: Send
         + Clone
-        + Fn((RasterTile2D<T>, Vec<(GridIdx2D, Coordinate2D)>), RasterTile2D<T>) -> FoldF,
+        + Fn((MaterializedRasterTile2D<T>, Vec<(GridIdx2D, Coordinate2D)>), RasterTile2D<T>) -> FoldF,
     FoldF: Send
-        + TryFuture<Ok = (RasterTile2D<T>, Vec<(GridIdx2D, Coordinate2D)>), Error = error::Error>,
+        + TryFuture<
+            Ok = (MaterializedRasterTile2D<T>, Vec<(GridIdx2D, Coordinate2D)>),
+            Error = error::Error,
+        >,
 {
     fn result_no_data_value(&self) -> Option<T> {
         Some(self.no_data_and_fill_value)
@@ -457,7 +475,7 @@ where
         &self,
         tile_info: TileInformation,
         query_rect: QueryRectangle,
-    ) -> Result<(RasterTile2D<T>, Vec<(GridIdx2D, Coordinate2D)>)> {
+    ) -> Result<(MaterializedRasterTile2D<T>, Vec<(GridIdx2D, Coordinate2D)>)> {
         let output_raster = Grid2D::new_filled(
             tile_info.tile_size_in_pixels,
             self.initial_fill_value(),
@@ -483,7 +501,8 @@ where
             .collect();
 
         Ok((
-            RasterTile2D::new_with_tile_info(query_rect.time_interval, tile_info, output_raster),
+            RasterTile2D::new_with_tile_info(query_rect.time_interval, tile_info, output_raster)
+                .into_materialized_tile(),
             accu_companion,
         ))
     }
@@ -541,25 +560,33 @@ mod tests {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 0].into(),
                 global_geo_transform: Default::default(),
-                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4], no_data_value).unwrap(),
+                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4], no_data_value)
+                    .unwrap()
+                    .into(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 1].into(),
                 global_geo_transform: Default::default(),
-                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10], no_data_value).unwrap(),
+                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10], no_data_value)
+                    .unwrap()
+                    .into(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 0].into(),
                 global_geo_transform: Default::default(),
-                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16], no_data_value).unwrap(),
+                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16], no_data_value)
+                    .unwrap()
+                    .into(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 1].into(),
                 global_geo_transform: Default::default(),
-                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22], no_data_value).unwrap(),
+                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22], no_data_value)
+                    .unwrap()
+                    .into(),
             },
         ];
 
@@ -622,25 +649,33 @@ mod tests {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 0].into(),
                 global_geo_transform: Default::default(),
-                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4], no_data_value).unwrap(),
+                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4], no_data_value)
+                    .unwrap()
+                    .into(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 1].into(),
                 global_geo_transform: Default::default(),
-                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10], no_data_value).unwrap(),
+                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10], no_data_value)
+                    .unwrap()
+                    .into(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 0].into(),
                 global_geo_transform: Default::default(),
-                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16], no_data_value).unwrap(),
+                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16], no_data_value)
+                    .unwrap()
+                    .into(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 1].into(),
                 global_geo_transform: Default::default(),
-                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22], no_data_value).unwrap(),
+                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22], no_data_value)
+                    .unwrap()
+                    .into(),
             },
         ];
 

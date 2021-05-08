@@ -1,3 +1,5 @@
+use std::ops::Add;
+
 use num_traits::{AsPrimitive, Zero};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
@@ -6,8 +8,9 @@ use crate::error;
 use crate::util::Result;
 
 use super::{
+    grid_traits::{ChangeGridBounds, GridShapeAccess},
     BoundedGrid, GridBoundingBox, GridBounds, GridContains, GridIdx, GridIdx2D, GridIndexAccess,
-    GridIndexAccessMut, GridSize, GridSpaceToLinearSpace,
+    GridIndexAccessMut, GridSize, GridSpaceToLinearSpace, NoDataValue,
 };
 
 /// An `GridShape` describes the shape of an n-dimensional array by storing the size of each axis.
@@ -256,7 +259,7 @@ pub type Grid3D<T> = Grid<GridShape3D, T>;
 
 impl<D, T> Grid<D, T>
 where
-    D: GridSize + GridSpaceToLinearSpace,
+    D: GridSize,
     T: Clone,
 {
     /// Creates a new `Grid`
@@ -379,12 +382,59 @@ where
 
 impl<T, D> BoundedGrid for Grid<D, T>
 where
-    D: GridSize + GridBounds,
+    D: GridBounds,
 {
     type IndexArray = D::IndexArray;
 
     fn bounding_box(&self) -> GridBoundingBox<Self::IndexArray> {
         GridBoundingBox::new_unchecked(self.shape.min_index(), self.shape.max_index())
+    }
+}
+
+impl<D, T> GridShapeAccess for Grid<D, T>
+where
+    D: GridSize,
+    D::ShapeArray: Into<GridShape<D::ShapeArray>>,
+    T: Copy,
+{
+    type ShapeArray = D::ShapeArray;
+
+    fn grid_shape_array(&self) -> Self::ShapeArray {
+        self.shape.axis_size()
+    }
+}
+
+impl<D, T> NoDataValue for Grid<D, T>
+where
+    T: PartialEq + Clone,
+{
+    type NoDataType = T;
+
+    fn no_data_value(&self) -> Option<Self::NoDataType> {
+        self.no_data_value.clone()
+    }
+}
+
+impl<D, T, I> ChangeGridBounds<I> for Grid<D, T>
+where
+    I: AsRef<[isize]> + Clone,
+    D: GridBounds<IndexArray = I> + Clone,
+    T: Clone,
+    GridBoundingBox<I>: GridSize,
+    GridIdx<I>: Add<Output = GridIdx<I>> + From<I>,
+{
+    type Output = Grid<GridBoundingBox<I>, T>;
+
+    fn shift_by_offset(self, offset: GridIdx<I>) -> Self::Output {
+        Grid {
+            shape: self.shift_bounding_box(offset),
+            no_data_value: self.no_data_value,
+            data: self.data,
+        }
+    }
+
+    fn set_grid_bounds(self, bounds: GridBoundingBox<I>) -> Result<Self::Output> {
+        Grid::new(bounds, self.data, self.no_data_value)
     }
 }
 

@@ -1,6 +1,5 @@
 use crate::raster::{
-    typed_raster_tile::TypedRasterTile, BoundedGrid, DynamicRasterDataType, Grid, GridBlit,
-    GridBoundingBox, GridBounds, Pixel, Raster, RasterTile2D, TypedRasterTile2D,
+    ChangeGridBounds, GeoTransformAccess, GridBlit, MaterializedRasterTile2D, Pixel, RasterTile2D,
 };
 use crate::util::Result;
 use crate::{error, primitives::SpatialBounded};
@@ -10,7 +9,7 @@ pub trait Blit<R> {
     fn blit(&mut self, source: R) -> Result<()>;
 }
 
-impl<T: Pixel> Blit<RasterTile2D<T>> for RasterTile2D<T> {
+impl<T: Pixel> Blit<RasterTile2D<T>> for MaterializedRasterTile2D<T> {
     /// Copy `source` raster pixels into this raster, fails if the rasters do not overlap
     #[allow(clippy::float_cmp)]
     fn blit(&mut self, source: RasterTile2D<T>) -> Result<()> {
@@ -37,23 +36,13 @@ impl<T: Pixel> Blit<RasterTile2D<T>> for RasterTile2D<T> {
             .tile_geo_transform()
             .coordinate_to_grid_idx_2d(source.spatial_bounds().upper_left());
 
-        let source_bounds = source.grid_array.bounding_box();
-        let shifted_bounds = GridBoundingBox::new_unchecked(
-            source_bounds.min_index() + offset,
-            source_bounds.max_index() + offset,
-        );
-
-        let shifted_source = Grid {
-            shape: shifted_bounds,
-            no_data_value: source.grid_array.no_data_value,
-            data: source.grid_array.data,
-        };
+        let shifted_source = source.grid_array.shift_by_offset(offset);
 
         self.grid_array.grid_blit_from(shifted_source)?;
         Ok(())
     }
 }
-
+/*/
 impl Blit<TypedRasterTile2D> for TypedRasterTile2D {
     fn blit(&mut self, source: TypedRasterTile2D) -> Result<()> {
         ensure!(
@@ -77,6 +66,7 @@ impl Blit<TypedRasterTile2D> for TypedRasterTile2D {
         }
     }
 }
+*/
 
 #[cfg(test)]
 mod tests {
@@ -93,7 +83,8 @@ mod tests {
         let temporal_bounds: TimeInterval = TimeInterval::default();
 
         let r1 = Grid2D::new(dim.into(), data, None).unwrap();
-        let mut t1 = RasterTile2D::new_without_offset(temporal_bounds, geo_transform, r1);
+        let mut t1 = RasterTile2D::new_without_offset(temporal_bounds, geo_transform, r1)
+            .into_materialized_tile();
 
         let data = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
         let geo_transform = GeoTransform::new((5.0, 15.0).into(), 10.0 / 4.0, -10.0 / 4.0);
@@ -117,7 +108,8 @@ mod tests {
         let temporal_bounds: TimeInterval = TimeInterval::default();
 
         let r1 = Grid2D::new(dim.into(), data, None).unwrap();
-        let mut t1 = RasterTile2D::new_without_offset(temporal_bounds, geo_transform, r1);
+        let mut t1 = RasterTile2D::new_without_offset(temporal_bounds, geo_transform, r1)
+            .into_materialized_tile();
 
         let data = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
         let geo_transform = GeoTransform::new((-5.0, 15.0).into(), 10.0 / 4.0, -10.0 / 4.0);
@@ -141,7 +133,8 @@ mod tests {
         let temporal_bounds: TimeInterval = TimeInterval::default();
 
         let r1 = Grid2D::new(dim.into(), data, None).unwrap();
-        let mut t1 = RasterTile2D::new_without_offset(temporal_bounds, geo_transform, r1);
+        let mut t1 = RasterTile2D::new_without_offset(temporal_bounds, geo_transform, r1)
+            .into_materialized_tile();
 
         let data = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
         let geo_transform = GeoTransform::new((-5.0, 10.0).into(), 10.0 / 4.0, -10.0 / 4.0);

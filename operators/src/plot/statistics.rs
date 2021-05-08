@@ -9,7 +9,7 @@ use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::select_all;
 use futures::{FutureExt, StreamExt};
-use geoengine_datatypes::raster::RasterTile2D;
+use geoengine_datatypes::raster::{Grid2D, GridOrEmpty, GridSize, NoDataValue};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
@@ -113,8 +113,10 @@ impl PlotQueryProcessor for StatisticsQueryProcessor {
                 |number_statistics: Result<Vec<NumberStatistics>>, enumerated_raster_tile| async move {
                     let mut number_statistics = number_statistics?;
                     let (i, raster_tile) = enumerated_raster_tile?;
-
-                    process_raster(&mut number_statistics[i], &raster_tile);
+                    match raster_tile.grid_array {
+                        GridOrEmpty::Grid(g) => process_raster(&mut number_statistics[i], &g),
+                        GridOrEmpty::Empty(n) => number_statistics[i].add_no_data_batch(n.number_of_elements())
+                    }
 
                     Ok(number_statistics)
                 },
@@ -128,11 +130,11 @@ impl PlotQueryProcessor for StatisticsQueryProcessor {
 }
 
 #[allow(clippy::float_cmp)] // allow since NO DATA is a specific value
-fn process_raster(number_statistics: &mut NumberStatistics, raster_tile: &RasterTile2D<f64>) {
-    let no_data_value = raster_tile.grid_array.no_data_value;
+fn process_raster(number_statistics: &mut NumberStatistics, tile_grid: &Grid2D<f64>) {
+    let no_data_value = tile_grid.no_data_value();
 
     if let Some(no_data_value) = no_data_value {
-        for &value in &raster_tile.grid_array.data {
+        for &value in &tile_grid.data {
             if value == no_data_value {
                 number_statistics.add_no_data();
             } else {
@@ -140,7 +142,7 @@ fn process_raster(number_statistics: &mut NumberStatistics, raster_tile: &Raster
             }
         }
     } else {
-        for &value in &raster_tile.grid_array.data {
+        for &value in &tile_grid.data {
             number_statistics.add(value);
         }
     }
@@ -183,7 +185,7 @@ mod tests {
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Measurement, SpatialResolution, TimeInterval,
     };
-    use geoengine_datatypes::raster::{Grid2D, RasterDataType, TileInformation};
+    use geoengine_datatypes::raster::{Grid2D, RasterDataType, RasterTile2D, TileInformation};
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use num_traits::AsPrimitive;
 

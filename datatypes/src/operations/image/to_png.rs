@@ -68,7 +68,8 @@ fn create_rgba_image<P: Pixel + RgbaTransmutable, N: Fn(P) -> bool>(
 
 impl<T: Pixel> ToPng for RasterTile2D<T> {
     fn to_png(&self, width: u32, height: u32, colorizer: &Colorizer) -> Result<Vec<u8>> {
-        self.grid_array.to_png(width, height, colorizer)
+        let temp_copy = self.clone().into_materialized_tile(); //FIXME: avoid the clone!
+        temp_copy.grid_array.to_png(width, height, colorizer)
     }
 }
 

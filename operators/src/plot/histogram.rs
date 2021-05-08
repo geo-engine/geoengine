@@ -240,7 +240,7 @@ impl HistogramRasterQueryProcessor {
             let mut computed_metadata = HistogramMetadataInProgress::default();
 
             while let Some(tile) = input.next().await {
-                let tile = tile?;
+                let tile = tile?.into_materialized_tile(); //TODO: is this required?
 
                 computed_metadata
                     .add_raster_batch(&tile.grid_array.data, tile.grid_array.no_data_value);
@@ -279,7 +279,7 @@ impl HistogramRasterQueryProcessor {
             let mut query = processor.query(query, ctx)?;
 
             while let Some(tile) = query.next().await {
-                let tile = tile?;
+                let tile = tile?.into_materialized_tile(); // TODO: is this needed?
 
                 histogram.add_raster_data(&tile.grid_array.data, tile.grid_array.no_data_value);
             }

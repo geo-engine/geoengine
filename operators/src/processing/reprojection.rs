@@ -694,25 +694,33 @@ mod tests {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 0].into(),
                 global_geo_transform: Default::default(),
-                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4], no_data_value).unwrap(),
+                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4], no_data_value)
+                    .unwrap()
+                    .into(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 1].into(),
                 global_geo_transform: Default::default(),
-                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10], no_data_value).unwrap(),
+                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10], no_data_value)
+                    .unwrap()
+                    .into(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 0].into(),
                 global_geo_transform: Default::default(),
-                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16], no_data_value).unwrap(),
+                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16], no_data_value)
+                    .unwrap()
+                    .into(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 1].into(),
                 global_geo_transform: Default::default(),
-                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22], no_data_value).unwrap(),
+                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22], no_data_value)
+                    .unwrap()
+                    .into(),
             },
         ];
 
@@ -840,7 +848,7 @@ mod tests {
             include_bytes!(
                 "../../test-data/raster/modis_ndvi/projected_3857/MOD13A2_M_NDVI_2014-04-01_tile-20.rst"
             ) as &[u8],
-            res[8].grid_array.data.as_slice()
+            res[8].clone().into_materialized_tile().grid_array.data.as_slice() // TODO: better way to do this... if let?
         );
 
         Ok(())

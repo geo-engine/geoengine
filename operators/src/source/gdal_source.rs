@@ -1069,6 +1069,12 @@ mod tests {
             TimeInterval::new_unchecked(1_385_856_000_000, 1_388_534_400_000)
         );
 
-        assert!(!tile_1.grid_array.data.iter().any(|p| *p != 0)); // TODO: the NDVI data has no NO DATA value. Currently, we fill empty areas with 0 if there is no NO DATA. We have to add a strategy to fix this since we might add empty areas through the tiling approach.
+        assert!(!tile_1
+            .clone()
+            .into_materialized_tile()
+            .grid_array
+            .data
+            .iter()
+            .any(|p| *p != 0)); // TODO: the NDVI data has no NO DATA value. Currently, we fill empty areas with 0 if there is no NO DATA. We have to add a strategy to fix this since we might add empty areas through the tiling approach.
     }
 }

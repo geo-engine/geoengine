@@ -11,7 +11,7 @@ use geoengine_datatypes::{
 };
 use geoengine_datatypes::{
     primitives::BoundingBox2D,
-    raster::{Blit, GeoTransform, Pixel},
+    raster::{Blit, GeoTransform, MaterializedRasterTile2D, Pixel},
 };
 
 use crate::error;
@@ -319,11 +319,12 @@ where
         request.time.unwrap_or_default(),
         query_geo_transform,
         output_raster,
-    ));
+    )
+    .into_materialized_tile());
 
     let output_tile = tile_stream
         .fold(output_tile, |raster2d, tile| {
-            let result: Result<RasterTile2D<T>> = match (raster2d, tile) {
+            let result: Result<MaterializedRasterTile2D<T>> = match (raster2d, tile) {
                 (Ok(mut raster2d), Ok(tile)) => match raster2d.blit(tile) {
                     Ok(_) => Ok(raster2d),
                     Err(error) => Err(error.into()),
@@ -356,7 +357,9 @@ where
         Some(suffix) => serde_json::from_str(suffix)?,
     };
 
-    Ok(output_tile.to_png(request.width, request.height, &colorizer)?)
+    Ok(output_tile
+        .grid_array
+        .to_png(request.width, request.height, &colorizer)?)
 }
 
 #[allow(clippy::unnecessary_wraps)] // TODO: remove line once implemented fully

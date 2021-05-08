@@ -145,7 +145,7 @@ impl<P: Pixel> MeanRasterPixelValuesOverTimeQueryProcessor<P> {
         let mut means: BTreeMap<TimeInstance, MeanCalculator> = BTreeMap::new();
 
         while let Some(tile) = tile_stream.next().await {
-            let tile = tile?;
+            let tile = tile?.into_materialized_tile(); // TODO: is this required?
 
             let time = Self::time_interval_projection(tile.time, position);
 

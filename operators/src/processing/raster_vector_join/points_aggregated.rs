@@ -1,14 +1,11 @@
 use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
 
-use geoengine_datatypes::raster::{GridIndexAccess, Pixel, RasterDataType};
-use geoengine_datatypes::{
-    collections::{
-        FeatureCollectionInfos, FeatureCollectionModifications, GeometryRandomAccess,
-        MultiPointCollection,
-    },
-    raster::Raster,
+use geoengine_datatypes::collections::{
+    FeatureCollectionInfos, FeatureCollectionModifications, GeometryRandomAccess,
+    MultiPointCollection,
 };
+use geoengine_datatypes::raster::{GridIndexAccess, NoDataValue, Pixel, RasterDataType};
 
 use crate::engine::{
     QueryContext, QueryProcessor, QueryRectangle, RasterQueryProcessor, TypedRasterQueryProcessor,
