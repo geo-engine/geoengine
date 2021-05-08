@@ -4,9 +4,9 @@ mod points_aggregated;
 mod util;
 
 use crate::engine::{
-    ExecutionContext, InitializedOperator, InitializedOperatorImpl, InitializedVectorOperator,
-    Operator, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
-    VectorResultDescriptor,
+    ExecutionContext, InitializedOperator, InitializedRasterOperator, InitializedVectorOperator,
+    Operator, SingleVectorMultipleRasterSources, TypedVectorQueryProcessor, VectorOperator,
+    VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::error;
 use crate::util::Result;
@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
 /// An operator that attaches raster values to vector data
-pub type RasterVectorJoin = Operator<RasterVectorJoinParams>;
+pub type RasterVectorJoin = Operator<RasterVectorJoinParams, SingleVectorMultipleRasterSources>;
 
 const MAX_NUMBER_OF_RASTER_INPUTS: usize = 8;
 
@@ -51,29 +51,20 @@ impl VectorOperator for RasterVectorJoin {
         context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedVectorOperator>> {
         ensure!(
-            self.vector_sources.len() == 1,
-            error::InvalidNumberOfVectorInputs {
-                expected: 1..2,
-                found: self.vector_sources.len()
-            }
-        );
-
-        ensure!(
-            !self.raster_sources.is_empty()
-                || self.raster_sources.len() > MAX_NUMBER_OF_RASTER_INPUTS,
+            (1..=MAX_NUMBER_OF_RASTER_INPUTS).contains(&self.sources.rasters.len()),
             error::InvalidNumberOfRasterInputs {
                 expected: 1..MAX_NUMBER_OF_RASTER_INPUTS,
-                found: self.raster_sources.len()
+                found: self.sources.rasters.len()
             }
         );
         ensure!(
-            self.raster_sources.len() == self.params.names.len(),
+            self.sources.rasters.len() == self.params.names.len(),
             error::InvalidOperatorSpec {
-                reason: "`raster_sources` must be of equal length as `names`"
+                reason: "`rasters` must be of equal length as `names`"
             }
         );
 
-        let vector_source = self.vector_sources.remove(0).initialize(context)?;
+        let vector_source = self.sources.vector.initialize(context)?;
 
         ensure!(
             vector_source.result_descriptor().data_type != VectorDataType::Data,
@@ -89,15 +80,18 @@ impl VectorOperator for RasterVectorJoin {
         );
 
         let raster_sources = self
-            .raster_sources
+            .sources
+            .rasters
             .drain(..)
             .map(|source| source.initialize(context))
             .collect::<Result<Vec<_>>>()?;
 
+        let params = self.params;
+
         let result_descriptor = vector_source.result_descriptor().map_columns(|columns| {
             let mut columns = columns.clone();
-            for (i, new_column_name) in self.params.names.iter().enumerate() {
-                let feature_data_type = match self.params.aggregation {
+            for (i, new_column_name) in params.names.iter().enumerate() {
+                let feature_data_type = match params.aggregation {
                     AggregationMethod::First | AggregationMethod::None => {
                         match raster_sources[i].result_descriptor().data_type {
                             RasterDataType::U8
@@ -119,21 +113,29 @@ impl VectorOperator for RasterVectorJoin {
         });
 
         Ok(InitializedRasterVectorJoin {
-            raster_sources,
             result_descriptor,
-            vector_sources: vec![vector_source],
-            state: self.params,
+            vector_source,
+            raster_sources,
+            state: params,
         }
         .boxed())
     }
 }
 
-pub type InitializedRasterVectorJoin =
-    InitializedOperatorImpl<VectorResultDescriptor, RasterVectorJoinParams>;
+pub struct InitializedRasterVectorJoin {
+    result_descriptor: VectorResultDescriptor,
+    vector_source: Box<InitializedVectorOperator>,
+    raster_sources: Vec<Box<InitializedRasterOperator>>,
+    state: RasterVectorJoinParams,
+}
 
 impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
     for InitializedRasterVectorJoin
 {
+    fn result_descriptor(&self) -> &VectorResultDescriptor {
+        &self.result_descriptor
+    }
+
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
         let typed_raster_processors = self
             .raster_sources
@@ -141,7 +143,7 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
             .map(|r| r.query_processor())
             .collect::<Result<Vec<_>>>()?;
 
-        Ok(match self.vector_sources[0].query_processor()? {
+        Ok(match self.vector_source.query_processor()? {
             TypedVectorQueryProcessor::Data(_) => unreachable!(),
             TypedVectorQueryProcessor::MultiPoint(points) => {
                 TypedVectorQueryProcessor::MultiPoint(match self.state.aggregation {
@@ -194,8 +196,10 @@ mod tests {
                 names: ["foo", "bar"].iter().copied().map(str::to_string).collect(),
                 aggregation: AggregationMethod::Mean,
             },
-            raster_sources: vec![],
-            vector_sources: vec![],
+            sources: SingleVectorMultipleRasterSources {
+                vector: MockFeatureCollectionSource::<MultiPoint>::multiple(vec![]).boxed(),
+                rasters: vec![],
+            },
         };
 
         let serialized = json!({
@@ -204,8 +208,15 @@ mod tests {
                 "names": ["foo", "bar"],
                 "aggregation": "mean",
             },
-            "rasterSources": [],
-            "vectorSources": [],
+            "sources": {
+                "vector": {
+                    "type": "MockFeatureCollectionSourceMultiPoint",
+                    "params": {
+                        "collections": []
+                    }
+                },
+                "rasters": [],
+            },
         })
         .to_string();
 
@@ -255,8 +266,10 @@ mod tests {
                 names: vec!["ndvi".to_string()],
                 aggregation: AggregationMethod::First,
             },
-            raster_sources: vec![ndvi_source(ndvi_id.clone())],
-            vector_sources: vec![point_source],
+            sources: SingleVectorMultipleRasterSources {
+                vector: point_source,
+                rasters: vec![ndvi_source(ndvi_id.clone())],
+            },
         };
 
         let operator = operator.boxed().initialize(&exe_ctc).unwrap();
@@ -323,8 +336,10 @@ mod tests {
                 names: vec!["ndvi".to_string()],
                 aggregation: AggregationMethod::Mean,
             },
-            raster_sources: vec![ndvi_source(ndvi_id.clone())],
-            vector_sources: vec![point_source],
+            sources: SingleVectorMultipleRasterSources {
+                vector: point_source,
+                rasters: vec![ndvi_source(ndvi_id.clone())],
+            },
         };
 
         let operator = operator.boxed().initialize(&exe_ctc).unwrap();
@@ -392,8 +407,10 @@ mod tests {
                 names: vec!["ndvi".to_string()],
                 aggregation: AggregationMethod::Mean,
             },
-            raster_sources: vec![ndvi_source(ndvi_id.clone())],
-            vector_sources: vec![point_source],
+            sources: SingleVectorMultipleRasterSources {
+                vector: point_source,
+                rasters: vec![ndvi_source(ndvi_id.clone())],
+            },
         };
 
         let operator = operator.boxed().initialize(&exe_ctc).unwrap();

@@ -240,8 +240,7 @@ async fn get_map<C: Context>(
             params: ReprojectionParams {
                 target_spatial_reference: request_spatial_ref,
             },
-            raster_sources: vec![operator],
-            vector_sources: vec![],
+            sources: operator.into(),
         };
 
         // TODO: avoid re-initialization of the whole operator graph

@@ -1,9 +1,9 @@
 use crate::engine::{
-    ExecutionContext, InitializedOperator, InitializedOperatorImpl, InitializedPlotOperator,
-    Operator, PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor,
-    QueryRectangle, TypedPlotQueryProcessor, TypedRasterQueryProcessor,
+    ExecutionContext, InitializedOperator, InitializedPlotOperator, InitializedRasterOperator,
+    MultipleRasterSources, Operator, PlotOperator, PlotQueryProcessor, PlotResultDescriptor,
+    QueryContext, QueryProcessor, QueryRectangle, TypedPlotQueryProcessor,
+    TypedRasterQueryProcessor,
 };
-use crate::error;
 use crate::util::number_statistics::NumberStatistics;
 use crate::util::Result;
 use async_trait::async_trait;
@@ -11,7 +11,6 @@ use futures::stream::select_all;
 use futures::{FutureExt, StreamExt};
 use geoengine_datatypes::raster::{Grid2D, GridOrEmpty, GridSize, NoDataValue};
 use serde::{Deserialize, Serialize};
-use snafu::ensure;
 
 pub const STATISTICS_OPERATOR_NAME: &str = "Statistics";
 
@@ -19,10 +18,12 @@ pub const STATISTICS_OPERATOR_NAME: &str = "Statistics";
 ///
 /// Does currently not use a weighted computations, so it assumes equally weighted
 /// time steps in the sources.
-pub type Statistics = Operator<StatisticsParams>;
+// TODO: implement operator also for vector data
+pub type Statistics = Operator<StatisticsParams, MultipleRasterSources>;
 
 /// The parameter spec for `Statistics`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StatisticsParams {}
 
 #[typetag::serde]
@@ -31,48 +32,42 @@ impl PlotOperator for Statistics {
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedPlotOperator>> {
-        // TODO: implement operator also for vector data
-        ensure!(
-            self.vector_sources.is_empty(),
-            error::InvalidNumberOfVectorInputs {
-                expected: 0..1,
-                found: self.vector_sources.len()
-            }
-        );
-
-        Ok(InitializedStatistics {
+        let initialized_operator = InitializedStatistics {
             result_descriptor: PlotResultDescriptor {},
-            raster_sources: self
-                .raster_sources
+            rasters: self
+                .sources
+                .rasters
                 .into_iter()
                 .map(|o| o.initialize(context))
                 .collect::<Result<Vec<_>>>()?,
-            vector_sources: self
-                .vector_sources
-                .into_iter()
-                .map(|o| o.initialize(context))
-                .collect::<Result<Vec<_>>>()?,
-            state: (),
-        }
-        .boxed())
+        };
+
+        Ok(initialized_operator.boxed())
     }
 }
 
 /// The initialization of `Statistics`
-pub type InitializedStatistics = InitializedOperatorImpl<PlotResultDescriptor, ()>;
+pub struct InitializedStatistics {
+    result_descriptor: PlotResultDescriptor,
+    rasters: Vec<Box<InitializedRasterOperator>>,
+}
 
 impl InitializedOperator<PlotResultDescriptor, TypedPlotQueryProcessor> for InitializedStatistics {
     fn query_processor(&self) -> Result<TypedPlotQueryProcessor> {
         Ok(TypedPlotQueryProcessor::JsonPlain(
             StatisticsQueryProcessor {
                 rasters: self
-                    .raster_sources
+                    .rasters
                     .iter()
                     .map(|source| source.query_processor())
                     .collect::<Result<Vec<_>>>()?,
             }
             .boxed(),
         ))
+    }
+
+    fn result_descriptor(&self) -> &PlotResultDescriptor {
+        &self.result_descriptor
     }
 }
 
@@ -193,15 +188,15 @@ mod tests {
     fn serialization() {
         let statistics = Statistics {
             params: StatisticsParams {},
-            raster_sources: vec![],
-            vector_sources: vec![],
+            sources: MultipleRasterSources { rasters: vec![] },
         };
 
         let serialized = json!({
             "type": "Statistics",
             "params": {},
-            "rasterSources": [],
-            "vectorSources": [],
+            "sources": {
+                "rasters": [],
+            },
         })
         .to_string();
 
@@ -236,8 +231,7 @@ mod tests {
 
         let statistics = Statistics {
             params: StatisticsParams {},
-            raster_sources: vec![raster_source],
-            vector_sources: vec![],
+            sources: vec![raster_source].into(),
         };
 
         let execution_context = MockExecutionContext::default();

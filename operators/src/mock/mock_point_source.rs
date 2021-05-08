@@ -1,9 +1,8 @@
 use crate::engine::{QueryContext, QueryProcessor, QueryRectangle};
 use crate::{
     engine::{
-        ExecutionContext, InitializedOperator, InitializedOperatorImpl, InitializedVectorOperator,
-        SourceOperator, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
-        VectorResultDescriptor,
+        ExecutionContext, InitializedOperator, InitializedVectorOperator, SourceOperator,
+        TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
     },
     util::Result,
 };
@@ -53,36 +52,39 @@ pub type MockPointSource = SourceOperator<MockPointSourceParams>;
 impl VectorOperator for MockPointSource {
     fn initialize(
         self: Box<Self>,
-        context: &dyn ExecutionContext,
+        _context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedVectorOperator>> {
-        InitializedOperatorImpl::create(
-            &self.params,
-            context,
-            |_, _, _, _| Ok(self.params.clone()),
-            |_, _, _, _, _| {
-                Ok(VectorResultDescriptor {
-                    data_type: VectorDataType::MultiPoint,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    columns: Default::default(),
-                })
+        Ok(InitializedMockPointSource {
+            result_descriptor: VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReference::epsg_4326().into(),
+                columns: Default::default(),
             },
-            vec![],
-            vec![],
-        )
-        .map(InitializedOperatorImpl::boxed)
+            points: self.params.points,
+        }
+        .boxed())
     }
 }
 
+pub struct InitializedMockPointSource {
+    result_descriptor: VectorResultDescriptor,
+    points: Vec<Coordinate2D>,
+}
+
 impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
-    for InitializedOperatorImpl<VectorResultDescriptor, MockPointSourceParams>
+    for InitializedMockPointSource
 {
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
         Ok(TypedVectorQueryProcessor::MultiPoint(
             MockPointSourceProcessor {
-                points: self.state.points.clone(),
+                points: self.points.clone(),
             }
             .boxed(),
         ))
+    }
+
+    fn result_descriptor(&self) -> &VectorResultDescriptor {
+        &self.result_descriptor
     }
 }
 

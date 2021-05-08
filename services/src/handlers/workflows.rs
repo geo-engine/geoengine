@@ -186,7 +186,7 @@ mod tests {
     use geoengine_datatypes::primitives::{FeatureData, Measurement, MultiPoint, TimeInterval};
     use geoengine_datatypes::raster::RasterDataType;
     use geoengine_datatypes::spatial_reference::SpatialReference;
-    use geoengine_operators::engine::PlotOperator;
+    use geoengine_operators::engine::{MultipleRasterSources, PlotOperator};
     use geoengine_operators::engine::{RasterOperator, RasterResultDescriptor, VectorOperator};
     use geoengine_operators::mock::{
         MockFeatureCollectionSource, MockPointSource, MockPointSourceParams, MockRasterSource,
@@ -576,8 +576,7 @@ mod tests {
         let workflow = Workflow {
             operator: Statistics {
                 params: StatisticsParams {},
-                raster_sources: vec![],
-                vector_sources: vec![],
+                sources: MultipleRasterSources { rasters: vec![] },
             }
             .boxed()
             .into(),

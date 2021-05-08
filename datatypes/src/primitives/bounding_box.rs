@@ -1,3 +1,5 @@
+use std::convert::TryFrom;
+
 use super::{Coordinate2D, SpatialBounded};
 use crate::error;
 use crate::util::Result;
@@ -437,6 +439,21 @@ impl From<&BoundingBox2D> for geo::Rect<f64> {
 impl SpatialBounded for BoundingBox2D {
     fn spatial_bounds(&self) -> BoundingBox2D {
         *self
+    }
+}
+
+impl TryFrom<BoundingBox2D> for gdal::vector::Geometry {
+    type Error = crate::error::Error;
+
+    fn try_from(value: BoundingBox2D) -> Result<Self, Self::Error> {
+        // rectangular geometry from West, South, East and North values.
+        gdal::vector::Geometry::bbox(
+            value.lower_left_coordinate.x,
+            value.lower_left_coordinate.y,
+            value.upper_right_coordinate.x,
+            value.upper_right_coordinate.y,
+        )
+        .map_err(crate::error::Error::from)
     }
 }
 
