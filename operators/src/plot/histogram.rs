@@ -311,8 +311,8 @@ impl HistogramRasterQueryProcessor {
 
 
                 match tile?.grid_array {
-                    geoengine_datatypes::raster::GridOrEmpty::Grid(g) => {histogram.add_raster_data(&g.data, g.no_data_value);}
-                    geoengine_datatypes::raster::GridOrEmpty::Empty(n) => {histogram.add_nodata_batch(n.number_of_elements() as u64)} // TODO: why u64?
+                    geoengine_datatypes::raster::GridOrEmpty::Grid(g) => histogram.add_raster_data(&g.data, g.no_data_value),
+                    geoengine_datatypes::raster::GridOrEmpty::Empty(n) => histogram.add_nodata_batch(n.number_of_elements() as u64) // TODO: why u64?
                 }
             }
         });

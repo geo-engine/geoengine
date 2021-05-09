@@ -226,10 +226,7 @@ where
 
         *this.current_spatial_tile += 1;
 
-        // map the returned accu into a RasterTile
-        let final_result = RasterTile2D::from(tile_result.0);
-
-        Poll::Ready(Some(Ok(final_result)))
+        Poll::Ready(Some(Ok(tile_result.0)))
     }
 }
 
