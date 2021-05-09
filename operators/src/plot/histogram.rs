@@ -15,12 +15,15 @@ use crate::{
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::{StreamExt, TryFutureExt};
-use geoengine_datatypes::collections::{FeatureCollection, FeatureCollectionInfos};
 use geoengine_datatypes::plots::{Plot, PlotData};
 use geoengine_datatypes::primitives::{
     DataRef, FeatureDataRef, FeatureDataType, Geometry, Measurement,
 };
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
+use geoengine_datatypes::{
+    collections::{FeatureCollection, FeatureCollectionInfos},
+    raster::GridSize,
+};
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, OptionExt};
 use std::convert::TryFrom;
@@ -264,10 +267,12 @@ impl HistogramRasterQueryProcessor {
             let mut computed_metadata = HistogramMetadataInProgress::default();
 
             while let Some(tile) = input.next().await {
-                let tile = tile?.into_materialized_tile(); //TODO: is this required?
-
-                computed_metadata
-                    .add_raster_batch(&tile.grid_array.data, tile.grid_array.no_data_value);
+                match tile?.grid_array {
+                    geoengine_datatypes::raster::GridOrEmpty::Grid(g) => {
+                        computed_metadata.add_raster_batch(&g.data, g.no_data_value);
+                    }
+                    geoengine_datatypes::raster::GridOrEmpty::Empty(_) => {} // TODO: find out if we really do nothing for empty tiles?
+                }
             }
 
             Ok(metadata.merge_with(computed_metadata.into()))
@@ -303,9 +308,12 @@ impl HistogramRasterQueryProcessor {
             let mut query = processor.query(query, ctx)?;
 
             while let Some(tile) = query.next().await {
-                let tile = tile?.into_materialized_tile(); // TODO: is this needed?
 
-                histogram.add_raster_data(&tile.grid_array.data, tile.grid_array.no_data_value);
+
+                match tile?.grid_array {
+                    geoengine_datatypes::raster::GridOrEmpty::Grid(g) => {histogram.add_raster_data(&g.data, g.no_data_value);}
+                    geoengine_datatypes::raster::GridOrEmpty::Empty(n) => {histogram.add_nodata_batch(n.number_of_elements() as u64)} // TODO: why u64?
+                }
             }
         });
 
