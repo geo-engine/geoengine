@@ -15,7 +15,8 @@ use geoengine_datatypes::{
     },
     primitives::{SpatialBounded, SpatialResolution, TimeInterval},
     raster::{
-        grid_idx_iter_2d, BoundedGrid, Grid2D, MaterializedRasterTile2D, TilingSpecification,
+        grid_idx_iter_2d, BoundedGrid, Grid2D, MaterializedRasterTile2D, NoDataValue,
+        TilingSpecification,
     },
     spatial_reference::SpatialReference,
 };
@@ -35,7 +36,7 @@ use std::pin::Pin;
 pub type RasterFold<'a, T, FoldFuture, FoldMethod, FoldCompanion> = TryFold<
     BoxStream<'a, Result<RasterTile2D<T>>>,
     FoldFuture,
-    (MaterializedRasterTile2D<T>, FoldCompanion),
+    (RasterTile2D<T>, FoldCompanion),
     FoldMethod,
 >;
 
@@ -233,35 +234,41 @@ where
 }
 
 pub fn fold_by_blit_impl<T>(
-    accu: (MaterializedRasterTile2D<T>, ()),
+    accu: (RasterTile2D<T>, ()),
     tile: RasterTile2D<T>,
-) -> Result<(MaterializedRasterTile2D<T>, ())>
+) -> Result<(RasterTile2D<T>, ())>
 where
     T: Pixel,
 {
     let (mut accu_tile, unused) = accu;
     let t_union = accu_tile.time.union(&tile.time)?;
-    match accu_tile.blit(tile) {
-        Ok(_) => {
-            accu_tile.time = t_union;
-            Ok((accu_tile, unused))
-        }
+
+    accu_tile.time = t_union;
+
+    if tile.grid_array.is_empty() && accu_tile.no_data_value() == tile.no_data_value() {
+        return Ok((accu_tile, unused));
+    }
+
+    let mut materialized_accu_tile = accu_tile.into_materialized_tile();
+
+    match materialized_accu_tile.blit(tile) {
+        Ok(_) => Ok((materialized_accu_tile.into(), unused)),
         Err(_error) => {
             // Ignore lookup errors
             //dbg!(
             //    "Skipping non-overlapping area tiles in blit method. This schould not happen but the MockSource produces all tiles!!!",
             //    error
             //);
-            Ok((accu_tile, unused))
+            Ok((materialized_accu_tile.into(), unused))
         }
     }
 }
 
 #[allow(dead_code)]
 pub fn fold_by_blit_future<T>(
-    accu: (MaterializedRasterTile2D<T>, ()),
+    accu: (RasterTile2D<T>, ()),
     tile: RasterTile2D<T>,
-) -> impl Future<Output = Result<(MaterializedRasterTile2D<T>, ())>>
+) -> impl Future<Output = Result<(RasterTile2D<T>, ())>>
 where
     T: Pixel,
 {
@@ -273,12 +280,9 @@ where
 
 #[allow(dead_code)]
 pub fn fold_by_coordinate_lookup_future<T>(
-    accu: (MaterializedRasterTile2D<T>, Vec<(GridIdx2D, Coordinate2D)>),
+    accu: (RasterTile2D<T>, Vec<(GridIdx2D, Coordinate2D)>),
     tile: RasterTile2D<T>,
-) -> impl TryFuture<
-    Ok = (MaterializedRasterTile2D<T>, Vec<(GridIdx2D, Coordinate2D)>),
-    Error = error::Error,
->
+) -> impl TryFuture<Ok = (RasterTile2D<T>, Vec<(GridIdx2D, Coordinate2D)>), Error = error::Error>
 where
     T: Pixel,
 {
@@ -294,9 +298,9 @@ where
 #[allow(clippy::type_complexity)]
 #[allow(clippy::needless_pass_by_value)]
 pub fn fold_by_coordinate_lookup_impl<T>(
-    accu: (MaterializedRasterTile2D<T>, Vec<(GridIdx2D, Coordinate2D)>),
+    accu: (RasterTile2D<T>, Vec<(GridIdx2D, Coordinate2D)>),
     tile: RasterTile2D<T>,
-) -> Result<(MaterializedRasterTile2D<T>, Vec<(GridIdx2D, Coordinate2D)>)>
+) -> Result<(RasterTile2D<T>, Vec<(GridIdx2D, Coordinate2D)>)>
 where
     T: Pixel,
 {
@@ -309,8 +313,10 @@ where
         return Ok((accu_tile, accu_companion));
     }
 
-    match insert_projected_pixels(&mut accu_tile, &tile, accu_companion.iter()) {
-        Ok(_) => Ok((accu_tile, accu_companion)),
+    let mut materialized_accu_tile = accu_tile.into_materialized_tile(); //in a fold chain the real materialization should only happen once. All other calls will be simple conversions.
+
+    match insert_projected_pixels(&mut materialized_accu_tile, &tile, accu_companion.iter()) {
+        Ok(_) => Ok((materialized_accu_tile.into(), accu_companion)),
         Err(error) => Err(error),
     }
 }
@@ -349,12 +355,9 @@ pub trait SubQueryTileAggregator<T>: Send
 where
     T: Pixel,
 {
-    type FoldFuture: TryFuture<
-        Ok = (MaterializedRasterTile2D<T>, Self::FoldCompanion),
-        Error = error::Error,
-    >;
+    type FoldFuture: TryFuture<Ok = (RasterTile2D<T>, Self::FoldCompanion), Error = error::Error>;
     type FoldMethod: Clone
-        + Fn((MaterializedRasterTile2D<T>, Self::FoldCompanion), RasterTile2D<T>) -> Self::FoldFuture;
+        + Fn((RasterTile2D<T>, Self::FoldCompanion), RasterTile2D<T>) -> Self::FoldFuture;
     type FoldCompanion: Clone + Send;
 
     /// The no-data-value to use in the resulting `RasterTile2D`
@@ -367,7 +370,7 @@ where
         &self,
         tile_info: TileInformation,
         query_rect: QueryRectangle,
-    ) -> Result<(MaterializedRasterTile2D<T>, Self::FoldCompanion)>;
+    ) -> Result<(RasterTile2D<T>, Self::FoldCompanion)>;
 
     /// This method generates a `QueryRectangle` for a tile-specific sub-query
     fn tile_query_rectangle(
@@ -389,8 +392,8 @@ pub struct TileSubQueryIdentity<F> {
 impl<T, FoldM, FoldF> SubQueryTileAggregator<T> for TileSubQueryIdentity<FoldM>
 where
     T: Pixel,
-    FoldM: Send + Clone + Fn((MaterializedRasterTile2D<T>, ()), RasterTile2D<T>) -> FoldF,
-    FoldF: TryFuture<Ok = (MaterializedRasterTile2D<T>, ()), Error = error::Error>,
+    FoldM: Send + Clone + Fn((RasterTile2D<T>, ()), RasterTile2D<T>) -> FoldF,
+    FoldF: TryFuture<Ok = (RasterTile2D<T>, ()), Error = error::Error>,
 {
     fn result_no_data_value(&self) -> Option<T> {
         Some(T::from_(0))
@@ -404,15 +407,14 @@ where
         &self,
         tile_info: TileInformation,
         query_rect: QueryRectangle,
-    ) -> Result<(MaterializedRasterTile2D<T>, ())> {
+    ) -> Result<(RasterTile2D<T>, ())> {
         let output_raster = Grid2D::new_filled(
             tile_info.tile_size_in_pixels,
             self.initial_fill_value(),
             self.result_no_data_value(),
         );
         Ok((
-            RasterTile2D::new_with_tile_info(query_rect.time_interval, tile_info, output_raster)
-                .into_materialized_tile(),
+            RasterTile2D::new_with_tile_info(query_rect.time_interval, tile_info, output_raster),
             (),
         ))
     }
@@ -455,12 +457,9 @@ where
     T: Pixel,
     FoldM: Send
         + Clone
-        + Fn((MaterializedRasterTile2D<T>, Vec<(GridIdx2D, Coordinate2D)>), RasterTile2D<T>) -> FoldF,
+        + Fn((RasterTile2D<T>, Vec<(GridIdx2D, Coordinate2D)>), RasterTile2D<T>) -> FoldF,
     FoldF: Send
-        + TryFuture<
-            Ok = (MaterializedRasterTile2D<T>, Vec<(GridIdx2D, Coordinate2D)>),
-            Error = error::Error,
-        >,
+        + TryFuture<Ok = (RasterTile2D<T>, Vec<(GridIdx2D, Coordinate2D)>), Error = error::Error>,
 {
     fn result_no_data_value(&self) -> Option<T> {
         Some(self.no_data_and_fill_value)
@@ -475,7 +474,7 @@ where
         &self,
         tile_info: TileInformation,
         query_rect: QueryRectangle,
-    ) -> Result<(MaterializedRasterTile2D<T>, Vec<(GridIdx2D, Coordinate2D)>)> {
+    ) -> Result<(RasterTile2D<T>, Vec<(GridIdx2D, Coordinate2D)>)> {
         let output_raster = Grid2D::new_filled(
             tile_info.tile_size_in_pixels,
             self.initial_fill_value(),
@@ -501,8 +500,7 @@ where
             .collect();
 
         Ok((
-            RasterTile2D::new_with_tile_info(query_rect.time_interval, tile_info, output_raster)
-                .into_materialized_tile(),
+            RasterTile2D::new_with_tile_info(query_rect.time_interval, tile_info, output_raster),
             accu_companion,
         ))
     }
