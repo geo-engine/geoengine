@@ -15,6 +15,7 @@ use bb8_postgres::{
     tokio_postgres::{error::SqlState, tls::MakeTlsConnect, tls::TlsConnect, Config, Socket},
     PostgresConnectionManager,
 };
+use log::{debug, warn};
 use std::sync::Arc;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
@@ -63,8 +64,7 @@ where
             Err(e) => {
                 if let Some(code) = e.code() {
                     if *code == SqlState::UNDEFINED_TABLE {
-                        // TODO: log
-                        eprintln!("UserDB: Uninitialized schema");
+                        warn!("UserDB: Uninitialized schema");
                         return Ok(0);
                     }
                 }
@@ -217,8 +217,7 @@ where
                         "#,
                     )
                     .await?;
-                    // TODO log
-                    eprintln!("Updated user database to schema version {}", version + 1);
+                    debug!("Updated user database to schema version {}", version + 1);
                 }
                 // 1 => {
                 // next version

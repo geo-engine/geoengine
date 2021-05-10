@@ -11,6 +11,7 @@ use crate::util::config::{get_config_element, Backend};
 use bb8_postgres::tokio_postgres;
 #[cfg(feature = "postgres")]
 use bb8_postgres::tokio_postgres::NoTls;
+use log::info;
 use snafu::ResultExt;
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -47,7 +48,7 @@ pub async fn start_server(
         .parse::<SocketAddr>()
         .context(error::AddrParse)?;
 
-    eprintln!(
+    info!(
         "Starting server… {}",
         format!(
             "http://{}/",
@@ -59,7 +60,7 @@ pub async fn start_server(
 
     match web_config.backend {
         Backend::InMemory => {
-            eprintln!("Using in memory backend"); // TODO: log
+            info!("Using in memory backend");
             start(
                 shutdown_rx,
                 static_files_dir,
@@ -71,7 +72,7 @@ pub async fn start_server(
         Backend::Postgres => {
             #[cfg(feature = "postgres")]
             {
-                eprintln!("Using Postgres backend"); // TODO: log
+                info!("Using Postgres backend");
                 let ctx = PostgresContext::new(
                     tokio_postgres::config::Config::from_str(
                         &get_config_element::<config::Postgres>()?.config_string,

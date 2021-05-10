@@ -3,6 +3,7 @@ use crate::error::Result;
 use crate::users::session::{Session, SessionId};
 use crate::users::userdb::UserDb;
 use crate::{contexts::Context, error::Error};
+use log::error;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use std::error::Error as StdError;
@@ -49,6 +50,8 @@ impl ErrorResponse {
 
 /// A handler for custom rejections
 pub async fn handle_rejection(err: Rejection) -> Result<impl Reply, Rejection> {
+    error!("Warp rejection: {:?}", err);
+
     let (code, error, message) = if let Some(e) = err.find::<Error>() {
         // custom errors
 
