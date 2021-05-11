@@ -126,6 +126,7 @@ where
         handlers::wfs::wfs_handler(ctx.clone()),
         handlers::plots::get_plot_handler(ctx.clone()),
         handlers::upload::upload_handler(ctx.clone()),
+        handlers::spatial_references::get_spatial_reference_specification_handler(ctx.clone()),
         serve_static_directory(static_files_dir)
     )
     .recover(handle_rejection);
