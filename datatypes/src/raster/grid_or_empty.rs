@@ -17,6 +17,7 @@ pub type GridOrEmpty3D<T> = GridOrEmpty<GridShape3D, T>;
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[serde(tag = "type")]
 pub enum GridOrEmpty<D, T> {
     Grid(Grid<D, T>),
     Empty(NoDataGrid<D, T>),

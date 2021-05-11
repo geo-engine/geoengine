@@ -166,13 +166,13 @@ mod tests {
                         "yPixelSize": -1.0
                     },
                     "gridArray": {
-                        "grid": {
-                            "shape": {
-                                "shapeArray": [3, 2]
-                            },
-                            "data": [1, 2, 3, 4, 5, 6],
-                            "noDataValue": null
-                        }
+                        "type": "grid",
+                        "shape": {
+                            "shapeArray": [3, 2]
+                        },
+                        "data": [1, 2, 3, 4, 5, 6],
+                        "noDataValue": null
+
                     }
                 }],
                 "resultDescriptor": {
