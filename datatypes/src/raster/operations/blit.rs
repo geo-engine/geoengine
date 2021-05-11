@@ -42,31 +42,6 @@ impl<T: Pixel> Blit<RasterTile2D<T>> for MaterializedRasterTile2D<T> {
         Ok(())
     }
 }
-/*/
-impl Blit<TypedRasterTile2D> for TypedRasterTile2D {
-    fn blit(&mut self, source: TypedRasterTile2D) -> Result<()> {
-        ensure!(
-            self.raster_data_type() == source.raster_data_type(),
-            error::NonMatchingRasterTypes {
-                a: self.raster_data_type(),
-                b: source.raster_data_type()
-            }
-        );
-        match self {
-            TypedRasterTile::U8(r) => r.blit(source.get_u8().expect("Must not fail!")),
-            TypedRasterTile::U16(r) => r.blit(source.get_u16().expect("Must not fail!")),
-            TypedRasterTile::U32(r) => r.blit(source.get_u32().expect("Must not fail!")),
-            TypedRasterTile::U64(r) => r.blit(source.get_u64().expect("Must not fail!")),
-            TypedRasterTile::I8(r) => r.blit(source.get_i8().expect("Must not fail!")),
-            TypedRasterTile::I16(r) => r.blit(source.get_i16().expect("Must not fail!")),
-            TypedRasterTile::I32(r) => r.blit(source.get_i32().expect("Must not fail!")),
-            TypedRasterTile::I64(r) => r.blit(source.get_i64().expect("Must not fail!")),
-            TypedRasterTile::F32(r) => r.blit(source.get_f32().expect("Must not fail!")),
-            TypedRasterTile::F64(r) => r.blit(source.get_f64().expect("Must not fail!")),
-        }
-    }
-}
-*/
 
 #[cfg(test)]
 mod tests {
