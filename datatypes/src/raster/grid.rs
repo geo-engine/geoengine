@@ -380,14 +380,16 @@ where
     }
 }
 
-impl<T, D> BoundedGrid for Grid<D, T>
+impl<T, D> GridBounds for Grid<D, T>
 where
     D: GridBounds,
 {
     type IndexArray = D::IndexArray;
-
-    fn bounding_box(&self) -> GridBoundingBox<Self::IndexArray> {
-        GridBoundingBox::new_unchecked(self.shape.min_index(), self.shape.max_index())
+    fn min_index(&self) -> GridIdx<<Self as GridBounds>::IndexArray> {
+        self.shape.min_index()
+    }
+    fn max_index(&self) -> GridIdx<<Self as GridBounds>::IndexArray> {
+        self.shape.max_index()
     }
 }
 

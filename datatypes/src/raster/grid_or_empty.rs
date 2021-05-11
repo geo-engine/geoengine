@@ -50,13 +50,6 @@ where
         }
     }
 
-    pub fn no_data_value(&self) -> Option<T> {
-        match self {
-            GridOrEmpty::Grid(g) => g.no_data_value.clone(),
-            GridOrEmpty::Empty(n) => Some(n.no_data_value.clone()),
-        }
-    }
-
     pub fn into_materialized_grid(self) -> Grid<D, T> {
         match self {
             GridOrEmpty::Grid(g) => g,
@@ -114,11 +107,17 @@ where
     type IndexArray = I;
 
     fn min_index(&self) -> GridIdx<Self::IndexArray> {
-        todo!()
+        match self {
+            GridOrEmpty::Grid(g) => g.min_index(),
+            GridOrEmpty::Empty(n) => n.min_index(),
+        }
     }
 
     fn max_index(&self) -> GridIdx<Self::IndexArray> {
-        todo!()
+        match self {
+            GridOrEmpty::Grid(g) => g.max_index(),
+            GridOrEmpty::Empty(n) => n.max_index(),
+        }
     }
 }
 
