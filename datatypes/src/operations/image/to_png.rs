@@ -1,8 +1,13 @@
-use crate::error;
-use crate::operations::image::{Colorizer, RgbaTransmutable};
-use crate::raster::{Grid2D, GridIndexAccess, Pixel, RasterTile2D, TypedRasterTile2D};
+use crate::raster::{
+    Grid2D, GridIndexAccess, GridOrEmpty2D, Pixel, RasterTile2D, TypedRasterTile2D,
+};
 use crate::util::Result;
-use image::{DynamicImage, ImageFormat, RgbaImage};
+use crate::{error, raster::NoDataGrid2D};
+use crate::{
+    operations::image::{Colorizer, RgbaTransmutable},
+    raster::GridOrEmpty,
+};
+use image::{DynamicImage, ImageBuffer, ImageFormat, RgbaImage};
 
 pub trait ToPng {
     /// Outputs png bytes of an image of size width x height
@@ -40,6 +45,41 @@ where
     }
 }
 
+impl<P> ToPng for NoDataGrid2D<P>
+where
+    P: Pixel + RgbaTransmutable,
+{
+    fn to_png(&self, width: u32, height: u32, colorizer: &Colorizer) -> Result<Vec<u8>> {
+        // TODO: use PNG color palette once it is available
+
+        let no_data_color: image::Rgba<u8> = colorizer.no_data_color().into();
+
+        let image_buffer = ImageBuffer::from_pixel(width, height, no_data_color);
+
+        let mut buffer = Vec::new();
+
+        DynamicImage::ImageRgba8(image_buffer)
+            .write_to(&mut buffer, ImageFormat::Png)
+            .map_err(|error| error::Error::Colorizer {
+                details: format!("encoding PNG failed: {}", error),
+            })?;
+
+        Ok(buffer)
+    }
+}
+
+impl<P> ToPng for GridOrEmpty2D<P>
+where
+    P: Pixel + RgbaTransmutable,
+{
+    fn to_png(&self, width: u32, height: u32, colorizer: &Colorizer) -> Result<Vec<u8>> {
+        match self {
+            GridOrEmpty::Grid(g) => g.to_png(width, height, colorizer),
+            GridOrEmpty::Empty(n) => n.to_png(width, height, colorizer),
+        }
+    }
+}
+
 fn create_rgba_image<P: Pixel + RgbaTransmutable, N: Fn(P) -> bool>(
     raster_grid: &Grid2D<P>,
     width: u32,
@@ -68,8 +108,7 @@ fn create_rgba_image<P: Pixel + RgbaTransmutable, N: Fn(P) -> bool>(
 
 impl<T: Pixel> ToPng for RasterTile2D<T> {
     fn to_png(&self, width: u32, height: u32, colorizer: &Colorizer) -> Result<Vec<u8>> {
-        let temp_copy = self.clone().into_materialized_tile(); //FIXME: avoid the clone!
-        temp_copy.grid_array.to_png(width, height, colorizer)
+        self.grid_array.to_png(width, height, colorizer)
     }
 }
 

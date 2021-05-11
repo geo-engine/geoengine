@@ -15,7 +15,7 @@ pub use self::grid_bounds::{
     GridBoundingBox, GridBoundingBox1D, GridBoundingBox2D, GridBoundingBox3D,
 };
 pub use self::grid_index::{GridIdx, GridIdx1D, GridIdx2D, GridIdx3D};
-pub use self::grid_or_empty::GridOrEmpty;
+pub use self::grid_or_empty::{GridOrEmpty, GridOrEmpty1D, GridOrEmpty2D, GridOrEmpty3D};
 pub use self::grid_traits::{
     BoundedGrid, GridBounds, GridContains, GridIndexAccess, GridIndexAccessMut, GridIntersection,
     GridSize, GridSpaceToLinearSpace,

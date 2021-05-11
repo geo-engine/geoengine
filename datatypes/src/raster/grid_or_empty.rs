@@ -3,13 +3,17 @@ use std::ops::Add;
 use super::{
     grid_traits::{ChangeGridBounds, GridShapeAccess},
     no_data_grid::NoDataGrid,
-    Grid, GridBoundingBox, GridBounds, GridIdx, GridIndexAccess, GridShape, GridSize,
-    GridSpaceToLinearSpace, NoDataValue,
+    Grid, GridBoundingBox, GridBounds, GridIdx, GridIndexAccess, GridShape, GridShape1D,
+    GridShape2D, GridShape3D, GridSize, GridSpaceToLinearSpace, NoDataValue,
 };
 
 use crate::util::Result;
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
+
+pub type GridOrEmpty1D<T> = GridOrEmpty<GridShape1D, T>;
+pub type GridOrEmpty2D<T> = GridOrEmpty<GridShape2D, T>;
+pub type GridOrEmpty3D<T> = GridOrEmpty<GridShape3D, T>;
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
