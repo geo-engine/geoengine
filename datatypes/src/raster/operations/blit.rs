@@ -38,7 +38,7 @@ impl<T: Pixel> Blit<RasterTile2D<T>> for MaterializedRasterTile2D<T> {
 
         let shifted_source = source.grid_array.shift_by_offset(offset);
 
-        self.grid_array.grid_blit_from(shifted_source)?;
+        self.grid_array.grid_blit_from(shifted_source);
         Ok(())
     }
 }

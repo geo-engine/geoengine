@@ -391,7 +391,7 @@ where
                 )?;
 
                 let mut tile_raster = Grid2D::new_filled(output_shape, fill_value, no_data_value);
-                tile_raster.grid_blit_from(dataset_raster)?;
+                tile_raster.grid_blit_from(dataset_raster);
                 tile_raster
             }
         };

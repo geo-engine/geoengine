@@ -1,10 +1,7 @@
-use crate::{
-    raster::{
-        no_data_grid::NoDataGrid, BoundedGrid, Grid, Grid1D, Grid2D, Grid3D, GridBoundingBox,
-        GridBounds, GridIdx, GridIndexAccess, GridIndexAccessMut, GridIntersection, GridOrEmpty,
-        GridSize, GridSpaceToLinearSpace, Pixel,
-    },
-    util::Result,
+use crate::raster::{
+    no_data_grid::NoDataGrid, BoundedGrid, Grid, Grid1D, Grid2D, Grid3D, GridBoundingBox,
+    GridBounds, GridIdx, GridIndexAccess, GridIndexAccessMut, GridIntersection, GridOrEmpty,
+    GridSize, GridSpaceToLinearSpace, Pixel,
 };
 
 pub trait GridBlit<O, T>
@@ -12,14 +9,14 @@ where
     O: GridSize + BoundedGrid + GridIndexAccess<T, O::IndexArray>,
     T: Pixel,
 {
-    fn grid_blit_from(&mut self, other: O) -> Result<()>;
+    fn grid_blit_from(&mut self, other: O);
 }
 
 impl<T> GridBlit<Grid1D<T>, T> for Grid1D<T>
 where
     T: Pixel + Sized,
 {
-    fn grid_blit_from(&mut self, other: Grid1D<T>) -> Result<()> {
+    fn grid_blit_from(&mut self, other: Grid1D<T>) {
         let other_offset_dim = other.bounding_box();
         let offset_dim = self.bounding_box();
         let intersection: Option<GridBoundingBox<[isize; 1]>> =
@@ -34,7 +31,6 @@ where
             self.data.as_mut_slice()[self_start_x..self_start_x + overlap_size]
                 .copy_from_slice(&other.data[other_start_x..other_start_x + overlap_size]);
         }
-        Ok(())
     }
 }
 
@@ -45,7 +41,7 @@ where
         + GridSpaceToLinearSpace<IndexArray = [isize; 2]>,
     T: Pixel + Sized,
 {
-    fn grid_blit_from(&mut self, other: Grid<D, T>) -> Result<()> {
+    fn grid_blit_from(&mut self, other: Grid<D, T>) {
         let other_offset_dim = other.bounding_box();
         let offset_dim = self.bounding_box();
         let intersection: Option<GridBoundingBox<[isize; 2]>> =
@@ -64,7 +60,6 @@ where
                     .copy_from_slice(&other.data[other_start_x..other_start_x + overlap_x_size]);
             }
         }
-        Ok(())
     }
 }
 
@@ -75,7 +70,7 @@ where
         + GridSpaceToLinearSpace<IndexArray = [isize; 2]>,
     T: Pixel + Sized,
 {
-    fn grid_blit_from(&mut self, other: NoDataGrid<D, T>) -> Result<()> {
+    fn grid_blit_from(&mut self, other: NoDataGrid<D, T>) {
         let other_offset_dim = other.bounding_box();
         let offset_dim = self.bounding_box();
         let intersection: Option<GridBoundingBox<[isize; 2]>> =
@@ -93,7 +88,6 @@ where
                 }
             }
         }
-        Ok(())
     }
 }
 
@@ -104,7 +98,7 @@ where
         + GridSpaceToLinearSpace<IndexArray = [isize; 2]>,
     T: Pixel + Sized,
 {
-    fn grid_blit_from(&mut self, other: GridOrEmpty<D, T>) -> Result<()> {
+    fn grid_blit_from(&mut self, other: GridOrEmpty<D, T>) {
         match other {
             GridOrEmpty::Grid(g) => self.grid_blit_from(g),
             GridOrEmpty::Empty(n) => self.grid_blit_from(n),
@@ -116,7 +110,7 @@ impl<T> GridBlit<Grid3D<T>, T> for Grid3D<T>
 where
     T: Pixel + Sized,
 {
-    fn grid_blit_from(&mut self, other: Grid3D<T>) -> Result<()> {
+    fn grid_blit_from(&mut self, other: Grid3D<T>) {
         let other_offset_dim = other.bounding_box();
         let offset_dim = self.bounding_box();
         let intersection: Option<GridBoundingBox<[isize; 3]>> =
@@ -142,7 +136,6 @@ where
                 }
             }
         }
-        Ok(())
     }
 }
 
@@ -161,7 +154,7 @@ mod tests {
 
         let r2 = Grid2D::new(dim.into(), data, None).unwrap();
 
-        r1.grid_blit_from(r2).unwrap();
+        r1.grid_blit_from(r2);
 
         assert_eq!(r1.data, vec![7; 16]);
     }
@@ -178,7 +171,7 @@ mod tests {
         let shifted_dim = GridBoundingBox::new(shifted_idx, shifted_idx + [3, 3]).unwrap();
         let r2 = Grid::new(shifted_dim, data, None).unwrap();
 
-        r1.grid_blit_from(r2).unwrap();
+        r1.grid_blit_from(r2);
 
         assert_eq!(
             r1.data,
@@ -198,7 +191,7 @@ mod tests {
         let shifted_dim = GridBoundingBox::new(shifted_idx, shifted_idx + [3, 3]).unwrap();
         let r2 = Grid::new(shifted_dim, data, None).unwrap();
 
-        r1.grid_blit_from(r2).unwrap();
+        r1.grid_blit_from(r2);
 
         assert_eq!(
             r1.data,
