@@ -12,26 +12,34 @@ use crate::util::Result;
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 
+/// A `RasterTile` is a `BaseTile` of raster data where the data is represented by `GridOrEmpty`.
 pub type RasterTile<D, T> = BaseTile<GridOrEmpty<D, T>>;
+/// A `RasterTile2D` is a `BaseTile` of 2-dimensional raster data where the data is represented by `GridOrEmpty`.
 pub type RasterTile2D<T> = RasterTile<GridShape2D, T>;
+/// A `RasterTile3D` is a `BaseTile` of 3-dimensional raster data where the data is represented by `GridOrEmpty`.
 pub type RasterTile3D<T> = RasterTile<GridShape3D, T>;
 
+/// A `MaterializedRasterTile` is a `BaseTile` of raster data where the data is represented by `Grid`. It implements mutable access to pixels.
 pub type MaterializedRasterTile<D, T> = BaseTile<Grid<D, T>>;
+/// A `MaterializedRasterTile2D` is a 2-dimensional `BaseTile` of raster data where the data is represented by `Grid`. It implements mutable access to pixels.
 pub type MaterializedRasterTile2D<T> = MaterializedRasterTile<GridShape2D, T>;
+/// A `MaterializedRasterTile3D` is a 3-dimensional `BaseTile` of raster data where the data is represented by `Grid`. It implements mutable access to pixels.
 pub type MaterializedRasterTile3D<T> = MaterializedRasterTile<GridShape3D, T>;
 
-/// A `RasterTile2D` is the main type used to iterate over tiles of 2D raster data
+/// A `BaseTile` is the main type used to iterate over tiles of raster data
+/// The data of the `RasterTile` is stored as `Grid` or `NoDataGrid`. The enum `GridOrEmpty` allows a combination of both.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct BaseTile<G> {
-    /// The `TimeInterval` where this `RasterTile is valid`.
+    /// The `TimeInterval` where this tile is valid.
     pub time: TimeInterval,
     /// The tile position is the position of the tile in the gird of tiles with origin at the origin of the global_geo_transform.
     /// This is NOT a pixel position inside the tile.
     pub tile_position: GridIdx2D,
     /// The global geotransform to transform pixels into geographic coordinates
     pub global_geo_transform: GeoTransform,
-    /// The data of the `RasterTile` is stored as `Grid` or `NoDataGrid`. `GridOrEmpty` allows a combination of both.
+    /// The pixels of the tile are stored as `Grid` or, in case they are all no-data as `NoDataGrid`.
+    /// The enum `GridOrEmpty` allows a combination of both.
     pub grid_array: G,
 }
 
