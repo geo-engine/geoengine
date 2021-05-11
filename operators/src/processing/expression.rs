@@ -365,7 +365,7 @@ where
                         a.time,
                         a.tile_position,
                         a.global_geo_transform,
-                        NoDataGrid::new(a.grid_array.grid_shape(), self.no_data_value)?.into(),
+                        NoDataGrid::new(a.grid_array.grid_shape(), self.no_data_value).into(),
                     ))
                 }
 

@@ -170,7 +170,7 @@ where
     }
 }
 
-impl<D, T, G> Raster<D, T, G> for BaseTile<G>
+impl<D, T, G> Raster<D, T> for BaseTile<G>
 where
     D: GridSize + GridBounds + Clone,
     T: Pixel,
@@ -178,6 +178,8 @@ where
     Self:
         SpatialBounded + NoDataValue<NoDataType = T> + GridShapeAccess<ShapeArray = D::ShapeArray>,
 {
+    type DataContainer = G;
+
     fn data_container(&self) -> &G {
         &self.grid_array
     }

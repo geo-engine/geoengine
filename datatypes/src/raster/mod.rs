@@ -51,15 +51,16 @@ mod tiling;
 mod typed_raster_conversion;
 mod typed_raster_tile;
 
-pub trait Raster<D: GridSize, T: Pixel, C>:
+pub trait Raster<D: GridSize, T: Pixel>:
     SpatialBounded
     + TemporalBounded
     + NoDataValue<NoDataType = T>
     + GridShapeAccess<ShapeArray = D::ShapeArray>
     + GeoTransformAccess
 {
+    type DataContainer;
     /// returns a reference to the data container used to hold the pixels / cells of the raster
-    fn data_container(&self) -> &C;
+    fn data_container(&self) -> &Self::DataContainer;
 }
 
 pub trait GeoTransformAccess {
