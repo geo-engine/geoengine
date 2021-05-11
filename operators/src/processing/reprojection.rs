@@ -845,7 +845,7 @@ mod tests {
             include_bytes!(
                 "../../test-data/raster/modis_ndvi/projected_3857/MOD13A2_M_NDVI_2014-04-01_tile-20.rst"
             ) as &[u8],
-            res[8].clone().into_materialized_tile().grid_array.data.as_slice() // TODO: better way to do this... if let?
+            res[8].clone().into_materialized_tile().grid_array.data.as_slice()
         );
 
         Ok(())

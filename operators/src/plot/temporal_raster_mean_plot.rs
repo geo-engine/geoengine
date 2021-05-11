@@ -135,7 +135,7 @@ impl<P: Pixel> MeanRasterPixelValuesOverTimeQueryProcessor<P> {
                 continue;
             }
 
-            let tile = tile.into_materialized_tile(); // TODO: is this required?
+            let tile = tile.into_materialized_tile(); // this should be free since we checked for empty tiles
 
             let time = Self::time_interval_projection(tile.time, position);
 
