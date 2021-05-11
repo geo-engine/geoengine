@@ -30,17 +30,12 @@ where
     D: GridSize,
     T: Clone,
 {
-    /// Creates a new `Grid`
-    ///
-    /// # Errors
-    ///
-    /// This constructor fails if the data container's capacity is different from the grid's dimension number
-    ///
-    pub fn new(shape: D, no_data_value: T) -> Result<Self> {
-        Ok(Self {
+    /// Creates a new `NoDataGrid`
+    pub fn new(shape: D, no_data_value: T) -> Self {
+        Self {
             shape,
             no_data_value,
-        })
+        }
     }
 
     /// Converts the data type of the raster by converting it pixel-wise
@@ -50,7 +45,6 @@ where
         To: Copy + 'static,
     {
         NoDataGrid::new(self.shape, self.no_data_value.as_())
-            .expect("grid array type conversion cannot fail")
     }
 }
 
@@ -167,6 +161,6 @@ where
     }
 
     fn set_grid_bounds(self, bounds: GridBoundingBox<I>) -> Result<Self::Output> {
-        NoDataGrid::new(bounds, self.no_data_value)
+        Ok(NoDataGrid::new(bounds, self.no_data_value))
     }
 }
