@@ -144,6 +144,11 @@ where
         )
     }
 
+    /// Returns true if the grid is a `NoDataGrid`
+    pub fn is_empty(&self) -> bool {
+        self.grid_array.is_empty()
+    }
+
     /// Convert the tile into a materialized tile.
     pub fn into_materialized_tile(self) -> MaterializedRasterTile<D, T> {
         MaterializedRasterTile {
