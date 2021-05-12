@@ -65,8 +65,7 @@ where
                         Err(error) => Err(error.into()),
                     }
                 }
-                (Err(error), _) => Err(error),
-                (_, Err(error)) => Err(error.into()),
+                (Err(error), _) | (_, Err(error)) => Err(error),
             };
 
             match result {
@@ -79,6 +78,10 @@ where
     Ok(output_tile.grid_array.to_png(width, height, &colorizer)?)
 }
 
+/// Method to generate a default `Colorizer`.
+///
+/// # Panics
+/// If T has no min max value
 pub fn default_colorizer_gradient<T: Pixel>() -> Result<Colorizer> {
     Colorizer::linear_gradient(
         vec![
