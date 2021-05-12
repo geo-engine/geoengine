@@ -122,7 +122,7 @@ where
                     ));
                 }
 
-                if *current_spatial_tile >= num_spatial_tiles.expect("checked") {
+                if *current_spatial_tile + 1 >= num_spatial_tiles.expect("checked") {
                     // time slice ended => query next time slice of sources
                     let mut next_qrect = *query_rect;
                     next_qrect.time_interval = TimeInterval::new_unchecked(
@@ -174,9 +174,12 @@ mod tests {
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;
-    use geoengine_datatypes::primitives::{BoundingBox2D, Measurement, SpatialResolution};
     use geoengine_datatypes::raster::{Grid, RasterDataType};
     use geoengine_datatypes::spatial_reference::SpatialReference;
+    use geoengine_datatypes::{
+        primitives::{BoundingBox2D, Measurement, SpatialResolution},
+        raster::TilingSpecification,
+    };
     use num_traits::AsPrimitive;
 
     #[tokio::test]
@@ -188,14 +191,14 @@ mod tests {
                 data: vec![
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(0, 5),
-                        tile_position: [0, 0].into(),
+                        tile_position: [-1, 0].into(),
                         global_geo_transform: Default::default(),
                         grid_array: Grid::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], no_data_value)
                             .unwrap(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(0, 5),
-                        tile_position: [0, 1].into(),
+                        tile_position: [-1, 1].into(),
                         global_geo_transform: Default::default(),
                         grid_array: Grid::new(
                             [3, 2].into(),
@@ -206,7 +209,7 @@ mod tests {
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(5, 10),
-                        tile_position: [0, 0].into(),
+                        tile_position: [-1, 0].into(),
                         global_geo_transform: Default::default(),
                         grid_array: Grid::new(
                             [3, 2].into(),
@@ -217,7 +220,7 @@ mod tests {
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(5, 10),
-                        tile_position: [0, 1].into(),
+                        tile_position: [-1, 1].into(),
                         global_geo_transform: Default::default(),
                         grid_array: Grid::new(
                             [3, 2].into(),
@@ -242,7 +245,7 @@ mod tests {
                 data: vec![
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(0, 3),
-                        tile_position: [0, 0].into(),
+                        tile_position: [-1, 0].into(),
                         global_geo_transform: Default::default(),
                         grid_array: Grid::new(
                             [3, 2].into(),
@@ -253,7 +256,7 @@ mod tests {
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(0, 3),
-                        tile_position: [0, 1].into(),
+                        tile_position: [-1, 1].into(),
                         global_geo_transform: Default::default(),
                         grid_array: Grid::new(
                             [3, 2].into(),
@@ -264,7 +267,7 @@ mod tests {
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(3, 6),
-                        tile_position: [0, 0].into(),
+                        tile_position: [-1, 0].into(),
                         global_geo_transform: Default::default(),
                         grid_array: Grid::new(
                             [3, 2].into(),
@@ -275,7 +278,7 @@ mod tests {
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(3, 6),
-                        tile_position: [0, 1].into(),
+                        tile_position: [-1, 1].into(),
                         global_geo_transform: Default::default(),
                         grid_array: Grid::new(
                             [3, 2].into(),
@@ -286,7 +289,7 @@ mod tests {
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(6, 10),
-                        tile_position: [0, 0].into(),
+                        tile_position: [-1, 0].into(),
                         global_geo_transform: Default::default(),
                         grid_array: Grid::new(
                             [3, 2].into(),
@@ -297,7 +300,7 @@ mod tests {
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(6, 10),
-                        tile_position: [0, 1].into(),
+                        tile_position: [-1, 1].into(),
                         global_geo_transform: Default::default(),
                         grid_array: Grid::new(
                             [3, 2].into(),
@@ -317,9 +320,12 @@ mod tests {
         }
         .boxed();
 
-        let exe_ctx = MockExecutionContext::default();
+        let exe_ctx = MockExecutionContext {
+            tiling_specification: TilingSpecification::new((0., 0.).into(), [3, 2].into()),
+            ..Default::default()
+        };
         let query_rect = QueryRectangle {
-            bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (1., 1.).into()),
+            bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (4., 3.).into()),
             time_interval: TimeInterval::new_unchecked(0, 10),
             spatial_resolution: SpatialResolution::one(),
         };

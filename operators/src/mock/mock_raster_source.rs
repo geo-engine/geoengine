@@ -5,10 +5,7 @@ use crate::engine::{
 };
 use crate::util::Result;
 use futures::{stream, stream::StreamExt};
-use geoengine_datatypes::{
-    primitives::SpatialBounded,
-    raster::{FromPrimitive, Pixel, RasterTile2D},
-};
+use geoengine_datatypes::raster::{FromPrimitive, Pixel, RasterTile2D};
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 
@@ -44,7 +41,7 @@ where
                 .iter()
                 .filter(move |t| {
                     t.time.intersects(&query.time_interval)
-                        && query.bbox.contains_bbox(&t.spatial_bounds())
+                        && t.tile_information().is_intersected_by_bbox(&query.bbox)
                 })
                 .cloned()
                 .map(Result::Ok),
