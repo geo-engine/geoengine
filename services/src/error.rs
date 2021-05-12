@@ -32,9 +32,6 @@ pub enum Error {
     TokioSignal {
         source: std::io::Error,
     },
-    Proj {
-        source: proj::ProjError,
-    },
 
     TokioChannelSend,
 
@@ -202,11 +199,5 @@ impl From<std::io::Error> for Error {
 impl From<gdal::errors::GdalError> for Error {
     fn from(gdal_error: gdal::errors::GdalError) -> Self {
         Self::Gdal { source: gdal_error }
-    }
-}
-
-impl From<proj::ProjError> for Error {
-    fn from(source: proj::ProjError) -> Self {
-        Self::Proj { source }
     }
 }
