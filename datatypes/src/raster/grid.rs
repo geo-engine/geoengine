@@ -413,7 +413,7 @@ where
     type NoDataType = T;
 
     fn no_data_value(&self) -> Option<Self::NoDataType> {
-        self.no_data_value.clone()
+        self.no_data_value
     }
 }
 

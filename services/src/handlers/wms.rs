@@ -2,16 +2,12 @@ use snafu::ResultExt;
 use warp::reply::Reply;
 use warp::{http::Response, Filter, Rejection};
 
+use geoengine_datatypes::primitives::BoundingBox2D;
 use geoengine_datatypes::{
     operations::image::{Colorizer, ToPng},
     primitives::SpatialResolution,
     raster::Grid2D,
-    raster::RasterTile2D,
     spatial_reference::SpatialReference,
-};
-use geoengine_datatypes::{
-    primitives::BoundingBox2D,
-    raster::{Blit, GeoTransform, MaterializedRasterTile2D, Pixel},
 };
 
 use crate::error;
@@ -21,17 +17,16 @@ use crate::ogc::wms::request::{GetCapabilities, GetLegendGraphic, GetMap, WmsReq
 use crate::users::session::Session;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
-use futures::StreamExt;
-use geoengine_datatypes::operations::image::RgbaColor;
+
 use geoengine_datatypes::primitives::{TimeInstance, TimeInterval};
-use geoengine_operators::call_on_generic_raster_processor;
 use geoengine_operators::engine::RasterOperator;
-use geoengine_operators::engine::{
-    QueryContext, QueryRectangle, RasterQueryProcessor, ResultDescriptor,
-};
+use geoengine_operators::engine::{QueryRectangle, ResultDescriptor};
 use geoengine_operators::processing::{Reprojection, ReprojectionParams};
+use geoengine_operators::{
+    call_on_generic_raster_processor, util::raster_stream_to_png::raster_stream_to_png_bytes,
+};
 use num_traits::AsPrimitive;
-use std::convert::TryInto;
+
 use std::str::FromStr;
 
 pub(crate) fn wms_handler<C: Context>(
@@ -249,6 +244,8 @@ async fn get_map<C: Context>(
             .context(error::Operator)?
     };
 
+    let no_data_value: Option<f64> = initialized.result_descriptor().no_data_value;
+
     let processor = initialized.query_processor().context(error::Operator)?;
 
     // TODO: use proj for determining axis order
@@ -278,10 +275,13 @@ async fn get_map<C: Context>(
 
     let query_ctx = ctx.query_context()?;
 
+    let colorizer = colorizer_from_style(&request.styles)?;
+
     let image_bytes = call_on_generic_raster_processor!(
         processor,
-        p => raster_stream_to_png_bytes(p, query_rect, query_ctx, request).await
-    )?;
+        p =>
+            raster_stream_to_png_bytes(p, query_rect, query_ctx, request.width, request.height, request.time, colorizer, no_data_value.map(AsPrimitive::as_)).await
+    ).map_err(error::Error::from)?;
 
     Ok(Box::new(
         Response::builder()
@@ -291,74 +291,11 @@ async fn get_map<C: Context>(
     ))
 }
 
-async fn raster_stream_to_png_bytes<T, C: QueryContext>(
-    processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
-    query_rect: QueryRectangle,
-    query_ctx: C,
-    request: &GetMap,
-) -> Result<Vec<u8>>
-where
-    T: Pixel,
-{
-    let tile_stream = processor.raster_query(query_rect, &query_ctx)?;
-
-    let x_query_resolution = query_rect.bbox.size_x() / f64::from(request.width);
-    let y_query_resolution = query_rect.bbox.size_y() / f64::from(request.height);
-
-    // build png
-    let dim = [request.height as usize, request.width as usize];
-    let query_geo_transform = GeoTransform::new(
-        query_rect.bbox.upper_left(),
-        x_query_resolution,
-        -y_query_resolution, // TODO: negative, s.t. geo transform fits...
-    );
-
-    let output_raster = Grid2D::new_filled(dim.into(), T::zero(), None);
-    let output_tile = Ok(RasterTile2D::new_without_offset(
-        request.time.unwrap_or_default(),
-        query_geo_transform,
-        output_raster,
-    )
-    .into_materialized_tile());
-
-    let output_tile = tile_stream
-        .fold(output_tile, |raster2d, tile| {
-            let result: Result<MaterializedRasterTile2D<T>> = match (raster2d, tile) {
-                (Ok(mut raster2d), Ok(tile)) => match raster2d.blit(tile) {
-                    Ok(_) => Ok(raster2d),
-                    Err(error) => Err(error.into()),
-                },
-                (Err(error), _) => Err(error),
-                (_, Err(error)) => Err(error.into()),
-            };
-
-            match result {
-                Ok(updated_raster2d) => futures::future::ok(updated_raster2d),
-                Err(error) => futures::future::err(error),
-            }
-        })
-        .await?;
-
-    let colorizer = match request.styles.strip_prefix("custom:") {
-        None => Colorizer::linear_gradient(
-            vec![
-                (AsPrimitive::<f64>::as_(T::min_value()), RgbaColor::black())
-                    .try_into()
-                    .unwrap(),
-                (AsPrimitive::<f64>::as_(T::max_value()), RgbaColor::white())
-                    .try_into()
-                    .unwrap(),
-            ],
-            RgbaColor::transparent(),
-            RgbaColor::pink(),
-        )
-        .unwrap(),
-        Some(suffix) => serde_json::from_str(suffix)?,
-    };
-
-    Ok(output_tile
-        .grid_array
-        .to_png(request.width, request.height, &colorizer)?)
+fn colorizer_from_style(styles: &str) -> Result<Option<Colorizer>> {
+    match styles.strip_prefix("custom:") {
+        None => Ok(None),
+        Some(suffix) => serde_json::from_str(suffix).map_err(error::Error::from),
+    }
 }
 
 #[allow(clippy::unnecessary_wraps)] // TODO: remove line once implemented fully
@@ -403,10 +340,9 @@ mod tests {
     use super::*;
     use crate::contexts::InMemoryContext;
     use crate::handlers::{handle_rejection, ErrorResponse};
-    use crate::ogc::wms::request::GetMapFormat;
     use crate::util::tests::{check_allowed_http_methods, register_ndvi_workflow_helper};
     use geoengine_datatypes::operations::image::RgbaColor;
-    use geoengine_operators::engine::ExecutionContext;
+    use geoengine_operators::engine::{ExecutionContext, RasterQueryProcessor};
     use geoengine_operators::source::GdalSourceProcessor;
     use geoengine_operators::util::gdal::create_ndvi_meta_data;
     use std::convert::TryInto;
@@ -493,55 +429,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn png_from_stream() {
-        let ctx = InMemoryContext::default();
-        let exe_ctx = ctx.execution_context(&Session::mock()).unwrap();
-
-        let gdal_source = GdalSourceProcessor::<u8> {
-            tiling_specification: exe_ctx.tiling_specification(),
-            meta_data: Box::new(create_ndvi_meta_data()),
-            phantom_data: Default::default(),
-        };
-
-        let query_bbox = BoundingBox2D::new((-10., 20.).into(), (50., 80.).into()).unwrap();
-
-        let image_bytes = raster_stream_to_png_bytes(
-            gdal_source.boxed(),
-            QueryRectangle {
-                bbox: query_bbox,
-                time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
-                    .unwrap(),
-                spatial_resolution: SpatialResolution::zero_point_one(),
-            },
-            ctx.query_context().unwrap(),
-            &GetMap {
-                version: "".to_string(),
-                width: 600,
-                height: 600,
-                bbox: query_bbox,
-                format: GetMapFormat::ImagePng,
-                layers: "".to_string(),
-                crs: None,
-                styles: "".to_string(),
-                time: None,
-                transparent: None,
-                bgcolor: None,
-                sld: None,
-                sld_body: None,
-                elevation: None,
-                exceptions: None,
-            },
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(
-            include_bytes!("../../../services/test-data/wms/raster.png") as &[u8],
-            image_bytes.as_slice()
-        );
-    }
-
-    #[tokio::test]
     async fn png_from_stream_non_full() {
         let ctx = InMemoryContext::default();
         let exe_ctx = ctx.execution_context(&Session::mock()).unwrap();
@@ -563,23 +450,11 @@ mod tests {
                 spatial_resolution: SpatialResolution::new_unchecked(1.0, 1.0),
             },
             ctx.query_context().unwrap(),
-            &GetMap {
-                version: "".to_string(),
-                width: 360,
-                height: 180,
-                bbox: query_bbox,
-                format: GetMapFormat::ImagePng,
-                layers: "".to_string(),
-                crs: None,
-                styles: "".to_string(),
-                time: None,
-                transparent: None,
-                bgcolor: None,
-                sld: None,
-                sld_body: None,
-                elevation: None,
-                exceptions: None,
-            },
+            360,
+            180,
+            None,
+            None,
+            None,
         )
         .await
         .unwrap();
@@ -608,7 +483,7 @@ mod tests {
 
         assert_eq!(res.status(), 200);
         assert_eq!(
-            include_bytes!("../../../services/test-data/wms/raster.png") as &[u8],
+            include_bytes!("../../../services/test-data/wms/get_map.png") as &[u8],
             res.body().to_vec().as_slice()
         );
     }
@@ -627,7 +502,7 @@ mod tests {
 
         assert_eq!(res.status(), 200);
         assert_eq!(
-            include_bytes!("../../../services/test-data/wms/raster.png") as &[u8],
+            include_bytes!("../../../services/test-data/wms/get_map.png") as &[u8],
             res.body().to_vec().as_slice()
         );
     }
@@ -693,7 +568,7 @@ mod tests {
 
         assert_eq!(res.status(), 200);
         assert_eq!(
-            include_bytes!("../../../services/test-data/wms/raster_colorizer.png") as &[u8],
+            include_bytes!("../../../services/test-data/wms/get_map_colorizer.png") as &[u8],
             res.body().to_vec().as_slice()
         );
     }

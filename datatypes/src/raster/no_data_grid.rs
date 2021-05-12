@@ -139,7 +139,7 @@ where
     type NoDataType = T;
 
     fn no_data_value(&self) -> Option<Self::NoDataType> {
-        Some(self.no_data_value.clone())
+        Some(self.no_data_value)
     }
 }
 
@@ -182,6 +182,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn convert_dtype() {
         let n = NoDataGrid2D::new([2, 2].into(), 42);
         let n_converted = n.convert_dtype::<f64>();

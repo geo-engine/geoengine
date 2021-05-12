@@ -25,7 +25,7 @@ where
         let scale_x = (raster_x_size as f64) / f64::from(width);
         let scale_y = (raster_y_size as f64) / f64::from(height);
 
-        let image_buffer = if let Some(_) = self.no_data_value() {
+        let image_buffer = if self.no_data_value().is_some() {
             let no_data_fn = move |p: P| self.is_no_data(p);
             create_rgba_image(self, width, height, colorizer, scale_x, scale_y, no_data_fn)
         } else {
