@@ -39,7 +39,7 @@ async fn tiles_to_png(query: QueryRectangle) -> Vec<u8> {
 fn bench_tiles_to_png(c: &mut Criterion) {
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let query = QueryRectangle {
-        bbox: BoundingBox2D::new((-10., 20.).into(), (50., 80.).into()).unwrap(),
+        bbox: BoundingBox2D::new((-5., -10.).into(), (55., 50.).into()).unwrap(),
         time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
         spatial_resolution: SpatialResolution::zero_point_one(),
     };
@@ -52,7 +52,7 @@ fn bench_tiles_to_png(c: &mut Criterion) {
 fn bench_empty_tiles_to_png(c: &mut Criterion) {
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let query = QueryRectangle {
-        bbox: BoundingBox2D::new((-10., 20.).into(), (50., 80.).into()).unwrap(),
+        bbox: BoundingBox2D::new((-5., -10.).into(), (55., 50.).into()).unwrap(),
         time_interval: TimeInterval::new(1_000_000_000_000, 1_000_000_000_000 + 1000).unwrap(),
         spatial_resolution: SpatialResolution::zero_point_one(),
     };
