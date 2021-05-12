@@ -3,12 +3,13 @@ use crate::primitives::PrimitivesError;
 use crate::util::Result;
 use arrow::bitmap::Bitmap;
 use gdal::vector::OGRFieldType;
+use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use snafu::ensure;
 use std::convert::TryFrom;
-use std::slice;
 use std::str;
+use std::{marker::PhantomData, slice};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -106,13 +107,38 @@ impl<'f> FeatureDataRef<'f> {
             FeatureDataRef::Category(data_ref) => data_ref.get_unchecked(i),
         }
     }
+
+    /// Creates an iterator over all values as string
+    /// Null-values are empty strings.
+    pub fn strings_iter(&self) -> Box<dyn Iterator<Item = String> + '_> {
+        match self {
+            FeatureDataRef::Text(data_ref) => Box::new(data_ref.strings_iter()),
+            FeatureDataRef::Float(data_ref) => Box::new(data_ref.strings_iter()),
+            FeatureDataRef::Int(data_ref) => Box::new(data_ref.strings_iter()),
+            FeatureDataRef::Category(data_ref) => Box::new(data_ref.strings_iter()),
+        }
+    }
+
+    /// Creates an iterator over all values as [`Option<f64>`]
+    /// Null values or non-convertible values are [`None`]
+    pub fn float_options_iter(&self) -> Box<dyn Iterator<Item = Option<f64>> + '_> {
+        match self {
+            FeatureDataRef::Text(data_ref) => Box::new(data_ref.float_options_iter()),
+            FeatureDataRef::Float(data_ref) => Box::new(data_ref.float_options_iter()),
+            FeatureDataRef::Int(data_ref) => Box::new(data_ref.float_options_iter()),
+            FeatureDataRef::Category(data_ref) => Box::new(data_ref.float_options_iter()),
+        }
+    }
 }
 
 /// Common methods for feature data references
 pub trait DataRef<'r, T>: AsRef<[T]> + Into<FeatureDataRef<'r>>
 where
-    T: 'r,
+    T: 'static,
 {
+    type StringsIter: Iterator<Item = String>;
+    type FloatOptionsIter: Iterator<Item = Option<f64>>;
+
     /// Computes JSON value lists for data elements
     fn json_values(&'r self) -> Box<dyn Iterator<Item = serde_json::Value> + 'r> {
         if self.has_nulls() {
@@ -148,6 +174,21 @@ where
     fn has_nulls(&self) -> bool;
 
     fn get_unchecked(&self, i: usize) -> FeatureDataValue;
+
+    /// Number of values
+    fn len(&self) -> usize;
+
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Creates an iterator over all values as string
+    /// Null values are empty strings.
+    fn strings_iter(&'r self) -> Self::StringsIter;
+
+    /// Creates an iterator over all values as [`Option<f64>`]
+    /// Null values or non-convertible values are [`None`]
+    fn float_options_iter(&'r self) -> Self::FloatOptionsIter;
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -185,6 +226,116 @@ impl<'f> DataRef<'f, f64> for FloatDataRef<'f> {
         } else {
             FeatureDataValue::Float(self.as_ref()[i])
         }
+    }
+
+    type StringsIter = NumberDataRefStringIter<'f, Self, f64>;
+
+    fn strings_iter(&'f self) -> Self::StringsIter {
+        NumberDataRefStringIter::new(self)
+    }
+
+    fn len(&self) -> usize {
+        self.buffer.len()
+    }
+
+    type FloatOptionsIter = NumberDataRefFloatOptionIter<'f, Self, f64>;
+
+    fn float_options_iter(&'f self) -> Self::FloatOptionsIter {
+        NumberDataRefFloatOptionIter::new(self)
+    }
+}
+
+pub struct NumberDataRefStringIter<'r, D, T>
+where
+    D: DataRef<'r, T>,
+    T: 'static,
+{
+    data_ref: &'r D,
+    i: usize,
+    t: PhantomData<T>,
+}
+
+impl<'r, D, T> NumberDataRefStringIter<'r, D, T>
+where
+    D: DataRef<'r, T>,
+    T: 'static,
+{
+    pub fn new(data_ref: &'r D) -> Self {
+        Self {
+            data_ref,
+            i: 0,
+            t: PhantomData::default(),
+        }
+    }
+}
+
+impl<'f, D, T> Iterator for NumberDataRefStringIter<'f, D, T>
+where
+    D: DataRef<'f, T>,
+    T: 'static + ToString,
+{
+    type Item = String;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.i >= self.data_ref.len() {
+            return None;
+        }
+
+        let i = self.i;
+        self.i += 1;
+
+        if self.data_ref.is_null(i) {
+            return Some(String::default());
+        }
+
+        Some(self.data_ref.as_ref()[i].to_string())
+    }
+}
+
+pub struct NumberDataRefFloatOptionIter<'r, D, T>
+where
+    D: DataRef<'r, T>,
+    T: 'static,
+{
+    data_ref: &'r D,
+    i: usize,
+    t: PhantomData<T>,
+}
+
+impl<'r, D, T> NumberDataRefFloatOptionIter<'r, D, T>
+where
+    D: DataRef<'r, T>,
+    T: 'static,
+{
+    pub fn new(data_ref: &'r D) -> Self {
+        Self {
+            data_ref,
+            i: 0,
+            t: PhantomData::default(),
+        }
+    }
+}
+
+impl<'f, D, T> Iterator for NumberDataRefFloatOptionIter<'f, D, T>
+where
+    D: DataRef<'f, T>,
+    T: 'static + AsPrimitive<f64>,
+{
+    type Item = Option<f64>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.i >= self.data_ref.len() {
+            return None;
+        }
+
+        let i = self.i;
+        self.i += 1;
+
+        Some(if self.data_ref.is_null(i) {
+            None
+        } else {
+            Some(self.data_ref.as_ref()[i].as_())
+        })
     }
 }
 
@@ -254,6 +405,22 @@ impl<'f> DataRef<'f, i64> for IntDataRef<'f> {
             FeatureDataValue::Int(self.as_ref()[i])
         }
     }
+
+    type StringsIter = NumberDataRefStringIter<'f, Self, i64>;
+
+    fn strings_iter(&'f self) -> Self::StringsIter {
+        NumberDataRefStringIter::new(self)
+    }
+
+    fn len(&self) -> usize {
+        self.buffer.len()
+    }
+
+    type FloatOptionsIter = NumberDataRefFloatOptionIter<'f, Self, i64>;
+
+    fn float_options_iter(&'f self) -> Self::FloatOptionsIter {
+        NumberDataRefFloatOptionIter::new(self)
+    }
 }
 
 impl AsRef<[i64]> for IntDataRef<'_> {
@@ -311,6 +478,22 @@ impl<'f> DataRef<'f, u8> for CategoryDataRef<'f> {
         } else {
             FeatureDataValue::Category(self.as_ref()[i])
         }
+    }
+
+    type StringsIter = NumberDataRefStringIter<'f, Self, u8>;
+
+    fn strings_iter(&'f self) -> Self::StringsIter {
+        NumberDataRefStringIter::new(self)
+    }
+
+    fn len(&self) -> usize {
+        self.buffer.len()
+    }
+
+    type FloatOptionsIter = NumberDataRefFloatOptionIter<'f, Self, u8>;
+
+    fn float_options_iter(&'f self) -> Self::FloatOptionsIter {
+        NumberDataRefFloatOptionIter::new(self)
     }
 }
 
@@ -460,6 +643,78 @@ impl<'r> DataRef<'r, u8> for TextDataRef<'r> {
         } else {
             FeatureDataValue::Text(text.expect("cannot be null"))
         }
+    }
+
+    type StringsIter = TextDataRefStringIter<'r>;
+
+    fn strings_iter(&'r self) -> Self::StringsIter {
+        Self::StringsIter::new(self)
+    }
+
+    fn len(&self) -> usize {
+        self.offsets.len() - 1
+    }
+
+    type FloatOptionsIter = TextDataRefFloatOptionIter<'r>;
+
+    fn float_options_iter(&'r self) -> Self::FloatOptionsIter {
+        Self::FloatOptionsIter::new(self)
+    }
+}
+
+pub struct TextDataRefStringIter<'r> {
+    data_ref: &'r TextDataRef<'r>,
+    i: usize,
+}
+
+impl<'r> TextDataRefStringIter<'r> {
+    pub fn new(data_ref: &'r TextDataRef<'r>) -> Self {
+        Self { data_ref, i: 0 }
+    }
+}
+
+impl<'r> Iterator for TextDataRefStringIter<'r> {
+    type Item = String;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let i = self.i;
+        self.i += 1;
+
+        self.data_ref
+            .text_at(i)
+            .map(|text_option| match text_option {
+                Some(text) => text.to_owned(),
+                None => String::default(),
+            })
+            .ok()
+    }
+}
+
+pub struct TextDataRefFloatOptionIter<'r> {
+    data_ref: &'r TextDataRef<'r>,
+    i: usize,
+}
+
+impl<'r> TextDataRefFloatOptionIter<'r> {
+    pub fn new(data_ref: &'r TextDataRef<'r>) -> Self {
+        Self { data_ref, i: 0 }
+    }
+}
+
+impl<'r> Iterator for TextDataRefFloatOptionIter<'r> {
+    type Item = Option<f64>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let i = self.i;
+        self.i += 1;
+
+        self.data_ref
+            .text_at(i)
+            .map(|text_option| match text_option {
+                Some(text) => text.parse().ok(),
+                None => None,
+            })
+            .ok()
     }
 }
 
@@ -720,5 +975,100 @@ impl<'s> TryFrom<&'s FeatureDataValue> for &'s str {
             FeatureDataValue::NullableText(v) if v.is_some() => v.as_ref().unwrap(),
             _ => return Err(crate::collections::FeatureCollectionError::WrongDataType),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        collections::{DataCollection, FeatureCollectionInfos},
+        primitives::{NoGeometry, TimeInterval},
+    };
+
+    use super::*;
+
+    #[test]
+    fn strings_iter() {
+        let collection = DataCollection::from_slices(
+            &[] as &[NoGeometry],
+            &[TimeInterval::default(); 3],
+            &[
+                ("ints", FeatureData::Int(vec![1, 2, 3])),
+                (
+                    "floats",
+                    FeatureData::NullableFloat(vec![Some(1.0), None, Some(3.0)]),
+                ),
+                (
+                    "texts",
+                    FeatureData::NullableText(vec![
+                        Some("a".to_owned()),
+                        Some("b".to_owned()),
+                        None,
+                    ]),
+                ),
+            ],
+        )
+        .unwrap();
+
+        let from_ints: Vec<String> = collection.data("ints").unwrap().strings_iter().collect();
+        let from_ints_cmp: Vec<String> = ["1", "2", "3"].iter().map(ToString::to_string).collect();
+        assert_eq!(from_ints, from_ints_cmp);
+
+        let from_floats: Vec<String> = collection.data("floats").unwrap().strings_iter().collect();
+        let from_floats_cmp: Vec<String> = ["1", "", "3"].iter().map(ToString::to_string).collect();
+        assert_eq!(from_floats, from_floats_cmp);
+
+        let from_strings: Vec<String> = collection.data("texts").unwrap().strings_iter().collect();
+        let from_strings_cmp: Vec<String> =
+            ["a", "b", ""].iter().map(ToString::to_string).collect();
+        assert_eq!(from_strings, from_strings_cmp);
+    }
+
+    #[test]
+    fn float_options_iter() {
+        let collection = DataCollection::from_slices(
+            &[] as &[NoGeometry],
+            &[TimeInterval::default(); 3],
+            &[
+                ("ints", FeatureData::Int(vec![1, 2, 3])),
+                (
+                    "floats",
+                    FeatureData::NullableFloat(vec![Some(1.0), None, Some(3.0)]),
+                ),
+                (
+                    "texts",
+                    FeatureData::NullableText(vec![
+                        Some("1".to_owned()),
+                        Some("f".to_owned()),
+                        None,
+                    ]),
+                ),
+            ],
+        )
+        .unwrap();
+
+        let from_ints: Vec<Option<f64>> = collection
+            .data("ints")
+            .unwrap()
+            .float_options_iter()
+            .collect();
+        let from_ints_cmp: Vec<Option<f64>> = vec![Some(1.0), Some(2.0), Some(3.0)];
+        assert_eq!(from_ints, from_ints_cmp);
+
+        let from_floats: Vec<Option<f64>> = collection
+            .data("floats")
+            .unwrap()
+            .float_options_iter()
+            .collect();
+        let from_floats_cmp: Vec<Option<f64>> = vec![Some(1.0), None, Some(3.0)];
+        assert_eq!(from_floats, from_floats_cmp);
+
+        let from_strings: Vec<Option<f64>> = collection
+            .data("texts")
+            .unwrap()
+            .float_options_iter()
+            .collect();
+        let from_strings_cmp: Vec<Option<f64>> = vec![Some(1.0), None, None];
+        assert_eq!(from_strings, from_strings_cmp);
     }
 }
