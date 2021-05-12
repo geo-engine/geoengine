@@ -10,7 +10,8 @@
       "resultDescriptor": {
         "dataType": "U8",
         "spatialReference": "EPSG:4326",
-        "measurement": "unitless"
+        "measurement": "unitless",
+        "no_data_value": 0.0
       },
       "params": {
         "filePath": "operators/test-data/raster/modis_ndvi/MOD13A2_M_NDVI_%%%_START_TIME_%%%.TIFF",
@@ -33,7 +34,8 @@
             "y": 90.0
           }
         },
-        "fileNotFoundHandling": "NoData"
+        "fileNotFoundHandling": "NoData",
+        "no_data_value": 0.0
       },
       "placeholder": "%%%_START_TIME_%%%",
       "timeFormat": "%Y-%m-%d",

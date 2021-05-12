@@ -1,5 +1,5 @@
 use crate::raster::{
-    Grid2D, GridIndexAccess, GridOrEmpty2D, Pixel, RasterTile2D, TypedRasterTile2D,
+    Grid2D, GridIndexAccess, GridOrEmpty2D, NoDataValue, Pixel, RasterTile2D, TypedRasterTile2D,
 };
 use crate::util::Result;
 use crate::{error, raster::NoDataGrid2D};
@@ -25,8 +25,8 @@ where
         let scale_x = (raster_x_size as f64) / f64::from(width);
         let scale_y = (raster_y_size as f64) / f64::from(height);
 
-        let image_buffer = if let Some(no_data_value) = self.no_data_value {
-            let no_data_fn = move |p: P| p == no_data_value;
+        let image_buffer = if let Some(_) = self.no_data_value() {
+            let no_data_fn = move |p: P| self.is_no_data(p);
             create_rgba_image(self, width, height, colorizer, scale_x, scale_y, no_data_fn)
         } else {
             let no_data_fn = move |_| false;
