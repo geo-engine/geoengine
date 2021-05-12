@@ -32,7 +32,7 @@ pub enum TimeGranularity {
 #[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
 pub struct TimeStep {
     pub granularity: TimeGranularity,
-    pub step: u32,
+    pub step: u32, // TODO: ensure on deserialization it is > 0
 }
 
 impl TimeStep {

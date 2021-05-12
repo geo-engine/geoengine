@@ -5,7 +5,10 @@ use crate::engine::{
 };
 use crate::util::Result;
 use futures::{stream, stream::StreamExt};
-use geoengine_datatypes::raster::{FromPrimitive, Pixel, RasterTile2D};
+use geoengine_datatypes::{
+    primitives::SpatialBounded,
+    raster::{FromPrimitive, Pixel, RasterTile2D},
+};
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 
@@ -36,11 +39,13 @@ where
         query: crate::engine::QueryRectangle,
         _ctx: &'a dyn crate::engine::QueryContext,
     ) -> Result<futures::stream::BoxStream<crate::util::Result<Self::Output>>> {
-        // TODO: filter spatially w.r.t. query rectangle
         Ok(stream::iter(
             self.data
                 .iter()
-                .filter(move |t| t.time.intersects(&query.time_interval))
+                .filter(move |t| {
+                    t.time.intersects(&query.time_interval)
+                        && query.bbox.contains_bbox(&t.spatial_bounds())
+                })
                 .cloned()
                 .map(Result::Ok),
         )
