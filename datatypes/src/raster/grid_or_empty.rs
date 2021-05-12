@@ -162,7 +162,7 @@ where
 
 impl<D, T> NoDataValue for GridOrEmpty<D, T>
 where
-    T: PartialEq + Clone,
+    T: PartialEq + Copy,
 {
     type NoDataType = T;
 
@@ -178,7 +178,7 @@ impl<D, T, I> ChangeGridBounds<I> for GridOrEmpty<D, T>
 where
     I: AsRef<[isize]> + Clone,
     D: GridBounds<IndexArray = I> + Clone + GridSpaceToLinearSpace<IndexArray = I>,
-    T: Clone,
+    T: Copy,
     GridBoundingBox<I>: GridSize,
     GridIdx<I>: Add<Output = GridIdx<I>> + From<I>,
 {

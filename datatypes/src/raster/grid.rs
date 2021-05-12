@@ -408,7 +408,7 @@ where
 
 impl<D, T> NoDataValue for Grid<D, T>
 where
-    T: PartialEq + Clone,
+    T: PartialEq + Copy,
 {
     type NoDataType = T;
 

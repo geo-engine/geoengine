@@ -142,7 +142,7 @@ pub trait GridShapeAccess {
 
 /// Provides the the value used to represent a no data entry.
 pub trait NoDataValue {
-    type NoDataType: PartialEq;
+    type NoDataType: PartialEq + Copy;
 
     fn no_data_value(&self) -> Option<Self::NoDataType>;
 

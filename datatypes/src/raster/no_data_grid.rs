@@ -28,7 +28,7 @@ pub type NoDataGrid3D<T> = NoDataGrid<GridShape3D, T>;
 impl<D, T> NoDataGrid<D, T>
 where
     D: GridSize,
-    T: Clone,
+    T: Copy,
 {
     /// Creates a new `NoDataGrid`
     pub fn new(shape: D, no_data_value: T) -> Self {
@@ -134,7 +134,7 @@ where
 
 impl<D, T> NoDataValue for NoDataGrid<D, T>
 where
-    T: PartialEq + Clone,
+    T: PartialEq + Copy,
 {
     type NoDataType = T;
 
@@ -147,7 +147,7 @@ impl<D, T, I> ChangeGridBounds<I> for NoDataGrid<D, T>
 where
     I: AsRef<[isize]> + Clone,
     D: GridBounds<IndexArray = I> + Clone,
-    T: Clone,
+    T: Copy,
     GridBoundingBox<I>: GridSize,
     GridIdx<I>: Add<Output = GridIdx<I>> + From<I>,
 {
