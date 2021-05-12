@@ -281,4 +281,28 @@ mod tests {
             image_bytes.as_slice()
         );
     }
+
+    #[test]
+    fn no_data_tile() {
+        let raster = NoDataGrid2D::new([2, 2].into(), 0);
+
+        let colorizer = Colorizer::linear_gradient(
+            vec![
+                (0.0, RgbaColor::new(0, 0, 0, 255)).try_into().unwrap(),
+                (255.0, RgbaColor::new(255, 255, 255, 255))
+                    .try_into()
+                    .unwrap(),
+            ],
+            RgbaColor::transparent(),
+            RgbaColor::pink(),
+        )
+        .unwrap();
+
+        let image_bytes = raster.to_png(100, 100, &colorizer).unwrap();
+
+        assert_eq!(
+            include_bytes!("../../../test-data/colorizer/empty.png") as &[u8],
+            image_bytes.as_slice()
+        );
+    }
 }
