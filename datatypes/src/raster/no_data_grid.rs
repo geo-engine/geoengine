@@ -164,3 +164,61 @@ where
         Ok(NoDataGrid::new(bounds, self.no_data_value))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new() {
+        let n = NoDataGrid2D::new([2, 2].into(), 42);
+        let expected = NoDataGrid {
+            shape: GridShape2D::from([2, 2]),
+            no_data_value: 42,
+        };
+
+        assert_eq!(n.no_data_value, 42);
+        assert_eq!(n, expected);
+    }
+
+    #[test]
+    fn convert_dtype() {
+        let n = NoDataGrid2D::new([2, 2].into(), 42);
+        let n_converted = n.convert_dtype::<f64>();
+        assert_eq!(n_converted.no_data_value, 42.);
+    }
+
+    #[test]
+    fn ndim() {
+        assert_eq!(NoDataGrid1D::<i32>::NDIM, 1);
+        assert_eq!(NoDataGrid2D::<f64>::NDIM, 2);
+        assert_eq!(NoDataGrid3D::<u16>::NDIM, 3);
+    }
+
+    #[test]
+    fn axis_size() {
+        let n = NoDataGrid2D::new([2, 2].into(), 42);
+        assert_eq!(n.axis_size(), [2, 2]);
+    }
+
+    #[test]
+    fn number_of_elements() {
+        let n = NoDataGrid2D::new([2, 2].into(), 42);
+        assert_eq!(n.number_of_elements(), 4);
+    }
+
+    #[test]
+    fn get_at_grid_index_unchecked() {
+        let n = NoDataGrid2D::new([2, 2].into(), 42);
+        assert_eq!(n.get_at_grid_index_unchecked([0, 0]), 42);
+        assert_eq!(n.get_at_grid_index_unchecked([100, 100]), 42);
+    }
+
+    #[test]
+    fn get_at_grid_index() {
+        let n = NoDataGrid2D::new([2, 2].into(), 42);
+        let result = n.get_at_grid_index([0, 0]).unwrap();
+        assert_eq!(result, 42);
+        assert!(n.get_at_grid_index([100, 100]).is_err());
+    }
+}
