@@ -224,6 +224,11 @@ impl PlotQueryProcessor for HistogramRasterQueryProcessor {
     ) -> Result<Self::OutputFormat> {
         self.preprocess(query, ctx)
             .and_then(move |histogram_metadata| async move {
+                if histogram_metadata.has_invalid_parameters() {
+                    // early return of empty histogram
+                    return self.empty_histogram();
+                }
+
                 self.process(histogram_metadata, query, ctx).await
             })
             .await
@@ -245,6 +250,11 @@ impl PlotQueryProcessor for HistogramVectorQueryProcessor {
     ) -> Result<Self::OutputFormat> {
         self.preprocess(query, ctx)
             .and_then(move |histogram_metadata| async move {
+                if histogram_metadata.has_invalid_parameters() {
+                    // early return of empty histogram
+                    return self.empty_histogram();
+                }
+
                 self.process(histogram_metadata, query, ctx).await
             })
             .await
@@ -308,6 +318,19 @@ impl HistogramRasterQueryProcessor {
                 histogram.add_raster_data(&tile.grid_array.data, tile.grid_array.no_data_value);
             }
         });
+
+        let chart = histogram.to_vega_embeddable(self.interactive)?;
+
+        Ok(chart)
+    }
+
+    fn empty_histogram(
+        &self,
+    ) -> Result<<HistogramRasterQueryProcessor as PlotQueryProcessor>::OutputFormat> {
+        let histogram =
+            geoengine_datatypes::plots::Histogram::builder(1, 0., 0., self.measurement.clone())
+                .build()
+                .map_err(Error::from)?;
 
         let chart = histogram.to_vega_embeddable(self.interactive)?;
 
@@ -384,6 +407,19 @@ impl HistogramVectorQueryProcessor {
 
         Ok(chart)
     }
+
+    fn empty_histogram(
+        &self,
+    ) -> Result<<HistogramRasterQueryProcessor as PlotQueryProcessor>::OutputFormat> {
+        let histogram =
+            geoengine_datatypes::plots::Histogram::builder(1, 0., 0., self.measurement.clone())
+                .build()
+                .map_err(Error::from)?;
+
+        let chart = histogram.to_vega_embeddable(self.interactive)?;
+
+        Ok(chart)
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -391,6 +427,12 @@ struct HistogramMetadata {
     pub number_of_buckets: usize,
     pub min: f64,
     pub max: f64,
+}
+
+impl HistogramMetadata {
+    fn has_invalid_parameters(&self) -> bool {
+        self.number_of_buckets == 0 || self.min > self.max
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -959,5 +1001,183 @@ mod tests {
         } else {
             panic!("we currently don't support text features, but this went through");
         }
+    }
+
+    #[tokio::test]
+    async fn no_data_raster() {
+        let no_data_value = Some(0);
+        let histogram = Histogram {
+            params: HistogramParams {
+                column_name: None,
+                bounds: HistogramBounds::Data(Data::default()),
+                buckets: None,
+                interactive: false,
+            },
+            sources: MockRasterSource {
+                params: MockRasterSourceParams {
+                    data: vec![RasterTile2D::new_with_tile_info(
+                        TimeInterval::default(),
+                        TileInformation {
+                            global_geo_transform: Default::default(),
+                            global_tile_position: [0, 0].into(),
+                            tile_size_in_pixels: [3, 2].into(),
+                        },
+                        Grid2D::new([3, 2].into(), vec![0, 0, 0, 0, 0, 0], no_data_value.clone())
+                            .unwrap(),
+                    )],
+                    result_descriptor: RasterResultDescriptor {
+                        data_type: RasterDataType::U8,
+                        spatial_reference: SpatialReference::epsg_4326().into(),
+                        measurement: Measurement::Unitless,
+                        no_data_value: no_data_value.map(AsPrimitive::as_),
+                    },
+                },
+            }
+            .boxed()
+            .into(),
+        };
+
+        let execution_context = MockExecutionContext::default();
+
+        let query_processor = histogram
+            .boxed()
+            .initialize(&execution_context)
+            .unwrap()
+            .query_processor()
+            .unwrap()
+            .json_vega()
+            .unwrap();
+
+        let result = query_processor
+            .plot_query(
+                QueryRectangle {
+                    bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    time_interval: TimeInterval::default(),
+                    spatial_resolution: SpatialResolution::one(),
+                },
+                &MockQueryContext::new(0),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            result,
+            geoengine_datatypes::plots::Histogram::builder(1, 0., 0., Measurement::Unitless)
+                .build()
+                .unwrap()
+                .to_vega_embeddable(false)
+                .unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn empty_feature_collection() {
+        let vector_source = MockFeatureCollectionSource::single(
+            DataCollection::from_slices(
+                &[] as &[NoGeometry],
+                &[] as &[TimeInterval],
+                &[("foo", FeatureData::Float(vec![]))],
+            )
+            .unwrap(),
+        )
+        .boxed();
+
+        let histogram = Histogram {
+            params: HistogramParams {
+                column_name: Some("foo".to_string()),
+                bounds: HistogramBounds::Data(Default::default()),
+                buckets: None,
+                interactive: false,
+            },
+            sources: vector_source.into(),
+        };
+
+        let execution_context = MockExecutionContext::default();
+
+        let query_processor = histogram
+            .boxed()
+            .initialize(&execution_context)
+            .unwrap()
+            .query_processor()
+            .unwrap()
+            .json_vega()
+            .unwrap();
+
+        let result = query_processor
+            .plot_query(
+                QueryRectangle {
+                    bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    time_interval: TimeInterval::default(),
+                    spatial_resolution: SpatialResolution::one(),
+                },
+                &MockQueryContext::new(0),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            result,
+            geoengine_datatypes::plots::Histogram::builder(1, 0., 0., Measurement::Unitless)
+                .build()
+                .unwrap()
+                .to_vega_embeddable(false)
+                .unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn feature_collection_with_one_feature() {
+        let vector_source = MockFeatureCollectionSource::single(
+            DataCollection::from_slices(
+                &[] as &[NoGeometry],
+                &[TimeInterval::default()],
+                &[("foo", FeatureData::Float(vec![5.0]))],
+            )
+            .unwrap(),
+        )
+        .boxed();
+
+        let histogram = Histogram {
+            params: HistogramParams {
+                column_name: Some("foo".to_string()),
+                bounds: HistogramBounds::Data(Default::default()),
+                buckets: None,
+                interactive: false,
+            },
+            sources: vector_source.into(),
+        };
+
+        let execution_context = MockExecutionContext::default();
+
+        let query_processor = histogram
+            .boxed()
+            .initialize(&execution_context)
+            .unwrap()
+            .query_processor()
+            .unwrap()
+            .json_vega()
+            .unwrap();
+
+        let result = query_processor
+            .plot_query(
+                QueryRectangle {
+                    bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    time_interval: TimeInterval::default(),
+                    spatial_resolution: SpatialResolution::one(),
+                },
+                &MockQueryContext::new(0),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            result,
+            geoengine_datatypes::plots::Histogram::builder(1, 5., 5., Measurement::Unitless)
+                .counts(vec![1])
+                .build()
+                .unwrap()
+                .to_vega_embeddable(false)
+                .unwrap()
+        );
     }
 }
