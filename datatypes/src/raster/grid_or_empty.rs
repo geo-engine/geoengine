@@ -1,8 +1,8 @@
 use std::ops::Add;
 
 use super::{
+    empty_grid::EmptyGrid,
     grid_traits::{ChangeGridBounds, GridShapeAccess},
-    no_data_grid::NoDataGrid,
     Grid, GridBoundingBox, GridBounds, GridIdx, GridIndexAccess, GridShape, GridShape1D,
     GridShape2D, GridShape3D, GridSize, GridSpaceToLinearSpace, NoDataValue,
 };
@@ -20,7 +20,7 @@ pub type GridOrEmpty3D<T> = GridOrEmpty<GridShape3D, T>;
 #[serde(tag = "type")]
 pub enum GridOrEmpty<D, T> {
     Grid(Grid<D, T>),
-    Empty(NoDataGrid<D, T>),
+    Empty(EmptyGrid<D, T>),
 }
 
 impl<D, T> GridOrEmpty<D, T>
@@ -142,11 +142,11 @@ where
     }
 }
 
-impl<D, T> From<NoDataGrid<D, T>> for GridOrEmpty<D, T>
+impl<D, T> From<EmptyGrid<D, T>> for GridOrEmpty<D, T>
 where
     T: Clone,
 {
-    fn from(no_grid_array: NoDataGrid<D, T>) -> Self {
+    fn from(no_grid_array: EmptyGrid<D, T>) -> Self {
         GridOrEmpty::Empty(no_grid_array)
     }
 }

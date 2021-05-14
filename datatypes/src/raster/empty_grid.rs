@@ -16,16 +16,16 @@ use snafu::ensure;
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct NoDataGrid<D, T> {
+pub struct EmptyGrid<D, T> {
     pub shape: D,
     pub no_data_value: T,
 }
 
-pub type NoDataGrid1D<T> = NoDataGrid<GridShape1D, T>;
-pub type NoDataGrid2D<T> = NoDataGrid<GridShape2D, T>;
-pub type NoDataGrid3D<T> = NoDataGrid<GridShape3D, T>;
+pub type NoDataGrid1D<T> = EmptyGrid<GridShape1D, T>;
+pub type NoDataGrid2D<T> = EmptyGrid<GridShape2D, T>;
+pub type NoDataGrid3D<T> = EmptyGrid<GridShape3D, T>;
 
-impl<D, T> NoDataGrid<D, T>
+impl<D, T> EmptyGrid<D, T>
 where
     D: GridSize,
     T: Copy,
@@ -39,16 +39,16 @@ where
     }
 
     /// Converts the data type of the raster by converting it pixel-wise
-    pub fn convert_dtype<To>(self) -> NoDataGrid<D, To>
+    pub fn convert_dtype<To>(self) -> EmptyGrid<D, To>
     where
         T: AsPrimitive<To> + Copy + 'static,
         To: Copy + 'static,
     {
-        NoDataGrid::new(self.shape, self.no_data_value.as_())
+        EmptyGrid::new(self.shape, self.no_data_value.as_())
     }
 }
 
-impl<D, T> GridSize for NoDataGrid<D, T>
+impl<D, T> GridSize for EmptyGrid<D, T>
 where
     D: GridSize + GridSpaceToLinearSpace,
 {
@@ -65,7 +65,7 @@ where
     }
 }
 
-impl<T, D, I, A> GridIndexAccess<T, I> for NoDataGrid<D, T>
+impl<T, D, I, A> GridIndexAccess<T, I> for EmptyGrid<D, T>
 where
     D: GridSize + GridSpaceToLinearSpace<IndexArray = A> + GridBounds<IndexArray = A>,
     I: Into<GridIdx<A>>,
@@ -90,7 +90,7 @@ where
     }
 }
 
-impl<T, D> GridBounds for NoDataGrid<D, T>
+impl<T, D> GridBounds for EmptyGrid<D, T>
 where
     D: GridBounds,
 {
@@ -105,7 +105,7 @@ where
     }
 }
 
-impl<D, T> GridShapeAccess for NoDataGrid<D, T>
+impl<D, T> GridShapeAccess for EmptyGrid<D, T>
 where
     D: GridSize,
     D::ShapeArray: Into<GridShape<D::ShapeArray>>,
@@ -118,12 +118,12 @@ where
     }
 }
 
-impl<D, T> From<NoDataGrid<D, T>> for Grid<D, T>
+impl<D, T> From<EmptyGrid<D, T>> for Grid<D, T>
 where
     T: Clone,
     D: GridSize,
 {
-    fn from(no_grid_array: NoDataGrid<D, T>) -> Self {
+    fn from(no_grid_array: EmptyGrid<D, T>) -> Self {
         Grid::new_filled(
             no_grid_array.shape,
             no_grid_array.no_data_value.clone(),
@@ -132,7 +132,7 @@ where
     }
 }
 
-impl<D, T> NoDataValue for NoDataGrid<D, T>
+impl<D, T> NoDataValue for EmptyGrid<D, T>
 where
     T: PartialEq + Copy,
 {
@@ -143,7 +143,7 @@ where
     }
 }
 
-impl<D, T, I> ChangeGridBounds<I> for NoDataGrid<D, T>
+impl<D, T, I> ChangeGridBounds<I> for EmptyGrid<D, T>
 where
     I: AsRef<[isize]> + Clone,
     D: GridBounds<IndexArray = I> + Clone,
@@ -151,17 +151,17 @@ where
     GridBoundingBox<I>: GridSize,
     GridIdx<I>: Add<Output = GridIdx<I>> + From<I>,
 {
-    type Output = NoDataGrid<GridBoundingBox<I>, T>;
+    type Output = EmptyGrid<GridBoundingBox<I>, T>;
 
     fn shift_by_offset(self, offset: GridIdx<I>) -> Self::Output {
-        NoDataGrid {
+        EmptyGrid {
             shape: self.shift_bounding_box(offset),
             no_data_value: self.no_data_value,
         }
     }
 
     fn set_grid_bounds(self, bounds: GridBoundingBox<I>) -> Result<Self::Output> {
-        Ok(NoDataGrid::new(bounds, self.no_data_value))
+        Ok(EmptyGrid::new(bounds, self.no_data_value))
     }
 }
 
@@ -172,7 +172,7 @@ mod tests {
     #[test]
     fn new() {
         let n = NoDataGrid2D::new([2, 2].into(), 42);
-        let expected = NoDataGrid {
+        let expected = EmptyGrid {
             shape: GridShape2D::from([2, 2]),
             no_data_value: 42,
         };

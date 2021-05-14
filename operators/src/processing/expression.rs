@@ -14,7 +14,7 @@ use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::primitives::Measurement;
 use geoengine_datatypes::raster::{
-    Grid2D, GridShapeAccess, NoDataGrid, Pixel, RasterDataType, RasterTile2D,
+    EmptyGrid, Grid2D, GridShapeAccess, Pixel, RasterDataType, RasterTile2D,
 };
 use num_traits::AsPrimitive;
 use serde::Serializer;
@@ -365,7 +365,7 @@ where
                         a.time,
                         a.tile_position,
                         a.global_geo_transform,
-                        NoDataGrid::new(a.grid_array.grid_shape(), self.no_data_value).into(),
+                        EmptyGrid::new(a.grid_array.grid_shape(), self.no_data_value).into(),
                     ))
                 }
 

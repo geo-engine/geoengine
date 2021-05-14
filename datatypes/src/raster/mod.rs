@@ -6,6 +6,7 @@ use super::primitives::{SpatialBounded, TemporalBounded};
 pub use self::data_type::{
     DynamicRasterDataType, FromPrimitive, Pixel, RasterDataType, StaticRasterDataType, TypedValue,
 };
+pub use self::empty_grid::{EmptyGrid, NoDataGrid1D, NoDataGrid2D, NoDataGrid3D};
 pub use self::geo_transform::{GdalGeoTransform, GeoTransform};
 pub use self::grid::{
     grid_idx_iter_2d, Grid, Grid1D, Grid2D, Grid3D, GridShape, GridShape1D, GridShape2D,
@@ -21,7 +22,6 @@ pub use self::grid_traits::{
     GridSize, GridSpaceToLinearSpace,
 };
 pub use self::grid_typed::{TypedGrid, TypedGrid2D, TypedGrid3D};
-pub use self::no_data_grid::{NoDataGrid, NoDataGrid1D, NoDataGrid2D, NoDataGrid3D};
 pub use self::operations::{blit::Blit, grid_blit::GridBlit};
 pub use self::raster_tile::{
     BaseTile, MaterializedRasterTile, MaterializedRasterTile2D, MaterializedRasterTile3D,
@@ -35,6 +35,7 @@ pub use self::{
 };
 
 mod data_type;
+mod empty_grid;
 mod geo_transform;
 mod grid;
 mod grid_bounds;
@@ -44,7 +45,6 @@ mod grid_traits;
 mod grid_typed;
 mod macros_raster;
 mod macros_raster_tile;
-mod no_data_grid;
 mod operations;
 mod raster_tile;
 mod tiling;

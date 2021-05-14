@@ -22,7 +22,7 @@ use futures::{
 
 use crate::engine::{MetaData, QueryRectangle};
 use geoengine_datatypes::raster::{
-    GeoTransform, Grid2D, GridOrEmpty2D, NoDataGrid, Pixel, RasterDataType, RasterTile2D,
+    EmptyGrid, GeoTransform, Grid2D, GridOrEmpty2D, Pixel, RasterDataType, RasterTile2D,
 };
 use geoengine_datatypes::{dataset::DatasetId, raster::TileInformation};
 use geoengine_datatypes::{
@@ -328,7 +328,7 @@ where
             return match dataset_params.file_not_found_handling {
                 FileNotFoundHandling::NoData => {
                     if let Some(no_data) = no_data_value {
-                        Ok(NoDataGrid::new(output_shape, no_data).into())
+                        Ok(EmptyGrid::new(output_shape, no_data).into())
                     } else {
                         Ok(Grid2D::new_filled(output_shape, fill_value, None).into())
                     }
@@ -357,7 +357,7 @@ where
             (_, false) => {
                 // TODO: refactor tile to hold an Option<GridData> and this will be empty in this case
                 if let Some(no_data) = no_data_value {
-                    NoDataGrid::new(output_shape, no_data).into()
+                    EmptyGrid::new(output_shape, no_data).into()
                 } else {
                     Grid2D::new_filled(output_shape, fill_value, None).into()
                 }

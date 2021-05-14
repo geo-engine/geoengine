@@ -1,7 +1,7 @@
 use crate::raster::{
-    no_data_grid::NoDataGrid, BoundedGrid, Grid, Grid1D, Grid2D, Grid3D, GridBoundingBox,
-    GridBounds, GridIdx, GridIndexAccess, GridIndexAccessMut, GridIntersection, GridOrEmpty,
-    GridSize, GridSpaceToLinearSpace, Pixel,
+    empty_grid::EmptyGrid, BoundedGrid, Grid, Grid1D, Grid2D, Grid3D, GridBoundingBox, GridBounds,
+    GridIdx, GridIndexAccess, GridIndexAccessMut, GridIntersection, GridOrEmpty, GridSize,
+    GridSpaceToLinearSpace, Pixel,
 };
 
 pub trait GridBlit<O, T>
@@ -66,14 +66,14 @@ where
     }
 }
 
-impl<D, T> GridBlit<NoDataGrid<D, T>, T> for Grid2D<T>
+impl<D, T> GridBlit<EmptyGrid<D, T>, T> for Grid2D<T>
 where
     D: GridSize<ShapeArray = [usize; 2]>
         + GridBounds<IndexArray = [isize; 2]>
         + GridSpaceToLinearSpace<IndexArray = [isize; 2]>,
     T: Pixel + Sized,
 {
-    fn grid_blit_from(&mut self, other: NoDataGrid<D, T>) {
+    fn grid_blit_from(&mut self, other: EmptyGrid<D, T>) {
         let other_offset_dim = other.bounding_box();
         let offset_dim = self.bounding_box();
         let intersection: Option<GridBoundingBox<[isize; 2]>> =
@@ -106,7 +106,7 @@ where
         + Clone,
     I: Clone + AsRef<[isize]> + Into<GridIdx<I>>,
     T: Pixel + Sized,
-    Self: GridBlit<Grid<D1, T>, T> + GridBlit<NoDataGrid<D1, T>, T>,
+    Self: GridBlit<Grid<D1, T>, T> + GridBlit<EmptyGrid<D1, T>, T>,
 {
     fn grid_blit_from(&mut self, other: GridOrEmpty<D1, T>) {
         match other {
@@ -152,14 +152,14 @@ where
     }
 }
 
-impl<D, T> GridBlit<NoDataGrid<D, T>, T> for Grid3D<T>
+impl<D, T> GridBlit<EmptyGrid<D, T>, T> for Grid3D<T>
 where
     D: GridSize<ShapeArray = [usize; 3]>
         + GridBounds<IndexArray = [isize; 3]>
         + GridSpaceToLinearSpace<IndexArray = [isize; 3]>,
     T: Pixel + Sized,
 {
-    fn grid_blit_from(&mut self, other: NoDataGrid<D, T>) {
+    fn grid_blit_from(&mut self, other: EmptyGrid<D, T>) {
         let other_offset_dim = other.bounding_box();
         let offset_dim = self.bounding_box();
         let intersection: Option<GridBoundingBox<[isize; 3]>> =
