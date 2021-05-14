@@ -114,7 +114,7 @@ criterion_group!(
     bench_600px_1_tile_to_png,
     bench_600px_2_tiles_to_png,
     bench_600px_4_tiles_to_png,
-    bench_600px_2_tile_2_no_data_tiles_to_png,
+    // bench_600px_2_tile_2_no_data_tiles_to_png,
     bench_600px_empty_to_png
 );
 criterion_main!(benches);
