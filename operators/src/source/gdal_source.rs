@@ -350,11 +350,15 @@ where
         // dataset spatial relations
         let dataset_contains_tile = dataset_bounds.contains_bbox(&output_bounds);
 
-        let dataset_intersects_tile = dataset_bounds.intersects_bbox(&output_bounds);
+        // TODO: re-enable when BBOx paradox is solved
+        // let dataset_intersects_tile = dataset_bounds.intersects_bbox(&output_bounds);
+
+        // TODO: move to false, true case when BBOX paradox is solved
+        let dataset_intersects_tile = dataset_bounds.intersection(&output_bounds);
 
         let result_raster: GridOrEmpty2D<T> = match (dataset_contains_tile, dataset_intersects_tile)
         {
-            (_, false) => {
+            (_, None) => {
                 // TODO: refactor tile to hold an Option<GridData> and this will be empty in this case
                 if let Some(no_data) = no_data_value {
                     EmptyGrid::new(output_shape, no_data).into()
@@ -362,7 +366,7 @@ where
                     Grid2D::new_filled(output_shape, fill_value, None).into()
                 }
             }
-            (true, true) => {
+            (true, Some(_)) => {
                 let dataset_idx_ul =
                     geo_transform.coordinate_to_grid_idx_2d(output_bounds.upper_left());
 
@@ -377,11 +381,17 @@ where
                 )?
                 .into()
             }
-            (false, true) => {
-                let intersecting_area = dataset_bounds
-                    .intersection(&output_bounds)
-                    .expect("checked intersection earlier");
-
+            // TODO: remove when bbox paradox is solved
+            (false, Some(intersecting_area))
+                if intersecting_area.size_x() <= 0. || intersecting_area.size_y() <= 0. =>
+            {
+                if let Some(no_data) = no_data_value {
+                    EmptyGrid::new(output_shape, no_data).into()
+                } else {
+                    Grid2D::new_filled(output_shape, fill_value, None).into()
+                }
+            }
+            (false, Some(intersecting_area)) => {
                 let dataset_idx_ul =
                     geo_transform.coordinate_to_grid_idx_2d(intersecting_area.upper_left());
 

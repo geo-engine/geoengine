@@ -79,7 +79,6 @@ fn bench_600px_4_tiles_to_png(c: &mut Criterion) {
     });
 }
 
-/*
 /// This bench will query 2 tiles and 2 no_data tiles by overlapping the opper right coordinate
 fn bench_600px_2_tile_2_no_data_tiles_to_png(c: &mut Criterion) {
     let runtime = tokio::runtime::Runtime::new().unwrap();
@@ -93,7 +92,6 @@ fn bench_600px_2_tile_2_no_data_tiles_to_png(c: &mut Criterion) {
             .iter(|| async { tiles_to_png(query, 600).await })
     });
 }
-*/
 
 /// This bench will query no tiles
 fn bench_600px_empty_to_png(c: &mut Criterion) {
@@ -114,7 +112,7 @@ criterion_group!(
     bench_600px_1_tile_to_png,
     bench_600px_2_tiles_to_png,
     bench_600px_4_tiles_to_png,
-    // bench_600px_2_tile_2_no_data_tiles_to_png,
+    bench_600px_2_tile_2_no_data_tiles_to_png,
     bench_600px_empty_to_png
 );
 criterion_main!(benches);
