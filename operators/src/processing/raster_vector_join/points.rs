@@ -21,8 +21,7 @@ use crate::{
 };
 use geoengine_datatypes::collections::FeatureCollectionInfos;
 use geoengine_datatypes::collections::GeometryCollection;
-use geoengine_datatypes::raster::Raster;
-use geoengine_datatypes::raster::{CoordinatePixelAccess, RasterDataType};
+use geoengine_datatypes::raster::{CoordinatePixelAccess, NoDataValue, RasterDataType};
 use num_traits::AsPrimitive;
 
 pub struct RasterPointJoinProcessor {
