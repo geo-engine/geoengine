@@ -377,7 +377,9 @@ mod tests {
                     global_tile_position: [0, 0].into(),
                     tile_size_in_pixels: [3, 2].into(),
                 },
-                Grid2D::new([3, 2].into(), values, no_data_value).unwrap(),
+                Grid2D::new([3, 2].into(), values, no_data_value)
+                    .unwrap()
+                    .into(),
             ));
         }
 

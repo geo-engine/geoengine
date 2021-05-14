@@ -130,7 +130,7 @@ mod tests {
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
-            raster,
+            raster.into(),
         );
 
         let mrs = MockRasterSource {

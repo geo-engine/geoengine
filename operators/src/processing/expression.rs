@@ -546,7 +546,7 @@ mod tests {
                 tile_size_in_pixels: [3, 2].into(),
                 global_geo_transform: Default::default(),
             },
-            raster,
+            raster.into(),
         );
 
         MockRasterSource {

@@ -411,7 +411,11 @@ where
             self.result_no_data_value(),
         );
         Ok((
-            RasterTile2D::new_with_tile_info(query_rect.time_interval, tile_info, output_raster),
+            RasterTile2D::new_with_tile_info(
+                query_rect.time_interval,
+                tile_info,
+                output_raster.into(),
+            ),
             (),
         ))
     }
@@ -497,7 +501,11 @@ where
             .collect();
 
         Ok((
-            RasterTile2D::new_with_tile_info(query_rect.time_interval, tile_info, output_raster),
+            RasterTile2D::new_with_tile_info(
+                query_rect.time_interval,
+                tile_info,
+                output_raster.into(),
+            ),
             accu_companion,
         ))
     }

@@ -21,7 +21,9 @@ use futures::{
 };
 
 use crate::engine::{MetaData, QueryRectangle};
-use geoengine_datatypes::raster::{GeoTransform, Grid2D, Pixel, RasterDataType, RasterTile2D};
+use geoengine_datatypes::raster::{
+    GeoTransform, Grid2D, GridOrEmpty2D, NoDataGrid, Pixel, RasterDataType, RasterTile2D,
+};
 use geoengine_datatypes::{dataset::DatasetId, raster::TileInformation};
 use geoengine_datatypes::{
     primitives::{
@@ -282,7 +284,7 @@ where
     pub async fn load_tile_data_async(
         dataset_params: GdalDatasetParameters,
         tile_information: TileInformation,
-    ) -> Result<Grid2D<T>> {
+    ) -> Result<GridOrEmpty2D<T>> {
         tokio::task::spawn_blocking(move || {
             Self::load_tile_data(&dataset_params, &tile_information)
         })
@@ -306,7 +308,7 @@ where
     pub fn load_tile_data(
         dataset_params: &GdalDatasetParameters,
         tile_information: &TileInformation,
-    ) -> Result<Grid2D<T>> {
+    ) -> Result<GridOrEmpty2D<T>> {
         let dataset_bounds = dataset_params.bbox;
         let geo_transform = dataset_params.geo_transform;
 
@@ -325,7 +327,11 @@ where
             // TODO: check if Gdal error is actually file not found
             return match dataset_params.file_not_found_handling {
                 FileNotFoundHandling::NoData => {
-                    Ok(Grid2D::new_filled(output_shape, fill_value, no_data_value))
+                    if let Some(no_data) = no_data_value {
+                        Ok(NoDataGrid::new(output_shape, no_data).into())
+                    } else {
+                        Ok(Grid2D::new_filled(output_shape, fill_value, None).into())
+                    }
                 }
                 FileNotFoundHandling::Error => Err(crate::error::Error::CouldNotOpenGdalDataset {
                     file_path: dataset_params.file_path.to_string_lossy().to_string(),
@@ -346,10 +352,15 @@ where
 
         let dataset_intersects_tile = dataset_bounds.intersects_bbox(&output_bounds);
 
-        let result_raster = match (dataset_contains_tile, dataset_intersects_tile) {
+        let result_raster: GridOrEmpty2D<T> = match (dataset_contains_tile, dataset_intersects_tile)
+        {
             (_, false) => {
                 // TODO: refactor tile to hold an Option<GridData> and this will be empty in this case
-                Grid2D::new_filled(output_shape, fill_value, no_data_value)
+                if let Some(no_data) = no_data_value {
+                    NoDataGrid::new(output_shape, no_data).into()
+                } else {
+                    Grid2D::new_filled(output_shape, fill_value, None).into()
+                }
             }
             (true, true) => {
                 let dataset_idx_ul =
@@ -364,6 +375,7 @@ where
                     output_shape,
                     no_data_value,
                 )?
+                .into()
             }
             (false, true) => {
                 let intersecting_area = dataset_bounds
@@ -392,7 +404,7 @@ where
 
                 let mut tile_raster = Grid2D::new_filled(output_shape, fill_value, no_data_value);
                 tile_raster.grid_blit_from(dataset_raster);
-                tile_raster
+                tile_raster.into()
             }
         };
 
@@ -634,7 +646,7 @@ mod tests {
     fn load_ndvi_jan_2014(
         output_shape: GridShape2D,
         output_bounds: BoundingBox2D,
-    ) -> Result<Grid2D<u8>> {
+    ) -> Result<GridOrEmpty2D<u8>> {
         GdalSourceProcessor::<u8>::load_tile_data(
             &GdalDatasetParameters {
                 file_path: raster_dir().join("modis_ndvi/MOD13A2_M_NDVI_2014-01-01.TIFF"),
@@ -898,6 +910,10 @@ mod tests {
 
         let x = load_ndvi_jan_2014(output_shape, output_bounds).unwrap();
 
+        assert!(!x.is_empty());
+
+        let x = x.into_materialized_grid();
+
         assert_eq!(x.data.len(), 64);
         assert_eq!(
             x.data,
@@ -922,6 +938,10 @@ mod tests {
         );
 
         let x = load_ndvi_jan_2014(output_shape, output_bounds).unwrap();
+
+        assert!(!x.is_empty());
+
+        let x = x.into_materialized_grid();
 
         assert_eq!(x.data.len(), 64);
         assert_eq!(
@@ -1048,6 +1068,6 @@ mod tests {
             TimeInterval::new_unchecked(1_385_856_000_000, 1_388_534_400_000)
         );
 
-        assert!(!tile_1.is_empty());
+        assert!(tile_1.is_empty());
     }
 }

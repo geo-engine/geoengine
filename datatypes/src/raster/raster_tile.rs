@@ -89,14 +89,14 @@ where
     pub fn new_with_tile_info(
         time: TimeInterval,
         tile_info: TileInformation,
-        data: Grid<D, T>,
+        data: GridOrEmpty<D, T>,
     ) -> Self {
         // TODO: assert, tile information xy size equals the data xy size
         Self {
             time,
             tile_position: tile_info.global_tile_position,
             global_geo_transform: tile_info.global_geo_transform,
-            grid_array: GridOrEmpty::Grid(data),
+            grid_array: data,
         }
     }
 
@@ -323,7 +323,9 @@ mod tests {
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
-            Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap(),
+            Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None)
+                .unwrap()
+                .into(),
         );
 
         validate_coordinate(&raster_tile, (0.0, 0.0));
@@ -345,7 +347,9 @@ mod tests {
                 global_tile_position: [1, 1].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
-            Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap(),
+            Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None)
+                .unwrap()
+                .into(),
         );
 
         validate_coordinate(&raster_tile, (0.0, 0.0));
