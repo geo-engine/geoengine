@@ -13,6 +13,7 @@ use crate::{
     util::input::RasterOrVectorOperator,
 };
 use async_trait::async_trait;
+use float_cmp::approx_eq;
 use futures::stream::BoxStream;
 use futures::{StreamExt, TryFutureExt};
 use geoengine_datatypes::collections::{FeatureCollection, FeatureCollectionInfos};
@@ -223,7 +224,8 @@ impl PlotQueryProcessor for HistogramRasterQueryProcessor {
         ctx: &'p dyn QueryContext,
     ) -> Result<Self::OutputFormat> {
         self.preprocess(query, ctx)
-            .and_then(move |histogram_metadata| async move {
+            .and_then(move |mut histogram_metadata| async move {
+                histogram_metadata.sanitize();
                 if histogram_metadata.has_invalid_parameters() {
                     // early return of empty histogram
                     return self.empty_histogram();
@@ -249,7 +251,8 @@ impl PlotQueryProcessor for HistogramVectorQueryProcessor {
         ctx: &'p dyn QueryContext,
     ) -> Result<Self::OutputFormat> {
         self.preprocess(query, ctx)
-            .and_then(move |histogram_metadata| async move {
+            .and_then(move |mut histogram_metadata| async move {
+                histogram_metadata.sanitize();
                 if histogram_metadata.has_invalid_parameters() {
                     // early return of empty histogram
                     return self.empty_histogram();
@@ -430,6 +433,14 @@ struct HistogramMetadata {
 }
 
 impl HistogramMetadata {
+    /// Fix invalid configurations if they are fixeable
+    fn sanitize(&mut self) {
+        // prevent the rare case that min=max and you have more than one bucket
+        if approx_eq!(f64, self.min, self.max) && self.number_of_buckets > 1 {
+            self.number_of_buckets = 1;
+        }
+    }
+
     fn has_invalid_parameters(&self) -> bool {
         self.number_of_buckets == 0 || self.min > self.max
     }
@@ -572,6 +583,7 @@ mod tests {
     use crate::source::{
         OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceErrorSpec,
     };
+    use chrono::NaiveDate;
     use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureData, NoGeometry, SpatialResolution, TimeInterval,
@@ -1173,6 +1185,76 @@ mod tests {
             result,
             geoengine_datatypes::plots::Histogram::builder(1, 5., 5., Measurement::Unitless)
                 .counts(vec![1])
+                .build()
+                .unwrap()
+                .to_vega_embeddable(false)
+                .unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn single_value_raster_stream() {
+        let execution_context = MockExecutionContext::default();
+
+        let no_data_value = None;
+        let histogram = Histogram {
+            params: HistogramParams {
+                column_name: None,
+                bounds: HistogramBounds::Data(Data::default()),
+                buckets: None,
+                interactive: false,
+            },
+            sources: MockRasterSource {
+                params: MockRasterSourceParams {
+                    data: vec![RasterTile2D::new_with_tile_info(
+                        TimeInterval::default(),
+                        TileInformation {
+                            global_geo_transform: Default::default(),
+                            global_tile_position: [0, 0].into(),
+                            tile_size_in_pixels: [3, 2].into(),
+                        },
+                        Grid2D::new([3, 2].into(), vec![4; 6], no_data_value).unwrap(),
+                    )],
+                    result_descriptor: RasterResultDescriptor {
+                        data_type: RasterDataType::U8,
+                        spatial_reference: SpatialReference::epsg_4326().into(),
+                        measurement: Measurement::Unitless,
+                        no_data_value: no_data_value.map(AsPrimitive::as_),
+                    },
+                },
+            }
+            .boxed()
+            .into(),
+        };
+
+        let query_processor = histogram
+            .boxed()
+            .initialize(&execution_context)
+            .unwrap()
+            .query_processor()
+            .unwrap()
+            .json_vega()
+            .unwrap();
+
+        let result = query_processor
+            .plot_query(
+                QueryRectangle {
+                    bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    time_interval: TimeInterval::new_instant(
+                        NaiveDate::from_ymd(2013, 12, 1).and_hms(12, 0, 0),
+                    )
+                    .unwrap(),
+                    spatial_resolution: SpatialResolution::one(),
+                },
+                &MockQueryContext::default(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            result,
+            geoengine_datatypes::plots::Histogram::builder(1, 4., 4., Measurement::Unitless)
+                .counts(vec![6])
                 .build()
                 .unwrap()
                 .to_vega_embeddable(false)
