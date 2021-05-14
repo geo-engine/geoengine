@@ -2,7 +2,7 @@ use crate::raster::{
     Grid2D, GridIndexAccess, GridOrEmpty2D, NoDataValue, Pixel, RasterTile2D, TypedRasterTile2D,
 };
 use crate::util::Result;
-use crate::{error, raster::NoDataGrid2D};
+use crate::{error, raster::EmptyGrid2D};
 use crate::{
     operations::image::{Colorizer, RgbaTransmutable},
     raster::GridOrEmpty,
@@ -45,7 +45,7 @@ where
     }
 }
 
-impl<P> ToPng for NoDataGrid2D<P>
+impl<P> ToPng for EmptyGrid2D<P>
 where
     P: Pixel + RgbaTransmutable,
 {
@@ -284,7 +284,7 @@ mod tests {
 
     #[test]
     fn no_data_tile() {
-        let raster = NoDataGrid2D::new([2, 2].into(), 0);
+        let raster = EmptyGrid2D::new([2, 2].into(), 0);
 
         let colorizer = Colorizer::linear_gradient(
             vec![

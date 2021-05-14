@@ -188,7 +188,7 @@ where
 #[cfg(test)]
 mod tests {
     use crate::raster::{
-        Grid, Grid2D, Grid3D, GridBlit, GridBoundingBox, GridIdx, NoDataGrid2D, NoDataGrid3D,
+        EmptyGrid2D, EmptyGrid3D, Grid, Grid2D, Grid3D, GridBlit, GridBoundingBox, GridIdx,
     };
 
     #[test]
@@ -254,7 +254,7 @@ mod tests {
 
         let mut r1 = Grid2D::new(dim.into(), data, None).unwrap();
 
-        let r2 = NoDataGrid2D::new(dim.into(), 7);
+        let r2 = EmptyGrid2D::new(dim.into(), 7);
 
         r1.grid_blit_from(r2);
 
@@ -332,7 +332,7 @@ mod tests {
 
         let mut r1 = Grid3D::new(dim.into(), data, None).unwrap();
 
-        let r2 = NoDataGrid3D::new(dim.into(), 7);
+        let r2 = EmptyGrid3D::new(dim.into(), 7);
 
         r1.grid_blit_from(r2);
 

@@ -6,7 +6,7 @@ use super::primitives::{SpatialBounded, TemporalBounded};
 pub use self::data_type::{
     DynamicRasterDataType, FromPrimitive, Pixel, RasterDataType, StaticRasterDataType, TypedValue,
 };
-pub use self::empty_grid::{EmptyGrid, NoDataGrid1D, NoDataGrid2D, NoDataGrid3D};
+pub use self::empty_grid::{EmptyGrid, EmptyGrid1D, EmptyGrid2D, EmptyGrid3D};
 pub use self::geo_transform::{GdalGeoTransform, GeoTransform};
 pub use self::grid::{
     grid_idx_iter_2d, Grid, Grid1D, Grid2D, Grid3D, GridShape, GridShape1D, GridShape2D,

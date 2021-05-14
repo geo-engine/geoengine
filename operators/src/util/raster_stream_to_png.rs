@@ -2,7 +2,7 @@ use futures::StreamExt;
 use geoengine_datatypes::{
     operations::image::{Colorizer, RgbaColor, ToPng},
     primitives::TimeInterval,
-    raster::{Blit, GeoTransform, Grid2D, NoDataGrid2D, Pixel, RasterTile2D},
+    raster::{Blit, EmptyGrid2D, GeoTransform, Grid2D, Pixel, RasterTile2D},
 };
 use num_traits::AsPrimitive;
 use std::convert::TryInto;
@@ -40,7 +40,7 @@ where
     );
 
     let output_grid = if let Some(no_data) = no_data_value {
-        NoDataGrid2D::new(dim.into(), no_data).into()
+        EmptyGrid2D::new(dim.into(), no_data).into()
     } else {
         Grid2D::new_filled(
             dim.into(),
