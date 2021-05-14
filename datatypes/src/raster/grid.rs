@@ -442,6 +442,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use crate::raster::{BoundedGrid, GridBoundingBox2D, GridBounds, GridIdx};
+
     use super::{Grid2D, Grid3D, GridIndexAccess, GridIndexAccessMut};
 
     #[test]
@@ -520,5 +522,18 @@ mod tests {
         let value = raster3d.get_at_grid_index(index).unwrap();
         assert_eq!(value, 9);
         assert_eq!(raster3d.data, [1, 2, 3, 9, 5, 6]);
+    }
+
+    #[test]
+    fn grid_bounds_2d() {
+        let dim = [3, 2].into();
+        let data = vec![1, 2, 3, 4, 5, 6];
+        let raster2d = Grid2D::new(dim, data, None).unwrap();
+
+        assert_eq!(raster2d.min_index(), GridIdx([0, 0]));
+        assert_eq!(raster2d.max_index(), GridIdx([2, 1]));
+
+        let exp_bbox = GridBoundingBox2D::new([0, 0], [2, 1]).unwrap();
+        assert_eq!(raster2d.bounding_box(), exp_bbox)
     }
 }

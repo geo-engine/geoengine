@@ -167,6 +167,9 @@ where
 
 #[cfg(test)]
 mod tests {
+    use crate::raster::BoundedGrid;
+    use crate::raster::GridBoundingBox2D;
+
     use super::*;
 
     #[test]
@@ -221,5 +224,17 @@ mod tests {
         let result = n.get_at_grid_index([0, 0]).unwrap();
         assert_eq!(result, 42);
         assert!(n.get_at_grid_index([100, 100]).is_err());
+    }
+
+    #[test]
+    fn grid_bounds_2d() {
+        let dim: GridShape2D = [3, 2].into();
+        let raster2d = EmptyGrid::new(dim, 3);
+
+        assert_eq!(raster2d.min_index(), GridIdx([0, 0]));
+        assert_eq!(raster2d.max_index(), GridIdx([2, 1]));
+
+        let exp_bbox = GridBoundingBox2D::new([0, 0], [2, 1]).unwrap();
+        assert_eq!(raster2d.bounding_box(), exp_bbox)
     }
 }

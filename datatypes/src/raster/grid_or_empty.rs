@@ -198,3 +198,35 @@ where
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::raster::{BoundedGrid, Grid2D, GridBoundingBox2D};
+
+    use super::*;
+
+    #[test]
+    fn grid_bounds_2d_empty_grid() {
+        let dim: GridShape2D = [3, 2].into();
+        let raster2d: GridOrEmpty2D<_> = EmptyGrid::new(dim, 3).into();
+
+        assert_eq!(raster2d.min_index(), GridIdx([0, 0]));
+        assert_eq!(raster2d.max_index(), GridIdx([2, 1]));
+
+        let exp_bbox = GridBoundingBox2D::new([0, 0], [2, 1]).unwrap();
+        assert_eq!(raster2d.bounding_box(), exp_bbox)
+    }
+
+    #[test]
+    fn grid_bounds_2d_grid() {
+        let dim: GridShape2D = [3, 2].into();
+        let data = [1, 2, 3, 4, 5, 6].into();
+        let raster2d: GridOrEmpty2D<_> = Grid2D::new(dim, data, Some(3)).unwrap().into();
+
+        assert_eq!(raster2d.min_index(), GridIdx([0, 0]));
+        assert_eq!(raster2d.max_index(), GridIdx([2, 1]));
+
+        let exp_bbox = GridBoundingBox2D::new([0, 0], [2, 1]).unwrap();
+        assert_eq!(raster2d.bounding_box(), exp_bbox)
+    }
+}
