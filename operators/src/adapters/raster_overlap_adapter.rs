@@ -15,7 +15,7 @@ use geoengine_datatypes::{
     },
     primitives::{SpatialBounded, SpatialResolution, TimeInterval},
     raster::{
-        grid_idx_iter_2d, BoundedGrid, Grid2D, MaterializedRasterTile2D, NoDataValue,
+        grid_idx_iter_2d, BoundedGrid, EmptyGrid, Grid2D, MaterializedRasterTile2D, NoDataValue,
         TilingSpecification,
     },
     spatial_reference::SpatialReference,
@@ -476,11 +476,9 @@ where
         tile_info: TileInformation,
         query_rect: QueryRectangle,
     ) -> Result<(RasterTile2D<T>, Vec<(GridIdx2D, Coordinate2D)>)> {
-        let output_raster = Grid2D::new_filled(
-            tile_info.tile_size_in_pixels,
-            self.initial_fill_value(),
-            self.result_no_data_value(),
-        );
+        let output_raster =
+            EmptyGrid::new(tile_info.tile_size_in_pixels, self.no_data_and_fill_value);
+
         let idxs: Vec<GridIdx2D> = grid_idx_iter_2d(&output_raster.bounding_box()).collect();
         let coords: Vec<Coordinate2D> = idxs
             .iter()
