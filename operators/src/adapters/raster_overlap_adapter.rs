@@ -14,7 +14,10 @@ use geoengine_datatypes::{
         project_coordinates_fail_tolerant, CoordinateProjection, CoordinateProjector, Reproject,
     },
     primitives::{SpatialBounded, SpatialResolution, TimeInterval},
-    raster::{grid_idx_iter_2d, BoundedGrid, Grid2D, TilingSpecification},
+    raster::{
+        grid_idx_iter_2d, BoundedGrid, Grid2D, MaterializedRasterTile2D, NoDataValue,
+        TilingSpecification,
+    },
     spatial_reference::SpatialReference,
 };
 use geoengine_datatypes::{
@@ -236,18 +239,24 @@ where
 {
     let (mut accu_tile, unused) = accu;
     let t_union = accu_tile.time.union(&tile.time)?;
-    match accu_tile.blit(tile) {
-        Ok(_) => {
-            accu_tile.time = t_union;
-            Ok((accu_tile, unused))
-        }
+
+    accu_tile.time = t_union;
+
+    if tile.grid_array.is_empty() && accu_tile.no_data_value() == tile.no_data_value() {
+        return Ok((accu_tile, unused));
+    }
+
+    let mut materialized_accu_tile = accu_tile.into_materialized_tile();
+
+    match materialized_accu_tile.blit(tile) {
+        Ok(_) => Ok((materialized_accu_tile.into(), unused)),
         Err(_error) => {
             // Ignore lookup errors
             //dbg!(
             //    "Skipping non-overlapping area tiles in blit method. This schould not happen but the MockSource produces all tiles!!!",
             //    error
             //);
-            Ok((accu_tile, unused))
+            Ok((materialized_accu_tile.into(), unused))
         }
     }
 }
@@ -295,18 +304,23 @@ where
     let (mut accu_tile, accu_companion) = accu;
     let t_union = accu_tile.time.union(&tile.time)?;
 
-    match insert_projected_pixels(&mut accu_tile, &tile, accu_companion.iter()) {
-        Ok(_) => {
-            accu_tile.time = t_union;
-            Ok((accu_tile, accu_companion))
-        }
+    accu_tile.time = t_union;
+
+    if tile.grid_array.is_empty() {
+        return Ok((accu_tile, accu_companion));
+    }
+
+    let mut materialized_accu_tile = accu_tile.into_materialized_tile(); //in a fold chain the real materialization should only happen once. All other calls will be simple conversions.
+
+    match insert_projected_pixels(&mut materialized_accu_tile, &tile, accu_companion.iter()) {
+        Ok(_) => Ok((materialized_accu_tile.into(), accu_companion)),
         Err(error) => Err(error),
     }
 }
 
 /// This method takes two tiles and a map from `GridIdx2D` to `Coordinate2D`. Then for all `GridIdx2D` we set the values from the corresponding coordinate in the source tile.
 pub fn insert_projected_pixels<'a, T: Pixel, I: Iterator<Item = &'a (GridIdx2D, Coordinate2D)>>(
-    target: &mut RasterTile2D<T>,
+    target: &mut MaterializedRasterTile2D<T>,
     source: &RasterTile2D<T>,
     local_target_idx_source_coordinate_map: I,
 ) -> Result<()> {
@@ -397,7 +411,11 @@ where
             self.result_no_data_value(),
         );
         Ok((
-            RasterTile2D::new_with_tile_info(query_rect.time_interval, tile_info, output_raster),
+            RasterTile2D::new_with_tile_info(
+                query_rect.time_interval,
+                tile_info,
+                output_raster.into(),
+            ),
             (),
         ))
     }
@@ -483,7 +501,11 @@ where
             .collect();
 
         Ok((
-            RasterTile2D::new_with_tile_info(query_rect.time_interval, tile_info, output_raster),
+            RasterTile2D::new_with_tile_info(
+                query_rect.time_interval,
+                tile_info,
+                output_raster.into(),
+            ),
             accu_companion,
         ))
     }
@@ -541,25 +563,33 @@ mod tests {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 0].into(),
                 global_geo_transform: Default::default(),
-                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4], no_data_value).unwrap(),
+                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4], no_data_value)
+                    .unwrap()
+                    .into(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 1].into(),
                 global_geo_transform: Default::default(),
-                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10], no_data_value).unwrap(),
+                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10], no_data_value)
+                    .unwrap()
+                    .into(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 0].into(),
                 global_geo_transform: Default::default(),
-                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16], no_data_value).unwrap(),
+                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16], no_data_value)
+                    .unwrap()
+                    .into(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 1].into(),
                 global_geo_transform: Default::default(),
-                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22], no_data_value).unwrap(),
+                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22], no_data_value)
+                    .unwrap()
+                    .into(),
             },
         ];
 
@@ -622,25 +652,33 @@ mod tests {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 0].into(),
                 global_geo_transform: Default::default(),
-                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4], no_data_value).unwrap(),
+                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4], no_data_value)
+                    .unwrap()
+                    .into(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 1].into(),
                 global_geo_transform: Default::default(),
-                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10], no_data_value).unwrap(),
+                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10], no_data_value)
+                    .unwrap()
+                    .into(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 0].into(),
                 global_geo_transform: Default::default(),
-                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16], no_data_value).unwrap(),
+                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16], no_data_value)
+                    .unwrap()
+                    .into(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 1].into(),
                 global_geo_transform: Default::default(),
-                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22], no_data_value).unwrap(),
+                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22], no_data_value)
+                    .unwrap()
+                    .into(),
             },
         ];
 

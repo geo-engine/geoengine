@@ -56,6 +56,11 @@ impl NumberStatistics {
         self.value_nan_count += 1;
     }
 
+    #[inline]
+    pub fn add_no_data_batch(&mut self, batch_size: usize) {
+        self.value_nan_count += batch_size;
+    }
+
     pub fn count(&self) -> usize {
         self.value_count
     }

@@ -132,7 +132,7 @@ mod tests {
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
-            raster,
+            raster.into(),
         );
 
         let mrs = MockRasterSource {
@@ -168,11 +168,13 @@ mod tests {
                         "yPixelSize": -1.0
                     },
                     "gridArray": {
+                        "type": "grid",
                         "shape": {
                             "shapeArray": [3, 2]
                         },
                         "data": [1, 2, 3, 4, 5, 6],
                         "noDataValue": null
+
                     }
                 }],
                 "resultDescriptor": {

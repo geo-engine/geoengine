@@ -1,14 +1,11 @@
 use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
 
-use geoengine_datatypes::raster::{GridIndexAccess, Pixel, RasterDataType};
-use geoengine_datatypes::{
-    collections::{
-        FeatureCollectionInfos, FeatureCollectionModifications, GeometryRandomAccess,
-        MultiPointCollection,
-    },
-    raster::Raster,
+use geoengine_datatypes::collections::{
+    FeatureCollectionInfos, FeatureCollectionModifications, GeometryRandomAccess,
+    MultiPointCollection,
 };
+use geoengine_datatypes::raster::{GridIndexAccess, NoDataValue, Pixel, RasterDataType};
 
 use crate::engine::{
     QueryContext, QueryProcessor, QueryRectangle, RasterQueryProcessor, TypedRasterQueryProcessor,
@@ -191,7 +188,9 @@ mod tests {
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
-            Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap(),
+            Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None)
+                .unwrap()
+                .into(),
         );
 
         let raster_source = MockRasterSource {
@@ -261,7 +260,9 @@ mod tests {
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
-            Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1], None).unwrap(),
+            Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1], None)
+                .unwrap()
+                .into(),
         );
         let raster_tile_b = RasterTile2D::new_with_tile_info(
             TimeInterval::new(10, 20).unwrap(),
@@ -270,7 +271,9 @@ mod tests {
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
-            Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap(),
+            Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None)
+                .unwrap()
+                .into(),
         );
 
         let raster_source = MockRasterSource {

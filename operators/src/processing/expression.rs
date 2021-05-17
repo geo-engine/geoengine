@@ -13,7 +13,9 @@ use crate::{
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::primitives::Measurement;
-use geoengine_datatypes::raster::{Grid2D, Pixel, RasterDataType, RasterTile2D};
+use geoengine_datatypes::raster::{
+    EmptyGrid, Grid2D, GridShapeAccess, Pixel, RasterDataType, RasterTile2D,
+};
 use num_traits::AsPrimitive;
 use serde::Serializer;
 use serde::{Deserialize, Serialize};
@@ -358,9 +360,20 @@ where
             .query(query, ctx)?
             .zip(self.source_b.query(query, ctx)?)
             .map(move |(a, b)| match (a, b) {
+                (Ok(a), Ok(b)) if a.grid_array.is_empty() && b.grid_array.is_empty() => {
+                    Ok(RasterTile2D::new(
+                        a.time,
+                        a.tile_position,
+                        a.global_geo_transform,
+                        EmptyGrid::new(a.grid_array.grid_shape(), self.no_data_value).into(),
+                    ))
+                }
+
                 (Ok(a), Ok(b)) => {
+                    let a = a.into_materialized_tile(); // TODO: find cases where we don't need this.
+                    let b = b.into_materialized_tile();
                     let mut out = Grid2D::new(
-                        a.grid_dimension(),
+                        a.grid_shape(),
                         vec![TO::zero(); a.grid_array.data.len()], // TODO: correct output size; initialization required?
                         Some(self.no_data_value),                  // TODO
                     )
@@ -382,7 +395,7 @@ where
                         a.time,
                         a.tile_position,
                         a.global_geo_transform,
-                        raster,
+                        raster.into(),
                     ))
                 }
                 _ => unimplemented!(),
@@ -472,8 +485,8 @@ mod tests {
         let no_data_value = 42;
         let no_data_value_option = Some(no_data_value);
 
-        let a = make_raster();
-        let b = make_raster();
+        let raster_a = make_raster();
+        let raster_b = make_raster();
 
         let o = Expression {
             params: ExpressionParams {
@@ -483,8 +496,8 @@ mod tests {
                 output_measurement: Some(Measurement::Unitless),
             },
             sources: ExpressionSources {
-                a,
-                b: Some(b),
+                a: raster_a,
+                b: Some(raster_b),
                 c: None,
             },
         }
@@ -492,10 +505,10 @@ mod tests {
         .initialize(&MockExecutionContext::default())
         .unwrap();
 
-        let p = o.query_processor().unwrap().get_i8().unwrap();
+        let processor = o.query_processor().unwrap().get_i8().unwrap();
 
         let ctx = MockQueryContext::new(1);
-        let q = p
+        let result_stream = processor
             .query(
                 QueryRectangle {
                     bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (3., 4.).into()),
@@ -506,18 +519,19 @@ mod tests {
             )
             .unwrap();
 
-        let c: Vec<Result<RasterTile2D<i8>>> = q.collect().await;
+        let result: Vec<Result<RasterTile2D<i8>>> = result_stream.collect().await;
 
-        assert_eq!(c.len(), 1);
+        assert_eq!(result.len(), 1);
 
         assert_eq!(
-            c[0].as_ref().unwrap().grid_array,
+            result[0].as_ref().unwrap().grid_array,
             Grid2D::new(
                 [3, 2].into(),
                 vec![2, 4, 6, 8, 10, 12],
                 no_data_value_option,
             )
             .unwrap()
+            .into()
         );
     }
 
@@ -532,7 +546,7 @@ mod tests {
                 tile_size_in_pixels: [3, 2].into(),
                 global_geo_transform: Default::default(),
             },
-            raster,
+            raster.into(),
         );
 
         MockRasterSource {

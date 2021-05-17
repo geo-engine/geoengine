@@ -99,7 +99,6 @@ impl GridSize for GridBoundingBox<[isize; 3]> {
 
 impl<A> GridBounds for GridBoundingBox<A>
 where
-    Self: GridSize,
     A: AsRef<[isize]> + Into<GridIdx<A>> + Clone,
 {
     type IndexArray = A;
