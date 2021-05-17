@@ -1,8 +1,13 @@
-use crate::error;
-use crate::operations::image::{Colorizer, RgbaTransmutable};
-use crate::raster::{Grid2D, GridIndexAccess, Pixel, RasterTile2D, TypedRasterTile2D};
+use crate::raster::{
+    Grid2D, GridIndexAccess, GridOrEmpty2D, NoDataValue, Pixel, RasterTile2D, TypedRasterTile2D,
+};
 use crate::util::Result;
-use image::{DynamicImage, ImageFormat, RgbaImage};
+use crate::{error, raster::EmptyGrid2D};
+use crate::{
+    operations::image::{Colorizer, RgbaTransmutable},
+    raster::GridOrEmpty,
+};
+use image::{DynamicImage, ImageBuffer, ImageFormat, RgbaImage};
 
 pub trait ToPng {
     /// Outputs png bytes of an image of size width x height
@@ -20,8 +25,8 @@ where
         let scale_x = (raster_x_size as f64) / f64::from(width);
         let scale_y = (raster_y_size as f64) / f64::from(height);
 
-        let image_buffer = if let Some(no_data_value) = self.no_data_value {
-            let no_data_fn = move |p: P| p == no_data_value;
+        let image_buffer = if self.no_data_value().is_some() {
+            let no_data_fn = move |p: P| self.is_no_data(p);
             create_rgba_image(self, width, height, colorizer, scale_x, scale_y, no_data_fn)
         } else {
             let no_data_fn = move |_| false;
@@ -37,6 +42,41 @@ where
             })?;
 
         Ok(buffer)
+    }
+}
+
+impl<P> ToPng for EmptyGrid2D<P>
+where
+    P: Pixel + RgbaTransmutable,
+{
+    fn to_png(&self, width: u32, height: u32, colorizer: &Colorizer) -> Result<Vec<u8>> {
+        // TODO: use PNG color palette once it is available
+
+        let no_data_color: image::Rgba<u8> = colorizer.no_data_color().into();
+
+        let image_buffer = ImageBuffer::from_pixel(width, height, no_data_color);
+
+        let mut buffer = Vec::new();
+
+        DynamicImage::ImageRgba8(image_buffer)
+            .write_to(&mut buffer, ImageFormat::Png)
+            .map_err(|error| error::Error::Colorizer {
+                details: format!("encoding PNG failed: {}", error),
+            })?;
+
+        Ok(buffer)
+    }
+}
+
+impl<P> ToPng for GridOrEmpty2D<P>
+where
+    P: Pixel + RgbaTransmutable,
+{
+    fn to_png(&self, width: u32, height: u32, colorizer: &Colorizer) -> Result<Vec<u8>> {
+        match self {
+            GridOrEmpty::Grid(g) => g.to_png(width, height, colorizer),
+            GridOrEmpty::Empty(n) => n.to_png(width, height, colorizer),
+        }
     }
 }
 
@@ -238,6 +278,30 @@ mod tests {
 
         assert_eq!(
             include_bytes!("../../../test-data/colorizer/no_data.png") as &[u8],
+            image_bytes.as_slice()
+        );
+    }
+
+    #[test]
+    fn no_data_tile() {
+        let raster = EmptyGrid2D::new([2, 2].into(), 0);
+
+        let colorizer = Colorizer::linear_gradient(
+            vec![
+                (0.0, RgbaColor::new(0, 0, 0, 255)).try_into().unwrap(),
+                (255.0, RgbaColor::new(255, 255, 255, 255))
+                    .try_into()
+                    .unwrap(),
+            ],
+            RgbaColor::transparent(),
+            RgbaColor::pink(),
+        )
+        .unwrap();
+
+        let image_bytes = raster.to_png(100, 100, &colorizer).unwrap();
+
+        assert_eq!(
+            include_bytes!("../../../test-data/colorizer/empty.png") as &[u8],
             image_bytes.as_slice()
         );
     }

@@ -453,7 +453,9 @@ mod tests {
             TimeInterval::default(),
             [0, 0].into(),
             [1.0, 1.0, 0.0, 1.0, 0.0, 1.0].into(),
-            Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None).unwrap(),
+            Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None)
+                .unwrap()
+                .into(),
         ));
 
         call_generic_raster_tile_2d_ext!(typed_raster_a, Foo, (raster, e) => {

@@ -1,6 +1,8 @@
+use std::ops::Add;
+
 use crate::util::Result;
 
-use super::{GridBoundingBox, GridIdx};
+use super::{GridBoundingBox, GridIdx, GridShape};
 
 /// Size information of a grid include the size of each axis and the number elements
 pub trait GridSize {
@@ -35,7 +37,7 @@ pub trait GridSize {
     }
 }
 /// The bounds of a grid are the minimal / the maximal valid index of each axis.
-pub trait GridBounds: GridSize {
+pub trait GridBounds {
     /// An array with one entry representing a position on an axis
     type IndexArray: AsRef<[isize]> + Into<GridIdx<Self::IndexArray>>;
 
@@ -125,4 +127,51 @@ pub trait GridIndexAccess<T, I> {
 
     /// Gets a reference to the value at a grid index
     fn get_at_grid_index_unchecked(&self, grid_index: I) -> T;
+}
+
+/// The shape of an array
+pub trait GridShapeAccess {
+    type ShapeArray: AsRef<[usize]> + Into<GridShape<Self::ShapeArray>>;
+
+    fn grid_shape_array(&self) -> Self::ShapeArray;
+
+    fn grid_shape(&self) -> GridShape<Self::ShapeArray> {
+        GridShape::new(self.grid_shape_array())
+    }
+}
+
+/// Provides the the value used to represent a no data entry.
+pub trait NoDataValue {
+    type NoDataType: PartialEq + Copy;
+
+    fn no_data_value(&self) -> Option<Self::NoDataType>;
+
+    fn is_no_data(&self, value: Self::NoDataType) -> bool {
+        self.no_data_value()
+            .map_or(false, |no_data_value| value == no_data_value)
+    }
+}
+
+/// Change the bounds of gridded data.
+pub trait ChangeGridBounds<I>: BoundedGrid<IndexArray = I>
+where
+    I: AsRef<[isize]> + Into<GridIdx<I>> + Clone,
+    GridBoundingBox<I>: GridSize,
+    GridIdx<I>: Add<Output = GridIdx<I>> + From<I>,
+{
+    type Output;
+
+    fn shift_bounding_box(&self, offset: GridIdx<I>) -> GridBoundingBox<I> {
+        let bounds = self.bounding_box();
+        GridBoundingBox::new_unchecked(
+            bounds.min_index() + offset.clone(),
+            bounds.max_index() + offset,
+        )
+    }
+
+    /// shift using an offset
+    fn shift_by_offset(self, offset: GridIdx<I>) -> Self::Output;
+
+    /// set new bounds. will fail if the axis sizes do not match.
+    fn set_grid_bounds(self, bounds: GridBoundingBox<I>) -> Result<Self::Output>;
 }

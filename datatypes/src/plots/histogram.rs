@@ -190,6 +190,10 @@ impl Histogram {
         }
     }
 
+    pub fn add_nodata_batch(&mut self, nodata_count: u64) {
+        self.nodata_count += nodata_count;
+    }
+
     fn handle_data_item(&mut self, value: f64, is_null: bool) {
         if is_null || !value.is_finite() {
             self.nodata_count += 1;
