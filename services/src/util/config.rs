@@ -170,3 +170,26 @@ pub struct Upload {
 impl ConfigElement for Upload {
     const KEY: &'static str = "upload";
 }
+
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case", remote = "flexi_logger::Duplicate")]
+enum DuplicateDef {
+    None,
+    Error,
+    Warn,
+    Info,
+    Debug,
+    Trace,
+    All,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Logging {
+    pub log_spec: String,
+    #[serde(with = "DuplicateDef")]
+    pub duplicate_to_term: flexi_logger::Duplicate,
+}
+
+impl ConfigElement for Logging {
+    const KEY: &'static str = "logging";
+}

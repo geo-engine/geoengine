@@ -26,3 +26,7 @@ chunk_byte_size = 1048576 # TODO: find reasonable default
 
 [upload]
 path = "upload"
+
+[logging]
+log_spec = "info"
+duplicate_to_term = "all"
