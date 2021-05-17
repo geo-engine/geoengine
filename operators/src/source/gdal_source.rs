@@ -82,7 +82,7 @@ pub enum GdalLoadingInfoPartIterator {
     Static {
         parts: std::vec::IntoIter<GdalLoadingInfoPart>,
     },
-    Dynamic {
+    Regular {
         time_step_iter: TimeStepIter,
         params: GdalDatasetParameters,
         placeholder: String,
@@ -98,7 +98,7 @@ impl Iterator for GdalLoadingInfoPartIterator {
     fn next(&mut self) -> Option<Self::Item> {
         match self {
             GdalLoadingInfoPartIterator::Static { parts } => parts.next().map(Result::Ok),
-            GdalLoadingInfoPartIterator::Dynamic {
+            GdalLoadingInfoPartIterator::Regular {
                 time_step_iter,
                 params,
                 placeholder,
@@ -211,7 +211,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor> for GdalMetaDataRegular {
             TimeStepIter::new_with_interval_incl_start(snapped_interval, self.step)?;
 
         Ok(GdalLoadingInfo {
-            info: GdalLoadingInfoPartIterator::Dynamic {
+            info: GdalLoadingInfoPartIterator::Regular {
                 time_step_iter: time_iterator,
                 params: self.params.clone(),
                 placeholder: self.placeholder.clone(),

@@ -1,6 +1,7 @@
 mod csv;
 mod gdal_source;
 mod ogr_source;
+mod stac;
 
 pub use self::csv::{
     CsvGeometrySpecification, CsvSource, CsvSourceParameters, CsvSourceStream, CsvTimeSpecification,
