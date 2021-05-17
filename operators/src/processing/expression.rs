@@ -485,8 +485,8 @@ mod tests {
         let no_data_value = 42;
         let no_data_value_option = Some(no_data_value);
 
-        let a = make_raster();
-        let b = make_raster();
+        let raster_a = make_raster();
+        let raster_b = make_raster();
 
         let o = Expression {
             params: ExpressionParams {
@@ -496,8 +496,8 @@ mod tests {
                 output_measurement: Some(Measurement::Unitless),
             },
             sources: ExpressionSources {
-                a,
-                b: Some(b),
+                a: raster_a,
+                b: Some(raster_b),
                 c: None,
             },
         }
@@ -505,10 +505,10 @@ mod tests {
         .initialize(&MockExecutionContext::default())
         .unwrap();
 
-        let p = o.query_processor().unwrap().get_i8().unwrap();
+        let processor = o.query_processor().unwrap().get_i8().unwrap();
 
         let ctx = MockQueryContext::new(1);
-        let q = p
+        let result_stream = processor
             .query(
                 QueryRectangle {
                     bbox: BoundingBox2D::new_unchecked((1., 2.).into(), (3., 4.).into()),
@@ -519,12 +519,12 @@ mod tests {
             )
             .unwrap();
 
-        let c: Vec<Result<RasterTile2D<i8>>> = q.collect().await;
+        let result: Vec<Result<RasterTile2D<i8>>> = result_stream.collect().await;
 
-        assert_eq!(c.len(), 1);
+        assert_eq!(result.len(), 1);
 
         assert_eq!(
-            c[0].as_ref().unwrap().grid_array,
+            result[0].as_ref().unwrap().grid_array,
             Grid2D::new(
                 [3, 2].into(),
                 vec![2, 4, 6, 8, 10, 12],
