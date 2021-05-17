@@ -9,5 +9,3 @@ Cargo.lock
 /.idea
 /.vscode
 Settings.toml
-
-logspec.toml
