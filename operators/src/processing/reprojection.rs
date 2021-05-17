@@ -15,8 +15,8 @@ use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::{
     operations::reproject::{
-        suggest_pixel_size_from_diag_cross, suggest_pixel_size_from_diag_cross_projected,
-        CoordinateProjection, CoordinateProjector, Reproject, ReprojectClipped,
+        suggest_pixel_size_from_diag_cross_projected, CoordinateProjection, CoordinateProjector,
+        Reproject, ReprojectClipped,
     },
     raster::{Pixel, TilingSpecification},
     spatial_reference::SpatialReference,
@@ -416,10 +416,20 @@ where
     ) -> Result<BoxStream<'a, Result<geoengine_datatypes::raster::RasterTile2D<Self::RasterType>>>>
     {
         // we need a resolution for the sub-querys. And since we don't want this to change for tiles, we precompute it for the complete bbox and pass it to the sub-query spec.
-        // TODO: use `rewrite_query` to determine resolution for tiles overlapping border
-        let projector = CoordinateProjector::from_known_srs(self.to, self.from)?;
+        let projector_source_target = CoordinateProjector::from_known_srs(self.from, self.to)?;
+        let projector_target_source = CoordinateProjector::from_known_srs(self.to, self.from)?;
+
+        let p_bbox = query.bbox.reproject_clipped(&projector_target_source)?;
+        let s_bbox = p_bbox.reproject(&projector_source_target)?;
+
         let p_spatial_resolution =
-            suggest_pixel_size_from_diag_cross(query.bbox, query.spatial_resolution, &projector)?;
+            suggest_pixel_size_from_diag_cross_projected(s_bbox, p_bbox, query.spatial_resolution)?;
+
+        let clipped_query = QueryRectangle {
+            bbox: s_bbox,
+            time_interval: query.time_interval,
+            spatial_resolution: query.spatial_resolution,
+        };
 
         let sub_query_spec = TileReprojectionSubQuery {
             in_srs: self.from,
@@ -430,7 +440,7 @@ where
         };
         let s = RasterOverlapAdapter::<'a, P, _, _>::new(
             &self.source,
-            query,
+            clipped_query,
             self.tiling_spec,
             ctx,
             sub_query_spec,
@@ -445,20 +455,29 @@ mod tests {
 
     use crate::{
         engine::VectorOperator,
-        source::{GdalSource, GdalSourceParameters},
-        util::gdal::add_ndvi_dataset,
+        source::{
+            FileNotFoundHandling, GdalDatasetParameters, GdalMetaDataRegular, GdalSource,
+            GdalSourceParameters,
+        },
+        util::gdal::{add_ndvi_dataset, raster_dir},
     };
     use geoengine_datatypes::{
         collections::{MultiLineStringCollection, MultiPointCollection, MultiPolygonCollection},
+        dataset::{DatasetId, InternalDatasetId},
         primitives::{
             BoundingBox2D, Measurement, MultiLineString, MultiPoint, MultiPolygon,
-            SpatialResolution, TimeInterval,
+            SpatialResolution, TimeGranularity, TimeInstance, TimeInterval, TimeStep,
         },
-        raster::{Grid, GridShape, GridShape2D, GridSize, RasterDataType, RasterTile2D},
+        raster::{
+            GeoTransform, Grid, GridShape, GridShape2D, GridSize, RasterDataType, RasterTile2D,
+        },
         spatial_reference::SpatialReferenceAuthority,
-        util::well_known_data::{
-            COLOGNE_EPSG_4326, COLOGNE_EPSG_900_913, HAMBURG_EPSG_4326, HAMBURG_EPSG_900_913,
-            MARBURG_EPSG_4326, MARBURG_EPSG_900_913,
+        util::{
+            well_known_data::{
+                COLOGNE_EPSG_4326, COLOGNE_EPSG_900_913, HAMBURG_EPSG_4326, HAMBURG_EPSG_900_913,
+                MARBURG_EPSG_4326, MARBURG_EPSG_900_913,
+            },
+            Identifier,
         },
     };
 
@@ -874,5 +893,100 @@ mod tests {
             .unwrap()
             .bbox
         );
+    }
+
+    #[tokio::test]
+    async fn raster_ndvi_3857_to_4326() -> Result<()> {
+        let mut exe_ctx = MockExecutionContext::default();
+        let query_ctx = MockQueryContext::default();
+
+        let m = GdalMetaDataRegular {
+            start: TimeInstance::from_millis(1_388_534_400_000).unwrap(),
+            step: TimeStep {
+                granularity: TimeGranularity::Months,
+                step: 1,
+            },
+            placeholder: "%%%_START_TIME_%%%".to_string(),
+            time_format: "%Y-%m-%d".to_string(),
+            params: GdalDatasetParameters {
+                file_path: raster_dir()
+                    .join("modis_ndvi/projected_3857/MOD13A2_M_NDVI_%%%_START_TIME_%%%.TIFF"),
+                rasterband_channel: 1,
+                geo_transform: GeoTransform {
+                    origin_coordinate: (20_037_508.342_789_244, 19_971_868.880_408_563).into(),
+                    x_pixel_size: 14_052.950_258_048_739,
+                    y_pixel_size: -14_057.881_117_788_405,
+                },
+                bbox: BoundingBox2D::new_unchecked(
+                    (-20_037_508.343, -19_966_571.375).into(),
+                    (20_027_452.843, 19_971_868.88).into(),
+                ),
+                file_not_found_handling: FileNotFoundHandling::Error,
+                no_data_value: Some(0.),
+            },
+            result_descriptor: RasterResultDescriptor {
+                data_type: RasterDataType::U8,
+                spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 3857)
+                    .into(),
+                measurement: Measurement::Unitless,
+                no_data_value: Some(0.),
+            },
+        };
+
+        let id: DatasetId = InternalDatasetId::new().into();
+        exe_ctx.add_meta_data(id.clone(), Box::new(m));
+
+        exe_ctx.tiling_specification =
+            TilingSpecification::new((0.0, 0.0).into(), [600, 600].into());
+
+        let output_shape: GridShape2D = [1000, 1000].into();
+        let output_bounds = BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into());
+        let time_interval = TimeInterval::new_unchecked(1_388_534_400_000, 1_388_534_400_001);
+        // 2014-01-01
+
+        let gdal_op = GdalSource {
+            params: GdalSourceParameters {
+                dataset: id.clone(),
+            },
+        }
+        .boxed();
+
+        let initialized_operator = RasterOperator::boxed(Reprojection {
+            params: ReprojectionParams {
+                target_spatial_reference: SpatialReference::epsg_4326(),
+            },
+            sources: SingleRasterOrVectorSource {
+                source: gdal_op.into(),
+            },
+        })
+        .initialize(&exe_ctx)?;
+
+        let x_query_resolution = output_bounds.size_x() / output_shape.axis_size_x() as f64;
+        let y_query_resolution = output_bounds.size_y() / (output_shape.axis_size_y() * 2) as f64; // *2 to account for the dataset aspect ratio 2:1
+        let spatial_resolution =
+            SpatialResolution::new_unchecked(x_query_resolution, y_query_resolution);
+
+        let qp = initialized_operator
+            .query_processor()
+            .unwrap()
+            .get_u8()
+            .unwrap();
+
+        let qs = qp
+            .raster_query(
+                QueryRectangle {
+                    bbox: output_bounds,
+                    time_interval,
+                    spatial_resolution,
+                },
+                &query_ctx,
+            )
+            .unwrap();
+
+        qs.map(Result::unwrap)
+            .collect::<Vec<RasterTile2D<u8>>>()
+            .await;
+
+        Ok(())
     }
 }
