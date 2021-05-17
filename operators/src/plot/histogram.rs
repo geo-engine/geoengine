@@ -1044,7 +1044,9 @@ mod tests {
                             global_tile_position: [0, 0].into(),
                             tile_size_in_pixels: [3, 2].into(),
                         },
-                        Grid2D::new([3, 2].into(), vec![0, 0, 0, 0, 0, 0], no_data_value).unwrap(),
+                        Grid2D::new([3, 2].into(), vec![0, 0, 0, 0, 0, 0], no_data_value)
+                            .unwrap()
+                            .into(),
                     )],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
@@ -1223,7 +1225,9 @@ mod tests {
                             global_tile_position: [0, 0].into(),
                             tile_size_in_pixels: [3, 2].into(),
                         },
-                        Grid2D::new([3, 2].into(), vec![4; 6], no_data_value).unwrap(),
+                        Grid2D::new([3, 2].into(), vec![4; 6], no_data_value)
+                            .unwrap()
+                            .into(),
                     )],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
