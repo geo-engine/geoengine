@@ -366,7 +366,7 @@ mod tests {
         };
         let query_rect = QueryRectangle {
             bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (4., 3.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 20),
+            time_interval: TimeInterval::new_unchecked(0, 40),
             spatial_resolution: SpatialResolution::one(),
         };
         let query_ctx = MockQueryContext {
@@ -387,7 +387,7 @@ mod tests {
             .collect::<Vec<_>>()
             .await;
 
-        assert_eq!(result.len(), 2);
+        assert_eq!(result.len(), 4);
 
         assert_eq!(
             result[0].as_ref().unwrap(),
@@ -406,6 +406,32 @@ mod tests {
             result[1].as_ref().unwrap(),
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 20),
+                TileInformation {
+                    global_tile_position: [-1, 1].into(),
+                    tile_size_in_pixels: [3, 2].into(),
+                    global_geo_transform: Default::default(),
+                },
+                Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1], no_data_value).unwrap(),
+            )
+        );
+
+        assert_eq!(
+            result[2].as_ref().unwrap(),
+            &RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(20, 40),
+                TileInformation {
+                    global_tile_position: [-1, 0].into(),
+                    tile_size_in_pixels: [3, 2].into(),
+                    global_geo_transform: Default::default(),
+                },
+                Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], no_data_value).unwrap(),
+            )
+        );
+
+        assert_eq!(
+            result[3].as_ref().unwrap(),
+            &RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(20, 40),
                 TileInformation {
                     global_tile_position: [-1, 1].into(),
                     tile_size_in_pixels: [3, 2].into(),
@@ -451,7 +477,7 @@ mod tests {
         };
         let query_rect = QueryRectangle {
             bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (4., 3.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 20),
+            time_interval: TimeInterval::new_unchecked(0, 40),
             spatial_resolution: SpatialResolution::one(),
         };
         let query_ctx = MockQueryContext {
@@ -472,7 +498,7 @@ mod tests {
             .collect::<Vec<_>>()
             .await;
 
-        assert_eq!(result.len(), 2);
+        assert_eq!(result.len(), 4);
 
         assert_eq!(
             result[0].as_ref().unwrap(),
@@ -491,6 +517,32 @@ mod tests {
             result[1].as_ref().unwrap(),
             &RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 20),
+                TileInformation {
+                    global_tile_position: [-1, 1].into(),
+                    tile_size_in_pixels: [3, 2].into(),
+                    global_geo_transform: Default::default(),
+                },
+                Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12], no_data_value).unwrap(),
+            )
+        );
+
+        assert_eq!(
+            result[2].as_ref().unwrap(),
+            &RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(20, 40),
+                TileInformation {
+                    global_tile_position: [-1, 0].into(),
+                    tile_size_in_pixels: [3, 2].into(),
+                    global_geo_transform: Default::default(),
+                },
+                Grid2D::new([3, 2].into(), vec![12, 11, 10, 9, 8, 7], no_data_value).unwrap(),
+            )
+        );
+
+        assert_eq!(
+            result[3].as_ref().unwrap(),
+            &RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(20, 40),
                 TileInformation {
                     global_tile_position: [-1, 1].into(),
                     tile_size_in_pixels: [3, 2].into(),
@@ -536,6 +588,42 @@ mod tests {
             ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
+                TileInformation {
+                    global_tile_position: [-1, 1].into(),
+                    tile_size_in_pixels: [3, 2].into(),
+                    global_geo_transform: Default::default(),
+                },
+                Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1], no_data_value).unwrap(),
+            ),
+            RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(20, 30),
+                TileInformation {
+                    global_tile_position: [-1, 0].into(),
+                    tile_size_in_pixels: [3, 2].into(),
+                    global_geo_transform: Default::default(),
+                },
+                Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], no_data_value).unwrap(),
+            ),
+            RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(20, 30),
+                TileInformation {
+                    global_tile_position: [-1, 1].into(),
+                    tile_size_in_pixels: [3, 2].into(),
+                    global_geo_transform: Default::default(),
+                },
+                Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12], no_data_value).unwrap(),
+            ),
+            RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(30, 40),
+                TileInformation {
+                    global_tile_position: [-1, 0].into(),
+                    tile_size_in_pixels: [3, 2].into(),
+                    global_geo_transform: Default::default(),
+                },
+                Grid2D::new([3, 2].into(), vec![12, 11, 10, 9, 8, 7], no_data_value).unwrap(),
+            ),
+            RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(30, 40),
                 TileInformation {
                     global_tile_position: [-1, 1].into(),
                     tile_size_in_pixels: [3, 2].into(),
