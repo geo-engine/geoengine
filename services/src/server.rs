@@ -126,6 +126,7 @@ where
         handlers::wfs::wfs_handler(ctx.clone()),
         handlers::plots::get_plot_handler(ctx.clone()),
         handlers::upload::upload_handler(ctx.clone()),
+        show_version_handler(),
         serve_static_directory(static_files_dir)
     )
     .recover(handle_rejection);
@@ -141,6 +142,42 @@ where
     };
 
     task.await.context(error::TokioJoin)
+}
+
+/// Shows information about the server software version.
+///
+/// # Example
+///
+/// ```text
+/// GET /version
+/// ```
+/// Response:
+/// ```text
+/// {
+///   "buildDate": "2021-05-17",
+///   "commitHash": "16cd0881a79b6f03bb5f1f6ef2b2711e570b9865"
+/// }
+/// ```
+fn show_version_handler() -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone
+{
+    warp::path("version")
+        .and(warp::get())
+        .and_then(show_version)
+}
+
+// TODO: move into handler once async closures are available?
+async fn show_version() -> Result<impl warp::Reply, warp::Rejection> {
+    #[derive(serde::Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct VersionInfo<'a> {
+        build_date: Option<&'a str>,
+        commit_hash: Option<&'a str>,
+    }
+
+    Ok(warp::reply::json(&VersionInfo {
+        build_date: option_env!("VERGEN_BUILD_DATE"),
+        commit_hash: option_env!("VERGEN_GIT_SHA"),
+    }))
 }
 
 fn serve_static_directory(

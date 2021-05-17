@@ -7,6 +7,7 @@ authors = [
     "Michael Mattig <mattig@mathematik.uni-marburg.de>",
 ]
 edition = "2018"
+build = "build.rs"
 
 [features]
 postgres = ["postgres-types", "bb8-postgres"]
@@ -44,3 +45,6 @@ clap = "3.0.0-beta.1"
 tempfile = "3.1"
 xml-rs = "0.8.3"
 reqwest = "0.11.0"
+
+[build-dependencies]
+vergen = "5"
