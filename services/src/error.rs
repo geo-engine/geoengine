@@ -147,6 +147,10 @@ pub enum Error {
     EmptyDatasetCannotBeImported,
     NoMainFileCandidateFound,
     NoFeatureDataTypeForColumnDataType,
+
+    UnknownSpatialReference {
+        srs_string: String,
+    },
 }
 
 impl Reject for Error {}

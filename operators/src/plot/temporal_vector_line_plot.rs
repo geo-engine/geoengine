@@ -7,7 +7,7 @@ use crate::error;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::StreamExt;
-use geoengine_datatypes::primitives::{FeatureDataType, FeatureDataValue};
+use geoengine_datatypes::primitives::FeatureDataType;
 use geoengine_datatypes::{
     collections::FeatureCollection,
     plots::{Plot, PlotData},
@@ -153,15 +153,20 @@ where
                         let ids = features.data(&self.params.id_column)?;
                         let values = features.data(&self.params.value_column)?;
 
-                        for i in 0..features.len() {
-                            if let (Some(id), Some(value), time) = (
-                                get_value_as_string(ids.get_unchecked(i)),
-                                get_value_as_f64(&values.get_unchecked(i)),
-                                features.time_intervals()[i],
-                            ) {
-                                acc.add(id, (time, value))
+                        for ((id, value), &time) in ids
+                            .strings_iter()
+                            .zip(values.float_options_iter())
+                            .zip(features.time_intervals())
+                        {
+                            if id.is_empty() || value.is_none() {
+                                continue;
                             }
+
+                            let value = value.expect("checked above");
+
+                            acc.add(id, (time, value));
                         }
+
                         Ok(acc)
                     }
                     (Err(err), _) | (_, Err(err)) => Err(err),
@@ -174,31 +179,6 @@ where
         MultiLineChart::new(data_points, measurement)
             .to_vega_embeddable(false)
             .context(error::DataType)
-    }
-}
-
-fn get_value_as_f64(value: &FeatureDataValue) -> Option<f64> {
-    match value {
-        FeatureDataValue::Int(v) => Some(*v as f64),
-        FeatureDataValue::NullableInt(v) => v.map(|v| v as f64),
-        FeatureDataValue::Float(v) => Some(*v),
-        FeatureDataValue::NullableFloat(v) => *v,
-        FeatureDataValue::Category(v) => Some(f64::from(*v)),
-        FeatureDataValue::NullableCategory(v) => v.map(f64::from),
-        _ => unreachable!(),
-    }
-}
-
-fn get_value_as_string(value: FeatureDataValue) -> Option<String> {
-    match value {
-        FeatureDataValue::Int(v) => Some(v.to_string()),
-        FeatureDataValue::NullableInt(v) => v.map(|v| v.to_string()),
-        FeatureDataValue::Float(v) => Some(v.to_string()),
-        FeatureDataValue::NullableFloat(v) => v.map(|v| v.to_string()),
-        FeatureDataValue::Text(v) => Some(v),
-        FeatureDataValue::NullableText(v) => v,
-        FeatureDataValue::Category(v) => Some(v.to_string()),
-        FeatureDataValue::NullableCategory(v) => v.map(|v| v.to_string()),
     }
 }
 

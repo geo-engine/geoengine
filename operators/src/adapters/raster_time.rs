@@ -191,7 +191,8 @@ mod tests {
                         tile_position: [0, 0].into(),
                         global_geo_transform: Default::default(),
                         grid_array: Grid::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], no_data_value)
-                            .unwrap(),
+                            .unwrap()
+                            .into(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(0, 5),
@@ -202,7 +203,8 @@ mod tests {
                             vec![7, 8, 9, 10, 11, 12],
                             no_data_value,
                         )
-                        .unwrap(),
+                        .unwrap()
+                        .into(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(5, 10),
@@ -213,7 +215,8 @@ mod tests {
                             vec![13, 14, 15, 16, 17, 18],
                             no_data_value,
                         )
-                        .unwrap(),
+                        .unwrap()
+                        .into(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(5, 10),
@@ -224,7 +227,8 @@ mod tests {
                             vec![19, 20, 21, 22, 23, 24],
                             no_data_value,
                         )
-                        .unwrap(),
+                        .unwrap()
+                        .into(),
                     },
                 ],
                 result_descriptor: RasterResultDescriptor {
@@ -249,7 +253,8 @@ mod tests {
                             vec![101, 102, 103, 104, 105, 106],
                             no_data_value,
                         )
-                        .unwrap(),
+                        .unwrap()
+                        .into(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(0, 3),
@@ -260,7 +265,8 @@ mod tests {
                             vec![107, 108, 109, 110, 111, 112],
                             no_data_value,
                         )
-                        .unwrap(),
+                        .unwrap()
+                        .into(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(3, 6),
@@ -271,7 +277,8 @@ mod tests {
                             vec![113, 114, 115, 116, 117, 118],
                             no_data_value,
                         )
-                        .unwrap(),
+                        .unwrap()
+                        .into(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(3, 6),
@@ -282,7 +289,8 @@ mod tests {
                             vec![119, 120, 121, 122, 123, 124],
                             no_data_value,
                         )
-                        .unwrap(),
+                        .unwrap()
+                        .into(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(6, 10),
@@ -293,7 +301,8 @@ mod tests {
                             vec![125, 126, 127, 128, 129, 130],
                             no_data_value,
                         )
-                        .unwrap(),
+                        .unwrap()
+                        .into(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(6, 10),
@@ -304,7 +313,8 @@ mod tests {
                             vec![131, 132, 133, 134, 135, 136],
                             no_data_value,
                         )
-                        .unwrap(),
+                        .unwrap()
+                        .into(),
                     },
                 ],
                 result_descriptor: RasterResultDescriptor {
