@@ -360,7 +360,11 @@ async fn suggest_meta_data<C: Context>(
 }
 
 fn suggest_main_file(upload: &Upload) -> Option<String> {
-    let known_extensions = ["csv", "shp", "json", "geojson", "gpkg"]; // TODO: rasters
+    let known_extensions = ["csv", "shp", "json", "geojson", "gpkg", "sqlite"]; // TODO: rasters
+
+    if upload.files.len() == 1 {
+        return Some(upload.files[0].name.clone());
+    }
 
     let mut sorted_files = upload.files.clone();
     sorted_files.sort_by(|a, b| b.byte_size.cmp(&a.byte_size));
