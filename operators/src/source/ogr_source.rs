@@ -59,7 +59,6 @@ pub type OgrSource = SourceOperator<OgrSourceParameters>;
 ///  - `layer_name`: name of the layer to load
 ///  - `time`: the type of the time attribute(s)
 ///  - `columns`: a mapping of the columns to data, time, space. Columns that are not listed are skipped when parsing.
-///  - `default`: wkt definition of the default point/line/polygon as a string (optional)
 ///  - `force_ogr_time_filter`: bool. force external time filter via ogr layer, even though data types don't match. Might not work
 ///  - `force_ogr_spatial_filter`: bool. force external spatial filter via ogr layer.
 ///    (result: empty collection), but has better performance for wfs requests (optional, false if not provided)
@@ -74,7 +73,6 @@ pub struct OgrSourceDataset {
     #[serde(default)]
     pub time: OgrSourceDatasetTimeType,
     pub columns: Option<OgrSourceColumnSpec>,
-    pub default_geometry: Option<TypedGeometry>, // TODO: move default geometry to OgrSourceErrorSpec::Keep
     #[serde(default)]
     pub force_ogr_time_filter: bool,
     #[serde(default)]
@@ -190,15 +188,23 @@ impl OgrSourceColumnSpec {
 }
 
 /// Specify the type of error handling
-///  - "skip"
-///  - "abort"
-///  - "keep"
-#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+///  - "ignore": invalid column values are kept as null, missing/invalid geom features are skipped
+///  - "abort": invalid column values and missing/invalid geoms result in abort
+#[derive(Copy, Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum OgrSourceErrorSpec {
-    Skip,
+    Ignore,
     Abort,
-    Keep,
+}
+
+impl OgrSourceErrorSpec {
+    /// handle the given error depending on the spec
+    fn on_error<T>(self, error: error::Error) -> Result<Option<T>> {
+        match self {
+            OgrSourceErrorSpec::Ignore => Ok(None),
+            OgrSourceErrorSpec::Abort => Err(error),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -673,16 +679,9 @@ where
     ) -> Result<FeatureCollection<G>> {
         let mut builder = feature_collection_builder.finish_header();
 
-        // TODO: cleaner way of handling the default geometry that fails earlier on wrongt data type and avoids cloning
-        let default = dataset_information
-            .default_geometry
-            .clone()
-            .map(TryInto::try_into)
-            .and_then(Result::ok);
-
         for feature in feature_iterator {
             if let Err(error) = Self::add_feature_to_batch(
-                &default,
+                dataset_information.on_error,
                 data_types,
                 &query_rectangle,
                 time_extractor,
@@ -692,8 +691,7 @@ where
                 was_spatial_filtered_by_ogr,
             ) {
                 match dataset_information.on_error {
-                    OgrSourceErrorSpec::Skip => continue,
-                    OgrSourceErrorSpec::Keep => (),
+                    OgrSourceErrorSpec::Ignore => continue,
                     OgrSourceErrorSpec::Abort => return Err(error),
                 }
             }
@@ -708,7 +706,7 @@ where
 
     #[allow(clippy::too_many_arguments)]
     fn add_feature_to_batch(
-        default_geometry: &Option<G>,
+        error_spec: OgrSourceErrorSpec,
         data_types: &HashMap<String, FeatureDataType>,
         query_rectangle: &QueryRectangle,
         time_extractor: &dyn Fn(&Feature) -> Result<TimeInterval, Error>,
@@ -724,14 +722,8 @@ where
             return Ok(());
         }
 
-        let geometry: G = match (
-            <G as TryFromOgrGeometry>::try_from(feature.geometry_by_index(0).map_err(Into::into)),
-            default_geometry,
-        ) {
-            (Ok(g), _) => g,
-            (Err(_), Some(g)) => g.clone(),
-            (Err(error), _) => return Err(error),
-        };
+        let geometry: G =
+            <G as TryFromOgrGeometry>::try_from(feature.geometry_by_index(0).map_err(Into::into))?;
 
         // filter out geometries that are not contained in the query's bounding box
         if !was_spatial_filtered_by_ogr && !geometry.intersects_bbox(&query_rectangle.bbox) {
@@ -752,9 +744,9 @@ where
                         Ok(Some(FieldValue::Integer64Value(v))) => Some(v.to_string()),
                         Ok(Some(FieldValue::StringValue(s))) => Some(s),
                         Ok(Some(FieldValue::RealValue(v))) => Some(v.to_string()),
-                        Ok(Some(_)) => return Err(Error::OgrColumnFieldTypeMismatch), // TODO: handle other types
                         Ok(None) => None,
-                        Err(_) => None, // TODO: log error
+                        Ok(Some(_)) => error_spec.on_error(Error::OgrColumnFieldTypeMismatch)?,
+                        Err(e) => error_spec.on_error(Error::Gdal { source: e })?, // TODO: handle other types
                     };
 
                     builder.push_data(&column, FeatureDataValue::NullableText(text_option))?;
@@ -765,9 +757,9 @@ where
                         Ok(Some(FieldValue::IntegerValue(v))) => Some(f64::from(v)),
                         Ok(Some(FieldValue::StringValue(s))) => f64::from_str(&s).ok(),
                         Ok(Some(FieldValue::RealValue(v))) => Some(v),
-                        Ok(Some(_)) => return Err(Error::OgrColumnFieldTypeMismatch), // TODO: handle other types
                         Ok(None) => None,
-                        Err(_) => None, // TODO: log error
+                        Ok(Some(_)) => error_spec.on_error(Error::OgrColumnFieldTypeMismatch)?,
+                        Err(e) => error_spec.on_error(Error::Gdal { source: e })?, // TODO: handle other types
                     };
 
                     builder.push_data(&column, FeatureDataValue::NullableFloat(value_option))?;
@@ -779,9 +771,9 @@ where
                         Ok(Some(FieldValue::Integer64Value(v))) => Some(v),
                         Ok(Some(FieldValue::StringValue(s))) => i64::from_str(&s).ok(),
                         Ok(Some(FieldValue::RealValue(v))) => Some(v as i64),
-                        Ok(Some(_)) => return Err(Error::OgrColumnFieldTypeMismatch), // TODO: handle other types
                         Ok(None) => None,
-                        Err(_) => None, // TODO: log error
+                        Ok(Some(_)) => error_spec.on_error(Error::OgrColumnFieldTypeMismatch)?,
+                        Err(e) => error_spec.on_error(Error::Gdal { source: e })?, // TODO: handle other types
                     };
 
                     builder.push_data(&column, FeatureDataValue::NullableInt(value_option))?;
@@ -1030,12 +1022,9 @@ mod tests {
                 int: vec!["dec1".to_string(), "dec2".to_string()],
                 text: vec!["text".to_string()],
             }),
-            default_geometry: Some(TypedGeometry::MultiPoint(
-                MultiPoint::new(vec![(0.0, 0.0).into()]).unwrap(),
-            )),
             force_ogr_time_filter: false,
             force_ogr_spatial_filter: false,
-            on_error: OgrSourceErrorSpec::Skip,
+            on_error: OgrSourceErrorSpec::Ignore,
             provenance: Some(ProvenanceInformation {
                 citation: "Foo Bar".to_string(),
                 license: "CC".to_string(),
@@ -1068,10 +1057,9 @@ mod tests {
                     "float": ["num"],
                     "text": ["text"]
                 },
-                "defaultGeometry":{"MultiPoint":{"coordinates":[{"x":0.0,"y":0.0}]}},
                 "forceOgrTimeFilter": false,
                 "forceOgrSpatialFilter": false,
-                "onError": "skip",
+                "onError": "ignore",
                 "provenance": {
                     "citation": "Foo Bar",
                     "license": "CC",
@@ -1103,10 +1091,9 @@ mod tests {
                     "float": ["num"],
                     "text": ["text"]
                 },
-                "defaultGeometry":{"MultiPoint":{"coordinates":[{"x":0.0,"y":0.0}]}},
                 "forceOgrTimeFilter": false,
                 "forceOgrSpatialFilter": false,
-                "onError": "skip",
+                "onError": "ignore",
                 "provenance": {
                     "citation": "Foo Bar",
                     "license": "CC",
@@ -1128,10 +1115,9 @@ mod tests {
             data_type: None,
             time: OgrSourceDatasetTimeType::None,
             columns: None,
-            default_geometry: None,
             force_ogr_time_filter: false,
             force_ogr_spatial_filter: false,
-            on_error: OgrSourceErrorSpec::Skip,
+            on_error: OgrSourceErrorSpec::Ignore,
             provenance: None,
         };
 
@@ -1174,10 +1160,9 @@ mod tests {
             data_type: None,
             time: OgrSourceDatasetTimeType::None,
             columns: None,
-            default_geometry: None,
             force_ogr_time_filter: false,
             force_ogr_spatial_filter: false,
-            on_error: OgrSourceErrorSpec::Skip,
+            on_error: OgrSourceErrorSpec::Ignore,
             provenance: None,
         };
 
@@ -1213,17 +1198,16 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn on_error_skip() -> Result<()> {
+    async fn on_error_ignore() -> Result<()> {
         let dataset_information = OgrSourceDataset {
             file_name: "test-data/vector/data/missing_geo.json".into(),
             layer_name: "missing_geo".to_string(),
             data_type: None,
             time: OgrSourceDatasetTimeType::None,
             columns: None,
-            default_geometry: None,
             force_ogr_time_filter: false,
             force_ogr_spatial_filter: false,
-            on_error: OgrSourceErrorSpec::Skip,
+            on_error: OgrSourceErrorSpec::Ignore,
             provenance: None,
         };
         let info = StaticMetaData {
@@ -1266,65 +1250,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn on_error_keep() -> Result<()> {
-        let dataset_information = OgrSourceDataset {
-            file_name: "test-data/vector/data/missing_geo.json".into(),
-            layer_name: "missing_geo".to_string(),
-            data_type: None,
-            time: OgrSourceDatasetTimeType::None,
-            columns: None,
-            default_geometry: Some(TypedGeometry::MultiPoint(
-                MultiPoint::new(vec![(4.0, 4.1).into()]).unwrap(),
-            )),
-            force_ogr_time_filter: false,
-            force_ogr_spatial_filter: false,
-            on_error: OgrSourceErrorSpec::Keep,
-            provenance: None,
-        };
-        let info = StaticMetaData {
-            loading_info: dataset_information,
-            result_descriptor: VectorResultDescriptor {
-                data_type: VectorDataType::MultiPoint,
-                spatial_reference: SpatialReferenceOption::Unreferenced,
-                columns: Default::default(),
-            },
-        };
-
-        let query_processor = OgrSourceProcessor::<MultiPoint>::new(Box::new(info));
-
-        let context = MockQueryContext::new(usize::MAX);
-        let query = query_processor
-            .query(
-                QueryRectangle {
-                    bbox: BoundingBox2D::new((0., 0.).into(), (5., 5.).into())?,
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::new(1., 1.)?,
-                },
-                &context,
-            )
-            .unwrap();
-
-        let result: Vec<MultiPointCollection> = query.try_collect().await?;
-
-        assert_eq!(result.len(), 1);
-
-        assert_eq!(
-            result[0],
-            MultiPointCollection::from_data(
-                MultiPoint::many(vec![
-                    vec![(0.0, 0.1)],
-                    vec![(1.0, 1.1), (2.0, 2.1)],
-                    vec![(4.0, 4.1)]
-                ])?,
-                vec![Default::default(); 3],
-                HashMap::new(),
-            )?
-        );
-
-        Ok(())
-    }
-
-    #[tokio::test]
     async fn ne_10m_ports_bbox_filter() -> Result<()> {
         let dataset = DatasetId::Internal(InternalDatasetId::new());
         let mut exe_ctx = MockExecutionContext::default();
@@ -1337,10 +1262,9 @@ mod tests {
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::None,
                     columns: None,
-                    default_geometry: None,
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
-                    on_error: OgrSourceErrorSpec::Skip,
+                    on_error: OgrSourceErrorSpec::Ignore,
                     provenance: None,
                 },
                 result_descriptor: VectorResultDescriptor {
@@ -1426,10 +1350,9 @@ mod tests {
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::None,
                     columns: None,
-                    default_geometry: None,
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: true,
-                    on_error: OgrSourceErrorSpec::Skip,
+                    on_error: OgrSourceErrorSpec::Ignore,
                     provenance: None,
                 },
                 result_descriptor: VectorResultDescriptor {
@@ -1517,10 +1440,9 @@ mod tests {
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::None,
                     columns: None,
-                    default_geometry: None,
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
-                    on_error: OgrSourceErrorSpec::Skip,
+                    on_error: OgrSourceErrorSpec::Ignore,
                     provenance: None,
                 },
                 result_descriptor: VectorResultDescriptor {
@@ -1617,10 +1539,9 @@ mod tests {
                             "website".to_string(),
                         ],
                     }),
-                    default_geometry: None,
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
-                    on_error: OgrSourceErrorSpec::Skip,
+                    on_error: OgrSourceErrorSpec::Ignore,
                     provenance: None,
                 },
                 result_descriptor: VectorResultDescriptor {
@@ -1790,10 +1711,9 @@ mod tests {
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::None,
                     columns: None,
-                    default_geometry: None,
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
-                    on_error: OgrSourceErrorSpec::Skip,
+                    on_error: OgrSourceErrorSpec::Ignore,
                     provenance: None,
                 },
                 result_descriptor: VectorResultDescriptor {
@@ -2951,10 +2871,9 @@ mod tests {
                 int: vec!["a".to_string()],
                 text: vec!["c".to_string()],
             }),
-            default_geometry: None,
             force_ogr_time_filter: false,
             force_ogr_spatial_filter: false,
-            on_error: OgrSourceErrorSpec::Skip,
+            on_error: OgrSourceErrorSpec::Ignore,
             provenance: None,
         };
 
@@ -3037,10 +2956,9 @@ mod tests {
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::None,
                     columns: None,
-                    default_geometry: None,
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
-                    on_error: OgrSourceErrorSpec::Skip,
+                    on_error: OgrSourceErrorSpec::Ignore,
                     provenance: None,
                 },
                 result_descriptor: VectorResultDescriptor {
@@ -3277,10 +3195,9 @@ mod tests {
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::None,
                     columns: None,
-                    default_geometry: None,
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
-                    on_error: OgrSourceErrorSpec::Skip,
+                    on_error: OgrSourceErrorSpec::Ignore,
                     provenance: None,
                 },
                 result_descriptor: VectorResultDescriptor {
@@ -3353,7 +3270,6 @@ mod tests {
                         float: vec![],
                         text: vec![],
                     }),
-                    default_geometry: None,
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Abort,
@@ -3438,7 +3354,6 @@ mod tests {
                         float: vec![],
                         text: vec!["txt".to_owned()],
                     }),
-                    default_geometry: None,
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Abort,
