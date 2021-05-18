@@ -461,7 +461,7 @@ where
 mod tests {
     use geoengine_datatypes::{
         primitives::{BoundingBox2D, Measurement, SpatialResolution},
-        raster::RasterDataType,
+        raster::{EmptyGrid, RasterDataType},
         spatial_reference::SpatialReference,
     };
     use num_traits::AsPrimitive;
@@ -968,6 +968,88 @@ mod tests {
                 GridOrEmpty::Grid(
                     Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12], no_data_value).unwrap()
                 ),
+            )
+        );
+    }
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn test_only_no_data() {
+        let no_data_value: Option<u8> = Some(42);
+
+        let mrs = MockRasterSource {
+            params: MockRasterSourceParams {
+                data: vec![RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(0, 20),
+                    TileInformation {
+                        global_tile_position: [-1, 0].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: Default::default(),
+                    },
+                    GridOrEmpty::Empty(EmptyGrid::new([3, 2].into(), no_data_value.unwrap())),
+                )],
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U8,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    measurement: Measurement::Unitless,
+                    no_data_value: no_data_value.map(AsPrimitive::as_),
+                },
+            },
+        }
+        .boxed();
+
+        let agg = TemporalRasterAggregation {
+            params: TemporalRasterAggregationParameters {
+                aggregation_type: AggregationType::Max,
+                window: TimeStep {
+                    granularity: geoengine_datatypes::primitives::TimeGranularity::Millis,
+                    step: 20,
+                },
+                ignore_no_data: false,
+            },
+            sources: SingleRasterSource { raster: mrs },
+        }
+        .boxed();
+
+        let exe_ctx = MockExecutionContext {
+            tiling_specification: TilingSpecification::new((0., 0.).into(), [3, 2].into()),
+            ..Default::default()
+        };
+        let query_rect = QueryRectangle {
+            bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (2., 3.).into()),
+            time_interval: TimeInterval::new_unchecked(0, 20),
+            spatial_resolution: SpatialResolution::one(),
+        };
+        let query_ctx = MockQueryContext {
+            chunk_byte_size: 1024 * 1024,
+        };
+
+        let qp = agg
+            .initialize(&exe_ctx)
+            .unwrap()
+            .query_processor()
+            .unwrap()
+            .get_u8()
+            .unwrap();
+
+        let result = qp
+            .raster_query(query_rect, &query_ctx)
+            .unwrap()
+            .collect::<Vec<_>>()
+            .await;
+
+        assert_eq!(result.len(), 1);
+
+        assert_eq!(
+            result[0].as_ref().unwrap(),
+            &RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(0, 20),
+                TileInformation {
+                    global_tile_position: [-1, 0].into(),
+                    tile_size_in_pixels: [3, 2].into(),
+                    global_geo_transform: Default::default(),
+                },
+                GridOrEmpty::Empty(EmptyGrid::new([3, 2].into(), no_data_value.unwrap())),
             )
         );
     }
