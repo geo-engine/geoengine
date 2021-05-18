@@ -8,6 +8,10 @@ authors = [
 ]
 edition = "2018"
 
+[features]
+# This compiles Geo Engine Pro
+pro = []
+
 [dependencies]
 # arrow = { version = "4.0", features = ["simd"] } TODO: activate when version is patched
 arrow = { version = "4.0" }

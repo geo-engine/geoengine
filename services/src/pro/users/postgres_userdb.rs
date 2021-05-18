@@ -1,5 +1,3 @@
-use crate::contexts::PostgresContext;
-use crate::error;
 use crate::error::Result;
 use crate::projects::project::{ProjectId, ProjectPermission, STRectangle};
 use crate::users::session::{Session, SessionId, UserInfo};
@@ -8,6 +6,7 @@ use crate::users::user::{UserCredentials, UserId, UserRegistration};
 use crate::users::userdb::UserDb;
 use crate::util::user_input::Validated;
 use crate::util::Identifier;
+use crate::{error, pro::contexts::PostgresContext};
 use async_trait::async_trait;
 use bb8_postgres::PostgresConnectionManager;
 use bb8_postgres::{

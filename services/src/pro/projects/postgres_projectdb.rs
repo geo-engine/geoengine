@@ -1,5 +1,3 @@
-use crate::error;
-use crate::error::Result;
 use crate::projects::project::{
     CreateProject, LoadVersion, Plot, Project, ProjectId, ProjectListOptions, ProjectListing,
     ProjectVersion, ProjectVersionId, UpdateProject, UserProjectPermission,
@@ -9,6 +7,8 @@ use crate::users::user::UserId;
 use crate::util::user_input::Validated;
 use crate::util::Identifier;
 use crate::workflows::workflow::WorkflowId;
+use crate::{error, pro::contexts::PostgresContext, projects::project::ProjectPermission};
+use crate::{error::Result, projects::project::Layer};
 use async_trait::async_trait;
 use bb8_postgres::PostgresConnectionManager;
 use bb8_postgres::{
@@ -17,8 +17,6 @@ use bb8_postgres::{
 };
 use snafu::ResultExt;
 
-use super::project::{Layer, ProjectPermission};
-use crate::contexts::PostgresContext;
 use bb8_postgres::bb8::PooledConnection;
 use bb8_postgres::tokio_postgres::Transaction;
 

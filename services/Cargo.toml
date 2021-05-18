@@ -10,6 +10,8 @@ edition = "2018"
 
 [features]
 postgres = ["postgres-types", "bb8-postgres"]
+# This compiles Geo Engine Pro
+pro = ["postgres"]
 
 [dependencies]
 async-trait = "0.1"

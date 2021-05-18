@@ -8,8 +8,6 @@ use std::sync::Arc;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 mod in_memory;
-#[cfg(feature = "postgres")]
-mod postgres;
 
 use crate::datasets::storage::DatasetDb;
 
@@ -27,11 +25,10 @@ use geoengine_operators::engine::{
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
-pub use in_memory::InMemoryContext;
-#[cfg(feature = "postgres")]
-pub use postgres::PostgresContext;
 
-type Db<T> = Arc<RwLock<T>>;
+pub use in_memory::InMemoryContext;
+
+pub type Db<T> = Arc<RwLock<T>>;
 
 /// A context bundles access to shared resources like databases and session specific information
 /// about the user to pass to the services handlers.

@@ -32,3 +32,7 @@ pub mod users;
 #[macro_use]
 pub mod util;
 pub mod workflows;
+
+/// Compiles Geo Engine Pro
+#[cfg(feature = "pro")]
+pub mod pro;

@@ -1,12 +1,16 @@
-use super::{Context, Db};
-use crate::contexts::{ExecutionContextImpl, QueryContextImpl};
 use crate::datasets::postgres::PostgresDatasetDb;
 use crate::error::{self, Result};
 use crate::projects::project::{ProjectId, ProjectPermission};
+use crate::users::session::Session;
 use crate::users::user::UserId;
+use crate::workflows::postgres_workflow_registry::PostgresWorkflowRegistry;
 use crate::{
-    projects::postgres_projectdb::PostgresProjectDb, users::postgres_userdb::PostgresUserDb,
-    users::session::Session, workflows::postgres_workflow_registry::PostgresWorkflowRegistry,
+    contexts::{Context, Db},
+    pro::users::PostgresUserDb,
+};
+use crate::{
+    contexts::{ExecutionContextImpl, QueryContextImpl},
+    pro::projects::PostgresProjectDb,
 };
 use async_trait::async_trait;
 use bb8_postgres::{

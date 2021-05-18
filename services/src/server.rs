@@ -1,10 +1,10 @@
-#[cfg(feature = "postgres")]
-use crate::contexts::PostgresContext;
 use crate::contexts::{Context, InMemoryContext};
 use crate::error;
 use crate::error::{Error, Result};
 use crate::handlers;
 use crate::handlers::handle_rejection;
+#[cfg(feature = "postgres")]
+use crate::pro::contexts::PostgresContext;
 use crate::util::config;
 use crate::util::config::{get_config_element, Backend};
 #[cfg(feature = "postgres")]
@@ -69,6 +69,7 @@ pub async fn start_server(
             .await
         }
         Backend::Postgres => {
+            // TODO: migrate to PRO
             #[cfg(feature = "postgres")]
             {
                 eprintln!("Using Postgres backend"); // TODO: log

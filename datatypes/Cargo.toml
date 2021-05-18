@@ -10,6 +10,8 @@ edition = "2018"
 
 [features]
 postgres = ["postgres-types"]
+# This compiles Geo Engine Pro
+pro = ["postgres"]
 
 [dependencies]
 # simd compiles with nightly only, allow default features to build with arrow-flight once it is possible
