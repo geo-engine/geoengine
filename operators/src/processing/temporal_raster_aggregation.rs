@@ -33,7 +33,6 @@ pub struct TemporalRasterAggregationParameters {
 pub enum AggregationType {
     Min,
     Max,
-    Mean,
 }
 
 pub type TemporalRasterAggregation =
@@ -222,7 +221,6 @@ where
                     Ok(s.boxed())
                 }
             }
-            AggregationType::Mean => Err(error::Error::NotYetImplemented), // TODO: implement
         }
     }
 }
