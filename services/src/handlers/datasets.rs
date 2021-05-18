@@ -27,7 +27,7 @@ use geoengine_datatypes::{
     collections::VectorDataType,
     dataset::{DatasetId, InternalDatasetId},
     primitives::FeatureDataType,
-    spatial_reference::SpatialReference,
+    spatial_reference::{SpatialReference, SpatialReferenceOption},
 };
 use geoengine_operators::{
     engine::{StaticMetaData, VectorResultDescriptor},
@@ -384,11 +384,15 @@ fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDef
         }
     };
     let vector_type = detect_vector_type(&layer)?;
-    let spatial_reference: SpatialReference = layer
+    let spatial_reference: SpatialReferenceOption = layer
         .spatial_ref()
-        .context(error::Gdal)?
-        .try_into()
-        .context(error::DataType)?;
+        .context(error::Gdal)
+        .and_then(|s| {
+            let s: Result<SpatialReference> = s.try_into().context(error::DataType);
+            s
+        })
+        .map(Into::into)
+        .unwrap_or(SpatialReferenceOption::Unreferenced);
     let columns_map = detect_columns(&layer);
     let columns_vecs = column_map_to_column_vecs(&columns_map);
     let time = detect_time_type(&columns_vecs);
@@ -414,7 +418,7 @@ fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDef
         },
         result_descriptor: VectorResultDescriptor {
             data_type: vector_type,
-            spatial_reference: spatial_reference.into(),
+            spatial_reference,
             columns: columns_map
                 .into_iter()
                 .filter_map(|(k, v)| v.try_into().map(|v| (k, v)).ok()) // ignore all columns here that don't have a corresponding type in our collections
