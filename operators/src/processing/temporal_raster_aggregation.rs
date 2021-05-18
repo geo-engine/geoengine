@@ -7,7 +7,7 @@ use crate::{
     error,
     util::Result,
 };
-use futures::{Future, FutureExt, StreamExt, TryFuture};
+use futures::{StreamExt, TryFuture};
 use geoengine_datatypes::raster::GridOrEmpty;
 use geoengine_datatypes::{
     primitives::{SpatialBounded, TimeInstance, TimeInterval, TimeStep},
@@ -150,7 +150,7 @@ where
             AggregationType::Min => {
                 if self.ignore_no_data {
                     let spec = TemporalRasterAggregationSubQuery {
-                        fold_fn: no_data_ignoring_fold_future::<P, MinIgnoreNoDataAccFunction>,
+                        fold_fn: no_data_ignoring_fold_fn::<P, MinIgnoreNoDataAccFunction>,
                         no_data_value: self.no_data_value,
                         initial_value: P::max_value(),
                         step: self.window,
@@ -167,7 +167,7 @@ where
                     Ok(s.boxed())
                 } else {
                     let spec = TemporalRasterAggregationSubQuery {
-                        fold_fn: fold_future::<P, MinAccFunction>,
+                        fold_fn: fold_fn::<P, MinAccFunction>,
                         no_data_value: self.no_data_value,
                         initial_value: P::max_value(),
                         step: self.window,
@@ -187,7 +187,7 @@ where
             AggregationType::Max => {
                 if self.ignore_no_data {
                     let spec = TemporalRasterAggregationSubQuery {
-                        fold_fn: no_data_ignoring_fold_future::<P, MaxIgnoreNoDataAccFunction>,
+                        fold_fn: no_data_ignoring_fold_fn::<P, MaxIgnoreNoDataAccFunction>,
                         no_data_value: self.no_data_value,
                         initial_value: P::min_value(),
                         step: self.window,
@@ -204,7 +204,7 @@ where
                     Ok(s.boxed())
                 } else {
                     let spec = TemporalRasterAggregationSubQuery {
-                        fold_fn: fold_future::<P, MaxAccFunction>,
+                        fold_fn: fold_fn::<P, MaxAccFunction>,
                         no_data_value: self.no_data_value,
                         initial_value: P::min_value(),
                         step: self.window,
@@ -310,7 +310,10 @@ impl NoDataIgnoringAccFunction for MaxIgnoreNoDataAccFunction {
     }
 }
 
-fn fold_fn<T, C>(acc: (RasterTile2D<T>, ()), tile: RasterTile2D<T>) -> (RasterTile2D<T>, ())
+async fn fold_fn<T, C>(
+    acc: (RasterTile2D<T>, ()),
+    tile: RasterTile2D<T>,
+) -> Result<(RasterTile2D<T>, ())>
 where
     T: Pixel,
     C: AccFunction,
@@ -330,13 +333,13 @@ where
     };
 
     acc.grid_array = grid;
-    (acc, ())
+    Ok((acc, ()))
 }
 
-fn no_data_ignoring_fold_fn<T, C>(
+async fn no_data_ignoring_fold_fn<T, C>(
     acc: (RasterTile2D<T>, ()),
     tile: RasterTile2D<T>,
-) -> (RasterTile2D<T>, ())
+) -> Result<(RasterTile2D<T>, ())>
 where
     T: Pixel,
     C: NoDataIgnoringAccFunction,
@@ -358,37 +361,7 @@ where
     };
 
     acc.grid_array = grid;
-    (acc, ())
-}
-
-pub fn fold_future<T, C>(
-    accu: (RasterTile2D<T>, ()),
-    tile: RasterTile2D<T>,
-) -> impl Future<Output = Result<(RasterTile2D<T>, ())>>
-where
-    T: Pixel,
-    C: AccFunction,
-{
-    tokio::task::spawn_blocking(|| fold_fn::<T, C>(accu, tile)).then(async move |x| match x {
-        Ok(r) => Ok(r),
-        Err(e) => Err(e.into()),
-    })
-}
-
-pub fn no_data_ignoring_fold_future<T, C>(
-    accu: (RasterTile2D<T>, ()),
-    tile: RasterTile2D<T>,
-) -> impl Future<Output = Result<(RasterTile2D<T>, ())>>
-where
-    T: Pixel,
-    C: NoDataIgnoringAccFunction,
-{
-    tokio::task::spawn_blocking(|| no_data_ignoring_fold_fn::<T, C>(accu, tile)).then(
-        async move |x| match x {
-            Ok(r) => Ok(r),
-            Err(e) => Err(e.into()),
-        },
-    )
+    Ok((acc, ()))
 }
 
 #[derive(Debug, Clone)]
