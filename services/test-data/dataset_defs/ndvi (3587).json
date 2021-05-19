@@ -1,6 +1,8 @@
 {
   "properties": {
-    "id": null,
+    "id": {
+      "internal": "a3f6955e-53cc-4752-9e4a-e9f0493add80"
+    },
     "name": "NDVI3857",
     "description": "NDVI data from MODIS reprojected to EPSG:3857",
     "sourceOperator": "GdalSource"
