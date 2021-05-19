@@ -8,7 +8,7 @@ use crate::{
         TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
         VectorResultDescriptor,
     },
-    error::Error,
+    error::{self, Error},
     util::{input::RasterOrVectorOperator, Result},
 };
 use futures::stream::BoxStream;
@@ -18,11 +18,13 @@ use geoengine_datatypes::{
         suggest_pixel_size_from_diag_cross_projected, CoordinateProjection, CoordinateProjector,
         Reproject, ReprojectClipped,
     },
-    raster::{Pixel, TilingSpecification},
+    primitives::{SpatialBounded, SpatialResolution},
+    raster::{Pixel, TileInformation, TilingSpecification},
     spatial_reference::SpatialReference,
 };
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
+use snafu::ResultExt;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 #[serde(rename_all = "camelCase")]
@@ -400,6 +402,81 @@ where
             no_data_and_fill_value,
         }
     }
+
+    /// compute the suggested resolution for querying the source to produce the given tile
+    fn tile_source_resolution(
+        tile: &TileInformation,
+        query_resolution: SpatialResolution,
+        projector_source_target: &CoordinateProjector,
+        projector_target_source: &CoordinateProjector,
+    ) -> Result<SpatialResolution> {
+        let p_bbox = tile
+            .spatial_bounds()
+            .reproject_clipped(projector_target_source)?;
+        let s_bbox = p_bbox.reproject(projector_source_target)?;
+
+        suggest_pixel_size_from_diag_cross_projected(s_bbox, p_bbox, query_resolution)
+            .context(error::DataType)
+    }
+
+    /// compute the resolution for the source as the highest resolution needed for any tile in the output
+    fn query_source_resolution(
+        &self,
+        query: QueryRectangle,
+        projector_source_target: &CoordinateProjector,
+        projector_target_source: &CoordinateProjector,
+    ) -> Result<SpatialResolution> {
+        let use_area = self.to.area_of_use_projected()?;
+
+        // use a fix tile size instead of the current one, because tests might use very small tiles
+        let tiling_spec = TilingSpecification {
+            origin_coordinate: self.tiling_spec.origin_coordinate,
+            tile_size_in_pixels: [600, 600].into(),
+        };
+
+        // TODO: cap the resolution
+        tiling_spec
+            .strategy(query.spatial_resolution.x, -1. * query.spatial_resolution.y) // adjust the spatial resolution to the sign of the geotransform
+            .tile_information_iterator(use_area)
+            .map(|tile| {
+                Self::tile_source_resolution(
+                    &tile,
+                    query.spatial_resolution,
+                    &projector_source_target,
+                    &projector_target_source,
+                )
+            })
+            .fold(Ok(None), |acc, sres| match (acc, sres) {
+                (Ok(None), Ok(r)) => Ok(Some(r)),
+                (Ok(Some(acc)), Ok(r)) => {
+                    let x = if r.x.abs() < acc.x.abs() { r.x } else { acc.x };
+                    let y = if r.y.abs() < acc.y.abs() { r.y } else { acc.y };
+
+                    Ok(Some(SpatialResolution::new_unchecked(x, y)))
+                }
+                (_, Err(e)) | (Err(e), _) => Err(e),
+            })?
+            .ok_or(error::Error::ReprojectionSourceResolution)
+    }
+
+    /// clip query s.th. it is valid in the source projection
+    fn clip_query(
+        query: QueryRectangle,
+        projector_source_target: &CoordinateProjector,
+        projector_target_source: &CoordinateProjector,
+    ) -> Result<QueryRectangle> {
+        let p_bbox = query
+            .bbox
+            .spatial_bounds()
+            .reproject_clipped(projector_target_source)?;
+        let s_bbox = p_bbox.reproject(projector_source_target)?;
+
+        Ok(QueryRectangle {
+            bbox: s_bbox,
+            time_interval: query.time_interval,
+            spatial_resolution: query.spatial_resolution,
+        })
+    }
 }
 
 impl<Q, P> RasterQueryProcessor for RasterReprojectionProcessor<Q, P>
@@ -415,32 +492,23 @@ where
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<geoengine_datatypes::raster::RasterTile2D<Self::RasterType>>>>
     {
-        // we need a resolution for the sub-querys. And since we don't want this to change for tiles, we precompute it for the complete bbox and pass it to the sub-query spec.
         let projector_source_target = CoordinateProjector::from_known_srs(self.from, self.to)?;
         let projector_target_source = CoordinateProjector::from_known_srs(self.to, self.from)?;
-
-        let p_bbox = query.bbox.reproject_clipped(&projector_target_source)?;
-        let s_bbox = p_bbox.reproject(&projector_source_target)?;
-
-        let p_spatial_resolution =
-            suggest_pixel_size_from_diag_cross_projected(s_bbox, p_bbox, query.spatial_resolution)?;
-
-        let clipped_query = QueryRectangle {
-            bbox: s_bbox,
-            time_interval: query.time_interval,
-            spatial_resolution: query.spatial_resolution,
-        };
 
         let sub_query_spec = TileReprojectionSubQuery {
             in_srs: self.from,
             out_srs: self.to,
             no_data_and_fill_value: self.no_data_and_fill_value,
             fold_fn: fold_by_coordinate_lookup_future,
-            in_spatial_res: p_spatial_resolution,
+            in_spatial_res: self.query_source_resolution(
+                query,
+                &projector_source_target,
+                &projector_target_source,
+            )?,
         };
         let s = RasterOverlapAdapter::<'a, P, _, _>::new(
             &self.source,
-            clipped_query,
+            Self::clip_query(query, &projector_source_target, &projector_target_source)?,
             self.tiling_spec,
             ctx,
             sub_query_spec,
@@ -763,7 +831,7 @@ mod tests {
 
         let initialized_operator = RasterOperator::boxed(Reprojection {
             params: ReprojectionParams {
-                target_spatial_reference: projection, // This test will do a identity reprojhection
+                target_spatial_reference: projection, // This test will do a identity reprojection
             },
             sources: SingleRasterOrVectorSource {
                 source: mrs1.into(),
@@ -778,7 +846,7 @@ mod tests {
             .unwrap();
 
         let query_rect = QueryRectangle {
-            bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (3., 1.).into()),
+            bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (4., 2.).into()),
             time_interval: TimeInterval::new_unchecked(0, 10),
             spatial_resolution: SpatialResolution::one(),
         };

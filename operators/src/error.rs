@@ -186,6 +186,8 @@ pub enum Error {
 
     FeatureDataValueMustNotBeNull,
     InvalidFeatureDataType,
+
+    ReprojectionSourceResolution,
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {
