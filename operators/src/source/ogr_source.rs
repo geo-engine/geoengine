@@ -745,8 +745,8 @@ where
                         Ok(Some(FieldValue::StringValue(s))) => Some(s),
                         Ok(Some(FieldValue::RealValue(v))) => Some(v.to_string()),
                         Ok(None) => None,
-                        Ok(Some(_)) => error_spec.on_error(Error::OgrColumnFieldTypeMismatch)?,
-                        Err(e) => error_spec.on_error(Error::Gdal { source: e })?, // TODO: handle other types
+                        Ok(Some(_)) => error_spec.on_error(Error::OgrColumnFieldTypeMismatch)?, // TODO: handle other types
+                        Err(e) => error_spec.on_error(Error::Gdal { source: e })?,
                     };
 
                     builder.push_data(&column, FeatureDataValue::NullableText(text_option))?;
@@ -758,8 +758,8 @@ where
                         Ok(Some(FieldValue::StringValue(s))) => f64::from_str(&s).ok(),
                         Ok(Some(FieldValue::RealValue(v))) => Some(v),
                         Ok(None) => None,
-                        Ok(Some(_)) => error_spec.on_error(Error::OgrColumnFieldTypeMismatch)?,
-                        Err(e) => error_spec.on_error(Error::Gdal { source: e })?, // TODO: handle other types
+                        Ok(Some(_)) => error_spec.on_error(Error::OgrColumnFieldTypeMismatch)?, // TODO: handle other types
+                        Err(e) => error_spec.on_error(Error::Gdal { source: e })?,
                     };
 
                     builder.push_data(&column, FeatureDataValue::NullableFloat(value_option))?;
@@ -772,8 +772,8 @@ where
                         Ok(Some(FieldValue::StringValue(s))) => i64::from_str(&s).ok(),
                         Ok(Some(FieldValue::RealValue(v))) => Some(v as i64),
                         Ok(None) => None,
-                        Ok(Some(_)) => error_spec.on_error(Error::OgrColumnFieldTypeMismatch)?,
-                        Err(e) => error_spec.on_error(Error::Gdal { source: e })?, // TODO: handle other types
+                        Ok(Some(_)) => error_spec.on_error(Error::OgrColumnFieldTypeMismatch)?, // TODO: handle other types
+                        Err(e) => error_spec.on_error(Error::Gdal { source: e })?,
                     };
 
                     builder.push_data(&column, FeatureDataValue::NullableInt(value_option))?;
