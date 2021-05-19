@@ -21,9 +21,8 @@
           "int": ["scalerank"],
           "text": ["featurecla", "name", "website"]
         },
-        "defaultGeometry": null,
         "forceOgrTimeFilter": false,
-        "onError": "skip",
+        "onError": "ignore",
         "provenance": null
       },
       "resultDescriptor": {

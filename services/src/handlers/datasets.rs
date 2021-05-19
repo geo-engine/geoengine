@@ -177,7 +177,7 @@ async fn get_dataset<C: Context>(
 ///             "int": []
 ///           },
 ///           "forceOgrTimeFilter": false,
-///           "onError": "skip"
+///           "onError": "ignore"
 ///         },
 ///         "resultDescriptor": {
 ///           "dataType": "MultiPolygon",
@@ -406,10 +406,9 @@ fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDef
                 float: columns_vecs.float,
                 text: columns_vecs.text,
             }),
-            default_geometry: None,
             force_ogr_time_filter: false,
             force_ogr_spatial_filter: false,
-            on_error: geoengine_operators::source::OgrSourceErrorSpec::Skip,
+            on_error: geoengine_operators::source::OgrSourceErrorSpec::Ignore,
             provenance: None,
         },
         result_descriptor: VectorResultDescriptor {
@@ -631,10 +630,9 @@ mod tests {
                 data_type: None,
                 time: Default::default(),
                 columns: None,
-                default_geometry: None,
                 force_ogr_time_filter: false,
                 force_ogr_spatial_filter: false,
-                on_error: OgrSourceErrorSpec::Skip,
+                on_error: OgrSourceErrorSpec::Ignore,
                 provenance: None,
             },
             result_descriptor: descriptor,
@@ -722,9 +720,8 @@ mod tests {
                                 "int": ["scalerank"],
                                 "text": ["featurecla", "name", "website"]
                             },
-                            "default_geometry": null,
                             "forceOgrTimeGilter": false,
-                            "onError": "skip",
+                            "onError": "ignore",
                             "provenance": null
                         },
                         "resultDescriptor": {
@@ -794,10 +791,9 @@ mod tests {
                             "website".to_string(),
                         ],
                     }),
-                    default_geometry: None,
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
-                    on_error: OgrSourceErrorSpec::Skip,
+                    on_error: OgrSourceErrorSpec::Ignore,
                     provenance: None,
                 },
                 result_descriptor: VectorResultDescriptor {
@@ -853,10 +849,9 @@ mod tests {
                         int: vec![],
                         text: vec![],
                     }),
-                    default_geometry: None,
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
-                    on_error: OgrSourceErrorSpec::Skip,
+                    on_error: OgrSourceErrorSpec::Ignore,
                     provenance: None,
                 },
                 result_descriptor: VectorResultDescriptor {
@@ -901,10 +896,9 @@ mod tests {
                         int: vec![],
                         text: vec![],
                     }),
-                    default_geometry: None,
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
-                    on_error: OgrSourceErrorSpec::Skip,
+                    on_error: OgrSourceErrorSpec::Ignore,
                     provenance: None,
                 },
                 result_descriptor: VectorResultDescriptor {
@@ -949,10 +943,9 @@ mod tests {
                         int: vec![],
                         text: vec![],
                     }),
-                    default_geometry: None,
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
-                    on_error: OgrSourceErrorSpec::Skip,
+                    on_error: OgrSourceErrorSpec::Ignore,
                     provenance: None,
                 },
                 result_descriptor: VectorResultDescriptor {
@@ -1001,10 +994,9 @@ mod tests {
                         int: vec!["duration".to_owned()],
                         text: vec![],
                     }),
-                    default_geometry: None,
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
-                    on_error: OgrSourceErrorSpec::Skip,
+                    on_error: OgrSourceErrorSpec::Ignore,
                     provenance: None,
                 },
                 result_descriptor: VectorResultDescriptor {
@@ -1045,10 +1037,9 @@ mod tests {
                 data_type: None,
                 time: Default::default(),
                 columns: None,
-                default_geometry: None,
                 force_ogr_time_filter: false,
                 force_ogr_spatial_filter: false,
-                on_error: OgrSourceErrorSpec::Skip,
+                on_error: OgrSourceErrorSpec::Ignore,
                 provenance: None,
             },
             result_descriptor: descriptor,
