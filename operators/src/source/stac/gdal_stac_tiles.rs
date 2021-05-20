@@ -270,8 +270,11 @@ mod tests {
         };
 
         let query = QueryRectangle {
-            bbox: BoundingBox2D::new((300000.0, 3390240.0).into(), (409800.0, 3500040.0).into())
-                .unwrap(),
+            bbox: BoundingBox2D::new(
+                (300_000.0, 3_390_240.0).into(),
+                (409_800.0, 3_500_040.0).into(),
+            )
+            .unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution { x: 10., y: -10. },
         };
@@ -306,8 +309,11 @@ mod tests {
         };
 
         let query = QueryRectangle {
-            bbox: BoundingBox2D::new((300000.0, 3390240.0).into(), (409800.0, 3500040.0).into())
-                .unwrap(),
+            bbox: BoundingBox2D::new(
+                (300_000.0, 3_390_240.0).into(),
+                (409_800.0, 3_500_040.0).into(),
+            )
+            .unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution { x: 10., y: -10. },
         };
@@ -342,8 +348,11 @@ mod tests {
         };
 
         let query = QueryRectangle {
-            bbox: BoundingBox2D::new((300000.0, 3390240.0).into(), (409800.0, 3500040.0).into())
-                .unwrap(),
+            bbox: BoundingBox2D::new(
+                (300_000.0, 3_390_240.0).into(),
+                (409_800.0, 3_500_040.0).into(),
+            )
+            .unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution { x: 10., y: -10. },
         };
@@ -366,9 +375,12 @@ mod tests {
         let id = add_stac_dataset(&mut exe_ctx);
 
         let output_shape: GridShape2D = [1024, 1024].into();
-        let output_bounds =
-            BoundingBox2D::new((300000.0, 3390240.0).into(), (409800.0, 3500040.0).into()).unwrap();
-        // let output_bounds = BoundingBox2D::new((499980., 7590240.).into(), (499999.0, 7590260.0).into()).unwrap();
+        let output_bounds = BoundingBox2D::new(
+            (300_000.0, 3_390_240.0).into(),
+            (409_800.0, 3_500_040.0).into(),
+        )
+        .unwrap();
+
         let time_interval = TimeInterval::default();
 
         let c = query_gdal_source(

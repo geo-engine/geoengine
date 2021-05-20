@@ -265,10 +265,11 @@ mod tests {
     #[test]
     fn test_deserialize() {
         let str = include_str!("../../../test-data/raster/stac/s2_items_1_1.json");
-        let _: FeatureCollection = serde_json::from_str(str).unwrap();
+        let _sfc: FeatureCollection = serde_json::from_str(str).unwrap();
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn gdal_transform() {
         let str = include_str!("../../../test-data/raster/stac/s2_items_1_1.json");
         let sfc: FeatureCollection = serde_json::from_str(str).unwrap();
@@ -279,7 +280,10 @@ mod tests {
             .gdal_geotransform()
             .unwrap();
 
-        assert_eq!(ass_gdal_transform, [300000., 10., 0., 3500040., 0., -10.])
+        assert_eq!(
+            ass_gdal_transform,
+            [300_000., 10., 0., 3_500_040., 0., -10.]
+        )
     }
 
     #[test]
@@ -294,8 +298,8 @@ mod tests {
             .unwrap();
 
         let exp_bbox = Rect::new(
-            Coordinate::from((300000.0, 3390240.0)),
-            Coordinate::from((409800.0, 3500040.0)),
+            Coordinate::from((300_000.0, 3_390_240.0)),
+            Coordinate::from((409_800.0, 3_500_040.0)),
         );
         assert_eq!(ass_bbox, exp_bbox);
     }
