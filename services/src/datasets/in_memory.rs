@@ -12,11 +12,14 @@ use geoengine_datatypes::{
     dataset::{DatasetId, DatasetProviderId, InternalDatasetId},
     util::Identifier,
 };
-use geoengine_operators::engine::{
-    MetaData, MetaDataProvider, RasterResultDescriptor, StaticMetaData, TypedResultDescriptor,
-    VectorResultDescriptor,
-};
 use geoengine_operators::source::{GdalLoadingInfo, GdalMetaDataRegular, OgrSourceDataset};
+use geoengine_operators::{
+    engine::{
+        MetaData, MetaDataProvider, RasterResultDescriptor, StaticMetaData, TypedResultDescriptor,
+        VectorResultDescriptor,
+    },
+    source::GdalStacTilesReading,
+};
 use geoengine_operators::{mock::MockDatasetDataSourceLoadingInfo, source::GdalMetaDataStatic};
 use std::collections::HashMap;
 
@@ -83,6 +86,7 @@ impl HashMapStorable for MetaDataDefinition {
             MetaDataDefinition::OgrMetaData(d) => d.store(id, db),
             MetaDataDefinition::GdalMetaDataRegular(d) => d.store(id, db),
             MetaDataDefinition::GdalStatic(d) => d.store(id, db),
+            MetaDataDefinition::GdalStacTiles(d) => d.store(id, db),
         }
     }
 }
@@ -112,6 +116,13 @@ impl HashMapStorable for GdalMetaDataStatic {
     fn store(&self, id: InternalDatasetId, db: &mut HashMapDatasetDb) -> TypedResultDescriptor {
         db.gdal_datasets.insert(id, Box::new(self.clone()));
         self.result_descriptor.clone().into()
+    }
+}
+
+impl HashMapStorable for GdalStacTilesReading {
+    fn store(&self, id: InternalDatasetId, db: &mut HashMapDatasetDb) -> TypedResultDescriptor {
+        db.gdal_datasets.insert(id, Box::new(self.clone()));
+        self.result_descriptor().expect("must not fail").into() //TODO: maybe return result?
     }
 }
 

@@ -1,0 +1,21 @@
+{
+  "properties": {
+    "id": null,
+    "name": "Sentinel2 B03 from S3 Tiles",
+    "description": "Sentinel2 B03 from S3 Tiles",
+    "sourceOperator": "GdalSource"
+  },
+  "metaData": {
+    "GdalStacTiles": {     
+      "filePath": "operators/test-data/raster/stac/",
+      "stacFeatureCollectionFileName": "s2_items_1_1.json",
+      "bandSpec": {
+        "eoBandId": "B03",
+        "noDataValue": 0.0,
+        "dataType": "U16"
+      },
+      "projEpsg": 32617
+    }
+  }
+}
+

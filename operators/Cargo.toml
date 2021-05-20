@@ -12,7 +12,7 @@ edition = "2018"
 # arrow = { version = "4.0", features = ["simd"] } TODO: activate when version is patched
 arrow = { version = "4.0" }
 async-trait = "0.1"
-chrono = "0.4"
+chrono = {version = "0.4", features = ["serde"]}
 crossbeam = "0.8"
 csv = "1.1"
 flatbuffers = "=0.9.0" # TODO: pinned only for `arrow`, should be removed at some point
@@ -20,7 +20,7 @@ float-cmp = "0.8"
 futures = "0.3"
 gdal = { version = "0.8", features = ["datetime"] }
 geo = "0.18"
-geojson = "0.22"
+geojson = {version = "0.22", features = ["geo-types"]}
 geoengine-datatypes = { path = "../datatypes" }
 lazy_static = "1.4"
 num_cpus = "1.13" # TODO: remove and switch to std::thread::available_concurrency() when it is available
@@ -30,6 +30,7 @@ paste = "1.0"
 pin-project = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+serde_with = "1.9"
 snafu = "0.6"
 tokio = { version = "1.1", features = ["macros", "signal", "sync", "rt-multi-thread"] }
 typetag = "0.1"

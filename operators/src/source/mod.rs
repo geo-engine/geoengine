@@ -3,6 +3,8 @@ mod gdal_source;
 mod ogr_source;
 mod stac;
 
+pub use stac::gdal_stac_tiles::GdalStacTilesReading;
+
 pub use self::csv::{
     CsvGeometrySpecification, CsvSource, CsvSourceParameters, CsvSourceStream, CsvTimeSpecification,
 };

@@ -8,7 +8,10 @@ use crate::util::user_input::{UserInput, Validated};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, InternalDatasetId};
 use geoengine_datatypes::util::Identifier;
-use geoengine_operators::{engine::StaticMetaData, source::OgrSourceDataset};
+use geoengine_operators::{
+    engine::StaticMetaData,
+    source::{GdalStacTilesReading, OgrSourceDataset},
+};
 use geoengine_operators::{
     engine::TypedResultDescriptor, mock::MockDatasetDataSourceLoadingInfo,
     source::GdalMetaDataStatic,
@@ -180,6 +183,7 @@ pub enum MetaDataDefinition {
     OgrMetaData(StaticMetaData<OgrSourceDataset, VectorResultDescriptor>),
     GdalMetaDataRegular(GdalMetaDataRegular),
     GdalStatic(GdalMetaDataStatic),
+    GdalStacTiles(GdalStacTilesReading),
 }
 
 impl MetaDataDefinition {
@@ -187,9 +191,9 @@ impl MetaDataDefinition {
         match self {
             MetaDataDefinition::MockMetaData(_) => "MockDatasetDataSource",
             MetaDataDefinition::OgrMetaData(_) => "OgrSource",
-            MetaDataDefinition::GdalMetaDataRegular(_) | MetaDataDefinition::GdalStatic(_) => {
-                "GdalSource"
-            }
+            MetaDataDefinition::GdalMetaDataRegular(_)
+            | MetaDataDefinition::GdalStatic(_)
+            | MetaDataDefinition::GdalStacTiles(_) => "GdalSource",
         }
     }
 }

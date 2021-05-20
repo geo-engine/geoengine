@@ -58,8 +58,13 @@ impl SpatialReference {
     }
 
     /// the WGS 84 spatial reference system
+    pub fn epsg(code: u32) -> Self {
+        Self::new(SpatialReferenceAuthority::Epsg, code)
+    }
+
+    /// the WGS 84 spatial reference system
     pub fn epsg_4326() -> Self {
-        Self::new(SpatialReferenceAuthority::Epsg, 4326)
+        Self::epsg(4326)
     }
 
     pub fn proj_string(self) -> Result<String> {

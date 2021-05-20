@@ -249,6 +249,10 @@ fn adjust_user_path_to_upload_path(meta: &mut MetaDataDefinition, upload: &Uploa
         crate::datasets::storage::MetaDataDefinition::GdalStatic(m) => {
             m.params.file_path = upload.adjust_file_path(&m.params.file_path)?
         }
+
+        MetaDataDefinition::GdalStacTiles(m) => {
+            m.file_path = upload.adjust_file_path(&m.file_path)?
+        }
     }
     Ok(())
 }
