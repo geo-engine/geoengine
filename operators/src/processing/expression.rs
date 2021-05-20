@@ -511,7 +511,7 @@ mod tests {
         let result_stream = processor
             .query(
                 QueryRectangle {
-                    bbox: BoundingBox2D::new_unchecked((1., 2.).into(), (3., 4.).into()),
+                    bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (3., 4.).into()),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
                 },
@@ -542,7 +542,7 @@ mod tests {
         let raster_tile = RasterTile2D::new_with_tile_info(
             TimeInterval::default(),
             TileInformation {
-                global_tile_position: [0, 0].into(),
+                global_tile_position: [-1, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
                 global_geo_transform: Default::default(),
             },

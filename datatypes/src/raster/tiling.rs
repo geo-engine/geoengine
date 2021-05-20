@@ -205,6 +205,36 @@ impl TileInformation {
             self.global_geo_transform.y_pixel_size,
         )
     }
+
+    /// Check whether tile is intersected by bbox. This is different to intersecting the `spatial_bounds` of the tile
+    /// with the given bbox because the tile's bbox should have closed-open semantics, that is, the lower right
+    /// coordinate is not part of the tile
+    /// TODO: make proper types for closed-closed and closed-open bboxes
+    pub fn is_intersected_by_bbox(&self, bbox: &BoundingBox2D) -> bool {
+        let this_bbox = self.spatial_bounds();
+
+        let overlap_x = crate::util::ranges::value_in_range(
+            this_bbox.lower_left().x,
+            bbox.lower_left().x,
+            bbox.upper_right().x,
+        ) || crate::util::ranges::value_in_range(
+            bbox.lower_left().x,
+            this_bbox.lower_left().x,
+            this_bbox.upper_right().x,
+        );
+
+        let overlap_y = crate::util::ranges::value_in_range(
+            this_bbox.lower_left().y,
+            bbox.lower_left().y,
+            bbox.upper_right().y,
+        ) || crate::util::ranges::value_in_range(
+            bbox.lower_left().y,
+            this_bbox.lower_left().y,
+            this_bbox.upper_right().y,
+        );
+
+        overlap_x && overlap_y
+    }
 }
 
 impl SpatialBounded for TileInformation {
