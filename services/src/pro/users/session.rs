@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 
+use crate::contexts::{Session, SessionId};
+use crate::pro::users::UserId;
 use crate::projects::project::{ProjectId, STRectangle};
-use crate::users::user::UserId;
 use crate::util::Identifier;
 use chrono::{DateTime, Utc};
 use geoengine_datatypes::identifier;
@@ -18,7 +19,7 @@ pub struct UserInfo {
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct Session {
+pub struct UserSession {
     pub id: SessionId,
     pub user: UserInfo,
     pub created: DateTime<Utc>,
@@ -27,7 +28,7 @@ pub struct Session {
     pub view: Option<STRectangle>,
 }
 
-impl Session {
+impl UserSession {
     pub fn mock() -> Self {
         Self {
             id: SessionId::new(),
@@ -41,5 +42,27 @@ impl Session {
             project: None,
             view: None,
         }
+    }
+}
+
+impl Session for UserSession {
+    fn id(&self) -> SessionId {
+        self.id
+    }
+
+    fn created(&self) -> &DateTime<Utc> {
+        &self.created
+    }
+
+    fn valid_until(&self) -> &DateTime<Utc> {
+        &self.valid_until
+    }
+
+    fn project(&self) -> Option<ProjectId> {
+        self.project
+    }
+
+    fn view(&self) -> Option<&STRectangle> {
+        self.view.as_ref()
     }
 }

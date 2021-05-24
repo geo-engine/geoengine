@@ -1,8 +1,7 @@
 use crate::datasets::postgres::PostgresDatasetDb;
 use crate::error::{self, Result};
+use crate::pro::users::{UserId, UserSession};
 use crate::projects::project::{ProjectId, ProjectPermission};
-use crate::users::session::Session;
-use crate::users::user::UserId;
 use crate::workflows::postgres_workflow_registry::PostgresWorkflowRegistry;
 use crate::{
     contexts::{Context, Db},
@@ -34,7 +33,7 @@ where
     user_db: Db<PostgresUserDb<Tls>>,
     project_db: Db<PostgresProjectDb<Tls>>,
     workflow_registry: Db<PostgresWorkflowRegistry<Tls>>,
-    session: Option<Session>,
+    session: Option<UserSession>,
 }
 
 impl<Tls> PostgresContext<Tls>
@@ -326,7 +325,7 @@ where
         todo!()
     }
 
-    fn execution_context(&self, _session: &Session) -> Result<Self::ExecutionContext> {
+    fn execution_context(&self, _session: &UserSession) -> Result<Self::ExecutionContext> {
         todo!()
     }
 }
@@ -334,18 +333,19 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::projects::project::PointSymbology;
     use crate::projects::project::{
         CreateProject, Layer, LayerUpdate, LoadVersion, OrderBy, Plot, PlotUpdate, ProjectFilter,
         ProjectId, ProjectListOptions, ProjectListing, ProjectPermission, STRectangle,
         UpdateProject, UserProjectPermission,
     };
     use crate::projects::projectdb::ProjectDb;
-    use crate::users::user::{UserCredentials, UserId, UserRegistration};
-    use crate::users::userdb::UserDb;
     use crate::util::user_input::UserInput;
     use crate::workflows::registry::WorkflowRegistry;
     use crate::workflows::workflow::Workflow;
+    use crate::{
+        pro::users::{UserCredentials, UserRegistration},
+        projects::project::PointSymbology,
+    };
     use bb8_postgres::tokio_postgres;
     use bb8_postgres::tokio_postgres::NoTls;
     use geoengine_datatypes::primitives::Coordinate2D;

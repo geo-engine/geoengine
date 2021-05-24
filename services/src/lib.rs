@@ -28,7 +28,6 @@ pub mod handlers;
 pub mod ogc;
 pub mod projects;
 pub mod server;
-pub mod users;
 #[macro_use]
 pub mod util;
 pub mod workflows;

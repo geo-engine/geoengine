@@ -8,6 +8,7 @@ use std::sync::Arc;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 mod in_memory;
+mod session;
 
 use crate::datasets::storage::DatasetDb;
 
@@ -27,6 +28,7 @@ use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 
 pub use in_memory::InMemoryContext;
+pub use session::{Session, SessionId, SimpleSession};
 
 pub type Db<T> = Arc<RwLock<T>>;
 

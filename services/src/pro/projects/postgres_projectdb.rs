@@ -1,14 +1,16 @@
-use crate::projects::project::{
-    CreateProject, LoadVersion, Plot, Project, ProjectId, ProjectListOptions, ProjectListing,
-    ProjectVersion, ProjectVersionId, UpdateProject, UserProjectPermission,
+use crate::pro::contexts::PostgresContext;
+use crate::pro::users::UserId;
+use crate::projects::{
+    CreateProject, LoadVersion, Project, ProjectDb, ProjectId, ProjectListOptions, ProjectListing,
+    ProjectVersion, ProjectVersionId, UpdateProject,
 };
-use crate::projects::projectdb::ProjectDb;
-use crate::users::user::UserId;
 use crate::util::user_input::Validated;
 use crate::util::Identifier;
 use crate::workflows::workflow::WorkflowId;
-use crate::{error, pro::contexts::PostgresContext, projects::project::ProjectPermission};
-use crate::{error::Result, projects::project::Layer};
+use crate::{
+    error::{self, Result},
+    pro::projects::projectdb::ProjectPermission,
+};
 use async_trait::async_trait;
 use bb8_postgres::PostgresConnectionManager;
 use bb8_postgres::{
@@ -305,7 +307,6 @@ where
             version: ProjectVersion {
                 id: version_id,
                 changed,
-                author: author_id,
             },
             name,
             description,
