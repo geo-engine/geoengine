@@ -171,23 +171,13 @@ impl ConfigElement for Upload {
     const KEY: &'static str = "upload";
 }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "snake_case", remote = "flexi_logger::Duplicate")]
-enum DuplicateDef {
-    None,
-    Error,
-    Warn,
-    Info,
-    Debug,
-    Trace,
-    All,
-}
-
 #[derive(Debug, Deserialize)]
 pub struct Logging {
     pub log_spec: String,
-    #[serde(with = "DuplicateDef")]
-    pub duplicate_to_term: flexi_logger::Duplicate,
+    pub log_to_file: bool,
+    pub filename_prefix: String,
+    pub enable_buffering: bool,
+    pub log_directory: Option<String>,
 }
 
 impl ConfigElement for Logging {
