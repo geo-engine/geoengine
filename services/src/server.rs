@@ -167,6 +167,7 @@ fn show_version_handler() -> impl Filter<Extract = impl warp::Reply, Error = war
 }
 
 // TODO: move into handler once async closures are available?
+#[allow(clippy::unused_async)] // the function signature of `Filter`'s `and_then` requires it
 async fn show_version() -> Result<impl warp::Reply, warp::Rejection> {
     #[derive(serde::Serialize)]
     #[serde(rename_all = "camelCase")]
