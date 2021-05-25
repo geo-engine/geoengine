@@ -136,6 +136,7 @@ where
 {
     type RasterType = P;
 
+    #[allow(clippy::too_many_lines)]
     fn raster_query<'a>(
         &'a self,
         query: crate::engine::QueryRectangle,
