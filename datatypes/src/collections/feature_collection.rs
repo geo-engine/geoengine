@@ -11,6 +11,7 @@ use arrow::{
     buffer::Buffer,
 };
 use serde::{Deserialize, Serialize};
+use serde_json::Map;
 use snafu::ensure;
 
 use std::collections::hash_map;
@@ -22,6 +23,7 @@ use std::ops::{Bound, RangeBounds};
 use std::rc::Rc;
 use std::sync::Arc;
 
+use crate::primitives::Coordinate2D;
 use crate::primitives::{
     CategoryDataRef, FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue, FloatDataRef,
     Geometry, IntDataRef, TextDataRef, TimeInterval,
@@ -37,7 +39,7 @@ use crate::{
     collections::{FeatureCollectionError, IntoGeometryOptionsIterator},
     operations::reproject::CoordinateProjection,
 };
-use crate::{json_map, primitives::Coordinate2D};
+use std::iter::FromIterator;
 
 use super::{geo_feature_collection::ReplaceRawArrayCoords, GeometryCollection};
 
@@ -907,9 +909,10 @@ where
                     geometry: geometry_option.map(Into::into),
                     id: None,
                     properties: Some(properties),
-                    foreign_members: Some(
-                        json_map! {"when".to_string() => time_interval.as_geo_json_event()},
-                    ),
+                    foreign_members: Some(Map::from_iter([(
+                        "when".to_string(),
+                        time_interval.as_geo_json_event(),
+                    )])),
                 },
             )
             .collect();
