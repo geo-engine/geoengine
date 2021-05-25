@@ -1,5 +1,5 @@
 use crate::{
-    adapters::{RasterOverlapAdapter, SubQueryTileAggregator},
+    adapters::SubQueryTileAggregator,
     engine::{
         InitializedOperator, InitializedRasterOperator, QueryRectangle, RasterQueryProcessor,
         RasterResultDescriptor, TypedRasterQueryProcessor,
@@ -127,6 +127,19 @@ where
             no_data_value: no_data_value.map(P::from_),
         }
     }
+
+    fn create_subquery<F>(
+        &self,
+        fold_fn: F,
+        initial_value: P,
+    ) -> TemporalRasterAggregationSubQuery<F, P> {
+        TemporalRasterAggregationSubQuery {
+            fold_fn,
+            no_data_value: self.no_data_value,
+            initial_value,
+            step: self.window,
+        }
+    }
 }
 
 impl<Q, P> RasterQueryProcessor for TemporalRasterAggregationProcessor<Q, P>
@@ -145,119 +158,71 @@ where
         match self.aggregation_type {
             AggregationType::Min {
                 ignore_no_data: true,
-            } => {
-                let spec = TemporalRasterAggregationSubQuery {
-                    fold_fn: no_data_ignoring_fold_future::<P, MinIgnoreNoDataAccFunction>,
-                    no_data_value: self.no_data_value,
-                    initial_value: P::max_value(),
-                    step: self.window,
-                };
-
-                let s = RasterOverlapAdapter::<'a, P, _, _>::new(
-                    &self.source,
-                    query,
-                    self.tiling_specification,
-                    ctx,
-                    spec,
-                );
-
-                Ok(s.boxed())
-            }
+            } => Ok(self
+                .create_subquery(
+                    no_data_ignoring_fold_future::<P, MinIgnoreNoDataAccFunction>,
+                    P::max_value(),
+                )
+                .into_raster_overlap_adapter(&self.source, query, ctx, self.tiling_specification)
+                .boxed()),
             AggregationType::Min {
                 ignore_no_data: false,
-            } => {
-                let spec = TemporalRasterAggregationSubQuery {
-                    fold_fn: fold_future::<P, MinAccFunction>,
-                    no_data_value: self.no_data_value,
-                    initial_value: P::max_value(),
-                    step: self.window,
-                };
-
-                let s = RasterOverlapAdapter::<'a, P, _, _>::new(
-                    &self.source,
-                    query,
-                    self.tiling_specification,
-                    ctx,
-                    spec,
-                );
-
-                Ok(s.boxed())
-            }
+            } => Ok(self
+                .create_subquery(fold_future::<P, MinAccFunction>, P::max_value())
+                .into_raster_overlap_adapter(&self.source, query, ctx, self.tiling_specification)
+                .boxed()),
             AggregationType::Max {
                 ignore_no_data: true,
-            } => {
-                let spec = TemporalRasterAggregationSubQuery {
-                    fold_fn: no_data_ignoring_fold_future::<P, MaxIgnoreNoDataAccFunction>,
-                    no_data_value: self.no_data_value,
-                    initial_value: P::min_value(),
-                    step: self.window,
-                };
-
-                let s = RasterOverlapAdapter::<'a, P, _, _>::new(
-                    &self.source,
-                    query,
-                    self.tiling_specification,
-                    ctx,
-                    spec,
-                );
-
-                Ok(s.boxed())
-            }
+            } => Ok(self
+                .create_subquery(
+                    no_data_ignoring_fold_future::<P, MaxIgnoreNoDataAccFunction>,
+                    P::min_value(),
+                )
+                .into_raster_overlap_adapter(&self.source, query, ctx, self.tiling_specification)
+                .boxed()),
             AggregationType::Max {
                 ignore_no_data: false,
-            } => {
-                let spec = TemporalRasterAggregationSubQuery {
-                    fold_fn: fold_future::<P, MaxAccFunction>,
-                    no_data_value: self.no_data_value,
-                    initial_value: P::min_value(),
-                    step: self.window,
-                };
-
-                let s = RasterOverlapAdapter::<'a, P, _, _>::new(
-                    &self.source,
-                    query,
-                    self.tiling_specification,
-                    ctx,
-                    spec,
-                );
-
-                Ok(s.boxed())
-            }
+            } => Ok(self
+                .create_subquery(fold_future::<P, MaxAccFunction>, P::min_value())
+                .into_raster_overlap_adapter(&self.source, query, ctx, self.tiling_specification)
+                .boxed()),
             AggregationType::FirstValid => {
-                let spec = TemporalRasterAggregationSubQuery {
-                    fold_fn: no_data_ignoring_fold_future::<P, FirstValidAccFunction>,
-                    no_data_value: self.no_data_value,
-                    initial_value: self.no_data_value.unwrap_or_else(P::zero), // TODO: what to do if there is no nodata?
-                    step: self.window,
-                };
-
-                let s = RasterOverlapAdapter::<'a, P, _, _>::new(
-                    &self.source,
-                    query,
-                    self.tiling_specification,
-                    ctx,
-                    spec,
-                );
-
-                Ok(s.boxed())
+                let no_data_value =
+                    self.no_data_value
+                        .ok_or(error::Error::OperationRequiresNoDataValue {
+                            operation_name: "TemporalRasterAggregation::FirstValid".to_string(),
+                        })?;
+                Ok(self
+                    .create_subquery(
+                        no_data_ignoring_fold_future::<P, FirstValidAccFunction>,
+                        no_data_value,
+                    )
+                    .into_raster_overlap_adapter(
+                        &self.source,
+                        query,
+                        ctx,
+                        self.tiling_specification,
+                    )
+                    .boxed())
             }
             AggregationType::LastValid => {
-                let spec = TemporalRasterAggregationSubQuery {
-                    fold_fn: no_data_ignoring_fold_future::<P, LastValidAccFunction>,
-                    no_data_value: self.no_data_value,
-                    initial_value: self.no_data_value.unwrap_or_else(P::zero), // TODO: what to do if there is no nodata?
-                    step: self.window,
-                };
-
-                let s = RasterOverlapAdapter::<'a, P, _, _>::new(
-                    &self.source,
-                    query,
-                    self.tiling_specification,
-                    ctx,
-                    spec,
-                );
-
-                Ok(s.boxed())
+                let no_data_value =
+                    self.no_data_value
+                        .ok_or(error::Error::OperationRequiresNoDataValue {
+                            operation_name: "TemporalRasterAggregation::FirstValid".to_string(),
+                        })?;
+                Ok(self
+                    .create_subquery(
+                        no_data_ignoring_fold_future::<P, LastValidAccFunction>,
+                        no_data_value,
+                    )
+                    .into_raster_overlap_adapter(
+                        &self.source,
+                        query,
+                        ctx,
+                        self.tiling_specification,
+                    )
+                    .boxed())
             }
         }
     }

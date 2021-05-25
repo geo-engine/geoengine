@@ -190,6 +190,14 @@ pub enum Error {
     WindowSizeMustNotBeZero,
 
     NotYetImplemented,
+
+    #[snafu(display(
+        "The operation \"{}\" requires a NoData value but none was specified.",
+        operation_name
+    ))]
+    OperationRequiresNoDataValue {
+        operation_name: String,
+    },
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {

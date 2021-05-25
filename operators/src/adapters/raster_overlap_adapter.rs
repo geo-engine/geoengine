@@ -379,6 +379,20 @@ where
 
     /// This method generates the method which combines the accumulator and each tile of the sub-query stream in the `TryFold` stream adapter.
     fn fold_method(&self) -> Self::FoldMethod;
+
+    fn into_raster_overlap_adapter<'a, S>(
+        self,
+        source: &'a S,
+        query: QueryRectangle,
+        ctx: &'a dyn QueryContext,
+        tiling_specification: TilingSpecification,
+    ) -> RasterOverlapAdapter<'a, T, S, Self>
+    where
+        S: RasterQueryProcessor<RasterType = T>,
+        Self: Sized,
+    {
+        RasterOverlapAdapter::<'a, T, S, Self>::new(source, query, tiling_specification, ctx, self)
+    }
 }
 
 #[derive(Debug, Clone)]
