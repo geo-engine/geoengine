@@ -27,7 +27,6 @@
             }
           }
         },
-        "defaultGeometry": null,
         "forceOgrTimeFilter": false,
         "onError": "abort",
         "provenance": null

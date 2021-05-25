@@ -10,6 +10,7 @@ use crate::datasets::storage::{DatasetDb, DatasetProviderDefinition};
 use crate::error::Result;
 use crate::users::user::UserId;
 use crate::util::user_input::UserInput;
+use log::warn;
 
 use super::storage::DatasetDefinition;
 
@@ -33,24 +34,21 @@ pub async fn add_datasets_from_directory<D: DatasetDb>(db: &mut D, file_path: Pa
 
     let dir = fs::read_dir(file_path);
     if dir.is_err() {
-        // TODO: log
-        eprintln!("Skipped adding datasets from directory because it can't be read");
+        warn!("Skipped adding datasets from directory because it can't be read");
     }
     let dir = dir.expect("checked");
 
     for entry in dir {
         if let Ok(entry) = entry {
             if let Err(e) = add_dataset_definition_from_dir_entry(db, &entry).await {
-                // TODO: log
-                eprintln!(
+                warn!(
                     "Skipped adding dataset from directory entry: {:?} error: {}",
                     entry,
                     e.to_string()
                 );
             }
         } else {
-            // TODO: log
-            eprintln!("Skipped adding dataset from directory entry: {:?}", entry);
+            warn!("Skipped adding dataset from directory entry: {:?}", entry);
         }
     }
 }

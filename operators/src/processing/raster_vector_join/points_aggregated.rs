@@ -170,11 +170,14 @@ mod tests {
     use crate::engine::{MockExecutionContext, RasterResultDescriptor};
     use crate::engine::{MockQueryContext, RasterOperator};
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
-    use geoengine_datatypes::primitives::{
-        BoundingBox2D, FeatureDataRef, Measurement, MultiPoint, SpatialResolution, TimeInterval,
-    };
     use geoengine_datatypes::raster::{Grid2D, RasterTile2D, TileInformation};
     use geoengine_datatypes::spatial_reference::SpatialReference;
+    use geoengine_datatypes::{
+        primitives::{
+            BoundingBox2D, FeatureDataRef, Measurement, MultiPoint, SpatialResolution, TimeInterval,
+        },
+        raster::TilingSpecification,
+    };
 
     #[tokio::test]
     async fn extract_raster_values_single_raster() {
@@ -203,7 +206,10 @@ mod tests {
         }
         .boxed();
 
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext {
+            tiling_specification: TilingSpecification::new((0., 0.).into(), [3, 2].into()),
+            ..Default::default()
+        };
 
         let raster_source = raster_source.initialize(&execution_context).unwrap();
 
@@ -228,7 +234,7 @@ mod tests {
             "foo",
             AggregationMethod::First,
             QueryRectangle {
-                bbox: BoundingBox2D::new((0.0, 0.0).into(), (3.0, 2.0).into()).unwrap(),
+                bbox: BoundingBox2D::new((0.0, -3.0).into(), (2.0, 0.).into()).unwrap(),
                 time_interval: Default::default(),
                 spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
             },
@@ -283,7 +289,10 @@ mod tests {
         }
         .boxed();
 
-        let execution_context = MockExecutionContext::default();
+        let execution_context = MockExecutionContext {
+            tiling_specification: TilingSpecification::new((0., 0.).into(), [3, 2].into()),
+            ..Default::default()
+        };
 
         let raster_source = raster_source.initialize(&execution_context).unwrap();
 
@@ -308,7 +317,7 @@ mod tests {
             "foo",
             AggregationMethod::Mean,
             QueryRectangle {
-                bbox: BoundingBox2D::new((0.0, 0.0).into(), (3.0, 2.0).into()).unwrap(),
+                bbox: BoundingBox2D::new((0.0, -3.0).into(), (2.0, 0.0).into()).unwrap(),
                 time_interval: Default::default(),
                 spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
             },

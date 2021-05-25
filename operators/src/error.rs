@@ -186,6 +186,10 @@ pub enum Error {
 
     FeatureDataValueMustNotBeNull,
     InvalidFeatureDataType,
+
+    WindowSizeMustNotBeZero,
+
+    NotYetImplemented,
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {

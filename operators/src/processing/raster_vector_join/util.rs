@@ -35,7 +35,7 @@ impl<'c> Iterator for FeatureTimeSpanIter<'c> {
     type Item = FeatureTimeSpan;
 
     fn next(&mut self) -> Option<Self::Item> {
-        while let Some((idx, time_interval)) = self.time_intervals.next() {
+        for (idx, time_interval) in &mut self.time_intervals {
             match self.current_time_span.take() {
                 None => {
                     // nothing there yet? store it as the beginning
