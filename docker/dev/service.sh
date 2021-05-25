@@ -7,7 +7,7 @@ set -m
 cd /app || exit
 
 # `/sbin/setuser geoengine` runs the given command as the user `geoengine`.
-exec /sbin/setuser geoengine /usr/bin/geoengine >>/var/log/geoengine.log 2>&1 &
+exec /sbin/setuser geoengine ./target/release/main >>/var/log/geoengine.log 2>&1 &
 
 # TODO: make requests to setup system
 
