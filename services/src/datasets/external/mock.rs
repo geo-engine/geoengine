@@ -85,7 +85,7 @@ impl DatasetProvider for MockExternalDataProvider {
         _user: crate::users::user::UserId,
         _dataset: &geoengine_datatypes::dataset::DatasetId,
     ) -> crate::error::Result<crate::datasets::storage::Dataset> {
-        todo!()
+        Err(error::Error::NotYetImplemented)
     }
 }
 
@@ -125,7 +125,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor> for MockExternal
         Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor>>,
         geoengine_operators::error::Error,
     > {
-        todo!()
+        Err(geoengine_operators::error::Error::NotYetImplemented)
     }
 }
 
@@ -137,6 +137,6 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor> for MockExternalD
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor>>,
         geoengine_operators::error::Error,
     > {
-        todo!()
+        Err(geoengine_operators::error::Error::NotYetImplemented)
     }
 }

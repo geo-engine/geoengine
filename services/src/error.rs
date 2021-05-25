@@ -152,6 +152,8 @@ pub enum Error {
     UnknownSpatialReference {
         srs_string: String,
     },
+
+    NotYetImplemented,
 }
 
 impl Reject for Error {}
