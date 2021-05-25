@@ -39,6 +39,8 @@ strum = { version = "0.20", features = ["derive"] }
 tokio = { version = "1.1", features = ["macros", "signal", "sync", "rt-multi-thread"] }
 uuid = { version = "0.8", features = ["serde", "v4", "v5"] }
 warp = "0.3"
+flexi_logger = "0.17"
+log = "0.4"
 
 [dev-dependencies]
 clap = "3.0.0-beta.1"
