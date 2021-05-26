@@ -22,14 +22,14 @@ use crate::engine::{ExecutionContext, Operator, RasterOperator, SingleRasterSour
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TemporalRasterAggregationParameters {
-    aggregation_type: AggregationType,
+    aggregation: Aggregation,
     window: TimeStep,
     // TODO: allow specifying window start instead of using query.start?
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub enum AggregationType {
+pub enum Aggregation {
     Min { ignore_no_data: bool },
     Max { ignore_no_data: bool },
     FirstValid,
@@ -50,7 +50,7 @@ impl RasterOperator for TemporalRasterAggregation {
         let source = self.sources.raster.initialize(context)?;
 
         let initialized_operator = InitializedTemporalRasterAggregation {
-            aggregation_type: self.params.aggregation_type,
+            aggregation_type: self.params.aggregation,
             window: self.params.window,
             result_descriptor: source.result_descriptor().clone(),
             source,
@@ -62,7 +62,7 @@ impl RasterOperator for TemporalRasterAggregation {
 }
 
 pub struct InitializedTemporalRasterAggregation {
-    aggregation_type: AggregationType,
+    aggregation_type: Aggregation,
     window: TimeStep,
     source: Box<InitializedRasterOperator>,
     result_descriptor: RasterResultDescriptor,
@@ -100,7 +100,7 @@ where
     Q: RasterQueryProcessor<RasterType = P>,
     P: Pixel,
 {
-    aggregation_type: AggregationType,
+    aggregation_type: Aggregation,
     window: TimeStep,
     source: Q,
     tiling_specification: TilingSpecification,
@@ -113,7 +113,7 @@ where
     P: Pixel,
 {
     fn new(
-        aggregation_type: AggregationType,
+        aggregation_type: Aggregation,
         window: TimeStep,
         source: Q,
         tiling_specification: TilingSpecification,
@@ -156,7 +156,7 @@ where
         ctx: &'a dyn crate::engine::QueryContext,
     ) -> Result<futures::stream::BoxStream<'a, Result<RasterTile2D<Self::RasterType>>>> {
         match self.aggregation_type {
-            AggregationType::Min {
+            Aggregation::Min {
                 ignore_no_data: true,
             } => Ok(self
                 .create_subquery(
@@ -165,13 +165,13 @@ where
                 )
                 .into_raster_overlap_adapter(&self.source, query, ctx, self.tiling_specification)
                 .boxed()),
-            AggregationType::Min {
+            Aggregation::Min {
                 ignore_no_data: false,
             } => Ok(self
                 .create_subquery(fold_future::<P, MinAccFunction>, P::max_value())
                 .into_raster_overlap_adapter(&self.source, query, ctx, self.tiling_specification)
                 .boxed()),
-            AggregationType::Max {
+            Aggregation::Max {
                 ignore_no_data: true,
             } => Ok(self
                 .create_subquery(
@@ -180,18 +180,16 @@ where
                 )
                 .into_raster_overlap_adapter(&self.source, query, ctx, self.tiling_specification)
                 .boxed()),
-            AggregationType::Max {
+            Aggregation::Max {
                 ignore_no_data: false,
             } => Ok(self
                 .create_subquery(fold_future::<P, MaxAccFunction>, P::min_value())
                 .into_raster_overlap_adapter(&self.source, query, ctx, self.tiling_specification)
                 .boxed()),
-            AggregationType::FirstValid => {
-                let no_data_value =
-                    self.no_data_value
-                        .ok_or(error::Error::OperationRequiresNoDataValue {
-                            operation_name: "TemporalRasterAggregation::FirstValid",
-                        })?;
+            Aggregation::FirstValid => {
+                let no_data_value = self
+                    .no_data_value
+                    .ok_or(error::Error::TemporalRasterAggregationFirstValidRequiresNoData)?;
                 Ok(self
                     .create_subquery(
                         no_data_ignoring_fold_future::<P, FirstValidAccFunction>,
@@ -205,12 +203,10 @@ where
                     )
                     .boxed())
             }
-            AggregationType::LastValid => {
-                let no_data_value =
-                    self.no_data_value
-                        .ok_or(error::Error::OperationRequiresNoDataValue {
-                            operation_name: "TemporalRasterAggregation::LastValid",
-                        })?;
+            Aggregation::LastValid => {
+                let no_data_value = self
+                    .no_data_value
+                    .ok_or(error::Error::TemporalRasterAggregationLastValidRequiresNoData)?;
                 Ok(self
                     .create_subquery(
                         no_data_ignoring_fold_future::<P, LastValidAccFunction>,
@@ -522,7 +518,7 @@ mod tests {
 
         let agg = TemporalRasterAggregation {
             params: TemporalRasterAggregationParameters {
-                aggregation_type: AggregationType::Min {
+                aggregation: Aggregation::Min {
                     ignore_no_data: false,
                 },
                 window: TimeStep {
@@ -644,7 +640,7 @@ mod tests {
 
         let agg = TemporalRasterAggregation {
             params: TemporalRasterAggregationParameters {
-                aggregation_type: AggregationType::Max {
+                aggregation: Aggregation::Max {
                     ignore_no_data: false,
                 },
                 window: TimeStep {
@@ -771,7 +767,7 @@ mod tests {
 
         let agg = TemporalRasterAggregation {
             params: TemporalRasterAggregationParameters {
-                aggregation_type: AggregationType::Max {
+                aggregation: Aggregation::Max {
                     ignore_no_data: false,
                 },
                 window: TimeStep {
@@ -903,7 +899,7 @@ mod tests {
 
         let agg = TemporalRasterAggregation {
             params: TemporalRasterAggregationParameters {
-                aggregation_type: AggregationType::Max {
+                aggregation: Aggregation::Max {
                     ignore_no_data: true,
                 },
                 window: TimeStep {
@@ -1033,7 +1029,7 @@ mod tests {
 
         let agg = TemporalRasterAggregation {
             params: TemporalRasterAggregationParameters {
-                aggregation_type: AggregationType::Max {
+                aggregation: Aggregation::Max {
                     ignore_no_data: false,
                 },
                 window: TimeStep {
@@ -1107,7 +1103,7 @@ mod tests {
 
         let agg = TemporalRasterAggregation {
             params: TemporalRasterAggregationParameters {
-                aggregation_type: AggregationType::FirstValid,
+                aggregation: Aggregation::FirstValid,
                 window: TimeStep {
                     granularity: geoengine_datatypes::primitives::TimeGranularity::Millis,
                     step: 30,
@@ -1196,7 +1192,7 @@ mod tests {
 
         let agg = TemporalRasterAggregation {
             params: TemporalRasterAggregationParameters {
-                aggregation_type: AggregationType::LastValid,
+                aggregation: Aggregation::LastValid,
                 window: TimeStep {
                     granularity: geoengine_datatypes::primitives::TimeGranularity::Millis,
                     step: 30,
