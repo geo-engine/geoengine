@@ -28,8 +28,6 @@ COPY Cargo.toml /app/
 # Build application and copy binary to `/usr/bin/geoengine`
 RUN RUSTFLAGS='-C target-cpu=native' $HOME/.cargo/bin/cargo build --release \
     && \
-    mv target/release/main /usr/bin/geoengine \
-    && \
     mkdir /etc/service/geoengine
 
 # Setup service

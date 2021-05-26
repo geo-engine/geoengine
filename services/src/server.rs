@@ -11,6 +11,7 @@ use crate::util::config::{get_config_element, Backend};
 use bb8_postgres::tokio_postgres;
 #[cfg(feature = "postgres")]
 use bb8_postgres::tokio_postgres::NoTls;
+use log::info;
 use snafu::ResultExt;
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -47,7 +48,7 @@ pub async fn start_server(
         .parse::<SocketAddr>()
         .context(error::AddrParse)?;
 
-    eprintln!(
+    info!(
         "Starting server… {}",
         format!(
             "http://{}/",
@@ -59,7 +60,7 @@ pub async fn start_server(
 
     match web_config.backend {
         Backend::InMemory => {
-            eprintln!("Using in memory backend"); // TODO: log
+            info!("Using in memory backend");
             start(
                 shutdown_rx,
                 static_files_dir,
@@ -71,7 +72,7 @@ pub async fn start_server(
         Backend::Postgres => {
             #[cfg(feature = "postgres")]
             {
-                eprintln!("Using Postgres backend"); // TODO: log
+                info!("Using Postgres backend");
                 let ctx = PostgresContext::new(
                     tokio_postgres::config::Config::from_str(
                         &get_config_element::<config::Postgres>()?.config_string,
@@ -127,6 +128,7 @@ where
         handlers::plots::get_plot_handler(ctx.clone()),
         handlers::upload::upload_handler(ctx.clone()),
         handlers::spatial_references::get_spatial_reference_specification_handler(ctx.clone()),
+        show_version_handler(), // TODO: allow disabling this function via config or feature flag
         serve_static_directory(static_files_dir)
     )
     .recover(handle_rejection);
@@ -142,6 +144,43 @@ where
     };
 
     task.await.context(error::TokioJoin)
+}
+
+/// Shows information about the server software version.
+///
+/// # Example
+///
+/// ```text
+/// GET /version
+/// ```
+/// Response:
+/// ```text
+/// {
+///   "buildDate": "2021-05-17",
+///   "commitHash": "16cd0881a79b6f03bb5f1f6ef2b2711e570b9865"
+/// }
+/// ```
+fn show_version_handler() -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone
+{
+    warp::path("version")
+        .and(warp::get())
+        .and_then(show_version)
+}
+
+// TODO: move into handler once async closures are available?
+#[allow(clippy::unused_async)] // the function signature of `Filter`'s `and_then` requires it
+async fn show_version() -> Result<impl warp::Reply, warp::Rejection> {
+    #[derive(serde::Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct VersionInfo<'a> {
+        build_date: Option<&'a str>,
+        commit_hash: Option<&'a str>,
+    }
+
+    Ok(warp::reply::json(&VersionInfo {
+        build_date: option_env!("VERGEN_BUILD_DATE"),
+        commit_hash: option_env!("VERGEN_GIT_SHA"),
+    }))
 }
 
 fn serve_static_directory(
