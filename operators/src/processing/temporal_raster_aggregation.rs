@@ -190,7 +190,7 @@ where
                 let no_data_value =
                     self.no_data_value
                         .ok_or(error::Error::OperationRequiresNoDataValue {
-                            operation_name: "TemporalRasterAggregation::FirstValid".to_string(),
+                            operation_name: "TemporalRasterAggregation::FirstValid",
                         })?;
                 Ok(self
                     .create_subquery(
@@ -209,7 +209,7 @@ where
                 let no_data_value =
                     self.no_data_value
                         .ok_or(error::Error::OperationRequiresNoDataValue {
-                            operation_name: "TemporalRasterAggregation::FirstValid".to_string(),
+                            operation_name: "TemporalRasterAggregation::LastValid",
                         })?;
                 Ok(self
                     .create_subquery(

@@ -196,7 +196,7 @@ pub enum Error {
         operation_name
     ))]
     OperationRequiresNoDataValue {
-        operation_name: String,
+        operation_name: &'static str,
     },
 }
 
