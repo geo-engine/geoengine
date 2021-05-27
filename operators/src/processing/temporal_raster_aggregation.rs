@@ -411,7 +411,7 @@ where
 
     accu_tile.grid_array = grid;
     TemporalRasterAggregationTileAccu {
-        accu_tile: accu_tile,
+        accu_tile,
         initial_state: false,
     }
 }
@@ -481,7 +481,7 @@ where
 fn first_tile_fold_fn<T>(
     acc: TemporalRasterAggregationTileAccu<T>,
     tile: RasterTile2D<T>,
-) -> Result<TemporalRasterAggregationTileAccu<T>>
+) -> TemporalRasterAggregationTileAccu<T>
 where
     T: Pixel,
 {
@@ -489,12 +489,12 @@ where
         let mut next_accu = tile;
         next_accu.time = acc.accu_tile.time;
 
-        Ok(TemporalRasterAggregationTileAccu {
+        TemporalRasterAggregationTileAccu {
             accu_tile: next_accu,
             initial_state: false,
-        })
+        }
     } else {
-        Ok(acc)
+        acc
     }
 }
 
@@ -506,25 +506,26 @@ where
     T: Pixel,
 {
     tokio::task::spawn_blocking(|| first_tile_fold_fn(accu, tile)).then(async move |x| match x {
-        Ok(r) => r,
+        Ok(r) => Ok(r),
         Err(e) => Err(e.into()),
     })
 }
 
+#[allow(clippy::needless_pass_by_value)]
 fn last_tile_fold_fn<T>(
     acc: TemporalRasterAggregationTileAccu<T>,
     tile: RasterTile2D<T>,
-) -> Result<TemporalRasterAggregationTileAccu<T>>
+) -> TemporalRasterAggregationTileAccu<T>
 where
     T: Pixel,
 {
     let mut next_accu = tile;
     next_accu.time = acc.accu_tile.time;
 
-    Ok(TemporalRasterAggregationTileAccu {
+    TemporalRasterAggregationTileAccu {
         accu_tile: next_accu,
         initial_state: false,
-    })
+    }
 }
 
 pub fn last_tile_fold_future<T>(
@@ -535,7 +536,7 @@ where
     T: Pixel,
 {
     tokio::task::spawn_blocking(|| last_tile_fold_fn(accu, tile)).then(async move |x| match x {
-        Ok(r) => r,
+        Ok(r) => Ok(r),
         Err(e) => Err(e.into()),
     })
 }
