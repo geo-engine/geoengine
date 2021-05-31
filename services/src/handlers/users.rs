@@ -3,10 +3,11 @@ use crate::error::Result;
 use crate::handlers::{authenticate, Context};
 use crate::projects::project::{ProjectId, STRectangle};
 use crate::users::session::Session;
-use crate::users::user::{UserCredentials, UserRegistration};
+use crate::users::user::{UserCredentials, UserId, UserRegistration};
 use crate::users::userdb::UserDb;
 use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
+use actix_web::{get, post, web, Responder};
 use snafu::ResultExt;
 use uuid::Uuid;
 use warp::reply::Reply;
@@ -36,24 +37,13 @@ use warp::Filter;
 ///
 /// This call fails if the [`UserRegistration`] is invalid
 /// or an account with the given e-mail already exists.
-pub(crate) fn register_user_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path("user")
-        .and(warp::post())
-        .and(warp::body::json())
-        .and(warp::any().map(move || ctx.clone()))
-        .and_then(register_user)
-}
-
-// TODO: move into handler once async closures are available?
-async fn register_user<C: Context>(
-    user: UserRegistration,
-    ctx: C,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    let user = user.validated()?;
+pub(crate) async fn register_user_handler<C: Context>(
+    user: web::Json<UserRegistration>,
+    ctx: web::Data<C>,
+) -> Result<impl Responder> {
+    let user = user.clone().validated()?;
     let id = ctx.user_db_ref_mut().await.register(user).await?;
-    Ok(warp::reply::json(&IdResponse::from(id)))
+    Ok(web::Json(IdResponse::from(id)))
 }
 
 /// Creates session for anonymous user.
@@ -78,19 +68,9 @@ async fn register_user<C: Context>(
 ///   "view": null
 /// }
 /// ```
-pub(crate) fn anonymous_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    warp::path!("anonymous")
-        .and(warp::post())
-        .and(warp::any().map(move || ctx.clone()))
-        .and_then(anonymous)
-}
-
-// TODO: move into handler once async closures are available?
-async fn anonymous<C: Context>(ctx: C) -> Result<impl warp::Reply, warp::Rejection> {
+pub(crate) async fn anonymous_handler<C: Context>(ctx: web::Data<C>) -> Result<impl Responder> {
     let session = ctx.user_db_ref_mut().await.anonymous().await?;
-    Ok(warp::reply::json(&session))
+    Ok(web::Json(session))
 }
 
 /// Creates a session by providing [`UserCredentials`].
@@ -124,29 +104,18 @@ async fn anonymous<C: Context>(ctx: C) -> Result<impl warp::Reply, warp::Rejecti
 /// # Errors
 ///
 /// This call fails if the [`UserCredentials`] are invalid.
-pub(crate) fn login_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path("login")
-        .and(warp::post())
-        .and(warp::body::json())
-        .and(warp::any().map(move || ctx.clone()))
-        .and_then(login)
-}
-
-// TODO: move into handler once async closures are available?
-async fn login<C: Context>(
-    user: UserCredentials,
-    ctx: C,
-) -> Result<impl warp::Reply, warp::Rejection> {
+pub(crate) async fn login_handler<C: Context>(
+    user: web::Json<UserCredentials>,
+    ctx: web::Data<C>,
+) -> Result<impl Responder> {
     let session = ctx
         .user_db_ref_mut()
         .await
-        .login(user)
+        .login(user.clone())
         .await
         .map_err(Box::new)
         .context(error::Authorization)?;
-    Ok(warp::reply::json(&session).into_response())
+    Ok(web::Json(session))
 }
 
 /// Ends a session.

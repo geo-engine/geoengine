@@ -7,9 +7,9 @@ use crate::handlers;
 use crate::handlers::handle_rejection;
 use crate::util::config;
 use crate::util::config::{get_config_element, Backend};
-use actix_web::web::Json;
-use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
 use actix_files::Files;
+use actix_web::web::Json;
+use actix_web::{get, web, App, HttpServer, Responder};
 #[cfg(feature = "postgres")]
 use bb8_postgres::tokio_postgres;
 #[cfg(feature = "postgres")]
@@ -20,10 +20,6 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 #[cfg(feature = "postgres")]
 use std::str::FromStr;
-use tokio::signal;
-use tokio::sync::oneshot::{Receiver, Sender};
-use warp::fs::File;
-use warp::{Filter, Rejection};
 
 /// Starts the webserver for the Geo Engine API.
 ///
@@ -137,6 +133,18 @@ where
     HttpServer::new(move || {
         let app = App::new()
             .app_data(wrapped_ctx.clone())
+            .route(
+                "/user",
+                web::post().to(handlers::users::register_user_handler::<C>),
+            )
+            .route(
+                "/anonymous",
+                web::post().to(handlers::users::anonymous_handler::<C>),
+            )
+            .route(
+                "/login",
+                web::post().to(handlers::users::login_handler::<C>),
+            )
             .service(show_version); // TODO: allow disabling this function via config or feature flag
 
         if let Some(static_files_dir) = static_files_dir.clone() {

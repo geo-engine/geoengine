@@ -155,6 +155,8 @@ pub enum Error {
 
 impl Reject for Error {}
 
+impl actix_web::error::ResponseError for Error {}
+
 impl From<geoengine_datatypes::error::Error> for Error {
     fn from(e: geoengine_datatypes::error::Error) -> Self {
         Self::DataType { source: e }
