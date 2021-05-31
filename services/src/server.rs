@@ -25,16 +25,6 @@ use tokio::sync::oneshot::{Receiver, Sender};
 use warp::fs::File;
 use warp::{Filter, Rejection};
 
-/// Combine filters by boxing them
-/// TODO: avoid boxing while still achieving acceptable compile time
-macro_rules! combine {
-  ($x:expr, $($y:expr),+) => {{
-      let filter = $x.boxed();
-      $( let filter = filter.or($y).boxed(); )+
-      filter
-  }}
-}
-
 /// Starts the webserver for the Geo Engine API.
 ///
 /// # Panics
@@ -188,18 +178,6 @@ async fn show_version() -> impl Responder {
         build_date: option_env!("VERGEN_BUILD_DATE"),
         commit_hash: option_env!("VERGEN_GIT_SHA"),
     })
-}
-
-pub async fn interrupt_handler(shutdown_tx: Sender<()>, callback: Option<fn()>) -> Result<()> {
-    signal::ctrl_c().await.context(error::TokioSignal)?;
-
-    if let Some(callback) = callback {
-        callback();
-    }
-
-    shutdown_tx
-        .send(())
-        .map_err(|_error| Error::TokioChannelSend)
 }
 
 #[cfg(test)]
