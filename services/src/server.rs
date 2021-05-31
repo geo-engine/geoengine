@@ -7,6 +7,9 @@ use crate::handlers;
 use crate::handlers::handle_rejection;
 use crate::util::config;
 use crate::util::config::{get_config_element, Backend};
+use actix_web::web::Json;
+use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
+use actix_files::Files;
 #[cfg(feature = "postgres")]
 use bb8_postgres::tokio_postgres;
 #[cfg(feature = "postgres")]
@@ -38,10 +41,7 @@ macro_rules! combine {
 ///  * may panic if the `Postgres` backend is chosen without compiling the `postgres` feature
 ///
 ///
-pub async fn start_server(
-    shutdown_rx: Option<Receiver<()>>,
-    static_files_dir: Option<PathBuf>,
-) -> Result<()> {
+pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<(), Error> {
     let web_config: config::Web = get_config_element()?;
     let bind_address = web_config
         .bind_address
@@ -62,7 +62,6 @@ pub async fn start_server(
         Backend::InMemory => {
             info!("Using in memory backend");
             start(
-                shutdown_rx,
                 static_files_dir,
                 bind_address,
                 InMemoryContext::new_with_data().await,
@@ -81,7 +80,7 @@ pub async fn start_server(
                 )
                 .await?;
 
-                start(shutdown_rx, static_files_dir, bind_address, ctx).await
+                start(static_files_dir, bind_address, ctx).await
             }
             #[cfg(not(feature = "postgres"))]
             panic!("Postgres backend was selected but the postgres feature wasn't activated during compilation")
@@ -90,7 +89,6 @@ pub async fn start_server(
 }
 
 async fn start<C>(
-    shutdown_rx: Option<Receiver<()>>,
     static_files_dir: Option<PathBuf>,
     bind_address: SocketAddr,
     ctx: C,
@@ -98,7 +96,7 @@ async fn start<C>(
 where
     C: Context,
 {
-    let handler = combine!(
+    /*let handler = combine!(
         handlers::workflows::register_workflow_handler(ctx.clone()),
         handlers::workflows::load_workflow_handler(ctx.clone()),
         handlers::workflows::get_workflow_metadata_handler(ctx.clone()),
@@ -143,7 +141,24 @@ where
         tokio::task::spawn(server)
     };
 
-    task.await.context(error::TokioJoin)
+    task.await.context(error::TokioJoin)*/
+    let wrapped_ctx = web::Data::new(ctx);
+
+    HttpServer::new(move || {
+        let app = App::new()
+            .app_data(wrapped_ctx.clone())
+            .service(show_version); // TODO: allow disabling this function via config or feature flag
+
+        if let Some(static_files_dir) = static_files_dir.clone() {
+            app.service(Files::new("/static", static_files_dir))
+        } else {
+            app
+        }
+    })
+    .bind(bind_address)?
+    .run()
+    .await
+    .map_err(Into::into)
 }
 
 /// Shows information about the server software version.
@@ -160,16 +175,8 @@ where
 ///   "commitHash": "16cd0881a79b6f03bb5f1f6ef2b2711e570b9865"
 /// }
 /// ```
-fn show_version_handler() -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone
-{
-    warp::path("version")
-        .and(warp::get())
-        .and_then(show_version)
-}
-
-// TODO: move into handler once async closures are available?
-#[allow(clippy::unused_async)] // the function signature of `Filter`'s `and_then` requires it
-async fn show_version() -> Result<impl warp::Reply, warp::Rejection> {
+#[get("/version")]
+async fn show_version() -> impl Responder {
     #[derive(serde::Serialize)]
     #[serde(rename_all = "camelCase")]
     struct VersionInfo<'a> {
@@ -177,28 +184,10 @@ async fn show_version() -> Result<impl warp::Reply, warp::Rejection> {
         commit_hash: Option<&'a str>,
     }
 
-    Ok(warp::reply::json(&VersionInfo {
+    Json(&VersionInfo {
         build_date: option_env!("VERGEN_BUILD_DATE"),
         commit_hash: option_env!("VERGEN_GIT_SHA"),
-    }))
-}
-
-fn serve_static_directory(
-    path: Option<PathBuf>,
-) -> impl Filter<Extract = (File,), Error = Rejection> + Clone {
-    let has_path = path.is_some();
-
-    warp::path("static")
-        .and(warp::get())
-        .and_then(move || async move {
-            if has_path {
-                Ok(())
-            } else {
-                Err(warp::reject::not_found())
-            }
-        })
-        .and(warp::fs::dir(path.unwrap_or_default()))
-        .map(|_, dir| dir)
+    })
 }
 
 pub async fn interrupt_handler(shutdown_tx: Sender<()>, callback: Option<fn()>) -> Result<()> {

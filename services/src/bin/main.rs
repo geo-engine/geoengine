@@ -6,22 +6,16 @@ use geoengine_services::error::Error;
 use geoengine_services::server;
 use geoengine_services::util::config;
 use geoengine_services::util::config::get_config_element;
-use log::{info, Record};
-use tokio::sync::oneshot;
+use log::Record;
 
-#[tokio::main]
+#[actix_web::main]
 async fn main() -> Result<(), Error> {
     let logger = initialize_logging();
 
-    let (shutdown_tx, shutdown_rx) = oneshot::channel();
-
-    let (server, interrupt_success) = tokio::join!(
-        server::start_server(Some(shutdown_rx), None),
-        server::interrupt_handler(shutdown_tx, Some(|| info!("Shutting down server…"))),
-    );
+    let res = server::start_server(None).await;
 
     logger.shutdown();
-    server.and(interrupt_success)
+    res
 }
 
 fn initialize_logging() -> LoggerHandle {
