@@ -1,7 +1,7 @@
 use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider, OrderBy};
 use crate::datasets::storage::{
-    AddDataset, AddDatasetProvider, Dataset, DatasetDb, DatasetProviderDb,
-    DatasetProviderListOptions, DatasetProviderListing, DatasetStore, DatasetStorer,
+    AddDataset, Dataset, DatasetDb, DatasetProviderDb, DatasetProviderListOptions,
+    DatasetProviderListing, DatasetStore, DatasetStorer,
 };
 use crate::error;
 use crate::error::Result;
@@ -21,7 +21,7 @@ use geoengine_operators::{mock::MockDatasetDataSourceLoadingInfo, source::GdalMe
 use std::collections::HashMap;
 
 use super::{
-    storage::MetaDataDefinition,
+    storage::{DatasetProviderDefinition, MetaDataDefinition},
     upload::{Upload, UploadDb, UploadId},
 };
 
@@ -37,6 +37,7 @@ pub struct HashMapDatasetDb {
     gdal_datasets:
         HashMap<InternalDatasetId, Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor>>>,
     uploads: HashMap<UploadId, Upload>,
+    external_providers: HashMap<DatasetProviderId, Box<dyn DatasetProviderDefinition>>,
 }
 
 impl DatasetDb for HashMapDatasetDb {}
@@ -46,9 +47,12 @@ impl DatasetProviderDb for HashMapDatasetDb {
     async fn add_dataset_provider(
         &mut self,
         _user: UserId,
-        _provider: Validated<AddDatasetProvider>,
+        provider: Box<dyn DatasetProviderDefinition>,
     ) -> Result<DatasetProviderId> {
-        todo!()
+        // TODO: user right management
+        let id = provider.id();
+        self.external_providers.insert(id, provider);
+        Ok(id)
     }
 
     async fn list_dataset_providers(
@@ -56,15 +60,28 @@ impl DatasetProviderDb for HashMapDatasetDb {
         _user: UserId,
         _options: Validated<DatasetProviderListOptions>,
     ) -> Result<Vec<DatasetProviderListing>> {
-        todo!()
+        // TODO: use options
+        Ok(self
+            .external_providers
+            .iter()
+            .map(|(id, d)| DatasetProviderListing {
+                id: *id,
+                type_name: d.type_name(),
+                name: d.name(),
+            })
+            .collect())
     }
 
     async fn dataset_provider(
         &self,
         _user: UserId,
-        _provider: DatasetProviderId,
-    ) -> Result<&dyn DatasetProvider> {
-        todo!()
+        provider: DatasetProviderId,
+    ) -> Result<Box<dyn DatasetProvider>> {
+        self.external_providers
+            .get(&provider)
+            .cloned()
+            .ok_or(error::Error::UnknownProviderId)?
+            .initialize()
     }
 }
 

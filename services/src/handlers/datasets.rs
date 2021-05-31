@@ -5,6 +5,7 @@ use std::{
 };
 
 use crate::datasets::storage::{AddDataset, DatasetStore, MetaDataSuggestion, SuggestMetaData};
+use crate::datasets::storage::{DatasetProviderDb, DatasetProviderListOptions};
 use crate::datasets::upload::UploadRootPath;
 use crate::datasets::{
     listing::DatasetProvider,
@@ -25,7 +26,7 @@ use gdal::vector::OGRFieldType;
 use gdal::{vector::Layer, Dataset};
 use geoengine_datatypes::{
     collections::VectorDataType,
-    dataset::{DatasetId, InternalDatasetId},
+    dataset::{DatasetId, DatasetProviderId, InternalDatasetId},
     primitives::FeatureDataType,
     spatial_reference::{SpatialReference, SpatialReferenceOption},
 };
@@ -38,6 +39,61 @@ use geoengine_operators::{
 use snafu::{OptionExt, ResultExt};
 use uuid::Uuid;
 use warp::Filter;
+
+pub(crate) fn list_providers_handler<C: Context>(
+    ctx: C,
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
+    warp::path("providers")
+        .and(warp::get())
+        .and(authenticate(ctx.clone()))
+        .and(warp::any().map(move || ctx.clone()))
+        .and(warp::query())
+        .and_then(list_providers)
+}
+
+// TODO: move into handler once async closures are available?
+async fn list_providers<C: Context>(
+    session: Session,
+    ctx: C,
+    options: DatasetProviderListOptions,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let list = ctx
+        .dataset_db_ref()
+        .await
+        .list_dataset_providers(session.user.id, options.validated()?)
+        .await?;
+    Ok(warp::reply::json(&list))
+}
+
+pub(crate) fn list_external_datasets_handler<C: Context>(
+    ctx: C,
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
+    warp::path!("datasets" / "external" / Uuid)
+        .map(DatasetProviderId)
+        .and(warp::get())
+        .and(authenticate(ctx.clone()))
+        .and(warp::any().map(move || ctx.clone()))
+        .and(warp::query())
+        .and_then(list_external_datasets)
+}
+
+// TODO: move into handler once async closures are available?
+async fn list_external_datasets<C: Context>(
+    provider: DatasetProviderId,
+    session: Session,
+    ctx: C,
+    options: DatasetListOptions,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let options = options.validated()?;
+    let list = ctx
+        .dataset_db_ref()
+        .await
+        .dataset_provider(session.user.id, provider)
+        .await?
+        .list(session.user.id, options)
+        .await?;
+    Ok(warp::reply::json(&list))
+}
 
 /// Lists available [Datasets](crate::datasets::listing::DatasetListing).
 ///

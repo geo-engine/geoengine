@@ -1,11 +1,11 @@
 use super::{
-    storage::Dataset,
+    storage::{Dataset, DatasetProviderDefinition},
     upload::{Upload, UploadDb, UploadId},
 };
 use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider};
 use crate::datasets::storage::{
-    AddDataset, AddDatasetProvider, DatasetDb, DatasetProviderDb, DatasetProviderListOptions,
-    DatasetProviderListing, DatasetStore, DatasetStorer,
+    AddDataset, DatasetDb, DatasetProviderDb, DatasetProviderListOptions, DatasetProviderListing,
+    DatasetStore, DatasetStorer,
 };
 use crate::error::Result;
 use crate::users::user::UserId;
@@ -24,7 +24,7 @@ impl DatasetProviderDb for PostgresDatasetDb {
     async fn add_dataset_provider(
         &mut self,
         _user: UserId,
-        _provider: Validated<AddDatasetProvider>,
+        _provider: Box<dyn DatasetProviderDefinition>,
     ) -> Result<DatasetProviderId> {
         todo!()
     }
@@ -41,7 +41,7 @@ impl DatasetProviderDb for PostgresDatasetDb {
         &self,
         _user: UserId,
         _provider: DatasetProviderId,
-    ) -> Result<&dyn DatasetProvider> {
+    ) -> Result<Box<dyn DatasetProvider>> {
         todo!()
     }
 }
