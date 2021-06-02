@@ -198,7 +198,7 @@ where
                 .into_raster_overlap_adapter(&self.source, query, ctx, self.tiling_specification)
                 .boxed()),
             Aggregation::First {
-                ignore_no_data: false,
+                ignore_no_data: true,
             } => {
                 let no_data_value = self
                     .no_data_value
@@ -217,7 +217,7 @@ where
                     .boxed())
             }
             Aggregation::First {
-                ignore_no_data: true,
+                ignore_no_data: false,
             } => {
                 let no_data_value = self
                     .no_data_value
@@ -233,7 +233,7 @@ where
                     .boxed())
             }
             Aggregation::Last {
-                ignore_no_data: false,
+                ignore_no_data: true,
             } => {
                 let no_data_value = self
                     .no_data_value
@@ -253,7 +253,7 @@ where
             }
 
             Aggregation::Last {
-                ignore_no_data: true,
+                ignore_no_data: false,
             } => {
                 let no_data_value = self
                     .no_data_value
@@ -1258,7 +1258,7 @@ mod tests {
         let agg = TemporalRasterAggregation {
             params: TemporalRasterAggregationParameters {
                 aggregation: Aggregation::First {
-                    ignore_no_data: false,
+                    ignore_no_data: true,
                 },
                 window: TimeStep {
                     granularity: geoengine_datatypes::primitives::TimeGranularity::Millis,
@@ -1349,7 +1349,7 @@ mod tests {
         let agg = TemporalRasterAggregation {
             params: TemporalRasterAggregationParameters {
                 aggregation: Aggregation::Last {
-                    ignore_no_data: false,
+                    ignore_no_data: true,
                 },
                 window: TimeStep {
                     granularity: geoengine_datatypes::primitives::TimeGranularity::Millis,
@@ -1440,7 +1440,7 @@ mod tests {
         let agg = TemporalRasterAggregation {
             params: TemporalRasterAggregationParameters {
                 aggregation: Aggregation::Last {
-                    ignore_no_data: true,
+                    ignore_no_data: false,
                 },
                 window: TimeStep {
                     granularity: geoengine_datatypes::primitives::TimeGranularity::Millis,
@@ -1530,7 +1530,7 @@ mod tests {
         let agg = TemporalRasterAggregation {
             params: TemporalRasterAggregationParameters {
                 aggregation: Aggregation::First {
-                    ignore_no_data: true,
+                    ignore_no_data: false,
                 },
                 window: TimeStep {
                     granularity: geoengine_datatypes::primitives::TimeGranularity::Millis,
