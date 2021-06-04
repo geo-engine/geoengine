@@ -927,7 +927,7 @@ x;y
         let mut db = ctx.dataset_db_ref_mut().await;
 
         db.add_dataset(
-            ctx.default_session().await,
+            &*ctx.default_session_ref().await,
             def.properties.validated().unwrap(),
             Box::new(def.meta_data),
         )

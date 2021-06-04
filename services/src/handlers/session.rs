@@ -40,7 +40,7 @@ pub(crate) fn anonymous_handler<C: SimpleContext>(
 
 // TODO: move into handler once async closures are available?
 async fn anonymous<C: SimpleContext>(ctx: C) -> Result<impl warp::Reply, warp::Rejection> {
-    Ok(warp::reply::json(&ctx.default_session().await))
+    Ok(warp::reply::json(&*ctx.default_session_ref().await))
 }
 
 /// Retrieves details about the [Session].
@@ -76,12 +76,13 @@ pub(crate) fn session_handler<C: Context>(
     warp::path("session")
         .and(warp::get())
         .and(authenticate(ctx))
-        .and_then(session)
+        .map(session)
 }
 
 // TODO: move into handler once async closures are available?
-async fn session<S: Session>(session: S) -> Result<impl warp::Reply, warp::Rejection> {
-    Ok(warp::reply::json(&session))
+#[allow(clippy::needless_pass_by_value)]
+fn session<S: Session>(session: S) -> impl warp::Reply {
+    warp::reply::json(&session)
 }
 
 /// Sets the active project of the session.
@@ -110,12 +111,10 @@ pub(crate) fn session_project_handler<C: SimpleContext>(
 // TODO: move into handler once async closures are available?
 async fn session_project<C: SimpleContext>(
     project: ProjectId,
-    mut session: C::Session,
-    mut ctx: C,
+    _session: C::Session,
+    ctx: C,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    session.project = Some(project);
-
-    ctx.set_default_session(session);
+    ctx.default_session_ref_mut().await.project = Some(project);
 
     Ok(warp::reply())
 }
@@ -158,13 +157,11 @@ pub(crate) fn session_view_handler<C: SimpleContext>(
 
 // TODO: move into handler once async closures are available?
 async fn session_view<C: SimpleContext>(
-    mut session: C::Session,
-    mut ctx: C,
+    _session: C::Session,
+    ctx: C,
     view: STRectangle,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    session.view = Some(view);
-
-    ctx.set_default_session(session);
+    ctx.default_session_ref_mut().await.view = Some(view);
 
     Ok(warp::reply())
 }
@@ -177,7 +174,7 @@ mod tests {
 
     use crate::{
         contexts::{InMemoryContext, SimpleSession},
-        handlers::{handle_rejection, ErrorResponse},
+        handlers::handle_rejection,
         util::tests::{check_allowed_http_methods, create_project_helper},
     };
 
@@ -187,7 +184,7 @@ mod tests {
     async fn session() {
         let ctx = InMemoryContext::default();
 
-        let session = ctx.default_session();
+        let session = ctx.default_session_ref().await;
 
         let res = warp::test::request()
             .method("GET")
@@ -200,19 +197,9 @@ mod tests {
             .await;
 
         let body = std::str::from_utf8(&res.body()).unwrap();
-        let session: SimpleSession = serde_json::from_str(body).unwrap();
+        let deserialized_session: SimpleSession = serde_json::from_str(body).unwrap();
 
-        let res = warp::test::request()
-            .method("GET")
-            .path("/session")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session.id().to_string()),
-            )
-            .reply(&session_handler(ctx).recover(handle_rejection))
-            .await;
-
-        ErrorResponse::assert(&res, 401, "InvalidSession", "The session id is invalid.");
+        assert_eq!(*session, deserialized_session);
     }
 
     #[tokio::test]
@@ -233,7 +220,7 @@ mod tests {
 
         assert_eq!(res.status(), 200);
 
-        assert_eq!(ctx.default_session().project(), Some(project));
+        assert_eq!(ctx.default_session_ref().await.project(), Some(project));
 
         let rect =
             STRectangle::new_unchecked(SpatialReferenceOption::Unreferenced, 0., 0., 1., 1., 0, 1);
@@ -251,7 +238,7 @@ mod tests {
 
         assert_eq!(res.status(), 200);
 
-        assert_eq!(ctx.default_session().view(), Some(rect).as_ref());
+        assert_eq!(ctx.default_session_ref().await.view(), Some(rect).as_ref());
     }
 
     async fn anonymous_test_helper(method: &str) -> Response<Bytes> {

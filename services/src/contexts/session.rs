@@ -1,7 +1,3 @@
-use std::borrow::Borrow;
-use std::sync::Arc;
-use std::sync::Mutex;
-
 use chrono::{DateTime, Utc, MAX_DATETIME, MIN_DATETIME};
 use geoengine_datatypes::identifier;
 use geoengine_datatypes::util::Identifier;

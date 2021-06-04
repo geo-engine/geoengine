@@ -150,6 +150,7 @@ pub async fn interrupt_handler(shutdown_tx: Sender<()>, callback: Option<fn()>) 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::contexts::{Session, SimpleSession};
     use crate::handlers::ErrorResponse;
     use tokio::sync::oneshot;
 
@@ -180,8 +181,21 @@ mod tests {
 
     async fn issue_queries(base_url: &str) {
         let client = reqwest::Client::new();
+
         let body = client
-            .post(&format!("{}{}", base_url, "user"))
+            .post(&format!("{}{}", base_url, "anonymous"))
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+
+        let session: SimpleSession = serde_json::from_str(&body).unwrap();
+
+        let body = client
+            .post(&format!("{}{}", base_url, "project"))
+            .header("Authorization", format!("Bearer {}", session.id()))
             .body("no json")
             .send()
             .await

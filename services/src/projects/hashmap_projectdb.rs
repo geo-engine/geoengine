@@ -207,9 +207,6 @@ mod test {
         let id = project_db.create(&session, create.clone()).await.unwrap();
         assert!(project_db.load_latest(&session, id).await.is_ok());
 
-        let id = project_db.create(&session, create).await.unwrap();
-        assert!(project_db.load_latest(&session, id).await.is_err());
-
         assert!(project_db
             .load_latest(&session, ProjectId::new())
             .await

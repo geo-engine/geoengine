@@ -117,7 +117,7 @@ mod tests {
     async fn upload() {
         let ctx = InMemoryContext::default();
 
-        let session = ctx.default_session().await;
+        let session_id = ctx.default_session_ref().await.id();
 
         let body = r#"-----------------------------10196671711503402186283068890
 Content-Disposition: form-data; name="files[]"; filename="bar.txt"
@@ -139,7 +139,7 @@ foo
             .header("Content-Length", body.len())
             .header(
                 "Authorization",
-                format!("Bearer {}", session.id().to_string()),
+                format!("Bearer {}", session_id.to_string()),
             )
             .header("Content-Type", "multipart/form-data; boundary=---------------------------10196671711503402186283068890")
             .body(

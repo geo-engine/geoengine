@@ -354,7 +354,7 @@ mod tests {
     async fn create_test_helper(method: &str) -> Response<Bytes> {
         let ctx = InMemoryContext::default();
 
-        let session = ctx.default_session().await;
+        let session = ctx.default_session_ref().await;
 
         let create = CreateProject {
             name: "Test".to_string(),
@@ -375,7 +375,7 @@ mod tests {
                 format!("Bearer {}", session.id().to_string()),
             )
             .json(&create)
-            .reply(&create_project_handler(ctx).recover(handle_rejection))
+            .reply(&create_project_handler(ctx.clone()).recover(handle_rejection))
             .await
     }
 
@@ -398,7 +398,7 @@ mod tests {
     async fn create_invalid_body() {
         let ctx = InMemoryContext::default();
 
-        let session = ctx.default_session();
+        let session_id = ctx.default_session_ref().await.id();
 
         let res = warp::test::request()
             .method("POST")
@@ -406,7 +406,7 @@ mod tests {
             .header("Content-Length", "0")
             .header(
                 "Authorization",
-                format!("Bearer {}", session.id().to_string()),
+                format!("Bearer {}", session_id.to_string()),
             )
             .body("no json")
             .reply(&create_project_handler(ctx).recover(handle_rejection))
@@ -424,7 +424,7 @@ mod tests {
     async fn create_missing_fields() {
         let ctx = InMemoryContext::default();
 
-        let session = ctx.default_session();
+        let session_id = ctx.default_session_ref().await.id();
 
         let create = json!({
             "description": "Foo".to_string(),
@@ -437,7 +437,7 @@ mod tests {
             .header("Content-Length", "0")
             .header(
                 "Authorization",
-                format!("Bearer {}", session.id().to_string()),
+                format!("Bearer {}", session_id.to_string()),
             )
             .json(&create)
             .reply(&create_project_handler(ctx).recover(handle_rejection))
@@ -618,7 +618,7 @@ mod tests {
     async fn load_not_found() {
         let ctx = InMemoryContext::default();
 
-        let session = ctx.default_session();
+        let session_id = ctx.default_session_ref().await.id();
 
         let res = warp::test::request()
             .method("GET")
@@ -626,7 +626,7 @@ mod tests {
             .header("Content-Length", "0")
             .header(
                 "Authorization",
-                format!("Bearer {}", session.id().to_string()),
+                format!("Bearer {}", session_id.to_string()),
             )
             .reply(&load_project_handler(ctx).recover(handle_rejection))
             .await;

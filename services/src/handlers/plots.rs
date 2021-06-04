@@ -247,7 +247,7 @@ mod tests {
     #[tokio::test]
     async fn json() {
         let ctx = InMemoryContext::default();
-        let session = ctx.default_session();
+        let session_id = ctx.default_session_ref().await.id();
 
         let workflow = Workflow {
             operator: Statistics {
@@ -281,7 +281,7 @@ mod tests {
             .path(&url)
             .header(
                 "Authorization",
-                format!("Bearer {}", session.id().to_string()),
+                format!("Bearer {}", session_id.to_string()),
             )
             .reply(&get_plot_handler(ctx).recover(handle_rejection))
             .await;
@@ -311,7 +311,7 @@ mod tests {
     #[tokio::test]
     async fn json_vega() {
         let ctx = InMemoryContext::default();
-        let session = ctx.default_session();
+        let session_id = ctx.default_session_ref().await.id();
 
         let workflow = Workflow {
             operator: Histogram {
@@ -353,7 +353,7 @@ mod tests {
             .path(&url)
             .header(
                 "Authorization",
-                format!("Bearer {}", session.id().to_string()),
+                format!("Bearer {}", session_id.to_string()),
             )
             .reply(&get_plot_handler(ctx).recover(handle_rejection))
             .await;
@@ -403,7 +403,7 @@ mod tests {
     async fn check_request_types() {
         async fn get_workflow_json(method: &str) -> Response<Bytes> {
             let ctx = InMemoryContext::default();
-            let session = ctx.default_session();
+            let session = ctx.default_session_ref().await;
 
             let workflow = Workflow {
                 operator: Statistics {
@@ -439,7 +439,7 @@ mod tests {
                     "Authorization",
                     format!("Bearer {}", session.id().to_string()),
                 )
-                .reply(&get_plot_handler(ctx).recover(handle_rejection))
+                .reply(&get_plot_handler(ctx.clone()).recover(handle_rejection))
                 .await
         }
 

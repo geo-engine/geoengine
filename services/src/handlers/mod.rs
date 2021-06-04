@@ -48,6 +48,7 @@ impl ErrorResponse {
 }
 
 /// A handler for custom rejections
+#[allow(clippy::unused_async)]
 pub async fn handle_rejection(err: Rejection) -> Result<impl Reply, Rejection> {
     let (code, error, message) = if let Some(e) = err.find::<Error>() {
         // custom errors

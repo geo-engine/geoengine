@@ -26,7 +26,7 @@ use warp::hyper::body::Bytes;
 
 #[allow(clippy::missing_panics_doc)]
 pub async fn create_project_helper<C: SimpleContext>(ctx: &C) -> (SimpleSession, ProjectId) {
-    let session = ctx.default_session();
+    let session = ctx.default_session_ref().await;
 
     let project = ctx
         .project_db()

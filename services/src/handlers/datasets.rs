@@ -593,7 +593,7 @@ mod tests {
     async fn test_list_datasets() -> Result<()> {
         let ctx = InMemoryContext::default();
 
-        let session = ctx.default_session();
+        let session_id = ctx.default_session_ref().await.id();
 
         let descriptor = VectorResultDescriptor {
             data_type: VectorDataType::Data,
@@ -644,7 +644,7 @@ mod tests {
             .header("Content-Length", "0")
             .header(
                 "Authorization",
-                format!("Bearer {}", session.id().to_string()),
+                format!("Bearer {}", session_id.to_string()),
             )
             .reply(&list_datasets_handler(ctx))
             .await;
@@ -681,7 +681,7 @@ mod tests {
     async fn create_dataset() {
         let ctx = InMemoryContext::default();
 
-        let session = ctx.default_session();
+        let session_id = ctx.default_session_ref().await.id();
 
         let s = r#"{
             "upload": "1f7e3e75-4d20-4c91-9497-7f4df7604b62",
@@ -733,7 +733,7 @@ mod tests {
             .header("Content-Length", "0")
             .header(
                 "Authorization",
-                format!("Bearer {}", session.id().to_string()),
+                format!("Bearer {}", session_id.to_string()),
             )
             .body(s)
             .reply(&create_dataset_handler(ctx))
@@ -1007,7 +1007,7 @@ mod tests {
     async fn get_dataset() -> Result<()> {
         let ctx = InMemoryContext::default();
 
-        let session = ctx.default_session();
+        let session_id = ctx.default_session_ref().await.id();
 
         let descriptor = VectorResultDescriptor {
             data_type: VectorDataType::Data,
@@ -1041,7 +1041,11 @@ mod tests {
         let id = ctx
             .dataset_db_ref_mut()
             .await
-            .add_dataset(&SimpleSession::default(), ds.validated()?, Box::new(meta))
+            .add_dataset(
+                &*ctx.default_session_ref().await,
+                ds.validated()?,
+                Box::new(meta),
+            )
             .await?;
 
         let res = warp::test::request()
@@ -1050,7 +1054,7 @@ mod tests {
             .header("Content-Length", "0")
             .header(
                 "Authorization",
-                format!("Bearer {}", session.id().to_string()),
+                format!("Bearer {}", session_id.to_string()),
             )
             .reply(&get_dataset_handler(ctx))
             .await;
