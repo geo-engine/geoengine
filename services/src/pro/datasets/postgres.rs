@@ -24,7 +24,7 @@ impl DatasetProviderDb<UserSession> for PostgresDatasetDb {
     async fn add_dataset_provider(
         &mut self,
         _session: &UserSession,
-        _provider: Box<dyn DatasetProviderDefinition<UserSession>>,
+        _provider: Box<dyn DatasetProviderDefinition>,
     ) -> Result<DatasetProviderId> {
         todo!()
     }
@@ -41,22 +41,26 @@ impl DatasetProviderDb<UserSession> for PostgresDatasetDb {
         &self,
         _session: &UserSession,
         _provider: DatasetProviderId,
-    ) -> Result<Box<dyn DatasetProvider<UserSession>>> {
+    ) -> Result<Box<dyn DatasetProvider>> {
         todo!()
     }
 }
 
 #[async_trait]
-impl DatasetProvider<UserSession> for PostgresDatasetDb {
+impl DatasetProvider for PostgresDatasetDb {
     async fn list(
         &self,
-        _session: &UserSession,
+        // _session: &UserSession,
         _options: Validated<DatasetListOptions>,
     ) -> Result<Vec<DatasetListing>> {
         todo!()
     }
 
-    async fn load(&self, _session: &UserSession, _dataset: &DatasetId) -> Result<Dataset> {
+    async fn load(
+        &self,
+        //  _session: &UserSession,
+        _dataset: &DatasetId,
+    ) -> Result<Dataset> {
         todo!()
     }
 }

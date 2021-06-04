@@ -52,14 +52,14 @@ pub(crate) fn list_providers_handler<C: Context>(
 
 // TODO: move into handler once async closures are available?
 async fn list_providers<C: Context>(
-    session: Session,
+    session: C::Session,
     ctx: C,
     options: DatasetProviderListOptions,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let list = ctx
         .dataset_db_ref()
         .await
-        .list_dataset_providers(session.user.id, options.validated()?)
+        .list_dataset_providers(&session, options.validated()?)
         .await?;
     Ok(warp::reply::json(&list))
 }
@@ -79,7 +79,7 @@ pub(crate) fn list_external_datasets_handler<C: Context>(
 // TODO: move into handler once async closures are available?
 async fn list_external_datasets<C: Context>(
     provider: DatasetProviderId,
-    session: Session,
+    session: C::Session,
     ctx: C,
     options: DatasetListOptions,
 ) -> Result<impl warp::Reply, warp::Rejection> {
@@ -87,9 +87,9 @@ async fn list_external_datasets<C: Context>(
     let list = ctx
         .dataset_db_ref()
         .await
-        .dataset_provider(session.user.id, provider)
+        .dataset_provider(&session, provider)
         .await?
-        .list(session.user.id, options)
+        .list(options)
         .await?;
     Ok(warp::reply::json(&list))
 }
@@ -136,12 +136,12 @@ pub(crate) fn list_datasets_handler<C: Context>(
 
 // TODO: move into handler once async closures are available?
 async fn list_datasets<C: Context>(
-    session: C::Session,
+    _session: C::Session,
     ctx: C,
     options: DatasetListOptions,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let options = options.validated()?;
-    let list = ctx.dataset_db_ref().await.list(&session, options).await?;
+    let list = ctx.dataset_db_ref().await.list(options).await?;
     Ok(warp::reply::json(&list))
 }
 
@@ -185,10 +185,10 @@ pub(crate) fn get_dataset_handler<C: Context>(
 // TODO: move into handler once async closures are available?
 async fn get_dataset<C: Context>(
     dataset: DatasetId,
-    session: C::Session,
+    _session: C::Session,
     ctx: C,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    let dataset = ctx.dataset_db_ref().await.load(&session, &dataset).await?;
+    let dataset = ctx.dataset_db_ref().await.load(&dataset).await?;
     Ok(warp::reply::json(&dataset))
 }
 

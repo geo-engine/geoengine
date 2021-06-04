@@ -164,10 +164,10 @@ impl DatasetStore<SimpleSession> for HashMapDatasetDb {
 }
 
 #[async_trait]
-impl DatasetProvider<SimpleSession> for HashMapDatasetDb {
+impl DatasetProvider for HashMapDatasetDb {
     async fn list(
         &self,
-        _session: &SimpleSession,
+        // _session: &SimpleSession,
         options: Validated<DatasetListOptions>,
     ) -> Result<Vec<DatasetListing>> {
         // TODO: permissions
@@ -199,7 +199,11 @@ impl DatasetProvider<SimpleSession> for HashMapDatasetDb {
         Ok(list)
     }
 
-    async fn load(&self, _session: &SimpleSession, dataset: &DatasetId) -> Result<Dataset> {
+    async fn load(
+        &self,
+        // _session: &SimpleSession,
+        dataset: &DatasetId,
+    ) -> Result<Dataset> {
         // TODO: permissions
 
         self.datasets
@@ -350,7 +354,6 @@ mod tests {
             .dataset_db_ref()
             .await
             .list(
-                &session,
                 DatasetListOptions {
                     filter: None,
                     order: OrderBy::NameAsc,

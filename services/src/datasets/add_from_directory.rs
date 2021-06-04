@@ -4,9 +4,9 @@ use std::{
     path::PathBuf,
 };
 
-use crate::error::Result;
 use crate::util::user_input::UserInput;
 use crate::{contexts::MockableSession, datasets::storage::DatasetDb};
+use crate::{datasets::storage::DatasetProviderDefinition, error::Result};
 
 use super::storage::DatasetDefinition;
 
@@ -55,15 +55,18 @@ pub async fn add_datasets_from_directory<S: MockableSession, D: DatasetDb<S>>(
     }
 }
 
-pub async fn add_providers_from_directory<D: DatasetDb>(db: &mut D, file_path: PathBuf) {
-    async fn add_provider_definition_from_dir_entry<D: DatasetDb>(
+pub async fn add_providers_from_directory<D: DatasetDb<S>, S: MockableSession>(
+    db: &mut D,
+    file_path: PathBuf,
+) {
+    async fn add_provider_definition_from_dir_entry<D: DatasetDb<S>, S: MockableSession>(
         db: &mut D,
         entry: &DirEntry,
     ) -> Result<()> {
         let def: Box<dyn DatasetProviderDefinition> =
             serde_json::from_reader(BufReader::new(File::open(entry.path())?))?;
 
-        db.add_dataset_provider(UserId::new(), def).await?; // TODO: add as system user
+        db.add_dataset_provider(&S::mock(), def).await?; // TODO: add as system user
 
         Ok(())
     }

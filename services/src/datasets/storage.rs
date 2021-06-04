@@ -221,7 +221,7 @@ impl MetaDataDefinition {
 /// Handling of datasets provided by geo engine internally, staged and by external providers
 #[async_trait]
 pub trait DatasetDb<S: Session>:
-    DatasetStore<S> + DatasetProvider<S> + DatasetProviderDb<S> + UploadDb<S> + Send + Sync
+    DatasetStore<S> + DatasetProvider + DatasetProviderDb<S> + UploadDb<S> + Send + Sync
 {
 }
 
@@ -273,12 +273,11 @@ pub trait DatasetStore<S: Session>: DatasetStorer {
 }
 
 #[typetag::serde(tag = "type")]
-pub trait DatasetProviderDefinition<S>:
+pub trait DatasetProviderDefinition:
     CloneableDatasetProviderDefinition + Send + Sync + std::fmt::Debug
-    where S: Session,
 {
     /// create the actual provider for data listing and access
-    fn initialize(self: Box<Self>) -> Result<Box<dyn DatasetProvider<S>>;
+    fn initialize(self: Box<Self>) -> Result<Box<dyn DatasetProvider>>;
 
     /// the type of the provider
     fn type_name(&self) -> String;
@@ -290,50 +289,21 @@ pub trait DatasetProviderDefinition<S>:
     fn id(&self) -> DatasetProviderId;
 }
 
-pub trait CloneableDatasetProviderDefinition<S> where S: Session {
-    fn clone_boxed_provider(&self) -> Box<dyn DatasetProviderDefinition<S>>;
+pub trait CloneableDatasetProviderDefinition {
+    fn clone_boxed_provider(&self) -> Box<dyn DatasetProviderDefinition>;
 }
 
-impl<S, T> CloneableDatasetProviderDefinition for T
+impl<T> CloneableDatasetProviderDefinition for T
 where
-    T: 'static + DatasetProviderDefinition<S> + Clone,
-    S: Session,
+    T: 'static + DatasetProviderDefinition + Clone,
 {
-    fn clone_boxed_provider(&self) -> Box<dyn DatasetProviderDefinition<S>> {
+    fn clone_boxed_provider(&self) -> Box<dyn DatasetProviderDefinition> {
         Box::new(self.clone())
     }
 }
 
-impl Clone for Box<dyn DatasetProviderDefinition<S>> where S: Session {
-    fn clone(&self) -> Box<dyn DatasetProviderDefinition<S>> {
+impl Clone for Box<dyn DatasetProviderDefinition> {
+    fn clone(&self) -> Box<dyn DatasetProviderDefinition> {
         self.clone_boxed_provider()
     }
-}
-
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
-pub enum DatasetPermission {
-    Read,
-    Write,
-    Owner,
-}
-
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
-pub struct UserDatasetPermission {
-    pub user: UserId,
-    pub dataset: InternalDatasetId,
-    pub permission: DatasetPermission,
-}
-
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
-pub enum DatasetProviderPermission {
-    Read,
-    Write,
-    Owner,
-}
-
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
-pub struct UserDatasetProviderPermission {
-    pub user: UserId,
-    pub external_provider: DatasetProviderId,
-    pub permission: DatasetProviderPermission,
 }

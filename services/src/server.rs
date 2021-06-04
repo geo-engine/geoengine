@@ -159,7 +159,7 @@ async fn show_version() -> Result<impl warp::Reply, warp::Rejection> {
     }))
 }
 
-fn serve_static_directory(
+pub fn serve_static_directory(
     path: Option<PathBuf>,
 ) -> impl Filter<Extract = (File,), Error = Rejection> + Clone {
     let has_path = path.is_some();

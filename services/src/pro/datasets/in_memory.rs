@@ -1,6 +1,6 @@
 use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider, OrderBy};
 use crate::datasets::storage::{
-    AddDataset, AddDatasetProvider, Dataset, DatasetDb, DatasetProviderDb,
+    AddDataset, Dataset, DatasetDb, DatasetProviderDb, DatasetProviderDefinition,
     DatasetProviderListOptions, DatasetProviderListing, DatasetStore, DatasetStorer,
     MetaDataDefinition,
 };
@@ -43,7 +43,7 @@ impl DatasetProviderDb<UserSession> for ProHashMapDatasetDb {
     async fn add_dataset_provider(
         &mut self,
         _session: &UserSession,
-        _provider: Validated<AddDatasetProvider>,
+        _provider: Box<dyn DatasetProviderDefinition>,
     ) -> Result<DatasetProviderId> {
         todo!()
     }
@@ -60,7 +60,7 @@ impl DatasetProviderDb<UserSession> for ProHashMapDatasetDb {
         &self,
         _session: &UserSession,
         _provider: DatasetProviderId,
-    ) -> Result<&dyn DatasetProvider<UserSession>> {
+    ) -> Result<Box<dyn DatasetProvider>> {
         todo!()
     }
 }
@@ -146,10 +146,10 @@ impl DatasetStore<UserSession> for ProHashMapDatasetDb {
 }
 
 #[async_trait]
-impl DatasetProvider<UserSession> for ProHashMapDatasetDb {
+impl DatasetProvider for ProHashMapDatasetDb {
     async fn list(
         &self,
-        _session: &UserSession,
+        // _session: &UserSession,
         options: Validated<DatasetListOptions>,
     ) -> Result<Vec<DatasetListing>> {
         // TODO: permissions
@@ -181,7 +181,11 @@ impl DatasetProvider<UserSession> for ProHashMapDatasetDb {
         Ok(list)
     }
 
-    async fn load(&self, _session: &UserSession, dataset: &DatasetId) -> Result<Dataset> {
+    async fn load(
+        &self,
+        //  _session: &UserSession,
+        dataset: &DatasetId,
+    ) -> Result<Dataset> {
         // TODO: permissions
 
         self.datasets
@@ -301,10 +305,9 @@ mod tests {
                 data_type: None,
                 time: Default::default(),
                 columns: None,
-                default_geometry: None,
                 force_ogr_time_filter: false,
                 force_ogr_spatial_filter: false,
-                on_error: OgrSourceErrorSpec::Skip,
+                on_error: OgrSourceErrorSpec::Ignore,
                 provenance: None,
             },
             result_descriptor: descriptor.clone(),
@@ -334,7 +337,6 @@ mod tests {
             .dataset_db_ref()
             .await
             .list(
-                &session,
                 DatasetListOptions {
                     filter: None,
                     order: OrderBy::NameAsc,

@@ -2,12 +2,13 @@ use flexi_logger::{
     style, AdaptiveFormat, Age, Cleanup, Criterion, DeferredNow, Duplicate, Logger, LoggerHandle,
     Naming,
 };
-use geoengine_services::error::Error;
+use geoengine_services::error::{Error, Result};
 use geoengine_services::server;
 use geoengine_services::util::config;
 use geoengine_services::util::config::get_config_element;
 use log::{info, Record};
 use tokio::sync::oneshot;
+use tokio::sync::oneshot::Receiver;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
@@ -16,7 +17,7 @@ async fn main() -> Result<(), Error> {
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
 
     let (server, interrupt_success) = tokio::join!(
-        start_server(Some(shutdown_rx), None),
+        start_server(shutdown_rx),
         server::interrupt_handler(shutdown_tx, Some(|| info!("Shutting down server…"))),
     );
 

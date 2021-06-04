@@ -1,5 +1,4 @@
-use crate::contexts::{Session, SimpleSession};
-use crate::datasets::storage::{AddDatasetProvider, AddMockDatasetProvider, Dataset};
+use crate::datasets::storage::Dataset;
 use crate::error;
 use crate::error::Result;
 use crate::util::config::{get_config_element, DatasetService};
@@ -68,7 +67,7 @@ pub enum OrderBy {
 
 /// Listing of stored datasets
 #[async_trait]
-pub trait DatasetProvider<S: Session>:
+pub trait DatasetProvider:
     Send
     + Sync
     + MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>
@@ -78,10 +77,14 @@ pub trait DatasetProvider<S: Session>:
     // TODO: filter, paging
     async fn list(
         &self,
-        session: &S,
+        // session: &S, // TODO: authorization
         options: Validated<DatasetListOptions>,
     ) -> Result<Vec<DatasetListing>>;
 
     // TODO: is this method useful?
-    async fn load(&self, session: &S, dataset: &DatasetId) -> Result<Dataset>;
+    async fn load(
+        &self,
+        // session: &S, // TODO: authorization
+        dataset: &DatasetId,
+    ) -> Result<Dataset>;
 }
