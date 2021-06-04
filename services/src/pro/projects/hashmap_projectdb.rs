@@ -345,9 +345,9 @@ mod test {
 
         let options = ProjectListOptions {
             filter: ProjectFilter::None,
-            order: OrderBy::NameDesc,
+            order: OrderBy::NameAsc,
             offset: 0,
-            limit: 3,
+            limit: 1,
         }
         .validated()
         .unwrap();

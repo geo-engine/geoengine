@@ -153,7 +153,7 @@ mod tests {
         pro::{
             contexts::ProInMemoryContext,
             projects::ProjectPermission,
-            users::{UserDb, UserRegistration},
+            users::{UserCredentials, UserDb, UserRegistration},
             util::tests::create_project_helper,
         },
         projects::ProjectDb,
@@ -306,13 +306,24 @@ mod tests {
 
         assert_eq!(res.status(), 200);
 
-        assert!(ctx
-            .project_db()
-            .write()
+        let target_user_session = ctx
+            .user_db_ref_mut()
             .await
-            .load_latest(&session, project)
+            .login(UserCredentials {
+                email: "foo2@bar.de".to_string(),
+                password: "secret1234".to_string(),
+            })
             .await
-            .is_err());
+            .unwrap();
+
+        assert!(dbg!(
+            ctx.project_db()
+                .write()
+                .await
+                .load_latest(&target_user_session, project)
+                .await
+        )
+        .is_err());
     }
 
     #[tokio::test]
