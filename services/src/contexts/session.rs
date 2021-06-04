@@ -1,12 +1,18 @@
+use std::borrow::Borrow;
+use std::sync::Arc;
+use std::sync::Mutex;
+
 use chrono::{DateTime, Utc, MAX_DATETIME, MIN_DATETIME};
 use geoengine_datatypes::identifier;
+use geoengine_datatypes::util::Identifier;
+use serde::{Deserialize, Serialize};
 
-use crate::projects::project::ProjectId;
-use crate::projects::project::STRectangle;
+use crate::projects::ProjectId;
+use crate::projects::STRectangle;
 
 identifier!(SessionId);
 
-pub trait Session {
+pub trait Session: Send + Sync + Serialize {
     fn id(&self) -> SessionId;
     fn created(&self) -> &DateTime<Utc>;
     fn valid_until(&self) -> &DateTime<Utc>;
@@ -14,10 +20,15 @@ pub trait Session {
     fn view(&self) -> Option<&STRectangle>;
 }
 
+pub trait MockableSession: Session {
+    fn mock() -> Self;
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct SimpleSession {
     id: SessionId,
-    project: Option<ProjectId>,
-    view: Option<STRectangle>,
+    pub project: Option<ProjectId>,
+    pub view: Option<STRectangle>,
 }
 
 impl Default for SimpleSession {
@@ -44,10 +55,16 @@ impl Session for SimpleSession {
     }
 
     fn project(&self) -> Option<ProjectId> {
-        &self.project
+        self.project
     }
 
     fn view(&self) -> Option<&STRectangle> {
-        &self.view
+        self.view.as_ref()
+    }
+}
+
+impl MockableSession for SimpleSession {
+    fn mock() -> Self {
+        Self::default()
     }
 }

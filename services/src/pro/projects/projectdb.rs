@@ -1,7 +1,7 @@
+use crate::error::Result;
 use crate::projects::{ProjectDb, ProjectId};
-use crate::{contexts::Session, error::Result};
 use crate::{
-    pro::users::UserSession,
+    pro::users::{UserId, UserSession},
     projects::{OrderBy, ProjectFilter},
 };
 use async_trait::async_trait;
@@ -46,6 +46,7 @@ pub enum ProjectPermission {
 pub struct UserProjectPermission {
     pub project: ProjectId,
     pub permission: ProjectPermission,
+    pub user: UserId,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
@@ -57,30 +58,30 @@ pub struct ProjectListOptions {
     pub limit: u32,
 }
 
-/// Instead of parsing list params, deserialize `ProjectPermission`s as JSON list.
-pub fn permissions_from_json_str<'de, D>(
-    deserializer: D,
-) -> Result<Vec<ProjectPermission>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    use serde::de::Visitor;
+// /// Instead of parsing list params, deserialize `ProjectPermission`s as JSON list.
+// pub fn permissions_from_json_str<'de, D>(
+//     deserializer: D,
+// ) -> Result<Vec<ProjectPermission>, D::Error>
+// where
+//     D: serde::Deserializer<'de>,
+// {
+//     use serde::de::Visitor;
 
-    struct PermissionsFromJsonStrVisitor;
-    impl<'de> Visitor<'de> for PermissionsFromJsonStrVisitor {
-        type Value = Vec<ProjectPermission>;
+//     struct PermissionsFromJsonStrVisitor;
+//     impl<'de> Visitor<'de> for PermissionsFromJsonStrVisitor {
+//         type Value = Vec<ProjectPermission>;
 
-        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-            formatter.write_str("a JSON array of type `ProjectPermission`")
-        }
+//         fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+//             formatter.write_str("a JSON array of type `ProjectPermission`")
+//         }
 
-        fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-        where
-            E: serde::de::Error,
-        {
-            serde_json::from_str(v).map_err(|error| E::custom(error.to_string()))
-        }
-    }
+//         fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+//         where
+//             E: serde::de::Error,
+//         {
+//             serde_json::from_str(v).map_err(|error| E::custom(error.to_string()))
+//         }
+//     }
 
-    deserializer.deserialize_str(PermissionsFromJsonStrVisitor)
-}
+//     deserializer.deserialize_str(PermissionsFromJsonStrVisitor)
+// }

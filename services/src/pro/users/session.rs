@@ -1,13 +1,10 @@
 use serde::{Deserialize, Serialize};
 
-use crate::contexts::{Session, SessionId};
+use crate::contexts::{MockableSession, Session, SessionId};
 use crate::pro::users::UserId;
-use crate::projects::project::{ProjectId, STRectangle};
+use crate::projects::{ProjectId, STRectangle};
 use crate::util::Identifier;
 use chrono::{DateTime, Utc};
-use geoengine_datatypes::identifier;
-
-identifier!(SessionId);
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -28,8 +25,8 @@ pub struct UserSession {
     pub view: Option<STRectangle>,
 }
 
-impl UserSession {
-    pub fn mock() -> Self {
+impl MockableSession for UserSession {
+    fn mock() -> Self {
         Self {
             id: SessionId::new(),
             user: UserInfo {

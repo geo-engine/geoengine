@@ -1,21 +1,13 @@
-use crate::contexts::{Context, InMemoryContext};
+use crate::contexts::{InMemoryContext, SimpleContext};
 use crate::error;
 use crate::error::{Error, Result};
 use crate::handlers;
 use crate::handlers::handle_rejection;
-#[cfg(feature = "postgres")]
-use crate::pro::contexts::PostgresContext;
 use crate::util::config;
 use crate::util::config::{get_config_element, Backend};
-#[cfg(feature = "postgres")]
-use bb8_postgres::tokio_postgres;
-#[cfg(feature = "postgres")]
-use bb8_postgres::tokio_postgres::NoTls;
 use snafu::ResultExt;
 use std::net::SocketAddr;
 use std::path::PathBuf;
-#[cfg(feature = "postgres")]
-use std::str::FromStr;
 use tokio::signal;
 use tokio::sync::oneshot::{Receiver, Sender};
 use warp::fs::File;
@@ -23,6 +15,7 @@ use warp::{Filter, Rejection};
 
 /// Combine filters by boxing them
 /// TODO: avoid boxing while still achieving acceptable compile time
+#[macro_export]
 macro_rules! combine {
   ($x:expr, $($y:expr),+) => {{
       let filter = $x.boxed();
@@ -69,21 +62,6 @@ pub async fn start_server(
             .await
         }
         Backend::Postgres => {
-            // TODO: migrate to PRO
-            #[cfg(feature = "postgres")]
-            {
-                eprintln!("Using Postgres backend"); // TODO: log
-                let ctx = PostgresContext::new(
-                    tokio_postgres::config::Config::from_str(
-                        &get_config_element::<config::Postgres>()?.config_string,
-                    )?,
-                    NoTls,
-                )
-                .await?;
-
-                start(shutdown_rx, static_files_dir, bind_address, ctx).await
-            }
-            #[cfg(not(feature = "postgres"))]
             panic!("Postgres backend was selected but the postgres feature wasn't activated during compilation")
         }
     }
@@ -96,22 +74,16 @@ async fn start<C>(
     ctx: C,
 ) -> Result<(), Error>
 where
-    C: Context,
+    C: SimpleContext,
 {
     let handler = combine!(
         handlers::workflows::register_workflow_handler(ctx.clone()),
         handlers::workflows::load_workflow_handler(ctx.clone()),
         handlers::workflows::get_workflow_metadata_handler(ctx.clone()),
-        handlers::users::register_user_handler(ctx.clone()),
-        handlers::users::anonymous_handler(ctx.clone()),
-        handlers::users::login_handler(ctx.clone()),
-        handlers::users::logout_handler(ctx.clone()),
-        handlers::users::session_handler(ctx.clone()),
-        handlers::users::session_project_handler(ctx.clone()),
-        handlers::users::session_view_handler(ctx.clone()),
-        handlers::projects::add_permission_handler(ctx.clone()),
-        handlers::projects::remove_permission_handler(ctx.clone()),
-        handlers::projects::list_permissions_handler(ctx.clone()),
+        handlers::session::anonymous_handler(ctx.clone()),
+        handlers::session::session_handler(ctx.clone()),
+        handlers::session::session_project_handler(ctx.clone()),
+        handlers::session::session_view_handler(ctx.clone()),
         handlers::projects::create_project_handler(ctx.clone()),
         handlers::projects::list_projects_handler(ctx.clone()),
         handlers::projects::update_project_handler(ctx.clone()),
@@ -145,7 +117,7 @@ where
     task.await.context(error::TokioJoin)
 }
 
-fn serve_static_directory(
+pub fn serve_static_directory(
     path: Option<PathBuf>,
 ) -> impl Filter<Extract = (File,), Error = Rejection> + Clone {
     let has_path = path.is_some();

@@ -18,11 +18,10 @@ impl ProjectDb<SimpleSession> for HashMapProjectDb {
     /// List projects
     async fn list(
         &self,
-        session: SimpleSession,
+        _session: &SimpleSession,
         options: Validated<ProjectListOptions>,
     ) -> Result<Vec<ProjectListing>> {
         let ProjectListOptions {
-            permissions,
             filter,
             order,
             offset,
@@ -32,7 +31,7 @@ impl ProjectDb<SimpleSession> for HashMapProjectDb {
         let mut projects = self
             .projects
             .values()
-            .flat_map(|projects| projects.last())
+            .filter_map(|projects| projects.last())
             .map(ProjectListing::from)
             .filter(|p| match &filter {
                 ProjectFilter::Name { term } => p.name == *term,
@@ -58,7 +57,7 @@ impl ProjectDb<SimpleSession> for HashMapProjectDb {
     /// Load a project
     async fn load(
         &self,
-        session: SimpleSession,
+        _session: &SimpleSession,
         project: ProjectId,
         version: LoadVersion,
     ) -> Result<Project> {
@@ -83,7 +82,7 @@ impl ProjectDb<SimpleSession> for HashMapProjectDb {
     /// Create a project
     async fn create(
         &mut self,
-        session: SimpleSession,
+        _session: &SimpleSession,
         create: Validated<CreateProject>,
     ) -> Result<ProjectId> {
         let project: Project = Project::from_create_project(create.user_input);
@@ -95,7 +94,7 @@ impl ProjectDb<SimpleSession> for HashMapProjectDb {
     /// Update a project
     async fn update(
         &mut self,
-        session: SimpleSession,
+        _session: &SimpleSession,
         update: Validated<UpdateProject>,
     ) -> Result<()> {
         let update = update.user_input;
@@ -116,7 +115,7 @@ impl ProjectDb<SimpleSession> for HashMapProjectDb {
     }
 
     /// Delete a project
-    async fn delete(&mut self, session: SimpleSession, project: ProjectId) -> Result<()> {
+    async fn delete(&mut self, _session: &SimpleSession, project: ProjectId) -> Result<()> {
         self.projects
             .remove(&project)
             .map(|_| ())
@@ -126,7 +125,7 @@ impl ProjectDb<SimpleSession> for HashMapProjectDb {
     /// Get the versions of a project
     async fn versions(
         &self,
-        session: SimpleSession,
+        _session: &SimpleSession,
         project: ProjectId,
     ) -> Result<Vec<ProjectVersion>> {
         // TODO: pagination?
@@ -147,18 +146,8 @@ mod test {
     use crate::projects::project::STRectangle;
     use crate::util::user_input::UserInput;
     use crate::util::Identifier;
-    use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, TimeInterval};
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
     use std::{thread, time};
-
-    fn strect() -> STRectangle {
-        STRectangle {
-            spatial_reference: SpatialReferenceOption::Unreferenced,
-            bounding_box: BoundingBox2D::new(Coordinate2D::new(0., 0.), Coordinate2D::new(1., 1.))
-                .unwrap(),
-            time_interval: TimeInterval::new(0, 1).unwrap(),
-        }
-    }
 
     #[tokio::test]
     async fn list() {
@@ -183,7 +172,7 @@ mod test {
             }
             .validated()
             .unwrap();
-            project_db.create(session, create).await.unwrap();
+            project_db.create(&session, create).await.unwrap();
         }
         let options = ProjectListOptions {
             filter: ProjectFilter::None,
@@ -193,7 +182,7 @@ mod test {
         }
         .validated()
         .unwrap();
-        let projects = project_db.list(session, options).await.unwrap();
+        let projects = project_db.list(&session, options).await.unwrap();
 
         assert_eq!(projects.len(), 2);
         assert_eq!(projects[0].name, "Test9");
@@ -215,14 +204,14 @@ mod test {
         .validated()
         .unwrap();
 
-        let id = project_db.create(session, create.clone()).await.unwrap();
-        assert!(project_db.load_latest(session, id).await.is_ok());
+        let id = project_db.create(&session, create.clone()).await.unwrap();
+        assert!(project_db.load_latest(&session, id).await.is_ok());
 
-        let id = project_db.create(session, create).await.unwrap();
-        assert!(project_db.load_latest(session, id).await.is_err());
+        let id = project_db.create(&session, create).await.unwrap();
+        assert!(project_db.load_latest(&session, id).await.is_err());
 
         assert!(project_db
-            .load_latest(session, ProjectId::new())
+            .load_latest(&session, ProjectId::new())
             .await
             .is_err())
     }
@@ -242,9 +231,9 @@ mod test {
         .validated()
         .unwrap();
 
-        let id = project_db.create(session, create).await.unwrap();
+        let id = project_db.create(&session, create).await.unwrap();
 
-        assert!(project_db.load_latest(session, id).await.is_ok())
+        assert!(project_db.load_latest(&session, id).await.is_ok())
     }
 
     #[tokio::test]
@@ -262,7 +251,7 @@ mod test {
         .validated()
         .unwrap();
 
-        let id = project_db.create(session, create).await.unwrap();
+        let id = project_db.create(&session, create).await.unwrap();
 
         let update = UpdateProject {
             id,
@@ -276,10 +265,10 @@ mod test {
         .validated()
         .unwrap();
 
-        project_db.update(session, update).await.unwrap();
+        project_db.update(&session, update).await.unwrap();
 
         assert_eq!(
-            project_db.load_latest(session, id).await.unwrap().name,
+            project_db.load_latest(&session, id).await.unwrap().name,
             "Foo"
         );
     }
@@ -299,9 +288,9 @@ mod test {
         .validated()
         .unwrap();
 
-        let id = project_db.create(session, create).await.unwrap();
+        let id = project_db.create(&session, create).await.unwrap();
 
-        assert!(project_db.delete(session, id).await.is_ok());
+        assert!(project_db.delete(&session, id).await.is_ok());
     }
 
     #[tokio::test]
@@ -319,7 +308,7 @@ mod test {
         .validated()
         .unwrap();
 
-        let id = project_db.create(session, create).await.unwrap();
+        let id = project_db.create(&session, create).await.unwrap();
 
         thread::sleep(time::Duration::from_millis(10));
 
@@ -335,9 +324,9 @@ mod test {
         .validated()
         .unwrap();
 
-        project_db.update(session, update).await.unwrap();
+        project_db.update(&session, update).await.unwrap();
 
-        let versions = project_db.versions(session, id).await.unwrap();
+        let versions = project_db.versions(&session, id).await.unwrap();
 
         assert_eq!(versions.len(), 2);
         assert!(versions[0].changed < versions[1].changed);

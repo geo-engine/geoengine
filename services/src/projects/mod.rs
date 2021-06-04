@@ -3,7 +3,9 @@ mod project;
 mod projectdb;
 
 pub use project::{
-    CreateProject, LoadVersion, OrderBy, Project, ProjectFilter, ProjectId, ProjectListOptions,
-    ProjectListing, ProjectVersion, ProjectVersionId, UpdateProject, Plot.
+    CreateProject, Layer, LayerType, LayerUpdate, LayerVisibility, LoadVersion, OrderBy, Plot,
+    PlotUpdate, PointSymbology, Project, ProjectFilter, ProjectId, ProjectListOptions,
+    ProjectListing, ProjectVersion, ProjectVersionId, RasterSymbology, STRectangle, Symbology,
+    UpdateProject,
 };
 pub use projectdb::ProjectDb;

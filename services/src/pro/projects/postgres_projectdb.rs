@@ -1,5 +1,8 @@
 use crate::pro::contexts::PostgresContext;
 use crate::pro::users::UserId;
+use crate::pro::users::UserSession;
+use crate::projects::Layer;
+use crate::projects::Plot;
 use crate::projects::{
     CreateProject, LoadVersion, Project, ProjectDb, ProjectId, ProjectListOptions, ProjectListing,
     ProjectVersion, ProjectVersionId, UpdateProject,
@@ -21,6 +24,9 @@ use snafu::ResultExt;
 
 use bb8_postgres::bb8::PooledConnection;
 use bb8_postgres::tokio_postgres::Transaction;
+
+use super::ProProjectDb;
+use super::UserProjectPermission;
 
 pub struct PostgresProjectDb<Tls>
 where
@@ -135,7 +141,7 @@ where
 }
 
 #[async_trait]
-impl<Tls> ProjectDb for PostgresProjectDb<Tls>
+impl<Tls> ProjectDb<UserSession> for PostgresProjectDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -144,7 +150,7 @@ where
 {
     async fn list(
         &self,
-        user: UserId,
+        session: &UserSession,
         options: Validated<ProjectListOptions>,
     ) -> Result<Vec<ProjectListing>> {
         // TODO: project filters
@@ -157,10 +163,12 @@ where
                 "
         SELECT p.id, p.project_id, p.name, p.description, p.changed 
         FROM user_project_permissions u JOIN project_versions p ON (u.project_id = p.project_id)
-        WHERE u.user_id = $1 AND u.permission = ANY ($2) AND latest IS TRUE
+        WHERE
+            u.user_id = $1
+            AND latest IS TRUE
         ORDER BY p.{}
-        LIMIT $3
-        OFFSET $4;",
+        LIMIT $2
+        OFFSET $3;",
                 options.order.to_sql_string()
             ))
             .await?;
@@ -169,8 +177,7 @@ where
             .query(
                 &stmt,
                 &[
-                    &user,
-                    &options.permissions,
+                    &session.user.id,
                     &i64::from(options.limit),
                     &i64::from(options.offset),
                 ],
@@ -212,7 +219,7 @@ where
     #[allow(clippy::too_many_lines)]
     async fn load(
         &self,
-        user: UserId,
+        session: &UserSession,
         project: ProjectId,
         version: LoadVersion,
     ) -> Result<Project> {
@@ -220,7 +227,7 @@ where
 
         PostgresContext::check_user_project_permission(
             &conn,
-            user,
+            session.user.id,
             project,
             &[
                 ProjectPermission::Read,
@@ -248,7 +255,8 @@ where
                 )
                 .await?;
 
-            conn.query_one(&stmt, &[&user, &project, &version]).await?
+            conn.query_one(&stmt, &[&session.user.id, &project, &version])
+                .await?
         } else {
             let stmt = conn
                 .prepare(
@@ -267,7 +275,7 @@ where
                 )
                 .await?;
 
-            conn.query_one(&stmt, &[&user, &project]).await?
+            conn.query_one(&stmt, &[&session.user.id, &project]).await?
         };
 
         let project_id = ProjectId(row.get(0));
@@ -277,7 +285,7 @@ where
         let bounds = row.get(4);
         let time_step = row.get(5);
         let changed = row.get(6);
-        let author_id = UserId(row.get(7));
+        let _author_id = UserId(row.get(7));
 
         let stmt = conn
             .prepare(
@@ -319,12 +327,12 @@ where
 
     async fn create(
         &mut self,
-        user: UserId,
+        session: &UserSession,
         create: Validated<CreateProject>,
     ) -> Result<ProjectId> {
         let mut conn = self.conn_pool.get().await?;
 
-        let project: Project = Project::from_create_project(create.user_input, user);
+        let project: Project = Project::from_create_project(create.user_input);
 
         let trans = conn.build_transaction().start().await?;
 
@@ -360,7 +368,7 @@ where
                     &project.description,
                     &project.bounds,
                     &project.time_step,
-                    &user,
+                    &session.user.id,
                 ],
             )
             .await?;
@@ -372,7 +380,10 @@ where
             .await?;
 
         trans
-            .execute(&stmt, &[&user, &project.id, &ProjectPermission::Owner])
+            .execute(
+                &stmt,
+                &[&session.user.id, &project.id, &ProjectPermission::Owner],
+            )
             .await?;
 
         trans.commit().await?;
@@ -381,14 +392,18 @@ where
     }
 
     #[allow(clippy::too_many_lines)]
-    async fn update(&mut self, user: UserId, update: Validated<UpdateProject>) -> Result<()> {
+    async fn update(
+        &mut self,
+        session: &UserSession,
+        update: Validated<UpdateProject>,
+    ) -> Result<()> {
         let update = update.user_input;
 
         let mut conn = self.conn_pool.get().await?;
 
         PostgresContext::check_user_project_permission(
             &conn,
-            user,
+            session.user.id,
             update.id,
             &[ProjectPermission::Write, ProjectPermission::Owner],
         )
@@ -396,14 +411,14 @@ where
 
         let trans = conn.build_transaction().start().await?;
 
-        let project = self.load_latest(user, update.id).await?; // TODO: move inside transaction?
+        let project = self.load_latest(&session, update.id).await?; // TODO: move inside transaction?
 
         let stmt = trans
             .prepare("UPDATE project_versions SET latest = FALSE WHERE project_id = $1 AND latest IS TRUE;")
             .await?;
         trans.execute(&stmt, &[&project.id]).await?;
 
-        let project = project.update_project(update, user)?;
+        let project = project.update_project(update)?;
 
         let stmt = trans
             .prepare(
@@ -432,7 +447,7 @@ where
                     &project.description,
                     &project.bounds,
                     &project.time_step,
-                    &user,
+                    &session.user.id,
                 ],
             )
             .await?;
@@ -479,12 +494,12 @@ where
         Ok(())
     }
 
-    async fn delete(&mut self, user: UserId, project: ProjectId) -> Result<()> {
+    async fn delete(&mut self, session: &UserSession, project: ProjectId) -> Result<()> {
         let conn = self.conn_pool.get().await?;
 
         PostgresContext::check_user_project_permission(
             &conn,
-            user,
+            session.user.id,
             project,
             &[ProjectPermission::Owner],
         )
@@ -497,12 +512,16 @@ where
         Ok(())
     }
 
-    async fn versions(&self, user: UserId, project: ProjectId) -> Result<Vec<ProjectVersion>> {
+    async fn versions(
+        &self,
+        session: &UserSession,
+        project: ProjectId,
+    ) -> Result<Vec<ProjectVersion>> {
         let conn = self.conn_pool.get().await?;
 
         PostgresContext::check_user_project_permission(
             &conn,
-            user,
+            session.user.id,
             project,
             &[
                 ProjectPermission::Read,
@@ -528,21 +547,29 @@ where
             .map(|row| ProjectVersion {
                 id: ProjectVersionId(row.get(0)),
                 changed: row.get(1),
-                author: UserId(row.get(2)),
             })
             .collect())
     }
+}
 
+#[async_trait]
+impl<Tls> ProProjectDb for PostgresProjectDb<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
     async fn list_permissions(
         &self,
-        user: UserId,
+        session: &UserSession,
         project: ProjectId,
     ) -> Result<Vec<UserProjectPermission>> {
         let conn = self.conn_pool.get().await?;
 
         PostgresContext::check_user_project_permission(
             &conn,
-            user,
+            session.user.id,
             project,
             &[
                 ProjectPermission::Read,
@@ -564,23 +591,23 @@ where
         Ok(rows
             .into_iter()
             .map(|row| UserProjectPermission {
-                user: UserId(row.get(0)),
                 project: ProjectId(row.get(1)),
                 permission: row.get(2),
+                user: session.user.id,
             })
             .collect())
     }
 
     async fn add_permission(
         &mut self,
-        user: UserId,
+        session: &UserSession,
         permission: UserProjectPermission,
     ) -> Result<()> {
         let conn = self.conn_pool.get().await?;
 
         PostgresContext::check_user_project_permission(
             &conn,
-            user,
+            session.user.id,
             permission.project,
             &[ProjectPermission::Owner],
         )
@@ -609,14 +636,14 @@ where
 
     async fn remove_permission(
         &mut self,
-        user: UserId,
+        session: &UserSession,
         permission: UserProjectPermission,
     ) -> Result<()> {
         let conn = self.conn_pool.get().await?;
 
         PostgresContext::check_user_project_permission(
             &conn,
-            user,
+            session.user.id,
             permission.project,
             &[ProjectPermission::Owner],
         )
@@ -630,8 +657,15 @@ where
             )
             .await?;
 
-        conn.execute(&stmt, &[&user, &permission.project, &permission.permission])
-            .await?;
+        conn.execute(
+            &stmt,
+            &[
+                &session.user.id,
+                &permission.project,
+                &permission.permission,
+            ],
+        )
+        .await?;
 
         Ok(())
     }

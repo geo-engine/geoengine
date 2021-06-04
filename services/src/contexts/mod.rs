@@ -1,18 +1,15 @@
 use crate::error::Result;
-use crate::{
-    projects::projectdb::ProjectDb, users::session::Session, users::userdb::UserDb,
-    workflows::registry::WorkflowRegistry,
-};
+use crate::{projects::ProjectDb, workflows::registry::WorkflowRegistry};
 use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 mod in_memory;
 mod session;
+mod simple_context;
 
 use crate::datasets::storage::DatasetDb;
 
-use crate::users::user::UserId;
 use crate::util::config;
 use crate::util::config::get_config_element;
 use geoengine_datatypes::dataset::DatasetId;
@@ -28,7 +25,8 @@ use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 
 pub use in_memory::InMemoryContext;
-pub use session::{Session, SessionId, SimpleSession};
+pub use session::{MockableSession, Session, SessionId, SimpleSession};
+pub use simple_context::SimpleContext;
 
 pub type Db<T> = Arc<RwLock<T>>;
 
@@ -37,16 +35,12 @@ pub type Db<T> = Arc<RwLock<T>>;
 // TODO: avoid locking the individual DBs here IF they are already thread safe (e.g. guaranteed by postgres)
 #[async_trait]
 pub trait Context: 'static + Send + Sync + Clone {
-    type UserDB: UserDb;
-    type ProjectDB: ProjectDb;
+    type Session: MockableSession; // Session;
+    type ProjectDB: ProjectDb<Self::Session>;
     type WorkflowRegistry: WorkflowRegistry;
-    type DatasetDB: DatasetDb;
+    type DatasetDB: DatasetDb<Self::Session>;
     type QueryContext: QueryContext;
     type ExecutionContext: ExecutionContext;
-
-    fn user_db(&self) -> Db<Self::UserDB>;
-    async fn user_db_ref(&self) -> RwLockReadGuard<Self::UserDB>;
-    async fn user_db_ref_mut(&self) -> RwLockWriteGuard<Self::UserDB>;
 
     fn project_db(&self) -> Db<Self::ProjectDB>;
     async fn project_db_ref(&self) -> RwLockReadGuard<Self::ProjectDB>;
@@ -62,11 +56,19 @@ pub trait Context: 'static + Send + Sync + Clone {
 
     fn query_context(&self) -> Result<Self::QueryContext>;
 
-    fn execution_context(&self, session: &Session) -> Result<Self::ExecutionContext>;
+    fn execution_context(&self, session: Self::Session) -> Result<Self::ExecutionContext>;
+
+    async fn session_id_to_session(&self, session_id: SessionId) -> Result<Self::Session>;
 }
 
 pub struct QueryContextImpl {
     chunk_byte_size: usize,
+}
+
+impl QueryContextImpl {
+    pub fn new(chunk_byte_size: usize) -> Self {
+        Self { chunk_byte_size }
+    }
 }
 
 impl QueryContext for QueryContextImpl {
@@ -75,21 +77,37 @@ impl QueryContext for QueryContextImpl {
     }
 }
 
-pub struct ExecutionContextImpl<D>
+pub struct ExecutionContextImpl<S, D>
 where
-    D: DatasetDb,
+    D: DatasetDb<S>,
+    S: Session,
 {
     dataset_db: Db<D>,
     thread_pool: Arc<ThreadPool>,
-    user: UserId,
+    session: S,
 }
 
-impl<D> ExecutionContext for ExecutionContextImpl<D>
+impl<S, D> ExecutionContextImpl<S, D>
 where
-    D: DatasetDb
+    D: DatasetDb<S>,
+    S: Session,
+{
+    pub fn new(dataset_db: Db<D>, thread_pool: Arc<ThreadPool>, session: S) -> Self {
+        Self {
+            dataset_db,
+            thread_pool,
+            session,
+        }
+    }
+}
+
+impl<S, D> ExecutionContext for ExecutionContextImpl<S, D>
+where
+    D: DatasetDb<S>
         + MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>
         + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor>
         + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor>,
+    S: Session,
 {
     fn thread_pool(&self) -> ThreadPoolContext {
         self.thread_pool.create_context()
@@ -113,10 +131,11 @@ where
 }
 
 // TODO: use macro(?) for delegating meta_data function to DatasetDB to avoid redundant code
-impl<D> MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>
-    for ExecutionContextImpl<D>
+impl<S, D> MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>
+    for ExecutionContextImpl<S, D>
 where
-    D: DatasetDb + MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>,
+    D: DatasetDb<S> + MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>,
+    S: Session,
 {
     // TODO: make async
     fn meta_data(
@@ -134,7 +153,7 @@ where
                     .dataset_db
                     .read()
                     .await
-                    .dataset_provider(self.user, external.provider)
+                    .dataset_provider(&self.session, external.provider)
                     .await
                     .map_err(|e| geoengine_operators::error::Error::DatasetMetaData {
                         source: Box::new(e),
@@ -146,9 +165,10 @@ where
 }
 
 // TODO: use macro(?) for delegating meta_data function to DatasetDB to avoid redundant code
-impl<D> MetaDataProvider<OgrSourceDataset, VectorResultDescriptor> for ExecutionContextImpl<D>
+impl<S, D> MetaDataProvider<OgrSourceDataset, VectorResultDescriptor> for ExecutionContextImpl<S, D>
 where
-    D: DatasetDb + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor>,
+    D: DatasetDb<S> + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor>,
+    S: Session,
 {
     // TODO: make async
     fn meta_data(
@@ -166,7 +186,7 @@ where
                     .dataset_db
                     .read()
                     .await
-                    .dataset_provider(self.user, external.provider)
+                    .dataset_provider(&self.session, external.provider)
                     .await
                     .map_err(|e| geoengine_operators::error::Error::DatasetMetaData {
                         source: Box::new(e),
@@ -178,9 +198,10 @@ where
 }
 
 // TODO: use macro(?) for delegating meta_data function to DatasetDB to avoid redundant code
-impl<D> MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor> for ExecutionContextImpl<D>
+impl<S, D> MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor> for ExecutionContextImpl<S, D>
 where
-    D: DatasetDb + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor>,
+    D: DatasetDb<S> + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor>,
+    S: Session,
 {
     // TODO: make async
     fn meta_data(
@@ -198,7 +219,7 @@ where
                     .dataset_db
                     .read()
                     .await
-                    .dataset_provider(self.user, external.provider)
+                    .dataset_provider(&self.session, external.provider)
                     .await
                     .map_err(|e| geoengine_operators::error::Error::DatasetMetaData {
                         source: Box::new(e),

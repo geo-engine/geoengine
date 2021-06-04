@@ -4,17 +4,17 @@ use std::{
     path::PathBuf,
 };
 
-use geoengine_datatypes::util::Identifier;
-
-use crate::datasets::storage::DatasetDb;
 use crate::error::Result;
-use crate::users::user::UserId;
 use crate::util::user_input::UserInput;
+use crate::{contexts::MockableSession, datasets::storage::DatasetDb};
 
 use super::storage::DatasetDefinition;
 
-pub async fn add_datasets_from_directory<D: DatasetDb>(db: &mut D, file_path: PathBuf) {
-    async fn add_dataset_definition_from_dir_entry<D: DatasetDb>(
+pub async fn add_datasets_from_directory<S: MockableSession, D: DatasetDb<S>>(
+    db: &mut D,
+    file_path: PathBuf,
+) {
+    async fn add_dataset_definition_from_dir_entry<S: MockableSession, D: DatasetDb<S>>(
         db: &mut D,
         entry: &DirEntry,
     ) -> Result<()> {
@@ -22,7 +22,7 @@ pub async fn add_datasets_from_directory<D: DatasetDb>(db: &mut D, file_path: Pa
             serde_json::from_reader(BufReader::new(File::open(entry.path())?))?;
 
         db.add_dataset(
-            UserId::new(),
+            &S::mock(), // TODO: find suitable way to add public dataset
             def.properties.validated()?,
             db.wrap_meta_data(def.meta_data),
         )

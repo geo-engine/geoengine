@@ -1,9 +1,9 @@
+use crate::contexts::Session;
 use crate::datasets::listing::{DatasetListing, DatasetProvider};
 use crate::datasets::upload::UploadDb;
 use crate::datasets::upload::UploadId;
 use crate::error;
 use crate::error::Result;
-use crate::users::user::UserId;
 use crate::util::user_input::{UserInput, Validated};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, InternalDatasetId};
@@ -196,35 +196,35 @@ impl MetaDataDefinition {
 
 /// Handling of datasets provided by geo engine internally, staged and by external providers
 #[async_trait]
-pub trait DatasetDb:
-    DatasetStore + DatasetProvider + DatasetProviderDb + UploadDb + Send + Sync
+pub trait DatasetDb<S: Session>:
+    DatasetStore<S> + DatasetProvider<S> + DatasetProviderDb<S> + UploadDb<S> + Send + Sync
 {
 }
 
 /// Storage and access of external dataset providers
 #[async_trait]
-pub trait DatasetProviderDb {
+pub trait DatasetProviderDb<S: Session> {
     /// Add an external dataset `provider` by `user`
     // TODO: require special privilege to be able to add external dataset provider and to access external data in general
     async fn add_dataset_provider(
         &mut self,
-        user: UserId,
+        session: &S,
         provider: Validated<AddDatasetProvider>,
     ) -> Result<DatasetProviderId>;
 
     /// List available providers for `user` filtered by `options`
     async fn list_dataset_providers(
         &self,
-        user: UserId,
+        session: &S,
         options: Validated<DatasetProviderListOptions>,
     ) -> Result<Vec<DatasetProviderListing>>;
 
     /// Get dataset `provider` for `user`
     async fn dataset_provider(
         &self,
-        user: UserId,
+        session: &S,
         provider: DatasetProviderId,
-    ) -> Result<&dyn DatasetProvider>;
+    ) -> Result<&dyn DatasetProvider<S>>;
 }
 
 /// Defines the type of meta data a `DatasetDB` is able to store
@@ -235,10 +235,10 @@ pub trait DatasetStorer: Send + Sync {
 /// Allow storage of meta data of a particular storage type, e.g. `HashMapStorable` meta data for
 /// `HashMapDatasetDB`
 #[async_trait]
-pub trait DatasetStore: DatasetStorer {
+pub trait DatasetStore<S: Session>: DatasetStorer {
     async fn add_dataset(
         &mut self,
-        user: UserId,
+        session: &S,
         dataset: Validated<AddDataset>,
         meta_data: Self::StorageType,
     ) -> Result<DatasetId>;
@@ -246,32 +246,4 @@ pub trait DatasetStore: DatasetStorer {
     /// turn given `meta` data definition into the corresponding `StorageType` for the `DatasetStore`
     /// for use in the `add_dataset` method
     fn wrap_meta_data(&self, meta: MetaDataDefinition) -> Self::StorageType;
-}
-
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
-pub enum DatasetPermission {
-    Read,
-    Write,
-    Owner,
-}
-
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
-pub struct UserDatasetPermission {
-    pub user: UserId,
-    pub dataset: InternalDatasetId,
-    pub permission: DatasetPermission,
-}
-
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
-pub enum DatasetProviderPermission {
-    Read,
-    Write,
-    Owner,
-}
-
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
-pub struct UserDatasetProviderPermission {
-    pub user: UserId,
-    pub external_provider: DatasetProviderId,
-    pub permission: DatasetProviderPermission,
 }

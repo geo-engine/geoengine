@@ -1,15 +1,12 @@
+use crate::contexts::SimpleContext;
+use crate::contexts::SimpleSession;
 use crate::datasets::storage::AddDataset;
 use crate::datasets::storage::DatasetStore;
 use crate::handlers::ErrorResponse;
-use crate::projects::project::{
-    CreateProject, Layer, LayerUpdate, ProjectId, RasterSymbology, STRectangle, Symbology,
-    UpdateProject,
+use crate::projects::{
+    CreateProject, Layer, LayerUpdate, ProjectDb, ProjectId, RasterSymbology, STRectangle,
+    Symbology, UpdateProject,
 };
-use crate::projects::projectdb::ProjectDb;
-use crate::users::session::Session;
-use crate::users::user::UserId;
-use crate::users::user::{UserCredentials, UserRegistration};
-use crate::users::userdb::UserDb;
 use crate::util::user_input::UserInput;
 use crate::util::Identifier;
 use crate::workflows::registry::WorkflowRegistry;
@@ -28,43 +25,15 @@ use warp::http::Response;
 use warp::hyper::body::Bytes;
 
 #[allow(clippy::missing_panics_doc)]
-pub async fn create_session_helper<C: Context>(ctx: &C) -> Session {
-    ctx.user_db()
-        .write()
-        .await
-        .register(
-            UserRegistration {
-                email: "foo@bar.de".to_string(),
-                password: "secret123".to_string(),
-                real_name: "Foo Bar".to_string(),
-            }
-            .validated()
-            .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    ctx.user_db()
-        .write()
-        .await
-        .login(UserCredentials {
-            email: "foo@bar.de".to_string(),
-            password: "secret123".to_string(),
-        })
-        .await
-        .unwrap()
-}
-
-#[allow(clippy::missing_panics_doc)]
-pub async fn create_project_helper<C: Context>(ctx: &C) -> (Session, ProjectId) {
-    let session = create_session_helper(ctx).await;
+pub async fn create_project_helper<C: SimpleContext>(ctx: &C) -> (SimpleSession, ProjectId) {
+    let session = ctx.default_session();
 
     let project = ctx
         .project_db()
         .write()
         .await
         .create(
-            session.user.id,
+            &session,
             CreateProject {
                 name: "Test".to_string(),
                 description: "Foo".to_string(),
@@ -86,7 +55,7 @@ pub async fn create_project_helper<C: Context>(ctx: &C) -> (Session, ProjectId) 
         .await
         .unwrap();
 
-    (session, project)
+    (session.clone(), project)
 }
 
 pub fn update_project_helper(project: ProjectId) -> UpdateProject {
@@ -147,7 +116,7 @@ pub async fn add_ndvi_to_datasets(ctx: &InMemoryContext) -> DatasetId {
     ctx.dataset_db_ref_mut()
         .await
         .add_dataset(
-            UserId::new(),
+            &SimpleSession::default(),
             ndvi.properties
                 .validated()
                 .expect("valid dataset description"),

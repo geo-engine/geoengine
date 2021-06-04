@@ -4,12 +4,12 @@ use async_trait::async_trait;
 use pwhash::bcrypt;
 use snafu::ensure;
 
-use crate::error;
-use crate::error::Result;
+use crate::contexts::SessionId;
+use crate::error::{self, Result};
 use crate::pro::users::{
-    SessionId, User, UserCredentials, UserDb, UserId, UserInfo, UserRegistration, UserSession,
+    User, UserCredentials, UserDb, UserId, UserInfo, UserRegistration, UserSession,
 };
-use crate::projects::project::{ProjectId, STRectangle};
+use crate::projects::{ProjectId, STRectangle};
 use crate::util::user_input::Validated;
 use geoengine_datatypes::util::Identifier;
 

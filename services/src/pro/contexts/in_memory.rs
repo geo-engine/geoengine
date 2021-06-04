@@ -1,38 +1,39 @@
-use crate::error::Error;
+use crate::contexts::{ExecutionContextImpl, QueryContextImpl};
+use crate::error;
+use crate::pro::contexts::{Context, Db, ProContext};
+use crate::pro::datasets::ProHashMapDatasetDb;
+use crate::pro::projects::ProHashMapProjectDb;
+use crate::pro::users::{HashMapUserDb, UserDb, UserSession};
+use crate::util::config;
+use crate::workflows::registry::HashMapRegistry;
 use crate::{
     datasets::add_from_directory::add_datasets_from_directory, error::Result,
     util::dataset_defs_dir,
 };
-use crate::{projects::hashmap_projectdb::HashMapProjectDb, workflows::registry::HashMapRegistry};
 use async_trait::async_trait;
-use tokio::sync::{Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
-
-use super::SimpleContext;
-use super::{Context, Db, SimpleSession};
-use crate::contexts::{ExecutionContextImpl, QueryContextImpl, Session, SessionId};
-use crate::datasets::in_memory::HashMapDatasetDb;
-use crate::util::config;
 use geoengine_operators::concurrency::ThreadPool;
-use std::borrow::Borrow;
+use snafu::ResultExt;
 use std::sync::Arc;
+use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 /// A context with references to in-memory versions of the individual databases.
 #[derive(Clone, Default)]
-pub struct InMemoryContext {
-    project_db: Db<HashMapProjectDb>,
+pub struct ProInMemoryContext {
+    user_db: Db<HashMapUserDb>,
+    project_db: Db<ProHashMapProjectDb>,
     workflow_registry: Db<HashMapRegistry>,
-    dataset_db: Db<HashMapDatasetDb>,
-    default_session: Arc<Mutex<SimpleSession>>,
+    dataset_db: Db<ProHashMapDatasetDb>,
+    session: Option<UserSession>,
     thread_pool: Arc<ThreadPool>,
 }
 
-impl InMemoryContext {
+impl ProInMemoryContext {
     #[allow(clippy::too_many_lines)]
     pub async fn new_with_data() -> Self {
-        let mut db = HashMapDatasetDb::default();
+        let mut db = ProHashMapDatasetDb::default();
         add_datasets_from_directory(&mut db, dataset_defs_dir()).await;
 
-        InMemoryContext {
+        Self {
             dataset_db: Arc::new(RwLock::new(db)),
             ..Default::default()
         }
@@ -40,13 +41,28 @@ impl InMemoryContext {
 }
 
 #[async_trait]
-impl Context for InMemoryContext {
-    type Session = SimpleSession;
-    type ProjectDB = HashMapProjectDb;
+impl ProContext for ProInMemoryContext {
+    type UserDB = HashMapUserDb;
+
+    fn user_db(&self) -> Db<Self::UserDB> {
+        self.user_db.clone()
+    }
+    async fn user_db_ref(&self) -> RwLockReadGuard<'_, Self::UserDB> {
+        self.user_db.read().await
+    }
+    async fn user_db_ref_mut(&self) -> RwLockWriteGuard<'_, Self::UserDB> {
+        self.user_db.write().await
+    }
+}
+
+#[async_trait]
+impl Context for ProInMemoryContext {
+    type Session = UserSession;
+    type ProjectDB = ProHashMapProjectDb;
     type WorkflowRegistry = HashMapRegistry;
-    type DatasetDB = HashMapDatasetDb;
+    type DatasetDB = ProHashMapDatasetDb;
     type QueryContext = QueryContextImpl;
-    type ExecutionContext = ExecutionContextImpl<SimpleSession, HashMapDatasetDb>;
+    type ExecutionContext = ExecutionContextImpl<UserSession, ProHashMapDatasetDb>;
 
     fn project_db(&self) -> Db<Self::ProjectDB> {
         self.project_db.clone()
@@ -85,34 +101,25 @@ impl Context for InMemoryContext {
         ))
     }
 
-    fn execution_context(&self, session: SimpleSession) -> Result<Self::ExecutionContext> {
-        Ok(ExecutionContextImpl::<SimpleSession, HashMapDatasetDb> {
-            dataset_db: self.dataset_db.clone(),
-            thread_pool: self.thread_pool.clone(),
-            session,
-        })
+    fn execution_context(&self, session: UserSession) -> Result<Self::ExecutionContext> {
+        Ok(
+            ExecutionContextImpl::<UserSession, ProHashMapDatasetDb>::new(
+                self.dataset_db.clone(),
+                self.thread_pool.clone(),
+                session,
+            ),
+        )
     }
 
-    async fn session_id_to_session(&self, session_id: SessionId) -> Result<Self::Session> {
-        let default_session = self.default_session().await;
-
-        if default_session.id() != session_id {
-            return Err(Error::Authorization {
-                source: Box::new(Error::InvalidSession),
-            });
-        }
-
-        Ok(default_session.clone())
-    }
-}
-
-#[async_trait]
-impl SimpleContext for InMemoryContext {
-    async fn default_session(&self) -> &SimpleSession {
-        self.default_session.lock().await.borrow()
-    }
-
-    fn set_default_session(&mut self, session: SimpleSession) {
-        *self.default_session.get_mut() = session;
+    async fn session_id_to_session(
+        &self,
+        session_id: crate::contexts::SessionId,
+    ) -> Result<Self::Session> {
+        self.user_db_ref()
+            .await
+            .session(session_id)
+            .await
+            .map_err(Box::new)
+            .context(error::Authorization)
     }
 }

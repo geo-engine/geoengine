@@ -1,13 +1,16 @@
-use crate::contexts::Session;
 use crate::error;
 use crate::error::Result;
-use crate::handlers::{authenticate, Context};
+use crate::handlers::authenticate;
+use crate::pro::contexts::ProContext;
 use crate::pro::users::UserCredentials;
+use crate::pro::users::UserDb;
 use crate::pro::users::UserRegistration;
 use crate::pro::users::UserSession;
-use crate::projects::{ProjectId, STRectangle};
+use crate::projects::ProjectId;
+use crate::projects::STRectangle;
 use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
+
 use snafu::ResultExt;
 use uuid::Uuid;
 use warp::reply::Reply;
@@ -39,7 +42,7 @@ use warp::Filter;
 ///
 /// This call fails if the [`UserRegistration`] is invalid
 /// or an account with the given e-mail already exists.
-pub(crate) fn register_user_handler<C: Context>(
+pub(crate) fn register_user_handler<C: ProContext>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::path("user")
@@ -50,50 +53,13 @@ pub(crate) fn register_user_handler<C: Context>(
 }
 
 // TODO: move into handler once async closures are available?
-async fn register_user<C: Context>(
+async fn register_user<C: ProContext>(
     user: UserRegistration,
     ctx: C,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let user = user.validated()?;
     let id = ctx.user_db_ref_mut().await.register(user).await?;
     Ok(warp::reply::json(&IdResponse::from(id)))
-}
-
-/// Creates session for anonymous user.
-///
-/// # Example
-///
-/// ```text
-/// POST /anonymous
-/// ```
-/// Response:
-/// ```text
-/// {
-///   "id": "2fee8652-3192-4d3e-8adc-14257064224a",
-///   "user": {
-///     "id": "744b83ff-2c5b-401a-b4bf-2ba7213ad5d5",
-///     "email": null,
-///     "realName": null
-///   },
-///   "created": "2021-04-18T16:54:55.728758Z",
-///   "validUntil": "2021-04-18T17:54:55.730196200Z",
-///   "project": null,
-///   "view": null
-/// }
-/// ```
-pub(crate) fn anonymous_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    warp::path!("anonymous")
-        .and(warp::post())
-        .and(warp::any().map(move || ctx.clone()))
-        .and_then(anonymous)
-}
-
-// TODO: move into handler once async closures are available?
-async fn anonymous<C: Context>(ctx: C) -> Result<impl warp::Reply, warp::Rejection> {
-    let session = ctx.user_db_ref_mut().await.anonymous().await?;
-    Ok(warp::reply::json(&session))
 }
 
 /// Creates a session by providing [`UserCredentials`].
@@ -127,7 +93,7 @@ async fn anonymous<C: Context>(ctx: C) -> Result<impl warp::Reply, warp::Rejecti
 /// # Errors
 ///
 /// This call fails if the [`UserCredentials`] are invalid.
-pub(crate) fn login_handler<C: Context>(
+pub(crate) fn login_handler<C: ProContext>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::path("login")
@@ -138,7 +104,7 @@ pub(crate) fn login_handler<C: Context>(
 }
 
 // TODO: move into handler once async closures are available?
-async fn login<C: Context>(
+async fn login<C: ProContext>(
     user: UserCredentials,
     ctx: C,
 ) -> Result<impl warp::Reply, warp::Rejection> {
@@ -164,7 +130,7 @@ async fn login<C: Context>(
 /// # Errors
 ///
 /// This call fails if the session is invalid.
-pub(crate) fn logout_handler<C: Context>(
+pub(crate) fn logout_handler<C: ProContext>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::path("logout")
@@ -175,7 +141,7 @@ pub(crate) fn logout_handler<C: Context>(
 }
 
 // TODO: move into handler once async closures are available?
-async fn logout<C: Context>(
+async fn logout<C: ProContext>(
     session: UserSession,
     ctx: C,
 ) -> Result<impl warp::Reply, warp::Rejection> {
@@ -183,44 +149,40 @@ async fn logout<C: Context>(
     Ok(warp::reply().into_response())
 }
 
-/// Retrieves details about the [Session].
+/// Creates session for anonymous user.
 ///
 /// # Example
 ///
 /// ```text
-/// GET /session
-/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
+/// POST /anonymous
 /// ```
 /// Response:
 /// ```text
 /// {
-///   "id": "29fb1e93-7b6b-466f-952a-fdde87736c62",
+///   "id": "2fee8652-3192-4d3e-8adc-14257064224a",
 ///   "user": {
-///     "id": "f33429a5-d207-4e59-827d-fc48f9630c9c",
-///     "email": "foo@bar.de",
-///     "realName": "Foo Bar"
+///     "id": "744b83ff-2c5b-401a-b4bf-2ba7213ad5d5",
+///     "email": null,
+///     "realName": null
 ///   },
-///   "created": "2021-04-18T17:20:44.190720500Z",
-///   "validUntil": "2021-04-18T18:20:44.190726700Z",
+///   "created": "2021-04-18T16:54:55.728758Z",
+///   "validUntil": "2021-04-18T17:54:55.730196200Z",
 ///   "project": null,
 ///   "view": null
 /// }
 /// ```
-///
-/// # Errors
-///
-/// This call fails if the session is invalid.
-pub(crate) fn session_handler<C: Context>(
+pub(crate) fn anonymous_handler<C: ProContext>(
     ctx: C,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    warp::path("session")
-        .and(warp::get())
-        .and(authenticate(ctx))
-        .and_then(session)
+    warp::path!("anonymous")
+        .and(warp::post())
+        .and(warp::any().map(move || ctx.clone()))
+        .and_then(anonymous)
 }
 
 // TODO: move into handler once async closures are available?
-async fn session<S: Session>(session: S) -> Result<impl warp::Reply, warp::Rejection> {
+async fn anonymous<C: ProContext>(ctx: C) -> Result<impl warp::Reply, warp::Rejection> {
+    let session = ctx.user_db_ref_mut().await.anonymous().await?;
     Ok(warp::reply::json(&session))
 }
 
@@ -236,7 +198,7 @@ async fn session<S: Session>(session: S) -> Result<impl warp::Reply, warp::Rejec
 /// # Errors
 ///
 /// This call fails if the session is invalid.
-pub(crate) fn session_project_handler<C: Context>(
+pub(crate) fn session_project_handler<C: ProContext>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::path!("session" / "project" / Uuid)
@@ -248,9 +210,9 @@ pub(crate) fn session_project_handler<C: Context>(
 }
 
 // TODO: move into handler once async closures are available?
-async fn session_project<S: Session, C: Context>(
+async fn session_project<C: ProContext>(
     project: ProjectId,
-    session: S,
+    session: UserSession,
     ctx: C,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     ctx.user_db_ref_mut()
@@ -261,6 +223,7 @@ async fn session_project<S: Session, C: Context>(
     Ok(warp::reply())
 }
 
+// TODO: /view instead of /session/view
 /// Sets the active view of the session.
 ///
 /// # Example
@@ -285,7 +248,7 @@ async fn session_project<S: Session, C: Context>(
 /// # Errors
 ///
 /// This call fails if the session is invalid.
-pub(crate) fn session_view_handler<C: Context>(
+pub(crate) fn session_view_handler<C: ProContext>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::path!("session" / "view")
@@ -297,8 +260,8 @@ pub(crate) fn session_view_handler<C: Context>(
 }
 
 // TODO: move into handler once async closures are available?
-async fn session_view<S: Session, C: Context>(
-    session: S,
+async fn session_view<C: ProContext>(
+    session: C::Session,
     ctx: C,
     view: STRectangle,
 ) -> Result<impl warp::Reply, warp::Rejection> {
@@ -313,21 +276,24 @@ async fn session_view<S: Session, C: Context>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::SimpleSession;
+
+    use crate::contexts::Session;
+    use crate::handlers::handle_rejection;
+    use crate::handlers::session::session_handler;
     use crate::handlers::ErrorResponse;
+    use crate::pro::contexts::ProInMemoryContext;
     use crate::pro::users::UserId;
-    use crate::projects::STRectangle;
-    use crate::util::tests::{
-        check_allowed_http_methods, create_project_helper, create_session_helper,
-    };
+    use crate::pro::util::tests::create_project_helper;
+    use crate::pro::util::tests::create_session_helper;
+    use crate::util::tests::check_allowed_http_methods;
     use crate::util::user_input::Validated;
-    use crate::{contexts::InMemoryContext, handlers::handle_rejection};
+
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
     use serde_json::json;
     use warp::http::Response;
     use warp::hyper::body::Bytes;
 
-    async fn register_test_helper<C: Context>(
+    async fn register_test_helper<C: ProContext>(
         ctx: C,
         method: &str,
         email: &str,
@@ -350,7 +316,7 @@ mod tests {
 
     #[tokio::test]
     async fn register() {
-        let ctx = InMemoryContext::default();
+        let ctx = ProInMemoryContext::default();
 
         let res = register_test_helper(ctx, "POST", "foo@bar.de").await;
 
@@ -362,7 +328,7 @@ mod tests {
 
     #[tokio::test]
     async fn register_fail() {
-        let ctx = InMemoryContext::default();
+        let ctx = ProInMemoryContext::default();
 
         let res = register_test_helper(ctx, "POST", "notanemail").await;
 
@@ -376,7 +342,7 @@ mod tests {
 
     #[tokio::test]
     async fn register_duplicate_email() {
-        let ctx = InMemoryContext::default();
+        let ctx = ProInMemoryContext::default();
 
         register_test_helper(ctx.clone(), "POST", "foo@bar.de").await;
 
@@ -393,7 +359,7 @@ mod tests {
 
     #[tokio::test]
     async fn register_invalid_method() {
-        let ctx = InMemoryContext::default();
+        let ctx = ProInMemoryContext::default();
 
         check_allowed_http_methods(
             |method| register_test_helper(ctx.clone(), method, "foo@bar.de"),
@@ -404,7 +370,7 @@ mod tests {
 
     #[tokio::test]
     async fn register_invalid_body() {
-        let ctx = InMemoryContext::default();
+        let ctx = ProInMemoryContext::default();
 
         // register user
         let res = warp::test::request()
@@ -425,7 +391,7 @@ mod tests {
 
     #[tokio::test]
     async fn register_missing_fields() {
-        let ctx = InMemoryContext::default();
+        let ctx = ProInMemoryContext::default();
 
         let user = json!({
             "password": "secret123",
@@ -451,7 +417,7 @@ mod tests {
 
     #[tokio::test]
     async fn register_invalid_type() {
-        let ctx = InMemoryContext::default();
+        let ctx = ProInMemoryContext::default();
 
         // register user
         let res = warp::test::request()
@@ -471,7 +437,7 @@ mod tests {
     }
 
     async fn login_test_helper(method: &str, password: &str) -> Response<Bytes> {
-        let ctx = InMemoryContext::default();
+        let ctx = ProInMemoryContext::default();
 
         let user = Validated {
             user_input: UserRegistration {
@@ -527,7 +493,7 @@ mod tests {
 
     #[tokio::test]
     async fn login_invalid_body() {
-        let ctx = InMemoryContext::default();
+        let ctx = ProInMemoryContext::default();
 
         let res = warp::test::request()
             .method("POST")
@@ -547,7 +513,7 @@ mod tests {
 
     #[tokio::test]
     async fn login_missing_fields() {
-        let ctx = InMemoryContext::default();
+        let ctx = ProInMemoryContext::default();
 
         let user = Validated {
             user_input: UserRegistration {
@@ -580,7 +546,7 @@ mod tests {
     }
 
     async fn logout_test_helper(method: &str) -> Response<Bytes> {
-        let ctx = InMemoryContext::default();
+        let ctx = ProInMemoryContext::default();
 
         let user = Validated {
             user_input: UserRegistration {
@@ -627,7 +593,7 @@ mod tests {
 
     #[tokio::test]
     async fn logout_missing_header() {
-        let ctx = InMemoryContext::default();
+        let ctx = ProInMemoryContext::default();
 
         let res = warp::test::request()
             .method("POST")
@@ -645,7 +611,7 @@ mod tests {
 
     #[tokio::test]
     async fn logout_wrong_token() {
-        let ctx = InMemoryContext::default();
+        let ctx = ProInMemoryContext::default();
 
         let res = warp::test::request()
             .method("POST")
@@ -662,7 +628,7 @@ mod tests {
 
     #[tokio::test]
     async fn logout_wrong_scheme() {
-        let ctx = InMemoryContext::default();
+        let ctx = ProInMemoryContext::default();
 
         let res = warp::test::request()
             .method("POST")
@@ -681,7 +647,7 @@ mod tests {
 
     #[tokio::test]
     async fn logout_invalid_token() {
-        let ctx = InMemoryContext::default();
+        let ctx = ProInMemoryContext::default();
 
         let res = warp::test::request()
             .method("POST")
@@ -705,7 +671,7 @@ mod tests {
 
     #[tokio::test]
     async fn session() {
-        let ctx = InMemoryContext::default();
+        let ctx = ProInMemoryContext::default();
 
         let session = create_session_helper(&ctx).await;
 
@@ -720,7 +686,7 @@ mod tests {
             .await;
 
         let body = std::str::from_utf8(&res.body()).unwrap();
-        let session: SimpleSession = serde_json::from_str(body).unwrap();
+        let session: UserSession = serde_json::from_str(body).unwrap();
 
         ctx.user_db()
             .write()
@@ -744,7 +710,7 @@ mod tests {
 
     #[tokio::test]
     async fn session_view_project() {
-        let ctx = InMemoryContext::default();
+        let ctx = ProInMemoryContext::default();
 
         let (session, project) = create_project_helper(&ctx).await;
 
@@ -797,33 +763,5 @@ mod tests {
                 .view,
             Some(rect)
         );
-    }
-
-    async fn anonymous_test_helper(method: &str) -> Response<Bytes> {
-        let ctx = InMemoryContext::default();
-
-        warp::test::request()
-            .method(method)
-            .path("/anonymous")
-            .reply(&anonymous_handler(ctx).recover(handle_rejection))
-            .await
-    }
-
-    #[tokio::test]
-    async fn anonymous() {
-        let res = anonymous_test_helper("POST").await;
-
-        assert_eq!(res.status(), 200);
-
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        let session = serde_json::from_str::<SimpleSession>(&body).unwrap();
-
-        assert!(session.user.real_name.is_none());
-        assert!(session.user.email.is_none());
-    }
-
-    #[tokio::test]
-    async fn anonymous_invalid_method() {
-        check_allowed_http_methods(anonymous_test_helper, &["POST"]).await;
     }
 }

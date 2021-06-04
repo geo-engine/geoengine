@@ -1,11 +1,13 @@
-use crate::contexts::SimpleSession;
 use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider, OrderBy};
 use crate::datasets::storage::{
     AddDataset, AddDatasetProvider, Dataset, DatasetDb, DatasetProviderDb,
     DatasetProviderListOptions, DatasetProviderListing, DatasetStore, DatasetStorer,
+    MetaDataDefinition,
 };
+use crate::datasets::upload::{Upload, UploadDb, UploadId};
 use crate::error;
 use crate::error::Result;
+use crate::pro::users::UserSession;
 use crate::util::user_input::Validated;
 use async_trait::async_trait;
 use geoengine_datatypes::{
@@ -20,13 +22,8 @@ use geoengine_operators::source::{GdalLoadingInfo, GdalMetaDataRegular, OgrSourc
 use geoengine_operators::{mock::MockDatasetDataSourceLoadingInfo, source::GdalMetaDataStatic};
 use std::collections::HashMap;
 
-use super::{
-    storage::MetaDataDefinition,
-    upload::{Upload, UploadDb, UploadId},
-};
-
 #[derive(Default)]
-pub struct HashMapDatasetDb {
+pub struct ProHashMapDatasetDb {
     datasets: Vec<Dataset>,
     ogr_datasets:
         HashMap<InternalDatasetId, StaticMetaData<OgrSourceDataset, VectorResultDescriptor>>,
@@ -39,13 +36,13 @@ pub struct HashMapDatasetDb {
     uploads: HashMap<UploadId, Upload>,
 }
 
-impl DatasetDb<SimpleSession> for HashMapDatasetDb {}
+impl DatasetDb<UserSession> for ProHashMapDatasetDb {}
 
 #[async_trait]
-impl DatasetProviderDb<SimpleSession> for HashMapDatasetDb {
+impl DatasetProviderDb<UserSession> for ProHashMapDatasetDb {
     async fn add_dataset_provider(
         &mut self,
-        _session: &SimpleSession,
+        _session: &UserSession,
         _provider: Validated<AddDatasetProvider>,
     ) -> Result<DatasetProviderId> {
         todo!()
@@ -53,7 +50,7 @@ impl DatasetProviderDb<SimpleSession> for HashMapDatasetDb {
 
     async fn list_dataset_providers(
         &self,
-        _session: &SimpleSession,
+        _session: &UserSession,
         _options: Validated<DatasetProviderListOptions>,
     ) -> Result<Vec<DatasetProviderListing>> {
         todo!()
@@ -61,23 +58,23 @@ impl DatasetProviderDb<SimpleSession> for HashMapDatasetDb {
 
     async fn dataset_provider(
         &self,
-        _session: &SimpleSession,
+        _session: &UserSession,
         _provider: DatasetProviderId,
-    ) -> Result<&dyn DatasetProvider<SimpleSession>> {
+    ) -> Result<&dyn DatasetProvider<UserSession>> {
         todo!()
     }
 }
 
-pub trait HashMapStorable: Send + Sync {
-    fn store(&self, id: InternalDatasetId, db: &mut HashMapDatasetDb) -> TypedResultDescriptor;
+pub trait ProHashMapStorable: Send + Sync {
+    fn store(&self, id: InternalDatasetId, db: &mut ProHashMapDatasetDb) -> TypedResultDescriptor;
 }
 
-impl DatasetStorer for HashMapDatasetDb {
-    type StorageType = Box<dyn HashMapStorable>;
+impl DatasetStorer for ProHashMapDatasetDb {
+    type StorageType = Box<dyn ProHashMapStorable>;
 }
 
-impl HashMapStorable for MetaDataDefinition {
-    fn store(&self, id: InternalDatasetId, db: &mut HashMapDatasetDb) -> TypedResultDescriptor {
+impl ProHashMapStorable for MetaDataDefinition {
+    fn store(&self, id: InternalDatasetId, db: &mut ProHashMapDatasetDb) -> TypedResultDescriptor {
         match self {
             MetaDataDefinition::MockMetaData(d) => d.store(id, db),
             MetaDataDefinition::OgrMetaData(d) => d.store(id, db),
@@ -87,41 +84,43 @@ impl HashMapStorable for MetaDataDefinition {
     }
 }
 
-impl HashMapStorable for StaticMetaData<OgrSourceDataset, VectorResultDescriptor> {
-    fn store(&self, id: InternalDatasetId, db: &mut HashMapDatasetDb) -> TypedResultDescriptor {
+impl ProHashMapStorable for StaticMetaData<OgrSourceDataset, VectorResultDescriptor> {
+    fn store(&self, id: InternalDatasetId, db: &mut ProHashMapDatasetDb) -> TypedResultDescriptor {
         db.ogr_datasets.insert(id, self.clone());
         self.result_descriptor.clone().into()
     }
 }
 
-impl HashMapStorable for StaticMetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor> {
-    fn store(&self, id: InternalDatasetId, db: &mut HashMapDatasetDb) -> TypedResultDescriptor {
+impl ProHashMapStorable
+    for StaticMetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>
+{
+    fn store(&self, id: InternalDatasetId, db: &mut ProHashMapDatasetDb) -> TypedResultDescriptor {
         db.mock_datasets.insert(id, self.clone());
         self.result_descriptor.clone().into()
     }
 }
 
-impl HashMapStorable for GdalMetaDataRegular {
-    fn store(&self, id: InternalDatasetId, db: &mut HashMapDatasetDb) -> TypedResultDescriptor {
+impl ProHashMapStorable for GdalMetaDataRegular {
+    fn store(&self, id: InternalDatasetId, db: &mut ProHashMapDatasetDb) -> TypedResultDescriptor {
         db.gdal_datasets.insert(id, Box::new(self.clone()));
         self.result_descriptor.clone().into()
     }
 }
 
-impl HashMapStorable for GdalMetaDataStatic {
-    fn store(&self, id: InternalDatasetId, db: &mut HashMapDatasetDb) -> TypedResultDescriptor {
+impl ProHashMapStorable for GdalMetaDataStatic {
+    fn store(&self, id: InternalDatasetId, db: &mut ProHashMapDatasetDb) -> TypedResultDescriptor {
         db.gdal_datasets.insert(id, Box::new(self.clone()));
         self.result_descriptor.clone().into()
     }
 }
 
 #[async_trait]
-impl DatasetStore<SimpleSession> for HashMapDatasetDb {
+impl DatasetStore<UserSession> for ProHashMapDatasetDb {
     async fn add_dataset(
         &mut self,
-        _session: &SimpleSession,
+        _session: &UserSession,
         dataset: Validated<AddDataset>,
-        meta_data: Box<dyn HashMapStorable>,
+        meta_data: Box<dyn ProHashMapStorable>,
     ) -> Result<DatasetId> {
         let dataset = dataset.user_input;
         let id = dataset
@@ -147,10 +146,10 @@ impl DatasetStore<SimpleSession> for HashMapDatasetDb {
 }
 
 #[async_trait]
-impl DatasetProvider<SimpleSession> for HashMapDatasetDb {
+impl DatasetProvider<UserSession> for ProHashMapDatasetDb {
     async fn list(
         &self,
-        _session: &SimpleSession,
+        _session: &UserSession,
         options: Validated<DatasetListOptions>,
     ) -> Result<Vec<DatasetListing>> {
         // TODO: permissions
@@ -182,7 +181,7 @@ impl DatasetProvider<SimpleSession> for HashMapDatasetDb {
         Ok(list)
     }
 
-    async fn load(&self, _session: &SimpleSession, dataset: &DatasetId) -> Result<Dataset> {
+    async fn load(&self, _session: &UserSession, dataset: &DatasetId) -> Result<Dataset> {
         // TODO: permissions
 
         self.datasets
@@ -194,7 +193,7 @@ impl DatasetProvider<SimpleSession> for HashMapDatasetDb {
 }
 
 impl MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>
-    for HashMapDatasetDb
+    for ProHashMapDatasetDb
 {
     fn meta_data(
         &self,
@@ -218,7 +217,7 @@ impl MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>
     }
 }
 
-impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor> for HashMapDatasetDb {
+impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor> for ProHashMapDatasetDb {
     fn meta_data(
         &self,
         dataset: &DatasetId,
@@ -241,7 +240,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor> for HashMapDatas
     }
 }
 
-impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor> for HashMapDatasetDb {
+impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor> for ProHashMapDatasetDb {
     fn meta_data(
         &self,
         dataset: &DatasetId,
@@ -268,8 +267,9 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor> for HashMapDatase
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::{Context, InMemoryContext};
+    use crate::contexts::{Context, MockableSession};
     use crate::datasets::listing::OrderBy;
+    use crate::pro::contexts::ProInMemoryContext;
     use crate::util::user_input::UserInput;
     use geoengine_datatypes::collections::VectorDataType;
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
@@ -277,9 +277,9 @@ mod tests {
 
     #[tokio::test]
     async fn add_ogr_and_list() -> Result<()> {
-        let ctx = InMemoryContext::default();
+        let ctx = ProInMemoryContext::default();
 
-        let session = SimpleSession::default();
+        let session = UserSession::mock(); // TODO: find suitable way for public data
 
         let descriptor = VectorResultDescriptor {
             data_type: VectorDataType::Data,
@@ -364,8 +364,8 @@ mod tests {
 }
 
 #[async_trait]
-impl UploadDb<SimpleSession> for HashMapDatasetDb {
-    async fn get_upload(&self, _session: &SimpleSession, upload: UploadId) -> Result<Upload> {
+impl UploadDb<UserSession> for ProHashMapDatasetDb {
+    async fn get_upload(&self, _session: &UserSession, upload: UploadId) -> Result<Upload> {
         // TODO: user permission
         self.uploads
             .get(&upload)
@@ -373,7 +373,7 @@ impl UploadDb<SimpleSession> for HashMapDatasetDb {
             .ok_or(error::Error::UnknownUploadId)
     }
 
-    async fn create_upload(&mut self, _session: &SimpleSession, upload: Upload) -> Result<()> {
+    async fn create_upload(&mut self, _session: &UserSession, upload: Upload) -> Result<()> {
         // TODO: user permission
         self.uploads.insert(upload.id, upload);
         Ok(())

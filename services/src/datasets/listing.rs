@@ -1,7 +1,7 @@
+use crate::contexts::{Session, SimpleSession};
 use crate::datasets::storage::{AddDatasetProvider, AddMockDatasetProvider, Dataset};
 use crate::error;
 use crate::error::Result;
-use crate::users::user::UserId;
 use crate::util::config::{get_config_element, DatasetService};
 use crate::util::user_input::{UserInput, Validated};
 use async_trait::async_trait;
@@ -69,7 +69,7 @@ pub enum OrderBy {
 
 /// Listing of stored datasets
 #[async_trait]
-pub trait DatasetProvider:
+pub trait DatasetProvider<S: Session>:
     Send
     + Sync
     + MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>
@@ -79,11 +79,11 @@ pub trait DatasetProvider:
     // TODO: filter, paging
     async fn list(
         &self,
-        user: UserId,
+        session: &S,
         options: Validated<DatasetListOptions>,
     ) -> Result<Vec<DatasetListing>>;
 
-    async fn load(&self, user: UserId, dataset: &DatasetId) -> Result<Dataset>;
+    async fn load(&self, session: &S, dataset: &DatasetId) -> Result<Dataset>;
 }
 
 pub enum TypedDatasetProvider {
@@ -99,7 +99,7 @@ impl TypedDatasetProvider {
         }
     }
 
-    pub fn into_box(self) -> Box<dyn DatasetProvider> {
+    pub fn into_box(self) -> Box<dyn DatasetProvider<SimpleSession>> {
         match self {
             TypedDatasetProvider::Mock(provider) => Box::new(provider),
         }
@@ -131,16 +131,16 @@ where
 }
 
 #[async_trait]
-impl DatasetProvider for MockDatasetProvider {
+impl DatasetProvider<SimpleSession> for MockDatasetProvider {
     async fn list(
         &self,
-        _user: UserId,
+        _session: &SimpleSession,
         _options: Validated<DatasetListOptions>,
     ) -> Result<Vec<DatasetListing>> {
         todo!()
     }
 
-    async fn load(&self, _user: UserId, _dataset: &DatasetId) -> Result<Dataset> {
+    async fn load(&self, _session: &SimpleSession, _dataset: &DatasetId) -> Result<Dataset> {
         todo!()
     }
 }

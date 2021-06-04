@@ -1,8 +1,10 @@
+use crate::contexts::SessionId;
 use crate::error::Result;
+use crate::pro::projects::ProjectPermission;
 use crate::pro::users::{
-    SessionId, User, UserCredentials, UserDb, UserId, UserInfo, UserRegistration, UserSession,
+    User, UserCredentials, UserDb, UserId, UserInfo, UserRegistration, UserSession,
 };
-use crate::projects::project::{ProjectId, ProjectPermission, STRectangle};
+use crate::projects::{ProjectId, STRectangle};
 use crate::util::user_input::Validated;
 use crate::util::Identifier;
 use crate::{error, pro::contexts::PostgresContext};

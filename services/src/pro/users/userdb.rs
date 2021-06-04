@@ -1,6 +1,7 @@
+use crate::contexts::SessionId;
 use crate::error::Result;
-use crate::pro::users::{SessionId, UserCredentials, UserId, UserRegistration, UserSession};
-use crate::projects::project::{ProjectId, STRectangle};
+use crate::pro::users::{UserCredentials, UserId, UserRegistration, UserSession};
+use crate::projects::{ProjectId, STRectangle};
 use crate::util::user_input::Validated;
 use async_trait::async_trait;
 
