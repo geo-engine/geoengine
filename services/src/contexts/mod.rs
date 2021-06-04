@@ -35,7 +35,7 @@ pub type Db<T> = Arc<RwLock<T>>;
 // TODO: avoid locking the individual DBs here IF they are already thread safe (e.g. guaranteed by postgres)
 #[async_trait]
 pub trait Context: 'static + Send + Sync + Clone {
-    type Session: MockableSession; // Session;
+    type Session: MockableSession; // TODO: change to `[Session]` when workarounds are gone
     type ProjectDB: ProjectDb<Self::Session>;
     type WorkflowRegistry: WorkflowRegistry;
     type DatasetDB: DatasetDb<Self::Session>;
@@ -58,7 +58,7 @@ pub trait Context: 'static + Send + Sync + Clone {
 
     fn execution_context(&self, session: Self::Session) -> Result<Self::ExecutionContext>;
 
-    async fn session_id_to_session(&self, session_id: SessionId) -> Result<Self::Session>;
+    async fn session_by_id(&self, session_id: SessionId) -> Result<Self::Session>;
 }
 
 pub struct QueryContextImpl {

@@ -1,5 +1,5 @@
 use crate::error::Result;
-use crate::projects::{ProjectDb, ProjectId};
+use crate::projects::{Project, ProjectDb, ProjectId, ProjectVersion};
 use crate::{
     pro::users::{UserId, UserSession},
     projects::{OrderBy, ProjectFilter},
@@ -9,9 +9,26 @@ use async_trait::async_trait;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 
+use super::LoadVersion;
+
 /// Storage of user projects
 #[async_trait]
 pub trait ProProjectDb: ProjectDb<UserSession> {
+    /// Load the the `version` of the `project` for the `user`
+    async fn load_version(
+        &self,
+        session: &UserSession,
+        project: ProjectId,
+        version: LoadVersion,
+    ) -> Result<Project>;
+
+    /// List all versions of the `project` if given `user` has at least read permission
+    async fn versions(
+        &self,
+        session: &UserSession,
+        project: ProjectId,
+    ) -> Result<Vec<ProjectVersion>>;
+
     /// List all permissions of users for the `project` if the `user` is an owner
     async fn list_permissions(
         &self,

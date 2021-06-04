@@ -21,7 +21,6 @@ use geoengine_operators::string_token;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
-use uuid::Uuid;
 
 identifier!(ProjectId);
 
@@ -512,19 +511,6 @@ impl ProjectVersion {
             id: ProjectVersionId::new(),
             changed: chrono::offset::Utc::now(),
         }
-    }
-}
-
-pub enum LoadVersion {
-    Version(ProjectVersionId),
-    Latest,
-}
-
-impl From<Option<Uuid>> for LoadVersion {
-    fn from(id: Option<Uuid>) -> Self {
-        id.map_or(LoadVersion::Latest, |id| {
-            LoadVersion::Version(ProjectVersionId(id))
-        })
     }
 }
 

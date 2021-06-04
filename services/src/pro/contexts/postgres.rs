@@ -343,10 +343,7 @@ where
         todo!()
     }
 
-    async fn session_id_to_session(
-        &self,
-        session_id: crate::contexts::SessionId,
-    ) -> Result<Self::Session> {
+    async fn session_by_id(&self, session_id: crate::contexts::SessionId) -> Result<Self::Session> {
         self.user_db_ref()
             .await
             .session(session_id)
@@ -359,12 +356,11 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pro::projects::{ProProjectDb, UserProjectPermission};
+    use crate::pro::projects::{LoadVersion, ProProjectDb, UserProjectPermission};
     use crate::pro::users::{UserCredentials, UserDb, UserRegistration};
     use crate::projects::{
-        CreateProject, Layer, LayerUpdate, LoadVersion, OrderBy, Plot, PlotUpdate, PointSymbology,
-        ProjectDb, ProjectFilter, ProjectId, ProjectListOptions, ProjectListing, STRectangle,
-        UpdateProject,
+        CreateProject, Layer, LayerUpdate, OrderBy, Plot, PlotUpdate, PointSymbology, ProjectDb,
+        ProjectFilter, ProjectId, ProjectListOptions, ProjectListing, STRectangle, UpdateProject,
     };
     use crate::util::user_input::UserInput;
     use crate::workflows::registry::WorkflowRegistry;
@@ -483,7 +479,7 @@ mod tests {
         assert!(ctx
             .project_db_ref()
             .await
-            .load_latest(session, project_id)
+            .load(session, project_id)
             .await
             .is_err());
     }
@@ -550,7 +546,7 @@ mod tests {
         let project = ctx
             .project_db_ref_mut()
             .await
-            .load(session, project_id, LoadVersion::Latest)
+            .load_version(session, project_id, LoadVersion::Latest)
             .await
             .unwrap();
 

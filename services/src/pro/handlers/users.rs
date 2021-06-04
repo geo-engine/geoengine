@@ -16,8 +16,6 @@ use uuid::Uuid;
 use warp::reply::Reply;
 use warp::Filter;
 
-// TODO: move to pro, create session-handler
-
 /// Registers a user by providing [`UserRegistration`] parameters.
 ///
 /// # Example

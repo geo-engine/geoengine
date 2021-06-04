@@ -132,7 +132,7 @@ pub fn authenticate<C: Context>(
                 .map_err(Box::new)
                 .context(error::Authorization)?;
 
-            ctx.session_id_to_session(token).await.map_err(Into::into)
+            ctx.session_by_id(token).await.map_err(Into::into)
         } else {
             Err(Error::Authorization {
                 source: Box::new(Error::MissingAuthorizationHeader),

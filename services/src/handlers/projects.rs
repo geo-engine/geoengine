@@ -1,7 +1,5 @@
 use crate::handlers::{authenticate, Context};
-use crate::projects::{
-    CreateProject, LoadVersion, ProjectDb, ProjectId, ProjectListOptions, UpdateProject,
-};
+use crate::projects::{CreateProject, ProjectDb, ProjectId, ProjectListOptions, UpdateProject};
 use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
 use uuid::Uuid;
@@ -158,28 +156,24 @@ async fn list_projects<C: Context>(
 pub(crate) fn load_project_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    (warp::path!("project" / Uuid / Uuid).map(|project_id: Uuid, version_id: Uuid| {
-        (ProjectId(project_id), LoadVersion::from(Some(version_id)))
-    }))
-    .or(warp::path!("project" / Uuid)
-        .map(|project_id| (ProjectId(project_id), LoadVersion::Latest)))
-    .unify()
-    .and(warp::get())
-    .and(authenticate(ctx.clone()))
-    .and(warp::any().map(move || ctx.clone()))
-    .and_then(load_project)
+    warp::path!("project" / Uuid)
+        .map(ProjectId)
+        .and(warp::get())
+        .and(authenticate(ctx.clone()))
+        .and(warp::any().map(move || ctx.clone()))
+        .and_then(load_project)
 }
 
 // TODO: move into handler once async closures are available?
 async fn load_project<C: Context>(
-    project: (ProjectId, LoadVersion),
+    project_id: ProjectId,
     session: C::Session,
     ctx: C,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let id = ctx
         .project_db_ref()
         .await
-        .load(&session, project.0, project.1)
+        .load(&session, project_id)
         .await?;
     Ok(warp::reply::json(&id))
 }
@@ -274,56 +268,6 @@ async fn delete_project<C: Context>(
     Ok(warp::reply())
 }
 
-/// Lists all [versions](crate::projects::project::ProjectVersion) of a project.
-///
-/// # Example
-///
-/// ```text
-/// GET /project/versions
-/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
-///
-/// "df4ad02e-0d61-4e29-90eb-dc1259c1f5b9"
-/// ```
-/// Response:
-/// ```text
-/// [
-///   {
-///     "id": "8f4b8683-f92c-4129-a16f-818aeeee484e",
-///     "changed": "2021-04-26T14:05:39.677390600Z",
-///     "author": "5b4466d2-8bab-4ed8-a182-722af3c80958"
-///   },
-///   {
-///     "id": "ced041c7-4b1d-4d13-b076-94596be6a36a",
-///     "changed": "2021-04-26T14:13:10.901912700Z",
-///     "author": "5b4466d2-8bab-4ed8-a182-722af3c80958"
-///   }
-/// ]
-/// ```
-pub(crate) fn project_versions_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path!("project" / "versions")
-        .and(warp::get())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and(warp::body::json())
-        .and_then(project_versions)
-}
-
-// TODO: move into handler once async closures are available?
-async fn project_versions<C: Context>(
-    session: C::Session,
-    ctx: C,
-    project: ProjectId,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    let versions = ctx
-        .project_db_ref_mut()
-        .await
-        .versions(&session, project)
-        .await?;
-    Ok(warp::reply::json(&versions))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -340,9 +284,7 @@ mod tests {
     use crate::workflows::workflow::WorkflowId;
     use crate::{
         contexts::InMemoryContext,
-        projects::{
-            Layer, Project, ProjectId, ProjectListing, ProjectVersion, STRectangle, UpdateProject,
-        },
+        projects::{Layer, Project, ProjectId, ProjectListing, STRectangle, UpdateProject},
     };
     use geoengine_datatypes::operations::image::Colorizer;
     use geoengine_datatypes::primitives::{TimeGranularity, TimeStep};
@@ -634,99 +576,6 @@ mod tests {
         ErrorResponse::assert(&res, 404, "NotFound", "Not Found");
     }
 
-    #[tokio::test]
-    async fn load_version() {
-        let ctx = InMemoryContext::default();
-
-        let (session, project) = create_project_helper(&ctx).await;
-
-        ctx.project_db()
-            .write()
-            .await
-            .update(
-                &session,
-                update_project_helper(project).validated().unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let res = warp::test::request()
-            .method("GET")
-            .path(&format!("/project/{}", project.to_string()))
-            .header("Content-Length", "0")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session.id().to_string()),
-            )
-            .reply(&load_project_handler(ctx.clone()))
-            .await;
-
-        assert_eq!(res.status(), 200);
-
-        let body: String = String::from_utf8(res.body().to_vec()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<Project>(&body).unwrap().name,
-            "TestUpdate"
-        );
-
-        let versions = ctx
-            .project_db()
-            .read()
-            .await
-            .versions(&session, project)
-            .await
-            .unwrap();
-        let version_id = versions.first().unwrap().id;
-
-        let res = warp::test::request()
-            .method("GET")
-            .path(&format!(
-                "/project/{}/{}",
-                project.to_string(),
-                version_id.to_string()
-            ))
-            .header("Content-Length", "0")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session.id().to_string()),
-            )
-            .reply(&load_project_handler(ctx))
-            .await;
-
-        assert_eq!(res.status(), 200);
-
-        let body: String = String::from_utf8(res.body().to_vec()).unwrap();
-        assert_eq!(serde_json::from_str::<Project>(&body).unwrap().name, "Test");
-    }
-
-    #[tokio::test]
-    async fn load_version_not_found() {
-        let ctx = InMemoryContext::default();
-
-        let (session, project) = create_project_helper(&ctx).await;
-
-        let res = warp::test::request()
-            .method("GET")
-            .path(&format!(
-                "/project/{}/00000000-0000-0000-0000-000000000000",
-                project.to_string()
-            ))
-            .header("Content-Length", "0")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session.id().to_string()),
-            )
-            .reply(&load_project_handler(ctx).recover(handle_rejection))
-            .await;
-
-        ErrorResponse::assert(
-            &res,
-            400,
-            "ProjectLoadFailed",
-            "The project failed to load.",
-        );
-    }
-
     async fn update_test_helper(
         method: &str,
     ) -> (InMemoryContext, SimpleSession, ProjectId, Response<Bytes>) {
@@ -761,7 +610,7 @@ mod tests {
             .project_db()
             .read()
             .await
-            .load_latest(&session, project)
+            .load(&session, project)
             .await
             .unwrap();
         assert_eq!(loaded.name, "TestUpdate");
@@ -868,7 +717,7 @@ mod tests {
                 .project_db()
                 .read()
                 .await
-                .load_latest(&session, project_id)
+                .load(&session, project_id)
                 .await
                 .unwrap();
 
@@ -1019,7 +868,7 @@ mod tests {
                 .project_db()
                 .read()
                 .await
-                .load_latest(&session, project_id)
+                .load(&session, project_id)
                 .await
                 .unwrap();
 
@@ -1150,7 +999,7 @@ mod tests {
             .project_db()
             .read()
             .await
-            .load_latest(&session, project)
+            .load(&session, project)
             .await
             .is_err());
 
@@ -1170,81 +1019,6 @@ mod tests {
             400,
             "ProjectDeleteFailed",
             "Failed to delete the project.",
-        );
-    }
-
-    async fn versions_test_helper(method: &str) -> Response<Bytes> {
-        let ctx = InMemoryContext::default();
-
-        let (session, project) = create_project_helper(&ctx).await;
-
-        ctx.project_db()
-            .write()
-            .await
-            .update(
-                &session,
-                update_project_helper(project).validated().unwrap(),
-            )
-            .await
-            .unwrap();
-
-        warp::test::request()
-            .method(method)
-            .path("/project/versions")
-            .header("Content-Length", "0")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session.id().to_string()),
-            )
-            .json(&project)
-            .reply(&project_versions_handler(ctx).recover(handle_rejection))
-            .await
-    }
-
-    #[tokio::test]
-    async fn versions() {
-        let res = versions_test_helper("GET").await;
-
-        assert_eq!(res.status(), 200);
-
-        let body: String = String::from_utf8(res.body().to_vec()).unwrap();
-        assert!(serde_json::from_str::<Vec<ProjectVersion>>(&body).is_ok());
-    }
-
-    #[tokio::test]
-    async fn versions_invalid_method() {
-        check_allowed_http_methods(versions_test_helper, &["GET"]).await;
-    }
-
-    #[tokio::test]
-    async fn versions_missing_header() {
-        let ctx = InMemoryContext::default();
-
-        let (session, project) = create_project_helper(&ctx).await;
-
-        ctx.project_db()
-            .write()
-            .await
-            .update(
-                &session,
-                update_project_helper(project).validated().unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let res = warp::test::request()
-            .method("GET")
-            .path("/project/versions")
-            .header("Content-Length", "0")
-            .json(&project)
-            .reply(&project_versions_handler(ctx).recover(handle_rejection))
-            .await;
-
-        ErrorResponse::assert(
-            &res,
-            401,
-            "MissingAuthorizationHeader",
-            "Header with authorization token not provided.",
         );
     }
 }

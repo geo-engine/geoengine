@@ -3,13 +3,15 @@ use crate::error::Result;
 use crate::pro::projects::{ProProjectDb, ProjectPermission, UserProjectPermission};
 use crate::pro::users::UserSession;
 use crate::projects::{
-    CreateProject, LoadVersion, OrderBy, Project, ProjectDb, ProjectFilter, ProjectId,
-    ProjectListOptions, ProjectListing, ProjectVersion, UpdateProject,
+    CreateProject, OrderBy, Project, ProjectDb, ProjectFilter, ProjectId, ProjectListOptions,
+    ProjectListing, ProjectVersion, UpdateProject,
 };
 use crate::util::user_input::Validated;
 use async_trait::async_trait;
 use snafu::ensure;
 use std::collections::HashMap;
+
+use super::LoadVersion;
 
 #[derive(Default)]
 pub struct ProHashMapProjectDb {
@@ -57,37 +59,6 @@ impl ProjectDb<UserSession> for ProHashMapProjectDb {
             .skip(offset as usize)
             .take(limit as usize)
             .collect())
-    }
-
-    /// Load a project
-    async fn load(
-        &self,
-        session: &UserSession,
-        project: ProjectId,
-        version: LoadVersion,
-    ) -> Result<Project> {
-        ensure!(
-            self.permissions
-                .iter()
-                .any(|p| p.project == project && p.user == session.user.id),
-            error::ProjectLoadFailed
-        );
-        let project_versions = self
-            .projects
-            .get(&project)
-            .ok_or(error::Error::ProjectLoadFailed)?;
-        if let LoadVersion::Version(version) = version {
-            Ok(project_versions
-                .iter()
-                .find(|p| p.version.id == version)
-                .ok_or(error::Error::ProjectLoadFailed)?
-                .clone())
-        } else {
-            Ok(project_versions
-                .last()
-                .ok_or(error::Error::ProjectLoadFailed)?
-                .clone())
-        }
     }
 
     /// Create a project
@@ -153,6 +124,45 @@ impl ProjectDb<UserSession> for ProHashMapProjectDb {
             .ok_or(error::Error::ProjectDeleteFailed)
     }
 
+    async fn load(&self, session: &UserSession, project: ProjectId) -> Result<Project> {
+        self.load_version(session, project, LoadVersion::Latest)
+            .await
+    }
+}
+
+#[async_trait]
+impl ProProjectDb for ProHashMapProjectDb {
+    /// Load a project
+    async fn load_version(
+        &self,
+        session: &UserSession,
+        project: ProjectId,
+        version: LoadVersion,
+    ) -> Result<Project> {
+        ensure!(
+            self.permissions
+                .iter()
+                .any(|p| p.project == project && p.user == session.user.id),
+            error::ProjectLoadFailed
+        );
+        let project_versions = self
+            .projects
+            .get(&project)
+            .ok_or(error::Error::ProjectLoadFailed)?;
+        if let LoadVersion::Version(version) = version {
+            Ok(project_versions
+                .iter()
+                .find(|p| p.version.id == version)
+                .ok_or(error::Error::ProjectLoadFailed)?
+                .clone())
+        } else {
+            Ok(project_versions
+                .last()
+                .ok_or(error::Error::ProjectLoadFailed)?
+                .clone())
+        }
+    }
+
     /// Get the versions of a project
     async fn versions(
         &self,
@@ -175,10 +185,7 @@ impl ProjectDb<UserSession> for ProHashMapProjectDb {
             .map(|p| p.version)
             .collect())
     }
-}
 
-#[async_trait]
-impl ProProjectDb for ProHashMapProjectDb {
     /// List all permissions on a project
     async fn list_permissions(
         &self,
@@ -413,16 +420,13 @@ mod test {
         .unwrap();
 
         let id = project_db.create(&session, create.clone()).await.unwrap();
-        assert!(project_db.load_latest(&session, id).await.is_ok());
+        assert!(project_db.load(&session, id).await.is_ok());
 
         let session2 = create_random_user_session_helper();
         let id = project_db.create(&session2, create).await.unwrap();
-        assert!(project_db.load_latest(&session, id).await.is_err());
+        assert!(project_db.load(&session, id).await.is_err());
 
-        assert!(project_db
-            .load_latest(&session, ProjectId::new())
-            .await
-            .is_err())
+        assert!(project_db.load(&session, ProjectId::new()).await.is_err())
     }
 
     #[tokio::test]
@@ -442,7 +446,7 @@ mod test {
 
         let id = project_db.create(&session, create).await.unwrap();
 
-        assert!(project_db.load_latest(&session, id).await.is_ok())
+        assert!(project_db.load(&session, id).await.is_ok())
     }
 
     #[tokio::test]
@@ -476,10 +480,7 @@ mod test {
 
         project_db.update(&session, update).await.unwrap();
 
-        assert_eq!(
-            project_db.load_latest(&session, id).await.unwrap().name,
-            "Foo"
-        );
+        assert_eq!(project_db.load(&session, id).await.unwrap().name, "Foo");
     }
 
     #[tokio::test]

@@ -4,7 +4,7 @@ use crate::error::{Error, Result};
 use crate::handlers;
 use crate::handlers::handle_rejection;
 use crate::util::config;
-use crate::util::config::{get_config_element, Backend};
+use crate::util::config::get_config_element;
 
 use log::info;
 use snafu::ResultExt;
@@ -52,21 +52,15 @@ pub async fn start_server(
         )
     );
 
-    match web_config.backend {
-        Backend::InMemory => {
-            info!("Using in memory backend");
-            start(
-                shutdown_rx,
-                static_files_dir,
-                bind_address,
-                InMemoryContext::new_with_data().await,
-            )
-            .await
-        }
-        Backend::Postgres => {
-            panic!("Postgres backend was selected but the postgres feature wasn't activated during compilation")
-        }
-    }
+    info!("Using in memory backend");
+
+    start(
+        shutdown_rx,
+        static_files_dir,
+        bind_address,
+        InMemoryContext::new_with_data().await,
+    )
+    .await
 }
 
 async fn start<C>(
@@ -91,7 +85,6 @@ where
         handlers::projects::update_project_handler(ctx.clone()),
         handlers::projects::delete_project_handler(ctx.clone()),
         handlers::projects::load_project_handler(ctx.clone()),
-        handlers::projects::project_versions_handler(ctx.clone()),
         handlers::datasets::get_dataset_handler(ctx.clone()),
         handlers::datasets::auto_create_dataset_handler(ctx.clone()),
         handlers::datasets::create_dataset_handler(ctx.clone()),

@@ -111,10 +111,7 @@ impl Context for ProInMemoryContext {
         )
     }
 
-    async fn session_id_to_session(
-        &self,
-        session_id: crate::contexts::SessionId,
-    ) -> Result<Self::Session> {
+    async fn session_by_id(&self, session_id: crate::contexts::SessionId) -> Result<Self::Session> {
         self.user_db_ref()
             .await
             .session(session_id)

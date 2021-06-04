@@ -4,7 +4,7 @@ use crate::pro::users::UserSession;
 use crate::projects::Layer;
 use crate::projects::Plot;
 use crate::projects::{
-    CreateProject, LoadVersion, Project, ProjectDb, ProjectId, ProjectListOptions, ProjectListing,
+    CreateProject, Project, ProjectDb, ProjectId, ProjectListOptions, ProjectListing,
     ProjectVersion, ProjectVersionId, UpdateProject,
 };
 use crate::util::user_input::Validated;
@@ -25,6 +25,7 @@ use snafu::ResultExt;
 use bb8_postgres::bb8::PooledConnection;
 use bb8_postgres::tokio_postgres::Transaction;
 
+use super::LoadVersion;
 use super::ProProjectDb;
 use super::UserProjectPermission;
 
@@ -216,8 +217,209 @@ where
         Ok(project_listings)
     }
 
+    async fn create(
+        &mut self,
+        session: &UserSession,
+        create: Validated<CreateProject>,
+    ) -> Result<ProjectId> {
+        let mut conn = self.conn_pool.get().await?;
+
+        let project: Project = Project::from_create_project(create.user_input);
+
+        let trans = conn.build_transaction().start().await?;
+
+        let stmt = trans
+            .prepare("INSERT INTO projects (id) VALUES ($1);")
+            .await?;
+
+        trans.execute(&stmt, &[&project.id]).await?;
+
+        let stmt = trans
+            .prepare(
+                "INSERT INTO project_versions (
+                    id,
+                    project_id,
+                    name,
+                    description,
+                    bounds,
+                    time_step,
+                    author_user_id,
+                    changed,
+                    latest)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, TRUE);",
+            )
+            .await?;
+
+        trans
+            .execute(
+                &stmt,
+                &[
+                    &ProjectVersionId::new(),
+                    &project.id,
+                    &project.name,
+                    &project.description,
+                    &project.bounds,
+                    &project.time_step,
+                    &session.user.id,
+                ],
+            )
+            .await?;
+
+        let stmt = trans
+            .prepare(
+                "INSERT INTO user_project_permissions (user_id, project_id, permission) VALUES ($1, $2, $3);",
+            )
+            .await?;
+
+        trans
+            .execute(
+                &stmt,
+                &[&session.user.id, &project.id, &ProjectPermission::Owner],
+            )
+            .await?;
+
+        trans.commit().await?;
+
+        Ok(project.id)
+    }
+
+    async fn load(&self, session: &UserSession, project: ProjectId) -> Result<Project> {
+        self.load_version(session, project, LoadVersion::Latest)
+            .await
+    }
+
     #[allow(clippy::too_many_lines)]
-    async fn load(
+    async fn update(
+        &mut self,
+        session: &UserSession,
+        update: Validated<UpdateProject>,
+    ) -> Result<()> {
+        let update = update.user_input;
+
+        let mut conn = self.conn_pool.get().await?;
+
+        PostgresContext::check_user_project_permission(
+            &conn,
+            session.user.id,
+            update.id,
+            &[ProjectPermission::Write, ProjectPermission::Owner],
+        )
+        .await?;
+
+        let trans = conn.build_transaction().start().await?;
+
+        let project = self.load(&session, update.id).await?; // TODO: move inside transaction?
+
+        let stmt = trans
+            .prepare("UPDATE project_versions SET latest = FALSE WHERE project_id = $1 AND latest IS TRUE;")
+            .await?;
+        trans.execute(&stmt, &[&project.id]).await?;
+
+        let project = project.update_project(update)?;
+
+        let stmt = trans
+            .prepare(
+                "
+                INSERT INTO project_versions (
+                    id,
+                    project_id,
+                    name,
+                    description,
+                    bounds,
+                    time_step,
+                    author_user_id,
+                    changed,
+                    latest)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, TRUE);",
+            )
+            .await?;
+
+        trans
+            .execute(
+                &stmt,
+                &[
+                    &project.version.id,
+                    &project.id,
+                    &project.name,
+                    &project.description,
+                    &project.bounds,
+                    &project.time_step,
+                    &session.user.id,
+                ],
+            )
+            .await?;
+
+        for (idx, layer) in project.layers.iter().enumerate() {
+            let stmt = trans
+                .prepare(
+                    "
+                INSERT INTO project_version_layers (
+                    project_id,
+                    project_version_id,
+                    layer_index,
+                    name,
+                    workflow_id,
+                    symbology,
+                    visibility)
+                VALUES ($1, $2, $3, $4, $5, $6, $7);",
+                )
+                .await?;
+
+            let symbology = serde_json::to_value(&layer.symbology).context(error::SerdeJson)?;
+
+            trans
+                .execute(
+                    &stmt,
+                    &[
+                        &project.id,
+                        &project.version.id,
+                        &(idx as i32),
+                        &layer.name,
+                        &layer.workflow,
+                        &symbology,
+                        &layer.visibility,
+                    ],
+                )
+                .await?;
+        }
+
+        self.update_plots(&trans, &project.id, &project.version.id, &project.plots)
+            .await?;
+
+        trans.commit().await?;
+
+        Ok(())
+    }
+
+    async fn delete(&mut self, session: &UserSession, project: ProjectId) -> Result<()> {
+        let conn = self.conn_pool.get().await?;
+
+        PostgresContext::check_user_project_permission(
+            &conn,
+            session.user.id,
+            project,
+            &[ProjectPermission::Owner],
+        )
+        .await?;
+
+        let stmt = conn.prepare("DELETE FROM projects WHERE id = $1;").await?;
+
+        conn.execute(&stmt, &[&project]).await?;
+
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl<Tls> ProProjectDb for PostgresProjectDb<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    #[allow(clippy::too_many_lines)]
+    async fn load_version(
         &self,
         session: &UserSession,
         project: ProjectId,
@@ -325,193 +527,6 @@ where
         })
     }
 
-    async fn create(
-        &mut self,
-        session: &UserSession,
-        create: Validated<CreateProject>,
-    ) -> Result<ProjectId> {
-        let mut conn = self.conn_pool.get().await?;
-
-        let project: Project = Project::from_create_project(create.user_input);
-
-        let trans = conn.build_transaction().start().await?;
-
-        let stmt = trans
-            .prepare("INSERT INTO projects (id) VALUES ($1);")
-            .await?;
-
-        trans.execute(&stmt, &[&project.id]).await?;
-
-        let stmt = trans
-            .prepare(
-                "INSERT INTO project_versions (
-                    id,
-                    project_id,
-                    name,
-                    description,
-                    bounds,
-                    time_step,
-                    author_user_id,
-                    changed,
-                    latest)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, TRUE);",
-            )
-            .await?;
-
-        trans
-            .execute(
-                &stmt,
-                &[
-                    &ProjectVersionId::new(),
-                    &project.id,
-                    &project.name,
-                    &project.description,
-                    &project.bounds,
-                    &project.time_step,
-                    &session.user.id,
-                ],
-            )
-            .await?;
-
-        let stmt = trans
-            .prepare(
-                "INSERT INTO user_project_permissions (user_id, project_id, permission) VALUES ($1, $2, $3);",
-            )
-            .await?;
-
-        trans
-            .execute(
-                &stmt,
-                &[&session.user.id, &project.id, &ProjectPermission::Owner],
-            )
-            .await?;
-
-        trans.commit().await?;
-
-        Ok(project.id)
-    }
-
-    #[allow(clippy::too_many_lines)]
-    async fn update(
-        &mut self,
-        session: &UserSession,
-        update: Validated<UpdateProject>,
-    ) -> Result<()> {
-        let update = update.user_input;
-
-        let mut conn = self.conn_pool.get().await?;
-
-        PostgresContext::check_user_project_permission(
-            &conn,
-            session.user.id,
-            update.id,
-            &[ProjectPermission::Write, ProjectPermission::Owner],
-        )
-        .await?;
-
-        let trans = conn.build_transaction().start().await?;
-
-        let project = self.load_latest(&session, update.id).await?; // TODO: move inside transaction?
-
-        let stmt = trans
-            .prepare("UPDATE project_versions SET latest = FALSE WHERE project_id = $1 AND latest IS TRUE;")
-            .await?;
-        trans.execute(&stmt, &[&project.id]).await?;
-
-        let project = project.update_project(update)?;
-
-        let stmt = trans
-            .prepare(
-                "
-                INSERT INTO project_versions (
-                    id,
-                    project_id,
-                    name,
-                    description,
-                    bounds,
-                    time_step,
-                    author_user_id,
-                    changed,
-                    latest)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, TRUE);",
-            )
-            .await?;
-
-        trans
-            .execute(
-                &stmt,
-                &[
-                    &project.version.id,
-                    &project.id,
-                    &project.name,
-                    &project.description,
-                    &project.bounds,
-                    &project.time_step,
-                    &session.user.id,
-                ],
-            )
-            .await?;
-
-        for (idx, layer) in project.layers.iter().enumerate() {
-            let stmt = trans
-                .prepare(
-                    "
-                INSERT INTO project_version_layers (
-                    project_id,
-                    project_version_id,
-                    layer_index,
-                    name,
-                    workflow_id,
-                    symbology,
-                    visibility)
-                VALUES ($1, $2, $3, $4, $5, $6, $7);",
-                )
-                .await?;
-
-            let symbology = serde_json::to_value(&layer.symbology).context(error::SerdeJson)?;
-
-            trans
-                .execute(
-                    &stmt,
-                    &[
-                        &project.id,
-                        &project.version.id,
-                        &(idx as i32),
-                        &layer.name,
-                        &layer.workflow,
-                        &symbology,
-                        &layer.visibility,
-                    ],
-                )
-                .await?;
-        }
-
-        self.update_plots(&trans, &project.id, &project.version.id, &project.plots)
-            .await?;
-
-        trans.commit().await?;
-
-        Ok(())
-    }
-
-    async fn delete(&mut self, session: &UserSession, project: ProjectId) -> Result<()> {
-        let conn = self.conn_pool.get().await?;
-
-        PostgresContext::check_user_project_permission(
-            &conn,
-            session.user.id,
-            project,
-            &[ProjectPermission::Owner],
-        )
-        .await?;
-
-        let stmt = conn.prepare("DELETE FROM projects WHERE id = $1;").await?;
-
-        conn.execute(&stmt, &[&project]).await?;
-
-        Ok(())
-    }
-
     async fn versions(
         &self,
         session: &UserSession,
@@ -550,16 +565,7 @@ where
             })
             .collect())
     }
-}
 
-#[async_trait]
-impl<Tls> ProProjectDb for PostgresProjectDb<Tls>
-where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
-    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-{
     async fn list_permissions(
         &self,
         session: &UserSession,

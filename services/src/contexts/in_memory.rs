@@ -23,7 +23,7 @@ pub struct InMemoryContext {
     project_db: Db<HashMapProjectDb>,
     workflow_registry: Db<HashMapRegistry>,
     dataset_db: Db<HashMapDatasetDb>,
-    default_session: Db<SimpleSession>,
+    session: Db<SimpleSession>,
     thread_pool: Arc<ThreadPool>,
 }
 
@@ -95,7 +95,7 @@ impl Context for InMemoryContext {
         })
     }
 
-    async fn session_id_to_session(&self, session_id: SessionId) -> Result<Self::Session> {
+    async fn session_by_id(&self, session_id: SessionId) -> Result<Self::Session> {
         let default_session = self.default_session_ref().await;
 
         if default_session.id() != session_id {
@@ -111,22 +111,14 @@ impl Context for InMemoryContext {
 #[async_trait]
 impl SimpleContext for InMemoryContext {
     fn default_session(&self) -> Db<SimpleSession> {
-        self.default_session.clone()
+        self.session.clone()
     }
 
     async fn default_session_ref(&self) -> RwLockReadGuard<SimpleSession> {
-        self.default_session.read().await
+        self.session.read().await
     }
 
     async fn default_session_ref_mut(&self) -> RwLockWriteGuard<SimpleSession> {
-        self.default_session.write().await
+        self.session.write().await
     }
-
-    // async fn default_session(&self) -> &SimpleSession {
-    //     self.default_session.lock().await.borrow()
-    // }
-
-    // fn set_default_session(&mut self, session: SimpleSession) {
-    //     *self.default_session.get_mut() = session;
-    // }
 }
