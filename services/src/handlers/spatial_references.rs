@@ -27,7 +27,7 @@ pub(crate) fn get_spatial_reference_specification_handler<C: Context>(
         .and_then(get_spatial_reference_specification)
 }
 
-#[allow(clippy::unused_async)]
+#[allow(clippy::unused_async)] // the function signature of `Filter`'s `and_then` requires it
 async fn get_spatial_reference_specification<S: Session>(
     srs_string: String,
     _session: S,

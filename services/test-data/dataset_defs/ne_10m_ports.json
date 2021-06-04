@@ -1,6 +1,8 @@
 {
   "properties": {
-    "id": null,
+    "id": {
+      "internal": "a9623a5b-b6c5-404b-bc5a-313ff72e4e75"
+    },
     "name": "Natural Earth 10m Ports",
     "description": "Ports from Natural Earth",
     "sourceOperator": "OgrSource"
@@ -19,9 +21,8 @@
           "int": ["scalerank"],
           "text": ["featurecla", "name", "website"]
         },
-        "defaultGeometry": null,
         "forceOgrTimeFilter": false,
-        "onError": "skip",
+        "onError": "ignore",
         "provenance": null
       },
       "resultDescriptor": {

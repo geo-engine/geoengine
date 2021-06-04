@@ -216,12 +216,13 @@ pub(crate) fn session_handler<C: Context>(
     warp::path("session")
         .and(warp::get())
         .and(authenticate(ctx))
-        .and_then(session)
+        .map(session)
 }
 
 // TODO: move into handler once async closures are available?
-async fn session<S: Session>(session: S) -> Result<impl warp::Reply, warp::Rejection> {
-    Ok(warp::reply::json(&session))
+#[allow(clippy::needless_pass_by_value)] // the function signature of `Filter`'s `map` requires it
+fn session<S: Session>(session: S) -> impl warp::Reply {
+    warp::reply::json(&session)
 }
 
 /// Sets the active project of the session.

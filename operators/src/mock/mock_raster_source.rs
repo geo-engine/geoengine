@@ -36,11 +36,13 @@ where
         query: crate::engine::QueryRectangle,
         _ctx: &'a dyn crate::engine::QueryContext,
     ) -> Result<futures::stream::BoxStream<crate::util::Result<Self::Output>>> {
-        // TODO: filter spatially w.r.t. query rectangle
         Ok(stream::iter(
             self.data
                 .iter()
-                .filter(move |t| t.time.intersects(&query.time_interval))
+                .filter(move |t| {
+                    t.time.intersects(&query.time_interval)
+                        && t.tile_information().is_intersected_by_bbox(&query.bbox)
+                })
                 .cloned()
                 .map(Result::Ok),
         )

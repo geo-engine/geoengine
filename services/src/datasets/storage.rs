@@ -8,6 +8,7 @@ use crate::util::user_input::{UserInput, Validated};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, InternalDatasetId};
 use geoengine_datatypes::util::Identifier;
+use geoengine_operators::engine::MetaData;
 use geoengine_operators::{engine::StaticMetaData, source::OgrSourceDataset};
 use geoengine_operators::{
     engine::TypedResultDescriptor, mock::MockDatasetDataSourceLoadingInfo,
@@ -15,7 +16,7 @@ use geoengine_operators::{
 };
 use geoengine_operators::{engine::VectorResultDescriptor, source::GdalMetaDataRegular};
 use serde::{Deserialize, Serialize};
-use snafu::ensure;
+use snafu::{ensure, ResultExt};
 use std::fmt::Debug;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -86,10 +87,11 @@ impl UserInput for ImportDataset {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct DatasetProviderListing {
     pub id: DatasetProviderId,
+    pub type_name: String,
     pub name: String,
-    pub description: String,
     // more meta data (number of datasets, ...)
 }
 
@@ -119,7 +121,8 @@ pub struct DatasetProviderListOptions {
 
 impl UserInput for DatasetProviderListOptions {
     fn validate(&self) -> Result<()> {
-        todo!()
+        // TODO
+        Ok(())
     }
 }
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -192,6 +195,27 @@ impl MetaDataDefinition {
             }
         }
     }
+
+    pub fn result_descriptor(&self) -> Result<TypedResultDescriptor> {
+        match self {
+            MetaDataDefinition::MockMetaData(m) => m
+                .result_descriptor()
+                .map(Into::into)
+                .context(error::Operator),
+            MetaDataDefinition::OgrMetaData(m) => m
+                .result_descriptor()
+                .map(Into::into)
+                .context(error::Operator),
+            MetaDataDefinition::GdalMetaDataRegular(m) => m
+                .result_descriptor()
+                .map(Into::into)
+                .context(error::Operator),
+            MetaDataDefinition::GdalStatic(m) => m
+                .result_descriptor()
+                .map(Into::into)
+                .context(error::Operator),
+        }
+    }
 }
 
 /// Handling of datasets provided by geo engine internally, staged and by external providers
@@ -209,7 +233,7 @@ pub trait DatasetProviderDb<S: Session> {
     async fn add_dataset_provider(
         &mut self,
         session: &S,
-        provider: Validated<AddDatasetProvider>,
+        provider: Box<dyn DatasetProviderDefinition>,
     ) -> Result<DatasetProviderId>;
 
     /// List available providers for `user` filtered by `options`
@@ -224,7 +248,7 @@ pub trait DatasetProviderDb<S: Session> {
         &self,
         session: &S,
         provider: DatasetProviderId,
-    ) -> Result<&dyn DatasetProvider<S>>;
+    ) -> Result<Box<dyn DatasetProvider>>;
 }
 
 /// Defines the type of meta data a `DatasetDB` is able to store
@@ -246,4 +270,70 @@ pub trait DatasetStore<S: Session>: DatasetStorer {
     /// turn given `meta` data definition into the corresponding `StorageType` for the `DatasetStore`
     /// for use in the `add_dataset` method
     fn wrap_meta_data(&self, meta: MetaDataDefinition) -> Self::StorageType;
+}
+
+#[typetag::serde(tag = "type")]
+pub trait DatasetProviderDefinition<S>:
+    CloneableDatasetProviderDefinition + Send + Sync + std::fmt::Debug
+    where S: Session,
+{
+    /// create the actual provider for data listing and access
+    fn initialize(self: Box<Self>) -> Result<Box<dyn DatasetProvider<S>>;
+
+    /// the type of the provider
+    fn type_name(&self) -> String;
+
+    /// name of the external data source
+    fn name(&self) -> String;
+
+    /// id of the provider
+    fn id(&self) -> DatasetProviderId;
+}
+
+pub trait CloneableDatasetProviderDefinition<S> where S: Session {
+    fn clone_boxed_provider(&self) -> Box<dyn DatasetProviderDefinition<S>>;
+}
+
+impl<S, T> CloneableDatasetProviderDefinition for T
+where
+    T: 'static + DatasetProviderDefinition<S> + Clone,
+    S: Session,
+{
+    fn clone_boxed_provider(&self) -> Box<dyn DatasetProviderDefinition<S>> {
+        Box::new(self.clone())
+    }
+}
+
+impl Clone for Box<dyn DatasetProviderDefinition<S>> where S: Session {
+    fn clone(&self) -> Box<dyn DatasetProviderDefinition<S>> {
+        self.clone_boxed_provider()
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
+pub enum DatasetPermission {
+    Read,
+    Write,
+    Owner,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
+pub struct UserDatasetPermission {
+    pub user: UserId,
+    pub dataset: InternalDatasetId,
+    pub permission: DatasetPermission,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
+pub enum DatasetProviderPermission {
+    Read,
+    Write,
+    Owner,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
+pub struct UserDatasetProviderPermission {
+    pub user: UserId,
+    pub external_provider: DatasetProviderId,
+    pub permission: DatasetProviderPermission,
 }

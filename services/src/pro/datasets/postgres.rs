@@ -1,5 +1,5 @@
 use crate::datasets::storage::{
-    AddDataset, AddDatasetProvider, Dataset, DatasetDb, DatasetProviderDb,
+    AddDataset, Dataset, DatasetDb, DatasetProviderDb, DatasetProviderDefinition,
     DatasetProviderListOptions, DatasetProviderListing, DatasetStore, DatasetStorer,
     MetaDataDefinition,
 };
@@ -24,7 +24,7 @@ impl DatasetProviderDb<UserSession> for PostgresDatasetDb {
     async fn add_dataset_provider(
         &mut self,
         _session: &UserSession,
-        _provider: Validated<AddDatasetProvider>,
+        _provider: Box<dyn DatasetProviderDefinition<UserSession>>,
     ) -> Result<DatasetProviderId> {
         todo!()
     }
@@ -41,7 +41,7 @@ impl DatasetProviderDb<UserSession> for PostgresDatasetDb {
         &self,
         _session: &UserSession,
         _provider: DatasetProviderId,
-    ) -> Result<&dyn DatasetProvider<UserSession>> {
+    ) -> Result<Box<dyn DatasetProvider<UserSession>>> {
         todo!()
     }
 }

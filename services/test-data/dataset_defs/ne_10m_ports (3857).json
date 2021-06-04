@@ -1,6 +1,8 @@
 {
   "properties": {
-    "id": null,
+    "id": {
+      "internal": "f47fc99c-c085-4fe3-90f3-120491facb28"
+    },
     "name": "Natural Earth 10m Ports 3857",
     "description": "Ports from Natural Earth reprojected to EPSG:3857",
     "sourceOperator": "OgrSource"
@@ -19,9 +21,8 @@
           "int": ["scalerank"],
           "text": ["featurecla", "name", "website"]
         },
-        "defaultGeometry": null,
         "forceOgrTimeFilter": false,
-        "onError": "skip",
+        "onError": "ignore",
         "provenance": null
       },
       "resultDescriptor": {

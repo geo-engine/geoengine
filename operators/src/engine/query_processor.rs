@@ -222,6 +222,63 @@ impl TypedRasterQueryProcessor {
     }
 }
 
+impl From<Box<dyn RasterQueryProcessor<RasterType = u8>>> for TypedRasterQueryProcessor {
+    fn from(value: Box<dyn RasterQueryProcessor<RasterType = u8>>) -> Self {
+        TypedRasterQueryProcessor::U8(value)
+    }
+}
+
+impl From<Box<dyn RasterQueryProcessor<RasterType = i8>>> for TypedRasterQueryProcessor {
+    fn from(value: Box<dyn RasterQueryProcessor<RasterType = i8>>) -> Self {
+        TypedRasterQueryProcessor::I8(value)
+    }
+}
+
+impl From<Box<dyn RasterQueryProcessor<RasterType = u16>>> for TypedRasterQueryProcessor {
+    fn from(value: Box<dyn RasterQueryProcessor<RasterType = u16>>) -> Self {
+        TypedRasterQueryProcessor::U16(value)
+    }
+}
+
+impl From<Box<dyn RasterQueryProcessor<RasterType = i16>>> for TypedRasterQueryProcessor {
+    fn from(value: Box<dyn RasterQueryProcessor<RasterType = i16>>) -> Self {
+        TypedRasterQueryProcessor::I16(value)
+    }
+}
+
+impl From<Box<dyn RasterQueryProcessor<RasterType = u32>>> for TypedRasterQueryProcessor {
+    fn from(value: Box<dyn RasterQueryProcessor<RasterType = u32>>) -> Self {
+        TypedRasterQueryProcessor::U32(value)
+    }
+}
+
+impl From<Box<dyn RasterQueryProcessor<RasterType = i32>>> for TypedRasterQueryProcessor {
+    fn from(value: Box<dyn RasterQueryProcessor<RasterType = i32>>) -> Self {
+        TypedRasterQueryProcessor::I32(value)
+    }
+}
+
+impl From<Box<dyn RasterQueryProcessor<RasterType = u64>>> for TypedRasterQueryProcessor {
+    fn from(value: Box<dyn RasterQueryProcessor<RasterType = u64>>) -> Self {
+        TypedRasterQueryProcessor::U64(value)
+    }
+}
+impl From<Box<dyn RasterQueryProcessor<RasterType = i64>>> for TypedRasterQueryProcessor {
+    fn from(value: Box<dyn RasterQueryProcessor<RasterType = i64>>) -> Self {
+        TypedRasterQueryProcessor::I64(value)
+    }
+}
+impl From<Box<dyn RasterQueryProcessor<RasterType = f32>>> for TypedRasterQueryProcessor {
+    fn from(value: Box<dyn RasterQueryProcessor<RasterType = f32>>) -> Self {
+        TypedRasterQueryProcessor::F32(value)
+    }
+}
+impl From<Box<dyn RasterQueryProcessor<RasterType = f64>>> for TypedRasterQueryProcessor {
+    fn from(value: Box<dyn RasterQueryProcessor<RasterType = f64>>) -> Self {
+        TypedRasterQueryProcessor::F64(value)
+    }
+}
+
 /// An enum that contains all possible query processor variants
 #[allow(clippy::pub_enum_variant_names)]
 pub enum TypedVectorQueryProcessor {

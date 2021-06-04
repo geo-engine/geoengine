@@ -7,8 +7,7 @@ use crate::util::user_input::{UserInput, Validated};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::DatasetId;
 use geoengine_operators::engine::{
-    MetaData, MetaDataProvider, RasterResultDescriptor, ResultDescriptor, TypedResultDescriptor,
-    VectorResultDescriptor,
+    MetaDataProvider, RasterResultDescriptor, TypedResultDescriptor, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
@@ -83,64 +82,6 @@ pub trait DatasetProvider<S: Session>:
         options: Validated<DatasetListOptions>,
     ) -> Result<Vec<DatasetListing>>;
 
+    // TODO: is this method useful?
     async fn load(&self, session: &S, dataset: &DatasetId) -> Result<Dataset>;
-}
-
-pub enum TypedDatasetProvider {
-    Mock(MockDatasetProvider), // wcs, ...
-}
-
-impl TypedDatasetProvider {
-    pub fn new(input: AddDatasetProvider) -> Self {
-        match input {
-            AddDatasetProvider::AddMockDatasetProvider(add) => {
-                Self::Mock(MockDatasetProvider::new(add))
-            }
-        }
-    }
-
-    pub fn into_box(self) -> Box<dyn DatasetProvider<SimpleSession>> {
-        match self {
-            TypedDatasetProvider::Mock(provider) => Box::new(provider),
-        }
-    }
-}
-
-pub struct MockDatasetProvider {
-    pub datasets: Vec<Dataset>,
-}
-
-impl MockDatasetProvider {
-    fn new(input: AddMockDatasetProvider) -> Self {
-        Self {
-            datasets: input.datasets,
-        }
-    }
-}
-
-impl<L, R> MetaDataProvider<L, R> for MockDatasetProvider
-where
-    R: ResultDescriptor,
-{
-    fn meta_data(
-        &self,
-        _dataset: &DatasetId,
-    ) -> std::result::Result<Box<dyn MetaData<L, R>>, geoengine_operators::error::Error> {
-        todo!()
-    }
-}
-
-#[async_trait]
-impl DatasetProvider<SimpleSession> for MockDatasetProvider {
-    async fn list(
-        &self,
-        _session: &SimpleSession,
-        _options: Validated<DatasetListOptions>,
-    ) -> Result<Vec<DatasetListing>> {
-        todo!()
-    }
-
-    async fn load(&self, _session: &SimpleSession, _dataset: &DatasetId) -> Result<Dataset> {
-        todo!()
-    }
 }

@@ -1,6 +1,8 @@
 {
   "properties": {
-    "id": null,
+    "id": {
+      "internal": "b526b59c-19f1-4d99-8773-5364b757f6d8"
+    },
     "name": "Points with Time",
     "description": "Some points in Europe in 2014",
     "sourceOperator": "OgrSource"
@@ -25,7 +27,6 @@
             }
           }
         },
-        "defaultGeometry": null,
         "forceOgrTimeFilter": false,
         "onError": "abort",
         "provenance": null

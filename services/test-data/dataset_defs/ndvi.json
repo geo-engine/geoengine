@@ -1,6 +1,8 @@
 {
   "properties": {
-    "id": null,
+    "id": {
+      "internal": "36574dc3-560a-4b09-9d22-d5945f2b8093"
+    },
     "name": "NDVI",
     "description": "NDVI data from MODIS",
     "sourceOperator": "GdalSource"

@@ -2,6 +2,7 @@ use crate::contexts::SessionId;
 use crate::error;
 use crate::error::Result;
 use crate::{contexts::Context, error::Error};
+use log::error;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use std::error::Error as StdError;
@@ -50,6 +51,8 @@ impl ErrorResponse {
 /// A handler for custom rejections
 #[allow(clippy::unused_async)]
 pub async fn handle_rejection(err: Rejection) -> Result<impl Reply, Rejection> {
+    error!("Warp rejection: {:?}", err);
+
     let (code, error, message) = if let Some(e) = err.find::<Error>() {
         // custom errors
 

@@ -5,6 +5,7 @@ use std::{
 };
 
 use crate::datasets::storage::{AddDataset, DatasetStore, MetaDataSuggestion, SuggestMetaData};
+use crate::datasets::storage::{DatasetProviderDb, DatasetProviderListOptions};
 use crate::datasets::upload::UploadRootPath;
 use crate::datasets::{
     listing::DatasetProvider,
@@ -24,9 +25,9 @@ use gdal::vector::OGRFieldType;
 use gdal::{vector::Layer, Dataset};
 use geoengine_datatypes::{
     collections::VectorDataType,
-    dataset::{DatasetId, InternalDatasetId},
+    dataset::{DatasetId, DatasetProviderId, InternalDatasetId},
     primitives::FeatureDataType,
-    spatial_reference::SpatialReference,
+    spatial_reference::{SpatialReference, SpatialReferenceOption},
 };
 use geoengine_operators::{
     engine::{StaticMetaData, VectorResultDescriptor},
@@ -37,6 +38,61 @@ use geoengine_operators::{
 use snafu::{OptionExt, ResultExt};
 use uuid::Uuid;
 use warp::Filter;
+
+pub(crate) fn list_providers_handler<C: Context>(
+    ctx: C,
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
+    warp::path("providers")
+        .and(warp::get())
+        .and(authenticate(ctx.clone()))
+        .and(warp::any().map(move || ctx.clone()))
+        .and(warp::query())
+        .and_then(list_providers)
+}
+
+// TODO: move into handler once async closures are available?
+async fn list_providers<C: Context>(
+    session: Session,
+    ctx: C,
+    options: DatasetProviderListOptions,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let list = ctx
+        .dataset_db_ref()
+        .await
+        .list_dataset_providers(session.user.id, options.validated()?)
+        .await?;
+    Ok(warp::reply::json(&list))
+}
+
+pub(crate) fn list_external_datasets_handler<C: Context>(
+    ctx: C,
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
+    warp::path!("datasets" / "external" / Uuid)
+        .map(DatasetProviderId)
+        .and(warp::get())
+        .and(authenticate(ctx.clone()))
+        .and(warp::any().map(move || ctx.clone()))
+        .and(warp::query())
+        .and_then(list_external_datasets)
+}
+
+// TODO: move into handler once async closures are available?
+async fn list_external_datasets<C: Context>(
+    provider: DatasetProviderId,
+    session: Session,
+    ctx: C,
+    options: DatasetListOptions,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let options = options.validated()?;
+    let list = ctx
+        .dataset_db_ref()
+        .await
+        .dataset_provider(session.user.id, provider)
+        .await?
+        .list(session.user.id, options)
+        .await?;
+    Ok(warp::reply::json(&list))
+}
 
 /// Lists available [Datasets](crate::datasets::listing::DatasetListing).
 ///
@@ -168,7 +224,7 @@ async fn get_dataset<C: Context>(
 ///             "int": []
 ///           },
 ///           "forceOgrTimeFilter": false,
-///           "onError": "skip"
+///           "onError": "ignore"
 ///         },
 ///         "resultDescriptor": {
 ///           "dataType": "MultiPolygon",
@@ -347,7 +403,11 @@ async fn suggest_meta_data<C: Context>(
 }
 
 fn suggest_main_file(upload: &Upload) -> Option<String> {
-    let known_extensions = ["csv", "shp", "json", "geojson", "gpkg"]; // TODO: rasters
+    let known_extensions = ["csv", "shp", "json", "geojson", "gpkg", "sqlite"]; // TODO: rasters
+
+    if upload.files.len() == 1 {
+        return Some(upload.files[0].name.clone());
+    }
 
     let mut sorted_files = upload.files.clone();
     sorted_files.sort_by(|a, b| b.byte_size.cmp(&a.byte_size));
@@ -371,11 +431,15 @@ fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDef
         }
     };
     let vector_type = detect_vector_type(&layer)?;
-    let spatial_reference: SpatialReference = layer
+    let spatial_reference: SpatialReferenceOption = layer
         .spatial_ref()
-        .context(error::Gdal)?
-        .try_into()
-        .context(error::DataType)?;
+        .context(error::Gdal)
+        .and_then(|s| {
+            let s: Result<SpatialReference> = s.try_into().context(error::DataType);
+            s
+        })
+        .map(Into::into)
+        .unwrap_or(SpatialReferenceOption::Unreferenced);
     let columns_map = detect_columns(&layer);
     let columns_vecs = column_map_to_column_vecs(&columns_map);
     let time = detect_time_type(&columns_vecs);
@@ -393,15 +457,14 @@ fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDef
                 float: columns_vecs.float,
                 text: columns_vecs.text,
             }),
-            default_geometry: None,
             force_ogr_time_filter: false,
             force_ogr_spatial_filter: false,
-            on_error: geoengine_operators::source::OgrSourceErrorSpec::Skip,
+            on_error: geoengine_operators::source::OgrSourceErrorSpec::Ignore,
             provenance: None,
         },
         result_descriptor: VectorResultDescriptor {
             data_type: vector_type,
-            spatial_reference: spatial_reference.into(),
+            spatial_reference,
             columns: columns_map
                 .into_iter()
                 .filter_map(|(k, v)| v.try_into().map(|v| (k, v)).ok()) // ignore all columns here that don't have a corresponding type in our collections
@@ -615,10 +678,9 @@ mod tests {
                 data_type: None,
                 time: Default::default(),
                 columns: None,
-                default_geometry: None,
                 force_ogr_time_filter: false,
                 force_ogr_spatial_filter: false,
-                on_error: OgrSourceErrorSpec::Skip,
+                on_error: OgrSourceErrorSpec::Ignore,
                 provenance: None,
             },
             result_descriptor: descriptor,
@@ -706,9 +768,8 @@ mod tests {
                                 "int": ["scalerank"],
                                 "text": ["featurecla", "name", "website"]
                             },
-                            "default_geometry": null,
                             "forceOgrTimeGilter": false,
-                            "onError": "skip",
+                            "onError": "ignore",
                             "provenance": null
                         },
                         "resultDescriptor": {
@@ -778,10 +839,9 @@ mod tests {
                             "website".to_string(),
                         ],
                     }),
-                    default_geometry: None,
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
-                    on_error: OgrSourceErrorSpec::Skip,
+                    on_error: OgrSourceErrorSpec::Ignore,
                     provenance: None,
                 },
                 result_descriptor: VectorResultDescriptor {
@@ -837,10 +897,9 @@ mod tests {
                         int: vec![],
                         text: vec![],
                     }),
-                    default_geometry: None,
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
-                    on_error: OgrSourceErrorSpec::Skip,
+                    on_error: OgrSourceErrorSpec::Ignore,
                     provenance: None,
                 },
                 result_descriptor: VectorResultDescriptor {
@@ -885,10 +944,9 @@ mod tests {
                         int: vec![],
                         text: vec![],
                     }),
-                    default_geometry: None,
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
-                    on_error: OgrSourceErrorSpec::Skip,
+                    on_error: OgrSourceErrorSpec::Ignore,
                     provenance: None,
                 },
                 result_descriptor: VectorResultDescriptor {
@@ -933,10 +991,9 @@ mod tests {
                         int: vec![],
                         text: vec![],
                     }),
-                    default_geometry: None,
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
-                    on_error: OgrSourceErrorSpec::Skip,
+                    on_error: OgrSourceErrorSpec::Ignore,
                     provenance: None,
                 },
                 result_descriptor: VectorResultDescriptor {
@@ -985,10 +1042,9 @@ mod tests {
                         int: vec!["duration".to_owned()],
                         text: vec![],
                     }),
-                    default_geometry: None,
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
-                    on_error: OgrSourceErrorSpec::Skip,
+                    on_error: OgrSourceErrorSpec::Ignore,
                     provenance: None,
                 },
                 result_descriptor: VectorResultDescriptor {
@@ -1029,10 +1085,9 @@ mod tests {
                 data_type: None,
                 time: Default::default(),
                 columns: None,
-                default_geometry: None,
                 force_ogr_time_filter: false,
                 force_ogr_spatial_filter: false,
-                on_error: OgrSourceErrorSpec::Skip,
+                on_error: OgrSourceErrorSpec::Ignore,
                 provenance: None,
             },
             result_descriptor: descriptor,

@@ -120,6 +120,7 @@ pub enum Error {
     DatasetIdTypeMissMatch,
     UnknownDatasetId,
     UnknownProviderId,
+    MissingDatasetId,
 
     #[snafu(display("Parameter {} must have length between {} and {}", parameter, min, max))]
     InvalidStringLength {
@@ -151,6 +152,8 @@ pub enum Error {
     UnknownSpatialReference {
         srs_string: String,
     },
+
+    NotYetImplemented,
 }
 
 impl Reject for Error {}

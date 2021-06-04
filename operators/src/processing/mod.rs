@@ -4,6 +4,7 @@ mod map_query;
 mod point_in_polygon;
 mod raster_vector_join;
 mod reprojection;
+mod temporal_raster_aggregation;
 mod vector_join;
 
 pub use reprojection::{Reprojection, ReprojectionParams};
