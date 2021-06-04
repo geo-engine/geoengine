@@ -13,6 +13,7 @@ use crate::{combine, error};
 use bb8_postgres::tokio_postgres;
 #[cfg(feature = "postgres")]
 use bb8_postgres::tokio_postgres::NoTls;
+use log::info;
 use snafu::ResultExt;
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -91,13 +92,18 @@ pub async fn start_pro_server(
     shutdown_rx: Option<Receiver<()>>,
     static_files_dir: Option<PathBuf>,
 ) -> Result<()> {
+    println!("|===========================================================================|");
+    println!("| Welcome to Geo Engine Pro Version: Please refer to our license agreement. |");
+    println!("| If you have any question: Visit https://www.geoengine.io.                 |");
+    println!("|===========================================================================|");
+
     let web_config: config::Web = get_config_element()?;
     let bind_address = web_config
         .bind_address
         .parse::<SocketAddr>()
         .context(error::AddrParse)?;
 
-    eprintln!(
+    info!(
         "Starting server… {}",
         format!(
             "http://{}/",
@@ -109,7 +115,7 @@ pub async fn start_pro_server(
 
     match web_config.backend {
         Backend::InMemory => {
-            eprintln!("Using in memory backend"); // TODO: log
+            info!("Using in memory backend"); // TODO: log
             start(
                 shutdown_rx,
                 static_files_dir,
