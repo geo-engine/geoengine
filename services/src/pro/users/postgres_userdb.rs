@@ -1,13 +1,13 @@
-use crate::contexts::PostgresContext;
-use crate::error;
+use crate::contexts::SessionId;
 use crate::error::Result;
-use crate::projects::project::{ProjectId, ProjectPermission, STRectangle};
-use crate::users::session::{Session, SessionId, UserInfo};
-use crate::users::user::User;
-use crate::users::user::{UserCredentials, UserId, UserRegistration};
-use crate::users::userdb::UserDb;
+use crate::pro::projects::ProjectPermission;
+use crate::pro::users::{
+    User, UserCredentials, UserDb, UserId, UserInfo, UserRegistration, UserSession,
+};
+use crate::projects::{ProjectId, STRectangle};
 use crate::util::user_input::Validated;
 use crate::util::Identifier;
+use crate::{error, pro::contexts::PostgresContext};
 use async_trait::async_trait;
 use bb8_postgres::PostgresConnectionManager;
 use bb8_postgres::{
@@ -73,7 +73,7 @@ where
         Ok(user.id)
     }
 
-    async fn anonymous(&mut self) -> Result<Session> {
+    async fn anonymous(&mut self) -> Result<UserSession> {
         let conn = self.conn_pool.get().await?;
         let stmt = conn
             .prepare("INSERT INTO users (id, active) VALUES ($1, TRUE);")
@@ -104,7 +104,7 @@ where
                 ],
             )
             .await?;
-        Ok(Session {
+        Ok(UserSession {
             id: session_id,
             user: UserInfo {
                 id: user_id,
@@ -118,7 +118,7 @@ where
         })
     }
 
-    async fn login(&mut self, user_credentials: UserCredentials) -> Result<Session> {
+    async fn login(&mut self, user_credentials: UserCredentials) -> Result<UserSession> {
         let conn = self.conn_pool.get().await?;
         let stmt = conn
             .prepare("SELECT id, password_hash, email, real_name FROM users WHERE email = $1;")
@@ -157,7 +157,7 @@ where
                     ],
                 )
                 .await?;
-            Ok(Session {
+            Ok(UserSession {
                 id: session_id,
                 user: UserInfo {
                     id: user_id,
@@ -186,7 +186,7 @@ where
         Ok(())
     }
 
-    async fn session(&self, session: SessionId) -> Result<Session> {
+    async fn session(&self, session: SessionId) -> Result<UserSession> {
         let conn = self.conn_pool.get().await?;
         let stmt = conn
             .prepare(
@@ -209,7 +209,7 @@ where
             .await
             .map_err(|_error| error::Error::InvalidSession)?;
 
-        Ok(Session {
+        Ok(UserSession {
             id: session,
             user: UserInfo {
                 id: row.get(0),
@@ -223,7 +223,11 @@ where
         })
     }
 
-    async fn set_session_project(&mut self, session: &Session, project: ProjectId) -> Result<()> {
+    async fn set_session_project(
+        &mut self,
+        session: &UserSession,
+        project: ProjectId,
+    ) -> Result<()> {
         let conn = self.conn_pool.get().await?;
         PostgresContext::check_user_project_permission(
             &conn,
@@ -247,7 +251,7 @@ where
         Ok(())
     }
 
-    async fn set_session_view(&mut self, session: &Session, view: STRectangle) -> Result<()> {
+    async fn set_session_view(&mut self, session: &UserSession, view: STRectangle) -> Result<()> {
         let conn = self.conn_pool.get().await?;
         let stmt = conn
             .prepare("UPDATE sessions SET view = $1 WHERE id = $2;")

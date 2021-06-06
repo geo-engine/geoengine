@@ -1,7 +1,6 @@
 use crate::datasets::storage::Dataset;
 use crate::error;
 use crate::error::Result;
-use crate::users::user::UserId;
 use crate::util::config::{get_config_element, DatasetService};
 use crate::util::user_input::{UserInput, Validated};
 use async_trait::async_trait;
@@ -78,10 +77,14 @@ pub trait DatasetProvider:
     // TODO: filter, paging
     async fn list(
         &self,
-        user: UserId,
+        // session: &S, // TODO: authorization
         options: Validated<DatasetListOptions>,
     ) -> Result<Vec<DatasetListing>>;
 
     // TODO: is this method useful?
-    async fn load(&self, user: UserId, dataset: &DatasetId) -> Result<Dataset>;
+    async fn load(
+        &self,
+        // session: &S, // TODO: authorization
+        dataset: &DatasetId,
+    ) -> Result<Dataset>;
 }

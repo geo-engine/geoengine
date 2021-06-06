@@ -4,7 +4,6 @@ use warp::Filter;
 
 use crate::error;
 use crate::handlers::{authenticate, Context};
-use crate::users::session::Session;
 use crate::util::IdResponse;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
@@ -51,7 +50,7 @@ pub(crate) fn register_workflow_handler<C: Context>(
 
 // TODO: move into handler once async closures are available?
 async fn register_workflow<C: Context>(
-    _session: Session,
+    _session: C::Session,
     ctx: C,
     workflow: Workflow,
 ) -> Result<impl warp::Reply, warp::Rejection> {
@@ -105,7 +104,7 @@ pub(crate) fn load_workflow_handler<C: Context>(
 // TODO: move into handler once async closures are available?
 async fn load_workflow<C: Context>(
     id: Uuid,
-    _session: Session,
+    _session: C::Session,
     ctx: C,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let wf = ctx
@@ -145,7 +144,7 @@ pub(crate) fn get_workflow_metadata_handler<C: Context>(
 // TODO: move into handler once async closures are available?
 async fn get_workflow_metadata<C: Context>(
     id: Uuid,
-    session: Session,
+    session: C::Session,
     ctx: C,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let workflow = ctx
@@ -154,7 +153,7 @@ async fn get_workflow_metadata<C: Context>(
         .load(&WorkflowId(id))
         .await?;
 
-    let execution_context = ctx.execution_context(&session)?;
+    let execution_context = ctx.execution_context(session)?;
 
     // TODO: use cache here
     call_on_typed_operator!(
@@ -174,11 +173,10 @@ async fn get_workflow_metadata<C: Context>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::InMemoryContext;
+    use crate::contexts::{InMemoryContext, Session, SimpleContext};
     use crate::handlers::{handle_rejection, ErrorResponse};
     use crate::util::tests::{
-        check_allowed_http_methods, check_allowed_http_methods2, create_session_helper,
-        register_ndvi_workflow_helper,
+        check_allowed_http_methods, check_allowed_http_methods2, register_ndvi_workflow_helper,
     };
     use crate::util::IdResponse;
     use crate::workflows::registry::WorkflowRegistry;
@@ -200,7 +198,7 @@ mod tests {
     async fn register_test_helper(method: &str) -> Response<Bytes> {
         let ctx = InMemoryContext::default();
 
-        let session = create_session_helper(&ctx).await;
+        let session = ctx.default_session_ref().await;
 
         let workflow = Workflow {
             operator: MockPointSource {
@@ -219,10 +217,10 @@ mod tests {
             .header("Content-Length", "0")
             .header(
                 "Authorization",
-                format!("Bearer {}", session.id.to_string()),
+                format!("Bearer {}", session.id().to_string()),
             )
             .json(&workflow)
-            .reply(&register_workflow_handler(ctx).recover(handle_rejection))
+            .reply(&register_workflow_handler(ctx.clone()).recover(handle_rejection))
             .await
     }
 
@@ -276,7 +274,7 @@ mod tests {
     async fn register_invalid_body() {
         let ctx = InMemoryContext::default();
 
-        let session = create_session_helper(&ctx).await;
+        let session_id = ctx.default_session_ref().await.id();
 
         // insert workflow
         let res = warp::test::request()
@@ -285,7 +283,7 @@ mod tests {
             .header("Content-Length", "0")
             .header(
                 "Authorization",
-                format!("Bearer {}", session.id.to_string()),
+                format!("Bearer {}", session_id.to_string()),
             )
             .body("no json")
             .reply(&register_workflow_handler(ctx).recover(handle_rejection))
@@ -303,7 +301,7 @@ mod tests {
     async fn register_missing_fields() {
         let ctx = InMemoryContext::default();
 
-        let session = create_session_helper(&ctx).await;
+        let session_id = ctx.default_session_ref().await.id();
 
         let workflow = json!({});
 
@@ -314,7 +312,7 @@ mod tests {
             .header("Content-Length", "0")
             .header(
                 "Authorization",
-                format!("Bearer {}", session.id.to_string()),
+                format!("Bearer {}", session_id.to_string()),
             )
             .json(&workflow)
             .reply(&register_workflow_handler(ctx).recover(handle_rejection))
@@ -331,7 +329,7 @@ mod tests {
     async fn load_test_helper(method: &str) -> (Workflow, Response<Bytes>) {
         let ctx = InMemoryContext::default();
 
-        let session = create_session_helper(&ctx).await;
+        let session_id = ctx.default_session_ref().await.id();
 
         let (workflow, id) = register_ndvi_workflow_helper(&ctx).await;
 
@@ -340,9 +338,9 @@ mod tests {
             .path(&format!("/workflow/{}", id.to_string()))
             .header(
                 "Authorization",
-                format!("Bearer {}", session.id.to_string()),
+                format!("Bearer {}", session_id.to_string()),
             )
-            .reply(&load_workflow_handler(ctx).recover(handle_rejection))
+            .reply(&load_workflow_handler(ctx.clone()).recover(handle_rejection))
             .await;
 
         (workflow, res)
@@ -397,7 +395,7 @@ mod tests {
     async fn vector_metadata_test_helper(method: &str) -> Response<Bytes> {
         let ctx = InMemoryContext::default();
 
-        let session = create_session_helper(&ctx).await;
+        let session = ctx.default_session_ref().await;
 
         let workflow = Workflow {
             operator: MockFeatureCollectionSource::single(
@@ -431,9 +429,9 @@ mod tests {
             .path(&format!("/workflow/{}/metadata", id.to_string()))
             .header(
                 "Authorization",
-                format!("Bearer {}", session.id.to_string()),
+                format!("Bearer {}", session.id().to_string()),
             )
-            .reply(&get_workflow_metadata_handler(ctx).recover(handle_rejection))
+            .reply(&get_workflow_metadata_handler(ctx.clone()).recover(handle_rejection))
             .await
     }
 
@@ -460,7 +458,7 @@ mod tests {
     async fn raster_metadata() {
         let ctx = InMemoryContext::default();
 
-        let session = create_session_helper(&ctx).await;
+        let session_id = ctx.default_session_ref().await.id();
 
         let workflow = Workflow {
             operator: MockRasterSource {
@@ -494,7 +492,7 @@ mod tests {
             .path(&format!("/workflow/{}/metadata", id.to_string()))
             .header(
                 "Authorization",
-                format!("Bearer {}", session.id.to_string()),
+                format!("Bearer {}", session_id.to_string()),
             )
             .reply(&get_workflow_metadata_handler(ctx))
             .await;
@@ -571,7 +569,7 @@ mod tests {
     async fn plot_metadata() {
         let ctx = InMemoryContext::default();
 
-        let session = create_session_helper(&ctx).await;
+        let session_id = ctx.default_session_ref().await.id();
 
         let workflow = Workflow {
             operator: Statistics {
@@ -595,7 +593,7 @@ mod tests {
             .path(&format!("/workflow/{}/metadata", id.to_string()))
             .header(
                 "Authorization",
-                format!("Bearer {}", session.id.to_string()),
+                format!("Bearer {}", session_id.to_string()),
             )
             .reply(&get_workflow_metadata_handler(ctx))
             .await;

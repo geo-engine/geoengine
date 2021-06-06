@@ -1,7 +1,7 @@
+use crate::contexts::SessionId;
 use crate::error::Result;
-use crate::projects::project::{ProjectId, STRectangle};
-use crate::users::session::{Session, SessionId};
-use crate::users::user::{UserCredentials, UserId, UserRegistration};
+use crate::pro::users::{UserCredentials, UserId, UserRegistration, UserSession};
+use crate::projects::{ProjectId, STRectangle};
 use crate::util::user_input::Validated;
 use async_trait::async_trait;
 
@@ -21,7 +21,7 @@ pub trait UserDb: Send + Sync {
     ///
     /// This call fails if the `UserRegistration` is invalid.
     ///
-    async fn anonymous(&mut self) -> Result<Session>;
+    async fn anonymous(&mut self) -> Result<UserSession>;
 
     /// Creates a `Session` by providing `UserCredentials`
     ///
@@ -29,7 +29,7 @@ pub trait UserDb: Send + Sync {
     ///
     /// This call fails if the `UserCredentials` are invalid.
     ///
-    async fn login(&mut self, user: UserCredentials) -> Result<Session>;
+    async fn login(&mut self, user: UserCredentials) -> Result<UserSession>;
 
     /// Removes a session from the `UserDB`
     ///
@@ -45,7 +45,7 @@ pub trait UserDb: Send + Sync {
     ///
     /// This call fails if the session is invalid.
     ///
-    async fn session(&self, session: SessionId) -> Result<Session>;
+    async fn session(&self, session: SessionId) -> Result<UserSession>;
 
     /// Sets the session project
     ///
@@ -53,7 +53,11 @@ pub trait UserDb: Send + Sync {
     ///
     /// This call fails if the session is invalid
     ///
-    async fn set_session_project(&mut self, session: &Session, project: ProjectId) -> Result<()>;
+    async fn set_session_project(
+        &mut self,
+        session: &UserSession,
+        project: ProjectId,
+    ) -> Result<()>;
 
     /// Sets the session view
     ///
@@ -61,5 +65,5 @@ pub trait UserDb: Send + Sync {
     ///
     /// This call fails if the session is invalid
     ///
-    async fn set_session_view(&mut self, session: &Session, view: STRectangle) -> Result<()>;
+    async fn set_session_view(&mut self, session: &UserSession, view: STRectangle) -> Result<()>;
 }

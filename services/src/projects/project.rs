@@ -1,7 +1,6 @@
 use std::{convert::TryInto, fmt::Debug};
 
 use crate::error::{Error, Result};
-use crate::users::user::UserId;
 use crate::util::config::ProjectService;
 use crate::util::user_input::UserInput;
 use crate::workflows::workflow::WorkflowId;
@@ -22,7 +21,6 @@ use geoengine_operators::string_token;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
-use uuid::Uuid;
 
 identifier!(ProjectId);
 
@@ -40,10 +38,10 @@ pub struct Project {
 }
 
 impl Project {
-    pub fn from_create_project(create: CreateProject, user: UserId) -> Self {
+    pub fn from_create_project(create: CreateProject) -> Self {
         Self {
             id: ProjectId::new(),
-            version: ProjectVersion::new(user),
+            version: ProjectVersion::new(),
             name: create.name,
             description: create.description,
             layers: vec![],
@@ -62,7 +60,7 @@ impl Project {
     /// If the updates layer list is longer than the current list,
     /// it just inserts new layers to the end.
     ///
-    pub fn update_project(&self, update: UpdateProject, user: UserId) -> Result<Project> {
+    pub fn update_project(&self, update: UpdateProject) -> Result<Project> {
         fn update_layer_or_plots<Content>(
             state: Vec<Content>,
             updates: Vec<VecUpdate<Content>>,
@@ -91,7 +89,7 @@ impl Project {
         }
 
         let mut project = self.clone();
-        project.version = ProjectVersion::new(user);
+        project.version = ProjectVersion::new();
 
         if let Some(name) = update.name {
             project.name = name;
@@ -480,58 +478,12 @@ impl UserInput for UpdateProject {
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
-#[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
-pub enum ProjectPermission {
-    Read,
-    Write,
-    Owner,
-}
-
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
-pub struct UserProjectPermission {
-    pub user: UserId,
-    pub project: ProjectId,
-    pub permission: ProjectPermission,
-}
-
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
 pub struct ProjectListOptions {
-    // TODO: remove, once warp allows parsing list params
-    #[serde(deserialize_with = "permissions_from_json_str")]
-    pub permissions: Vec<ProjectPermission>,
     #[serde(default)]
     pub filter: ProjectFilter,
     pub order: OrderBy,
     pub offset: u32,
     pub limit: u32,
-}
-
-/// Instead of parsing list params, deserialize `ProjectPermission`s as JSON list.
-pub fn permissions_from_json_str<'de, D>(
-    deserializer: D,
-) -> Result<Vec<ProjectPermission>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    use serde::de::Visitor;
-
-    struct PermissionsFromJsonStrVisitor;
-    impl<'de> Visitor<'de> for PermissionsFromJsonStrVisitor {
-        type Value = Vec<ProjectPermission>;
-
-        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-            formatter.write_str("a JSON array of type `ProjectPermission`")
-        }
-
-        fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-        where
-            E: serde::de::Error,
-        {
-            serde_json::from_str(v).map_err(|error| E::custom(error.to_string()))
-        }
-    }
-
-    deserializer.deserialize_str(PermissionsFromJsonStrVisitor)
 }
 
 impl UserInput for ProjectListOptions {
@@ -551,29 +503,14 @@ identifier!(ProjectVersionId);
 pub struct ProjectVersion {
     pub id: ProjectVersionId,
     pub changed: DateTime<Utc>,
-    pub author: UserId,
 }
 
 impl ProjectVersion {
-    fn new(user: UserId) -> Self {
+    fn new() -> Self {
         Self {
             id: ProjectVersionId::new(),
             changed: chrono::offset::Utc::now(),
-            author: user,
         }
-    }
-}
-
-pub enum LoadVersion {
-    Version(ProjectVersionId),
-    Latest,
-}
-
-impl From<Option<Uuid>> for LoadVersion {
-    fn from(id: Option<Uuid>) -> Self {
-        id.map_or(LoadVersion::Latest, |id| {
-            LoadVersion::Version(ProjectVersionId(id))
-        })
     }
 }
 

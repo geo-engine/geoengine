@@ -4,19 +4,19 @@ use async_trait::async_trait;
 use pwhash::bcrypt;
 use snafu::ensure;
 
-use crate::error;
-use crate::error::Result;
-use crate::projects::project::{ProjectId, STRectangle};
-use crate::users::session::{Session, SessionId, UserInfo};
-use crate::users::user::{User, UserCredentials, UserId, UserRegistration};
-use crate::users::userdb::UserDb;
+use crate::contexts::SessionId;
+use crate::error::{self, Result};
+use crate::pro::users::{
+    User, UserCredentials, UserDb, UserId, UserInfo, UserRegistration, UserSession,
+};
+use crate::projects::{ProjectId, STRectangle};
 use crate::util::user_input::Validated;
 use geoengine_datatypes::util::Identifier;
 
 #[derive(Default)]
 pub struct HashMapUserDb {
     users: HashMap<String, User>,
-    sessions: HashMap<SessionId, Session>,
+    sessions: HashMap<SessionId, UserSession>,
 }
 
 #[async_trait]
@@ -37,7 +37,7 @@ impl UserDb for HashMapUserDb {
         Ok(id)
     }
 
-    async fn anonymous(&mut self) -> Result<Session> {
+    async fn anonymous(&mut self) -> Result<UserSession> {
         let id = UserId::new();
         let user = User {
             id,
@@ -49,7 +49,7 @@ impl UserDb for HashMapUserDb {
 
         self.users.insert(id.to_string(), user);
 
-        let session = Session {
+        let session = UserSession {
             id: SessionId::new(),
             user: UserInfo {
                 id,
@@ -68,10 +68,10 @@ impl UserDb for HashMapUserDb {
     }
 
     /// Log user in
-    async fn login(&mut self, user_credentials: UserCredentials) -> Result<Session> {
+    async fn login(&mut self, user_credentials: UserCredentials) -> Result<UserSession> {
         match self.users.get(&user_credentials.email) {
             Some(user) if bcrypt::verify(user_credentials.password, &user.password_hash) => {
-                let session = Session {
+                let session = UserSession {
                     id: SessionId::new(),
                     user: UserInfo {
                         id: user.id,
@@ -100,14 +100,18 @@ impl UserDb for HashMapUserDb {
         }
     }
 
-    async fn session(&self, session: SessionId) -> Result<Session> {
+    async fn session(&self, session: SessionId) -> Result<UserSession> {
         match self.sessions.get(&session) {
             Some(session) => Ok(session.clone()),
             None => Err(error::Error::InvalidSession),
         }
     }
 
-    async fn set_session_project(&mut self, session: &Session, project: ProjectId) -> Result<()> {
+    async fn set_session_project(
+        &mut self,
+        session: &UserSession,
+        project: ProjectId,
+    ) -> Result<()> {
         // TODO: check project exists
         match self.sessions.get_mut(&session.id) {
             Some(session) => {
@@ -118,7 +122,7 @@ impl UserDb for HashMapUserDb {
         }
     }
 
-    async fn set_session_view(&mut self, session: &Session, view: STRectangle) -> Result<()> {
+    async fn set_session_view(&mut self, session: &UserSession, view: STRectangle) -> Result<()> {
         match self.sessions.get_mut(&session.id) {
             Some(session) => {
                 session.view = Some(view);

@@ -15,7 +15,6 @@ use crate::datasets::{
 use crate::error;
 use crate::error::Result;
 use crate::handlers::authenticate;
-use crate::users::session::Session;
 use crate::util::user_input::UserInput;
 use crate::{contexts::Context, datasets::storage::AutoCreateDataset};
 use crate::{
@@ -53,14 +52,14 @@ pub(crate) fn list_providers_handler<C: Context>(
 
 // TODO: move into handler once async closures are available?
 async fn list_providers<C: Context>(
-    session: Session,
+    session: C::Session,
     ctx: C,
     options: DatasetProviderListOptions,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let list = ctx
         .dataset_db_ref()
         .await
-        .list_dataset_providers(session.user.id, options.validated()?)
+        .list_dataset_providers(&session, options.validated()?)
         .await?;
     Ok(warp::reply::json(&list))
 }
@@ -80,7 +79,7 @@ pub(crate) fn list_external_datasets_handler<C: Context>(
 // TODO: move into handler once async closures are available?
 async fn list_external_datasets<C: Context>(
     provider: DatasetProviderId,
-    session: Session,
+    session: C::Session,
     ctx: C,
     options: DatasetListOptions,
 ) -> Result<impl warp::Reply, warp::Rejection> {
@@ -88,9 +87,9 @@ async fn list_external_datasets<C: Context>(
     let list = ctx
         .dataset_db_ref()
         .await
-        .dataset_provider(session.user.id, provider)
+        .dataset_provider(&session, provider)
         .await?
-        .list(session.user.id, options)
+        .list(options)
         .await?;
     Ok(warp::reply::json(&list))
 }
@@ -137,16 +136,12 @@ pub(crate) fn list_datasets_handler<C: Context>(
 
 // TODO: move into handler once async closures are available?
 async fn list_datasets<C: Context>(
-    session: Session,
+    _session: C::Session,
     ctx: C,
     options: DatasetListOptions,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let options = options.validated()?;
-    let list = ctx
-        .dataset_db_ref()
-        .await
-        .list(session.user.id, options)
-        .await?;
+    let list = ctx.dataset_db_ref().await.list(options).await?;
     Ok(warp::reply::json(&list))
 }
 
@@ -190,14 +185,10 @@ pub(crate) fn get_dataset_handler<C: Context>(
 // TODO: move into handler once async closures are available?
 async fn get_dataset<C: Context>(
     dataset: DatasetId,
-    session: Session,
+    _session: C::Session,
     ctx: C,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    let dataset = ctx
-        .dataset_db_ref()
-        .await
-        .load(session.user.id, &dataset)
-        .await?;
+    let dataset = ctx.dataset_db_ref().await.load(&dataset).await?;
     Ok(warp::reply::json(&dataset))
 }
 
@@ -266,14 +257,14 @@ pub(crate) fn create_dataset_handler<C: Context>(
 
 // TODO: move into handler once async closures are available?
 async fn create_dataset<C: Context>(
-    session: Session,
+    session: C::Session,
     ctx: C,
     create: CreateDataset,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let upload = ctx
         .dataset_db_ref()
         .await
-        .get_upload(session.user.id, create.upload)
+        .get_upload(&session, create.upload)
         .await?;
 
     let mut definition = create.definition;
@@ -283,11 +274,7 @@ async fn create_dataset<C: Context>(
     let mut db = ctx.dataset_db_ref_mut().await;
     let meta_data = db.wrap_meta_data(definition.meta_data);
     let id = db
-        .add_dataset(
-            session.user.id,
-            definition.properties.validated()?,
-            meta_data,
-        )
+        .add_dataset(&session, definition.properties.validated()?, meta_data)
         .await?;
 
     Ok(warp::reply::json(&IdResponse::from(id)))
@@ -346,14 +333,14 @@ pub(crate) fn auto_create_dataset_handler<C: Context>(
 
 // TODO: move into handler once async closures are available?
 async fn auto_create_dataset<C: Context>(
-    session: Session,
+    session: C::Session,
     ctx: C,
     create: AutoCreateDataset,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let upload = ctx
         .dataset_db_ref()
         .await
-        .get_upload(session.user.id, create.upload)
+        .get_upload(&session, create.upload)
         .await?;
 
     let create = create.validated()?.user_input;
@@ -371,7 +358,7 @@ async fn auto_create_dataset<C: Context>(
     let mut db = ctx.dataset_db_ref_mut().await;
     let meta_data = db.wrap_meta_data(meta_data);
     let id = db
-        .add_dataset(session.user.id, properties.validated()?, meta_data)
+        .add_dataset(&session, properties.validated()?, meta_data)
         .await?;
 
     Ok(warp::reply::json(&IdResponse::from(id)))
@@ -390,14 +377,14 @@ pub(crate) fn suggest_meta_data_handler<C: Context>(
 
 // TODO: move into handler once async closures are available?
 async fn suggest_meta_data<C: Context>(
-    session: Session,
+    session: C::Session,
     ctx: C,
     suggest: SuggestMetaData,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let upload = ctx
         .dataset_db_ref()
         .await
-        .get_upload(session.user.id, suggest.upload)
+        .get_upload(&session, suggest.upload)
         .await?;
 
     let main_file = suggest
@@ -656,12 +643,9 @@ mod tests {
     use std::{path::PathBuf, str::FromStr};
 
     use super::*;
-    use crate::contexts::InMemoryContext;
+    use crate::contexts::{InMemoryContext, Session, SimpleContext, SimpleSession};
     use crate::datasets::storage::{AddDataset, DatasetStore};
     use crate::error::Result;
-    use crate::users::user::UserId;
-    use crate::util::tests::create_session_helper;
-    use crate::util::Identifier;
     use geoengine_datatypes::collections::VectorDataType;
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
     use geoengine_operators::engine::{StaticMetaData, VectorResultDescriptor};
@@ -672,7 +656,7 @@ mod tests {
     async fn test_list_datasets() -> Result<()> {
         let ctx = InMemoryContext::default();
 
-        let session = create_session_helper(&ctx).await;
+        let session_id = ctx.default_session_ref().await.id();
 
         let descriptor = VectorResultDescriptor {
             data_type: VectorDataType::Data,
@@ -705,7 +689,7 @@ mod tests {
         let id = ctx
             .dataset_db_ref_mut()
             .await
-            .add_dataset(UserId::new(), ds.validated()?, Box::new(meta))
+            .add_dataset(&SimpleSession::default(), ds.validated()?, Box::new(meta))
             .await?;
 
         let res = warp::test::request()
@@ -722,7 +706,7 @@ mod tests {
             .header("Content-Length", "0")
             .header(
                 "Authorization",
-                format!("Bearer {}", session.id.to_string()),
+                format!("Bearer {}", session_id.to_string()),
             )
             .reply(&list_datasets_handler(ctx))
             .await;
@@ -759,7 +743,7 @@ mod tests {
     async fn create_dataset() {
         let ctx = InMemoryContext::default();
 
-        let session = create_session_helper(&ctx).await;
+        let session_id = ctx.default_session_ref().await.id();
 
         let s = r#"{
             "upload": "1f7e3e75-4d20-4c91-9497-7f4df7604b62",
@@ -810,7 +794,7 @@ mod tests {
             .header("Content-Length", "0")
             .header(
                 "Authorization",
-                format!("Bearer {}", session.id.to_string()),
+                format!("Bearer {}", session_id.to_string()),
             )
             .body(s)
             .reply(&create_dataset_handler(ctx))
@@ -1079,7 +1063,7 @@ mod tests {
     async fn get_dataset() -> Result<()> {
         let ctx = InMemoryContext::default();
 
-        let session = create_session_helper(&ctx).await;
+        let session_id = ctx.default_session_ref().await.id();
 
         let descriptor = VectorResultDescriptor {
             data_type: VectorDataType::Data,
@@ -1112,7 +1096,11 @@ mod tests {
         let id = ctx
             .dataset_db_ref_mut()
             .await
-            .add_dataset(UserId::new(), ds.validated()?, Box::new(meta))
+            .add_dataset(
+                &*ctx.default_session_ref().await,
+                ds.validated()?,
+                Box::new(meta),
+            )
             .await?;
 
         let res = warp::test::request()
@@ -1121,7 +1109,7 @@ mod tests {
             .header("Content-Length", "0")
             .header(
                 "Authorization",
-                format!("Bearer {}", session.id.to_string()),
+                format!("Bearer {}", session_id.to_string()),
             )
             .reply(&get_dataset_handler(ctx))
             .await;

@@ -1,22 +1,15 @@
-#[cfg(feature = "postgres")]
-use crate::contexts::PostgresContext;
-use crate::contexts::{Context, InMemoryContext};
+use crate::contexts::{InMemoryContext, SimpleContext};
 use crate::error;
 use crate::error::{Error, Result};
 use crate::handlers;
 use crate::handlers::handle_rejection;
 use crate::util::config;
-use crate::util::config::{get_config_element, Backend};
-#[cfg(feature = "postgres")]
-use bb8_postgres::tokio_postgres;
-#[cfg(feature = "postgres")]
-use bb8_postgres::tokio_postgres::NoTls;
+use crate::util::config::get_config_element;
+
 use log::info;
 use snafu::ResultExt;
 use std::net::SocketAddr;
 use std::path::PathBuf;
-#[cfg(feature = "postgres")]
-use std::str::FromStr;
 use tokio::signal;
 use tokio::sync::oneshot::{Receiver, Sender};
 use warp::fs::File;
@@ -24,6 +17,7 @@ use warp::{Filter, Rejection};
 
 /// Combine filters by boxing them
 /// TODO: avoid boxing while still achieving acceptable compile time
+#[macro_export]
 macro_rules! combine {
   ($x:expr, $($y:expr),+) => {{
       let filter = $x.boxed();
@@ -58,35 +52,15 @@ pub async fn start_server(
         )
     );
 
-    match web_config.backend {
-        Backend::InMemory => {
-            info!("Using in memory backend");
-            start(
-                shutdown_rx,
-                static_files_dir,
-                bind_address,
-                InMemoryContext::new_with_data().await,
-            )
-            .await
-        }
-        Backend::Postgres => {
-            #[cfg(feature = "postgres")]
-            {
-                info!("Using Postgres backend");
-                let ctx = PostgresContext::new(
-                    tokio_postgres::config::Config::from_str(
-                        &get_config_element::<config::Postgres>()?.config_string,
-                    )?,
-                    NoTls,
-                )
-                .await?;
+    info!("Using in memory backend");
 
-                start(shutdown_rx, static_files_dir, bind_address, ctx).await
-            }
-            #[cfg(not(feature = "postgres"))]
-            panic!("Postgres backend was selected but the postgres feature wasn't activated during compilation")
-        }
-    }
+    start(
+        shutdown_rx,
+        static_files_dir,
+        bind_address,
+        InMemoryContext::new_with_data().await,
+    )
+    .await
 }
 
 async fn start<C>(
@@ -96,28 +70,21 @@ async fn start<C>(
     ctx: C,
 ) -> Result<(), Error>
 where
-    C: Context,
+    C: SimpleContext,
 {
     let handler = combine!(
         handlers::workflows::register_workflow_handler(ctx.clone()),
         handlers::workflows::load_workflow_handler(ctx.clone()),
         handlers::workflows::get_workflow_metadata_handler(ctx.clone()),
-        handlers::users::register_user_handler(ctx.clone()),
-        handlers::users::anonymous_handler(ctx.clone()),
-        handlers::users::login_handler(ctx.clone()),
-        handlers::users::logout_handler(ctx.clone()),
-        handlers::users::session_handler(ctx.clone()),
-        handlers::users::session_project_handler(ctx.clone()),
-        handlers::users::session_view_handler(ctx.clone()),
-        handlers::projects::add_permission_handler(ctx.clone()),
-        handlers::projects::remove_permission_handler(ctx.clone()),
-        handlers::projects::list_permissions_handler(ctx.clone()),
+        handlers::session::anonymous_handler(ctx.clone()),
+        handlers::session::session_handler(ctx.clone()),
+        handlers::session::session_project_handler(ctx.clone()),
+        handlers::session::session_view_handler(ctx.clone()),
         handlers::projects::create_project_handler(ctx.clone()),
         handlers::projects::list_projects_handler(ctx.clone()),
         handlers::projects::update_project_handler(ctx.clone()),
         handlers::projects::delete_project_handler(ctx.clone()),
         handlers::projects::load_project_handler(ctx.clone()),
-        handlers::projects::project_versions_handler(ctx.clone()),
         handlers::datasets::get_dataset_handler(ctx.clone()),
         handlers::datasets::auto_create_dataset_handler(ctx.clone()),
         handlers::datasets::create_dataset_handler(ctx.clone()),
@@ -185,7 +152,7 @@ async fn show_version() -> Result<impl warp::Reply, warp::Rejection> {
     }))
 }
 
-fn serve_static_directory(
+pub fn serve_static_directory(
     path: Option<PathBuf>,
 ) -> impl Filter<Extract = (File,), Error = Rejection> + Clone {
     let has_path = path.is_some();
@@ -218,6 +185,7 @@ pub async fn interrupt_handler(shutdown_tx: Sender<()>, callback: Option<fn()>) 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::contexts::{Session, SimpleSession};
     use crate::handlers::ErrorResponse;
     use tokio::sync::oneshot;
 
@@ -248,8 +216,21 @@ mod tests {
 
     async fn issue_queries(base_url: &str) {
         let client = reqwest::Client::new();
+
         let body = client
-            .post(&format!("{}{}", base_url, "user"))
+            .post(&format!("{}{}", base_url, "anonymous"))
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+
+        let session: SimpleSession = serde_json::from_str(&body).unwrap();
+
+        let body = client
+            .post(&format!("{}{}", base_url, "project"))
+            .header("Authorization", format!("Bearer {}", session.id()))
             .body("no json")
             .send()
             .await

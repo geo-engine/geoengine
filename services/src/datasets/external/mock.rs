@@ -1,4 +1,3 @@
-use crate::users::user::UserId;
 use crate::{datasets::listing::DatasetListOptions, error::Result};
 use crate::{
     datasets::{
@@ -25,9 +24,7 @@ pub struct MockExternalDataProviderDefinition {
 
 #[typetag::serde]
 impl DatasetProviderDefinition for MockExternalDataProviderDefinition {
-    fn initialize(
-        self: Box<Self>,
-    ) -> crate::error::Result<Box<dyn crate::datasets::listing::DatasetProvider>> {
+    fn initialize(self: Box<Self>) -> crate::error::Result<Box<dyn DatasetProvider>> {
         Ok(Box::new(MockExternalDataProvider {
             datasets: self.datasets,
         }))
@@ -54,7 +51,7 @@ pub struct MockExternalDataProvider {
 impl DatasetProvider for MockExternalDataProvider {
     async fn list(
         &self,
-        _user: UserId,
+        // _session: S,
         _options: Validated<DatasetListOptions>,
     ) -> Result<Vec<DatasetListing>> {
         // TODO: user right management
@@ -82,7 +79,7 @@ impl DatasetProvider for MockExternalDataProvider {
 
     async fn load(
         &self,
-        _user: crate::users::user::UserId,
+        // _session: S,
         _dataset: &geoengine_datatypes::dataset::DatasetId,
     ) -> crate::error::Result<crate::datasets::storage::Dataset> {
         Err(error::Error::NotYetImplemented)
