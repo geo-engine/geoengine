@@ -3,7 +3,7 @@ use crate::util::Result;
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::convert::TryInto;
+use std::convert::TryFrom;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct RasterProperties {
@@ -60,18 +60,18 @@ pub enum RasterPropertiesEntryType {
     String,
 }
 
-impl Into<String> for RasterPropertiesEntry {
-    fn into(self) -> String {
-        match self {
+impl From<RasterPropertiesEntry> for String {
+    fn from(prop: RasterPropertiesEntry) -> String {
+        match prop {
             RasterPropertiesEntry::Number(n) => n.to_string(),
             RasterPropertiesEntry::String(s) => s,
         }
     }
 }
 
-impl TryInto<f64> for RasterPropertiesEntry {
-    fn try_into(self) -> Result<f64> {
-        match self {
+impl TryFrom<RasterPropertiesEntry> for f64 {
+    fn try_from(prop: RasterPropertiesEntry) -> Result<f64> {
+        match prop {
             RasterPropertiesEntry::Number(n) => Ok(n),
             RasterPropertiesEntry::String(s) => s.parse().map_err(|_| Error::WrongMetadataType),
         }
