@@ -14,7 +14,7 @@ pro = []
 
 [dependencies]
 # arrow = { version = "4.0", features = ["simd"] } TODO: activate when version is patched
-arrow = { version = "=4.0" } # TODO: unfix version once test runs again
+arrow = { version = "=4.2" } # TODO: unfix version once test runs again
 async-trait = "0.1"
 chrono = "0.4"
 crossbeam = "0.8"
