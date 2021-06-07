@@ -8,7 +8,6 @@ use crate::handlers::handle_rejection;
 use crate::util::config;
 use crate::util::config::{get_config_element, Backend};
 use actix_files::Files;
-use actix_web::web::Json;
 use actix_web::{get, web, App, HttpServer, Responder};
 #[cfg(feature = "postgres")]
 use bb8_postgres::tokio_postgres;
@@ -133,6 +132,8 @@ where
     HttpServer::new(move || {
         let app = App::new()
             .app_data(wrapped_ctx.clone())
+            .wrap(actix_web::middleware::Logger::default())
+            .service(show_version) // TODO: allow disabling this function via config or feature flag
             .route(
                 "/user",
                 web::post().to(handlers::users::register_user_handler::<C>),
@@ -144,8 +145,7 @@ where
             .route(
                 "/login",
                 web::post().to(handlers::users::login_handler::<C>),
-            )
-            .service(show_version); // TODO: allow disabling this function via config or feature flag
+            );
 
         if let Some(static_files_dir) = static_files_dir.clone() {
             app.service(Files::new("/static", static_files_dir))
@@ -182,7 +182,7 @@ async fn show_version() -> impl Responder {
         commit_hash: Option<&'a str>,
     }
 
-    Json(&VersionInfo {
+    web::Json(&VersionInfo {
         build_date: option_env!("VERGEN_BUILD_DATE"),
         commit_hash: option_env!("VERGEN_GIT_SHA"),
     })
