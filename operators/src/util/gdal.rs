@@ -52,7 +52,7 @@ pub fn create_ndvi_meta_data() -> GdalMetaDataRegular {
             bbox: BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
             file_not_found_handling: FileNotFoundHandling::NoData,
             no_data_value,
-            metadata_mapping: None,
+            properties_mapping: None,
         },
         result_descriptor: RasterResultDescriptor {
             data_type: RasterDataType::U8,

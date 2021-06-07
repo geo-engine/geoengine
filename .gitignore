@@ -9,3 +9,7 @@ Cargo.lock
 /.idea
 /.vscode
 Settings.toml
+
+# GDAL/OGR
+*.gpkg-shm
+*.gpkg-wal

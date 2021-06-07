@@ -6,14 +6,14 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct RasterMetadata {
+pub struct RasterProperties {
     pub scale: Option<f64>,
     pub offset: Option<f64>,
     pub band_name: Option<String>,
-    pub metadata_map: HashMap<MetadataKey, MetadataEntry>,
+    pub properties_map: HashMap<RasterPropertiesKey, RasterPropertiesEntry>,
 }
 
-impl RasterMetadata {
+impl RasterProperties {
     pub fn band_name(&self) -> Option<&String> {
         self.band_name.as_ref()
     }
@@ -26,54 +26,54 @@ impl RasterMetadata {
         self.band_name = None;
     }
 
-    pub fn metadata_domain(&self) -> impl Iterator<Item = &str> {
-        vec![].into_iter() // hack
+    pub fn properties_domains(&self) -> impl Iterator<Item = Option<&String>> {
+        self.properties_map.keys().map(|m| m.domain.as_ref())
     }
 }
 
-impl Default for RasterMetadata {
+impl Default for RasterProperties {
     fn default() -> Self {
-        RasterMetadata {
+        RasterProperties {
             band_name: None,
             scale: None,
             offset: None,
-            metadata_map: HashMap::new(),
+            properties_map: HashMap::new(),
         }
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Hash, Eq, PartialOrd, Ord)]
-pub struct MetadataKey {
+pub struct RasterPropertiesKey {
     pub domain: Option<String>,
     pub key: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum MetadataEntry {
+pub enum RasterPropertiesEntry {
     Number(f64),
     String(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum MetadataEntryType {
+pub enum RasterPropertiesEntryType {
     Number,
     String,
 }
 
-impl Into<String> for MetadataEntry {
+impl Into<String> for RasterPropertiesEntry {
     fn into(self) -> String {
         match self {
-            MetadataEntry::Number(n) => n.to_string(),
-            MetadataEntry::String(s) => s,
+            RasterPropertiesEntry::Number(n) => n.to_string(),
+            RasterPropertiesEntry::String(s) => s,
         }
     }
 }
 
-impl TryInto<f64> for MetadataEntry {
+impl TryInto<f64> for RasterPropertiesEntry {
     fn try_into(self) -> Result<f64> {
         match self {
-            MetadataEntry::Number(n) => Ok(n),
-            MetadataEntry::String(s) => s.parse().map_err(|_| Error::WrongMetadataType),
+            RasterPropertiesEntry::Number(n) => Ok(n),
+            RasterPropertiesEntry::String(s) => s.parse().map_err(|_| Error::WrongMetadataType),
         }
     }
 

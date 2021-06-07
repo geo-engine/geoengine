@@ -176,11 +176,11 @@ mod tests {
                         "noDataValue": null
 
                     },
-                    "metadata":{
+                    "properties":{
                         "scale":null,
                         "offset":null,
                         "band_name":null,
-                        "metadata_map":{}
+                        "properties_map":{}
                     }
                 }],
                 "resultDescriptor": {
