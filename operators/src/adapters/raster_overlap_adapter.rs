@@ -564,6 +564,7 @@ mod tests {
                 grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4], no_data_value)
                     .unwrap()
                     .into(),
+                metadata: Default::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -572,6 +573,7 @@ mod tests {
                 grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10], no_data_value)
                     .unwrap()
                     .into(),
+                metadata: Default::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -580,6 +582,7 @@ mod tests {
                 grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16], no_data_value)
                     .unwrap()
                     .into(),
+                metadata: Default::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -588,6 +591,7 @@ mod tests {
                 grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22], no_data_value)
                     .unwrap()
                     .into(),
+                metadata: Default::default(),
             },
         ];
 
@@ -653,6 +657,7 @@ mod tests {
                 grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4], no_data_value)
                     .unwrap()
                     .into(),
+                metadata: Default::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -661,6 +666,7 @@ mod tests {
                 grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10], no_data_value)
                     .unwrap()
                     .into(),
+                metadata: Default::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -669,6 +675,7 @@ mod tests {
                 grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16], no_data_value)
                     .unwrap()
                     .into(),
+                metadata: Default::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -677,6 +684,7 @@ mod tests {
                 grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22], no_data_value)
                     .unwrap()
                     .into(),
+                metadata: Default::default(),
             },
         ];
 

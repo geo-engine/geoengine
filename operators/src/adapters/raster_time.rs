@@ -196,6 +196,7 @@ mod tests {
                         grid_array: Grid::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], no_data_value)
                             .unwrap()
                             .into(),
+                        metadata: Default::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(0, 5),
@@ -208,6 +209,7 @@ mod tests {
                         )
                         .unwrap()
                         .into(),
+                        metadata: Default::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(5, 10),
@@ -220,6 +222,7 @@ mod tests {
                         )
                         .unwrap()
                         .into(),
+                        metadata: Default::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(5, 10),
@@ -232,6 +235,7 @@ mod tests {
                         )
                         .unwrap()
                         .into(),
+                        metadata: Default::default(),
                     },
                 ],
                 result_descriptor: RasterResultDescriptor {
@@ -258,6 +262,7 @@ mod tests {
                         )
                         .unwrap()
                         .into(),
+                        metadata: Default::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(0, 3),
@@ -270,6 +275,7 @@ mod tests {
                         )
                         .unwrap()
                         .into(),
+                        metadata: Default::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(3, 6),
@@ -282,6 +288,7 @@ mod tests {
                         )
                         .unwrap()
                         .into(),
+                        metadata: Default::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(3, 6),
@@ -294,6 +301,7 @@ mod tests {
                         )
                         .unwrap()
                         .into(),
+                        metadata: Default::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(6, 10),
@@ -306,6 +314,7 @@ mod tests {
                         )
                         .unwrap()
                         .into(),
+                        metadata: Default::default(),
                     },
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(6, 10),
@@ -318,6 +327,7 @@ mod tests {
                         )
                         .unwrap()
                         .into(),
+                        metadata: Default::default(),
                     },
                 ],
                 result_descriptor: RasterResultDescriptor {

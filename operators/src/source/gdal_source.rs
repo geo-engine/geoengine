@@ -7,8 +7,11 @@ use crate::{
     util::Result,
 };
 
-use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
 use gdal::Dataset as GdalDataset;
+use gdal::{
+    raster::{GdalType, RasterBand as GdalRasterBand},
+    Metadata as GdalMetadata,
+};
 use snafu::ResultExt;
 use std::{marker::PhantomData, path::PathBuf};
 //use gdal::metadata::Metadata; // TODO: handle metadata
@@ -22,7 +25,8 @@ use futures::{
 
 use crate::engine::{MetaData, QueryRectangle};
 use geoengine_datatypes::raster::{
-    EmptyGrid, GeoTransform, Grid2D, GridOrEmpty2D, Pixel, RasterDataType, RasterTile2D,
+    EmptyGrid, GeoTransform, Grid2D, GridOrEmpty2D, MetadataEntry, MetadataEntryType, MetadataKey,
+    Pixel, RasterDataType, RasterMetadata, RasterTile2D,
 };
 use geoengine_datatypes::{dataset::DatasetId, raster::TileInformation};
 use geoengine_datatypes::{
@@ -142,6 +146,7 @@ pub struct GdalDatasetParameters {
     pub bbox: BoundingBox2D, // the bounding box of the dataset containing the raster data
     pub file_not_found_handling: FileNotFoundHandling,
     pub no_data_value: Option<f64>,
+    pub metadata_mapping: Option<Vec<GdalMetadataMapping>>,
 }
 
 /// How to handle file not found errors
@@ -252,6 +257,7 @@ impl GdalDatasetParameters {
         Ok(Self {
             file_not_found_handling: FileNotFoundHandling::NoData,
             file_path: file_path.into(),
+            metadata_mapping: self.metadata_mapping.clone(),
             ..*self
         })
     }
@@ -346,6 +352,13 @@ where
         // get the requested raster band of the dataset …
         let rasterband: GdalRasterBand =
             dataset.rasterband(dataset_params.rasterband_channel as isize)?;
+
+        let mut metadata = RasterMetadata::default();
+        if let Some(metadata_mapping) = dataset_params.metadata_mapping.as_ref() {
+            metadata_from_gdal(&mut metadata, &dataset, metadata_mapping)?;
+            metadata_from_gdal(&mut metadata, &rasterband, metadata_mapping)?;
+            metadata_from_band(&mut metadata, &rasterband)?;
+        }
 
         // dataset spatial relations
         let dataset_contains_tile = dataset_bounds.contains_bbox(&output_bounds);
@@ -601,6 +614,62 @@ where
     Grid::new(tile_grid, buffer.data, no_data_value).map_err(Into::into)
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct GdalMetadataMapping {
+    source_key: MetadataKey,
+    target_key: MetadataKey,
+    target_type: MetadataEntryType,
+}
+
+fn metadata_from_gdal<'a, I, M>(
+    metadata: &mut RasterMetadata,
+    gdal_dataset: &M,
+    metadata_mapping: I,
+) -> Result<()>
+where
+    I: IntoIterator<Item = &'a GdalMetadataMapping>,
+    M: GdalMetadata,
+{
+    let mapping_iter = metadata_mapping.into_iter();
+
+    for m in mapping_iter {
+        let data = if let Some(domain) = &m.source_key.domain {
+            gdal_dataset.metadata_item(&m.source_key.key, &domain)
+        } else {
+            gdal_dataset.metadata_item(&m.source_key.key, "")
+        };
+
+        if let Some(d) = data {
+            let entry = match m.target_type {
+                MetadataEntryType::Number => d
+                    .parse::<f64>()
+                    .map_or_else(|_| MetadataEntry::String(d), |n| MetadataEntry::Number(n)),
+                MetadataEntryType::String => MetadataEntry::String(d),
+            };
+
+            metadata.metadata_map.insert(m.target_key.clone(), entry);
+        }
+    }
+
+    Ok(())
+}
+
+fn metadata_from_band(metadata: &mut RasterMetadata, gdal_dataset: &GdalRasterBand) -> Result<()> {
+    if let Some(scale) = gdal_dataset.metadata_item("scale", "") {
+        metadata.scale = scale.parse::<f64>().ok();
+    };
+
+    if let Some(offset) = gdal_dataset.metadata_item("offset", "") {
+        metadata.offset = offset.parse::<f64>().ok();
+    };
+
+    if let Some(band_name) = gdal_dataset.metadata_item("band_name", "") {
+        metadata.set_band_name(band_name);
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -669,6 +738,7 @@ mod tests {
                 bbox: BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value: Some(0.),
+                metadata_mapping: None,
             },
             &TileInformation::with_bbox_and_shape(output_bounds, output_shape),
         )
@@ -838,6 +908,7 @@ mod tests {
             bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (1., 1.).into()),
             file_not_found_handling: FileNotFoundHandling::NoData,
             no_data_value: Some(0.),
+            metadata_mapping: None,
         };
         let replaced = params
             .replace_time_placeholder("%TIME%", "%f", TimeInstance::from_millis_unchecked(22))
@@ -874,6 +945,7 @@ mod tests {
                 bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (1., 1.).into()),
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value,
+                metadata_mapping: None,
             },
             placeholder: "%TIME%".to_string(),
             time_format: "%f".to_string(),
