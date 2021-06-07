@@ -146,7 +146,8 @@ where
 
         let values = self
             .features
-            .vector_query(query, ctx)?
+            .vector_query(query, ctx)
+            .await?
             .fold(Ok(values), |acc, features| async {
                 match (acc, features) {
                     (Ok(mut acc), Ok(features)) => {

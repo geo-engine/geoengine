@@ -4,6 +4,7 @@ use crate::engine::{
     VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::util::Result;
+use async_trait::async_trait;
 use futures::stream;
 use futures::stream::BoxStream;
 use futures::StreamExt;
@@ -61,9 +62,10 @@ pub struct MockDatasetDataSourceProcessor {
     loading_info: Box<dyn MetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>>,
 }
 
+#[async_trait]
 impl QueryProcessor for MockDatasetDataSourceProcessor {
     type Output = MultiPointCollection;
-    fn query<'a>(
+    async fn query<'a>(
         &'a self,
         query: QueryRectangle,
         _ctx: &'a dyn QueryContext,
@@ -139,8 +141,8 @@ mod tests {
     use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution};
     use geoengine_datatypes::util::Identifier;
 
-    #[test]
-    fn test() {
+    #[tokio::test]
+    async fn test() {
         let mut execution_context = MockExecutionContext::default();
 
         let id = DatasetId::Internal(InternalDatasetId::new());
@@ -170,7 +172,10 @@ mod tests {
         };
         let ctx = MockQueryContext::new(2 * std::mem::size_of::<Coordinate2D>());
 
-        let stream = point_processor.vector_query(query_rectangle, &ctx).unwrap();
+        let stream = point_processor
+            .vector_query(query_rectangle, &ctx)
+            .await
+            .unwrap();
 
         let blocking_stream = block_on_stream(stream);
         let collections: Vec<MultiPointCollection> = blocking_stream.map(Result::unwrap).collect();

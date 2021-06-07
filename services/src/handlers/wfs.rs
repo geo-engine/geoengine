@@ -471,7 +471,7 @@ where
     let features: Vec<serde_json::Value> = Vec::new();
 
     // TODO: more efficient merging of the partial feature collections
-    let stream = processor.vector_query(query_rect, query_ctx)?;
+    let stream = processor.vector_query(query_rect, query_ctx).await?;
 
     let features = stream
         .fold(

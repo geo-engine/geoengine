@@ -18,6 +18,7 @@ use crate::engine::{
 use crate::error;
 use crate::util::Result;
 use arrow::array::BooleanArray;
+use async_trait::async_trait;
 
 /// The point in polygon filter requires two inputs in the following order:
 /// 1. a `MultiPointCollection` source
@@ -140,38 +141,41 @@ impl PointInPolygonFilterProcessor {
     }
 }
 
+#[async_trait]
 impl VectorQueryProcessor for PointInPolygonFilterProcessor {
     type VectorType = MultiPointCollection;
 
-    fn vector_query<'a>(
+    async fn vector_query<'a>(
         &'a self,
         query: QueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
         // TODO: multi-threading
 
-        let filtered_stream = self
-            .points
-            .query(query, ctx)?
-            .and_then(move |points| async move {
-                let initial_filter = BooleanArray::from(vec![false; points.len()]);
+        let filtered_stream =
+            self.points
+                .query(query, ctx)
+                .await?
+                .and_then(move |points| async move {
+                    let initial_filter = BooleanArray::from(vec![false; points.len()]);
 
-                let filter = self
-                    .polygons
-                    .query(query, ctx)?
-                    .fold(Ok(initial_filter), |filter, polygons| async {
-                        let polygons = polygons?;
+                    let filter = self
+                        .polygons
+                        .query(query, ctx)
+                        .await?
+                        .fold(Ok(initial_filter), |filter, polygons| async {
+                            let polygons = polygons?;
 
-                        if polygons.is_empty() {
-                            return filter;
-                        }
+                            if polygons.is_empty() {
+                                return filter;
+                            }
 
-                        Self::filter_points(&points, &polygons, &filter?)
-                    })
-                    .await?;
+                            Self::filter_points(&points, &polygons, &filter?)
+                        })
+                        .await?;
 
-                points.filter(filter).map_err(Into::into)
-            });
+                    points.filter(filter).map_err(Into::into)
+                });
 
         Ok(
             FeatureCollectionChunkMerger::new(filtered_stream.fuse(), ctx.chunk_byte_size())
@@ -557,7 +561,7 @@ mod tests {
         };
         let ctx = MockQueryContext::new(usize::MAX);
 
-        let query = query_processor.query(query_rectangle, &ctx).unwrap();
+        let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
 
         let result = query
             .map(Result::unwrap)
@@ -605,7 +609,7 @@ mod tests {
         };
         let ctx = MockQueryContext::new(usize::MAX);
 
-        let query = query_processor.query(query_rectangle, &ctx).unwrap();
+        let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
 
         let result = query
             .map(Result::unwrap)
@@ -666,7 +670,7 @@ mod tests {
         };
         let ctx = MockQueryContext::new(usize::MAX);
 
-        let query = query_processor.query(query_rectangle, &ctx).unwrap();
+        let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
 
         let result = query
             .map(Result::unwrap)
@@ -748,6 +752,7 @@ mod tests {
 
         let query = query_processor
             .query(query_rectangle, &ctx_minimal_chunks)
+            .await
             .unwrap();
 
         let result = query
@@ -762,6 +767,7 @@ mod tests {
 
         let query = query_processor
             .query(query_rectangle, &ctx_one_chunk)
+            .await
             .unwrap();
 
         let result = query

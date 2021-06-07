@@ -111,7 +111,7 @@ impl<P: Pixel> PlotQueryProcessor for MeanRasterPixelValuesOverTimeQueryProcesso
         ctx: &'a dyn QueryContext,
     ) -> Result<Self::OutputFormat> {
         let means =
-            Self::calculate_means(self.raster.query(query, ctx)?, self.time_position).await?;
+            Self::calculate_means(self.raster.query(query, ctx).await?, self.time_position).await?;
 
         let plot = Self::generate_plot(means, self.measurement.clone(), self.draw_area)?;
 

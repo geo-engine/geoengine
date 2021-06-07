@@ -5,6 +5,7 @@ use crate::engine::{
 };
 use crate::engine::{QueryContext, QueryProcessor, QueryRectangle};
 use crate::util::Result;
+use async_trait::async_trait;
 use futures::stream::{self, BoxStream, StreamExt};
 use geoengine_datatypes::collections::{FeatureCollection, FeatureCollectionInfos};
 use geoengine_datatypes::primitives::{
@@ -21,13 +22,14 @@ where
     collections: Vec<FeatureCollection<G>>,
 }
 
+#[async_trait]
 impl<G> QueryProcessor for MockFeatureCollectionSourceProcessor<G>
 where
     G: Geometry + ArrowTyped + Send + Sync + 'static,
 {
     type Output = FeatureCollection<G>;
 
-    fn query<'a>(
+    async fn query<'a>(
         &'a self,
         _query: QueryRectangle,
         _ctx: &'a dyn QueryContext,
@@ -235,8 +237,8 @@ mod tests {
         let _operator: Box<dyn VectorOperator> = serde_json::from_str(&serialized).unwrap();
     }
 
-    #[test]
-    fn execute() {
+    #[tokio::test]
+    async fn execute() {
         let collection = MultiPointCollection::from_data(
             MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1), (2.0, 3.1)]).unwrap(),
             vec![TimeInterval::new_unchecked(0, 1); 3],
@@ -268,7 +270,7 @@ mod tests {
         };
         let ctx = MockQueryContext::new(2 * std::mem::size_of::<Coordinate2D>());
 
-        let stream = processor.vector_query(query_rectangle, &ctx).unwrap();
+        let stream = processor.vector_query(query_rectangle, &ctx).await.unwrap();
 
         let blocking_stream = block_on_stream(stream);
 

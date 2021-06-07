@@ -21,6 +21,7 @@ use futures::{
 };
 
 use crate::engine::{MetaData, QueryRectangle};
+use async_trait::async_trait;
 use geoengine_datatypes::raster::{
     EmptyGrid, GeoTransform, Grid2D, GridOrEmpty2D, Pixel, RasterDataType, RasterTile2D,
 };
@@ -457,12 +458,13 @@ where
     }
 }
 
+#[async_trait]
 impl<T> QueryProcessor for GdalSourceProcessor<T>
 where
     T: Pixel + gdal::raster::GdalType,
 {
     type Output = RasterTile2D<T>;
-    fn query<'a>(
+    async fn query<'a>(
         &'a self,
         query: crate::engine::QueryRectangle,
         _ctx: &'a dyn crate::engine::QueryContext,
@@ -648,6 +650,7 @@ mod tests {
                 },
                 query_ctx,
             )
+            .await
             .unwrap()
             .collect()
             .await

@@ -4,6 +4,7 @@ use crate::engine::{
     RasterQueryProcessor, RasterResultDescriptor, SourceOperator, TypedRasterQueryProcessor,
 };
 use crate::util::Result;
+use async_trait::async_trait;
 use futures::{stream, stream::StreamExt};
 use geoengine_datatypes::raster::{FromPrimitive, Pixel, RasterTile2D};
 use num_traits::AsPrimitive;
@@ -26,12 +27,13 @@ where
     }
 }
 
+#[async_trait]
 impl<T> QueryProcessor for MockRasterSourceProcessor<T>
 where
     T: Pixel,
 {
     type Output = RasterTile2D<T>;
-    fn query<'a>(
+    async fn query<'a>(
         &'a self,
         query: crate::engine::QueryRectangle,
         _ctx: &'a dyn crate::engine::QueryContext,

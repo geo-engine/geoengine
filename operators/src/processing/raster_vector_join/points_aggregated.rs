@@ -18,6 +18,7 @@ use crate::processing::raster_vector_join::aggregator::{
 use crate::processing::raster_vector_join::util::FeatureTimeSpanIter;
 use crate::processing::raster_vector_join::AggregationMethod;
 use crate::util::Result;
+use async_trait::async_trait;
 use geoengine_datatypes::primitives::MultiPointAccess;
 
 pub struct RasterPointAggregateJoinProcessor {
@@ -61,7 +62,7 @@ impl RasterPointAggregateJoinProcessor {
                 spatial_resolution: query.spatial_resolution,
             };
 
-            let mut rasters = raster_processor.raster_query(query, ctx)?;
+            let mut rasters = raster_processor.raster_query(query, ctx).await?;
 
             // TODO: optimize geo access (only specific tiles, etc.)
 
@@ -137,16 +138,17 @@ impl RasterPointAggregateJoinProcessor {
     }
 }
 
+#[async_trait]
 impl VectorQueryProcessor for RasterPointAggregateJoinProcessor {
     type VectorType = MultiPointCollection;
 
-    fn vector_query<'a>(
+    async fn vector_query<'a>(
         &'a self,
         query: QueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
         let stream = self.points
-            .query(query, ctx)?
+            .query(query, ctx).await?
             .and_then(async move |mut points| {
 
                 for (raster, new_column_name) in self.raster_processors.iter().zip(&self.column_names) {

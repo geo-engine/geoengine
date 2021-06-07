@@ -195,12 +195,9 @@ where
                         .sub_query
                         .new_fold_accu(fold_tile_spec, tile_query_rectangle)?;
 
-                    let tile_query_stream = this
-                        .source
-                        .raster_query(tile_query_rectangle, *this.query_ctx)?;
+                    let tile_query_stream = todo!();
 
-                    let tile_folding_stream =
-                        tile_query_stream.try_fold(tile_folding_accu, this.sub_query.fold_method());
+                    let tile_folding_stream = todo!();
 
                     this.running_future.set(Some(tile_folding_stream));
                 }

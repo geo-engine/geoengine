@@ -18,6 +18,8 @@ use crate::adapters::FeatureCollectionChunkMerger;
 use crate::engine::{QueryContext, QueryProcessor, QueryRectangle, VectorQueryProcessor};
 use crate::error::Error;
 use crate::util::Result;
+use async_trait::async_trait;
+use futures::TryStreamExt;
 
 /// Implements an inner equi-join between a `GeoFeatureCollection` stream and a `DataCollection` stream.
 pub struct EquiGeoToDataJoinProcessor<G> {
@@ -333,6 +335,7 @@ where
     }
 }
 
+#[async_trait]
 impl<G> VectorQueryProcessor for EquiGeoToDataJoinProcessor<G>
 where
     G: Geometry + ArrowTyped + Sync + Send + 'static,
@@ -342,44 +345,47 @@ where
 {
     type VectorType = FeatureCollection<G>;
 
-    fn vector_query<'a>(
+    async fn vector_query<'a>(
         &'a self,
         query: QueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
-        let result_stream =
-            self.left_processor
-                .query(query, ctx)?
-                .flat_map(move |left_collection| {
-                    // This implementation is a nested-loop join
+        // let result_stream = self
+        //     .left_processor
+        //     .query(query, ctx)
+        //     .await?
+        //     .then(move |left_collection| async {
+        //         // This implementation is a nested-loop join
 
-                    let left_collection = match left_collection {
-                        Ok(collection) => Arc::new(collection),
-                        Err(e) => return stream::once(async { Err(e) }).boxed(),
-                    };
+        //         let left_collection = match left_collection {
+        //             Ok(collection) => Arc::new(collection),
+        //             Err(e) => return stream::once(async { Err(e) }).boxed(),
+        //         };
 
-                    let data_query = match self.right_processor.query(query, ctx) {
-                        Ok(data_query) => data_query,
-                        Err(e) => return stream::once(async { Err(e) }).boxed(),
-                    };
+        //         let data_query = match self.right_processor.query(query, ctx).await {
+        //             Ok(data_query) => data_query,
+        //             Err(e) => return stream::once(async { Err(e) }).boxed(),
+        //         };
 
-                    data_query
-                        .flat_map(move |right_collection| {
-                            match right_collection.and_then(|right_collection| {
-                                self.join(
-                                    left_collection.clone(),
-                                    right_collection,
-                                    ctx.chunk_byte_size(),
-                                )
-                            }) {
-                                Ok(batch_iter) => stream::iter(batch_iter).boxed(),
-                                Err(e) => stream::once(async { Err(e) }).boxed(),
-                            }
-                        })
-                        .boxed()
-                });
+        //         data_query
+        //             .flat_map(move |right_collection| {
+        //                 match right_collection.and_then(|right_collection| {
+        //                     self.join(
+        //                         left_collection.clone(),
+        //                         right_collection,
+        //                         ctx.chunk_byte_size(),
+        //                     )
+        //                 }) {
+        //                     Ok(batch_iter) => stream::iter(batch_iter).boxed(),
+        //                     Err(e) => stream::once(async { Err(e) }).boxed(),
+        //                 }
+        //             })
+        //             .boxed()
+        //     })
+        //     .flatten();
 
-        Ok(FeatureCollectionChunkMerger::new(result_stream.fuse(), ctx.chunk_byte_size()).boxed())
+        // Ok(FeatureCollectionChunkMerger::new(result_stream.fuse(), ctx.chunk_byte_size()).boxed())
+        todo!()
     }
 }
 
@@ -398,7 +404,7 @@ mod tests {
     use super::*;
     use crate::processing::vector_join::util::translation_table;
 
-    fn join_mock_collections(
+    async fn join_mock_collections(
         left: MultiPointCollection,
         right: DataCollection,
         left_join_column: &str,
@@ -440,13 +446,13 @@ mod tests {
             ),
         );
 
-        block_on_stream(processor.vector_query(query_rectangle, &ctx).unwrap())
+        block_on_stream(processor.vector_query(query_rectangle, &ctx).await.unwrap())
             .collect::<Result<_>>()
             .unwrap()
     }
 
-    #[test]
-    fn join() {
+    #[tokio::test]
+    async fn join() {
         let left = MultiPointCollection::from_data(
             MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1)]).unwrap(),
             vec![TimeInterval::default(); 2],
@@ -480,14 +486,14 @@ mod tests {
         )
         .unwrap();
 
-        let result = join_mock_collections(left, right, "foo", "bar", "");
+        let result = join_mock_collections(left, right, "foo", "bar", "").await;
 
         assert_eq!(result.len(), 1);
         assert_eq!(result[0], expected_result);
     }
 
-    #[test]
-    fn time_intervals() {
+    #[tokio::test]
+    async fn time_intervals() {
         let left = MultiPointCollection::from_data(
             MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1)]).unwrap(),
             vec![
@@ -527,14 +533,14 @@ mod tests {
         )
         .unwrap();
 
-        let result = join_mock_collections(left, right, "foo", "bar", "");
+        let result = join_mock_collections(left, right, "foo", "bar", "").await;
 
         assert_eq!(result.len(), 1);
         assert_eq!(result[0], expected_result);
     }
 
-    #[test]
-    fn name_collision() {
+    #[tokio::test]
+    async fn name_collision() {
         let left = MultiPointCollection::from_data(
             MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1)]).unwrap(),
             vec![TimeInterval::default(); 2],
@@ -568,14 +574,14 @@ mod tests {
         )
         .unwrap();
 
-        let result = join_mock_collections(left, right, "foo", "foo", "2");
+        let result = join_mock_collections(left, right, "foo", "foo", "2").await;
 
         assert_eq!(result.len(), 1);
         assert_eq!(result[0], expected_result);
     }
 
-    #[test]
-    fn multi_match_geo() {
+    #[tokio::test]
+    async fn multi_match_geo() {
         let left = MultiPointCollection::from_data(
             MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1)]).unwrap(),
             vec![TimeInterval::default(); 2],
@@ -638,14 +644,14 @@ mod tests {
         )
         .unwrap();
 
-        let result = join_mock_collections(left, right, "foo", "bar", "");
+        let result = join_mock_collections(left, right, "foo", "bar", "").await;
 
         assert_eq!(result.len(), 1);
         assert_eq!(result[0], expected_result);
     }
 
-    #[test]
-    fn no_matches() {
+    #[tokio::test]
+    async fn no_matches() {
         let left = MultiPointCollection::from_data(
             MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1)]).unwrap(),
             vec![TimeInterval::default(); 2],
@@ -666,7 +672,7 @@ mod tests {
         )
         .unwrap();
 
-        let result = join_mock_collections(left, right, "foo", "bar", "");
+        let result = join_mock_collections(left, right, "foo", "bar", "").await;
 
         // TODO: do we need an empty collection here? (cf. `FeatureCollectionChunkMerger`)
         assert_eq!(result.len(), 0);

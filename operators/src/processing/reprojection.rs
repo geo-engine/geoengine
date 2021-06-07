@@ -11,6 +11,7 @@ use crate::{
     error::Error,
     util::{input::RasterOrVectorOperator, Result},
 };
+use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::{
@@ -182,6 +183,7 @@ pub fn query_rewrite_fn(
     })
 }
 
+#[async_trait]
 impl<Q, G> VectorQueryProcessor for VectorReprojectionProcessor<Q, G>
 where
     Q: VectorQueryProcessor<VectorType = G>,
@@ -189,7 +191,7 @@ where
 {
     type VectorType = G::Out;
 
-    fn vector_query<'a>(
+    async fn vector_query<'a>(
         &'a self,
         query: QueryRectangle,
         ctx: &'a dyn QueryContext,
@@ -198,7 +200,8 @@ where
 
         Ok(self
             .source
-            .vector_query(rewritten_query, ctx)?
+            .vector_query(rewritten_query, ctx)
+            .await?
             .map(move |collection_result| {
                 collection_result.and_then(|collection| {
                     CoordinateProjector::from_known_srs(self.from, self.to)
@@ -402,6 +405,7 @@ where
     }
 }
 
+#[async_trait]
 impl<Q, P> RasterQueryProcessor for RasterReprojectionProcessor<Q, P>
 where
     Q: RasterQueryProcessor<RasterType = P>,
@@ -409,7 +413,7 @@ where
 {
     type RasterType = P;
 
-    fn raster_query<'a>(
+    async fn raster_query<'a>(
         &'a self,
         query: QueryRectangle,
         ctx: &'a dyn QueryContext,
@@ -523,7 +527,10 @@ mod tests {
         };
         let ctx = MockQueryContext::new(usize::MAX);
 
-        let query = query_processor.vector_query(query_rectangle, &ctx).unwrap();
+        let query = query_processor
+            .vector_query(query_rectangle, &ctx)
+            .await
+            .unwrap();
 
         let result = query
             .map(Result::unwrap)
@@ -591,7 +598,10 @@ mod tests {
         };
         let ctx = MockQueryContext::new(usize::MAX);
 
-        let query = query_processor.vector_query(query_rectangle, &ctx).unwrap();
+        let query = query_processor
+            .vector_query(query_rectangle, &ctx)
+            .await
+            .unwrap();
 
         let result = query
             .map(Result::unwrap)
@@ -661,7 +671,10 @@ mod tests {
         };
         let ctx = MockQueryContext::new(usize::MAX);
 
-        let query = query_processor.vector_query(query_rectangle, &ctx).unwrap();
+        let query = query_processor
+            .vector_query(query_rectangle, &ctx)
+            .await
+            .unwrap();
 
         let result = query
             .map(Result::unwrap)
@@ -764,7 +777,7 @@ mod tests {
             spatial_resolution: SpatialResolution::one(),
         };
 
-        let a = qp.raster_query(query_rect, &query_ctx)?;
+        let a = qp.raster_query(query_rect, &query_ctx).await?;
 
         let res = a
             .map(Result::unwrap)
@@ -831,6 +844,7 @@ mod tests {
                 },
                 &query_ctx,
             )
+            .await
             .unwrap();
 
         let res = qs

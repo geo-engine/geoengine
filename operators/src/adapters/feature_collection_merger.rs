@@ -176,12 +176,13 @@ mod tests {
 
         let number_of_source_chunks = processor
             .query(qrect, &cx)
+            .await
             .unwrap()
             .fold(0_usize, async move |i, _| i + 1)
             .await;
         assert_eq!(number_of_source_chunks, 5);
 
-        let stream = processor.query(qrect, &cx).unwrap();
+        let stream = processor.query(qrect, &cx).await.unwrap();
 
         let chunk_byte_size = MultiPointCollection::from_data(
             MultiPoint::many(coordinates[0..5].to_vec()).unwrap(),
@@ -245,7 +246,7 @@ mod tests {
         let cx = MockQueryContext::new(0);
 
         let collections =
-            FeatureCollectionChunkMerger::new(processor.query(qrect, &cx).unwrap().fuse(), 0)
+            FeatureCollectionChunkMerger::new(processor.query(qrect, &cx).await.unwrap().fuse(), 0)
                 .collect::<Vec<Result<DataCollection>>>()
                 .await;
 

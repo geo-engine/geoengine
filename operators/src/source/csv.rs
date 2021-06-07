@@ -25,6 +25,7 @@ use crate::engine::{
 };
 use crate::error;
 use crate::util::Result;
+use async_trait::async_trait;
 use std::sync::atomic::Ordering;
 
 /// Parameters for the CSV Source Operator
@@ -376,11 +377,12 @@ struct CsvSourceProcessor {
     params: CsvSourceParameters,
 }
 
+#[async_trait]
 impl QueryProcessor for CsvSourceProcessor {
     type Output = MultiPointCollection;
 
-    fn query<'a>(
-        &self,
+    async fn query<'a>(
+        &'a self,
         query: QueryRectangle,
         _ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
@@ -554,7 +556,8 @@ x,y
         };
         let ctx = MockQueryContext::new(10 * 8 * 2);
 
-        let r: Vec<Result<MultiPointCollection>> = p.query(query, &ctx).unwrap().collect().await;
+        let r: Vec<Result<MultiPointCollection>> =
+            p.query(query, &ctx).await.unwrap().collect().await;
 
         assert_eq!(r.len(), 1);
 

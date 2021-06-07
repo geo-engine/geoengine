@@ -1,7 +1,8 @@
+use std::pin::Pin;
 use std::sync::Arc;
 
 use futures::stream::BoxStream;
-use futures::{StreamExt, TryStreamExt};
+use futures::{FutureExt, StreamExt, TryStreamExt};
 
 use geoengine_datatypes::{
     collections::FeatureCollectionModifications,
@@ -15,10 +16,8 @@ use crate::engine::{
     VectorQueryProcessor,
 };
 use crate::util::Result;
-use crate::{
-    adapters::{FeatureCollectionStreamExt, RasterStreamExt},
-    error::Error,
-};
+use crate::{adapters::RasterStreamExt, error::Error};
+use async_trait::async_trait;
 use geoengine_datatypes::collections::FeatureCollectionInfos;
 use geoengine_datatypes::collections::GeometryCollection;
 use geoengine_datatypes::raster::{CoordinatePixelAccess, NoDataValue, RasterDataType};
@@ -43,24 +42,25 @@ impl RasterPointJoinProcessor {
         }
     }
 
-    fn process_collections<'a>(
+    async fn process_collections<'a>(
         points: BoxStream<'a, Result<MultiPointCollection>>,
         raster_processor: &'a TypedRasterQueryProcessor,
         new_column_name: &'a str,
         query: QueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> BoxStream<'a, Result<MultiPointCollection>> {
-        let stream = points.map_ok(move |points| {
-            Self::process_collection_chunk(points, raster_processor, new_column_name, query, ctx)
-        });
+        todo!()
+        // let stream = points.map_ok(move |points| {
+        //     Self::process_collection_chunk(points, raster_processor, new_column_name, query, ctx)
+        // });
 
-        stream
-            .try_flatten()
-            .merge_chunks(ctx.chunk_byte_size())
-            .boxed()
+        // stream
+        //     .try_flatten()
+        //     .merge_chunks(ctx.chunk_byte_size())
+        //     .boxed()
     }
 
-    fn process_collection_chunk<'a>(
+    async fn process_collection_chunk<'a>(
         points: MultiPointCollection,
         raster_processor: &'a TypedRasterQueryProcessor,
         new_column_name: &'a str,
@@ -68,11 +68,11 @@ impl RasterPointJoinProcessor {
         ctx: &'a dyn QueryContext,
     ) -> BoxStream<'a, Result<MultiPointCollection>> {
         call_on_generic_raster_processor!(raster_processor, raster_processor => {
-            Self::process_typed_collection_chunk(points, raster_processor, new_column_name, query, ctx)
+            Self::process_typed_collection_chunk(points, raster_processor, new_column_name, query, ctx).await
         })
     }
 
-    fn process_typed_collection_chunk<'a, P: Pixel>(
+    async fn process_typed_collection_chunk<'a, P: Pixel>(
         points: MultiPointCollection,
         raster_processor: &'a dyn RasterQueryProcessor<RasterType = P>,
         new_column_name: &'a str,
@@ -92,7 +92,7 @@ impl RasterPointJoinProcessor {
             spatial_resolution: query.spatial_resolution,
         };
 
-        let raster_query = match raster_processor.raster_query(query, ctx) {
+        let raster_query = match raster_processor.raster_query(query, ctx).await {
             Ok(q) => q,
             Err(e) => return futures::stream::once(async { Err(e) }).boxed(),
         };
@@ -249,21 +249,23 @@ impl<P: Pixel> PointRasterJoiner<P> {
     }
 }
 
+#[async_trait]
 impl VectorQueryProcessor for RasterPointJoinProcessor {
     type VectorType = MultiPointCollection;
 
-    fn vector_query<'a>(
+    async fn vector_query<'a>(
         &'a self,
         query: QueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
-        let mut stream = self.points.query(query, ctx)?;
+        let mut stream = self.points.query(query, ctx).await?;
 
         for (raster_processor, new_column_name) in
             self.raster_processors.iter().zip(&self.column_names)
         {
             stream =
-                Self::process_collections(stream, raster_processor, new_column_name, query, ctx);
+                Self::process_collections(stream, raster_processor, new_column_name, query, ctx)
+                    .await;
         }
 
         Ok(stream)
@@ -340,6 +342,7 @@ mod tests {
                 },
                 &MockQueryContext::new(usize::MAX),
             )
+            .await
             .unwrap()
             .map(Result::unwrap)
             .collect::<Vec<MultiPointCollection>>()
@@ -428,6 +431,7 @@ mod tests {
                 },
                 &MockQueryContext::new(usize::MAX),
             )
+            .await
             .unwrap()
             .map(Result::unwrap)
             .collect::<Vec<MultiPointCollection>>()
@@ -519,6 +523,7 @@ mod tests {
                 },
                 &MockQueryContext::new(usize::MAX),
             )
+            .await
             .unwrap()
             .map(Result::unwrap)
             .collect::<Vec<MultiPointCollection>>()
@@ -614,6 +619,7 @@ mod tests {
                 },
                 &MockQueryContext::new(usize::MAX),
             )
+            .await
             .unwrap()
             .map(Result::unwrap)
             .collect::<Vec<MultiPointCollection>>()

@@ -7,6 +7,7 @@ use crate::{
     error,
     util::Result,
 };
+use async_trait::async_trait;
 use futures::{Future, FutureExt, StreamExt, TryFuture};
 use geoengine_datatypes::raster::GridOrEmpty;
 use geoengine_datatypes::{
@@ -134,6 +135,7 @@ where
     }
 }
 
+#[async_trait]
 impl<Q, P> RasterQueryProcessor for TemporalRasterAggregationProcessor<Q, P>
 where
     P: Pixel,
@@ -141,7 +143,7 @@ where
 {
     type RasterType = P;
 
-    fn raster_query<'a>(
+    async fn raster_query<'a>(
         &'a self,
         query: crate::engine::QueryRectangle,
         ctx: &'a dyn crate::engine::QueryContext,
@@ -527,6 +529,7 @@ mod tests {
 
         let result = qp
             .raster_query(query_rect, &query_ctx)
+            .await
             .unwrap()
             .collect::<Vec<_>>()
             .await;
@@ -648,6 +651,7 @@ mod tests {
 
         let result = qp
             .raster_query(query_rect, &query_ctx)
+            .await
             .unwrap()
             .collect::<Vec<_>>()
             .await;
@@ -774,6 +778,7 @@ mod tests {
 
         let result = qp
             .raster_query(query_rect, &query_ctx)
+            .await
             .unwrap()
             .collect::<Vec<_>>()
             .await;
@@ -905,6 +910,7 @@ mod tests {
 
         let result = qp
             .raster_query(query_rect, &query_ctx)
+            .await
             .unwrap()
             .collect::<Vec<_>>()
             .await;
@@ -1034,6 +1040,7 @@ mod tests {
 
         let result = qp
             .raster_query(query_rect, &query_ctx)
+            .await
             .unwrap()
             .collect::<Vec<_>>()
             .await;
