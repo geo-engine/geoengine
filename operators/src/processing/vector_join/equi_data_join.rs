@@ -350,42 +350,35 @@ where
         query: QueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
-        // let result_stream = self
-        //     .left_processor
-        //     .query(query, ctx)
-        //     .await?
-        //     .then(move |left_collection| async {
-        //         // This implementation is a nested-loop join
+        let result_stream = self
+            .left_processor
+            .query(query, ctx)
+            .await?
+            .and_then(async move |left_collection| {
+                // This implementation is a nested-loop join
+                let left_collection = Arc::new(left_collection);
 
-        //         let left_collection = match left_collection {
-        //             Ok(collection) => Arc::new(collection),
-        //             Err(e) => return stream::once(async { Err(e) }).boxed(),
-        //         };
+                let data_query = self.right_processor.query(query, ctx).await?;
 
-        //         let data_query = match self.right_processor.query(query, ctx).await {
-        //             Ok(data_query) => data_query,
-        //             Err(e) => return stream::once(async { Err(e) }).boxed(),
-        //         };
+                let out = data_query
+                    .flat_map(move |right_collection| {
+                        match right_collection.and_then(|right_collection| {
+                            self.join(
+                                left_collection.clone(),
+                                right_collection,
+                                ctx.chunk_byte_size(),
+                            )
+                        }) {
+                            Ok(batch_iter) => stream::iter(batch_iter).boxed(),
+                            Err(e) => stream::once(async { Err(e) }).boxed(),
+                        }
+                    })
+                    .boxed();
+                Ok(out)
+            })
+            .try_flatten();
 
-        //         data_query
-        //             .flat_map(move |right_collection| {
-        //                 match right_collection.and_then(|right_collection| {
-        //                     self.join(
-        //                         left_collection.clone(),
-        //                         right_collection,
-        //                         ctx.chunk_byte_size(),
-        //                     )
-        //                 }) {
-        //                     Ok(batch_iter) => stream::iter(batch_iter).boxed(),
-        //                     Err(e) => stream::once(async { Err(e) }).boxed(),
-        //                 }
-        //             })
-        //             .boxed()
-        //     })
-        //     .flatten();
-
-        // Ok(FeatureCollectionChunkMerger::new(result_stream.fuse(), ctx.chunk_byte_size()).boxed())
-        todo!()
+        Ok(FeatureCollectionChunkMerger::new(result_stream.fuse(), ctx.chunk_byte_size()).boxed())
     }
 }
 

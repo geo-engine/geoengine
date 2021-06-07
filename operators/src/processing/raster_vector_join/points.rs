@@ -1,8 +1,7 @@
-use std::pin::Pin;
-use std::sync::Arc;
-
+use crate::adapters::FeatureCollectionStreamExt;
 use futures::stream::BoxStream;
-use futures::{FutureExt, StreamExt, TryStreamExt};
+use futures::{StreamExt, TryStreamExt};
+use std::sync::Arc;
 
 use geoengine_datatypes::{
     collections::FeatureCollectionModifications,
@@ -49,15 +48,15 @@ impl RasterPointJoinProcessor {
         query: QueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> BoxStream<'a, Result<MultiPointCollection>> {
-        todo!()
-        // let stream = points.map_ok(move |points| {
-        //     Self::process_collection_chunk(points, raster_processor, new_column_name, query, ctx)
-        // });
+        let stream = points.and_then(async move |points| {
+            Self::process_collection_chunk(points, raster_processor, new_column_name, query, ctx)
+                .await
+        });
 
-        // stream
-        //     .try_flatten()
-        //     .merge_chunks(ctx.chunk_byte_size())
-        //     .boxed()
+        stream
+            .try_flatten()
+            .merge_chunks(ctx.chunk_byte_size())
+            .boxed()
     }
 
     async fn process_collection_chunk<'a>(
@@ -66,7 +65,7 @@ impl RasterPointJoinProcessor {
         new_column_name: &'a str,
         query: QueryRectangle,
         ctx: &'a dyn QueryContext,
-    ) -> BoxStream<'a, Result<MultiPointCollection>> {
+    ) -> Result<BoxStream<'a, Result<MultiPointCollection>>> {
         call_on_generic_raster_processor!(raster_processor, raster_processor => {
             Self::process_typed_collection_chunk(points, raster_processor, new_column_name, query, ctx).await
         })
@@ -78,7 +77,7 @@ impl RasterPointJoinProcessor {
         new_column_name: &'a str,
         query: QueryRectangle,
         ctx: &'a dyn QueryContext,
-    ) -> BoxStream<'a, Result<MultiPointCollection>> {
+    ) -> Result<BoxStream<'a, Result<MultiPointCollection>>> {
         // make qrect smaller wrt. points
         let query = QueryRectangle {
             bbox: points
@@ -92,10 +91,7 @@ impl RasterPointJoinProcessor {
             spatial_resolution: query.spatial_resolution,
         };
 
-        let raster_query = match raster_processor.raster_query(query, ctx).await {
-            Ok(q) => q,
-            Err(e) => return futures::stream::once(async { Err(e) }).boxed(),
-        };
+        let raster_query = raster_processor.raster_query(query, ctx).await?;
 
         let points = Arc::new(points);
 
@@ -113,7 +109,7 @@ impl RasterPointJoinProcessor {
             )
             .map(move |accum| accum?.into_colletion(new_column_name));
 
-        collection_stream.boxed()
+        Ok(collection_stream.boxed())
     }
 }
 
