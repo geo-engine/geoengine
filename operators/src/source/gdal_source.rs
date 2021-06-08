@@ -1,3 +1,4 @@
+use crate::engine::{MetaData, QueryRectangle};
 use crate::{
     engine::{
         InitializedOperator, InitializedRasterOperator, QueryProcessor, RasterOperator,
@@ -6,22 +7,14 @@ use crate::{
     error::{self, Error},
     util::Result,
 };
-
-use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
-use gdal::Dataset as GdalDataset;
-use snafu::ResultExt;
-use std::{marker::PhantomData, path::PathBuf};
-//use gdal::metadata::Metadata; // TODO: handle metadata
-
-use serde::{Deserialize, Serialize};
-
 use futures::{
     stream::{self, BoxStream, StreamExt},
     Stream,
 };
 
-use crate::engine::{MetaData, QueryRectangle};
 use async_trait::async_trait;
+use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
+use gdal::Dataset as GdalDataset;
 use geoengine_datatypes::raster::{
     EmptyGrid, GeoTransform, Grid2D, GridOrEmpty2D, Pixel, RasterDataType, RasterTile2D,
 };
@@ -35,6 +28,11 @@ use geoengine_datatypes::{
         TilingSpecification,
     },
 };
+use log::debug;
+use serde::{Deserialize, Serialize};
+use snafu::ResultExt;
+use std::{marker::PhantomData, path::PathBuf};
+//use gdal::metadata::Metadata; // TODO: handle metadata
 
 /// Parameters for the GDAL Source Operator
 ///
@@ -319,6 +317,12 @@ where
         let output_shape = tile_information.tile_size_in_pixels();
         let output_geo_transform = tile_information.tile_geo_transform();
 
+        debug!(
+            "GridOrEmpty2D<{:?}> requested for {:?}.",
+            T::TYPE,
+            &output_bounds
+        );
+
         let dataset_result = GdalDataset::open(&dataset_params.file_path);
 
         // TODO: We also need to get metadata from the dataset (for each tile) e.g. scale + offset.
@@ -326,13 +330,20 @@ where
         // TODO: ensure that there is a no_data_value
         let fill_value = no_data_value.unwrap_or_else(T::zero);
 
+        debug!(
+            "no_data_value is {:?} and fill_value is {:?}.",
+            &no_data_value, &fill_value
+        );
+
         if dataset_result.is_err() {
             // TODO: check if Gdal error is actually file not found
             return match dataset_params.file_not_found_handling {
                 FileNotFoundHandling::NoData => {
                     if let Some(no_data) = no_data_value {
+                        debug!("file not found -> returning empty grid");
                         Ok(EmptyGrid::new(output_shape, no_data).into())
                     } else {
+                        debug!("file not found -> returning filled grid");
                         Ok(Grid2D::new_filled(output_shape, fill_value, None).into())
                     }
                 }
@@ -473,6 +484,12 @@ where
     ) -> Result<BoxStream<Result<RasterTile2D<T>>>> {
         let meta_data = self.meta_data.loading_info(query).await?;
 
+        debug!(
+            "Querying GdalSourceProcessor<{:?}> with: {:?}.",
+            T::TYPE,
+            &query
+        );
+
         let stream = stream::iter(meta_data.info)
             .map(move |info| match info {
                 Ok(info) => self.tile_stream(query, info).boxed(),
@@ -494,6 +511,8 @@ impl RasterOperator for GdalSource {
         context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<InitializedRasterOperator>> {
         let meta_data: GdalMetaData = context.meta_data(&self.params.dataset).await?;
+
+        debug!("Initializing GdalSource for {:?}.", &self.params.dataset);
 
         Ok(InitializedGdalSourceOperator {
             result_descriptor: meta_data.result_descriptor().await?,

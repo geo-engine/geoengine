@@ -190,6 +190,9 @@ pub enum Error {
     WindowSizeMustNotBeZero,
 
     NotYetImplemented,
+
+    TemporalRasterAggregationLastValidRequiresNoData,
+    TemporalRasterAggregationFirstValidRequiresNoData,
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {

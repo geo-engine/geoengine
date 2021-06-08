@@ -1,5 +1,7 @@
+use crate::adapters::{FoldTileAccu, FoldTileAccuMut};
+use crate::engine::{ExecutionContext, Operator, RasterOperator, SingleRasterSource};
 use crate::{
-    adapters::{RasterOverlapAdapter, SubQueryTileAggregator},
+    adapters::SubQueryTileAggregator,
     engine::{
         InitializedOperator, InitializedRasterOperator, QueryRectangle, RasterQueryProcessor,
         RasterResultDescriptor, TypedRasterQueryProcessor,
@@ -9,31 +11,36 @@ use crate::{
 };
 use async_trait::async_trait;
 use futures::{Future, FutureExt, StreamExt, TryFuture};
-use geoengine_datatypes::raster::GridOrEmpty;
+use geoengine_datatypes::raster::{EmptyGrid2D, GridOrEmpty};
 use geoengine_datatypes::{
     primitives::{SpatialBounded, TimeInstance, TimeInterval, TimeStep},
     raster::{Grid2D, Pixel, RasterTile2D, TileInformation, TilingSpecification},
 };
+use log::debug;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use typetag;
 
-use crate::engine::{ExecutionContext, Operator, RasterOperator, SingleRasterSource};
-
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TemporalRasterAggregationParameters {
-    aggregation_type: AggregationType,
+    aggregation: Aggregation,
     window: TimeStep,
-    ignore_no_data: bool,
     // TODO: allow specifying window start instead of using query.start?
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub enum AggregationType {
-    Min,
-    Max,
+#[serde(tag = "type")]
+pub enum Aggregation {
+    #[serde(rename_all = "camelCase")]
+    Min { ignore_no_data: bool },
+    #[serde(rename_all = "camelCase")]
+    Max { ignore_no_data: bool },
+    #[serde(rename_all = "camelCase")]
+    First { ignore_no_data: bool },
+    #[serde(rename_all = "camelCase")]
+    Last { ignore_no_data: bool },
 }
 
 pub type TemporalRasterAggregation =
@@ -50,10 +57,14 @@ impl RasterOperator for TemporalRasterAggregation {
 
         let source = self.sources.raster.initialize(context).await?;
 
+        debug!(
+            "Initializing TemporalRasterAggregation with {:?}.",
+            &self.params
+        );
+
         let initialized_operator = InitializedTemporalRasterAggregation {
-            aggregation_type: self.params.aggregation_type,
+            aggregation_type: self.params.aggregation,
             window: self.params.window,
-            ignore_no_data: self.params.ignore_no_data,
             result_descriptor: source.result_descriptor().clone(),
             source,
             tiling_specification: context.tiling_specification(),
@@ -64,9 +75,8 @@ impl RasterOperator for TemporalRasterAggregation {
 }
 
 pub struct InitializedTemporalRasterAggregation {
-    aggregation_type: AggregationType,
+    aggregation_type: Aggregation,
     window: TimeStep,
-    ignore_no_data: bool,
     source: Box<InitializedRasterOperator>,
     result_descriptor: RasterResultDescriptor,
     tiling_specification: TilingSpecification,
@@ -87,7 +97,6 @@ impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
             TemporalRasterAggregationProcessor::new(
                 self.aggregation_type,
                 self.window,
-                self.ignore_no_data,
                 p,
                 self.tiling_specification,
                 self.source.result_descriptor().no_data_value
@@ -104,9 +113,8 @@ where
     Q: RasterQueryProcessor<RasterType = P>,
     P: Pixel,
 {
-    aggregation_type: AggregationType,
+    aggregation_type: Aggregation,
     window: TimeStep,
-    ignore_no_data: bool,
     source: Q,
     tiling_specification: TilingSpecification,
     no_data_value: Option<P>,
@@ -118,9 +126,8 @@ where
     P: Pixel,
 {
     fn new(
-        aggregation_type: AggregationType,
+        aggregation_type: Aggregation,
         window: TimeStep,
-        ignore_no_data: bool,
         source: Q,
         tiling_specification: TilingSpecification,
         no_data_value: Option<f64>,
@@ -128,10 +135,22 @@ where
         Self {
             aggregation_type,
             window,
-            ignore_no_data,
             source,
             tiling_specification,
             no_data_value: no_data_value.map(P::from_),
+        }
+    }
+
+    fn create_subquery<F>(
+        &self,
+        fold_fn: F,
+        initial_value: P,
+    ) -> TemporalRasterAggregationSubQuery<F, P> {
+        TemporalRasterAggregationSubQuery {
+            fold_fn,
+            no_data_value: self.no_data_value,
+            initial_value,
+            step: self.window,
         }
     }
 }
@@ -144,85 +163,113 @@ where
 {
     type RasterType = P;
 
+    #[allow(clippy::too_many_lines)]
     async fn raster_query<'a>(
         &'a self,
         query: crate::engine::QueryRectangle,
         ctx: &'a dyn crate::engine::QueryContext,
     ) -> Result<futures::stream::BoxStream<'a, Result<RasterTile2D<Self::RasterType>>>> {
         match self.aggregation_type {
-            AggregationType::Min => {
-                if self.ignore_no_data {
-                    let spec = TemporalRasterAggregationSubQuery {
-                        fold_fn: no_data_ignoring_fold_future::<P, MinIgnoreNoDataAccFunction>,
-                        no_data_value: self.no_data_value,
-                        initial_value: P::max_value(),
-                        step: self.window,
-                    };
-
-                    let s = RasterOverlapAdapter::<'a, P, _, _>::new(
+            Aggregation::Min {
+                ignore_no_data: true,
+            } => Ok(self
+                .create_subquery(
+                    no_data_ignoring_fold_future::<P, MinIgnoreNoDataAccFunction>,
+                    P::max_value(),
+                )
+                .into_raster_overlap_adapter(&self.source, query, ctx, self.tiling_specification)
+                .boxed()),
+            Aggregation::Min {
+                ignore_no_data: false,
+            } => Ok(self
+                .create_subquery(fold_future::<P, MinAccFunction>, P::max_value())
+                .into_raster_overlap_adapter(&self.source, query, ctx, self.tiling_specification)
+                .boxed()),
+            Aggregation::Max {
+                ignore_no_data: true,
+            } => Ok(self
+                .create_subquery(
+                    no_data_ignoring_fold_future::<P, MaxIgnoreNoDataAccFunction>,
+                    P::min_value(),
+                )
+                .into_raster_overlap_adapter(&self.source, query, ctx, self.tiling_specification)
+                .boxed()),
+            Aggregation::Max {
+                ignore_no_data: false,
+            } => Ok(self
+                .create_subquery(fold_future::<P, MaxAccFunction>, P::min_value())
+                .into_raster_overlap_adapter(&self.source, query, ctx, self.tiling_specification)
+                .boxed()),
+            Aggregation::First {
+                ignore_no_data: true,
+            } => {
+                let no_data_value = self
+                    .no_data_value
+                    .ok_or(error::Error::TemporalRasterAggregationFirstValidRequiresNoData)?;
+                Ok(self
+                    .create_subquery(
+                        no_data_ignoring_fold_future::<P, FirstValidAccFunction>,
+                        no_data_value,
+                    )
+                    .into_raster_overlap_adapter(
                         &self.source,
                         query,
-                        self.tiling_specification,
                         ctx,
-                        spec,
-                    );
-
-                    Ok(s.boxed())
-                } else {
-                    let spec = TemporalRasterAggregationSubQuery {
-                        fold_fn: fold_future::<P, MinAccFunction>,
-                        no_data_value: self.no_data_value,
-                        initial_value: P::max_value(),
-                        step: self.window,
-                    };
-
-                    let s = RasterOverlapAdapter::<'a, P, _, _>::new(
-                        &self.source,
-                        query,
                         self.tiling_specification,
-                        ctx,
-                        spec,
-                    );
-
-                    Ok(s.boxed())
-                }
+                    )
+                    .boxed())
             }
-            AggregationType::Max => {
-                if self.ignore_no_data {
-                    let spec = TemporalRasterAggregationSubQuery {
-                        fold_fn: no_data_ignoring_fold_future::<P, MaxIgnoreNoDataAccFunction>,
-                        no_data_value: self.no_data_value,
-                        initial_value: P::min_value(),
-                        step: self.window,
-                    };
-
-                    let s = RasterOverlapAdapter::<'a, P, _, _>::new(
+            Aggregation::First {
+                ignore_no_data: false,
+            } => {
+                let no_data_value = self
+                    .no_data_value
+                    .ok_or(error::Error::TemporalRasterAggregationFirstValidRequiresNoData)?;
+                Ok(self
+                    .create_subquery(first_tile_fold_future::<P>, no_data_value)
+                    .into_raster_overlap_adapter(
                         &self.source,
                         query,
-                        self.tiling_specification,
                         ctx,
-                        spec,
-                    );
-
-                    Ok(s.boxed())
-                } else {
-                    let spec = TemporalRasterAggregationSubQuery {
-                        fold_fn: fold_future::<P, MaxAccFunction>,
-                        no_data_value: self.no_data_value,
-                        initial_value: P::min_value(),
-                        step: self.window,
-                    };
-
-                    let s = RasterOverlapAdapter::<'a, P, _, _>::new(
+                        self.tiling_specification,
+                    )
+                    .boxed())
+            }
+            Aggregation::Last {
+                ignore_no_data: true,
+            } => {
+                let no_data_value = self
+                    .no_data_value
+                    .ok_or(error::Error::TemporalRasterAggregationLastValidRequiresNoData)?;
+                Ok(self
+                    .create_subquery(
+                        no_data_ignoring_fold_future::<P, LastValidAccFunction>,
+                        no_data_value,
+                    )
+                    .into_raster_overlap_adapter(
                         &self.source,
                         query,
-                        self.tiling_specification,
                         ctx,
-                        spec,
-                    );
+                        self.tiling_specification,
+                    )
+                    .boxed())
+            }
 
-                    Ok(s.boxed())
-                }
+            Aggregation::Last {
+                ignore_no_data: false,
+            } => {
+                let no_data_value = self
+                    .no_data_value
+                    .ok_or(error::Error::TemporalRasterAggregationFirstValidRequiresNoData)?;
+                Ok(self
+                    .create_subquery(last_tile_fold_future::<P>, no_data_value)
+                    .into_raster_overlap_adapter(
+                        &self.source,
+                        query,
+                        ctx,
+                        self.tiling_specification,
+                    )
+                    .boxed())
             }
         }
     }
@@ -313,39 +360,75 @@ impl NoDataIgnoringAccFunction for MaxIgnoreNoDataAccFunction {
     }
 }
 
-fn fold_fn<T, C>(acc: (RasterTile2D<T>, ()), tile: RasterTile2D<T>) -> (RasterTile2D<T>, ())
+struct LastValidAccFunction {}
+
+impl NoDataIgnoringAccFunction for LastValidAccFunction {
+    fn acc_ignore_no_data<T: Pixel>(no_data: Option<T>, acc: T, value: T) -> T {
+        if let Some(no_data) = no_data {
+            if value == no_data {
+                return acc;
+            }
+        }
+        value
+    }
+}
+struct FirstValidAccFunction {}
+
+impl NoDataIgnoringAccFunction for FirstValidAccFunction {
+    fn acc_ignore_no_data<T: Pixel>(no_data: Option<T>, acc: T, value: T) -> T {
+        if let Some(no_data) = no_data {
+            if acc == no_data {
+                return value;
+            }
+        }
+        acc
+    }
+}
+
+fn fold_fn<T, C>(
+    acc: TemporalRasterAggregationTileAccu<T>,
+    tile: RasterTile2D<T>,
+) -> TemporalRasterAggregationTileAccu<T>
 where
     T: Pixel,
     C: AccFunction,
 {
-    let mut acc = acc.0;
-    let grid = match (acc.grid_array, tile.grid_array) {
-        (GridOrEmpty::Grid(mut a), GridOrEmpty::Grid(g)) => {
-            a.data = a
-                .inner_ref()
-                .iter()
-                .zip(g.inner_ref())
-                .map(|(x, y)| C::acc(a.no_data_value, *x, *y))
-                .collect();
-            GridOrEmpty::Grid(a)
+    let mut accu_tile = acc.accu_tile;
+
+    let grid = if acc.initial_state {
+        tile.grid_array
+    } else {
+        match (accu_tile.grid_array, tile.grid_array) {
+            (GridOrEmpty::Grid(mut a), GridOrEmpty::Grid(g)) => {
+                a.data = a
+                    .inner_ref()
+                    .iter()
+                    .zip(g.inner_ref())
+                    .map(|(x, y)| C::acc(a.no_data_value, *x, *y))
+                    .collect();
+                GridOrEmpty::Grid(a)
+            }
+            (GridOrEmpty::Empty(e), _) | (_, GridOrEmpty::Empty(e)) => GridOrEmpty::Empty(e),
         }
-        (GridOrEmpty::Empty(e), _) | (_, GridOrEmpty::Empty(e)) => GridOrEmpty::Empty(e),
     };
 
-    acc.grid_array = grid;
-    (acc, ())
+    accu_tile.grid_array = grid;
+    TemporalRasterAggregationTileAccu {
+        accu_tile,
+        initial_state: false,
+    }
 }
 
 fn no_data_ignoring_fold_fn<T, C>(
-    acc: (RasterTile2D<T>, ()),
+    acc: TemporalRasterAggregationTileAccu<T>,
     tile: RasterTile2D<T>,
-) -> (RasterTile2D<T>, ())
+) -> TemporalRasterAggregationTileAccu<T>
 where
     T: Pixel,
     C: NoDataIgnoringAccFunction,
 {
-    let mut acc = acc.0;
-    let grid = match (acc.grid_array, tile.grid_array) {
+    let mut acc_tile = acc.into_tile();
+    let grid = match (acc_tile.grid_array, tile.grid_array) {
         (GridOrEmpty::Grid(mut a), GridOrEmpty::Grid(g)) => {
             a.data = a
                 .inner_ref()
@@ -355,19 +438,23 @@ where
                 .collect();
             GridOrEmpty::Grid(a)
         }
+        // TODO: need to increase temporal validity?
         (GridOrEmpty::Grid(a), GridOrEmpty::Empty(_)) => GridOrEmpty::Grid(a),
         (GridOrEmpty::Empty(_), GridOrEmpty::Grid(g)) => GridOrEmpty::Grid(g),
         (GridOrEmpty::Empty(a), GridOrEmpty::Empty(_)) => GridOrEmpty::Empty(a),
     };
 
-    acc.grid_array = grid;
-    (acc, ())
+    acc_tile.grid_array = grid;
+    TemporalRasterAggregationTileAccu {
+        accu_tile: acc_tile,
+        initial_state: false,
+    }
 }
 
 pub fn fold_future<T, C>(
-    accu: (RasterTile2D<T>, ()),
+    accu: TemporalRasterAggregationTileAccu<T>,
     tile: RasterTile2D<T>,
-) -> impl Future<Output = Result<(RasterTile2D<T>, ())>>
+) -> impl Future<Output = Result<TemporalRasterAggregationTileAccu<T>>>
 where
     T: Pixel,
     C: AccFunction,
@@ -379,9 +466,9 @@ where
 }
 
 pub fn no_data_ignoring_fold_future<T, C>(
-    accu: (RasterTile2D<T>, ()),
+    accu: TemporalRasterAggregationTileAccu<T>,
     tile: RasterTile2D<T>,
-) -> impl Future<Output = Result<(RasterTile2D<T>, ())>>
+) -> impl Future<Output = Result<TemporalRasterAggregationTileAccu<T>>>
 where
     T: Pixel,
     C: NoDataIgnoringAccFunction,
@@ -392,6 +479,93 @@ where
             Err(e) => Err(e.into()),
         },
     )
+}
+
+fn first_tile_fold_fn<T>(
+    acc: TemporalRasterAggregationTileAccu<T>,
+    tile: RasterTile2D<T>,
+) -> TemporalRasterAggregationTileAccu<T>
+where
+    T: Pixel,
+{
+    if acc.initial_state {
+        let mut next_accu = tile;
+        next_accu.time = acc.accu_tile.time;
+
+        TemporalRasterAggregationTileAccu {
+            accu_tile: next_accu,
+            initial_state: false,
+        }
+    } else {
+        acc
+    }
+}
+
+pub fn first_tile_fold_future<T>(
+    accu: TemporalRasterAggregationTileAccu<T>,
+    tile: RasterTile2D<T>,
+) -> impl Future<Output = Result<TemporalRasterAggregationTileAccu<T>>>
+where
+    T: Pixel,
+{
+    tokio::task::spawn_blocking(|| first_tile_fold_fn(accu, tile)).then(async move |x| match x {
+        Ok(r) => Ok(r),
+        Err(e) => Err(e.into()),
+    })
+}
+
+#[allow(clippy::needless_pass_by_value)]
+fn last_tile_fold_fn<T>(
+    acc: TemporalRasterAggregationTileAccu<T>,
+    tile: RasterTile2D<T>,
+) -> TemporalRasterAggregationTileAccu<T>
+where
+    T: Pixel,
+{
+    let mut next_accu = tile;
+    next_accu.time = acc.accu_tile.time;
+
+    TemporalRasterAggregationTileAccu {
+        accu_tile: next_accu,
+        initial_state: false,
+    }
+}
+
+pub fn last_tile_fold_future<T>(
+    accu: TemporalRasterAggregationTileAccu<T>,
+    tile: RasterTile2D<T>,
+) -> impl Future<Output = Result<TemporalRasterAggregationTileAccu<T>>>
+where
+    T: Pixel,
+{
+    tokio::task::spawn_blocking(|| last_tile_fold_fn(accu, tile)).then(async move |x| match x {
+        Ok(r) => Ok(r),
+        Err(e) => Err(e.into()),
+    })
+}
+
+#[derive(Debug, Clone)]
+pub struct TemporalRasterAggregationTileAccu<T> {
+    accu_tile: RasterTile2D<T>,
+    initial_state: bool,
+}
+
+impl<T: Pixel> FoldTileAccu for TemporalRasterAggregationTileAccu<T> {
+    type RasterType = T;
+
+    fn tile_ref(&self) -> &RasterTile2D<Self::RasterType> {
+        &self.accu_tile
+    }
+
+    fn into_tile(self) -> RasterTile2D<Self::RasterType> {
+        self.accu_tile
+    }
+}
+
+impl<T: Pixel> FoldTileAccuMut for TemporalRasterAggregationTileAccu<T> {
+    fn tile_mut(&mut self) -> &mut RasterTile2D<Self::RasterType> {
+        &mut self.accu_tile
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -405,9 +579,15 @@ pub struct TemporalRasterAggregationSubQuery<F, T: Pixel> {
 impl<T, FoldM, FoldF> SubQueryTileAggregator<T> for TemporalRasterAggregationSubQuery<FoldM, T>
 where
     T: Pixel,
-    FoldM: Send + Clone + Fn((RasterTile2D<T>, ()), RasterTile2D<T>) -> FoldF,
-    FoldF: TryFuture<Ok = (RasterTile2D<T>, ()), Error = crate::error::Error>,
+    FoldM: Send + Clone + Fn(TemporalRasterAggregationTileAccu<T>, RasterTile2D<T>) -> FoldF,
+    FoldF: TryFuture<Ok = TemporalRasterAggregationTileAccu<T>, Error = crate::error::Error>,
 {
+    type TileAccu = TemporalRasterAggregationTileAccu<T>;
+
+    type FoldFuture = FoldF;
+
+    type FoldMethod = FoldM;
+
     fn result_no_data_value(&self) -> Option<T> {
         self.no_data_value
     }
@@ -420,20 +600,25 @@ where
         &self,
         tile_info: TileInformation,
         query_rect: QueryRectangle,
-    ) -> Result<(RasterTile2D<T>, ())> {
-        let output_raster = Grid2D::new_filled(
-            tile_info.tile_size_in_pixels,
-            self.initial_fill_value(),
-            self.result_no_data_value(),
-        );
-        Ok((
-            RasterTile2D::new_with_tile_info(
+    ) -> Result<Self::TileAccu> {
+        let output_raster = if let Some(no_data_value) = self.result_no_data_value() {
+            EmptyGrid2D::new(tile_info.tile_size_in_pixels, no_data_value).into()
+        } else {
+            Grid2D::new_filled(
+                tile_info.tile_size_in_pixels,
+                self.initial_fill_value(),
+                self.result_no_data_value(),
+            )
+            .into()
+        };
+        Ok(TemporalRasterAggregationTileAccu {
+            accu_tile: RasterTile2D::new_with_tile_info(
                 query_rect.time_interval,
                 tile_info,
-                GridOrEmpty::Grid(output_raster),
+                output_raster,
             ),
-            (),
-        ))
+            initial_state: true,
+        })
     }
 
     fn tile_query_rectangle(
@@ -452,19 +637,13 @@ where
     fn fold_method(&self) -> Self::FoldMethod {
         self.fold_fn.clone()
     }
-
-    type FoldFuture = FoldF;
-
-    type FoldMethod = FoldM;
-
-    type FoldCompanion = ();
 }
 
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::{
         primitives::{BoundingBox2D, Measurement, SpatialResolution},
-        raster::{EmptyGrid, RasterDataType},
+        raster::{EmptyGrid, EmptyGrid2D, RasterDataType},
         spatial_reference::SpatialReference,
     };
     use num_traits::AsPrimitive;
@@ -496,12 +675,13 @@ mod tests {
 
         let agg = TemporalRasterAggregation {
             params: TemporalRasterAggregationParameters {
-                aggregation_type: AggregationType::Min,
+                aggregation: Aggregation::Min {
+                    ignore_no_data: false,
+                },
                 window: TimeStep {
                     granularity: geoengine_datatypes::primitives::TimeGranularity::Millis,
                     step: 20,
                 },
-                ignore_no_data: false,
             },
             sources: SingleRasterSource { raster: mrs },
         }
@@ -619,12 +799,13 @@ mod tests {
 
         let agg = TemporalRasterAggregation {
             params: TemporalRasterAggregationParameters {
-                aggregation_type: AggregationType::Max,
+                aggregation: Aggregation::Max {
+                    ignore_no_data: false,
+                },
                 window: TimeStep {
                     granularity: geoengine_datatypes::primitives::TimeGranularity::Millis,
                     step: 20,
                 },
-                ignore_no_data: false,
             },
             sources: SingleRasterSource { raster: mrs },
         }
@@ -747,12 +928,13 @@ mod tests {
 
         let agg = TemporalRasterAggregation {
             params: TemporalRasterAggregationParameters {
-                aggregation_type: AggregationType::Max,
+                aggregation: Aggregation::Max {
+                    ignore_no_data: false,
+                },
                 window: TimeStep {
                     granularity: geoengine_datatypes::primitives::TimeGranularity::Millis,
                     step: 20,
                 },
-                ignore_no_data: false,
             },
             sources: SingleRasterSource { raster: mrs },
         }
@@ -880,12 +1062,13 @@ mod tests {
 
         let agg = TemporalRasterAggregation {
             params: TemporalRasterAggregationParameters {
-                aggregation_type: AggregationType::Max,
+                aggregation: Aggregation::Max {
+                    ignore_no_data: true,
+                },
                 window: TimeStep {
                     granularity: geoengine_datatypes::primitives::TimeGranularity::Millis,
                     step: 20,
                 },
-                ignore_no_data: true,
             },
             sources: SingleRasterSource { raster: mrs },
         }
@@ -1011,12 +1194,13 @@ mod tests {
 
         let agg = TemporalRasterAggregation {
             params: TemporalRasterAggregationParameters {
-                aggregation_type: AggregationType::Max,
+                aggregation: Aggregation::Max {
+                    ignore_no_data: false,
+                },
                 window: TimeStep {
                     granularity: geoengine_datatypes::primitives::TimeGranularity::Millis,
                     step: 20,
                 },
-                ignore_no_data: false,
             },
             sources: SingleRasterSource { raster: mrs },
         }
@@ -1063,6 +1247,375 @@ mod tests {
                     global_geo_transform: Default::default(),
                 },
                 GridOrEmpty::Empty(EmptyGrid::new([3, 2].into(), no_data_value.unwrap())),
+            )
+        );
+    }
+
+    #[tokio::test]
+    async fn test_first_with_no_data() {
+        let (no_data_value, raster_tiles) = make_raster_with_no_data();
+
+        let mrs = MockRasterSource {
+            params: MockRasterSourceParams {
+                data: raster_tiles,
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U8,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    measurement: Measurement::Unitless,
+                    no_data_value: no_data_value.map(AsPrimitive::as_),
+                },
+            },
+        }
+        .boxed();
+
+        let agg = TemporalRasterAggregation {
+            params: TemporalRasterAggregationParameters {
+                aggregation: Aggregation::First {
+                    ignore_no_data: true,
+                },
+                window: TimeStep {
+                    granularity: geoengine_datatypes::primitives::TimeGranularity::Millis,
+                    step: 30,
+                },
+            },
+            sources: SingleRasterSource { raster: mrs },
+        }
+        .boxed();
+
+        let exe_ctx = MockExecutionContext {
+            tiling_specification: TilingSpecification::new((0., 0.).into(), [3, 2].into()),
+            ..Default::default()
+        };
+        let query_rect = QueryRectangle {
+            bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (4., 3.).into()),
+            time_interval: TimeInterval::new_unchecked(0, 30),
+            spatial_resolution: SpatialResolution::one(),
+        };
+        let query_ctx = MockQueryContext {
+            chunk_byte_size: 1024 * 1024,
+        };
+
+        let qp = agg
+            .initialize(&exe_ctx)
+            .await
+            .unwrap()
+            .query_processor()
+            .unwrap()
+            .get_u8()
+            .unwrap();
+
+        let result = qp
+            .raster_query(query_rect, &query_ctx)
+            .await
+            .unwrap()
+            .collect::<Vec<_>>()
+            .await;
+
+        assert_eq!(result.len(), 2);
+
+        assert_eq!(
+            result[0].as_ref().unwrap(),
+            &RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(0, 30),
+                TileInformation {
+                    global_tile_position: [-1, 0].into(),
+                    tile_size_in_pixels: [3, 2].into(),
+                    global_geo_transform: Default::default(),
+                },
+                GridOrEmpty::Grid(
+                    Grid2D::new([3, 2].into(), vec![7, 8, 9, 16, 11, 12], no_data_value).unwrap()
+                ),
+            )
+        );
+
+        assert_eq!(
+            result[1].as_ref().unwrap(),
+            &RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(0, 30),
+                TileInformation {
+                    global_tile_position: [-1, 1].into(),
+                    tile_size_in_pixels: [3, 2].into(),
+                    global_geo_transform: Default::default(),
+                },
+                GridOrEmpty::Grid(
+                    Grid2D::new([3, 2].into(), vec![1, 2, 3, 42, 5, 6], no_data_value).unwrap()
+                ),
+            )
+        );
+    }
+
+    #[tokio::test]
+    async fn test_last_with_no_data() {
+        let (no_data_value, raster_tiles) = make_raster_with_no_data();
+
+        let mrs = MockRasterSource {
+            params: MockRasterSourceParams {
+                data: raster_tiles,
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U8,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    measurement: Measurement::Unitless,
+                    no_data_value: no_data_value.map(AsPrimitive::as_),
+                },
+            },
+        }
+        .boxed();
+
+        let agg = TemporalRasterAggregation {
+            params: TemporalRasterAggregationParameters {
+                aggregation: Aggregation::Last {
+                    ignore_no_data: true,
+                },
+                window: TimeStep {
+                    granularity: geoengine_datatypes::primitives::TimeGranularity::Millis,
+                    step: 30,
+                },
+            },
+            sources: SingleRasterSource { raster: mrs },
+        }
+        .boxed();
+
+        let exe_ctx = MockExecutionContext {
+            tiling_specification: TilingSpecification::new((0., 0.).into(), [3, 2].into()),
+            ..Default::default()
+        };
+        let query_rect = QueryRectangle {
+            bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (4., 3.).into()),
+            time_interval: TimeInterval::new_unchecked(0, 30),
+            spatial_resolution: SpatialResolution::one(),
+        };
+        let query_ctx = MockQueryContext {
+            chunk_byte_size: 1024 * 1024,
+        };
+
+        let qp = agg
+            .initialize(&exe_ctx)
+            .await
+            .unwrap()
+            .query_processor()
+            .unwrap()
+            .get_u8()
+            .unwrap();
+
+        let result = qp
+            .raster_query(query_rect, &query_ctx)
+            .await
+            .unwrap()
+            .collect::<Vec<_>>()
+            .await;
+
+        assert_eq!(result.len(), 2);
+
+        assert_eq!(
+            result[0].as_ref().unwrap(),
+            &RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(0, 30),
+                TileInformation {
+                    global_tile_position: [-1, 0].into(),
+                    tile_size_in_pixels: [3, 2].into(),
+                    global_geo_transform: Default::default(),
+                },
+                GridOrEmpty::Grid(
+                    Grid2D::new([3, 2].into(), vec![13, 8, 15, 16, 17, 18], no_data_value).unwrap()
+                ),
+            )
+        );
+
+        assert_eq!(
+            result[1].as_ref().unwrap(),
+            &RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(0, 30),
+                TileInformation {
+                    global_tile_position: [-1, 1].into(),
+                    tile_size_in_pixels: [3, 2].into(),
+                    global_geo_transform: Default::default(),
+                },
+                GridOrEmpty::Grid(
+                    Grid2D::new([3, 2].into(), vec![1, 2, 3, 42, 5, 6], no_data_value).unwrap()
+                ),
+            )
+        );
+    }
+
+    #[tokio::test]
+    async fn test_last() {
+        let (no_data_value, raster_tiles) = make_raster_with_no_data();
+
+        let mrs = MockRasterSource {
+            params: MockRasterSourceParams {
+                data: raster_tiles,
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U8,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    measurement: Measurement::Unitless,
+                    no_data_value: no_data_value.map(AsPrimitive::as_),
+                },
+            },
+        }
+        .boxed();
+
+        let agg = TemporalRasterAggregation {
+            params: TemporalRasterAggregationParameters {
+                aggregation: Aggregation::Last {
+                    ignore_no_data: false,
+                },
+                window: TimeStep {
+                    granularity: geoengine_datatypes::primitives::TimeGranularity::Millis,
+                    step: 30,
+                },
+            },
+            sources: SingleRasterSource { raster: mrs },
+        }
+        .boxed();
+
+        let exe_ctx = MockExecutionContext {
+            tiling_specification: TilingSpecification::new((0., 0.).into(), [3, 2].into()),
+            ..Default::default()
+        };
+        let query_rect = QueryRectangle {
+            bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (4., 3.).into()),
+            time_interval: TimeInterval::new_unchecked(0, 30),
+            spatial_resolution: SpatialResolution::one(),
+        };
+        let query_ctx = MockQueryContext {
+            chunk_byte_size: 1024 * 1024,
+        };
+
+        let qp = agg
+            .initialize(&exe_ctx)
+            .await
+            .unwrap()
+            .query_processor()
+            .unwrap()
+            .get_u8()
+            .unwrap();
+
+        let result = qp
+            .raster_query(query_rect, &query_ctx)
+            .await
+            .unwrap()
+            .collect::<Vec<_>>()
+            .await;
+
+        assert_eq!(result.len(), 2);
+
+        assert_eq!(
+            result[0].as_ref().unwrap(),
+            &RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(0, 30),
+                TileInformation {
+                    global_tile_position: [-1, 0].into(),
+                    tile_size_in_pixels: [3, 2].into(),
+                    global_geo_transform: Default::default(),
+                },
+                GridOrEmpty::Grid(
+                    Grid2D::new([3, 2].into(), vec![13, 42, 15, 16, 17, 18], no_data_value)
+                        .unwrap()
+                )
+            )
+        );
+
+        assert_eq!(
+            result[1].as_ref().unwrap(),
+            &RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(0, 30),
+                TileInformation {
+                    global_tile_position: [-1, 1].into(),
+                    tile_size_in_pixels: [3, 2].into(),
+                    global_geo_transform: Default::default(),
+                },
+                GridOrEmpty::Empty(EmptyGrid2D::new([3, 2].into(), no_data_value.unwrap()))
+            )
+        );
+    }
+
+    #[tokio::test]
+    async fn test_first() {
+        let (no_data_value, raster_tiles) = make_raster_with_no_data();
+
+        let mrs = MockRasterSource {
+            params: MockRasterSourceParams {
+                data: raster_tiles,
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U8,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    measurement: Measurement::Unitless,
+                    no_data_value: no_data_value.map(AsPrimitive::as_),
+                },
+            },
+        }
+        .boxed();
+
+        let agg = TemporalRasterAggregation {
+            params: TemporalRasterAggregationParameters {
+                aggregation: Aggregation::First {
+                    ignore_no_data: false,
+                },
+                window: TimeStep {
+                    granularity: geoengine_datatypes::primitives::TimeGranularity::Millis,
+                    step: 30,
+                },
+            },
+            sources: SingleRasterSource { raster: mrs },
+        }
+        .boxed();
+
+        let exe_ctx = MockExecutionContext {
+            tiling_specification: TilingSpecification::new((0., 0.).into(), [3, 2].into()),
+            ..Default::default()
+        };
+        let query_rect = QueryRectangle {
+            bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (4., 3.).into()),
+            time_interval: TimeInterval::new_unchecked(0, 30),
+            spatial_resolution: SpatialResolution::one(),
+        };
+        let query_ctx = MockQueryContext {
+            chunk_byte_size: 1024 * 1024,
+        };
+
+        let qp = agg
+            .initialize(&exe_ctx)
+            .await
+            .unwrap()
+            .query_processor()
+            .unwrap()
+            .get_u8()
+            .unwrap();
+
+        let result = qp
+            .raster_query(query_rect, &query_ctx)
+            .await
+            .unwrap()
+            .collect::<Vec<_>>()
+            .await;
+
+        assert_eq!(result.len(), 2);
+
+        assert_eq!(
+            result[0].as_ref().unwrap(),
+            &RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(0, 30),
+                TileInformation {
+                    global_tile_position: [-1, 0].into(),
+                    tile_size_in_pixels: [3, 2].into(),
+                    global_geo_transform: Default::default(),
+                },
+                GridOrEmpty::Empty(EmptyGrid2D::new([3, 2].into(), no_data_value.unwrap()))
+            )
+        );
+
+        assert_eq!(
+            result[1].as_ref().unwrap(),
+            &RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(0, 30),
+                TileInformation {
+                    global_tile_position: [-1, 1].into(),
+                    tile_size_in_pixels: [3, 2].into(),
+                    global_geo_transform: Default::default(),
+                },
+                GridOrEmpty::Grid(
+                    Grid2D::new([3, 2].into(), vec![1, 2, 3, 42, 5, 6], no_data_value).unwrap()
+                )
             )
         );
     }
@@ -1163,5 +1716,86 @@ mod tests {
             ),
         ];
         (no_data_value, raster_tiles)
+    }
+
+    fn make_raster_with_no_data() -> (
+        Option<u8>,
+        Vec<geoengine_datatypes::raster::RasterTile2D<u8>>,
+    ) {
+        let no_data_value = 42;
+        let raster_tiles = vec![
+            RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(0, 10),
+                TileInformation {
+                    global_tile_position: [-1, 0].into(),
+                    tile_size_in_pixels: [3, 2].into(),
+                    global_geo_transform: Default::default(),
+                },
+                GridOrEmpty::Empty(EmptyGrid2D::new([3, 2].into(), no_data_value)),
+            ),
+            RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(0, 10),
+                TileInformation {
+                    global_tile_position: [-1, 1].into(),
+                    tile_size_in_pixels: [3, 2].into(),
+                    global_geo_transform: Default::default(),
+                },
+                GridOrEmpty::Grid(
+                    Grid2D::new([3, 2].into(), vec![1, 2, 3, 42, 5, 6], Some(no_data_value))
+                        .unwrap(),
+                ),
+            ),
+            RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(10, 20),
+                TileInformation {
+                    global_tile_position: [-1, 0].into(),
+                    tile_size_in_pixels: [3, 2].into(),
+                    global_geo_transform: Default::default(),
+                },
+                GridOrEmpty::Grid(
+                    Grid2D::new(
+                        [3, 2].into(),
+                        vec![7, 8, 9, 42, 11, 12],
+                        Some(no_data_value),
+                    )
+                    .unwrap(),
+                ),
+            ),
+            RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(10, 20),
+                TileInformation {
+                    global_tile_position: [-1, 1].into(),
+                    tile_size_in_pixels: [3, 2].into(),
+                    global_geo_transform: Default::default(),
+                },
+                GridOrEmpty::Empty(EmptyGrid2D::new([3, 2].into(), no_data_value)),
+            ),
+            RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(20, 30),
+                TileInformation {
+                    global_tile_position: [-1, 0].into(),
+                    tile_size_in_pixels: [3, 2].into(),
+                    global_geo_transform: Default::default(),
+                },
+                GridOrEmpty::Grid(
+                    Grid2D::new(
+                        [3, 2].into(),
+                        vec![13, 42, 15, 16, 17, 18],
+                        Some(no_data_value),
+                    )
+                    .unwrap(),
+                ),
+            ),
+            RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(20, 30),
+                TileInformation {
+                    global_tile_position: [-1, 1].into(),
+                    tile_size_in_pixels: [3, 2].into(),
+                    global_geo_transform: Default::default(),
+                },
+                GridOrEmpty::Empty(EmptyGrid2D::new([3, 2].into(), no_data_value)),
+            ),
+        ];
+        (Some(no_data_value), raster_tiles)
     }
 }
