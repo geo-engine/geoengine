@@ -37,6 +37,7 @@ pub struct RasterPropertiesKey {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "type")]
 pub enum RasterPropertiesEntry {
     Number(f64),
     String(String),
