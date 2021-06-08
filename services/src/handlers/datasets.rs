@@ -454,7 +454,7 @@ fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDef
     Ok(MetaDataDefinition::OgrMetaData(StaticMetaData {
         loading_info: OgrSourceDataset {
             file_name: main_file_path.into(),
-            layer_name: layer.name(),
+            layer_name: geometry.layer_name.unwrap_or_else(|| layer.name()),
             data_type: Some(geometry.data_type),
             time,
             columns: Some(OgrSourceColumnSpec {
@@ -633,10 +633,11 @@ fn detect_time_type(columns: &Columns) -> OgrSourceDatasetTimeType {
 }
 
 fn detect_vector_geometry(dataset: &Dataset) -> DetectedGeometry {
-    if let Ok(layer) = dataset.layer(0) {
-        if let Some(g) = layer.defn().geom_fields().next() {
+    for layer in dataset.layers() {
+        for g in layer.defn().geom_fields() {
             if let Ok(data_type) = VectorDataType::try_from_ogr_type_code(g.field_type()) {
                 return DetectedGeometry {
+                    layer_name: Some(layer.name()),
                     data_type,
                     spatial_reference: g
                         .spatial_ref()
@@ -652,7 +653,9 @@ fn detect_vector_geometry(dataset: &Dataset) -> DetectedGeometry {
         }
     }
 
+    // fallback type if no geometry was found
     DetectedGeometry {
+        layer_name: None,
         data_type: VectorDataType::Data,
         spatial_reference: SpatialReferenceOption::Unreferenced,
     }
@@ -665,6 +668,7 @@ struct GdalAutoDetect {
 }
 
 struct DetectedGeometry {
+    layer_name: Option<String>,
     data_type: VectorDataType,
     spatial_reference: SpatialReferenceOption,
 }
