@@ -14,19 +14,7 @@ pub struct RasterProperties {
 }
 
 impl RasterProperties {
-    pub fn band_name(&self) -> Option<&String> {
-        self.band_name.as_ref()
-    }
-
-    pub fn set_band_name(&mut self, band_name: String) {
-        self.band_name = Some(band_name);
-    }
-
-    pub fn remove_band_name(&mut self) {
-        self.band_name = None;
-    }
-
-    pub fn properties_domains(&self) -> impl Iterator<Item = Option<&String>> {
+    pub fn domains(&self) -> impl Iterator<Item = Option<&String>> {
         self.properties_map.keys().map(|m| m.domain.as_ref())
     }
 }
