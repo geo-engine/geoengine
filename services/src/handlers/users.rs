@@ -1,17 +1,14 @@
 use crate::error;
 use crate::error::Result;
-use crate::handlers::{authenticate, Context};
+use crate::handlers::Context;
 use crate::projects::project::{ProjectId, STRectangle};
 use crate::users::session::Session;
-use crate::users::user::{UserCredentials, UserId, UserRegistration};
+use crate::users::user::{UserCredentials, UserRegistration};
 use crate::users::userdb::UserDb;
 use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
-use actix_web::{get, post, web, HttpResponse, Responder};
+use actix_web::{web, HttpResponse, Responder};
 use snafu::ResultExt;
-use uuid::Uuid;
-use warp::reply::Reply;
-use warp::Filter;
 
 /// Registers a user by providing [`UserRegistration`] parameters.
 ///
@@ -222,13 +219,13 @@ pub(crate) async fn session_view_handler<C: Context>(
     session: Session,
     ctx: web::Data<C>,
     view: web::Json<STRectangle>,
-) -> Result<impl warp::Reply, warp::Rejection> {
+) -> Result<impl Responder> {
     ctx.user_db_ref_mut()
         .await
-        .set_session_view(&session, *view)
+        .set_session_view(&session, view.clone())
         .await?;
 
-    Ok(warp::reply())
+    Ok(HttpResponse::Ok())
 }
 
 #[cfg(test)]

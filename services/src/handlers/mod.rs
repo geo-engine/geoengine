@@ -186,7 +186,7 @@ impl FromRequest for Session {
     type Future = Ready<Result<Self, Self::Error>>;
     type Config = ();
 
-    fn from_request(req: &HttpRequest, payload: &mut Payload) -> Self::Future {
+    fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
         let session = req.extensions_mut().remove::<Session>();
 
         match session {

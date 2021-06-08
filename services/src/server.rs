@@ -4,7 +4,6 @@ use crate::contexts::{Context, InMemoryContext};
 use crate::error;
 use crate::error::{Error, Result};
 use crate::handlers;
-use crate::handlers::handle_rejection;
 use crate::handlers::validate_token;
 use crate::util::config;
 use crate::util::config::{get_config_element, Backend};
