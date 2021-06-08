@@ -13,6 +13,7 @@ use crate::util::Result;
 
 use crate::processing::raster_vector_join::points::RasterPointJoinProcessor;
 use crate::processing::raster_vector_join::points_aggregated::RasterPointAggregateJoinProcessor;
+use async_trait::async_trait;
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::primitives::FeatureDataType;
 use geoengine_datatypes::raster::RasterDataType;
@@ -45,8 +46,9 @@ pub enum AggregationMethod {
 }
 
 #[typetag::serde]
+#[async_trait]
 impl VectorOperator for RasterVectorJoin {
-    fn initialize(
+    async fn initialize(
         mut self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedVectorOperator>> {
@@ -64,7 +66,7 @@ impl VectorOperator for RasterVectorJoin {
             }
         );
 
-        let vector_source = self.sources.vector.initialize(context)?;
+        let vector_source = self.sources.vector.initialize(context).await?;
 
         ensure!(
             vector_source.result_descriptor().data_type != VectorDataType::Data,
@@ -79,12 +81,11 @@ impl VectorOperator for RasterVectorJoin {
             },
         );
 
-        let raster_sources = self
-            .sources
-            .rasters
-            .drain(..)
-            .map(|source| source.initialize(context))
-            .collect::<Result<Vec<_>>>()?;
+        let mut raster_sources = vec![];
+        for source in self.sources.rasters {
+            // TODO: initialize in parallel
+            raster_sources.push(source.initialize(context).await?);
+        }
 
         let params = self.params;
 
@@ -272,7 +273,7 @@ mod tests {
             },
         };
 
-        let operator = operator.boxed().initialize(&exe_ctc).unwrap();
+        let operator = operator.boxed().initialize(&exe_ctc).await.unwrap();
 
         let query_processor = operator.query_processor().unwrap().multi_point().unwrap();
 
@@ -343,7 +344,7 @@ mod tests {
             },
         };
 
-        let operator = operator.boxed().initialize(&exe_ctc).unwrap();
+        let operator = operator.boxed().initialize(&exe_ctc).await.unwrap();
 
         let query_processor = operator.query_processor().unwrap().multi_point().unwrap();
 
@@ -415,7 +416,7 @@ mod tests {
             },
         };
 
-        let operator = operator.boxed().initialize(&exe_ctc).unwrap();
+        let operator = operator.boxed().initialize(&exe_ctc).await.unwrap();
 
         let query_processor = operator.query_processor().unwrap().multi_point().unwrap();
 

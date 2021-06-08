@@ -62,8 +62,9 @@ pub struct MockRasterSourceParams {
 pub type MockRasterSource = SourceOperator<MockRasterSourceParams>;
 
 #[typetag::serde]
+#[async_trait]
 impl RasterOperator for MockRasterSource {
-    fn initialize(
+    async fn initialize(
         self: Box<Self>,
         _context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<InitializedRasterOperator>> {
@@ -122,8 +123,8 @@ mod tests {
         spatial_reference::SpatialReference,
     };
 
-    #[test]
-    fn serde() {
+    #[tokio::test]
+    async fn serde() {
         let no_data_value = None;
         let raster = Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], no_data_value).unwrap();
 
@@ -194,7 +195,7 @@ mod tests {
 
         let execution_context = MockExecutionContext::default();
 
-        let initialized = deserialized.initialize(&execution_context).unwrap();
+        let initialized = deserialized.initialize(&execution_context).await.unwrap();
 
         match initialized.query_processor().unwrap() {
             crate::engine::TypedRasterQueryProcessor::U8(..) => {}

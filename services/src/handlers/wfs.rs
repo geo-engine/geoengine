@@ -392,6 +392,7 @@ async fn get_feature<C: Context>(
     let initialized = operator
         .clone()
         .initialize(&execution_context)
+        .await
         .context(error::Operator)?;
 
     // handle request and workflow crs matching
@@ -418,6 +419,7 @@ async fn get_feature<C: Context>(
         // TODO: avoid re-initialization of the whole operator graph
         Box::new(proj)
             .initialize(&execution_context)
+            .await
             .context(error::Operator)?
     };
 

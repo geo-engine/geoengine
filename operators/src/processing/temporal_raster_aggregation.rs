@@ -40,14 +40,15 @@ pub type TemporalRasterAggregation =
     Operator<TemporalRasterAggregationParameters, SingleRasterSource>;
 
 #[typetag::serde]
+#[async_trait]
 impl RasterOperator for TemporalRasterAggregation {
-    fn initialize(
+    async fn initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedRasterOperator>> {
         ensure!(self.params.window.step > 0, error::WindowSizeMustNotBeZero);
 
-        let source = self.sources.raster.initialize(context)?;
+        let source = self.sources.raster.initialize(context).await?;
 
         let initialized_operator = InitializedTemporalRasterAggregation {
             aggregation_type: self.params.aggregation_type,
@@ -521,6 +522,7 @@ mod tests {
 
         let qp = agg
             .initialize(&exe_ctx)
+            .await
             .unwrap()
             .query_processor()
             .unwrap()
@@ -643,6 +645,7 @@ mod tests {
 
         let qp = agg
             .initialize(&exe_ctx)
+            .await
             .unwrap()
             .query_processor()
             .unwrap()
@@ -770,6 +773,7 @@ mod tests {
 
         let qp = agg
             .initialize(&exe_ctx)
+            .await
             .unwrap()
             .query_processor()
             .unwrap()
@@ -902,6 +906,7 @@ mod tests {
 
         let qp = agg
             .initialize(&exe_ctx)
+            .await
             .unwrap()
             .query_processor()
             .unwrap()
@@ -1032,6 +1037,7 @@ mod tests {
 
         let qp = agg
             .initialize(&exe_ctx)
+            .await
             .unwrap()
             .query_processor()
             .unwrap()

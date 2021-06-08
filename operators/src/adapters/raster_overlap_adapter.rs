@@ -642,7 +642,7 @@ mod tests {
         };
         let tiling_strat = exe_ctx.tiling_specification;
 
-        let op = mrs1.initialize(&exe_ctx).unwrap();
+        let op = mrs1.initialize(&exe_ctx).await.unwrap();
 
         let qp = op.query_processor().unwrap().get_u8().unwrap();
 
@@ -731,7 +731,7 @@ mod tests {
         };
         let tiling_strat = exe_ctx.tiling_specification;
 
-        let op = mrs1.initialize(&exe_ctx).unwrap();
+        let op = mrs1.initialize(&exe_ctx).await.unwrap();
 
         let raster_res_desc: &RasterResultDescriptor = op.result_descriptor();
 

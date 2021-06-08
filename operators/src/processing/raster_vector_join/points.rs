@@ -314,6 +314,7 @@ mod tests {
 
         let points = points
             .initialize(&execution_context)
+            .await
             .unwrap()
             .query_processor()
             .unwrap()
@@ -322,6 +323,7 @@ mod tests {
 
         let rasters = raster_source
             .initialize(&execution_context)
+            .await
             .unwrap()
             .query_processor()
             .unwrap();
@@ -399,6 +401,7 @@ mod tests {
 
         let points = points
             .initialize(&execution_context)
+            .await
             .unwrap()
             .query_processor()
             .unwrap()
@@ -407,6 +410,7 @@ mod tests {
 
         let rasters = raster_source
             .initialize(&execution_context)
+            .await
             .unwrap()
             .query_processor()
             .unwrap();
@@ -492,6 +496,7 @@ mod tests {
 
         let points = points
             .initialize(&execution_context)
+            .await
             .unwrap()
             .query_processor()
             .unwrap()
@@ -500,6 +505,7 @@ mod tests {
 
         let rasters = raster_source
             .initialize(&execution_context)
+            .await
             .unwrap()
             .query_processor()
             .unwrap();
@@ -587,6 +593,7 @@ mod tests {
 
         let points = points
             .initialize(&execution_context)
+            .await
             .unwrap()
             .query_processor()
             .unwrap()
@@ -595,6 +602,7 @@ mod tests {
 
         let rasters = raster_source
             .initialize(&execution_context)
+            .await
             .unwrap()
             .query_processor()
             .unwrap();

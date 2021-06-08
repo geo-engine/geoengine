@@ -160,8 +160,9 @@ pub struct GdalMetaDataStatic {
     pub result_descriptor: RasterResultDescriptor,
 }
 
+#[async_trait]
 impl MetaData<GdalLoadingInfo, RasterResultDescriptor> for GdalMetaDataStatic {
-    fn loading_info(&self, _query: QueryRectangle) -> Result<GdalLoadingInfo> {
+    async fn loading_info(&self, _query: QueryRectangle) -> Result<GdalLoadingInfo> {
         Ok(GdalLoadingInfo {
             info: GdalLoadingInfoPartIterator::Static {
                 parts: vec![GdalLoadingInfoPart {
@@ -173,7 +174,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor> for GdalMetaDataStatic {
         })
     }
 
-    fn result_descriptor(&self) -> Result<RasterResultDescriptor> {
+    async fn result_descriptor(&self) -> Result<RasterResultDescriptor> {
         Ok(self.result_descriptor.clone())
     }
 
@@ -199,8 +200,9 @@ pub struct GdalMetaDataRegular {
     pub step: TimeStep,
 }
 
+#[async_trait]
 impl MetaData<GdalLoadingInfo, RasterResultDescriptor> for GdalMetaDataRegular {
-    fn loading_info(&self, query: QueryRectangle) -> Result<GdalLoadingInfo> {
+    async fn loading_info(&self, query: QueryRectangle) -> Result<GdalLoadingInfo> {
         let snapped_start = self
             .step
             .snap_relative(self.start, query.time_interval.start())?;
@@ -223,7 +225,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor> for GdalMetaDataRegular {
         })
     }
 
-    fn result_descriptor(&self) -> Result<RasterResultDescriptor> {
+    async fn result_descriptor(&self) -> Result<RasterResultDescriptor> {
         Ok(self.result_descriptor.clone())
     }
 
@@ -469,7 +471,7 @@ where
         query: crate::engine::QueryRectangle,
         _ctx: &'a dyn crate::engine::QueryContext,
     ) -> Result<BoxStream<Result<RasterTile2D<T>>>> {
-        let meta_data = self.meta_data.loading_info(query)?;
+        let meta_data = self.meta_data.loading_info(query).await?;
 
         let stream = stream::iter(meta_data.info)
             .map(move |info| match info {
@@ -485,15 +487,16 @@ where
 pub type GdalSource = SourceOperator<GdalSourceParameters>;
 
 #[typetag::serde]
+#[async_trait]
 impl RasterOperator for GdalSource {
-    fn initialize(
+    async fn initialize(
         self: Box<Self>,
         context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<InitializedRasterOperator>> {
-        let meta_data: GdalMetaData = context.meta_data(&self.params.dataset)?;
+        let meta_data: GdalMetaData = context.meta_data(&self.params.dataset).await?;
 
         Ok(InitializedGdalSourceOperator {
-            result_descriptor: meta_data.result_descriptor()?,
+            result_descriptor: meta_data.result_descriptor().await?,
             meta_data,
             tiling_specification: context.tiling_specification(),
         }
@@ -636,7 +639,7 @@ mod tests {
         let spatial_resolution =
             SpatialResolution::new_unchecked(x_query_resolution, y_query_resolution);
 
-        let o = op.initialize(exe_ctx).unwrap();
+        let o = op.initialize(exe_ctx).await.unwrap();
 
         o.query_processor()
             .unwrap()
@@ -859,8 +862,8 @@ mod tests {
         assert_eq!(params.no_data_value, replaced.no_data_value);
     }
 
-    #[test]
-    fn test_regular_meta_data() {
+    #[tokio::test]
+    async fn test_regular_meta_data() {
         let no_data_value = Some(0.);
 
         let meta_data = GdalMetaDataRegular {
@@ -888,7 +891,7 @@ mod tests {
         };
 
         assert_eq!(
-            meta_data.result_descriptor().unwrap(),
+            meta_data.result_descriptor().await.unwrap(),
             RasterResultDescriptor {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
@@ -904,6 +907,7 @@ mod tests {
                     time_interval: TimeInterval::new_unchecked(0, 30),
                     spatial_resolution: SpatialResolution::one(),
                 })
+                .await
                 .unwrap()
                 .info
                 .map(|p| p.unwrap().params.file_path.to_str().unwrap().to_owned())

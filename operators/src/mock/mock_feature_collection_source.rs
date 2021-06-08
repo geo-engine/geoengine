@@ -91,8 +91,9 @@ macro_rules! impl_mock_feature_collection_source {
         type $newtype = MockFeatureCollectionSource<$geometry>;
 
         #[typetag::serde]
+        #[async_trait]
         impl VectorOperator for $newtype {
-            fn initialize(
+            async fn initialize(
                 self: Box<Self>,
                 _context: &dyn ExecutionContext,
             ) -> Result<Box<InitializedVectorOperator>> {
@@ -254,7 +255,10 @@ mod tests {
 
         let source = MockFeatureCollectionSource::single(collection.clone()).boxed();
 
-        let source = source.initialize(&MockExecutionContext::default()).unwrap();
+        let source = source
+            .initialize(&MockExecutionContext::default())
+            .await
+            .unwrap();
 
         let processor =
             if let Ok(TypedVectorQueryProcessor::MultiPoint(p)) = source.query_processor() {

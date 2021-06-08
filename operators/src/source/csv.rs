@@ -144,8 +144,9 @@ pub struct CsvSourceStream {
 pub type CsvSource = SourceOperator<CsvSourceParameters>;
 
 #[typetag::serde]
+#[async_trait]
 impl VectorOperator for CsvSource {
-    fn initialize(
+    async fn initialize(
         self: Box<Self>,
         _context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<InitializedVectorOperator>> {

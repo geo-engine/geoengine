@@ -220,16 +220,17 @@ pub struct InitializedOgrSource {
 }
 
 #[typetag::serde]
+#[async_trait]
 impl VectorOperator for OgrSource {
-    fn initialize(
+    async fn initialize(
         self: Box<Self>,
         context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<crate::engine::InitializedVectorOperator>> {
         let info: Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor>> =
-            context.meta_data(&self.params.dataset)?;
+            context.meta_data(&self.params.dataset).await?;
 
         let initialized_source = InitializedOgrSource {
-            result_descriptor: info.result_descriptor()?,
+            result_descriptor: info.result_descriptor().await?,
             state: OgrSourceState {
                 dataset_information: info,
                 params: self.params,
@@ -321,7 +322,7 @@ where
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         Ok(OgrSourceStream::new(
-            self.dataset_information.loading_info(query)?,
+            self.dataset_information.loading_info(query).await?,
             query,
             ctx.chunk_byte_size(),
         )
@@ -1287,7 +1288,8 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)?;
+        .initialize(&exe_ctx)
+        .await?;
 
         assert_eq!(
             source.result_descriptor().data_type,
@@ -1376,7 +1378,8 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)?;
+        .initialize(&exe_ctx)
+        .await?;
 
         assert_eq!(
             source.result_descriptor().data_type,
@@ -1467,7 +1470,8 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)?;
+        .initialize(&exe_ctx)
+        .await?;
 
         assert_eq!(
             source.result_descriptor().data_type,
@@ -1576,7 +1580,8 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)?;
+        .initialize(&exe_ctx)
+        .await?;
 
         assert_eq!(
             source.result_descriptor().data_type,
@@ -1740,7 +1745,8 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)?;
+        .initialize(&exe_ctx)
+        .await?;
 
         assert_eq!(
             source.result_descriptor().data_type,
@@ -2987,7 +2993,8 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)?;
+        .initialize(&exe_ctx)
+        .await?;
 
         assert_eq!(
             source.result_descriptor().data_type,
@@ -3229,6 +3236,7 @@ mod tests {
         }
         .boxed()
         .initialize(&exe_ctx)
+        .await
         .unwrap();
 
         assert_eq!(
@@ -3305,6 +3313,7 @@ mod tests {
         }
         .boxed()
         .initialize(&exe_ctx)
+        .await
         .unwrap();
 
         assert_eq!(
@@ -3396,6 +3405,7 @@ mod tests {
         }
         .boxed()
         .initialize(&exe_ctx)
+        .await
         .unwrap();
 
         assert_eq!(

@@ -51,8 +51,9 @@ pub struct MockPointSourceParams {
 pub type MockPointSource = SourceOperator<MockPointSourceParams>;
 
 #[typetag::serde]
+#[async_trait]
 impl VectorOperator for MockPointSource {
-    fn initialize(
+    async fn initialize(
         self: Box<Self>,
         _context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedVectorOperator>> {
@@ -122,7 +123,7 @@ mod tests {
             params: MockPointSourceParams { points },
         }
         .boxed();
-        let initialized = mps.initialize(&execution_context).unwrap();
+        let initialized = mps.initialize(&execution_context).await.unwrap();
 
         let typed_processor = initialized.query_processor();
         let point_processor = match typed_processor {

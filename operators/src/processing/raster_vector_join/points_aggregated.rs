@@ -213,7 +213,7 @@ mod tests {
             ..Default::default()
         };
 
-        let raster_source = raster_source.initialize(&execution_context).unwrap();
+        let raster_source = raster_source.initialize(&execution_context).await.unwrap();
 
         let points = MultiPointCollection::from_data(
             MultiPoint::many(vec![
@@ -296,7 +296,7 @@ mod tests {
             ..Default::default()
         };
 
-        let raster_source = raster_source.initialize(&execution_context).unwrap();
+        let raster_source = raster_source.initialize(&execution_context).await.unwrap();
 
         let points = MultiPointCollection::from_data(
             MultiPoint::many(vec![

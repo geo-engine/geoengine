@@ -123,18 +123,34 @@ impl ExpressionSources {
         a + b + c
     }
 
-    fn initialize(self, context: &dyn ExecutionContext) -> Result<ExpressionInitializedSources> {
+    async fn initialize(
+        self,
+        context: &dyn ExecutionContext,
+    ) -> Result<ExpressionInitializedSources> {
+        let b = if let Some(b) = self.b {
+            Some(b.initialize(context).await)
+        } else {
+            None
+        };
+
+        let c = if let Some(c) = self.c {
+            Some(c.initialize(context).await)
+        } else {
+            None
+        };
+
         Ok(ExpressionInitializedSources {
-            a: self.a.initialize(context)?,
-            b: self.b.map(|o| o.initialize(context)).transpose()?,
-            c: self.c.map(|o| o.initialize(context)).transpose()?,
+            a: self.a.initialize(context).await?,
+            b: b.transpose()?,
+            c: c.transpose()?,
         })
     }
 }
 
 #[typetag::serde]
+#[async_trait]
 impl RasterOperator for Expression {
-    fn initialize(
+    async fn initialize(
         self: Box<Self>,
         context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<InitializedRasterOperator>> {
@@ -156,7 +172,7 @@ impl RasterOperator for Expression {
             crate::error::InvalidNoDataValueValueForOutputDataType
         );
 
-        let sources = self.sources.initialize(context)?;
+        let sources = self.sources.initialize(context).await?;
 
         let spatial_reference = sources.a.result_descriptor().spatial_reference;
 
@@ -506,6 +522,7 @@ mod tests {
         }
         .boxed()
         .initialize(&MockExecutionContext::default())
+        .await
         .unwrap();
 
         let processor = o.query_processor().unwrap().get_i8().unwrap();

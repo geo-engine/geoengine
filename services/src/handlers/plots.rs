@@ -136,6 +136,7 @@ async fn get_plot<C: Context>(
 
     let initialized = operator
         .initialize(&execution_context)
+        .await
         .context(error::Operator)?;
 
     let processor = initialized.query_processor().context(error::Operator)?;

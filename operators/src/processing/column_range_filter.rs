@@ -30,12 +30,13 @@ pub struct ColumnRangeFilterParams {
 pub type ColumnRangeFilter = Operator<ColumnRangeFilterParams, SingleVectorSource>;
 
 #[typetag::serde]
+#[async_trait]
 impl VectorOperator for ColumnRangeFilter {
-    fn initialize(
+    async fn initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedVectorOperator>> {
-        let vector_source = self.sources.vector.initialize(context)?;
+        let vector_source = self.sources.vector.initialize(context).await?;
 
         let initialized_operator = InitializedColumnRangeFilter {
             result_descriptor: vector_source.result_descriptor().clone(),
@@ -230,7 +231,10 @@ mod tests {
         }
         .boxed();
 
-        let initialized = filter.initialize(&MockExecutionContext::default()).unwrap();
+        let initialized = filter
+            .initialize(&MockExecutionContext::default())
+            .await
+            .unwrap();
 
         let point_processor = match initialized.query_processor() {
             Ok(TypedVectorQueryProcessor::MultiPoint(processor)) => processor,

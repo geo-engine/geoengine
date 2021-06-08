@@ -36,13 +36,14 @@ pub struct PointInPolygonFilterSource {
 }
 
 #[typetag::serde]
+#[async_trait]
 impl VectorOperator for PointInPolygonFilter {
-    fn initialize(
+    async fn initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedVectorOperator>> {
-        let points = self.sources.points.initialize(context)?;
-        let polygons = self.sources.polygons.initialize(context)?;
+        let points = self.sources.points.initialize(context).await?;
+        let polygons = self.sources.polygons.initialize(context).await?;
 
         ensure!(
             points.result_descriptor().data_type == VectorDataType::MultiPoint,
@@ -550,7 +551,8 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&MockExecutionContext::default())?;
+        .initialize(&MockExecutionContext::default())
+        .await?;
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
 
@@ -598,7 +600,8 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&MockExecutionContext::default())?;
+        .initialize(&MockExecutionContext::default())
+        .await?;
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
 
@@ -659,7 +662,8 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&MockExecutionContext::default())?;
+        .initialize(&MockExecutionContext::default())
+        .await?;
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
 
@@ -737,7 +741,8 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&MockExecutionContext::default())?;
+        .initialize(&MockExecutionContext::default())
+        .await?;
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
 

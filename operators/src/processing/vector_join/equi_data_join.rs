@@ -409,10 +409,12 @@ mod tests {
         let left = MockFeatureCollectionSource::single(left)
             .boxed()
             .initialize(&execution_context)
+            .await
             .unwrap();
         let right = MockFeatureCollectionSource::single(right)
             .boxed()
             .initialize(&execution_context)
+            .await
             .unwrap();
 
         let left_processor = left.query_processor().unwrap().multi_point().unwrap();

@@ -27,19 +27,21 @@ pub type Statistics = Operator<StatisticsParams, MultipleRasterSources>;
 pub struct StatisticsParams {}
 
 #[typetag::serde]
+#[async_trait]
 impl PlotOperator for Statistics {
-    fn initialize(
+    async fn initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedPlotOperator>> {
+        let mut rasters = vec![];
+        for source in self.sources.rasters {
+            // TODO: initialize in parallel
+            rasters.push(source.initialize(context).await?);
+        }
+
         let initialized_operator = InitializedStatistics {
             result_descriptor: PlotResultDescriptor {},
-            rasters: self
-                .sources
-                .rasters
-                .into_iter()
-                .map(|o| o.initialize(context))
-                .collect::<Result<Vec<_>>>()?,
+            rasters,
         };
 
         Ok(initialized_operator.boxed())
@@ -238,7 +240,11 @@ mod tests {
 
         let execution_context = MockExecutionContext::default();
 
-        let statistics = statistics.boxed().initialize(&execution_context).unwrap();
+        let statistics = statistics
+            .boxed()
+            .initialize(&execution_context)
+            .await
+            .unwrap();
 
         let processor = statistics.query_processor().unwrap().json_plain().unwrap();
 

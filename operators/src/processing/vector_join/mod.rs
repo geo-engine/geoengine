@@ -12,6 +12,7 @@ use crate::util::Result;
 
 use self::equi_data_join::EquiGeoToDataJoinProcessor;
 use crate::processing::vector_join::util::translation_table;
+use async_trait::async_trait;
 use std::collections::HashMap;
 
 mod equi_data_join;
@@ -50,13 +51,14 @@ pub enum VectorJoinType {
 }
 
 #[typetag::serde]
+#[async_trait]
 impl VectorOperator for VectorJoin {
-    fn initialize(
+    async fn initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedVectorOperator>> {
-        let left = self.sources.left.initialize(context)?;
-        let right = self.sources.right.initialize(context)?;
+        let left = self.sources.left.initialize(context).await?;
+        let right = self.sources.right.initialize(context).await?;
 
         match self.params.join_type {
             VectorJoinType::EquiGeoToData { .. } => {
@@ -231,8 +233,8 @@ mod tests {
         assert_eq!(params, params_deserialized);
     }
 
-    #[test]
-    fn initialization() {
+    #[tokio::test]
+    async fn initialization() {
         let operator = VectorJoin {
             params: VectorJoinParams {
                 join_type: VectorJoinType::EquiGeoToData {
@@ -266,6 +268,7 @@ mod tests {
         operator
             .boxed()
             .initialize(&MockExecutionContext::default())
+            .await
             .unwrap();
     }
 }

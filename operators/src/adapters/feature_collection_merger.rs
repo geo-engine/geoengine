@@ -158,6 +158,7 @@ mod tests {
         let source = source
             .boxed()
             .initialize(&MockExecutionContext::default())
+            .await
             .unwrap();
 
         let processor =
@@ -229,6 +230,7 @@ mod tests {
         let source = MockFeatureCollectionSource::single(DataCollection::empty())
             .boxed()
             .initialize(&MockExecutionContext::default())
+            .await
             .unwrap();
 
         let processor =
