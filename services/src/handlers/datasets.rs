@@ -21,8 +21,8 @@ use crate::{
     datasets::{listing::DatasetListOptions, upload::UploadDb},
     util::IdResponse,
 };
-use gdal::vector::OGRFieldType;
 use gdal::{vector::Layer, Dataset};
+use gdal::{vector::OGRFieldType, DatasetOptions};
 use geoengine_datatypes::{
     collections::VectorDataType,
     dataset::{DatasetId, DatasetProviderId, InternalDatasetId},
@@ -35,7 +35,7 @@ use geoengine_operators::{
         OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceTimeFormat,
     },
 };
-use snafu::{OptionExt, ResultExt};
+use snafu::ResultExt;
 use uuid::Uuid;
 use warp::Filter;
 
@@ -430,29 +430,36 @@ fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDef
             return Err(crate::error::Error::DatasetHasNoAutoImportableLayer);
         }
     };
-    let vector_type = detect_vector_type(&layer)?;
-    let spatial_reference: SpatialReferenceOption = layer
-        .spatial_ref()
-        .context(error::Gdal)
-        .and_then(|s| {
-            let s: Result<SpatialReference> = s.try_into().context(error::DataType);
-            s
-        })
-        .map(Into::into)
-        .unwrap_or(SpatialReferenceOption::Unreferenced);
+
     let columns_map = detect_columns(&layer);
     let columns_vecs = column_map_to_column_vecs(&columns_map);
+
+    let mut geometry = detect_vector_geometry(&dataset);
+    let mut x = "".to_owned();
+    let mut y: Option<String> = None;
+
+    if geometry.data_type == VectorDataType::Data {
+        // help Gdal detecting geometry
+        if let Some(auto_detect) = gdal_autodetect(&main_file_path, &columns_vecs.text) {
+            geometry = detect_vector_geometry(&auto_detect.dataset);
+            if geometry.data_type != VectorDataType::Data {
+                x = auto_detect.x;
+                y = auto_detect.y;
+            }
+        }
+    }
+
     let time = detect_time_type(&columns_vecs);
 
     Ok(MetaDataDefinition::OgrMetaData(StaticMetaData {
         loading_info: OgrSourceDataset {
             file_name: main_file_path.into(),
             layer_name: layer.name(),
-            data_type: Some(vector_type),
+            data_type: Some(geometry.data_type),
             time,
             columns: Some(OgrSourceColumnSpec {
-                x: "".to_owned(), // TODO: for csv-files: try to find wkt/xy columns
-                y: None,
+                x,
+                y,
                 int: columns_vecs.int,
                 float: columns_vecs.float,
                 text: columns_vecs.text,
@@ -463,14 +470,84 @@ fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDef
             provenance: None,
         },
         result_descriptor: VectorResultDescriptor {
-            data_type: vector_type,
-            spatial_reference,
+            data_type: geometry.data_type,
+            spatial_reference: geometry.spatial_reference,
             columns: columns_map
                 .into_iter()
                 .filter_map(|(k, v)| v.try_into().map(|v| (k, v)).ok()) // ignore all columns here that don't have a corresponding type in our collections
                 .collect(),
         },
     }))
+}
+
+/// create Gdal dataset with autodetect parameters based on available columns
+fn gdal_autodetect(path: &Path, columns: &[String]) -> Option<GdalAutoDetect> {
+    let columns_lower = columns.iter().map(|s| s.to_lowercase()).collect::<Vec<_>>();
+
+    // TODO: load candidates from config
+    let xy = [("x", "y"), ("lon", "lat"), ("longitude", "latitude")];
+
+    for (x, y) in xy {
+        let mut found_x = None;
+        let mut found_y = None;
+
+        for (column_lower, column) in columns_lower.iter().zip(columns) {
+            if x == column_lower {
+                found_x = Some(column);
+            }
+
+            if y == column_lower {
+                found_y = Some(column);
+            }
+
+            if let (Some(x), Some(y)) = (found_x, found_y) {
+                let mut dataset_options = DatasetOptions::default();
+
+                let open_opts = &[
+                    &format!("X_POSSIBLE_NAMES={}", x),
+                    &format!("Y_POSSIBLE_NAMES={}", y),
+                    "AUTODETECT_TYPE=YES",
+                ];
+
+                dataset_options.open_options = Some(open_opts);
+
+                return Dataset::open_ex(path, dataset_options).ok().map(|dataset| {
+                    GdalAutoDetect {
+                        dataset,
+                        x: x.clone(),
+                        y: Some(y.clone()),
+                    }
+                });
+            }
+        }
+    }
+
+    // TODO: load candidates from config
+    let geoms = ["geom", "wkt"];
+    for geom in geoms {
+        for (column_lower, column) in columns_lower.iter().zip(columns) {
+            if geom == column_lower {
+                let mut dataset_options = DatasetOptions::default();
+
+                let open_opts = &[
+                    &format!("GEOM_POSSIBLE_NAMES={}", column),
+                    "AUTODETECT_TYPE=YES",
+                ];
+
+                dataset_options.open_options = Some(open_opts);
+
+                return Dataset::open_ex(path, dataset_options).ok().map(|dataset| {
+                    GdalAutoDetect {
+                        dataset,
+                        x: geom.to_owned(),
+                        y: None,
+                    }
+                });
+            }
+        }
+    }
+
+    None
 }
 
 fn detect_time_type(columns: &Columns) -> OgrSourceDatasetTimeType {
@@ -555,15 +632,41 @@ fn detect_time_type(columns: &Columns) -> OgrSourceDatasetTimeType {
     }
 }
 
-fn detect_vector_type(layer: &Layer) -> Result<VectorDataType> {
-    let ogr_type = layer
-        .defn()
-        .geom_fields()
-        .next()
-        .context(error::EmptyDatasetCannotBeImported)?
-        .field_type();
+fn detect_vector_geometry(dataset: &Dataset) -> DetectedGeometry {
+    if let Ok(layer) = dataset.layer(0) {
+        if let Some(g) = layer.defn().geom_fields().next() {
+            if let Ok(data_type) = VectorDataType::try_from_ogr_type_code(g.field_type()) {
+                return DetectedGeometry {
+                    data_type,
+                    spatial_reference: g
+                        .spatial_ref()
+                        .context(error::Gdal)
+                        .and_then(|s| {
+                            let s: Result<SpatialReference> = s.try_into().context(error::DataType);
+                            s
+                        })
+                        .map(Into::into)
+                        .unwrap_or(SpatialReferenceOption::Unreferenced),
+                };
+            }
+        }
+    }
 
-    VectorDataType::try_from_ogr_type_code(ogr_type).context(error::DataType)
+    DetectedGeometry {
+        data_type: VectorDataType::Data,
+        spatial_reference: SpatialReferenceOption::Unreferenced,
+    }
+}
+
+struct GdalAutoDetect {
+    dataset: Dataset,
+    x: String,
+    y: Option<String>,
+}
+
+struct DetectedGeometry {
+    data_type: VectorDataType,
+    spatial_reference: SpatialReferenceOption,
 }
 
 struct Columns {
@@ -1054,6 +1157,59 @@ mod tests {
                         .iter()
                         .cloned()
                         .collect(),
+                },
+            })
+        )
+    }
+
+    #[test]
+    fn it_detects_csv() {
+        let mut meta_data = auto_detect_meta_data_definition(
+            &PathBuf::from_str("../operators/test-data/vector/data/lonlat.csv").unwrap(),
+        )
+        .unwrap();
+
+        if let MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data {
+            if let Some(columns) = &mut meta_data.loading_info.columns {
+                columns.text.sort();
+            }
+        }
+
+        assert_eq!(
+            meta_data,
+            MetaDataDefinition::OgrMetaData(StaticMetaData {
+                loading_info: OgrSourceDataset {
+                    file_name: "../operators/test-data/vector/data/lonlat.csv".into(),
+                    layer_name: "lonlat".to_string(),
+                    data_type: Some(VectorDataType::MultiPoint),
+                    time: OgrSourceDatasetTimeType::None,
+                    columns: Some(OgrSourceColumnSpec {
+                        x: "Longitude".to_string(),
+                        y: Some("Latitude".to_string()),
+                        float: vec![],
+                        int: vec![],
+                        text: vec![
+                            "Latitude".to_string(),
+                            "Longitude".to_string(),
+                            "Name".to_string()
+                        ],
+                    }),
+                    force_ogr_time_filter: false,
+                    force_ogr_spatial_filter: false,
+                    on_error: OgrSourceErrorSpec::Ignore,
+                    provenance: None,
+                },
+                result_descriptor: VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReferenceOption::Unreferenced,
+                    columns: [
+                        ("Latitude".to_string(), FeatureDataType::Text),
+                        ("Longitude".to_string(), FeatureDataType::Text),
+                        ("Name".to_string(), FeatureDataType::Text)
+                    ]
+                    .iter()
+                    .cloned()
+                    .collect(),
                 },
             })
         )
