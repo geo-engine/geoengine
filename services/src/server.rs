@@ -155,14 +155,17 @@ where
                         "/logout",
                         web::post().to(handlers::users::logout_handler::<C>),
                     )
-                    .route("/session", web::get().to(handlers::users::session_handler))
-                    .route(
-                        "/session/project/{project}",
-                        web::post().to(handlers::users::session_project_handler::<C>),
-                    )
-                    .route(
-                        "/session/view",
-                        web::post().to(handlers::users::session_view_handler::<C>),
+                    .service(
+                        web::scope("/session")
+                            .route("", web::get().to(handlers::users::session_handler))
+                            .route(
+                                "/project/{project}",
+                                web::post().to(handlers::users::session_project_handler::<C>),
+                            )
+                            .route(
+                                "/view",
+                                web::post().to(handlers::users::session_view_handler::<C>),
+                            ),
                     ),
             );
 
