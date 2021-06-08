@@ -14,6 +14,7 @@ use crate::util::Result;
 use crate::processing::raster_vector_join::points::RasterPointJoinProcessor;
 use crate::processing::raster_vector_join::points_aggregated::RasterPointAggregateJoinProcessor;
 use async_trait::async_trait;
+use futures::future::join_all;
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::primitives::FeatureDataType;
 use geoengine_datatypes::raster::RasterDataType;
@@ -81,11 +82,15 @@ impl VectorOperator for RasterVectorJoin {
             },
         );
 
-        let mut raster_sources = vec![];
-        for source in self.sources.rasters {
-            // TODO: initialize in parallel
-            raster_sources.push(source.initialize(context).await?);
-        }
+        let raster_sources = join_all(
+            self.sources
+                .rasters
+                .into_iter()
+                .map(|s| s.initialize(context)),
+        )
+        .await
+        .into_iter()
+        .collect::<Result<Vec<_>>>()?;
 
         let params = self.params;
 

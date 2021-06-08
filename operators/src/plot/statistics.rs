@@ -7,6 +7,7 @@ use crate::engine::{
 use crate::util::number_statistics::NumberStatistics;
 use crate::util::Result;
 use async_trait::async_trait;
+use futures::future::join_all;
 use futures::stream::select_all;
 use futures::{FutureExt, StreamExt};
 use geoengine_datatypes::raster::{Grid2D, GridOrEmpty, GridSize, NoDataValue};
@@ -33,15 +34,17 @@ impl PlotOperator for Statistics {
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedPlotOperator>> {
-        let mut rasters = vec![];
-        for source in self.sources.rasters {
-            // TODO: initialize in parallel
-            rasters.push(source.initialize(context).await?);
-        }
+        let rasters = join_all(
+            self.sources
+                .rasters
+                .into_iter()
+                .map(|s| s.initialize(context)),
+        )
+        .await;
 
         let initialized_operator = InitializedStatistics {
             result_descriptor: PlotResultDescriptor {},
-            rasters,
+            rasters: rasters.into_iter().collect::<Result<Vec<_>>>()?,
         };
 
         Ok(initialized_operator.boxed())
