@@ -3,6 +3,10 @@ use crate::error::Result;
 use crate::users::session::{Session, SessionId};
 use crate::users::userdb::UserDb;
 use crate::{contexts::Context, error::Error};
+use actix_web::dev::{Payload, ServiceRequest};
+use actix_web::{web, FromRequest, HttpMessage, HttpRequest};
+use actix_web_httpauth::extractors::bearer::BearerAuth;
+use futures::future::{err, ok, Ready};
 use log::error;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
@@ -153,4 +157,41 @@ fn authenticate<C: Context>(
         .and(warp::any().map(move || ctx.clone()))
         .and(warp::header::optional::<String>("authorization"))
         .and_then(do_authenticate)
+}
+
+pub async fn validate_token<C: Context>(
+    req: ServiceRequest,
+    credentials: BearerAuth,
+) -> Result<ServiceRequest, actix_web::Error> {
+    let ctx: &C = req.app_data::<web::Data<C>>().unwrap();
+
+    let token = SessionId::from_str(credentials.token())
+        .map_err(Box::new)
+        .context(error::Authorization)?;
+    let session = ctx
+        .user_db_ref()
+        .await
+        .session(token)
+        .await
+        .map_err(Box::new)
+        .context(error::Authorization)?;
+
+    req.extensions_mut().insert(session);
+
+    Ok(req)
+}
+
+impl FromRequest for Session {
+    type Error = error::Error;
+    type Future = Ready<Result<Self, Self::Error>>;
+    type Config = ();
+
+    fn from_request(req: &HttpRequest, payload: &mut Payload) -> Self::Future {
+        let session = req.extensions_mut().remove::<Session>();
+
+        match session {
+            Some(session) => ok(session),
+            None => err(error::Error::MissingAuthorizationHeader),
+        }
+    }
 }

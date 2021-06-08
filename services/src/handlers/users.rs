@@ -7,7 +7,7 @@ use crate::users::user::{UserCredentials, UserId, UserRegistration};
 use crate::users::userdb::UserDb;
 use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
-use actix_web::{get, post, web, Responder};
+use actix_web::{get, post, web, HttpResponse, Responder};
 use snafu::ResultExt;
 use uuid::Uuid;
 use warp::reply::Reply;
@@ -130,20 +130,12 @@ pub(crate) async fn login_handler<C: Context>(
 /// # Errors
 ///
 /// This call fails if the session is invalid.
-pub(crate) fn logout_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path("logout")
-        .and(warp::post())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and_then(logout)
-}
-
-// TODO: move into handler once async closures are available?
-async fn logout<C: Context>(session: Session, ctx: C) -> Result<impl warp::Reply, warp::Rejection> {
+pub(crate) async fn logout_handler<C: Context>(
+    session: Session,
+    ctx: web::Data<C>,
+) -> Result<impl Responder> {
     ctx.user_db_ref_mut().await.logout(session.id).await?;
-    Ok(warp::reply().into_response())
+    Ok(HttpResponse::Ok())
 }
 
 /// Retrieves details about the [Session].
@@ -173,18 +165,8 @@ async fn logout<C: Context>(session: Session, ctx: C) -> Result<impl warp::Reply
 /// # Errors
 ///
 /// This call fails if the session is invalid.
-pub(crate) fn session_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    warp::path("session")
-        .and(warp::get())
-        .and(authenticate(ctx))
-        .map(session)
-}
-
-#[allow(clippy::needless_pass_by_value)] // the function signature of `Filter`'s `map` requires it
-fn session(session: Session) -> impl warp::Reply {
-    warp::reply::json(&session)
+pub(crate) async fn session_handler(session: Session) -> impl Responder {
+    web::Json(session)
 }
 
 /// Sets the active project of the session.
@@ -199,29 +181,17 @@ fn session(session: Session) -> impl warp::Reply {
 /// # Errors
 ///
 /// This call fails if the session is invalid.
-pub(crate) fn session_project_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path!("session" / "project" / Uuid)
-        .map(ProjectId)
-        .and(warp::post())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and_then(session_project)
-}
-
-// TODO: move into handler once async closures are available?
-async fn session_project<C: Context>(
-    project: ProjectId,
+pub(crate) async fn session_project_handler<C: Context>(
+    project: web::Path<ProjectId>,
     session: Session,
-    ctx: C,
-) -> Result<impl warp::Reply, warp::Rejection> {
+    ctx: web::Data<C>,
+) -> Result<impl Responder> {
     ctx.user_db_ref_mut()
         .await
-        .set_session_project(&session, project)
+        .set_session_project(&session, *project)
         .await?;
 
-    Ok(warp::reply())
+    Ok(HttpResponse::Ok())
 }
 
 /// Sets the active view of the session.
@@ -248,26 +218,14 @@ async fn session_project<C: Context>(
 /// # Errors
 ///
 /// This call fails if the session is invalid.
-pub(crate) fn session_view_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path!("session" / "view")
-        .and(warp::post())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and(warp::body::json())
-        .and_then(session_view)
-}
-
-// TODO: move into handler once async closures are available?
-async fn session_view<C: Context>(
+pub(crate) async fn session_view_handler<C: Context>(
     session: Session,
-    ctx: C,
-    view: STRectangle,
+    ctx: web::Data<C>,
+    view: web::Json<STRectangle>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     ctx.user_db_ref_mut()
         .await
-        .set_session_view(&session, view)
+        .set_session_view(&session, *view)
         .await?;
 
     Ok(warp::reply())

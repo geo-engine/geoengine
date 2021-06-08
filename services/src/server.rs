@@ -5,10 +5,12 @@ use crate::error;
 use crate::error::{Error, Result};
 use crate::handlers;
 use crate::handlers::handle_rejection;
+use crate::handlers::validate_token;
 use crate::util::config;
 use crate::util::config::{get_config_element, Backend};
 use actix_files::Files;
 use actix_web::{get, web, App, HttpServer, Responder};
+use actix_web_httpauth::middleware::HttpAuthentication;
 #[cfg(feature = "postgres")]
 use bb8_postgres::tokio_postgres;
 #[cfg(feature = "postgres")]
@@ -145,6 +147,24 @@ where
             .route(
                 "/login",
                 web::post().to(handlers::users::login_handler::<C>),
+            )
+            .service(
+                // Scope for handlers which need authentication
+                web::scope("")
+                    .wrap(HttpAuthentication::bearer(validate_token::<C>))
+                    .route(
+                        "/logout",
+                        web::post().to(handlers::users::logout_handler::<C>),
+                    )
+                    .route("/session", web::get().to(handlers::users::session_handler))
+                    .route(
+                        "/session/project/{project}",
+                        web::post().to(handlers::users::session_project_handler::<C>),
+                    )
+                    .route(
+                        "/session/view",
+                        web::post().to(handlers::users::session_view_handler::<C>),
+                    ),
             );
 
         if let Some(static_files_dir) = static_files_dir.clone() {
