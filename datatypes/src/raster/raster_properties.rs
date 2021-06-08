@@ -67,3 +67,12 @@ impl TryFrom<RasterPropertiesEntry> for f64 {
 
     type Error = crate::error::Error;
 }
+
+impl ToString for RasterPropertiesEntry {
+    fn to_string(&self) -> String {
+        match self {
+            RasterPropertiesEntry::Number(n) => n.to_string(),
+            RasterPropertiesEntry::String(s) => s.clone(),
+        }
+    }
+}
