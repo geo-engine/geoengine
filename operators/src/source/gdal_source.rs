@@ -664,8 +664,6 @@ fn properties_from_gdal<'a, I, M>(
             gdal_dataset.metadata_item(&m.source_key.key, "")
         };
 
-        println!("m: {:?}", m);
-
         if let Some(d) = data {
             let entry = match m.target_type {
                 RasterPropertiesEntryType::Number => d.parse::<f64>().map_or_else(
