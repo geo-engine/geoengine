@@ -10,6 +10,7 @@ use crate::{
     engine::ExecutionContext,
     opencl::{ClProgram, CompiledClProgram, IterationType, RasterArgument},
 };
+use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::primitives::Measurement;
@@ -122,18 +123,34 @@ impl ExpressionSources {
         a + b + c
     }
 
-    fn initialize(self, context: &dyn ExecutionContext) -> Result<ExpressionInitializedSources> {
+    async fn initialize(
+        self,
+        context: &dyn ExecutionContext,
+    ) -> Result<ExpressionInitializedSources> {
+        let b = if let Some(b) = self.b {
+            Some(b.initialize(context).await)
+        } else {
+            None
+        };
+
+        let c = if let Some(c) = self.c {
+            Some(c.initialize(context).await)
+        } else {
+            None
+        };
+
         Ok(ExpressionInitializedSources {
-            a: self.a.initialize(context)?,
-            b: self.b.map(|o| o.initialize(context)).transpose()?,
-            c: self.c.map(|o| o.initialize(context)).transpose()?,
+            a: self.a.initialize(context).await?,
+            b: b.transpose()?,
+            c: c.transpose()?,
         })
     }
 }
 
 #[typetag::serde]
+#[async_trait]
 impl RasterOperator for Expression {
-    fn initialize(
+    async fn initialize(
         self: Box<Self>,
         context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<InitializedRasterOperator>> {
@@ -155,7 +172,7 @@ impl RasterOperator for Expression {
             crate::error::InvalidNoDataValueValueForOutputDataType
         );
 
-        let sources = self.sources.initialize(context)?;
+        let sources = self.sources.initialize(context).await?;
 
         let spatial_reference = sources.a.result_descriptor().spatial_reference;
 
@@ -340,6 +357,7 @@ __kernel void expressionkernel(
     }
 }
 
+#[async_trait]
 impl<'a, T1, T2, TO> QueryProcessor for ExpressionQueryProcessor<T1, T2, TO>
 where
     T1: Pixel,
@@ -348,7 +366,7 @@ where
 {
     type Output = RasterTile2D<TO>;
 
-    fn query<'b>(
+    async fn query<'b>(
         &'b self,
         query: QueryRectangle,
         ctx: &'b dyn QueryContext,
@@ -357,8 +375,9 @@ where
         let mut cl_program = self.cl_program.clone();
         Ok(self
             .source_a
-            .query(query, ctx)?
-            .zip(self.source_b.query(query, ctx)?)
+            .query(query, ctx)
+            .await?
+            .zip(self.source_b.query(query, ctx).await?)
             .map(move |(a, b)| match (a, b) {
                 (Ok(a), Ok(b)) if a.grid_array.is_empty() && b.grid_array.is_empty() => {
                     Ok(RasterTile2D::new(
@@ -503,6 +522,7 @@ mod tests {
         }
         .boxed()
         .initialize(&MockExecutionContext::default())
+        .await
         .unwrap();
 
         let processor = o.query_processor().unwrap().get_i8().unwrap();
@@ -517,6 +537,7 @@ mod tests {
                 },
                 &ctx,
             )
+            .await
             .unwrap();
 
         let result: Vec<Result<RasterTile2D<i8>>> = result_stream.collect().await;

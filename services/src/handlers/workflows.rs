@@ -160,7 +160,7 @@ async fn get_workflow_metadata<C: Context>(
         workflow.operator,
         operator => {
             let operator = operator
-                .initialize(&execution_context)
+                .initialize(&execution_context).await
                 .context(error::Operator)?;
 
             let result_descriptor = operator.result_descriptor();

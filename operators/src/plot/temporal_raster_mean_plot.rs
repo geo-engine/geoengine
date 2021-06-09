@@ -46,14 +46,15 @@ pub enum MeanRasterPixelValuesOverTimePosition {
 }
 
 #[typetag::serde]
+#[async_trait]
 impl PlotOperator for MeanRasterPixelValuesOverTime {
-    fn initialize(
+    async fn initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedPlotOperator>> {
         let initialized_operator = InitializedMeanRasterPixelValuesOverTime {
             result_descriptor: PlotResultDescriptor {},
-            raster: self.sources.raster.initialize(context)?,
+            raster: self.sources.raster.initialize(context).await?,
             state: self.params,
         };
 
@@ -111,7 +112,7 @@ impl<P: Pixel> PlotQueryProcessor for MeanRasterPixelValuesOverTimeQueryProcesso
         ctx: &'a dyn QueryContext,
     ) -> Result<Self::OutputFormat> {
         let means =
-            Self::calculate_means(self.raster.query(query, ctx)?, self.time_position).await?;
+            Self::calculate_means(self.raster.query(query, ctx).await?, self.time_position).await?;
 
         let plot = Self::generate_plot(means, self.measurement.clone(), self.draw_area)?;
 
@@ -330,6 +331,7 @@ mod tests {
         let temporal_raster_mean_plot = temporal_raster_mean_plot
             .boxed()
             .initialize(&execution_context)
+            .await
             .unwrap();
 
         let processor = temporal_raster_mean_plot
@@ -438,6 +440,7 @@ mod tests {
         let temporal_raster_mean_plot = temporal_raster_mean_plot
             .boxed()
             .initialize(&execution_context)
+            .await
             .unwrap();
 
         let processor = temporal_raster_mean_plot

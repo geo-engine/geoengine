@@ -56,23 +56,24 @@ impl DatasetProvider for MockExternalDataProvider {
     ) -> Result<Vec<DatasetListing>> {
         // TODO: user right management
         // TODO: options
-        Ok(self
-            .datasets
-            .iter()
-            .map(|d| {
-                Ok(DatasetListing {
-                    id: d
-                        .properties
-                        .id
-                        .clone()
-                        .ok_or(error::Error::MissingDatasetId)?,
-                    name: d.properties.name.clone(),
-                    description: d.properties.description.clone(),
-                    tags: vec![],
-                    source_operator: d.properties.source_operator.clone(),
-                    result_descriptor: d.meta_data.result_descriptor()?,
-                })
-            })
+        let mut listing = vec![];
+        for dataset in &self.datasets {
+            listing.push(Ok(DatasetListing {
+                id: dataset
+                    .properties
+                    .id
+                    .clone()
+                    .ok_or(error::Error::MissingDatasetId)?,
+                name: dataset.properties.name.clone(),
+                description: dataset.properties.description.clone(),
+                tags: vec![],
+                source_operator: dataset.properties.source_operator.clone(),
+                result_descriptor: dataset.meta_data.result_descriptor().await?,
+            }));
+        }
+
+        Ok(listing
+            .into_iter()
             .filter_map(|d: Result<DatasetListing>| if let Ok(d) = d { Some(d) } else { None })
             .collect())
     }
@@ -86,10 +87,11 @@ impl DatasetProvider for MockExternalDataProvider {
     }
 }
 
+#[async_trait]
 impl MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>
     for MockExternalDataProvider
 {
-    fn meta_data(
+    async fn meta_data(
         &self,
         dataset: &DatasetId,
     ) -> Result<
@@ -114,8 +116,9 @@ impl MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>
     }
 }
 
+#[async_trait]
 impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor> for MockExternalDataProvider {
-    fn meta_data(
+    async fn meta_data(
         &self,
         _dataset: &DatasetId,
     ) -> Result<
@@ -126,8 +129,9 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor> for MockExternal
     }
 }
 
+#[async_trait]
 impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor> for MockExternalDataProvider {
-    fn meta_data(
+    async fn meta_data(
         &self,
         _dataset: &DatasetId,
     ) -> Result<

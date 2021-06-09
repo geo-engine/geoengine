@@ -6,6 +6,7 @@ use crate::{
     },
     util::Result,
 };
+use async_trait::async_trait;
 use futures::stream::{self, BoxStream, StreamExt};
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::{
@@ -20,9 +21,10 @@ pub struct MockPointSourceProcessor {
     points: Vec<Coordinate2D>,
 }
 
+#[async_trait]
 impl QueryProcessor for MockPointSourceProcessor {
     type Output = MultiPointCollection;
-    fn query<'a>(
+    async fn query<'a>(
         &'a self,
         _query: QueryRectangle,
         ctx: &'a dyn QueryContext,
@@ -49,8 +51,9 @@ pub struct MockPointSourceParams {
 pub type MockPointSource = SourceOperator<MockPointSourceParams>;
 
 #[typetag::serde]
+#[async_trait]
 impl VectorOperator for MockPointSource {
-    fn initialize(
+    async fn initialize(
         self: Box<Self>,
         _context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedVectorOperator>> {
@@ -111,8 +114,8 @@ mod tests {
         let _operator: Box<dyn VectorOperator> = serde_json::from_str(&serialized).unwrap();
     }
 
-    #[test]
-    fn execute() {
+    #[tokio::test]
+    async fn execute() {
         let execution_context = MockExecutionContext::default();
         let points = vec![Coordinate2D::new(1., 2.); 3];
 
@@ -120,7 +123,7 @@ mod tests {
             params: MockPointSourceParams { points },
         }
         .boxed();
-        let initialized = mps.initialize(&execution_context).unwrap();
+        let initialized = mps.initialize(&execution_context).await.unwrap();
 
         let typed_processor = initialized.query_processor();
         let point_processor = match typed_processor {
@@ -135,7 +138,10 @@ mod tests {
         };
         let ctx = MockQueryContext::new(2 * std::mem::size_of::<Coordinate2D>());
 
-        let stream = point_processor.vector_query(query_rectangle, &ctx).unwrap();
+        let stream = point_processor
+            .vector_query(query_rectangle, &ctx)
+            .await
+            .unwrap();
 
         let blocking_stream = block_on_stream(stream);
         let collections: Vec<MultiPointCollection> = blocking_stream.map(Result::unwrap).collect();

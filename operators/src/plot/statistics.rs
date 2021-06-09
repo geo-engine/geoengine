@@ -7,6 +7,7 @@ use crate::engine::{
 use crate::util::number_statistics::NumberStatistics;
 use crate::util::Result;
 use async_trait::async_trait;
+use futures::future::join_all;
 use futures::stream::select_all;
 use futures::{FutureExt, StreamExt};
 use geoengine_datatypes::raster::{Grid2D, GridOrEmpty, GridSize, NoDataValue};
@@ -27,19 +28,23 @@ pub type Statistics = Operator<StatisticsParams, MultipleRasterSources>;
 pub struct StatisticsParams {}
 
 #[typetag::serde]
+#[async_trait]
 impl PlotOperator for Statistics {
-    fn initialize(
+    async fn initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedPlotOperator>> {
-        let initialized_operator = InitializedStatistics {
-            result_descriptor: PlotResultDescriptor {},
-            rasters: self
-                .sources
+        let rasters = join_all(
+            self.sources
                 .rasters
                 .into_iter()
-                .map(|o| o.initialize(context))
-                .collect::<Result<Vec<_>>>()?,
+                .map(|s| s.initialize(context)),
+        )
+        .await;
+
+        let initialized_operator = InitializedStatistics {
+            result_descriptor: PlotResultDescriptor {},
+            rasters: rasters.into_iter().collect::<Result<Vec<_>>>()?,
         };
 
         Ok(initialized_operator.boxed())
@@ -93,7 +98,7 @@ impl PlotQueryProcessor for StatisticsQueryProcessor {
         for (i, raster_processor) in self.rasters.iter().enumerate() {
             queries.push(
                 call_on_generic_raster_processor!(raster_processor, processor => {
-                    processor.query(query, ctx)?
+                    processor.query(query, ctx).await?
                              .map(move |r| r.map(|tile| (i, tile.convert::<f64>())))
                              .boxed()
                 }),
@@ -238,7 +243,11 @@ mod tests {
 
         let execution_context = MockExecutionContext::default();
 
-        let statistics = statistics.boxed().initialize(&execution_context).unwrap();
+        let statistics = statistics
+            .boxed()
+            .initialize(&execution_context)
+            .await
+            .unwrap();
 
         let processor = statistics.query_processor().unwrap().json_plain().unwrap();
 

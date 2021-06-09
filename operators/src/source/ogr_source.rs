@@ -43,6 +43,7 @@ use crate::{
     },
     error,
 };
+use async_trait::async_trait;
 use geoengine_datatypes::dataset::DatasetId;
 use std::convert::{TryFrom, TryInto};
 
@@ -219,16 +220,17 @@ pub struct InitializedOgrSource {
 }
 
 #[typetag::serde]
+#[async_trait]
 impl VectorOperator for OgrSource {
-    fn initialize(
+    async fn initialize(
         self: Box<Self>,
         context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<crate::engine::InitializedVectorOperator>> {
         let info: Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor>> =
-            context.meta_data(&self.params.dataset)?;
+            context.meta_data(&self.params.dataset).await?;
 
         let initialized_source = InitializedOgrSource {
-            result_descriptor: info.result_descriptor()?,
+            result_descriptor: info.result_descriptor().await?,
             state: OgrSourceState {
                 dataset_information: info,
                 params: self.params,
@@ -307,19 +309,20 @@ where
     }
 }
 
+#[async_trait]
 impl<G> QueryProcessor for OgrSourceProcessor<G>
 where
     G: Geometry + ArrowTyped + 'static + std::marker::Unpin + TryFromOgrGeometry,
     FeatureCollectionRowBuilder<G>: FeatureCollectionBuilderGeometryHandler<G>,
 {
     type Output = FeatureCollection<G>;
-    fn query<'a>(
+    async fn query<'a>(
         &'a self,
         query: QueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         Ok(OgrSourceStream::new(
-            self.dataset_information.loading_info(query)?,
+            self.dataset_information.loading_info(query).await?,
             query,
             ctx.chunk_byte_size(),
         )
@@ -1142,6 +1145,7 @@ mod tests {
                 },
                 &context,
             )
+            .await
             .unwrap();
 
         let result: Vec<MultiPointCollection> = query.try_collect().await?;
@@ -1187,6 +1191,7 @@ mod tests {
                 },
                 &context,
             )
+            .await
             .unwrap();
 
         let result: Vec<Result<MultiPointCollection>> = query.collect().await;
@@ -1231,6 +1236,7 @@ mod tests {
                 },
                 &context,
             )
+            .await
             .unwrap();
 
         let result: Vec<MultiPointCollection> = query.try_collect().await?;
@@ -1282,7 +1288,8 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)?;
+        .initialize(&exe_ctx)
+        .await?;
 
         assert_eq!(
             source.result_descriptor().data_type,
@@ -1305,6 +1312,7 @@ mod tests {
                 },
                 &context,
             )
+            .await
             .unwrap();
 
         let result: Vec<MultiPointCollection> = query.try_collect().await?;
@@ -1370,7 +1378,8 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)?;
+        .initialize(&exe_ctx)
+        .await?;
 
         assert_eq!(
             source.result_descriptor().data_type,
@@ -1393,6 +1402,7 @@ mod tests {
                 },
                 &context,
             )
+            .await
             .unwrap();
 
         let result: Vec<MultiPointCollection> = query.try_collect().await?;
@@ -1460,7 +1470,8 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)?;
+        .initialize(&exe_ctx)
+        .await?;
 
         assert_eq!(
             source.result_descriptor().data_type,
@@ -1483,6 +1494,7 @@ mod tests {
                 },
                 &context,
             )
+            .await
             .unwrap();
 
         let result: Vec<MultiPointCollection> = query.try_collect().await?;
@@ -1568,7 +1580,8 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)?;
+        .initialize(&exe_ctx)
+        .await?;
 
         assert_eq!(
             source.result_descriptor().data_type,
@@ -1591,6 +1604,7 @@ mod tests {
                 },
                 &context,
             )
+            .await
             .unwrap();
 
         let result: Vec<MultiPointCollection> = query.try_collect().await?;
@@ -1731,7 +1745,8 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)?;
+        .initialize(&exe_ctx)
+        .await?;
 
         assert_eq!(
             source.result_descriptor().data_type,
@@ -1754,6 +1769,7 @@ mod tests {
                 },
                 &context,
             )
+            .await
             .unwrap();
 
         let result: Vec<MultiPointCollection> = query.try_collect().await?;
@@ -2905,6 +2921,7 @@ mod tests {
                 },
                 &context,
             )
+            .await
             .unwrap();
 
         let result: Vec<DataCollection> = query.try_collect().await?;
@@ -2976,7 +2993,8 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(&exe_ctx)?;
+        .initialize(&exe_ctx)
+        .await?;
 
         assert_eq!(
             source.result_descriptor().data_type,
@@ -3103,6 +3121,7 @@ mod tests {
                 },
                 &context1,
             )
+            .await
             .unwrap();
 
         let result: Vec<MultiPointCollection> = query.try_collect().await?;
@@ -3136,6 +3155,7 @@ mod tests {
                 },
                 &context,
             )
+            .await
             .unwrap();
 
         let result: Vec<MultiPointCollection> = query.try_collect().await?;
@@ -3216,6 +3236,7 @@ mod tests {
         }
         .boxed()
         .initialize(&exe_ctx)
+        .await
         .unwrap();
 
         assert_eq!(
@@ -3242,6 +3263,7 @@ mod tests {
                 },
                 &context,
             )
+            .await
             .unwrap();
 
         let result: Vec<MultiPointCollection> = query.try_collect().await.unwrap();
@@ -3291,6 +3313,7 @@ mod tests {
         }
         .boxed()
         .initialize(&exe_ctx)
+        .await
         .unwrap();
 
         assert_eq!(
@@ -3316,6 +3339,7 @@ mod tests {
                 },
                 &context,
             )
+            .await
             .unwrap();
 
         let result: Vec<MultiPolygonCollection> = query.try_collect().await.unwrap();
@@ -3381,6 +3405,7 @@ mod tests {
         }
         .boxed()
         .initialize(&exe_ctx)
+        .await
         .unwrap();
 
         assert_eq!(
@@ -3406,6 +3431,7 @@ mod tests {
                 },
                 &context,
             )
+            .await
             .unwrap();
 
         let result: Vec<MultiPointCollection> = query.try_collect().await.unwrap();

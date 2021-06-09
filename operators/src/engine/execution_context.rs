@@ -6,6 +6,7 @@ use crate::error::Error;
 use crate::mock::MockDatasetDataSourceLoadingInfo;
 use crate::source::{GdalLoadingInfo, OgrSourceDataset};
 use crate::util::Result;
+use async_trait::async_trait;
 use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::raster::GridShape;
 use geoengine_datatypes::raster::TilingSpecification;
@@ -26,19 +27,21 @@ pub trait ExecutionContext:
     fn tiling_specification(&self) -> TilingSpecification;
 }
 
+#[async_trait]
 pub trait MetaDataProvider<L, R>
 where
     R: ResultDescriptor,
 {
-    fn meta_data(&self, dataset: &DatasetId) -> Result<Box<dyn MetaData<L, R>>>;
+    async fn meta_data(&self, dataset: &DatasetId) -> Result<Box<dyn MetaData<L, R>>>;
 }
 
+#[async_trait]
 pub trait MetaData<L, R>: Debug + Send + Sync
 where
     R: ResultDescriptor,
 {
-    fn loading_info(&self, query: QueryRectangle) -> Result<L>;
-    fn result_descriptor(&self) -> Result<R>;
+    async fn loading_info(&self, query: QueryRectangle) -> Result<L>;
+    async fn result_descriptor(&self) -> Result<R>;
 
     fn box_clone(&self) -> Box<dyn MetaData<L, R>>;
 }
@@ -94,12 +97,13 @@ impl ExecutionContext for MockExecutionContext {
     }
 }
 
+#[async_trait]
 impl<L, R> MetaDataProvider<L, R> for MockExecutionContext
 where
     L: 'static,
     R: 'static + ResultDescriptor,
 {
-    fn meta_data(&self, dataset: &DatasetId) -> Result<Box<dyn MetaData<L, R>>> {
+    async fn meta_data(&self, dataset: &DatasetId) -> Result<Box<dyn MetaData<L, R>>> {
         let meta_data = self
             .meta_data
             .get(dataset)
@@ -122,16 +126,17 @@ where
     pub result_descriptor: R,
 }
 
+#[async_trait]
 impl<L, R> MetaData<L, R> for StaticMetaData<L, R>
 where
     L: Debug + Clone + Send + Sync + 'static,
     R: Debug + Send + Sync + 'static + ResultDescriptor,
 {
-    fn loading_info(&self, _query: QueryRectangle) -> Result<L> {
+    async fn loading_info(&self, _query: QueryRectangle) -> Result<L> {
         Ok(self.loading_info.clone())
     }
 
-    fn result_descriptor(&self) -> Result<R> {
+    async fn result_descriptor(&self) -> Result<R> {
         Ok(self.result_descriptor.clone())
     }
 
@@ -146,8 +151,8 @@ mod tests {
     use geoengine_datatypes::collections::VectorDataType;
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 
-    #[test]
-    fn test() {
+    #[tokio::test]
+    async fn test() {
         let info = StaticMetaData {
             loading_info: 1_i32,
             result_descriptor: VectorResultDescriptor {
@@ -166,7 +171,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            info3.result_descriptor().unwrap(),
+            info3.result_descriptor().await.unwrap(),
             VectorResultDescriptor {
                 data_type: VectorDataType::Data,
                 spatial_reference: SpatialReferenceOption::Unreferenced,
