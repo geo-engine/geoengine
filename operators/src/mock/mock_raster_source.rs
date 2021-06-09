@@ -178,6 +178,12 @@ mod tests {
                         "data": [1, 2, 3, 4, 5, 6],
                         "noDataValue": null
 
+                    },
+                    "properties":{
+                        "scale":null,
+                        "offset":null,
+                        "band_name":null,
+                        "properties_map":{}
                     }
                 }],
                 "resultDescriptor": {

@@ -14,9 +14,10 @@ use futures::{
 
 use async_trait::async_trait;
 use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
-use gdal::Dataset as GdalDataset;
+use gdal::{Dataset as GdalDataset, Metadata as GdalMetadata};
 use geoengine_datatypes::raster::{
-    EmptyGrid, GeoTransform, Grid2D, GridOrEmpty2D, Pixel, RasterDataType, RasterTile2D,
+    EmptyGrid, GeoTransform, Grid2D, GridOrEmpty2D, Pixel, RasterDataType, RasterProperties,
+    RasterPropertiesEntry, RasterPropertiesEntryType, RasterPropertiesKey, RasterTile2D,
 };
 use geoengine_datatypes::{dataset::DatasetId, raster::TileInformation};
 use geoengine_datatypes::{
@@ -141,6 +142,7 @@ pub struct GdalDatasetParameters {
     pub bbox: BoundingBox2D, // the bounding box of the dataset containing the raster data
     pub file_not_found_handling: FileNotFoundHandling,
     pub no_data_value: Option<f64>,
+    pub properties_mapping: Option<Vec<GdalMetadataMapping>>,
 }
 
 /// How to handle file not found errors
@@ -253,6 +255,7 @@ impl GdalDatasetParameters {
         Ok(Self {
             file_not_found_handling: FileNotFoundHandling::NoData,
             file_path: file_path.into(),
+            properties_mapping: self.properties_mapping.clone(),
             ..*self
         })
     }
@@ -285,7 +288,7 @@ where
     pub async fn load_tile_data_async(
         dataset_params: GdalDatasetParameters,
         tile_information: TileInformation,
-    ) -> Result<GridOrEmpty2D<T>> {
+    ) -> Result<GridWithProperties<T>> {
         tokio::task::spawn_blocking(move || {
             Self::load_tile_data(&dataset_params, &tile_information)
         })
@@ -300,19 +303,26 @@ where
     ) -> Result<RasterTile2D<T>> {
         Self::load_tile_data_async(dataset_params, tile_information)
             .await
-            .map(|tile_data| RasterTile2D::new_with_tile_info(time, tile_information, tile_data))
+            .map(|grid_with_properties| {
+                RasterTile2D::new_with_tile_info_and_properties(
+                    time,
+                    tile_information,
+                    grid_with_properties.grid,
+                    grid_with_properties.properties,
+                )
+            })
     }
 
     ///
     /// A method to load single tiles from a GDAL dataset.
     ///
+    #[allow(clippy::too_many_lines)]
     pub fn load_tile_data(
         dataset_params: &GdalDatasetParameters,
         tile_information: &TileInformation,
-    ) -> Result<GridOrEmpty2D<T>> {
+    ) -> Result<GridWithProperties<T>> {
         let dataset_bounds = dataset_params.bbox;
         let geo_transform = dataset_params.geo_transform;
-
         let output_bounds = tile_information.spatial_bounds();
         let output_shape = tile_information.tile_size_in_pixels();
         let output_geo_transform = tile_information.tile_geo_transform();
@@ -324,11 +334,9 @@ where
         );
 
         let dataset_result = GdalDataset::open(&dataset_params.file_path);
-
-        // TODO: We also need to get metadata from the dataset (for each tile) e.g. scale + offset.
         let no_data_value = dataset_params.no_data_value.map(T::from_);
-        // TODO: ensure that there is a no_data_value
         let fill_value = no_data_value.unwrap_or_else(T::zero);
+        let mut properties = RasterProperties::default();
 
         debug!(
             "no_data_value is {:?} and fill_value is {:?}.",
@@ -341,10 +349,16 @@ where
                 FileNotFoundHandling::NoData => {
                     if let Some(no_data) = no_data_value {
                         debug!("file not found -> returning empty grid");
-                        Ok(EmptyGrid::new(output_shape, no_data).into())
+                        Ok(GridWithProperties {
+                            grid: EmptyGrid::new(output_shape, no_data).into(),
+                            properties,
+                        })
                     } else {
                         debug!("file not found -> returning filled grid");
-                        Ok(Grid2D::new_filled(output_shape, fill_value, None).into())
+                        Ok(GridWithProperties {
+                            grid: Grid2D::new_filled(output_shape, fill_value, None).into(),
+                            properties,
+                        })
                     }
                 }
                 FileNotFoundHandling::Error => Err(crate::error::Error::CouldNotOpenGdalDataset {
@@ -354,24 +368,23 @@ where
         };
 
         let dataset = dataset_result.expect("checked");
-
-        // TODO: investigate if we need a dataset cache
-
-        // get the requested raster band of the dataset …
         let rasterband: GdalRasterBand =
             dataset.rasterband(dataset_params.rasterband_channel as isize)?;
+
+        if let Some(properties_mapping) = dataset_params.properties_mapping.as_ref() {
+            properties_from_gdal(&mut properties, &dataset, properties_mapping);
+            properties_from_gdal(&mut properties, &rasterband, properties_mapping);
+            properties_from_band(&mut properties, &rasterband);
+        }
 
         // dataset spatial relations
         let dataset_contains_tile = dataset_bounds.contains_bbox(&output_bounds);
 
         // TODO: re-enable when BBOx paradox is solved
         // let dataset_intersects_tile = dataset_bounds.intersects_bbox(&output_bounds);
-
         // TODO: move to false, true case when BBOX paradox is solved
         let dataset_intersects_tile = dataset_bounds.intersection(&output_bounds);
-
-        let result_raster: GridOrEmpty2D<T> = match (dataset_contains_tile, dataset_intersects_tile)
-        {
+        let result_grid: GridOrEmpty2D<T> = match (dataset_contains_tile, dataset_intersects_tile) {
             (_, None) => {
                 // TODO: refactor tile to hold an Option<GridData> and this will be empty in this case
                 if let Some(no_data) = no_data_value {
@@ -432,7 +445,10 @@ where
             }
         };
 
-        Ok(result_raster)
+        Ok(GridWithProperties {
+            grid: result_grid,
+            properties,
+        })
     }
 
     ///
@@ -521,6 +537,11 @@ impl RasterOperator for GdalSource {
         }
         .boxed())
     }
+}
+
+pub struct GridWithProperties<T> {
+    grid: GridOrEmpty2D<T>,
+    properties: RasterProperties,
 }
 
 pub struct InitializedGdalSourceOperator {
@@ -625,6 +646,65 @@ where
     Grid::new(tile_grid, buffer.data, no_data_value).map_err(Into::into)
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct GdalMetadataMapping {
+    source_key: RasterPropertiesKey,
+    target_key: RasterPropertiesKey,
+    target_type: RasterPropertiesEntryType,
+}
+
+fn properties_from_gdal<'a, I, M>(
+    properties: &mut RasterProperties,
+    gdal_dataset: &M,
+    properties_mapping: I,
+) where
+    I: IntoIterator<Item = &'a GdalMetadataMapping>,
+    M: GdalMetadata,
+{
+    let mapping_iter = properties_mapping.into_iter();
+
+    for m in mapping_iter {
+        let data = if let Some(domain) = &m.source_key.domain {
+            gdal_dataset.metadata_item(&m.source_key.key, &domain)
+        } else {
+            gdal_dataset.metadata_item(&m.source_key.key, "")
+        };
+
+        if let Some(d) = data {
+            let entry = match m.target_type {
+                RasterPropertiesEntryType::Number => d.parse::<f64>().map_or_else(
+                    |_| RasterPropertiesEntry::String(d),
+                    RasterPropertiesEntry::Number,
+                ),
+                RasterPropertiesEntryType::String => RasterPropertiesEntry::String(d),
+            };
+
+            debug!(
+                "gdal properties key \"{:?}\" => target key \"{:?}\". Value: {:?} ",
+                &m.source_key, &m.target_key, &entry
+            );
+
+            properties
+                .properties_map
+                .insert(m.target_key.clone(), entry);
+        }
+    }
+}
+
+fn properties_from_band(properties: &mut RasterProperties, gdal_dataset: &GdalRasterBand) {
+    if let Some(scale) = gdal_dataset.metadata_item("scale", "") {
+        properties.scale = scale.parse::<f64>().ok();
+    };
+
+    if let Some(offset) = gdal_dataset.metadata_item("offset", "") {
+        properties.offset = offset.parse::<f64>().ok();
+    };
+
+    if let Some(band_name) = gdal_dataset.metadata_item("band_name", "") {
+        properties.band_name = Some(band_name);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -681,7 +761,7 @@ mod tests {
     fn load_ndvi_jan_2014(
         output_shape: GridShape2D,
         output_bounds: BoundingBox2D,
-    ) -> Result<GridOrEmpty2D<u8>> {
+    ) -> Result<GridWithProperties<u8>> {
         GdalSourceProcessor::<u8>::load_tile_data(
             &GdalDatasetParameters {
                 file_path: raster_dir().join("modis_ndvi/MOD13A2_M_NDVI_2014-01-01.TIFF"),
@@ -694,6 +774,30 @@ mod tests {
                 bbox: BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value: Some(0.),
+                properties_mapping: Some(vec![
+                    GdalMetadataMapping {
+                        source_key: RasterPropertiesKey {
+                            domain: None,
+                            key: "AREA_OR_POINT".to_string(),
+                        },
+                        target_type: RasterPropertiesEntryType::String,
+                        target_key: RasterPropertiesKey {
+                            domain: None,
+                            key: "AREA_OR_POINT".to_string(),
+                        },
+                    },
+                    GdalMetadataMapping {
+                        source_key: RasterPropertiesKey {
+                            domain: Some("IMAGE_STRUCTURE".to_string()),
+                            key: "COMPRESSION".to_string(),
+                        },
+                        target_type: RasterPropertiesEntryType::String,
+                        target_key: RasterPropertiesKey {
+                            domain: Some("IMAGE_STRUCTURE_INFO".to_string()),
+                            key: "COMPRESSION".to_string(),
+                        },
+                    },
+                ]),
             },
             &TileInformation::with_bbox_and_shape(output_bounds, output_shape),
         )
@@ -863,6 +967,7 @@ mod tests {
             bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (1., 1.).into()),
             file_not_found_handling: FileNotFoundHandling::NoData,
             no_data_value: Some(0.),
+            properties_mapping: None,
         };
         let replaced = params
             .replace_time_placeholder("%TIME%", "%f", TimeInstance::from_millis_unchecked(22))
@@ -899,6 +1004,7 @@ mod tests {
                 bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (1., 1.).into()),
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value,
+                properties_mapping: None,
             },
             placeholder: "%TIME%".to_string(),
             time_format: "%f".to_string(),
@@ -944,15 +1050,16 @@ mod tests {
         let output_shape: GridShape2D = [8, 8].into();
         let output_bounds = BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into());
 
-        let x = load_ndvi_jan_2014(output_shape, output_bounds).unwrap();
+        let GridWithProperties { grid, properties } =
+            load_ndvi_jan_2014(output_shape, output_bounds).unwrap();
 
-        assert!(!x.is_empty());
+        assert!(!grid.is_empty());
 
-        let x = x.into_materialized_grid();
+        let grid = grid.into_materialized_grid();
 
-        assert_eq!(x.data.len(), 64);
+        assert_eq!(grid.data.len(), 64);
         assert_eq!(
-            x.data,
+            grid.data,
             &[
                 255, 255, 255, 255, 255, 255, 255, 255, 255, 75, 37, 255, 44, 34, 39, 32, 255, 86,
                 255, 255, 255, 30, 96, 255, 255, 255, 255, 255, 90, 255, 255, 255, 255, 255, 202,
@@ -960,7 +1067,24 @@ mod tests {
                 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255
             ]
         );
-        assert_eq!(x.no_data_value, Some(0));
+        assert_eq!(grid.no_data_value, Some(0));
+
+        assert!(properties.scale.is_none());
+        assert!(properties.offset.is_none());
+        assert_eq!(
+            properties.properties_map.get(&RasterPropertiesKey {
+                key: "AREA_OR_POINT".to_string(),
+                domain: None,
+            }),
+            Some(&RasterPropertiesEntry::String("Area".to_string()))
+        );
+        assert_eq!(
+            properties.properties_map.get(&RasterPropertiesKey {
+                domain: Some("IMAGE_STRUCTURE_INFO".to_string()),
+                key: "COMPRESSION".to_string(),
+            }),
+            Some(&RasterPropertiesEntry::String("LZW".to_string()))
+        );
     }
 
     #[test]
@@ -973,7 +1097,9 @@ mod tests {
             (180. - x_size, 90. + y_size).into(),
         );
 
-        let x = load_ndvi_jan_2014(output_shape, output_bounds).unwrap();
+        let x = load_ndvi_jan_2014(output_shape, output_bounds)
+            .unwrap()
+            .grid;
 
         assert!(!x.is_empty());
 
