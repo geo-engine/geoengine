@@ -82,6 +82,7 @@ impl DatasetProviderDb<SimpleSession> for HashMapDatasetDb {
             .cloned()
             .ok_or(error::Error::UnknownProviderId)?
             .initialize()
+            .await
     }
 }
 
