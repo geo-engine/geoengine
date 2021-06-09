@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error;
 use crate::util::Result;
+use async_trait::async_trait;
 
 use super::{
     query_processor::{TypedRasterQueryProcessor, TypedVectorQueryProcessor},
@@ -12,8 +13,9 @@ use super::{
 
 /// Common methods for `RasterOperator`s
 #[typetag::serde(tag = "type")]
+#[async_trait]
 pub trait RasterOperator: CloneableRasterOperator + Send + Sync + std::fmt::Debug {
-    fn initialize(
+    async fn initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedRasterOperator>>;
@@ -29,8 +31,9 @@ pub trait RasterOperator: CloneableRasterOperator + Send + Sync + std::fmt::Debu
 
 /// Common methods for `VectorOperator`s
 #[typetag::serde(tag = "type")]
+#[async_trait]
 pub trait VectorOperator: CloneableVectorOperator + Send + Sync + std::fmt::Debug {
-    fn initialize(
+    async fn initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedVectorOperator>>;
@@ -46,8 +49,9 @@ pub trait VectorOperator: CloneableVectorOperator + Send + Sync + std::fmt::Debu
 
 /// Common methods for `PlotOperator`s
 #[typetag::serde(tag = "type")]
+#[async_trait]
 pub trait PlotOperator: CloneablePlotOperator + Send + Sync + std::fmt::Debug {
-    fn initialize(
+    async fn initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedPlotOperator>>;

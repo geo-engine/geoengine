@@ -11,6 +11,7 @@ use crate::{
     error::Error,
     util::{input::RasterOrVectorOperator, Result},
 };
+use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::{
@@ -58,8 +59,9 @@ pub struct InitializedRasterReprojection {
 }
 
 #[typetag::serde]
+#[async_trait]
 impl VectorOperator for Reprojection {
-    fn initialize(
+    async fn initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedVectorOperator>> {
@@ -68,7 +70,7 @@ impl VectorOperator for Reprojection {
             RasterOrVectorOperator::Raster(_) => return Err(Error::InvalidOperatorType),
         };
 
-        let vector_operator = vector_operator.initialize(context)?;
+        let vector_operator = vector_operator.initialize(context).await?;
 
         let in_desc: &VectorResultDescriptor = vector_operator.result_descriptor();
         let out_desc = VectorResultDescriptor {
@@ -182,6 +184,7 @@ pub fn query_rewrite_fn(
     })
 }
 
+#[async_trait]
 impl<Q, G> VectorQueryProcessor for VectorReprojectionProcessor<Q, G>
 where
     Q: VectorQueryProcessor<VectorType = G>,
@@ -189,7 +192,7 @@ where
 {
     type VectorType = G::Out;
 
-    fn vector_query<'a>(
+    async fn vector_query<'a>(
         &'a self,
         query: QueryRectangle,
         ctx: &'a dyn QueryContext,
@@ -198,7 +201,8 @@ where
 
         Ok(self
             .source
-            .vector_query(rewritten_query, ctx)?
+            .vector_query(rewritten_query, ctx)
+            .await?
             .map(move |collection_result| {
                 collection_result.and_then(|collection| {
                     CoordinateProjector::from_known_srs(self.from, self.to)
@@ -211,8 +215,9 @@ where
 }
 
 #[typetag::serde]
+#[async_trait]
 impl RasterOperator for Reprojection {
-    fn initialize(
+    async fn initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedRasterOperator>> {
@@ -221,7 +226,7 @@ impl RasterOperator for Reprojection {
             RasterOrVectorOperator::Vector(_) => return Err(Error::InvalidOperatorType),
         };
 
-        let raster_operator = raster_operator.initialize(context)?;
+        let raster_operator = raster_operator.initialize(context).await?;
 
         let in_desc: &RasterResultDescriptor = raster_operator.result_descriptor();
         let out_no_data_value = in_desc.no_data_value.unwrap_or(0.); // TODO: add option to force a no_data_value
@@ -402,6 +407,7 @@ where
     }
 }
 
+#[async_trait]
 impl<Q, P> RasterQueryProcessor for RasterReprojectionProcessor<Q, P>
 where
     Q: RasterQueryProcessor<RasterType = P>,
@@ -409,7 +415,7 @@ where
 {
     type RasterType = P;
 
-    fn raster_query<'a>(
+    async fn raster_query<'a>(
         &'a self,
         query: QueryRectangle,
         ctx: &'a dyn QueryContext,
@@ -506,7 +512,8 @@ mod tests {
                 source: point_source.into(),
             },
         })
-        .initialize(&MockExecutionContext::default())?;
+        .initialize(&MockExecutionContext::default())
+        .await?;
 
         let query_processor = initialized_operator.query_processor()?;
 
@@ -523,7 +530,10 @@ mod tests {
         };
         let ctx = MockQueryContext::new(usize::MAX);
 
-        let query = query_processor.vector_query(query_rectangle, &ctx).unwrap();
+        let query = query_processor
+            .vector_query(query_rectangle, &ctx)
+            .await
+            .unwrap();
 
         let result = query
             .map(Result::unwrap)
@@ -574,7 +584,8 @@ mod tests {
                 source: lines_source.into(),
             },
         })
-        .initialize(&MockExecutionContext::default())?;
+        .initialize(&MockExecutionContext::default())
+        .await?;
 
         let query_processor = initialized_operator.query_processor()?;
 
@@ -591,7 +602,10 @@ mod tests {
         };
         let ctx = MockQueryContext::new(usize::MAX);
 
-        let query = query_processor.vector_query(query_rectangle, &ctx).unwrap();
+        let query = query_processor
+            .vector_query(query_rectangle, &ctx)
+            .await
+            .unwrap();
 
         let result = query
             .map(Result::unwrap)
@@ -644,7 +658,8 @@ mod tests {
                 source: polygon_source.into(),
             },
         })
-        .initialize(&MockExecutionContext::default())?;
+        .initialize(&MockExecutionContext::default())
+        .await?;
 
         let query_processor = initialized_operator.query_processor()?;
 
@@ -661,7 +676,10 @@ mod tests {
         };
         let ctx = MockQueryContext::new(usize::MAX);
 
-        let query = query_processor.vector_query(query_rectangle, &ctx).unwrap();
+        let query = query_processor
+            .vector_query(query_rectangle, &ctx)
+            .await
+            .unwrap();
 
         let result = query
             .map(Result::unwrap)
@@ -754,7 +772,8 @@ mod tests {
                 source: mrs1.into(),
             },
         })
-        .initialize(&exe_ctx)?;
+        .initialize(&exe_ctx)
+        .await?;
 
         let qp = initialized_operator
             .query_processor()
@@ -768,7 +787,7 @@ mod tests {
             spatial_resolution: SpatialResolution::one(),
         };
 
-        let a = qp.raster_query(query_rect, &query_ctx)?;
+        let a = qp.raster_query(query_rect, &query_ctx).await?;
 
         let res = a
             .map(Result::unwrap)
@@ -813,7 +832,8 @@ mod tests {
                 source: gdal_op.into(),
             },
         })
-        .initialize(&exe_ctx)?;
+        .initialize(&exe_ctx)
+        .await?;
 
         let x_query_resolution = output_bounds.size_x() / output_shape.axis_size_x() as f64;
         let y_query_resolution = output_bounds.size_y() / (output_shape.axis_size_y() * 2) as f64; // *2 to account for the dataset aspect ratio 2:1
@@ -835,6 +855,7 @@ mod tests {
                 },
                 &query_ctx,
             )
+            .await
             .unwrap();
 
         let res = qs

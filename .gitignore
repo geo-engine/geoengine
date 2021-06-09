@@ -10,6 +10,7 @@ Cargo.lock
 /.vscode
 Settings.toml
 
-# GDAL/OGR
-*.gpkg-shm
-*.gpkg-wal
+# Data
+upload/
+**/*.gpkg-shm
+**/*.gpkg-wal

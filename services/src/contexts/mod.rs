@@ -131,6 +131,7 @@ where
 }
 
 // TODO: use macro(?) for delegating meta_data function to DatasetDB to avoid redundant code
+#[async_trait]
 impl<S, D> MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>
     for ExecutionContextImpl<S, D>
 where
@@ -138,19 +139,18 @@ where
     S: Session,
 {
     // TODO: make async
-    fn meta_data(
+    async fn meta_data(
         &self,
         dataset: &DatasetId,
     ) -> Result<
         Box<dyn MetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>>,
         geoengine_operators::error::Error,
     > {
-        futures::executor::block_on(async {
-            match dataset {
-                DatasetId::Internal(_) => self.dataset_db.read().await.meta_data(dataset),
-                DatasetId::Staging(_) => todo!(),
-                DatasetId::External(external) => self
-                    .dataset_db
+        match dataset {
+            DatasetId::Internal(_) => self.dataset_db.read().await.meta_data(dataset).await,
+            DatasetId::Staging(_) => todo!(),
+            DatasetId::External(external) => {
+                self.dataset_db
                     .read()
                     .await
                     .dataset_provider(&self.session, external.provider)
@@ -158,32 +158,33 @@ where
                     .map_err(|e| geoengine_operators::error::Error::DatasetMetaData {
                         source: Box::new(e),
                     })?
-                    .meta_data(dataset),
+                    .meta_data(dataset)
+                    .await
             }
-        })
+        }
     }
 }
 
 // TODO: use macro(?) for delegating meta_data function to DatasetDB to avoid redundant code
+#[async_trait]
 impl<S, D> MetaDataProvider<OgrSourceDataset, VectorResultDescriptor> for ExecutionContextImpl<S, D>
 where
     D: DatasetDb<S> + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor>,
     S: Session,
 {
     // TODO: make async
-    fn meta_data(
+    async fn meta_data(
         &self,
         dataset: &DatasetId,
     ) -> Result<
         Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor>>,
         geoengine_operators::error::Error,
     > {
-        futures::executor::block_on(async {
-            match dataset {
-                DatasetId::Internal(_) => self.dataset_db.read().await.meta_data(dataset),
-                DatasetId::Staging(_) => todo!(),
-                DatasetId::External(external) => self
-                    .dataset_db
+        match dataset {
+            DatasetId::Internal(_) => self.dataset_db.read().await.meta_data(dataset).await,
+            DatasetId::Staging(_) => todo!(),
+            DatasetId::External(external) => {
+                self.dataset_db
                     .read()
                     .await
                     .dataset_provider(&self.session, external.provider)
@@ -191,32 +192,33 @@ where
                     .map_err(|e| geoengine_operators::error::Error::DatasetMetaData {
                         source: Box::new(e),
                     })?
-                    .meta_data(dataset),
+                    .meta_data(dataset)
+                    .await
             }
-        })
+        }
     }
 }
 
 // TODO: use macro(?) for delegating meta_data function to DatasetDB to avoid redundant code
+#[async_trait]
 impl<S, D> MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor> for ExecutionContextImpl<S, D>
 where
     D: DatasetDb<S> + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor>,
     S: Session,
 {
     // TODO: make async
-    fn meta_data(
+    async fn meta_data(
         &self,
         dataset: &DatasetId,
     ) -> Result<
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor>>,
         geoengine_operators::error::Error,
     > {
-        futures::executor::block_on(async {
-            match dataset {
-                DatasetId::Internal(_) => self.dataset_db.read().await.meta_data(dataset),
-                DatasetId::Staging(_) => todo!(),
-                DatasetId::External(external) => self
-                    .dataset_db
+        match dataset {
+            DatasetId::Internal(_) => self.dataset_db.read().await.meta_data(dataset).await,
+            DatasetId::Staging(_) => todo!(),
+            DatasetId::External(external) => {
+                self.dataset_db
                     .read()
                     .await
                     .dataset_provider(&self.session, external.provider)
@@ -224,8 +226,9 @@ where
                     .map_err(|e| geoengine_operators::error::Error::DatasetMetaData {
                         source: Box::new(e),
                     })?
-                    .meta_data(dataset),
+                    .meta_data(dataset)
+                    .await
             }
-        })
+        }
     }
 }

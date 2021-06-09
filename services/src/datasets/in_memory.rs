@@ -214,10 +214,11 @@ impl DatasetProvider for HashMapDatasetDb {
     }
 }
 
+#[async_trait]
 impl MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>
     for HashMapDatasetDb
 {
-    fn meta_data(
+    async fn meta_data(
         &self,
         dataset: &DatasetId,
     ) -> Result<
@@ -239,8 +240,9 @@ impl MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>
     }
 }
 
+#[async_trait]
 impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor> for HashMapDatasetDb {
-    fn meta_data(
+    async fn meta_data(
         &self,
         dataset: &DatasetId,
     ) -> Result<
@@ -262,8 +264,9 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor> for HashMapDatas
     }
 }
 
+#[async_trait]
 impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor> for HashMapDatasetDb {
-    fn meta_data(
+    async fn meta_data(
         &self,
         dataset: &DatasetId,
     ) -> Result<
@@ -339,10 +342,10 @@ mod tests {
         let exe_ctx = ctx.execution_context(session.clone())?;
 
         let meta: Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor>> =
-            exe_ctx.meta_data(&id)?;
+            exe_ctx.meta_data(&id).await?;
 
         assert_eq!(
-            meta.result_descriptor()?,
+            meta.result_descriptor().await?,
             VectorResultDescriptor {
                 data_type: VectorDataType::Data,
                 spatial_reference: SpatialReferenceOption::Unreferenced,

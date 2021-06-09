@@ -64,8 +64,9 @@ pub enum HistogramBounds {
 }
 
 #[typetag::serde]
+#[async_trait]
 impl PlotOperator for Histogram {
-    fn initialize(
+    async fn initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedPlotOperator>> {
@@ -82,7 +83,7 @@ impl PlotOperator for Histogram {
                 InitializedHistogram::new(
                     PlotResultDescriptor {},
                     self.params,
-                    raster_source.initialize(context)?,
+                    raster_source.initialize(context).await?,
                 )
                 .boxed()
             }
@@ -96,7 +97,7 @@ impl PlotOperator for Histogram {
                                 .to_string(),
                         })?;
 
-                let vector_source = vector_source.initialize(context)?;
+                let vector_source = vector_source.initialize(context).await?;
 
                 match vector_source.result_descriptor().columns.get(column_name) {
                     None => {
@@ -298,7 +299,7 @@ impl HistogramRasterQueryProcessor {
         // TODO: compute only number of buckets if possible
 
         call_on_generic_raster_processor!(&self.input, processor => {
-            process_metadata(processor.query(query, ctx)?, self.metadata).await
+            process_metadata(processor.query(query, ctx).await?, self.metadata).await
         })
     }
 
@@ -318,7 +319,7 @@ impl HistogramRasterQueryProcessor {
         .map_err(Error::from)?;
 
         call_on_generic_raster_processor!(&self.input, processor => {
-            let mut query = processor.query(query, ctx)?;
+            let mut query = processor.query(query, ctx).await?;
 
             while let Some(tile) = query.next().await {
 
@@ -383,7 +384,7 @@ impl HistogramVectorQueryProcessor {
         // TODO: compute only number of buckets if possible
 
         call_on_generic_vector_processor!(&self.input, processor => {
-            process_metadata(processor.query(query, ctx)?, &self.column_name, self.metadata).await
+            process_metadata(processor.query(query, ctx).await?, &self.column_name, self.metadata).await
         })
     }
 
@@ -403,7 +404,7 @@ impl HistogramVectorQueryProcessor {
         .map_err(Error::from)?;
 
         call_on_generic_vector_processor!(&self.input, processor => {
-            let mut query = processor.query(query, ctx)?;
+            let mut query = processor.query(query, ctx).await?;
 
             while let Some(collection) = query.next().await {
                 let collection = collection?;
@@ -685,8 +686,8 @@ mod tests {
         assert_eq!(deserialized.params, histogram.params);
     }
 
-    #[test]
-    fn column_name_for_raster_source() {
+    #[tokio::test]
+    async fn column_name_for_raster_source() {
         let histogram = Histogram {
             params: HistogramParams {
                 column_name: Some("foo".to_string()),
@@ -699,7 +700,11 @@ mod tests {
 
         let execution_context = MockExecutionContext::default();
 
-        assert!(histogram.boxed().initialize(&execution_context).is_err());
+        assert!(histogram
+            .boxed()
+            .initialize(&execution_context)
+            .await
+            .is_err());
     }
 
     fn mock_raster_source() -> Box<dyn RasterOperator> {
@@ -745,6 +750,7 @@ mod tests {
         let query_processor = histogram
             .boxed()
             .initialize(&execution_context)
+            .await
             .unwrap()
             .query_processor()
             .unwrap()
@@ -791,6 +797,7 @@ mod tests {
         let query_processor = histogram
             .boxed()
             .initialize(&execution_context)
+            .await
             .unwrap()
             .query_processor()
             .unwrap()
@@ -853,6 +860,7 @@ mod tests {
         let query_processor = histogram
             .boxed()
             .initialize(&execution_context)
+            .await
             .unwrap()
             .query_processor()
             .unwrap()
@@ -919,6 +927,7 @@ mod tests {
         let query_processor = histogram
             .boxed()
             .initialize(&execution_context)
+            .await
             .unwrap()
             .query_processor()
             .unwrap()
@@ -1016,7 +1025,7 @@ mod tests {
         );
 
         if let Err(Error::InvalidOperatorSpec { reason }) =
-            histogram.boxed().initialize(&execution_context)
+            histogram.boxed().initialize(&execution_context).await
         {
             assert_eq!(reason, "column `featurecla` must be numerical");
         } else {
@@ -1064,6 +1073,7 @@ mod tests {
         let query_processor = histogram
             .boxed()
             .initialize(&execution_context)
+            .await
             .unwrap()
             .query_processor()
             .unwrap()
@@ -1119,6 +1129,7 @@ mod tests {
         let query_processor = histogram
             .boxed()
             .initialize(&execution_context)
+            .await
             .unwrap()
             .query_processor()
             .unwrap()
@@ -1174,6 +1185,7 @@ mod tests {
         let query_processor = histogram
             .boxed()
             .initialize(&execution_context)
+            .await
             .unwrap()
             .query_processor()
             .unwrap()
@@ -1243,6 +1255,7 @@ mod tests {
         let query_processor = histogram
             .boxed()
             .initialize(&execution_context)
+            .await
             .unwrap()
             .query_processor()
             .unwrap()

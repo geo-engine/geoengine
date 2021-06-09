@@ -1,6 +1,7 @@
 use crate::engine::{QueryContext, QueryRectangle, RasterQueryProcessor};
 use crate::error;
 use crate::util::Result;
+use futures::future::BoxFuture;
 use futures::Stream;
 use futures::{
     ready,
@@ -61,6 +62,8 @@ pub type RasterFold<'a, T, FoldFuture, FoldMethod, FoldTileAccu> =
 pub type RasterFoldOption<'a, T, FoldFuture, FoldMethod, FoldTileAccu> =
     Option<RasterFold<'a, T, FoldFuture, FoldMethod, FoldTileAccu>>;
 
+type QueryFuture<'a, T> = BoxFuture<'a, Result<BoxStream<'a, Result<RasterTile2D<T>>>>>;
+
 /// This adapter allows to generate a tile stream using sub-querys.
 /// This is done using a `TileSubQuery`.
 /// The sub-query is resolved for each produced tile.
@@ -74,7 +77,7 @@ where
     /// The `QueryRectangle` the adapter is queried with
     query_rect: QueryRectangle,
     /// This `TimeInstance` is the point in time currently queried in the sub-query
-    time_start: Option<TimeInstance>,
+    time_start: TimeInstance,
     /// This `TimeInstance` is the latest point in time seen from the tiles produced by the sub-query
     time_end: Option<TimeInstance>,
     /// The `TileInformation` of all tiles the produces stream will contain
@@ -84,15 +87,19 @@ where
     source: &'a RasterProcessorType,
     /// The `QueryContext` to use for sub-queries
     query_ctx: &'a dyn QueryContext,
+    /// This is the `Future` which creates the sub-query stream
+    #[pin]
+    running_query: Option<QueryFuture<'a, PixelType>>,
     /// This is the `Future` which flattens the sub-query streams into single tiles
     #[pin]
-    running_future: RasterFoldOption<
+    running_fold: RasterFoldOption<
         'a,
         PixelType,
         SubQuery::FoldFuture,
         SubQuery::FoldMethod,
         SubQuery::TileAccu,
     >,
+
     /// remember when the operator is done
     ended: bool,
     /// The `TileSubQuery` defined what this adapter does.
@@ -128,9 +135,10 @@ where
             query_rect,
             tiles_to_produce,
             current_spatial_tile: 0,
-            time_start: Some(query_rect.time_interval.start()),
+            time_start: query_rect.time_interval.start(),
             time_end: None,
-            running_future: None,
+            running_query: None,
+            running_fold: None,
             query_ctx,
             ended: false,
             sub_query,
@@ -169,63 +177,58 @@ where
 
         let mut this = self.project();
 
-        if this.running_future.as_ref().is_none() {
-            // there is no future running / stream processing
-            if *this.current_spatial_tile >= this.tiles_to_produce.len() {
-                // we iterated through all the tiles, now we need to move time forward
-                *this.current_spatial_tile = 0;
-
-                // make time progress
-                let (n_t_start, n_t_end) = match (*this.time_start, *this.time_end) {
-                    (Some(t_start), Some(t_end)) if t_start == t_end => (Some(t_start + 1), None),
-                    (Some(t_start), Some(t_end)) if t_start < t_end => (Some(t_end), None),
-                    (_, _) => (None, None),
-                };
-
-                *this.time_start = n_t_start;
-                *this.time_end = n_t_end;
-            }
-
-            if let Some(t_start) = *this.time_start {
-                if !(this.query_rect.time_interval.is_instant()
-                    && t_start == this.query_rect.time_interval.start())
-                    && t_start >= this.query_rect.time_interval.end()
-                {
-                    *this.ended = true;
-                } else {
-                    let current_spatial_tile_info =
-                        this.tiles_to_produce[*this.current_spatial_tile];
-
-                    let fold_tile_spec = TileInformation {
-                        tile_size_in_pixels: current_spatial_tile_info.tile_size_in_pixels,
-                        global_tile_position: current_spatial_tile_info.global_tile_position,
-                        global_geo_transform: current_spatial_tile_info.global_geo_transform,
-                    };
-
-                    let tile_query_rectangle = this.sub_query.tile_query_rectangle(
-                        fold_tile_spec,
-                        *this.query_rect,
-                        t_start,
-                    )?;
-
-                    // TODO: this schould also be a future. We can chain it with the query if we find a way to store it in the running future
-                    let tile_folding_accu = this
-                        .sub_query
-                        .new_fold_accu(fold_tile_spec, tile_query_rectangle)?;
-
-                    let tile_query_stream = this
-                        .source
-                        .raster_query(tile_query_rectangle, *this.query_ctx)?;
-
-                    let tile_folding_stream =
-                        tile_query_stream.try_fold(tile_folding_accu, this.sub_query.fold_method());
-
-                    this.running_future.set(Some(tile_folding_stream));
-                }
-            }
+        if !(this.query_rect.time_interval.is_instant()
+            && *this.time_start == this.query_rect.time_interval.start())
+            && *this.time_start >= this.query_rect.time_interval.end()
+        {
+            *this.ended = true;
+            return Poll::Ready(None);
         }
 
-        let future_result = match this.running_future.as_mut().as_pin_mut() {
+        let current_spatial_tile_info = this.tiles_to_produce[*this.current_spatial_tile];
+
+        let fold_tile_spec = TileInformation {
+            tile_size_in_pixels: current_spatial_tile_info.tile_size_in_pixels,
+            global_tile_position: current_spatial_tile_info.global_tile_position,
+            global_geo_transform: current_spatial_tile_info.global_geo_transform,
+        };
+
+        let tile_query_rectangle = this.sub_query.tile_query_rectangle(
+            fold_tile_spec,
+            *this.query_rect,
+            *this.time_start,
+        )?;
+
+        if this.running_query.as_ref().is_none() && this.running_fold.as_ref().is_none() {
+            // there is no query and no stream pending
+
+            let tile_query_stream = this
+                .source
+                .raster_query(tile_query_rectangle, *this.query_ctx)
+                .boxed();
+
+            this.running_query.set(Some(tile_query_stream));
+        }
+
+        if let Some(query_future) = this.running_query.as_mut().as_pin_mut() {
+            // TODO: match block?
+            let query_result: Result<BoxStream<'a, Result<RasterTile2D<PixelType>>>> =
+                ready!(query_future.poll(cx));
+            let tile_query_stream = query_result?;
+
+            let tile_folding_accu = this
+                .sub_query
+                .new_fold_accu(fold_tile_spec, tile_query_rectangle)?;
+
+            let tile_folding_stream =
+                tile_query_stream.try_fold(tile_folding_accu, this.sub_query.fold_method());
+
+            this.running_fold.set(Some(tile_folding_stream));
+        }
+
+        this.running_query.set(None);
+
+        let future_result = match this.running_fold.as_mut().as_pin_mut() {
             Some(fut) => ready!(fut.poll(cx)),
             None => return Poll::Ready(None),
         };
@@ -236,16 +239,35 @@ where
         };
 
         // set the running future to None --> will create a new one in the next call
-        this.running_future.set(None);
+        this.running_fold.set(None);
 
         // update the end_time from the produced tile
         let t_end = tile_result.time.end();
         this.time_end.replace(t_end);
 
+        // make tile progress
         *this.current_spatial_tile += 1;
+        // check if we iterated through all the tiles
+        if *this.current_spatial_tile >= this.tiles_to_produce.len() {
+            // reset to the first tile and move time forward
+            *this.current_spatial_tile = 0;
+            // make time progress
+            time_progress(this.time_start, this.time_end);
+        }
 
         Poll::Ready(Some(Ok(tile_result)))
     }
+}
+
+fn time_progress(start: &mut TimeInstance, end: &mut Option<TimeInstance>) {
+    let t_start = *start;
+    let (n_t_start, n_t_end) = match *end {
+        Some(t_end) if t_start < t_end => (t_end, None),
+        _ => (t_start + 1, None),
+    };
+
+    *start = n_t_start;
+    *end = n_t_end;
 }
 
 pub fn fold_by_blit_impl<T>(accu: RasterTile2D<T>, tile: RasterTile2D<T>) -> Result<RasterTile2D<T>>
@@ -675,7 +697,7 @@ mod tests {
         };
         let tiling_strat = exe_ctx.tiling_specification;
 
-        let op = mrs1.initialize(&exe_ctx).unwrap();
+        let op = mrs1.initialize(&exe_ctx).await.unwrap();
 
         let qp = op.query_processor().unwrap().get_u8().unwrap();
 
@@ -768,7 +790,7 @@ mod tests {
         };
         let tiling_strat = exe_ctx.tiling_specification;
 
-        let op = mrs1.initialize(&exe_ctx).unwrap();
+        let op = mrs1.initialize(&exe_ctx).await.unwrap();
 
         let raster_res_desc: &RasterResultDescriptor = op.result_descriptor();
 

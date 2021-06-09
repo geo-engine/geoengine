@@ -9,6 +9,7 @@ use crate::{
     error,
     util::Result,
 };
+use async_trait::async_trait;
 use futures::{Future, FutureExt, StreamExt, TryFuture};
 use geoengine_datatypes::raster::{EmptyGrid2D, GridOrEmpty};
 use geoengine_datatypes::{
@@ -46,14 +47,15 @@ pub type TemporalRasterAggregation =
     Operator<TemporalRasterAggregationParameters, SingleRasterSource>;
 
 #[typetag::serde]
+#[async_trait]
 impl RasterOperator for TemporalRasterAggregation {
-    fn initialize(
+    async fn initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedRasterOperator>> {
         ensure!(self.params.window.step > 0, error::WindowSizeMustNotBeZero);
 
-        let source = self.sources.raster.initialize(context)?;
+        let source = self.sources.raster.initialize(context).await?;
 
         debug!(
             "Initializing TemporalRasterAggregation with {:?}.",
@@ -153,6 +155,7 @@ where
     }
 }
 
+#[async_trait]
 impl<Q, P> RasterQueryProcessor for TemporalRasterAggregationProcessor<Q, P>
 where
     P: Pixel,
@@ -161,7 +164,7 @@ where
     type RasterType = P;
 
     #[allow(clippy::too_many_lines)]
-    fn raster_query<'a>(
+    async fn raster_query<'a>(
         &'a self,
         query: crate::engine::QueryRectangle,
         ctx: &'a dyn crate::engine::QueryContext,
@@ -699,6 +702,7 @@ mod tests {
 
         let qp = agg
             .initialize(&exe_ctx)
+            .await
             .unwrap()
             .query_processor()
             .unwrap()
@@ -707,6 +711,7 @@ mod tests {
 
         let result = qp
             .raster_query(query_rect, &query_ctx)
+            .await
             .unwrap()
             .collect::<Vec<_>>()
             .await;
@@ -821,6 +826,7 @@ mod tests {
 
         let qp = agg
             .initialize(&exe_ctx)
+            .await
             .unwrap()
             .query_processor()
             .unwrap()
@@ -829,6 +835,7 @@ mod tests {
 
         let result = qp
             .raster_query(query_rect, &query_ctx)
+            .await
             .unwrap()
             .collect::<Vec<_>>()
             .await;
@@ -948,6 +955,7 @@ mod tests {
 
         let qp = agg
             .initialize(&exe_ctx)
+            .await
             .unwrap()
             .query_processor()
             .unwrap()
@@ -956,6 +964,7 @@ mod tests {
 
         let result = qp
             .raster_query(query_rect, &query_ctx)
+            .await
             .unwrap()
             .collect::<Vec<_>>()
             .await;
@@ -1080,6 +1089,7 @@ mod tests {
 
         let qp = agg
             .initialize(&exe_ctx)
+            .await
             .unwrap()
             .query_processor()
             .unwrap()
@@ -1088,6 +1098,7 @@ mod tests {
 
         let result = qp
             .raster_query(query_rect, &query_ctx)
+            .await
             .unwrap()
             .collect::<Vec<_>>()
             .await;
@@ -1210,6 +1221,7 @@ mod tests {
 
         let qp = agg
             .initialize(&exe_ctx)
+            .await
             .unwrap()
             .query_processor()
             .unwrap()
@@ -1218,6 +1230,7 @@ mod tests {
 
         let result = qp
             .raster_query(query_rect, &query_ctx)
+            .await
             .unwrap()
             .collect::<Vec<_>>()
             .await;
@@ -1284,6 +1297,7 @@ mod tests {
 
         let qp = agg
             .initialize(&exe_ctx)
+            .await
             .unwrap()
             .query_processor()
             .unwrap()
@@ -1292,6 +1306,7 @@ mod tests {
 
         let result = qp
             .raster_query(query_rect, &query_ctx)
+            .await
             .unwrap()
             .collect::<Vec<_>>()
             .await;
@@ -1375,6 +1390,7 @@ mod tests {
 
         let qp = agg
             .initialize(&exe_ctx)
+            .await
             .unwrap()
             .query_processor()
             .unwrap()
@@ -1383,6 +1399,7 @@ mod tests {
 
         let result = qp
             .raster_query(query_rect, &query_ctx)
+            .await
             .unwrap()
             .collect::<Vec<_>>()
             .await;
@@ -1466,6 +1483,7 @@ mod tests {
 
         let qp = agg
             .initialize(&exe_ctx)
+            .await
             .unwrap()
             .query_processor()
             .unwrap()
@@ -1474,6 +1492,7 @@ mod tests {
 
         let result = qp
             .raster_query(query_rect, &query_ctx)
+            .await
             .unwrap()
             .collect::<Vec<_>>()
             .await;
@@ -1556,6 +1575,7 @@ mod tests {
 
         let qp = agg
             .initialize(&exe_ctx)
+            .await
             .unwrap()
             .query_processor()
             .unwrap()
@@ -1564,6 +1584,7 @@ mod tests {
 
         let result = qp
             .raster_query(query_rect, &query_ctx)
+            .await
             .unwrap()
             .collect::<Vec<_>>()
             .await;

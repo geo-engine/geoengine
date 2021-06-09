@@ -1,5 +1,6 @@
 use crate::engine::{QueryContext, QueryProcessor, QueryRectangle};
 use crate::util::Result;
+use async_trait::async_trait;
 use futures::stream::BoxStream;
 
 /// This `QueryProcessor` allows to rewrite a query. It does not change the data. Results of the children are forwarded.
@@ -14,6 +15,7 @@ impl<S, Q> MapQueryProcessor<S, Q> {
     }
 }
 
+#[async_trait]
 impl<S, Q> QueryProcessor for MapQueryProcessor<S, Q>
 where
     S: QueryProcessor,
@@ -21,12 +23,12 @@ where
 {
     type Output = S::Output;
 
-    fn query<'a>(
+    async fn query<'a>(
         &'a self,
         query: QueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         let rewritten_query = (self.query_fn)(query)?;
-        self.source.query(rewritten_query, ctx)
+        self.source.query(rewritten_query, ctx).await
     }
 }

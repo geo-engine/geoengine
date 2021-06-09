@@ -65,11 +65,12 @@ impl DatasetProvider for PostgresDatasetDb {
     }
 }
 
+#[async_trait]
 impl<L, R> MetaDataProvider<L, R> for PostgresDatasetDb
 where
     R: ResultDescriptor,
 {
-    fn meta_data(
+    async fn meta_data(
         &self,
         _dataset: &DatasetId,
     ) -> std::result::Result<Box<dyn MetaData<L, R>>, geoengine_operators::error::Error> {
