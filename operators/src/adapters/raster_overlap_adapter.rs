@@ -210,23 +210,32 @@ where
             this.running_query.set(Some(tile_query_stream));
         }
 
-        if let Some(query_future) = this.running_query.as_mut().as_pin_mut() {
-            // TODO: match block?
-            let query_result: Result<BoxStream<'a, Result<RasterTile2D<PixelType>>>> =
-                ready!(query_future.poll(cx));
-            let tile_query_stream = query_result?;
-
-            let tile_folding_accu = this
-                .sub_query
-                .new_fold_accu(fold_tile_spec, tile_query_rectangle)?;
-
-            let tile_folding_stream =
-                tile_query_stream.try_fold(tile_folding_accu, this.sub_query.fold_method());
-
-            this.running_fold.set(Some(tile_folding_stream));
-        }
+        let query_future_result =
+            if let Some(query_future) = this.running_query.as_mut().as_pin_mut() {
+                // TODO: match block?
+                let query_result: Result<BoxStream<'a, Result<RasterTile2D<PixelType>>>> =
+                    ready!(query_future.poll(cx));
+                Some(query_result)
+            } else {
+                None
+            };
 
         this.running_query.set(None);
+
+        match query_future_result {
+            Some(Ok(tile_query_stream)) => {
+                let tile_folding_accu = this
+                    .sub_query
+                    .new_fold_accu(fold_tile_spec, tile_query_rectangle)?;
+
+                let tile_folding_stream =
+                    tile_query_stream.try_fold(tile_folding_accu, this.sub_query.fold_method());
+
+                this.running_fold.set(Some(tile_folding_stream));
+            }
+            Some(Err(err)) => return Poll::Ready(Some(Err(err))),
+            None => {} // there is no result but there meight be a running fold...
+        }
 
         let future_result = match this.running_fold.as_mut().as_pin_mut() {
             Some(fut) => ready!(fut.poll(cx)),
