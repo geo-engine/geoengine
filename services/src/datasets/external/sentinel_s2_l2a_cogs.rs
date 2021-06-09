@@ -1,6 +1,6 @@
-use std::collections::HashMap;
-use std::ops::Bound;
-
+use crate::stac::Feature as StacFeature;
+use crate::stac::FeatureCollection as StacCollection;
+use crate::stac::StacAsset;
 use crate::{datasets::listing::DatasetListOptions, error::Result};
 use crate::{
     datasets::{
@@ -15,16 +15,22 @@ use chrono::{DateTime, Duration, Utc};
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
 use geoengine_datatypes::operations::reproject::{CoordinateProjection, CoordinateProjector};
 use geoengine_datatypes::primitives::{BoundingBox2D, Measurement, TimeInterval};
-use geoengine_datatypes::raster::{Raster, RasterDataType};
+use geoengine_datatypes::raster::GeoTransform;
+use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
 use geoengine_operators::engine::QueryRectangle;
+use geoengine_operators::source::GdalDatasetParameters;
+use geoengine_operators::source::GdalLoadingInfoPart;
+use geoengine_operators::source::GdalLoadingInfoPartIterator;
 use geoengine_operators::{
     engine::{MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor},
     mock::MockDatasetDataSourceLoadingInfo,
     source::{GdalLoadingInfo, OgrSourceDataset},
 };
-use log::{debug, info};
 use serde::{Deserialize, Serialize};
+use snafu::ResultExt;
+use std::collections::HashMap;
+use std::path::PathBuf;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -102,8 +108,10 @@ pub struct SentinelDataset {
 }
 
 pub struct SentinelS2L2aCogsDataProvider {
+    #[allow(dead_code)]
     id: DatasetProviderId,
     api_url: String,
+    #[allow(dead_code)]
     meta_data: SentinelMetaData,
     datasets: HashMap<DatasetId, SentinelDataset>,
 }
@@ -150,7 +158,7 @@ impl SentinelS2L2aCogsDataProvider {
                     .into();
                     let listing = DatasetListing {
                         id: dataset_id.clone(),
-                        name: format!("Sentinal S2 L2A COGS {}:{}", zone.name, band.name),
+                        name: format!("Sentinel S2 L2A COGS {}:{}", zone.name, band.name),
                         description: "".to_owned(),
                         tags: vec![],
                         source_operator: "GdalSource".to_owned(),
@@ -203,20 +211,140 @@ pub struct SentinelS2L2aCogsMetaData {
 }
 
 impl SentinelS2L2aCogsMetaData {
-    async fn web_request<T: Serialize + ?Sized>(
+    async fn create_loading_info(&self, query: QueryRectangle) -> Result<GdalLoadingInfo> {
+        // for reference: https://stacspec.org/STAC-ext-api.html#operation/getSearchSTAC
+
+        let mut features = self.load_all_features(&self.request_params(query)?).await?;
+        features.sort_by(|a, b| a.properties.datetime.cmp(&b.properties.datetime));
+
+        let mut parts = vec![];
+        let num_features = features.len();
+        for i in 0..num_features {
+            let feature = &features[i];
+            let start = feature.properties.datetime;
+            let end = if i < num_features - 1 {
+                features[i + 1].properties.datetime
+            } else {
+                start + Duration::hours(12) // TODO: determine correct validty for last tile
+            };
+
+            let time_interval = TimeInterval::new(start, end)?;
+
+            if time_interval.intersects(&query.time_interval) {
+                let asset =
+                    feature
+                        .assets
+                        .get(&self.band.name)
+                        .ok_or(error::Error::StacNoSuchBand {
+                            band_name: self.band.name.clone(),
+                        })?;
+
+                parts.push(self.create_loading_info_part(time_interval, asset)?)
+            }
+        }
+
+        Ok(GdalLoadingInfo {
+            info: GdalLoadingInfoPartIterator::Static {
+                parts: parts.into_iter(),
+            },
+        })
+    }
+
+    fn create_loading_info_part(
+        &self,
+        time_interval: TimeInterval,
+        asset: &StacAsset,
+    ) -> Result<GdalLoadingInfoPart> {
+        Ok(GdalLoadingInfoPart {
+            time: time_interval,
+            params: GdalDatasetParameters {
+                file_path: PathBuf::from(format!("/vsicurl/{}", asset.href)),
+                rasterband_channel: 1,
+                geo_transform: GeoTransform::from(
+                    asset
+                        .gdal_geotransform()
+                        .ok_or(error::Error::StacInvalidGeoTransform)?,
+                ),
+                bbox: asset
+                    .native_bbox()
+                    .ok_or(error::Error::StacInvalidBbox)?
+                    .into(),
+                file_not_found_handling: geoengine_operators::source::FileNotFoundHandling::NoData,
+                no_data_value: self.band.no_data_value,
+            },
+        })
+    }
+
+    fn request_params(&self, query: QueryRectangle) -> Result<Vec<(String, String)>> {
+        let (t_start, t_end) = Self::time_range_request(&query.time_interval)?;
+
+        let bbox = self.bbox_wgs84(query.bbox)?;
+
+        Ok(vec![
+            (
+                "collections[]".to_owned(),
+                "sentinel-s2-l2a-cogs".to_owned(),
+            ),
+            (
+                "bbox".to_owned(),
+                format!(
+                    "[{},{},{},{}]", // array-brackets are not used in standard but required here for unknkown reason
+                    bbox.lower_left().x,
+                    bbox.lower_left().y,
+                    bbox.upper_right().x,
+                    bbox.upper_right().y
+                ),
+            ), // TODO: order coordinates depending on projection
+            (
+                "datetime".to_owned(),
+                format!("{}/{}", t_start.to_rfc3339(), t_end.to_rfc3339()),
+            ),
+            ("limit".to_owned(), "500".to_owned()),
+        ])
+    }
+
+    async fn load_all_features<T: Serialize + ?Sized>(
         &self,
         params: &T,
-    ) -> geoengine_operators::util::Result<String> {
+    ) -> Result<Vec<StacFeature>> {
+        let mut features = vec![];
+
+        let mut collection = self.load_collection(params, 1).await?;
+        features.append(&mut collection.features);
+
+        let num_pages =
+            (collection.context.matched as f64 / collection.context.limit as f64).ceil() as u32;
+
+        for page in 2..=num_pages {
+            let mut collection = self.load_collection(params, page).await?;
+            features.append(&mut collection.features);
+        }
+
+        Ok(features)
+    }
+
+    async fn load_collection<T: Serialize + ?Sized>(
+        &self,
+        params: &T,
+        page: u32,
+    ) -> Result<StacCollection> {
         let client = reqwest::Client::new();
-        client
+        let text = client
             .get(&self.api_url)
             .query(&params)
+            .query(&[("page", &page.to_string())])
             .send()
             .await
-            .map_err(|_| geoengine_operators::error::Error::LoadingInfo)?
+            .context(error::Reqwest)?
             .text()
             .await
-            .map_err(|_| geoengine_operators::error::Error::LoadingInfo)
+            .context(error::Reqwest)?;
+
+        serde_json::from_str(&text).map_err(|error| error::Error::StacJsonRespone {
+            url: self.api_url.clone(),
+            response: text,
+            error,
+        })
     }
 
     fn time_range_request(time: &TimeInterval) -> Result<(DateTime<Utc>, DateTime<Utc>)> {
@@ -260,40 +388,12 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor> for SentinelS2L2aCogsMeta
         &self,
         query: QueryRectangle,
     ) -> geoengine_operators::util::Result<GdalLoadingInfo> {
-        // for reference: https://stacspec.org/STAC-ext-api.html#operation/getSearchSTAC
-
-        let (t_start, t_end) = Self::time_range_request(&query.time_interval)
-            .map_err(|_| geoengine_operators::error::Error::LoadingInfo)?;
-
-        let bbox = self
-            .bbox_wgs84(query.bbox)
-            .map_err(|_| geoengine_operators::error::Error::LoadingInfo)?;
-
-        let params = [
-            ("collections[]", "sentinel-s2-l2a-cogs"),
-            (
-                "bbox",
-                &format!(
-                    "[{},{},{},{}]", // array-brackets are not used in standard but required here for unknkown reason
-                    bbox.lower_left().x,
-                    bbox.lower_left().y,
-                    bbox.upper_right().x,
-                    bbox.upper_right().y
-                ),
-            ), // TODO: order coordinates depending on projection
-            (
-                "datetime",
-                &format!("{}/{}", t_start.to_rfc3339(), t_end.to_rfc3339()),
-            ),
-        ];
-
-        debug!("params {:?}", params);
-
-        let result = self.web_request(&params).await?;
-
-        debug!("result {:?}", result);
-
-        Err(geoengine_operators::error::Error::NotImplemented)
+        // TODO: propagate error properly
+        self.create_loading_info(query).await.map_err(|e| {
+            geoengine_operators::error::Error::LoadingInfo {
+                reason: format!("{:?}", e),
+            }
+        })
     }
 
     async fn result_descriptor(&self) -> geoengine_operators::util::Result<RasterResultDescriptor> {
@@ -361,5 +461,156 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor> for SentinelS2L2
         geoengine_operators::error::Error,
     > {
         Err(geoengine_operators::error::Error::NotImplemented)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{fs::File, io::BufReader, str::FromStr};
+
+    use futures::StreamExt;
+    use geoengine_datatypes::primitives::SpatialResolution;
+    use geoengine_operators::{
+        engine::{MockExecutionContext, MockQueryContext, RasterOperator},
+        source::{FileNotFoundHandling, GdalSource, GdalSourceParameters},
+    };
+
+    use super::*;
+
+    #[tokio::test]
+    async fn loading_info() -> Result<()> {
+        // TODO: mock STAC endpoint
+
+        let def: Box<dyn DatasetProviderDefinition> = serde_json::from_reader(BufReader::new(
+            File::open("test-data/provider_defs/sentinel_s2_l2a_cogs.json")?,
+        ))?;
+
+        let provider = def.initialize().await?;
+
+        let meta: Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor>> = provider
+            .meta_data(
+                &ExternalDatasetId {
+                    provider: DatasetProviderId::from_str("5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5")?,
+                    id: "UTM36S:B01".to_owned(),
+                }
+                .into(),
+            )
+            .await?;
+
+        let loading_info = meta
+            .loading_info(QueryRectangle {
+                bbox: BoundingBox2D::new_unchecked(
+                    (166_021.44, 0.00).into(),
+                    (534_994.66, 9_329_005.18).into(),
+                ),
+                time_interval: TimeInterval::new_instant(
+                    DateTime::parse_from_rfc3339("2021-01-01T12:00:00Z")
+                        .unwrap()
+                        .timestamp_millis(),
+                )?,
+                spatial_resolution: SpatialResolution::one(),
+            })
+            .await?;
+
+        let expected = vec![GdalLoadingInfoPart {
+            time: TimeInterval::new_unchecked(1_609_499_078_000, 1_609_542_278_000),
+            params: GdalDatasetParameters {
+                file_path: "/vsicurl/https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/20/C/NR/2021/1/S2B_20CNR_20210101_0_L2A/B01.tif".into(),
+                rasterband_channel: 1,
+                geo_transform: GeoTransform {
+                    origin_coordinate: (499_980.0, 1_100_020.0).into(),
+                    x_pixel_size: 60.,
+                    y_pixel_size: -60.,
+                },
+                bbox: BoundingBox2D::new_unchecked((499_980.0, 990_220.0).into(), (609_780.0, 1_100_020.0).into()),
+                file_not_found_handling: FileNotFoundHandling::NoData,
+                no_data_value: None,
+            },
+        }];
+
+        if let GdalLoadingInfoPartIterator::Static { parts } = loading_info.info {
+            let result: Vec<_> = parts.collect();
+
+            assert_eq!(result.len(), 1);
+
+            assert_eq!(result, expected);
+        } else {
+            unreachable!()
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn query_data() -> Result<()> {
+        // TODO: mock STAC endpoint
+
+        let mut exe = MockExecutionContext::default();
+
+        let def: Box<dyn DatasetProviderDefinition> = serde_json::from_reader(BufReader::new(
+            File::open("services/test-data/provider_defs/sentinel_s2_l2a_cogs.json")?,
+        ))?;
+
+        let provider = def.initialize().await?;
+
+        let meta: Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor>> = provider
+            .meta_data(
+                &ExternalDatasetId {
+                    provider: DatasetProviderId::from_str("5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5")?,
+                    id: "UTM36S:B01".to_owned(),
+                }
+                .into(),
+            )
+            .await?;
+
+        exe.add_meta_data(
+            ExternalDatasetId {
+                provider: DatasetProviderId::from_str("5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5")?,
+                id: "UTM36S:B01".to_owned(),
+            }
+            .into(),
+            meta,
+        );
+
+        let op = GdalSource {
+            params: GdalSourceParameters {
+                dataset: ExternalDatasetId {
+                    provider: DatasetProviderId::from_str("5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5")?,
+                    id: "UTM36S:B01".to_owned(),
+                }
+                .into(),
+            },
+        }
+        .boxed()
+        .initialize(&exe)
+        .await
+        .unwrap();
+
+        let processor = op.query_processor()?.get_u16().unwrap();
+
+        let query = QueryRectangle {
+            bbox: BoundingBox2D::new_unchecked(
+                (166_021.44, 0.00).into(),
+                (534_994.66, 9_329_005.18).into(),
+            ),
+            time_interval: TimeInterval::new_instant(
+                DateTime::parse_from_rfc3339("2021-01-01T12:00:00Z")
+                    .unwrap()
+                    .timestamp_millis(),
+            )?,
+            spatial_resolution: SpatialResolution::one(),
+        };
+
+        let ctx = MockQueryContext::new(usize::MAX);
+
+        let result = processor
+            .raster_query(query, &ctx)
+            .await?
+            .collect::<Vec<_>>()
+            .await;
+
+        assert_eq!(result.len(), 1);
+
+        Ok(())
     }
 }

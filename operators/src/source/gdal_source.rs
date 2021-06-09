@@ -126,7 +126,7 @@ impl Iterator for GdalLoadingInfoPartIterator {
 }
 
 /// one temporal slice of the dataset that requires reading from exactly one Gdal dataset
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct GdalLoadingInfoPart {
     pub time: TimeInterval,
     pub params: GdalDatasetParameters,

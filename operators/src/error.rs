@@ -194,7 +194,9 @@ pub enum Error {
     TemporalRasterAggregationLastValidRequiresNoData,
     TemporalRasterAggregationFirstValidRequiresNoData,
 
-    LoadingInfo,
+    LoadingInfo {
+        reason: String, // TODO: find cleaner way to make errors in services crate visible
+    },
 
     NotImplemented,
 }
