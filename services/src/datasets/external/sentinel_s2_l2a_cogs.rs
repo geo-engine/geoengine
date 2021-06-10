@@ -132,8 +132,8 @@ impl SentinelS2L2aCogsDataProvider {
         // TODO: is there a no data value?
         SentinelMetaData {
             bands: vec![
-                Band::new("B01".to_owned(), None, RasterDataType::U16),
-                Band::new("B02".to_owned(), None, RasterDataType::U16),
+                Band::new("B01".to_owned(), Some(0.), RasterDataType::U16),
+                Band::new("B02".to_owned(), Some(0.), RasterDataType::U16),
             ],
             zones: vec![
                 Zone::new("UTM32N".to_owned(), 32632),
@@ -221,6 +221,15 @@ impl SentinelS2L2aCogsMetaData {
         let num_features = features.len();
         for i in 0..num_features {
             let feature = &features[i];
+
+            if feature
+                .properties
+                .proj_epsg
+                .map_or(true, |epsg| epsg != self.zone.epsg)
+            {
+                continue;
+            }
+
             let start = feature.properties.datetime;
             let end = if i < num_features - 1 {
                 features[i + 1].properties.datetime
@@ -491,7 +500,7 @@ mod tests {
             .meta_data(
                 &ExternalDatasetId {
                     provider: DatasetProviderId::from_str("5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5")?,
-                    id: "UTM36S:B01".to_owned(),
+                    id: "UTM32N:B01".to_owned(),
                 }
                 .into(),
             )
@@ -504,7 +513,7 @@ mod tests {
                     (534_994.66, 9_329_005.18).into(),
                 ),
                 time_interval: TimeInterval::new_instant(
-                    DateTime::parse_from_rfc3339("2021-01-01T12:00:00Z")
+                    DateTime::parse_from_rfc3339("2021-01-02T10:02:26Z")
                         .unwrap()
                         .timestamp_millis(),
                 )?,
@@ -513,18 +522,18 @@ mod tests {
             .await?;
 
         let expected = vec![GdalLoadingInfoPart {
-            time: TimeInterval::new_unchecked(1_609_499_078_000, 1_609_542_278_000),
+            time: TimeInterval::new_unchecked(1_609_581_746_000, 1_609_624_946_000),
             params: GdalDatasetParameters {
-                file_path: "/vsicurl/https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/20/C/NR/2021/1/S2B_20CNR_20210101_0_L2A/B01.tif".into(),
+                file_path: "/vsicurl/https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/32/R/PU/2021/1/S2B_32RPU_20210102_0_L2A/B01.tif".into(),
                 rasterband_channel: 1,
                 geo_transform: GeoTransform {
-                    origin_coordinate: (499_980.0, 1_100_020.0).into(),
+                    origin_coordinate: (600_000.0, 3_400_020.0).into(),
                     x_pixel_size: 60.,
                     y_pixel_size: -60.,
                 },
-                bbox: BoundingBox2D::new_unchecked((499_980.0, 990_220.0).into(), (609_780.0, 1_100_020.0).into()),
+                bbox: BoundingBox2D::new_unchecked((600_000.0, 3_290_220.0 ).into(), ( 709_800.0, 3_400_020.0).into()),
                 file_not_found_handling: FileNotFoundHandling::NoData,
-                no_data_value: None,
+                no_data_value: Some(0.),
             },
         }];
 
@@ -548,7 +557,7 @@ mod tests {
         let mut exe = MockExecutionContext::default();
 
         let def: Box<dyn DatasetProviderDefinition> = serde_json::from_reader(BufReader::new(
-            File::open("services/test-data/provider_defs/sentinel_s2_l2a_cogs.json")?,
+            File::open("test-data/provider_defs/sentinel_s2_l2a_cogs.json")?,
         ))?;
 
         let provider = def.initialize().await?;
@@ -557,7 +566,7 @@ mod tests {
             .meta_data(
                 &ExternalDatasetId {
                     provider: DatasetProviderId::from_str("5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5")?,
-                    id: "UTM36S:B01".to_owned(),
+                    id: "UTM32N:B01".to_owned(),
                 }
                 .into(),
             )
@@ -566,7 +575,7 @@ mod tests {
         exe.add_meta_data(
             ExternalDatasetId {
                 provider: DatasetProviderId::from_str("5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5")?,
-                id: "UTM36S:B01".to_owned(),
+                id: "UTM32N:B01".to_owned(),
             }
             .into(),
             meta,
@@ -576,7 +585,7 @@ mod tests {
             params: GdalSourceParameters {
                 dataset: ExternalDatasetId {
                     provider: DatasetProviderId::from_str("5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5")?,
-                    id: "UTM36S:B01".to_owned(),
+                    id: "UTM32N:B01".to_owned(),
                 }
                 .into(),
             },
@@ -594,11 +603,14 @@ mod tests {
                 (534_994.66, 9_329_005.18).into(),
             ),
             time_interval: TimeInterval::new_instant(
-                DateTime::parse_from_rfc3339("2021-01-01T12:00:00Z")
+                DateTime::parse_from_rfc3339("2021-01-02T10:02:26Z")
                     .unwrap()
                     .timestamp_millis(),
             )?,
-            spatial_resolution: SpatialResolution::one(),
+            spatial_resolution: SpatialResolution::new_unchecked(
+                166_021.44 / 256.,
+                (9_329_005.18 - 534_994.66) / 256.,
+            ),
         };
 
         let ctx = MockQueryContext::new(usize::MAX);
@@ -609,7 +621,8 @@ mod tests {
             .collect::<Vec<_>>()
             .await;
 
-        assert_eq!(result.len(), 1);
+        // TODO: check actual data
+        assert_eq!(result.len(), 2);
 
         Ok(())
     }
