@@ -12,12 +12,15 @@ use std::{
 use std::{ffi::OsStr, fmt::Debug};
 
 use chrono::DateTime;
+use chrono::NaiveDate;
+use chrono::NaiveDateTime;
 use futures::stream::BoxStream;
 use futures::task::{Context, Waker};
 use futures::Stream;
 use futures::StreamExt;
 use gdal::vector::{Feature, FeatureIterator, FieldValue, OGRwkbGeometryType};
 use gdal::{Dataset, DatasetOptions};
+use log::debug;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use tokio::task::spawn_blocking;
@@ -525,6 +528,8 @@ where
     fn create_time_parser(
         time_format: &OgrSourceTimeFormat,
     ) -> Box<dyn Fn(FieldValue) -> Result<TimeInstance> + '_> {
+        debug!("{:?}", time_format);
+
         match time_format {
             OgrSourceTimeFormat::Auto => Box::new(move |field: FieldValue| match field {
                 FieldValue::DateValue(value) => Ok(value.and_hms(0, 0, 0).naive_utc().into()),
@@ -533,8 +538,17 @@ where
             }),
             OgrSourceTimeFormat::Custom { custom_format } => Box::new(move |field: FieldValue| {
                 let date = field.into_string().ok_or(Error::OgrFieldValueIsNotString)?;
-                let date_time = DateTime::parse_from_str(&date, &custom_format)?;
-                Ok(date_time.timestamp_millis().try_into()?)
+                let date_time_result = DateTime::parse_from_str(&date, &custom_format)
+                    .map(|t| t.timestamp_millis())
+                    .or_else(|_| {
+                        NaiveDateTime::parse_from_str(&date, &custom_format)
+                            .map(|n| n.timestamp_millis())
+                    })
+                    .or_else(|_| {
+                        NaiveDate::parse_from_str(&date, &custom_format)
+                            .map(|d| d.and_hms(0, 0, 0).timestamp_millis())
+                    });
+                Ok(date_time_result?.try_into()?)
             }),
             OgrSourceTimeFormat::Seconds => Box::new(move |field: FieldValue| match field {
                 FieldValue::IntegerValue(v) => {
