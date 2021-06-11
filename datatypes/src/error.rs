@@ -227,6 +227,8 @@ pub enum Error {
     OutputBboxEmpty {
         bbox: BoundingBox2D,
     },
+
+    WrongMetadataType,
 }
 
 impl From<arrow::error::ArrowError> for Error {

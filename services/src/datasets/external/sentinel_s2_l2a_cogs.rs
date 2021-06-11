@@ -294,6 +294,7 @@ impl SentinelS2L2aCogsMetaData {
                     .into(),
                 file_not_found_handling: geoengine_operators::source::FileNotFoundHandling::NoData,
                 no_data_value: self.band.no_data_value,
+                properties_mapping: None,
             },
         })
     }
@@ -543,6 +544,7 @@ mod tests {
                 bbox: BoundingBox2D::new_unchecked((600_000.0, 3_290_220.0 ).into(), ( 709_800.0, 3_400_020.0).into()),
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value: Some(0.),
+                properties_mapping: None,
             },
         }];
 

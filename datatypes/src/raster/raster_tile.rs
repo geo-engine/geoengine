@@ -1,3 +1,4 @@
+use super::RasterProperties;
 use super::{
     grid_or_empty::GridOrEmpty, GeoTransform, GeoTransformAccess, Grid, GridBounds, GridIdx2D,
     GridIndexAccess, GridIndexAccessMut, GridShape, GridShape2D, GridShape3D, GridShapeAccess,
@@ -41,6 +42,8 @@ pub struct BaseTile<G> {
     /// The pixels of the tile are stored as `Grid` or, in case they are all no-data as `NoDataGrid`.
     /// The enum `GridOrEmpty` allows a combination of both.
     pub grid_array: G,
+    /// Metadata for the `BaseTile`
+    pub properties: RasterProperties,
 }
 
 impl<G> BaseTile<G>
@@ -97,6 +100,24 @@ where
             tile_position: tile_info.global_tile_position,
             global_geo_transform: tile_info.global_geo_transform,
             grid_array: data,
+            properties: Default::default(),
+        }
+    }
+
+    /// create a new `RasterTile`
+    pub fn new_with_tile_info_and_properties(
+        time: TimeInterval,
+        tile_info: TileInformation,
+        data: GridOrEmpty<D, T>,
+        properties: RasterProperties,
+    ) -> Self {
+        // TODO: assert, tile information xy size equals the data xy size
+        Self {
+            time,
+            tile_position: tile_info.global_tile_position,
+            global_geo_transform: tile_info.global_geo_transform,
+            grid_array: data,
+            properties,
         }
     }
 
@@ -112,6 +133,7 @@ where
             tile_position,
             global_geo_transform,
             grid_array: data,
+            properties: RasterProperties::default(),
         }
     }
 
@@ -126,6 +148,7 @@ where
             tile_position: [0, 0].into(),
             global_geo_transform,
             grid_array: GridOrEmpty::Grid(data),
+            properties: RasterProperties::default(),
         }
     }
 
@@ -156,6 +179,7 @@ where
             time: self.time,
             tile_position: self.tile_position,
             global_geo_transform: self.global_geo_transform,
+            properties: RasterProperties::default(),
         }
     }
 }
@@ -283,6 +307,7 @@ where
             global_geo_transform: mat_tile.global_geo_transform,
             tile_position: mat_tile.tile_position,
             time: mat_tile.time,
+            properties: RasterProperties::default(),
         }
     }
 }
