@@ -129,7 +129,6 @@ impl SentinelS2L2aCogsDataProvider {
 
     fn load_metadata() -> SentinelMetaData {
         // TODO: fetch dataset metadata from config or remote
-        // TODO: is there a no data value?
         SentinelMetaData {
             bands: vec![
                 Band::new("B01".to_owned(), Some(0.), RasterDataType::U16),
@@ -169,7 +168,7 @@ impl SentinelS2L2aCogsDataProvider {
                                 zone.epsg,
                             )
                             .into(),
-                            measurement: Measurement::Unitless,
+                            measurement: Measurement::Unitless, // TODO: add measurement
                             no_data_value: band.no_data_value,
                         }
                         .into(),
