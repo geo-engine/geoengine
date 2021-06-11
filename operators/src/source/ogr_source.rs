@@ -3470,4 +3470,295 @@ mod tests {
 
         assert_eq!(result, pc);
     }
+
+    #[tokio::test]
+    async fn points_date_csv() {
+        let dataset = DatasetId::Internal(InternalDatasetId::new());
+        let mut exe_ctx = MockExecutionContext::default();
+        exe_ctx.add_meta_data(
+            dataset.clone(),
+            Box::new(StaticMetaData {
+                loading_info: OgrSourceDataset {
+                    file_name: "test-data/vector/data/lonlat_date.csv".into(),
+                    layer_name: "lonlat_date".to_owned(),
+                    data_type: Some(VectorDataType::MultiPoint),
+                    time: OgrSourceDatasetTimeType::Start {
+                        start_field: "Date".to_owned(),
+                        start_format: OgrSourceTimeFormat::Custom {
+                            custom_format: "%d.%m.%Y".to_owned(),
+                        },
+                        duration: 84000,
+                    },
+                    columns: Some(OgrSourceColumnSpec {
+                        x: "Longitude".to_owned(),
+                        y: Some("Latitude".to_owned()),
+                        int: vec![],
+                        float: vec![],
+                        text: vec!["Name".to_owned()],
+                    }),
+                    force_ogr_time_filter: false,
+                    force_ogr_spatial_filter: false,
+                    on_error: OgrSourceErrorSpec::Abort,
+                    provenance: None,
+                },
+                result_descriptor: VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: [("Name".to_string(), FeatureDataType::Text)]
+                        .iter()
+                        .cloned()
+                        .collect(),
+                },
+            }),
+        );
+
+        let source = OgrSource {
+            params: OgrSourceParameters {
+                dataset,
+                attribute_projection: None,
+            },
+        }
+        .boxed()
+        .initialize(&exe_ctx)
+        .await
+        .unwrap();
+
+        assert_eq!(
+            source.result_descriptor().data_type,
+            VectorDataType::MultiPoint
+        );
+        assert_eq!(
+            source.result_descriptor().spatial_reference,
+            SpatialReference::epsg_4326().into()
+        );
+
+        let query_processor = source.query_processor().unwrap().multi_point().unwrap();
+
+        let query_bbox = BoundingBox2D::new((-180.0, -90.0).into(), (180.00, 90.0).into()).unwrap();
+
+        let context = MockQueryContext::new(1024 * 1024);
+        let query = query_processor
+            .query(
+                QueryRectangle {
+                    bbox: query_bbox,
+                    time_interval: Default::default(),
+                    spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
+                },
+                &context,
+            )
+            .await
+            .unwrap();
+
+        let result: Vec<MultiPointCollection> = query.try_collect().await.unwrap();
+
+        assert_eq!(result.len(), 1);
+        let result = result.into_iter().next().unwrap();
+
+        let pc = MultiPointCollection::from_data(
+            MultiPoint::many(vec![vec![(1.1, 2.2)]]).unwrap(),
+            vec![TimeInterval::new(819_763_200_000, 819_763_284_000).unwrap()],
+            {
+                let mut map = HashMap::new();
+                map.insert("Name".into(), FeatureData::Text(vec!["foo".to_owned()]));
+                map
+            },
+        )
+        .unwrap();
+
+        assert_eq!(result, pc);
+    }
+
+    #[tokio::test]
+    async fn points_date_time_csv() {
+        let dataset = DatasetId::Internal(InternalDatasetId::new());
+        let mut exe_ctx = MockExecutionContext::default();
+        exe_ctx.add_meta_data(
+            dataset.clone(),
+            Box::new(StaticMetaData {
+                loading_info: OgrSourceDataset {
+                    file_name: "test-data/vector/data/lonlat_date_time.csv".into(),
+                    layer_name: "lonlat_date_time".to_owned(),
+                    data_type: Some(VectorDataType::MultiPoint),
+                    time: OgrSourceDatasetTimeType::Start {
+                        start_field: "DateTime".to_owned(),
+                        start_format: OgrSourceTimeFormat::Custom {
+                            custom_format: "%d.%m.%Y %H:%M:%S".to_owned(),
+                        },
+                        duration: 84000,
+                    },
+                    columns: Some(OgrSourceColumnSpec {
+                        x: "Longitude".to_owned(),
+                        y: Some("Latitude".to_owned()),
+                        int: vec![],
+                        float: vec![],
+                        text: vec!["Name".to_owned()],
+                    }),
+                    force_ogr_time_filter: false,
+                    force_ogr_spatial_filter: false,
+                    on_error: OgrSourceErrorSpec::Abort,
+                    provenance: None,
+                },
+                result_descriptor: VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: [("Name".to_string(), FeatureDataType::Text)]
+                        .iter()
+                        .cloned()
+                        .collect(),
+                },
+            }),
+        );
+
+        let source = OgrSource {
+            params: OgrSourceParameters {
+                dataset,
+                attribute_projection: None,
+            },
+        }
+        .boxed()
+        .initialize(&exe_ctx)
+        .await
+        .unwrap();
+
+        assert_eq!(
+            source.result_descriptor().data_type,
+            VectorDataType::MultiPoint
+        );
+        assert_eq!(
+            source.result_descriptor().spatial_reference,
+            SpatialReference::epsg_4326().into()
+        );
+
+        let query_processor = source.query_processor().unwrap().multi_point().unwrap();
+
+        let query_bbox = BoundingBox2D::new((-180.0, -90.0).into(), (180.00, 90.0).into()).unwrap();
+
+        let context = MockQueryContext::new(1024 * 1024);
+        let query = query_processor
+            .query(
+                QueryRectangle {
+                    bbox: query_bbox,
+                    time_interval: Default::default(),
+                    spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
+                },
+                &context,
+            )
+            .await
+            .unwrap();
+
+        let result: Vec<MultiPointCollection> = query.try_collect().await.unwrap();
+
+        assert_eq!(result.len(), 1);
+        let result = result.into_iter().next().unwrap();
+
+        let pc = MultiPointCollection::from_data(
+            MultiPoint::many(vec![vec![(1.1, 2.2)]]).unwrap(),
+            vec![TimeInterval::new(819_828_000_000, 819_828_084_000).unwrap()],
+            {
+                let mut map = HashMap::new();
+                map.insert("Name".into(), FeatureData::Text(vec!["foo".to_owned()]));
+                map
+            },
+        )
+        .unwrap();
+
+        assert_eq!(result, pc);
+    }
+
+    #[tokio::test]
+    async fn points_date_time_tz_csv() {
+        let dataset = DatasetId::Internal(InternalDatasetId::new());
+        let mut exe_ctx = MockExecutionContext::default();
+        exe_ctx.add_meta_data(
+            dataset.clone(),
+            Box::new(StaticMetaData {
+                loading_info: OgrSourceDataset {
+                    file_name: "test-data/vector/data/lonlat_date_time_tz.csv".into(),
+                    layer_name: "lonlat_date_time_tz".to_owned(),
+                    data_type: Some(VectorDataType::MultiPoint),
+                    time: OgrSourceDatasetTimeType::Start {
+                        start_field: "DateTimeTz".to_owned(),
+                        start_format: OgrSourceTimeFormat::Custom {
+                            custom_format: "%d.%m.%Y %H:%M:%S %z".to_owned(),
+                        },
+                        duration: 84000,
+                    },
+                    columns: Some(OgrSourceColumnSpec {
+                        x: "Longitude".to_owned(),
+                        y: Some("Latitude".to_owned()),
+                        int: vec![],
+                        float: vec![],
+                        text: vec!["Name".to_owned()],
+                    }),
+                    force_ogr_time_filter: false,
+                    force_ogr_spatial_filter: false,
+                    on_error: OgrSourceErrorSpec::Abort,
+                    provenance: None,
+                },
+                result_descriptor: VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: [("Name".to_string(), FeatureDataType::Text)]
+                        .iter()
+                        .cloned()
+                        .collect(),
+                },
+            }),
+        );
+
+        let source = OgrSource {
+            params: OgrSourceParameters {
+                dataset,
+                attribute_projection: None,
+            },
+        }
+        .boxed()
+        .initialize(&exe_ctx)
+        .await
+        .unwrap();
+
+        assert_eq!(
+            source.result_descriptor().data_type,
+            VectorDataType::MultiPoint
+        );
+        assert_eq!(
+            source.result_descriptor().spatial_reference,
+            SpatialReference::epsg_4326().into()
+        );
+
+        let query_processor = source.query_processor().unwrap().multi_point().unwrap();
+
+        let query_bbox = BoundingBox2D::new((-180.0, -90.0).into(), (180.00, 90.0).into()).unwrap();
+
+        let context = MockQueryContext::new(1024 * 1024);
+        let query = query_processor
+            .query(
+                QueryRectangle {
+                    bbox: query_bbox,
+                    time_interval: Default::default(),
+                    spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
+                },
+                &context,
+            )
+            .await
+            .unwrap();
+
+        let result: Vec<MultiPointCollection> = query.try_collect().await.unwrap();
+
+        assert_eq!(result.len(), 1);
+        let result = result.into_iter().next().unwrap();
+
+        let pc = MultiPointCollection::from_data(
+            MultiPoint::many(vec![vec![(1.1, 2.2)]]).unwrap(),
+            vec![TimeInterval::new(819_842_400_000, 819_842_484_000).unwrap()],
+            {
+                let mut map = HashMap::new();
+                map.insert("Name".into(), FeatureData::Text(vec!["foo".to_owned()]));
+                map
+            },
+        )
+        .unwrap();
+
+        assert_eq!(result, pc);
+    }
 }
