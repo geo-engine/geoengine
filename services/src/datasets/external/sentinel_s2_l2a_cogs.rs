@@ -13,8 +13,7 @@ use crate::{
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
-use geoengine_datatypes::operations::reproject::{CoordinateProjection, CoordinateProjector};
-use geoengine_datatypes::primitives::{BoundingBox2D, Measurement, TimeInterval};
+use geoengine_datatypes::primitives::{Measurement, TimeInterval};
 use geoengine_datatypes::raster::GeoTransform;
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
@@ -27,6 +26,7 @@ use geoengine_operators::{
     mock::MockDatasetDataSourceLoadingInfo,
     source::{GdalLoadingInfo, OgrSourceDataset},
 };
+use log::debug;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use std::collections::HashMap;
@@ -214,32 +214,45 @@ impl SentinelS2L2aCogsMetaData {
     async fn create_loading_info(&self, query: QueryRectangle) -> Result<GdalLoadingInfo> {
         // for reference: https://stacspec.org/STAC-ext-api.html#operation/getSearchSTAC
 
-        let mut features = self.load_all_features(&self.request_params(query)?).await?;
-        features.sort_by(|a, b| a.properties.datetime.cmp(&b.properties.datetime));
+        let features = self.load_all_features(&self.request_params(query)?).await?;
+        debug!("number of features returned by STAC: {}", features.len());
+        let mut features: Vec<StacFeature> = features
+            .into_iter()
+            .filter(|f| {
+                f.properties
+                    .proj_epsg
+                    .map_or(false, |epsg| epsg == self.zone.epsg)
+            })
+            .collect();
+
+        features.sort_by_key(|a| a.properties.datetime);
 
         let mut parts = vec![];
         let num_features = features.len();
+        debug!("number of features in current zone: {}", num_features);
         for i in 0..num_features {
             let feature = &features[i];
 
-            if feature
-                .properties
-                .proj_epsg
-                .map_or(true, |epsg| epsg != self.zone.epsg)
-            {
-                continue;
-            }
-
             let start = feature.properties.datetime;
+            // feature is valid until next feature starts
             let end = if i < num_features - 1 {
                 features[i + 1].properties.datetime
             } else {
-                start + Duration::hours(12) // TODO: determine correct validty for last tile
+                start + Duration::hours(12) // TODO: determine correct validity for last tile
             };
 
             let time_interval = TimeInterval::new(start, end)?;
 
             if time_interval.intersects(&query.time_interval) {
+                debug!(
+                    "STAC asset time: {}, url: {}",
+                    time_interval,
+                    feature
+                        .assets
+                        .get(&self.band.name)
+                        .map_or(&"n/a".to_string(), |a| &a.href)
+                );
+
                 let asset =
                     feature
                         .assets
@@ -251,6 +264,7 @@ impl SentinelS2L2aCogsMetaData {
                 parts.push(self.create_loading_info_part(time_interval, asset)?)
             }
         }
+        debug!("number of generated loading infos: {}", parts.len());
 
         Ok(GdalLoadingInfo {
             info: GdalLoadingInfoPartIterator::Static {
@@ -287,7 +301,9 @@ impl SentinelS2L2aCogsMetaData {
     fn request_params(&self, query: QueryRectangle) -> Result<Vec<(String, String)>> {
         let (t_start, t_end) = Self::time_range_request(&query.time_interval)?;
 
-        let bbox = self.bbox_wgs84(query.bbox)?;
+        // request all features in zone in order to be able to determine the temporal validity of individual tile
+        let bbox =
+            SpatialReference::new(SpatialReferenceAuthority::Epsg, self.zone.epsg).area_of_use()?;
 
         Ok(vec![
             (
@@ -380,15 +396,6 @@ impl SentinelS2L2aCogsMetaData {
 
         Ok((t_start, t_end))
     }
-
-    fn bbox_wgs84(&self, bbox: BoundingBox2D) -> Result<BoundingBox2D> {
-        let projector = CoordinateProjector::from_known_srs(
-            SpatialReference::new(SpatialReferenceAuthority::Epsg, self.zone.epsg),
-            SpatialReference::epsg_4326(),
-        )?;
-        let coords = projector.project_coordinates(&[bbox.lower_left(), bbox.upper_right()])?;
-        Ok(BoundingBox2D::new(coords[0], coords[1])?)
-    }
 }
 
 #[async_trait]
@@ -478,7 +485,7 @@ mod tests {
     use std::{fs::File, io::BufReader, str::FromStr};
 
     use futures::StreamExt;
-    use geoengine_datatypes::primitives::SpatialResolution;
+    use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution};
     use geoengine_operators::{
         engine::{MockExecutionContext, MockQueryContext, RasterOperator},
         source::{FileNotFoundHandling, GdalSource, GdalSourceParameters},
@@ -504,7 +511,8 @@ mod tests {
                 }
                 .into(),
             )
-            .await?;
+            .await
+            .unwrap();
 
         let loading_info = meta
             .loading_info(QueryRectangle {
@@ -519,7 +527,8 @@ mod tests {
                 )?,
                 spatial_resolution: SpatialResolution::one(),
             })
-            .await?;
+            .await
+            .unwrap();
 
         let expected = vec![GdalLoadingInfoPart {
             time: TimeInterval::new_unchecked(1_609_581_746_000, 1_609_624_946_000),
@@ -603,7 +612,7 @@ mod tests {
                 (534_994.66, 9_329_005.18).into(),
             ),
             time_interval: TimeInterval::new_instant(
-                DateTime::parse_from_rfc3339("2021-01-02T10:02:26Z")
+                DateTime::parse_from_rfc3339("2021-01-01T12:02:26Z")
                     .unwrap()
                     .timestamp_millis(),
             )?,
