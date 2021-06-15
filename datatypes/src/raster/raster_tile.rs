@@ -182,6 +182,15 @@ where
             properties: RasterProperties::default(),
         }
     }
+
+    pub fn materialize(&mut self) {
+        match self.grid_array {
+            GridOrEmpty::Grid(_) => {}
+            GridOrEmpty::Empty(_) => {
+                self.grid_array = self.grid_array.to_owned().into_materialized_grid().into();
+            }
+        }
+    }
 }
 
 impl<G> TemporalBounded for BaseTile<G> {

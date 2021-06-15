@@ -11,12 +11,16 @@ use crate::{
 };
 use async_trait::async_trait;
 use futures::{Future, FutureExt, StreamExt, TryFuture};
-use geoengine_datatypes::raster::{EmptyGrid2D, GridOrEmpty};
+use geoengine_datatypes::raster::{
+    EmptyGrid2D, GridIdx, GridIdx2D, GridIndexAccess, GridIndexAccessMut, GridOrEmpty,
+    GridOrEmpty2D, GridSize, NoDataValue,
+};
 use geoengine_datatypes::{
     primitives::{SpatialBounded, TimeInstance, TimeInterval, TimeStep},
     raster::{Grid2D, Pixel, RasterTile2D, TileInformation, TilingSpecification},
 };
 use log::debug;
+use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use typetag;
@@ -565,6 +569,105 @@ impl<T: Pixel> FoldTileAccu for TemporalRasterAggregationTileAccu<T> {
 impl<T: Pixel> FoldTileAccuMut for TemporalRasterAggregationTileAccu<T> {
     fn tile_mut(&mut self) -> &mut RasterTile2D<Self::RasterType> {
         &mut self.accu_tile
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct TemporalMeanTileAccu {
+    accu_tile: RasterTile2D<f64>,
+    count_grid: Grid2D<u64>,
+    ignore_no_data: bool,
+}
+
+impl TemporalMeanTileAccu {
+    pub fn add_tile<T>(&mut self, in_tile: RasterTile2D<T>) -> Result<()>
+    where
+        T: Copy + AsPrimitive<f64> + Pixel,
+    {
+        let union_time = self.accu_tile.time.union(&in_tile.time)?;
+        self.accu_tile.time = union_time;
+
+        let in_tile_grid = match in_tile.grid_array {
+            GridOrEmpty::Grid(g) => g,
+            GridOrEmpty::Empty(_) => return Ok(()),
+        };
+
+        match &mut self.accu_tile.grid_array {
+            GridOrEmpty::Empty(_) => {
+                let i
+            },
+
+            GridOrEmpty::Grid(accu_grid) => {
+                let accu_no_data = accu_grid
+                    .no_data_value
+                    .expect("there must be a no data value");
+                debug_assert_eq!(accu_no_data, f64::NAN); // and we expect it to be NAN
+
+                let [y_size, x_size] = accu_grid.axis_size();
+                for y in 0..y_size as isize {
+                    // TODO: parallel
+                    for x in 0..x_size as isize {
+                        let g_idx: GridIdx2D = GridIdx([y, x]);
+                        let in_value = in_tile_grid.get_at_grid_index(g_idx)?;
+                        if in_tile_grid.is_no_data(in_value) {
+                            if self.ignore_no_data {
+                                accu_grid.set_at_grid_index_unchecked(g_idx, accu_no_data);
+                                continue; // set the accu to no_data
+                            }
+                        } else {
+                            let acc_value = accu_grid.get_at_grid_index_unchecked(g_idx);
+                            if accu_grid.is_no_data(acc_value) && self.ignore_no_data {
+                                continue; // there is no data so continue
+                            }
+                            let acc_count = self.count_grid.get_at_grid_index_unchecked(g_idx);
+                            let in_value_f64: f64 = in_value.as_();
+                            accu_grid.set_at_grid_index_unchecked(g_idx, in_value_f64 + acc_value);
+                            self.count_grid
+                                .set_at_grid_index_unchecked(g_idx, acc_count + 1);
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+impl FoldTileAccu for TemporalMeanTileAccu {
+    type RasterType = f64;
+
+    fn tile_ref(&self) -> &RasterTile2D<Self::RasterType> {
+        &self.accu_tile
+    }
+
+    fn into_tile(self) -> RasterTile2D<Self::RasterType> {
+        let mut accu_tile = self.accu_tile;
+        let count_grid = self.count_grid;
+
+        let accu_grid = match &accu_tile.grid_array {
+            GridOrEmpty::Grid(g) => g,
+            GridOrEmpty::Empty(_) => return accu_tile,
+        };
+
+        let res: Vec<f64> = accu_grid
+            .data
+            .iter()
+            .zip(count_grid.data.into_iter())
+            .map(|(v, c)| {
+                let c: f64 = c.as_();
+                v / c
+            })
+            .collect();
+
+        let res_grid = Grid2D {
+            shape: accu_grid.shape,
+            data: res,
+            no_data_value: accu_grid.no_data_value,
+        };
+
+        accu_tile.grid_array = res_grid.into();
+
+        accu_tile
     }
 }
 

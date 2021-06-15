@@ -67,8 +67,8 @@ type QueryFuture<'a, T> = BoxFuture<'a, Result<BoxStream<'a, Result<RasterTile2D
 /// This adapter allows to generate a tile stream using sub-querys.
 /// This is done using a `TileSubQuery`.
 /// The sub-query is resolved for each produced tile.
-#[pin_project(project = RasterOverlapAdapterProjection)]
-pub struct RasterOverlapAdapter<'a, PixelType, RasterProcessorType, SubQuery>
+#[pin_project(project = RasterSubQueryAdapterProjection)]
+pub struct RasterSubQueryAdapter<'a, PixelType, RasterProcessorType, SubQuery>
 where
     PixelType: Pixel,
     RasterProcessorType: RasterQueryProcessor<RasterType = PixelType>,
@@ -102,12 +102,12 @@ where
 
     /// remember when the operator is done
     ended: bool,
-    /// The `TileSubQuery` defined what this adapter does.
+    /// The `SubQuery` defines what this adapter does.
     sub_query: SubQuery,
 }
 
 impl<'a, PixelType, RasterProcessorType, SubQuery>
-    RasterOverlapAdapter<'a, PixelType, RasterProcessorType, SubQuery>
+    RasterSubQueryAdapter<'a, PixelType, RasterProcessorType, SubQuery>
 where
     PixelType: Pixel,
     RasterProcessorType: RasterQueryProcessor<RasterType = PixelType>,
@@ -147,7 +147,7 @@ where
 }
 
 impl<PixelType, RasterProcessorType, SubQuery> FusedStream
-    for RasterOverlapAdapter<'_, PixelType, RasterProcessorType, SubQuery>
+    for RasterSubQueryAdapter<'_, PixelType, RasterProcessorType, SubQuery>
 where
     PixelType: Pixel,
     RasterProcessorType: RasterQueryProcessor<RasterType = PixelType>,
@@ -159,7 +159,7 @@ where
 }
 
 impl<'a, PixelType, RasterProcessorType, SubQuery> Stream
-    for RasterOverlapAdapter<'a, PixelType, RasterProcessorType, SubQuery>
+    for RasterSubQueryAdapter<'a, PixelType, RasterProcessorType, SubQuery>
 where
     PixelType: Pixel,
     RasterProcessorType: RasterQueryProcessor<RasterType = PixelType>,
@@ -427,12 +427,12 @@ where
         query: QueryRectangle,
         ctx: &'a dyn QueryContext,
         tiling_specification: TilingSpecification,
-    ) -> RasterOverlapAdapter<'a, T, S, Self>
+    ) -> RasterSubQueryAdapter<'a, T, S, Self>
     where
         S: RasterQueryProcessor<RasterType = T>,
         Self: Sized,
     {
-        RasterOverlapAdapter::<'a, T, S, Self>::new(source, query, tiling_specification, ctx, self)
+        RasterSubQueryAdapter::<'a, T, S, Self>::new(source, query, tiling_specification, ctx, self)
     }
 }
 
@@ -701,7 +701,7 @@ mod tests {
 
         let qp = op.query_processor().unwrap().get_u8().unwrap();
 
-        let a = RasterOverlapAdapter::new(
+        let a = RasterSubQueryAdapter::new(
             &qp,
             query_rect,
             tiling_strat,
@@ -808,7 +808,7 @@ mod tests {
             fold_fn: fold_by_coordinate_lookup_future,
             in_spatial_res: query_rect.spatial_resolution,
         };
-        let a = RasterOverlapAdapter::new(&qp, query_rect, tiling_strat, &query_ctx, state_gen);
+        let a = RasterSubQueryAdapter::new(&qp, query_rect, tiling_strat, &query_ctx, state_gen);
         let res = a
             .map(Result::unwrap)
             .collect::<Vec<RasterTile2D<u8>>>()
