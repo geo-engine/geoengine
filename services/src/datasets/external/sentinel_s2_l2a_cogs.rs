@@ -108,11 +108,8 @@ pub struct SentinelDataset {
 }
 
 pub struct SentinelS2L2aCogsDataProvider {
-    #[allow(dead_code)]
-    id: DatasetProviderId,
     api_url: String,
-    #[allow(dead_code)]
-    meta_data: SentinelMetaData,
+
     datasets: HashMap<DatasetId, SentinelDataset>,
 }
 
@@ -120,10 +117,8 @@ impl SentinelS2L2aCogsDataProvider {
     pub fn new(id: DatasetProviderId, api_url: String) -> Self {
         let meta_data = Self::load_metadata();
         Self {
-            id,
             api_url,
             datasets: Self::create_datasets(&id, &meta_data),
-            meta_data,
         }
     }
 
