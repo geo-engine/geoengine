@@ -1,13 +1,14 @@
-use crate::handlers::{authenticate, Context};
+use crate::error::Result;
+use crate::handlers::Context;
 use crate::projects::project::{
-    CreateProject, LoadVersion, ProjectId, ProjectListOptions, UpdateProject, UserProjectPermission,
+    CreateProject, LoadVersion, ProjectId, ProjectListOptions, ProjectVersionId, UpdateProject,
+    UserProjectPermission,
 };
 use crate::projects::projectdb::ProjectDb;
 use crate::users::session::Session;
 use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
-use uuid::Uuid;
-use warp::Filter;
+use actix_web::{web, HttpResponse, Responder};
 
 /// Create a new project for the user by providing [`CreateProject`].
 ///
@@ -43,30 +44,18 @@ use warp::Filter;
 ///   "id": "df4ad02e-0d61-4e29-90eb-dc1259c1f5b9"
 /// }
 /// ```
-pub(crate) fn create_project_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path("project")
-        .and(warp::post())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and(warp::body::json())
-        .and_then(create_project)
-}
-
-// TODO: move into handler once async closures are available?
-async fn create_project<C: Context>(
+pub(crate) async fn create_project_handler<C: Context>(
     session: Session,
-    ctx: C,
-    create: CreateProject,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    let create = create.validated()?;
+    ctx: web::Data<C>,
+    create: web::Json<CreateProject>,
+) -> Result<impl Responder> {
+    let create = create.clone().validated()?;
     let id = ctx
         .project_db_ref_mut()
         .await
         .create(session.user.id, create)
         .await?;
-    Ok(warp::reply::json(&IdResponse::from(id)))
+    Ok(web::Json(IdResponse::from(id)))
 }
 
 /// List all projects accessible to the user that match the [`ProjectListOptions`].
@@ -90,30 +79,75 @@ async fn create_project<C: Context>(
 ///   }
 /// ]
 /// ```
-pub(crate) fn list_projects_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path("projects")
-        .and(warp::get())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and(warp::query::<ProjectListOptions>())
-        .and_then(list_projects)
-}
-
-// TODO: move into handler once async closures are available?
-async fn list_projects<C: Context>(
+pub(crate) async fn list_projects_handler<C: Context>(
     session: Session,
-    ctx: C,
-    options: ProjectListOptions,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    let options = options.validated()?;
+    ctx: web::Data<C>,
+    options: web::Query<ProjectListOptions>,
+) -> Result<impl Responder> {
+    let options = options.clone().validated()?;
     let listing = ctx
         .project_db_ref()
         .await
         .list(session.user.id, options)
         .await?;
-    Ok(warp::reply::json(&listing))
+    Ok(web::Json(listing))
+}
+
+/// Retrieves details about the latest version of a [project](crate::projects::project::Project).
+///
+/// # Example
+///
+/// ```text
+/// GET /project/df4ad02e-0d61-4e29-90eb-dc1259c1f5b9
+/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
+/// ```
+/// Response:
+/// ```text
+/// {
+///   "id": "df4ad02e-0d61-4e29-90eb-dc1259c1f5b9",
+///   "version": {
+///     "id": "8f4b8683-f92c-4129-a16f-818aeeee484e",
+///     "changed": "2021-04-26T14:05:39.677390600Z",
+///     "author": "5b4466d2-8bab-4ed8-a182-722af3c80958"
+///   },
+///   "name": "Test",
+///   "description": "Foo",
+///   "layers": [],
+///   "plots": [],
+///   "bounds": {
+///     "spatialReference": "EPSG:4326",
+///     "boundingBox": {
+///       "lowerLeftCoordinate": {
+///         "x": 0.0,
+///         "y": 0.0
+///       },
+///       "upperRightCoordinate": {
+///         "x": 1.0,
+///         "y": 1.0
+///       }
+///     },
+///     "timeInterval": {
+///       "start": 0,
+///       "end": 1
+///     }
+///   },
+///   "timeStep": {
+///     "granularity": "Months",
+///     "step": 1
+///   }
+/// }
+/// ```
+pub(crate) async fn load_project_handler<C: Context>(
+    project: web::Path<ProjectId>,
+    session: Session,
+    ctx: web::Data<C>,
+) -> Result<impl Responder> {
+    let id = ctx
+        .project_db_ref()
+        .await
+        .load(session.user.id, *project, LoadVersion::Latest)
+        .await?;
+    Ok(web::Json(id))
 }
 
 /// Retrieves details about a [project](crate::projects::project::Project).
@@ -161,33 +195,17 @@ async fn list_projects<C: Context>(
 ///   }
 /// }
 /// ```
-pub(crate) fn load_project_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    (warp::path!("project" / Uuid / Uuid).map(|project_id: Uuid, version_id: Uuid| {
-        (ProjectId(project_id), LoadVersion::from(Some(version_id)))
-    }))
-    .or(warp::path!("project" / Uuid)
-        .map(|project_id| (ProjectId(project_id), LoadVersion::Latest)))
-    .unify()
-    .and(warp::get())
-    .and(authenticate(ctx.clone()))
-    .and(warp::any().map(move || ctx.clone()))
-    .and_then(load_project)
-}
-
-// TODO: move into handler once async closures are available?
-async fn load_project<C: Context>(
-    project: (ProjectId, LoadVersion),
+pub(crate) async fn load_project_version_handler<C: Context>(
+    web::Path((project, version)): web::Path<(ProjectId, ProjectVersionId)>,
     session: Session,
-    ctx: C,
-) -> Result<impl warp::Reply, warp::Rejection> {
+    ctx: web::Data<C>,
+) -> Result<impl Responder> {
     let id = ctx
         .project_db_ref()
         .await
-        .load(session.user.id, project.0, project.1)
+        .load(session.user.id, project, LoadVersion::Version(version))
         .await?;
-    Ok(warp::reply::json(&id))
+    Ok(web::Json(id))
 }
 
 /// Updates a project.
@@ -220,32 +238,20 @@ async fn load_project<C: Context>(
 ///   ]
 /// }
 /// ```
-pub(crate) fn update_project_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path!("project" / Uuid)
-        .map(ProjectId)
-        .and(warp::patch())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and(warp::body::json())
-        .and_then(update_project)
-}
-
-// TODO: move into handler once async closures are available?
-async fn update_project<C: Context>(
-    project: ProjectId,
+pub(crate) async fn update_project_handler<C: Context>(
+    project: web::Path<ProjectId>,
     session: Session,
-    ctx: C,
-    mut update: UpdateProject,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    update.id = project; // TODO: avoid passing project id in path AND body
-    let update = update.validated()?;
+    ctx: web::Data<C>,
+    mut update: web::Json<UpdateProject>,
+) -> Result<impl Responder> {
+    //let update = update.clone();
+    update.id = *project; // TODO: avoid passing project id in path AND body
+    let update = update.clone().validated()?;
     ctx.project_db_ref_mut()
         .await
         .update(session.user.id, update)
         .await?;
-    Ok(warp::reply())
+    Ok(HttpResponse::Ok())
 }
 
 /// Deletes a project.
@@ -256,28 +262,16 @@ async fn update_project<C: Context>(
 /// DELETE /project/df4ad02e-0d61-4e29-90eb-dc1259c1f5b9
 /// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
 /// ```
-pub(crate) fn delete_project_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path!("project" / Uuid)
-        .map(ProjectId)
-        .and(warp::delete())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and_then(delete_project)
-}
-
-// TODO: move into handler once async closures are available?
-async fn delete_project<C: Context>(
-    project: ProjectId,
+pub(crate) async fn delete_project_handler<C: Context>(
+    project: web::Path<ProjectId>,
     session: Session,
-    ctx: C,
-) -> Result<impl warp::Reply, warp::Rejection> {
+    ctx: web::Data<C>,
+) -> Result<impl Responder> {
     ctx.project_db_ref_mut()
         .await
-        .delete(session.user.id, project)
+        .delete(session.user.id, *project)
         .await?;
-    Ok(warp::reply())
+    Ok(HttpResponse::Ok())
 }
 
 /// Lists all [versions](crate::projects::project::ProjectVersion) of a project.
@@ -305,29 +299,17 @@ async fn delete_project<C: Context>(
 ///   }
 /// ]
 /// ```
-pub(crate) fn project_versions_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path!("project" / "versions")
-        .and(warp::get())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and(warp::body::json())
-        .and_then(project_versions)
-}
-
-// TODO: move into handler once async closures are available?
-async fn project_versions<C: Context>(
+pub(crate) async fn project_versions_handler<C: Context>(
     session: Session,
-    ctx: C,
-    project: ProjectId,
-) -> Result<impl warp::Reply, warp::Rejection> {
+    ctx: web::Data<C>,
+    project: web::Json<ProjectId>,
+) -> Result<impl Responder> {
     let versions = ctx
         .project_db_ref_mut()
         .await
-        .versions(session.user.id, project)
+        .versions(session.user.id, *project)
         .await?;
-    Ok(warp::reply::json(&versions))
+    Ok(web::Json(versions))
 }
 
 /// Add a [permission](crate::projects::project::ProjectPermission) for another user
@@ -345,28 +327,16 @@ async fn project_versions<C: Context>(
 ///   "permission": "Read"
 /// }
 /// ```
-pub(crate) fn add_permission_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path!("project" / "permission" / "add")
-        .and(warp::post())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and(warp::body::json())
-        .and_then(add_permission)
-}
-
-// TODO: move into handler once async closures are available?
-async fn add_permission<C: Context>(
+pub(crate) async fn add_permission_handler<C: Context>(
     session: Session,
-    ctx: C,
-    permission: UserProjectPermission,
-) -> Result<impl warp::Reply, warp::Rejection> {
+    ctx: web::Data<C>,
+    permission: web::Json<UserProjectPermission>,
+) -> Result<impl Responder> {
     ctx.project_db_ref_mut()
         .await
-        .add_permission(session.user.id, permission)
+        .add_permission(session.user.id, permission.clone())
         .await?;
-    Ok(warp::reply())
+    Ok(HttpResponse::Ok())
 }
 
 /// Removes a [permission](crate::projects::project::ProjectPermission) of another user
@@ -375,7 +345,7 @@ async fn add_permission<C: Context>(
 /// # Example
 ///
 /// ```text
-/// POST /project/permission/add
+/// DELETE /project/permission
 /// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
 ///
 /// {
@@ -384,28 +354,16 @@ async fn add_permission<C: Context>(
 ///   "permission": "Read"
 /// }
 /// ```
-pub(crate) fn remove_permission_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path!("project" / "permission")
-        .and(warp::delete())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and(warp::body::json())
-        .and_then(remove_permission)
-}
-
-// TODO: move into handler once async closures are available?
-async fn remove_permission<C: Context>(
+pub(crate) async fn remove_permission_handler<C: Context>(
     session: Session,
-    ctx: C,
-    permission: UserProjectPermission,
-) -> Result<impl warp::Reply, warp::Rejection> {
+    ctx: web::Data<C>,
+    permission: web::Json<UserProjectPermission>,
+) -> Result<impl Responder> {
     ctx.project_db_ref_mut()
         .await
-        .remove_permission(session.user.id, permission)
+        .remove_permission(session.user.id, permission.clone())
         .await?;
-    Ok(warp::reply())
+    Ok(HttpResponse::Ok())
 }
 
 /// Shows the access rights the user has for a given project.
@@ -426,29 +384,17 @@ async fn remove_permission<C: Context>(
 ///   }
 /// ]
 /// ```
-pub(crate) fn list_permissions_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path!("project" / Uuid / "permissions")
-        .map(ProjectId)
-        .and(warp::get())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and_then(list_permissions)
-}
-
-// TODO: move into handler once async closures are available?
-async fn list_permissions<C: Context>(
-    project: ProjectId,
+pub(crate) async fn list_permissions_handler<C: Context>(
+    project: web::Path<ProjectId>,
     session: Session,
-    ctx: C,
-) -> Result<impl warp::Reply, warp::Rejection> {
+    ctx: web::Data<C>,
+) -> Result<impl Responder> {
     let permissions = ctx
         .project_db_ref_mut()
         .await
-        .list_permissions(session.user.id, project)
+        .list_permissions(session.user.id, *project)
         .await?;
-    Ok(warp::reply::json(&permissions))
+    Ok(web::Json(permissions))
 }
 
 #[cfg(test)]

@@ -155,17 +155,54 @@ where
                         "/logout",
                         web::post().to(handlers::users::logout_handler::<C>),
                     )
-                    .service(
-                        web::scope("/session")
-                            .route("", web::get().to(handlers::users::session_handler))
-                            .route(
-                                "/project/{project}",
-                                web::post().to(handlers::users::session_project_handler::<C>),
-                            )
-                            .route(
-                                "/view",
-                                web::post().to(handlers::users::session_view_handler::<C>),
-                            ),
+                    .route("/session", web::get().to(handlers::users::session_handler))
+                    .route(
+                        "/session/project/{project}",
+                        web::post().to(handlers::users::session_project_handler::<C>),
+                    )
+                    .route(
+                        "/session/view",
+                        web::post().to(handlers::users::session_view_handler::<C>),
+                    )
+                    .route(
+                        "/project",
+                        web::post().to(handlers::projects::create_project_handler::<C>),
+                    )
+                    .route(
+                        "/projects",
+                        web::get().to(handlers::projects::list_projects_handler::<C>),
+                    )
+                    .route(
+                        "/project/{project}",
+                        web::get().to(handlers::projects::load_project_handler::<C>),
+                    )
+                    .route(
+                        "/project/{project}/{version}",
+                        web::get().to(handlers::projects::load_project_version_handler::<C>),
+                    )
+                    .route(
+                        "/project/{project}",
+                        web::patch().to(handlers::projects::update_project_handler::<C>),
+                    )
+                    .route(
+                        "/project/{project}",
+                        web::delete().to(handlers::projects::delete_project_handler::<C>),
+                    )
+                    .route(
+                        "/project/versions",
+                        web::get().to(handlers::projects::project_versions_handler::<C>),
+                    )
+                    .route(
+                        "/project/permission/add",
+                        web::post().to(handlers::projects::add_permission_handler::<C>),
+                    )
+                    .route(
+                        "/project/permission",
+                        web::delete().to(handlers::projects::remove_permission_handler::<C>),
+                    )
+                    .route(
+                        "/project/{project}/permissions",
+                        web::get().to(handlers::projects::list_permissions_handler::<C>),
                     ),
             );
 

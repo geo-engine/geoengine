@@ -1,11 +1,11 @@
 use crate::handlers::ErrorResponse;
 use actix_web::dev::HttpResponseBuilder;
+use actix_web::http::StatusCode;
 use actix_web::HttpResponse;
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use snafu::Snafu;
 use strum::IntoStaticStr;
 use warp::reject::Reject;
-use actix_web::http::StatusCode;
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 #[derive(Debug, Snafu, IntoStaticStr)]
@@ -166,7 +166,7 @@ impl actix_web::error::ResponseError for Error {
                 Into::<&str>::into(source.as_ref()).to_string(),
                 source.to_string(),
             ),
-            _ => (Into::<&str>::into(e).to_string(), e.to_string()),
+            _ => (Into::<&str>::into(self).to_string(), self.to_string()),
         };
 
         HttpResponseBuilder::new(self.status_code()).json(ErrorResponse { error, message })
@@ -174,9 +174,9 @@ impl actix_web::error::ResponseError for Error {
 
     fn status_code(&self) -> StatusCode {
         match self {
-            Error::Authorization => StatusCode::UNAUTHORIZED,
-            Error::Duplicate => StatusCode::CONFLICT,
-            _ => StatusCode::BAD_REQUEST
+            Error::Authorization { source: _ } => StatusCode::UNAUTHORIZED,
+            Error::Duplicate { reason: _ } => StatusCode::CONFLICT,
+            _ => StatusCode::BAD_REQUEST,
         }
     }
 }
