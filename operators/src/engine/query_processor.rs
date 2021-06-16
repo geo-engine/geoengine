@@ -13,9 +13,10 @@ use geoengine_datatypes::{collections::MultiPointCollection, raster::RasterTile2
 #[async_trait]
 pub trait QueryProcessor: Send + Sync {
     type Output;
+    type Qrect: Send + Sync;
     async fn query<'a>(
         &'a self,
-        query: QueryRectangle,
+        query: Self::Qrect,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>>;
 }
@@ -42,7 +43,7 @@ pub trait RasterQueryProcessor: Sync + Send {
 #[async_trait]
 impl<S, T> RasterQueryProcessor for S
 where
-    S: QueryProcessor<Output = RasterTile2D<T>> + Sync + Send,
+    S: QueryProcessor<Output = RasterTile2D<T>, Qrect = QueryRectangle> + Sync + Send,
     T: Pixel,
 {
     type RasterType = T;
@@ -76,7 +77,7 @@ pub trait VectorQueryProcessor: Sync + Send {
 #[async_trait]
 impl<S, VD> VectorQueryProcessor for S
 where
-    S: QueryProcessor<Output = VD> + Sync + Send,
+    S: QueryProcessor<Output = VD, Qrect = QueryRectangle> + Sync + Send,
 {
     type VectorType = VD;
 
@@ -111,11 +112,15 @@ pub trait PlotQueryProcessor: Sync + Send {
 }
 
 #[async_trait]
-impl<T> QueryProcessor for Box<dyn QueryProcessor<Output = T>> {
+impl<T, Q> QueryProcessor for Box<dyn QueryProcessor<Output = T, Qrect = Q>>
+where
+    Q: Send + Sync,
+{
     type Output = T;
+    type Qrect = Q;
     async fn query<'a>(
         &'a self,
-        query: QueryRectangle,
+        query: Q,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         self.as_ref().query(query, ctx).await
@@ -128,6 +133,7 @@ where
     T: Pixel,
 {
     type Output = RasterTile2D<T>;
+    type Qrect = QueryRectangle;
 
     async fn query<'a>(
         &'a self,
@@ -144,6 +150,8 @@ where
     V: 'static,
 {
     type Output = V;
+    type Qrect = QueryRectangle;
+
     async fn query<'a>(
         &'a self,
         query: QueryRectangle,

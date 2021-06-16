@@ -381,6 +381,7 @@ struct CsvSourceProcessor {
 #[async_trait]
 impl QueryProcessor for CsvSourceProcessor {
     type Output = MultiPointCollection;
+    type Qrect = QueryRectangle;
 
     async fn query<'a>(
         &'a self,

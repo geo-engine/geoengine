@@ -68,6 +68,7 @@ pub struct MockDatasetDataSourceProcessor {
 
 #[async_trait]
 impl QueryProcessor for MockDatasetDataSourceProcessor {
+    type Qrect = QueryRectangle;
     type Output = MultiPointCollection;
     async fn query<'a>(
         &'a self,

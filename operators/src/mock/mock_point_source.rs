@@ -24,6 +24,7 @@ pub struct MockPointSourceProcessor {
 #[async_trait]
 impl QueryProcessor for MockPointSourceProcessor {
     type Output = MultiPointCollection;
+    type Qrect = QueryRectangle;
     async fn query<'a>(
         &'a self,
         _query: QueryRectangle,

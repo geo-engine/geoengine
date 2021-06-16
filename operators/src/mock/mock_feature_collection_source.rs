@@ -28,6 +28,7 @@ where
     G: Geometry + ArrowTyped + Send + Sync + 'static,
 {
     type Output = FeatureCollection<G>;
+    type Qrect = QueryRectangle;
 
     async fn query<'a>(
         &'a self,

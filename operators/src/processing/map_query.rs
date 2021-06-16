@@ -1,4 +1,4 @@
-use crate::engine::{QueryContext, QueryProcessor, QueryRectangle};
+use crate::engine::{QueryContext, QueryProcessor};
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
@@ -19,13 +19,14 @@ impl<S, Q> MapQueryProcessor<S, Q> {
 impl<S, Q> QueryProcessor for MapQueryProcessor<S, Q>
 where
     S: QueryProcessor,
-    Q: Fn(QueryRectangle) -> Result<QueryRectangle> + Sync + Send,
+    Q: Fn(S::Qrect) -> Result<S::Qrect> + Sync + Send,
 {
     type Output = S::Output;
+    type Qrect = S::Qrect;
 
     async fn query<'a>(
         &'a self,
-        query: QueryRectangle,
+        query: S::Qrect,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         let rewritten_query = (self.query_fn)(query)?;

@@ -319,6 +319,7 @@ where
     FeatureCollectionRowBuilder<G>: FeatureCollectionBuilderGeometryHandler<G>,
 {
     type Output = FeatureCollection<G>;
+    type Qrect = QueryRectangle;
     async fn query<'a>(
         &'a self,
         query: QueryRectangle,

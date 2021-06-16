@@ -493,6 +493,7 @@ where
     T: Pixel + gdal::raster::GdalType,
 {
     type Output = RasterTile2D<T>;
+    type Qrect = QueryRectangle;
     async fn query<'a>(
         &'a self,
         query: crate::engine::QueryRectangle,

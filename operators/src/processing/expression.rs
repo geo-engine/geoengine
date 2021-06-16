@@ -365,6 +365,7 @@ where
     TO: Pixel,
 {
     type Output = RasterTile2D<TO>;
+    type Qrect = QueryRectangle;
 
     async fn query<'b>(
         &'b self,

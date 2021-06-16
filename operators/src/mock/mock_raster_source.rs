@@ -1,6 +1,6 @@
 use crate::call_generic_raster_processor;
 use crate::engine::{
-    InitializedOperator, InitializedRasterOperator, QueryProcessor, RasterOperator,
+    InitializedOperator, InitializedRasterOperator, QueryProcessor, QueryRectangle, RasterOperator,
     RasterQueryProcessor, RasterResultDescriptor, SourceOperator, TypedRasterQueryProcessor,
 };
 use crate::util::Result;
@@ -33,6 +33,7 @@ where
     T: Pixel,
 {
     type Output = RasterTile2D<T>;
+    type Qrect = QueryRectangle;
     async fn query<'a>(
         &'a self,
         query: crate::engine::QueryRectangle,
