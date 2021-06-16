@@ -28,7 +28,7 @@ impl<T: Pixel> Blit<RasterTile2D<T>> for MaterializedRasterTile2D<T> {
 
         ensure!(
             self.spatial_partition()
-                .intersects(source.spatial_partition()),
+                .intersects(&source.spatial_partition()),
             error::Blit {
                 details: "No overlapping region",
             }

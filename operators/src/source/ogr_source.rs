@@ -1148,6 +1148,7 @@ mod tests {
                 spatial_reference: SpatialReferenceOption::Unreferenced,
                 columns: Default::default(),
             },
+            phantom: Default::default(),
         };
 
         let query_processor = OgrSourceProcessor::<MultiPoint>::new(Box::new(info));
@@ -1194,6 +1195,7 @@ mod tests {
                 spatial_reference: SpatialReferenceOption::Unreferenced,
                 columns: Default::default(),
             },
+            phantom: Default::default(),
         };
 
         let query_processor = OgrSourceProcessor::<MultiPoint>::new(Box::new(info));
@@ -1239,6 +1241,7 @@ mod tests {
                 spatial_reference: SpatialReferenceOption::Unreferenced,
                 columns: Default::default(),
             },
+            phantom: Default::default(),
         };
 
         let query_processor = OgrSourceProcessor::<MultiPoint>::new(Box::new(info));
@@ -1295,6 +1298,7 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     columns: Default::default(),
                 },
+                phantom: Default::default(),
             }),
         );
 
@@ -1385,6 +1389,7 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     columns: Default::default(),
                 },
+                phantom: Default::default(),
             }),
         );
 
@@ -1477,6 +1482,7 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     columns: Default::default(),
                 },
+                phantom: Default::default(),
             }),
         );
 
@@ -1587,6 +1593,7 @@ mod tests {
                     .cloned()
                     .collect(),
                 },
+                phantom: Default::default(),
             }),
         );
 
@@ -1752,6 +1759,7 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     columns: Default::default(),
                 },
+                phantom: Default::default(),
             }),
         );
 
@@ -2924,6 +2932,7 @@ mod tests {
                 .cloned()
                 .collect(),
             },
+            phantom: Default::default(),
         };
 
         let query_processor = OgrSourceProcessor::<NoGeometry>::new(Box::new(info));
@@ -3000,6 +3009,7 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     columns: Default::default(),
                 },
+                phantom: Default::default(),
             }),
         );
 
@@ -3242,6 +3252,7 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     columns: Default::default(),
                 },
+                phantom: Default::default(),
             }),
         );
 
@@ -3319,6 +3330,7 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     columns: Default::default(),
                 },
+                phantom: Default::default(),
             }),
         );
 
@@ -3411,6 +3423,7 @@ mod tests {
                     .cloned()
                     .collect(),
                 },
+                phantom: Default::default(),
             }),
         );
 
@@ -3512,6 +3525,7 @@ mod tests {
                         .cloned()
                         .collect(),
                 },
+                phantom: Default::default(),
             }),
         );
 
@@ -3609,6 +3623,7 @@ mod tests {
                         .cloned()
                         .collect(),
                 },
+                phantom: Default::default(),
             }),
         );
 
@@ -3706,6 +3721,7 @@ mod tests {
                         .cloned()
                         .collect(),
                 },
+                phantom: Default::default(),
             }),
         );
 

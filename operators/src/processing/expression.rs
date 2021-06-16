@@ -527,7 +527,7 @@ mod tests {
         let result_stream = processor
             .raster_query(
                 RasterQueryRectangle {
-                    partition: SpatialPartition::new_unchecked((0., 0.).into(), (3., 4.).into()),
+                    partition: SpatialPartition::new_unchecked((0., 4.).into(), (3., 0.).into()),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
                 },

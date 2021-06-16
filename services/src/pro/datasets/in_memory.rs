@@ -15,8 +15,8 @@ use geoengine_datatypes::{
     util::Identifier,
 };
 use geoengine_operators::engine::{
-    MetaData, MetaDataProvider, RasterResultDescriptor, StaticMetaData, TypedResultDescriptor,
-    VectorResultDescriptor, VectorQueryRectangle, RasterQueryRectangle
+    MetaData, MetaDataProvider, RasterQueryRectangle, RasterResultDescriptor, StaticMetaData,
+    TypedResultDescriptor, VectorQueryRectangle, VectorResultDescriptor,
 };
 use geoengine_operators::source::{GdalLoadingInfo, GdalMetaDataRegular, OgrSourceDataset};
 use geoengine_operators::{mock::MockDatasetDataSourceLoadingInfo, source::GdalMetaDataStatic};
@@ -27,13 +27,14 @@ pub struct ProHashMapDatasetDb {
     datasets: Vec<Dataset>,
     ogr_datasets: HashMap<
         InternalDatasetId,
-        StaticMetaData<OgrSourceDataset, VectorResultDescriptor>,
+        StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
     >,
     mock_datasets: HashMap<
         InternalDatasetId,
         StaticMetaData<
             MockDatasetDataSourceLoadingInfo,
             VectorResultDescriptor,
+            VectorQueryRectangle,
         >,
     >,
     gdal_datasets: HashMap<
@@ -92,7 +93,7 @@ impl ProHashMapStorable for MetaDataDefinition {
 }
 
 impl ProHashMapStorable
-    for StaticMetaData<OgrSourceDataset, VectorResultDescriptor>
+    for StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
 {
     fn store(&self, id: InternalDatasetId, db: &mut ProHashMapDatasetDb) -> TypedResultDescriptor {
         db.ogr_datasets.insert(id, self.clone());
@@ -104,6 +105,7 @@ impl ProHashMapStorable
     for StaticMetaData<
         MockDatasetDataSourceLoadingInfo,
         VectorResultDescriptor,
+        VectorQueryRectangle,
     >
 {
     fn store(&self, id: InternalDatasetId, db: &mut ProHashMapDatasetDb) -> TypedResultDescriptor {
@@ -337,6 +339,7 @@ mod tests {
                 provenance: None,
             },
             result_descriptor: descriptor.clone(),
+            phantom: Default::default(),
         };
 
         let id = ctx

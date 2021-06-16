@@ -781,7 +781,7 @@ mod tests {
             .unwrap();
 
         let query_rect = RasterQueryRectangle {
-            partition: SpatialPartition::new_unchecked((0., 0.).into(), (3., 1.).into()),
+            partition: SpatialPartition::new_unchecked((0., 1.).into(), (3., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 10),
             spatial_resolution: SpatialResolution::one(),
         };

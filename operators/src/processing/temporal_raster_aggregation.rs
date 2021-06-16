@@ -1212,7 +1212,7 @@ mod tests {
             ..Default::default()
         };
         let query_rect = RasterQueryRectangle {
-            partition: SpatialPartition::new_unchecked((0., 0.).into(), (2., 3.).into()),
+            partition: SpatialPartition::new_unchecked((0., 3.).into(), (2., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 20),
             spatial_resolution: SpatialResolution::one(),
         };

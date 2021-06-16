@@ -64,8 +64,6 @@ pub trait PlotOperator: CloneablePlotOperator + Send + Sync + std::fmt::Debug {
     }
 }
 
-// TODO: rename `query_processor` to `xyz_query_processor`
-
 pub trait InitializedRasterOperator: Send + Sync {
     /// Get the result descriptor of the `Operator`
     fn result_descriptor(&self) -> &RasterResultDescriptor;

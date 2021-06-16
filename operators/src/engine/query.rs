@@ -2,7 +2,7 @@ use geoengine_datatypes::primitives::{
     BoundingBox2D, SpatialPartition, SpatialPartitioned, SpatialResolution, TimeInterval,
 };
 
-/// A spatio-temporal rectangle for querying data
+/// A spatio-temporal rectangle for querying data with a bounding box
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct VectorQueryRectangle {
     pub bbox: BoundingBox2D,
@@ -10,7 +10,7 @@ pub struct VectorQueryRectangle {
     pub spatial_resolution: SpatialResolution,
 }
 
-/// A spatio-temporal rectangle for querying data
+/// A spatio-temporal rectangle for querying data with a spatial partition
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct RasterQueryRectangle {
     pub partition: SpatialPartition,

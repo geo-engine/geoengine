@@ -23,7 +23,7 @@ impl SpatialPartition {
     ) -> Result<Self> {
         ensure!(
             upper_left_coordinate.x < lower_right_coordinate.x
-                && upper_left_coordinate.y < lower_right_coordinate.y,
+                && upper_left_coordinate.y > lower_right_coordinate.y,
             error::InvalidSpatialPartition {
                 upper_left_coordinate,
                 lower_right_coordinate
@@ -45,15 +45,15 @@ impl SpatialPartition {
         }
     }
 
-    /// Create a partition from a bbox by adding a pixel in each dimension
+    /// Create a partition from a bbox by snapping to the next pixel
     /// The resulting partition is not equivalent to the bbox but contains it
     pub fn with_bbox_and_resolution(bbox: BoundingBox2D, resolution: SpatialResolution) -> Self {
         let lr = bbox.lower_right();
         Self {
             upper_left_coordinate: bbox.upper_left(),
             lower_right_coordinate: Coordinate2D {
-                x: lr.x + resolution.x, // rather snap to next pixel if pixel is already partially conained
-                y: lr.y + resolution.y,
+                x: (lr.x / resolution.x).ceil() * resolution.x,
+                y: (lr.y / resolution.y).ceil() * resolution.y,
             },
         }
     }
@@ -67,7 +67,7 @@ impl SpatialPartition {
     }
 
     /// Return true if the `other` partition has any space in common with the partition
-    pub fn intersects(&self, other: SpatialPartition) -> bool {
+    pub fn intersects(&self, other: &SpatialPartition) -> bool {
         let overlap_x = crate::util::ranges::value_in_range(
             self.upper_left_coordinate.x,
             other.upper_left_coordinate.x,
@@ -92,7 +92,7 @@ impl SpatialPartition {
     }
 
     /// Returns true if the given bbox has any space in common with the partition
-    pub fn intersects_bbox(&self, bbox: BoundingBox2D) -> bool {
+    pub fn intersects_bbox(&self, bbox: &BoundingBox2D) -> bool {
         let overlap_x = crate::util::ranges::value_in_range(
             self.upper_left_coordinate.x,
             bbox.lower_left().x,
@@ -116,63 +116,57 @@ impl SpatialPartition {
         overlap_x && overlap_y
     }
 
-    pub fn intersection(&self, other: SpatialPartition) -> Option<Self> {
+    /// Returns the intersection (common area) of the partition with `other` if there is any
+    pub fn intersection(&self, other: &Self) -> Option<Self> {
         if self.intersects(other) {
-            // let ul_x = f64::max(
-            //     self.lower_left_coordinate.x,
-            //     other_bbox.lower_left_coordinate.x,
-            // );
-            // let ul_y = f64::max(
-            //     self.lower_left_coordinate.y,
-            //     other_bbox.lower_left_coordinate.y,
-            // );
-            // let lr_x = f64::min(
-            //     self.upper_right_coordinate.x,
-            //     other_bbox.upper_right_coordinate.x,
-            // );
-            // let lr_y = f64::min(
-            //     self.upper_right_coordinate.y,
-            //     other_bbox.upper_right_coordinate.y,
-            // );
+            let ul_x = f64::max(self.upper_left_coordinate.x, other.upper_left_coordinate.x);
+            let ul_y = f64::min(self.upper_left_coordinate.y, other.upper_left_coordinate.y);
+            let lr_x = f64::min(
+                self.lower_right_coordinate.x,
+                other.lower_right_coordinate.x,
+            );
+            let lr_y = f64::max(
+                self.lower_right_coordinate.y,
+                other.lower_right_coordinate.y,
+            );
 
-            // Some(BoundingBox2D::new_unchecked(
-            //     (ll_x, ll_y).into(),
-            //     (ur_x, ur_y).into(),
-            // ))
-            todo!()
+            Some(Self::new_unchecked(
+                (ul_x, ul_y).into(),
+                (lr_x, lr_y).into(),
+            ))
         } else {
             None
         }
     }
 
-    pub fn contains(&self, _other: &Self) -> bool {
-        // self.contains_x(other) && self.contains_y(other)
-        todo!()
+    /// Return true if the partition contains the `other`
+    pub fn contains(&self, other: &Self) -> bool {
+        self.contains_x(other) && self.contains_y(other)
     }
 
-    // fn contains_x(&self, other_bbox: &Self) -> bool {
-    //     crate::util::ranges::value_in_rangee(
-    //         other_bbox.lower_left().x,
-    //         self.lower_left().x,
-    //         self.upper_right().x,
-    //     ) && crate::util::ranges::value_in_range(
-    //         other_bbox.upper_right().x,
-    //         self.lower_left().x,
-    //         self.upper_right().x,
-    //     )
-    // }
+    fn contains_x(&self, other: &Self) -> bool {
+        crate::util::ranges::value_in_range(
+            other.upper_left_coordinate.x,
+            self.upper_left_coordinate.x,
+            self.lower_right_coordinate.x,
+        ) && crate::util::ranges::value_in_range(
+            other.lower_right_coordinate.x,
+            self.upper_left_coordinate.x,
+            self.lower_right_coordinate.x,
+        )
+    }
 
-    // fn contains_y(&self, other_bbox: &Self) -> bool {
-    //     crate::util::ranges::value_in_range(
-    //         other_bbox.lower_left().y,
-    //         self.lower_left().y,
-    //         self.upper_right().y,
-    //     ) && crate::util::ranges::value_in_range(
-    //         other_bbox.upper_right().y,
-    //         self.lower_left().y,
-    //         self.upper_right().y,
-    //     )
-    // }
+    fn contains_y(&self, other: &Self) -> bool {
+        crate::util::ranges::value_in_range(
+            other.lower_right_coordinate.y,
+            self.lower_right_coordinate.y,
+            self.upper_left_coordinate.y,
+        ) && crate::util::ranges::value_in_range(
+            other.upper_left_coordinate.y,
+            self.lower_right_coordinate.y,
+            self.upper_left_coordinate.y,
+        )
+    }
 }
 
 pub trait SpatialPartitioned {
@@ -207,6 +201,21 @@ impl BoxShaped for SpatialPartition {
     }
 
     fn size_y(&self) -> f64 {
-        self.lower_right_coordinate.y - self.upper_left_coordinate.y
+        self.upper_left_coordinate.y - self.lower_right_coordinate.y
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bbox_to_partition() {
+        let bbox = BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into());
+        let res = SpatialResolution { x: 0.1, y: -0.1 };
+        assert_eq!(
+            SpatialPartition::with_bbox_and_resolution(bbox, res),
+            SpatialPartition::new_unchecked((-180., 90.).into(), (180., -90.).into())
+        );
     }
 }

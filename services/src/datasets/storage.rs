@@ -8,7 +8,7 @@ use crate::util::user_input::{UserInput, Validated};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, InternalDatasetId};
 use geoengine_datatypes::util::Identifier;
-use geoengine_operators::engine::MetaData;
+use geoengine_operators::engine::{MetaData, VectorQueryRectangle};
 use geoengine_operators::{engine::StaticMetaData, source::OgrSourceDataset};
 use geoengine_operators::{
     engine::TypedResultDescriptor, mock::MockDatasetDataSourceLoadingInfo,
@@ -179,8 +179,14 @@ pub struct MetaDataSuggestion {
 #[allow(clippy::large_enum_variant)]
 #[derive(PartialEq, Deserialize, Serialize, Debug, Clone)]
 pub enum MetaDataDefinition {
-    MockMetaData(StaticMetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>),
-    OgrMetaData(StaticMetaData<OgrSourceDataset, VectorResultDescriptor>),
+    MockMetaData(
+        StaticMetaData<
+            MockDatasetDataSourceLoadingInfo,
+            VectorResultDescriptor,
+            VectorQueryRectangle,
+        >,
+    ),
+    OgrMetaData(StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>),
     GdalMetaDataRegular(GdalMetaDataRegular),
     GdalStatic(GdalMetaDataStatic),
 }
@@ -198,24 +204,16 @@ impl MetaDataDefinition {
 
     pub async fn result_descriptor(&self) -> Result<TypedResultDescriptor> {
         match self {
-            MetaDataDefinition::MockMetaData(m) =>
-            // m
-            // .result_descriptor()
-            // .await
-            // .map(Into::into)
-            // .context(error::Operator),
-            {
-                todo!()
-            }
-            MetaDataDefinition::OgrMetaData(m) =>
-            // m
-            //     .result_descriptor()
-            //     .await
-            //     .map(Into::into)
-            //     .context(error::Operator),
-            {
-                todo!()
-            }
+            MetaDataDefinition::MockMetaData(m) => m
+                .result_descriptor()
+                .await
+                .map(Into::into)
+                .context(error::Operator),
+            MetaDataDefinition::OgrMetaData(m) => m
+                .result_descriptor()
+                .await
+                .map(Into::into)
+                .context(error::Operator),
             MetaDataDefinition::GdalMetaDataRegular(m) => m
                 .result_descriptor()
                 .await

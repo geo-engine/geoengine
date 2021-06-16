@@ -247,10 +247,12 @@ mod tests {
         };
         let cx = MockQueryContext::new(0);
 
-        let collections =
-            FeatureCollectionChunkMerger::new(processor.vector_query(qrect, &cx).await.unwrap().fuse(), 0)
-                .collect::<Vec<Result<DataCollection>>>()
-                .await;
+        let collections = FeatureCollectionChunkMerger::new(
+            processor.vector_query(qrect, &cx).await.unwrap().fuse(),
+            0,
+        )
+        .collect::<Vec<Result<DataCollection>>>()
+        .await;
 
         assert_eq!(collections.len(), 0);
     }

@@ -28,11 +28,17 @@ use super::{
 #[derive(Default)]
 pub struct HashMapDatasetDb {
     datasets: Vec<Dataset>,
-    ogr_datasets:
-        HashMap<InternalDatasetId, StaticMetaData<OgrSourceDataset, VectorResultDescriptor>>,
+    ogr_datasets: HashMap<
+        InternalDatasetId,
+        StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
+    >,
     mock_datasets: HashMap<
         InternalDatasetId,
-        StaticMetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>,
+        StaticMetaData<
+            MockDatasetDataSourceLoadingInfo,
+            VectorResultDescriptor,
+            VectorQueryRectangle,
+        >,
     >,
     gdal_datasets: HashMap<
         InternalDatasetId,
@@ -106,14 +112,22 @@ impl HashMapStorable for MetaDataDefinition {
     }
 }
 
-impl HashMapStorable for StaticMetaData<OgrSourceDataset, VectorResultDescriptor> {
+impl HashMapStorable
+    for StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
+{
     fn store(&self, id: InternalDatasetId, db: &mut HashMapDatasetDb) -> TypedResultDescriptor {
         db.ogr_datasets.insert(id, self.clone());
         self.result_descriptor.clone().into()
     }
 }
 
-impl HashMapStorable for StaticMetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor> {
+impl HashMapStorable
+    for StaticMetaData<
+        MockDatasetDataSourceLoadingInfo,
+        VectorResultDescriptor,
+        VectorQueryRectangle,
+    >
+{
     fn store(&self, id: InternalDatasetId, db: &mut HashMapDatasetDb) -> TypedResultDescriptor {
         db.mock_datasets.insert(id, self.clone());
         self.result_descriptor.clone().into()
@@ -344,6 +358,7 @@ mod tests {
                 provenance: None,
             },
             result_descriptor: descriptor.clone(),
+            phantom: Default::default(),
         };
 
         let id = ctx

@@ -980,7 +980,7 @@ mod tests {
         let mut execution_context = MockExecutionContext::default();
         execution_context.add_meta_data::<_, _, VectorQueryRectangle>(
             DatasetId::Internal(dataset_id),
-            Box::new(StaticMetaData {
+            Box::new(StaticMetaData::<_, _, VectorQueryRectangle> {
                 loading_info: OgrSourceDataset {
                     file_name: "operators/test-data/vector/data/ne_10m_ports/ne_10m_ports.shp"
                         .into(),
@@ -1017,6 +1017,7 @@ mod tests {
                     .cloned()
                     .collect(),
                 },
+                phantom: Default::default(),
             }),
         );
 

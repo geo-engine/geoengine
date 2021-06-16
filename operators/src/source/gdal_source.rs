@@ -391,7 +391,7 @@ where
         // TODO: re-enable when BBOx paradox is solved
         // let dataset_intersects_tile = dataset_bounds.intersects_bbox(&output_bounds);
         // TODO: move to false, true case when BBOX paradox is solved
-        let dataset_intersects_tile = dataset_bounds.intersection(output_bounds);
+        let dataset_intersects_tile = dataset_bounds.intersection(&output_bounds);
         let result_grid: GridOrEmpty2D<T> = match (dataset_contains_tile, dataset_intersects_tile) {
             (_, None) => {
                 // TODO: refactor tile to hold an Option<GridData> and this will be empty in this case

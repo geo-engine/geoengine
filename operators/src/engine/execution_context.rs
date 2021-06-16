@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::any::Any;
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::marker::PhantomData;
 
 use super::{RasterQueryRectangle, VectorQueryRectangle};
 
@@ -121,17 +122,20 @@ where
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct StaticMetaData<L, R>
+pub struct StaticMetaData<L, R, Q>
 where
     L: Debug + Clone + Send + Sync + 'static,
     R: Debug + Send + Sync + 'static + ResultDescriptor,
+    Q: Debug + Clone + Send + Sync + 'static,
 {
     pub loading_info: L,
     pub result_descriptor: R,
+    #[serde(skip)]
+    pub phantom: PhantomData<Q>,
 }
 
 #[async_trait]
-impl<L, R, Q> MetaData<L, R, Q> for StaticMetaData<L, R>
+impl<L, R, Q> MetaData<L, R, Q> for StaticMetaData<L, R, Q>
 where
     L: Debug + Clone + Send + Sync + 'static,
     R: Debug + Send + Sync + 'static + ResultDescriptor,
@@ -165,9 +169,11 @@ mod tests {
                 spatial_reference: SpatialReferenceOption::Unreferenced,
                 columns: Default::default(),
             },
+            phantom: Default::default(),
         };
 
-        let info: Box<dyn MetaData<i32, VectorResultDescriptor, VectorQueryRectangle>> = Box::new(info);
+        let info: Box<dyn MetaData<i32, VectorResultDescriptor, VectorQueryRectangle>> =
+            Box::new(info);
 
         let info2: Box<dyn Any + Send + Sync> = Box::new(info);
 

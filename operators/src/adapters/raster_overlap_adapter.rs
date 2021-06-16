@@ -599,7 +599,7 @@ where
         Ok(RasterQueryRectangle {
             partition: tile_info
                 .spatial_partition()
-                .intersection(query_rect.spatial_partition())
+                .intersection(&query_rect.spatial_partition())
                 .expect("should not be empty")
                 .reproject(&proj)?,
             time_interval: TimeInterval::new_instant(start_time)?,
@@ -688,7 +688,7 @@ mod tests {
         };
 
         let query_rect = RasterQueryRectangle {
-            partition: SpatialPartition::new_unchecked((0., 0.).into(), (3., 1.).into()),
+            partition: SpatialPartition::new_unchecked((0., 1.).into(), (3., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 10),
             spatial_resolution: SpatialResolution::one(),
         };
@@ -781,7 +781,7 @@ mod tests {
         };
 
         let query_rect = RasterQueryRectangle {
-            partition: SpatialPartition::new_unchecked((0., 0.).into(), (3., 1.).into()),
+            partition: SpatialPartition::new_unchecked((0., 1.).into(), (3., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 10),
             spatial_resolution: SpatialResolution::one(),
         };

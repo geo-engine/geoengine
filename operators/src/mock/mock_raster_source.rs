@@ -1,7 +1,7 @@
 use crate::call_generic_raster_processor;
 use crate::engine::{
     InitializedRasterOperator, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-    SourceOperator, TypedRasterQueryProcessor, VectorQueryProcessor,
+    SourceOperator, TypedRasterQueryProcessor,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -47,7 +47,7 @@ where
                     t.time.intersects(&query.time_interval)
                         && t.tile_information()
                             .spatial_partition()
-                            .intersects(query.partition)
+                            .intersects(&query.partition)
                 })
                 .cloned()
                 .map(Result::Ok),

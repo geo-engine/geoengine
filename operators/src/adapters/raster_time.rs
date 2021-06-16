@@ -3,9 +3,7 @@ use crate::util::Result;
 use futures::stream::{FusedStream, Zip};
 use futures::Stream;
 use futures::{ready, StreamExt};
-use geoengine_datatypes::primitives::{
-    BoundingBox2D, SpatialPartition, TimeInstance, TimeInterval,
-};
+use geoengine_datatypes::primitives::{SpatialPartition, TimeInstance, TimeInterval};
 use geoengine_datatypes::raster::{GridSize, Pixel, RasterTile2D, TileInformation, TilingStrategy};
 use pin_project::pin_project;
 use std::cmp::min;

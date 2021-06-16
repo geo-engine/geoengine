@@ -462,7 +462,7 @@ impl TryFrom<BoundingBox2D> for gdal::vector::Geometry {
 #[cfg(test)]
 mod tests {
 
-    use crate::primitives::{BoundingBox2D, Coordinate2D, SpatialBounded, BoxShaped};
+    use crate::primitives::{BoundingBox2D, BoxShaped, Coordinate2D, SpatialBounded};
     #[test]
     #[allow(clippy::float_cmp)]
     fn bounding_box_new() {
