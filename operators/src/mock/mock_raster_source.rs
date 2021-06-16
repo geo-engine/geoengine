@@ -1,11 +1,12 @@
 use crate::call_generic_raster_processor;
 use crate::engine::{
-    InitializedOperator, InitializedRasterOperator, QueryProcessor, RasterOperator,
-    RasterQueryProcessor, RasterResultDescriptor, SourceOperator, TypedRasterQueryProcessor,
+    InitializedRasterOperator, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+    SourceOperator, TypedRasterQueryProcessor, VectorQueryProcessor,
 };
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::{stream, stream::StreamExt};
+use geoengine_datatypes::primitives::SpatialPartitioned;
 use geoengine_datatypes::raster::{FromPrimitive, Pixel, RasterTile2D};
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
@@ -28,22 +29,25 @@ where
 }
 
 #[async_trait]
-impl<T> QueryProcessor for MockRasterSourceProcessor<T>
+impl<T> RasterQueryProcessor for MockRasterSourceProcessor<T>
 where
     T: Pixel,
 {
-    type Output = RasterTile2D<T>;
-    async fn query<'a>(
+    type RasterType = T;
+    async fn raster_query<'a>(
         &'a self,
-        query: crate::engine::QueryRectangle,
+        query: crate::engine::RasterQueryRectangle,
         _ctx: &'a dyn crate::engine::QueryContext,
-    ) -> Result<futures::stream::BoxStream<crate::util::Result<Self::Output>>> {
+    ) -> Result<futures::stream::BoxStream<crate::util::Result<RasterTile2D<Self::RasterType>>>>
+    {
         Ok(stream::iter(
             self.data
                 .iter()
                 .filter(move |t| {
                     t.time.intersects(&query.time_interval)
-                        && t.tile_information().is_intersected_by_bbox(&query.bbox)
+                        && t.tile_information()
+                            .spatial_partition()
+                            .intersects(query.partition)
                 })
                 .cloned()
                 .map(Result::Ok),
@@ -67,7 +71,7 @@ impl RasterOperator for MockRasterSource {
     async fn initialize(
         self: Box<Self>,
         _context: &dyn crate::engine::ExecutionContext,
-    ) -> Result<Box<InitializedRasterOperator>> {
+    ) -> Result<Box<dyn InitializedRasterOperator>> {
         Ok(InitializedMockRasterSource {
             result_descriptor: self.params.result_descriptor,
             data: self.params.data,
@@ -81,9 +85,7 @@ pub struct InitializedMockRasterSource {
     data: Vec<RasterTile2D<u8>>,
 }
 
-impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
-    for InitializedMockRasterSource
-{
+impl InitializedRasterOperator for InitializedMockRasterSource {
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         fn converted<From, To>(
             raster_tiles: &[RasterTile2D<From>],

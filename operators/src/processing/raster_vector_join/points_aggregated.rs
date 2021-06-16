@@ -8,8 +8,8 @@ use geoengine_datatypes::collections::{
 use geoengine_datatypes::raster::{GridIndexAccess, NoDataValue, Pixel, RasterDataType};
 
 use crate::engine::{
-    QueryContext, QueryProcessor, QueryRectangle, RasterQueryProcessor, TypedRasterQueryProcessor,
-    VectorQueryProcessor,
+    QueryContext, RasterQueryProcessor, TypedRasterQueryProcessor, VectorQueryProcessor,
+    VectorQueryRectangle,
 };
 use crate::processing::raster_vector_join::aggregator::{
     Aggregator, FirstValueFloatAggregator, FirstValueIntAggregator, MeanValueAggregator,
@@ -48,7 +48,7 @@ impl RasterPointAggregateJoinProcessor {
         raster_processor: &dyn RasterQueryProcessor<RasterType = P>,
         new_column_name: &str,
         aggregation: AggregationMethod,
-        query: QueryRectangle,
+        query: VectorQueryRectangle,
         ctx: &dyn QueryContext,
     ) -> Result<MultiPointCollection> {
         let mut aggregator = Self::create_aggregator::<P>(points.len(), aggregation);
@@ -56,13 +56,13 @@ impl RasterPointAggregateJoinProcessor {
         let points = points.sort_by_time_asc()?;
 
         for time_span in FeatureTimeSpanIter::new(points.time_intervals()) {
-            let query = QueryRectangle {
+            let query = VectorQueryRectangle {
                 bbox: query.bbox,
                 time_interval: time_span.time_interval,
                 spatial_resolution: query.spatial_resolution,
             };
 
-            let mut rasters = raster_processor.raster_query(query, ctx).await?;
+            let mut rasters = raster_processor.raster_query(query.into(), ctx).await?;
 
             // TODO: optimize geo access (only specific tiles, etc.)
 
@@ -144,11 +144,11 @@ impl VectorQueryProcessor for RasterPointAggregateJoinProcessor {
 
     async fn vector_query<'a>(
         &'a self,
-        query: QueryRectangle,
+        query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
         let stream = self.points
-            .query(query, ctx).await?
+            .vector_query(query, ctx).await?
             .and_then(async move |mut points| {
 
                 for (raster, new_column_name) in self.raster_processors.iter().zip(&self.column_names) {
@@ -169,7 +169,7 @@ impl VectorQueryProcessor for RasterPointAggregateJoinProcessor {
 mod tests {
     use super::*;
 
-    use crate::engine::{MockExecutionContext, RasterResultDescriptor};
+    use crate::engine::{MockExecutionContext, RasterResultDescriptor, VectorQueryRectangle};
     use crate::engine::{MockQueryContext, RasterOperator};
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use geoengine_datatypes::raster::{Grid2D, RasterTile2D, TileInformation};
@@ -235,7 +235,7 @@ mod tests {
             &raster_source.query_processor().unwrap().get_u8().unwrap(),
             "foo",
             AggregationMethod::First,
-            QueryRectangle {
+            VectorQueryRectangle {
                 bbox: BoundingBox2D::new((0.0, -3.0).into(), (2.0, 0.).into()).unwrap(),
                 time_interval: Default::default(),
                 spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
@@ -318,7 +318,7 @@ mod tests {
             &raster_source.query_processor().unwrap().get_u8().unwrap(),
             "foo",
             AggregationMethod::Mean,
-            QueryRectangle {
+            VectorQueryRectangle {
                 bbox: BoundingBox2D::new((0.0, -3.0).into(), (2.0, 0.0).into()).unwrap(),
                 time_interval: Default::default(),
                 spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),

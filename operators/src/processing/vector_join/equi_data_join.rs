@@ -15,7 +15,8 @@ use geoengine_datatypes::primitives::{FeatureDataRef, Geometry, TimeInterval};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 
 use crate::adapters::FeatureCollectionChunkMerger;
-use crate::engine::{QueryContext, QueryProcessor, QueryRectangle, VectorQueryProcessor};
+use crate::engine::VectorQueryRectangle;
+use crate::engine::{QueryContext, VectorQueryProcessor};
 use crate::error::Error;
 use crate::util::Result;
 use async_trait::async_trait;
@@ -347,18 +348,18 @@ where
 
     async fn vector_query<'a>(
         &'a self,
-        query: QueryRectangle,
+        query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
         let result_stream = self
             .left_processor
-            .query(query, ctx)
+            .vector_query(query, ctx)
             .await?
             .and_then(async move |left_collection| {
                 // This implementation is a nested-loop join
                 let left_collection = Arc::new(left_collection);
 
-                let data_query = self.right_processor.query(query, ctx).await?;
+                let data_query = self.right_processor.vector_query(query, ctx).await?;
 
                 let out = data_query
                     .flat_map(move |right_collection| {
@@ -420,7 +421,7 @@ mod tests {
         let left_processor = left.query_processor().unwrap().multi_point().unwrap();
         let right_processor = right.query_processor().unwrap().data().unwrap();
 
-        let query_rectangle = QueryRectangle {
+        let query_rectangle = VectorQueryRectangle {
             bbox: BoundingBox2D::new((f64::MIN, f64::MIN).into(), (f64::MAX, f64::MAX).into())
                 .unwrap(),
             time_interval: TimeInterval::default(),

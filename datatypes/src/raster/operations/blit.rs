@@ -1,8 +1,9 @@
+use crate::error;
+use crate::primitives::{BoxShaped, SpatialPartitioned};
 use crate::raster::{
     ChangeGridBounds, GeoTransformAccess, GridBlit, MaterializedRasterTile2D, Pixel, RasterTile2D,
 };
 use crate::util::Result;
-use crate::{error, primitives::SpatialBounded};
 use snafu::ensure;
 
 pub trait Blit<R> {
@@ -25,16 +26,17 @@ impl<T: Pixel> Blit<RasterTile2D<T>> for MaterializedRasterTile2D<T> {
             }
         );
 
-        let _ = self
-            .spatial_bounds()
-            .intersection(&source.spatial_bounds())
-            .ok_or(error::Error::Blit {
-                details: "No overlapping region".into(),
-            })?;
+        ensure!(
+            self.spatial_partition()
+                .intersects(source.spatial_partition()),
+            error::Blit {
+                details: "No overlapping region",
+            }
+        );
 
         let offset = self
             .tile_geo_transform()
-            .coordinate_to_grid_idx_2d(source.spatial_bounds().upper_left());
+            .coordinate_to_grid_idx_2d(source.spatial_partition().upper_left());
 
         let shifted_source = source.grid_array.shift_by_offset(offset);
 

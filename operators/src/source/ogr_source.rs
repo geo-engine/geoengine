@@ -36,13 +36,13 @@ use geoengine_datatypes::primitives::{
 use geoengine_datatypes::provenance::ProvenanceInformation;
 use geoengine_datatypes::util::arrow::ArrowTyped;
 
+use crate::engine::VectorQueryRectangle;
 use crate::error::Error;
 use crate::util::Result;
 use crate::{
     engine::{
-        InitializedOperator, MetaData, QueryContext, QueryProcessor, QueryRectangle,
-        SourceOperator, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
-        VectorResultDescriptor,
+        InitializedVectorOperator, MetaData, QueryContext, SourceOperator,
+        TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
     },
     error,
 };
@@ -213,7 +213,8 @@ impl OgrSourceErrorSpec {
 
 #[derive(Clone, Debug)]
 pub struct OgrSourceState {
-    dataset_information: Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor>>,
+    dataset_information:
+        Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
     params: OgrSourceParameters,
 }
 
@@ -228,9 +229,10 @@ impl VectorOperator for OgrSource {
     async fn initialize(
         self: Box<Self>,
         context: &dyn crate::engine::ExecutionContext,
-    ) -> Result<Box<crate::engine::InitializedVectorOperator>> {
-        let info: Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor>> =
-            context.meta_data(&self.params.dataset).await?;
+    ) -> Result<Box<dyn crate::engine::InitializedVectorOperator>> {
+        let info: Box<
+            dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
+        > = context.meta_data(&self.params.dataset).await?;
 
         let initialized_source = InitializedOgrSource {
             result_descriptor: info.result_descriptor().await?,
@@ -264,9 +266,7 @@ impl OgrSource {
     }
 }
 
-impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
-    for InitializedOgrSource
-{
+impl InitializedVectorOperator for InitializedOgrSource {
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
         // TODO: simplify with macro
         Ok(match self.result_descriptor.data_type {
@@ -294,7 +294,8 @@ pub struct OgrSourceProcessor<G>
 where
     G: Geometry + ArrowTyped,
 {
-    dataset_information: Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor>>,
+    dataset_information:
+        Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
     _collection_type: PhantomData<FeatureCollection<G>>,
 }
 
@@ -303,7 +304,9 @@ where
     G: Geometry + ArrowTyped,
 {
     pub fn new(
-        dataset_information: Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor>>,
+        dataset_information: Box<
+            dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
+        >,
     ) -> Self {
         Self {
             dataset_information,
@@ -313,17 +316,17 @@ where
 }
 
 #[async_trait]
-impl<G> QueryProcessor for OgrSourceProcessor<G>
+impl<G> VectorQueryProcessor for OgrSourceProcessor<G>
 where
     G: Geometry + ArrowTyped + 'static + std::marker::Unpin + TryFromOgrGeometry,
     FeatureCollectionRowBuilder<G>: FeatureCollectionBuilderGeometryHandler<G>,
 {
-    type Output = FeatureCollection<G>;
-    async fn query<'a>(
+    type VectorType = FeatureCollection<G>;
+    async fn vector_query<'a>(
         &'a self,
-        query: QueryRectangle,
+        query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
-    ) -> Result<BoxStream<'a, Result<Self::Output>>> {
+    ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
         Ok(OgrSourceStream::new(
             self.dataset_information.loading_info(query).await?,
             query,
@@ -355,7 +358,7 @@ where
 {
     pub fn new(
         dataset_information: OgrSourceDataset,
-        query_rectangle: QueryRectangle,
+        query_rectangle: VectorQueryRectangle,
         chunk_byte_size: usize,
     ) -> Self {
         // We need two slots for the channel in case of an error: first output `Err`, then output `None` to close the `Stream`
@@ -438,7 +441,7 @@ where
         dataset_information: &OgrSourceDataset,
         work_query_receiver: &Receiver<WorkQuery>,
         poll_result_sender: &SyncSender<Option<Result<FeatureCollection<G>>>>,
-        query_rectangle: &QueryRectangle,
+        query_rectangle: &VectorQueryRectangle,
         chunk_byte_size: usize,
     ) -> Result<()> {
         // TODO: add OGR time filter if forced
@@ -689,7 +692,7 @@ where
         feature_collection_builder: FeatureCollectionBuilder<G>,
         dataset_information: &OgrSourceDataset,
         data_types: &HashMap<String, FeatureDataType>,
-        query_rectangle: &QueryRectangle,
+        query_rectangle: &VectorQueryRectangle,
         time_extractor: &dyn Fn(&Feature) -> Result<TimeInterval>,
         chunk_byte_size: usize,
         was_spatial_filtered_by_ogr: bool,
@@ -725,7 +728,7 @@ where
     fn add_feature_to_batch(
         error_spec: OgrSourceErrorSpec,
         data_types: &HashMap<String, FeatureDataType>,
-        query_rectangle: &QueryRectangle,
+        query_rectangle: &VectorQueryRectangle,
         time_extractor: &dyn Fn(&Feature) -> Result<TimeInterval, Error>,
         builder: &mut FeatureCollectionRowBuilder<G>,
         feature: &Feature,
@@ -1151,8 +1154,8 @@ mod tests {
 
         let context = MockQueryContext::new(usize::MAX);
         let query = query_processor
-            .query(
-                QueryRectangle {
+            .vector_query(
+                VectorQueryRectangle {
                     bbox: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
@@ -1197,8 +1200,8 @@ mod tests {
 
         let context = MockQueryContext::new(usize::MAX);
         let query = query_processor
-            .query(
-                QueryRectangle {
+            .vector_query(
+                VectorQueryRectangle {
                     bbox: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
@@ -1242,8 +1245,8 @@ mod tests {
 
         let context = MockQueryContext::new(usize::MAX);
         let query = query_processor
-            .query(
-                QueryRectangle {
+            .vector_query(
+                VectorQueryRectangle {
                     bbox: BoundingBox2D::new((0., 0.).into(), (5., 5.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
@@ -1273,7 +1276,7 @@ mod tests {
     async fn ne_10m_ports_bbox_filter() -> Result<()> {
         let dataset = DatasetId::Internal(InternalDatasetId::new());
         let mut exe_ctx = MockExecutionContext::default();
-        exe_ctx.add_meta_data(
+        exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             dataset.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
@@ -1318,8 +1321,8 @@ mod tests {
 
         let context = MockQueryContext::new(usize::MAX);
         let query = query_processor
-            .query(
-                QueryRectangle {
+            .vector_query(
+                VectorQueryRectangle {
                     bbox: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
@@ -1363,7 +1366,7 @@ mod tests {
     async fn ne_10m_ports_force_spatial_filter() -> Result<()> {
         let dataset = DatasetId::Internal(InternalDatasetId::new());
         let mut exe_ctx = MockExecutionContext::default();
-        exe_ctx.add_meta_data(
+        exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             dataset.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
@@ -1408,8 +1411,8 @@ mod tests {
 
         let context = MockQueryContext::new(usize::MAX);
         let query = query_processor
-            .query(
-                QueryRectangle {
+            .vector_query(
+                VectorQueryRectangle {
                     bbox: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
@@ -1453,7 +1456,7 @@ mod tests {
     async fn ne_10m_ports_fast_spatial_filter() -> Result<()> {
         let dataset = DatasetId::Internal(InternalDatasetId::new());
         let mut exe_ctx = MockExecutionContext::default();
-        exe_ctx.add_meta_data(
+        exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             dataset.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
@@ -1500,8 +1503,8 @@ mod tests {
 
         let context = MockQueryContext::new(usize::MAX);
         let query = query_processor
-            .query(
-                QueryRectangle {
+            .vector_query(
+                VectorQueryRectangle {
                     bbox: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
@@ -1546,7 +1549,7 @@ mod tests {
     async fn ne_10m_ports_columns() -> Result<()> {
         let id = DatasetId::Internal(InternalDatasetId::new());
         let mut exe_ctx = MockExecutionContext::default();
-        exe_ctx.add_meta_data(
+        exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
@@ -1610,8 +1613,8 @@ mod tests {
 
         let context = MockQueryContext::new(usize::MAX);
         let query = query_processor
-            .query(
-                QueryRectangle {
+            .vector_query(
+                VectorQueryRectangle {
                     bbox: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
@@ -1730,7 +1733,7 @@ mod tests {
     async fn ne_10m_ports() -> Result<()> {
         let id = DatasetId::Internal(InternalDatasetId::new());
         let mut exe_ctx = MockExecutionContext::default();
-        exe_ctx.add_meta_data(
+        exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
@@ -1775,8 +1778,8 @@ mod tests {
 
         let context = MockQueryContext::new(usize::MAX);
         let query = query_processor
-            .query(
-                QueryRectangle {
+            .vector_query(
+                VectorQueryRectangle {
                     bbox: BoundingBox2D::new((-180.0, -90.0).into(), (180.0, 90.0).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
@@ -2927,8 +2930,8 @@ mod tests {
 
         let context = MockQueryContext::new(usize::MAX);
         let query = query_processor
-            .query(
-                QueryRectangle {
+            .vector_query(
+                VectorQueryRectangle {
                     bbox: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
@@ -2978,7 +2981,7 @@ mod tests {
     async fn chunked() -> Result<()> {
         let id = DatasetId::Internal(InternalDatasetId::new());
         let mut exe_ctx = MockExecutionContext::default();
-        exe_ctx.add_meta_data(
+        exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             id.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
@@ -3127,8 +3130,8 @@ mod tests {
 
         let context1 = MockQueryContext::new(0);
         let query = query_processor
-            .query(
-                QueryRectangle {
+            .vector_query(
+                VectorQueryRectangle {
                     bbox: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
@@ -3161,8 +3164,8 @@ mod tests {
         // LARGER CHUNK
         let context = MockQueryContext::new(1_000);
         let query = query_processor
-            .query(
-                QueryRectangle {
+            .vector_query(
+                VectorQueryRectangle {
                     bbox: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
@@ -3220,7 +3223,7 @@ mod tests {
     async fn empty() {
         let dataset = DatasetId::Internal(InternalDatasetId::new());
         let mut exe_ctx = MockExecutionContext::default();
-        exe_ctx.add_meta_data(
+        exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             dataset.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
@@ -3269,8 +3272,8 @@ mod tests {
 
         let context = MockQueryContext::new(0);
         let query = query_processor
-            .query(
-                QueryRectangle {
+            .vector_query(
+                VectorQueryRectangle {
                     bbox: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
@@ -3291,7 +3294,7 @@ mod tests {
     async fn polygon_gpkg() {
         let dataset = DatasetId::Internal(InternalDatasetId::new());
         let mut exe_ctx = MockExecutionContext::default();
-        exe_ctx.add_meta_data(
+        exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             dataset.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
@@ -3345,8 +3348,8 @@ mod tests {
 
         let context = MockQueryContext::new(1024 * 1024);
         let query = query_processor
-            .query(
-                QueryRectangle {
+            .vector_query(
+                VectorQueryRectangle {
                     bbox: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
@@ -3377,7 +3380,7 @@ mod tests {
     async fn points_csv() {
         let dataset = DatasetId::Internal(InternalDatasetId::new());
         let mut exe_ctx = MockExecutionContext::default();
-        exe_ctx.add_meta_data(
+        exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             dataset.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
@@ -3437,8 +3440,8 @@ mod tests {
 
         let context = MockQueryContext::new(1024 * 1024);
         let query = query_processor
-            .query(
-                QueryRectangle {
+            .vector_query(
+                VectorQueryRectangle {
                     bbox: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
@@ -3475,7 +3478,7 @@ mod tests {
     async fn points_date_csv() {
         let dataset = DatasetId::Internal(InternalDatasetId::new());
         let mut exe_ctx = MockExecutionContext::default();
-        exe_ctx.add_meta_data(
+        exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             dataset.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
@@ -3538,8 +3541,8 @@ mod tests {
 
         let context = MockQueryContext::new(1024 * 1024);
         let query = query_processor
-            .query(
-                QueryRectangle {
+            .vector_query(
+                VectorQueryRectangle {
                     bbox: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
@@ -3572,7 +3575,7 @@ mod tests {
     async fn points_date_time_csv() {
         let dataset = DatasetId::Internal(InternalDatasetId::new());
         let mut exe_ctx = MockExecutionContext::default();
-        exe_ctx.add_meta_data(
+        exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             dataset.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
@@ -3635,8 +3638,8 @@ mod tests {
 
         let context = MockQueryContext::new(1024 * 1024);
         let query = query_processor
-            .query(
-                QueryRectangle {
+            .vector_query(
+                VectorQueryRectangle {
                     bbox: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
@@ -3669,7 +3672,7 @@ mod tests {
     async fn points_date_time_tz_csv() {
         let dataset = DatasetId::Internal(InternalDatasetId::new());
         let mut exe_ctx = MockExecutionContext::default();
-        exe_ctx.add_meta_data(
+        exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
             dataset.clone(),
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
@@ -3732,8 +3735,8 @@ mod tests {
 
         let context = MockQueryContext::new(1024 * 1024);
         let query = query_processor
-            .query(
-                QueryRectangle {
+            .vector_query(
+                VectorQueryRectangle {
                     bbox: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),

@@ -2,10 +2,10 @@ use super::map_query::MapQueryProcessor;
 use crate::{
     adapters::{fold_by_coordinate_lookup_future, RasterOverlapAdapter, TileReprojectionSubQuery},
     engine::{
-        ExecutionContext, InitializedOperator, InitializedRasterOperator,
-        InitializedVectorOperator, Operator, QueryContext, QueryRectangle, RasterOperator,
-        RasterQueryProcessor, RasterResultDescriptor, SingleRasterOrVectorSource,
-        TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
+        ExecutionContext, InitializedRasterOperator, InitializedVectorOperator, Operator,
+        QueryContext, RasterOperator, RasterQueryProcessor, RasterQueryRectangle,
+        RasterResultDescriptor, SingleRasterOrVectorSource, TypedRasterQueryProcessor,
+        TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorQueryRectangle,
         VectorResultDescriptor,
     },
     error::Error,
@@ -48,13 +48,13 @@ pub struct RasterReprojectionState {
 pub type Reprojection = Operator<ReprojectionParams, SingleRasterOrVectorSource>;
 pub struct InitializedVectorReprojection {
     result_descriptor: VectorResultDescriptor,
-    source: Box<InitializedVectorOperator>,
+    source: Box<dyn InitializedVectorOperator>,
     state: VectorReprojectionState,
 }
 
 pub struct InitializedRasterReprojection {
     result_descriptor: RasterResultDescriptor,
-    source: Box<InitializedRasterOperator>,
+    source: Box<dyn InitializedRasterOperator>,
     state: RasterReprojectionState,
 }
 
@@ -64,7 +64,7 @@ impl VectorOperator for Reprojection {
     async fn initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
-    ) -> Result<Box<InitializedVectorOperator>> {
+    ) -> Result<Box<dyn InitializedVectorOperator>> {
         let vector_operator = match self.sources.source {
             RasterOrVectorOperator::Vector(operator) => operator,
             RasterOrVectorOperator::Raster(_) => return Err(Error::InvalidOperatorType),
@@ -94,9 +94,7 @@ impl VectorOperator for Reprojection {
     }
 }
 
-impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
-    for InitializedVectorReprojection
-{
+impl InitializedVectorOperator for InitializedVectorReprojection {
     fn result_descriptor(&self) -> &VectorResultDescriptor {
         &self.result_descriptor
     }
@@ -106,7 +104,7 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
         match self.source.query_processor()? {
             TypedVectorQueryProcessor::Data(source) => Ok(TypedVectorQueryProcessor::Data(
                 MapQueryProcessor::new(source, move |query| {
-                    query_rewrite_fn(query, state.source_srs, state.target_srs)
+                    vector_query_rewrite_fn(query, state.source_srs, state.target_srs)
                 })
                 .boxed(),
             )),
@@ -164,11 +162,11 @@ where
 
 /// this method performs the transformation of a query rectangle in `target` projection
 /// to a new query rectangle with coordinates in the `source` projection
-pub fn query_rewrite_fn(
-    query: QueryRectangle,
+pub fn vector_query_rewrite_fn(
+    query: VectorQueryRectangle,
     source: SpatialReference,
     target: SpatialReference,
-) -> Result<QueryRectangle> {
+) -> Result<VectorQueryRectangle> {
     let projector_source_target = CoordinateProjector::from_known_srs(source, target)?;
     let projector_target_source = CoordinateProjector::from_known_srs(target, source)?;
 
@@ -177,7 +175,7 @@ pub fn query_rewrite_fn(
 
     let p_spatial_resolution =
         suggest_pixel_size_from_diag_cross_projected(s_bbox, p_bbox, query.spatial_resolution)?;
-    Ok(QueryRectangle {
+    Ok(VectorQueryRectangle {
         bbox: p_bbox,
         spatial_resolution: p_spatial_resolution,
         time_interval: query.time_interval,
@@ -194,10 +192,10 @@ where
 
     async fn vector_query<'a>(
         &'a self,
-        query: QueryRectangle,
+        query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
-        let rewritten_query = query_rewrite_fn(query, self.from, self.to)?;
+        let rewritten_query = vector_query_rewrite_fn(query, self.from, self.to)?;
 
         Ok(self
             .source
@@ -220,7 +218,7 @@ impl RasterOperator for Reprojection {
     async fn initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
-    ) -> Result<Box<InitializedRasterOperator>> {
+    ) -> Result<Box<dyn InitializedRasterOperator>> {
         let raster_operator = match self.sources.source {
             RasterOrVectorOperator::Raster(operator) => operator,
             RasterOrVectorOperator::Vector(_) => return Err(Error::InvalidOperatorType),
@@ -255,9 +253,7 @@ impl RasterOperator for Reprojection {
     }
 }
 
-impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
-    for InitializedRasterReprojection
-{
+impl InitializedRasterOperator for InitializedRasterReprojection {
     fn result_descriptor(&self) -> &RasterResultDescriptor {
         &self.result_descriptor
     }
@@ -417,15 +413,18 @@ where
 
     async fn raster_query<'a>(
         &'a self,
-        query: QueryRectangle,
+        query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<geoengine_datatypes::raster::RasterTile2D<Self::RasterType>>>>
     {
         // we need a resolution for the sub-querys. And since we don't want this to change for tiles, we precompute it for the complete bbox and pass it to the sub-query spec.
         // TODO: use `rewrite_query` to determine resolution for tiles overlapping border
         let projector = CoordinateProjector::from_known_srs(self.to, self.from)?;
-        let p_spatial_resolution =
-            suggest_pixel_size_from_diag_cross(query.bbox, query.spatial_resolution, &projector)?;
+        let p_spatial_resolution = suggest_pixel_size_from_diag_cross(
+            query.partition,
+            query.spatial_resolution,
+            &projector,
+        )?;
 
         let sub_query_spec = TileReprojectionSubQuery {
             in_srs: self.from,
@@ -457,8 +456,8 @@ mod tests {
     use geoengine_datatypes::{
         collections::{MultiLineStringCollection, MultiPointCollection, MultiPolygonCollection},
         primitives::{
-            BoundingBox2D, Measurement, MultiLineString, MultiPoint, MultiPolygon,
-            SpatialResolution, TimeInterval,
+            BoundingBox2D, BoxShaped, Measurement, MultiLineString, MultiPoint, MultiPolygon,
+            SpatialPartition, SpatialResolution, TimeInterval,
         },
         raster::{Grid, GridShape, GridShape2D, GridSize, RasterDataType, RasterTile2D},
         spatial_reference::SpatialReferenceAuthority,
@@ -519,7 +518,7 @@ mod tests {
 
         let query_processor = query_processor.multi_point().unwrap();
 
-        let query_rectangle = QueryRectangle {
+        let query_rectangle = VectorQueryRectangle {
             bbox: BoundingBox2D::new(
                 (COLOGNE_EPSG_4326.x, MARBURG_EPSG_4326.y).into(),
                 (MARBURG_EPSG_4326.x, HAMBURG_EPSG_4326.y).into(),
@@ -591,7 +590,7 @@ mod tests {
 
         let query_processor = query_processor.multi_line_string().unwrap();
 
-        let query_rectangle = QueryRectangle {
+        let query_rectangle = VectorQueryRectangle {
             bbox: BoundingBox2D::new(
                 (COLOGNE_EPSG_4326.x, MARBURG_EPSG_4326.y).into(),
                 (MARBURG_EPSG_4326.x, HAMBURG_EPSG_4326.y).into(),
@@ -665,7 +664,7 @@ mod tests {
 
         let query_processor = query_processor.multi_polygon().unwrap();
 
-        let query_rectangle = QueryRectangle {
+        let query_rectangle = VectorQueryRectangle {
             bbox: BoundingBox2D::new(
                 (COLOGNE_EPSG_4326.x, MARBURG_EPSG_4326.y).into(),
                 (MARBURG_EPSG_4326.x, HAMBURG_EPSG_4326.y).into(),
@@ -781,8 +780,8 @@ mod tests {
             .get_u8()
             .unwrap();
 
-        let query_rect = QueryRectangle {
-            bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (3., 1.).into()),
+        let query_rect = RasterQueryRectangle {
+            partition: SpatialPartition::new_unchecked((0., 0.).into(), (3., 1.).into()),
             time_interval: TimeInterval::new_unchecked(0, 10),
             spatial_resolution: SpatialResolution::one(),
         };
@@ -808,7 +807,7 @@ mod tests {
 
         let output_shape: GridShape2D = [900, 1800].into();
         let output_bounds =
-            BoundingBox2D::new_unchecked((0., 0.).into(), (20_000_000., 20_000_000.).into());
+            SpatialPartition::new_unchecked((0., 20_000_000.).into(), (20_000_000., 0.).into());
         let time_interval = TimeInterval::new_unchecked(1_388_534_400_000, 1_388_534_400_001);
         // 2014-01-01
 
@@ -848,8 +847,8 @@ mod tests {
 
         let qs = qp
             .raster_query(
-                QueryRectangle {
-                    bbox: output_bounds,
+                RasterQueryRectangle {
+                    partition: output_bounds,
                     time_interval,
                     spatial_resolution,
                 },
@@ -878,7 +877,7 @@ mod tests {
 
     #[test]
     fn query_rewrite_4326_3857() {
-        let query = QueryRectangle {
+        let query = VectorQueryRectangle {
             bbox: BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
@@ -891,7 +890,7 @@ mod tests {
 
         assert_eq!(
             expected,
-            query_rewrite_fn(
+            vector_query_rewrite_fn(
                 query,
                 SpatialReference::new(SpatialReferenceAuthority::Epsg, 3857),
                 SpatialReference::epsg_4326(),

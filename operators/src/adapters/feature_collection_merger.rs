@@ -130,8 +130,8 @@ mod tests {
     use super::*;
 
     use crate::engine::{
-        MockExecutionContext, MockQueryContext, QueryProcessor, QueryRectangle,
-        TypedVectorQueryProcessor, VectorOperator,
+        MockExecutionContext, MockQueryContext, TypedVectorQueryProcessor, VectorOperator,
+        VectorQueryRectangle,
     };
     use crate::error::Error;
     use crate::mock::{MockFeatureCollectionSource, MockPointSource, MockPointSourceParams};
@@ -168,7 +168,7 @@ mod tests {
                 unreachable!();
             };
 
-        let qrect = QueryRectangle {
+        let qrect = VectorQueryRectangle {
             bbox: BoundingBox2D::new((0.0, 0.0).into(), (10.0, 10.0).into()).unwrap(),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
@@ -176,14 +176,14 @@ mod tests {
         let cx = MockQueryContext::new(std::mem::size_of::<Coordinate2D>() * 2);
 
         let number_of_source_chunks = processor
-            .query(qrect, &cx)
+            .vector_query(qrect, &cx)
             .await
             .unwrap()
             .fold(0_usize, async move |i, _| i + 1)
             .await;
         assert_eq!(number_of_source_chunks, 5);
 
-        let stream = processor.query(qrect, &cx).await.unwrap();
+        let stream = processor.vector_query(qrect, &cx).await.unwrap();
 
         let chunk_byte_size = MultiPointCollection::from_data(
             MultiPoint::many(coordinates[0..5].to_vec()).unwrap(),
@@ -240,7 +240,7 @@ mod tests {
                 unreachable!();
             };
 
-        let qrect = QueryRectangle {
+        let qrect = VectorQueryRectangle {
             bbox: BoundingBox2D::new((0.0, 0.0).into(), (0.0, 0.0).into()).unwrap(),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
@@ -248,7 +248,7 @@ mod tests {
         let cx = MockQueryContext::new(0);
 
         let collections =
-            FeatureCollectionChunkMerger::new(processor.query(qrect, &cx).await.unwrap().fuse(), 0)
+            FeatureCollectionChunkMerger::new(processor.vector_query(qrect, &cx).await.unwrap().fuse(), 0)
                 .collect::<Vec<Result<DataCollection>>>()
                 .await;
 

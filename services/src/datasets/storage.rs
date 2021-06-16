@@ -198,16 +198,24 @@ impl MetaDataDefinition {
 
     pub async fn result_descriptor(&self) -> Result<TypedResultDescriptor> {
         match self {
-            MetaDataDefinition::MockMetaData(m) => m
-                .result_descriptor()
-                .await
-                .map(Into::into)
-                .context(error::Operator),
-            MetaDataDefinition::OgrMetaData(m) => m
-                .result_descriptor()
-                .await
-                .map(Into::into)
-                .context(error::Operator),
+            MetaDataDefinition::MockMetaData(m) =>
+            // m
+            // .result_descriptor()
+            // .await
+            // .map(Into::into)
+            // .context(error::Operator),
+            {
+                todo!()
+            }
+            MetaDataDefinition::OgrMetaData(m) =>
+            // m
+            //     .result_descriptor()
+            //     .await
+            //     .map(Into::into)
+            //     .context(error::Operator),
+            {
+                todo!()
+            }
             MetaDataDefinition::GdalMetaDataRegular(m) => m
                 .result_descriptor()
                 .await

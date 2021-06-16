@@ -16,7 +16,7 @@ use geoengine_datatypes::{
 };
 use geoengine_operators::engine::{
     MetaData, MetaDataProvider, RasterResultDescriptor, StaticMetaData, TypedResultDescriptor,
-    VectorResultDescriptor,
+    VectorResultDescriptor, VectorQueryRectangle, RasterQueryRectangle
 };
 use geoengine_operators::source::{GdalLoadingInfo, GdalMetaDataRegular, OgrSourceDataset};
 use geoengine_operators::{mock::MockDatasetDataSourceLoadingInfo, source::GdalMetaDataStatic};
@@ -25,14 +25,21 @@ use std::collections::HashMap;
 #[derive(Default)]
 pub struct ProHashMapDatasetDb {
     datasets: Vec<Dataset>,
-    ogr_datasets:
-        HashMap<InternalDatasetId, StaticMetaData<OgrSourceDataset, VectorResultDescriptor>>,
+    ogr_datasets: HashMap<
+        InternalDatasetId,
+        StaticMetaData<OgrSourceDataset, VectorResultDescriptor>,
+    >,
     mock_datasets: HashMap<
         InternalDatasetId,
-        StaticMetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>,
+        StaticMetaData<
+            MockDatasetDataSourceLoadingInfo,
+            VectorResultDescriptor,
+        >,
     >,
-    gdal_datasets:
-        HashMap<InternalDatasetId, Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor>>>,
+    gdal_datasets: HashMap<
+        InternalDatasetId,
+        Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
+    >,
     uploads: HashMap<UploadId, Upload>,
 }
 
@@ -84,7 +91,9 @@ impl ProHashMapStorable for MetaDataDefinition {
     }
 }
 
-impl ProHashMapStorable for StaticMetaData<OgrSourceDataset, VectorResultDescriptor> {
+impl ProHashMapStorable
+    for StaticMetaData<OgrSourceDataset, VectorResultDescriptor>
+{
     fn store(&self, id: InternalDatasetId, db: &mut ProHashMapDatasetDb) -> TypedResultDescriptor {
         db.ogr_datasets.insert(id, self.clone());
         self.result_descriptor.clone().into()
@@ -92,7 +101,10 @@ impl ProHashMapStorable for StaticMetaData<OgrSourceDataset, VectorResultDescrip
 }
 
 impl ProHashMapStorable
-    for StaticMetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>
+    for StaticMetaData<
+        MockDatasetDataSourceLoadingInfo,
+        VectorResultDescriptor,
+    >
 {
     fn store(&self, id: InternalDatasetId, db: &mut ProHashMapDatasetDb) -> TypedResultDescriptor {
         db.mock_datasets.insert(id, self.clone());
@@ -197,14 +209,21 @@ impl DatasetProvider for ProHashMapDatasetDb {
 }
 
 #[async_trait]
-impl MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>
+impl
+    MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
     for ProHashMapDatasetDb
 {
     async fn meta_data(
         &self,
         dataset: &DatasetId,
     ) -> Result<
-        Box<dyn MetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>>,
+        Box<
+            dyn MetaData<
+                MockDatasetDataSourceLoadingInfo,
+                VectorResultDescriptor,
+                VectorQueryRectangle,
+            >,
+        >,
         geoengine_operators::error::Error,
     > {
         Ok(Box::new(
@@ -223,12 +242,14 @@ impl MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>
 }
 
 #[async_trait]
-impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor> for ProHashMapDatasetDb {
+impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
+    for ProHashMapDatasetDb
+{
     async fn meta_data(
         &self,
         dataset: &DatasetId,
     ) -> Result<
-        Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor>>,
+        Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
         Ok(Box::new(
@@ -247,12 +268,14 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor> for ProHashMapDa
 }
 
 #[async_trait]
-impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor> for ProHashMapDatasetDb {
+impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
+    for ProHashMapDatasetDb
+{
     async fn meta_data(
         &self,
         dataset: &DatasetId,
     ) -> Result<
-        Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor>>,
+        Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
         let id = dataset
@@ -324,8 +347,9 @@ mod tests {
 
         let exe_ctx = ctx.execution_context(session.clone())?;
 
-        let meta: Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor>> =
-            exe_ctx.meta_data(&id).await?;
+        let meta: Box<
+            dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
+        > = exe_ctx.meta_data(&id).await?;
 
         assert_eq!(
             meta.result_descriptor().await?,

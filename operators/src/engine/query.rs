@@ -1,11 +1,43 @@
-use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution, TimeInterval};
+use geoengine_datatypes::primitives::{
+    BoundingBox2D, SpatialPartition, SpatialPartitioned, SpatialResolution, TimeInterval,
+};
 
 /// A spatio-temporal rectangle for querying data
 #[derive(Copy, Clone, Debug, PartialEq)]
-pub struct QueryRectangle {
+pub struct VectorQueryRectangle {
     pub bbox: BoundingBox2D,
     pub time_interval: TimeInterval,
     pub spatial_resolution: SpatialResolution,
+}
+
+/// A spatio-temporal rectangle for querying data
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct RasterQueryRectangle {
+    pub partition: SpatialPartition,
+    pub time_interval: TimeInterval,
+    pub spatial_resolution: SpatialResolution,
+}
+
+impl SpatialPartitioned for VectorQueryRectangle {
+    fn spatial_partition(&self) -> SpatialPartition {
+        SpatialPartition::with_bbox_and_resolution(self.bbox, self.spatial_resolution)
+    }
+}
+
+impl SpatialPartitioned for RasterQueryRectangle {
+    fn spatial_partition(&self) -> SpatialPartition {
+        self.partition
+    }
+}
+
+impl From<VectorQueryRectangle> for RasterQueryRectangle {
+    fn from(value: VectorQueryRectangle) -> Self {
+        Self {
+            partition: value.spatial_partition(),
+            time_interval: value.time_interval,
+            spatial_resolution: value.spatial_resolution,
+        }
+    }
 }
 
 pub trait QueryContext: Send + Sync {

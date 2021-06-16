@@ -11,9 +11,8 @@ use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval};
 
 use crate::adapters::FeatureCollectionChunkMerger;
 use crate::engine::{
-    ExecutionContext, InitializedOperator, InitializedVectorOperator, Operator, QueryContext,
-    QueryProcessor, QueryRectangle, TypedVectorQueryProcessor, VectorOperator,
-    VectorQueryProcessor, VectorResultDescriptor,
+    ExecutionContext, InitializedVectorOperator, Operator, QueryContext, TypedVectorQueryProcessor,
+    VectorOperator, VectorQueryProcessor, VectorQueryRectangle, VectorResultDescriptor,
 };
 use crate::error;
 use crate::util::Result;
@@ -41,7 +40,7 @@ impl VectorOperator for PointInPolygonFilter {
     async fn initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
-    ) -> Result<Box<InitializedVectorOperator>> {
+    ) -> Result<Box<dyn InitializedVectorOperator>> {
         let points = self.sources.points.initialize(context).await?;
         let polygons = self.sources.polygons.initialize(context).await?;
 
@@ -71,14 +70,12 @@ impl VectorOperator for PointInPolygonFilter {
 }
 
 pub struct InitializedPointInPolygonFilter {
-    points: Box<InitializedVectorOperator>,
-    polygons: Box<InitializedVectorOperator>,
+    points: Box<dyn InitializedVectorOperator>,
+    polygons: Box<dyn InitializedVectorOperator>,
     result_descriptor: VectorResultDescriptor,
 }
 
-impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
-    for InitializedPointInPolygonFilter
-{
+impl InitializedVectorOperator for InitializedPointInPolygonFilter {
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
         let point_processor = self
             .points
@@ -148,21 +145,21 @@ impl VectorQueryProcessor for PointInPolygonFilterProcessor {
 
     async fn vector_query<'a>(
         &'a self,
-        query: QueryRectangle,
+        query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
         // TODO: multi-threading
 
         let filtered_stream =
             self.points
-                .query(query, ctx)
+                .vector_query(query, ctx)
                 .await?
                 .and_then(move |points| async move {
                     let initial_filter = BooleanArray::from(vec![false; points.len()]);
 
                     let filter = self
                         .polygons
-                        .query(query, ctx)
+                        .vector_query(query, ctx)
                         .await?
                         .fold(Ok(initial_filter), |filter, polygons| async {
                             let polygons = polygons?;
@@ -389,7 +386,7 @@ mod tests {
         BoundingBox2D, MultiPoint, MultiPolygon, SpatialResolution, TimeInterval,
     };
 
-    use crate::mock::MockFeatureCollectionSource;
+    use crate::{engine::VectorQueryRectangle, mock::MockFeatureCollectionSource};
 
     use super::*;
     use crate::engine::{MockExecutionContext, MockQueryContext};
@@ -556,14 +553,17 @@ mod tests {
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
 
-        let query_rectangle = QueryRectangle {
+        let query_rectangle = VectorQueryRectangle {
             bbox: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
         let ctx = MockQueryContext::new(usize::MAX);
 
-        let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
+        let query = query_processor
+            .vector_query(query_rectangle, &ctx)
+            .await
+            .unwrap();
 
         let result = query
             .map(Result::unwrap)
@@ -605,14 +605,17 @@ mod tests {
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
 
-        let query_rectangle = QueryRectangle {
+        let query_rectangle = VectorQueryRectangle {
             bbox: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
         let ctx = MockQueryContext::new(usize::MAX);
 
-        let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
+        let query = query_processor
+            .vector_query(query_rectangle, &ctx)
+            .await
+            .unwrap();
 
         let result = query
             .map(Result::unwrap)
@@ -667,14 +670,17 @@ mod tests {
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
 
-        let query_rectangle = QueryRectangle {
+        let query_rectangle = VectorQueryRectangle {
             bbox: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
         let ctx = MockQueryContext::new(usize::MAX);
 
-        let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
+        let query = query_processor
+            .vector_query(query_rectangle, &ctx)
+            .await
+            .unwrap();
 
         let result = query
             .map(Result::unwrap)
@@ -746,7 +752,7 @@ mod tests {
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
 
-        let query_rectangle = QueryRectangle {
+        let query_rectangle = VectorQueryRectangle {
             bbox: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
@@ -756,7 +762,7 @@ mod tests {
         let ctx_minimal_chunks = MockQueryContext::new(0);
 
         let query = query_processor
-            .query(query_rectangle, &ctx_minimal_chunks)
+            .vector_query(query_rectangle, &ctx_minimal_chunks)
             .await
             .unwrap();
 
@@ -771,7 +777,7 @@ mod tests {
         assert_eq!(result[1], points2);
 
         let query = query_processor
-            .query(query_rectangle, &ctx_one_chunk)
+            .vector_query(query_rectangle, &ctx_one_chunk)
             .await
             .unwrap();
 

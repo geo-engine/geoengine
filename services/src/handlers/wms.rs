@@ -2,7 +2,7 @@ use snafu::ResultExt;
 use warp::reply::Reply;
 use warp::{http::Response, Filter, Rejection};
 
-use geoengine_datatypes::primitives::BoundingBox2D;
+use geoengine_datatypes::primitives::{BoundingBox2D, BoxShaped};
 use geoengine_datatypes::{
     operations::image::{Colorizer, ToPng},
     primitives::SpatialResolution,
@@ -19,8 +19,7 @@ use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 
 use geoengine_datatypes::primitives::{TimeInstance, TimeInterval};
-use geoengine_operators::engine::RasterOperator;
-use geoengine_operators::engine::{QueryRectangle, ResultDescriptor};
+use geoengine_operators::engine::{RasterOperator, ResultDescriptor, VectorQueryRectangle};
 use geoengine_operators::processing::{Reprojection, ReprojectionParams};
 use geoengine_operators::{
     call_on_generic_raster_processor, util::raster_stream_to_png::raster_stream_to_png_bytes,
@@ -263,7 +262,7 @@ async fn get_map<C: Context>(
     let x_query_resolution = query_bbox.size_x() / f64::from(request.width);
     let y_query_resolution = query_bbox.size_y() / f64::from(request.height);
 
-    let query_rect = QueryRectangle {
+    let query_rect = VectorQueryRectangle {
         bbox: query_bbox,
         time_interval: request.time.unwrap_or_else(|| {
             let time = TimeInstance::from(chrono::offset::Utc::now());
@@ -273,7 +272,8 @@ async fn get_map<C: Context>(
             x_query_resolution,
             y_query_resolution,
         ),
-    };
+    }
+    .into();
 
     let query_ctx = ctx.query_context()?;
 
@@ -344,7 +344,10 @@ mod tests {
     use crate::handlers::{handle_rejection, ErrorResponse};
     use crate::util::tests::{check_allowed_http_methods, register_ndvi_workflow_helper};
     use geoengine_datatypes::operations::image::RgbaColor;
-    use geoengine_operators::engine::{ExecutionContext, RasterQueryProcessor};
+    use geoengine_datatypes::primitives::SpatialPartition;
+    use geoengine_operators::engine::{
+        ExecutionContext, RasterQueryProcessor, RasterQueryRectangle,
+    };
     use geoengine_operators::source::GdalSourceProcessor;
     use geoengine_operators::util::gdal::create_ndvi_meta_data;
     use std::convert::TryInto;
@@ -441,12 +444,13 @@ mod tests {
             phantom_data: Default::default(),
         };
 
-        let query_bbox = BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap();
+        let query_partition =
+            SpatialPartition::new((-180., 90.).into(), (180., -90.).into()).unwrap();
 
         let image_bytes = raster_stream_to_png_bytes(
             gdal_source.boxed(),
-            QueryRectangle {
-                bbox: query_bbox,
+            RasterQueryRectangle {
+                partition: query_partition,
                 time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
                     .unwrap(),
                 spatial_resolution: SpatialResolution::new_unchecked(1.0, 1.0),

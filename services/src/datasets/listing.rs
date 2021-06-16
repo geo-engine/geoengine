@@ -6,7 +6,8 @@ use crate::util::user_input::{UserInput, Validated};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::DatasetId;
 use geoengine_operators::engine::{
-    MetaDataProvider, RasterResultDescriptor, TypedResultDescriptor, VectorResultDescriptor,
+    MetaDataProvider, RasterQueryRectangle, RasterResultDescriptor, TypedResultDescriptor,
+    VectorQueryRectangle, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
@@ -67,12 +68,11 @@ pub enum OrderBy {
 
 /// Listing of stored datasets
 #[async_trait]
-pub trait DatasetProvider:
-    Send
+pub trait DatasetProvider: Send
     + Sync
-    + MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>
-    + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor>
-    + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor>
+    + MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
+    + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
+    + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
 {
     // TODO: filter, paging
     async fn list(

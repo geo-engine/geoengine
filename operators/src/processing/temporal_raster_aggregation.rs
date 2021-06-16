@@ -1,19 +1,22 @@
 use crate::adapters::{FoldTileAccu, FoldTileAccuMut};
-use crate::engine::{ExecutionContext, Operator, RasterOperator, SingleRasterSource};
+use crate::engine::{
+    ExecutionContext, Operator, RasterOperator, RasterQueryRectangle, SingleRasterSource,
+};
 use crate::{
     adapters::SubQueryTileAggregator,
     engine::{
-        InitializedOperator, InitializedRasterOperator, QueryRectangle, RasterQueryProcessor,
-        RasterResultDescriptor, TypedRasterQueryProcessor,
+        InitializedRasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+        TypedRasterQueryProcessor,
     },
     error,
     util::Result,
 };
 use async_trait::async_trait;
 use futures::{Future, FutureExt, StreamExt, TryFuture};
+use geoengine_datatypes::primitives::SpatialPartitioned;
 use geoengine_datatypes::raster::{EmptyGrid2D, GridOrEmpty};
 use geoengine_datatypes::{
-    primitives::{SpatialBounded, TimeInstance, TimeInterval, TimeStep},
+    primitives::{TimeInstance, TimeInterval, TimeStep},
     raster::{Grid2D, Pixel, RasterTile2D, TileInformation, TilingSpecification},
 };
 use log::debug;
@@ -52,7 +55,7 @@ impl RasterOperator for TemporalRasterAggregation {
     async fn initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
-    ) -> Result<Box<InitializedRasterOperator>> {
+    ) -> Result<Box<dyn InitializedRasterOperator>> {
         ensure!(self.params.window.step > 0, error::WindowSizeMustNotBeZero);
 
         let source = self.sources.raster.initialize(context).await?;
@@ -77,14 +80,12 @@ impl RasterOperator for TemporalRasterAggregation {
 pub struct InitializedTemporalRasterAggregation {
     aggregation_type: Aggregation,
     window: TimeStep,
-    source: Box<InitializedRasterOperator>,
+    source: Box<dyn InitializedRasterOperator>,
     result_descriptor: RasterResultDescriptor,
     tiling_specification: TilingSpecification,
 }
 
-impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
-    for InitializedTemporalRasterAggregation
-{
+impl InitializedRasterOperator for InitializedTemporalRasterAggregation {
     fn result_descriptor(&self) -> &RasterResultDescriptor {
         &self.result_descriptor
     }
@@ -94,14 +95,14 @@ impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
 
         let res = call_on_generic_raster_processor!(
             source_processor, p =>
-            TemporalRasterAggregationProcessor::new(
+           TemporalRasterAggregationProcessor::new(
                 self.aggregation_type,
                 self.window,
                 p,
                 self.tiling_specification,
                 self.source.result_descriptor().no_data_value
-            )
-            .boxed().into()
+            ).boxed()
+            .into()
         );
 
         Ok(res)
@@ -166,7 +167,7 @@ where
     #[allow(clippy::too_many_lines)]
     async fn raster_query<'a>(
         &'a self,
-        query: crate::engine::QueryRectangle,
+        query: crate::engine::RasterQueryRectangle,
         ctx: &'a dyn crate::engine::QueryContext,
     ) -> Result<futures::stream::BoxStream<'a, Result<RasterTile2D<Self::RasterType>>>> {
         match self.aggregation_type {
@@ -599,7 +600,7 @@ where
     fn new_fold_accu(
         &self,
         tile_info: TileInformation,
-        query_rect: QueryRectangle,
+        query_rect: RasterQueryRectangle,
     ) -> Result<Self::TileAccu> {
         let output_raster = if let Some(no_data_value) = self.result_no_data_value() {
             EmptyGrid2D::new(tile_info.tile_size_in_pixels, no_data_value).into()
@@ -624,11 +625,11 @@ where
     fn tile_query_rectangle(
         &self,
         tile_info: TileInformation,
-        query_rect: QueryRectangle,
+        query_rect: RasterQueryRectangle,
         start_time: TimeInstance,
-    ) -> Result<QueryRectangle> {
-        Ok(QueryRectangle {
-            bbox: tile_info.spatial_bounds(),
+    ) -> Result<RasterQueryRectangle> {
+        Ok(RasterQueryRectangle {
+            partition: tile_info.spatial_partition(),
             spatial_resolution: query_rect.spatial_resolution,
             time_interval: TimeInterval::new(start_time, (start_time + self.step)?)?,
         })
@@ -642,14 +643,14 @@ where
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::{
-        primitives::{BoundingBox2D, Measurement, SpatialResolution},
+        primitives::{Measurement, SpatialPartition, SpatialResolution},
         raster::{EmptyGrid, EmptyGrid2D, RasterDataType},
         spatial_reference::SpatialReference,
     };
     use num_traits::AsPrimitive;
 
     use crate::{
-        engine::{MockExecutionContext, MockQueryContext},
+        engine::{MockExecutionContext, MockQueryContext, RasterQueryRectangle},
         mock::{MockRasterSource, MockRasterSourceParams},
     };
 
@@ -691,8 +692,8 @@ mod tests {
             tiling_specification: TilingSpecification::new((0., 0.).into(), [3, 2].into()),
             ..Default::default()
         };
-        let query_rect = QueryRectangle {
-            bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (4., 3.).into()),
+        let query_rect = RasterQueryRectangle {
+            partition: SpatialPartition::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 40),
             spatial_resolution: SpatialResolution::one(),
         };
@@ -815,8 +816,8 @@ mod tests {
             tiling_specification: TilingSpecification::new((0., 0.).into(), [3, 2].into()),
             ..Default::default()
         };
-        let query_rect = QueryRectangle {
-            bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (4., 3.).into()),
+        let query_rect = RasterQueryRectangle {
+            partition: SpatialPartition::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 40),
             spatial_resolution: SpatialResolution::one(),
         };
@@ -944,8 +945,8 @@ mod tests {
             tiling_specification: TilingSpecification::new((0., 0.).into(), [3, 2].into()),
             ..Default::default()
         };
-        let query_rect = QueryRectangle {
-            bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (4., 3.).into()),
+        let query_rect = RasterQueryRectangle {
+            partition: SpatialPartition::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 40),
             spatial_resolution: SpatialResolution::one(),
         };
@@ -1078,8 +1079,8 @@ mod tests {
             tiling_specification: TilingSpecification::new((0., 0.).into(), [3, 2].into()),
             ..Default::default()
         };
-        let query_rect = QueryRectangle {
-            bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (4., 3.).into()),
+        let query_rect = RasterQueryRectangle {
+            partition: SpatialPartition::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 40),
             spatial_resolution: SpatialResolution::one(),
         };
@@ -1210,8 +1211,8 @@ mod tests {
             tiling_specification: TilingSpecification::new((0., 0.).into(), [3, 2].into()),
             ..Default::default()
         };
-        let query_rect = QueryRectangle {
-            bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (2., 3.).into()),
+        let query_rect = RasterQueryRectangle {
+            partition: SpatialPartition::new_unchecked((0., 0.).into(), (2., 3.).into()),
             time_interval: TimeInterval::new_unchecked(0, 20),
             spatial_resolution: SpatialResolution::one(),
         };
@@ -1286,8 +1287,8 @@ mod tests {
             tiling_specification: TilingSpecification::new((0., 0.).into(), [3, 2].into()),
             ..Default::default()
         };
-        let query_rect = QueryRectangle {
-            bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (4., 3.).into()),
+        let query_rect = RasterQueryRectangle {
+            partition: SpatialPartition::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
         };
@@ -1379,8 +1380,8 @@ mod tests {
             tiling_specification: TilingSpecification::new((0., 0.).into(), [3, 2].into()),
             ..Default::default()
         };
-        let query_rect = QueryRectangle {
-            bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (4., 3.).into()),
+        let query_rect = RasterQueryRectangle {
+            partition: SpatialPartition::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
         };
@@ -1472,8 +1473,8 @@ mod tests {
             tiling_specification: TilingSpecification::new((0., 0.).into(), [3, 2].into()),
             ..Default::default()
         };
-        let query_rect = QueryRectangle {
-            bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (4., 3.).into()),
+        let query_rect = RasterQueryRectangle {
+            partition: SpatialPartition::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
         };
@@ -1564,8 +1565,8 @@ mod tests {
             tiling_specification: TilingSpecification::new((0., 0.).into(), [3, 2].into()),
             ..Default::default()
         };
-        let query_rect = QueryRectangle {
-            bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (4., 3.).into()),
+        let query_rect = RasterQueryRectangle {
+            partition: SpatialPartition::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
         };

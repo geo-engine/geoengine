@@ -1,7 +1,6 @@
 use crate::engine::{
-    InitializedOperator, InitializedRasterOperator, Operator, QueryContext, QueryProcessor,
-    QueryRectangle, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-    TypedRasterQueryProcessor,
+    InitializedRasterOperator, Operator, QueryContext, RasterOperator, RasterQueryProcessor,
+    RasterQueryRectangle, RasterResultDescriptor, TypedRasterQueryProcessor,
 };
 use crate::error::Error;
 use crate::util::Result;
@@ -153,7 +152,7 @@ impl RasterOperator for Expression {
     async fn initialize(
         self: Box<Self>,
         context: &dyn crate::engine::ExecutionContext,
-    ) -> Result<Box<InitializedRasterOperator>> {
+    ) -> Result<Box<dyn InitializedRasterOperator>> {
         // TODO: handle more then exactly 2 inputs, i.e. 1-8
         ensure!(
             self.sources.number_of_sources() == 2,
@@ -218,13 +217,13 @@ pub struct InitializedExpression {
 }
 
 pub struct ExpressionInitializedSources {
-    a: Box<InitializedRasterOperator>,
-    b: Option<Box<InitializedRasterOperator>>,
-    c: Option<Box<InitializedRasterOperator>>,
+    a: Box<dyn InitializedRasterOperator>,
+    b: Option<Box<dyn InitializedRasterOperator>>,
+    c: Option<Box<dyn InitializedRasterOperator>>,
 }
 
 impl ExpressionInitializedSources {
-    fn iter(&self) -> impl Iterator<Item = &Box<InitializedRasterOperator>> {
+    fn iter(&self) -> impl Iterator<Item = &Box<dyn InitializedRasterOperator>> {
         let mut sources = vec![&self.a];
 
         if let Some(o) = self.b.as_ref() {
@@ -239,9 +238,7 @@ impl ExpressionInitializedSources {
     }
 }
 
-impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
-    for InitializedExpression
-{
+impl InitializedRasterOperator for InitializedExpression {
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         // TODO: handle different number of sources
 
@@ -358,26 +355,25 @@ __kernel void expressionkernel(
 }
 
 #[async_trait]
-impl<'a, T1, T2, TO> QueryProcessor for ExpressionQueryProcessor<T1, T2, TO>
+impl<'a, T1, T2, TO> RasterQueryProcessor for ExpressionQueryProcessor<T1, T2, TO>
 where
     T1: Pixel,
     T2: Pixel,
     TO: Pixel,
 {
-    type Output = RasterTile2D<TO>;
-
-    async fn query<'b>(
+    type RasterType = TO;
+    async fn raster_query<'b>(
         &'b self,
-        query: QueryRectangle,
+        query: RasterQueryRectangle,
         ctx: &'b dyn QueryContext,
-    ) -> Result<BoxStream<'b, Result<RasterTile2D<TO>>>> {
+    ) -> Result<BoxStream<'b, Result<RasterTile2D<Self::RasterType>>>> {
         // TODO: validate that tiles actually fit together
         let mut cl_program = self.cl_program.clone();
         Ok(self
             .source_a
-            .query(query, ctx)
+            .raster_query(query, ctx)
             .await?
-            .zip(self.source_b.query(query, ctx).await?)
+            .zip(self.source_b.raster_query(query, ctx).await?)
             .map(move |(a, b)| match (a, b) {
                 (Ok(a), Ok(b)) if a.grid_array.is_empty() && b.grid_array.is_empty() => {
                     Ok(RasterTile2D::new(
@@ -429,7 +425,7 @@ mod tests {
     use crate::engine::{MockExecutionContext, MockQueryContext};
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, Measurement, SpatialResolution, TimeInterval,
+        Measurement, SpatialPartition, SpatialResolution, TimeInterval,
     };
     use geoengine_datatypes::raster::TileInformation;
     use geoengine_datatypes::spatial_reference::SpatialReference;
@@ -529,9 +525,9 @@ mod tests {
 
         let ctx = MockQueryContext::new(1);
         let result_stream = processor
-            .query(
-                QueryRectangle {
-                    bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (3., 4.).into()),
+            .raster_query(
+                RasterQueryRectangle {
+                    partition: SpatialPartition::new_unchecked((0., 0.).into(), (3., 4.).into()),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
                 },

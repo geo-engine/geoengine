@@ -1,8 +1,8 @@
-use crate::engine::{QueryContext, QueryProcessor, QueryRectangle};
+use crate::engine::{QueryContext, VectorQueryRectangle};
 use crate::{
     engine::{
-        ExecutionContext, InitializedOperator, InitializedVectorOperator, SourceOperator,
-        TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+        ExecutionContext, InitializedVectorOperator, SourceOperator, TypedVectorQueryProcessor,
+        VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
     },
     util::Result,
 };
@@ -22,13 +22,13 @@ pub struct MockPointSourceProcessor {
 }
 
 #[async_trait]
-impl QueryProcessor for MockPointSourceProcessor {
-    type Output = MultiPointCollection;
-    async fn query<'a>(
+impl VectorQueryProcessor for MockPointSourceProcessor {
+    type VectorType = MultiPointCollection;
+    async fn vector_query<'a>(
         &'a self,
-        _query: QueryRectangle,
+        _query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
-    ) -> Result<BoxStream<'a, Result<MultiPointCollection>>> {
+    ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
         let chunk_size = ctx.chunk_byte_size() / std::mem::size_of::<Coordinate2D>();
         Ok(
             stream::iter(self.points.chunks(chunk_size).map(move |chunk| {
@@ -56,7 +56,7 @@ impl VectorOperator for MockPointSource {
     async fn initialize(
         self: Box<Self>,
         _context: &dyn ExecutionContext,
-    ) -> Result<Box<InitializedVectorOperator>> {
+    ) -> Result<Box<dyn InitializedVectorOperator>> {
         Ok(InitializedMockPointSource {
             result_descriptor: VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint,
@@ -74,9 +74,7 @@ pub struct InitializedMockPointSource {
     points: Vec<Coordinate2D>,
 }
 
-impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
-    for InitializedMockPointSource
-{
+impl InitializedVectorOperator for InitializedMockPointSource {
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
         Ok(TypedVectorQueryProcessor::MultiPoint(
             MockPointSourceProcessor {
@@ -131,7 +129,7 @@ mod tests {
             _ => panic!(),
         };
 
-        let query_rectangle = QueryRectangle {
+        let query_rectangle = VectorQueryRectangle {
             bbox: BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),

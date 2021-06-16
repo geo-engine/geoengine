@@ -5,9 +5,9 @@ use snafu::ensure;
 use crate::{
     error::{self, Error},
     primitives::{
-        BoundingBox2D, Coordinate2D, Line, MultiLineString, MultiLineStringAccess,
+        BoundingBox2D, BoxShaped, Coordinate2D, Line, MultiLineString, MultiLineStringAccess,
         MultiLineStringRef, MultiPoint, MultiPointAccess, MultiPointRef, MultiPolygon,
-        MultiPolygonAccess, MultiPolygonRef, SpatialBounded, SpatialResolution,
+        MultiPolygonAccess, MultiPolygonRef, SpatialBounded, SpatialPartition, SpatialResolution,
     },
     spatial_reference::SpatialReference,
     util::Result,
@@ -300,9 +300,42 @@ where
     }
 }
 
+impl<P> Reproject<P> for SpatialPartition
+where
+    P: CoordinateProjection,
+{
+    type Out = SpatialPartition;
+    fn reproject(&self, projector: &P) -> Result<SpatialPartition> {
+        const POINTS_PER_LINE: i32 = 7;
+        let upper_line = Line::new(self.upper_left(), self.upper_right())
+            .with_additional_equi_spaced_coords(POINTS_PER_LINE);
+        let right_line = Line::new(self.upper_right(), self.lower_right())
+            .with_additional_equi_spaced_coords(POINTS_PER_LINE);
+        let lower_line = Line::new(self.lower_right(), self.lower_left())
+            .with_additional_equi_spaced_coords(POINTS_PER_LINE);
+        let left_line = Line::new(self.lower_left(), self.upper_left())
+            .with_additional_equi_spaced_coords(POINTS_PER_LINE);
+
+        let outline_coordinates: Vec<Coordinate2D> = upper_line
+            .chain(right_line)
+            .chain(lower_line)
+            .chain(left_line)
+            .collect();
+
+        let proj_outline_coordinates = projector.project_coordinates(&outline_coordinates)?;
+
+        let bbox = MultiPoint::new_unchecked(proj_outline_coordinates).spatial_bounds();
+
+        Ok(SpatialPartition::new_unchecked(
+            bbox.upper_left(),
+            bbox.lower_right(),
+        ))
+    }
+}
+
 #[inline]
-fn euclidian_pixel_distance(
-    bbox: BoundingBox2D,
+fn euclidian_pixel_distance<B: BoxShaped>(
+    bbox: B,
     spatial_resolution: SpatialResolution,
 ) -> Result<f64> {
     ensure!(
@@ -347,8 +380,8 @@ fn diag_distance(ul_coord: Coordinate2D, lr_coord: Coordinate2D) -> f64 {
 /// A suggested pixel size is calculated using the approach used by GDAL:
 /// The upper left and the lower right coordinates of the bounding box are projected in the target SRS.
 /// Then, the distance between both points in the target SRS is devided by the distance in pixels of the source.
-pub fn suggest_pixel_size_like_gdal<P: CoordinateProjection>(
-    bbox: BoundingBox2D,
+pub fn suggest_pixel_size_like_gdal<P: CoordinateProjection, B: BoxShaped>(
+    bbox: B,
     spatial_resolution: SpatialResolution,
     projector: &P,
 ) -> Result<SpatialResolution> {
@@ -367,8 +400,8 @@ pub fn suggest_pixel_size_like_gdal<P: CoordinateProjection>(
 
 /// This approach uses the GDAL way to suggest the pixel size. However, we check both diagonals and take the smaller one.
 /// This method fails if the bbox cannot be projected
-pub fn suggest_pixel_size_from_diag_cross<P: CoordinateProjection>(
-    bbox: BoundingBox2D,
+pub fn suggest_pixel_size_from_diag_cross<P: CoordinateProjection, B: BoxShaped>(
+    bbox: B,
     spatial_resolution: SpatialResolution,
     projector: &P,
 ) -> Result<SpatialResolution> {
@@ -390,10 +423,10 @@ pub fn suggest_pixel_size_from_diag_cross<P: CoordinateProjection>(
     min_dist_r.map(|d| SpatialResolution::new_unchecked(d / diag_pixels, d / diag_pixels))
 }
 
-/// A version of `suggest_pixel_size_from_diag_cross` that takes a `bbox` and a projected counterpart as input
-pub fn suggest_pixel_size_from_diag_cross_projected(
-    bbox: BoundingBox2D,
-    bbox_projected: BoundingBox2D,
+/// A version of `suggest_pixel_size_from_diag_cross` that takes a `partition` and a projected counterpart as input
+pub fn suggest_pixel_size_from_diag_cross_projected<B: BoxShaped>(
+    bbox: B,
+    bbox_projected: B,
     spatial_resolution: SpatialResolution,
 ) -> Result<SpatialResolution> {
     let diag_pixels = euclidian_pixel_distance(bbox, spatial_resolution)?;

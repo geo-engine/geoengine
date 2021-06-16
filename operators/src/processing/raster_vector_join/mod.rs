@@ -4,8 +4,8 @@ mod points_aggregated;
 mod util;
 
 use crate::engine::{
-    ExecutionContext, InitializedOperator, InitializedRasterOperator, InitializedVectorOperator,
-    Operator, SingleVectorMultipleRasterSources, TypedVectorQueryProcessor, VectorOperator,
+    ExecutionContext, InitializedRasterOperator, InitializedVectorOperator, Operator,
+    SingleVectorMultipleRasterSources, TypedVectorQueryProcessor, VectorOperator,
     VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::error;
@@ -52,7 +52,7 @@ impl VectorOperator for RasterVectorJoin {
     async fn initialize(
         mut self: Box<Self>,
         context: &dyn ExecutionContext,
-    ) -> Result<Box<InitializedVectorOperator>> {
+    ) -> Result<Box<dyn InitializedVectorOperator>> {
         ensure!(
             (1..=MAX_NUMBER_OF_RASTER_INPUTS).contains(&self.sources.rasters.len()),
             error::InvalidNumberOfRasterInputs {
@@ -130,14 +130,12 @@ impl VectorOperator for RasterVectorJoin {
 
 pub struct InitializedRasterVectorJoin {
     result_descriptor: VectorResultDescriptor,
-    vector_source: Box<InitializedVectorOperator>,
-    raster_sources: Vec<Box<InitializedRasterOperator>>,
+    vector_source: Box<dyn InitializedVectorOperator>,
+    raster_sources: Vec<Box<dyn InitializedRasterOperator>>,
     state: RasterVectorJoinParams,
 }
 
-impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
-    for InitializedRasterVectorJoin
-{
+impl InitializedVectorOperator for InitializedRasterVectorJoin {
     fn result_descriptor(&self) -> &VectorResultDescriptor {
         &self.result_descriptor
     }
@@ -181,7 +179,7 @@ mod tests {
     use super::*;
 
     use crate::engine::{
-        MockExecutionContext, MockQueryContext, QueryProcessor, QueryRectangle, RasterOperator,
+        MockExecutionContext, MockQueryContext, RasterOperator, VectorQueryRectangle,
     };
     use crate::mock::MockFeatureCollectionSource;
     use crate::source::{GdalSource, GdalSourceParameters};
@@ -283,8 +281,8 @@ mod tests {
         let query_processor = operator.query_processor().unwrap().multi_point().unwrap();
 
         let result = query_processor
-            .query(
-                QueryRectangle {
+            .vector_query(
+                VectorQueryRectangle {
                     bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
@@ -354,8 +352,8 @@ mod tests {
         let query_processor = operator.query_processor().unwrap().multi_point().unwrap();
 
         let result = query_processor
-            .query(
-                QueryRectangle {
+            .vector_query(
+                VectorQueryRectangle {
                     bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
@@ -426,8 +424,8 @@ mod tests {
         let query_processor = operator.query_processor().unwrap().multi_point().unwrap();
 
         let result = query_processor
-            .query(
-                QueryRectangle {
+            .vector_query(
+                VectorQueryRectangle {
                     bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),

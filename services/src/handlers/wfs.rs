@@ -21,7 +21,8 @@ use geoengine_datatypes::{
 };
 use geoengine_operators::engine::VectorOperator;
 use geoengine_operators::engine::{
-    QueryContext, QueryRectangle, ResultDescriptor, TypedVectorQueryProcessor, VectorQueryProcessor,
+    QueryContext, ResultDescriptor, TypedVectorQueryProcessor, VectorQueryProcessor,
+    VectorQueryRectangle,
 };
 use geoengine_operators::processing::{Reprojection, ReprojectionParams};
 use serde_json::json;
@@ -425,7 +426,7 @@ async fn get_feature<C: Context>(
 
     let processor = initialized.query_processor().context(error::Operator)?;
 
-    let query_rect = QueryRectangle {
+    let query_rect = VectorQueryRectangle {
         bbox: request.bbox,
         time_interval: request.time.unwrap_or_else(|| {
             let time = TimeInstance::from(chrono::offset::Utc::now());
@@ -463,7 +464,7 @@ async fn get_feature<C: Context>(
 
 async fn vector_stream_to_geojson<G>(
     processor: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
-    query_rect: QueryRectangle,
+    query_rect: VectorQueryRectangle,
     query_ctx: &dyn QueryContext,
 ) -> Result<serde_json::Value>
 where

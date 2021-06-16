@@ -18,8 +18,8 @@ use geoengine_datatypes::raster::GridShape2D;
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_operators::concurrency::{ThreadPool, ThreadPoolContext};
 use geoengine_operators::engine::{
-    ExecutionContext, MetaData, MetaDataProvider, QueryContext, RasterResultDescriptor,
-    VectorResultDescriptor,
+    ExecutionContext, MetaData, MetaDataProvider, QueryContext, RasterQueryRectangle,
+    RasterResultDescriptor, VectorQueryRectangle, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
@@ -104,9 +104,12 @@ where
 impl<S, D> ExecutionContext for ExecutionContextImpl<S, D>
 where
     D: DatasetDb<S>
-        + MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>
-        + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor>
-        + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor>,
+        + MetaDataProvider<
+            MockDatasetDataSourceLoadingInfo,
+            VectorResultDescriptor,
+            VectorQueryRectangle,
+        > + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
+        + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>,
     S: Session,
 {
     fn thread_pool(&self) -> ThreadPoolContext {
@@ -132,10 +135,16 @@ where
 
 // TODO: use macro(?) for delegating meta_data function to DatasetDB to avoid redundant code
 #[async_trait]
-impl<S, D> MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>
+impl<S, D>
+    MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
     for ExecutionContextImpl<S, D>
 where
-    D: DatasetDb<S> + MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>,
+    D: DatasetDb<S>
+        + MetaDataProvider<
+            MockDatasetDataSourceLoadingInfo,
+            VectorResultDescriptor,
+            VectorQueryRectangle,
+        >,
     S: Session,
 {
     // TODO: make async
@@ -143,7 +152,13 @@ where
         &self,
         dataset: &DatasetId,
     ) -> Result<
-        Box<dyn MetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>>,
+        Box<
+            dyn MetaData<
+                MockDatasetDataSourceLoadingInfo,
+                VectorResultDescriptor,
+                VectorQueryRectangle,
+            >,
+        >,
         geoengine_operators::error::Error,
     > {
         match dataset {
@@ -167,9 +182,11 @@ where
 
 // TODO: use macro(?) for delegating meta_data function to DatasetDB to avoid redundant code
 #[async_trait]
-impl<S, D> MetaDataProvider<OgrSourceDataset, VectorResultDescriptor> for ExecutionContextImpl<S, D>
+impl<S, D> MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
+    for ExecutionContextImpl<S, D>
 where
-    D: DatasetDb<S> + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor>,
+    D: DatasetDb<S>
+        + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
     S: Session,
 {
     // TODO: make async
@@ -177,7 +194,7 @@ where
         &self,
         dataset: &DatasetId,
     ) -> Result<
-        Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor>>,
+        Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
         match dataset {
@@ -201,9 +218,11 @@ where
 
 // TODO: use macro(?) for delegating meta_data function to DatasetDB to avoid redundant code
 #[async_trait]
-impl<S, D> MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor> for ExecutionContextImpl<S, D>
+impl<S, D> MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
+    for ExecutionContextImpl<S, D>
 where
-    D: DatasetDb<S> + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor>,
+    D: DatasetDb<S>
+        + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>,
     S: Session,
 {
     // TODO: make async
@@ -211,7 +230,7 @@ where
         &self,
         dataset: &DatasetId,
     ) -> Result<
-        Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor>>,
+        Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
         match dataset {

@@ -11,8 +11,8 @@ use geoengine_datatypes::{
 use geoengine_datatypes::{collections::MultiPointCollection, raster::RasterTile2D};
 
 use crate::engine::{
-    QueryContext, QueryProcessor, QueryRectangle, RasterQueryProcessor, TypedRasterQueryProcessor,
-    VectorQueryProcessor,
+    QueryContext, RasterQueryProcessor, TypedRasterQueryProcessor, VectorQueryProcessor,
+    VectorQueryRectangle,
 };
 use crate::util::Result;
 use crate::{adapters::RasterStreamExt, error::Error};
@@ -45,7 +45,7 @@ impl RasterPointJoinProcessor {
         points: BoxStream<'a, Result<MultiPointCollection>>,
         raster_processor: &'a TypedRasterQueryProcessor,
         new_column_name: &'a str,
-        query: QueryRectangle,
+        query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> BoxStream<'a, Result<MultiPointCollection>> {
         let stream = points.and_then(async move |points| {
@@ -63,7 +63,7 @@ impl RasterPointJoinProcessor {
         points: MultiPointCollection,
         raster_processor: &'a TypedRasterQueryProcessor,
         new_column_name: &'a str,
-        query: QueryRectangle,
+        query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<MultiPointCollection>>> {
         call_on_generic_raster_processor!(raster_processor, raster_processor => {
@@ -75,11 +75,11 @@ impl RasterPointJoinProcessor {
         points: MultiPointCollection,
         raster_processor: &'a dyn RasterQueryProcessor<RasterType = P>,
         new_column_name: &'a str,
-        query: QueryRectangle,
+        query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<MultiPointCollection>>> {
         // make qrect smaller wrt. points
-        let query = QueryRectangle {
+        let query = VectorQueryRectangle {
             bbox: points
                 .bbox()
                 .and_then(|bbox| bbox.intersection(&query.bbox))
@@ -91,7 +91,7 @@ impl RasterPointJoinProcessor {
             spatial_resolution: query.spatial_resolution,
         };
 
-        let raster_query = raster_processor.raster_query(query, ctx).await?;
+        let raster_query = raster_processor.raster_query(query.into(), ctx).await?;
 
         let points = Arc::new(points);
 
@@ -251,10 +251,10 @@ impl VectorQueryProcessor for RasterPointJoinProcessor {
 
     async fn vector_query<'a>(
         &'a self,
-        query: QueryRectangle,
+        query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
-        let mut stream = self.points.query(query, ctx).await?;
+        let mut stream = self.points.vector_query(query, ctx).await?;
 
         for (raster_processor, new_column_name) in
             self.raster_processors.iter().zip(&self.column_names)
@@ -272,8 +272,8 @@ impl VectorQueryProcessor for RasterPointJoinProcessor {
 mod tests {
     use super::*;
 
-    use crate::engine::MockQueryContext;
     use crate::engine::{MockExecutionContext, RasterOperator, VectorOperator};
+    use crate::engine::{MockQueryContext, VectorQueryRectangle};
     use crate::mock::MockFeatureCollectionSource;
     use crate::source::{GdalSource, GdalSourceParameters};
     use crate::util::gdal::add_ndvi_dataset;
@@ -333,7 +333,7 @@ mod tests {
 
         let mut result = processor
             .vector_query(
-                QueryRectangle {
+                VectorQueryRectangle {
                     bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     time_interval: time_instant,
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
@@ -420,7 +420,7 @@ mod tests {
 
         let mut result = processor
             .vector_query(
-                QueryRectangle {
+                VectorQueryRectangle {
                     bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     time_interval: TimeInterval::new(
                         NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
@@ -515,7 +515,7 @@ mod tests {
 
         let mut result = processor
             .vector_query(
-                QueryRectangle {
+                VectorQueryRectangle {
                     bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     time_interval: TimeInterval::new_instant(
                         NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
@@ -612,7 +612,7 @@ mod tests {
 
         let mut result = processor
             .vector_query(
-                QueryRectangle {
+                VectorQueryRectangle {
                     bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     time_interval: TimeInterval::new(
                         NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),

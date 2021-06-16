@@ -1,4 +1,6 @@
-use super::query::{QueryContext, QueryRectangle};
+use super::query::QueryContext;
+use super::RasterQueryRectangle;
+use super::VectorQueryRectangle;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
@@ -9,17 +11,6 @@ use geoengine_datatypes::plots::{PlotData, PlotOutputFormat};
 use geoengine_datatypes::raster::Pixel;
 use geoengine_datatypes::{collections::MultiPointCollection, raster::RasterTile2D};
 
-/// An instantiation of an operator that produces a stream of results for a query
-#[async_trait]
-pub trait QueryProcessor: Send + Sync {
-    type Output;
-    async fn query<'a>(
-        &'a self,
-        query: QueryRectangle,
-        ctx: &'a dyn QueryContext,
-    ) -> Result<BoxStream<'a, Result<Self::Output>>>;
-}
-
 /// An instantiation of a raster operator that produces a stream of raster results for a query
 #[async_trait]
 pub trait RasterQueryProcessor: Sync + Send {
@@ -27,7 +18,7 @@ pub trait RasterQueryProcessor: Sync + Send {
 
     async fn raster_query<'a>(
         &'a self,
-        query: QueryRectangle,
+        query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<RasterTile2D<Self::RasterType>>>>;
 
@@ -39,21 +30,21 @@ pub trait RasterQueryProcessor: Sync + Send {
     }
 }
 
-#[async_trait]
-impl<S, T> RasterQueryProcessor for S
-where
-    S: QueryProcessor<Output = RasterTile2D<T>> + Sync + Send,
-    T: Pixel,
-{
-    type RasterType = T;
-    async fn raster_query<'a>(
-        &'a self,
-        query: QueryRectangle,
-        ctx: &'a dyn QueryContext,
-    ) -> Result<BoxStream<'a, Result<RasterTile2D<Self::RasterType>>>> {
-        self.query(query, ctx).await
-    }
-}
+// #[async_trait]
+// impl<S, T> RasterQueryProcessor for S
+// where
+//     S: QueryProcessor<Output = RasterTile2D<T>> + Sync + Send,
+//     T: Pixel,
+// {
+//     type RasterType = T;
+//     async fn raster_query<'a>(
+//         &'a self,
+//         query: QueryRectangle,
+//         ctx: &'a dyn QueryContext,
+//     ) -> Result<BoxStream<'a, Result<RasterTile2D<Self::RasterType>>>> {
+//         self.query(query, ctx).await
+//     }
+// }
 
 /// An instantiation of a vector operator that produces a stream of vector results for a query
 #[async_trait]
@@ -61,7 +52,7 @@ pub trait VectorQueryProcessor: Sync + Send {
     type VectorType;
     async fn vector_query<'a>(
         &'a self,
-        query: QueryRectangle,
+        query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::VectorType>>>;
 
@@ -73,21 +64,21 @@ pub trait VectorQueryProcessor: Sync + Send {
     }
 }
 
-#[async_trait]
-impl<S, VD> VectorQueryProcessor for S
-where
-    S: QueryProcessor<Output = VD> + Sync + Send,
-{
-    type VectorType = VD;
+// #[async_trait]
+// impl<S, VD> VectorQueryProcessor for S
+// where
+//     S: QueryProcessor<Output = VD> + Sync + Send,
+// {
+//     type VectorType = VD;
 
-    async fn vector_query<'a>(
-        &'a self,
-        query: QueryRectangle,
-        ctx: &'a dyn QueryContext,
-    ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
-        self.query(query, ctx).await
-    }
-}
+//     async fn vector_query<'a>(
+//         &'a self,
+//         query: QueryRectangle,
+//         ctx: &'a dyn QueryContext,
+//     ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
+//         self.query(query, ctx).await
+//     }
+// }
 
 /// An instantiation of a plot operator that produces a stream of vector results for a query
 #[async_trait]
@@ -98,7 +89,7 @@ pub trait PlotQueryProcessor: Sync + Send {
 
     async fn plot_query<'a>(
         &'a self,
-        query: QueryRectangle,
+        query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<Self::OutputFormat>;
 
@@ -110,45 +101,62 @@ pub trait PlotQueryProcessor: Sync + Send {
     }
 }
 
-#[async_trait]
-impl<T> QueryProcessor for Box<dyn QueryProcessor<Output = T>> {
-    type Output = T;
-    async fn query<'a>(
-        &'a self,
-        query: QueryRectangle,
-        ctx: &'a dyn QueryContext,
-    ) -> Result<BoxStream<'a, Result<Self::Output>>> {
-        self.as_ref().query(query, ctx).await
-    }
-}
+// #[async_trait]
+// impl<T> QueryProcessor for Box<dyn QueryProcessor<Output = T>> {
+//     type Output = T;
+//     async fn query<'a>(
+//         &'a self,
+//         query: QueryRectangle,
+//         ctx: &'a dyn QueryContext,
+//     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
+//         self.as_ref().query(query, ctx).await
+//     }
+// }
 
 #[async_trait]
-impl<T> QueryProcessor for Box<dyn RasterQueryProcessor<RasterType = T>>
+impl<T> RasterQueryProcessor for Box<dyn RasterQueryProcessor<RasterType = T>>
 where
     T: Pixel,
 {
-    type Output = RasterTile2D<T>;
+    type RasterType = T;
 
-    async fn query<'a>(
+    async fn raster_query<'a>(
         &'a self,
-        query: QueryRectangle,
+        query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
-    ) -> Result<BoxStream<'a, Result<Self::Output>>> {
+    ) -> Result<BoxStream<'a, Result<RasterTile2D<Self::RasterType>>>> {
         self.as_ref().raster_query(query, ctx).await
     }
 }
 
+// #[async_trait]
+// impl<T, S> RasterQueryProcessor for Box<S>
+// where
+//     T: Pixel,
+//     S: RasterQueryProcessor<RasterType = T>
+// {
+//     type RasterType = T;
+
+//     async fn raster_query<'a>(
+//         &'a self,
+//         query: RasterQueryRectangle,
+//         ctx: &'a dyn QueryContext,
+//     ) -> Result<BoxStream<'a, Result<RasterTile2D<Self::RasterType>>>> {
+//         self.as_ref().raster_query(query, ctx).await
+//     }
+// }
+
 #[async_trait]
-impl<V> QueryProcessor for Box<dyn VectorQueryProcessor<VectorType = V>>
+impl<V> VectorQueryProcessor for Box<dyn VectorQueryProcessor<VectorType = V>>
 where
     V: 'static,
 {
-    type Output = V;
-    async fn query<'a>(
+    type VectorType = V;
+    async fn vector_query<'a>(
         &'a self,
-        query: QueryRectangle,
+        query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
-    ) -> Result<BoxStream<'a, Result<Self::Output>>> {
+    ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
         self.as_ref().vector_query(query, ctx).await
     }
 }
