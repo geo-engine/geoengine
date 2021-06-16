@@ -348,7 +348,7 @@ impl BoxShaped for BoundingBox2D {
     /// # Examples
     ///
     /// ```
-    /// use geoengine_datatypes::primitives::{Coordinate2D, BoundingBox2D};
+    /// use geoengine_datatypes::primitives::{Coordinate2D, BoundingBox2D, BoxShaped};
     ///
     /// let ll = Coordinate2D::new(1.0, 1.0);
     /// let ur = Coordinate2D::new(2.0, 2.0);
@@ -366,7 +366,7 @@ impl BoxShaped for BoundingBox2D {
     /// # Examples
     ///
     /// ```
-    /// use geoengine_datatypes::primitives::{Coordinate2D, BoundingBox2D};
+    /// use geoengine_datatypes::primitives::{Coordinate2D, BoundingBox2D, BoxShaped};
     ///
     /// let ll = Coordinate2D::new(1.0, 1.0);
     /// let ur = Coordinate2D::new(2.0, 2.0);
@@ -384,7 +384,7 @@ impl BoxShaped for BoundingBox2D {
     /// # Examples
     ///
     /// ```
-    /// use geoengine_datatypes::primitives::{Coordinate2D, BoundingBox2D};
+    /// use geoengine_datatypes::primitives::{Coordinate2D, BoundingBox2D, BoxShaped};
     ///
     /// let ll = Coordinate2D::new(1.0, 1.0);
     /// let ur = Coordinate2D::new(2.0, 2.0);
@@ -402,7 +402,7 @@ impl BoxShaped for BoundingBox2D {
     /// # Examples
     ///
     /// ```
-    /// use geoengine_datatypes::primitives::{Coordinate2D, BoundingBox2D};
+    /// use geoengine_datatypes::primitives::{Coordinate2D, BoundingBox2D, BoxShaped};
     ///
     /// let ll = Coordinate2D::new(1.0, 1.0);
     /// let ur = Coordinate2D::new(2.0, 2.0);
