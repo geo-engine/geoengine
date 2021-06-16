@@ -187,7 +187,7 @@ where
         match self.grid_array {
             GridOrEmpty::Grid(_) => {}
             GridOrEmpty::Empty(_) => {
-                self.grid_array = self.grid_array.to_owned().into_materialized_grid().into();
+                self.grid_array = self.grid_array.clone().into_materialized_grid().into();
             }
         }
     }
