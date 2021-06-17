@@ -73,7 +73,8 @@ mod tests {
                 "type": "GdalSource",
                 "params": {
                     "dataset": {
-                        "internal": "fc734022-61e0-49da-b327-257ba9d602a7"
+                        "type": "internal",
+                        "dataset": "fc734022-61e0-49da-b327-257ba9d602a7"
                     }
                 }
             })
@@ -86,7 +87,8 @@ mod tests {
             "type": "GdalSource",
             "params": {
                 "dataset": {
-                    "internal": "fc734022-61e0-49da-b327-257ba9d602a7"
+                    "type": "internal",
+                    "dataset":  "fc734022-61e0-49da-b327-257ba9d602a7"
                 }
             }
         })
@@ -105,7 +107,8 @@ mod tests {
             "type": "OgrSource",
             "params": {
                 "dataset": {
-                    "internal": "fc734022-61e0-49da-b327-257ba9d602a7"
+                    "type": "internal",
+                    "dataset":  "fc734022-61e0-49da-b327-257ba9d602a7"
                 },
                 "attribute_projection": null,
             }

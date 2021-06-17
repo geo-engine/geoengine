@@ -175,7 +175,9 @@ pub(crate) fn get_dataset_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::path!("dataset" / "internal" / Uuid)
-        .map(|id: Uuid| (DatasetId::Internal(InternalDatasetId(id))))
+        .map(|id: Uuid| DatasetId::Internal {
+            dataset: InternalDatasetId(id),
+        })
         .and(warp::get())
         .and(authenticate(ctx.clone()))
         .and(warp::any().map(move || ctx.clone()))
@@ -826,18 +828,18 @@ mod tests {
             body,
             json!([{
                 "id": {
-                    "internal": id.internal().unwrap()
+                    "type": "internal",
+                    "dataset": id.internal().unwrap()
                 },
                 "name": "OgrDataset",
                 "description": "My Ogr dataset",
                 "tags": [],
                 "sourceOperator": "OgrSource",
                 "resultDescriptor": {
-                    "vector": {
-                        "dataType": "Data",
-                        "spatialReference": "",
-                        "columns": {}
-                    }
+                    "type": "vector",
+                    "dataType": "Data",
+                    "spatialReference": "",
+                    "columns": {}
                 }
             }])
             .to_string()
@@ -862,35 +864,36 @@ mod tests {
                     "sourceOperator": "OgrSource"
                 },
                 "metaData": {
-                    "OgrMetaData": {
-                        "loadingInfo": {
-                            "fileName": "operators/test-data/vector/data/ne_10m_ports/ne_10m_ports.shp",
-                            "layerName": "ne_10m_ports",
-                            "dataType": "MultiPoint",
-                            "time": "none",
-                            "columns": {
-                                "x": "",
-                                "y": null,
-                                "float": ["natlscale"],
-                                "int": ["scalerank"],
-                                "text": ["featurecla", "name", "website"]
-                            },
-                            "forceOgrTimeGilter": false,
-                            "onError": "ignore",
-                            "provenance": null
+                    "type": "ogrMetaData",
+                    "loadingInfo": {
+                        "fileName": "operators/test-data/vector/data/ne_10m_ports/ne_10m_ports.shp",
+                        "layerName": "ne_10m_ports",
+                        "dataType": "MultiPoint",
+                        "time": {
+                            "type": "none"
                         },
-                        "resultDescriptor": {
-                            "dataType": "MultiPoint",
-                            "spatialReference": "EPSG:4326",
-                            "columns": {
-                                "website": "text",
-                                "name": "text",
-                                "natlscale": "float",
-                                "scalerank": "int",
-                                "featurecla": "text"
-                            }
+                        "columns": {
+                            "x": "",
+                            "y": null,
+                            "float": ["natlscale"],
+                            "int": ["scalerank"],
+                            "text": ["featurecla", "name", "website"]
+                        },
+                        "forceOgrTimeGilter": false,
+                        "onError": "ignore",
+                        "provenance": null
+                    },
+                    "resultDescriptor": {
+                        "dataType": "MultiPoint",
+                        "spatialReference": "EPSG:4326",
+                        "columns": {
+                            "website": "text",
+                            "name": "text",
+                            "natlscale": "float",
+                            "scalerank": "int",
+                            "featurecla": "text"
                         }
-                    }
+                    }                    
                 }
             }
         }"#;
@@ -1282,16 +1285,16 @@ mod tests {
             body,
             json!({
                 "id": {
-                    "internal": id.internal().unwrap()
+                    "type": "internal",
+                    "dataset": id.internal().unwrap()
                 },
                 "name": "OgrDataset",
                 "description": "My Ogr dataset",
                 "resultDescriptor": {
-                    "vector": {
-                        "dataType": "Data",
-                        "spatialReference": "",
-                        "columns": {}
-                    }
+                    "type": "vector",
+                    "dataType": "Data",
+                    "spatialReference": "",
+                    "columns": {}
                 },
                 "sourceOperator": "OgrSource"
             })

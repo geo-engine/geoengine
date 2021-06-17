@@ -505,10 +505,9 @@ mod tests {
                 "dataType": "U8",
                 "spatialReference": "EPSG:4326",
                 "measurement": {
-                    "continuous": {
-                        "measurement": "radiation",
-                        "unit": null
-                    }
+                    "type": "continuous",
+                    "measurement": "radiation",
+                    "unit": null
                 },
                 "noDataValue": null
             })

@@ -51,7 +51,8 @@ use std::{marker::PhantomData, path::PathBuf};
 ///         "type": "GdalSource",
 ///         "params": {
 ///             "dataset": {
-///                 "internal": "a626c880-1c41-489b-9e19-9596d129859c"
+///                 "type": "internal",
+///                 "dataset": "a626c880-1c41-489b-9e19-9596d129859c"
 ///             }
 ///         }
 ///     }"#;

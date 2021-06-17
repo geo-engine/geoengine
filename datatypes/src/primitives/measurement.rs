@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::fmt;
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", tag = "type")]
 pub enum Measurement {
     Unitless,
     Continuous {
