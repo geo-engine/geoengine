@@ -232,7 +232,7 @@ impl SentinelS2L2aCogsMetaData {
             let end = if i < num_features - 1 {
                 features[i + 1].properties.datetime
             } else {
-                start + Duration::hours(12) // TODO: determine correct validity for last tile
+                start + Duration::minutes(1) // TODO: determine correct validity for last tile
             };
 
             let time_interval = TimeInterval::new(start, end)?;
@@ -377,8 +377,8 @@ impl SentinelS2L2aCogsMetaData {
                     },
                 })?;
 
-        // shift start by 1 day to ensure getting the most recent data for start time
-        let t_start = t_start - Duration::days(1);
+        // shift start by 1 minute to ensure getting the most recent data for start time
+        let t_start = t_start - Duration::minutes(1);
 
         let t_end =
             time.end()
@@ -526,7 +526,7 @@ mod tests {
             .unwrap();
 
         let expected = vec![GdalLoadingInfoPart {
-            time: TimeInterval::new_unchecked(1_609_581_746_000, 1_609_624_946_000),
+            time: TimeInterval::new_unchecked(1_609_581_746_000, 1_609_581_806_000),
             params: GdalDatasetParameters {
                 file_path: "/vsicurl/https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/32/R/PU/2021/1/S2B_32RPU_20210102_0_L2A/B01.tif".into(),
                 rasterband_channel: 1,
@@ -608,7 +608,7 @@ mod tests {
                 (534_994.66, 9_329_005.18).into(),
             ),
             time_interval: TimeInterval::new_instant(
-                DateTime::parse_from_rfc3339("2021-01-01T12:02:26Z")
+                DateTime::parse_from_rfc3339("2021-01-02T10:02:26Z")
                     .unwrap()
                     .timestamp_millis(),
             )?,
