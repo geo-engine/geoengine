@@ -402,7 +402,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor> for SentinelS2L2aCogsMeta
         // TODO: propagate error properly
         self.create_loading_info(query).await.map_err(|e| {
             geoengine_operators::error::Error::LoadingInfo {
-                reason: format!("{:?}", e),
+                source: Box::new(e),
             }
         })
     }

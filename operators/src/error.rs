@@ -194,8 +194,9 @@ pub enum Error {
     TemporalRasterAggregationLastValidRequiresNoData,
     TemporalRasterAggregationFirstValidRequiresNoData,
 
+    #[snafu(display("LoadingInfoError: {}", source))]
     LoadingInfo {
-        reason: String, // TODO: find cleaner way to make errors in services crate visible
+        source: Box<dyn std::error::Error + Send + Sync>,
     },
 
     NotImplemented,
