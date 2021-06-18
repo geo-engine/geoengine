@@ -131,10 +131,6 @@ impl ThreadPool {
         }
     }
 
-    pub fn create_context(&self) -> ThreadPoolContext {
-        ThreadPoolContext::new(self, self.next_group_id.fetch_add(1))
-    }
-
     fn compute(&self, task: Task) {
         self.global_queue.push(task);
 
@@ -145,6 +141,16 @@ impl ThreadPool {
     }
 }
 
+pub trait ThreadPoolContextCreator {
+    fn create_context(&self) -> ThreadPoolContext;
+}
+
+impl ThreadPoolContextCreator for Arc<ThreadPool> {
+    fn create_context(&self) -> ThreadPoolContext {
+        ThreadPoolContext::new(self.clone(), self.next_group_id.fetch_add(1))
+    }
+}
+
 impl Default for ThreadPool {
     fn default() -> Self {
         Self::new(num_cpus::get())
@@ -152,15 +158,15 @@ impl Default for ThreadPool {
 }
 
 /// A computation context for a group that spawns tasks in a `ThreadPool`
-#[derive(Copy, Clone, Debug)]
-pub struct ThreadPoolContext<'pool> {
-    thread_pool: &'pool ThreadPool,
+#[derive(Clone, Debug)]
+pub struct ThreadPoolContext {
+    thread_pool: Arc<ThreadPool>,
     task_group_id: TaskGroupId,
 }
 
-impl<'pool> ThreadPoolContext<'pool> {
+impl ThreadPoolContext {
     /// Create a new `ThreadPoolContext`
-    fn new(thread_pool: &'pool ThreadPool, task_group_id: TaskGroupId) -> Self {
+    fn new(thread_pool: Arc<ThreadPool>, task_group_id: TaskGroupId) -> Self {
         Self {
             thread_pool,
             task_group_id,
@@ -186,11 +192,11 @@ impl<'pool> ThreadPoolContext<'pool> {
     /// Provides a lifetime for that scope.
     /// TODO: provide an async version so that async workflows can do something in the meantime?
     /// TODO: handle panics: if a thread panics, this function will block forever
-    pub fn scope<'scope, S>(&'pool self, scope_fn: S)
+    pub fn scope<'scope, S>(&'scope self, scope_fn: S)
     where
-        S: FnOnce(&Scope<'pool, 'scope>) + 'scope,
+        S: FnOnce(&Scope<'scope>) + 'scope,
     {
-        let scope = Scope::<'pool, 'scope> {
+        let scope = Scope::<'scope> {
             thread_pool_context: &self,
             wait_group: WaitGroup::new(),
             _scope_marker: PhantomData,
@@ -204,14 +210,14 @@ impl<'pool> ThreadPoolContext<'pool> {
 
 /// A scope in which you can execute tasks and it blocks until all tasks are finished
 #[derive(Debug)]
-pub struct Scope<'pool, 'scope> {
-    thread_pool_context: &'pool ThreadPoolContext<'pool>,
+pub struct Scope<'scope> {
+    thread_pool_context: &'scope ThreadPoolContext,
     wait_group: WaitGroup,
     // needs to be invariant to `'scope`, cf. https://github.com/crossbeam-rs/crossbeam/pull/226/files#r232721183
     _scope_marker: PhantomData<&'scope mut &'scope ()>,
 }
 
-impl<'pool, 'scope> Scope<'pool, 'scope> {
+impl<'scope> Scope<'scope> {
     /// Compute a task in the `ThreadPool`
     pub fn compute<F>(&self, task: F)
     where
@@ -340,7 +346,7 @@ mod tests {
     #[test]
     #[allow(clippy::blacklisted_name)]
     fn two_task_one_thread() {
-        let thread_pool = ThreadPool::new(2);
+        let thread_pool = Arc::new(ThreadPool::new(2));
 
         let foo = Arc::new(AtomicI32::new(0));
 
@@ -363,7 +369,7 @@ mod tests {
     #[test]
     #[allow(clippy::blacklisted_name)]
     fn two_task_two_threads() {
-        let thread_pool = ThreadPool::new(2);
+        let thread_pool = Arc::new(ThreadPool::new(2));
 
         let foo = Arc::new(AtomicI32::new(0));
 
@@ -385,7 +391,7 @@ mod tests {
 
     #[test]
     fn lots_of_tasks() {
-        let thread_pool = ThreadPool::new(2);
+        let thread_pool = Arc::new(ThreadPool::new(2));
 
         let number_of_tasks = 1_000_000;
         let tasks_completed = Arc::new(AtomicI32::new(0));
@@ -405,7 +411,7 @@ mod tests {
 
     #[test]
     fn context() {
-        let thread_pool = ThreadPool::new(2);
+        let thread_pool = Arc::new(ThreadPool::new(2));
         let context = thread_pool.create_context();
 
         let result = Arc::new(AtomicI32::new(0));
@@ -425,7 +431,7 @@ mod tests {
     fn scoped() {
         const NUMBER_OF_TASKS: usize = 42;
 
-        let thread_pool = ThreadPool::new(2);
+        let thread_pool = Arc::new(ThreadPool::new(2));
         let context = thread_pool.create_context();
 
         let result = AtomicUsize::new(0);
@@ -445,7 +451,7 @@ mod tests {
     fn scoped_vec() {
         const NUMBER_OF_TASKS: usize = 42;
 
-        let thread_pool = ThreadPool::new(2);
+        let thread_pool = Arc::new(ThreadPool::new(2));
         let context = thread_pool.create_context();
 
         let mut result = vec![0; NUMBER_OF_TASKS];
@@ -463,7 +469,7 @@ mod tests {
     fn compute_results() {
         const NUMBER_OF_TASKS: usize = 42;
 
-        let thread_pool = ThreadPool::new(2);
+        let thread_pool = Arc::new(ThreadPool::new(2));
         let context = thread_pool.create_context();
 
         let mut futures = Vec::with_capacity(NUMBER_OF_TASKS);
@@ -481,7 +487,7 @@ mod tests {
 
     #[test]
     fn parking() {
-        let thread_pool = ThreadPool::new(1);
+        let thread_pool = Arc::new(ThreadPool::new(1));
         let context = thread_pool.create_context();
 
         // wait for the thread to be parked

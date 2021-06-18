@@ -696,9 +696,7 @@ mod tests {
             time_interval: TimeInterval::new_unchecked(0, 40),
             spatial_resolution: SpatialResolution::one(),
         };
-        let query_ctx = MockQueryContext {
-            chunk_byte_size: 1024 * 1024,
-        };
+        let query_ctx = MockQueryContext::default();
 
         let qp = agg
             .initialize(&exe_ctx)
@@ -820,9 +818,7 @@ mod tests {
             time_interval: TimeInterval::new_unchecked(0, 40),
             spatial_resolution: SpatialResolution::one(),
         };
-        let query_ctx = MockQueryContext {
-            chunk_byte_size: 1024 * 1024,
-        };
+        let query_ctx = MockQueryContext::default();
 
         let qp = agg
             .initialize(&exe_ctx)
@@ -949,9 +945,7 @@ mod tests {
             time_interval: TimeInterval::new_unchecked(0, 40),
             spatial_resolution: SpatialResolution::one(),
         };
-        let query_ctx = MockQueryContext {
-            chunk_byte_size: 1024 * 1024,
-        };
+        let query_ctx = MockQueryContext::default();
 
         let qp = agg
             .initialize(&exe_ctx)
@@ -1083,9 +1077,7 @@ mod tests {
             time_interval: TimeInterval::new_unchecked(0, 40),
             spatial_resolution: SpatialResolution::one(),
         };
-        let query_ctx = MockQueryContext {
-            chunk_byte_size: 1024 * 1024,
-        };
+        let query_ctx = MockQueryContext::default();
 
         let qp = agg
             .initialize(&exe_ctx)
@@ -1215,9 +1207,7 @@ mod tests {
             time_interval: TimeInterval::new_unchecked(0, 20),
             spatial_resolution: SpatialResolution::one(),
         };
-        let query_ctx = MockQueryContext {
-            chunk_byte_size: 1024 * 1024,
-        };
+        let query_ctx = MockQueryContext::default();
 
         let qp = agg
             .initialize(&exe_ctx)
@@ -1291,9 +1281,7 @@ mod tests {
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
         };
-        let query_ctx = MockQueryContext {
-            chunk_byte_size: 1024 * 1024,
-        };
+        let query_ctx = MockQueryContext::default();
 
         let qp = agg
             .initialize(&exe_ctx)
@@ -1384,9 +1372,7 @@ mod tests {
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
         };
-        let query_ctx = MockQueryContext {
-            chunk_byte_size: 1024 * 1024,
-        };
+        let query_ctx = MockQueryContext::default();
 
         let qp = agg
             .initialize(&exe_ctx)
@@ -1477,9 +1463,7 @@ mod tests {
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
         };
-        let query_ctx = MockQueryContext {
-            chunk_byte_size: 1024 * 1024,
-        };
+        let query_ctx = MockQueryContext::default();
 
         let qp = agg
             .initialize(&exe_ctx)
@@ -1569,9 +1553,7 @@ mod tests {
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
         };
-        let query_ctx = MockQueryContext {
-            chunk_byte_size: 1024 * 1024,
-        };
+        let query_ctx = MockQueryContext::default();
 
         let qp = agg
             .initialize(&exe_ctx)

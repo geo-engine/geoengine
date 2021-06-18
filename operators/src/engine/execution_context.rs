@@ -1,4 +1,4 @@
-use crate::concurrency::{ThreadPool, ThreadPoolContext};
+use crate::concurrency::{ThreadPool, ThreadPoolContext, ThreadPoolContextCreator};
 use crate::engine::{
     QueryRectangle, RasterResultDescriptor, ResultDescriptor, VectorResultDescriptor,
 };
@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use std::any::Any;
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::sync::Arc;
 
 /// A context that provides certain utility access during operator initialization
 pub trait ExecutionContext:
@@ -56,7 +57,7 @@ where
 }
 
 pub struct MockExecutionContext {
-    pub thread_pool: ThreadPool,
+    pub thread_pool: ThreadPoolContext,
     pub meta_data: HashMap<DatasetId, Box<dyn Any + Send + Sync>>,
     pub tiling_specification: TilingSpecification,
 }
@@ -64,7 +65,7 @@ pub struct MockExecutionContext {
 impl Default for MockExecutionContext {
     fn default() -> Self {
         Self {
-            thread_pool: ThreadPool::default(),
+            thread_pool: Arc::new(ThreadPool::default()).create_context(),
             meta_data: HashMap::default(),
             tiling_specification: TilingSpecification {
                 origin_coordinate: Default::default(),
@@ -89,7 +90,7 @@ impl MockExecutionContext {
 
 impl ExecutionContext for MockExecutionContext {
     fn thread_pool(&self) -> ThreadPoolContext {
-        self.thread_pool.create_context()
+        self.thread_pool.clone()
     }
 
     fn tiling_specification(&self) -> TilingSpecification {

@@ -15,6 +15,7 @@ use geoengine_operators::concurrency::ThreadPool;
 use snafu::ResultExt;
 use std::sync::Arc;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use geoengine_operators::concurrency::ThreadPoolContextCreator;
 
 /// A context with references to in-memory versions of the individual databases.
 #[derive(Clone, Default)]
@@ -96,16 +97,17 @@ impl Context for ProInMemoryContext {
 
     fn query_context(&self) -> Result<Self::QueryContext> {
         // TODO: load config only once
-        Ok(QueryContextImpl::new(
-            config::get_config_element::<config::QueryContext>()?.chunk_byte_size,
-        ))
+        Ok(QueryContextImpl{
+            chunk_byte_size: config::get_config_element::<config::QueryContext>()?.chunk_byte_size,
+            thread_pool: self.thread_pool.create_context()
+        })
     }
 
     fn execution_context(&self, session: UserSession) -> Result<Self::ExecutionContext> {
         Ok(
             ExecutionContextImpl::<UserSession, ProHashMapDatasetDb>::new(
                 self.dataset_db.clone(),
-                self.thread_pool.clone(),
+                self.thread_pool.create_context(),
                 session,
             ),
         )
