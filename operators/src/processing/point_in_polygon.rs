@@ -183,7 +183,7 @@ impl PointInPolygonFilterProcessor {
         })
         .await?;
 
-        arrow::compute::or(initial_filter, &dbg!(filter).into()).map_err(Into::into)
+        arrow::compute::or(initial_filter, &filter.into()).map_err(Into::into)
     }
 }
 
