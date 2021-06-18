@@ -1,3 +1,6 @@
+use std::cmp::min;
+use std::sync::Arc;
+
 use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
 use serde::{Deserialize, Serialize};
@@ -10,6 +13,7 @@ use geoengine_datatypes::collections::{
 use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval};
 
 use crate::adapters::FeatureCollectionChunkMerger;
+use crate::concurrency::ThreadPoolContext;
 use crate::engine::{
     ExecutionContext, InitializedOperator, InitializedVectorOperator, Operator, QueryContext,
     QueryProcessor, QueryRectangle, TypedVectorQueryProcessor, VectorOperator,
@@ -115,30 +119,71 @@ impl PointInPolygonFilterProcessor {
         Self { points, polygons }
     }
 
-    fn filter_points(
-        points: &MultiPointCollection,
-        polygons: &MultiPolygonCollection,
+    fn filter_parallel(
+        tester: &Arc<PointInPolygonTester>,
+        points: &Arc<MultiPointCollection>,
+        thread_pool: &ThreadPoolContext,
+    ) -> Vec<bool> {
+        let parallelism = thread_pool.degree_of_parallelism();
+        let chunk_size = (points.len() as f64 / parallelism as f64).ceil() as usize;
+
+        let mut result = vec![false; points.len()];
+
+        thread_pool.scope(|scope| {
+            let num_features = points.len();
+            let feature_offsets = points.feature_offsets();
+            let time_intervals = points.time_intervals();
+            let coordinates = points.coordinates();
+
+            for (chunk_index, chunk_result) in (&mut result).chunks_mut(chunk_size).enumerate() {
+                let feature_index_start = chunk_index * chunk_size;
+                let features_index_end = min(feature_index_start + chunk_size, num_features);
+                let tester = tester.clone();
+
+                scope.compute(move || {
+                    for (
+                        feature_index,
+                        ((coordinates_start_index, coordinates_end_index), time_interval),
+                    ) in two_tuple_windows(
+                        feature_offsets[feature_index_start..=features_index_end]
+                            .iter()
+                            .map(|&c| c as usize),
+                    )
+                    .zip(time_intervals[feature_index_start..features_index_end].iter())
+                    .enumerate()
+                    {
+                        let is_multi_point_in_polygon_collection = coordinates
+                            [coordinates_start_index..coordinates_end_index]
+                            .iter()
+                            .any(|coordinate| {
+                                tester.is_coordinate_in_any_polygon(coordinate, time_interval)
+                            });
+
+                        chunk_result[feature_index] = is_multi_point_in_polygon_collection;
+                    }
+                });
+            }
+        });
+
+        result
+    }
+
+    async fn filter_points(
+        ctx: &dyn QueryContext,
+        points: Arc<MultiPointCollection>,
+        polygons: MultiPolygonCollection,
         initial_filter: &BooleanArray,
     ) -> Result<BooleanArray> {
-        let mut filter = Vec::with_capacity(points.len());
+        let thread_pool = ctx.thread_pool();
 
-        let tester = PointInPolygonTester::new(polygons);
+        let thread_points = points.clone();
+        let filter = tokio::task::spawn_blocking(move || {
+            let tester = Arc::new(PointInPolygonTester::new(&polygons)); // TODO: multithread
+            Self::filter_parallel(&tester, &thread_points, &thread_pool)
+        })
+        .await?;
 
-        let coordinates = points.coordinates();
-
-        for ((coordinates_start_index, coordinates_end_index), time_interval) in
-            two_tuple_windows(points.feature_offsets().iter().map(|&c| c as usize))
-                .zip(points.time_intervals())
-        {
-            let is_multi_point_in_polygon_collection = coordinates
-                [coordinates_start_index..coordinates_end_index]
-                .iter()
-                .any(|coordinate| tester.is_coordinate_in_any_polygon(coordinate, time_interval));
-
-            filter.push(is_multi_point_in_polygon_collection);
-        }
-
-        arrow::compute::or(initial_filter, &filter.into()).map_err(Into::into)
+        arrow::compute::or(initial_filter, &dbg!(filter).into()).map_err(Into::into)
     }
 }
 
@@ -151,14 +196,13 @@ impl VectorQueryProcessor for PointInPolygonFilterProcessor {
         query: QueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
-        // TODO: multi-threading
-
         let filtered_stream =
             self.points
                 .query(query, ctx)
                 .await?
                 .and_then(move |points| async move {
                     let initial_filter = BooleanArray::from(vec![false; points.len()]);
+                    let arc_points = Arc::new(points);
 
                     let filter = self
                         .polygons
@@ -171,11 +215,11 @@ impl VectorQueryProcessor for PointInPolygonFilterProcessor {
                                 return filter;
                             }
 
-                            Self::filter_points(&points, &polygons, &filter?)
+                            Self::filter_points(ctx, arc_points.clone(), polygons, &filter?).await
                         })
                         .await?;
 
-                    points.filter(filter).map_err(Into::into)
+                    arc_points.filter(filter).map_err(Into::into)
                 });
 
         Ok(
