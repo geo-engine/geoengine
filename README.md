@@ -90,6 +90,5 @@ Inspect the container:
 
 ## Contributing
 
-If you want to contribute to Geo Engine, we are happy about it.
-Feel free to get in touch with us so that we can give you a good starting point and discuss what you want to develop.
-For more information, visit [www.geoengine.de/cla](https://www.geoengine.de/cla/).
+We are grateful for any contributions.
+Please make sure to read our [contributing guide](CONTRIBUTING.md).
