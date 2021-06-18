@@ -35,8 +35,8 @@ pub struct PointInPolygonFilterParams {}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct PointInPolygonFilterSource {
-    points: Box<dyn VectorOperator>,
-    polygons: Box<dyn VectorOperator>,
+    pub points: Box<dyn VectorOperator>,
+    pub polygons: Box<dyn VectorOperator>,
 }
 
 #[typetag::serde]

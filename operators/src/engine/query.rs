@@ -38,6 +38,13 @@ impl MockQueryContext {
             ..Default::default()
         }
     }
+
+    pub fn with_chunk_size_and_thread_count(chunk_byte_size: usize, num_threads: usize) -> Self {
+        Self {
+            chunk_byte_size,
+            thread_pool: Arc::new(ThreadPool::new(num_threads)).create_context(),
+        }
+    }
 }
 
 impl QueryContext for MockQueryContext {
