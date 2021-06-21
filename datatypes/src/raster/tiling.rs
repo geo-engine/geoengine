@@ -1,4 +1,4 @@
-use crate::primitives::{BoxShaped, Coordinate2D, SpatialPartition, SpatialPartitioned};
+use crate::primitives::{AxisAlignedRectangle, Coordinate2D, SpatialPartition, SpatialPartitioned};
 
 use super::{GeoTransform, GridBoundingBox2D, GridIdx, GridIdx2D, GridShape2D, GridSize};
 

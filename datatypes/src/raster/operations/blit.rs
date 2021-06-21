@@ -1,5 +1,5 @@
 use crate::error;
-use crate::primitives::{BoxShaped, SpatialPartitioned};
+use crate::primitives::{AxisAlignedRectangle, SpatialPartitioned};
 use crate::raster::{
     ChangeGridBounds, GeoTransformAccess, GridBlit, MaterializedRasterTile2D, Pixel, RasterTile2D,
 };

@@ -5,9 +5,10 @@ use snafu::ensure;
 use crate::{
     error::{self, Error},
     primitives::{
-        BoundingBox2D, BoxShaped, Coordinate2D, Line, MultiLineString, MultiLineStringAccess,
-        MultiLineStringRef, MultiPoint, MultiPointAccess, MultiPointRef, MultiPolygon,
-        MultiPolygonAccess, MultiPolygonRef, SpatialBounded, SpatialPartition, SpatialResolution,
+        AxisAlignedRectangle, BoundingBox2D, Coordinate2D, Line, MultiLineString,
+        MultiLineStringAccess, MultiLineStringRef, MultiPoint, MultiPointAccess, MultiPointRef,
+        MultiPolygon, MultiPolygonAccess, MultiPolygonRef, SpatialBounded, SpatialPartition,
+        SpatialResolution,
     },
     spatial_reference::SpatialReference,
     util::Result,
@@ -334,7 +335,7 @@ where
 }
 
 #[inline]
-fn euclidian_pixel_distance<B: BoxShaped>(
+fn euclidian_pixel_distance<B: AxisAlignedRectangle>(
     bbox: B,
     spatial_resolution: SpatialResolution,
 ) -> Result<f64> {
@@ -380,7 +381,7 @@ fn diag_distance(ul_coord: Coordinate2D, lr_coord: Coordinate2D) -> f64 {
 /// A suggested pixel size is calculated using the approach used by GDAL:
 /// The upper left and the lower right coordinates of the bounding box are projected in the target SRS.
 /// Then, the distance between both points in the target SRS is devided by the distance in pixels of the source.
-pub fn suggest_pixel_size_like_gdal<P: CoordinateProjection, B: BoxShaped>(
+pub fn suggest_pixel_size_like_gdal<P: CoordinateProjection, B: AxisAlignedRectangle>(
     bbox: B,
     spatial_resolution: SpatialResolution,
     projector: &P,
@@ -400,7 +401,7 @@ pub fn suggest_pixel_size_like_gdal<P: CoordinateProjection, B: BoxShaped>(
 
 /// This approach uses the GDAL way to suggest the pixel size. However, we check both diagonals and take the smaller one.
 /// This method fails if the bbox cannot be projected
-pub fn suggest_pixel_size_from_diag_cross<P: CoordinateProjection, B: BoxShaped>(
+pub fn suggest_pixel_size_from_diag_cross<P: CoordinateProjection, B: AxisAlignedRectangle>(
     bbox: B,
     spatial_resolution: SpatialResolution,
     projector: &P,
@@ -424,7 +425,7 @@ pub fn suggest_pixel_size_from_diag_cross<P: CoordinateProjection, B: BoxShaped>
 }
 
 /// A version of `suggest_pixel_size_from_diag_cross` that takes a `partition` and a projected counterpart as input
-pub fn suggest_pixel_size_from_diag_cross_projected<B: BoxShaped>(
+pub fn suggest_pixel_size_from_diag_cross_projected<B: AxisAlignedRectangle>(
     bbox: B,
     bbox_projected: B,
     spatial_resolution: SpatialResolution,

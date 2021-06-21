@@ -6,7 +6,7 @@ use crate::util::Result;
 
 use super::BoundingBox2D;
 use super::Coordinate2D;
-use super::{BoxShaped, SpatialResolution};
+use super::{AxisAlignedRectangle, SpatialResolution};
 
 /// A partition of space that include the upper left but excludes the lower right coordinate
 #[derive(Copy, Clone, Serialize, Deserialize, PartialEq, Debug)]
@@ -173,7 +173,7 @@ pub trait SpatialPartitioned {
     fn spatial_partition(&self) -> SpatialPartition;
 }
 
-impl BoxShaped for SpatialPartition {
+impl AxisAlignedRectangle for SpatialPartition {
     fn upper_left(&self) -> Coordinate2D {
         self.upper_left_coordinate
     }

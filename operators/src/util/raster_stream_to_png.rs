@@ -1,7 +1,7 @@
 use futures::StreamExt;
 use geoengine_datatypes::{
     operations::image::{Colorizer, RgbaColor, ToPng},
-    primitives::{BoxShaped, TimeInterval},
+    primitives::{AxisAlignedRectangle, TimeInterval},
     raster::{Blit, EmptyGrid2D, GeoTransform, Grid2D, Pixel, RasterTile2D},
 };
 use num_traits::AsPrimitive;

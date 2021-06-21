@@ -2,7 +2,7 @@ use snafu::ResultExt;
 use warp::reply::Reply;
 use warp::{http::Response, Filter, Rejection};
 
-use geoengine_datatypes::primitives::{BoundingBox2D, BoxShaped};
+use geoengine_datatypes::primitives::{AxisAlignedRectangle, BoundingBox2D};
 use geoengine_datatypes::{
     operations::image::{Colorizer, ToPng},
     primitives::SpatialResolution,

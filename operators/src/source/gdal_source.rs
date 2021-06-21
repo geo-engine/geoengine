@@ -22,7 +22,7 @@ use geoengine_datatypes::raster::{
 };
 use geoengine_datatypes::{dataset::DatasetId, raster::TileInformation};
 use geoengine_datatypes::{
-    primitives::{BoxShaped, TimeInstance, TimeInterval, TimeStep, TimeStepIter},
+    primitives::{AxisAlignedRectangle, TimeInstance, TimeInterval, TimeStep, TimeStepIter},
     raster::{
         Grid, GridBlit, GridBoundingBox2D, GridBounds, GridIdx, GridSize, GridSpaceToLinearSpace,
         TilingSpecification,

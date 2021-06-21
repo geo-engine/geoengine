@@ -456,8 +456,8 @@ mod tests {
     use geoengine_datatypes::{
         collections::{MultiLineStringCollection, MultiPointCollection, MultiPolygonCollection},
         primitives::{
-            BoundingBox2D, BoxShaped, Measurement, MultiLineString, MultiPoint, MultiPolygon,
-            SpatialPartition, SpatialResolution, TimeInterval,
+            AxisAlignedRectangle, BoundingBox2D, Measurement, MultiLineString, MultiPoint,
+            MultiPolygon, SpatialPartition, SpatialResolution, TimeInterval,
         },
         raster::{Grid, GridShape, GridShape2D, GridSize, RasterDataType, RasterTile2D},
         spatial_reference::SpatialReferenceAuthority,

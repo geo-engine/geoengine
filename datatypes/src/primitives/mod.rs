@@ -39,7 +39,7 @@ pub use time_interval::TimeInterval;
 pub use time_step::{TimeGranularity, TimeStep, TimeStepIter};
 
 /// Common trait for axis-parallel boxes
-pub trait BoxShaped: Copy {
+pub trait AxisAlignedRectangle: Copy {
     fn lower_left(&self) -> Coordinate2D;
     fn upper_left(&self) -> Coordinate2D;
     fn upper_right(&self) -> Coordinate2D;

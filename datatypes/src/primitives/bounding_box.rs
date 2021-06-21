@@ -1,6 +1,6 @@
 use std::convert::TryFrom;
 
-use super::{BoxShaped, Coordinate2D, SpatialBounded};
+use super::{AxisAlignedRectangle, Coordinate2D, SpatialBounded};
 use crate::error;
 use crate::util::Result;
 #[cfg(feature = "postgres")]
@@ -342,13 +342,13 @@ impl BoundingBox2D {
     }
 }
 
-impl BoxShaped for BoundingBox2D {
+impl AxisAlignedRectangle for BoundingBox2D {
     /// Returns the `Coordnate2D` representing the lower left edge of the bounding box
     ///
     /// # Examples
     ///
     /// ```
-    /// use geoengine_datatypes::primitives::{Coordinate2D, BoundingBox2D, BoxShaped};
+    /// use geoengine_datatypes::primitives::{Coordinate2D, BoundingBox2D, AxisAlignedRectangle};
     ///
     /// let ll = Coordinate2D::new(1.0, 1.0);
     /// let ur = Coordinate2D::new(2.0, 2.0);
@@ -366,7 +366,7 @@ impl BoxShaped for BoundingBox2D {
     /// # Examples
     ///
     /// ```
-    /// use geoengine_datatypes::primitives::{Coordinate2D, BoundingBox2D, BoxShaped};
+    /// use geoengine_datatypes::primitives::{Coordinate2D, BoundingBox2D, AxisAlignedRectangle};
     ///
     /// let ll = Coordinate2D::new(1.0, 1.0);
     /// let ur = Coordinate2D::new(2.0, 2.0);
@@ -384,7 +384,7 @@ impl BoxShaped for BoundingBox2D {
     /// # Examples
     ///
     /// ```
-    /// use geoengine_datatypes::primitives::{Coordinate2D, BoundingBox2D, BoxShaped};
+    /// use geoengine_datatypes::primitives::{Coordinate2D, BoundingBox2D, AxisAlignedRectangle};
     ///
     /// let ll = Coordinate2D::new(1.0, 1.0);
     /// let ur = Coordinate2D::new(2.0, 2.0);
@@ -402,7 +402,7 @@ impl BoxShaped for BoundingBox2D {
     /// # Examples
     ///
     /// ```
-    /// use geoengine_datatypes::primitives::{Coordinate2D, BoundingBox2D, BoxShaped};
+    /// use geoengine_datatypes::primitives::{Coordinate2D, BoundingBox2D, AxisAlignedRectangle};
     ///
     /// let ll = Coordinate2D::new(1.0, 1.0);
     /// let ur = Coordinate2D::new(2.0, 2.0);
@@ -462,7 +462,7 @@ impl TryFrom<BoundingBox2D> for gdal::vector::Geometry {
 #[cfg(test)]
 mod tests {
 
-    use crate::primitives::{BoundingBox2D, BoxShaped, Coordinate2D, SpatialBounded};
+    use crate::primitives::{AxisAlignedRectangle, BoundingBox2D, Coordinate2D, SpatialBounded};
     #[test]
     #[allow(clippy::float_cmp)]
     fn bounding_box_new() {
