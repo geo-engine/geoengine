@@ -178,7 +178,7 @@ impl PointInPolygonFilterProcessor {
         polygons: MultiPolygonCollection,
         initial_filter: &BooleanArray,
     ) -> Result<BooleanArray> {
-        let thread_pool = ctx.thread_pool();
+        let thread_pool = ctx.thread_pool().clone();
 
         let thread_points = points.clone();
         let filter = tokio::task::spawn_blocking(move || {

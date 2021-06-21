@@ -71,8 +71,8 @@ impl QueryContext for QueryContextImpl {
         self.chunk_byte_size
     }
 
-    fn thread_pool(&self) -> ThreadPoolContext {
-        self.thread_pool.clone()
+    fn thread_pool(&self) -> &ThreadPoolContext {
+        &self.thread_pool
     }
 }
 

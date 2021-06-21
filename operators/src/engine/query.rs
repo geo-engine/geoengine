@@ -14,7 +14,7 @@ pub struct QueryRectangle {
 
 pub trait QueryContext: Send + Sync {
     fn chunk_byte_size(&self) -> usize;
-    fn thread_pool(&self) -> ThreadPoolContext;
+    fn thread_pool(&self) -> &ThreadPoolContext;
 }
 
 pub struct MockQueryContext {
@@ -52,7 +52,7 @@ impl QueryContext for MockQueryContext {
         self.chunk_byte_size
     }
 
-    fn thread_pool(&self) -> ThreadPoolContext {
-        self.thread_pool.clone()
+    fn thread_pool(&self) -> &ThreadPoolContext {
+        &self.thread_pool
     }
 }
