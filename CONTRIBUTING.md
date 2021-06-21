@@ -17,10 +17,10 @@ It would be nice if you create, for instance, a failing test with the expected o
 
 If you want to discuss new features before implementing them, feel free to start a discussion on [GitHub](https://github.com/geo-engine/geoengine/discussions) and get feedback on your idea.
 
-### ❓ Support
+### ❓ Get in touch
 
-In case you have difficulties using Geo Engine, feel free to ask for help!
-You can either start a Q&A on [GitHub](https://github.com/geo-engine/geoengine/discussions) or write an email to [support@geoengine.de](mailto:dev@geoengine.de).
+In case you have difficulties getting started, feel free to ask for help!
+You can either start a Q&A on [GitHub](https://github.com/geo-engine/geoengine/discussions) or write an email to [dev@geoengine.de](mailto:dev@geoengine.de).
 
 ## 🛠️ Pull requests
 
