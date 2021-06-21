@@ -488,7 +488,7 @@ mod tests {
             .await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             400,
             "BodyDeserializeError",
             "expected ident at line 1 column 2",
@@ -519,7 +519,7 @@ mod tests {
             .await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             400,
             "BodyDeserializeError",
             "missing field `name` at line 1 column 195",
@@ -544,7 +544,7 @@ mod tests {
             .await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             401,
             "MissingAuthorizationHeader",
             "Header with authorization token not provided.",
@@ -629,7 +629,7 @@ mod tests {
             .await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             401,
             "MissingAuthorizationHeader",
             "Header with authorization token not provided.",
@@ -682,7 +682,7 @@ mod tests {
             .await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             401,
             "MissingAuthorizationHeader",
             "Header with authorization token not provided.",
@@ -706,7 +706,7 @@ mod tests {
             .reply(&load_project_handler(ctx).recover(handle_rejection))
             .await;
 
-        ErrorResponse::assert(&res, 404, "NotFound", "Not Found");
+        ErrorResponse::assert(res, 404, "NotFound", "Not Found");
     }
 
     #[tokio::test]
@@ -795,7 +795,7 @@ mod tests {
             .await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             400,
             "ProjectLoadFailed",
             "The project failed to load.",
@@ -867,7 +867,7 @@ mod tests {
             .await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             400,
             "BodyDeserializeError",
             "expected ident at line 1 column 2",
@@ -909,7 +909,7 @@ mod tests {
             .await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             400,
             "BodyDeserializeError",
             "missing field `id` at line 1 column 246",
@@ -1241,7 +1241,7 @@ mod tests {
             .await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             400,
             "ProjectDeleteFailed",
             "Failed to delete the project.",
@@ -1316,7 +1316,7 @@ mod tests {
             .await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             401,
             "MissingAuthorizationHeader",
             "Header with authorization token not provided.",
@@ -1411,7 +1411,7 @@ mod tests {
             .await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             401,
             "MissingAuthorizationHeader",
             "Header with authorization token not provided.",
@@ -1520,7 +1520,7 @@ mod tests {
             .await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             401,
             "MissingAuthorizationHeader",
             "Header with authorization token not provided.",
@@ -1624,7 +1624,7 @@ mod tests {
             .await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             401,
             "MissingAuthorizationHeader",
             "Header with authorization token not provided.",

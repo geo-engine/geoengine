@@ -265,7 +265,7 @@ mod tests {
             .await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             401,
             "MissingAuthorizationHeader",
             "Header with authorization token not provided.",
@@ -292,7 +292,7 @@ mod tests {
             .await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             400,
             "BodyDeserializeError",
             "expected ident at line 1 column 2",
@@ -321,7 +321,7 @@ mod tests {
             .await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             400,
             "BodyDeserializeError",
             "missing field `type` at line 1 column 2",
@@ -374,7 +374,7 @@ mod tests {
             .await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             401,
             "MissingAuthorizationHeader",
             "Header with authorization token not provided.",
@@ -391,7 +391,7 @@ mod tests {
             .reply(&load_workflow_handler(ctx).recover(handle_rejection))
             .await;
 
-        ErrorResponse::assert(&res, 404, "NotFound", "Not Found");
+        ErrorResponse::assert(res, 404, "NotFound", "Not Found");
     }
 
     async fn vector_metadata_test_helper(method: &str) -> Response<Bytes> {
@@ -560,7 +560,7 @@ mod tests {
             .await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             401,
             "MissingAuthorizationHeader",
             "Header with authorization token not provided.",

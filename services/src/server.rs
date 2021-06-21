@@ -74,7 +74,7 @@ pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<(), Error
     }
 }
 
-fn init_routes<C>(cfg: &mut web::ServiceConfig)
+pub(crate) fn init_routes<C>(cfg: &mut web::ServiceConfig)
 where
     C: Context,
 {

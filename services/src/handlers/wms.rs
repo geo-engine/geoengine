@@ -380,7 +380,7 @@ mod tests {
         let res = test_test_helper("GET", Some("/wms?service=WMS&version=1.3.0&layers=mock_raster&bbox=1,2,3,4&width=100&height=100&crs=foo&styles=ssss&format=image/png")).await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             400,
             "UnableToParseQueryString",
             "Unable to parse query string: missing field `request`",
@@ -392,7 +392,7 @@ mod tests {
         let res = test_test_helper("GET", Some("/wms?request=GetMap&service=WMS&version=1.3.0&layers=mock_raster&bbox=1,2,3,4&width=XYZ&height=100&crs=EPSG:4326&styles=ssss&format=image/png")).await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             400,
             "UnableToParseQueryString",
             "Unable to parse query string: could not parse string",
@@ -517,7 +517,7 @@ mod tests {
         let res = get_map_test_helper("GET", Some("/wms?request=GetMap&service=WMS&version=1.3.0&bbox=20,-10,80,50&width=600&height=600&crs=EPSG:4326&styles=ssss&format=image/png&time=2014-01-01T00:00:00.0Z")).await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             400,
             "UnableToParseQueryString",
             "Unable to parse query string: missing field `layers`",

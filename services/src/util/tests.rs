@@ -18,14 +18,16 @@ use crate::{
     contexts::{Context, InMemoryContext},
     datasets::storage::{DatasetDefinition, MetaDataDefinition},
 };
+use actix_web::dev::ServiceResponse;
+use actix_web::http::Method;
+use actix_web::{test, App};
 use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::operations::image::Colorizer;
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use geoengine_operators::engine::{RasterOperator, TypedOperator};
 use geoengine_operators::source::{GdalSource, GdalSourceParameters};
 use geoengine_operators::util::gdal::create_ndvi_meta_data;
-use warp::http::Response;
-use warp::hyper::body::Bytes;
+use crate::server::init_routes;
 
 #[allow(clippy::missing_panics_doc)]
 pub async fn create_session_helper<C: Context>(ctx: &C) -> Session {
@@ -157,36 +159,44 @@ pub async fn add_ndvi_to_datasets(ctx: &InMemoryContext) -> DatasetId {
         .expect("dataset db access")
 }
 
-pub async fn check_allowed_http_methods2<'a, T, TRes, P, PParam>(
+pub async fn check_allowed_http_methods2<T, TRes, P, PParam>(
     test_helper: T,
-    allowed_methods: &'a [&str],
+    allowed_methods: &[Method],
     projector: P,
 ) where
-    T: Fn(&'a str) -> TRes,
+    T: Fn(Method) -> TRes,
     TRes: futures::Future<Output = PParam>,
-    P: Fn(PParam) -> Response<Bytes>,
+    P: Fn(PParam) -> ServiceResponse,
 {
-    const HTTP_METHODS: [&str; 9] = [
-        "GET", "HEAD", "POST", "PUT", "DELETE", "CONNECT", "OPTIONS", "TRACE", "PATCH",
+    const HTTP_METHODS: [Method; 9] = [
+        Method::GET,
+        Method::HEAD,
+        Method::POST,
+        Method::PUT,
+        Method::DELETE,
+        Method::CONNECT,
+        Method::OPTIONS,
+        Method::TRACE,
+        Method::PATCH,
     ];
 
-    for method in &HTTP_METHODS {
-        if !allowed_methods.contains(method) {
+    for method in HTTP_METHODS {
+        if !allowed_methods.contains(&method) {
             let res = test_helper(method).await;
             let res = projector(res);
 
-            ErrorResponse::assert(&res, 405, "MethodNotAllowed", "HTTP method not allowed.");
+            ErrorResponse::assert(res, 405, "MethodNotAllowed", "HTTP method not allowed.");
         }
     }
 }
 
-pub fn check_allowed_http_methods<'a, T, TRes>(
+pub fn check_allowed_http_methods<T, TRes>(
     test_helper: T,
-    allowed_methods: &'a [&str],
-) -> impl futures::Future + 'a
+    allowed_methods: &[Method],
+) -> impl futures::Future + '_
 where
-    T: Fn(&'a str) -> TRes + 'a,
-    TRes: futures::Future<Output = Response<Bytes>> + 'a,
+    T: Fn(Method) -> TRes,
+    TRes: futures::Future<Output = ServiceResponse>,
 {
     check_allowed_http_methods2(test_helper, allowed_methods, |res| res)
 }

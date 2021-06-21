@@ -790,7 +790,7 @@ x;y
             .reply(&wfs_handler(ctx).recover(handle_rejection))
             .await;
 
-        ErrorResponse::assert(&res, 400, "InvalidQuery", "Invalid query string.");
+        ErrorResponse::assert(res, 400, "InvalidQuery", "Invalid query string.");
     }
 
     async fn get_feature_json_test_helper(method: &str) -> Response<Bytes> {
@@ -916,7 +916,7 @@ x;y
             .reply(&wfs_handler(ctx).recover(handle_rejection))
             .await;
 
-        ErrorResponse::assert(&res, 400, "InvalidQuery", "Invalid query string.");
+        ErrorResponse::assert(res, 400, "InvalidQuery", "Invalid query string.");
     }
 
     async fn add_dataset_definition_to_datasets(

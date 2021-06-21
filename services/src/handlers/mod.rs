@@ -3,8 +3,8 @@ use crate::error::Result;
 use crate::users::session::{Session, SessionId};
 use crate::users::userdb::UserDb;
 use crate::{contexts::Context, error::Error};
-use actix_web::dev::{Payload, ServiceRequest};
-use actix_web::{web, FromRequest, HttpMessage, HttpRequest};
+use actix_web::dev::{Payload, ServiceRequest, ServiceResponse};
+use actix_web::{test, web, FromRequest, HttpMessage, HttpRequest};
 use actix_web_httpauth::extractors::bearer::BearerAuth;
 use futures::future::{err, ok, Ready};
 use log::error;
@@ -39,12 +39,11 @@ impl ErrorResponse {
     /// # Panics
     /// Panics if `status` or `error` do not match.
     ///
-    pub fn assert(res: &Response<Bytes>, status: u16, error: &str, message: &str) {
+    pub async fn assert(res: ServiceResponse, status: u16, error: &str, message: &str) {
         assert_eq!(res.status(), status);
 
-        let body = std::str::from_utf8(&res.body()).unwrap();
         assert_eq!(
-            serde_json::from_str::<ErrorResponse>(body).unwrap(),
+            test::read_body_json(res).await,
             ErrorResponse {
                 error: error.to_string(),
                 message: message.to_string(),

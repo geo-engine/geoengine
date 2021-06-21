@@ -233,6 +233,7 @@ mod tests {
     use super::*;
     use crate::handlers::ErrorResponse;
     use crate::projects::project::STRectangle;
+    use crate::server::init_routes;
     use crate::users::session::Session;
     use crate::users::user::UserId;
     use crate::users::userdb::UserDb;
@@ -241,16 +242,17 @@ mod tests {
     };
     use crate::util::user_input::Validated;
     use crate::{contexts::InMemoryContext, handlers::handle_rejection};
+    use actix_web::dev::ServiceResponse;
+    use actix_web::http::Method;
+    use actix_web::{test, App};
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
     use serde_json::json;
-    use warp::http::Response;
-    use warp::hyper::body::Bytes;
 
     async fn register_test_helper<C: Context>(
         ctx: C,
-        method: &str,
+        method: Method,
         email: &str,
-    ) -> Response<Bytes> {
+    ) -> ServiceResponse {
         let user = UserRegistration {
             email: email.to_string(),
             password: "secret123".to_string(),
@@ -258,12 +260,19 @@ mod tests {
         };
 
         // register user
-        warp::test::request()
-            .method(method)
-            .path("/user")
+        /*warp::test::request()
+        .method(method)
+        .path("/user")
+        .header("Content-Length", "0")
+        .json(&user)
+        .reply(&register_user_handler(ctx).recover(handle_rejection))
+        .await*/
+        let mut app = test::init_service(App::new().data(ctx).configure(init_routes)).await;
+        test::TestRequest::method(method)
+            .uri("/user")
             .header("Content-Length", "0")
-            .json(&user)
-            .reply(&register_user_handler(ctx).recover(handle_rejection))
+            .set_json(&user)
+            .send_request(&mut app)
             .await
     }
 
@@ -271,7 +280,7 @@ mod tests {
     async fn register() {
         let ctx = InMemoryContext::default();
 
-        let res = register_test_helper(ctx, "POST", "foo@bar.de").await;
+        let res = register_test_helper(ctx, Method::POST, "foo@bar.de").await;
 
         assert_eq!(res.status(), 200);
 
@@ -283,10 +292,10 @@ mod tests {
     async fn register_fail() {
         let ctx = InMemoryContext::default();
 
-        let res = register_test_helper(ctx, "POST", "notanemail").await;
+        let res = register_test_helper(ctx, Method::POST, "notanemail").await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             400,
             "RegistrationFailed",
             "Registration failed: Invalid e-mail address",
@@ -297,17 +306,18 @@ mod tests {
     async fn register_duplicate_email() {
         let ctx = InMemoryContext::default();
 
-        register_test_helper(ctx.clone(), "POST", "foo@bar.de").await;
+        register_test_helper(ctx.clone(), Method::POST, "foo@bar.de").await;
 
         // register user
-        let res = register_test_helper(ctx, "POST", "foo@bar.de").await;
+        let res = register_test_helper(ctx, Method::POST, "foo@bar.de").await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             409,
             "Duplicate",
             "Tried to create duplicate: E-mail already exists",
-        );
+        )
+        .await;
     }
 
     #[tokio::test]
@@ -316,7 +326,7 @@ mod tests {
 
         check_allowed_http_methods(
             |method| register_test_helper(ctx.clone(), method, "foo@bar.de"),
-            &["POST"],
+            &[Method::POST],
         )
         .await;
     }
@@ -326,20 +336,21 @@ mod tests {
         let ctx = InMemoryContext::default();
 
         // register user
-        let res = warp::test::request()
-            .method("POST")
-            .path("/user")
+        let mut app = test::init_service(App::new().data(ctx).configure(init_routes)).await;
+        let res = test::TestRequest::post()
+            .uri("/user")
             .header("Content-Length", "0")
-            .body("no json")
-            .reply(&register_user_handler(ctx).recover(handle_rejection))
+            .set_payload("no json")
+            .send_request(&mut app)
             .await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             400,
             "BodyDeserializeError",
             "expected ident at line 1 column 2",
-        );
+        )
+        .await;
     }
 
     #[tokio::test]
@@ -361,7 +372,7 @@ mod tests {
             .await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             400,
             "BodyDeserializeError",
             "missing field `email` at line 1 column 47",
@@ -382,7 +393,7 @@ mod tests {
             .await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             415,
             "UnsupportedMediaType",
             "Unsupported content type header.",
@@ -431,7 +442,7 @@ mod tests {
         let res = login_test_helper("POST", "wrong").await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             401,
             "LoginFailed",
             "User does not exist or password is wrong.",
@@ -457,7 +468,7 @@ mod tests {
             .await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             400,
             "BodyDeserializeError",
             "expected ident at line 1 column 2",
@@ -491,7 +502,7 @@ mod tests {
             .await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             400,
             "BodyDeserializeError",
             "missing field `password` at line 1 column 22",
@@ -555,7 +566,7 @@ mod tests {
             .await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             401,
             "MissingAuthorizationHeader",
             "Header with authorization token not provided.",
@@ -576,7 +587,7 @@ mod tests {
             .reply(&logout_handler(ctx).recover(handle_rejection))
             .await;
 
-        ErrorResponse::assert(&res, 401, "InvalidSession", "The session id is invalid.");
+        ErrorResponse::assert(res, 401, "InvalidSession", "The session id is invalid.");
     }
 
     #[tokio::test]
@@ -591,7 +602,7 @@ mod tests {
             .await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             401,
             "InvalidAuthorizationScheme",
             "Authentication scheme must be Bearer.",
@@ -610,7 +621,7 @@ mod tests {
             .await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             401,
             "InvalidUuid",
             "Identifier does not have the right format.",
@@ -658,7 +669,7 @@ mod tests {
             .reply(&session_handler(ctx).recover(handle_rejection))
             .await;
 
-        ErrorResponse::assert(&res, 401, "InvalidSession", "The session id is invalid.");
+        ErrorResponse::assert(res, 401, "InvalidSession", "The session id is invalid.");
     }
 
     #[tokio::test]
