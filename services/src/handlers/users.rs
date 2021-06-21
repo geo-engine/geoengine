@@ -38,7 +38,7 @@ pub(crate) async fn register_user_handler<C: Context>(
     user: web::Json<UserRegistration>,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
-    let user = user.clone().validated()?;
+    let user = user.into_inner().validated()?;
     let id = ctx.user_db_ref_mut().await.register(user).await?;
     Ok(web::Json(IdResponse::from(id)))
 }
@@ -108,7 +108,7 @@ pub(crate) async fn login_handler<C: Context>(
     let session = ctx
         .user_db_ref_mut()
         .await
-        .login(user.clone())
+        .login(user.into_inner())
         .await
         .map_err(Box::new)
         .context(error::Authorization)?;
@@ -222,7 +222,7 @@ pub(crate) async fn session_view_handler<C: Context>(
 ) -> Result<impl Responder> {
     ctx.user_db_ref_mut()
         .await
-        .set_session_view(&session, view.clone())
+        .set_session_view(&session, view.into_inner())
         .await?;
 
     Ok(HttpResponse::Ok())

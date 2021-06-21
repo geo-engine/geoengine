@@ -49,7 +49,7 @@ pub(crate) async fn create_project_handler<C: Context>(
     ctx: web::Data<C>,
     create: web::Json<CreateProject>,
 ) -> Result<impl Responder> {
-    let create = create.clone().validated()?;
+    let create = create.into_inner().validated()?;
     let id = ctx
         .project_db_ref_mut()
         .await
@@ -84,7 +84,7 @@ pub(crate) async fn list_projects_handler<C: Context>(
     ctx: web::Data<C>,
     options: web::Query<ProjectListOptions>,
 ) -> Result<impl Responder> {
-    let options = options.clone().validated()?;
+    let options = options.into_inner().validated()?;
     let listing = ctx
         .project_db_ref()
         .await
@@ -244,9 +244,8 @@ pub(crate) async fn update_project_handler<C: Context>(
     ctx: web::Data<C>,
     mut update: web::Json<UpdateProject>,
 ) -> Result<impl Responder> {
-    //let update = update.clone();
     update.id = *project; // TODO: avoid passing project id in path AND body
-    let update = update.clone().validated()?;
+    let update = update.into_inner().validated()?;
     ctx.project_db_ref_mut()
         .await
         .update(session.user.id, update)
@@ -334,7 +333,7 @@ pub(crate) async fn add_permission_handler<C: Context>(
 ) -> Result<impl Responder> {
     ctx.project_db_ref_mut()
         .await
-        .add_permission(session.user.id, permission.clone())
+        .add_permission(session.user.id, permission.into_inner())
         .await?;
     Ok(HttpResponse::Ok())
 }
@@ -361,7 +360,7 @@ pub(crate) async fn remove_permission_handler<C: Context>(
 ) -> Result<impl Responder> {
     ctx.project_db_ref_mut()
         .await
-        .remove_permission(session.user.id, permission.clone())
+        .remove_permission(session.user.id, permission.into_inner())
         .await?;
     Ok(HttpResponse::Ok())
 }
