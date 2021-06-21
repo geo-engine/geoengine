@@ -15,11 +15,12 @@ It would be nice if you create, for instance, a failing test with the expected o
 
 ### 📣 Discussion
 
-If you want to discuss new features before implementing them, feel free to start a discussion and get feedback on your idea.
+If you want to discuss new features before implementing them, feel free to start a discussion on [GitHub](https://github.com/geo-engine/geoengine/discussions) and get feedback on your idea.
 
 ### ❓ Support
 
 In case you have difficulties using Geo Engine, feel free to ask for help!
+You can either start a Q&A on [GitHub](https://github.com/geo-engine/geoengine/discussions) or write an email to [support@geoengine.de](mailto:support@geoengine.de).
 
 ## 🛠️ Pull requests
 
@@ -33,9 +34,9 @@ You can visit [www.geoengine.de/cla](https://www.geoengine.de/cla/) to get more 
 
 ### Code reviews
 
-The core team usually makes a code review on each pull request.
+The core team usually performs a code review on each pull request.
 We address all issues and try to give helpful feedback.
-You can either rebuttal a comment or provide a fix.
+You can either rebut a comment or provide a fix.
 Please refer to your commit as a response to each comment such that we can easily check it and have a fast process.
 Moreover, please do not mark the issues as resolved yourself – it will always be the one that commented on the code that resolves it.
 
@@ -47,4 +48,4 @@ Our coverage tool will automatically tell you how much of our contribution is co
 
 ### Your PR is merged!
 
-Congratulations! The Geo Engine team thanks you for your contribution. ✨
+Congratulations! The Geo Engine community thanks you for your contribution. ✨
