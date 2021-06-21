@@ -74,6 +74,82 @@ pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<(), Error
     }
 }
 
+fn init_routes<C>(cfg: &mut web::ServiceConfig)
+where
+    C: Context,
+{
+    cfg.route(
+        "/user",
+        web::post().to(handlers::users::register_user_handler::<C>),
+    )
+    .route(
+        "/anonymous",
+        web::post().to(handlers::users::anonymous_handler::<C>),
+    )
+    .route(
+        "/login",
+        web::post().to(handlers::users::login_handler::<C>),
+    )
+    .service(
+        // Scope for handlers which need authentication
+        web::scope("")
+            .wrap(HttpAuthentication::bearer(validate_token::<C>))
+            .route(
+                "/logout",
+                web::post().to(handlers::users::logout_handler::<C>),
+            )
+            .route("/session", web::get().to(handlers::users::session_handler))
+            .route(
+                "/session/project/{project}",
+                web::post().to(handlers::users::session_project_handler::<C>),
+            )
+            .route(
+                "/session/view",
+                web::post().to(handlers::users::session_view_handler::<C>),
+            )
+            .route(
+                "/project",
+                web::post().to(handlers::projects::create_project_handler::<C>),
+            )
+            .route(
+                "/projects",
+                web::get().to(handlers::projects::list_projects_handler::<C>),
+            )
+            .route(
+                "/project/{project}",
+                web::get().to(handlers::projects::load_project_handler::<C>),
+            )
+            .route(
+                "/project/{project}/{version}",
+                web::get().to(handlers::projects::load_project_version_handler::<C>),
+            )
+            .route(
+                "/project/{project}",
+                web::patch().to(handlers::projects::update_project_handler::<C>),
+            )
+            .route(
+                "/project/{project}",
+                web::delete().to(handlers::projects::delete_project_handler::<C>),
+            )
+            .route(
+                "/project/versions",
+                web::get().to(handlers::projects::project_versions_handler::<C>),
+            )
+            .route(
+                "/project/permission/add",
+                web::post().to(handlers::projects::add_permission_handler::<C>),
+            )
+            .route(
+                "/project/permission",
+                web::delete().to(handlers::projects::remove_permission_handler::<C>),
+            )
+            .route(
+                "/project/{project}/permissions",
+                web::get().to(handlers::projects::list_permissions_handler::<C>),
+            ),
+    );
+}
+
 async fn start<C>(
     static_files_dir: Option<PathBuf>,
     bind_address: SocketAddr,
@@ -135,76 +211,7 @@ where
             .app_data(wrapped_ctx.clone())
             .wrap(actix_web::middleware::Logger::default())
             .service(show_version) // TODO: allow disabling this function via config or feature flag
-            .route(
-                "/user",
-                web::post().to(handlers::users::register_user_handler::<C>),
-            )
-            .route(
-                "/anonymous",
-                web::post().to(handlers::users::anonymous_handler::<C>),
-            )
-            .route(
-                "/login",
-                web::post().to(handlers::users::login_handler::<C>),
-            )
-            .service(
-                // Scope for handlers which need authentication
-                web::scope("")
-                    .wrap(HttpAuthentication::bearer(validate_token::<C>))
-                    .route(
-                        "/logout",
-                        web::post().to(handlers::users::logout_handler::<C>),
-                    )
-                    .route("/session", web::get().to(handlers::users::session_handler))
-                    .route(
-                        "/session/project/{project}",
-                        web::post().to(handlers::users::session_project_handler::<C>),
-                    )
-                    .route(
-                        "/session/view",
-                        web::post().to(handlers::users::session_view_handler::<C>),
-                    )
-                    .route(
-                        "/project",
-                        web::post().to(handlers::projects::create_project_handler::<C>),
-                    )
-                    .route(
-                        "/projects",
-                        web::get().to(handlers::projects::list_projects_handler::<C>),
-                    )
-                    .route(
-                        "/project/{project}",
-                        web::get().to(handlers::projects::load_project_handler::<C>),
-                    )
-                    .route(
-                        "/project/{project}/{version}",
-                        web::get().to(handlers::projects::load_project_version_handler::<C>),
-                    )
-                    .route(
-                        "/project/{project}",
-                        web::patch().to(handlers::projects::update_project_handler::<C>),
-                    )
-                    .route(
-                        "/project/{project}",
-                        web::delete().to(handlers::projects::delete_project_handler::<C>),
-                    )
-                    .route(
-                        "/project/versions",
-                        web::get().to(handlers::projects::project_versions_handler::<C>),
-                    )
-                    .route(
-                        "/project/permission/add",
-                        web::post().to(handlers::projects::add_permission_handler::<C>),
-                    )
-                    .route(
-                        "/project/permission",
-                        web::delete().to(handlers::projects::remove_permission_handler::<C>),
-                    )
-                    .route(
-                        "/project/{project}/permissions",
-                        web::get().to(handlers::projects::list_permissions_handler::<C>),
-                    ),
-            );
+            .configure(init_routes::<C>);
 
         if let Some(static_files_dir) = static_files_dir.clone() {
             app.service(Files::new("/static", static_files_dir))
