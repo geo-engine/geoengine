@@ -120,10 +120,14 @@ impl PointInPolygonFilterProcessor {
     }
 
     fn filter_parallel(
-        tester: &Arc<PointInPolygonTester>,
         points: &Arc<MultiPointCollection>,
+        polygons: &MultiPolygonCollection,
         thread_pool: &ThreadPoolContext,
     ) -> Vec<bool> {
+        // TODO: parallelize over coordinate rather than features
+
+        let tester = Arc::new(PointInPolygonTester::new(polygons)); // TODO: multithread
+
         let parallelism = thread_pool.degree_of_parallelism();
         let chunk_size = (points.len() as f64 / parallelism as f64).ceil() as usize;
 
@@ -178,8 +182,7 @@ impl PointInPolygonFilterProcessor {
 
         let thread_points = points.clone();
         let filter = tokio::task::spawn_blocking(move || {
-            let tester = Arc::new(PointInPolygonTester::new(&polygons)); // TODO: multithread
-            Self::filter_parallel(&tester, &thread_points, &thread_pool)
+            Self::filter_parallel(&thread_points, &polygons, &thread_pool)
         })
         .await?;
 
