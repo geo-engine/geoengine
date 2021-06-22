@@ -1,14 +1,12 @@
-use crate::datasets::storage::{AddDatasetProvider, AddMockDatasetProvider, Dataset};
+use crate::datasets::storage::Dataset;
 use crate::error;
 use crate::error::Result;
-use crate::users::user::UserId;
 use crate::util::config::{get_config_element, DatasetService};
 use crate::util::user_input::{UserInput, Validated};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::DatasetId;
 use geoengine_operators::engine::{
-    MetaData, MetaDataProvider, RasterResultDescriptor, ResultDescriptor, TypedResultDescriptor,
-    VectorResultDescriptor,
+    MetaDataProvider, RasterResultDescriptor, TypedResultDescriptor, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
@@ -79,68 +77,14 @@ pub trait DatasetProvider:
     // TODO: filter, paging
     async fn list(
         &self,
-        user: UserId,
+        // session: &S, // TODO: authorization
         options: Validated<DatasetListOptions>,
     ) -> Result<Vec<DatasetListing>>;
 
-    async fn load(&self, user: UserId, dataset: &DatasetId) -> Result<Dataset>;
-}
-
-pub enum TypedDatasetProvider {
-    Mock(MockDatasetProvider), // wcs, ...
-}
-
-impl TypedDatasetProvider {
-    pub fn new(input: AddDatasetProvider) -> Self {
-        match input {
-            AddDatasetProvider::AddMockDatasetProvider(add) => {
-                Self::Mock(MockDatasetProvider::new(add))
-            }
-        }
-    }
-
-    pub fn into_box(self) -> Box<dyn DatasetProvider> {
-        match self {
-            TypedDatasetProvider::Mock(provider) => Box::new(provider),
-        }
-    }
-}
-
-pub struct MockDatasetProvider {
-    pub datasets: Vec<Dataset>,
-}
-
-impl MockDatasetProvider {
-    fn new(input: AddMockDatasetProvider) -> Self {
-        Self {
-            datasets: input.datasets,
-        }
-    }
-}
-
-impl<L, R> MetaDataProvider<L, R> for MockDatasetProvider
-where
-    R: ResultDescriptor,
-{
-    fn meta_data(
+    // TODO: is this method useful?
+    async fn load(
         &self,
-        _dataset: &DatasetId,
-    ) -> std::result::Result<Box<dyn MetaData<L, R>>, geoengine_operators::error::Error> {
-        todo!()
-    }
-}
-
-#[async_trait]
-impl DatasetProvider for MockDatasetProvider {
-    async fn list(
-        &self,
-        _user: UserId,
-        _options: Validated<DatasetListOptions>,
-    ) -> Result<Vec<DatasetListing>> {
-        todo!()
-    }
-
-    async fn load(&self, _user: UserId, _dataset: &DatasetId) -> Result<Dataset> {
-        todo!()
-    }
+        // session: &S, // TODO: authorization
+        dataset: &DatasetId,
+    ) -> Result<Dataset>;
 }

@@ -2,7 +2,7 @@ use flexi_logger::{
     style, AdaptiveFormat, Age, Cleanup, Criterion, DeferredNow, Duplicate, Logger, LoggerHandle,
     Naming,
 };
-use geoengine_services::error::Error;
+use geoengine_services::error::{Error, Result};
 use geoengine_services::server;
 use geoengine_services::util::config;
 use geoengine_services::util::config::get_config_element;
@@ -12,10 +12,20 @@ use log::Record;
 async fn main() -> Result<(), Error> {
     let logger = initialize_logging();
 
-    let res = server::start_server(None).await;
+    let res = start_server().await;
 
     logger.shutdown();
     res
+}
+
+#[cfg(not(feature = "pro"))]
+pub async fn start_server() -> Result<()> {
+    server::start_server(None).await
+}
+
+#[cfg(feature = "pro")]
+pub async fn start_server() -> Result<()> {
+    geoengine_services::pro::server::start_pro_server(None).await
 }
 
 fn initialize_logging() -> LoggerHandle {

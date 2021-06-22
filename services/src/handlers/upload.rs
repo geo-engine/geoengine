@@ -7,7 +7,6 @@ use warp::Filter;
 use crate::datasets::upload::{FileId, FileUpload, Upload, UploadDb, UploadId, UploadRootPath};
 use crate::error;
 use crate::handlers::{authenticate, Context};
-use crate::users::session::Session;
 use crate::util::IdResponse;
 use bytes::Buf;
 use mime::Mime;
@@ -48,7 +47,7 @@ pub(crate) fn upload_handler<C: Context>(
 
 // TODO: move into handler once async closures are available?
 async fn upload<C: Context>(
-    session: Session,
+    session: C::Session,
     ctx: C,
     mime: Mime,
     body: impl Stream<Item = Result<impl Buf, warp::Error>> + Unpin,
@@ -97,7 +96,7 @@ async fn upload<C: Context>(
     ctx.dataset_db_ref_mut()
         .await
         .create_upload(
-            session.user.id,
+            &session,
             Upload {
                 id: upload_id,
                 files,
@@ -111,15 +110,14 @@ async fn upload<C: Context>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::InMemoryContext;
+    use crate::contexts::{InMemoryContext, Session, SimpleContext};
     use crate::handlers::handle_rejection;
-    use crate::util::tests::create_session_helper;
 
     #[tokio::test]
     async fn upload() {
         let ctx = InMemoryContext::default();
 
-        let session = create_session_helper(&ctx).await;
+        let session_id = ctx.default_session_ref().await.id();
 
         let body = r#"-----------------------------10196671711503402186283068890
 Content-Disposition: form-data; name="files[]"; filename="bar.txt"
@@ -141,7 +139,7 @@ foo
             .header("Content-Length", body.len())
             .header(
                 "Authorization",
-                format!("Bearer {}", session.id.to_string()),
+                format!("Bearer {}", session_id.to_string()),
             )
             .header("Content-Type", "multipart/form-data; boundary=---------------------------10196671711503402186283068890")
             .body(

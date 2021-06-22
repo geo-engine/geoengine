@@ -9,3 +9,8 @@ Cargo.lock
 /.idea
 /.vscode
 Settings.toml
+
+# Data
+upload/
+**/*.gpkg-shm
+**/*.gpkg-wal

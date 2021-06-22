@@ -33,6 +33,9 @@ pub use self::typed_raster_tile::{TypedRasterTile2D, TypedRasterTile3D};
 pub use self::{
     grid_traits::ChangeGridBounds, grid_traits::GridShapeAccess, grid_traits::NoDataValue,
 };
+pub use raster_properties::{
+    RasterProperties, RasterPropertiesEntry, RasterPropertiesEntryType, RasterPropertiesKey,
+};
 
 mod data_type;
 mod empty_grid;
@@ -46,6 +49,7 @@ mod grid_typed;
 mod macros_raster;
 mod macros_raster_tile;
 mod operations;
+mod raster_properties;
 mod raster_tile;
 mod tiling;
 mod typed_raster_conversion;

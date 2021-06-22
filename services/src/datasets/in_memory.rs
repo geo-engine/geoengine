@@ -1,11 +1,11 @@
+use crate::contexts::SimpleSession;
 use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider, OrderBy};
 use crate::datasets::storage::{
-    AddDataset, AddDatasetProvider, Dataset, DatasetDb, DatasetProviderDb,
-    DatasetProviderListOptions, DatasetProviderListing, DatasetStore, DatasetStorer,
+    AddDataset, Dataset, DatasetDb, DatasetProviderDb, DatasetProviderListOptions,
+    DatasetProviderListing, DatasetStore, DatasetStorer,
 };
 use crate::error;
 use crate::error::Result;
-use crate::users::user::UserId;
 use crate::util::user_input::Validated;
 use async_trait::async_trait;
 use geoengine_datatypes::{
@@ -21,7 +21,7 @@ use geoengine_operators::{mock::MockDatasetDataSourceLoadingInfo, source::GdalMe
 use std::collections::HashMap;
 
 use super::{
-    storage::MetaDataDefinition,
+    storage::{DatasetProviderDefinition, MetaDataDefinition},
     upload::{Upload, UploadDb, UploadId},
 };
 
@@ -37,34 +37,51 @@ pub struct HashMapDatasetDb {
     gdal_datasets:
         HashMap<InternalDatasetId, Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor>>>,
     uploads: HashMap<UploadId, Upload>,
+    external_providers: HashMap<DatasetProviderId, Box<dyn DatasetProviderDefinition>>,
 }
 
-impl DatasetDb for HashMapDatasetDb {}
+impl DatasetDb<SimpleSession> for HashMapDatasetDb {}
 
 #[async_trait]
-impl DatasetProviderDb for HashMapDatasetDb {
+impl DatasetProviderDb<SimpleSession> for HashMapDatasetDb {
     async fn add_dataset_provider(
         &mut self,
-        _user: UserId,
-        _provider: Validated<AddDatasetProvider>,
+        _session: &SimpleSession,
+        provider: Box<dyn DatasetProviderDefinition>,
     ) -> Result<DatasetProviderId> {
-        todo!()
+        // TODO: user right management
+        let id = provider.id();
+        self.external_providers.insert(id, provider);
+        Ok(id)
     }
 
     async fn list_dataset_providers(
         &self,
-        _user: UserId,
+        _session: &SimpleSession,
         _options: Validated<DatasetProviderListOptions>,
     ) -> Result<Vec<DatasetProviderListing>> {
-        todo!()
+        // TODO: use options
+        Ok(self
+            .external_providers
+            .iter()
+            .map(|(id, d)| DatasetProviderListing {
+                id: *id,
+                type_name: d.type_name(),
+                name: d.name(),
+            })
+            .collect())
     }
 
     async fn dataset_provider(
         &self,
-        _user: UserId,
-        _provider: DatasetProviderId,
-    ) -> Result<&dyn DatasetProvider> {
-        todo!()
+        _session: &SimpleSession,
+        provider: DatasetProviderId,
+    ) -> Result<Box<dyn DatasetProvider>> {
+        self.external_providers
+            .get(&provider)
+            .cloned()
+            .ok_or(error::Error::UnknownProviderId)?
+            .initialize()
     }
 }
 
@@ -116,10 +133,10 @@ impl HashMapStorable for GdalMetaDataStatic {
 }
 
 #[async_trait]
-impl DatasetStore for HashMapDatasetDb {
+impl DatasetStore<SimpleSession> for HashMapDatasetDb {
     async fn add_dataset(
         &mut self,
-        _user: UserId,
+        _session: &SimpleSession,
         dataset: Validated<AddDataset>,
         meta_data: Box<dyn HashMapStorable>,
     ) -> Result<DatasetId> {
@@ -150,7 +167,7 @@ impl DatasetStore for HashMapDatasetDb {
 impl DatasetProvider for HashMapDatasetDb {
     async fn list(
         &self,
-        _user: UserId,
+        // _session: &SimpleSession,
         options: Validated<DatasetListOptions>,
     ) -> Result<Vec<DatasetListing>> {
         // TODO: permissions
@@ -182,7 +199,11 @@ impl DatasetProvider for HashMapDatasetDb {
         Ok(list)
     }
 
-    async fn load(&self, _user: UserId, dataset: &DatasetId) -> Result<Dataset> {
+    async fn load(
+        &self,
+        // _session: &SimpleSession,
+        dataset: &DatasetId,
+    ) -> Result<Dataset> {
         // TODO: permissions
 
         self.datasets
@@ -193,10 +214,11 @@ impl DatasetProvider for HashMapDatasetDb {
     }
 }
 
+#[async_trait]
 impl MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>
     for HashMapDatasetDb
 {
-    fn meta_data(
+    async fn meta_data(
         &self,
         dataset: &DatasetId,
     ) -> Result<
@@ -218,8 +240,9 @@ impl MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>
     }
 }
 
+#[async_trait]
 impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor> for HashMapDatasetDb {
-    fn meta_data(
+    async fn meta_data(
         &self,
         dataset: &DatasetId,
     ) -> Result<
@@ -241,8 +264,9 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor> for HashMapDatas
     }
 }
 
+#[async_trait]
 impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor> for HashMapDatasetDb {
-    fn meta_data(
+    async fn meta_data(
         &self,
         dataset: &DatasetId,
     ) -> Result<
@@ -270,7 +294,6 @@ mod tests {
     use super::*;
     use crate::contexts::{Context, InMemoryContext};
     use crate::datasets::listing::OrderBy;
-    use crate::users::session::Session;
     use crate::util::user_input::UserInput;
     use geoengine_datatypes::collections::VectorDataType;
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
@@ -280,7 +303,7 @@ mod tests {
     async fn add_ogr_and_list() -> Result<()> {
         let ctx = InMemoryContext::default();
 
-        let session = Session::mock();
+        let session = SimpleSession::default();
 
         let descriptor = VectorResultDescriptor {
             data_type: VectorDataType::Data,
@@ -313,16 +336,16 @@ mod tests {
         let id = ctx
             .dataset_db_ref_mut()
             .await
-            .add_dataset(session.user.id, ds.validated()?, Box::new(meta))
+            .add_dataset(&session, ds.validated()?, Box::new(meta))
             .await?;
 
-        let exe_ctx = ctx.execution_context(&session)?;
+        let exe_ctx = ctx.execution_context(session.clone())?;
 
         let meta: Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor>> =
-            exe_ctx.meta_data(&id)?;
+            exe_ctx.meta_data(&id).await?;
 
         assert_eq!(
-            meta.result_descriptor()?,
+            meta.result_descriptor().await?,
             VectorResultDescriptor {
                 data_type: VectorDataType::Data,
                 spatial_reference: SpatialReferenceOption::Unreferenced,
@@ -334,7 +357,6 @@ mod tests {
             .dataset_db_ref()
             .await
             .list(
-                session.user.id,
                 DatasetListOptions {
                     filter: None,
                     order: OrderBy::NameAsc,
@@ -364,8 +386,8 @@ mod tests {
 }
 
 #[async_trait]
-impl UploadDb for HashMapDatasetDb {
-    async fn get_upload(&self, _user: UserId, upload: UploadId) -> Result<Upload> {
+impl UploadDb<SimpleSession> for HashMapDatasetDb {
+    async fn get_upload(&self, _session: &SimpleSession, upload: UploadId) -> Result<Upload> {
         // TODO: user permission
         self.uploads
             .get(&upload)
@@ -373,7 +395,7 @@ impl UploadDb for HashMapDatasetDb {
             .ok_or(error::Error::UnknownUploadId)
     }
 
-    async fn create_upload(&mut self, _user: UserId, upload: Upload) -> Result<()> {
+    async fn create_upload(&mut self, _session: &SimpleSession, upload: Upload) -> Result<()> {
         // TODO: user permission
         self.uploads.insert(upload.id, upload);
         Ok(())

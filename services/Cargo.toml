@@ -11,6 +11,8 @@ build = "build.rs"
 
 [features]
 postgres = ["postgres-types", "bb8-postgres"]
+# This compiles Geo Engine Pro
+pro = ["postgres"]
 
 [dependencies]
 async-trait = "0.1"
@@ -37,6 +39,7 @@ serde_urlencoded = "0.7"
 snafu = "0.6"
 strum = { version = "0.20", features = ["derive"] }
 tokio = { version = "1.1", features = ["macros", "signal", "sync", "rt-multi-thread"] }
+typetag = "0.1"
 uuid = { version = "0.8", features = ["serde", "v4", "v5"] }
 warp = "0.3"
 flexi_logger = "0.17"

@@ -1,12 +1,16 @@
-use super::{Context, Db};
-use crate::contexts::{ExecutionContextImpl, QueryContextImpl};
-use crate::datasets::postgres::PostgresDatasetDb;
 use crate::error::{self, Result};
-use crate::projects::project::{ProjectId, ProjectPermission};
-use crate::users::user::UserId;
+use crate::pro::datasets::PostgresDatasetDb;
+use crate::pro::projects::ProjectPermission;
+use crate::pro::users::{UserDb, UserId, UserSession};
+use crate::projects::ProjectId;
+use crate::workflows::postgres_workflow_registry::PostgresWorkflowRegistry;
 use crate::{
-    projects::postgres_projectdb::PostgresProjectDb, users::postgres_userdb::PostgresUserDb,
-    users::session::Session, workflows::postgres_workflow_registry::PostgresWorkflowRegistry,
+    contexts::{Context, Db},
+    pro::users::PostgresUserDb,
+};
+use crate::{
+    contexts::{ExecutionContextImpl, QueryContextImpl},
+    pro::projects::PostgresProjectDb,
 };
 use async_trait::async_trait;
 use bb8_postgres::{
@@ -16,8 +20,11 @@ use bb8_postgres::{
     PostgresConnectionManager,
 };
 use log::{debug, warn};
+use snafu::ResultExt;
 use std::sync::Arc;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+
+use super::ProContext;
 
 /// A contex with references to Postgres backends of the dbs. Automatically migrates schema on instantiation
 #[derive(Clone)]
@@ -31,7 +38,7 @@ where
     user_db: Db<PostgresUserDb<Tls>>,
     project_db: Db<PostgresProjectDb<Tls>>,
     workflow_registry: Db<PostgresWorkflowRegistry<Tls>>,
-    session: Option<Session>,
+    session: Option<UserSession>,
 }
 
 impl<Tls> PostgresContext<Tls>
@@ -261,7 +268,7 @@ where
 }
 
 #[async_trait]
-impl<Tls> Context for PostgresContext<Tls>
+impl<Tls> ProContext for PostgresContext<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -269,11 +276,6 @@ where
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
     type UserDB = PostgresUserDb<Tls>;
-    type ProjectDB = PostgresProjectDb<Tls>;
-    type WorkflowRegistry = PostgresWorkflowRegistry<Tls>;
-    type DatasetDB = PostgresDatasetDb;
-    type QueryContext = QueryContextImpl;
-    type ExecutionContext = ExecutionContextImpl<PostgresDatasetDb>;
 
     fn user_db(&self) -> Db<Self::UserDB> {
         self.user_db.clone()
@@ -284,6 +286,22 @@ where
     async fn user_db_ref_mut(&self) -> RwLockWriteGuard<'_, Self::UserDB> {
         self.user_db.write().await
     }
+}
+
+#[async_trait]
+impl<Tls> Context for PostgresContext<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    type Session = UserSession;
+    type ProjectDB = PostgresProjectDb<Tls>;
+    type WorkflowRegistry = PostgresWorkflowRegistry<Tls>;
+    type DatasetDB = PostgresDatasetDb;
+    type QueryContext = QueryContextImpl;
+    type ExecutionContext = ExecutionContextImpl<UserSession, PostgresDatasetDb>;
 
     fn project_db(&self) -> Db<Self::ProjectDB> {
         self.project_db.clone()
@@ -321,23 +339,29 @@ where
         todo!()
     }
 
-    fn execution_context(&self, _session: &Session) -> Result<Self::ExecutionContext> {
+    fn execution_context(&self, _session: UserSession) -> Result<Self::ExecutionContext> {
         todo!()
+    }
+
+    async fn session_by_id(&self, session_id: crate::contexts::SessionId) -> Result<Self::Session> {
+        self.user_db_ref()
+            .await
+            .session(session_id)
+            .await
+            .map_err(Box::new)
+            .context(error::Authorization)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::projects::project::PointSymbology;
-    use crate::projects::project::{
-        CreateProject, Layer, LayerUpdate, LoadVersion, OrderBy, Plot, PlotUpdate, ProjectFilter,
-        ProjectId, ProjectListOptions, ProjectListing, ProjectPermission, STRectangle,
-        UpdateProject, UserProjectPermission,
+    use crate::pro::projects::{LoadVersion, ProProjectDb, UserProjectPermission};
+    use crate::pro::users::{UserCredentials, UserDb, UserRegistration};
+    use crate::projects::{
+        CreateProject, Layer, LayerUpdate, OrderBy, Plot, PlotUpdate, PointSymbology, ProjectDb,
+        ProjectFilter, ProjectId, ProjectListOptions, ProjectListing, STRectangle, UpdateProject,
     };
-    use crate::projects::projectdb::ProjectDb;
-    use crate::users::user::{UserCredentials, UserId, UserRegistration};
-    use crate::users::userdb::UserDb;
     use crate::util::user_input::UserInput;
     use crate::workflows::registry::WorkflowRegistry;
     use crate::workflows::workflow::Workflow;
@@ -368,21 +392,32 @@ mod tests {
 
         anonymous(&ctx).await;
 
-        let user_id = user_reg_login(&ctx).await;
+        let _user_id = user_reg_login(&ctx).await;
 
-        create_projects(&ctx, user_id).await;
+        let session = ctx
+            .user_db()
+            .write()
+            .await
+            .login(UserCredentials {
+                email: "foo@bar.de".into(),
+                password: "secret123".into(),
+            })
+            .await
+            .unwrap();
 
-        let projects = list_projects(&ctx, user_id).await;
+        create_projects(&ctx, &session).await;
+
+        let projects = list_projects(&ctx, &session).await;
 
         set_session(&ctx, &projects).await;
 
         let project_id = projects[0].id;
 
-        update_projects(&ctx, user_id, project_id).await;
+        update_projects(&ctx, &session, project_id).await;
 
-        add_permission(&ctx, user_id, project_id).await;
+        add_permission(&ctx, &session, project_id).await;
 
-        delete_project(ctx, user_id, project_id).await;
+        delete_project(ctx, &session, project_id).await;
     }
 
     async fn set_session(ctx: &PostgresContext<NoTls>, projects: &[ProjectListing]) {
@@ -430,26 +465,34 @@ mod tests {
         );
     }
 
-    async fn delete_project(ctx: PostgresContext<NoTls>, user_id: UserId, project_id: ProjectId) {
+    async fn delete_project(
+        ctx: PostgresContext<NoTls>,
+        session: &UserSession,
+        project_id: ProjectId,
+    ) {
         ctx.project_db_ref_mut()
             .await
-            .delete(user_id, project_id)
+            .delete(session, project_id)
             .await
             .unwrap();
 
         assert!(ctx
             .project_db_ref()
             .await
-            .load_latest(user_id, project_id)
+            .load(session, project_id)
             .await
             .is_err());
     }
 
-    async fn add_permission(ctx: &PostgresContext<NoTls>, user_id: UserId, project_id: ProjectId) {
+    async fn add_permission(
+        ctx: &PostgresContext<NoTls>,
+        session: &UserSession,
+        project_id: ProjectId,
+    ) {
         assert_eq!(
             ctx.project_db_ref()
                 .await
-                .list_permissions(user_id, project_id)
+                .list_permissions(session, project_id)
                 .await
                 .unwrap()
                 .len(),
@@ -474,11 +517,11 @@ mod tests {
         ctx.project_db_ref_mut()
             .await
             .add_permission(
-                user_id,
+                session,
                 UserProjectPermission {
-                    user: user2,
                     project: project_id,
                     permission: ProjectPermission::Read,
+                    user: user2,
                 },
             )
             .await
@@ -487,7 +530,7 @@ mod tests {
         assert_eq!(
             ctx.project_db_ref()
                 .await
-                .list_permissions(user_id, project_id)
+                .list_permissions(session, project_id)
                 .await
                 .unwrap()
                 .len(),
@@ -495,11 +538,15 @@ mod tests {
         );
     }
 
-    async fn update_projects(ctx: &PostgresContext<NoTls>, user_id: UserId, project_id: ProjectId) {
+    async fn update_projects(
+        ctx: &PostgresContext<NoTls>,
+        session: &UserSession,
+        project_id: ProjectId,
+    ) {
         let project = ctx
             .project_db_ref_mut()
             .await
-            .load(user_id, project_id, LoadVersion::Latest)
+            .load_version(session, project_id, LoadVersion::Latest)
             .await
             .unwrap();
 
@@ -566,26 +613,24 @@ mod tests {
         };
         ctx.project_db_ref_mut()
             .await
-            .update(user_id, update.validated().unwrap())
+            .update(session, update.validated().unwrap())
             .await
             .unwrap();
 
         let versions = ctx
             .project_db_ref()
             .await
-            .versions(user_id, project_id)
+            .versions(session, project_id)
             .await
             .unwrap();
         assert_eq!(versions.len(), 2);
     }
 
-    async fn list_projects(ctx: &PostgresContext<NoTls>, user_id: UserId) -> Vec<ProjectListing> {
+    async fn list_projects(
+        ctx: &PostgresContext<NoTls>,
+        session: &UserSession,
+    ) -> Vec<ProjectListing> {
         let options = ProjectListOptions {
-            permissions: vec![
-                ProjectPermission::Owner,
-                ProjectPermission::Write,
-                ProjectPermission::Read,
-            ],
             filter: ProjectFilter::None,
             order: OrderBy::NameDesc,
             offset: 0,
@@ -596,7 +641,7 @@ mod tests {
         let projects = ctx
             .project_db_ref_mut()
             .await
-            .list(user_id, options)
+            .list(session, options)
             .await
             .unwrap();
 
@@ -606,7 +651,7 @@ mod tests {
         projects
     }
 
-    async fn create_projects(ctx: &PostgresContext<NoTls>, user_id: UserId) {
+    async fn create_projects(ctx: &PostgresContext<NoTls>, session: &UserSession) {
         for i in 0..10 {
             let create = CreateProject {
                 name: format!("Test{}", i),
@@ -627,7 +672,7 @@ mod tests {
             .unwrap();
             ctx.project_db_ref_mut()
                 .await
-                .create(user_id, create)
+                .create(session, create)
                 .await
                 .unwrap();
         }

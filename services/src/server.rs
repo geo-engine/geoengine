@@ -1,25 +1,30 @@
-#[cfg(feature = "postgres")]
-use crate::contexts::PostgresContext;
-use crate::contexts::{Context, InMemoryContext};
+use crate::contexts::{InMemoryContext, SimpleContext};
 use crate::error;
 use crate::error::{Error, Result};
 use crate::handlers;
-use crate::handlers::validate_token;
+use crate::handlers::handle_rejection;
 use crate::util::config;
-use crate::util::config::{get_config_element, Backend};
-use actix_files::Files;
-use actix_web::{get, web, App, HttpServer, Responder};
-use actix_web_httpauth::middleware::HttpAuthentication;
-#[cfg(feature = "postgres")]
-use bb8_postgres::tokio_postgres;
-#[cfg(feature = "postgres")]
-use bb8_postgres::tokio_postgres::NoTls;
+use crate::util::config::get_config_element;
+
 use log::info;
 use snafu::ResultExt;
 use std::net::SocketAddr;
 use std::path::PathBuf;
-#[cfg(feature = "postgres")]
-use std::str::FromStr;
+use tokio::signal;
+use tokio::sync::oneshot::{Receiver, Sender};
+use warp::fs::File;
+use warp::{Filter, Rejection};
+
+/// Combine filters by boxing them
+/// TODO: avoid boxing while still achieving acceptable compile time
+#[macro_export]
+macro_rules! combine {
+  ($x:expr, $($y:expr),+) => {{
+      let filter = $x.boxed();
+      $( let filter = filter.or($y).boxed(); )+
+      filter
+  }}
+}
 
 /// Starts the webserver for the Geo Engine API.
 ///
@@ -27,7 +32,10 @@ use std::str::FromStr;
 ///  * may panic if the `Postgres` backend is chosen without compiling the `postgres` feature
 ///
 ///
-pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<(), Error> {
+pub async fn start_server(
+    shutdown_rx: Option<Receiver<()>>,
+    static_files_dir: Option<PathBuf>,
+) -> Result<()> {
     let web_config: config::Web = get_config_element()?;
     let bind_address = web_config
         .bind_address
@@ -44,145 +52,46 @@ pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<(), Error
         )
     );
 
-    match web_config.backend {
-        Backend::InMemory => {
-            info!("Using in memory backend");
-            start(
-                static_files_dir,
-                bind_address,
-                InMemoryContext::new_with_data().await,
-            )
-            .await
-        }
-        Backend::Postgres => {
-            #[cfg(feature = "postgres")]
-            {
-                info!("Using Postgres backend");
-                let ctx = PostgresContext::new(
-                    tokio_postgres::config::Config::from_str(
-                        &get_config_element::<config::Postgres>()?.config_string,
-                    )?,
-                    NoTls,
-                )
-                .await?;
+    info!("Using in memory backend");
 
-                start(static_files_dir, bind_address, ctx).await
-            }
-            #[cfg(not(feature = "postgres"))]
-            panic!("Postgres backend was selected but the postgres feature wasn't activated during compilation")
-        }
-    }
-}
-
-pub(crate) fn init_routes<C>(cfg: &mut web::ServiceConfig)
-where
-    C: Context,
-{
-    cfg.route(
-        "/user",
-        web::post().to(handlers::users::register_user_handler::<C>),
+    start(
+        shutdown_rx,
+        static_files_dir,
+        bind_address,
+        InMemoryContext::new_with_data().await,
     )
-    .route(
-        "/anonymous",
-        web::post().to(handlers::users::anonymous_handler::<C>),
-    )
-    .route(
-        "/login",
-        web::post().to(handlers::users::login_handler::<C>),
-    )
-    .service(
-        // Scope for handlers which need authentication
-        web::scope("")
-            .wrap(HttpAuthentication::bearer(validate_token::<C>))
-            .route(
-                "/logout",
-                web::post().to(handlers::users::logout_handler::<C>),
-            )
-            .route("/session", web::get().to(handlers::users::session_handler))
-            .route(
-                "/session/project/{project}",
-                web::post().to(handlers::users::session_project_handler::<C>),
-            )
-            .route(
-                "/session/view",
-                web::post().to(handlers::users::session_view_handler::<C>),
-            )
-            .route(
-                "/project",
-                web::post().to(handlers::projects::create_project_handler::<C>),
-            )
-            .route(
-                "/projects",
-                web::get().to(handlers::projects::list_projects_handler::<C>),
-            )
-            .route(
-                "/project/{project}",
-                web::get().to(handlers::projects::load_project_handler::<C>),
-            )
-            .route(
-                "/project/{project}/{version}",
-                web::get().to(handlers::projects::load_project_version_handler::<C>),
-            )
-            .route(
-                "/project/{project}",
-                web::patch().to(handlers::projects::update_project_handler::<C>),
-            )
-            .route(
-                "/project/{project}",
-                web::delete().to(handlers::projects::delete_project_handler::<C>),
-            )
-            .route(
-                "/project/versions",
-                web::get().to(handlers::projects::project_versions_handler::<C>),
-            )
-            .route(
-                "/project/permission/add",
-                web::post().to(handlers::projects::add_permission_handler::<C>),
-            )
-            .route(
-                "/project/permission",
-                web::delete().to(handlers::projects::remove_permission_handler::<C>),
-            )
-            .route(
-                "/project/{project}/permissions",
-                web::get().to(handlers::projects::list_permissions_handler::<C>),
-            ),
-    );
+    .await
 }
 
 async fn start<C>(
+    shutdown_rx: Option<Receiver<()>>,
     static_files_dir: Option<PathBuf>,
     bind_address: SocketAddr,
     ctx: C,
 ) -> Result<(), Error>
 where
-    C: Context,
+    C: SimpleContext,
 {
-    /*let handler = combine!(
+    let handler = combine!(
         handlers::workflows::register_workflow_handler(ctx.clone()),
         handlers::workflows::load_workflow_handler(ctx.clone()),
         handlers::workflows::get_workflow_metadata_handler(ctx.clone()),
-        handlers::users::register_user_handler(ctx.clone()),
-        handlers::users::anonymous_handler(ctx.clone()),
-        handlers::users::login_handler(ctx.clone()),
-        handlers::users::logout_handler(ctx.clone()),
-        handlers::users::session_handler(ctx.clone()),
-        handlers::users::session_project_handler(ctx.clone()),
-        handlers::users::session_view_handler(ctx.clone()),
-        handlers::projects::add_permission_handler(ctx.clone()),
-        handlers::projects::remove_permission_handler(ctx.clone()),
-        handlers::projects::list_permissions_handler(ctx.clone()),
+        handlers::session::anonymous_handler(ctx.clone()),
+        handlers::session::session_handler(ctx.clone()),
+        handlers::session::session_project_handler(ctx.clone()),
+        handlers::session::session_view_handler(ctx.clone()),
         handlers::projects::create_project_handler(ctx.clone()),
         handlers::projects::list_projects_handler(ctx.clone()),
         handlers::projects::update_project_handler(ctx.clone()),
         handlers::projects::delete_project_handler(ctx.clone()),
         handlers::projects::load_project_handler(ctx.clone()),
-        handlers::projects::project_versions_handler(ctx.clone()),
-        handlers::datasets::list_datasets_handler(ctx.clone()),
         handlers::datasets::get_dataset_handler(ctx.clone()),
         handlers::datasets::auto_create_dataset_handler(ctx.clone()),
         handlers::datasets::create_dataset_handler(ctx.clone()),
         handlers::datasets::suggest_meta_data_handler(ctx.clone()),
+        handlers::datasets::list_providers_handler(ctx.clone()),
+        handlers::datasets::list_external_datasets_handler(ctx.clone()),
+        handlers::datasets::list_datasets_handler(ctx.clone()), // must come after `list_external_datasets_handler`
         handlers::wms::wms_handler(ctx.clone()),
         handlers::wfs::wfs_handler(ctx.clone()),
         handlers::plots::get_plot_handler(ctx.clone()),
@@ -203,26 +112,7 @@ where
         tokio::task::spawn(server)
     };
 
-    task.await.context(error::TokioJoin)*/
-    let wrapped_ctx = web::Data::new(ctx);
-
-    HttpServer::new(move || {
-        let app = App::new()
-            .app_data(wrapped_ctx.clone())
-            .wrap(actix_web::middleware::Logger::default())
-            .service(show_version) // TODO: allow disabling this function via config or feature flag
-            .configure(init_routes::<C>);
-
-        if let Some(static_files_dir) = static_files_dir.clone() {
-            app.service(Files::new("/static", static_files_dir))
-        } else {
-            app
-        }
-    })
-    .bind(bind_address)?
-    .run()
-    .await
-    .map_err(Into::into)
+    task.await.context(error::TokioJoin)
 }
 
 /// Shows information about the server software version.
@@ -239,8 +129,16 @@ where
 ///   "commitHash": "16cd0881a79b6f03bb5f1f6ef2b2711e570b9865"
 /// }
 /// ```
-#[get("/version")]
-async fn show_version() -> impl Responder {
+fn show_version_handler() -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone
+{
+    warp::path("version")
+        .and(warp::get())
+        .and_then(show_version)
+}
+
+// TODO: move into handler once async closures are available?
+#[allow(clippy::unused_async)] // the function signature of `Filter`'s `and_then` requires it
+async fn show_version() -> Result<impl warp::Reply, warp::Rejection> {
     #[derive(serde::Serialize)]
     #[serde(rename_all = "camelCase")]
     struct VersionInfo<'a> {
@@ -248,15 +146,46 @@ async fn show_version() -> impl Responder {
         commit_hash: Option<&'a str>,
     }
 
-    web::Json(&VersionInfo {
+    Ok(warp::reply::json(&VersionInfo {
         build_date: option_env!("VERGEN_BUILD_DATE"),
         commit_hash: option_env!("VERGEN_GIT_SHA"),
-    })
+    }))
+}
+
+pub fn serve_static_directory(
+    path: Option<PathBuf>,
+) -> impl Filter<Extract = (File,), Error = Rejection> + Clone {
+    let has_path = path.is_some();
+
+    warp::path("static")
+        .and(warp::get())
+        .and_then(move || async move {
+            if has_path {
+                Ok(())
+            } else {
+                Err(warp::reject::not_found())
+            }
+        })
+        .and(warp::fs::dir(path.unwrap_or_default()))
+        .map(|_, dir| dir)
+}
+
+pub async fn interrupt_handler(shutdown_tx: Sender<()>, callback: Option<fn()>) -> Result<()> {
+    signal::ctrl_c().await.context(error::TokioSignal)?;
+
+    if let Some(callback) = callback {
+        callback();
+    }
+
+    shutdown_tx
+        .send(())
+        .map_err(|_error| Error::TokioChannelSend)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::contexts::{Session, SimpleSession};
     use crate::handlers::ErrorResponse;
     use tokio::sync::oneshot;
 
@@ -287,8 +216,21 @@ mod tests {
 
     async fn issue_queries(base_url: &str) {
         let client = reqwest::Client::new();
+
         let body = client
-            .post(&format!("{}{}", base_url, "user"))
+            .post(&format!("{}{}", base_url, "anonymous"))
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+
+        let session: SimpleSession = serde_json::from_str(&body).unwrap();
+
+        let body = client
+            .post(&format!("{}{}", base_url, "project"))
+            .header("Authorization", format!("Bearer {}", session.id()))
             .body("no json")
             .send()
             .await

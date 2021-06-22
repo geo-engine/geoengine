@@ -5,9 +5,8 @@ use geoengine_datatypes::{
 use serde::{Deserialize, Serialize};
 use warp::Filter;
 
-use crate::error;
 use crate::handlers::{authenticate, Context};
-use crate::users::session::Session;
+use crate::{contexts::Session, error};
 
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -29,9 +28,9 @@ pub(crate) fn get_spatial_reference_specification_handler<C: Context>(
 }
 
 #[allow(clippy::unused_async)] // the function signature of `Filter`'s `and_then` requires it
-async fn get_spatial_reference_specification(
+async fn get_spatial_reference_specification<S: Session>(
     srs_string: String,
-    _session: Session,
+    _session: S,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     // TODO: get specification from Proj or some other source
     let spec = match srs_string.to_uppercase().as_str() {
@@ -94,15 +93,16 @@ async fn get_spatial_reference_specification(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::contexts::InMemoryContext;
+    use crate::contexts::SimpleContext;
     use crate::handlers::handle_rejection;
-    use crate::{contexts::InMemoryContext, util::tests::create_session_helper};
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use serde_json;
 
     #[tokio::test]
     async fn get_spatial_reference() {
         let ctx = InMemoryContext::default();
-        let session = create_session_helper(&ctx).await;
+        let session_id = ctx.default_session_ref().await.id();
 
         let response = warp::test::request()
             .method("GET")
@@ -110,7 +110,7 @@ mod tests {
             .header("Content-Length", "0")
             .header(
                 "Authorization",
-                format!("Bearer {}", session.id.to_string()),
+                format!("Bearer {}", session_id.to_string()),
             )
             .reply(&get_spatial_reference_specification_handler(ctx).recover(handle_rejection))
             .await;

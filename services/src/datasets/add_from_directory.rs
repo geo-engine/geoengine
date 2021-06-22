@@ -4,18 +4,19 @@ use std::{
     path::PathBuf,
 };
 
-use geoengine_datatypes::util::Identifier;
-
-use crate::datasets::storage::DatasetDb;
-use crate::error::Result;
-use crate::users::user::UserId;
 use crate::util::user_input::UserInput;
-use log::warn;
+use crate::{contexts::MockableSession, datasets::storage::DatasetDb};
+use crate::{datasets::storage::DatasetProviderDefinition, error::Result};
 
 use super::storage::DatasetDefinition;
 
-pub async fn add_datasets_from_directory<D: DatasetDb>(db: &mut D, file_path: PathBuf) {
-    async fn add_dataset_definition_from_dir_entry<D: DatasetDb>(
+use log::warn;
+
+pub async fn add_datasets_from_directory<S: MockableSession, D: DatasetDb<S>>(
+    db: &mut D,
+    file_path: PathBuf,
+) {
+    async fn add_dataset_definition_from_dir_entry<S: MockableSession, D: DatasetDb<S>>(
         db: &mut D,
         entry: &DirEntry,
     ) -> Result<()> {
@@ -23,7 +24,7 @@ pub async fn add_datasets_from_directory<D: DatasetDb>(db: &mut D, file_path: Pa
             serde_json::from_reader(BufReader::new(File::open(entry.path())?))?;
 
         db.add_dataset(
-            UserId::new(),
+            &S::mock(), // TODO: find suitable way to add public dataset
             def.properties.validated()?,
             db.wrap_meta_data(def.meta_data),
         )
@@ -35,6 +36,7 @@ pub async fn add_datasets_from_directory<D: DatasetDb>(db: &mut D, file_path: Pa
     let dir = fs::read_dir(file_path);
     if dir.is_err() {
         warn!("Skipped adding datasets from directory because it can't be read");
+        return;
     }
     let dir = dir.expect("checked");
 
@@ -49,6 +51,46 @@ pub async fn add_datasets_from_directory<D: DatasetDb>(db: &mut D, file_path: Pa
             }
         } else {
             warn!("Skipped adding dataset from directory entry: {:?}", entry);
+        }
+    }
+}
+
+pub async fn add_providers_from_directory<D: DatasetDb<S>, S: MockableSession>(
+    db: &mut D,
+    file_path: PathBuf,
+) {
+    async fn add_provider_definition_from_dir_entry<D: DatasetDb<S>, S: MockableSession>(
+        db: &mut D,
+        entry: &DirEntry,
+    ) -> Result<()> {
+        let def: Box<dyn DatasetProviderDefinition> =
+            serde_json::from_reader(BufReader::new(File::open(entry.path())?))?;
+
+        db.add_dataset_provider(&S::mock(), def).await?; // TODO: add as system user
+
+        Ok(())
+    }
+
+    let dir = fs::read_dir(file_path);
+    if dir.is_err() {
+        warn!("Skipped adding providers from directory because it can't be read");
+        return;
+    }
+    let dir = dir.expect("checked");
+
+    for entry in dir {
+        if let Ok(entry) = entry {
+            if let Err(e) = add_provider_definition_from_dir_entry(db, &entry).await {
+                // TODO: log
+                warn!(
+                    "Skipped adding provider from directory entry: {:?} error: {}",
+                    entry,
+                    e.to_string()
+                );
+            }
+        } else {
+            // TODO: log
+            warn!("Skipped adding provider from directory entry: {:?}", entry);
         }
     }
 }

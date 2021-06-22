@@ -42,6 +42,19 @@ before creating a pull request.
 
 Edit `Settings-test.toml` for environment specific test parameters.
 
+#### PostgreSQL
+
+For running the PostgreSQL tests, you need to have it installed.
+Furthermore, you need to create a default user `geoengine` with password `geoengine`.
+
+```
+sudo -u postgres psql << EOF
+\set AUTOCOMMIT on
+CREATE USER geoengine WITH PASSWORD 'geoengine' CREATEDB;
+CREATE DATABASE geoengine OWNER geoengine;
+EOF
+```
+
 ### Benchmarks
 
 For performance-critical features, we aim to provide benchmarks in the `benches` directory.
@@ -74,3 +87,8 @@ Execute:
 Inspect the container:
 
 `docker exec -it geoengine bash`
+
+## Contributing
+
+We are grateful for any contributions.
+Please make sure to read our [contributing guide](CONTRIBUTING.md).

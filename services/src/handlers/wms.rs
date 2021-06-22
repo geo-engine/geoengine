@@ -10,11 +10,11 @@ use geoengine_datatypes::{
     spatial_reference::SpatialReference,
 };
 
+use crate::contexts::MockableSession;
 use crate::error;
 use crate::error::Result;
 use crate::handlers::Context;
 use crate::ogc::wms::request::{GetCapabilities, GetLegendGraphic, GetMap, WmsRequest};
-use crate::users::session::Session;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 
@@ -211,11 +211,12 @@ async fn get_map<C: Context>(
     let operator = workflow.operator.get_raster().context(error::Operator)?;
 
     // TODO: use correct session when WMS uses authenticated access
-    let execution_context = ctx.execution_context(&Session::mock())?;
+    let execution_context = ctx.execution_context(C::Session::mock())?;
 
     let initialized = operator
         .clone()
         .initialize(&execution_context)
+        .await
         .context(error::Operator)?;
 
     // handle request and workflow crs matching
@@ -241,6 +242,7 @@ async fn get_map<C: Context>(
         // TODO: avoid re-initialization of the whole operator graph
         Box::new(proj)
             .initialize(&execution_context)
+            .await
             .context(error::Operator)?
     };
 
@@ -338,7 +340,7 @@ fn get_map_mock(request: &GetMap) -> Result<Box<dyn warp::Reply>, warp::Rejectio
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::InMemoryContext;
+    use crate::contexts::{InMemoryContext, SimpleSession};
     use crate::handlers::{handle_rejection, ErrorResponse};
     use crate::util::tests::{check_allowed_http_methods, register_ndvi_workflow_helper};
     use geoengine_datatypes::operations::image::RgbaColor;
@@ -431,7 +433,7 @@ mod tests {
     #[tokio::test]
     async fn png_from_stream_non_full() {
         let ctx = InMemoryContext::default();
-        let exe_ctx = ctx.execution_context(&Session::mock()).unwrap();
+        let exe_ctx = ctx.execution_context(SimpleSession::default()).unwrap();
 
         let gdal_source = GdalSourceProcessor::<u8> {
             tiling_specification: exe_ctx.tiling_specification(),

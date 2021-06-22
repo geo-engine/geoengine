@@ -26,7 +26,7 @@ where
 {
     let colorizer = colorizer.unwrap_or(default_colorizer_gradient::<T>()?);
 
-    let tile_stream = processor.raster_query(query_rect, &query_ctx)?;
+    let tile_stream = processor.raster_query(query_rect, &query_ctx).await?;
 
     let x_query_resolution = query_rect.bbox.size_x() / f64::from(width);
     let y_query_resolution = query_rect.bbox.size_y() / f64::from(height);

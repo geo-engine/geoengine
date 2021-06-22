@@ -2,11 +2,11 @@ use snafu::ResultExt;
 use warp::reply::Reply;
 use warp::{http::Response, Filter};
 
+use crate::contexts::MockableSession;
 use crate::error;
 use crate::error::Result;
 use crate::handlers::Context;
 use crate::ogc::wfs::request::{GetCapabilities, GetFeature, TypeNames, WfsRequest};
-use crate::users::session::Session;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use futures::StreamExt;
@@ -388,10 +388,11 @@ async fn get_feature<C: Context>(
     let operator = workflow.operator.get_vector().context(error::Operator)?;
 
     // TODO: use correct session when WFS uses authenticated access
-    let execution_context = ctx.execution_context(&Session::mock())?;
+    let execution_context = ctx.execution_context(C::Session::mock())?;
     let initialized = operator
         .clone()
         .initialize(&execution_context)
+        .await
         .context(error::Operator)?;
 
     // handle request and workflow crs matching
@@ -418,6 +419,7 @@ async fn get_feature<C: Context>(
         // TODO: avoid re-initialization of the whole operator graph
         Box::new(proj)
             .initialize(&execution_context)
+            .await
             .context(error::Operator)?
     };
 
@@ -471,7 +473,7 @@ where
     let features: Vec<serde_json::Value> = Vec::new();
 
     // TODO: more efficient merging of the partial feature collections
-    let stream = processor.vector_query(query_rect, query_ctx)?;
+    let stream = processor.vector_query(query_rect, query_ctx).await?;
 
     let features = stream
         .fold(
@@ -540,14 +542,13 @@ fn get_feature_mock(_request: &GetFeature) -> Result<Box<dyn warp::Reply>, warp:
 mod tests {
     use super::*;
 
+    use crate::contexts::SimpleContext;
     use crate::datasets::storage::{DatasetDefinition, DatasetStore};
     use crate::handlers::{handle_rejection, ErrorResponse};
-    use crate::users::user::UserId;
     use crate::util::tests::check_allowed_http_methods;
     use crate::util::user_input::UserInput;
     use crate::{contexts::InMemoryContext, workflows::workflow::Workflow};
     use geoengine_datatypes::dataset::DatasetId;
-    use geoengine_datatypes::util::Identifier;
     use geoengine_operators::engine::TypedOperator;
     use geoengine_operators::source::CsvSourceParameters;
     use geoengine_operators::source::{CsvGeometrySpecification, CsvSource, CsvTimeSpecification};
@@ -928,7 +929,7 @@ x;y
         let mut db = ctx.dataset_db_ref_mut().await;
 
         db.add_dataset(
-            UserId::new(),
+            &*ctx.default_session_ref().await,
             def.properties.validated().unwrap(),
             Box::new(def.meta_data),
         )

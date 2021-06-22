@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
+use crate::contexts::Session;
 use crate::error::Result;
-use crate::users::user::UserId;
 use crate::{
     error,
     util::config::{self, get_config_element},
@@ -53,8 +53,8 @@ pub struct UploadListing {
 }
 
 #[async_trait]
-pub trait UploadDb {
-    async fn get_upload(&self, user: UserId, upload: UploadId) -> Result<Upload>;
+pub trait UploadDb<S: Session> {
+    async fn get_upload(&self, session: &S, upload: UploadId) -> Result<Upload>;
 
-    async fn create_upload(&mut self, user: UserId, upload: Upload) -> Result<()>;
+    async fn create_upload(&mut self, session: &S, upload: Upload) -> Result<()>;
 }

@@ -44,12 +44,13 @@ pub struct FeatureAttributeValuesOverTimeParams {
 }
 
 #[typetag::serde]
+#[async_trait]
 impl PlotOperator for FeatureAttributeValuesOverTime {
-    fn initialize(
+    async fn initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
     ) -> Result<Box<InitializedPlotOperator>> {
-        let source = self.sources.vector.initialize(context)?;
+        let source = self.sources.vector.initialize(context).await?;
         let result_descriptor = source.result_descriptor();
         let columns: &HashMap<String, FeatureDataType> = &result_descriptor.columns;
 
@@ -146,7 +147,8 @@ where
 
         let values = self
             .features
-            .vector_query(query, ctx)?
+            .vector_query(query, ctx)
+            .await?
             .fold(Ok(values), |acc, features| async {
                 match (acc, features) {
                     (Ok(mut acc), Ok(features)) => {
@@ -312,7 +314,7 @@ mod tests {
             sources: point_source.into(),
         };
 
-        let operator = operator.boxed().initialize(&exe_ctc).unwrap();
+        let operator = operator.boxed().initialize(&exe_ctc).await.unwrap();
 
         let query_processor = operator.query_processor().unwrap().json_vega().unwrap();
 
@@ -411,7 +413,7 @@ mod tests {
             sources: point_source.into(),
         };
 
-        let operator = operator.boxed().initialize(&exe_ctc).unwrap();
+        let operator = operator.boxed().initialize(&exe_ctc).await.unwrap();
 
         let query_processor = operator.query_processor().unwrap().json_vega().unwrap();
 
@@ -498,7 +500,7 @@ mod tests {
             sources: point_source.into(),
         };
 
-        let operator = operator.boxed().initialize(&exe_ctc).unwrap();
+        let operator = operator.boxed().initialize(&exe_ctc).await.unwrap();
 
         let query_processor = operator.query_processor().unwrap().json_vega().unwrap();
 

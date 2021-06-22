@@ -45,7 +45,7 @@ use actix_web::{web, HttpResponse, Responder};
 /// }
 /// ```
 pub(crate) async fn create_project_handler<C: Context>(
-    session: Session,
+    session: C::Session,
     ctx: web::Data<C>,
     create: web::Json<CreateProject>,
 ) -> Result<impl Responder> {
@@ -80,7 +80,7 @@ pub(crate) async fn create_project_handler<C: Context>(
 /// ]
 /// ```
 pub(crate) async fn list_projects_handler<C: Context>(
-    session: Session,
+    session: C::Session,
     ctx: web::Data<C>,
     options: web::Query<ProjectListOptions>,
 ) -> Result<impl Responder> {
@@ -139,7 +139,7 @@ pub(crate) async fn list_projects_handler<C: Context>(
 /// ```
 pub(crate) async fn load_project_handler<C: Context>(
     project: web::Path<ProjectId>,
-    session: Session,
+    session: C::Session,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
     let id = ctx
@@ -197,7 +197,7 @@ pub(crate) async fn load_project_handler<C: Context>(
 /// ```
 pub(crate) async fn load_project_version_handler<C: Context>(
     x: web::Path<(ProjectId, ProjectVersionId)>,
-    session: Session,
+    session: C::Session,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
     let x = x.into_inner();
@@ -400,8 +400,9 @@ pub(crate) async fn list_permissions_handler<C: Context>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::contexts::{Session, SimpleContext, SimpleSession};
     use crate::handlers::{handle_rejection, ErrorResponse};
-    use crate::projects::project::{
+    use crate::projects::{
         LayerUpdate, LayerVisibility, Plot, PlotUpdate, RasterSymbology, Symbology,
     };
     use crate::users::session::Session;
@@ -430,7 +431,7 @@ mod tests {
     async fn create_test_helper(method: &str) -> Response<Bytes> {
         let ctx = InMemoryContext::default();
 
-        let session = create_session_helper(&ctx).await;
+        let session = ctx.default_session_ref().await;
 
         let create = CreateProject {
             name: "Test".to_string(),
@@ -448,10 +449,10 @@ mod tests {
             .header("Content-Length", "0")
             .header(
                 "Authorization",
-                format!("Bearer {}", session.id.to_string()),
+                format!("Bearer {}", session.id().to_string()),
             )
             .json(&create)
-            .reply(&create_project_handler(ctx).recover(handle_rejection))
+            .reply(&create_project_handler(ctx.clone()).recover(handle_rejection))
             .await
     }
 
@@ -474,7 +475,7 @@ mod tests {
     async fn create_invalid_body() {
         let ctx = InMemoryContext::default();
 
-        let session = create_session_helper(&ctx).await;
+        let session_id = ctx.default_session_ref().await.id();
 
         let res = warp::test::request()
             .method("POST")
@@ -482,7 +483,7 @@ mod tests {
             .header("Content-Length", "0")
             .header(
                 "Authorization",
-                format!("Bearer {}", session.id.to_string()),
+                format!("Bearer {}", session_id.to_string()),
             )
             .body("no json")
             .reply(&create_project_handler(ctx).recover(handle_rejection))
@@ -500,7 +501,7 @@ mod tests {
     async fn create_missing_fields() {
         let ctx = InMemoryContext::default();
 
-        let session = create_session_helper(&ctx).await;
+        let session_id = ctx.default_session_ref().await.id();
 
         let create = json!({
             "description": "Foo".to_string(),
@@ -513,7 +514,7 @@ mod tests {
             .header("Content-Length", "0")
             .header(
                 "Authorization",
-                format!("Bearer {}", session.id.to_string()),
+                format!("Bearer {}", session_id.to_string()),
             )
             .json(&create)
             .reply(&create_project_handler(ctx).recover(handle_rejection))
@@ -578,7 +579,7 @@ mod tests {
             .header("Content-Length", "0")
             .header(
                 "Authorization",
-                format!("Bearer {}", session.id.to_string()),
+                format!("Bearer {}", session.id().to_string()),
             )
             .reply(&list_projects_handler(ctx).recover(handle_rejection))
             .await
@@ -648,7 +649,7 @@ mod tests {
             .header("Content-Length", "0")
             .header(
                 "Authorization",
-                format!("Bearer {}", session.id.to_string()),
+                format!("Bearer {}", session.id().to_string()),
             )
             .reply(&load_project_handler(ctx).recover(handle_rejection))
             .await
@@ -694,7 +695,7 @@ mod tests {
     async fn load_not_found() {
         let ctx = InMemoryContext::default();
 
-        let session = create_session_helper(&ctx).await;
+        let session_id = ctx.default_session_ref().await.id();
 
         let res = warp::test::request()
             .method("GET")
@@ -702,7 +703,7 @@ mod tests {
             .header("Content-Length", "0")
             .header(
                 "Authorization",
-                format!("Bearer {}", session.id.to_string()),
+                format!("Bearer {}", session_id.to_string()),
             )
             .reply(&load_project_handler(ctx).recover(handle_rejection))
             .await;
@@ -710,102 +711,9 @@ mod tests {
         ErrorResponse::assert(res, 404, "NotFound", "Not Found");
     }
 
-    #[tokio::test]
-    async fn load_version() {
-        let ctx = InMemoryContext::default();
-
-        let (session, project) = create_project_helper(&ctx).await;
-
-        ctx.project_db()
-            .write()
-            .await
-            .update(
-                session.user.id,
-                update_project_helper(project).validated().unwrap(),
-            )
-            .await
-            .unwrap();
-
-        let res = warp::test::request()
-            .method("GET")
-            .path(&format!("/project/{}", project.to_string()))
-            .header("Content-Length", "0")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session.id.to_string()),
-            )
-            .reply(&load_project_handler(ctx.clone()))
-            .await;
-
-        assert_eq!(res.status(), 200);
-
-        let body: String = String::from_utf8(res.body().to_vec()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<Project>(&body).unwrap().name,
-            "TestUpdate"
-        );
-
-        let versions = ctx
-            .project_db()
-            .read()
-            .await
-            .versions(session.user.id, project)
-            .await
-            .unwrap();
-        let version_id = versions.first().unwrap().id;
-
-        let res = warp::test::request()
-            .method("GET")
-            .path(&format!(
-                "/project/{}/{}",
-                project.to_string(),
-                version_id.to_string()
-            ))
-            .header("Content-Length", "0")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session.id.to_string()),
-            )
-            .reply(&load_project_handler(ctx))
-            .await;
-
-        assert_eq!(res.status(), 200);
-
-        let body: String = String::from_utf8(res.body().to_vec()).unwrap();
-        assert_eq!(serde_json::from_str::<Project>(&body).unwrap().name, "Test");
-    }
-
-    #[tokio::test]
-    async fn load_version_not_found() {
-        let ctx = InMemoryContext::default();
-
-        let (session, project) = create_project_helper(&ctx).await;
-
-        let res = warp::test::request()
-            .method("GET")
-            .path(&format!(
-                "/project/{}/00000000-0000-0000-0000-000000000000",
-                project.to_string()
-            ))
-            .header("Content-Length", "0")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session.id.to_string()),
-            )
-            .reply(&load_project_handler(ctx).recover(handle_rejection))
-            .await;
-
-        ErrorResponse::assert(
-            res,
-            400,
-            "ProjectLoadFailed",
-            "The project failed to load.",
-        );
-    }
-
     async fn update_test_helper(
         method: &str,
-    ) -> (InMemoryContext, Session, ProjectId, Response<Bytes>) {
+    ) -> (InMemoryContext, SimpleSession, ProjectId, Response<Bytes>) {
         let ctx = InMemoryContext::default();
 
         let (session, project) = create_project_helper(&ctx).await;
@@ -818,7 +726,7 @@ mod tests {
             .header("Content-Length", "0")
             .header(
                 "Authorization",
-                format!("Bearer {}", session.id.to_string()),
+                format!("Bearer {}", session.id().to_string()),
             )
             .json(&update)
             .reply(&update_project_handler(ctx.clone()).recover(handle_rejection))
@@ -903,7 +811,7 @@ mod tests {
             .header("Content-Length", "0")
             .header(
                 "Authorization",
-                format!("Bearer {}", session.id.to_string()),
+                format!("Bearer {}", session.id().to_string()),
             )
             .json(&update)
             .reply(&update_project_handler(ctx).recover(handle_rejection))
@@ -922,7 +830,7 @@ mod tests {
     async fn update_layers() {
         async fn update_and_load_latest(
             ctx: &InMemoryContext,
-            session: &Session,
+            session: &SimpleSession,
             project_id: ProjectId,
             update: UpdateProject,
         ) -> Vec<Layer> {
@@ -932,7 +840,7 @@ mod tests {
                 .header("Content-Length", "0")
                 .header(
                     "Authorization",
-                    format!("Bearer {}", session.id.to_string()),
+                    format!("Bearer {}", session.id().to_string()),
                 )
                 .json(&update)
                 .reply(&update_project_handler(ctx.clone()))
@@ -944,7 +852,7 @@ mod tests {
                 .project_db()
                 .read()
                 .await
-                .load_latest(session.user.id, project_id)
+                .load(&session, project_id)
                 .await
                 .unwrap();
 
@@ -1073,7 +981,7 @@ mod tests {
     async fn update_plots() {
         async fn update_and_load_latest(
             ctx: &InMemoryContext,
-            session: &Session,
+            session: &SimpleSession,
             project_id: ProjectId,
             update: UpdateProject,
         ) -> Vec<Plot> {
@@ -1083,7 +991,7 @@ mod tests {
                 .header("Content-Length", "0")
                 .header(
                     "Authorization",
-                    format!("Bearer {}", session.id.to_string()),
+                    format!("Bearer {}", session.id().to_string()),
                 )
                 .json(&update)
                 .reply(&update_project_handler(ctx.clone()))
@@ -1095,7 +1003,7 @@ mod tests {
                 .project_db()
                 .read()
                 .await
-                .load_latest(session.user.id, project_id)
+                .load(&session, project_id)
                 .await
                 .unwrap();
 
@@ -1215,7 +1123,7 @@ mod tests {
             .header("Content-Length", "0")
             .header(
                 "Authorization",
-                format!("Bearer {}", session.id.to_string()),
+                format!("Bearer {}", session.id().to_string()),
             )
             .reply(&delete_project_handler(ctx.clone()))
             .await;
@@ -1226,7 +1134,7 @@ mod tests {
             .project_db()
             .read()
             .await
-            .load_latest(session.user.id, project)
+            .load(&session, project)
             .await
             .is_err());
 
@@ -1236,7 +1144,7 @@ mod tests {
             .header("Content-Length", "0")
             .header(
                 "Authorization",
-                format!("Bearer {}", session.id.to_string()),
+                format!("Bearer {}", session.id().to_string()),
             )
             .reply(&delete_project_handler(ctx).recover(handle_rejection))
             .await;
