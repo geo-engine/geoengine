@@ -2,20 +2,14 @@ use crate::error;
 use crate::error::Result;
 use crate::users::session::{Session, SessionId};
 use crate::users::userdb::UserDb;
-use crate::{contexts::Context, error::Error};
+use crate::contexts::Context;
 use actix_web::dev::{Payload, ServiceRequest, ServiceResponse};
 use actix_web::{test, web, FromRequest, HttpMessage, HttpRequest};
 use actix_web_httpauth::extractors::bearer::BearerAuth;
 use futures::future::{err, ok, Ready};
-use log::error;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
-use std::error::Error as StdError;
 use std::str::FromStr;
-use warp::http::{Response, StatusCode};
-use warp::hyper::body::Bytes;
-use warp::reject::{InvalidQuery, MethodNotAllowed, UnsupportedMediaType};
-use warp::{Filter, Rejection, Reply};
 
 pub mod datasets;
 pub mod plots;
@@ -42,9 +36,10 @@ impl ErrorResponse {
     pub async fn assert(res: ServiceResponse, status: u16, error: &str, message: &str) {
         assert_eq!(res.status(), status);
 
+        let body: ErrorResponse = test::read_body_json(res).await;
         assert_eq!(
-            test::read_body_json(res).await,
-            ErrorResponse {
+            body,
+            Self {
                 error: error.to_string(),
                 message: message.to_string(),
             }
@@ -52,7 +47,7 @@ impl ErrorResponse {
     }
 }
 
-/// A handler for custom rejections
+/*// A handler for custom rejections
 #[allow(clippy::unused_async)]
 pub async fn handle_rejection(err: Rejection) -> Result<impl Reply, Rejection> {
     error!("Warp rejection: {:?}", err);
@@ -156,7 +151,7 @@ fn authenticate<C: Context>(
         .and(warp::any().map(move || ctx.clone()))
         .and(warp::header::optional::<String>("authorization"))
         .and_then(do_authenticate)
-}
+}*/
 
 pub async fn validate_token<C: Context>(
     req: ServiceRequest,

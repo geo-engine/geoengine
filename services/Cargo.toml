@@ -41,9 +41,12 @@ uuid = { version = "0.8", features = ["serde", "v4", "v5"] }
 warp = "0.3"
 flexi_logger = "0.17"
 log = "0.4"
-actix-web = "3"
-actix-files = "0.5.0"
-actix-web-httpauth = "0.5.1"
+actix-files = "0.6.0-beta.4"
+actix-http = "=3.0.0-beta.5"
+actix-rt = "2.2.0"
+actix-service = "=2.0.0-beta.5"
+actix-web = "=4.0.0-beta.5"
+actix-web-httpauth = "0.6.0-beta.1"
 
 [dev-dependencies]
 clap = "3.0.0-beta.1"

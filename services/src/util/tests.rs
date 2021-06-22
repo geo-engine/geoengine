@@ -20,14 +20,12 @@ use crate::{
 };
 use actix_web::dev::ServiceResponse;
 use actix_web::http::Method;
-use actix_web::{test, App};
 use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::operations::image::Colorizer;
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use geoengine_operators::engine::{RasterOperator, TypedOperator};
 use geoengine_operators::source::{GdalSource, GdalSourceParameters};
 use geoengine_operators::util::gdal::create_ndvi_meta_data;
-use crate::server::init_routes;
 
 #[allow(clippy::missing_panics_doc)]
 pub async fn create_session_helper<C: Context>(ctx: &C) -> Session {
@@ -190,13 +188,13 @@ pub async fn check_allowed_http_methods2<T, TRes, P, PParam>(
     }
 }
 
-pub fn check_allowed_http_methods<T, TRes>(
+pub fn check_allowed_http_methods<'a, T, TRes>(
     test_helper: T,
-    allowed_methods: &[Method],
-) -> impl futures::Future + '_
+    allowed_methods: &'a [Method],
+) -> impl futures::Future + 'a
 where
-    T: Fn(Method) -> TRes,
-    TRes: futures::Future<Output = ServiceResponse>,
+    T: Fn(Method) -> TRes + 'a,
+    TRes: futures::Future<Output = ServiceResponse> + 'a,
 {
     check_allowed_http_methods2(test_helper, allowed_methods, |res| res)
 }

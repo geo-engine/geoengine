@@ -196,14 +196,15 @@ pub(crate) async fn load_project_handler<C: Context>(
 /// }
 /// ```
 pub(crate) async fn load_project_version_handler<C: Context>(
-    web::Path((project, version)): web::Path<(ProjectId, ProjectVersionId)>,
+    x: web::Path<(ProjectId, ProjectVersionId)>,
     session: Session,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
+    let x = x.into_inner();
     let id = ctx
         .project_db_ref()
         .await
-        .load(session.user.id, project, LoadVersion::Version(version))
+        .load(session.user.id, x.0, LoadVersion::Version(x.1))
         .await?;
     Ok(web::Json(id))
 }
