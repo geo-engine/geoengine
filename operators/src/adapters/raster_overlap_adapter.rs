@@ -1,4 +1,4 @@
-use crate::engine::{QueryContext, RasterQueryProcessor, RasterQueryRectangle};
+use crate::engine::{QueryContext, QueryProcessor, RasterQueryProcessor, RasterQueryRectangle};
 use crate::error;
 use crate::util::Result;
 use futures::future::BoxFuture;
@@ -9,7 +9,7 @@ use futures::{
     FutureExt, TryFuture, TryStreamExt,
 };
 use futures::{stream::FusedStream, Future};
-use geoengine_datatypes::primitives::SpatialPartitioned;
+use geoengine_datatypes::primitives::{SpatialPartition2D, SpatialPartitioned};
 use geoengine_datatypes::{
     error::Error::{GridIndexOutOfBounds, InvalidGridIndex},
     operations::reproject::{
@@ -151,7 +151,8 @@ impl<PixelType, RasterProcessorType, SubQuery> FusedStream
     for RasterOverlapAdapter<'_, PixelType, RasterProcessorType, SubQuery>
 where
     PixelType: Pixel,
-    RasterProcessorType: RasterQueryProcessor<RasterType = PixelType>,
+    RasterProcessorType:
+        QueryProcessor<Output = RasterTile2D<PixelType>, SpatialBounds = SpatialPartition2D>,
     SubQuery: SubQueryTileAggregator<PixelType>,
 {
     fn is_terminated(&self) -> bool {
@@ -163,7 +164,8 @@ impl<'a, PixelType, RasterProcessorType, SubQuery> Stream
     for RasterOverlapAdapter<'a, PixelType, RasterProcessorType, SubQuery>
 where
     PixelType: Pixel,
-    RasterProcessorType: RasterQueryProcessor<RasterType = PixelType>,
+    RasterProcessorType:
+        QueryProcessor<Output = RasterTile2D<PixelType>, SpatialBounds = SpatialPartition2D>,
     SubQuery: SubQueryTileAggregator<PixelType>,
 {
     type Item = Result<RasterTile2D<PixelType>>;
@@ -205,7 +207,7 @@ where
 
             let tile_query_stream = this
                 .source
-                .raster_query(tile_query_rectangle, *this.query_ctx)
+                .query(tile_query_rectangle, *this.query_ctx)
                 .boxed();
 
             this.running_query.set(Some(tile_query_stream));

@@ -1,6 +1,7 @@
 use crate::adapters::{FoldTileAccu, FoldTileAccuMut};
 use crate::engine::{
-    ExecutionContext, Operator, RasterOperator, RasterQueryRectangle, SingleRasterSource,
+    ExecutionContext, Operator, QueryProcessor, RasterOperator, RasterQueryRectangle,
+    SingleRasterSource,
 };
 use crate::{
     adapters::SubQueryTileAggregator,
@@ -13,7 +14,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use futures::{Future, FutureExt, StreamExt, TryFuture};
-use geoengine_datatypes::primitives::SpatialPartitioned;
+use geoengine_datatypes::primitives::{SpatialPartition2D, SpatialPartitioned};
 use geoengine_datatypes::raster::{EmptyGrid2D, GridOrEmpty};
 use geoengine_datatypes::{
     primitives::{TimeInstance, TimeInterval, TimeStep},
@@ -157,19 +158,20 @@ where
 }
 
 #[async_trait]
-impl<Q, P> RasterQueryProcessor for TemporalRasterAggregationProcessor<Q, P>
+impl<Q, P> QueryProcessor for TemporalRasterAggregationProcessor<Q, P>
 where
+    Q: QueryProcessor<Output = RasterTile2D<P>, SpatialBounds = SpatialPartition2D>,
     P: Pixel,
-    Q: RasterQueryProcessor<RasterType = P>,
 {
-    type RasterType = P;
+    type Output = RasterTile2D<P>;
+    type SpatialBounds = SpatialPartition2D;
 
     #[allow(clippy::too_many_lines)]
-    async fn raster_query<'a>(
+    async fn query<'a>(
         &'a self,
         query: crate::engine::RasterQueryRectangle,
         ctx: &'a dyn crate::engine::QueryContext,
-    ) -> Result<futures::stream::BoxStream<'a, Result<RasterTile2D<Self::RasterType>>>> {
+    ) -> Result<futures::stream::BoxStream<'a, Result<Self::Output>>> {
         match self.aggregation_type {
             Aggregation::Min {
                 ignore_no_data: true,
@@ -650,7 +652,7 @@ mod tests {
     use num_traits::AsPrimitive;
 
     use crate::{
-        engine::{MockExecutionContext, MockQueryContext, RasterQueryRectangle},
+        engine::{MockExecutionContext, MockQueryContext, QueryProcessor, RasterQueryRectangle},
         mock::{MockRasterSource, MockRasterSourceParams},
     };
 
@@ -711,7 +713,7 @@ mod tests {
             .unwrap();
 
         let result = qp
-            .raster_query(query_rect, &query_ctx)
+            .query(query_rect, &query_ctx)
             .await
             .unwrap()
             .collect::<Vec<_>>()
@@ -835,7 +837,7 @@ mod tests {
             .unwrap();
 
         let result = qp
-            .raster_query(query_rect, &query_ctx)
+            .query(query_rect, &query_ctx)
             .await
             .unwrap()
             .collect::<Vec<_>>()
@@ -964,7 +966,7 @@ mod tests {
             .unwrap();
 
         let result = qp
-            .raster_query(query_rect, &query_ctx)
+            .query(query_rect, &query_ctx)
             .await
             .unwrap()
             .collect::<Vec<_>>()
@@ -1098,7 +1100,7 @@ mod tests {
             .unwrap();
 
         let result = qp
-            .raster_query(query_rect, &query_ctx)
+            .query(query_rect, &query_ctx)
             .await
             .unwrap()
             .collect::<Vec<_>>()
@@ -1230,7 +1232,7 @@ mod tests {
             .unwrap();
 
         let result = qp
-            .raster_query(query_rect, &query_ctx)
+            .query(query_rect, &query_ctx)
             .await
             .unwrap()
             .collect::<Vec<_>>()
@@ -1306,7 +1308,7 @@ mod tests {
             .unwrap();
 
         let result = qp
-            .raster_query(query_rect, &query_ctx)
+            .query(query_rect, &query_ctx)
             .await
             .unwrap()
             .collect::<Vec<_>>()
@@ -1399,7 +1401,7 @@ mod tests {
             .unwrap();
 
         let result = qp
-            .raster_query(query_rect, &query_ctx)
+            .query(query_rect, &query_ctx)
             .await
             .unwrap()
             .collect::<Vec<_>>()
@@ -1492,7 +1494,7 @@ mod tests {
             .unwrap();
 
         let result = qp
-            .raster_query(query_rect, &query_ctx)
+            .query(query_rect, &query_ctx)
             .await
             .unwrap()
             .collect::<Vec<_>>()
@@ -1584,7 +1586,7 @@ mod tests {
             .unwrap();
 
         let result = qp
-            .raster_query(query_rect, &query_ctx)
+            .query(query_rect, &query_ctx)
             .await
             .unwrap()
             .collect::<Vec<_>>()

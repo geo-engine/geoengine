@@ -8,8 +8,8 @@ use geoengine_datatypes::collections::{
 use geoengine_datatypes::raster::{GridIndexAccess, NoDataValue, Pixel, RasterDataType};
 
 use crate::engine::{
-    QueryContext, RasterQueryProcessor, TypedRasterQueryProcessor, VectorQueryProcessor,
-    VectorQueryRectangle,
+    QueryContext, QueryProcessor, RasterQueryProcessor, TypedRasterQueryProcessor,
+    VectorQueryProcessor, VectorQueryRectangle,
 };
 use crate::processing::raster_vector_join::aggregator::{
     Aggregator, FirstValueFloatAggregator, FirstValueIntAggregator, MeanValueAggregator,
@@ -19,7 +19,7 @@ use crate::processing::raster_vector_join::util::FeatureTimeSpanIter;
 use crate::processing::raster_vector_join::AggregationMethod;
 use crate::util::Result;
 use async_trait::async_trait;
-use geoengine_datatypes::primitives::MultiPointAccess;
+use geoengine_datatypes::primitives::{BoundingBox2D, MultiPointAccess};
 
 pub struct RasterPointAggregateJoinProcessor {
     points: Box<dyn VectorQueryProcessor<VectorType = MultiPointCollection>>,
@@ -139,16 +139,17 @@ impl RasterPointAggregateJoinProcessor {
 }
 
 #[async_trait]
-impl VectorQueryProcessor for RasterPointAggregateJoinProcessor {
-    type VectorType = MultiPointCollection;
+impl QueryProcessor for RasterPointAggregateJoinProcessor {
+    type Output = MultiPointCollection;
+    type SpatialBounds = BoundingBox2D;
 
-    async fn vector_query<'a>(
+    async fn query<'a>(
         &'a self,
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
-    ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
+    ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         let stream = self.points
-            .vector_query(query, ctx).await?
+            .query(query, ctx).await?
             .and_then(async move |mut points| {
 
                 for (raster, new_column_name) in self.raster_processors.iter().zip(&self.column_names) {

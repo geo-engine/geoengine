@@ -1,6 +1,6 @@
 use crate::engine::{
     ExecutionContext, InitializedPlotOperator, InitializedRasterOperator, Operator, PlotOperator,
-    PlotQueryProcessor, PlotResultDescriptor, QueryContext, RasterQueryProcessor,
+    PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor, RasterQueryProcessor,
     SingleRasterSource, TypedPlotQueryProcessor, VectorQueryRectangle,
 };
 use crate::util::math::average_floor;
@@ -110,7 +110,7 @@ impl<P: Pixel> PlotQueryProcessor for MeanRasterPixelValuesOverTimeQueryProcesso
         ctx: &'a dyn QueryContext,
     ) -> Result<Self::OutputFormat> {
         let means = Self::calculate_means(
-            self.raster.raster_query(query.into(), ctx).await?,
+            self.raster.query(query.into(), ctx).await?,
             self.time_position,
         )
         .await?;

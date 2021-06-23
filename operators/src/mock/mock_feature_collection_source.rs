@@ -136,6 +136,7 @@ impl_mock_feature_collection_source!(MultiPolygon, MultiPolygon);
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::QueryProcessor;
     use crate::engine::{MockExecutionContext, MockQueryContext};
     use futures::executor::block_on_stream;
     use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, FeatureData, TimeInterval};
@@ -273,7 +274,7 @@ mod tests {
         };
         let ctx = MockQueryContext::new(2 * std::mem::size_of::<Coordinate2D>());
 
-        let stream = processor.vector_query(query_rectangle, &ctx).await.unwrap();
+        let stream = processor.query(query_rectangle, &ctx).await.unwrap();
 
         let blocking_stream = block_on_stream(stream);
 

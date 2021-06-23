@@ -1,4 +1,4 @@
-use crate::engine::{MetaData, RasterQueryRectangle};
+use crate::engine::{MetaData, QueryProcessor, RasterQueryRectangle};
 use crate::{
     engine::{
         InitializedRasterOperator, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
@@ -486,21 +486,23 @@ where
 }
 
 #[async_trait]
-impl<T> RasterQueryProcessor for GdalSourceProcessor<T>
+impl<P> QueryProcessor for GdalSourceProcessor<P>
 where
-    T: Pixel + gdal::raster::GdalType,
+    P: Pixel + gdal::raster::GdalType,
 {
-    type RasterType = T;
-    async fn raster_query<'a>(
+    type Output = RasterTile2D<P>;
+    type SpatialBounds = SpatialPartition2D;
+
+    async fn query<'a>(
         &'a self,
         query: crate::engine::RasterQueryRectangle,
         _ctx: &'a dyn crate::engine::QueryContext,
-    ) -> Result<BoxStream<Result<RasterTile2D<Self::RasterType>>>> {
+    ) -> Result<BoxStream<Result<Self::Output>>> {
         let meta_data = self.meta_data.loading_info(query).await?;
 
         debug!(
             "Querying GdalSourceProcessor<{:?}> with: {:?}.",
-            T::TYPE,
+            P::TYPE,
             &query
         );
 

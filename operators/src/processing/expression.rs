@@ -1,6 +1,6 @@
 use crate::engine::{
-    InitializedRasterOperator, Operator, QueryContext, RasterOperator, RasterQueryProcessor,
-    RasterQueryRectangle, RasterResultDescriptor, TypedRasterQueryProcessor,
+    InitializedRasterOperator, Operator, QueryContext, QueryProcessor, RasterOperator,
+    RasterQueryProcessor, RasterQueryRectangle, RasterResultDescriptor, TypedRasterQueryProcessor,
 };
 use crate::error::Error;
 use crate::util::Result;
@@ -12,7 +12,7 @@ use crate::{
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::StreamExt;
-use geoengine_datatypes::primitives::Measurement;
+use geoengine_datatypes::primitives::{Measurement, SpatialPartition2D};
 use geoengine_datatypes::raster::{
     EmptyGrid, Grid2D, GridShapeAccess, Pixel, RasterDataType, RasterTile2D,
 };
@@ -355,25 +355,27 @@ __kernel void expressionkernel(
 }
 
 #[async_trait]
-impl<'a, T1, T2, TO> RasterQueryProcessor for ExpressionQueryProcessor<T1, T2, TO>
+impl<'a, T1, T2, TO> QueryProcessor for ExpressionQueryProcessor<T1, T2, TO>
 where
     T1: Pixel,
     T2: Pixel,
     TO: Pixel,
 {
-    type RasterType = TO;
-    async fn raster_query<'b>(
+    type Output = RasterTile2D<TO>;
+    type SpatialBounds = SpatialPartition2D;
+
+    async fn query<'b>(
         &'b self,
         query: RasterQueryRectangle,
         ctx: &'b dyn QueryContext,
-    ) -> Result<BoxStream<'b, Result<RasterTile2D<Self::RasterType>>>> {
+    ) -> Result<BoxStream<'b, Result<Self::Output>>> {
         // TODO: validate that tiles actually fit together
         let mut cl_program = self.cl_program.clone();
         Ok(self
             .source_a
-            .raster_query(query, ctx)
+            .query(query, ctx)
             .await?
-            .zip(self.source_b.raster_query(query, ctx).await?)
+            .zip(self.source_b.query(query, ctx).await?)
             .map(move |(a, b)| match (a, b) {
                 (Ok(a), Ok(b)) if a.grid_array.is_empty() && b.grid_array.is_empty() => {
                     Ok(RasterTile2D::new(
@@ -525,7 +527,7 @@ mod tests {
 
         let ctx = MockQueryContext::new(1);
         let result_stream = processor
-            .raster_query(
+            .query(
                 RasterQueryRectangle {
                     spatial_bounds: SpatialPartition2D::new_unchecked(
                         (0., 4.).into(),

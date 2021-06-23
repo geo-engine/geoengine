@@ -7,7 +7,7 @@ use geoengine_datatypes::{
 use num_traits::AsPrimitive;
 use std::convert::TryInto;
 
-use crate::engine::{QueryContext, RasterQueryProcessor, RasterQueryRectangle};
+use crate::engine::{QueryContext, QueryProcessor, RasterQueryProcessor, RasterQueryRectangle};
 use crate::{error, util::Result};
 
 #[allow(clippy::too_many_arguments)]
@@ -26,7 +26,7 @@ where
 {
     let colorizer = colorizer.unwrap_or(default_colorizer_gradient::<T>()?);
 
-    let tile_stream = processor.raster_query(query_rect, &query_ctx).await?;
+    let tile_stream = processor.query(query_rect, &query_ctx).await?;
 
     let x_query_resolution = query_rect.spatial_bounds.size_x() / f64::from(width);
     let y_query_resolution = query_rect.spatial_bounds.size_y() / f64::from(height);

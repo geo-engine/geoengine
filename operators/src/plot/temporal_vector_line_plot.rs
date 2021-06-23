@@ -1,3 +1,4 @@
+use crate::engine::QueryProcessor;
 use crate::engine::{
     ExecutionContext, InitializedPlotOperator, InitializedVectorOperator, Operator, PlotOperator,
     PlotQueryProcessor, PlotResultDescriptor, QueryContext, SingleVectorSource,
@@ -145,7 +146,7 @@ where
 
         let values = self
             .features
-            .vector_query(query, ctx)
+            .query(query, ctx)
             .await?
             .fold(Ok(values), |acc, features| async {
                 match (acc, features) {

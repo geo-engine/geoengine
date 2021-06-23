@@ -30,13 +30,13 @@ use geoengine_datatypes::collections::{
     FeatureCollectionRowBuilder, GeoFeatureCollectionRowBuilder, VectorDataType,
 };
 use geoengine_datatypes::primitives::{
-    Coordinate2D, FeatureDataType, FeatureDataValue, Geometry, MultiLineString, MultiPoint,
-    MultiPolygon, NoGeometry, TimeInstance, TimeInterval, TypedGeometry,
+    BoundingBox2D, Coordinate2D, FeatureDataType, FeatureDataValue, Geometry, MultiLineString,
+    MultiPoint, MultiPolygon, NoGeometry, TimeInstance, TimeInterval, TypedGeometry,
 };
 use geoengine_datatypes::provenance::ProvenanceInformation;
 use geoengine_datatypes::util::arrow::ArrowTyped;
 
-use crate::engine::VectorQueryRectangle;
+use crate::engine::{QueryProcessor, VectorQueryRectangle};
 use crate::error::Error;
 use crate::util::Result;
 use crate::{
@@ -316,17 +316,19 @@ where
 }
 
 #[async_trait]
-impl<G> VectorQueryProcessor for OgrSourceProcessor<G>
+impl<G> QueryProcessor for OgrSourceProcessor<G>
 where
     G: Geometry + ArrowTyped + 'static + std::marker::Unpin + TryFromOgrGeometry,
     FeatureCollectionRowBuilder<G>: FeatureCollectionBuilderGeometryHandler<G>,
 {
-    type VectorType = FeatureCollection<G>;
-    async fn vector_query<'a>(
+    type Output = FeatureCollection<G>;
+    type SpatialBounds = BoundingBox2D;
+
+    async fn query<'a>(
         &'a self,
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
-    ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
+    ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         Ok(OgrSourceStream::new(
             self.dataset_information.loading_info(query).await?,
             query,
@@ -1157,7 +1159,7 @@ mod tests {
 
         let context = MockQueryContext::new(usize::MAX);
         let query = query_processor
-            .vector_query(
+            .query(
                 VectorQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
@@ -1204,7 +1206,7 @@ mod tests {
 
         let context = MockQueryContext::new(usize::MAX);
         let query = query_processor
-            .vector_query(
+            .query(
                 VectorQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
@@ -1250,7 +1252,7 @@ mod tests {
 
         let context = MockQueryContext::new(usize::MAX);
         let query = query_processor
-            .vector_query(
+            .query(
                 VectorQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (5., 5.).into())?,
                     time_interval: Default::default(),
@@ -1327,7 +1329,7 @@ mod tests {
 
         let context = MockQueryContext::new(usize::MAX);
         let query = query_processor
-            .vector_query(
+            .query(
                 VectorQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                     time_interval: Default::default(),
@@ -1418,7 +1420,7 @@ mod tests {
 
         let context = MockQueryContext::new(usize::MAX);
         let query = query_processor
-            .vector_query(
+            .query(
                 VectorQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                     time_interval: Default::default(),
@@ -1511,7 +1513,7 @@ mod tests {
 
         let context = MockQueryContext::new(usize::MAX);
         let query = query_processor
-            .vector_query(
+            .query(
                 VectorQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                     time_interval: Default::default(),
@@ -1622,7 +1624,7 @@ mod tests {
 
         let context = MockQueryContext::new(usize::MAX);
         let query = query_processor
-            .vector_query(
+            .query(
                 VectorQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                     time_interval: Default::default(),
@@ -1788,7 +1790,7 @@ mod tests {
 
         let context = MockQueryContext::new(usize::MAX);
         let query = query_processor
-            .vector_query(
+            .query(
                 VectorQueryRectangle {
                     spatial_bounds: BoundingBox2D::new(
                         (-180.0, -90.0).into(),
@@ -2944,7 +2946,7 @@ mod tests {
 
         let context = MockQueryContext::new(usize::MAX);
         let query = query_processor
-            .vector_query(
+            .query(
                 VectorQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
@@ -3145,7 +3147,7 @@ mod tests {
 
         let context1 = MockQueryContext::new(0);
         let query = query_processor
-            .vector_query(
+            .query(
                 VectorQueryRectangle {
                     spatial_bounds: query_bbox,
                     time_interval: Default::default(),
@@ -3179,7 +3181,7 @@ mod tests {
         // LARGER CHUNK
         let context = MockQueryContext::new(1_000);
         let query = query_processor
-            .vector_query(
+            .query(
                 VectorQueryRectangle {
                     spatial_bounds: query_bbox,
                     time_interval: Default::default(),
@@ -3288,7 +3290,7 @@ mod tests {
 
         let context = MockQueryContext::new(0);
         let query = query_processor
-            .vector_query(
+            .query(
                 VectorQueryRectangle {
                     spatial_bounds: query_bbox,
                     time_interval: Default::default(),
@@ -3365,7 +3367,7 @@ mod tests {
 
         let context = MockQueryContext::new(1024 * 1024);
         let query = query_processor
-            .vector_query(
+            .query(
                 VectorQueryRectangle {
                     spatial_bounds: query_bbox,
                     time_interval: Default::default(),
@@ -3458,7 +3460,7 @@ mod tests {
 
         let context = MockQueryContext::new(1024 * 1024);
         let query = query_processor
-            .vector_query(
+            .query(
                 VectorQueryRectangle {
                     spatial_bounds: query_bbox,
                     time_interval: Default::default(),
@@ -3560,7 +3562,7 @@ mod tests {
 
         let context = MockQueryContext::new(1024 * 1024);
         let query = query_processor
-            .vector_query(
+            .query(
                 VectorQueryRectangle {
                     spatial_bounds: query_bbox,
                     time_interval: Default::default(),
@@ -3658,7 +3660,7 @@ mod tests {
 
         let context = MockQueryContext::new(1024 * 1024);
         let query = query_processor
-            .vector_query(
+            .query(
                 VectorQueryRectangle {
                     spatial_bounds: query_bbox,
                     time_interval: Default::default(),
@@ -3756,7 +3758,7 @@ mod tests {
 
         let context = MockQueryContext::new(1024 * 1024);
         let query = query_processor
-            .vector_query(
+            .query(
                 VectorQueryRectangle {
                     spatial_bounds: query_bbox,
                     time_interval: Default::default(),

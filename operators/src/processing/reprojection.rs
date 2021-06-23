@@ -3,7 +3,7 @@ use crate::{
     adapters::{fold_by_coordinate_lookup_future, RasterOverlapAdapter, TileReprojectionSubQuery},
     engine::{
         ExecutionContext, InitializedRasterOperator, InitializedVectorOperator, Operator,
-        QueryContext, RasterOperator, RasterQueryProcessor, RasterQueryRectangle,
+        QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterQueryRectangle,
         RasterResultDescriptor, SingleRasterOrVectorSource, TypedRasterQueryProcessor,
         TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorQueryRectangle,
         VectorResultDescriptor,
@@ -19,7 +19,8 @@ use geoengine_datatypes::{
         suggest_pixel_size_from_diag_cross, suggest_pixel_size_from_diag_cross_projected,
         CoordinateProjection, CoordinateProjector, Reproject, ReprojectClipped,
     },
-    raster::{Pixel, TilingSpecification},
+    primitives::{BoundingBox2D, SpatialPartition2D},
+    raster::{Pixel, RasterTile2D, TilingSpecification},
     spatial_reference::SpatialReference,
 };
 use num_traits::AsPrimitive;
@@ -104,7 +105,7 @@ impl InitializedVectorOperator for InitializedVectorReprojection {
         match self.source.query_processor()? {
             TypedVectorQueryProcessor::Data(source) => Ok(TypedVectorQueryProcessor::Data(
                 MapQueryProcessor::new(source, move |query| {
-                    vector_query_rewrite_fn(query, state.source_srs, state.target_srs)
+                    query_rewrite_fn(query, state.source_srs, state.target_srs)
                 })
                 .boxed(),
             )),
@@ -162,7 +163,7 @@ where
 
 /// this method performs the transformation of a query rectangle in `target` projection
 /// to a new query rectangle with coordinates in the `source` projection
-pub fn vector_query_rewrite_fn(
+pub fn query_rewrite_fn(
     query: VectorQueryRectangle,
     source: SpatialReference,
     target: SpatialReference,
@@ -185,23 +186,24 @@ pub fn vector_query_rewrite_fn(
 }
 
 #[async_trait]
-impl<Q, G> VectorQueryProcessor for VectorReprojectionProcessor<Q, G>
+impl<Q, G> QueryProcessor for VectorReprojectionProcessor<Q, G>
 where
-    Q: VectorQueryProcessor<VectorType = G>,
+    Q: QueryProcessor<Output = G, SpatialBounds = BoundingBox2D>,
     G: Reproject<CoordinateProjector> + Sync + Send,
 {
-    type VectorType = G::Out;
+    type Output = G::Out;
+    type SpatialBounds = BoundingBox2D;
 
-    async fn vector_query<'a>(
+    async fn query<'a>(
         &'a self,
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
-    ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
-        let rewritten_query = vector_query_rewrite_fn(query, self.from, self.to)?;
+    ) -> Result<BoxStream<'a, Result<Self::Output>>> {
+        let rewritten_query = query_rewrite_fn(query, self.from, self.to)?;
 
         Ok(self
             .source
-            .vector_query(rewritten_query, ctx)
+            .query(rewritten_query, ctx)
             .await?
             .map(move |collection_result| {
                 collection_result.and_then(|collection| {
@@ -406,19 +408,19 @@ where
 }
 
 #[async_trait]
-impl<Q, P> RasterQueryProcessor for RasterReprojectionProcessor<Q, P>
+impl<Q, P> QueryProcessor for RasterReprojectionProcessor<Q, P>
 where
-    Q: RasterQueryProcessor<RasterType = P>,
+    Q: QueryProcessor<Output = RasterTile2D<P>, SpatialBounds = SpatialPartition2D>,
     P: Pixel,
 {
-    type RasterType = P;
+    type Output = RasterTile2D<P>;
+    type SpatialBounds = SpatialPartition2D;
 
-    async fn raster_query<'a>(
+    async fn query<'a>(
         &'a self,
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
-    ) -> Result<BoxStream<'a, Result<geoengine_datatypes::raster::RasterTile2D<Self::RasterType>>>>
-    {
+    ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         // we need a resolution for the sub-querys. And since we don't want this to change for tiles, we precompute it for the complete bbox and pass it to the sub-query spec.
         // TODO: use `rewrite_query` to determine resolution for tiles overlapping border
         let projector = CoordinateProjector::from_known_srs(self.to, self.from)?;
@@ -469,7 +471,7 @@ mod tests {
         },
     };
 
-    use crate::engine::{MockExecutionContext, MockQueryContext, VectorQueryProcessor};
+    use crate::engine::{MockExecutionContext, MockQueryContext};
     use crate::mock::MockFeatureCollectionSource;
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;
@@ -531,10 +533,7 @@ mod tests {
         };
         let ctx = MockQueryContext::new(usize::MAX);
 
-        let query = query_processor
-            .vector_query(query_rectangle, &ctx)
-            .await
-            .unwrap();
+        let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
 
         let result = query
             .map(Result::unwrap)
@@ -603,10 +602,7 @@ mod tests {
         };
         let ctx = MockQueryContext::new(usize::MAX);
 
-        let query = query_processor
-            .vector_query(query_rectangle, &ctx)
-            .await
-            .unwrap();
+        let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
 
         let result = query
             .map(Result::unwrap)
@@ -677,10 +673,7 @@ mod tests {
         };
         let ctx = MockQueryContext::new(usize::MAX);
 
-        let query = query_processor
-            .vector_query(query_rectangle, &ctx)
-            .await
-            .unwrap();
+        let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
 
         let result = query
             .map(Result::unwrap)
@@ -892,7 +885,7 @@ mod tests {
 
         assert_eq!(
             expected,
-            vector_query_rewrite_fn(
+            query_rewrite_fn(
                 query,
                 SpatialReference::new(SpatialReferenceAuthority::Epsg, 3857),
                 SpatialReference::epsg_4326(),

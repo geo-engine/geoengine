@@ -151,6 +151,7 @@ impl InitializedVectorOperator
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::QueryProcessor;
     use crate::engine::{MockExecutionContext, MockQueryContext};
     use futures::executor::block_on_stream;
     use geoengine_datatypes::collections::FeatureCollectionInfos;
@@ -189,10 +190,7 @@ mod tests {
         };
         let ctx = MockQueryContext::new(2 * std::mem::size_of::<Coordinate2D>());
 
-        let stream = point_processor
-            .vector_query(query_rectangle, &ctx)
-            .await
-            .unwrap();
+        let stream = point_processor.query(query_rectangle, &ctx).await.unwrap();
 
         let blocking_stream = block_on_stream(stream);
         let collections: Vec<MultiPointCollection> = blocking_stream.map(Result::unwrap).collect();

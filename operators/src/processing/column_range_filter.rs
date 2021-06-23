@@ -1,6 +1,7 @@
 use crate::engine::{
-    ExecutionContext, InitializedVectorOperator, Operator, QueryContext, TypedVectorQueryProcessor,
-    VectorOperator, VectorQueryProcessor, VectorQueryRectangle, VectorResultDescriptor,
+    ExecutionContext, InitializedVectorOperator, Operator, QueryContext, QueryProcessor,
+    TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorQueryRectangle,
+    VectorResultDescriptor,
 };
 use crate::error;
 use crate::util::input::StringOrNumberRange;
@@ -12,7 +13,7 @@ use futures::StreamExt;
 use geoengine_datatypes::collections::{
     FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
 };
-use geoengine_datatypes::primitives::{FeatureDataType, FeatureDataValue, Geometry};
+use geoengine_datatypes::primitives::{BoundingBox2D, FeatureDataType, FeatureDataValue, Geometry};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
@@ -55,7 +56,7 @@ pub struct InitializedColumnRangeFilter {
 
 impl InitializedVectorOperator for InitializedColumnRangeFilter {
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
-        Ok(map_typed_vector_query_processor!(
+        Ok(map_typed_query_processor!(
             self.vector_source.query_processor()?,
             source => ColumnRangeFilterProcessor::new(source, self.state.clone()).boxed()
         ))
@@ -93,56 +94,53 @@ where
 }
 
 #[async_trait]
-impl<G> VectorQueryProcessor for ColumnRangeFilterProcessor<G>
+impl<G> QueryProcessor for ColumnRangeFilterProcessor<G>
 where
     G: Geometry + ArrowTyped + Sync + Send + 'static,
 {
-    type VectorType = FeatureCollection<G>;
+    type Output = FeatureCollection<G>;
+    type SpatialBounds = BoundingBox2D;
 
-    async fn vector_query<'a>(
+    async fn query<'a>(
         &'a self,
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
-    ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
+    ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         let column_name = self.column.clone();
         let ranges = self.ranges.clone();
         let keep_nulls = self.keep_nulls;
 
-        let filter_stream = self
-            .source
-            .vector_query(query, ctx)
-            .await?
-            .map(move |collection| {
-                let collection = collection?;
+        let filter_stream = self.source.query(query, ctx).await?.map(move |collection| {
+            let collection = collection?;
 
-                // TODO: do transformation work only once
-                let ranges: Result<Vec<RangeInclusive<FeatureDataValue>>> =
-                    match collection.column_type(&column_name)? {
-                        FeatureDataType::Text => ranges
-                            .iter()
-                            .cloned()
-                            .map(|range| range.into_string_range().map(Into::into))
-                            .collect(),
-                        FeatureDataType::Float => ranges
-                            .iter()
-                            .cloned()
-                            .map(|range| range.into_float_range().map(Into::into))
-                            .collect(),
-                        FeatureDataType::Int => ranges
-                            .iter()
-                            .cloned()
-                            .map(|range| range.into_int_range().map(Into::into))
-                            .collect(),
-                        FeatureDataType::Category => Err(error::Error::InvalidType {
-                            expected: "text, float, or int".to_string(),
-                            found: "category".to_string(),
-                        }),
-                    };
+            // TODO: do transformation work only once
+            let ranges: Result<Vec<RangeInclusive<FeatureDataValue>>> =
+                match collection.column_type(&column_name)? {
+                    FeatureDataType::Text => ranges
+                        .iter()
+                        .cloned()
+                        .map(|range| range.into_string_range().map(Into::into))
+                        .collect(),
+                    FeatureDataType::Float => ranges
+                        .iter()
+                        .cloned()
+                        .map(|range| range.into_float_range().map(Into::into))
+                        .collect(),
+                    FeatureDataType::Int => ranges
+                        .iter()
+                        .cloned()
+                        .map(|range| range.into_int_range().map(Into::into))
+                        .collect(),
+                    FeatureDataType::Category => Err(error::Error::InvalidType {
+                        expected: "text, float, or int".to_string(),
+                        found: "category".to_string(),
+                    }),
+                };
 
-                collection
-                    .column_range_filter(&column_name, &ranges?, keep_nulls)
-                    .map_err(Into::into)
-            });
+            collection
+                .column_range_filter(&column_name, &ranges?, keep_nulls)
+                .map_err(Into::into)
+        });
 
         let merged_chunks_stream =
             FeatureCollectionChunkMerger::new(filter_stream.fuse(), ctx.chunk_byte_size());
@@ -250,10 +248,7 @@ mod tests {
 
         let ctx = MockQueryContext::new(2 * std::mem::size_of::<Coordinate2D>());
 
-        let stream = point_processor
-            .vector_query(query_rectangle, &ctx)
-            .await
-            .unwrap();
+        let stream = point_processor.query(query_rectangle, &ctx).await.unwrap();
 
         let collections: Vec<MultiPointCollection> = stream.map(Result::unwrap).collect().await;
 

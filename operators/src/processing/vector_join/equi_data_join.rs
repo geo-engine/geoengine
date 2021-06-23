@@ -11,12 +11,12 @@ use geoengine_datatypes::collections::{
     FeatureCollectionInfos, FeatureCollectionRowBuilder, GeoFeatureCollectionRowBuilder,
     GeometryRandomAccess,
 };
-use geoengine_datatypes::primitives::{FeatureDataRef, Geometry, TimeInterval};
+use geoengine_datatypes::primitives::{BoundingBox2D, FeatureDataRef, Geometry, TimeInterval};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 
 use crate::adapters::FeatureCollectionChunkMerger;
-use crate::engine::VectorQueryRectangle;
 use crate::engine::{QueryContext, VectorQueryProcessor};
+use crate::engine::{QueryProcessor, VectorQueryRectangle};
 use crate::error::Error;
 use crate::util::Result;
 use async_trait::async_trait;
@@ -337,29 +337,30 @@ where
 }
 
 #[async_trait]
-impl<G> VectorQueryProcessor for EquiGeoToDataJoinProcessor<G>
+impl<G> QueryProcessor for EquiGeoToDataJoinProcessor<G>
 where
     G: Geometry + ArrowTyped + Sync + Send + 'static,
     for<'g> FeatureCollection<G>: GeometryRandomAccess<'g>,
     for<'g> <FeatureCollection<G> as GeometryRandomAccess<'g>>::GeometryType: Into<G>,
     FeatureCollectionRowBuilder<G>: GeoFeatureCollectionRowBuilder<G>,
 {
-    type VectorType = FeatureCollection<G>;
+    type Output = FeatureCollection<G>;
+    type SpatialBounds = BoundingBox2D;
 
-    async fn vector_query<'a>(
+    async fn query<'a>(
         &'a self,
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
-    ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
+    ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         let result_stream = self
             .left_processor
-            .vector_query(query, ctx)
+            .query(query, ctx)
             .await?
             .and_then(async move |left_collection| {
                 // This implementation is a nested-loop join
                 let left_collection = Arc::new(left_collection);
 
-                let data_query = self.right_processor.vector_query(query, ctx).await?;
+                let data_query = self.right_processor.query(query, ctx).await?;
 
                 let out = data_query
                     .flat_map(move |right_collection| {
@@ -445,7 +446,7 @@ mod tests {
             ),
         );
 
-        block_on_stream(processor.vector_query(query_rectangle, &ctx).await.unwrap())
+        block_on_stream(processor.query(query_rectangle, &ctx).await.unwrap())
             .collect::<Result<_>>()
             .unwrap()
     }

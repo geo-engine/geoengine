@@ -18,11 +18,11 @@ use geoengine_datatypes::{
     spatial_reference::SpatialReference,
 };
 
-use crate::engine::VectorQueryRectangle;
 use crate::engine::{
     InitializedVectorOperator, QueryContext, SourceOperator, TypedVectorQueryProcessor,
     VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
+use crate::engine::{QueryProcessor, VectorQueryRectangle};
 use crate::error;
 use crate::util::Result;
 use async_trait::async_trait;
@@ -377,14 +377,15 @@ struct CsvSourceProcessor {
 }
 
 #[async_trait]
-impl VectorQueryProcessor for CsvSourceProcessor {
-    type VectorType = MultiPointCollection;
+impl QueryProcessor for CsvSourceProcessor {
+    type Output = MultiPointCollection;
+    type SpatialBounds = BoundingBox2D;
 
-    async fn vector_query<'a>(
+    async fn query<'a>(
         &'a self,
         query: VectorQueryRectangle,
         _ctx: &'a dyn QueryContext,
-    ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
+    ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         // TODO: properly handle chunk_size
         Ok(CsvSourceStream::new(self.params.clone(), query.spatial_bounds, 10)?.boxed())
     }
@@ -556,7 +557,7 @@ x,y
         let ctx = MockQueryContext::new(10 * 8 * 2);
 
         let r: Vec<Result<MultiPointCollection>> =
-            p.vector_query(query, &ctx).await.unwrap().collect().await;
+            p.query(query, &ctx).await.unwrap().collect().await;
 
         assert_eq!(r.len(), 1);
 

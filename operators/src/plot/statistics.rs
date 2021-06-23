@@ -1,6 +1,6 @@
 use crate::engine::{
     ExecutionContext, InitializedPlotOperator, InitializedRasterOperator, MultipleRasterSources,
-    Operator, PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext,
+    Operator, PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor,
     TypedPlotQueryProcessor, TypedRasterQueryProcessor, VectorQueryRectangle,
 };
 use crate::util::number_statistics::NumberStatistics;
@@ -97,7 +97,7 @@ impl PlotQueryProcessor for StatisticsQueryProcessor {
         for (i, raster_processor) in self.rasters.iter().enumerate() {
             queries.push(
                 call_on_generic_raster_processor!(raster_processor, processor => {
-                    processor.raster_query(query.into(), ctx).await?
+                    processor.query(query.into(), ctx).await?
                              .map(move |r| r.map(|tile| (i, tile.convert::<f64>())))
                              .boxed()
                 }),

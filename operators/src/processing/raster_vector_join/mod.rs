@@ -179,7 +179,8 @@ mod tests {
     use super::*;
 
     use crate::engine::{
-        MockExecutionContext, MockQueryContext, RasterOperator, VectorQueryRectangle,
+        MockExecutionContext, MockQueryContext, QueryProcessor, RasterOperator,
+        VectorQueryRectangle,
     };
     use crate::mock::MockFeatureCollectionSource;
     use crate::source::{GdalSource, GdalSourceParameters};
@@ -281,7 +282,7 @@ mod tests {
         let query_processor = operator.query_processor().unwrap().multi_point().unwrap();
 
         let result = query_processor
-            .vector_query(
+            .query(
                 VectorQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
                         .unwrap(),
@@ -353,7 +354,7 @@ mod tests {
         let query_processor = operator.query_processor().unwrap().multi_point().unwrap();
 
         let result = query_processor
-            .vector_query(
+            .query(
                 VectorQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
                         .unwrap(),
@@ -426,7 +427,7 @@ mod tests {
         let query_processor = operator.query_processor().unwrap().multi_point().unwrap();
 
         let result = query_processor
-            .vector_query(
+            .query(
                 VectorQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
                         .unwrap(),
