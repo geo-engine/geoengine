@@ -1,3 +1,6 @@
+use std::path::Path;
+
+use gdal::{Dataset, DatasetOptions};
 use geoengine_datatypes::{
     dataset::{DatasetId, InternalDatasetId},
     primitives::{BoundingBox2D, Measurement, TimeGranularity, TimeInstance, TimeStep},
@@ -5,10 +8,13 @@ use geoengine_datatypes::{
     spatial_reference::SpatialReference,
     util::Identifier,
 };
+use snafu::ResultExt;
 
 use crate::{
     engine::{MockExecutionContext, RasterResultDescriptor},
+    error,
     source::{FileNotFoundHandling, GdalDatasetParameters, GdalMetaDataRegular},
+    util::Result,
 };
 
 /// # Panics
@@ -68,4 +74,12 @@ pub fn add_ndvi_dataset(ctx: &mut MockExecutionContext) -> DatasetId {
     let id: DatasetId = InternalDatasetId::new().into();
     ctx.add_meta_data(id.clone(), Box::new(create_ndvi_meta_data()));
     id
+}
+
+pub fn open_dataset(path: &Path) -> Result<Dataset> {
+    Dataset::open(&path).context(error::Gdal)
+}
+
+pub fn open_dataset_ex(path: &Path, dataset_options: DatasetOptions) -> Result<Dataset> {
+    Dataset::open_ex(path, dataset_options).context(error::Gdal)
 }
