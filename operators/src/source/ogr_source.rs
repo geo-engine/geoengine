@@ -1089,7 +1089,11 @@ mod tests {
                             "format": "custom",
                             "customFormat": "YYYY-MM-DD"
                         },
-                        "duration": 42
+                        "duration": {
+                            "type": "finite",
+                            "granularity": "Seconds",
+                            "step": 42
+                        }
                     }
                 },
                 "columns": {
@@ -1123,7 +1127,11 @@ mod tests {
                             "format": "custom",
                             "customFormat": "YYYY-MM-DD"
                         },
-                        "duration": 42
+                        "duration": {
+                            "type": "finite",
+                            "granularity": "Seconds",
+                            "step": 42
+                        }
                     }
                 },
                 "columns": {
@@ -3514,7 +3522,7 @@ mod tests {
                         },
                         duration: OgrSourceDurationSpec::Finite(TimeStep {
                             granularity: TimeGranularity::Seconds,
-                            step: 84000,
+                            step: 84,
                         }),
                     },
                     columns: Some(OgrSourceColumnSpec {
@@ -3614,7 +3622,7 @@ mod tests {
                         },
                         duration: OgrSourceDurationSpec::Finite(TimeStep {
                             granularity: TimeGranularity::Seconds,
-                            step: 84000,
+                            step: 84,
                         }),
                     },
                     columns: Some(OgrSourceColumnSpec {
@@ -3714,7 +3722,7 @@ mod tests {
                         },
                         duration: OgrSourceDurationSpec::Finite(TimeStep {
                             granularity: TimeGranularity::Seconds,
-                            step: 84000,
+                            step: 84,
                         }),
                     },
                     columns: Some(OgrSourceColumnSpec {
