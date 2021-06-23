@@ -32,7 +32,8 @@ use geoengine_datatypes::{
 use geoengine_operators::{
     engine::{StaticMetaData, VectorResultDescriptor},
     source::{
-        OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceTimeFormat,
+        OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec,
+        OgrSourceTimeFormat,
     },
 };
 use snafu::ResultExt;
@@ -626,7 +627,7 @@ fn detect_time_type(columns: &Columns) -> OgrSourceDatasetTimeType {
         (Some(start), None, None) => OgrSourceDatasetTimeType::Start {
             start_field: start.clone(),
             start_format: OgrSourceTimeFormat::Auto,
-            duration: 0,
+            duration: OgrSourceDurationSpec::Instant,
         },
         _ => OgrSourceDatasetTimeType::None,
     }
