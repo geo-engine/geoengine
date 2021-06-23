@@ -36,7 +36,6 @@ use std::pin::Pin;
 
 pub trait FoldTileAccu {
     type RasterType: Pixel;
-    fn tile_ref(&self) -> &RasterTile2D<Self::RasterType>;
     fn into_tile(self) -> RasterTile2D<Self::RasterType>;
 }
 
@@ -46,10 +45,6 @@ pub trait FoldTileAccuMut: FoldTileAccu {
 
 impl<T: Pixel> FoldTileAccu for RasterTile2D<T> {
     type RasterType = T;
-
-    fn tile_ref(&self) -> &RasterTile2D<Self::RasterType> {
-        &self
-    }
 
     fn into_tile(self) -> RasterTile2D<Self::RasterType> {
         self
@@ -339,7 +334,7 @@ where
     T: Pixel,
 {
     let mut accu = accu;
-    let t_union = accu.tile_ref().time.union(&tile.time)?;
+    let t_union = accu.accu_tile.time.union(&tile.time)?;
 
     accu.tile_mut().time = t_union;
 
@@ -504,10 +499,6 @@ pub struct TileWithProjectionCoordinates<T> {
 
 impl<T: Pixel> FoldTileAccu for TileWithProjectionCoordinates<T> {
     type RasterType = T;
-
-    fn tile_ref(&self) -> &RasterTile2D<Self::RasterType> {
-        &self.accu_tile
-    }
 
     fn into_tile(self) -> RasterTile2D<Self::RasterType> {
         self.accu_tile

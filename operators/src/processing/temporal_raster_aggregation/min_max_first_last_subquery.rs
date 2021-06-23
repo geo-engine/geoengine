@@ -288,10 +288,6 @@ pub struct TemporalRasterAggregationTileAccu<T> {
 impl<T: Pixel> FoldTileAccu for TemporalRasterAggregationTileAccu<T> {
     type RasterType = T;
 
-    fn tile_ref(&self) -> &RasterTile2D<Self::RasterType> {
-        &self.accu_tile
-    }
-
     fn into_tile(self) -> RasterTile2D<Self::RasterType> {
         self.accu_tile
     }
