@@ -45,7 +45,7 @@ pub trait RasterQueryProcessor: Sync + Send {
 #[async_trait]
 impl<S, T> RasterQueryProcessor for S
 where
-    S: QueryProcessor<Output = RasterTile2D<T>> + Sync + Send,
+    S: QueryProcessor<Output = RasterTile2D<T>, SpatialBounds = SpatialPartition2D> + Sync + Send,
     T: Pixel,
 {
     type RasterType = T;
@@ -54,7 +54,7 @@ where
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<RasterTile2D<Self::RasterType>>>> {
-        self.raster_query(query, ctx).await
+        self.query(query, ctx).await
     }
 }
 
@@ -79,7 +79,7 @@ pub trait VectorQueryProcessor: Sync + Send {
 #[async_trait]
 impl<S, VD> VectorQueryProcessor for S
 where
-    S: QueryProcessor<Output = VD> + Sync + Send,
+    S: QueryProcessor<Output = VD, SpatialBounds = BoundingBox2D> + Sync + Send,
 {
     type VectorType = VD;
 
@@ -88,7 +88,7 @@ where
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
-        self.vector_query(query, ctx).await
+        self.query(query, ctx).await
     }
 }
 
