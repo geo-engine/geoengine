@@ -76,10 +76,14 @@ pub fn add_ndvi_dataset(ctx: &mut MockExecutionContext) -> DatasetId {
     id
 }
 
-pub fn open_dataset(path: &Path) -> Result<Dataset> {
+/// Opens a Gdal Dataset with the given `path`.
+/// Other crates should use this method for Gdal Dataset access as a workaround to avoid strange errors.
+pub fn gdal_open_dataset(path: &Path) -> Result<Dataset> {
     Dataset::open(&path).context(error::Gdal)
 }
 
-pub fn open_dataset_ex(path: &Path, dataset_options: DatasetOptions) -> Result<Dataset> {
+/// Opens a Gdal Dataset with the given `path` and `dataset_options`.
+/// Other crates should use this method for Gdal Dataset access as a workaround to avoid strange errors.
+pub fn gdal_open_dataset_ex(path: &Path, dataset_options: DatasetOptions) -> Result<Dataset> {
     Dataset::open_ex(path, dataset_options).context(error::Gdal)
 }
