@@ -34,6 +34,7 @@ use geoengine_operators::{
     source::{
         OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceTimeFormat,
     },
+    util::gdal::{gdal_open_dataset, gdal_open_dataset_ex},
 };
 use snafu::ResultExt;
 use uuid::Uuid;
@@ -421,7 +422,7 @@ fn suggest_main_file(upload: &Upload) -> Option<String> {
 }
 
 fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDefinition> {
-    let dataset = Dataset::open(&main_file_path).context(error::Gdal)?;
+    let dataset = gdal_open_dataset(&main_file_path).context(error::Operator)?;
     let layer = {
         if let Ok(layer) = dataset.layer(0) {
             layer
@@ -511,13 +512,13 @@ fn gdal_autodetect(path: &Path, columns: &[String]) -> Option<GdalAutoDetect> {
 
                 dataset_options.open_options = Some(open_opts);
 
-                return Dataset::open_ex(path, dataset_options).ok().map(|dataset| {
-                    GdalAutoDetect {
+                return gdal_open_dataset_ex(path, dataset_options)
+                    .ok()
+                    .map(|dataset| GdalAutoDetect {
                         dataset,
                         x: x.clone(),
                         y: Some(y.clone()),
-                    }
-                });
+                    });
             }
         }
     }
@@ -536,13 +537,13 @@ fn gdal_autodetect(path: &Path, columns: &[String]) -> Option<GdalAutoDetect> {
 
                 dataset_options.open_options = Some(open_opts);
 
-                return Dataset::open_ex(path, dataset_options).ok().map(|dataset| {
-                    GdalAutoDetect {
+                return gdal_open_dataset_ex(path, dataset_options)
+                    .ok()
+                    .map(|dataset| GdalAutoDetect {
                         dataset,
                         x: geom.to_owned(),
                         y: None,
-                    }
-                });
+                    });
             }
         }
     }
