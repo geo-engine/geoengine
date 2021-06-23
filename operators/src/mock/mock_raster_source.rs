@@ -47,7 +47,7 @@ where
                     t.time.intersects(&query.time_interval)
                         && t.tile_information()
                             .spatial_partition()
-                            .intersects(&query.partition)
+                            .intersects(&query.spatial_bounds)
                 })
                 .cloned()
                 .map(Result::Ok),

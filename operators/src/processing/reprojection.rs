@@ -170,13 +170,15 @@ pub fn vector_query_rewrite_fn(
     let projector_source_target = CoordinateProjector::from_known_srs(source, target)?;
     let projector_target_source = CoordinateProjector::from_known_srs(target, source)?;
 
-    let p_bbox = query.bbox.reproject_clipped(&projector_target_source)?;
+    let p_bbox = query
+        .spatial_bounds
+        .reproject_clipped(&projector_target_source)?;
     let s_bbox = p_bbox.reproject(&projector_source_target)?;
 
     let p_spatial_resolution =
         suggest_pixel_size_from_diag_cross_projected(s_bbox, p_bbox, query.spatial_resolution)?;
     Ok(VectorQueryRectangle {
-        bbox: p_bbox,
+        spatial_bounds: p_bbox,
         spatial_resolution: p_spatial_resolution,
         time_interval: query.time_interval,
     })
@@ -421,7 +423,7 @@ where
         // TODO: use `rewrite_query` to determine resolution for tiles overlapping border
         let projector = CoordinateProjector::from_known_srs(self.to, self.from)?;
         let p_spatial_resolution = suggest_pixel_size_from_diag_cross(
-            query.partition,
+            query.spatial_bounds,
             query.spatial_resolution,
             &projector,
         )?;
@@ -457,7 +459,7 @@ mod tests {
         collections::{MultiLineStringCollection, MultiPointCollection, MultiPolygonCollection},
         primitives::{
             AxisAlignedRectangle, BoundingBox2D, Measurement, MultiLineString, MultiPoint,
-            MultiPolygon, SpatialPartition, SpatialResolution, TimeInterval,
+            MultiPolygon, SpatialPartition2D, SpatialResolution, TimeInterval,
         },
         raster::{Grid, GridShape, GridShape2D, GridSize, RasterDataType, RasterTile2D},
         spatial_reference::SpatialReferenceAuthority,
@@ -519,7 +521,7 @@ mod tests {
         let query_processor = query_processor.multi_point().unwrap();
 
         let query_rectangle = VectorQueryRectangle {
-            bbox: BoundingBox2D::new(
+            spatial_bounds: BoundingBox2D::new(
                 (COLOGNE_EPSG_4326.x, MARBURG_EPSG_4326.y).into(),
                 (MARBURG_EPSG_4326.x, HAMBURG_EPSG_4326.y).into(),
             )
@@ -591,7 +593,7 @@ mod tests {
         let query_processor = query_processor.multi_line_string().unwrap();
 
         let query_rectangle = VectorQueryRectangle {
-            bbox: BoundingBox2D::new(
+            spatial_bounds: BoundingBox2D::new(
                 (COLOGNE_EPSG_4326.x, MARBURG_EPSG_4326.y).into(),
                 (MARBURG_EPSG_4326.x, HAMBURG_EPSG_4326.y).into(),
             )
@@ -665,7 +667,7 @@ mod tests {
         let query_processor = query_processor.multi_polygon().unwrap();
 
         let query_rectangle = VectorQueryRectangle {
-            bbox: BoundingBox2D::new(
+            spatial_bounds: BoundingBox2D::new(
                 (COLOGNE_EPSG_4326.x, MARBURG_EPSG_4326.y).into(),
                 (MARBURG_EPSG_4326.x, HAMBURG_EPSG_4326.y).into(),
             )
@@ -781,7 +783,7 @@ mod tests {
             .unwrap();
 
         let query_rect = RasterQueryRectangle {
-            partition: SpatialPartition::new_unchecked((0., 1.).into(), (3., 0.).into()),
+            spatial_bounds: SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 10),
             spatial_resolution: SpatialResolution::one(),
         };
@@ -807,7 +809,7 @@ mod tests {
 
         let output_shape: GridShape2D = [900, 1800].into();
         let output_bounds =
-            SpatialPartition::new_unchecked((0., 20_000_000.).into(), (20_000_000., 0.).into());
+            SpatialPartition2D::new_unchecked((0., 20_000_000.).into(), (20_000_000., 0.).into());
         let time_interval = TimeInterval::new_unchecked(1_388_534_400_000, 1_388_534_400_001);
         // 2014-01-01
 
@@ -848,7 +850,7 @@ mod tests {
         let qs = qp
             .raster_query(
                 RasterQueryRectangle {
-                    partition: output_bounds,
+                    spatial_bounds: output_bounds,
                     time_interval,
                     spatial_resolution,
                 },
@@ -878,7 +880,7 @@ mod tests {
     #[test]
     fn query_rewrite_4326_3857() {
         let query = VectorQueryRectangle {
-            bbox: BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
+            spatial_bounds: BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
@@ -896,7 +898,7 @@ mod tests {
                 SpatialReference::epsg_4326(),
             )
             .unwrap()
-            .bbox
+            .spatial_bounds
         );
     }
 }

@@ -13,10 +13,13 @@ pub use operator_impl::{
     MultipleRasterSources, MultipleVectorSources, Operator, SingleRasterOrVectorSource,
     SingleRasterSource, SingleVectorMultipleRasterSources, SingleVectorSource, SourceOperator,
 };
-pub use query::{MockQueryContext, QueryContext, RasterQueryRectangle, VectorQueryRectangle};
+pub use query::{
+    MockQueryContext, PlotQueryRectangle, QueryContext, QueryRectangle, RasterQueryRectangle,
+    VectorQueryRectangle,
+};
 pub use query_processor::{
-    PlotQueryProcessor, RasterQueryProcessor, TypedPlotQueryProcessor, TypedRasterQueryProcessor,
-    TypedVectorQueryProcessor, VectorQueryProcessor,
+    PlotQueryProcessor, QueryProcessor, RasterQueryProcessor, TypedPlotQueryProcessor,
+    TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorQueryProcessor,
 };
 pub use result_descriptor::{
     PlotResultDescriptor, RasterResultDescriptor, ResultDescriptor, TypedResultDescriptor,

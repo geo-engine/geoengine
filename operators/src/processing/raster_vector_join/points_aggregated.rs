@@ -57,7 +57,7 @@ impl RasterPointAggregateJoinProcessor {
 
         for time_span in FeatureTimeSpanIter::new(points.time_intervals()) {
             let query = VectorQueryRectangle {
-                bbox: query.bbox,
+                spatial_bounds: query.spatial_bounds,
                 time_interval: time_span.time_interval,
                 spatial_resolution: query.spatial_resolution,
             };
@@ -236,7 +236,7 @@ mod tests {
             "foo",
             AggregationMethod::First,
             VectorQueryRectangle {
-                bbox: BoundingBox2D::new((0.0, -3.0).into(), (2.0, 0.).into()).unwrap(),
+                spatial_bounds: BoundingBox2D::new((0.0, -3.0).into(), (2.0, 0.).into()).unwrap(),
                 time_interval: Default::default(),
                 spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
             },
@@ -319,7 +319,7 @@ mod tests {
             "foo",
             AggregationMethod::Mean,
             VectorQueryRectangle {
-                bbox: BoundingBox2D::new((0.0, -3.0).into(), (2.0, 0.0).into()).unwrap(),
+                spatial_bounds: BoundingBox2D::new((0.0, -3.0).into(), (2.0, 0.0).into()).unwrap(),
                 time_interval: Default::default(),
                 spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
             },

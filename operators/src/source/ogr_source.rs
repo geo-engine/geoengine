@@ -452,7 +452,7 @@ where
 
         if use_ogr_spatial_filter {
             // rectangular geometry from West, South, East and North values.
-            let filter_geometry = query_rectangle.bbox.try_into()?;
+            let filter_geometry = query_rectangle.spatial_bounds.try_into()?;
             // TODO: log uses spatial filter
             // TODO: use OGR_L_SetSpatialFilterRect() once GDAL crate supports it
             // NOTE: the OGR-filter may be inaccurately allowing more features that should be returned in a "strict" fashion.
@@ -746,7 +746,9 @@ where
             <G as TryFromOgrGeometry>::try_from(feature.geometry_by_index(0).map_err(Into::into))?;
 
         // filter out geometries that are not contained in the query's bounding box
-        if !was_spatial_filtered_by_ogr && !geometry.intersects_bbox(&query_rectangle.bbox) {
+        if !was_spatial_filtered_by_ogr
+            && !geometry.intersects_bbox(&query_rectangle.spatial_bounds)
+        {
             return Ok(());
         }
 
@@ -1157,7 +1159,7 @@ mod tests {
         let query = query_processor
             .vector_query(
                 VectorQueryRectangle {
-                    bbox: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
+                    spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
                 },
@@ -1204,7 +1206,7 @@ mod tests {
         let query = query_processor
             .vector_query(
                 VectorQueryRectangle {
-                    bbox: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
+                    spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
                 },
@@ -1250,7 +1252,7 @@ mod tests {
         let query = query_processor
             .vector_query(
                 VectorQueryRectangle {
-                    bbox: BoundingBox2D::new((0., 0.).into(), (5., 5.).into())?,
+                    spatial_bounds: BoundingBox2D::new((0., 0.).into(), (5., 5.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
                 },
@@ -1327,7 +1329,7 @@ mod tests {
         let query = query_processor
             .vector_query(
                 VectorQueryRectangle {
-                    bbox: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
+                    spatial_bounds: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
                 },
@@ -1418,7 +1420,7 @@ mod tests {
         let query = query_processor
             .vector_query(
                 VectorQueryRectangle {
-                    bbox: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
+                    spatial_bounds: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
                 },
@@ -1511,7 +1513,7 @@ mod tests {
         let query = query_processor
             .vector_query(
                 VectorQueryRectangle {
-                    bbox: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
+                    spatial_bounds: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
                 },
@@ -1622,7 +1624,7 @@ mod tests {
         let query = query_processor
             .vector_query(
                 VectorQueryRectangle {
-                    bbox: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
+                    spatial_bounds: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
                 },
@@ -1788,7 +1790,10 @@ mod tests {
         let query = query_processor
             .vector_query(
                 VectorQueryRectangle {
-                    bbox: BoundingBox2D::new((-180.0, -90.0).into(), (180.0, 90.0).into())?,
+                    spatial_bounds: BoundingBox2D::new(
+                        (-180.0, -90.0).into(),
+                        (180.0, 90.0).into(),
+                    )?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
                 },
@@ -2941,7 +2946,7 @@ mod tests {
         let query = query_processor
             .vector_query(
                 VectorQueryRectangle {
-                    bbox: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
+                    spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
                 },
@@ -3142,7 +3147,7 @@ mod tests {
         let query = query_processor
             .vector_query(
                 VectorQueryRectangle {
-                    bbox: query_bbox,
+                    spatial_bounds: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
                 },
@@ -3176,7 +3181,7 @@ mod tests {
         let query = query_processor
             .vector_query(
                 VectorQueryRectangle {
-                    bbox: query_bbox,
+                    spatial_bounds: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
                 },
@@ -3285,7 +3290,7 @@ mod tests {
         let query = query_processor
             .vector_query(
                 VectorQueryRectangle {
-                    bbox: query_bbox,
+                    spatial_bounds: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
                 },
@@ -3362,7 +3367,7 @@ mod tests {
         let query = query_processor
             .vector_query(
                 VectorQueryRectangle {
-                    bbox: query_bbox,
+                    spatial_bounds: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
                 },
@@ -3455,7 +3460,7 @@ mod tests {
         let query = query_processor
             .vector_query(
                 VectorQueryRectangle {
-                    bbox: query_bbox,
+                    spatial_bounds: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
                 },
@@ -3557,7 +3562,7 @@ mod tests {
         let query = query_processor
             .vector_query(
                 VectorQueryRectangle {
-                    bbox: query_bbox,
+                    spatial_bounds: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
                 },
@@ -3655,7 +3660,7 @@ mod tests {
         let query = query_processor
             .vector_query(
                 VectorQueryRectangle {
-                    bbox: query_bbox,
+                    spatial_bounds: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
                 },
@@ -3753,7 +3758,7 @@ mod tests {
         let query = query_processor
             .vector_query(
                 VectorQueryRectangle {
-                    bbox: query_bbox,
+                    spatial_bounds: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
                 },

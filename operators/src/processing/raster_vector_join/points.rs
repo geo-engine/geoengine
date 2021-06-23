@@ -80,10 +80,10 @@ impl RasterPointJoinProcessor {
     ) -> Result<BoxStream<'a, Result<MultiPointCollection>>> {
         // make qrect smaller wrt. points
         let query = VectorQueryRectangle {
-            bbox: points
+            spatial_bounds: points
                 .bbox()
-                .and_then(|bbox| bbox.intersection(&query.bbox))
-                .unwrap_or(query.bbox),
+                .and_then(|bbox| bbox.intersection(&query.spatial_bounds))
+                .unwrap_or(query.spatial_bounds),
             time_interval: points
                 .time_bounds()
                 .and_then(|time| time.intersect(&query.time_interval))
@@ -334,7 +334,8 @@ mod tests {
         let mut result = processor
             .vector_query(
                 VectorQueryRectangle {
-                    bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
+                        .unwrap(),
                     time_interval: time_instant,
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
                 },
@@ -421,7 +422,8 @@ mod tests {
         let mut result = processor
             .vector_query(
                 VectorQueryRectangle {
-                    bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
+                        .unwrap(),
                     time_interval: TimeInterval::new(
                         NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
                         NaiveDate::from_ymd(2014, 3, 1).and_hms(0, 0, 0),
@@ -516,7 +518,8 @@ mod tests {
         let mut result = processor
             .vector_query(
                 VectorQueryRectangle {
-                    bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
+                        .unwrap(),
                     time_interval: TimeInterval::new_instant(
                         NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
                     )
@@ -613,7 +616,8 @@ mod tests {
         let mut result = processor
             .vector_query(
                 VectorQueryRectangle {
-                    bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
+                        .unwrap(),
                     time_interval: TimeInterval::new(
                         NaiveDate::from_ymd(2014, 1, 1).and_hms(0, 0, 0),
                         NaiveDate::from_ymd(2014, 3, 1).and_hms(0, 0, 0),

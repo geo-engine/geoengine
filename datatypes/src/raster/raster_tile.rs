@@ -5,7 +5,7 @@ use super::{
     GridSize, GridSpaceToLinearSpace, NoDataValue, Raster, TileInformation,
 };
 use crate::primitives::{
-    Coordinate2D, SpatialBounded, SpatialPartition, SpatialPartitioned, TemporalBounded,
+    Coordinate2D, SpatialBounded, SpatialPartition2D, SpatialPartitioned, TemporalBounded,
     TimeInterval,
 };
 use crate::raster::data_type::FromPrimitive;
@@ -195,7 +195,7 @@ impl<G> SpatialPartitioned for BaseTile<G>
 where
     G: GridSize,
 {
-    fn spatial_partition(&self) -> SpatialPartition {
+    fn spatial_partition(&self) -> SpatialPartition2D {
         self.tile_information().spatial_partition()
     }
 }
@@ -569,7 +569,7 @@ mod tests {
         );
         assert_eq!(
             ti.spatial_partition(),
-            SpatialPartition::new_unchecked(
+            SpatialPartition2D::new_unchecked(
                 Coordinate2D::new(3000., 200.),
                 Coordinate2D::new(4000., 100.)
             )
@@ -585,7 +585,7 @@ mod tests {
         );
         assert_eq!(
             ti.spatial_partition(),
-            SpatialPartition::new_unchecked(
+            SpatialPartition2D::new_unchecked(
                 Coordinate2D::new(-177., 88.),
                 Coordinate2D::new(-176., 87.)
             )

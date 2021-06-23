@@ -142,7 +142,7 @@ async fn get_plot<C: Context>(
     let processor = initialized.query_processor().context(error::Operator)?;
 
     let query_rect = VectorQueryRectangle {
-        bbox: params.bbox,
+        spatial_bounds: params.bbox,
         time_interval: params.time,
         spatial_resolution: params.spatial_resolution,
     };

@@ -128,7 +128,7 @@ where
         );
 
         let tiles_to_produce: Vec<TileInformation> = tiling_strat
-            .tile_information_iterator(query_rect.partition)
+            .tile_information_iterator(query_rect.spatial_bounds)
             .collect();
 
         Self {
@@ -486,7 +486,7 @@ where
         start_time: TimeInstance,
     ) -> Result<RasterQueryRectangle> {
         Ok(RasterQueryRectangle {
-            partition: tile_info.spatial_partition(),
+            spatial_bounds: tile_info.spatial_partition(),
             time_interval: TimeInterval::new_instant(start_time)?,
             spatial_resolution: query_rect.spatial_resolution,
         })
@@ -597,7 +597,7 @@ where
         let proj = CoordinateProjector::from_known_srs(self.out_srs, self.in_srs)?;
 
         Ok(RasterQueryRectangle {
-            partition: tile_info
+            spatial_bounds: tile_info
                 .spatial_partition()
                 .intersection(&query_rect.spatial_partition())
                 .expect("should not be empty")
@@ -615,7 +615,7 @@ where
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::{
-        primitives::{Measurement, SpatialPartition, SpatialResolution, TimeInterval},
+        primitives::{Measurement, SpatialPartition2D, SpatialResolution, TimeInterval},
         raster::{Grid, GridShape, RasterDataType},
         spatial_reference::SpatialReference,
     };
@@ -688,7 +688,7 @@ mod tests {
         };
 
         let query_rect = RasterQueryRectangle {
-            partition: SpatialPartition::new_unchecked((0., 1.).into(), (3., 0.).into()),
+            spatial_bounds: SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 10),
             spatial_resolution: SpatialResolution::one(),
         };
@@ -781,7 +781,7 @@ mod tests {
         };
 
         let query_rect = RasterQueryRectangle {
-            partition: SpatialPartition::new_unchecked((0., 1.).into(), (3., 0.).into()),
+            spatial_bounds: SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 10),
             spatial_resolution: SpatialResolution::one(),
         };

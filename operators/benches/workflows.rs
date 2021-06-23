@@ -1,5 +1,5 @@
 use geoengine_datatypes::{
-    primitives::{Coordinate2D, SpatialPartition, SpatialResolution, TimeInterval},
+    primitives::{Coordinate2D, SpatialPartition2D, SpatialResolution, TimeInterval},
     raster::TilingSpecification,
 };
 use geoengine_operators::{
@@ -41,7 +41,7 @@ async fn tiles_to_png(query: RasterQueryRectangle, tile_size: usize) -> Vec<u8> 
 fn bench_600px_1_tile_to_png(c: &mut Criterion) {
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let query = RasterQueryRectangle {
-        partition: SpatialPartition::new((0., 60.).into(), (60., 0.).into()).unwrap(),
+        spatial_bounds: SpatialPartition2D::new((0., 60.).into(), (60., 0.).into()).unwrap(),
         time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
         spatial_resolution: SpatialResolution::zero_point_one(),
     };
@@ -55,7 +55,7 @@ fn bench_600px_1_tile_to_png(c: &mut Criterion) {
 fn bench_600px_2_tiles_to_png(c: &mut Criterion) {
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let query = RasterQueryRectangle {
-        partition: SpatialPartition::new((0., 50.).into(), (60., -10.).into()).unwrap(),
+        spatial_bounds: SpatialPartition2D::new((0., 50.).into(), (60., -10.).into()).unwrap(),
         time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
         spatial_resolution: SpatialResolution::zero_point_one(),
     };
@@ -69,7 +69,7 @@ fn bench_600px_2_tiles_to_png(c: &mut Criterion) {
 fn bench_600px_4_tiles_to_png(c: &mut Criterion) {
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let query = RasterQueryRectangle {
-        partition: SpatialPartition::new((-5., 50.).into(), (55., -10.).into()).unwrap(),
+        spatial_bounds: SpatialPartition2D::new((-5., 50.).into(), (55., -10.).into()).unwrap(),
         time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
         spatial_resolution: SpatialResolution::zero_point_one(),
     };
@@ -83,7 +83,7 @@ fn bench_600px_4_tiles_to_png(c: &mut Criterion) {
 fn bench_600px_2_tile_2_no_data_tiles_to_png(c: &mut Criterion) {
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let query = RasterQueryRectangle {
-        partition: SpatialPartition::new((130., 120.).into(), (190., 600.).into()).unwrap(),
+        spatial_bounds: SpatialPartition2D::new((130., 120.).into(), (190., 600.).into()).unwrap(),
         time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
         spatial_resolution: SpatialResolution::zero_point_one(),
     };
@@ -97,7 +97,7 @@ fn bench_600px_2_tile_2_no_data_tiles_to_png(c: &mut Criterion) {
 fn bench_600px_empty_to_png(c: &mut Criterion) {
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let query = RasterQueryRectangle {
-        partition: SpatialPartition::new((-5., 50.).into(), (55., -10.).into()).unwrap(),
+        spatial_bounds: SpatialPartition2D::new((-5., 50.).into(), (55., -10.).into()).unwrap(),
         time_interval: TimeInterval::new(1_000_000_000_000, 1_000_000_000_000 + 1000).unwrap(),
         spatial_resolution: SpatialResolution::zero_point_one(),
     };

@@ -629,7 +629,7 @@ where
         start_time: TimeInstance,
     ) -> Result<RasterQueryRectangle> {
         Ok(RasterQueryRectangle {
-            partition: tile_info.spatial_partition(),
+            spatial_bounds: tile_info.spatial_partition(),
             spatial_resolution: query_rect.spatial_resolution,
             time_interval: TimeInterval::new(start_time, (start_time + self.step)?)?,
         })
@@ -643,7 +643,7 @@ where
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::{
-        primitives::{Measurement, SpatialPartition, SpatialResolution},
+        primitives::{Measurement, SpatialPartition2D, SpatialResolution},
         raster::{EmptyGrid, EmptyGrid2D, RasterDataType},
         spatial_reference::SpatialReference,
     };
@@ -693,7 +693,7 @@ mod tests {
             ..Default::default()
         };
         let query_rect = RasterQueryRectangle {
-            partition: SpatialPartition::new_unchecked((0., 3.).into(), (4., 0.).into()),
+            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 40),
             spatial_resolution: SpatialResolution::one(),
         };
@@ -817,7 +817,7 @@ mod tests {
             ..Default::default()
         };
         let query_rect = RasterQueryRectangle {
-            partition: SpatialPartition::new_unchecked((0., 3.).into(), (4., 0.).into()),
+            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 40),
             spatial_resolution: SpatialResolution::one(),
         };
@@ -946,7 +946,7 @@ mod tests {
             ..Default::default()
         };
         let query_rect = RasterQueryRectangle {
-            partition: SpatialPartition::new_unchecked((0., 3.).into(), (4., 0.).into()),
+            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 40),
             spatial_resolution: SpatialResolution::one(),
         };
@@ -1080,7 +1080,7 @@ mod tests {
             ..Default::default()
         };
         let query_rect = RasterQueryRectangle {
-            partition: SpatialPartition::new_unchecked((0., 3.).into(), (4., 0.).into()),
+            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 40),
             spatial_resolution: SpatialResolution::one(),
         };
@@ -1212,7 +1212,7 @@ mod tests {
             ..Default::default()
         };
         let query_rect = RasterQueryRectangle {
-            partition: SpatialPartition::new_unchecked((0., 3.).into(), (2., 0.).into()),
+            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (2., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 20),
             spatial_resolution: SpatialResolution::one(),
         };
@@ -1288,7 +1288,7 @@ mod tests {
             ..Default::default()
         };
         let query_rect = RasterQueryRectangle {
-            partition: SpatialPartition::new_unchecked((0., 3.).into(), (4., 0.).into()),
+            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
         };
@@ -1381,7 +1381,7 @@ mod tests {
             ..Default::default()
         };
         let query_rect = RasterQueryRectangle {
-            partition: SpatialPartition::new_unchecked((0., 3.).into(), (4., 0.).into()),
+            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
         };
@@ -1474,7 +1474,7 @@ mod tests {
             ..Default::default()
         };
         let query_rect = RasterQueryRectangle {
-            partition: SpatialPartition::new_unchecked((0., 3.).into(), (4., 0.).into()),
+            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
         };
@@ -1566,7 +1566,7 @@ mod tests {
             ..Default::default()
         };
         let query_rect = RasterQueryRectangle {
-            partition: SpatialPartition::new_unchecked((0., 3.).into(), (4., 0.).into()),
+            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
         };

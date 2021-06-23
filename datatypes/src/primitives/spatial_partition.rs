@@ -6,17 +6,28 @@ use crate::util::Result;
 
 use super::BoundingBox2D;
 use super::Coordinate2D;
-use super::{AxisAlignedRectangle, SpatialResolution};
+use super::SpatialResolution;
+
+/// Common trait for axis-parallel boxes
+pub trait AxisAlignedRectangle: Copy {
+    fn lower_left(&self) -> Coordinate2D;
+    fn upper_left(&self) -> Coordinate2D;
+    fn upper_right(&self) -> Coordinate2D;
+    fn lower_right(&self) -> Coordinate2D;
+
+    fn size_x(&self) -> f64;
+    fn size_y(&self) -> f64;
+}
 
 /// A partition of space that include the upper left but excludes the lower right coordinate
 #[derive(Copy, Clone, Serialize, Deserialize, PartialEq, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct SpatialPartition {
+pub struct SpatialPartition2D {
     upper_left_coordinate: Coordinate2D,
     lower_right_coordinate: Coordinate2D,
 }
 
-impl SpatialPartition {
+impl SpatialPartition2D {
     pub fn new(
         upper_left_coordinate: Coordinate2D,
         lower_right_coordinate: Coordinate2D,
@@ -67,7 +78,7 @@ impl SpatialPartition {
     }
 
     /// Return true if the `other` partition has any space in common with the partition
-    pub fn intersects(&self, other: &SpatialPartition) -> bool {
+    pub fn intersects(&self, other: &SpatialPartition2D) -> bool {
         let overlap_x = crate::util::ranges::value_in_range(
             self.upper_left_coordinate.x,
             other.upper_left_coordinate.x,
@@ -170,10 +181,10 @@ impl SpatialPartition {
 }
 
 pub trait SpatialPartitioned {
-    fn spatial_partition(&self) -> SpatialPartition;
+    fn spatial_partition(&self) -> SpatialPartition2D;
 }
 
-impl AxisAlignedRectangle for SpatialPartition {
+impl AxisAlignedRectangle for SpatialPartition2D {
     fn upper_left(&self) -> Coordinate2D {
         self.upper_left_coordinate
     }
@@ -214,35 +225,35 @@ mod tests {
         let bbox = BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into());
         let res = SpatialResolution { x: 0.1, y: -0.1 };
         assert_eq!(
-            SpatialPartition::with_bbox_and_resolution(bbox, res),
-            SpatialPartition::new_unchecked((-180., 90.).into(), (180., -90.).into())
+            SpatialPartition2D::with_bbox_and_resolution(bbox, res),
+            SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into())
         );
     }
 
     #[test]
     fn it_contains() {
-        let p1 = SpatialPartition::new_unchecked((0., 1.).into(), (1., 0.).into());
-        let p2 = SpatialPartition::new_unchecked((0., 1.).into(), (0.5, 0.5).into());
+        let p1 = SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into());
+        let p2 = SpatialPartition2D::new_unchecked((0., 1.).into(), (0.5, 0.5).into());
         assert!(p1.contains(&p2));
         assert!(!p2.contains(&p1));
     }
 
     #[test]
     fn it_contains_not() {
-        let p1 = SpatialPartition::new_unchecked((0., 1.).into(), (1., 0.).into());
-        let p2 = SpatialPartition::new_unchecked((1., 1.).into(), (0., 2.).into());
+        let p1 = SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into());
+        let p2 = SpatialPartition2D::new_unchecked((1., 1.).into(), (0., 2.).into());
         assert!(!p1.contains(&p2));
     }
 
     #[test]
     fn it_intersects() {
-        let p1 = SpatialPartition::new_unchecked((0., 1.).into(), (1., 0.).into());
-        let p2 = SpatialPartition::new_unchecked((0., 1.).into(), (1., 0.5).into());
+        let p1 = SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into());
+        let p2 = SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.5).into());
         assert!(p1.intersects(&p2));
         assert!(p2.intersects(&p1));
 
         assert_eq!(
-            Some(SpatialPartition::new_unchecked(
+            Some(SpatialPartition2D::new_unchecked(
                 (0., 1.).into(),
                 (1., 0.5).into()
             )),
@@ -250,7 +261,7 @@ mod tests {
         );
 
         assert_eq!(
-            Some(SpatialPartition::new_unchecked(
+            Some(SpatialPartition2D::new_unchecked(
                 (0., 1.).into(),
                 (1., 0.5).into()
             )),
@@ -260,13 +271,13 @@ mod tests {
 
     #[test]
     fn it_intersects2() {
-        let p1 = SpatialPartition::new_unchecked((0., 5.0).into(), (5.0, 0.).into());
-        let p2 = SpatialPartition::new_unchecked((0., 20.0).into(), (20.0, 0.).into());
+        let p1 = SpatialPartition2D::new_unchecked((0., 5.0).into(), (5.0, 0.).into());
+        let p2 = SpatialPartition2D::new_unchecked((0., 20.0).into(), (20.0, 0.).into());
         assert!(p1.intersects(&p2));
         assert!(p2.intersects(&p1));
 
         assert_eq!(
-            Some(SpatialPartition::new_unchecked(
+            Some(SpatialPartition2D::new_unchecked(
                 (0., 5.).into(),
                 (5., 0.).into()
             )),
@@ -274,7 +285,7 @@ mod tests {
         );
 
         assert_eq!(
-            Some(SpatialPartition::new_unchecked(
+            Some(SpatialPartition2D::new_unchecked(
                 (0., 5.).into(),
                 (5., 0.).into()
             )),
@@ -284,8 +295,8 @@ mod tests {
 
     #[test]
     fn it_intersects_not() {
-        let p1 = SpatialPartition::new_unchecked((0., 1.).into(), (1., 0.).into());
-        let p2 = SpatialPartition::new_unchecked((1., 1.).into(), (2., 0.).into());
+        let p1 = SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into());
+        let p2 = SpatialPartition2D::new_unchecked((1., 1.).into(), (2., 0.).into());
         assert!(!p1.intersects(&p2));
         assert!(!p2.intersects(&p1));
         assert_eq!(None, p1.intersection(&p2));
@@ -294,14 +305,14 @@ mod tests {
 
     #[test]
     fn it_intersects_bbox() {
-        let p1 = SpatialPartition::new_unchecked((0., 1.).into(), (1., 0.).into());
+        let p1 = SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into());
         let bbox = BoundingBox2D::new_unchecked((0., 0.).into(), (0.5, 0.5).into());
         assert!(p1.intersects_bbox(&bbox));
     }
 
     #[test]
     fn it_intersects_bbox_not() {
-        let p1 = SpatialPartition::new_unchecked((0., 1.).into(), (1., 0.).into());
+        let p1 = SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into());
         let bbox = BoundingBox2D::new_unchecked((1., 1.).into(), (2., 2.).into());
         assert!(!p1.intersects_bbox(&bbox));
     }

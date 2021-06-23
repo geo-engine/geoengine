@@ -422,8 +422,11 @@ mod tests {
         let right_processor = right.query_processor().unwrap().data().unwrap();
 
         let query_rectangle = VectorQueryRectangle {
-            bbox: BoundingBox2D::new((f64::MIN, f64::MIN).into(), (f64::MAX, f64::MAX).into())
-                .unwrap(),
+            spatial_bounds: BoundingBox2D::new(
+                (f64::MIN, f64::MIN).into(),
+                (f64::MAX, f64::MAX).into(),
+            )
+            .unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };

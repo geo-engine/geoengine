@@ -425,7 +425,7 @@ mod tests {
     use crate::engine::{MockExecutionContext, MockQueryContext};
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use geoengine_datatypes::primitives::{
-        Measurement, SpatialPartition, SpatialResolution, TimeInterval,
+        Measurement, SpatialPartition2D, SpatialResolution, TimeInterval,
     };
     use geoengine_datatypes::raster::TileInformation;
     use geoengine_datatypes::spatial_reference::SpatialReference;
@@ -527,7 +527,10 @@ mod tests {
         let result_stream = processor
             .raster_query(
                 RasterQueryRectangle {
-                    partition: SpatialPartition::new_unchecked((0., 4.).into(), (3., 0.).into()),
+                    spatial_bounds: SpatialPartition2D::new_unchecked(
+                        (0., 4.).into(),
+                        (3., 0.).into(),
+                    ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
                 },

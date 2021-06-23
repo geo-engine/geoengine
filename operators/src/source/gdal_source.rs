@@ -15,7 +15,7 @@ use futures::{
 use async_trait::async_trait;
 use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
 use gdal::{Dataset as GdalDataset, Metadata as GdalMetadata};
-use geoengine_datatypes::primitives::{SpatialPartition, SpatialPartitioned};
+use geoengine_datatypes::primitives::{SpatialPartition2D, SpatialPartitioned};
 use geoengine_datatypes::raster::{
     EmptyGrid, GeoTransform, Grid2D, GridOrEmpty2D, Pixel, RasterDataType, RasterProperties,
     RasterPropertiesEntry, RasterPropertiesEntryType, RasterPropertiesKey, RasterTile2D,
@@ -139,7 +139,7 @@ pub struct GdalDatasetParameters {
     pub file_path: PathBuf,
     pub rasterband_channel: usize,
     pub geo_transform: GeoTransform,
-    pub partition: SpatialPartition, // the spatial partition of the dataset containing the raster data
+    pub partition: SpatialPartition2D, // the spatial partition of the dataset containing the raster data
     pub file_not_found_handling: FileNotFoundHandling,
     pub no_data_value: Option<f64>,
     pub properties_mapping: Option<Vec<GdalMetadataMapping>>,
@@ -479,7 +479,7 @@ where
 
         let tiling_strategy = self.tiling_specification.strategy(x_signed, y_signed);
 
-        stream::iter(tiling_strategy.tile_information_iterator(query.partition))
+        stream::iter(tiling_strategy.tile_information_iterator(query.spatial_bounds))
             .map(move |tile| Self::load_tile_async(info.params.clone(), tile, info.time))
             .buffered(1) // TODO: find a good default and / or add to config.
     }
@@ -707,7 +707,7 @@ mod tests {
     use crate::engine::{MockExecutionContext, MockQueryContext};
     use crate::util::gdal::{add_ndvi_dataset, raster_dir};
     use crate::util::Result;
-    use geoengine_datatypes::primitives::SpatialPartition;
+    use geoengine_datatypes::primitives::SpatialPartition2D;
     use geoengine_datatypes::raster::{TileInformation, TilingStrategy};
     use geoengine_datatypes::{
         primitives::{Measurement, SpatialResolution, TimeGranularity},
@@ -720,7 +720,7 @@ mod tests {
         query_ctx: &MockQueryContext,
         id: DatasetId,
         output_shape: GridShape2D,
-        output_bounds: SpatialPartition,
+        output_bounds: SpatialPartition2D,
         time_interval: TimeInterval,
     ) -> Vec<Result<RasterTile2D<u8>>> {
         let op = GdalSource {
@@ -743,7 +743,7 @@ mod tests {
             .unwrap()
             .raster_query(
                 RasterQueryRectangle {
-                    partition: output_bounds,
+                    spatial_bounds: output_bounds,
                     time_interval,
                     spatial_resolution,
                 },
@@ -757,7 +757,7 @@ mod tests {
 
     fn load_ndvi_jan_2014(
         output_shape: GridShape2D,
-        output_bounds: SpatialPartition,
+        output_bounds: SpatialPartition2D,
     ) -> Result<GridWithProperties<u8>> {
         GdalSourceProcessor::<u8>::load_tile_data(
             &GdalDatasetParameters {
@@ -768,7 +768,7 @@ mod tests {
                     x_pixel_size: 0.1,
                     y_pixel_size: -0.1,
                 },
-                partition: SpatialPartition::new_unchecked(
+                partition: SpatialPartition2D::new_unchecked(
                     (-180., 90.).into(),
                     (180., -90.).into(),
                 ),
@@ -815,7 +815,7 @@ mod tests {
             dataset_y_pixel_size,
         );
 
-        let partition = SpatialPartition::new((-180., 90.).into(), (180., -90.).into()).unwrap();
+        let partition = SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
 
         let origin_split_tileing_strategy = TilingStrategy {
             tile_size_in_pixels: tile_size_in_pixels.into(),
@@ -849,7 +849,7 @@ mod tests {
             dataset_y_pixel_size,
         );
 
-        let partition = SpatialPartition::new((-180., 90.).into(), (180., -90.).into()).unwrap();
+        let partition = SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
 
         let origin_split_tileing_strategy = TilingStrategy {
             tile_size_in_pixels: tile_size_in_pixels.into(),
@@ -883,7 +883,7 @@ mod tests {
             dataset_y_pixel_size,
         );
 
-        let partition = SpatialPartition::new((-180., 90.).into(), (180., -90.).into()).unwrap();
+        let partition = SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
 
         let origin_split_tileing_strategy = TilingStrategy {
             tile_size_in_pixels: tile_size_in_pixels.into(),
@@ -913,7 +913,7 @@ mod tests {
             dataset_y_pixel_size,
         );
 
-        let partition = SpatialPartition::new((-180., 90.).into(), (180., -90.).into()).unwrap();
+        let partition = SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
 
         let origin_split_tileing_strategy = TilingStrategy {
             tile_size_in_pixels: tile_size_in_pixels.into(),
@@ -964,7 +964,7 @@ mod tests {
             file_path: "/foo/bar_%TIME%.tiff".into(),
             rasterband_channel: 0,
             geo_transform: Default::default(),
-            partition: SpatialPartition::new_unchecked((0., 1.).into(), (1., 0.).into()),
+            partition: SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into()),
             file_not_found_handling: FileNotFoundHandling::NoData,
             no_data_value: Some(0.),
             properties_mapping: None,
@@ -1001,7 +1001,7 @@ mod tests {
                 file_path: "/foo/bar_%TIME%.tiff".into(),
                 rasterband_channel: 0,
                 geo_transform: Default::default(),
-                partition: SpatialPartition::new_unchecked((0., 1.).into(), (1., 0.).into()),
+                partition: SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into()),
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value,
                 properties_mapping: None,
@@ -1028,7 +1028,10 @@ mod tests {
         assert_eq!(
             meta_data
                 .loading_info(RasterQueryRectangle {
-                    partition: SpatialPartition::new_unchecked((0., 1.).into(), (1., 0.).into()),
+                    spatial_bounds: SpatialPartition2D::new_unchecked(
+                        (0., 1.).into(),
+                        (1., 0.).into()
+                    ),
                     time_interval: TimeInterval::new_unchecked(0, 30),
                     spatial_resolution: SpatialResolution::one(),
                 })
@@ -1049,7 +1052,7 @@ mod tests {
     fn test_load_tile_data() {
         let output_shape: GridShape2D = [8, 8].into();
         let output_bounds =
-            SpatialPartition::new_unchecked((-180., 90.).into(), (180., -90.).into());
+            SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into());
 
         let GridWithProperties { grid, properties } =
             load_ndvi_jan_2014(output_shape, output_bounds).unwrap();
@@ -1093,7 +1096,7 @@ mod tests {
         let output_shape: GridShape2D = [8, 8].into();
         // shift world bbox one pixel up and to the left
         let (x_size, y_size) = (45., 22.5);
-        let output_bounds = SpatialPartition::new_unchecked(
+        let output_bounds = SpatialPartition2D::new_unchecked(
             (-180. - x_size, 90. + y_size).into(),
             (180. - x_size, -90. + y_size).into(),
         );
@@ -1126,7 +1129,7 @@ mod tests {
 
         let output_shape: GridShape2D = [256, 256].into();
         let output_bounds =
-            SpatialPartition::new_unchecked((-180., 90.).into(), (180., -90.).into());
+            SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into());
         let time_interval = TimeInterval::new_unchecked(1_388_534_400_000, 1_388_534_400_001); // 2014-01-01
 
         let c = query_gdal_source(
@@ -1176,7 +1179,7 @@ mod tests {
 
         let output_shape: GridShape2D = [256, 256].into();
         let output_bounds =
-            SpatialPartition::new_unchecked((-180., 90.).into(), (180., -90.).into());
+            SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into());
         let time_interval = TimeInterval::new_unchecked(1_388_534_400_000, 1_393_632_000_000); // 2014-01-01 - 2014-03-01
 
         let c = query_gdal_source(
@@ -1211,7 +1214,7 @@ mod tests {
 
         let output_shape: GridShape2D = [256, 256].into();
         let output_bounds =
-            SpatialPartition::new_unchecked((-180., 90.).into(), (180., -90.).into());
+            SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into());
         let time_interval = TimeInterval::new_unchecked(1_385_856_000_000, 1_388_534_400_000); // 2013-12-01 - 2014-01-01
 
         let c = query_gdal_source(

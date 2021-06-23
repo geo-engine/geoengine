@@ -1,4 +1,6 @@
-use crate::primitives::{AxisAlignedRectangle, Coordinate2D, SpatialPartition, SpatialPartitioned};
+use crate::primitives::{
+    AxisAlignedRectangle, Coordinate2D, SpatialPartition2D, SpatialPartitioned,
+};
 
 use super::{GeoTransform, GridBoundingBox2D, GridIdx, GridIdx2D, GridShape2D, GridSize};
 
@@ -55,12 +57,12 @@ impl TilingStrategy {
         }
     }
 
-    pub fn upper_left_pixel_idx(&self, partition: SpatialPartition) -> GridIdx2D {
+    pub fn upper_left_pixel_idx(&self, partition: SpatialPartition2D) -> GridIdx2D {
         self.geo_transform
             .coordinate_to_grid_idx_2d(partition.upper_left())
     }
 
-    pub fn lower_right_pixel_idx(&self, partition: SpatialPartition) -> GridIdx2D {
+    pub fn lower_right_pixel_idx(&self, partition: SpatialPartition2D) -> GridIdx2D {
         let lr_idx = self
             .geo_transform
             .coordinate_to_grid_idx_2d(partition.lower_right());
@@ -76,7 +78,7 @@ impl TilingStrategy {
         [y_tile_idx, x_tile_idx].into()
     }
 
-    pub fn tile_grid_box(&self, partition: SpatialPartition) -> GridBoundingBox2D {
+    pub fn tile_grid_box(&self, partition: SpatialPartition2D) -> GridBoundingBox2D {
         let start = self.pixel_idx_to_tile_idx(self.upper_left_pixel_idx(partition));
         let end = self.pixel_idx_to_tile_idx(self.lower_right_pixel_idx(partition));
         GridBoundingBox2D::new_unchecked(start, end)
@@ -86,7 +88,7 @@ impl TilingStrategy {
     /// the iterator moves once along the x-axis and then increases the y-axis
     pub fn tile_idx_iterator(
         &self,
-        partition: SpatialPartition,
+        partition: SpatialPartition2D,
     ) -> impl Iterator<Item = GridIdx2D> {
         let GridIdx([upper_left_tile_y, upper_left_tile_x]) =
             self.pixel_idx_to_tile_idx(self.upper_left_pixel_idx(partition));
@@ -104,7 +106,7 @@ impl TilingStrategy {
     /// the iterator moves once along the x-axis and then increases the y-axis
     pub fn tile_information_iterator(
         &self,
-        partition: SpatialPartition,
+        partition: SpatialPartition2D,
     ) -> impl Iterator<Item = TileInformation> {
         let tile_pixel_size = self.tile_size_in_pixels;
         let geo_transform = self.geo_transform;
@@ -134,7 +136,7 @@ impl TileInformation {
         }
     }
 
-    pub fn with_partition_and_shape(partition: SpatialPartition, shape: GridShape2D) -> Self {
+    pub fn with_partition_and_shape(partition: SpatialPartition2D, shape: GridShape2D) -> Self {
         Self {
             tile_size_in_pixels: shape,
             global_tile_position: [0, 0].into(),
@@ -208,13 +210,13 @@ impl TileInformation {
 }
 
 impl SpatialPartitioned for TileInformation {
-    fn spatial_partition(&self) -> SpatialPartition {
+    fn spatial_partition(&self) -> SpatialPartition2D {
         let top_left_coord = self
             .global_geo_transform
             .grid_idx_to_upper_left_coordinate_2d(self.global_upper_left_pixel_idx());
         let lower_right_coord = self
             .global_geo_transform
             .grid_idx_to_upper_left_coordinate_2d(self.global_lower_right_pixel_idx() + 1); // we need the border of the lower right pixel.
-        SpatialPartition::new_unchecked(top_left_coord, lower_right_coord)
+        SpatialPartition2D::new_unchecked(top_left_coord, lower_right_coord)
     }
 }

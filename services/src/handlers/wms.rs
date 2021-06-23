@@ -263,7 +263,7 @@ async fn get_map<C: Context>(
     let y_query_resolution = query_bbox.size_y() / f64::from(request.height);
 
     let query_rect = VectorQueryRectangle {
-        bbox: query_bbox,
+        spatial_bounds: query_bbox,
         time_interval: request.time.unwrap_or_else(|| {
             let time = TimeInstance::from(chrono::offset::Utc::now());
             TimeInterval::new_unchecked(time, time)
@@ -344,7 +344,7 @@ mod tests {
     use crate::handlers::{handle_rejection, ErrorResponse};
     use crate::util::tests::{check_allowed_http_methods, register_ndvi_workflow_helper};
     use geoengine_datatypes::operations::image::RgbaColor;
-    use geoengine_datatypes::primitives::SpatialPartition;
+    use geoengine_datatypes::primitives::SpatialPartition2D;
     use geoengine_operators::engine::{
         ExecutionContext, RasterQueryProcessor, RasterQueryRectangle,
     };
@@ -445,12 +445,12 @@ mod tests {
         };
 
         let query_partition =
-            SpatialPartition::new((-180., 90.).into(), (180., -90.).into()).unwrap();
+            SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
 
         let image_bytes = raster_stream_to_png_bytes(
             gdal_source.boxed(),
             RasterQueryRectangle {
-                partition: query_partition,
+                spatial_bounds: query_partition,
                 time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
                     .unwrap(),
                 spatial_resolution: SpatialResolution::new_unchecked(1.0, 1.0),

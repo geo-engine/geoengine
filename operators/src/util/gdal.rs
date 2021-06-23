@@ -1,6 +1,6 @@
 use geoengine_datatypes::{
     dataset::{DatasetId, InternalDatasetId},
-    primitives::{Measurement, SpatialPartition, TimeGranularity, TimeInstance, TimeStep},
+    primitives::{Measurement, SpatialPartition2D, TimeGranularity, TimeInstance, TimeStep},
     raster::{GeoTransform, RasterDataType},
     spatial_reference::SpatialReference,
     util::Identifier,
@@ -49,7 +49,7 @@ pub fn create_ndvi_meta_data() -> GdalMetaDataRegular {
                 x_pixel_size: 0.1,
                 y_pixel_size: -0.1,
             },
-            partition: SpatialPartition::new_unchecked((-180., 90.).into(), (180., -90.).into()),
+            partition: SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into()),
             file_not_found_handling: FileNotFoundHandling::NoData,
             no_data_value,
             properties_mapping: None,

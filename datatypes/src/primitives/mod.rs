@@ -30,21 +30,10 @@ pub use multi_line_string::{MultiLineString, MultiLineStringAccess, MultiLineStr
 pub use multi_point::{MultiPoint, MultiPointAccess, MultiPointRef};
 pub use multi_polygon::{MultiPolygon, MultiPolygonAccess, MultiPolygonRef};
 pub use no_geometry::NoGeometry;
-pub use spatial_partition::{SpatialPartition, SpatialPartitioned};
+pub use spatial_partition::{AxisAlignedRectangle, SpatialPartition2D, SpatialPartitioned};
 pub use spatial_resolution::SpatialResolution;
 pub use spatio_temporal_bounded::{SpatialBounded, TemporalBounded};
 
 pub use time_instance::TimeInstance;
 pub use time_interval::TimeInterval;
 pub use time_step::{TimeGranularity, TimeStep, TimeStepIter};
-
-/// Common trait for axis-parallel boxes
-pub trait AxisAlignedRectangle: Copy {
-    fn lower_left(&self) -> Coordinate2D;
-    fn upper_left(&self) -> Coordinate2D;
-    fn upper_right(&self) -> Coordinate2D;
-    fn lower_right(&self) -> Coordinate2D;
-
-    fn size_x(&self) -> f64;
-    fn size_y(&self) -> f64;
-}

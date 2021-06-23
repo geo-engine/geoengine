@@ -386,7 +386,7 @@ impl VectorQueryProcessor for CsvSourceProcessor {
         _ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
         // TODO: properly handle chunk_size
-        Ok(CsvSourceStream::new(self.params.clone(), query.bbox, 10)?.boxed())
+        Ok(CsvSourceStream::new(self.params.clone(), query.spatial_bounds, 10)?.boxed())
     }
 }
 
@@ -546,7 +546,7 @@ x,y
         let p = CsvSourceProcessor { params };
 
         let query = VectorQueryRectangle {
-            bbox: BoundingBox2D::new_unchecked(
+            spatial_bounds: BoundingBox2D::new_unchecked(
                 Coordinate2D::new(0., 0.),
                 Coordinate2D::new(3., 3.),
             ),

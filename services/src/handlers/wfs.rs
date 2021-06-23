@@ -19,11 +19,11 @@ use geoengine_datatypes::{
     primitives::{FeatureData, Geometry, MultiPoint, TimeInstance, TimeInterval},
     spatial_reference::SpatialReference,
 };
-use geoengine_operators::engine::VectorOperator;
 use geoengine_operators::engine::{
     QueryContext, ResultDescriptor, TypedVectorQueryProcessor, VectorQueryProcessor,
     VectorQueryRectangle,
 };
+use geoengine_operators::engine::{QueryProcessor, VectorOperator};
 use geoengine_operators::processing::{Reprojection, ReprojectionParams};
 use serde_json::json;
 use std::str::FromStr;
@@ -427,7 +427,7 @@ async fn get_feature<C: Context>(
     let processor = initialized.query_processor().context(error::Operator)?;
 
     let query_rect = VectorQueryRectangle {
-        bbox: request.bbox,
+        spatial_bounds: request.bbox,
         time_interval: request.time.unwrap_or_else(|| {
             let time = TimeInstance::from(chrono::offset::Utc::now());
             TimeInterval::new_unchecked(time, time)
@@ -474,7 +474,7 @@ where
     let features: Vec<serde_json::Value> = Vec::new();
 
     // TODO: more efficient merging of the partial feature collections
-    let stream = processor.vector_query(query_rect, query_ctx).await?;
+    let stream = processor.query(query_rect, query_ctx).await?;
 
     let features = stream
         .fold(

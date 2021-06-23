@@ -169,7 +169,7 @@ mod tests {
             };
 
         let qrect = VectorQueryRectangle {
-            bbox: BoundingBox2D::new((0.0, 0.0).into(), (10.0, 10.0).into()).unwrap(),
+            spatial_bounds: BoundingBox2D::new((0.0, 0.0).into(), (10.0, 10.0).into()).unwrap(),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
@@ -241,7 +241,7 @@ mod tests {
             };
 
         let qrect = VectorQueryRectangle {
-            bbox: BoundingBox2D::new((0.0, 0.0).into(), (0.0, 0.0).into()).unwrap(),
+            spatial_bounds: BoundingBox2D::new((0.0, 0.0).into(), (0.0, 0.0).into()).unwrap(),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };

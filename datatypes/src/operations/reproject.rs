@@ -7,7 +7,7 @@ use crate::{
     primitives::{
         AxisAlignedRectangle, BoundingBox2D, Coordinate2D, Line, MultiLineString,
         MultiLineStringAccess, MultiLineStringRef, MultiPoint, MultiPointAccess, MultiPointRef,
-        MultiPolygon, MultiPolygonAccess, MultiPolygonRef, SpatialBounded, SpatialPartition,
+        MultiPolygon, MultiPolygonAccess, MultiPolygonRef, SpatialBounded, SpatialPartition2D,
         SpatialResolution,
     },
     spatial_reference::SpatialReference,
@@ -301,12 +301,12 @@ where
     }
 }
 
-impl<P> Reproject<P> for SpatialPartition
+impl<P> Reproject<P> for SpatialPartition2D
 where
     P: CoordinateProjection,
 {
-    type Out = SpatialPartition;
-    fn reproject(&self, projector: &P) -> Result<SpatialPartition> {
+    type Out = SpatialPartition2D;
+    fn reproject(&self, projector: &P) -> Result<SpatialPartition2D> {
         const POINTS_PER_LINE: i32 = 7;
         let upper_line = Line::new(self.upper_left(), self.upper_right())
             .with_additional_equi_spaced_coords(POINTS_PER_LINE);
@@ -327,7 +327,7 @@ where
 
         let bbox = MultiPoint::new_unchecked(proj_outline_coordinates).spatial_bounds();
 
-        Ok(SpatialPartition::new_unchecked(
+        Ok(SpatialPartition2D::new_unchecked(
             bbox.upper_left(),
             bbox.lower_right(),
         ))

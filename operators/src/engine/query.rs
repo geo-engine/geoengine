@@ -1,39 +1,36 @@
 use geoengine_datatypes::primitives::{
-    BoundingBox2D, SpatialPartition, SpatialPartitioned, SpatialResolution, TimeInterval,
+    AxisAlignedRectangle, BoundingBox2D, SpatialPartition2D, SpatialPartitioned, SpatialResolution,
+    TimeInterval,
 };
 
 /// A spatio-temporal rectangle for querying data with a bounding box
 #[derive(Copy, Clone, Debug, PartialEq)]
-pub struct VectorQueryRectangle {
-    pub bbox: BoundingBox2D,
+pub struct QueryRectangle<SpatialBounds: AxisAlignedRectangle> {
+    pub spatial_bounds: SpatialBounds,
     pub time_interval: TimeInterval,
     pub spatial_resolution: SpatialResolution,
 }
 
-/// A spatio-temporal rectangle for querying data with a spatial partition
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub struct RasterQueryRectangle {
-    pub partition: SpatialPartition,
-    pub time_interval: TimeInterval,
-    pub spatial_resolution: SpatialResolution,
-}
+pub type VectorQueryRectangle = QueryRectangle<BoundingBox2D>;
+pub type RasterQueryRectangle = QueryRectangle<SpatialPartition2D>;
+pub type PlotQueryRectangle = QueryRectangle<BoundingBox2D>;
 
 impl SpatialPartitioned for VectorQueryRectangle {
-    fn spatial_partition(&self) -> SpatialPartition {
-        SpatialPartition::with_bbox_and_resolution(self.bbox, self.spatial_resolution)
+    fn spatial_partition(&self) -> SpatialPartition2D {
+        SpatialPartition2D::with_bbox_and_resolution(self.spatial_bounds, self.spatial_resolution)
     }
 }
 
 impl SpatialPartitioned for RasterQueryRectangle {
-    fn spatial_partition(&self) -> SpatialPartition {
-        self.partition
+    fn spatial_partition(&self) -> SpatialPartition2D {
+        self.spatial_bounds
     }
 }
 
 impl From<VectorQueryRectangle> for RasterQueryRectangle {
     fn from(value: VectorQueryRectangle) -> Self {
         Self {
-            partition: value.spatial_partition(),
+            spatial_bounds: value.spatial_partition(),
             time_interval: value.time_interval,
             spatial_resolution: value.spatial_resolution,
         }

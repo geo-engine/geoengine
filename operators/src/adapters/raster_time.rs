@@ -3,7 +3,7 @@ use crate::util::Result;
 use futures::stream::{FusedStream, Zip};
 use futures::Stream;
 use futures::{ready, StreamExt};
-use geoengine_datatypes::primitives::{SpatialPartition, TimeInstance, TimeInterval};
+use geoengine_datatypes::primitives::{SpatialPartition2D, TimeInstance, TimeInterval};
 use geoengine_datatypes::raster::{GridSize, Pixel, RasterTile2D, TileInformation, TilingStrategy};
 use pin_project::pin_project;
 use std::cmp::min;
@@ -74,7 +74,7 @@ where
 
     fn number_of_tiles_in_partition(
         tile_info: &TileInformation,
-        partition: SpatialPartition,
+        partition: SpatialPartition2D,
     ) -> usize {
         // TODO: get tiling strategy from stream or execution context instead of creating it here
         let strat = TilingStrategy {
@@ -121,7 +121,7 @@ where
                 if num_spatial_tiles.is_none() {
                     *num_spatial_tiles = Some(Self::number_of_tiles_in_partition(
                         &tile_a.tile_information(),
-                        query_rect.partition,
+                        query_rect.spatial_bounds,
                     ));
                 }
 
