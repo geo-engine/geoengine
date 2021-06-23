@@ -1362,10 +1362,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: Default::default(),
                 },
-                GridOrEmpty::Grid(
-                    Grid2D::new([3, 2].into(), vec![10, 42, 12, 42, 14, 15], no_data_value)
-                        .unwrap()
-                )
+                GridOrEmpty::Empty(EmptyGrid2D::new([3, 2].into(), no_data_value.unwrap()))
             )
         );
 

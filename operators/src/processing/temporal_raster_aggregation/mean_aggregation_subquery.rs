@@ -42,6 +42,8 @@ pub struct TemporalMeanTileAccu<T> {
     count_grid: Grid2D<u64>,
     ignore_no_data: bool,
     out_no_data_value: T,
+
+    initial_state: bool,
 }
 
 impl<T> TemporalMeanTileAccu<T> {
@@ -53,25 +55,32 @@ impl<T> TemporalMeanTileAccu<T> {
 
         let in_tile_grid = match in_tile.grid_array {
             GridOrEmpty::Grid(g) => g,
-            GridOrEmpty::Empty(_) => return Ok(()),
+            GridOrEmpty::Empty(_) => {
+                self.initial_state = false;
+                return Ok(());
+            }
         };
 
         match &mut self.value_grid {
+            GridOrEmpty::Empty(_) if !self.initial_state && !self.ignore_no_data => {
+                // every pixel is nodata we will keep it like this forever
+            }
+
             GridOrEmpty::Empty(_) => {
                 let mut accu_grid = self.value_grid.clone().into_materialized_grid();
 
-                for ((av, ac), iv) in accu_grid
+                for ((acc_value, acc_count), new_value) in accu_grid
                     .data
                     .iter_mut()
                     .zip(self.count_grid.data.iter_mut())
                     .zip(in_tile_grid.data.iter())
                 {
-                    if in_tile_grid.is_no_data(*iv) {
-                        *ac = 0;
+                    if in_tile_grid.is_no_data(*new_value) {
+                        *acc_count = 0;
                     } else {
-                        let ivf: f64 = iv.as_();
-                        *av = ivf;
-                        *ac = 1;
+                        let ivf: f64 = new_value.as_();
+                        *acc_value = ivf;
+                        *acc_count = 1;
                     }
                 }
 
@@ -79,31 +88,33 @@ impl<T> TemporalMeanTileAccu<T> {
             }
 
             GridOrEmpty::Grid(accu_grid) => {
-                for ((av, ac), iv) in accu_grid
+                for ((acc_value, acc_count), new_value) in accu_grid
                     .data
                     .iter_mut()
                     .zip(self.count_grid.data.iter_mut())
                     .zip(in_tile_grid.data.iter())
                 {
-                    if in_tile_grid.is_no_data(*iv) {
+                    if in_tile_grid.is_no_data(*new_value) {
                         // The input pixel value is nodata
                         if !self.ignore_no_data {
                             // once nodata always nodata
-                            *ac = 0;
+                            *acc_count = 0;
                         }
                     } else {
-                        let ivf: f64 = iv.as_();
-                        if self.ignore_no_data || *ac > 0 {
+                        let ivf: f64 = new_value.as_();
+                        if self.ignore_no_data || *acc_count > 0 {
                             // we either ignore nodata, then we add all non-nodata pixels or the count is > 0, so not nodata
                             // *av += ivf;
-                            *ac += 1;
-                            let delta = ivf - *av;
-                            *av += delta / (*ac as f64);
+                            *acc_count += 1;
+                            let delta = ivf - *acc_value;
+                            *acc_value += delta / (*acc_count as f64);
                         }
                     }
                 }
             }
         }
+
+        self.initial_state = false;
         Ok(())
     }
 }
@@ -114,10 +125,6 @@ where
 {
     type RasterType = T;
 
-    fn tile_ref(&self) -> &RasterTile2D<Self::RasterType> {
-        unimplemented!();
-    }
-
     fn into_tile(self) -> RasterTile2D<Self::RasterType> {
         let TemporalMeanTileAccu {
             time,
@@ -127,6 +134,7 @@ where
             count_grid,
             ignore_no_data: _,
             out_no_data_value,
+            initial_state: _,
         } = self;
 
         let value_grid = match value_grid {
@@ -205,6 +213,7 @@ where
             count_grid: Grid2D::new_filled(tile_info.tile_size_in_pixels, 0, None),
             ignore_no_data: self.ignore_no_data,
             out_no_data_value: self.no_data_value,
+            initial_state: true,
         })
     }
 
