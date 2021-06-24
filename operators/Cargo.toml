@@ -23,6 +23,7 @@ flatbuffers = "=0.9.0" # TODO: pinned only for `arrow`, should be removed at som
 float-cmp = "0.8"
 futures = "0.3"
 gdal = { version = "0.8", features = ["datetime"] }
+gdal-sys = "0.4.0"
 geo = "0.18"
 geoengine-datatypes = { path = "../datatypes" }
 lazy_static = "1.4"

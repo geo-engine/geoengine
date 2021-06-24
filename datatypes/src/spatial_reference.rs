@@ -196,6 +196,20 @@ impl TryFrom<SpatialRef> for SpatialReference {
     }
 }
 
+impl TryFrom<SpatialReference> for SpatialRef {
+    type Error = error::Error;
+
+    fn try_from(value: SpatialReference) -> Result<Self, Self::Error> {
+        if value.authority == SpatialReferenceAuthority::Epsg {
+            return SpatialRef::from_epsg(value.code).context(error::Gdal);
+        }
+
+        // TODO: support other projections reliably
+
+        SpatialRef::from_proj4(&value.proj_string()?).context(error::Gdal)
+    }
+}
+
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub enum SpatialReferenceOption {
     SpatialReference(SpatialReference),
@@ -341,6 +355,7 @@ impl<'de> Deserialize<'de> for SpatialReferenceOption {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::convert::TryInto;
 
     #[test]
     fn display() {
@@ -516,5 +531,14 @@ mod tests {
         assert!(SpatialReference::new(SpatialReferenceAuthority::SrOrg, 1)
             .proj_string()
             .is_err());
+    }
+
+    #[test]
+    fn spatial_reference_to_gdal_spatial_ref_epsg() {
+        let spatial_reference = SpatialReference::epsg_4326();
+        let gdal_sref: SpatialRef = spatial_reference.try_into().unwrap();
+
+        assert_eq!(gdal_sref.auth_name().unwrap(), "EPSG");
+        assert_eq!(gdal_sref.auth_code().unwrap(), 4326);
     }
 }
