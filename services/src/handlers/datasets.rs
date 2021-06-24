@@ -829,7 +829,7 @@ mod tests {
             json!([{
                 "id": {
                     "type": "internal",
-                    "dataset_id": id.internal().unwrap()
+                    "datasetId": id.internal().unwrap()
                 },
                 "name": "OgrDataset",
                 "description": "My Ogr dataset",
@@ -1286,7 +1286,7 @@ mod tests {
             json!({
                 "id": {
                     "type": "internal",
-                    "dataset_id": id.internal().unwrap()
+                    "datasetId": id.internal().unwrap()
                 },
                 "name": "OgrDataset",
                 "description": "My Ogr dataset",

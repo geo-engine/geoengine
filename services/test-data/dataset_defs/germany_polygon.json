@@ -2,7 +2,7 @@
   "properties": {
     "id": {
       "type": "internal",
-      "dataset_id": "b6191257-6d61-4c6b-90a4-ebfb1b23899d"
+      "datasetId": "b6191257-6d61-4c6b-90a4-ebfb1b23899d"
     },
     "name": "Germany",
     "description": "Boundaries of Germany",

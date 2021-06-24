@@ -2,7 +2,7 @@
   "properties": {
     "id": {
       "type": "internal",
-      "dataset_id": "b526b59c-19f1-4d99-8773-5364b757f6d8"
+      "datasetId": "b526b59c-19f1-4d99-8773-5364b757f6d8"
     },
     "name": "Points with Time",
     "description": "Some points in Europe in 2014",

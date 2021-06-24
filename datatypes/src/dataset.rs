@@ -10,11 +10,15 @@ identifier!(StagingDatasetId);
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum DatasetId {
-    Internal { dataset_id: InternalDatasetId },
+    #[serde(rename_all = "camelCase")]
+    Internal {
+        dataset_id: InternalDatasetId,
+    },
     External(ExternalDatasetId),
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ExternalDatasetId {
     pub provider_id: DatasetProviderId,
     pub dataset_id: String,

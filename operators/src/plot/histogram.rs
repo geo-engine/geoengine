@@ -973,7 +973,7 @@ mod tests {
                     "params": {
                         "dataset": {
                             "type": "internal",
-                            "dataset_id": dataset_id
+                            "datasetId": dataset_id
                         },
                         "attributeProjection": null
                     },

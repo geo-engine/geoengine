@@ -2,7 +2,7 @@
   "properties": {
     "id": {
       "type": "internal",
-      "dataset_id": "f47fc99c-c085-4fe3-90f3-120491facb28"
+      "datasetId": "f47fc99c-c085-4fe3-90f3-120491facb28"
     },
     "name": "Natural Earth 10m Ports 3857",
     "description": "Ports from Natural Earth reprojected to EPSG:3857",
