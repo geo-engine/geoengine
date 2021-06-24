@@ -180,7 +180,7 @@ pub struct MetaDataSuggestion {
 
 #[allow(clippy::large_enum_variant)]
 #[derive(PartialEq, Deserialize, Serialize, Debug, Clone)]
-#[serde(rename_all = "camelCase", tag = "type")]
+#[serde(tag = "type")]
 pub enum MetaDataDefinition {
     MockMetaData(StaticMetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>),
     OgrMetaData(StaticMetaData<OgrSourceDataset, VectorResultDescriptor>),

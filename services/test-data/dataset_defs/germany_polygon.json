@@ -9,7 +9,7 @@
     "sourceOperator": "OgrSource"
   },
   "metaData": {
-    "type": "ogrMetaData",
+    "type": "OgrMetaData",
     "loadingInfo": {
       "fileName": "operators/test-data/vector/data/germany_polygon.gpkg",
       "layerName": "test_germany",

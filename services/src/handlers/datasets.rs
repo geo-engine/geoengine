@@ -864,7 +864,7 @@ mod tests {
                     "sourceOperator": "OgrSource"
                 },
                 "metaData": {
-                    "type": "ogrMetaData",
+                    "type": "OgrMetaData",
                     "loadingInfo": {
                         "fileName": "operators/test-data/vector/data/ne_10m_ports/ne_10m_ports.shp",
                         "layerName": "ne_10m_ports",

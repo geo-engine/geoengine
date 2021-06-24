@@ -14,7 +14,7 @@
         "sourceOperator": "MockDatasetDataSource"
       },
       "metaData": {
-        "type": "mockMetaData",
+        "type": "MockMetaData",
         "loadingInfo": {
           "points": [
             {

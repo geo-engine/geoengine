@@ -9,7 +9,7 @@
     "sourceOperator": "GdalSource"
   },
   "metaData": {
-    "type": "gdalMetaDataRegular",
+    "type": "GdalMetaDataRegular",
     "resultDescriptor": {
       "dataType": "U8",
       "spatialReference": "EPSG:4326",
