@@ -493,7 +493,7 @@ mod tests {
         // TODO: mock STAC endpoint
 
         let def: Box<dyn DatasetProviderDefinition> = serde_json::from_reader(BufReader::new(
-            File::open("test-data/provider_defs/sentinel_s2_l2a_cogs.json")?,
+            File::open("services/test-data/provider_defs/pro/sentinel_s2_l2a_cogs.json")?,
         ))?;
 
         let provider = def.initialize().await?;
@@ -562,7 +562,7 @@ mod tests {
         let mut exe = MockExecutionContext::default();
 
         let def: Box<dyn DatasetProviderDefinition> = serde_json::from_reader(BufReader::new(
-            File::open("test-data/provider_defs/sentinel_s2_l2a_cogs.json")?,
+            File::open("services/test-data/provider_defs/pro/sentinel_s2_l2a_cogs.json")?,
         ))?;
 
         let provider = def.initialize().await?;
