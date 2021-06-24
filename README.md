@@ -87,3 +87,8 @@ Execute:
 Inspect the container:
 
 `docker exec -it geoengine bash`
+
+## Contributing
+
+We are grateful for any contributions.
+Please make sure to read our [contributing guide](CONTRIBUTING.md).
