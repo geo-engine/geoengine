@@ -52,7 +52,7 @@ use std::{marker::PhantomData, path::PathBuf};
 ///         "params": {
 ///             "dataset": {
 ///                 "type": "internal",
-///                 "dataset": "a626c880-1c41-489b-9e19-9596d129859c"
+///                 "datasetId": "a626c880-1c41-489b-9e19-9596d129859c"
 ///             }
 ///         }
 ///     }"#;
