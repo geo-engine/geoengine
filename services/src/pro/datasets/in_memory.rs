@@ -34,6 +34,7 @@ pub struct ProHashMapDatasetDb {
     gdal_datasets:
         HashMap<InternalDatasetId, Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor>>>,
     uploads: HashMap<UploadId, Upload>,
+    external_providers: HashMap<DatasetProviderId, Box<dyn DatasetProviderDefinition>>,
 }
 
 impl DatasetDb<UserSession> for ProHashMapDatasetDb {}
@@ -43,9 +44,11 @@ impl DatasetProviderDb<UserSession> for ProHashMapDatasetDb {
     async fn add_dataset_provider(
         &mut self,
         _session: &UserSession,
-        _provider: Box<dyn DatasetProviderDefinition>,
+        provider: Box<dyn DatasetProviderDefinition>,
     ) -> Result<DatasetProviderId> {
-        todo!()
+        let id = provider.id();
+        self.external_providers.insert(id, provider);
+        Ok(id)
     }
 
     async fn list_dataset_providers(
@@ -53,15 +56,29 @@ impl DatasetProviderDb<UserSession> for ProHashMapDatasetDb {
         _session: &UserSession,
         _options: Validated<DatasetProviderListOptions>,
     ) -> Result<Vec<DatasetProviderListing>> {
-        todo!()
+        // TODO: use options
+        Ok(self
+            .external_providers
+            .iter()
+            .map(|(id, d)| DatasetProviderListing {
+                id: *id,
+                type_name: d.type_name(),
+                name: d.name(),
+            })
+            .collect())
     }
 
     async fn dataset_provider(
         &self,
         _session: &UserSession,
-        _provider: DatasetProviderId,
+        provider: DatasetProviderId,
     ) -> Result<Box<dyn DatasetProvider>> {
-        todo!()
+        self.external_providers
+            .get(&provider)
+            .cloned()
+            .ok_or(error::Error::UnknownProviderId)?
+            .initialize()
+            .await
     }
 }
 

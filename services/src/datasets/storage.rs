@@ -277,11 +277,12 @@ pub trait DatasetStore<S: Session>: DatasetStorer {
 }
 
 #[typetag::serde(tag = "type")]
+#[async_trait]
 pub trait DatasetProviderDefinition:
     CloneableDatasetProviderDefinition + Send + Sync + std::fmt::Debug
 {
     /// create the actual provider for data listing and access
-    fn initialize(self: Box<Self>) -> Result<Box<dyn DatasetProvider>>;
+    async fn initialize(self: Box<Self>) -> Result<Box<dyn DatasetProvider>>;
 
     /// the type of the provider
     fn type_name(&self) -> String;
