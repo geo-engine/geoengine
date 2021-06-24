@@ -47,5 +47,9 @@ name = "workflows"
 harness = false
 
 [[bench]]
+name = "thread_pool"
+harness = false
+
+[[bench]]
 name = "pip"
 harness = false

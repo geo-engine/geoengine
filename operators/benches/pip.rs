@@ -1,25 +1,25 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use futures::StreamExt;
 use geoengine_datatypes::collections::MultiPolygonCollection;
 use geoengine_datatypes::primitives::{BoundingBox2D, MultiPoint, MultiPolygon, SpatialResolution};
 use geoengine_datatypes::{collections::MultiPointCollection, primitives::TimeInterval};
+use geoengine_operators::engine::QueryProcessor;
 use geoengine_operators::engine::{
-    MockExecutionContext, MockQueryContext, QueryProcessor, QueryRectangle, VectorOperator,
+    MockExecutionContext, MockQueryContext, QueryRectangle, VectorOperator,
 };
 use geoengine_operators::mock::MockFeatureCollectionSource;
 use geoengine_operators::processing::{
     PointInPolygonFilter, PointInPolygonFilterParams, PointInPolygonFilterSource,
 };
 use geoengine_operators::util::Result;
+use std::time::Instant;
 
 async fn pip(num_threads: usize) {
+    let raw_points = vec![(1.0, 1.1); 10_000_000];
+    let time = vec![TimeInterval::new(0, 1).unwrap(); 10_000_000];
+
     let points = MultiPointCollection::from_data(
-        MultiPoint::many(vec![(1.0, 1.1), (2.0, 2.1), (3.0, 3.1)]).unwrap(),
-        vec![
-            TimeInterval::new(0, 1).unwrap(),
-            TimeInterval::new(5, 6).unwrap(),
-            TimeInterval::new(0, 5).unwrap(),
-        ],
+        MultiPoint::many(raw_points).unwrap(),
+        time,
         Default::default(),
     )
     .unwrap();
@@ -71,22 +71,20 @@ async fn pip(num_threads: usize) {
 
     let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
 
-    query
+    let res = query
         .map(Result::unwrap)
         .collect::<Vec<MultiPointCollection>>()
         .await;
+
+    assert!(!res.is_empty());
 }
 
-fn criterion_benchmark(c: &mut Criterion) {
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .build()
-        .unwrap();
-    for num_threads in [1, 2, 4, 8] {
-        c.bench_function(&format!("{} thread", num_threads), |b| {
-            b.to_async(&rt).iter(|| black_box(pip(num_threads)))
-        });
+#[tokio::main]
+async fn main() {
+    println!("num_threads,time");
+    for num_threads in [1, 2, 4] {
+        let start = Instant::now();
+        pip(num_threads).await;
+        println!("{},{:?}", num_threads, start.elapsed());
     }
 }
-
-criterion_group!(benches, criterion_benchmark);
-criterion_main!(benches);
