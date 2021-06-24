@@ -71,7 +71,7 @@ impl From<ImportDataset> for Dataset {
     fn from(value: ImportDataset) -> Self {
         Dataset {
             id: DatasetId::Internal {
-                dataset: InternalDatasetId::new(),
+                dataset_id: InternalDatasetId::new(),
             },
             name: value.name,
             description: value.description,

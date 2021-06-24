@@ -176,7 +176,7 @@ pub(crate) fn get_dataset_handler<C: Context>(
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::path!("dataset" / "internal" / Uuid)
         .map(|id: Uuid| DatasetId::Internal {
-            dataset: InternalDatasetId(id),
+            dataset_id: InternalDatasetId(id),
         })
         .and(warp::get())
         .and(authenticate(ctx.clone()))
@@ -829,7 +829,7 @@ mod tests {
             json!([{
                 "id": {
                     "type": "internal",
-                    "dataset": id.internal().unwrap()
+                    "dataset_id": id.internal().unwrap()
                 },
                 "name": "OgrDataset",
                 "description": "My Ogr dataset",
@@ -1286,7 +1286,7 @@ mod tests {
             json!({
                 "id": {
                     "type": "internal",
-                    "dataset": id.internal().unwrap()
+                    "dataset_id": id.internal().unwrap()
                 },
                 "name": "OgrDataset",
                 "description": "My Ogr dataset",

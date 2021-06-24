@@ -74,7 +74,7 @@ mod tests {
                 "params": {
                     "dataset": {
                         "type": "internal",
-                        "dataset": "fc734022-61e0-49da-b327-257ba9d602a7"
+                        "dataset_id": "fc734022-61e0-49da-b327-257ba9d602a7"
                     }
                 }
             })
@@ -88,7 +88,7 @@ mod tests {
             "params": {
                 "dataset": {
                     "type": "internal",
-                    "dataset":  "fc734022-61e0-49da-b327-257ba9d602a7"
+                    "dataset_id":  "fc734022-61e0-49da-b327-257ba9d602a7"
                 }
             }
         })
@@ -108,7 +108,7 @@ mod tests {
             "params": {
                 "dataset": {
                     "type": "internal",
-                    "dataset":  "fc734022-61e0-49da-b327-257ba9d602a7"
+                    "dataset_id":  "fc734022-61e0-49da-b327-257ba9d602a7"
                 },
                 "attribute_projection": null,
             }

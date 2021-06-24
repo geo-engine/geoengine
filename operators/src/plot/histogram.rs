@@ -973,7 +973,7 @@ mod tests {
                     "params": {
                         "dataset": {
                             "type": "internal",
-                            "dataset": dataset_id
+                            "dataset_id": dataset_id
                         },
                         "attributeProjection": null
                     },
@@ -984,9 +984,7 @@ mod tests {
 
         let mut execution_context = MockExecutionContext::default();
         execution_context.add_meta_data(
-            DatasetId::Internal {
-                dataset: dataset_id,
-            },
+            DatasetId::Internal { dataset_id },
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: "operators/test-data/vector/data/ne_10m_ports/ne_10m_ports.shp"

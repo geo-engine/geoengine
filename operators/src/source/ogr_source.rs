@@ -1270,7 +1270,7 @@ mod tests {
     #[tokio::test]
     async fn ne_10m_ports_bbox_filter() -> Result<()> {
         let dataset = DatasetId::Internal {
-            dataset: InternalDatasetId::new(),
+            dataset_id: InternalDatasetId::new(),
         };
         let mut exe_ctx = MockExecutionContext::default();
         exe_ctx.add_meta_data(
@@ -1362,7 +1362,7 @@ mod tests {
     #[tokio::test]
     async fn ne_10m_ports_force_spatial_filter() -> Result<()> {
         let dataset = DatasetId::Internal {
-            dataset: InternalDatasetId::new(),
+            dataset_id: InternalDatasetId::new(),
         };
         let mut exe_ctx = MockExecutionContext::default();
         exe_ctx.add_meta_data(
@@ -1454,7 +1454,7 @@ mod tests {
     #[tokio::test]
     async fn ne_10m_ports_fast_spatial_filter() -> Result<()> {
         let dataset = DatasetId::Internal {
-            dataset: InternalDatasetId::new(),
+            dataset_id: InternalDatasetId::new(),
         };
         let mut exe_ctx = MockExecutionContext::default();
         exe_ctx.add_meta_data(
@@ -1549,7 +1549,7 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn ne_10m_ports_columns() -> Result<()> {
         let id = DatasetId::Internal {
-            dataset: InternalDatasetId::new(),
+            dataset_id: InternalDatasetId::new(),
         };
         let mut exe_ctx = MockExecutionContext::default();
         exe_ctx.add_meta_data(
@@ -1735,7 +1735,7 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn ne_10m_ports() -> Result<()> {
         let id = DatasetId::Internal {
-            dataset: InternalDatasetId::new(),
+            dataset_id: InternalDatasetId::new(),
         };
         let mut exe_ctx = MockExecutionContext::default();
         exe_ctx.add_meta_data(
@@ -2985,7 +2985,7 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn chunked() -> Result<()> {
         let id = DatasetId::Internal {
-            dataset: InternalDatasetId::new(),
+            dataset_id: InternalDatasetId::new(),
         };
         let mut exe_ctx = MockExecutionContext::default();
         exe_ctx.add_meta_data(
@@ -3229,7 +3229,7 @@ mod tests {
     #[tokio::test]
     async fn empty() {
         let dataset = DatasetId::Internal {
-            dataset: InternalDatasetId::new(),
+            dataset_id: InternalDatasetId::new(),
         };
         let mut exe_ctx = MockExecutionContext::default();
         exe_ctx.add_meta_data(
@@ -3302,7 +3302,7 @@ mod tests {
     #[tokio::test]
     async fn polygon_gpkg() {
         let dataset = DatasetId::Internal {
-            dataset: InternalDatasetId::new(),
+            dataset_id: InternalDatasetId::new(),
         };
         let mut exe_ctx = MockExecutionContext::default();
         exe_ctx.add_meta_data(
@@ -3390,7 +3390,7 @@ mod tests {
     #[tokio::test]
     async fn points_csv() {
         let dataset = DatasetId::Internal {
-            dataset: InternalDatasetId::new(),
+            dataset_id: InternalDatasetId::new(),
         };
         let mut exe_ctx = MockExecutionContext::default();
         exe_ctx.add_meta_data(
@@ -3490,7 +3490,7 @@ mod tests {
     #[tokio::test]
     async fn points_date_csv() {
         let dataset = DatasetId::Internal {
-            dataset: InternalDatasetId::new(),
+            dataset_id: InternalDatasetId::new(),
         };
         let mut exe_ctx = MockExecutionContext::default();
         exe_ctx.add_meta_data(
@@ -3589,7 +3589,7 @@ mod tests {
     #[tokio::test]
     async fn points_date_time_csv() {
         let dataset = DatasetId::Internal {
-            dataset: InternalDatasetId::new(),
+            dataset_id: InternalDatasetId::new(),
         };
         let mut exe_ctx = MockExecutionContext::default();
         exe_ctx.add_meta_data(
@@ -3688,7 +3688,7 @@ mod tests {
     #[tokio::test]
     async fn points_date_time_tz_csv() {
         let dataset = DatasetId::Internal {
-            dataset: InternalDatasetId::new(),
+            dataset_id: InternalDatasetId::new(),
         };
         let mut exe_ctx = MockExecutionContext::default();
         exe_ctx.add_meta_data(

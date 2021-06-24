@@ -147,14 +147,14 @@ where
         geoengine_operators::error::Error,
     > {
         match dataset_id {
-            DatasetId::Internal { dataset: _ } => {
+            DatasetId::Internal { dataset_id: _ } => {
                 self.dataset_db.read().await.meta_data(dataset_id).await
             }
             DatasetId::External(external) => {
                 self.dataset_db
                     .read()
                     .await
-                    .dataset_provider(&self.session, external.provider)
+                    .dataset_provider(&self.session, external.provider_id)
                     .await
                     .map_err(|e| geoengine_operators::error::Error::DatasetMetaData {
                         source: Box::new(e),
@@ -182,14 +182,14 @@ where
         geoengine_operators::error::Error,
     > {
         match dataset_id {
-            DatasetId::Internal { dataset: _ } => {
+            DatasetId::Internal { dataset_id: _ } => {
                 self.dataset_db.read().await.meta_data(dataset_id).await
             }
             DatasetId::External(external) => {
                 self.dataset_db
                     .read()
                     .await
-                    .dataset_provider(&self.session, external.provider)
+                    .dataset_provider(&self.session, external.provider_id)
                     .await
                     .map_err(|e| geoengine_operators::error::Error::DatasetMetaData {
                         source: Box::new(e),
@@ -217,14 +217,14 @@ where
         geoengine_operators::error::Error,
     > {
         match dataset_id {
-            DatasetId::Internal { dataset: _ } => {
+            DatasetId::Internal { dataset_id: _ } => {
                 self.dataset_db.read().await.meta_data(dataset_id).await
             }
             DatasetId::External(external) => {
                 self.dataset_db
                     .read()
                     .await
-                    .dataset_provider(&self.session, external.provider)
+                    .dataset_provider(&self.session, external.provider_id)
                     .await
                     .map_err(|e| geoengine_operators::error::Error::DatasetMetaData {
                         source: Box::new(e),

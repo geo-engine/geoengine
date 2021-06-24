@@ -6,8 +6,8 @@
       "properties": {
         "id": {
           "type": "external",
-          "provider": "d0535f1d-27b6-4982-b2f8-b1070f1bf6ee",
-          "dataset": "d89f1327-15ff-4016-8c3e-e96a7c60d93b"
+          "provider_id": "d0535f1d-27b6-4982-b2f8-b1070f1bf6ee",
+          "dataset_id": "d89f1327-15ff-4016-8c3e-e96a7c60d93b"
         },
         "name": "Mock",
         "description": "A mock dataset",

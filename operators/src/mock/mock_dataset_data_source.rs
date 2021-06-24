@@ -151,7 +151,7 @@ mod tests {
         let mut execution_context = MockExecutionContext::default();
 
         let id = DatasetId::Internal {
-            dataset: InternalDatasetId::new(),
+            dataset_id: InternalDatasetId::new(),
         };
         execution_context.add_meta_data(
             id.clone(),
