@@ -1,6 +1,6 @@
 use super::map_query::MapQueryProcessor;
 use crate::{
-    adapters::{fold_by_coordinate_lookup_future, RasterOverlapAdapter, TileReprojectionSubQuery},
+    adapters::{fold_by_coordinate_lookup_future, RasterSubQueryAdapter, TileReprojectionSubQuery},
     engine::{
         ExecutionContext, InitializedOperator, InitializedRasterOperator,
         InitializedVectorOperator, Operator, QueryContext, QueryRectangle, RasterOperator,
@@ -434,7 +434,7 @@ where
             fold_fn: fold_by_coordinate_lookup_future,
             in_spatial_res: p_spatial_resolution,
         };
-        let s = RasterOverlapAdapter::<'a, P, _, _>::new(
+        let s = RasterSubQueryAdapter::<'a, P, _, _>::new(
             &self.source,
             query,
             self.tiling_spec,
