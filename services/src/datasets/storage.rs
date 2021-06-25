@@ -70,7 +70,9 @@ pub struct ImportDataset {
 impl From<ImportDataset> for Dataset {
     fn from(value: ImportDataset) -> Self {
         Dataset {
-            id: DatasetId::Internal(InternalDatasetId::new()),
+            id: DatasetId::Internal {
+                dataset_id: InternalDatasetId::new(),
+            },
             name: value.name,
             description: value.description,
             result_descriptor: value.result_descriptor,
@@ -178,6 +180,7 @@ pub struct MetaDataSuggestion {
 
 #[allow(clippy::large_enum_variant)]
 #[derive(PartialEq, Deserialize, Serialize, Debug, Clone)]
+#[serde(tag = "type")]
 pub enum MetaDataDefinition {
     MockMetaData(StaticMetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>),
     OgrMetaData(StaticMetaData<OgrSourceDataset, VectorResultDescriptor>),

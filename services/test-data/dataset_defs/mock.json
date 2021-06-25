@@ -1,27 +1,28 @@
 {
   "properties": {
     "id": {
-      "internal": "5c2e620c-0c25-49f4-a3dd-9ef518c95709"
+      "type": "internal",
+      "datasetId": "5c2e620c-0c25-49f4-a3dd-9ef518c95709"
     },
     "name": "Mock",
     "description": "A mock dataset",
     "sourceOperator": "MockDatasetDataSource"
   },
   "metaData": {
-    "MockMetaData": {
-      "loadingInfo": {
-        "points": [
-          {
-            "x": 1.0,
-            "y": 2.0
-          }
-        ]
-      },
-      "resultDescriptor": {
-        "dataType": "MultiPoint",
-        "spatialReference": "EPSG:4326",
-        "columns": {}
-      }
+    "type": "MockMetaData",
+    "loadingInfo": {
+      "points": [
+        {
+          "x": 1.0,
+          "y": 2.0
+        }
+      ]
+    },
+    "resultDescriptor": {
+      "type": "vector",
+      "dataType": "MultiPoint",
+      "spatialReference": "EPSG:4326",
+      "columns": {}
     }
   }
 }

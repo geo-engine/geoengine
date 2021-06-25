@@ -146,8 +146,8 @@ impl SentinelS2L2aCogsDataProvider {
             .flat_map(|zone| {
                 meta_data.bands.iter().map(move |band| {
                     let dataset_id: DatasetId = ExternalDatasetId {
-                        provider: *id,
-                        id: format!("{}:{}", zone.name, band.name),
+                        provider_id: *id,
+                        dataset_id: format!("{}:{}", zone.name, band.name),
                     }
                     .into();
                     let listing = DatasetListing {
@@ -501,8 +501,10 @@ mod tests {
         let meta: Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor>> = provider
             .meta_data(
                 &ExternalDatasetId {
-                    provider: DatasetProviderId::from_str("5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5")?,
-                    id: "UTM32N:B01".to_owned(),
+                    provider_id: DatasetProviderId::from_str(
+                        "5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5",
+                    )?,
+                    dataset_id: "UTM32N:B01".to_owned(),
                 }
                 .into(),
             )
@@ -570,8 +572,10 @@ mod tests {
         let meta: Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor>> = provider
             .meta_data(
                 &ExternalDatasetId {
-                    provider: DatasetProviderId::from_str("5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5")?,
-                    id: "UTM32N:B01".to_owned(),
+                    provider_id: DatasetProviderId::from_str(
+                        "5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5",
+                    )?,
+                    dataset_id: "UTM32N:B01".to_owned(),
                 }
                 .into(),
             )
@@ -579,8 +583,8 @@ mod tests {
 
         exe.add_meta_data(
             ExternalDatasetId {
-                provider: DatasetProviderId::from_str("5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5")?,
-                id: "UTM32N:B01".to_owned(),
+                provider_id: DatasetProviderId::from_str("5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5")?,
+                dataset_id: "UTM32N:B01".to_owned(),
             }
             .into(),
             meta,
@@ -589,8 +593,10 @@ mod tests {
         let op = GdalSource {
             params: GdalSourceParameters {
                 dataset: ExternalDatasetId {
-                    provider: DatasetProviderId::from_str("5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5")?,
-                    id: "UTM32N:B01".to_owned(),
+                    provider_id: DatasetProviderId::from_str(
+                        "5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5",
+                    )?,
+                    dataset_id: "UTM32N:B01".to_owned(),
                 }
                 .into(),
             },
