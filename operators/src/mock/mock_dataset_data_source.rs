@@ -163,7 +163,9 @@ mod tests {
     async fn test() {
         let mut execution_context = MockExecutionContext::default();
 
-        let id = DatasetId::Internal(InternalDatasetId::new());
+        let id = DatasetId::Internal {
+            dataset_id: InternalDatasetId::new(),
+        };
         execution_context.add_meta_data(
             id.clone(),
             Box::new(MockDatasetDataSourceLoadingInfo {

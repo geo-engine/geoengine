@@ -1,6 +1,7 @@
 use crate::adapters::FeatureCollectionStreamExt;
 use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
+use geoengine_datatypes::primitives::BoundingBox2D;
 use std::sync::Arc;
 
 use geoengine_datatypes::{
@@ -246,14 +247,15 @@ impl<P: Pixel> PointRasterJoiner<P> {
 }
 
 #[async_trait]
-impl VectorQueryProcessor for RasterPointJoinProcessor {
-    type VectorType = MultiPointCollection;
+impl QueryProcessor for RasterPointJoinProcessor {
+    type Output = MultiPointCollection;
+    type SpatialBounds = BoundingBox2D;
 
-    async fn vector_query<'a>(
+    async fn query<'a>(
         &'a self,
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
-    ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
+    ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         let mut stream = self.points.query(query, ctx).await?;
 
         for (raster_processor, new_column_name) in
@@ -272,8 +274,10 @@ impl VectorQueryProcessor for RasterPointJoinProcessor {
 mod tests {
     use super::*;
 
-    use crate::engine::{MockExecutionContext, RasterOperator, VectorOperator};
-    use crate::engine::{MockQueryContext, VectorQueryRectangle};
+    use crate::engine::{
+        MockExecutionContext, MockQueryContext, QueryProcessor, RasterOperator, VectorOperator,
+        VectorQueryRectangle,
+    };
     use crate::mock::MockFeatureCollectionSource;
     use crate::source::{GdalSource, GdalSourceParameters};
     use crate::util::gdal::add_ndvi_dataset;

@@ -432,6 +432,12 @@ impl From<BoundingBox2D> for geo::Rect<f64> {
     }
 }
 
+impl From<geo::Rect<f64>> for BoundingBox2D {
+    fn from(bbox: geo::Rect<f64>) -> BoundingBox2D {
+        BoundingBox2D::new_unchecked(bbox.min().into(), bbox.max().into())
+    }
+}
+
 impl From<&BoundingBox2D> for geo::Rect<f64> {
     fn from(bbox: &BoundingBox2D) -> geo::Rect<f64> {
         geo::Rect::new(bbox.lower_left_coordinate, bbox.upper_right_coordinate)

@@ -50,7 +50,8 @@ use std::{marker::PhantomData, path::PathBuf};
 ///         "type": "GdalSource",
 ///         "params": {
 ///             "dataset": {
-///                 "internal": "a626c880-1c41-489b-9e19-9596d129859c"
+///                 "type": "internal",
+///                 "datasetId": "a626c880-1c41-489b-9e19-9596d129859c"
 ///             }
 ///         }
 ///     }"#;
@@ -127,7 +128,7 @@ impl Iterator for GdalLoadingInfoPartIterator {
 }
 
 /// one temporal slice of the dataset that requires reading from exactly one Gdal dataset
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct GdalLoadingInfoPart {
     pub time: TimeInterval,
     pub params: GdalDatasetParameters,

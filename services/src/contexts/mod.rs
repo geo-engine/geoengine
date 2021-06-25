@@ -150,7 +150,7 @@ where
     // TODO: make async
     async fn meta_data(
         &self,
-        dataset: &DatasetId,
+        dataset_id: &DatasetId,
     ) -> Result<
         Box<
             dyn MetaData<
@@ -161,19 +161,20 @@ where
         >,
         geoengine_operators::error::Error,
     > {
-        match dataset {
-            DatasetId::Internal(_) => self.dataset_db.read().await.meta_data(dataset).await,
-            DatasetId::Staging(_) => todo!(),
+        match dataset_id {
+            DatasetId::Internal { dataset_id: _ } => {
+                self.dataset_db.read().await.meta_data(dataset_id).await
+            }
             DatasetId::External(external) => {
                 self.dataset_db
                     .read()
                     .await
-                    .dataset_provider(&self.session, external.provider)
+                    .dataset_provider(&self.session, external.provider_id)
                     .await
                     .map_err(|e| geoengine_operators::error::Error::DatasetMetaData {
                         source: Box::new(e),
                     })?
-                    .meta_data(dataset)
+                    .meta_data(dataset_id)
                     .await
             }
         }
@@ -192,24 +193,25 @@ where
     // TODO: make async
     async fn meta_data(
         &self,
-        dataset: &DatasetId,
+        dataset_id: &DatasetId,
     ) -> Result<
         Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
-        match dataset {
-            DatasetId::Internal(_) => self.dataset_db.read().await.meta_data(dataset).await,
-            DatasetId::Staging(_) => todo!(),
+        match dataset_id {
+            DatasetId::Internal { dataset_id: _ } => {
+                self.dataset_db.read().await.meta_data(dataset_id).await
+            }
             DatasetId::External(external) => {
                 self.dataset_db
                     .read()
                     .await
-                    .dataset_provider(&self.session, external.provider)
+                    .dataset_provider(&self.session, external.provider_id)
                     .await
                     .map_err(|e| geoengine_operators::error::Error::DatasetMetaData {
                         source: Box::new(e),
                     })?
-                    .meta_data(dataset)
+                    .meta_data(dataset_id)
                     .await
             }
         }
@@ -228,24 +230,25 @@ where
     // TODO: make async
     async fn meta_data(
         &self,
-        dataset: &DatasetId,
+        dataset_id: &DatasetId,
     ) -> Result<
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
-        match dataset {
-            DatasetId::Internal(_) => self.dataset_db.read().await.meta_data(dataset).await,
-            DatasetId::Staging(_) => todo!(),
+        match dataset_id {
+            DatasetId::Internal { dataset_id: _ } => {
+                self.dataset_db.read().await.meta_data(dataset_id).await
+            }
             DatasetId::External(external) => {
                 self.dataset_db
                     .read()
                     .await
-                    .dataset_provider(&self.session, external.provider)
+                    .dataset_provider(&self.session, external.provider_id)
                     .await
                     .map_err(|e| geoengine_operators::error::Error::DatasetMetaData {
                         source: Box::new(e),
                     })?
-                    .meta_data(dataset)
+                    .meta_data(dataset_id)
                     .await
             }
         }

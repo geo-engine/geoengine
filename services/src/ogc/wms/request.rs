@@ -1,5 +1,5 @@
 use crate::ogc::util::{parse_bbox, parse_time_option};
-use crate::util::{from_str, from_str_option};
+use crate::util::{bool_option_case_insensitive, from_str};
 use geoengine_datatypes::{
     primitives::{BoundingBox2D, TimeInterval},
     spatial_reference::SpatialReference,
@@ -60,7 +60,7 @@ pub struct GetMap {
     pub time: Option<TimeInterval>,
     #[serde(alias = "TRANSPARENT")]
     #[serde(default)]
-    #[serde(deserialize_with = "from_str_option")]
+    #[serde(deserialize_with = "bool_option_case_insensitive")]
     pub transparent: Option<bool>,
     #[serde(alias = "BGCOLOR")]
     pub bgcolor: Option<String>,

@@ -26,8 +26,9 @@ pub struct MockExternalDataProviderDefinition {
 }
 
 #[typetag::serde]
+#[async_trait]
 impl DatasetProviderDefinition for MockExternalDataProviderDefinition {
-    fn initialize(self: Box<Self>) -> crate::error::Result<Box<dyn DatasetProvider>> {
+    async fn initialize(self: Box<Self>) -> crate::error::Result<Box<dyn DatasetProvider>> {
         Ok(Box::new(MockExternalDataProvider {
             datasets: self.datasets,
         }))

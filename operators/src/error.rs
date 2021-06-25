@@ -195,6 +195,13 @@ pub enum Error {
     TemporalRasterAggregationFirstValidRequiresNoData,
 
     NoSpatialBoundsAvailable,
+
+    #[snafu(display("LoadingInfoError: {}", source))]
+    LoadingInfo {
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
+
+    NotImplemented,
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {

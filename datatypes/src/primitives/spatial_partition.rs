@@ -216,6 +216,18 @@ impl AxisAlignedRectangle for SpatialPartition2D {
     }
 }
 
+impl From<geo::Rect<f64>> for SpatialPartition2D {
+    fn from(partition: geo::Rect<f64>) -> SpatialPartition2D {
+        SpatialPartition2D::new_unchecked(partition.min().into(), partition.max().into())
+    }
+}
+
+impl From<&SpatialPartition2D> for geo::Rect<f64> {
+    fn from(partition: &SpatialPartition2D) -> geo::Rect<f64> {
+        geo::Rect::new(partition.lower_left(), partition.upper_right())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

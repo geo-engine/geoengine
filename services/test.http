@@ -163,8 +163,8 @@ Content-Type: application/json
     "params": {
       "dataset": {
         "external": {
-          "provider": "d0535f1d-27b6-4982-b2f8-b1070f1bf6ee",
-          "id": "d89f1327-15ff-4016-8c3e-e96a7c60d93b"
+          "providerId": "d0535f1d-27b6-4982-b2f8-b1070f1bf6ee",
+          "datasetId": "d89f1327-15ff-4016-8c3e-e96a7c60d93b"
         }
       }
     }

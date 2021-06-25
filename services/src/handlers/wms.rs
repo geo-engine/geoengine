@@ -1,3 +1,4 @@
+use log::debug;
 use snafu::ResultExt;
 use warp::reply::Reply;
 use warp::{http::Response, Filter, Rejection};
@@ -35,6 +36,8 @@ pub(crate) fn wms_handler<C: Context>(
         .and(warp::get())
         .and(
             warp::query::raw().and_then(|query_string: String| async move {
+                debug!("{}", query_string);
+
                 // TODO: make case insensitive by using serde-aux instead
                 let query_string = query_string.replace("REQUEST", "request");
 

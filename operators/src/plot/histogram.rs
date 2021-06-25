@@ -973,7 +973,8 @@ mod tests {
                     "type": "OgrSource",
                     "params": {
                         "dataset": {
-                            "internal": dataset_id
+                            "type": "internal",
+                            "datasetId": dataset_id
                         },
                         "attributeProjection": null
                     },
@@ -984,8 +985,8 @@ mod tests {
 
         let mut execution_context = MockExecutionContext::default();
         execution_context.add_meta_data::<_, _, VectorQueryRectangle>(
-            DatasetId::Internal(dataset_id),
-            Box::new(StaticMetaData::<_, _, VectorQueryRectangle> {
+            DatasetId::Internal { dataset_id },
+            Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: "operators/test-data/vector/data/ne_10m_ports/ne_10m_ports.shp"
                         .into(),
