@@ -49,7 +49,6 @@ impl DatasetProviderDb<SimpleSession> for HashMapDatasetDb {
         _session: &SimpleSession,
         provider: Box<dyn DatasetProviderDefinition>,
     ) -> Result<DatasetProviderId> {
-        // TODO: user right management
         let id = provider.id();
         self.external_providers.insert(id, provider);
         Ok(id)
@@ -82,6 +81,7 @@ impl DatasetProviderDb<SimpleSession> for HashMapDatasetDb {
             .cloned()
             .ok_or(error::Error::UnknownProviderId)?
             .initialize()
+            .await
     }
 }
 

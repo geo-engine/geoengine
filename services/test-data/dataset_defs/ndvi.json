@@ -1,51 +1,53 @@
 {
   "properties": {
     "id": {
-      "internal": "36574dc3-560a-4b09-9d22-d5945f2b8093"
+      "type": "internal",
+      "datasetId": "36574dc3-560a-4b09-9d22-d5945f2b8093"
     },
     "name": "NDVI",
     "description": "NDVI data from MODIS",
     "sourceOperator": "GdalSource"
   },
   "metaData": {
-    "GdalMetaDataRegular": {
-      "resultDescriptor": {
-        "dataType": "U8",
-        "spatialReference": "EPSG:4326",
-        "measurement": "unitless",
-        "noDataValue": 0.0
+    "type": "GdalMetaDataRegular",
+    "resultDescriptor": {
+      "dataType": "U8",
+      "spatialReference": "EPSG:4326",
+      "measurement": {
+        "type": "unitless"
       },
-      "params": {
-        "filePath": "operators/test-data/raster/modis_ndvi/MOD13A2_M_NDVI_%%%_START_TIME_%%%.TIFF",
-        "rasterbandChannel": 1,
-        "geoTransform": {
-          "originCoordinate": {
-            "x": -180.0,
-            "y": 90.0
-          },
-          "xPixelSize": 0.1,
-          "yPixelSize": -0.1
+      "noDataValue": 0.0
+    },
+    "params": {
+      "filePath": "operators/test-data/raster/modis_ndvi/MOD13A2_M_NDVI_%%%_START_TIME_%%%.TIFF",
+      "rasterbandChannel": 1,
+      "geoTransform": {
+        "originCoordinate": {
+          "x": -180.0,
+          "y": 90.0
         },
-        "bbox": {
-          "lowerLeftCoordinate": {
-            "x": -180.0,
-            "y": -90.0
-          },
-          "upperRightCoordinate": {
-            "x": 180.0,
-            "y": 90.0
-          }
-        },
-        "fileNotFoundHandling": "NoData",
-        "noDataValue": 0.0
+        "xPixelSize": 0.1,
+        "yPixelSize": -0.1
       },
-      "placeholder": "%%%_START_TIME_%%%",
-      "timeFormat": "%Y-%m-%d",
-      "start": 1388534400000,
-      "step": {
-        "granularity": "Months",
-        "step": 1
-      }
+      "bbox": {
+        "lowerLeftCoordinate": {
+          "x": -180.0,
+          "y": -90.0
+        },
+        "upperRightCoordinate": {
+          "x": 180.0,
+          "y": 90.0
+        }
+      },
+      "fileNotFoundHandling": "NoData",
+      "noDataValue": 0.0
+    },
+    "placeholder": "%%%_START_TIME_%%%",
+    "timeFormat": "%Y-%m-%d",
+    "start": 1388534400000,
+    "step": {
+      "granularity": "Months",
+      "step": 1
     }
   }
 }
