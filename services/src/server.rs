@@ -92,6 +92,7 @@ where
         handlers::datasets::list_providers_handler(ctx.clone()),
         handlers::datasets::list_external_datasets_handler(ctx.clone()),
         handlers::datasets::list_datasets_handler(ctx.clone()), // must come after `list_external_datasets_handler`
+        handlers::wcs::wcs_handler(ctx.clone()),
         handlers::wms::wms_handler(ctx.clone()),
         handlers::wfs::wfs_handler(ctx.clone()),
         handlers::plots::get_plot_handler(ctx.clone()),

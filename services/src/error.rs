@@ -169,6 +169,7 @@ pub enum Error {
         response: String,
         error: serde_json::Error,
     },
+    RasterDataTypeNotSupportByGdal,
 }
 
 impl Reject for Error {}
