@@ -629,8 +629,8 @@ mod tests {
 
         let query = RasterQueryRectangle {
             spatial_bounds: SpatialPartition2D::new_unchecked(
-                (166_021.44, 0.00).into(),
-                (534_994.66, 9_329_005.18).into(),
+                (166_021.44, 9_329_005.18).into(),
+                (534_994.66, 0.00).into(),
             ),
             time_interval: TimeInterval::new_instant(
                 DateTime::parse_from_rfc3339("2021-01-02T10:02:26Z")
