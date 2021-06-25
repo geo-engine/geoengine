@@ -193,6 +193,8 @@ pub enum Error {
 
     TemporalRasterAggregationLastValidRequiresNoData,
     TemporalRasterAggregationFirstValidRequiresNoData,
+
+    ChannelSend,
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {

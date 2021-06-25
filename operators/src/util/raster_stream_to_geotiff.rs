@@ -2,7 +2,7 @@ use core::slice;
 use futures::StreamExt;
 use gdal::{
     raster::{Buffer, GdalType},
-    Dataset, Driver,
+    Driver,
 };
 use gdal_sys::{VSIFree, VSIGetMemFileBuffer};
 use geoengine_datatypes::{
@@ -10,13 +10,19 @@ use geoengine_datatypes::{
     raster::{Blit, GeoTransform, Grid2D, GridShape2D, GridSize, Pixel, RasterTile2D},
     spatial_reference::SpatialReference,
 };
-use std::convert::TryInto;
-use std::ffi::CString;
+use std::{
+    convert::TryInto,
+    sync::mpsc::{Receiver, Sender},
+};
+use std::{ffi::CString, sync::mpsc};
 
-use crate::engine::{QueryContext, QueryRectangle, RasterQueryProcessor};
 use crate::util::Result;
+use crate::{
+    engine::{QueryContext, QueryRectangle, RasterQueryProcessor},
+    error::Error,
+};
 
-pub async fn raster_stream_to_geotiff_bytes<T, C: QueryContext>(
+pub async fn raster_stream_to_geotiff_bytes<T, C: QueryContext + 'static>(
     processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
     query_rect: QueryRectangle,
     query_ctx: C,
@@ -28,8 +34,47 @@ pub async fn raster_stream_to_geotiff_bytes<T, C: QueryContext>(
 where
     T: Pixel + GdalType,
 {
+    let file_name = format!("/vsimem/{}.tiff", uuid::Uuid::new_v4());
+    let (tx, rx): (Sender<RasterTile2D<T>>, Receiver<RasterTile2D<T>>) = mpsc::channel();
+
+    let file_name_clone = file_name.clone();
+    let writer = tokio::task::spawn_blocking(move || {
+        gdal_writer(
+            &rx,
+            &file_name_clone,
+            query_rect,
+            width,
+            height,
+            no_data_value,
+            spatial_reference,
+        )
+    });
+
     let mut tile_stream = processor.raster_query(query_rect, &query_ctx).await?;
 
+    while let Some(tile) = tile_stream.next().await {
+        tx.send(tile?).map_err(|_| Error::ChannelSend)?;
+    }
+
+    drop(tx);
+
+    writer.await??;
+
+    // TODO: use higher level rust-gdal method when it is mapped
+    let bytes = get_vsi_mem_file_bytes_and_free(&file_name);
+
+    Ok(bytes)
+}
+
+fn gdal_writer<T: Pixel + GdalType>(
+    rx: &Receiver<RasterTile2D<T>>,
+    file_name: &str,
+    query_rect: QueryRectangle,
+    width: u32,
+    height: u32,
+    no_data_value: Option<f64>,
+    spatial_reference: SpatialReference,
+) -> Result<()> {
     let x_pixel_size = query_rect.bbox.size_x() / f64::from(width);
     let y_pixel_size = query_rect.bbox.size_y() / f64::from(height);
 
@@ -39,9 +84,8 @@ where
 
     let driver = Driver::get("GTiff")?;
     // TODO: "COMPRESS, DEFLATE" flags but rust-gdal doesn't support setting this yet(?)
-    let file_name = "/vsimem/test.tiff";
     let mut dataset =
-        driver.create_with_band_type::<T>(file_name, width as isize, height as isize, 1)?;
+        driver.create_with_band_type::<T>(&file_name, width as isize, height as isize, 1)?;
 
     dataset.set_spatial_ref(&spatial_reference.try_into()?)?;
     dataset.set_geo_transform(&output_geo_transform.into())?;
@@ -51,9 +95,7 @@ where
         band.set_no_data_value(no_data)?;
     }
 
-    // TODO: interleave consuming tile_stream and writing to band
-    while let Some(tile) = tile_stream.next().await {
-        let tile = tile?;
+    while let Ok(tile) = rx.recv() {
         let tile_info = tile.tile_information();
 
         let tile_bounds = tile_info.spatial_bounds();
@@ -113,20 +155,14 @@ where
 
         let buffer = Buffer::new(window_size, mat_tile.grid_array.data);
 
-        // TODO: async write in own writer thread
         band.write(window, window_size, &buffer)?;
     }
 
-    // TODO: use higher level rust-gdal method when it is mapped
-    let bytes = get_vsi_mem_file_bytes_and_free(dataset, file_name);
-
-    Ok(bytes)
+    Ok(())
 }
 
 /// copies the bytes of the vsi in-memory file with given `file_name` and frees the memory
-fn get_vsi_mem_file_bytes_and_free(dataset: Dataset, file_name: &str) -> Vec<u8> {
-    drop(dataset);
-
+fn get_vsi_mem_file_bytes_and_free(file_name: &str) -> Vec<u8> {
     let bytes = unsafe {
         let mut length: u64 = 0;
         let file_name_c = CString::new(file_name).expect("contains no 0 byte");
