@@ -1,7 +1,6 @@
 use crate::adapters::FeatureCollectionStreamExt;
 use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
-use geoengine_datatypes::primitives::BoundingBox2D;
 use std::sync::Arc;
 
 use geoengine_datatypes::{
@@ -247,15 +246,14 @@ impl<P: Pixel> PointRasterJoiner<P> {
 }
 
 #[async_trait]
-impl QueryProcessor for RasterPointJoinProcessor {
-    type Output = MultiPointCollection;
-    type SpatialBounds = BoundingBox2D;
+impl VectorQueryProcessor for RasterPointJoinProcessor {
+    type VectorType = MultiPointCollection;
 
-    async fn query<'a>(
+    async fn vector_query<'a>(
         &'a self,
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
-    ) -> Result<BoxStream<'a, Result<Self::Output>>> {
+    ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
         let mut stream = self.points.query(query, ctx).await?;
 
         for (raster_processor, new_column_name) in
