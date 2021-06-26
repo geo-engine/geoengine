@@ -37,6 +37,10 @@ pub enum Error {
         source: std::io::Error,
     },
 
+    Reqwest {
+        source: reqwest::Error,
+    },
+
     TokioChannelSend,
 
     #[snafu(display("Unable to parse query string: {}", source))]
@@ -158,6 +162,17 @@ pub enum Error {
     },
 
     NotYetImplemented,
+
+    StacNoSuchBand {
+        band_name: String,
+    },
+    StacInvalidGeoTransform,
+    StacInvalidBbox,
+    StacJsonRespone {
+        url: String,
+        response: String,
+        error: serde_json::Error,
+    },
 }
 
 impl Reject for Error {}
@@ -228,5 +243,11 @@ impl From<std::io::Error> for Error {
 impl From<gdal::errors::GdalError> for Error {
     fn from(gdal_error: gdal::errors::GdalError) -> Self {
         Self::Gdal { source: gdal_error }
+    }
+}
+
+impl From<reqwest::Error> for Error {
+    fn from(source: reqwest::Error) -> Self {
+        Self::Reqwest { source }
     }
 }

@@ -177,7 +177,6 @@ mod tests {
                         },
                         "data": [1, 2, 3, 4, 5, 6],
                         "noDataValue": null
-
                     },
                     "properties":{
                         "scale":null,
@@ -189,7 +188,9 @@ mod tests {
                 "resultDescriptor": {
                     "dataType": "U8",
                     "spatialReference": "EPSG:4326",
-                    "measurement": "unitless",
+                    "measurement": {
+                        "type": "unitless"
+                    },
                     "noDataValue": null
                 }
             }

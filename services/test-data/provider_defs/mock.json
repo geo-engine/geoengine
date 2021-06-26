@@ -5,30 +5,28 @@
     {
       "properties": {
         "id": {
-          "external": {
-            "provider": "d0535f1d-27b6-4982-b2f8-b1070f1bf6ee",
-            "id": "d89f1327-15ff-4016-8c3e-e96a7c60d93b"
-          }
+          "type": "external",
+          "providerId": "d0535f1d-27b6-4982-b2f8-b1070f1bf6ee",
+          "datasetId": "d89f1327-15ff-4016-8c3e-e96a7c60d93b"
         },
         "name": "Mock",
         "description": "A mock dataset",
         "sourceOperator": "MockDatasetDataSource"
       },
       "metaData": {
-        "MockMetaData": {
-          "loadingInfo": {
-            "points": [
-              {
-                "x": 133.7,
-                "y": 42.0
-              }
-            ]
-          },
-          "resultDescriptor": {
-            "dataType": "MultiPoint",
-            "spatialReference": "EPSG:4326",
-            "columns": {}
-          }
+        "type": "MockMetaData",
+        "loadingInfo": {
+          "points": [
+            {
+              "x": 133.7,
+              "y": 42.0
+            }
+          ]
+        },
+        "resultDescriptor": {
+          "dataType": "MultiPoint",
+          "spatialReference": "EPSG:4326",
+          "columns": {}
         }
       }
     }

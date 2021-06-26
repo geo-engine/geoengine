@@ -34,6 +34,7 @@ use geoengine_operators::{
     source::{
         OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceTimeFormat,
     },
+    util::gdal::{gdal_open_dataset, gdal_open_dataset_ex},
 };
 use snafu::ResultExt;
 use uuid::Uuid;
@@ -175,7 +176,9 @@ pub(crate) fn get_dataset_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::path!("dataset" / "internal" / Uuid)
-        .map(|id: Uuid| (DatasetId::Internal(InternalDatasetId(id))))
+        .map(|id: Uuid| DatasetId::Internal {
+            dataset_id: InternalDatasetId(id),
+        })
         .and(warp::get())
         .and(authenticate(ctx.clone()))
         .and(warp::any().map(move || ctx.clone()))
@@ -421,7 +424,7 @@ fn suggest_main_file(upload: &Upload) -> Option<String> {
 }
 
 fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDefinition> {
-    let dataset = Dataset::open(&main_file_path).context(error::Gdal)?;
+    let dataset = gdal_open_dataset(&main_file_path).context(error::Operator)?;
     let layer = {
         if let Ok(layer) = dataset.layer(0) {
             layer
@@ -511,13 +514,13 @@ fn gdal_autodetect(path: &Path, columns: &[String]) -> Option<GdalAutoDetect> {
 
                 dataset_options.open_options = Some(open_opts);
 
-                return Dataset::open_ex(path, dataset_options).ok().map(|dataset| {
-                    GdalAutoDetect {
+                return gdal_open_dataset_ex(path, dataset_options)
+                    .ok()
+                    .map(|dataset| GdalAutoDetect {
                         dataset,
                         x: x.clone(),
                         y: Some(y.clone()),
-                    }
-                });
+                    });
             }
         }
     }
@@ -536,13 +539,13 @@ fn gdal_autodetect(path: &Path, columns: &[String]) -> Option<GdalAutoDetect> {
 
                 dataset_options.open_options = Some(open_opts);
 
-                return Dataset::open_ex(path, dataset_options).ok().map(|dataset| {
-                    GdalAutoDetect {
+                return gdal_open_dataset_ex(path, dataset_options)
+                    .ok()
+                    .map(|dataset| GdalAutoDetect {
                         dataset,
                         x: geom.to_owned(),
                         y: None,
-                    }
-                });
+                    });
             }
         }
     }
@@ -826,18 +829,18 @@ mod tests {
             body,
             json!([{
                 "id": {
-                    "internal": id.internal().unwrap()
+                    "type": "internal",
+                    "datasetId": id.internal().unwrap()
                 },
                 "name": "OgrDataset",
                 "description": "My Ogr dataset",
                 "tags": [],
                 "sourceOperator": "OgrSource",
                 "resultDescriptor": {
-                    "vector": {
-                        "dataType": "Data",
-                        "spatialReference": "",
-                        "columns": {}
-                    }
+                    "type": "vector",
+                    "dataType": "Data",
+                    "spatialReference": "",
+                    "columns": {}
                 }
             }])
             .to_string()
@@ -862,35 +865,36 @@ mod tests {
                     "sourceOperator": "OgrSource"
                 },
                 "metaData": {
-                    "OgrMetaData": {
-                        "loadingInfo": {
-                            "fileName": "operators/test-data/vector/data/ne_10m_ports/ne_10m_ports.shp",
-                            "layerName": "ne_10m_ports",
-                            "dataType": "MultiPoint",
-                            "time": "none",
-                            "columns": {
-                                "x": "",
-                                "y": null,
-                                "float": ["natlscale"],
-                                "int": ["scalerank"],
-                                "text": ["featurecla", "name", "website"]
-                            },
-                            "forceOgrTimeGilter": false,
-                            "onError": "ignore",
-                            "provenance": null
+                    "type": "OgrMetaData",
+                    "loadingInfo": {
+                        "fileName": "operators/test-data/vector/data/ne_10m_ports/ne_10m_ports.shp",
+                        "layerName": "ne_10m_ports",
+                        "dataType": "MultiPoint",
+                        "time": {
+                            "type": "none"
                         },
-                        "resultDescriptor": {
-                            "dataType": "MultiPoint",
-                            "spatialReference": "EPSG:4326",
-                            "columns": {
-                                "website": "text",
-                                "name": "text",
-                                "natlscale": "float",
-                                "scalerank": "int",
-                                "featurecla": "text"
-                            }
+                        "columns": {
+                            "x": "",
+                            "y": null,
+                            "float": ["natlscale"],
+                            "int": ["scalerank"],
+                            "text": ["featurecla", "name", "website"]
+                        },
+                        "forceOgrTimeGilter": false,
+                        "onError": "ignore",
+                        "provenance": null
+                    },
+                    "resultDescriptor": {
+                        "dataType": "MultiPoint",
+                        "spatialReference": "EPSG:4326",
+                        "columns": {
+                            "website": "text",
+                            "name": "text",
+                            "natlscale": "float",
+                            "scalerank": "int",
+                            "featurecla": "text"
                         }
-                    }
+                    }                    
                 }
             }
         }"#;
@@ -1282,16 +1286,16 @@ mod tests {
             body,
             json!({
                 "id": {
-                    "internal": id.internal().unwrap()
+                    "type": "internal",
+                    "datasetId": id.internal().unwrap()
                 },
                 "name": "OgrDataset",
                 "description": "My Ogr dataset",
                 "resultDescriptor": {
-                    "vector": {
-                        "dataType": "Data",
-                        "spatialReference": "",
-                        "columns": {}
-                    }
+                    "type": "vector",
+                    "dataType": "Data",
+                    "spatialReference": "",
+                    "columns": {}
                 },
                 "sourceOperator": "OgrSource"
             })

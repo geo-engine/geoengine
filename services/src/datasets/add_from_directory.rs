@@ -67,7 +67,6 @@ pub async fn add_providers_from_directory<D: DatasetDb<S>, S: MockableSession>(
             serde_json::from_reader(BufReader::new(File::open(entry.path())?))?;
 
         db.add_dataset_provider(&S::mock(), def).await?; // TODO: add as system user
-
         Ok(())
     }
 
@@ -80,6 +79,9 @@ pub async fn add_providers_from_directory<D: DatasetDb<S>, S: MockableSession>(
 
     for entry in dir {
         if let Ok(entry) = entry {
+            if entry.path().is_dir() {
+                continue;
+            }
             if let Err(e) = add_provider_definition_from_dir_entry(db, &entry).await {
                 // TODO: log
                 warn!(
