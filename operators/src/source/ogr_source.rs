@@ -216,8 +216,8 @@ impl OgrSourceErrorSpec {
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum OgrSourceDurationSpec {
     Infinite,
-    Instant,
-    Finite(TimeStep),
+    Zero,
+    Value(TimeStep),
 }
 
 impl Add<OgrSourceDurationSpec> for TimeInstance {
@@ -226,8 +226,8 @@ impl Add<OgrSourceDurationSpec> for TimeInstance {
     fn add(self, rhs: OgrSourceDurationSpec) -> Self::Output {
         match rhs {
             OgrSourceDurationSpec::Infinite => Ok(TimeInstance::MAX),
-            OgrSourceDurationSpec::Instant => Ok(self),
-            OgrSourceDurationSpec::Finite(step) => (self + step).context(error::DataType),
+            OgrSourceDurationSpec::Zero => Ok(self),
+            OgrSourceDurationSpec::Value(step) => (self + step).context(error::DataType),
         }
     }
 }
@@ -1052,7 +1052,7 @@ mod tests {
                 start_format: OgrSourceTimeFormat::Custom {
                     custom_format: "YYYY-MM-DD".to_string(),
                 },
-                duration: OgrSourceDurationSpec::Finite(TimeStep {
+                duration: OgrSourceDurationSpec::Value(TimeStep {
                     granularity: TimeGranularity::Seconds,
                     step: 42,
                 }),
@@ -3520,7 +3520,7 @@ mod tests {
                         start_format: OgrSourceTimeFormat::Custom {
                             custom_format: "%d.%m.%Y".to_owned(),
                         },
-                        duration: OgrSourceDurationSpec::Finite(TimeStep {
+                        duration: OgrSourceDurationSpec::Value(TimeStep {
                             granularity: TimeGranularity::Seconds,
                             step: 84,
                         }),
@@ -3620,7 +3620,7 @@ mod tests {
                         start_format: OgrSourceTimeFormat::Custom {
                             custom_format: "%d.%m.%Y %H:%M:%S".to_owned(),
                         },
-                        duration: OgrSourceDurationSpec::Finite(TimeStep {
+                        duration: OgrSourceDurationSpec::Value(TimeStep {
                             granularity: TimeGranularity::Seconds,
                             step: 84,
                         }),
@@ -3720,7 +3720,7 @@ mod tests {
                         start_format: OgrSourceTimeFormat::Custom {
                             custom_format: "%d.%m.%Y %H:%M:%S %z".to_owned(),
                         },
-                        duration: OgrSourceDurationSpec::Finite(TimeStep {
+                        duration: OgrSourceDurationSpec::Value(TimeStep {
                             granularity: TimeGranularity::Seconds,
                             step: 84,
                         }),

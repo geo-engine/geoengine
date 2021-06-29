@@ -627,7 +627,7 @@ fn detect_time_type(columns: &Columns) -> OgrSourceDatasetTimeType {
         (Some(start), None, None) => OgrSourceDatasetTimeType::Start {
             start_field: start.clone(),
             start_format: OgrSourceTimeFormat::Auto,
-            duration: OgrSourceDurationSpec::Instant,
+            duration: OgrSourceDurationSpec::Zero,
         },
         _ => OgrSourceDatasetTimeType::None,
     }
