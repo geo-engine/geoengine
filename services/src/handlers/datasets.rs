@@ -356,6 +356,7 @@ async fn auto_create_dataset<C: Context>(
         name: create.dataset_name,
         description: create.dataset_description,
         source_operator: meta_data.source_operator_type().to_owned(),
+        symbology: None,
     };
 
     let mut db = ctx.dataset_db_ref_mut().await;
@@ -779,6 +780,7 @@ mod tests {
             name: "OgrDataset".to_string(),
             description: "My Ogr dataset".to_string(),
             source_operator: "OgrSource".to_string(),
+            symbology: None,
         };
 
         let meta = StaticMetaData {
@@ -841,7 +843,8 @@ mod tests {
                     "dataType": "Data",
                     "spatialReference": "",
                     "columns": {}
-                }
+                },
+                "symbology": null
             }])
             .to_string()
         );
@@ -1240,6 +1243,7 @@ mod tests {
             name: "OgrDataset".to_string(),
             description: "My Ogr dataset".to_string(),
             source_operator: "OgrSource".to_string(),
+            symbology: None,
         };
 
         let meta = StaticMetaData {
@@ -1297,7 +1301,8 @@ mod tests {
                     "spatialReference": "",
                     "columns": {}
                 },
-                "sourceOperator": "OgrSource"
+                "sourceOperator": "OgrSource",
+                "symbology": null
             })
             .to_string()
         );

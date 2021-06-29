@@ -167,6 +167,7 @@ impl SentinelS2L2aCogsDataProvider {
                             no_data_value: band.no_data_value,
                         }
                         .into(),
+                        symbology: None, // TODO
                     };
 
                     let dataset = SentinelDataset {
