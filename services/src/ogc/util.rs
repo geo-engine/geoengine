@@ -132,6 +132,11 @@ mod tests {
             ))
             .unwrap()
         );
+
+        assert_eq!(
+            TimeInterval::new_instant(Utc.ymd(2014, 4, 1).and_hms_milli(12, 0, 0, 0)).unwrap(),
+            parse_time(to_deserializer("2014-04-01T12:00:00.000+00:00")).unwrap()
+        );
     }
 
     #[test]

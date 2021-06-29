@@ -1,41 +1,40 @@
 {
   "properties": {
     "id": {
-      "internal": "b526b59c-19f1-4d99-8773-5364b757f6d8"
+      "type": "internal",
+      "datasetId": "b526b59c-19f1-4d99-8773-5364b757f6d8"
     },
     "name": "Points with Time",
     "description": "Some points in Europe in 2014",
     "sourceOperator": "OgrSource"
   },
   "metaData": {
-    "OgrMetaData": {
-      "loadingInfo": {
-        "fileName": "operators/test-data/vector/data/points_with_time.json",
-        "layerName": "points_with_time",
-        "dataType": "MultiPoint",
-        "time": {
-          "start+end": {
-            "startField": "time_start",
-            "startFormat": {
-              "format": "custom",
-              "customFormat": "+%Y-%m-%d %H:%M:%S %z"
-            },
-            "endField": "time_end",
-            "endFormat": {
-              "format": "custom",
-              "customFormat": "+%Y-%m-%d %H:%M:%S %z"
-            }
-          }
+    "type": "OgrMetaData",
+    "loadingInfo": {
+      "fileName": "operators/test-data/vector/data/points_with_time.json",
+      "layerName": "points_with_time",
+      "dataType": "MultiPoint",
+      "time": {
+        "type": "start+end",
+        "startField": "time_start",
+        "startFormat": {
+          "format": "custom",
+          "customFormat": "+%Y-%m-%d %H:%M:%S %z"
         },
-        "forceOgrTimeFilter": false,
-        "onError": "abort",
-        "provenance": null
+        "endField": "time_end",
+        "endFormat": {
+          "format": "custom",
+          "customFormat": "+%Y-%m-%d %H:%M:%S %z"
+        }
       },
-      "resultDescriptor": {
-        "dataType": "MultiPoint",
-        "spatialReference": "EPSG:4326",
-        "columns": {}
-      }
+      "forceOgrTimeFilter": false,
+      "onError": "abort",
+      "provenance": null
+    },
+    "resultDescriptor": {
+      "dataType": "MultiPoint",
+      "spatialReference": "EPSG:4326",
+      "columns": {}
     }
   }
 }

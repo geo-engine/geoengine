@@ -196,6 +196,7 @@ impl TemporalBounded for STRectangle {
     }
 }
 
+// TODO: split into Raster and VectorLayer like in frontend?
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 pub struct Layer {
     // TODO: check that workflow/operator output type fits to the type of LayerInfo
@@ -210,7 +211,7 @@ impl Layer {
     pub fn layer_type(&self) -> LayerType {
         match self.symbology {
             Symbology::Raster(_) => LayerType::Raster,
-            Symbology::Vector(_) => LayerType::Vector,
+            _ => LayerType::Vector,
         }
     }
 }
@@ -224,10 +225,12 @@ pub enum LayerType {
 }
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 #[allow(clippy::large_enum_variant)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", tag = "type")]
 pub enum Symbology {
     Raster(RasterSymbology),
-    Vector(VectorSymbology),
+    Point(PointSymbology),
+    Line(LineSymbology),
+    Polygon(PolygonSymbology),
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
@@ -237,14 +240,6 @@ pub struct RasterSymbology {
 }
 
 impl Eq for RasterSymbology {}
-
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub enum VectorSymbology {
-    Point(PointSymbology),
-    Line(LineSymbology),
-    Polygon(PolygonSymbology),
-}
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -266,11 +261,15 @@ pub struct PointSymbology {
 impl Default for PointSymbology {
     fn default() -> Self {
         Self {
-            radius: NumberParam::Static(10),
-            fill_color: ColorParam::Static(RgbaColor::white()),
+            radius: NumberParam::Static { value: 10 },
+            fill_color: ColorParam::Static {
+                color: RgbaColor::white(),
+            },
             stroke: StrokeParam {
-                width: NumberParam::Static(1),
-                color: ColorParam::Static(RgbaColor::black()),
+                width: NumberParam::Static { value: 1 },
+                color: ColorParam::Static {
+                    color: RgbaColor::black(),
+                },
             },
             text: None,
         }
@@ -279,7 +278,7 @@ impl Default for PointSymbology {
 
 impl From<PointSymbology> for Symbology {
     fn from(value: PointSymbology) -> Self {
-        Symbology::Vector(VectorSymbology::Point(value))
+        Symbology::Point(value)
     }
 }
 
@@ -301,14 +300,14 @@ pub struct PolygonSymbology {
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", tag = "type")]
 pub enum NumberParam {
-    Static(usize),
+    Static { value: usize },
     Derived(DerivedNumber),
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", tag = "type")]
 pub struct DerivedNumber {
     pub attribute: String,
     pub factor: f64,
@@ -325,9 +324,9 @@ pub struct StrokeParam {
 impl Eq for DerivedNumber {}
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", tag = "type")]
 pub enum ColorParam {
-    Static(RgbaColor),
+    Static { color: RgbaColor },
     Derived(DerivedColor),
 }
 
@@ -583,9 +582,10 @@ mod tests {
                         "legend": false,
                     },
                     "symbology": {
-                        "raster": {
-                            "opacity": 1.0,
-                            "colorizer": "rgba"
+                        "type": "raster",
+                        "opacity": 1.0,
+                        "colorizer": {
+                            "type": "rgba"
                         }
                     }
                 })
@@ -659,49 +659,52 @@ mod tests {
 
     #[test]
     fn serialize_symbology() {
-        let symbology = Symbology::Vector(VectorSymbology::Point(PointSymbology {
-            radius: NumberParam::Static(1),
+        let symbology = Symbology::Point(PointSymbology {
+            radius: NumberParam::Static { value: 1 },
             fill_color: ColorParam::Derived(DerivedColor {
                 attribute: "foo".to_owned(),
                 colorizer: Colorizer::Rgba,
             }),
             stroke: StrokeParam {
-                width: NumberParam::Static(1),
-                color: ColorParam::Static(RgbaColor::black()),
+                width: NumberParam::Static { value: 1 },
+                color: ColorParam::Static {
+                    color: RgbaColor::black(),
+                },
             },
             text: None,
-        }));
+        });
 
         assert_eq!(
             serde_json::to_string(&symbology).unwrap(),
             json!({
-                "vector": {
-                    "point": {
-                        "radius": {
-                            "static": 1
-                        },
-                        "fillColor": {
-                            "derived": {
-                                "attribute": "foo",
-                                "colorizer": "rgba"
-                            }
-                        },
-                        "stroke": {
-                            "width": {
-                                "static": 1
-                            },
-                            "color": {
-                                "static": [
-                                    0,
-                                    0,
-                                    0,
-                                    255
-                                ]
-                            }
-                        },
-                        "text": null
+                "type": "point",
+                "radius": {
+                    "type": "static",
+                    "value": 1
+                },
+                "fillColor": {
+                    "type": "derived",
+                    "attribute": "foo",
+                    "colorizer": {
+                        "type": "rgba"
                     }
-                }
+                },
+                "stroke": {
+                    "width": {
+                        "type": "static",
+                        "value": 1
+                    },
+                    "color": {
+                        "type": "static",
+                        "color": [
+                            0,
+                            0,
+                            0,
+                            255
+                        ]
+                    }
+                },
+                "text": null
             })
             .to_string(),
         );

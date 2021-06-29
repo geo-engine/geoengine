@@ -105,7 +105,7 @@ impl OgrSourceDataset {
 ///  - `start_format` and `start_format`: a mapping of a field type to a time value (cf. `OgrSourceDatasetTimeType`)
 ///  - `duration`: the duration of the time validity for all features in the file
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", tag = "type")]
 pub enum OgrSourceDatasetTimeType {
     None,
     #[serde(rename_all = "camelCase")]
@@ -1083,17 +1083,16 @@ mod tests {
                 "layerName": "foobar",
                 "dataType": "MultiPoint",
                 "time": {
-                    "start": {
-                        "startField": "start",
-                        "startFormat": {
-                            "format": "custom",
-                            "customFormat": "YYYY-MM-DD"
-                        },
-                        "duration": {
-                            "type": "finite",
-                            "granularity": "Seconds",
-                            "step": 42
-                        }
+                    "type": "start",
+                    "startField": "start",
+                    "startFormat": {
+                        "format": "custom",
+                        "customFormat": "YYYY-MM-DD"
+                    },
+                    "duration": {
+                        "type": "value",
+                        "granularity": "Seconds",
+                        "step": 42
                     }
                 },
                 "columns": {
@@ -1121,17 +1120,16 @@ mod tests {
                 "layerName": "foobar",
                 "dataType": "MultiPoint",
                 "time": {
-                    "start": {
-                        "startField": "start",
-                        "startFormat": {
-                            "format": "custom",
-                            "customFormat": "YYYY-MM-DD"
-                        },
-                        "duration": {
-                            "type": "finite",
-                            "granularity": "Seconds",
-                            "step": 42
-                        }
+                    "type": "start",
+                    "startField": "start",
+                    "startFormat": {
+                        "format": "custom",
+                        "customFormat": "YYYY-MM-DD"
+                    },
+                    "duration": {
+                        "type": "value",
+                        "granularity": "Seconds",
+                        "step": 42
                     }
                 },
                 "columns": {
@@ -1304,7 +1302,9 @@ mod tests {
 
     #[tokio::test]
     async fn ne_10m_ports_bbox_filter() -> Result<()> {
-        let dataset = DatasetId::Internal(InternalDatasetId::new());
+        let dataset = DatasetId::Internal {
+            dataset_id: InternalDatasetId::new(),
+        };
         let mut exe_ctx = MockExecutionContext::default();
         exe_ctx.add_meta_data(
             dataset.clone(),
@@ -1394,7 +1394,9 @@ mod tests {
 
     #[tokio::test]
     async fn ne_10m_ports_force_spatial_filter() -> Result<()> {
-        let dataset = DatasetId::Internal(InternalDatasetId::new());
+        let dataset = DatasetId::Internal {
+            dataset_id: InternalDatasetId::new(),
+        };
         let mut exe_ctx = MockExecutionContext::default();
         exe_ctx.add_meta_data(
             dataset.clone(),
@@ -1484,7 +1486,9 @@ mod tests {
 
     #[tokio::test]
     async fn ne_10m_ports_fast_spatial_filter() -> Result<()> {
-        let dataset = DatasetId::Internal(InternalDatasetId::new());
+        let dataset = DatasetId::Internal {
+            dataset_id: InternalDatasetId::new(),
+        };
         let mut exe_ctx = MockExecutionContext::default();
         exe_ctx.add_meta_data(
             dataset.clone(),
@@ -1577,7 +1581,9 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn ne_10m_ports_columns() -> Result<()> {
-        let id = DatasetId::Internal(InternalDatasetId::new());
+        let id = DatasetId::Internal {
+            dataset_id: InternalDatasetId::new(),
+        };
         let mut exe_ctx = MockExecutionContext::default();
         exe_ctx.add_meta_data(
             id.clone(),
@@ -1761,7 +1767,9 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn ne_10m_ports() -> Result<()> {
-        let id = DatasetId::Internal(InternalDatasetId::new());
+        let id = DatasetId::Internal {
+            dataset_id: InternalDatasetId::new(),
+        };
         let mut exe_ctx = MockExecutionContext::default();
         exe_ctx.add_meta_data(
             id.clone(),
@@ -3009,7 +3017,9 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn chunked() -> Result<()> {
-        let id = DatasetId::Internal(InternalDatasetId::new());
+        let id = DatasetId::Internal {
+            dataset_id: InternalDatasetId::new(),
+        };
         let mut exe_ctx = MockExecutionContext::default();
         exe_ctx.add_meta_data(
             id.clone(),
@@ -3251,7 +3261,9 @@ mod tests {
 
     #[tokio::test]
     async fn empty() {
-        let dataset = DatasetId::Internal(InternalDatasetId::new());
+        let dataset = DatasetId::Internal {
+            dataset_id: InternalDatasetId::new(),
+        };
         let mut exe_ctx = MockExecutionContext::default();
         exe_ctx.add_meta_data(
             dataset.clone(),
@@ -3322,7 +3334,9 @@ mod tests {
 
     #[tokio::test]
     async fn polygon_gpkg() {
-        let dataset = DatasetId::Internal(InternalDatasetId::new());
+        let dataset = DatasetId::Internal {
+            dataset_id: InternalDatasetId::new(),
+        };
         let mut exe_ctx = MockExecutionContext::default();
         exe_ctx.add_meta_data(
             dataset.clone(),
@@ -3408,7 +3422,9 @@ mod tests {
 
     #[tokio::test]
     async fn points_csv() {
-        let dataset = DatasetId::Internal(InternalDatasetId::new());
+        let dataset = DatasetId::Internal {
+            dataset_id: InternalDatasetId::new(),
+        };
         let mut exe_ctx = MockExecutionContext::default();
         exe_ctx.add_meta_data(
             dataset.clone(),
@@ -3506,7 +3522,9 @@ mod tests {
 
     #[tokio::test]
     async fn points_date_csv() {
-        let dataset = DatasetId::Internal(InternalDatasetId::new());
+        let dataset = DatasetId::Internal {
+            dataset_id: InternalDatasetId::new(),
+        };
         let mut exe_ctx = MockExecutionContext::default();
         exe_ctx.add_meta_data(
             dataset.clone(),
@@ -3606,7 +3624,9 @@ mod tests {
 
     #[tokio::test]
     async fn points_date_time_csv() {
-        let dataset = DatasetId::Internal(InternalDatasetId::new());
+        let dataset = DatasetId::Internal {
+            dataset_id: InternalDatasetId::new(),
+        };
         let mut exe_ctx = MockExecutionContext::default();
         exe_ctx.add_meta_data(
             dataset.clone(),
@@ -3706,7 +3726,9 @@ mod tests {
 
     #[tokio::test]
     async fn points_date_time_tz_csv() {
-        let dataset = DatasetId::Internal(InternalDatasetId::new());
+        let dataset = DatasetId::Internal {
+            dataset_id: InternalDatasetId::new(),
+        };
         let mut exe_ctx = MockExecutionContext::default();
         exe_ctx.add_meta_data(
             dataset.clone(),

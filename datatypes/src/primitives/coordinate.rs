@@ -152,6 +152,15 @@ impl From<&Coordinate2D> for geo::Coordinate<f64> {
     }
 }
 
+impl From<geo::Coordinate<f64>> for Coordinate2D {
+    fn from(coordinate: geo::Coordinate<f64>) -> Coordinate2D {
+        Coordinate2D {
+            x: coordinate.x,
+            y: coordinate.y,
+        }
+    }
+}
+
 impl Coord<f64> for Coordinate2D {
     fn x(&self) -> f64 {
         self.x

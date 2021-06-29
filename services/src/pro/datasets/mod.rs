@@ -1,3 +1,4 @@
+mod external;
 mod in_memory;
 mod postgres;
 mod storage;

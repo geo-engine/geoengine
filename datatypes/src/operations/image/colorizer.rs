@@ -12,7 +12,7 @@ use std::str::FromStr;
 /// A colorizer specifies a mapping between raster values and an output image
 /// There are different variants that perform different kinds of mapping.
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", tag = "type")]
 pub enum Colorizer {
     #[serde(rename_all = "camelCase")]
     LinearGradient {
@@ -631,14 +631,13 @@ mod tests {
         assert_eq!(
             serialized_colorizer,
             serde_json::json!({
-                "palette": {
-                    "colors": {
-                        "1": [255, 255, 255, 255],
-                        "2": [0, 0, 0, 255]
-                    },
-                    "noDataColor": [0, 0, 0, 0],
-                    "defaultColor": [0, 0, 0, 0]
-                }
+                "type": "palette",
+                "colors": {
+                    "1": [255, 255, 255, 255],
+                    "2": [0, 0, 0, 255]
+                },
+                "noDataColor": [0, 0, 0, 0],
+                "defaultColor": [0, 0, 0, 0]
             })
         );
 
@@ -664,17 +663,16 @@ mod tests {
         assert_eq!(
             serialized_colorizer,
             serde_json::json!({
-                "linearGradient": {
-                    "breakpoints": [{
-                        "value": 1.0,
-                        "color": [255, 255, 255, 255]
-                    }, {
-                        "value": 2.0,
-                        "color": [0, 0, 0, 255]
-                    }],
-                    "noDataColor": [0, 0, 0, 0],
-                    "defaultColor": [0, 0, 0, 0]
-                }
+                "type": "linearGradient",
+                "breakpoints": [{
+                    "value": 1.0,
+                    "color": [255, 255, 255, 255]
+                }, {
+                    "value": 2.0,
+                    "color": [0, 0, 0, 255]
+                }],
+                "noDataColor": [0, 0, 0, 0],
+                "defaultColor": [0, 0, 0, 0]
             })
         );
 

@@ -8,30 +8,29 @@ identifier!(InternalDatasetId);
 identifier!(StagingDatasetId);
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", tag = "type")]
 pub enum DatasetId {
-    Internal(InternalDatasetId),
-    Staging(StagingDatasetId),
+    #[serde(rename_all = "camelCase")]
+    Internal {
+        dataset_id: InternalDatasetId,
+    },
     External(ExternalDatasetId),
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ExternalDatasetId {
-    pub provider: DatasetProviderId,
-    pub id: String, // TODO: generic or enum?
+    pub provider_id: DatasetProviderId,
+    pub dataset_id: String,
 }
 
 impl DatasetId {
     pub fn internal(&self) -> Option<InternalDatasetId> {
-        if let Self::Internal(id) = self {
-            return Some(*id);
-        }
-        None
-    }
-
-    pub fn staging(&self) -> Option<StagingDatasetId> {
-        if let Self::Staging(id) = self {
-            return Some(*id);
+        if let Self::Internal {
+            dataset_id: dataset,
+        } = self
+        {
+            return Some(*dataset);
         }
         None
     }
@@ -46,13 +45,7 @@ impl DatasetId {
 
 impl From<InternalDatasetId> for DatasetId {
     fn from(value: InternalDatasetId) -> Self {
-        DatasetId::Internal(value)
-    }
-}
-
-impl From<StagingDatasetId> for DatasetId {
-    fn from(value: StagingDatasetId) -> Self {
-        DatasetId::Staging(value)
+        DatasetId::Internal { dataset_id: value }
     }
 }
 
