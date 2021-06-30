@@ -306,10 +306,7 @@ where
         let f = if tile_information.is_intersected_by_bbox(&dataset_params.bbox) {
             Self::load_tile_data_async(dataset_params, tile_information).await
         } else {
-            let fill_value: T = dataset_params
-                .no_data_value
-                .map(|v| T::from_(v))
-                .unwrap_or_else(T::zero);
+            let fill_value: T = dataset_params.no_data_value.map_or_else(T::zero, T::from_);
 
             let empty_grid = if let Some(no_data) = dataset_params.no_data_value {
                 EmptyGrid::new(tile_information.tile_size_in_pixels, T::from_(no_data)).into()
@@ -552,12 +549,8 @@ impl RasterOperator for GdalSource {
         debug!("Initializing GdalSource for {:?}.", &self.params.dataset);
 
         // TODO: move somewhere else?
-        // gdal::config::set_config_option("GDAL_NUM_THREADS", "2")?;
         gdal::config::set_config_option("GDAL_DISABLE_READDIR_ON_OPEN", "TRUE")?;
-        // gdal::config::set_config_option("CPL_VSIL_CURL_ALLOWED_EXTENSIONS", ".tif")?;
         gdal::config::set_config_option("VSI_CACHE", "TRUE")?;
-        // gdal::config::set_config_option("VSI_CACHE_SIZE", "65000000")?;
-        // gdal::config::set_config_option("GDAL_HTTP_VERSION", "2")?;
 
         Ok(InitializedGdalSourceOperator {
             result_descriptor: meta_data.result_descriptor().await?,
