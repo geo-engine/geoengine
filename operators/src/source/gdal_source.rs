@@ -551,6 +551,14 @@ impl RasterOperator for GdalSource {
 
         debug!("Initializing GdalSource for {:?}.", &self.params.dataset);
 
+        // TODO: move somewhere else?
+        // gdal::config::set_config_option("GDAL_NUM_THREADS", "2")?;
+        gdal::config::set_config_option("GDAL_DISABLE_READDIR_ON_OPEN", "TRUE")?;
+        // gdal::config::set_config_option("CPL_VSIL_CURL_ALLOWED_EXTENSIONS", ".tif")?;
+        gdal::config::set_config_option("VSI_CACHE", "TRUE")?;
+        // gdal::config::set_config_option("VSI_CACHE_SIZE", "65000000")?;
+        // gdal::config::set_config_option("GDAL_HTTP_VERSION", "2")?;
+
         Ok(InitializedGdalSourceOperator {
             result_descriptor: meta_data.result_descriptor().await?,
             meta_data,
