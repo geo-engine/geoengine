@@ -28,6 +28,7 @@ pub async fn raster_stream_to_geotiff_bytes<T, C: QueryContext + 'static>(
     query_ctx: C,
     no_data_value: Option<f64>,
     spatial_reference: SpatialReference,
+    tile_limit: Option<usize>,
 ) -> Result<Vec<u8>>
 where
     T: Pixel + GdalType,
@@ -48,8 +49,17 @@ where
 
     let mut tile_stream = processor.raster_query(query_rect, &query_ctx).await?;
 
+    let mut tile_count = 0;
     while let Some(tile) = tile_stream.next().await {
         tx.send(tile?).map_err(|_| Error::ChannelSend)?;
+
+        tile_count += 1;
+
+        if tile_limit.map_or_else(|| false, |limit| tile_count > limit) {
+            return Err(Error::TileLimitExceeded {
+                limit: tile_limit.expect("limit exist because it is exceeded"),
+            });
+        }
     }
 
     drop(tx);
@@ -215,6 +225,7 @@ mod tests {
             ctx,
             Some(0.),
             SpatialReference::epsg_4326(),
+            None,
         )
         .await
         .unwrap();
@@ -224,5 +235,40 @@ mod tests {
                 as &[u8],
             bytes.as_slice()
         );
+    }
+
+    #[tokio::test]
+    async fn geotiff_from_stream_limit() {
+        let ctx = MockQueryContext::default();
+        let tiling_specification =
+            TilingSpecification::new(Coordinate2D::default(), [600, 600].into());
+
+        let gdal_source = GdalSourceProcessor::<u8> {
+            tiling_specification,
+            meta_data: Box::new(create_ndvi_meta_data()),
+            phantom_data: Default::default(),
+        };
+
+        let query_bbox = BoundingBox2D::new((-10., 20.).into(), (50., 80.).into()).unwrap();
+
+        let bytes = raster_stream_to_geotiff_bytes(
+            gdal_source.boxed(),
+            QueryRectangle {
+                bbox: query_bbox,
+                time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
+                    .unwrap(),
+                spatial_resolution: SpatialResolution::new_unchecked(
+                    query_bbox.size_x() / 600.,
+                    query_bbox.size_y() / 600.,
+                ),
+            },
+            ctx,
+            Some(0.),
+            SpatialReference::epsg_4326(),
+            Some(1),
+        )
+        .await;
+
+        assert!(bytes.is_err());
     }
 }
