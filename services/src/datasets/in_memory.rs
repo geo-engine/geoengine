@@ -168,6 +168,7 @@ impl DatasetStore<SimpleSession> for HashMapDatasetDb {
             description: dataset.description,
             result_descriptor,
             source_operator: dataset.source_operator,
+            symbology: dataset.symbology,
         };
         self.datasets.push(d);
 
@@ -343,6 +344,7 @@ mod tests {
             name: "OgrDataset".to_string(),
             description: "My Ogr dataset".to_string(),
             source_operator: "OgrSource".to_string(),
+            symbology: None,
         };
 
         let meta = StaticMetaData {
@@ -406,7 +408,8 @@ mod tests {
                 description: "My Ogr dataset".to_string(),
                 tags: vec![],
                 source_operator: "OgrSource".to_string(),
-                result_descriptor: descriptor.into()
+                result_descriptor: descriptor.into(),
+                symbology: None,
             }
         );
 

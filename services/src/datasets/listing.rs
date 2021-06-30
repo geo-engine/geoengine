@@ -1,6 +1,7 @@
 use crate::datasets::storage::Dataset;
 use crate::error;
 use crate::error::Result;
+use crate::projects::Symbology;
 use crate::util::config::{get_config_element, DatasetService};
 use crate::util::user_input::{UserInput, Validated};
 use async_trait::async_trait;
@@ -23,6 +24,7 @@ pub struct DatasetListing {
     pub tags: Vec<String>,
     pub source_operator: String,
     pub result_descriptor: TypedResultDescriptor,
+    pub symbology: Option<Symbology>,
     // TODO: meta data like bounds, resolution
 }
 

@@ -196,12 +196,17 @@ pub enum Error {
 
     NoSpatialBoundsAvailable,
 
+    ChannelSend,
     #[snafu(display("LoadingInfoError: {}", source))]
     LoadingInfo {
         source: Box<dyn std::error::Error + Send + Sync>,
     },
 
     NotImplemented,
+
+    TileLimitExceeded {
+        limit: usize,
+    },
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {

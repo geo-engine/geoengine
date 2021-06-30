@@ -4,6 +4,7 @@ use crate::datasets::upload::UploadDb;
 use crate::datasets::upload::UploadId;
 use crate::error;
 use crate::error::Result;
+use crate::projects::Symbology;
 use crate::util::user_input::{UserInput, Validated};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, InternalDatasetId};
@@ -27,6 +28,7 @@ pub struct Dataset {
     pub description: String,
     pub result_descriptor: TypedResultDescriptor,
     pub source_operator: String,
+    pub symbology: Option<Symbology>,
 }
 
 impl Dataset {
@@ -38,6 +40,7 @@ impl Dataset {
             tags: vec![], // TODO
             source_operator: self.source_operator.clone(),
             result_descriptor: self.result_descriptor.clone(),
+            symbology: self.symbology.clone(),
         }
     }
 }
@@ -49,6 +52,7 @@ pub struct AddDataset {
     pub name: String,
     pub description: String,
     pub source_operator: String,
+    pub symbology: Option<Symbology>,
 }
 
 impl UserInput for AddDataset {
@@ -77,6 +81,7 @@ impl From<ImportDataset> for Dataset {
             description: value.description,
             result_descriptor: value.result_descriptor,
             source_operator: value.source_operator,
+            symbology: None,
         }
     }
 }

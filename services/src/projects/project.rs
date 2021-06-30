@@ -223,6 +223,7 @@ pub enum LayerType {
     Raster,
     Vector,
 }
+
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 #[allow(clippy::large_enum_variant)]
 #[serde(rename_all = "camelCase", tag = "type")]

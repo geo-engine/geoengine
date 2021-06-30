@@ -73,6 +73,7 @@ impl DatasetProvider for MockExternalDataProvider {
                 tags: vec![],
                 source_operator: dataset.properties.source_operator.clone(),
                 result_descriptor: dataset.meta_data.result_descriptor().await?,
+                symbology: dataset.properties.symbology.clone(),
             }));
         }
 
