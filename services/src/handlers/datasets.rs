@@ -757,6 +757,7 @@ mod tests {
     use crate::contexts::{InMemoryContext, Session, SimpleContext, SimpleSession};
     use crate::datasets::storage::{AddDataset, DatasetStore};
     use crate::error::Result;
+    use crate::projects::{PointSymbology, Symbology};
     use geoengine_datatypes::collections::VectorDataType;
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
     use geoengine_operators::engine::{StaticMetaData, VectorResultDescriptor};
@@ -764,19 +765,24 @@ mod tests {
     use serde_json::json;
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn test_list_datasets() -> Result<()> {
         let ctx = InMemoryContext::default();
 
         let session_id = ctx.default_session_ref().await.id();
 
         let descriptor = VectorResultDescriptor {
-            data_type: VectorDataType::Data,
+            data_type: VectorDataType::MultiPoint,
             spatial_reference: SpatialReferenceOption::Unreferenced,
             columns: Default::default(),
         };
 
+        let id = DatasetId::Internal {
+            dataset_id: InternalDatasetId::from_str("370e99ec-9fd8-401d-828d-d67b431a8742")
+                .unwrap(),
+        };
         let ds = AddDataset {
-            id: None,
+            id: Some(id),
             name: "OgrDataset".to_string(),
             description: "My Ogr dataset".to_string(),
             source_operator: "OgrSource".to_string(),
@@ -795,10 +801,43 @@ mod tests {
                 on_error: OgrSourceErrorSpec::Ignore,
                 provenance: None,
             },
+            result_descriptor: descriptor.clone(),
+        };
+
+        let _id = ctx
+            .dataset_db_ref_mut()
+            .await
+            .add_dataset(&SimpleSession::default(), ds.validated()?, Box::new(meta))
+            .await?;
+
+        let id2 = DatasetId::Internal {
+            dataset_id: InternalDatasetId::from_str("370e99ec-9fd8-401d-828d-d67b431a8742")
+                .unwrap(),
+        };
+        let ds = AddDataset {
+            id: Some(id2),
+            name: "OgrDataset2".to_string(),
+            description: "My Ogr dataset2".to_string(),
+            source_operator: "OgrSource".to_string(),
+            symbology: Some(Symbology::Point(PointSymbology::default())),
+        };
+
+        let meta = StaticMetaData {
+            loading_info: OgrSourceDataset {
+                file_name: Default::default(),
+                layer_name: "".to_string(),
+                data_type: None,
+                time: Default::default(),
+                columns: None,
+                force_ogr_time_filter: false,
+                force_ogr_spatial_filter: false,
+                on_error: OgrSourceErrorSpec::Ignore,
+                provenance: None,
+            },
             result_descriptor: descriptor,
         };
 
-        let id = ctx
+        let _id2 = ctx
             .dataset_db_ref_mut()
             .await
             .add_dataset(&SimpleSession::default(), ds.validated()?, Box::new(meta))
@@ -832,7 +871,44 @@ mod tests {
             json!([{
                 "id": {
                     "type": "internal",
-                    "datasetId": id.internal().unwrap()
+                    "datasetId": "370e99ec-9fd8-401d-828d-d67b431a8742"
+                },
+                "name": "OgrDataset2",
+                "description": "My Ogr dataset2",
+                "tags": [],
+                "sourceOperator": "OgrSource",
+                "resultDescriptor": {
+                    "type": "vector",
+                    "dataType": "MultiPoint",
+                    "spatialReference": "",
+                    "columns": {}
+                },
+                "symbology": {
+                    "type": "point",
+                    "radius": {
+                        "type": "static",
+                        "value": 10
+                    },
+                    "fillColor": {
+                        "type": "static",
+                        "color": [255, 255, 255, 255]
+                    },
+                    "stroke": {
+                        "width": {
+                            "type": "static",
+                            "value": 1
+                        },
+                        "color": {
+                            "type": "static",
+                            "color": [0, 0, 0, 255]
+                        }
+                    },
+                    "text": null
+                }
+            }, {
+                "id": {
+                    "type": "internal",
+                    "datasetId": "370e99ec-9fd8-401d-828d-d67b431a8742"
                 },
                 "name": "OgrDataset",
                 "description": "My Ogr dataset",
@@ -840,7 +916,7 @@ mod tests {
                 "sourceOperator": "OgrSource",
                 "resultDescriptor": {
                     "type": "vector",
-                    "dataType": "Data",
+                    "dataType": "MultiPoint",
                     "spatialReference": "",
                     "columns": {}
                 },
