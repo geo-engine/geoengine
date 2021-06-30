@@ -12,6 +12,7 @@ use crate::error;
 use crate::error::Result;
 use crate::handlers::Context;
 use crate::ogc::wcs::request::{GetCoverage, WcsRequest};
+use crate::util::config::get_config_element;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 
@@ -148,10 +149,9 @@ async fn get_coverage<C: Context>(
                 p,
                 query_rect,
                 query_ctx,
-                request.size_x,
-                request.size_y,
                 no_data_value,
                 request_spatial_ref,
+                Some(get_config_element::<crate::util::config::Wcs>()?.tile_limit),
             )
             .await
         }
@@ -160,10 +160,9 @@ async fn get_coverage<C: Context>(
                 p,
                 query_rect,
                 query_ctx,
-                request.size_x,
-                request.size_y,
                 no_data_value,
                 request_spatial_ref,
+                Some(get_config_element::<crate::util::config::Wcs>()?.tile_limit),
             )
             .await
         }
@@ -172,10 +171,9 @@ async fn get_coverage<C: Context>(
                 p,
                 query_rect,
                 query_ctx,
-                request.size_x,
-                request.size_y,
                 no_data_value,
                 request_spatial_ref,
+                Some(get_config_element::<crate::util::config::Wcs>()?.tile_limit),
             )
             .await
         }
@@ -184,10 +182,9 @@ async fn get_coverage<C: Context>(
                 p,
                 query_rect,
                 query_ctx,
-                request.size_x,
-                request.size_y,
                 no_data_value,
                 request_spatial_ref,
+                Some(get_config_element::<crate::util::config::Wcs>()?.tile_limit),
             )
             .await
         }
@@ -196,10 +193,9 @@ async fn get_coverage<C: Context>(
                 p,
                 query_rect,
                 query_ctx,
-                request.size_x,
-                request.size_y,
                 no_data_value,
                 request_spatial_ref,
+                Some(get_config_element::<crate::util::config::Wcs>()?.tile_limit),
             )
             .await
         }
@@ -208,10 +204,9 @@ async fn get_coverage<C: Context>(
                 p,
                 query_rect,
                 query_ctx,
-                request.size_x,
-                request.size_y,
                 no_data_value,
                 request_spatial_ref,
+                Some(get_config_element::<crate::util::config::Wcs>()?.tile_limit),
             )
             .await
         }
@@ -220,10 +215,9 @@ async fn get_coverage<C: Context>(
                 p,
                 query_rect,
                 query_ctx,
-                request.size_x,
-                request.size_y,
                 no_data_value,
                 request_spatial_ref,
+                Some(get_config_element::<crate::util::config::Wcs>()?.tile_limit),
             )
             .await
         }

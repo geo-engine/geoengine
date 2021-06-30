@@ -45,3 +45,7 @@ enable_buffering = false
 # By default logs are saved in the current working directory.
 # Use this option if another folder should be used.
 #log_directory = "/var/log/"
+
+[wcs]
+# max number of tiles to be produced for generating output tiff
+tile_limit = 4 
