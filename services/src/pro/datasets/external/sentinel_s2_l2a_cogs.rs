@@ -13,6 +13,9 @@ use crate::{
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
+use geoengine_datatypes::operations::reproject::CoordinateProjection;
+use geoengine_datatypes::operations::reproject::CoordinateProjector;
+use geoengine_datatypes::operations::reproject::ReprojectClipped;
 use geoengine_datatypes::primitives::{Measurement, TimeInterval};
 use geoengine_datatypes::raster::GeoTransform;
 use geoengine_datatypes::raster::RasterDataType;
@@ -128,6 +131,10 @@ impl SentinelS2L2aCogsDataProvider {
             bands: vec![
                 Band::new("B01".to_owned(), Some(0.), RasterDataType::U16),
                 Band::new("B02".to_owned(), Some(0.), RasterDataType::U16),
+                Band::new("B03".to_owned(), Some(0.), RasterDataType::U16),
+                Band::new("B04".to_owned(), Some(0.), RasterDataType::U16),
+                Band::new("B08".to_owned(), Some(0.), RasterDataType::U16),
+                Band::new("SCL".to_owned(), Some(0.), RasterDataType::U8),
             ],
             zones: vec![
                 Zone::new("UTM32N".to_owned(), 32632),
@@ -186,7 +193,10 @@ impl SentinelS2L2aCogsDataProvider {
 impl DatasetProvider for SentinelS2L2aCogsDataProvider {
     async fn list(&self, _options: Validated<DatasetListOptions>) -> Result<Vec<DatasetListing>> {
         // TODO: options
-        Ok(self.datasets.values().map(|d| d.listing.clone()).collect())
+        let mut x: Vec<DatasetListing> =
+            self.datasets.values().map(|d| d.listing.clone()).collect();
+        x.sort_by_key(|e| e.name.clone());
+        Ok(x)
     }
 
     async fn load(
@@ -232,7 +242,7 @@ impl SentinelS2L2aCogsMetaData {
             let end = if i < num_features - 1 {
                 features[i + 1].properties.datetime
             } else {
-                start + Duration::minutes(1) // TODO: determine correct validity for last tile
+                start + Duration::seconds(1) // TODO: determine correct validity for last tile
             };
 
             let time_interval = TimeInterval::new(start, end)?;
@@ -297,8 +307,12 @@ impl SentinelS2L2aCogsMetaData {
         let (t_start, t_end) = Self::time_range_request(&query.time_interval)?;
 
         // request all features in zone in order to be able to determine the temporal validity of individual tile
-        let bbox =
-            SpatialReference::new(SpatialReferenceAuthority::Epsg, self.zone.epsg).area_of_use()?;
+        // let bbox = SpatialReference::new(SpatialReferenceAuthority::Epsg, self.zone.epsg).area_of_use()?;
+        let projector = CoordinateProjector::from_known_srs(
+            SpatialReference::new(SpatialReferenceAuthority::Epsg, self.zone.epsg),
+            SpatialReference::epsg_4326(),
+        )?;
+        let bbox = query.bbox.reproject_clipped(&projector)?;
 
         Ok(vec![
             (
