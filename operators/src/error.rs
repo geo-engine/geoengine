@@ -201,6 +201,10 @@ pub enum Error {
     },
 
     NotImplemented,
+
+    TileLimitExceeded {
+        limit: usize,
+    },
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {
