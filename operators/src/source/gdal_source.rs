@@ -1,12 +1,13 @@
-use crate::engine::{MetaData, QueryRectangle};
+use crate::engine::{MetaData, QueryProcessor, QueryRectangle, TypedRasterQueryProcessor};
 use crate::{
     engine::{
-        InitializedOperator, InitializedRasterOperator, QueryProcessor, RasterOperator,
-        RasterQueryProcessor, RasterResultDescriptor, SourceOperator, TypedRasterQueryProcessor,
+        InitializedOperator, InitializedRasterOperator, RasterOperator, RasterQueryProcessor,
+        RasterResultDescriptor, SourceOperator,
     },
     error::{self, Error},
     util::Result,
 };
+use futures::future;
 use futures::{
     stream::{self, BoxStream, StreamExt},
     Stream,
@@ -302,16 +303,35 @@ where
         tile_information: TileInformation,
         time: TimeInterval,
     ) -> Result<RasterTile2D<T>> {
-        Self::load_tile_data_async(dataset_params, tile_information)
-            .await
-            .map(|grid_with_properties| {
-                RasterTile2D::new_with_tile_info_and_properties(
-                    time,
-                    tile_information,
-                    grid_with_properties.grid,
-                    grid_with_properties.properties,
-                )
+        let f = if tile_information.is_intersected_by_bbox(&dataset_params.bbox) {
+            Self::load_tile_data_async(dataset_params, tile_information).await
+        } else {
+            let fill_value: T = dataset_params
+                .no_data_value
+                .map(|v| T::from_(v))
+                .unwrap_or_else(T::zero);
+
+            let empty_grid = if let Some(no_data) = dataset_params.no_data_value {
+                EmptyGrid::new(tile_information.tile_size_in_pixels, T::from_(no_data)).into()
+            } else {
+                Grid2D::new_filled(tile_information.tile_size_in_pixels, fill_value, None).into()
+            };
+
+            future::ok(GridWithProperties {
+                grid: empty_grid,
+                properties: Default::default(),
             })
+            .await
+        };
+
+        f.map(|grid_with_properties| {
+            RasterTile2D::new_with_tile_info_and_properties(
+                time,
+                tile_information,
+                grid_with_properties.grid,
+                grid_with_properties.properties,
+            )
+        })
     }
 
     ///
