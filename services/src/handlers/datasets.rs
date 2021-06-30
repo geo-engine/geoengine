@@ -32,7 +32,8 @@ use geoengine_datatypes::{
 use geoengine_operators::{
     engine::{StaticMetaData, VectorResultDescriptor},
     source::{
-        OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceTimeFormat,
+        OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec,
+        OgrSourceTimeFormat,
     },
     util::gdal::{gdal_open_dataset, gdal_open_dataset_ex},
 };
@@ -629,7 +630,7 @@ fn detect_time_type(columns: &Columns) -> OgrSourceDatasetTimeType {
         (Some(start), None, None) => OgrSourceDatasetTimeType::Start {
             start_field: start.clone(),
             start_format: OgrSourceTimeFormat::Auto,
-            duration: 0,
+            duration: OgrSourceDurationSpec::Zero,
         },
         _ => OgrSourceDatasetTimeType::None,
     }
