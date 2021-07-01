@@ -2,9 +2,12 @@ use chrono::FixedOffset;
 use geoengine_datatypes::primitives::{
     BoundingBox2D, Coordinate2D, SpatialResolution, TimeInterval,
 };
+use geoengine_datatypes::spatial_reference::SpatialReference;
 use serde::de::Error;
 use serde::Deserialize;
 use std::str::FromStr;
+
+use super::wcs::request::{GridOffset, WcsBoundingbox};
 
 /// Parse bbox, format is: "x1,y1,x2,y2"
 pub fn parse_bbox<'de, D>(deserializer: D) -> Result<BoundingBox2D, D::Error>
@@ -118,6 +121,95 @@ where
     };
 
     Ok(Some(spatial_resolution))
+}
+
+/// Parse wcs 1.1.1 bbox, format is: "x1,y1,x2,y2,crs", crs format is like `urn:ogc:def:crs:EPSG::4326`
+pub fn parse_wcs_bbox<'de, D>(deserializer: D) -> Result<WcsBoundingbox, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+
+    let (bbox, crs) = if let Some(idx) = s.rfind(',') {
+        (&s[0..idx], &s[idx + 1..s.len()])
+    } else {
+        return Err(D::Error::custom("Invalid bbox"));
+    };
+
+    let split: Vec<Result<f64, std::num::ParseFloatError>> =
+        bbox.split(',').map(str::parse).collect();
+
+    let bbox = if let [Ok(x1), Ok(y1), Ok(x2), Ok(y2)] = *split.as_slice() {
+        BoundingBox2D::new(Coordinate2D::new(x1, y1), Coordinate2D::new(x2, y2))
+            .map_err(D::Error::custom)?
+    } else {
+        return Err(D::Error::custom("Invalid bbox"));
+    };
+
+    // TODO: more sophisticated crs parsing
+    let spatial_reference = if let Some(crs) = crs.strip_prefix("urn:ogc:def:crs:") {
+        SpatialReference::from_str(&crs.replace("::", ":")).map_err(D::Error::custom)?
+    } else {
+        return Err(D::Error::custom(&format!(
+            "cannot parse crs from string: {}",
+            crs
+        )));
+    };
+
+    Ok(WcsBoundingbox {
+        bbox,
+        spatial_reference,
+    })
+}
+
+/// parse wcs 1.1.1, format is like `urn:ogc:def:crs:EPSG::4326`
+pub fn parse_wcs_crs<'de, D>(deserializer: D) -> Result<SpatialReference, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+
+    if let Some(crs) = s.strip_prefix("urn:ogc:def:crs:") {
+        SpatialReference::from_str(&crs.replace("::", ":")).map_err(D::Error::custom)
+    } else {
+        Err(D::Error::custom("cannot parse crs"))
+    }
+}
+
+/// parse coordinate, format is "x,y"
+pub fn parse_coordinate<'de, D>(deserializer: D) -> Result<Coordinate2D, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+
+    let split: Vec<Result<f64, std::num::ParseFloatError>> = s.split(',').map(str::parse).collect();
+
+    match *split.as_slice() {
+        [Ok(x), Ok(y)] => Ok(Coordinate2D::new(x, y)),
+        _ => Err(D::Error::custom("Invalid coordinate")),
+    }
+}
+
+/// Parse a spatial resolution, format is: "resolution" or "xResolution,yResolution"
+pub fn parse_grid_offset_option<'de, D>(deserializer: D) -> Result<Option<GridOffset>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+
+    if s.is_empty() {
+        return Ok(None);
+    }
+
+    let split: Vec<Result<f64, std::num::ParseFloatError>> = s.split(',').map(str::parse).collect();
+
+    let grid_offset = match *split.as_slice() {
+        [Ok(x_step), Ok(y_step)] => GridOffset { x_step, y_step },
+        _ => return Err(D::Error::custom("Invalid grid offset")),
+    };
+
+    Ok(Some(grid_offset))
 }
 
 #[cfg(test)]
@@ -247,5 +339,51 @@ mod tests {
         let subset = parse_subset_option(to_deserializer("(2.,1.)"));
 
         assert!(subset.is_err());
+    }
+
+    #[test]
+    fn it_parses_wcs_bbox() {
+        let s = "-81,-162,81,162,urn:ogc:def:crs:EPSG::4326";
+
+        assert_eq!(
+            parse_wcs_bbox(to_deserializer(s)).unwrap(),
+            WcsBoundingbox {
+                bbox: BoundingBox2D::new_unchecked((-81., -162.).into(), (81., 162.).into()),
+                spatial_reference: SpatialReference::epsg_4326(),
+            }
+        )
+    }
+
+    #[test]
+    fn it_parses_wcs_crs() {
+        let s = "urn:ogc:def:crs:EPSG::4326";
+
+        assert_eq!(
+            parse_wcs_crs(to_deserializer(s)).unwrap(),
+            SpatialReference::epsg_4326(),
+        )
+    }
+
+    #[test]
+    fn it_parses_coordinate() {
+        let s = "1.1,2.2";
+
+        assert_eq!(
+            parse_coordinate(to_deserializer(s)).unwrap(),
+            Coordinate2D::new(1.1, 2.2)
+        )
+    }
+
+    #[test]
+    fn it_parses_grid_offset() {
+        let s = "-8,5";
+
+        assert_eq!(
+            parse_grid_offset_option(to_deserializer(s)).unwrap(),
+            Some(GridOffset {
+                x_step: -8.,
+                y_step: 5.
+            })
+        )
     }
 }

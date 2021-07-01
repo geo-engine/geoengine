@@ -170,6 +170,12 @@ pub enum Error {
         error: serde_json::Error,
     },
     RasterDataTypeNotSupportByGdal,
+
+    ExternalAddressNotConfigured,
+
+    MissingSpatialReference,
+
+    WcsBoundingboxCrsMustMatchRequest,
 }
 
 impl Reject for Error {}

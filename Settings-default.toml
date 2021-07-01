@@ -1,6 +1,6 @@
 [web]
 bind_address = "127.0.0.1:3030"
-# external_address = "http://www.example.com"
+external_address = "http://localhost:3030"
 backend = "in_memory" # TODO: remove option
 
 [project_service]
