@@ -202,12 +202,7 @@ mod tests {
 
     async fn queries(shutdown_tx: Sender<()>) {
         let web_config: config::Web = get_config_element().unwrap();
-        let base_url = format!(
-            "http://{}/",
-            web_config
-                .external_address
-                .unwrap_or(web_config.bind_address)
-        );
+        let base_url = format!("http://{}", web_config.bind_address);
 
         assert!(wait_for_server(&base_url).await);
         issue_queries(&base_url).await;
@@ -219,7 +214,7 @@ mod tests {
         let client = reqwest::Client::new();
 
         let body = client
-            .post(&format!("{}{}", base_url, "anonymous"))
+            .post(&format!("{}/{}", base_url, "anonymous"))
             .send()
             .await
             .unwrap()
@@ -230,7 +225,7 @@ mod tests {
         let session: SimpleSession = serde_json::from_str(&body).unwrap();
 
         let body = client
-            .post(&format!("{}{}", base_url, "project"))
+            .post(&format!("{}/{}", base_url, "project"))
             .header("Authorization", format!("Bearer {}", session.id()))
             .body("no json")
             .send()
