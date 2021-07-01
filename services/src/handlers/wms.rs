@@ -3,7 +3,7 @@ use snafu::ResultExt;
 use warp::reply::Reply;
 use warp::{http::Response, Filter, Rejection};
 
-use geoengine_datatypes::primitives::{AxisAlignedRectangle, BoundingBox2D};
+use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D};
 use geoengine_datatypes::{
     operations::image::{Colorizer, ToPng},
     primitives::SpatialResolution,
@@ -20,7 +20,7 @@ use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 
 use geoengine_datatypes::primitives::{TimeInstance, TimeInterval};
-use geoengine_operators::engine::{RasterOperator, ResultDescriptor, VectorQueryRectangle};
+use geoengine_operators::engine::{RasterOperator, RasterQueryRectangle, ResultDescriptor};
 use geoengine_operators::processing::{Reprojection, ReprojectionParams};
 use geoengine_operators::{
     call_on_generic_raster_processor, util::raster_stream_to_png::raster_stream_to_png_bytes,
@@ -254,9 +254,9 @@ async fn get_map<C: Context>(
 
     // TODO: use proj for determining axis order
     let query_bbox = if request_spatial_ref == SpatialReference::epsg_4326() {
-        BoundingBox2D::new(
-            (request.bbox.lower_left().y, request.bbox.lower_left().x).into(),
-            (request.bbox.upper_right().y, request.bbox.upper_right().x).into(),
+        SpatialPartition2D::new(
+            (request.bbox.lower_left().y, request.bbox.upper_right().x).into(),
+            (request.bbox.upper_right().y, request.bbox.lower_left().x).into(),
         )
         .context(error::DataType)?
     } else {
@@ -265,7 +265,7 @@ async fn get_map<C: Context>(
     let x_query_resolution = query_bbox.size_x() / f64::from(request.width);
     let y_query_resolution = query_bbox.size_y() / f64::from(request.height);
 
-    let query_rect = VectorQueryRectangle {
+    let query_rect = RasterQueryRectangle {
         spatial_bounds: query_bbox,
         time_interval: request.time.unwrap_or_else(|| {
             let time = TimeInstance::from(chrono::offset::Utc::now());
@@ -275,8 +275,7 @@ async fn get_map<C: Context>(
             x_query_resolution,
             y_query_resolution,
         ),
-    }
-    .into();
+    };
 
     let query_ctx = ctx.query_context()?;
 
@@ -494,6 +493,26 @@ mod tests {
         assert_eq!(
             include_bytes!("../../../services/test-data/wms/get_map.png") as &[u8],
             res.body().to_vec().as_slice()
+        );
+    }
+
+    #[tokio::test]
+    async fn get_map_ndvi() {
+        let ctx = InMemoryContext::default();
+
+        let (_, id) = register_ndvi_workflow_helper(&ctx).await;
+
+        let response = warp::test::request()
+            .method("GET")
+            .path(&format!("/wms?service=WMS&version=1.3.0&request=GetMap&layers={}&styles=&width=335&height=168&crs=EPSG:4326&bbox=-90.0,-180.0,90.0,180.0&format=image/png&transparent=FALSE&bgcolor=0xFFFFFF&exceptions=XML&time=2014-04-01T12%3A00%3A00.000%2B00%3A00", id.to_string()))
+            .reply(&wms_handler(ctx).recover(handle_rejection))
+            .await;
+
+        assert_eq!(response.status(), 200, "{:?}", response.body());
+
+        assert_eq!(
+            include_bytes!("../../../services/test-data/wms/get_map_ndvi.png") as &[u8],
+            response.body().to_vec().as_slice()
         );
     }
 
