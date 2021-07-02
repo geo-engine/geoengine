@@ -296,14 +296,14 @@
         "xPixelSize": 0.1,
         "yPixelSize": -0.1
       },
-      "bbox": {
-        "lowerLeftCoordinate": {
+      "partition": {
+        "upperLeftCoordinate": {
           "x": -180.0,
-          "y": -90.0
-        },
-        "upperRightCoordinate": {
-          "x": 180.0,
           "y": 90.0
+        },
+        "lowerRightCoordinate": {
+          "x": 180.0,
+          "y": -90.0
         }
       },
       "fileNotFoundHandling": "NoData",

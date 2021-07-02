@@ -1,6 +1,6 @@
 use std::cmp::{max, min};
 
-use crate::primitives::{BoundingBox2D, Coordinate2D};
+use crate::primitives::{AxisAlignedRectangle, BoundingBox2D, Coordinate2D};
 use serde::{Deserialize, Serialize};
 
 use super::{GridBoundingBox2D, GridIdx, GridIdx2D};

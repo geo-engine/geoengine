@@ -30,7 +30,7 @@ use geoengine_datatypes::{
     spatial_reference::{SpatialReference, SpatialReferenceOption},
 };
 use geoengine_operators::{
-    engine::{StaticMetaData, VectorResultDescriptor},
+    engine::{StaticMetaData, VectorQueryRectangle, VectorResultDescriptor},
     source::{
         OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec,
         OgrSourceTimeFormat,
@@ -456,7 +456,11 @@ fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDef
 
     let time = detect_time_type(&columns_vecs);
 
-    Ok(MetaDataDefinition::OgrMetaData(StaticMetaData {
+    Ok(MetaDataDefinition::OgrMetaData(StaticMetaData::<
+        _,
+        _,
+        VectorQueryRectangle,
+    > {
         loading_info: OgrSourceDataset {
             file_name: main_file_path.into(),
             layer_name: geometry.layer_name.unwrap_or_else(|| layer.name()),
@@ -482,6 +486,7 @@ fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDef
                 .filter_map(|(k, v)| v.try_into().map(|v| (k, v)).ok()) // ignore all columns here that don't have a corresponding type in our collections
                 .collect(),
         },
+        phantom: Default::default(),
     }))
 }
 
@@ -803,6 +808,7 @@ mod tests {
                 provenance: None,
             },
             result_descriptor: descriptor.clone(),
+            phantom: Default::default(),
         };
 
         let _id = ctx
@@ -836,6 +842,7 @@ mod tests {
                 provenance: None,
             },
             result_descriptor: descriptor,
+            phantom: Default::default(),
         };
 
         let _id2 = ctx
@@ -1049,6 +1056,7 @@ mod tests {
                     .cloned()
                     .collect(),
                 },
+                phantom: Default::default(),
             })
         )
     }
@@ -1098,6 +1106,7 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     columns: [].iter().cloned().collect(),
                 },
+                phantom: Default::default()
             })
         )
     }
@@ -1145,6 +1154,7 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     columns: [].iter().cloned().collect(),
                 },
+                phantom: Default::default(),
             })
         )
     }
@@ -1192,6 +1202,7 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     columns: [].iter().cloned().collect(),
                 },
+                phantom: Default::default(),
             })
         )
     }
@@ -1246,6 +1257,7 @@ mod tests {
                         .cloned()
                         .collect(),
                 },
+                phantom: Default::default()
             })
         )
     }
@@ -1299,6 +1311,7 @@ mod tests {
                     .cloned()
                     .collect(),
                 },
+                phantom: Default::default()
             })
         )
     }
@@ -1336,6 +1349,7 @@ mod tests {
                 provenance: None,
             },
             result_descriptor: descriptor,
+            phantom: Default::default(),
         };
 
         let id = ctx
