@@ -14,7 +14,6 @@ use crate::datasets::{
 };
 use crate::error;
 use crate::error::Result;
-use crate::handlers::authenticate;
 use crate::util::user_input::UserInput;
 use crate::{contexts::Context, datasets::storage::AutoCreateDataset};
 use crate::{
@@ -25,7 +24,7 @@ use gdal::{vector::Layer, Dataset};
 use gdal::{vector::OGRFieldType, DatasetOptions};
 use geoengine_datatypes::{
     collections::VectorDataType,
-    dataset::{DatasetId, DatasetProviderId, InternalDatasetId},
+    dataset::{DatasetId, DatasetProviderId},
     primitives::FeatureDataType,
     spatial_reference::{SpatialReference, SpatialReferenceOption},
 };
@@ -37,62 +36,36 @@ use geoengine_operators::{
     util::gdal::{gdal_open_dataset, gdal_open_dataset_ex},
 };
 use snafu::ResultExt;
-use uuid::Uuid;
-use warp::Filter;
+use actix_web::{web, Responder};
 
-pub(crate) fn list_providers_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path("providers")
-        .and(warp::get())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and(warp::query())
-        .and_then(list_providers)
-}
-
-// TODO: move into handler once async closures are available?
-async fn list_providers<C: Context>(
+pub(crate) async fn list_providers_handler<C: Context>(
     session: C::Session,
-    ctx: C,
-    options: DatasetProviderListOptions,
-) -> Result<impl warp::Reply, warp::Rejection> {
+    ctx: web::Data<C>,
+    options: web::Query<DatasetProviderListOptions>,
+) -> Result<impl Responder> {
     let list = ctx
         .dataset_db_ref()
         .await
-        .list_dataset_providers(&session, options.validated()?)
+        .list_dataset_providers(&session, options.into_inner().validated()?)
         .await?;
-    Ok(warp::reply::json(&list))
+    Ok(web::Json(list))
 }
 
-pub(crate) fn list_external_datasets_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path!("datasets" / "external" / Uuid)
-        .map(DatasetProviderId)
-        .and(warp::get())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and(warp::query())
-        .and_then(list_external_datasets)
-}
-
-// TODO: move into handler once async closures are available?
-async fn list_external_datasets<C: Context>(
-    provider: DatasetProviderId,
+pub(crate) async fn list_external_datasets_handler<C: Context>(
+    provider: web::Path<DatasetProviderId>,
     session: C::Session,
-    ctx: C,
-    options: DatasetListOptions,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    let options = options.validated()?;
+    ctx: web::Data<C>,
+    options: web::Query<DatasetListOptions>,
+) -> Result<impl Responder> {
+    let options = options.into_inner().validated()?;
     let list = ctx
         .dataset_db_ref()
         .await
-        .dataset_provider(&session, provider)
+        .dataset_provider(&session, provider.into_inner())
         .await?
         .list(options)
         .await?;
-    Ok(warp::reply::json(&list))
+    Ok(web::Json(list))
 }
 
 /// Lists available [Datasets](crate::datasets::listing::DatasetListing).
@@ -124,26 +97,14 @@ async fn list_external_datasets<C: Context>(
 ///   }
 /// ]
 /// ```
-pub(crate) fn list_datasets_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path("datasets")
-        .and(warp::get())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and(warp::query())
-        .and_then(list_datasets)
-}
-
-// TODO: move into handler once async closures are available?
-async fn list_datasets<C: Context>(
+pub(crate) async fn list_datasets_handler<C: Context>(
     _session: C::Session,
-    ctx: C,
-    options: DatasetListOptions,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    let options = options.validated()?;
+    ctx: web::Data<C>,
+    options: web::Query<DatasetListOptions>,
+) -> Result<impl Responder> {
+    let options = options.into_inner().validated()?;
     let list = ctx.dataset_db_ref().await.list(options).await?;
-    Ok(warp::reply::json(&list))
+    Ok(web::Json(list))
 }
 
 /// Retrieves details about a [Dataset](crate::datasets::listing::DatasetListing) using the internal id.
@@ -172,27 +133,13 @@ async fn list_datasets<C: Context>(
 ///   "sourceOperator": "OgrSource"
 /// }
 /// ```
-pub(crate) fn get_dataset_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path!("dataset" / "internal" / Uuid)
-        .map(|id: Uuid| DatasetId::Internal {
-            dataset_id: InternalDatasetId(id),
-        })
-        .and(warp::get())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and_then(get_dataset)
-}
-
-// TODO: move into handler once async closures are available?
-async fn get_dataset<C: Context>(
-    dataset: DatasetId,
+pub(crate) async fn get_dataset_handler<C: Context>(
+    dataset: web::Path<DatasetId>,
     _session: C::Session,
-    ctx: C,
-) -> Result<impl warp::Reply, warp::Rejection> {
+    ctx: web::Data<C>,
+) -> Result<impl Responder> {
     let dataset = ctx.dataset_db_ref().await.load(&dataset).await?;
-    Ok(warp::reply::json(&dataset))
+    Ok(web::Json(dataset))
 }
 
 /// Creates a new [Dataset](CreateDataset) using previously uploaded files.
@@ -247,30 +194,18 @@ async fn get_dataset<C: Context>(
 ///   }
 /// }
 /// ```
-pub(crate) fn create_dataset_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path("dataset")
-        .and(warp::post())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and(warp::body::json())
-        .and_then(create_dataset)
-}
-
-// TODO: move into handler once async closures are available?
-async fn create_dataset<C: Context>(
+pub(crate) async fn create_dataset_handler<C: Context>(
     session: C::Session,
-    ctx: C,
-    create: CreateDataset,
-) -> Result<impl warp::Reply, warp::Rejection> {
+    ctx: web::Data<C>,
+    create: web::Json<CreateDataset>,
+) -> Result<impl Responder> {
     let upload = ctx
         .dataset_db_ref()
         .await
         .get_upload(&session, create.upload)
         .await?;
 
-    let mut definition = create.definition;
+    let mut definition = create.into_inner().definition;
 
     adjust_user_path_to_upload_path(&mut definition.meta_data, &upload)?;
 
@@ -280,7 +215,7 @@ async fn create_dataset<C: Context>(
         .add_dataset(&session, definition.properties.validated()?, meta_data)
         .await?;
 
-    Ok(warp::reply::json(&IdResponse::from(id)))
+    Ok(web::Json(IdResponse::from(id)))
 }
 
 fn adjust_user_path_to_upload_path(meta: &mut MetaDataDefinition, upload: &Upload) -> Result<()> {
@@ -323,30 +258,18 @@ fn adjust_user_path_to_upload_path(meta: &mut MetaDataDefinition, upload: &Uploa
 ///   }
 /// }
 /// ```
-pub(crate) fn auto_create_dataset_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path!("dataset" / "auto")
-        .and(warp::post())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and(warp::body::json())
-        .and_then(auto_create_dataset)
-}
-
-// TODO: move into handler once async closures are available?
-async fn auto_create_dataset<C: Context>(
+pub(crate) async fn auto_create_dataset_handler<C: Context>(
     session: C::Session,
-    ctx: C,
-    create: AutoCreateDataset,
-) -> Result<impl warp::Reply, warp::Rejection> {
+    ctx: web::Data<C>,
+    create: web::Json<AutoCreateDataset>,
+) -> Result<impl Responder> {
     let upload = ctx
         .dataset_db_ref()
         .await
         .get_upload(&session, create.upload)
         .await?;
 
-    let create = create.validated()?.user_input;
+    let create = create.into_inner().validated()?.user_input;
 
     let main_file_path = upload.id.root_path()?.join(&create.main_file);
     let meta_data = auto_detect_meta_data_definition(&main_file_path)?;
@@ -364,33 +287,21 @@ async fn auto_create_dataset<C: Context>(
         .add_dataset(&session, properties.validated()?, meta_data)
         .await?;
 
-    Ok(warp::reply::json(&IdResponse::from(id)))
+    Ok(web::Json(IdResponse::from(id)))
 }
 
-pub(crate) fn suggest_meta_data_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path!("dataset" / "suggest")
-        .and(warp::get())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and(warp::query())
-        .and_then(suggest_meta_data)
-}
-
-// TODO: move into handler once async closures are available?
-async fn suggest_meta_data<C: Context>(
+pub(crate) async fn suggest_meta_data_handler<C: Context>(
     session: C::Session,
-    ctx: C,
-    suggest: SuggestMetaData,
-) -> Result<impl warp::Reply, warp::Rejection> {
+    ctx: web::Data<C>,
+    suggest: web::Query<SuggestMetaData>,
+) -> Result<impl Responder> {
     let upload = ctx
         .dataset_db_ref()
         .await
         .get_upload(&session, suggest.upload)
         .await?;
 
-    let main_file = suggest
+    let main_file = suggest.into_inner()
         .main_file
         .or_else(|| suggest_main_file(&upload))
         .ok_or(error::Error::NoMainFileCandidateFound)?;
@@ -399,7 +310,7 @@ async fn suggest_meta_data<C: Context>(
 
     let meta_data = auto_detect_meta_data_definition(&main_file_path)?;
 
-    Ok(warp::reply::json(&MetaDataSuggestion {
+    Ok(web::Json(MetaDataSuggestion {
         main_file,
         meta_data,
     }))

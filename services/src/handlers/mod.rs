@@ -1,13 +1,10 @@
+use crate::contexts::Context;
 use crate::contexts::SessionId;
 use crate::error;
 use crate::error::Result;
-use crate::users::session::{Session, SessionId};
-use crate::users::userdb::UserDb;
-use crate::contexts::Context;
-use actix_web::dev::{Payload, ServiceRequest, ServiceResponse};
-use actix_web::{test, web, FromRequest, HttpMessage, HttpRequest};
+use actix_web::dev::{ServiceRequest, ServiceResponse};
+use actix_web::{test, web, HttpMessage};
 use actix_web_httpauth::extractors::bearer::BearerAuth;
-use futures::future::{err, ok, Ready};
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use std::str::FromStr;
@@ -111,40 +108,6 @@ pub async fn handle_rejection(err: Rejection) -> Result<impl Reply, Rejection> {
 
     let json = warp::reply::json(&ErrorResponse { error, message });
     Ok(warp::reply::with_status(json, code))
-}
-
-pub fn authenticate<C: Context>(
-    ctx: C,
-) -> impl warp::Filter<Extract = (C::Session,), Error = warp::Rejection> + Clone {
-    async fn do_authenticate<C: Context>(
-        ctx: C,
-        token: Option<String>,
-    ) -> Result<C::Session, warp::Rejection> {
-        if let Some(token) = token {
-            if !token.starts_with("Bearer ") {
-                return Err(Error::Authorization {
-                    source: Box::new(Error::InvalidAuthorizationScheme),
-                }
-                .into());
-            }
-
-            let token = SessionId::from_str(&token["Bearer ".len()..])
-                .map_err(Box::new)
-                .context(error::Authorization)?;
-
-            ctx.session_by_id(token).await.map_err(Into::into)
-        } else {
-            Err(Error::Authorization {
-                source: Box::new(Error::MissingAuthorizationHeader),
-            }
-            .into())
-        }
-    }
-
-    warp::any()
-        .and(warp::any().map(move || ctx.clone()))
-        .and(warp::header::optional::<String>("authorization"))
-        .and_then(do_authenticate)
 }*/
 
 pub async fn validate_token<C: Context>(
@@ -156,24 +119,10 @@ pub async fn validate_token<C: Context>(
     let token = SessionId::from_str(credentials.token())
         .map_err(Box::new)
         .context(error::Authorization)?;
-    let session = ctx.session_by_id(token).await.map_err(Into::into);
+
+    let session = ctx.session_by_id(token).await?;
 
     req.extensions_mut().insert(session);
 
     Ok(req)
-}
-
-impl FromRequest for Session {
-    type Error = error::Error;
-    type Future = Ready<Result<Self, Self::Error>>;
-    type Config = ();
-
-    fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
-        let session = req.extensions_mut().remove::<Session>();
-
-        match session {
-            Some(session) => ok(session),
-            None => err(error::Error::MissingAuthorizationHeader),
-        }
-    }
 }

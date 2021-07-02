@@ -2,29 +2,17 @@ use crate::contexts::{InMemoryContext, SimpleContext};
 use crate::error;
 use crate::error::{Error, Result};
 use crate::handlers;
-use crate::handlers::handle_rejection;
+use crate::handlers::validate_token;
 use crate::util::config;
 use crate::util::config::get_config_element;
 
+use actix_files::Files;
+use actix_web::{get, web, App, HttpServer, Responder};
+use actix_web_httpauth::middleware::HttpAuthentication;
 use log::info;
 use snafu::ResultExt;
 use std::net::SocketAddr;
 use std::path::PathBuf;
-use tokio::signal;
-use tokio::sync::oneshot::{Receiver, Sender};
-use warp::fs::File;
-use warp::{Filter, Rejection};
-
-/// Combine filters by boxing them
-/// TODO: avoid boxing while still achieving acceptable compile time
-#[macro_export]
-macro_rules! combine {
-  ($x:expr, $($y:expr),+) => {{
-      let filter = $x.boxed();
-      $( let filter = filter.or($y).boxed(); )+
-      filter
-  }}
-}
 
 /// Starts the webserver for the Geo Engine API.
 ///
@@ -32,10 +20,7 @@ macro_rules! combine {
 ///  * may panic if the `Postgres` backend is chosen without compiling the `postgres` feature
 ///
 ///
-pub async fn start_server(
-    shutdown_rx: Option<Receiver<()>>,
-    static_files_dir: Option<PathBuf>,
-) -> Result<()> {
+pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<()> {
     let web_config: config::Web = get_config_element()?;
     let bind_address = web_config
         .bind_address
@@ -55,7 +40,6 @@ pub async fn start_server(
     info!("Using in memory backend");
 
     start(
-        shutdown_rx,
         static_files_dir,
         bind_address,
         InMemoryContext::new_with_data().await,
@@ -64,7 +48,6 @@ pub async fn start_server(
 }
 
 async fn start<C>(
-    shutdown_rx: Option<Receiver<()>>,
     static_files_dir: Option<PathBuf>,
     bind_address: SocketAddr,
     ctx: C,
@@ -72,7 +55,32 @@ async fn start<C>(
 where
     C: SimpleContext,
 {
-    let handler = combine!(
+    let wrapped_ctx = web::Data::new(ctx);
+
+    HttpServer::new(move || {
+        let app = App::new()
+            .app_data(wrapped_ctx.clone())
+            .wrap(actix_web::middleware::Logger::default())
+            .service(show_version_handler) // TODO: allow disabling this function via config or feature flag
+            .configure(init_routes::<C>);
+
+        if let Some(static_files_dir) = static_files_dir.clone() {
+            app.service(Files::new("/static", static_files_dir))
+        } else {
+            app
+        }
+    })
+    .bind(bind_address)?
+    .run()
+    .await
+    .map_err(Into::into)
+}
+
+pub(crate) fn init_routes<C>(cfg: &mut web::ServiceConfig)
+where
+    C: SimpleContext,
+{
+    /*let handler = combine!(
         handlers::workflows::register_workflow_handler(ctx.clone()),
         handlers::workflows::load_workflow_handler(ctx.clone()),
         handlers::workflows::get_workflow_metadata_handler(ctx.clone()),
@@ -100,19 +108,87 @@ where
         show_version_handler(), // TODO: allow disabling this function via config or feature flag
         serve_static_directory(static_files_dir)
     )
-    .recover(handle_rejection);
-
-    let task = if let Some(receiver) = shutdown_rx {
-        let (_, server) = warp::serve(handler).bind_with_graceful_shutdown(bind_address, async {
-            receiver.await.ok();
-        });
-        tokio::task::spawn(server)
-    } else {
-        let server = warp::serve(handler).bind(bind_address);
-        tokio::task::spawn(server)
-    };
-
-    task.await.context(error::TokioJoin)
+    .recover(handle_rejection);*/
+    cfg.route(
+        "/anonymous",
+        web::post().to(handlers::session::anonymous_handler::<C>),
+    )
+    .service(
+        web::scope("")
+            .wrap(HttpAuthentication::bearer(validate_token::<C>))
+            .route(
+                "/workflow",
+                web::post().to(handlers::workflows::register_workflow_handler::<C>),
+            )
+            .route(
+                "/workflow/{id}",
+                web::get().to(handlers::workflows::load_workflow_handler::<C>),
+            )
+            .route(
+                "/workflow/{id}/metadata",
+                web::get().to(handlers::workflows::get_workflow_metadata_handler::<C>),
+            )
+            .route(
+                "/session",
+                web::get().to(handlers::session::session_handler::<C>),
+            )
+            .route(
+                "/session/project/{project}",
+                web::post().to(handlers::session::session_project_handler::<C>),
+            )
+            .route(
+                "/session/view",
+                web::post().to(handlers::session::session_view_handler::<C>),
+            )
+            .route(
+                "/project",
+                web::post().to(handlers::projects::create_project_handler::<C>),
+            )
+            .route(
+                "/projects",
+                web::get().to(handlers::projects::list_projects_handler::<C>),
+            )
+            .route(
+                "/project/{project}",
+                web::patch().to(handlers::projects::update_project_handler::<C>),
+            )
+            .route(
+                "/project/{project}",
+                web::delete().to(handlers::projects::delete_project_handler::<C>),
+            )
+            .route(
+                "/project/{project}",
+                web::get().to(handlers::projects::load_project_handler::<C>),
+            )
+            .route(
+                "/dataset/internal/{dataset}",
+                web::get().to(handlers::datasets::get_dataset_handler::<C>),
+            )
+            .route(
+                "/dataset/auto",
+                web::post().to(handlers::datasets::auto_create_dataset_handler::<C>),
+            )
+            .route(
+                "/dataset",
+                web::post().to(handlers::datasets::create_dataset_handler::<C>),
+            )
+            .route(
+                "/dataset/suggest",
+                web::get().to(handlers::datasets::suggest_meta_data_handler::<C>),
+            )
+            .route(
+                "/providers",
+                web::get().to(handlers::datasets::list_providers_handler::<C>),
+            )
+            .route(
+                "/datasets/external/{provider}",
+                web::get().to(handlers::datasets::list_external_datasets_handler::<C>),
+            )
+            .route(
+                "/datasets",
+                web::get().to(handlers::datasets::list_datasets_handler::<C>),
+            ),
+    );
 }
 
 /// Shows information about the server software version.
@@ -129,16 +205,9 @@ where
 ///   "commitHash": "16cd0881a79b6f03bb5f1f6ef2b2711e570b9865"
 /// }
 /// ```
-fn show_version_handler() -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone
-{
-    warp::path("version")
-        .and(warp::get())
-        .and_then(show_version)
-}
-
-// TODO: move into handler once async closures are available?
-#[allow(clippy::unused_async)] // the function signature of `Filter`'s `and_then` requires it
-async fn show_version() -> Result<impl warp::Reply, warp::Rejection> {
+#[allow(clippy::unused_async)] // the function signature of request handlers requires it
+#[get("/version")]
+async fn show_version_handler() -> impl Responder {
     #[derive(serde::Serialize)]
     #[serde(rename_all = "camelCase")]
     struct VersionInfo<'a> {
@@ -146,40 +215,10 @@ async fn show_version() -> Result<impl warp::Reply, warp::Rejection> {
         commit_hash: Option<&'a str>,
     }
 
-    Ok(warp::reply::json(&VersionInfo {
+    web::Json(&VersionInfo {
         build_date: option_env!("VERGEN_BUILD_DATE"),
         commit_hash: option_env!("VERGEN_GIT_SHA"),
-    }))
-}
-
-pub fn serve_static_directory(
-    path: Option<PathBuf>,
-) -> impl Filter<Extract = (File,), Error = Rejection> + Clone {
-    let has_path = path.is_some();
-
-    warp::path("static")
-        .and(warp::get())
-        .and_then(move || async move {
-            if has_path {
-                Ok(())
-            } else {
-                Err(warp::reject::not_found())
-            }
-        })
-        .and(warp::fs::dir(path.unwrap_or_default()))
-        .map(|_, dir| dir)
-}
-
-pub async fn interrupt_handler(shutdown_tx: Sender<()>, callback: Option<fn()>) -> Result<()> {
-    signal::ctrl_c().await.context(error::TokioSignal)?;
-
-    if let Some(callback) = callback {
-        callback();
-    }
-
-    shutdown_tx
-        .send(())
-        .map_err(|_error| Error::TokioChannelSend)
+    })
 }
 
 #[cfg(test)]

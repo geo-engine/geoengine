@@ -1,11 +1,6 @@
 use crate::error::Result;
 use crate::handlers::Context;
-use crate::projects::project::{
-    CreateProject, LoadVersion, ProjectId, ProjectListOptions, ProjectVersionId, UpdateProject,
-    UserProjectPermission,
-};
-use crate::projects::projectdb::ProjectDb;
-use crate::users::session::Session;
+use crate::projects::{CreateProject, ProjectDb, ProjectId, ProjectListOptions, UpdateProject};
 use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
 use actix_web::{web, HttpResponse, Responder};
@@ -53,7 +48,7 @@ pub(crate) async fn create_project_handler<C: Context>(
     let id = ctx
         .project_db_ref_mut()
         .await
-        .create(session.user.id, create)
+        .create(&session, create)
         .await?;
     Ok(web::Json(IdResponse::from(id)))
 }
@@ -85,11 +80,7 @@ pub(crate) async fn list_projects_handler<C: Context>(
     options: web::Query<ProjectListOptions>,
 ) -> Result<impl Responder> {
     let options = options.into_inner().validated()?;
-    let listing = ctx
-        .project_db_ref()
-        .await
-        .list(session.user.id, options)
-        .await?;
+    let listing = ctx.project_db_ref().await.list(&session, options).await?;
     Ok(web::Json(listing))
 }
 
@@ -145,66 +136,7 @@ pub(crate) async fn load_project_handler<C: Context>(
     let id = ctx
         .project_db_ref()
         .await
-        .load(session.user.id, *project, LoadVersion::Latest)
-        .await?;
-    Ok(web::Json(id))
-}
-
-/// Retrieves details about a [project](crate::projects::project::Project).
-/// If no version is specified, it loads the latest version.
-///
-/// # Example
-///
-/// ```text
-/// GET /project/df4ad02e-0d61-4e29-90eb-dc1259c1f5b9/[version]
-/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
-/// ```
-/// Response:
-/// ```text
-/// {
-///   "id": "df4ad02e-0d61-4e29-90eb-dc1259c1f5b9",
-///   "version": {
-///     "id": "8f4b8683-f92c-4129-a16f-818aeeee484e",
-///     "changed": "2021-04-26T14:05:39.677390600Z",
-///     "author": "5b4466d2-8bab-4ed8-a182-722af3c80958"
-///   },
-///   "name": "Test",
-///   "description": "Foo",
-///   "layers": [],
-///   "plots": [],
-///   "bounds": {
-///     "spatialReference": "EPSG:4326",
-///     "boundingBox": {
-///       "lowerLeftCoordinate": {
-///         "x": 0.0,
-///         "y": 0.0
-///       },
-///       "upperRightCoordinate": {
-///         "x": 1.0,
-///         "y": 1.0
-///       }
-///     },
-///     "timeInterval": {
-///       "start": 0,
-///       "end": 1
-///     }
-///   },
-///   "timeStep": {
-///     "granularity": "Months",
-///     "step": 1
-///   }
-/// }
-/// ```
-pub(crate) async fn load_project_version_handler<C: Context>(
-    x: web::Path<(ProjectId, ProjectVersionId)>,
-    session: C::Session,
-    ctx: web::Data<C>,
-) -> Result<impl Responder> {
-    let x = x.into_inner();
-    let id = ctx
-        .project_db_ref()
-        .await
-        .load(session.user.id, x.0, LoadVersion::Version(x.1))
+        .load(&session, project.into_inner())
         .await?;
     Ok(web::Json(id))
 }
@@ -241,15 +173,15 @@ pub(crate) async fn load_project_version_handler<C: Context>(
 /// ```
 pub(crate) async fn update_project_handler<C: Context>(
     project: web::Path<ProjectId>,
-    session: Session,
+    session: C::Session,
     ctx: web::Data<C>,
     mut update: web::Json<UpdateProject>,
 ) -> Result<impl Responder> {
-    update.id = *project; // TODO: avoid passing project id in path AND body
+    update.id = project.into_inner(); // TODO: avoid passing project id in path AND body
     let update = update.into_inner().validated()?;
     ctx.project_db_ref_mut()
         .await
-        .update(session.user.id, update)
+        .update(&session, update)
         .await?;
     Ok(HttpResponse::Ok())
 }
@@ -264,137 +196,14 @@ pub(crate) async fn update_project_handler<C: Context>(
 /// ```
 pub(crate) async fn delete_project_handler<C: Context>(
     project: web::Path<ProjectId>,
-    session: Session,
+    session: C::Session,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
     ctx.project_db_ref_mut()
         .await
-        .delete(session.user.id, *project)
+        .delete(&session, *project)
         .await?;
     Ok(HttpResponse::Ok())
-}
-
-/// Lists all [versions](crate::projects::project::ProjectVersion) of a project.
-///
-/// # Example
-///
-/// ```text
-/// GET /project/versions
-/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
-///
-/// "df4ad02e-0d61-4e29-90eb-dc1259c1f5b9"
-/// ```
-/// Response:
-/// ```text
-/// [
-///   {
-///     "id": "8f4b8683-f92c-4129-a16f-818aeeee484e",
-///     "changed": "2021-04-26T14:05:39.677390600Z",
-///     "author": "5b4466d2-8bab-4ed8-a182-722af3c80958"
-///   },
-///   {
-///     "id": "ced041c7-4b1d-4d13-b076-94596be6a36a",
-///     "changed": "2021-04-26T14:13:10.901912700Z",
-///     "author": "5b4466d2-8bab-4ed8-a182-722af3c80958"
-///   }
-/// ]
-/// ```
-pub(crate) async fn project_versions_handler<C: Context>(
-    session: Session,
-    ctx: web::Data<C>,
-    project: web::Json<ProjectId>,
-) -> Result<impl Responder> {
-    let versions = ctx
-        .project_db_ref_mut()
-        .await
-        .versions(session.user.id, *project)
-        .await?;
-    Ok(web::Json(versions))
-}
-
-/// Add a [permission](crate::projects::project::ProjectPermission) for another user
-/// if the session user is the owner of the target project.
-///
-/// # Example
-///
-/// ```text
-/// POST /project/permission/add
-/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
-///
-/// {
-///   "user": "3cbe632e-c50a-46d0-8490-f12621347bb1",
-///   "project": "aaed86a1-49d4-482d-b993-39159bb853df",
-///   "permission": "Read"
-/// }
-/// ```
-pub(crate) async fn add_permission_handler<C: Context>(
-    session: Session,
-    ctx: web::Data<C>,
-    permission: web::Json<UserProjectPermission>,
-) -> Result<impl Responder> {
-    ctx.project_db_ref_mut()
-        .await
-        .add_permission(session.user.id, permission.into_inner())
-        .await?;
-    Ok(HttpResponse::Ok())
-}
-
-/// Removes a [permission](crate::projects::project::ProjectPermission) of another user
-/// if the session user is the owner of the target project.
-///
-/// # Example
-///
-/// ```text
-/// DELETE /project/permission
-/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
-///
-/// {
-///   "user": "3cbe632e-c50a-46d0-8490-f12621347bb1",
-///   "project": "aaed86a1-49d4-482d-b993-39159bb853df",
-///   "permission": "Read"
-/// }
-/// ```
-pub(crate) async fn remove_permission_handler<C: Context>(
-    session: Session,
-    ctx: web::Data<C>,
-    permission: web::Json<UserProjectPermission>,
-) -> Result<impl Responder> {
-    ctx.project_db_ref_mut()
-        .await
-        .remove_permission(session.user.id, permission.into_inner())
-        .await?;
-    Ok(HttpResponse::Ok())
-}
-
-/// Shows the access rights the user has for a given project.
-///
-/// # Example
-///
-/// ```text
-/// GET /project/df4ad02e-0d61-4e29-90eb-dc1259c1f5b9/permissions
-/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
-/// ```
-/// Response:
-/// ```text
-/// [
-///   {
-///     "user": "5b4466d2-8bab-4ed8-a182-722af3c80958",
-///     "project": "df4ad02e-0d61-4e29-90eb-dc1259c1f5b9",
-///     "permission": "Owner"
-///   }
-/// ]
-/// ```
-pub(crate) async fn list_permissions_handler<C: Context>(
-    project: web::Path<ProjectId>,
-    session: Session,
-    ctx: web::Data<C>,
-) -> Result<impl Responder> {
-    let permissions = ctx
-        .project_db_ref_mut()
-        .await
-        .list_permissions(session.user.id, *project)
-        .await?;
-    Ok(web::Json(permissions))
 }
 
 #[cfg(test)]

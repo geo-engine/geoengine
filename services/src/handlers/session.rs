@@ -1,9 +1,7 @@
-use uuid::Uuid;
-use warp::Filter;
+use actix_web::{web, HttpResponse, Responder};
 
 use crate::{
-    contexts::{Context, Session, SimpleContext},
-    handlers::authenticate,
+    contexts::{Context, SimpleContext},
     projects::{ProjectId, STRectangle},
 };
 
@@ -29,18 +27,8 @@ use crate::{
 ///   "view": null
 /// }
 /// ```
-pub(crate) fn anonymous_handler<C: SimpleContext>(
-    ctx: C,
-) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    warp::path!("anonymous")
-        .and(warp::post())
-        .and(warp::any().map(move || ctx.clone()))
-        .and_then(anonymous)
-}
-
-// TODO: move into handler once async closures are available?
-async fn anonymous<C: SimpleContext>(ctx: C) -> Result<impl warp::Reply, warp::Rejection> {
-    Ok(warp::reply::json(&*ctx.default_session_ref().await))
+pub(crate) async fn anonymous_handler<C: SimpleContext>(ctx: web::Data<C>) -> impl Responder {
+    web::Json(ctx.default_session_ref().await.clone())
 }
 
 /// Retrieves details about the [Session].
@@ -70,19 +58,8 @@ async fn anonymous<C: SimpleContext>(ctx: C) -> Result<impl warp::Reply, warp::R
 /// # Errors
 ///
 /// This call fails if the session is invalid.
-pub(crate) fn session_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    warp::path("session")
-        .and(warp::get())
-        .and(authenticate(ctx))
-        .map(session)
-}
-
-// TODO: move into handler once async closures are available?
-#[allow(clippy::needless_pass_by_value)]
-fn session<S: Session>(session: S) -> impl warp::Reply {
-    warp::reply::json(&session)
+pub(crate) async fn session_handler<C: Context>(session: C::Session) -> impl Responder {
+    web::Json(session)
 }
 
 /// Sets the active project of the session.
@@ -97,26 +74,14 @@ fn session<S: Session>(session: S) -> impl warp::Reply {
 /// # Errors
 ///
 /// This call fails if the session is invalid.
-pub(crate) fn session_project_handler<C: SimpleContext>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path!("session" / "project" / Uuid)
-        .map(ProjectId)
-        .and(warp::post())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and_then(session_project)
-}
-
-// TODO: move into handler once async closures are available?
-async fn session_project<C: SimpleContext>(
-    project: ProjectId,
+pub(crate) async fn session_project_handler<C: SimpleContext>(
+    project: web::Path<ProjectId>,
     _session: C::Session,
-    ctx: C,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    ctx.default_session_ref_mut().await.project = Some(project);
+    ctx: web::Data<C>,
+) -> impl Responder {
+    ctx.default_session_ref_mut().await.project = Some(project.into_inner());
 
-    Ok(warp::reply())
+    HttpResponse::Ok()
 }
 
 // TODO: /view instead of /session/view
@@ -144,26 +109,14 @@ async fn session_project<C: SimpleContext>(
 /// # Errors
 ///
 /// This call fails if the session is invalid.
-pub(crate) fn session_view_handler<C: SimpleContext>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path!("session" / "view")
-        .and(warp::post())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and(warp::body::json())
-        .and_then(session_view)
-}
-
-// TODO: move into handler once async closures are available?
-async fn session_view<C: SimpleContext>(
+pub(crate) async fn session_view_handler<C: SimpleContext>(
     _session: C::Session,
-    ctx: C,
-    view: STRectangle,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    ctx.default_session_ref_mut().await.view = Some(view);
+    ctx: web::Data<C>,
+    view: web::Json<STRectangle>,
+) -> impl Responder {
+    ctx.default_session_ref_mut().await.view = Some(view.into_inner());
 
-    Ok(warp::reply())
+    HttpResponse::Ok()
 }
 
 #[cfg(test)]

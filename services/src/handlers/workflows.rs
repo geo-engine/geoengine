@@ -1,14 +1,15 @@
+use actix_web::{web, Responder};
 use uuid::Uuid;
-use warp::reply::Reply;
-use warp::Filter;
 
 use crate::error;
-use crate::handlers::{authenticate, Context};
+use crate::error::Result;
+use crate::handlers::Context;
 use crate::util::IdResponse;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use geoengine_operators::call_on_typed_operator;
 use snafu::ResultExt;
+use geoengine_operators::engine::TypedResultDescriptor;
 
 /// Registers a new [Workflow].
 ///
@@ -37,29 +38,17 @@ use snafu::ResultExt;
 ///   "id": "cee25e8c-18a0-5f1b-a504-0bc30de21e06"
 /// }
 /// ```
-pub(crate) fn register_workflow_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path!("workflow")
-        .and(warp::post())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and(warp::body::json())
-        .and_then(register_workflow)
-}
-
-// TODO: move into handler once async closures are available?
-async fn register_workflow<C: Context>(
+pub(crate) async fn register_workflow_handler<C: Context>(
     _session: C::Session,
-    ctx: C,
-    workflow: Workflow,
-) -> Result<impl warp::Reply, warp::Rejection> {
+    ctx: web::Data<C>,
+    workflow: web::Json<Workflow>,
+) -> Result<impl Responder> {
     let id = ctx
         .workflow_registry_ref_mut()
         .await
-        .register(workflow)
+        .register(workflow.into_inner())
         .await?;
-    Ok(warp::reply::json(&IdResponse::from(id)))
+    Ok(web::Json(IdResponse::from(id)))
 }
 
 /// Retrieves an existing [Workflow] using its id.
@@ -91,28 +80,17 @@ async fn register_workflow<C: Context>(
 ///   }
 /// }
 /// ```
-pub(crate) fn load_workflow_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path!("workflow" / Uuid)
-        .and(warp::get())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and_then(load_workflow)
-}
-
-// TODO: move into handler once async closures are available?
-async fn load_workflow<C: Context>(
-    id: Uuid,
+pub(crate) async fn load_workflow_handler<C: Context>(
+    id: web::Path<Uuid>,
     _session: C::Session,
-    ctx: C,
-) -> Result<impl warp::Reply, warp::Rejection> {
+    ctx: web::Data<C>,
+) -> Result<impl Responder> {
     let wf = ctx
         .workflow_registry_ref()
         .await
-        .load(&WorkflowId(id))
+        .load(&WorkflowId(id.into_inner()))
         .await?;
-    Ok(warp::reply::json(&wf).into_response())
+    Ok(web::Json(wf))
 }
 
 /// Gets the metadata of a workflow.
@@ -131,43 +109,33 @@ async fn load_workflow<C: Context>(
 ///   "columns": {}
 /// }
 /// ```
-pub(crate) fn get_workflow_metadata_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::get()
-        .and(warp::path!("workflow" / Uuid / "metadata"))
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and_then(get_workflow_metadata)
-}
-
-// TODO: move into handler once async closures are available?
-async fn get_workflow_metadata<C: Context>(
-    id: Uuid,
+pub(crate) async fn get_workflow_metadata_handler<C: Context>(
+    id: web::Path<Uuid>,
     session: C::Session,
-    ctx: C,
-) -> Result<impl warp::Reply, warp::Rejection> {
+    ctx: web::Data<C>,
+) -> Result<impl Responder> {
     let workflow = ctx
         .workflow_registry_ref()
         .await
-        .load(&WorkflowId(id))
+        .load(&WorkflowId(id.into_inner()))
         .await?;
 
     let execution_context = ctx.execution_context(session)?;
 
     // TODO: use cache here
-    call_on_typed_operator!(
+    let result_descriptor: TypedResultDescriptor = call_on_typed_operator!(
         workflow.operator,
         operator => {
             let operator = operator
                 .initialize(&execution_context).await
                 .context(error::Operator)?;
 
-            let result_descriptor = operator.result_descriptor();
-
-            Ok(warp::reply::json(result_descriptor))
+            #[allow(clippy::clone_on_copy)]
+            operator.result_descriptor().clone().into()
         }
-    )
+    );
+
+    Ok(web::Json(result_descriptor))
 }
 
 #[cfg(test)]
