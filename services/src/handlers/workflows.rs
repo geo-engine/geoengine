@@ -8,8 +8,8 @@ use crate::util::IdResponse;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use geoengine_operators::call_on_typed_operator;
-use snafu::ResultExt;
 use geoengine_operators::engine::TypedResultDescriptor;
+use snafu::ResultExt;
 
 /// Registers a new [Workflow].
 ///
@@ -412,6 +412,7 @@ mod tests {
         assert_eq!(
             serde_json::from_slice::<serde_json::Value>(res.body()).unwrap(),
             json!({
+                "type": "vector",
                 "dataType": "MultiPoint",
                 "spatialReference": "EPSG:4326",
                 "columns": {
@@ -470,6 +471,7 @@ mod tests {
         assert_eq!(
             serde_json::from_slice::<serde_json::Value>(res.body()).unwrap(),
             serde_json::json!({
+                "type": "raster",
                 "dataType": "U8",
                 "spatialReference": "EPSG:4326",
                 "measurement": {
@@ -569,7 +571,9 @@ mod tests {
 
         assert_eq!(
             serde_json::from_slice::<serde_json::Value>(res.body()).unwrap(),
-            serde_json::json!({})
+            serde_json::json!({
+                "type": "plot",
+            })
         );
     }
 }

@@ -1,3 +1,4 @@
+use crate::projects::{RasterSymbology, Symbology};
 use crate::stac::Feature as StacFeature;
 use crate::stac::FeatureCollection as StacCollection;
 use crate::stac::StacAsset;
@@ -13,6 +14,7 @@ use crate::{
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
+use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
 use geoengine_datatypes::primitives::{Measurement, TimeInterval};
 use geoengine_datatypes::raster::GeoTransform;
 use geoengine_datatypes::raster::RasterDataType;
@@ -30,6 +32,7 @@ use log::debug;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use std::collections::HashMap;
+use std::convert::TryInto;
 use std::path::PathBuf;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -167,6 +170,22 @@ impl SentinelS2L2aCogsDataProvider {
                             no_data_value: band.no_data_value,
                         }
                         .into(),
+                        symbology: Some(Symbology::Raster(RasterSymbology {
+                            opacity: 1.0,
+                            colorizer: Colorizer::linear_gradient(
+                                vec![
+                                    (0.0, RgbaColor::white())
+                                        .try_into()
+                                        .expect("valid breakpoint"),
+                                    (10_000.0, RgbaColor::black())
+                                        .try_into()
+                                        .expect("valid breakpoint"),
+                                ],
+                                RgbaColor::transparent(),
+                                RgbaColor::transparent(),
+                            )
+                            .expect("valid colorizer"),
+                        })), // TODO: individual colorizer per band
                     };
 
                     let dataset = SentinelDataset {

@@ -1,5 +1,6 @@
 use std::iter::Peekable;
 use std::marker::PhantomData;
+use std::ops::Add;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::str::FromStr;
@@ -31,7 +32,7 @@ use geoengine_datatypes::collections::{
 };
 use geoengine_datatypes::primitives::{
     Coordinate2D, FeatureDataType, FeatureDataValue, Geometry, MultiLineString, MultiPoint,
-    MultiPolygon, NoGeometry, TimeInstance, TimeInterval, TypedGeometry,
+    MultiPolygon, NoGeometry, TimeInstance, TimeInterval, TimeStep, TypedGeometry,
 };
 use geoengine_datatypes::provenance::ProvenanceInformation;
 use geoengine_datatypes::util::arrow::ArrowTyped;
@@ -111,7 +112,7 @@ pub enum OgrSourceDatasetTimeType {
     Start {
         start_field: String,
         start_format: OgrSourceTimeFormat,
-        duration: u32,
+        duration: OgrSourceDurationSpec,
     },
     #[serde(rename = "start+end")]
     #[serde(rename_all = "camelCase")]
@@ -207,6 +208,26 @@ impl OgrSourceErrorSpec {
         match self {
             OgrSourceErrorSpec::Ignore => Ok(None),
             OgrSourceErrorSpec::Abort => Err(error),
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", tag = "type")]
+pub enum OgrSourceDurationSpec {
+    Infinite,
+    Zero,
+    Value(TimeStep),
+}
+
+impl Add<OgrSourceDurationSpec> for TimeInstance {
+    type Output = Result<TimeInstance>;
+
+    fn add(self, rhs: OgrSourceDurationSpec) -> Self::Output {
+        match rhs {
+            OgrSourceDurationSpec::Infinite => Ok(TimeInstance::MAX),
+            OgrSourceDurationSpec::Zero => Ok(self),
+            OgrSourceDurationSpec::Value(step) => (self + step).context(error::DataType),
         }
     }
 }
@@ -579,14 +600,13 @@ where
                 start_format,
                 duration,
             } => {
-                let duration = i64::from(*duration);
                 let time_start_parser = Self::create_time_parser(start_format);
 
                 Box::new(move |feature: &Feature| {
                     let field_value = feature.field(&start_field)?;
                     if let Some(field_value) = field_value {
                         let time_start = time_start_parser(field_value)?;
-                        TimeInterval::new(time_start, time_start + duration).map_err(Into::into)
+                        TimeInterval::new(time_start, (time_start + *duration)?).map_err(Into::into)
                     } else {
                         // TODO: throw error or use some user defined default time (like for geometries)?
                         Ok(TimeInterval::default())
@@ -1013,7 +1033,9 @@ mod tests {
         DataCollection, GeometryCollection, MultiPointCollection, MultiPolygonCollection,
     };
     use geoengine_datatypes::dataset::InternalDatasetId;
-    use geoengine_datatypes::primitives::{BoundingBox2D, FeatureData, SpatialResolution};
+    use geoengine_datatypes::primitives::{
+        BoundingBox2D, FeatureData, SpatialResolution, TimeGranularity,
+    };
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
     use geoengine_datatypes::util::Identifier;
     use serde_json::json;
@@ -1030,7 +1052,10 @@ mod tests {
                 start_format: OgrSourceTimeFormat::Custom {
                     custom_format: "YYYY-MM-DD".to_string(),
                 },
-                duration: 42,
+                duration: OgrSourceDurationSpec::Value(TimeStep {
+                    granularity: TimeGranularity::Seconds,
+                    step: 42,
+                }),
             },
             columns: Some(OgrSourceColumnSpec {
                 x: "x".to_string(),
@@ -1064,7 +1089,11 @@ mod tests {
                         "format": "custom",
                         "customFormat": "YYYY-MM-DD"
                     },
-                    "duration": 42
+                    "duration": {
+                        "type": "value",
+                        "granularity": "Seconds",
+                        "step": 42
+                    }
                 },
                 "columns": {
                     "x": "x",
@@ -1097,7 +1126,11 @@ mod tests {
                         "format": "custom",
                         "customFormat": "YYYY-MM-DD"
                     },
-                    "duration": 42
+                    "duration": {
+                        "type": "value",
+                        "granularity": "Seconds",
+                        "step": 42
+                    }
                 },
                 "columns": {
                     "x": "x",
@@ -3505,7 +3538,10 @@ mod tests {
                         start_format: OgrSourceTimeFormat::Custom {
                             custom_format: "%d.%m.%Y".to_owned(),
                         },
-                        duration: 84000,
+                        duration: OgrSourceDurationSpec::Value(TimeStep {
+                            granularity: TimeGranularity::Seconds,
+                            step: 84,
+                        }),
                     },
                     columns: Some(OgrSourceColumnSpec {
                         x: "Longitude".to_owned(),
@@ -3604,7 +3640,10 @@ mod tests {
                         start_format: OgrSourceTimeFormat::Custom {
                             custom_format: "%d.%m.%Y %H:%M:%S".to_owned(),
                         },
-                        duration: 84000,
+                        duration: OgrSourceDurationSpec::Value(TimeStep {
+                            granularity: TimeGranularity::Seconds,
+                            step: 84,
+                        }),
                     },
                     columns: Some(OgrSourceColumnSpec {
                         x: "Longitude".to_owned(),
@@ -3703,7 +3742,10 @@ mod tests {
                         start_format: OgrSourceTimeFormat::Custom {
                             custom_format: "%d.%m.%Y %H:%M:%S %z".to_owned(),
                         },
-                        duration: 84000,
+                        duration: OgrSourceDurationSpec::Value(TimeStep {
+                            granularity: TimeGranularity::Seconds,
+                            step: 84,
+                        }),
                     },
                     columns: Some(OgrSourceColumnSpec {
                         x: "Longitude".to_owned(),
