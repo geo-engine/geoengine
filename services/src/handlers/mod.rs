@@ -3,10 +3,12 @@ use crate::contexts::SessionId;
 use crate::error;
 use crate::error::Result;
 use actix_web::dev::{ServiceRequest, ServiceResponse};
-use actix_web::{test, web, HttpMessage};
+use actix_web::http::StatusCode;
+use actix_web::{test, web, HttpMessage, HttpResponse};
 use actix_web_httpauth::extractors::bearer::BearerAuth;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
+use std::fmt;
 use std::str::FromStr;
 
 pub mod datasets;
@@ -42,6 +44,22 @@ impl ErrorResponse {
                 message: message.to_string(),
             }
         );
+    }
+}
+
+impl actix_web::ResponseError for ErrorResponse {
+    fn error_response(&self) -> HttpResponse {
+        HttpResponse::build(self.status_code()).json(self)
+    }
+
+    fn status_code(&self) -> StatusCode {
+        StatusCode::BAD_REQUEST
+    }
+}
+
+impl fmt::Display for ErrorResponse {
+    fn fmt(&self, _f: &mut fmt::Formatter) -> fmt::Result {
+        unimplemented!("required by ResponseError")
     }
 }
 

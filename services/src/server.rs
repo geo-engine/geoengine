@@ -2,12 +2,13 @@ use crate::contexts::{InMemoryContext, SimpleContext};
 use crate::error;
 use crate::error::{Error, Result};
 use crate::handlers;
-use crate::handlers::validate_token;
+use crate::handlers::{validate_token, ErrorResponse};
 use crate::util::config;
 use crate::util::config::get_config_element;
 
 use actix_files::Files;
-use actix_web::{web, App, HttpServer, Responder};
+use actix_web::error::{InternalError, JsonPayloadError};
+use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use actix_web_httpauth::middleware::HttpAuthentication;
 use log::info;
 use snafu::ResultExt;
@@ -58,8 +59,27 @@ where
     let wrapped_ctx = web::Data::new(ctx);
 
     HttpServer::new(move || {
+        let json_config = web::JsonConfig::default().error_handler(|err, _req| match err {
+            JsonPayloadError::Overflow => todo!(),
+            JsonPayloadError::ContentType => InternalError::from_response(
+                err,
+                HttpResponse::UnsupportedMediaType().json(ErrorResponse {
+                    error: "UnsupportedMediaType".to_string(),
+                    message: "Unsupported content type header.".to_string(),
+                }),
+            )
+            .into(),
+            JsonPayloadError::Deserialize(err) => ErrorResponse {
+                error: "BodyDeserializeError".to_string(),
+                message: err.to_string(),
+            }
+            .into(),
+            JsonPayloadError::Payload(err) => todo!(),
+        });
+
         let app = App::new()
             .app_data(wrapped_ctx.clone())
+            .app_data(json_config)
             .wrap(actix_web::middleware::Logger::default())
             .configure(init_routes::<C>);
 

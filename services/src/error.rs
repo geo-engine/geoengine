@@ -1,5 +1,4 @@
 use crate::handlers::ErrorResponse;
-use actix_web::dev::HttpResponseBuilder;
 use actix_web::http::StatusCode;
 use actix_web::HttpResponse;
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
@@ -189,7 +188,7 @@ impl actix_web::error::ResponseError for Error {
             _ => (Into::<&str>::into(self).to_string(), self.to_string()),
         };
 
-        HttpResponseBuilder::new(self.status_code()).json(ErrorResponse { error, message })
+        HttpResponse::build(self.status_code()).json(ErrorResponse { error, message })
     }
 
     fn status_code(&self) -> StatusCode {
