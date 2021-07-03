@@ -61,7 +61,6 @@ where
         let app = App::new()
             .app_data(wrapped_ctx.clone())
             .wrap(actix_web::middleware::Logger::default())
-            .service(show_version_handler) // TODO: allow disabling this function via config or feature flag
             .configure(init_routes::<C>);
 
         if let Some(static_files_dir) = static_files_dir.clone() {
@@ -80,115 +79,105 @@ pub(crate) fn init_routes<C>(cfg: &mut web::ServiceConfig)
 where
     C: SimpleContext,
 {
-    /*let handler = combine!(
-        handlers::workflows::register_workflow_handler(ctx.clone()),
-        handlers::workflows::load_workflow_handler(ctx.clone()),
-        handlers::workflows::get_workflow_metadata_handler(ctx.clone()),
-        handlers::session::anonymous_handler(ctx.clone()),
-        handlers::session::session_handler(ctx.clone()),
-        handlers::session::session_project_handler(ctx.clone()),
-        handlers::session::session_view_handler(ctx.clone()),
-        handlers::projects::create_project_handler(ctx.clone()),
-        handlers::projects::list_projects_handler(ctx.clone()),
-        handlers::projects::update_project_handler(ctx.clone()),
-        handlers::projects::delete_project_handler(ctx.clone()),
-        handlers::projects::load_project_handler(ctx.clone()),
-        handlers::datasets::get_dataset_handler(ctx.clone()),
-        handlers::datasets::auto_create_dataset_handler(ctx.clone()),
-        handlers::datasets::create_dataset_handler(ctx.clone()),
-        handlers::datasets::suggest_meta_data_handler(ctx.clone()),
-        handlers::datasets::list_providers_handler(ctx.clone()),
-        handlers::datasets::list_external_datasets_handler(ctx.clone()),
-        handlers::datasets::list_datasets_handler(ctx.clone()), // must come after `list_external_datasets_handler`
-        handlers::wms::wms_handler(ctx.clone()),
-        handlers::wfs::wfs_handler(ctx.clone()),
-        handlers::plots::get_plot_handler(ctx.clone()),
-        handlers::upload::upload_handler(ctx.clone()),
-        handlers::spatial_references::get_spatial_reference_specification_handler(ctx.clone()),
-        show_version_handler(), // TODO: allow disabling this function via config or feature flag
-        serve_static_directory(static_files_dir)
-    )
-    .recover(handle_rejection);*/
-    cfg.route(
-        "/anonymous",
-        web::post().to(handlers::session::anonymous_handler::<C>),
-    )
-    .service(
-        web::scope("")
-            .wrap(HttpAuthentication::bearer(validate_token::<C>))
-            .route(
-                "/workflow",
-                web::post().to(handlers::workflows::register_workflow_handler::<C>),
-            )
-            .route(
-                "/workflow/{id}",
-                web::get().to(handlers::workflows::load_workflow_handler::<C>),
-            )
-            .route(
-                "/workflow/{id}/metadata",
-                web::get().to(handlers::workflows::get_workflow_metadata_handler::<C>),
-            )
-            .route(
-                "/session",
-                web::get().to(handlers::session::session_handler::<C>),
-            )
-            .route(
-                "/session/project/{project}",
-                web::post().to(handlers::session::session_project_handler::<C>),
-            )
-            .route(
-                "/session/view",
-                web::post().to(handlers::session::session_view_handler::<C>),
-            )
-            .route(
-                "/project",
-                web::post().to(handlers::projects::create_project_handler::<C>),
-            )
-            .route(
-                "/projects",
-                web::get().to(handlers::projects::list_projects_handler::<C>),
-            )
-            .route(
-                "/project/{project}",
-                web::patch().to(handlers::projects::update_project_handler::<C>),
-            )
-            .route(
-                "/project/{project}",
-                web::delete().to(handlers::projects::delete_project_handler::<C>),
-            )
-            .route(
-                "/project/{project}",
-                web::get().to(handlers::projects::load_project_handler::<C>),
-            )
-            .route(
-                "/dataset/internal/{dataset}",
-                web::get().to(handlers::datasets::get_dataset_handler::<C>),
-            )
-            .route(
-                "/dataset/auto",
-                web::post().to(handlers::datasets::auto_create_dataset_handler::<C>),
-            )
-            .route(
-                "/dataset",
-                web::post().to(handlers::datasets::create_dataset_handler::<C>),
-            )
-            .route(
-                "/dataset/suggest",
-                web::get().to(handlers::datasets::suggest_meta_data_handler::<C>),
-            )
-            .route(
-                "/providers",
-                web::get().to(handlers::datasets::list_providers_handler::<C>),
-            )
-            .route(
-                "/datasets/external/{provider}",
-                web::get().to(handlers::datasets::list_external_datasets_handler::<C>),
-            )
-            .route(
-                "/datasets",
-                web::get().to(handlers::datasets::list_datasets_handler::<C>),
-            ),
-    );
+    cfg.route("/version", web::get().to(show_version_handler)) // TODO: allow disabling this function via config or feature flag
+        .route("/wms", web::get().to(handlers::wms::wms_handler::<C>))
+        .route("/wfs", web::get().to(handlers::wfs::wfs_handler::<C>))
+        .route(
+            "/anonymous",
+            web::post().to(handlers::session::anonymous_handler::<C>),
+        )
+        .service(
+            web::scope("")
+                .wrap(HttpAuthentication::bearer(validate_token::<C>))
+                .route(
+                    "/workflow",
+                    web::post().to(handlers::workflows::register_workflow_handler::<C>),
+                )
+                .route(
+                    "/workflow/{id}",
+                    web::get().to(handlers::workflows::load_workflow_handler::<C>),
+                )
+                .route(
+                    "/workflow/{id}/metadata",
+                    web::get().to(handlers::workflows::get_workflow_metadata_handler::<C>),
+                )
+                .route(
+                    "/session",
+                    web::get().to(handlers::session::session_handler::<C>),
+                )
+                .route(
+                    "/session/project/{project}",
+                    web::post().to(handlers::session::session_project_handler::<C>),
+                )
+                .route(
+                    "/session/view",
+                    web::post().to(handlers::session::session_view_handler::<C>),
+                )
+                .route(
+                    "/project",
+                    web::post().to(handlers::projects::create_project_handler::<C>),
+                )
+                .route(
+                    "/projects",
+                    web::get().to(handlers::projects::list_projects_handler::<C>),
+                )
+                .route(
+                    "/project/{project}",
+                    web::patch().to(handlers::projects::update_project_handler::<C>),
+                )
+                .route(
+                    "/project/{project}",
+                    web::delete().to(handlers::projects::delete_project_handler::<C>),
+                )
+                .route(
+                    "/project/{project}",
+                    web::get().to(handlers::projects::load_project_handler::<C>),
+                )
+                .route(
+                    "/dataset/internal/{dataset}",
+                    web::get().to(handlers::datasets::get_dataset_handler::<C>),
+                )
+                .route(
+                    "/dataset/auto",
+                    web::post().to(handlers::datasets::auto_create_dataset_handler::<C>),
+                )
+                .route(
+                    "/dataset",
+                    web::post().to(handlers::datasets::create_dataset_handler::<C>),
+                )
+                .route(
+                    "/dataset/suggest",
+                    web::get().to(handlers::datasets::suggest_meta_data_handler::<C>),
+                )
+                .route(
+                    "/providers",
+                    web::get().to(handlers::datasets::list_providers_handler::<C>),
+                )
+                .route(
+                    "/datasets/external/{provider}",
+                    web::get().to(handlers::datasets::list_external_datasets_handler::<C>),
+                )
+                .route(
+                    "/datasets",
+                    web::get().to(handlers::datasets::list_datasets_handler::<C>),
+                )
+                .route(
+                    "/plot/{id}",
+                    web::get().to(handlers::plots::get_plot_handler::<C>),
+                )
+                .route(
+                    "/upload",
+                    web::post().to(handlers::upload::upload_handler::<C>),
+                )
+                .route(
+                    "/spatialReferenceSpecification/{srs_string}",
+                    web::get().to(
+                        handlers::spatial_references::get_spatial_reference_specification_handler::<
+                            C,
+                        >,
+                    ),
+                ),
+        );
 }
 
 /// Shows information about the server software version.
@@ -206,7 +195,6 @@ where
 /// }
 /// ```
 #[allow(clippy::unused_async)] // the function signature of request handlers requires it
-#[get("/version")]
 async fn show_version_handler() -> impl Responder {
     #[derive(serde::Serialize)]
     #[serde(rename_all = "camelCase")]

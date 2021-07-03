@@ -145,7 +145,9 @@ pub enum Error {
     UploadFieldMissingFileName,
     UnknownUploadId,
     PathIsNotAFile,
-    MultiPartBoundaryMissing,
+    Multipart {
+        source: actix_multipart::MultipartError,
+    },
     InvalidUploadFileName,
     InvalidDatasetName,
     DatasetHasNoAutoImportableLayer,
@@ -249,5 +251,11 @@ impl From<gdal::errors::GdalError> for Error {
 impl From<reqwest::Error> for Error {
     fn from(source: reqwest::Error) -> Self {
         Self::Reqwest { source }
+    }
+}
+
+impl From<actix_multipart::MultipartError> for Error {
+    fn from(source: actix_multipart::MultipartError) -> Self {
+        Self::Multipart { source }
     }
 }

@@ -1,16 +1,15 @@
 use tokio::{fs, io::AsyncWriteExt};
 
-use futures::{Stream, TryStreamExt};
+use actix_multipart::Multipart;
+use actix_web::{web, Responder};
+use futures::StreamExt;
 use geoengine_datatypes::util::Identifier;
-use warp::Filter;
 
 use crate::datasets::upload::{FileId, FileUpload, Upload, UploadDb, UploadId, UploadRootPath};
 use crate::error;
-use crate::handlers::{authenticate, Context};
+use crate::error::Result;
+use crate::handlers::Context;
 use crate::util::IdResponse;
-use bytes::Buf;
-use mime::Mime;
-use mpart_async::server::MultipartStream;
 use snafu::ResultExt;
 
 /// Uploads files.
@@ -33,35 +32,11 @@ use snafu::ResultExt;
 ///   "id": "420b06de-0a7e-45cb-9c1c-ea901b46ab69"
 /// }
 /// ```
-pub(crate) fn upload_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path("upload")
-        .and(warp::post())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and(warp::header::<Mime>("content-type"))
-        .and(warp::body::stream())
-        .and_then(upload)
-}
-
-// TODO: move into handler once async closures are available?
-async fn upload<C: Context>(
+pub(crate) async fn upload_handler<C: Context>(
     session: C::Session,
-    ctx: C,
-    mime: Mime,
-    body: impl Stream<Item = Result<impl Buf, warp::Error>> + Unpin,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    let boundary = mime
-        .get_param("boundary")
-        .map(|v| v.to_string())
-        .ok_or(error::Error::MultiPartBoundaryMissing)?;
-
-    let mut stream = MultipartStream::new(
-        boundary,
-        body.map_ok(|mut buf| buf.copy_to_bytes(buf.remaining())),
-    );
-
+    ctx: web::Data<C>,
+    mut body: Multipart,
+) -> Result<impl Responder> {
     let upload_id = UploadId::new();
 
     let root = upload_id.root_path()?;
@@ -69,10 +44,13 @@ async fn upload<C: Context>(
     fs::create_dir_all(&root).await.context(error::Io)?;
 
     let mut files: Vec<FileUpload> = vec![];
-    while let Ok(Some(mut field)) = stream.try_next().await {
+    while let Some(item) = body.next().await {
+        let mut field = item?;
         let file_name = field
-            .filename()
-            .map_err(|_| error::Error::UploadFieldMissingFileName)?
+            .content_disposition()
+            .ok_or(error::Error::UploadFieldMissingFileName)?
+            .get_filename()
+            .ok_or(error::Error::UploadFieldMissingFileName)?
             .to_owned();
 
         let file_id = FileId::new();
@@ -81,7 +59,8 @@ async fn upload<C: Context>(
             .context(error::Io)?;
 
         let mut byte_size = 0;
-        while let Ok(Some(bytes)) = field.try_next().await {
+        while let Some(chunk) = field.next().await {
+            let bytes = chunk?;
             file.write_all(&bytes).await.context(error::Io)?;
             byte_size += bytes.len();
         }
@@ -104,7 +83,7 @@ async fn upload<C: Context>(
         )
         .await?;
 
-    Ok(warp::reply::json(&IdResponse::from(upload_id)))
+    Ok(web::Json(IdResponse::from(upload_id)))
 }
 
 #[cfg(test)]

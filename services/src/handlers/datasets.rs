@@ -20,6 +20,7 @@ use crate::{
     datasets::{listing::DatasetListOptions, upload::UploadDb},
     util::IdResponse,
 };
+use actix_web::{web, Responder};
 use gdal::{vector::Layer, Dataset};
 use gdal::{vector::OGRFieldType, DatasetOptions};
 use geoengine_datatypes::{
@@ -37,7 +38,6 @@ use geoengine_operators::{
     util::gdal::{gdal_open_dataset, gdal_open_dataset_ex},
 };
 use snafu::ResultExt;
-use actix_web::{web, Responder};
 
 pub(crate) async fn list_providers_handler<C: Context>(
     session: C::Session,
@@ -303,7 +303,8 @@ pub(crate) async fn suggest_meta_data_handler<C: Context>(
         .get_upload(&session, suggest.upload)
         .await?;
 
-    let main_file = suggest.into_inner()
+    let main_file = suggest
+        .into_inner()
         .main_file
         .or_else(|| suggest_main_file(&upload))
         .ok_or(error::Error::NoMainFileCandidateFound)?;

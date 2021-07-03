@@ -1,7 +1,5 @@
-use log::debug;
+use actix_web::{web, HttpResponse};
 use snafu::ResultExt;
-use warp::reply::Reply;
-use warp::{http::Response, Filter, Rejection};
 
 use geoengine_datatypes::primitives::BoundingBox2D;
 use geoengine_datatypes::{
@@ -30,42 +28,17 @@ use num_traits::AsPrimitive;
 
 use std::str::FromStr;
 
-pub(crate) fn wms_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    warp::path!("wms")
-        .and(warp::get())
-        .and(
-            warp::query::raw().and_then(|query_string: String| async move {
-                debug!("{}", query_string);
-
-                // TODO: make case insensitive by using serde-aux instead
-                let query_string = query_string.replace("REQUEST", "request");
-
-                serde_urlencoded::from_str::<WmsRequest>(&query_string)
-                    .context(error::UnableToParseQueryString)
-                    .map_err(Rejection::from)
-            }),
-        )
-        // .and(warp::query::<WMSRequest>())
-        .and(warp::any().map(move || ctx.clone()))
-        .and_then(wms)
-}
-
-// TODO: move into handler once async closures are available?
-async fn wms<C: Context>(
-    request: WmsRequest,
-    ctx: C,
-) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
+pub(crate) async fn wms_handler<C: Context>(
+    request: web::Query<WmsRequest>,
+    ctx: web::Data<C>,
+) -> Result<HttpResponse> {
     // TODO: authentication
     // TODO: more useful error output than "invalid query string"
-    match request {
+    match request.into_inner() {
         WmsRequest::GetCapabilities(request) => get_capabilities(&request),
-        WmsRequest::GetMap(request) => get_map(&request, &ctx).await,
-        WmsRequest::GetLegendGraphic(request) => get_legend_graphic(&request, &ctx),
-        _ => Ok(Box::new(
-            warp::http::StatusCode::NOT_IMPLEMENTED.into_response(),
-        )),
+        WmsRequest::GetMap(request) => get_map(&request, ctx.get_ref()).await,
+        WmsRequest::GetLegendGraphic(request) => get_legend_graphic(&request, ctx.get_ref()),
+        _ => Ok(HttpResponse::NotImplemented().finish()),
     }
 }
 
@@ -128,7 +101,7 @@ async fn wms<C: Context>(
 /// </WMS_Capabilities>
 /// ```
 #[allow(clippy::unnecessary_wraps)] // TODO: remove line once implemented fully
-fn get_capabilities(_request: &GetCapabilities) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
+fn get_capabilities(_request: &GetCapabilities) -> Result<HttpResponse> {
     // TODO: implement
     // TODO: inject correct url of the instance and return data for the default layer
     let wms_url = "http://localhost/wms".to_string();
@@ -184,7 +157,9 @@ fn get_capabilities(_request: &GetCapabilities) -> Result<Box<dyn warp::Reply>, 
         wms_url = wms_url
     );
 
-    Ok(Box::new(warp::reply::html(mock)))
+    Ok(HttpResponse::Ok()
+        .content_type(mime::TEXT_HTML_UTF_8)
+        .body(mock))
 }
 
 /// Renders a map as raster image.
@@ -196,10 +171,7 @@ fn get_capabilities(_request: &GetCapabilities) -> Result<Box<dyn warp::Reply>, 
 /// ```
 /// Response:
 /// PNG image
-async fn get_map<C: Context>(
-    request: &GetMap,
-    ctx: &C,
-) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
+async fn get_map<C: Context>(request: &GetMap, ctx: &C) -> Result<HttpResponse> {
     // TODO: validate request?
     if request.layers == "mock_raster" {
         return get_map_mock(request);
@@ -288,12 +260,9 @@ async fn get_map<C: Context>(
             raster_stream_to_png_bytes(p, query_rect, query_ctx, request.width, request.height, request.time, colorizer, no_data_value.map(AsPrimitive::as_)).await
     ).map_err(error::Error::from)?;
 
-    Ok(Box::new(
-        Response::builder()
-            .header("Content-Type", "image/png")
-            .body(image_bytes)
-            .context(error::Http)?,
-    ))
+    Ok(HttpResponse::Ok()
+        .content_type(mime::IMAGE_PNG)
+        .body(image_bytes))
 }
 
 fn colorizer_from_style(styles: &str) -> Result<Option<Colorizer>> {
@@ -304,17 +273,12 @@ fn colorizer_from_style(styles: &str) -> Result<Option<Colorizer>> {
 }
 
 #[allow(clippy::unnecessary_wraps)] // TODO: remove line once implemented fully
-fn get_legend_graphic<C: Context>(
-    _request: &GetLegendGraphic,
-    _ctx: &C,
-) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
+fn get_legend_graphic<C: Context>(_request: &GetLegendGraphic, _ctx: &C) -> Result<HttpResponse> {
     // TODO: implement
-    Ok(Box::new(
-        warp::http::StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    ))
+    Ok(HttpResponse::InternalServerError().finish())
 }
 
-fn get_map_mock(request: &GetMap) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
+fn get_map_mock(request: &GetMap) -> Result<HttpResponse> {
     let raster = Grid2D::new(
         [2, 2].into(),
         vec![
@@ -332,12 +296,9 @@ fn get_map_mock(request: &GetMap) -> Result<Box<dyn warp::Reply>, warp::Rejectio
         .to_png(request.width, request.height, &colorizer)
         .context(error::DataType)?;
 
-    Ok(Box::new(
-        Response::builder()
-            .header("Content-Type", "image/png")
-            .body(image_bytes)
-            .context(error::Http)?,
-    ))
+    Ok(HttpResponse::Ok()
+        .content_type(mime::IMAGE_PNG)
+        .body(image_bytes))
 }
 
 #[cfg(test)]

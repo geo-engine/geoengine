@@ -1,12 +1,12 @@
+use actix_web::{web, Responder};
 use geoengine_datatypes::{
     primitives::BoundingBox2D,
     spatial_reference::{SpatialReference, SpatialReferenceAuthority},
 };
 use serde::{Deserialize, Serialize};
-use warp::Filter;
 
 use crate::handlers::{authenticate, Context};
-use crate::{contexts::Session, error};
+use crate::{error, error::Result};
 
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -18,20 +18,10 @@ pub struct SpatialReferenceSpecification {
     axis_labels: Option<(String, String)>,
 }
 
-pub(crate) fn get_spatial_reference_specification_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path!("spatialReferenceSpecification" / String)
-        .and(warp::get())
-        .and(authenticate(ctx))
-        .and_then(get_spatial_reference_specification)
-}
-
-#[allow(clippy::unused_async)] // the function signature of `Filter`'s `and_then` requires it
-async fn get_spatial_reference_specification<S: Session>(
-    srs_string: String,
-    _session: S,
-) -> Result<impl warp::Reply, warp::Rejection> {
+pub(crate) async fn get_spatial_reference_specification_handler<C: Context>(
+    srs_string: web::Path<String>,
+    _session: C::Session,
+) -> Result<impl Responder> {
     // TODO: get specification from Proj or some other source
     let spec = match srs_string.to_uppercase().as_str() {
         "EPSG:4326" => SpatialReferenceSpecification {
@@ -84,10 +74,10 @@ async fn get_spatial_reference_specification<S: Session>(
             axis_labels: None,
         },
 
-        _ => return Err(error::Error::UnknownSpatialReference { srs_string }.into()), // TODO: 400 on invalid srsString, 404 not found
+        _ => return Err(error::Error::UnknownSpatialReference { srs_string: srs_string.into_inner() }.into()), // TODO: 400 on invalid srsString, 404 not found
     };
 
-    Ok(warp::reply::json(&spec))
+    Ok(web::Json(spec))
 }
 
 #[cfg(test)]

@@ -1,6 +1,5 @@
+use actix_web::{web, HttpResponse};
 use snafu::ResultExt;
-use warp::reply::Reply;
-use warp::{http::Response, Filter};
 
 use crate::contexts::MockableSession;
 use crate::error;
@@ -27,29 +26,16 @@ use geoengine_operators::processing::{Reprojection, ReprojectionParams};
 use serde_json::json;
 use std::str::FromStr;
 
-pub(crate) fn wfs_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path!("wfs")
-        .and(warp::get())
-        .and(warp::query::<WfsRequest>())
-        .and(warp::any().map(move || ctx.clone()))
-        .and_then(wfs)
-}
-
-// TODO: move into handler once async closures are available?
-async fn wfs<C: Context>(
-    request: WfsRequest,
-    ctx: C,
-) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
+pub(crate) async fn wfs_handler<C: Context>(
+    request: web::Query<WfsRequest>,
+    ctx: web::Data<C>,
+) -> Result<HttpResponse> {
     // TODO: authentication
     // TODO: more useful error output than "invalid query string"
-    match request {
+    match request.into_inner() {
         WfsRequest::GetCapabilities(request) => get_capabilities(&request),
-        WfsRequest::GetFeature(request) => get_feature(&request, &ctx).await,
-        _ => Ok(Box::new(
-            warp::http::StatusCode::NOT_IMPLEMENTED.into_response(),
-        )),
+        WfsRequest::GetFeature(request) => get_feature(&request, ctx.get_ref()).await,
+        _ => Ok(HttpResponse::NotImplemented().finish()),
     }
 }
 
@@ -151,7 +137,7 @@ async fn wfs<C: Context>(
 /// </wfs:WFS_Capabilities>
 /// ```
 #[allow(clippy::unnecessary_wraps)] // TODO: remove line once implemented fully
-fn get_capabilities(_request: &GetCapabilities) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
+fn get_capabilities(_request: &GetCapabilities) -> Result<HttpResponse> {
     // TODO: implement
     // TODO: inject correct url of the instance and return data for the default layer
     let wfs_url = "http://localhost/wfs".to_string();
@@ -245,7 +231,9 @@ fn get_capabilities(_request: &GetCapabilities) -> Result<Box<dyn warp::Reply>, 
         wfs_url = wfs_url
     );
 
-    Ok(Box::new(warp::reply::html(mock)))
+    Ok(HttpResponse::Ok()
+        .content_type(mime::TEXT_HTML_UTF_8)
+        .body(mock))
 }
 
 /// Retrieves feature data objects.
@@ -353,10 +341,7 @@ fn get_capabilities(_request: &GetCapabilities) -> Result<Box<dyn warp::Reply>, 
 ///   ]
 /// }
 /// ```
-async fn get_feature<C: Context>(
-    request: &GetFeature,
-    ctx: &C,
-) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
+async fn get_feature<C: Context>(request: &GetFeature, ctx: &C) -> Result<HttpResponse> {
     // TODO: validate request?
     if request.type_names
         == (TypeNames {
@@ -453,12 +438,7 @@ async fn get_feature<C: Context>(
         }
     }?;
 
-    Ok(Box::new(
-        Response::builder()
-            .header("Content-Type", "application/json")
-            .body(json.to_string())
-            .context(error::Http)?,
-    ))
+    Ok(HttpResponse::Ok().json(json))
 }
 
 async fn vector_stream_to_geojson<G>(
@@ -514,7 +494,7 @@ where
 }
 
 #[allow(clippy::unnecessary_wraps)] // TODO: remove line once implemented fully
-fn get_feature_mock(_request: &GetFeature) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
+fn get_feature_mock(_request: &GetFeature) -> Result<HttpResponse> {
     let collection = MultiPointCollection::from_data(
         MultiPoint::many(vec![
             (0.0, 0.1),
@@ -535,7 +515,9 @@ fn get_feature_mock(_request: &GetFeature) -> Result<Box<dyn warp::Reply>, warp:
     )
     .unwrap();
 
-    Ok(Box::new(warp::reply::html(collection.to_geo_json())))
+    Ok(HttpResponse::Ok()
+        .content_type(mime::APPLICATION_JSON)
+        .body(collection.to_geo_json()))
 }
 
 #[cfg(test)]

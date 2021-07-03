@@ -1,7 +1,7 @@
+use actix_web::{web, Responder};
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use uuid::Uuid;
-use warp::Filter;
 
 use geoengine_datatypes::plots::PlotOutputFormat;
 use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution, TimeInterval};
@@ -9,6 +9,7 @@ use geoengine_operators::engine::{QueryRectangle, TypedPlotQueryProcessor};
 
 use crate::contexts::Context;
 use crate::error;
+use crate::error::Result;
 use crate::handlers::authenticate;
 use crate::ogc::util::{parse_bbox, parse_time};
 use crate::util::parsing::parse_spatial_resolution;
@@ -106,28 +107,16 @@ pub(crate) struct GetPlot {
 ///   ]
 /// }
 /// ```
-pub(crate) fn get_plot_handler<C: Context>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path!("plot" / Uuid)
-        .and(warp::get())
-        .and(warp::query::query::<GetPlot>())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and_then(get_plot)
-}
-
-// TODO: move into handler once async closures are available?
-async fn get_plot<C: Context>(
-    id: Uuid,
-    params: GetPlot,
+pub(crate) async fn get_plot_handler<C: Context>(
+    id: web::Path<Uuid>,
+    params: web::Query<GetPlot>,
     session: C::Session,
-    ctx: C,
-) -> Result<impl warp::Reply, warp::Rejection> {
+    ctx: web::Data<C>,
+) -> Result<impl Responder> {
     let workflow = ctx
         .workflow_registry_ref()
         .await
-        .load(&WorkflowId(id))
+        .load(&WorkflowId(id.into_inner()))
         .await?;
 
     let operator = workflow.operator.get_plot().context(error::Operator)?;
@@ -183,7 +172,7 @@ async fn get_plot<C: Context>(
         data,
     };
 
-    Ok(warp::reply::json(&output))
+    Ok(web::Json(output))
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
