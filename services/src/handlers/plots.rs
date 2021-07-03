@@ -10,7 +10,6 @@ use geoengine_operators::engine::{QueryRectangle, TypedPlotQueryProcessor};
 use crate::contexts::Context;
 use crate::error;
 use crate::error::Result;
-use crate::handlers::authenticate;
 use crate::ogc::util::{parse_bbox, parse_time};
 use crate::util::parsing::parse_spatial_resolution;
 use crate::workflows::registry::WorkflowRegistry;

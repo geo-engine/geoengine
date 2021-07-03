@@ -5,7 +5,7 @@ use geoengine_datatypes::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::handlers::{authenticate, Context};
+use crate::handlers::Context;
 use crate::{error, error::Result};
 
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]

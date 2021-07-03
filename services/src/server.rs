@@ -7,7 +7,7 @@ use crate::util::config;
 use crate::util::config::get_config_element;
 
 use actix_files::Files;
-use actix_web::{get, web, App, HttpServer, Responder};
+use actix_web::{web, App, HttpServer, Responder};
 use actix_web_httpauth::middleware::HttpAuthentication;
 use log::info;
 use snafu::ResultExt;

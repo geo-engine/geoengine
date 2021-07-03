@@ -153,7 +153,7 @@ pub async fn check_allowed_http_methods2<T, TRes, P, PParam>(
             let res = test_helper(method).await;
             let res = projector(res);
 
-            ErrorResponse::assert(res, 405, "MethodNotAllowed", "HTTP method not allowed.");
+            ErrorResponse::assert(res, 405, "MethodNotAllowed", "HTTP method not allowed.").await;
         }
     }
 }
