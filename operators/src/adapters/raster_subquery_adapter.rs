@@ -240,17 +240,15 @@ where
             None => return Poll::Ready(None),
         };
 
-        let tile_result = match future_result {
-            Ok(tile_accu) => tile_accu.into_tile(),
-            Err(err) => return Poll::Ready(Some(Err(err))),
-        };
-
         // set the running future to None --> will create a new one in the next call
         this.running_fold.set(None);
 
-        // update the end_time from the produced tile
-        let t_end = tile_result.time.end();
-        this.time_end.replace(t_end);
+        let tile_accu_result = future_result.map(FoldTileAccu::into_tile);
+
+        // if we produced a tile: get the end of the current time slot (must be the same for all tiles in the slot)
+        if let Ok(ref r) = tile_accu_result {
+            this.time_end.replace(r.time.end());
+        }
 
         // make tile progress
         *this.current_spatial_tile += 1;
@@ -259,22 +257,21 @@ where
             // reset to the first tile and move time forward
             *this.current_spatial_tile = 0;
             // make time progress
-            time_progress(this.time_start, this.time_end);
+            if let Some(ref time_end) = this.time_end {
+                *this.time_start = *time_end;
+                *this.time_end = None;
+            } else {
+                // we produced only error tiles for a time slot and do not know how to progress in time => end stream
+                // TODO: discuss whether we should generate an additional time slot (t_end, eot) with error tiles, s.t. the query time interval is answered completely
+                *this.ended = true;
+            }
         }
 
-        Poll::Ready(Some(Ok(tile_result)))
+        match tile_accu_result {
+            Ok(tile_accu) => Poll::Ready(Some(Ok(tile_accu))),
+            Err(err) => Poll::Ready(Some(Err(err))),
+        }
     }
-}
-
-fn time_progress(start: &mut TimeInstance, end: &mut Option<TimeInstance>) {
-    let t_start = *start;
-    let (n_t_start, n_t_end) = match *end {
-        Some(t_end) if t_start < t_end => (t_end, None),
-        _ => (t_start + 1, None),
-    };
-
-    *start = n_t_start;
-    *end = n_t_end;
 }
 
 pub fn fold_by_blit_impl<T>(accu: RasterTile2D<T>, tile: RasterTile2D<T>) -> Result<RasterTile2D<T>>
