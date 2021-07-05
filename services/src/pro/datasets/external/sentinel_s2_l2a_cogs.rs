@@ -14,6 +14,7 @@ use crate::{
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
+use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
 use geoengine_datatypes::operations::reproject::CoordinateProjection;
 use geoengine_datatypes::operations::reproject::CoordinateProjector;
 use geoengine_datatypes::operations::reproject::ReprojectClipped;
