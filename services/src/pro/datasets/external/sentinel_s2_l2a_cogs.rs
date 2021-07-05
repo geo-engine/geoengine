@@ -320,13 +320,12 @@ impl SentinelS2L2aCogsMetaData {
         let (t_start, t_end) = Self::time_range_request(&query.time_interval)?;
 
         // request all features in zone in order to be able to determine the temporal validity of individual tile
-        // let bbox = SpatialReference::new(SpatialReferenceAuthority::Epsg, self.zone.epsg).area_of_use()?;
         let projector = CoordinateProjector::from_known_srs(
             SpatialReference::new(SpatialReferenceAuthority::Epsg, self.zone.epsg),
             SpatialReference::epsg_4326(),
         )?;
 
-        let spatial_partition = query.spatial_partition();
+        let spatial_partition = query.spatial_partition(); // TODO: use SpatialPartition2D directly
         let bbox = BoundingBox2D::new_upper_left_lower_right_unchecked(
             spatial_partition.upper_left(),
             spatial_partition.lower_right(),

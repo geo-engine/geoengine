@@ -7,7 +7,6 @@ use crate::{
     error::{self, Error},
     util::Result,
 };
-use futures::future;
 use futures::{
     stream::{self, BoxStream, StreamExt},
     Stream,
@@ -325,11 +324,10 @@ where
                 Grid2D::new_filled(tile_information.tile_size_in_pixels, fill_value, None).into()
             };
 
-            future::ok(GridWithProperties {
+            Ok(GridWithProperties {
                 grid: empty_grid,
                 properties: Default::default(),
             })
-            .await
         };
 
         f.map(|grid_with_properties| {
@@ -550,10 +548,6 @@ impl RasterOperator for GdalSource {
         let meta_data: GdalMetaData = context.meta_data(&self.params.dataset).await?;
 
         debug!("Initializing GdalSource for {:?}.", &self.params.dataset);
-
-        // TODO: move somewhere else?
-        gdal::config::set_config_option("GDAL_DISABLE_READDIR_ON_OPEN", "TRUE")?;
-        gdal::config::set_config_option("VSI_CACHE", "TRUE")?;
 
         Ok(InitializedGdalSourceOperator {
             result_descriptor: meta_data.result_descriptor().await?,
