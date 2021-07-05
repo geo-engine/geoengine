@@ -1,6 +1,6 @@
 use std::convert::TryFrom;
 
-use super::{Coordinate2D, SpatialBounded};
+use super::{AxisAlignedRectangle, Coordinate2D, SpatialBounded};
 use crate::error;
 use crate::util::Result;
 #[cfg(feature = "postgres")]
@@ -12,7 +12,7 @@ use snafu::ensure;
 #[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
 #[repr(C)]
 #[serde(rename_all = "camelCase")]
-/// The bounding box of a geometry.
+/// A bounding box that includes all border points.
 /// Note: may degenerate to a point!
 pub struct BoundingBox2D {
     lower_left_coordinate: Coordinate2D,
@@ -122,88 +122,6 @@ impl BoundingBox2D {
         let lower_left_coordinate = (upper_left_coordinate.x, lower_right_coordinate.y).into();
         let upper_right_coordinate = (lower_right_coordinate.x, upper_left_coordinate.y).into();
         BoundingBox2D::new_unchecked(lower_left_coordinate, upper_right_coordinate)
-    }
-
-    /// Returns the `Coordnate2D` representing the lower left edge of the bounding box
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use geoengine_datatypes::primitives::{Coordinate2D, BoundingBox2D};
-    ///
-    /// let ll = Coordinate2D::new(1.0, 1.0);
-    /// let ur = Coordinate2D::new(2.0, 2.0);
-    /// let bbox = BoundingBox2D::new(ll, ur).unwrap();
-    ///
-    /// assert_eq!(bbox.lower_left(), (1.0, 1.0).into());
-    /// ```
-    ///
-    pub fn lower_left(&self) -> Coordinate2D {
-        self.lower_left_coordinate
-    }
-
-    /// Returns the `Coordnate2D` representing the upper right edge of the bounding box
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use geoengine_datatypes::primitives::{Coordinate2D, BoundingBox2D};
-    ///
-    /// let ll = Coordinate2D::new(1.0, 1.0);
-    /// let ur = Coordinate2D::new(2.0, 2.0);
-    /// let bbox = BoundingBox2D::new(ll, ur).unwrap();
-    ///
-    /// assert_eq!(bbox.upper_right(), (2.0, 2.0).into());
-    /// ```
-    ///
-    pub fn upper_right(&self) -> Coordinate2D {
-        self.upper_right_coordinate
-    }
-
-    /// Returns the `Coordnate2D` representing the upper left edge of the bounding box
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use geoengine_datatypes::primitives::{Coordinate2D, BoundingBox2D};
-    ///
-    /// let ll = Coordinate2D::new(1.0, 1.0);
-    /// let ur = Coordinate2D::new(2.0, 2.0);
-    /// let bbox = BoundingBox2D::new(ll, ur).unwrap();
-    ///
-    /// assert_eq!(bbox.upper_left(), (1.0, 2.0).into());
-    /// ```
-    ///
-    pub fn upper_left(&self) -> Coordinate2D {
-        (self.lower_left_coordinate.x, self.upper_right_coordinate.y).into()
-    }
-
-    /// Returns the `Coordnate2D` representing the upper right edge of the bounding box
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use geoengine_datatypes::primitives::{Coordinate2D, BoundingBox2D};
-    ///
-    /// let ll = Coordinate2D::new(1.0, 1.0);
-    /// let ur = Coordinate2D::new(2.0, 2.0);
-    /// let bbox = BoundingBox2D::new(ll, ur).unwrap();
-    ///
-    /// assert_eq!(bbox.upper_left(), (1.0, 2.0).into());
-    /// ```
-    ///
-    pub fn lower_right(&self) -> Coordinate2D {
-        (self.upper_right_coordinate.x, self.lower_left_coordinate.y).into()
-    }
-
-    /// Returns the width of the bounding box
-    pub fn size_x(&self) -> f64 {
-        self.upper_right_coordinate.x - self.lower_left_coordinate.x
-    }
-
-    /// Returns the height of the bounding box
-    pub fn size_y(&self) -> f64 {
-        self.upper_right_coordinate.y - self.lower_left_coordinate.y
     }
 
     /// Checks if a coordinate is located inside the bounding box
@@ -319,7 +237,7 @@ impl BoundingBox2D {
         )
     }
 
-    /// Returns the `Coordnate2D` representing the upper right edge of the bounding box
+    /// Returns true if there is an intersection with `other_bbox`
     ///
     /// # Examples
     ///
@@ -424,6 +342,90 @@ impl BoundingBox2D {
     }
 }
 
+impl AxisAlignedRectangle for BoundingBox2D {
+    /// Returns the `Coordnate2D` representing the lower left edge of the bounding box
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use geoengine_datatypes::primitives::{Coordinate2D, BoundingBox2D, AxisAlignedRectangle};
+    ///
+    /// let ll = Coordinate2D::new(1.0, 1.0);
+    /// let ur = Coordinate2D::new(2.0, 2.0);
+    /// let bbox = BoundingBox2D::new(ll, ur).unwrap();
+    ///
+    /// assert_eq!(bbox.lower_left(), (1.0, 1.0).into());
+    /// ```
+    ///
+    fn lower_left(&self) -> Coordinate2D {
+        self.lower_left_coordinate
+    }
+
+    /// Returns the `Coordnate2D` representing the upper right edge of the bounding box
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use geoengine_datatypes::primitives::{Coordinate2D, BoundingBox2D, AxisAlignedRectangle};
+    ///
+    /// let ll = Coordinate2D::new(1.0, 1.0);
+    /// let ur = Coordinate2D::new(2.0, 2.0);
+    /// let bbox = BoundingBox2D::new(ll, ur).unwrap();
+    ///
+    /// assert_eq!(bbox.upper_right(), (2.0, 2.0).into());
+    /// ```
+    ///
+    fn upper_right(&self) -> Coordinate2D {
+        self.upper_right_coordinate
+    }
+
+    /// Returns the `Coordnate2D` representing the upper left edge of the bounding box
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use geoengine_datatypes::primitives::{Coordinate2D, BoundingBox2D, AxisAlignedRectangle};
+    ///
+    /// let ll = Coordinate2D::new(1.0, 1.0);
+    /// let ur = Coordinate2D::new(2.0, 2.0);
+    /// let bbox = BoundingBox2D::new(ll, ur).unwrap();
+    ///
+    /// assert_eq!(bbox.upper_left(), (1.0, 2.0).into());
+    /// ```
+    ///
+    fn upper_left(&self) -> Coordinate2D {
+        (self.lower_left_coordinate.x, self.upper_right_coordinate.y).into()
+    }
+
+    /// Returns the `Coordnate2D` representing the upper right edge of the bounding box
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use geoengine_datatypes::primitives::{Coordinate2D, BoundingBox2D, AxisAlignedRectangle};
+    ///
+    /// let ll = Coordinate2D::new(1.0, 1.0);
+    /// let ur = Coordinate2D::new(2.0, 2.0);
+    /// let bbox = BoundingBox2D::new(ll, ur).unwrap();
+    ///
+    /// assert_eq!(bbox.upper_left(), (1.0, 2.0).into());
+    /// ```
+    ///
+    fn lower_right(&self) -> Coordinate2D {
+        (self.upper_right_coordinate.x, self.lower_left_coordinate.y).into()
+    }
+
+    /// Returns the width of the bounding box
+    fn size_x(&self) -> f64 {
+        self.upper_right_coordinate.x - self.lower_left_coordinate.x
+    }
+
+    /// Returns the height of the bounding box
+    fn size_y(&self) -> f64 {
+        self.upper_right_coordinate.y - self.lower_left_coordinate.y
+    }
+}
+
 impl From<BoundingBox2D> for geo::Rect<f64> {
     fn from(bbox: BoundingBox2D) -> geo::Rect<f64> {
         Self::from(&bbox)
@@ -466,7 +468,7 @@ impl TryFrom<BoundingBox2D> for gdal::vector::Geometry {
 #[cfg(test)]
 mod tests {
 
-    use crate::primitives::{BoundingBox2D, Coordinate2D, SpatialBounded};
+    use crate::primitives::{AxisAlignedRectangle, BoundingBox2D, Coordinate2D, SpatialBounded};
     #[test]
     #[allow(clippy::float_cmp)]
     fn bounding_box_new() {

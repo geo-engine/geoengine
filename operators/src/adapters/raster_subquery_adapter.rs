@@ -1,4 +1,4 @@
-use crate::engine::{QueryContext, QueryRectangle, RasterQueryProcessor};
+use crate::engine::{QueryContext, QueryProcessor, RasterQueryProcessor, RasterQueryRectangle};
 use crate::error;
 use crate::util::Result;
 use futures::future::BoxFuture;
@@ -9,12 +9,13 @@ use futures::{
     FutureExt, TryFuture, TryStreamExt,
 };
 use futures::{stream::FusedStream, Future};
+use geoengine_datatypes::primitives::{SpatialPartition2D, SpatialPartitioned};
 use geoengine_datatypes::{
     error::Error::{GridIndexOutOfBounds, InvalidGridIndex},
     operations::reproject::{
         project_coordinates_fail_tolerant, CoordinateProjection, CoordinateProjector, Reproject,
     },
-    primitives::{SpatialBounded, SpatialResolution, TimeInterval},
+    primitives::{SpatialResolution, TimeInterval},
     raster::{
         grid_idx_iter_2d, BoundedGrid, EmptyGrid, Grid2D, MaterializedRasterTile2D, NoDataValue,
         TilingSpecification,
@@ -70,7 +71,7 @@ where
     SubQuery: SubQueryTileAggregator<PixelType>,
 {
     /// The `QueryRectangle` the adapter is queried with
-    query_rect: QueryRectangle,
+    query_rect: RasterQueryRectangle,
     /// This `TimeInstance` is the point in time currently queried in the sub-query
     time_start: TimeInstance,
     /// This `TimeInstance` is the latest point in time seen from the tiles produced by the sub-query
@@ -111,7 +112,7 @@ where
     /// Creates a new `RasterOverlapAdapter` and initialize all the internal things.
     pub fn new(
         source: &'a RasterProcessorType,
-        query_rect: QueryRectangle,
+        query_rect: RasterQueryRectangle,
         tiling_spec: TilingSpecification,
         query_ctx: &'a dyn QueryContext,
         sub_query: SubQuery,
@@ -122,7 +123,7 @@ where
         );
 
         let tiles_to_produce: Vec<TileInformation> = tiling_strat
-            .tile_information_iterator(query_rect.bbox)
+            .tile_information_iterator(query_rect.spatial_bounds)
             .collect();
 
         Self {
@@ -145,7 +146,8 @@ impl<PixelType, RasterProcessorType, SubQuery> FusedStream
     for RasterSubQueryAdapter<'_, PixelType, RasterProcessorType, SubQuery>
 where
     PixelType: Pixel,
-    RasterProcessorType: RasterQueryProcessor<RasterType = PixelType>,
+    RasterProcessorType:
+        QueryProcessor<Output = RasterTile2D<PixelType>, SpatialBounds = SpatialPartition2D>,
     SubQuery: SubQueryTileAggregator<PixelType>,
 {
     fn is_terminated(&self) -> bool {
@@ -157,7 +159,8 @@ impl<'a, PixelType, RasterProcessorType, SubQuery> Stream
     for RasterSubQueryAdapter<'a, PixelType, RasterProcessorType, SubQuery>
 where
     PixelType: Pixel,
-    RasterProcessorType: RasterQueryProcessor<RasterType = PixelType>,
+    RasterProcessorType:
+        QueryProcessor<Output = RasterTile2D<PixelType>, SpatialBounds = SpatialPartition2D>,
     SubQuery: SubQueryTileAggregator<PixelType>,
 {
     type Item = Result<RasterTile2D<PixelType>>;
@@ -199,7 +202,7 @@ where
 
             let tile_query_stream = this
                 .source
-                .raster_query(tile_query_rectangle, *this.query_ctx)
+                .query(tile_query_rectangle, *this.query_ctx)
                 .boxed();
 
             this.running_query.set(Some(tile_query_stream));
@@ -402,16 +405,16 @@ where
     fn new_fold_accu(
         &self,
         tile_info: TileInformation,
-        query_rect: QueryRectangle,
+        query_rect: RasterQueryRectangle,
     ) -> Result<Self::TileAccu>;
 
     /// This method generates a `QueryRectangle` for a tile-specific sub-query
     fn tile_query_rectangle(
         &self,
         tile_info: TileInformation,
-        query_rect: QueryRectangle,
+        query_rect: RasterQueryRectangle,
         start_time: TimeInstance,
-    ) -> Result<QueryRectangle>;
+    ) -> Result<RasterQueryRectangle>;
 
     /// This method generates the method which combines the accumulator and each tile of the sub-query stream in the `TryFold` stream adapter.
     fn fold_method(&self) -> Self::FoldMethod;
@@ -419,7 +422,7 @@ where
     fn into_raster_overlap_adapter<'a, S>(
         self,
         source: &'a S,
-        query: QueryRectangle,
+        query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
         tiling_specification: TilingSpecification,
     ) -> RasterSubQueryAdapter<'a, T, S, Self>
@@ -459,7 +462,7 @@ where
     fn new_fold_accu(
         &self,
         tile_info: TileInformation,
-        query_rect: QueryRectangle,
+        query_rect: RasterQueryRectangle,
     ) -> Result<Self::TileAccu> {
         let output_raster = Grid2D::new_filled(
             tile_info.tile_size_in_pixels,
@@ -476,13 +479,13 @@ where
     fn tile_query_rectangle(
         &self,
         tile_info: TileInformation,
-        query_rect: QueryRectangle,
+        query_rect: RasterQueryRectangle,
         start_time: TimeInstance,
-    ) -> Result<QueryRectangle> {
-        Ok(QueryRectangle {
-            bbox: tile_info.spatial_bounds(),
-            spatial_resolution: query_rect.spatial_resolution,
+    ) -> Result<RasterQueryRectangle> {
+        Ok(RasterQueryRectangle {
+            spatial_bounds: tile_info.spatial_partition(),
             time_interval: TimeInterval::new_instant(start_time)?,
+            spatial_resolution: query_rect.spatial_resolution,
         })
     }
 
@@ -544,7 +547,7 @@ where
     fn new_fold_accu(
         &self,
         tile_info: TileInformation,
-        query_rect: QueryRectangle,
+        query_rect: RasterQueryRectangle,
     ) -> Result<Self::TileAccu> {
         let output_raster =
             EmptyGrid::new(tile_info.tile_size_in_pixels, self.no_data_and_fill_value);
@@ -581,19 +584,19 @@ where
     fn tile_query_rectangle(
         &self,
         tile_info: TileInformation,
-        query_rect: QueryRectangle,
+        query_rect: RasterQueryRectangle,
         start_time: TimeInstance,
-    ) -> Result<QueryRectangle> {
+    ) -> Result<RasterQueryRectangle> {
         let proj = CoordinateProjector::from_known_srs(self.out_srs, self.in_srs)?;
 
-        Ok(QueryRectangle {
-            bbox: tile_info
-                .spatial_bounds()
-                .intersection(&query_rect.bbox)
+        Ok(RasterQueryRectangle {
+            spatial_bounds: tile_info
+                .spatial_partition()
+                .intersection(&query_rect.spatial_partition())
                 .expect("should not be empty")
                 .reproject(&proj)?,
-            spatial_resolution: self.in_spatial_res,
             time_interval: TimeInterval::new_instant(start_time)?,
+            spatial_resolution: self.in_spatial_res,
         })
     }
 
@@ -605,7 +608,7 @@ where
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::{
-        primitives::{BoundingBox2D, Measurement, SpatialResolution, TimeInterval},
+        primitives::{Measurement, SpatialPartition2D, SpatialResolution, TimeInterval},
         raster::{Grid, GridShape, RasterDataType},
         spatial_reference::SpatialReference,
     };
@@ -677,8 +680,8 @@ mod tests {
             shape_array: [2, 2],
         };
 
-        let query_rect = QueryRectangle {
-            bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (3., 1.).into()),
+        let query_rect = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 10),
             spatial_resolution: SpatialResolution::one(),
         };
@@ -770,8 +773,8 @@ mod tests {
             shape_array: [2, 2],
         };
 
-        let query_rect = QueryRectangle {
-            bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (3., 1.).into()),
+        let query_rect = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 10),
             spatial_resolution: SpatialResolution::one(),
         };

@@ -1,7 +1,7 @@
 use crate::engine::{
-    ExecutionContext, InitializedOperator, InitializedVectorOperator, Operator, QueryContext,
-    QueryProcessor, QueryRectangle, TypedVectorQueryProcessor, VectorOperator,
-    VectorQueryProcessor, VectorResultDescriptor,
+    ExecutionContext, InitializedVectorOperator, Operator, QueryContext, QueryProcessor,
+    TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorQueryRectangle,
+    VectorResultDescriptor,
 };
 use crate::error;
 use crate::util::input::StringOrNumberRange;
@@ -13,7 +13,7 @@ use futures::StreamExt;
 use geoengine_datatypes::collections::{
     FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
 };
-use geoengine_datatypes::primitives::{FeatureDataType, FeatureDataValue, Geometry};
+use geoengine_datatypes::primitives::{BoundingBox2D, FeatureDataType, FeatureDataValue, Geometry};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
@@ -35,7 +35,7 @@ impl VectorOperator for ColumnRangeFilter {
     async fn initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
-    ) -> Result<Box<InitializedVectorOperator>> {
+    ) -> Result<Box<dyn InitializedVectorOperator>> {
         let vector_source = self.sources.vector.initialize(context).await?;
 
         let initialized_operator = InitializedColumnRangeFilter {
@@ -50,15 +50,13 @@ impl VectorOperator for ColumnRangeFilter {
 
 pub struct InitializedColumnRangeFilter {
     result_descriptor: VectorResultDescriptor,
-    vector_source: Box<InitializedVectorOperator>,
+    vector_source: Box<dyn InitializedVectorOperator>,
     state: ColumnRangeFilterParams,
 }
 
-impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
-    for InitializedColumnRangeFilter
-{
+impl InitializedVectorOperator for InitializedColumnRangeFilter {
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
-        Ok(map_typed_vector_query_processor!(
+        Ok(map_typed_query_processor!(
             self.vector_source.query_processor()?,
             source => ColumnRangeFilterProcessor::new(source, self.state.clone()).boxed()
         ))
@@ -96,17 +94,18 @@ where
 }
 
 #[async_trait]
-impl<G> VectorQueryProcessor for ColumnRangeFilterProcessor<G>
+impl<G> QueryProcessor for ColumnRangeFilterProcessor<G>
 where
     G: Geometry + ArrowTyped + Sync + Send + 'static,
 {
-    type VectorType = FeatureCollection<G>;
+    type Output = FeatureCollection<G>;
+    type SpatialBounds = BoundingBox2D;
 
-    async fn vector_query<'a>(
+    async fn query<'a>(
         &'a self,
-        query: QueryRectangle,
+        query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
-    ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
+    ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         let column_name = self.column.clone();
         let ranges = self.ranges.clone();
         let keep_nulls = self.keep_nulls;
@@ -153,7 +152,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::{MockExecutionContext, MockQueryContext};
+    use crate::engine::{MockExecutionContext, MockQueryContext, VectorQueryRectangle};
     use crate::mock::MockFeatureCollectionSource;
     use geoengine_datatypes::collections::{FeatureCollectionModifications, MultiPointCollection};
     use geoengine_datatypes::primitives::{
@@ -241,18 +240,15 @@ mod tests {
             _ => panic!(),
         };
 
-        let query_rectangle = QueryRectangle {
-            bbox: BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
+        let query_rectangle = VectorQueryRectangle {
+            spatial_bounds: BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
 
         let ctx = MockQueryContext::new(2 * std::mem::size_of::<Coordinate2D>());
 
-        let stream = point_processor
-            .vector_query(query_rectangle, &ctx)
-            .await
-            .unwrap();
+        let stream = point_processor.query(query_rectangle, &ctx).await.unwrap();
 
         let collections: Vec<MultiPointCollection> = stream.map(Result::unwrap).collect().await;
 

@@ -6,7 +6,7 @@ use gdal::{
 };
 use gdal_sys::{VSIFree, VSIGetMemFileBuffer};
 use geoengine_datatypes::{
-    primitives::SpatialBounded,
+    primitives::{AxisAlignedRectangle, SpatialPartitioned},
     raster::{
         ChangeGridBounds, GeoTransform, Grid2D, GridBlit, GridIdx, GridShape2D, GridSize, Pixel,
         RasterTile2D,
@@ -19,15 +19,15 @@ use std::{
 };
 use std::{ffi::CString, sync::mpsc};
 
-use crate::util::Result;
+use crate::{engine::RasterQueryRectangle, util::Result};
 use crate::{
-    engine::{QueryContext, QueryRectangle, RasterQueryProcessor},
+    engine::{QueryContext, RasterQueryProcessor},
     error::Error,
 };
 
 pub async fn raster_stream_to_geotiff_bytes<T, C: QueryContext + 'static>(
     processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
-    query_rect: QueryRectangle,
+    query_rect: RasterQueryRectangle,
     query_ctx: C,
     no_data_value: Option<f64>,
     spatial_reference: SpatialReference,
@@ -78,18 +78,21 @@ where
 fn gdal_writer<T: Pixel + GdalType>(
     rx: &Receiver<RasterTile2D<T>>,
     file_name: &str,
-    query_rect: QueryRectangle,
+    query_rect: RasterQueryRectangle,
     no_data_value: Option<f64>,
     spatial_reference: SpatialReference,
 ) -> Result<()> {
     let x_pixel_size = query_rect.spatial_resolution.x;
     let y_pixel_size = query_rect.spatial_resolution.y;
-    let width = (query_rect.bbox.size_x() / x_pixel_size).ceil() as u32;
-    let height = (query_rect.bbox.size_y() / y_pixel_size).ceil() as u32;
+    let width = (query_rect.spatial_bounds.size_x() / x_pixel_size).ceil() as u32;
+    let height = (query_rect.spatial_bounds.size_y() / y_pixel_size).ceil() as u32;
 
-    let output_geo_transform =
-        GeoTransform::new(query_rect.bbox.upper_left(), x_pixel_size, -y_pixel_size);
-    let output_bounds = query_rect.bbox;
+    let output_geo_transform = GeoTransform::new(
+        query_rect.spatial_bounds.upper_left(),
+        x_pixel_size,
+        -y_pixel_size,
+    );
+    let output_bounds = query_rect.spatial_bounds;
 
     let driver = Driver::get("GTiff")?;
     // TODO: "COMPRESS, DEFLATE" flags but rust-gdal doesn't support setting this yet(?)
@@ -107,9 +110,9 @@ fn gdal_writer<T: Pixel + GdalType>(
     while let Ok(tile) = rx.recv() {
         let tile_info = tile.tile_information();
 
-        let tile_bounds = tile_info.spatial_bounds();
+        let tile_bounds = tile_info.spatial_partition();
 
-        let (upper_left, grid_array) = if output_bounds.contains_bbox(&tile_bounds) {
+        let (upper_left, grid_array) = if output_bounds.contains(&tile_bounds) {
             (
                 tile_bounds.upper_left(),
                 tile.into_materialized_tile().grid_array,
@@ -184,7 +187,7 @@ fn get_vsi_mem_file_bytes_and_free(file_name: &str) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::{
-        primitives::{BoundingBox2D, Coordinate2D, SpatialResolution, TimeInterval},
+        primitives::{Coordinate2D, SpatialPartition2D, SpatialResolution, TimeInterval},
         raster::TilingSpecification,
     };
 
@@ -206,12 +209,12 @@ mod tests {
             phantom_data: Default::default(),
         };
 
-        let query_bbox = BoundingBox2D::new((-10., 20.).into(), (50., 80.).into()).unwrap();
+        let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
 
         let bytes = raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
-            QueryRectangle {
-                bbox: query_bbox,
+            RasterQueryRectangle {
+                spatial_bounds: query_bbox,
                 time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
                     .unwrap(),
                 spatial_resolution: SpatialResolution::new_unchecked(
@@ -246,12 +249,12 @@ mod tests {
             phantom_data: Default::default(),
         };
 
-        let query_bbox = BoundingBox2D::new((-10., 20.).into(), (50., 80.).into()).unwrap();
+        let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
 
         let bytes = raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
-            QueryRectangle {
-                bbox: query_bbox,
+            RasterQueryRectangle {
+                spatial_bounds: query_bbox,
                 time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
                     .unwrap(),
                 spatial_resolution: SpatialResolution::new_unchecked(

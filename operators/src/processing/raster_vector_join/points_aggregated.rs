@@ -8,8 +8,8 @@ use geoengine_datatypes::collections::{
 use geoengine_datatypes::raster::{GridIndexAccess, NoDataValue, Pixel, RasterDataType};
 
 use crate::engine::{
-    QueryContext, QueryProcessor, QueryRectangle, RasterQueryProcessor, TypedRasterQueryProcessor,
-    VectorQueryProcessor,
+    QueryContext, QueryProcessor, RasterQueryProcessor, TypedRasterQueryProcessor,
+    VectorQueryProcessor, VectorQueryRectangle,
 };
 use crate::processing::raster_vector_join::aggregator::{
     Aggregator, FirstValueFloatAggregator, FirstValueIntAggregator, MeanValueAggregator,
@@ -19,7 +19,7 @@ use crate::processing::raster_vector_join::util::FeatureTimeSpanIter;
 use crate::processing::raster_vector_join::AggregationMethod;
 use crate::util::Result;
 use async_trait::async_trait;
-use geoengine_datatypes::primitives::MultiPointAccess;
+use geoengine_datatypes::primitives::{BoundingBox2D, MultiPointAccess};
 
 pub struct RasterPointAggregateJoinProcessor {
     points: Box<dyn VectorQueryProcessor<VectorType = MultiPointCollection>>,
@@ -48,7 +48,7 @@ impl RasterPointAggregateJoinProcessor {
         raster_processor: &dyn RasterQueryProcessor<RasterType = P>,
         new_column_name: &str,
         aggregation: AggregationMethod,
-        query: QueryRectangle,
+        query: VectorQueryRectangle,
         ctx: &dyn QueryContext,
     ) -> Result<MultiPointCollection> {
         let mut aggregator = Self::create_aggregator::<P>(points.len(), aggregation);
@@ -56,13 +56,13 @@ impl RasterPointAggregateJoinProcessor {
         let points = points.sort_by_time_asc()?;
 
         for time_span in FeatureTimeSpanIter::new(points.time_intervals()) {
-            let query = QueryRectangle {
-                bbox: query.bbox,
+            let query = VectorQueryRectangle {
+                spatial_bounds: query.spatial_bounds,
                 time_interval: time_span.time_interval,
                 spatial_resolution: query.spatial_resolution,
             };
 
-            let mut rasters = raster_processor.raster_query(query, ctx).await?;
+            let mut rasters = raster_processor.raster_query(query.into(), ctx).await?;
 
             // TODO: optimize geo access (only specific tiles, etc.)
 
@@ -139,14 +139,15 @@ impl RasterPointAggregateJoinProcessor {
 }
 
 #[async_trait]
-impl VectorQueryProcessor for RasterPointAggregateJoinProcessor {
-    type VectorType = MultiPointCollection;
+impl QueryProcessor for RasterPointAggregateJoinProcessor {
+    type Output = MultiPointCollection;
+    type SpatialBounds = BoundingBox2D;
 
-    async fn vector_query<'a>(
+    async fn query<'a>(
         &'a self,
-        query: QueryRectangle,
+        query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
-    ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
+    ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         let stream = self.points
             .query(query, ctx).await?
             .and_then(async move |mut points| {
@@ -169,7 +170,7 @@ impl VectorQueryProcessor for RasterPointAggregateJoinProcessor {
 mod tests {
     use super::*;
 
-    use crate::engine::{MockExecutionContext, RasterResultDescriptor};
+    use crate::engine::{MockExecutionContext, RasterResultDescriptor, VectorQueryRectangle};
     use crate::engine::{MockQueryContext, RasterOperator};
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use geoengine_datatypes::raster::{Grid2D, RasterTile2D, TileInformation};
@@ -235,8 +236,8 @@ mod tests {
             &raster_source.query_processor().unwrap().get_u8().unwrap(),
             "foo",
             AggregationMethod::First,
-            QueryRectangle {
-                bbox: BoundingBox2D::new((0.0, -3.0).into(), (2.0, 0.).into()).unwrap(),
+            VectorQueryRectangle {
+                spatial_bounds: BoundingBox2D::new((0.0, -3.0).into(), (2.0, 0.).into()).unwrap(),
                 time_interval: Default::default(),
                 spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
             },
@@ -318,8 +319,8 @@ mod tests {
             &raster_source.query_processor().unwrap().get_u8().unwrap(),
             "foo",
             AggregationMethod::Mean,
-            QueryRectangle {
-                bbox: BoundingBox2D::new((0.0, -3.0).into(), (2.0, 0.0).into()).unwrap(),
+            VectorQueryRectangle {
+                spatial_bounds: BoundingBox2D::new((0.0, -3.0).into(), (2.0, 0.0).into()).unwrap(),
                 time_interval: Default::default(),
                 spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
             },

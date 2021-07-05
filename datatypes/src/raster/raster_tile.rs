@@ -5,7 +5,8 @@ use super::{
     GridSize, GridSpaceToLinearSpace, NoDataValue, Raster, TileInformation,
 };
 use crate::primitives::{
-    BoundingBox2D, Coordinate2D, SpatialBounded, TemporalBounded, TimeInterval,
+    Coordinate2D, SpatialBounded, SpatialPartition2D, SpatialPartitioned, TemporalBounded,
+    TimeInterval,
 };
 use crate::raster::data_type::FromPrimitive;
 use crate::raster::{CoordinatePixelAccess, Pixel};
@@ -199,12 +200,12 @@ impl<G> TemporalBounded for BaseTile<G> {
     }
 }
 
-impl<G> SpatialBounded for BaseTile<G>
+impl<G> SpatialPartitioned for BaseTile<G>
 where
     G: GridSize,
 {
-    fn spatial_bounds(&self) -> BoundingBox2D {
-        self.tile_information().spatial_bounds()
+    fn spatial_partition(&self) -> SpatialPartition2D {
+        self.tile_information().spatial_partition()
     }
 }
 
@@ -569,15 +570,15 @@ mod tests {
     }
 
     #[test]
-    fn tile_information_spatial_bounds() {
+    fn tile_information_spatial_partition() {
         let ti = TileInformation::new(
             GridIdx([-2, 3]),
             GridShape2D::from([100, 1000]),
             GeoTransform::default(),
         );
         assert_eq!(
-            ti.spatial_bounds(),
-            BoundingBox2D::new_upper_left_lower_right_unchecked(
+            ti.spatial_partition(),
+            SpatialPartition2D::new_unchecked(
                 Coordinate2D::new(3000., 200.),
                 Coordinate2D::new(4000., 100.)
             )
@@ -592,8 +593,8 @@ mod tests {
             GeoTransform::new_with_coordinate_x_y(-180., 0.1, 90., -0.1),
         );
         assert_eq!(
-            ti.spatial_bounds(),
-            BoundingBox2D::new_upper_left_lower_right_unchecked(
+            ti.spatial_partition(),
+            SpatialPartition2D::new_unchecked(
                 Coordinate2D::new(-177., 88.),
                 Coordinate2D::new(-176., 87.)
             )

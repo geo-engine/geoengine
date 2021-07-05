@@ -1,9 +1,7 @@
-use crate::ogc::util::{parse_bbox, parse_time_option};
+use crate::ogc::util::{parse_spatial_partition, parse_time_option};
 use crate::util::{bool_option_case_insensitive, from_str};
-use geoengine_datatypes::{
-    primitives::{BoundingBox2D, TimeInterval},
-    spatial_reference::SpatialReference,
-};
+use geoengine_datatypes::primitives::{SpatialPartition2D, TimeInterval};
+use geoengine_datatypes::spatial_reference::SpatialReference;
 use serde::{Deserialize, Serialize};
 
 // TODO: ignore case for field names
@@ -44,8 +42,8 @@ pub struct GetMap {
     #[serde(deserialize_with = "from_str")]
     pub height: u32,
     #[serde(alias = "BBOX")]
-    #[serde(deserialize_with = "parse_bbox")]
-    pub bbox: BoundingBox2D,
+    #[serde(deserialize_with = "parse_spatial_partition")]
+    pub bbox: SpatialPartition2D,
     #[serde(alias = "FORMAT")]
     pub format: GetMapFormat,
     #[serde(alias = "LAYERS")]
@@ -115,10 +113,7 @@ pub struct GetLegendGraphic {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use geoengine_datatypes::{
-        primitives::{BoundingBox2D, Coordinate2D},
-        spatial_reference::SpatialReference,
-    };
+    use geoengine_datatypes::{primitives::Coordinate2D, spatial_reference::SpatialReference};
 
     #[test]
     fn deserialize_get_map() {
@@ -137,7 +132,8 @@ mod tests {
             sld: Some("sld_spec".into()),
             sld_body: Some("sld_body".into()),
             elevation: Some("elevation".into()),
-            bbox: BoundingBox2D::new(Coordinate2D::new(1., 2.), Coordinate2D::new(3., 4.)).unwrap(),
+            bbox: SpatialPartition2D::new(Coordinate2D::new(1., 4.), Coordinate2D::new(3., 2.))
+                .unwrap(),
             height: 2,
             format: GetMapFormat::ImagePng,
             exceptions: Some("exceptions".into()),
@@ -163,7 +159,8 @@ mod tests {
             sld: None,
             sld_body: None,
             elevation: None,
-            bbox: BoundingBox2D::new(Coordinate2D::new(1., 2.), Coordinate2D::new(3., 4.)).unwrap(),
+            bbox: SpatialPartition2D::new(Coordinate2D::new(1., 4.), Coordinate2D::new(3., 2.))
+                .unwrap(),
             height: 2,
             format: GetMapFormat::ImagePng,
             exceptions: None,

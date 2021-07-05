@@ -194,6 +194,8 @@ pub enum Error {
     TemporalRasterAggregationLastValidRequiresNoData,
     TemporalRasterAggregationFirstValidRequiresNoData,
 
+    NoSpatialBoundsAvailable,
+
     ChannelSend,
     #[snafu(display("LoadingInfoError: {}", source))]
     LoadingInfo {
