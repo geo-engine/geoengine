@@ -12,7 +12,7 @@ build = "build.rs"
 [features]
 postgres = ["postgres-types", "bb8-postgres"]
 # This compiles Geo Engine Pro
-pro = ["postgres"]
+pro = ["postgres", "geoengine-operators/pro", "geoengine-datatypes/pro"]
 
 [dependencies]
 async-trait = "0.1"

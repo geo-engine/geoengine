@@ -10,7 +10,7 @@ edition = "2018"
 
 [features]
 # This compiles Geo Engine Pro
-pro = []
+pro = ["geoengine-datatypes/pro"]
 
 [dependencies]
 # arrow = { version = "4.0", features = ["simd"] } TODO: activate when version is patched

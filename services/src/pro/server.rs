@@ -19,7 +19,6 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 #[cfg(feature = "postgres")]
 use std::str::FromStr;
-#[cfg(feature = "postgres")]
 use tokio::sync::oneshot::Receiver;
 use warp::Filter;
 
