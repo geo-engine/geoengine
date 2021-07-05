@@ -9,10 +9,10 @@ use chrono::{DateTime, Duration, Utc};
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
 use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
 use geoengine_datatypes::operations::reproject::{
-    CoordinateProjection, CoordinateProjector, Reproject,
+    CoordinateProjection, CoordinateProjector, ReprojectClipped,
 };
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, Measurement, SpatialPartitioned, TimeInterval,
+    AxisAlignedRectangle, BoundingBox2D, Measurement, SpatialPartitioned, TimeInterval,
 };
 use geoengine_datatypes::raster::{GeoTransform, RasterDataType};
 use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
@@ -325,7 +325,13 @@ impl SentinelS2L2aCogsMetaData {
             SpatialReference::new(SpatialReferenceAuthority::Epsg, self.zone.epsg),
             SpatialReference::epsg_4326(),
         )?;
-        let bbox = query.spatial_partition().reproject(&projector)?; // TODO: clipped?
+
+        let spatial_partition = query.spatial_partition();
+        let bbox = BoundingBox2D::new_upper_left_lower_right_unchecked(
+            spatial_partition.upper_left(),
+            spatial_partition.lower_right(),
+        );
+        let bbox = bbox.reproject_clipped(&projector)?; // TODO: use reproject_clipped on SpatialPartition2D
 
         Ok(vec![
             (
@@ -571,7 +577,7 @@ mod tests {
             .unwrap();
 
         let expected = vec![GdalLoadingInfoPart {
-            time: TimeInterval::new_unchecked(1_609_581_746_000, 1_609_581_806_000),
+            time: TimeInterval::new_unchecked(1_609_581_746_000, 1_609_581_747_000),
             params: GdalDatasetParameters {
                 file_path: "/vsicurl/https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/32/R/PU/2021/1/S2B_32RPU_20210102_0_L2A/B01.tif".into(),
                 rasterband_channel: 1,
