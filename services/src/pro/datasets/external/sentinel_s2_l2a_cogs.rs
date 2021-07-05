@@ -585,7 +585,7 @@ mod tests {
                     x_pixel_size: 60.,
                     y_pixel_size: -60.,
                 },
-                partition: SpatialPartition2D::new_unchecked((600_000.0, 3_290_220.0 ).into(), ( 709_800.0, 3_400_020.0).into()),
+                partition: SpatialPartition2D::new_unchecked((600_000.0, 3_400_020.0 ).into(), ( 709_800.0, 3_290_220.0).into()),
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value: Some(0.),
                 properties_mapping: None,
