@@ -2,12 +2,12 @@ use std::str::FromStr;
 
 use geoengine_operators::util::raster_stream_to_geotiff::raster_stream_to_geotiff_bytes;
 use log::info;
-use snafu::ResultExt;
+use snafu::{ensure, ResultExt};
 use uuid::Uuid;
 use warp::Rejection;
 use warp::{http::Response, Filter};
 
-use geoengine_datatypes::primitives::{AxisAlignedRectangle, BoundingBox2D};
+use geoengine_datatypes::primitives::AxisAlignedRectangle;
 use geoengine_datatypes::{primitives::SpatialResolution, spatial_reference::SpatialReference};
 
 use crate::contexts::MockableSession;
@@ -20,8 +20,8 @@ use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 
 use geoengine_datatypes::primitives::{TimeInstance, TimeInterval};
+use geoengine_operators::engine::ResultDescriptor;
 use geoengine_operators::engine::{RasterOperator, RasterQueryRectangle};
-use geoengine_operators::engine::{ResultDescriptor, VectorQueryRectangle};
 use geoengine_operators::processing::{Reprojection, ReprojectionParams};
 
 pub(crate) fn wcs_handler<C: Context>(
@@ -245,7 +245,20 @@ async fn get_coverage<C: Context>(
     ctx: &C,
 ) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
     info!("{:?}", request);
-    // TODO: validate request (version, ...)?
+    ensure!(
+        request.version == "1.1.1" || request.version == "1.1.0",
+        error::WcsVersionNotSupported
+    );
+
+    ensure!(
+        request.grid_origin() == request.boundingbox.partition.upper_left(),
+        error::WcsGridOriginMustEqualBoundingboxUpperLeft
+    );
+
+    ensure!(
+        request.gridbasecrs == request.boundingbox.spatial_reference,
+        error::WcsBoundingboxCrsMustEqualGridBaseCrs
+    );
 
     let workflow = ctx
         .workflow_registry_ref()
@@ -270,8 +283,6 @@ async fn get_coverage<C: Context>(
     let workflow_spatial_ref = workflow_spatial_ref.ok_or(error::Error::InvalidSpatialReference)?;
 
     let request_spatial_ref: SpatialReference = request.gridbasecrs;
-
-    // TODO: check gridorigin and bbox upper left are equal
 
     if request_spatial_ref != request.boundingbox.spatial_reference {
         return Err(Error::WcsBoundingboxCrsMustMatchRequest.into());
@@ -299,45 +310,24 @@ async fn get_coverage<C: Context>(
 
     let processor = initialized.query_processor().context(error::Operator)?;
 
-    // TODO: proper axis order handling while parsing request
-    let query_bbox = if request_spatial_ref == SpatialReference::epsg_4326() {
-        BoundingBox2D::new(
-            (
-                request.boundingbox.bbox.lower_left().y,
-                request.boundingbox.bbox.lower_left().x,
-            )
-                .into(),
-            (
-                request.boundingbox.bbox.upper_right().y,
-                request.boundingbox.bbox.upper_right().x,
-            )
-                .into(),
-        )
-        .context(error::DataType)?
+    let spatial_resolution: SpatialResolution = if let Some(res) = request.spatial_resolution() {
+        res?
     } else {
-        request.boundingbox.bbox
-    };
-
-    // TODO: handle axis order?
-    let spatial_resolution: SpatialResolution = request.gridoffsets.map_or_else(
-        ||
         // TODO: proper default resolution
         SpatialResolution {
-            x: query_bbox.size_x() / 256.,
-            y: query_bbox.size_y() / 256.
-        },
-        |g| g.into(),
-    );
+            x: request.boundingbox.partition.size_x() / 256.,
+            y: request.boundingbox.partition.size_y() / 256.,
+        }
+    };
 
-    let query_rect: RasterQueryRectangle = VectorQueryRectangle {
-        spatial_bounds: query_bbox,
+    let query_rect: RasterQueryRectangle = RasterQueryRectangle {
+        spatial_bounds: request.boundingbox.partition,
         time_interval: request.time.unwrap_or_else(|| {
             let time = TimeInstance::from(chrono::offset::Utc::now());
             TimeInterval::new_unchecked(time, time)
         }),
         spatial_resolution,
-    }
-    .into();
+    };
 
     let query_ctx = ctx.query_context()?;
 
@@ -433,52 +423,9 @@ async fn get_coverage<C: Context>(
 
 #[cfg(test)]
 mod tests {
-    use geoengine_datatypes::primitives::Coordinate2D;
-
     use super::*;
     use crate::contexts::InMemoryContext;
-    use crate::ogc::wcs::request::{GetCoverageFormat, GridOffset, WcsBoundingbox};
     use crate::util::tests::register_ndvi_workflow_helper;
-
-    #[test]
-    fn deserialize() {
-        let params = &[
-            ("service", "WCS"),
-            ("request", "GetCoverage"),
-            ("version", "1.1.1"),
-            ("identifier", "nurc:Arc_Sample"),
-            ("boundingbox", "-81,-162,81,162,urn:ogc:def:crs:EPSG::4326"),
-            ("format", "image/tiff"),
-            ("gridbasecrs", "urn:ogc:def:crs:EPSG::4326"),
-            ("gridcs", "urn:ogc:def:cs:OGC:0.0:Grid2dSquareCS"),
-            ("gridtype", "urn:ogc:def:method:WCS:1.1:2dSimpleGrid"),
-            ("gridorigin", "81,-162"),
-            ("gridoffsets", "-18,36"),
-            ("time", "2014-01-01T00:00:00.0Z"),
-        ];
-        let string = serde_urlencoded::to_string(params).unwrap();
-
-        let coverage: WcsRequest = serde_urlencoded::from_str(&string).unwrap();
-        assert_eq!(
-            WcsRequest::GetCoverage(GetCoverage {
-                version: "1.1.1".to_owned(),
-                format: GetCoverageFormat::ImageTiff,
-                identifier: "nurc:Arc_Sample".to_owned(),
-                boundingbox: WcsBoundingbox {
-                    bbox: BoundingBox2D::new_unchecked((-81., -162.).into(), (81., 162.).into()),
-                    spatial_reference: SpatialReference::epsg_4326(),
-                },
-                gridbasecrs: SpatialReference::epsg_4326(),
-                gridorigin: Coordinate2D::new(81., -162.),
-                gridoffsets: Some(GridOffset {
-                    x_step: -18.,
-                    y_step: 36.
-                }),
-                time: Some(TimeInterval::new_instant(1_388_534_400_000).unwrap()),
-            }),
-            coverage
-        );
-    }
 
     #[tokio::test]
     async fn get_capabilities() {

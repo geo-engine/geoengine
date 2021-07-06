@@ -1,14 +1,16 @@
 use chrono::FixedOffset;
-use geoengine_datatypes::primitives::SpatialPartition2D;
+use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D};
 use geoengine_datatypes::primitives::{
     BoundingBox2D, Coordinate2D, SpatialResolution, TimeInterval,
 };
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use serde::de::Error;
 use serde::Deserialize;
+use snafu::ResultExt;
 use std::str::FromStr;
 
 use super::wcs::request::{GridOffset, WcsBoundingbox};
+use crate::error::{self, Result};
 
 /// Parse bbox, format is: "x1,y1,x2,y2"
 pub fn parse_bbox<'de, D>(deserializer: D) -> Result<BoundingBox2D, D::Error>
@@ -154,16 +156,6 @@ where
         return Err(D::Error::custom("Invalid bbox"));
     };
 
-    let split: Vec<Result<f64, std::num::ParseFloatError>> =
-        bbox.split(',').map(str::parse).collect();
-
-    let bbox = if let [Ok(x1), Ok(y1), Ok(x2), Ok(y2)] = *split.as_slice() {
-        BoundingBox2D::new(Coordinate2D::new(x1, y1), Coordinate2D::new(x2, y2))
-            .map_err(D::Error::custom)?
-    } else {
-        return Err(D::Error::custom("Invalid bbox"));
-    };
-
     // TODO: more sophisticated crs parsing
     let spatial_reference = if let Some(crs) = crs.strip_prefix("urn:ogc:def:crs:") {
         SpatialReference::from_str(&crs.replace("::", ":")).map_err(D::Error::custom)?
@@ -174,8 +166,18 @@ where
         )));
     };
 
+    let split: Vec<Result<f64, std::num::ParseFloatError>> =
+        bbox.split(',').map(str::parse).collect();
+
+    let partition = if let [Ok(a), Ok(b), Ok(c), Ok(d)] = *split.as_slice() {
+        rectangle_from_ogc_params::<SpatialPartition2D>(a, b, c, d, spatial_reference)
+            .map_err(D::Error::custom)?
+    } else {
+        return Err(D::Error::custom("Invalid bbox"));
+    };
+
     Ok(WcsBoundingbox {
-        bbox,
+        partition,
         spatial_reference,
     })
 }
@@ -209,7 +211,7 @@ where
     }
 }
 
-/// Parse a spatial resolution, format is: "resolution" or "xResolution,yResolution"
+/// Parse grid offset, format is `x_step,y_step`
 pub fn parse_grid_offset_option<'de, D>(deserializer: D) -> Result<Option<GridOffset>, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -230,9 +232,36 @@ where
     Ok(Some(grid_offset))
 }
 
+/// create an axis aligned rectangle using the values "a,b,c,d" from OGC bbox-like parameters using the axis ordering for `spatial_reference`
+pub fn rectangle_from_ogc_params<A: AxisAlignedRectangle>(
+    a: f64,
+    b: f64,
+    c: f64,
+    d: f64,
+    spatial_reference: SpatialReference,
+) -> Result<A> {
+    // TODO: properly handle axis order
+    if spatial_reference == SpatialReference::epsg_4326() {
+        A::from_min_max((b, a).into(), (d, c).into()).context(error::DataType)
+    } else {
+        A::from_min_max((a, b).into(), (c, d).into()).context(error::DataType)
+    }
+}
+
+/// reorders the given tuple of coordinates, resolutions, etc. using the axis ordering for `spatial_reference` to give (x, y)
+pub fn tuple_from_ogc_params(a: f64, b: f64, spatial_reference: SpatialReference) -> (f64, f64) {
+    // TODO: properly handle axis order
+    if spatial_reference == SpatialReference::epsg_4326() {
+        (b, a)
+    } else {
+        (a, b)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use chrono::{TimeZone, Utc};
+    use geoengine_datatypes::spatial_reference::SpatialReferenceAuthority;
     use serde::de::value::StringDeserializer;
     use serde::de::IntoDeserializer;
 
@@ -361,12 +390,31 @@ mod tests {
 
     #[test]
     fn it_parses_wcs_bbox() {
+        let s = "-162,-81,162,81,urn:ogc:def:crs:EPSG::3857";
+
+        assert_eq!(
+            parse_wcs_bbox(to_deserializer(s)).unwrap(),
+            WcsBoundingbox {
+                partition: SpatialPartition2D::new_unchecked(
+                    (-162., 81.).into(),
+                    (162., -81.).into()
+                ),
+                spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 3857),
+            }
+        )
+    }
+
+    #[test]
+    fn it_parses_wcs_bbox_epsg_4326() {
         let s = "-81,-162,81,162,urn:ogc:def:crs:EPSG::4326";
 
         assert_eq!(
             parse_wcs_bbox(to_deserializer(s)).unwrap(),
             WcsBoundingbox {
-                bbox: BoundingBox2D::new_unchecked((-81., -162.).into(), (81., 162.).into()),
+                partition: SpatialPartition2D::new_unchecked(
+                    (-162., 81.).into(),
+                    (162., -81.).into()
+                ),
                 spatial_reference: SpatialReference::epsg_4326(),
             }
         )

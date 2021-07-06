@@ -10,6 +10,9 @@ use super::SpatialResolution;
 
 /// Common trait for axis-parallel boxes
 pub trait AxisAlignedRectangle: Copy {
+    /// create a new instance defined by min and max coordinate values
+    fn from_min_max(min: Coordinate2D, max: Coordinate2D) -> Result<Self>;
+
     fn lower_left(&self) -> Coordinate2D;
     fn upper_left(&self) -> Coordinate2D;
     fn upper_right(&self) -> Coordinate2D;
@@ -185,6 +188,10 @@ pub trait SpatialPartitioned {
 }
 
 impl AxisAlignedRectangle for SpatialPartition2D {
+    fn from_min_max(min: Coordinate2D, max: Coordinate2D) -> Result<Self> {
+        SpatialPartition2D::new((min.x, max.y).into(), (max.x, min.y).into())
+    }
+
     fn upper_left(&self) -> Coordinate2D {
         self.upper_left_coordinate
     }
