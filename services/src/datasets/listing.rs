@@ -1,12 +1,14 @@
 use crate::datasets::storage::Dataset;
 use crate::error;
 use crate::error::Result;
+use crate::projects::Symbology;
 use crate::util::config::{get_config_element, DatasetService};
 use crate::util::user_input::{UserInput, Validated};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::DatasetId;
 use geoengine_operators::engine::{
-    MetaDataProvider, RasterResultDescriptor, TypedResultDescriptor, VectorResultDescriptor,
+    MetaDataProvider, RasterQueryRectangle, RasterResultDescriptor, TypedResultDescriptor,
+    VectorQueryRectangle, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
@@ -22,6 +24,7 @@ pub struct DatasetListing {
     pub tags: Vec<String>,
     pub source_operator: String,
     pub result_descriptor: TypedResultDescriptor,
+    pub symbology: Option<Symbology>,
     // TODO: meta data like bounds, resolution
 }
 
@@ -67,12 +70,11 @@ pub enum OrderBy {
 
 /// Listing of stored datasets
 #[async_trait]
-pub trait DatasetProvider:
-    Send
+pub trait DatasetProvider: Send
     + Sync
-    + MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>
-    + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor>
-    + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor>
+    + MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
+    + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
+    + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
 {
     // TODO: filter, paging
     async fn list(

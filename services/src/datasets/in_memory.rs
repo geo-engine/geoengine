@@ -13,8 +13,8 @@ use geoengine_datatypes::{
     util::Identifier,
 };
 use geoengine_operators::engine::{
-    MetaData, MetaDataProvider, RasterResultDescriptor, StaticMetaData, TypedResultDescriptor,
-    VectorResultDescriptor,
+    MetaData, MetaDataProvider, RasterQueryRectangle, RasterResultDescriptor, StaticMetaData,
+    TypedResultDescriptor, VectorQueryRectangle, VectorResultDescriptor,
 };
 use geoengine_operators::source::{GdalLoadingInfo, GdalMetaDataRegular, OgrSourceDataset};
 use geoengine_operators::{mock::MockDatasetDataSourceLoadingInfo, source::GdalMetaDataStatic};
@@ -28,14 +28,22 @@ use super::{
 #[derive(Default)]
 pub struct HashMapDatasetDb {
     datasets: Vec<Dataset>,
-    ogr_datasets:
-        HashMap<InternalDatasetId, StaticMetaData<OgrSourceDataset, VectorResultDescriptor>>,
+    ogr_datasets: HashMap<
+        InternalDatasetId,
+        StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
+    >,
     mock_datasets: HashMap<
         InternalDatasetId,
-        StaticMetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>,
+        StaticMetaData<
+            MockDatasetDataSourceLoadingInfo,
+            VectorResultDescriptor,
+            VectorQueryRectangle,
+        >,
     >,
-    gdal_datasets:
-        HashMap<InternalDatasetId, Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor>>>,
+    gdal_datasets: HashMap<
+        InternalDatasetId,
+        Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
+    >,
     uploads: HashMap<UploadId, Upload>,
     external_providers: HashMap<DatasetProviderId, Box<dyn DatasetProviderDefinition>>,
 }
@@ -104,14 +112,22 @@ impl HashMapStorable for MetaDataDefinition {
     }
 }
 
-impl HashMapStorable for StaticMetaData<OgrSourceDataset, VectorResultDescriptor> {
+impl HashMapStorable
+    for StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
+{
     fn store(&self, id: InternalDatasetId, db: &mut HashMapDatasetDb) -> TypedResultDescriptor {
         db.ogr_datasets.insert(id, self.clone());
         self.result_descriptor.clone().into()
     }
 }
 
-impl HashMapStorable for StaticMetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor> {
+impl HashMapStorable
+    for StaticMetaData<
+        MockDatasetDataSourceLoadingInfo,
+        VectorResultDescriptor,
+        VectorQueryRectangle,
+    >
+{
     fn store(&self, id: InternalDatasetId, db: &mut HashMapDatasetDb) -> TypedResultDescriptor {
         db.mock_datasets.insert(id, self.clone());
         self.result_descriptor.clone().into()
@@ -152,6 +168,7 @@ impl DatasetStore<SimpleSession> for HashMapDatasetDb {
             description: dataset.description,
             result_descriptor,
             source_operator: dataset.source_operator,
+            symbology: dataset.symbology,
         };
         self.datasets.push(d);
 
@@ -215,14 +232,21 @@ impl DatasetProvider for HashMapDatasetDb {
 }
 
 #[async_trait]
-impl MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>
+impl
+    MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
     for HashMapDatasetDb
 {
     async fn meta_data(
         &self,
         dataset: &DatasetId,
     ) -> Result<
-        Box<dyn MetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>>,
+        Box<
+            dyn MetaData<
+                MockDatasetDataSourceLoadingInfo,
+                VectorResultDescriptor,
+                VectorQueryRectangle,
+            >,
+        >,
         geoengine_operators::error::Error,
     > {
         Ok(Box::new(
@@ -241,12 +265,14 @@ impl MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>
 }
 
 #[async_trait]
-impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor> for HashMapDatasetDb {
+impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
+    for HashMapDatasetDb
+{
     async fn meta_data(
         &self,
         dataset: &DatasetId,
     ) -> Result<
-        Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor>>,
+        Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
         Ok(Box::new(
@@ -265,12 +291,14 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor> for HashMapDatas
 }
 
 #[async_trait]
-impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor> for HashMapDatasetDb {
+impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
+    for HashMapDatasetDb
+{
     async fn meta_data(
         &self,
         dataset: &DatasetId,
     ) -> Result<
-        Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor>>,
+        Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
         let id = dataset
@@ -316,6 +344,7 @@ mod tests {
             name: "OgrDataset".to_string(),
             description: "My Ogr dataset".to_string(),
             source_operator: "OgrSource".to_string(),
+            symbology: None,
         };
 
         let meta = StaticMetaData {
@@ -331,6 +360,7 @@ mod tests {
                 provenance: None,
             },
             result_descriptor: descriptor.clone(),
+            phantom: Default::default(),
         };
 
         let id = ctx
@@ -341,8 +371,9 @@ mod tests {
 
         let exe_ctx = ctx.execution_context(session.clone())?;
 
-        let meta: Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor>> =
-            exe_ctx.meta_data(&id).await?;
+        let meta: Box<
+            dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
+        > = exe_ctx.meta_data(&id).await?;
 
         assert_eq!(
             meta.result_descriptor().await?,
@@ -377,7 +408,8 @@ mod tests {
                 description: "My Ogr dataset".to_string(),
                 tags: vec![],
                 source_operator: "OgrSource".to_string(),
-                result_descriptor: descriptor.into()
+                result_descriptor: descriptor.into(),
+                symbology: None,
             }
         );
 

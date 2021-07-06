@@ -1,8 +1,8 @@
-use crate::engine::{MetaData, QueryRectangle};
+use crate::engine::{MetaData, QueryProcessor, RasterQueryRectangle};
 use crate::{
     engine::{
-        InitializedOperator, InitializedRasterOperator, QueryProcessor, RasterOperator,
-        RasterQueryProcessor, RasterResultDescriptor, SourceOperator, TypedRasterQueryProcessor,
+        InitializedRasterOperator, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+        SourceOperator, TypedRasterQueryProcessor,
     },
     error::{self, Error},
     util::Result,
@@ -15,15 +15,14 @@ use futures::{
 use async_trait::async_trait;
 use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
 use gdal::{Dataset as GdalDataset, Metadata as GdalMetadata};
+use geoengine_datatypes::primitives::{SpatialPartition2D, SpatialPartitioned};
 use geoengine_datatypes::raster::{
     EmptyGrid, GeoTransform, Grid2D, GridOrEmpty2D, Pixel, RasterDataType, RasterProperties,
     RasterPropertiesEntry, RasterPropertiesEntryType, RasterPropertiesKey, RasterTile2D,
 };
 use geoengine_datatypes::{dataset::DatasetId, raster::TileInformation};
 use geoengine_datatypes::{
-    primitives::{
-        BoundingBox2D, SpatialBounded, TimeInstance, TimeInterval, TimeStep, TimeStepIter,
-    },
+    primitives::{AxisAlignedRectangle, TimeInstance, TimeInterval, TimeStep, TimeStepIter},
     raster::{
         Grid, GridBlit, GridBoundingBox2D, GridBounds, GridIdx, GridSize, GridSpaceToLinearSpace,
         TilingSpecification,
@@ -70,7 +69,8 @@ pub struct GdalSourceParameters {
     pub dataset: DatasetId,
 }
 
-type GdalMetaData = Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor>>;
+type GdalMetaData =
+    Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>;
 
 #[derive(Debug, Clone)]
 pub struct GdalLoadingInfo {
@@ -140,7 +140,7 @@ pub struct GdalDatasetParameters {
     pub file_path: PathBuf,
     pub rasterband_channel: usize,
     pub geo_transform: GeoTransform,
-    pub bbox: BoundingBox2D, // the bounding box of the dataset containing the raster data
+    pub partition: SpatialPartition2D, // the spatial partition of the dataset containing the raster data
     pub file_not_found_handling: FileNotFoundHandling,
     pub no_data_value: Option<f64>,
     pub properties_mapping: Option<Vec<GdalMetadataMapping>>,
@@ -162,8 +162,10 @@ pub struct GdalMetaDataStatic {
 }
 
 #[async_trait]
-impl MetaData<GdalLoadingInfo, RasterResultDescriptor> for GdalMetaDataStatic {
-    async fn loading_info(&self, _query: QueryRectangle) -> Result<GdalLoadingInfo> {
+impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
+    for GdalMetaDataStatic
+{
+    async fn loading_info(&self, _query: RasterQueryRectangle) -> Result<GdalLoadingInfo> {
         Ok(GdalLoadingInfo {
             info: GdalLoadingInfoPartIterator::Static {
                 parts: vec![GdalLoadingInfoPart {
@@ -179,7 +181,9 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor> for GdalMetaDataStatic {
         Ok(self.result_descriptor.clone())
     }
 
-    fn box_clone(&self) -> Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor>> {
+    fn box_clone(
+        &self,
+    ) -> Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> {
         Box::new(self.clone())
     }
 }
@@ -202,8 +206,10 @@ pub struct GdalMetaDataRegular {
 }
 
 #[async_trait]
-impl MetaData<GdalLoadingInfo, RasterResultDescriptor> for GdalMetaDataRegular {
-    async fn loading_info(&self, query: QueryRectangle) -> Result<GdalLoadingInfo> {
+impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
+    for GdalMetaDataRegular
+{
+    async fn loading_info(&self, query: RasterQueryRectangle) -> Result<GdalLoadingInfo> {
         let snapped_start = self
             .step
             .snap_relative(self.start, query.time_interval.start())?;
@@ -230,7 +236,9 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor> for GdalMetaDataRegular {
         Ok(self.result_descriptor.clone())
     }
 
-    fn box_clone(&self) -> Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor>> {
+    fn box_clone(
+        &self,
+    ) -> Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> {
         Box::new(self.clone())
     }
 }
@@ -322,9 +330,9 @@ where
         dataset_params: &GdalDatasetParameters,
         tile_information: &TileInformation,
     ) -> Result<GridWithProperties<T>> {
-        let dataset_bounds = dataset_params.bbox;
+        let dataset_bounds = dataset_params.partition;
         let geo_transform = dataset_params.geo_transform;
-        let output_bounds = tile_information.spatial_bounds();
+        let output_bounds = tile_information.spatial_partition();
         let output_shape = tile_information.tile_size_in_pixels();
         let output_geo_transform = tile_information.tile_geo_transform();
 
@@ -379,7 +387,7 @@ where
         }
 
         // dataset spatial relations
-        let dataset_contains_tile = dataset_bounds.contains_bbox(&output_bounds);
+        let dataset_contains_tile = dataset_bounds.contains(&output_bounds);
 
         // TODO: re-enable when BBOx paradox is solved
         // let dataset_intersects_tile = dataset_bounds.intersects_bbox(&output_bounds);
@@ -408,16 +416,6 @@ where
                     no_data_value,
                 )?
                 .into()
-            }
-            // TODO: remove when bbox paradox is solved
-            (false, Some(intersecting_area))
-                if intersecting_area.size_x() <= 0. || intersecting_area.size_y() <= 0. =>
-            {
-                if let Some(no_data) = no_data_value {
-                    EmptyGrid::new(output_shape, no_data).into()
-                } else {
-                    Grid2D::new_filled(output_shape, fill_value, None).into()
-                }
             }
             (false, Some(intersecting_area)) => {
                 let dataset_idx_ul =
@@ -457,7 +455,7 @@ where
     ///
     pub fn tile_stream(
         &self,
-        query: QueryRectangle,
+        query: RasterQueryRectangle,
         info: GdalLoadingInfoPart,
     ) -> impl Stream<Item = Result<RasterTile2D<T>>> {
         let spatial_resolution = query.spatial_resolution;
@@ -482,28 +480,30 @@ where
 
         let tiling_strategy = self.tiling_specification.strategy(x_signed, y_signed);
 
-        stream::iter(tiling_strategy.tile_information_iterator(query.bbox))
+        stream::iter(tiling_strategy.tile_information_iterator(query.spatial_bounds))
             .map(move |tile| Self::load_tile_async(info.params.clone(), tile, info.time))
             .buffered(1) // TODO: find a good default and / or add to config.
     }
 }
 
 #[async_trait]
-impl<T> QueryProcessor for GdalSourceProcessor<T>
+impl<P> QueryProcessor for GdalSourceProcessor<P>
 where
-    T: Pixel + gdal::raster::GdalType,
+    P: Pixel + gdal::raster::GdalType,
 {
-    type Output = RasterTile2D<T>;
+    type Output = RasterTile2D<P>;
+    type SpatialBounds = SpatialPartition2D;
+
     async fn query<'a>(
         &'a self,
-        query: crate::engine::QueryRectangle,
+        query: crate::engine::RasterQueryRectangle,
         _ctx: &'a dyn crate::engine::QueryContext,
-    ) -> Result<BoxStream<Result<RasterTile2D<T>>>> {
+    ) -> Result<BoxStream<Result<Self::Output>>> {
         let meta_data = self.meta_data.loading_info(query).await?;
 
         debug!(
             "Querying GdalSourceProcessor<{:?}> with: {:?}.",
-            T::TYPE,
+            P::TYPE,
             &query
         );
 
@@ -526,7 +526,7 @@ impl RasterOperator for GdalSource {
     async fn initialize(
         self: Box<Self>,
         context: &dyn crate::engine::ExecutionContext,
-    ) -> Result<Box<InitializedRasterOperator>> {
+    ) -> Result<Box<dyn InitializedRasterOperator>> {
         let meta_data: GdalMetaData = context.meta_data(&self.params.dataset).await?;
 
         debug!("Initializing GdalSource for {:?}.", &self.params.dataset);
@@ -551,9 +551,7 @@ pub struct InitializedGdalSourceOperator {
     pub tiling_specification: TilingSpecification,
 }
 
-impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
-    for InitializedGdalSourceOperator
-{
+impl InitializedRasterOperator for InitializedGdalSourceOperator {
     fn result_descriptor(&self) -> &RasterResultDescriptor {
         &self.result_descriptor
     }
@@ -709,9 +707,10 @@ fn properties_from_band(properties: &mut RasterProperties, gdal_dataset: &GdalRa
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::{MockExecutionContext, MockQueryContext, QueryRectangle};
+    use crate::engine::{MockExecutionContext, MockQueryContext};
     use crate::util::gdal::{add_ndvi_dataset, raster_dir};
     use crate::util::Result;
+    use geoengine_datatypes::primitives::SpatialPartition2D;
     use geoengine_datatypes::raster::{TileInformation, TilingStrategy};
     use geoengine_datatypes::{
         primitives::{Measurement, SpatialResolution, TimeGranularity},
@@ -724,7 +723,7 @@ mod tests {
         query_ctx: &MockQueryContext,
         id: DatasetId,
         output_shape: GridShape2D,
-        output_bounds: BoundingBox2D,
+        output_bounds: SpatialPartition2D,
         time_interval: TimeInterval,
     ) -> Vec<Result<RasterTile2D<u8>>> {
         let op = GdalSource {
@@ -745,9 +744,9 @@ mod tests {
             .unwrap()
             .get_u8()
             .unwrap()
-            .query(
-                QueryRectangle {
-                    bbox: output_bounds,
+            .raster_query(
+                RasterQueryRectangle {
+                    spatial_bounds: output_bounds,
                     time_interval,
                     spatial_resolution,
                 },
@@ -761,7 +760,7 @@ mod tests {
 
     fn load_ndvi_jan_2014(
         output_shape: GridShape2D,
-        output_bounds: BoundingBox2D,
+        output_bounds: SpatialPartition2D,
     ) -> Result<GridWithProperties<u8>> {
         GdalSourceProcessor::<u8>::load_tile_data(
             &GdalDatasetParameters {
@@ -772,7 +771,10 @@ mod tests {
                     x_pixel_size: 0.1,
                     y_pixel_size: -0.1,
                 },
-                bbox: BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
+                partition: SpatialPartition2D::new_unchecked(
+                    (-180., 90.).into(),
+                    (180., -90.).into(),
+                ),
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value: Some(0.),
                 properties_mapping: Some(vec![
@@ -800,7 +802,7 @@ mod tests {
                     },
                 ]),
             },
-            &TileInformation::with_bbox_and_shape(output_bounds, output_shape),
+            &TileInformation::with_partition_and_shape(output_bounds, output_shape),
         )
     }
 
@@ -816,7 +818,7 @@ mod tests {
             dataset_y_pixel_size,
         );
 
-        let bounding_box = BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap();
+        let partition = SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
 
         let origin_split_tileing_strategy = TilingStrategy {
             tile_size_in_pixels: tile_size_in_pixels.into(),
@@ -824,15 +826,15 @@ mod tests {
         };
 
         assert_eq!(
-            origin_split_tileing_strategy.upper_left_pixel_idx(bounding_box),
+            origin_split_tileing_strategy.upper_left_pixel_idx(partition),
             [0, 0].into()
         );
         assert_eq!(
-            origin_split_tileing_strategy.lower_right_pixel_idx(bounding_box),
+            origin_split_tileing_strategy.lower_right_pixel_idx(partition),
             [1800 - 1, 3600 - 1].into()
         );
 
-        let tile_grid = origin_split_tileing_strategy.tile_grid_box(bounding_box);
+        let tile_grid = origin_split_tileing_strategy.tile_grid_box(partition);
         assert_eq!(tile_grid.axis_size(), [3, 6]);
         assert_eq!(tile_grid.min_index(), [0, 0].into());
         assert_eq!(tile_grid.max_index(), [2, 5].into());
@@ -850,7 +852,7 @@ mod tests {
             dataset_y_pixel_size,
         );
 
-        let bounding_box = BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap();
+        let partition = SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
 
         let origin_split_tileing_strategy = TilingStrategy {
             tile_size_in_pixels: tile_size_in_pixels.into(),
@@ -858,15 +860,15 @@ mod tests {
         };
 
         assert_eq!(
-            origin_split_tileing_strategy.upper_left_pixel_idx(bounding_box),
+            origin_split_tileing_strategy.upper_left_pixel_idx(partition),
             [-900, -1800].into()
         );
         assert_eq!(
-            origin_split_tileing_strategy.lower_right_pixel_idx(bounding_box),
+            origin_split_tileing_strategy.lower_right_pixel_idx(partition),
             [1800 / 2 - 1, 3600 / 2 - 1].into()
         );
 
-        let tile_grid = origin_split_tileing_strategy.tile_grid_box(bounding_box);
+        let tile_grid = origin_split_tileing_strategy.tile_grid_box(partition);
         assert_eq!(tile_grid.axis_size(), [4, 6]);
         assert_eq!(tile_grid.min_index(), [-2, -3].into());
         assert_eq!(tile_grid.max_index(), [1, 2].into());
@@ -884,7 +886,7 @@ mod tests {
             dataset_y_pixel_size,
         );
 
-        let bounding_box = BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap();
+        let partition = SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
 
         let origin_split_tileing_strategy = TilingStrategy {
             tile_size_in_pixels: tile_size_in_pixels.into(),
@@ -892,7 +894,7 @@ mod tests {
         };
 
         let vres: Vec<GridIdx2D> = origin_split_tileing_strategy
-            .tile_idx_iterator(bounding_box)
+            .tile_idx_iterator(partition)
             .collect();
         assert_eq!(vres.len(), 4 * 6);
         assert_eq!(vres[0], [-2, -3].into());
@@ -914,7 +916,7 @@ mod tests {
             dataset_y_pixel_size,
         );
 
-        let bounding_box = BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap();
+        let partition = SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
 
         let origin_split_tileing_strategy = TilingStrategy {
             tile_size_in_pixels: tile_size_in_pixels.into(),
@@ -922,7 +924,7 @@ mod tests {
         };
 
         let vres: Vec<TileInformation> = origin_split_tileing_strategy
-            .tile_information_iterator(bounding_box)
+            .tile_information_iterator(partition)
             .collect();
         assert_eq!(vres.len(), 4 * 6);
         assert_eq!(
@@ -965,7 +967,7 @@ mod tests {
             file_path: "/foo/bar_%TIME%.tiff".into(),
             rasterband_channel: 0,
             geo_transform: Default::default(),
-            bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (1., 1.).into()),
+            partition: SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into()),
             file_not_found_handling: FileNotFoundHandling::NoData,
             no_data_value: Some(0.),
             properties_mapping: None,
@@ -979,7 +981,7 @@ mod tests {
         );
         assert_eq!(params.rasterband_channel, replaced.rasterband_channel);
         assert_eq!(params.geo_transform, replaced.geo_transform);
-        assert_eq!(params.bbox, replaced.bbox);
+        assert_eq!(params.partition, replaced.partition);
         assert_eq!(
             params.file_not_found_handling,
             replaced.file_not_found_handling
@@ -1002,7 +1004,7 @@ mod tests {
                 file_path: "/foo/bar_%TIME%.tiff".into(),
                 rasterband_channel: 0,
                 geo_transform: Default::default(),
-                bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (1., 1.).into()),
+                partition: SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into()),
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value,
                 properties_mapping: None,
@@ -1028,8 +1030,11 @@ mod tests {
 
         assert_eq!(
             meta_data
-                .loading_info(QueryRectangle {
-                    bbox: BoundingBox2D::new_unchecked((0., 0.).into(), (1., 1.).into()),
+                .loading_info(RasterQueryRectangle {
+                    spatial_bounds: SpatialPartition2D::new_unchecked(
+                        (0., 1.).into(),
+                        (1., 0.).into()
+                    ),
                     time_interval: TimeInterval::new_unchecked(0, 30),
                     spatial_resolution: SpatialResolution::one(),
                 })
@@ -1049,7 +1054,8 @@ mod tests {
     #[test]
     fn test_load_tile_data() {
         let output_shape: GridShape2D = [8, 8].into();
-        let output_bounds = BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into());
+        let output_bounds =
+            SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into());
 
         let GridWithProperties { grid, properties } =
             load_ndvi_jan_2014(output_shape, output_bounds).unwrap();
@@ -1093,9 +1099,9 @@ mod tests {
         let output_shape: GridShape2D = [8, 8].into();
         // shift world bbox one pixel up and to the left
         let (x_size, y_size) = (45., 22.5);
-        let output_bounds = BoundingBox2D::new_unchecked(
-            (-180. - x_size, -90. + y_size).into(),
-            (180. - x_size, 90. + y_size).into(),
+        let output_bounds = SpatialPartition2D::new_unchecked(
+            (-180. - x_size, 90. + y_size).into(),
+            (180. - x_size, -90. + y_size).into(),
         );
 
         let x = load_ndvi_jan_2014(output_shape, output_bounds)
@@ -1125,7 +1131,8 @@ mod tests {
         let id = add_ndvi_dataset(&mut exe_ctx);
 
         let output_shape: GridShape2D = [256, 256].into();
-        let output_bounds = BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into());
+        let output_bounds =
+            SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into());
         let time_interval = TimeInterval::new_unchecked(1_388_534_400_000, 1_388_534_400_001); // 2014-01-01
 
         let c = query_gdal_source(
@@ -1174,7 +1181,8 @@ mod tests {
         let id = add_ndvi_dataset(&mut exe_ctx);
 
         let output_shape: GridShape2D = [256, 256].into();
-        let output_bounds = BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into());
+        let output_bounds =
+            SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into());
         let time_interval = TimeInterval::new_unchecked(1_388_534_400_000, 1_393_632_000_000); // 2014-01-01 - 2014-03-01
 
         let c = query_gdal_source(
@@ -1208,7 +1216,8 @@ mod tests {
         let id = add_ndvi_dataset(&mut exe_ctx);
 
         let output_shape: GridShape2D = [256, 256].into();
-        let output_bounds = BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into());
+        let output_bounds =
+            SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into());
         let time_interval = TimeInterval::new_unchecked(1_385_856_000_000, 1_388_534_400_000); // 2013-12-01 - 2014-01-01
 
         let c = query_gdal_source(

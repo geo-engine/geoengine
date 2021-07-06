@@ -10,10 +10,10 @@ use geoengine_datatypes::collections::{
 use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval};
 
 use crate::adapters::FeatureCollectionChunkMerger;
+use crate::engine::QueryProcessor;
 use crate::engine::{
-    ExecutionContext, InitializedOperator, InitializedVectorOperator, Operator, QueryContext,
-    QueryProcessor, QueryRectangle, TypedVectorQueryProcessor, VectorOperator,
-    VectorQueryProcessor, VectorResultDescriptor,
+    ExecutionContext, InitializedVectorOperator, Operator, QueryContext, TypedVectorQueryProcessor,
+    VectorOperator, VectorQueryProcessor, VectorQueryRectangle, VectorResultDescriptor,
 };
 use crate::error;
 use crate::util::Result;
@@ -41,7 +41,7 @@ impl VectorOperator for PointInPolygonFilter {
     async fn initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
-    ) -> Result<Box<InitializedVectorOperator>> {
+    ) -> Result<Box<dyn InitializedVectorOperator>> {
         let points = self.sources.points.initialize(context).await?;
         let polygons = self.sources.polygons.initialize(context).await?;
 
@@ -71,14 +71,12 @@ impl VectorOperator for PointInPolygonFilter {
 }
 
 pub struct InitializedPointInPolygonFilter {
-    points: Box<InitializedVectorOperator>,
-    polygons: Box<InitializedVectorOperator>,
+    points: Box<dyn InitializedVectorOperator>,
+    polygons: Box<dyn InitializedVectorOperator>,
     result_descriptor: VectorResultDescriptor,
 }
 
-impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
-    for InitializedPointInPolygonFilter
-{
+impl InitializedVectorOperator for InitializedPointInPolygonFilter {
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
         let point_processor = self
             .points
@@ -148,7 +146,7 @@ impl VectorQueryProcessor for PointInPolygonFilterProcessor {
 
     async fn vector_query<'a>(
         &'a self,
-        query: QueryRectangle,
+        query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
         // TODO: multi-threading
@@ -389,7 +387,7 @@ mod tests {
         BoundingBox2D, MultiPoint, MultiPolygon, SpatialResolution, TimeInterval,
     };
 
-    use crate::mock::MockFeatureCollectionSource;
+    use crate::{engine::VectorQueryRectangle, mock::MockFeatureCollectionSource};
 
     use super::*;
     use crate::engine::{MockExecutionContext, MockQueryContext};
@@ -556,8 +554,8 @@ mod tests {
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
 
-        let query_rectangle = QueryRectangle {
-            bbox: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
+        let query_rectangle = VectorQueryRectangle {
+            spatial_bounds: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
@@ -605,8 +603,8 @@ mod tests {
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
 
-        let query_rectangle = QueryRectangle {
-            bbox: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
+        let query_rectangle = VectorQueryRectangle {
+            spatial_bounds: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
@@ -667,8 +665,8 @@ mod tests {
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
 
-        let query_rectangle = QueryRectangle {
-            bbox: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
+        let query_rectangle = VectorQueryRectangle {
+            spatial_bounds: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
@@ -746,8 +744,8 @@ mod tests {
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
 
-        let query_rectangle = QueryRectangle {
-            bbox: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
+        let query_rectangle = VectorQueryRectangle {
+            spatial_bounds: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };

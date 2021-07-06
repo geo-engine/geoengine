@@ -7,7 +7,7 @@ use uuid::Uuid;
 use warp::Rejection;
 use warp::{http::Response, Filter};
 
-use geoengine_datatypes::primitives::BoundingBox2D;
+use geoengine_datatypes::primitives::{AxisAlignedRectangle, BoundingBox2D};
 use geoengine_datatypes::{primitives::SpatialResolution, spatial_reference::SpatialReference};
 
 use crate::contexts::MockableSession;
@@ -20,8 +20,8 @@ use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 
 use geoengine_datatypes::primitives::{TimeInstance, TimeInterval};
-use geoengine_operators::engine::RasterOperator;
-use geoengine_operators::engine::{QueryRectangle, ResultDescriptor};
+use geoengine_operators::engine::{RasterOperator, RasterQueryRectangle};
+use geoengine_operators::engine::{ResultDescriptor, VectorQueryRectangle};
 use geoengine_operators::processing::{Reprojection, ReprojectionParams};
 
 pub(crate) fn wcs_handler<C: Context>(
@@ -299,6 +299,7 @@ async fn get_coverage<C: Context>(
 
     let processor = initialized.query_processor().context(error::Operator)?;
 
+    // TODO: proper axis order handling while parsing request
     let query_bbox = if request_spatial_ref == SpatialReference::epsg_4326() {
         BoundingBox2D::new(
             (
@@ -328,14 +329,15 @@ async fn get_coverage<C: Context>(
         |g| g.into(),
     );
 
-    let query_rect = QueryRectangle {
-        bbox: query_bbox,
+    let query_rect: RasterQueryRectangle = VectorQueryRectangle {
+        spatial_bounds: query_bbox,
         time_interval: request.time.unwrap_or_else(|| {
             let time = TimeInstance::from(chrono::offset::Utc::now());
             TimeInterval::new_unchecked(time, time)
         }),
         spatial_resolution,
-    };
+    }
+    .into();
 
     let query_ctx = ctx.query_context()?;
 

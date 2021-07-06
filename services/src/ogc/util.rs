@@ -1,4 +1,5 @@
 use chrono::FixedOffset;
+use geoengine_datatypes::primitives::SpatialPartition2D;
 use geoengine_datatypes::primitives::{
     BoundingBox2D, Coordinate2D, SpatialResolution, TimeInterval,
 };
@@ -20,6 +21,23 @@ where
 
     if let [Ok(x1), Ok(y1), Ok(x2), Ok(y2)] = *split.as_slice() {
         BoundingBox2D::new(Coordinate2D::new(x1, y1), Coordinate2D::new(x2, y2))
+            .map_err(D::Error::custom)
+    } else {
+        Err(D::Error::custom("Invalid bbox"))
+    }
+}
+
+/// Parse spatial partition, format is: "x1,y1,x2,y2"
+pub fn parse_spatial_partition<'de, D>(deserializer: D) -> Result<SpatialPartition2D, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+
+    let split: Vec<Result<f64, std::num::ParseFloatError>> = s.split(',').map(str::parse).collect();
+
+    if let [Ok(x1), Ok(y1), Ok(x2), Ok(y2)] = *split.as_slice() {
+        SpatialPartition2D::new(Coordinate2D::new(x1, y2), Coordinate2D::new(x2, y1))
             .map_err(D::Error::custom)
     } else {
         Err(D::Error::custom("Invalid bbox"))

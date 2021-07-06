@@ -1,16 +1,16 @@
 use geoengine_datatypes::{
-    primitives::{BoundingBox2D, Coordinate2D, SpatialResolution, TimeInterval},
+    primitives::{Coordinate2D, SpatialPartition2D, SpatialResolution, TimeInterval},
     raster::TilingSpecification,
 };
 use geoengine_operators::{
-    engine::{MockQueryContext, QueryRectangle, RasterQueryProcessor},
+    engine::{MockQueryContext, RasterQueryProcessor, RasterQueryRectangle},
     source::GdalSourceProcessor,
     util::{gdal::create_ndvi_meta_data, raster_stream_to_png::raster_stream_to_png_bytes},
 };
 
 use criterion::*;
 
-async fn tiles_to_png(query: QueryRectangle, tile_size: usize) -> Vec<u8> {
+async fn tiles_to_png(query: RasterQueryRectangle, tile_size: usize) -> Vec<u8> {
     let ctx = MockQueryContext::default();
     let tiling_specification =
         TilingSpecification::new(Coordinate2D::default(), [tile_size, tile_size].into());
@@ -40,8 +40,8 @@ async fn tiles_to_png(query: QueryRectangle, tile_size: usize) -> Vec<u8> {
 /// This bench will query a single tile
 fn bench_600px_1_tile_to_png(c: &mut Criterion) {
     let runtime = tokio::runtime::Runtime::new().unwrap();
-    let query = QueryRectangle {
-        bbox: BoundingBox2D::new((0., 0.).into(), (60., 60.).into()).unwrap(),
+    let query = RasterQueryRectangle {
+        spatial_bounds: SpatialPartition2D::new((0., 60.).into(), (60., 0.).into()).unwrap(),
         time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
         spatial_resolution: SpatialResolution::zero_point_one(),
     };
@@ -54,8 +54,8 @@ fn bench_600px_1_tile_to_png(c: &mut Criterion) {
 /// This bench will query 2 tiles
 fn bench_600px_2_tiles_to_png(c: &mut Criterion) {
     let runtime = tokio::runtime::Runtime::new().unwrap();
-    let query = QueryRectangle {
-        bbox: BoundingBox2D::new((0., -10.).into(), (60., 50.).into()).unwrap(),
+    let query = RasterQueryRectangle {
+        spatial_bounds: SpatialPartition2D::new((0., 50.).into(), (60., -10.).into()).unwrap(),
         time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
         spatial_resolution: SpatialResolution::zero_point_one(),
     };
@@ -68,8 +68,8 @@ fn bench_600px_2_tiles_to_png(c: &mut Criterion) {
 /// This bench will query 4 tiles
 fn bench_600px_4_tiles_to_png(c: &mut Criterion) {
     let runtime = tokio::runtime::Runtime::new().unwrap();
-    let query = QueryRectangle {
-        bbox: BoundingBox2D::new((-5., -10.).into(), (55., 50.).into()).unwrap(),
+    let query = RasterQueryRectangle {
+        spatial_bounds: SpatialPartition2D::new((-5., 50.).into(), (55., -10.).into()).unwrap(),
         time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
         spatial_resolution: SpatialResolution::zero_point_one(),
     };
@@ -82,8 +82,8 @@ fn bench_600px_4_tiles_to_png(c: &mut Criterion) {
 /// This bench will query 2 tiles and 2 no_data tiles by overlapping the opper right coordinate
 fn bench_600px_2_tile_2_no_data_tiles_to_png(c: &mut Criterion) {
     let runtime = tokio::runtime::Runtime::new().unwrap();
-    let query = QueryRectangle {
-        bbox: BoundingBox2D::new((130., 60.).into(), (190., 120.).into()).unwrap(),
+    let query = RasterQueryRectangle {
+        spatial_bounds: SpatialPartition2D::new((130., 120.).into(), (190., 600.).into()).unwrap(),
         time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
         spatial_resolution: SpatialResolution::zero_point_one(),
     };
@@ -96,8 +96,8 @@ fn bench_600px_2_tile_2_no_data_tiles_to_png(c: &mut Criterion) {
 /// This bench will query no tiles
 fn bench_600px_empty_to_png(c: &mut Criterion) {
     let runtime = tokio::runtime::Runtime::new().unwrap();
-    let query = QueryRectangle {
-        bbox: BoundingBox2D::new((-5., -10.).into(), (55., 50.).into()).unwrap(),
+    let query = RasterQueryRectangle {
+        spatial_bounds: SpatialPartition2D::new((-5., 50.).into(), (55., -10.).into()).unwrap(),
         time_interval: TimeInterval::new(1_000_000_000_000, 1_000_000_000_000 + 1000).unwrap(),
         spatial_resolution: SpatialResolution::zero_point_one(),
     };

@@ -29,14 +29,14 @@
         "xPixelSize": 14052.95025804873876,
         "yPixelSize": -14057.88111778840539
       },
-      "bbox": {
-        "lowerLeftCoordinate": {
+      "partition": {
+        "upperLeftCoordinate": {
           "x": -20037508.343,
-          "y": -19966571.375
-        },
-        "upperRightCoordinate": {
-          "x": 20027452.843,
           "y": 19971868.88
+        },
+        "lowerRightCoordinate": {
+          "x": 20027452.843,
+          "y": -19966571.375
         }
       },
       "fileNotFoundHandling": "NoData",

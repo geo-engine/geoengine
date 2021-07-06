@@ -1,14 +1,14 @@
-use uuid::Uuid;
-use warp::reply::Reply;
-use warp::Filter;
-
 use crate::error;
 use crate::handlers::{authenticate, Context};
 use crate::util::IdResponse;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use geoengine_operators::call_on_typed_operator;
+use geoengine_operators::engine::TypedResultDescriptor;
 use snafu::ResultExt;
+use uuid::Uuid;
+use warp::reply::Reply;
+use warp::Filter;
 
 /// Registers a new [Workflow].
 ///
@@ -156,18 +156,19 @@ async fn get_workflow_metadata<C: Context>(
     let execution_context = ctx.execution_context(session)?;
 
     // TODO: use cache here
-    call_on_typed_operator!(
+    let result_descriptor: TypedResultDescriptor = call_on_typed_operator!(
         workflow.operator,
         operator => {
             let operator = operator
                 .initialize(&execution_context).await
                 .context(error::Operator)?;
 
-            let result_descriptor = operator.result_descriptor();
-
-            Ok(warp::reply::json(result_descriptor))
+            #[allow(clippy::clone_on_copy)]
+            operator.result_descriptor().clone().into()
         }
-    )
+    );
+
+    Ok(warp::reply::json(&result_descriptor))
 }
 
 #[cfg(test)]
@@ -444,6 +445,7 @@ mod tests {
         assert_eq!(
             serde_json::from_slice::<serde_json::Value>(res.body()).unwrap(),
             json!({
+                "type": "vector",
                 "dataType": "MultiPoint",
                 "spatialReference": "EPSG:4326",
                 "columns": {
@@ -502,6 +504,7 @@ mod tests {
         assert_eq!(
             serde_json::from_slice::<serde_json::Value>(res.body()).unwrap(),
             serde_json::json!({
+                "type": "raster",
                 "dataType": "U8",
                 "spatialReference": "EPSG:4326",
                 "measurement": {
@@ -601,7 +604,9 @@ mod tests {
 
         assert_eq!(
             serde_json::from_slice::<serde_json::Value>(res.body()).unwrap(),
-            serde_json::json!({})
+            serde_json::json!({
+                "type": "plot",
+            })
         );
     }
 }

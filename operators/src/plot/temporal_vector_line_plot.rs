@@ -1,7 +1,8 @@
+use crate::engine::QueryProcessor;
 use crate::engine::{
-    ExecutionContext, InitializedOperator, InitializedPlotOperator, InitializedVectorOperator,
-    Operator, PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryRectangle,
-    SingleVectorSource, TypedPlotQueryProcessor, VectorQueryProcessor,
+    ExecutionContext, InitializedPlotOperator, InitializedVectorOperator, Operator, PlotOperator,
+    PlotQueryProcessor, PlotResultDescriptor, QueryContext, SingleVectorSource,
+    TypedPlotQueryProcessor, VectorQueryProcessor, VectorQueryRectangle,
 };
 use crate::error;
 use crate::util::Result;
@@ -49,7 +50,7 @@ impl PlotOperator for FeatureAttributeValuesOverTime {
     async fn initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
-    ) -> Result<Box<InitializedPlotOperator>> {
+    ) -> Result<Box<dyn InitializedPlotOperator>> {
         let source = self.sources.vector.initialize(context).await?;
         let result_descriptor = source.result_descriptor();
         let columns: &HashMap<String, FeatureDataType> = &result_descriptor.columns;
@@ -96,13 +97,11 @@ impl PlotOperator for FeatureAttributeValuesOverTime {
 /// The initialization of `FeatureAttributeValuesOverTime`
 pub struct InitializedFeatureAttributeValuesOverTime {
     result_descriptor: PlotResultDescriptor,
-    vector_source: Box<InitializedVectorOperator>,
+    vector_source: Box<dyn InitializedVectorOperator>,
     state: FeatureAttributeValuesOverTimeParams,
 }
 
-impl InitializedOperator<PlotResultDescriptor, TypedPlotQueryProcessor>
-    for InitializedFeatureAttributeValuesOverTime
-{
+impl InitializedPlotOperator for InitializedFeatureAttributeValuesOverTime {
     fn query_processor(&self) -> Result<TypedPlotQueryProcessor> {
         let input_processor = self.vector_source.query_processor()?;
 
@@ -140,14 +139,14 @@ where
 
     async fn plot_query<'a>(
         &'a self,
-        query: QueryRectangle,
+        query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<Self::OutputFormat> {
         let values = FeatureAttributeValues::<MAX_FEATURES>::default();
 
         let values = self
             .features
-            .vector_query(query, ctx)
+            .query(query, ctx)
             .await?
             .fold(Ok(values), |acc, features| async {
                 match (acc, features) {
@@ -320,8 +319,9 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                QueryRectangle {
-                    bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
+                        .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
                 },
@@ -419,8 +419,9 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                QueryRectangle {
-                    bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
+                        .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
                 },
@@ -506,8 +507,9 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                QueryRectangle {
-                    bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
+                        .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
                 },

@@ -10,7 +10,10 @@ use crate::{
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId};
 use geoengine_operators::{
-    engine::{MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor},
+    engine::{
+        MetaData, MetaDataProvider, RasterQueryRectangle, RasterResultDescriptor,
+        VectorQueryRectangle, VectorResultDescriptor,
+    },
     mock::MockDatasetDataSourceLoadingInfo,
     source::{GdalLoadingInfo, OgrSourceDataset},
 };
@@ -70,6 +73,7 @@ impl DatasetProvider for MockExternalDataProvider {
                 tags: vec![],
                 source_operator: dataset.properties.source_operator.clone(),
                 result_descriptor: dataset.meta_data.result_descriptor().await?,
+                symbology: dataset.properties.symbology.clone(),
             }));
         }
 
@@ -89,14 +93,21 @@ impl DatasetProvider for MockExternalDataProvider {
 }
 
 #[async_trait]
-impl MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>
+impl
+    MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
     for MockExternalDataProvider
 {
     async fn meta_data(
         &self,
         dataset: &DatasetId,
     ) -> Result<
-        Box<dyn MetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>>,
+        Box<
+            dyn MetaData<
+                MockDatasetDataSourceLoadingInfo,
+                VectorResultDescriptor,
+                VectorQueryRectangle,
+            >,
+        >,
         geoengine_operators::error::Error,
     > {
         let dataset_def = self
@@ -118,12 +129,14 @@ impl MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>
 }
 
 #[async_trait]
-impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor> for MockExternalDataProvider {
+impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
+    for MockExternalDataProvider
+{
     async fn meta_data(
         &self,
         _dataset: &DatasetId,
     ) -> Result<
-        Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor>>,
+        Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
         Err(geoengine_operators::error::Error::NotYetImplemented)
@@ -131,12 +144,14 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor> for MockExternal
 }
 
 #[async_trait]
-impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor> for MockExternalDataProvider {
+impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
+    for MockExternalDataProvider
+{
     async fn meta_data(
         &self,
         _dataset: &DatasetId,
     ) -> Result<
-        Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor>>,
+        Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
         Err(geoengine_operators::error::Error::NotYetImplemented)

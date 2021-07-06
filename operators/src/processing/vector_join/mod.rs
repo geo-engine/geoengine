@@ -4,8 +4,8 @@ use snafu::ensure;
 use geoengine_datatypes::collections::VectorDataType;
 
 use crate::engine::{
-    ExecutionContext, InitializedOperator, InitializedVectorOperator, Operator,
-    TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+    ExecutionContext, InitializedVectorOperator, Operator, TypedVectorQueryProcessor,
+    VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::error;
 use crate::util::Result;
@@ -56,7 +56,7 @@ impl VectorOperator for VectorJoin {
     async fn initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
-    ) -> Result<Box<InitializedVectorOperator>> {
+    ) -> Result<Box<dyn InitializedVectorOperator>> {
         let left = self.sources.left.initialize(context).await?;
         let right = self.sources.right.initialize(context).await?;
 
@@ -129,14 +129,12 @@ pub struct InitializedVectorJoinParams {
 
 pub struct InitializedVectorJoin {
     result_descriptor: VectorResultDescriptor,
-    left: Box<InitializedVectorOperator>,
-    right: Box<InitializedVectorOperator>,
+    left: Box<dyn InitializedVectorOperator>,
+    right: Box<dyn InitializedVectorOperator>,
     state: InitializedVectorJoinParams,
 }
 
-impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
-    for InitializedVectorJoin
-{
+impl InitializedVectorOperator for InitializedVectorJoin {
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
         match &self.state.join_type {
             VectorJoinType::EquiGeoToData {

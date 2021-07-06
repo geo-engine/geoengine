@@ -1,12 +1,12 @@
 use futures::{Future, FutureExt, TryFuture};
 use geoengine_datatypes::{
-    primitives::{SpatialBounded, TimeInstance, TimeInterval, TimeStep},
+    primitives::{SpatialPartitioned, TimeInstance, TimeInterval, TimeStep},
     raster::{EmptyGrid2D, Grid2D, GridOrEmpty, Pixel, RasterTile2D, TileInformation},
 };
 
 use crate::{
     adapters::{FoldTileAccu, FoldTileAccuMut, SubQueryTileAggregator},
-    engine::QueryRectangle,
+    engine::{QueryRectangle, RasterQueryRectangle},
     util::Result,
 };
 
@@ -330,7 +330,7 @@ where
     fn new_fold_accu(
         &self,
         tile_info: TileInformation,
-        query_rect: QueryRectangle,
+        query_rect: RasterQueryRectangle,
     ) -> Result<Self::TileAccu> {
         let output_raster = if let Some(no_data_value) = self.result_no_data_value() {
             EmptyGrid2D::new(tile_info.tile_size_in_pixels, no_data_value).into()
@@ -355,11 +355,11 @@ where
     fn tile_query_rectangle(
         &self,
         tile_info: TileInformation,
-        query_rect: QueryRectangle,
+        query_rect: RasterQueryRectangle,
         start_time: TimeInstance,
-    ) -> Result<QueryRectangle> {
+    ) -> Result<RasterQueryRectangle> {
         Ok(QueryRectangle {
-            bbox: tile_info.spatial_bounds(),
+            spatial_bounds: tile_info.spatial_partition(),
             spatial_resolution: query_rect.spatial_resolution,
             time_interval: TimeInterval::new(start_time, (start_time + self.step)?)?,
         })
