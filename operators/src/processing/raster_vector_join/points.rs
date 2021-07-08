@@ -108,7 +108,7 @@ impl RasterPointJoinProcessor {
                     }
                 },
             )
-            .map(move |accum| accum?.into_colletion(new_column_name));
+            .map(move |accum| accum?.into_collection(new_column_name));
 
         Ok(collection_stream.boxed())
     }
@@ -195,7 +195,7 @@ impl<P: Pixel> PointRasterJoiner<P> {
         Ok(self)
     }
 
-    fn into_colletion(self, new_column_name: &str) -> Result<MultiPointCollection> {
+    fn into_collection(self, new_column_name: &str) -> Result<MultiPointCollection> {
         let points = match &self.points {
             Some(points) => points,
             None => return Err(Error::EmptyInput), // TODO: maybe output empty dataset or just nulls

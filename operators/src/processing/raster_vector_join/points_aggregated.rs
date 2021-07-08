@@ -11,21 +11,30 @@ use crate::engine::{
     QueryContext, QueryProcessor, RasterQueryProcessor, TypedRasterQueryProcessor,
     VectorQueryProcessor, VectorQueryRectangle,
 };
-use crate::processing::raster_vector_join::aggregator::{
-    Aggregator, FirstValueFloatAggregator, FirstValueIntAggregator, MeanValueAggregator,
-    TypedAggregator,
+use crate::processing::raster_vector_join::per_feature_aggregator::{
+    FirstValueFloatPerFeatureAggregator, FirstValueIntPerFeatureAggregator,
+    MeanValuePerFeatureAggregator, PerFeatureAggregator, TypedPerFeatureAggregator,
 };
 use crate::processing::raster_vector_join::util::FeatureTimeSpanIter;
-use crate::processing::raster_vector_join::AggregationMethod;
+use crate::processing::raster_vector_join::TemporalAggregationMethod;
 use crate::util::Result;
 use async_trait::async_trait;
 use geoengine_datatypes::primitives::{BoundingBox2D, MultiPointAccess};
+
+use super::aggregator::{
+    AggregationResult, FirstValueFloatAggregator, FirstValueIntAggregator, MeanValueAggregator,
+    TypedAggregator,
+};
+use super::util::FeatureTimeSpan;
+use super::FeatureAggregationMethod;
+use crate::processing::raster_vector_join::aggregator::Aggregator;
 
 pub struct RasterPointAggregateJoinProcessor {
     points: Box<dyn VectorQueryProcessor<VectorType = MultiPointCollection>>,
     raster_processors: Vec<TypedRasterQueryProcessor>,
     column_names: Vec<String>,
-    aggregation: AggregationMethod,
+    feature_aggregation: FeatureAggregationMethod,
+    temporal_aggregation: TemporalAggregationMethod,
 }
 
 impl RasterPointAggregateJoinProcessor {
@@ -33,13 +42,15 @@ impl RasterPointAggregateJoinProcessor {
         points: Box<dyn VectorQueryProcessor<VectorType = MultiPointCollection>>,
         raster_processors: Vec<TypedRasterQueryProcessor>,
         column_names: Vec<String>,
-        aggregation: AggregationMethod,
+        feature_aggregation: FeatureAggregationMethod,
+        temporal_aggregation: TemporalAggregationMethod,
     ) -> Self {
         Self {
             points,
             raster_processors,
             column_names,
-            aggregation,
+            feature_aggregation,
+            temporal_aggregation,
         }
     }
 
@@ -47,11 +58,13 @@ impl RasterPointAggregateJoinProcessor {
         points: &MultiPointCollection,
         raster_processor: &dyn RasterQueryProcessor<RasterType = P>,
         new_column_name: &str,
-        aggregation: AggregationMethod,
+        feature_aggregation: FeatureAggregationMethod,
+        temporal_aggregation: TemporalAggregationMethod,
         query: VectorQueryRectangle,
         ctx: &dyn QueryContext,
     ) -> Result<MultiPointCollection> {
-        let mut aggregator = Self::create_aggregator::<P>(points.len(), aggregation);
+        let mut temporal_aggregator =
+            Self::create_temporal_aggregator::<P>(points.len(), temporal_aggregation);
 
         let points = points.sort_by_time_asc()?;
 
@@ -74,48 +87,57 @@ impl RasterPointAggregateJoinProcessor {
                     // TODO: don't do random access but use a single iterator
                     let geometry = points.geometry_at(feature_index).expect("must exist");
 
-                    // TODO: aggregate multiple extracted values for one multi point before inserting it to the aggregator
+                    let mut feature_aggregator =
+                        Self::create_feature_aggregator::<P>(feature_aggregation);
                     for coordinate in geometry.points() {
                         let grid_idx = geo_transform.coordinate_to_grid_idx_2d(*coordinate);
-
                         // try to get the pixel if the coordinate is within the current tile
                         if let Ok(pixel) = raster.get_at_grid_index(grid_idx) {
                             // finally, attach value to feature
-
                             let is_no_data = raster
                                 .no_data_value()
                                 .map_or(false, |no_data| pixel == no_data);
 
                             if is_no_data {
-                                aggregator.add_null(feature_index);
+                                feature_aggregator.add_null();
                             } else {
-                                aggregator.add_value(
-                                    feature_index,
-                                    pixel,
-                                    time_span.time_interval.duration_ms() as u64,
-                                );
+                                feature_aggregator
+                                    .add_value(pixel, time_span.time_interval.duration_ms() as u64);
+                            }
+
+                            if feature_aggregator.is_satisfied() {
+                                break;
                             }
                         }
                     }
+
+                    if feature_aggregator.is_satisfied() {
+                        fill_temporal_aggregator(
+                            feature_aggregator,
+                            &mut temporal_aggregator,
+                            feature_index,
+                            &time_span,
+                        );
+                    }
                 }
 
-                if aggregator.is_satisfied() {
+                if temporal_aggregator.is_satisfied() {
                     break;
                 }
             }
         }
 
         points
-            .add_column(new_column_name, aggregator.into_data())
+            .add_column(new_column_name, temporal_aggregator.into_data())
             .map_err(Into::into)
     }
 
-    fn create_aggregator<P: Pixel>(
+    fn create_temporal_aggregator<P: Pixel>(
         number_of_features: usize,
-        aggregation: AggregationMethod,
-    ) -> TypedAggregator {
+        aggregation: TemporalAggregationMethod,
+    ) -> TypedPerFeatureAggregator {
         match aggregation {
-            AggregationMethod::First => match P::TYPE {
+            TemporalAggregationMethod::First => match P::TYPE {
                 RasterDataType::U8
                 | RasterDataType::U16
                 | RasterDataType::U32
@@ -124,17 +146,64 @@ impl RasterPointAggregateJoinProcessor {
                 | RasterDataType::I16
                 | RasterDataType::I32
                 | RasterDataType::I64 => {
-                    FirstValueIntAggregator::new(number_of_features).into_typed()
+                    FirstValueIntPerFeatureAggregator::new(number_of_features).into_typed()
                 }
                 RasterDataType::F32 | RasterDataType::F64 => {
-                    FirstValueFloatAggregator::new(number_of_features).into_typed()
+                    FirstValueFloatPerFeatureAggregator::new(number_of_features).into_typed()
                 }
             },
-            AggregationMethod::Mean => MeanValueAggregator::new(number_of_features).into_typed(),
-            AggregationMethod::None => {
+            TemporalAggregationMethod::Mean => {
+                MeanValuePerFeatureAggregator::new(number_of_features).into_typed()
+            }
+            TemporalAggregationMethod::None => {
                 unreachable!("this type of aggregator does not lead to this kind of processor")
             }
         }
+    }
+
+    fn create_feature_aggregator<P: Pixel>(
+        aggregation: FeatureAggregationMethod,
+    ) -> TypedAggregator {
+        match aggregation {
+            FeatureAggregationMethod::First => match P::TYPE {
+                RasterDataType::U8
+                | RasterDataType::U16
+                | RasterDataType::U32
+                | RasterDataType::U64
+                | RasterDataType::I8
+                | RasterDataType::I16
+                | RasterDataType::I32
+                | RasterDataType::I64 => FirstValueIntAggregator::new().into_typed(),
+                RasterDataType::F32 | RasterDataType::F64 => {
+                    FirstValueFloatAggregator::new().into_typed()
+                }
+            },
+            FeatureAggregationMethod::Mean => MeanValueAggregator::new().into_typed(),
+        }
+    }
+}
+
+fn fill_temporal_aggregator(
+    feature_aggregator: TypedAggregator,
+    temporal_aggregator: &mut TypedPerFeatureAggregator,
+    feature_index: usize,
+    time_span: &FeatureTimeSpan,
+) {
+    if let Some(result) = feature_aggregator.result() {
+        match result {
+            AggregationResult::Int(r) => temporal_aggregator.add_value(
+                feature_index,
+                r,
+                time_span.time_interval.duration_ms() as u64,
+            ),
+            AggregationResult::Float(r) => temporal_aggregator.add_value(
+                feature_index,
+                r,
+                time_span.time_interval.duration_ms() as u64,
+            ),
+        }
+    } else {
+        temporal_aggregator.add_null(feature_index);
     }
 }
 
@@ -154,7 +223,7 @@ impl QueryProcessor for RasterPointAggregateJoinProcessor {
 
                 for (raster, new_column_name) in self.raster_processors.iter().zip(&self.column_names) {
                     points = call_on_generic_raster_processor!(raster, raster => {
-                        Self::extract_raster_values(&points, raster, new_column_name, self.aggregation, query, ctx).await?
+                        Self::extract_raster_values(&points, raster, new_column_name, self.feature_aggregation, self.temporal_aggregation, query, ctx).await?
                     });
                 }
 
@@ -218,15 +287,16 @@ mod tests {
 
         let points = MultiPointCollection::from_data(
             MultiPoint::many(vec![
-                (0.0, 0.0),
-                (1.0, 0.0),
-                (0.0, -1.0),
-                (1.0, -1.0),
-                (0.0, -2.0),
-                (1.0, -2.0),
+                vec![(0.0, 0.0)],
+                vec![(1.0, 0.0)],
+                vec![(0.0, -1.0)],
+                vec![(1.0, -1.0)],
+                vec![(0.0, -2.0)],
+                vec![(1.0, -2.0)],
+                vec![(0.0, -2.0), (1.0, -2.0)],
             ])
             .unwrap(),
-            vec![TimeInterval::default(); 6],
+            vec![TimeInterval::default(); 7],
             Default::default(),
         )
         .unwrap();
@@ -235,7 +305,8 @@ mod tests {
             &points,
             &raster_source.query_processor().unwrap().get_u8().unwrap(),
             "foo",
-            AggregationMethod::First,
+            FeatureAggregationMethod::First,
+            TemporalAggregationMethod::First,
             VectorQueryRectangle {
                 spatial_bounds: BoundingBox2D::new((0.0, -3.0).into(), (2.0, 0.).into()).unwrap(),
                 time_interval: Default::default(),
@@ -247,7 +318,7 @@ mod tests {
         .unwrap();
 
         if let FeatureDataRef::Int(extracted_data) = result.data("foo").unwrap() {
-            assert_eq!(extracted_data.as_ref(), &[1, 2, 3, 4, 5, 6]);
+            assert_eq!(extracted_data.as_ref(), &[1, 2, 3, 4, 5, 6, 5]);
         } else {
             unreachable!();
         }
@@ -318,7 +389,8 @@ mod tests {
             &points,
             &raster_source.query_processor().unwrap().get_u8().unwrap(),
             "foo",
-            AggregationMethod::Mean,
+            FeatureAggregationMethod::First,
+            TemporalAggregationMethod::Mean,
             VectorQueryRectangle {
                 spatial_bounds: BoundingBox2D::new((0.0, -3.0).into(), (2.0, 0.0).into()).unwrap(),
                 time_interval: Default::default(),

@@ -970,7 +970,8 @@ x;y
                     "names": [
                         "NDVI"
                     ],
-                    "aggregation": "first"
+                    "feature_aggregation": "first",
+                    "temporal_aggregation": "first"
                 },
                 "sources": {
                     "vector": {
