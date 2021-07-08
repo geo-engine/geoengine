@@ -218,7 +218,10 @@ impl AxisAlignedRectangle for SpatialPartition2D {
 
 impl From<geo::Rect<f64>> for SpatialPartition2D {
     fn from(partition: geo::Rect<f64>) -> SpatialPartition2D {
-        SpatialPartition2D::new_unchecked(partition.min().into(), partition.max().into())
+        SpatialPartition2D::new_unchecked(
+            (partition.min().x, partition.max().y).into(),
+            (partition.max().x, partition.min().y).into(),
+        )
     }
 }
 

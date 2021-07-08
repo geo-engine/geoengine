@@ -8,7 +8,12 @@ use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
 use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
-use geoengine_datatypes::primitives::{AxisAlignedRectangle, Measurement, TimeInterval};
+use geoengine_datatypes::operations::reproject::{
+    CoordinateProjection, CoordinateProjector, ReprojectClipped,
+};
+use geoengine_datatypes::primitives::{
+    AxisAlignedRectangle, BoundingBox2D, Measurement, SpatialPartitioned, TimeInterval,
+};
 use geoengine_datatypes::raster::{GeoTransform, RasterDataType};
 use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
 use geoengine_operators::engine::{
@@ -123,6 +128,10 @@ impl SentinelS2L2aCogsDataProvider {
             bands: vec![
                 Band::new("B01".to_owned(), Some(0.), RasterDataType::U16),
                 Band::new("B02".to_owned(), Some(0.), RasterDataType::U16),
+                Band::new("B03".to_owned(), Some(0.), RasterDataType::U16),
+                Band::new("B04".to_owned(), Some(0.), RasterDataType::U16),
+                Band::new("B08".to_owned(), Some(0.), RasterDataType::U16),
+                Band::new("SCL".to_owned(), Some(0.), RasterDataType::U8),
             ],
             zones: vec![
                 Zone::new("UTM32N".to_owned(), 32632),
@@ -197,7 +206,10 @@ impl SentinelS2L2aCogsDataProvider {
 impl DatasetProvider for SentinelS2L2aCogsDataProvider {
     async fn list(&self, _options: Validated<DatasetListOptions>) -> Result<Vec<DatasetListing>> {
         // TODO: options
-        Ok(self.datasets.values().map(|d| d.listing.clone()).collect())
+        let mut x: Vec<DatasetListing> =
+            self.datasets.values().map(|d| d.listing.clone()).collect();
+        x.sort_by_key(|e| e.name.clone());
+        Ok(x)
     }
 
     async fn load(
@@ -243,7 +255,7 @@ impl SentinelS2L2aCogsMetaData {
             let end = if i < num_features - 1 {
                 features[i + 1].properties.datetime
             } else {
-                start + Duration::minutes(1) // TODO: determine correct validity for last tile
+                start + Duration::seconds(1) // TODO: determine correct validity for last tile
             };
 
             let time_interval = TimeInterval::new(start, end)?;
@@ -308,8 +320,17 @@ impl SentinelS2L2aCogsMetaData {
         let (t_start, t_end) = Self::time_range_request(&query.time_interval)?;
 
         // request all features in zone in order to be able to determine the temporal validity of individual tile
-        let bbox =
-            SpatialReference::new(SpatialReferenceAuthority::Epsg, self.zone.epsg).area_of_use()?;
+        let projector = CoordinateProjector::from_known_srs(
+            SpatialReference::new(SpatialReferenceAuthority::Epsg, self.zone.epsg),
+            SpatialReference::epsg_4326(),
+        )?;
+
+        let spatial_partition = query.spatial_partition(); // TODO: use SpatialPartition2D directly
+        let bbox = BoundingBox2D::new_upper_left_lower_right_unchecked(
+            spatial_partition.upper_left(),
+            spatial_partition.lower_right(),
+        );
+        let bbox = bbox.reproject_clipped(&projector)?; // TODO: use reproject_clipped on SpatialPartition2D
 
         Ok(vec![
             (
@@ -555,7 +576,7 @@ mod tests {
             .unwrap();
 
         let expected = vec![GdalLoadingInfoPart {
-            time: TimeInterval::new_unchecked(1_609_581_746_000, 1_609_581_806_000),
+            time: TimeInterval::new_unchecked(1_609_581_746_000, 1_609_581_747_000),
             params: GdalDatasetParameters {
                 file_path: "/vsicurl/https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/32/R/PU/2021/1/S2B_32RPU_20210102_0_L2A/B01.tif".into(),
                 rasterband_channel: 1,
@@ -564,7 +585,7 @@ mod tests {
                     x_pixel_size: 60.,
                     y_pixel_size: -60.,
                 },
-                partition: SpatialPartition2D::new_unchecked((600_000.0, 3_290_220.0 ).into(), ( 709_800.0, 3_400_020.0).into()),
+                partition: SpatialPartition2D::new_unchecked((600_000.0, 3_400_020.0 ).into(), ( 709_800.0, 3_290_220.0).into()),
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value: Some(0.),
                 properties_mapping: None,

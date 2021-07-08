@@ -310,16 +310,34 @@ where
         tile_information: TileInformation,
         time: TimeInterval,
     ) -> Result<RasterTile2D<T>> {
-        Self::load_tile_data_async(dataset_params, tile_information)
-            .await
-            .map(|grid_with_properties| {
-                RasterTile2D::new_with_tile_info_and_properties(
-                    time,
-                    tile_information,
-                    grid_with_properties.grid,
-                    grid_with_properties.properties,
-                )
+        let f = if tile_information
+            .spatial_partition()
+            .intersects(&dataset_params.partition)
+        {
+            Self::load_tile_data_async(dataset_params, tile_information).await
+        } else {
+            let fill_value: T = dataset_params.no_data_value.map_or_else(T::zero, T::from_);
+
+            let empty_grid = if let Some(no_data) = dataset_params.no_data_value {
+                EmptyGrid::new(tile_information.tile_size_in_pixels, T::from_(no_data)).into()
+            } else {
+                Grid2D::new_filled(tile_information.tile_size_in_pixels, fill_value, None).into()
+            };
+
+            Ok(GridWithProperties {
+                grid: empty_grid,
+                properties: Default::default(),
             })
+        };
+
+        f.map(|grid_with_properties| {
+            RasterTile2D::new_with_tile_info_and_properties(
+                time,
+                tile_information,
+                grid_with_properties.grid,
+                grid_with_properties.properties,
+            )
+        })
     }
 
     ///
