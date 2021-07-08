@@ -233,8 +233,8 @@ mod tests {
             "type": "RasterVectorJoin",
             "params": {
                 "names": ["foo", "bar"],
-                "feature_aggregation": "first",
-                "temporal_aggregation": "mean",
+                "featureAggregation": "first",
+                "temporalAggregation": "mean",
             },
             "sources": {
                 "vector": {
