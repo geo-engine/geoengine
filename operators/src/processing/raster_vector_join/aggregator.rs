@@ -1,6 +1,8 @@
 use geoengine_datatypes::primitives::FeatureDataType;
-use geoengine_datatypes::raster::Pixel;
+use geoengine_datatypes::raster::{Pixel, RasterDataType};
 use num_traits::AsPrimitive;
+
+use super::FeatureAggregationMethod;
 
 /// Aggregating raster pixel values
 pub trait Aggregator {
@@ -26,6 +28,25 @@ pub trait Aggregator {
 
     /// Whether an aggregator needs no more values for producing the outcome
     fn is_satisfied(&self) -> bool;
+}
+
+pub fn create_aggregator<P: Pixel>(aggregation: FeatureAggregationMethod) -> TypedAggregator {
+    match aggregation {
+        FeatureAggregationMethod::First => match P::TYPE {
+            RasterDataType::U8
+            | RasterDataType::U16
+            | RasterDataType::U32
+            | RasterDataType::U64
+            | RasterDataType::I8
+            | RasterDataType::I16
+            | RasterDataType::I32
+            | RasterDataType::I64 => FirstValueIntAggregator::new().into_typed(),
+            RasterDataType::F32 | RasterDataType::F64 => {
+                FirstValueFloatAggregator::new().into_typed()
+            }
+        },
+        FeatureAggregationMethod::Mean => MeanValueAggregator::new().into_typed(),
+    }
 }
 
 /// An aggregator wrapper for different return types

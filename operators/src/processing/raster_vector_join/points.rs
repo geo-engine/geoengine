@@ -23,10 +23,14 @@ use geoengine_datatypes::collections::GeometryCollection;
 use geoengine_datatypes::raster::{CoordinatePixelAccess, NoDataValue, RasterDataType};
 use num_traits::AsPrimitive;
 
+use super::aggregator::{create_aggregator, AggregationResult};
+use super::FeatureAggregationMethod;
+
 pub struct RasterPointJoinProcessor {
     points: Box<dyn VectorQueryProcessor<VectorType = MultiPointCollection>>,
     raster_processors: Vec<TypedRasterQueryProcessor>,
     column_names: Vec<String>,
+    aggregation_method: FeatureAggregationMethod,
 }
 
 impl RasterPointJoinProcessor {
@@ -34,11 +38,13 @@ impl RasterPointJoinProcessor {
         points: Box<dyn VectorQueryProcessor<VectorType = MultiPointCollection>>,
         raster_processors: Vec<TypedRasterQueryProcessor>,
         column_names: Vec<String>,
+        aggregation_method: FeatureAggregationMethod,
     ) -> Self {
         Self {
             points,
             raster_processors,
             column_names,
+            aggregation_method,
         }
     }
 
@@ -48,10 +54,18 @@ impl RasterPointJoinProcessor {
         new_column_name: &'a str,
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
+        aggregation_method: FeatureAggregationMethod,
     ) -> BoxStream<'a, Result<MultiPointCollection>> {
         let stream = points.and_then(async move |points| {
-            Self::process_collection_chunk(points, raster_processor, new_column_name, query, ctx)
-                .await
+            Self::process_collection_chunk(
+                points,
+                raster_processor,
+                new_column_name,
+                query,
+                ctx,
+                aggregation_method,
+            )
+            .await
         });
 
         stream
@@ -66,9 +80,10 @@ impl RasterPointJoinProcessor {
         new_column_name: &'a str,
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
+        aggregation_method: FeatureAggregationMethod,
     ) -> Result<BoxStream<'a, Result<MultiPointCollection>>> {
         call_on_generic_raster_processor!(raster_processor, raster_processor => {
-            Self::process_typed_collection_chunk(points, raster_processor, new_column_name, query, ctx).await
+            Self::process_typed_collection_chunk(points, raster_processor, new_column_name, query, ctx, aggregation_method).await
         })
     }
 
@@ -78,6 +93,7 @@ impl RasterPointJoinProcessor {
         new_column_name: &'a str,
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
+        aggregation_method: FeatureAggregationMethod,
     ) -> Result<BoxStream<'a, Result<MultiPointCollection>>> {
         // make qrect smaller wrt. points
         let query = VectorQueryRectangle {
@@ -98,7 +114,7 @@ impl RasterPointJoinProcessor {
 
         let collection_stream = raster_query
             .time_multi_fold(
-                move || Ok(PointRasterJoiner::new()),
+                move || Ok(PointRasterJoiner::new(aggregation_method)),
                 move |accum, raster| {
                     let points = points.clone();
                     async move {
@@ -117,15 +133,17 @@ impl RasterPointJoinProcessor {
 struct PointRasterJoiner<P: Pixel> {
     values: Vec<Option<P>>,
     points: Option<MultiPointCollection>,
+    aggregation_method: FeatureAggregationMethod,
 }
 
 impl<P: Pixel> PointRasterJoiner<P> {
-    fn new() -> Self {
+    fn new(aggregation_method: FeatureAggregationMethod) -> Self {
         // TODO: is it possible to do the initialization here?
 
         Self {
             values: vec![],
             points: None,
+            aggregation_method,
         }
     }
 
@@ -235,11 +253,29 @@ impl<P: Pixel> PointRasterJoiner<P> {
 
                 let slice = &self.values[begin..end];
 
-                // TODO: implement aggregation methods
+                match slice {
+                    &[Some(value)] => Some(value.as_()),
+                    &[] => None,
+                    s => {
+                        let mut aggregator = create_aggregator::<P>(self.aggregation_method);
 
-                match slice.first() {
-                    Some(Some(value)) => Some(value.as_()),
-                    _ => None,
+                        for v in s {
+                            if let Some(value) = v {
+                                aggregator.add_value(*value, 1);
+                            } else {
+                                aggregator.add_null();
+                            }
+
+                            if aggregator.is_satisfied() {
+                                break;
+                            }
+                        }
+
+                        aggregator.result().map(|result| match result {
+                            AggregationResult::Int(v) => To::from_(v),
+                            AggregationResult::Float(v) => To::from_(v),
+                        })
+                    }
                 }
             })
             .collect()
@@ -261,9 +297,15 @@ impl QueryProcessor for RasterPointJoinProcessor {
         for (raster_processor, new_column_name) in
             self.raster_processors.iter().zip(&self.column_names)
         {
-            stream =
-                Self::process_collections(stream, raster_processor, new_column_name, query, ctx)
-                    .await;
+            stream = Self::process_collections(
+                stream,
+                raster_processor,
+                new_column_name,
+                query,
+                ctx,
+                self.aggregation_method,
+            )
+            .await;
         }
 
         Ok(stream)
@@ -294,13 +336,14 @@ mod tests {
         let points = MockFeatureCollectionSource::single(
             MultiPointCollection::from_data(
                 MultiPoint::many(vec![
-                    (-13.95, 20.05),
-                    (-14.05, 20.05),
-                    (-13.95, 19.95),
-                    (-14.05, 19.95),
+                    vec![(-13.95, 20.05)],
+                    vec![(-14.05, 20.05)],
+                    vec![(-13.95, 19.95)],
+                    vec![(-14.05, 19.95)],
+                    vec![(-13.95, 19.95), (-14.05, 19.95)],
                 ])
                 .unwrap(),
-                vec![time_instant; 4],
+                vec![time_instant; 5],
                 Default::default(),
             )
             .unwrap(),
@@ -332,8 +375,12 @@ mod tests {
             .query_processor()
             .unwrap();
 
-        let processor =
-            RasterPointJoinProcessor::new(points, vec![rasters], vec!["ndvi".to_owned()]);
+        let processor = RasterPointJoinProcessor::new(
+            points,
+            vec![rasters],
+            vec!["ndvi".to_owned()],
+            FeatureAggregationMethod::First,
+        );
 
         let mut result = processor
             .query(
@@ -359,15 +406,16 @@ mod tests {
             result,
             MultiPointCollection::from_slices(
                 &MultiPoint::many(vec![
-                    (-13.95, 20.05),
-                    (-14.05, 20.05),
-                    (-13.95, 19.95),
-                    (-14.05, 19.95),
+                    vec![(-13.95, 20.05)],
+                    vec![(-14.05, 20.05)],
+                    vec![(-13.95, 19.95)],
+                    vec![(-14.05, 19.95)],
+                    vec![(-13.95, 19.95), (-14.05, 19.95)],
                 ])
                 .unwrap(),
-                &[time_instant; 4],
+                &[time_instant; 5],
                 // these values are taken from loading the tiff in QGIS
-                &[("ndvi", FeatureData::Int(vec![54, 55, 51, 55]))],
+                &[("ndvi", FeatureData::Int(vec![54, 55, 51, 55, 51]))],
             )
             .unwrap()
         );
@@ -420,8 +468,12 @@ mod tests {
             .query_processor()
             .unwrap();
 
-        let processor =
-            RasterPointJoinProcessor::new(points, vec![rasters], vec!["ndvi".to_owned()]);
+        let processor = RasterPointJoinProcessor::new(
+            points,
+            vec![rasters],
+            vec!["ndvi".to_owned()],
+            FeatureAggregationMethod::First,
+        );
 
         let mut result = processor
             .query(
@@ -516,8 +568,12 @@ mod tests {
             .query_processor()
             .unwrap();
 
-        let processor =
-            RasterPointJoinProcessor::new(points, vec![rasters], vec!["ndvi".to_owned()]);
+        let processor = RasterPointJoinProcessor::new(
+            points,
+            vec![rasters],
+            vec!["ndvi".to_owned()],
+            FeatureAggregationMethod::First,
+        );
 
         let mut result = processor
             .query(
@@ -564,6 +620,7 @@ mod tests {
         );
     }
 
+    #[allow(clippy::too_many_lines)]
     #[tokio::test]
     async fn both_ranges() {
         let points = MockFeatureCollectionSource::single(
@@ -614,8 +671,12 @@ mod tests {
             .query_processor()
             .unwrap();
 
-        let processor =
-            RasterPointJoinProcessor::new(points, vec![rasters], vec!["ndvi".to_owned()]);
+        let processor = RasterPointJoinProcessor::new(
+            points,
+            vec![rasters],
+            vec!["ndvi".to_owned()],
+            FeatureAggregationMethod::First,
+        );
 
         let mut result = processor
             .query(

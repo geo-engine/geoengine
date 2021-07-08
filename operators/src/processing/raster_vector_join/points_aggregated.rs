@@ -21,13 +21,9 @@ use crate::util::Result;
 use async_trait::async_trait;
 use geoengine_datatypes::primitives::{BoundingBox2D, MultiPointAccess};
 
-use super::aggregator::{
-    AggregationResult, FirstValueFloatAggregator, FirstValueIntAggregator, MeanValueAggregator,
-    TypedAggregator,
-};
+use super::aggregator::{create_aggregator, AggregationResult, TypedAggregator};
 use super::util::FeatureTimeSpan;
 use super::FeatureAggregationMethod;
-use crate::processing::raster_vector_join::aggregator::Aggregator;
 
 pub struct RasterPointAggregateJoinProcessor {
     points: Box<dyn VectorQueryProcessor<VectorType = MultiPointCollection>>,
@@ -87,8 +83,7 @@ impl RasterPointAggregateJoinProcessor {
                     // TODO: don't do random access but use a single iterator
                     let geometry = points.geometry_at(feature_index).expect("must exist");
 
-                    let mut feature_aggregator =
-                        Self::create_feature_aggregator::<P>(feature_aggregation);
+                    let mut feature_aggregator = create_aggregator::<P>(feature_aggregation);
                     for coordinate in geometry.points() {
                         let grid_idx = geo_transform.coordinate_to_grid_idx_2d(*coordinate);
                         // try to get the pixel if the coordinate is within the current tile
@@ -101,8 +96,7 @@ impl RasterPointAggregateJoinProcessor {
                             if is_no_data {
                                 feature_aggregator.add_null();
                             } else {
-                                feature_aggregator
-                                    .add_value(pixel, time_span.time_interval.duration_ms() as u64);
+                                feature_aggregator.add_value(pixel, 1);
                             }
 
                             if feature_aggregator.is_satisfied() {
@@ -158,27 +152,6 @@ impl RasterPointAggregateJoinProcessor {
             TemporalAggregationMethod::None => {
                 unreachable!("this type of aggregator does not lead to this kind of processor")
             }
-        }
-    }
-
-    fn create_feature_aggregator<P: Pixel>(
-        aggregation: FeatureAggregationMethod,
-    ) -> TypedAggregator {
-        match aggregation {
-            FeatureAggregationMethod::First => match P::TYPE {
-                RasterDataType::U8
-                | RasterDataType::U16
-                | RasterDataType::U32
-                | RasterDataType::U64
-                | RasterDataType::I8
-                | RasterDataType::I16
-                | RasterDataType::I32
-                | RasterDataType::I64 => FirstValueIntAggregator::new().into_typed(),
-                RasterDataType::F32 | RasterDataType::F64 => {
-                    FirstValueFloatAggregator::new().into_typed()
-                }
-            },
-            FeatureAggregationMethod::Mean => MeanValueAggregator::new().into_typed(),
         }
     }
 }

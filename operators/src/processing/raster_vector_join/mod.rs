@@ -29,6 +29,7 @@ const MAX_NUMBER_OF_RASTER_INPUTS: usize = 8;
 
 /// The parameter spec for `RasterVectorJoin`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RasterVectorJoinParams {
     /// Each name reflects the output column of the join result.
     /// For each raster input, one name must be defined.
@@ -173,6 +174,7 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
                         points,
                         typed_raster_processors,
                         self.state.names.clone(),
+                        self.state.feature_aggregation,
                     )
                     .boxed(),
                     TemporalAggregationMethod::First | TemporalAggregationMethod::Mean => {
