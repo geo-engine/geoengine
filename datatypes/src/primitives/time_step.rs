@@ -214,7 +214,7 @@ impl TimeStep {
                 let snapped_year = if snapped_months.is_negative() {
                     ref_date_time.year() + (ref_date_time.month() as i32 + snapped_months - 12) / 12
                 } else {
-                    ref_date_time.year() + (ref_date_time.month() as i32 + snapped_months) / 12
+                    ref_date_time.year() + (ref_date_time.month() as i32 + snapped_months - 1) / 12
                 };
 
                 let mut snapped_month =
@@ -1311,6 +1311,50 @@ mod tests {
             "2000-01-01T00:00:00.0",
             "1999-01-01T00:00:00.0",
             "1997-01-01T00:00:00.0",
+        )
+    }
+
+    #[test]
+    fn snap_m_12m() {
+        test_snap(
+            TimeGranularity::Months,
+            1,
+            "2014-01-01T00:00:00.0",
+            "2014-12-01T12:00:00.0",
+            "2014-12-01T00:00:00.0",
+        )
+    }
+
+    #[test]
+    fn snap_m_13m() {
+        test_snap(
+            TimeGranularity::Months,
+            1,
+            "2014-01-01T00:00:00.0",
+            "2015-01-01T12:00:00.0",
+            "2015-01-01T00:00:00.0",
+        )
+    }
+
+    #[test]
+    fn snap_m_24m() {
+        test_snap(
+            TimeGranularity::Months,
+            1,
+            "2014-01-01T00:00:00.0",
+            "2015-12-01T12:00:00.0",
+            "2015-12-01T00:00:00.0",
+        )
+    }
+
+    #[test]
+    fn snap_m_12m_neg() {
+        test_snap(
+            TimeGranularity::Months,
+            1,
+            "2014-01-01T00:00:00.0",
+            "2013-01-01T12:00:00.0",
+            "2013-01-01T00:00:00.0",
         )
     }
 }
