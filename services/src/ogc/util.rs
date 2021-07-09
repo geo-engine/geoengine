@@ -132,33 +132,6 @@ where
     Ok(Some(spatial_resolution))
 }
 
-/// Parses a ogc subset parameter "(min,max)" from a string
-pub fn parse_subset_option<'de, D>(deserializer: D) -> Result<Option<(f64, f64)>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    let s = String::deserialize(deserializer)?;
-
-    if s.is_empty() {
-        return Ok(None);
-    }
-
-    let s = if s[0..1] == *"(" || s[s.len() - 1..s.len()] == *")" {
-        &s[1..s.len() - 1]
-    } else {
-        return Err(D::Error::custom("Invalid subset"));
-    };
-
-    let split: Vec<Result<f64, std::num::ParseFloatError>> = s.split(',').map(str::parse).collect();
-
-    let spatial_resolution = match *split.as_slice() {
-        [Ok(min), Ok(max)] if min < max => (min, max),
-        _ => return Err(D::Error::custom("Invalid subset")),
-    };
-
-    Ok(Some(spatial_resolution))
-}
-
 /// Parse wcs 1.1.1 bbox, format is: "x1,y1,x2,y2,crs", crs format is like `urn:ogc:def:crs:EPSG::4326`
 pub fn parse_wcs_bbox<'de, D>(deserializer: D) -> Result<WcsBoundingbox, D::Error>
 where
@@ -365,20 +338,6 @@ mod tests {
 
         assert!(parse_spatial_resolution_option(to_deserializer(",")).is_err());
         assert!(parse_spatial_resolution_option(to_deserializer("0.1,0.2,0.3")).is_err());
-    }
-
-    #[test]
-    fn subset() {
-        let subset = parse_subset_option(to_deserializer("(1.,2.)"));
-
-        assert_eq!(subset, Ok(Some((1., 2.))));
-    }
-
-    #[test]
-    fn subset_invalid() {
-        let subset = parse_subset_option(to_deserializer("(2.,1.)"));
-
-        assert!(subset.is_err());
     }
 
     #[test]
