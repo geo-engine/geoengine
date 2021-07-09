@@ -251,7 +251,8 @@ async fn get_coverage<C: Context>(
     );
 
     ensure!(
-        request.grid_origin() == request.boundingbox.partition.upper_left(),
+        request.gridorigin.coordinate(request.gridbasecrs)
+            == request.boundingbox.partition.upper_left(),
         error::WcsGridOriginMustEqualBoundingboxUpperLeft
     );
 
@@ -310,8 +311,8 @@ async fn get_coverage<C: Context>(
 
     let processor = initialized.query_processor().context(error::Operator)?;
 
-    let spatial_resolution: SpatialResolution = if let Some(res) = request.spatial_resolution() {
-        res?
+    let spatial_resolution: SpatialResolution = if let Some(grid_offsets) = request.gridoffsets {
+        grid_offsets.spatial_resolution(request.gridbasecrs)?
     } else {
         // TODO: proper default resolution
         SpatialResolution {

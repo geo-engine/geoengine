@@ -1,16 +1,31 @@
 use chrono::FixedOffset;
-use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D};
-use geoengine_datatypes::primitives::{
-    BoundingBox2D, Coordinate2D, SpatialResolution, TimeInterval,
-};
+use geoengine_datatypes::primitives::{AxisAlignedRectangle, BoundingBox2D, SpatialPartition2D};
+use geoengine_datatypes::primitives::{Coordinate2D, SpatialResolution, TimeInterval};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use serde::de::Error;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use std::str::FromStr;
 
-use super::wcs::request::{GridOffset, WcsBoundingbox};
+use super::wcs::request::WcsBoundingbox;
 use crate::error::{self, Result};
+
+#[derive(PartialEq, Debug, Deserialize, Serialize, Clone, Copy)]
+pub struct OgcBoundingBox {
+    values: [f64; 4],
+}
+
+impl OgcBoundingBox {
+    pub fn new(a: f64, b: f64, c: f64, d: f64) -> Self {
+        Self {
+            values: [a, b, c, d],
+        }
+    }
+
+    pub fn bounds<A: AxisAlignedRectangle>(self, spatial_reference: SpatialReference) -> Result<A> {
+        rectangle_from_ogc_params(self.values, spatial_reference)
+    }
+}
 
 /// Parse bbox, format is: "x1,y1,x2,y2"
 pub fn parse_bbox<'de, D>(deserializer: D) -> Result<BoundingBox2D, D::Error>
@@ -29,8 +44,8 @@ where
     }
 }
 
-/// Parse spatial partition, format is: "x1,y1,x2,y2"
-pub fn parse_spatial_partition<'de, D>(deserializer: D) -> Result<SpatialPartition2D, D::Error>
+/// Parse bbox, format is: "x1,y1,x2,y2"
+pub fn parse_ogc_bbox<'de, D>(deserializer: D) -> Result<OgcBoundingBox, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
@@ -39,8 +54,9 @@ where
     let split: Vec<Result<f64, std::num::ParseFloatError>> = s.split(',').map(str::parse).collect();
 
     if let [Ok(x1), Ok(y1), Ok(x2), Ok(y2)] = *split.as_slice() {
-        SpatialPartition2D::new(Coordinate2D::new(x1, y2), Coordinate2D::new(x2, y1))
-            .map_err(D::Error::custom)
+        Ok(OgcBoundingBox {
+            values: [x1, y1, x2, y2],
+        })
     } else {
         Err(D::Error::custom("Invalid bbox"))
     }
@@ -170,7 +186,7 @@ where
         bbox.split(',').map(str::parse).collect();
 
     let partition = if let [Ok(a), Ok(b), Ok(c), Ok(d)] = *split.as_slice() {
-        rectangle_from_ogc_params::<SpatialPartition2D>(a, b, c, d, spatial_reference)
+        rectangle_from_ogc_params::<SpatialPartition2D>([a, b, c, d], spatial_reference)
             .map_err(D::Error::custom)?
     } else {
         return Err(D::Error::custom("Invalid bbox"));
@@ -211,35 +227,12 @@ where
     }
 }
 
-/// Parse grid offset, format is `x_step,y_step`
-pub fn parse_grid_offset_option<'de, D>(deserializer: D) -> Result<Option<GridOffset>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    let s = String::deserialize(deserializer)?;
-
-    if s.is_empty() {
-        return Ok(None);
-    }
-
-    let split: Vec<Result<f64, std::num::ParseFloatError>> = s.split(',').map(str::parse).collect();
-
-    let grid_offset = match *split.as_slice() {
-        [Ok(x_step), Ok(y_step)] => GridOffset { x_step, y_step },
-        _ => return Err(D::Error::custom("Invalid grid offset")),
-    };
-
-    Ok(Some(grid_offset))
-}
-
 /// create an axis aligned rectangle using the values "a,b,c,d" from OGC bbox-like parameters using the axis ordering for `spatial_reference`
 pub fn rectangle_from_ogc_params<A: AxisAlignedRectangle>(
-    a: f64,
-    b: f64,
-    c: f64,
-    d: f64,
+    values: [f64; 4],
     spatial_reference: SpatialReference,
 ) -> Result<A> {
+    let [a, b, c, d] = values;
     // TODO: properly handle axis order
     if spatial_reference == SpatialReference::epsg_4326() {
         A::from_min_max((b, a).into(), (d, c).into()).context(error::DataType)
@@ -437,19 +430,6 @@ mod tests {
         assert_eq!(
             parse_coordinate(to_deserializer(s)).unwrap(),
             Coordinate2D::new(1.1, 2.2)
-        )
-    }
-
-    #[test]
-    fn it_parses_grid_offset() {
-        let s = "-8,5";
-
-        assert_eq!(
-            parse_grid_offset_option(to_deserializer(s)).unwrap(),
-            Some(GridOffset {
-                x_step: -8.,
-                y_step: 5.
-            })
         )
     }
 }

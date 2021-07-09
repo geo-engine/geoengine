@@ -253,15 +253,7 @@ async fn get_map<C: Context>(
     let processor = initialized.query_processor().context(error::Operator)?;
 
     // TODO: use proj for determining axis order
-    let query_bbox = if request_spatial_ref == SpatialReference::epsg_4326() {
-        SpatialPartition2D::new(
-            (request.bbox.lower_left().y, request.bbox.upper_right().x).into(),
-            (request.bbox.upper_right().y, request.bbox.lower_left().x).into(),
-        )
-        .context(error::DataType)?
-    } else {
-        request.bbox
-    };
+    let query_bbox: SpatialPartition2D = request.bbox.bounds(request_spatial_ref)?;
     let x_query_resolution = query_bbox.size_x() / f64::from(request.width);
     let y_query_resolution = query_bbox.size_y() / f64::from(request.height);
 

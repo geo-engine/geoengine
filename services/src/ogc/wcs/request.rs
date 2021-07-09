@@ -1,10 +1,8 @@
 use crate::error::{self, Result};
-use crate::ogc::util::{
-    parse_coordinate, parse_grid_offset_option, parse_time_option, parse_wcs_bbox, parse_wcs_crs,
-    tuple_from_ogc_params,
-};
+use crate::ogc::util::{parse_time_option, parse_wcs_bbox, parse_wcs_crs, tuple_from_ogc_params};
 use geoengine_datatypes::primitives::{Coordinate2D, SpatialPartition2D, SpatialResolution};
 use geoengine_datatypes::{primitives::TimeInterval, spatial_reference::SpatialReference};
+use serde::de::Error;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 
@@ -51,12 +49,12 @@ pub struct GetCoverage {
     #[serde(deserialize_with = "parse_wcs_crs")]
     pub gridbasecrs: SpatialReference,
     #[serde(alias = "GRIDORIGIN")]
-    #[serde(deserialize_with = "parse_coordinate")]
-    gridorigin: Coordinate2D,
+    #[serde(deserialize_with = "parse_grid_origin")]
+    pub gridorigin: GridOrigin,
     #[serde(alias = "GRIDOFFSETS")]
     #[serde(default)]
     #[serde(deserialize_with = "parse_grid_offset_option")]
-    pub gridoffsets: Option<GridOffset>,
+    pub gridoffsets: Option<GridOffsets>,
 
     // ignored for now:
     // GRIDCS=crs: The grid CRS (URN).
@@ -69,21 +67,6 @@ pub struct GetCoverage {
     pub time: Option<TimeInterval>,
 }
 
-impl GetCoverage {
-    pub fn spatial_resolution(&self) -> Option<Result<SpatialResolution>> {
-        if let Some(gridoffsets) = self.gridoffsets {
-            let (x, y) =
-                tuple_from_ogc_params(gridoffsets.x_step, gridoffsets.y_step, self.gridbasecrs);
-            return Some(SpatialResolution::new(x.abs(), y.abs()).context(error::DataType));
-        }
-        None
-    }
-
-    pub fn grid_origin(&self) -> Coordinate2D {
-        tuple_from_ogc_params(self.gridorigin.x, self.gridorigin.y, self.gridbasecrs).into()
-    }
-}
-
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub struct WcsBoundingbox {
     pub partition: SpatialPartition2D,
@@ -91,17 +74,30 @@ pub struct WcsBoundingbox {
 }
 
 #[derive(PartialEq, Debug, Deserialize, Serialize, Clone, Copy)]
-pub struct GridOffset {
-    pub x_step: f64,
-    pub y_step: f64,
+pub struct GridOffsets {
+    x_step: f64,
+    y_step: f64,
 }
 
-impl From<GridOffset> for SpatialResolution {
-    fn from(value: GridOffset) -> Self {
-        SpatialResolution {
-            x: value.x_step.abs(),
-            y: value.y_step.abs(),
-        }
+impl GridOffsets {
+    pub fn spatial_resolution(
+        &self,
+        spatial_reference: SpatialReference,
+    ) -> Result<SpatialResolution> {
+        let (x, y) = tuple_from_ogc_params(self.x_step, self.y_step, spatial_reference);
+        SpatialResolution::new(x.abs(), y.abs()).context(error::DataType)
+    }
+}
+
+#[derive(PartialEq, Debug, Deserialize, Serialize, Clone, Copy)]
+pub struct GridOrigin {
+    x: f64,
+    y: f64,
+}
+
+impl GridOrigin {
+    pub fn coordinate(&self, spatial_reference: SpatialReference) -> Coordinate2D {
+        tuple_from_ogc_params(self.x, self.y, spatial_reference).into()
     }
 }
 
@@ -111,9 +107,51 @@ pub enum GetCoverageFormat {
     ImageTiff,
 }
 
+/// parse coordinate, format is "x,y"
+pub fn parse_grid_origin<'de, D>(deserializer: D) -> Result<GridOrigin, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+
+    let split: Vec<Result<f64, std::num::ParseFloatError>> = s.split(',').map(str::parse).collect();
+
+    match *split.as_slice() {
+        [Ok(x), Ok(y)] => Ok(GridOrigin { x, y }),
+        _ => Err(D::Error::custom("Invalid gridorigin")),
+    }
+}
+
+/// Parse grid offset, format is `x_step,y_step`
+pub fn parse_grid_offset_option<'de, D>(deserializer: D) -> Result<Option<GridOffsets>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+
+    if s.is_empty() {
+        return Ok(None);
+    }
+
+    let split: Vec<Result<f64, std::num::ParseFloatError>> = s.split(',').map(str::parse).collect();
+
+    let grid_offset = match *split.as_slice() {
+        [Ok(x_step), Ok(y_step)] => GridOffsets { x_step, y_step },
+        _ => return Err(D::Error::custom("Invalid grid offset")),
+    };
+
+    Ok(Some(grid_offset))
+}
+
 #[cfg(test)]
 mod tests {
+    use serde::de::{value::StringDeserializer, IntoDeserializer};
+
     use super::*;
+
+    fn to_deserializer(s: &str) -> StringDeserializer<serde::de::value::Error> {
+        s.to_owned().into_deserializer()
+    }
 
     #[test]
     fn deserialize() {
@@ -147,8 +185,8 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326(),
                 },
                 gridbasecrs: SpatialReference::epsg_4326(),
-                gridorigin: Coordinate2D::new(81., -162.),
-                gridoffsets: Some(GridOffset {
+                gridorigin: GridOrigin { x: 81., y: -162. },
+                gridoffsets: Some(GridOffsets {
                     x_step: -18.,
                     y_step: 36.
                 }),
@@ -156,5 +194,18 @@ mod tests {
             }),
             coverage
         );
+    }
+
+    #[test]
+    fn it_parses_grid_offset() {
+        let s = "-8,5";
+
+        assert_eq!(
+            parse_grid_offset_option(to_deserializer(s)).unwrap(),
+            Some(GridOffsets {
+                x_step: -8.,
+                y_step: 5.
+            })
+        )
     }
 }
