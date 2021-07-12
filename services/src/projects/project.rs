@@ -308,7 +308,7 @@ pub enum NumberParam {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase", tag = "type")]
+#[serde(rename_all = "camelCase")]
 pub struct DerivedNumber {
     pub attribute: String,
     pub factor: f64,
@@ -708,6 +708,25 @@ mod tests {
                 "text": null
             })
             .to_string(),
+        );
+    }
+
+    #[test]
+    fn serialize_derived_number_param() {
+        assert_eq!(
+            serde_json::to_string(&NumberParam::Derived(DerivedNumber {
+                attribute: "foo".to_owned(),
+                factor: 1.,
+                default_value: 0.
+            }))
+            .unwrap(),
+            json!({
+                "type": "derived",
+                "attribute": "foo",
+                "factor": 1.0,
+                "defaultValue": 0.0
+            })
+            .to_string()
         );
     }
 }
