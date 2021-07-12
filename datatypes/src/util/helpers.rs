@@ -64,6 +64,16 @@ where
     }
 }
 
+/// snap `value` to previous `step` multiple from `start`
+pub fn snap_prev(start: f64, step: f64, value: f64) -> f64 {
+    start + ((value - start) / step).floor() * step
+}
+
+/// snap `value` to next `step` multiple from `start`
+pub fn snap_next(start: f64, step: f64, value: f64) -> f64 {
+    start + ((value - start) / step).ceil() * step
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -73,5 +83,17 @@ mod tests {
         assert_approx_eq!(&[1., 2., 3.], &[1., 2., 3.]);
 
         assert!(!approx_eq_floats(&[1., 2.], &[1., 2., 3.]));
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn it_snaps_right() {
+        assert_eq!(snap_next(1., 2., 4.5), 5.)
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn it_snaps_left() {
+        assert_eq!(snap_prev(1., 2., 4.5), 3.)
     }
 }

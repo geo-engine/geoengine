@@ -1,6 +1,6 @@
 use std::cmp::{max, min};
 
-use crate::primitives::{AxisAlignedRectangle, BoundingBox2D, Coordinate2D};
+use crate::primitives::{AxisAlignedRectangle, BoundingBox2D, Coordinate2D, SpatialResolution};
 use serde::{Deserialize, Serialize};
 
 use super::{GridBoundingBox2D, GridIdx, GridIdx2D};
@@ -134,6 +134,13 @@ impl GeoTransform {
             self.origin_coordinate.x + (self.x_pixel_size / 2.),
             self.origin_coordinate.y - (self.y_pixel_size / 2.)
         )
+    }
+
+    pub fn spatial_resolution(&self) -> SpatialResolution {
+        SpatialResolution {
+            x: self.x_pixel_size.abs(),
+            y: self.y_pixel_size.abs(),
+        }
     }
 }
 
