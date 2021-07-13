@@ -2,6 +2,9 @@ use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
 use crate::error;
+use crate::raster::GridShape2D;
+use crate::util::helpers::snap_next;
+use crate::util::helpers::snap_prev;
 use crate::util::Result;
 
 use super::BoundingBox2D;
@@ -10,6 +13,9 @@ use super::SpatialResolution;
 
 /// Common trait for axis-parallel boxes
 pub trait AxisAlignedRectangle: Copy {
+    /// create a new instance defined by min and max coordinate values
+    fn from_min_max(min: Coordinate2D, max: Coordinate2D) -> Result<Self>;
+
     fn lower_left(&self) -> Coordinate2D;
     fn upper_left(&self) -> Coordinate2D;
     fn upper_right(&self) -> Coordinate2D;
@@ -178,6 +184,34 @@ impl SpatialPartition2D {
             self.upper_left_coordinate.y,
         )
     }
+
+    /// Align this partition by snapping bounds to the pixel borders defined by `origin` and `resolution`
+    pub fn snap_to_grid(&self, origin: Coordinate2D, resolution: SpatialResolution) -> Self {
+        Self {
+            upper_left_coordinate: (
+                snap_prev(origin.x, resolution.x, self.upper_left().x),
+                snap_next(origin.y, resolution.y, self.upper_left().y),
+            )
+                .into(),
+            lower_right_coordinate: (
+                snap_next(origin.x, resolution.x, self.lower_right().x),
+                snap_prev(origin.y, resolution.y, self.lower_right().y),
+            )
+                .into(),
+        }
+    }
+
+    /// Return the number of pixel as a gridshape. Due to floating number imprecisions we snap to grid
+    /// and round here
+    pub fn grid_shape(&self, origin: Coordinate2D, resolution: SpatialResolution) -> GridShape2D {
+        let snapped = self.snap_to_grid(origin, resolution);
+
+        [
+            (snapped.size_y() / resolution.y).round() as usize,
+            (snapped.size_x() / resolution.x).round() as usize,
+        ]
+        .into()
+    }
 }
 
 pub trait SpatialPartitioned {
@@ -185,6 +219,10 @@ pub trait SpatialPartitioned {
 }
 
 impl AxisAlignedRectangle for SpatialPartition2D {
+    fn from_min_max(min: Coordinate2D, max: Coordinate2D) -> Result<Self> {
+        SpatialPartition2D::new((min.x, max.y).into(), (max.x, min.y).into())
+    }
+
     fn upper_left(&self) -> Coordinate2D {
         self.upper_left_coordinate
     }
@@ -330,5 +368,36 @@ mod tests {
         let p1 = SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into());
         let bbox = BoundingBox2D::new_unchecked((1., 1.).into(), (2., 2.).into());
         assert!(!p1.intersects_bbox(&bbox));
+    }
+
+    #[test]
+    fn it_snaps_to_grid() {
+        let origin = Coordinate2D::new(1., 1.);
+        let resolution = SpatialResolution { x: 3., y: 5. };
+        let p = SpatialPartition2D::new_unchecked((2., 10.).into(), (6., 2.).into());
+
+        assert_eq!(
+            p.snap_to_grid(origin, resolution),
+            SpatialPartition2D::new_unchecked((1., 11.).into(), (7., 1.).into())
+        );
+    }
+
+    #[test]
+    fn it_counts_pixels() {
+        let p = SpatialPartition2D::new_unchecked(
+            (137.229_987_293_519_68, -66.227_224_576_271_84).into(),
+            (180., -90.).into(),
+        );
+
+        assert_eq!(
+            p.grid_shape(
+                (-180., -66.227_224_576_271_84).into(),
+                SpatialResolution::new_unchecked(
+                    0.228_716_645_489_199_48,
+                    0.226_407_384_987_887_26
+                )
+            ),
+            [105, 187].into()
+        )
     }
 }

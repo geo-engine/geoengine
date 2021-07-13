@@ -343,6 +343,10 @@ impl BoundingBox2D {
 }
 
 impl AxisAlignedRectangle for BoundingBox2D {
+    fn from_min_max(min: Coordinate2D, max: Coordinate2D) -> Result<Self> {
+        BoundingBox2D::new(min, max)
+    }
+
     /// Returns the `Coordnate2D` representing the lower left edge of the bounding box
     ///
     /// # Examples

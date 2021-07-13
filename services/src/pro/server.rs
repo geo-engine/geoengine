@@ -61,6 +61,7 @@ where
         handlers::datasets::auto_create_dataset_handler(ctx.clone()),
         handlers::datasets::create_dataset_handler(ctx.clone()),
         handlers::datasets::suggest_meta_data_handler(ctx.clone()),
+        handlers::wcs::wcs_handler(ctx.clone()),
         handlers::wms::wms_handler(ctx.clone()),
         handlers::wfs::wfs_handler(ctx.clone()),
         handlers::plots::get_plot_handler(ctx.clone()),

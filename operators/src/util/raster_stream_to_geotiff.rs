@@ -8,8 +8,7 @@ use gdal_sys::{VSIFree, VSIGetMemFileBuffer};
 use geoengine_datatypes::{
     primitives::{AxisAlignedRectangle, SpatialPartitioned},
     raster::{
-        ChangeGridBounds, GeoTransform, Grid2D, GridBlit, GridIdx, GridShape2D, GridSize, Pixel,
-        RasterTile2D,
+        ChangeGridBounds, GeoTransform, Grid2D, GridBlit, GridIdx, GridSize, Pixel, RasterTile2D,
     },
     spatial_reference::SpatialReference,
 };
@@ -120,19 +119,15 @@ fn gdal_writer<T: Pixel + GdalType>(
         } else {
             // extract relevant data from tile (intersection with output_bounds)
 
-            // TODO: snap intersection to pixels?
             let intersection = output_bounds
                 .intersection(&tile_bounds)
                 .expect("tile must intersect with query");
 
-            let shape: GridShape2D = [
-                (intersection.size_y() / y_pixel_size).ceil() as usize,
-                (intersection.size_x() / x_pixel_size).ceil() as usize,
-            ]
-            .into();
-
             let mut output_grid = Grid2D::new_filled(
-                shape,
+                intersection.grid_shape(
+                    output_geo_transform.origin_coordinate,
+                    output_geo_transform.spatial_resolution(),
+                ),
                 no_data_value.map_or_else(T::zero, T::from_),
                 no_data_value.map(T::from_),
             );
@@ -270,5 +265,42 @@ mod tests {
         .await;
 
         assert!(bytes.is_err());
+    }
+
+    #[tokio::test]
+    async fn geotiff_from_stream_in_range_of_window() {
+        let ctx = MockQueryContext::default();
+        let tiling_specification =
+            TilingSpecification::new(Coordinate2D::default(), [600, 600].into());
+
+        let gdal_source = GdalSourceProcessor::<u8> {
+            tiling_specification,
+            meta_data: Box::new(create_ndvi_meta_data()),
+            phantom_data: Default::default(),
+        };
+
+        let query_bbox =
+            SpatialPartition2D::new((-180., -66.227_224_576_271_84).into(), (180., -90.).into())
+                .unwrap();
+
+        let bytes = raster_stream_to_geotiff_bytes(
+            gdal_source.boxed(),
+            RasterQueryRectangle {
+                spatial_bounds: query_bbox,
+                time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
+                    .unwrap(),
+                spatial_resolution: SpatialResolution::new_unchecked(
+                    0.228_716_645_489_199_48,
+                    0.226_407_384_987_887_26,
+                ),
+            },
+            ctx,
+            Some(0.),
+            SpatialReference::epsg_4326(),
+            None,
+        )
+        .await;
+
+        assert!(bytes.is_ok())
     }
 }

@@ -183,3 +183,12 @@ pub struct Logging {
 impl ConfigElement for Logging {
     const KEY: &'static str = "logging";
 }
+
+#[derive(Debug, Deserialize)]
+pub struct Wcs {
+    pub tile_limit: usize,
+}
+
+impl ConfigElement for Wcs {
+    const KEY: &'static str = "wcs";
+}

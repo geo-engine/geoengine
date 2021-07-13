@@ -1,6 +1,6 @@
-use crate::ogc::util::{parse_spatial_partition, parse_time_option};
+use crate::ogc::util::{parse_ogc_bbox, parse_time_option, OgcBoundingBox};
 use crate::util::{bool_option_case_insensitive, from_str};
-use geoengine_datatypes::primitives::{SpatialPartition2D, TimeInterval};
+use geoengine_datatypes::primitives::TimeInterval;
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use serde::{Deserialize, Serialize};
 
@@ -42,8 +42,8 @@ pub struct GetMap {
     #[serde(deserialize_with = "from_str")]
     pub height: u32,
     #[serde(alias = "BBOX")]
-    #[serde(deserialize_with = "parse_spatial_partition")]
-    pub bbox: SpatialPartition2D,
+    #[serde(deserialize_with = "parse_ogc_bbox")]
+    pub bbox: OgcBoundingBox,
     #[serde(alias = "FORMAT")]
     pub format: GetMapFormat,
     #[serde(alias = "LAYERS")]
@@ -113,7 +113,7 @@ pub struct GetLegendGraphic {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use geoengine_datatypes::{primitives::Coordinate2D, spatial_reference::SpatialReference};
+    use geoengine_datatypes::spatial_reference::SpatialReference;
 
     #[test]
     fn deserialize_get_map() {
@@ -132,8 +132,7 @@ mod tests {
             sld: Some("sld_spec".into()),
             sld_body: Some("sld_body".into()),
             elevation: Some("elevation".into()),
-            bbox: SpatialPartition2D::new(Coordinate2D::new(1., 4.), Coordinate2D::new(3., 2.))
-                .unwrap(),
+            bbox: OgcBoundingBox::new(1., 2., 3., 4.),
             height: 2,
             format: GetMapFormat::ImagePng,
             exceptions: Some("exceptions".into()),
@@ -159,8 +158,7 @@ mod tests {
             sld: None,
             sld_body: None,
             elevation: None,
-            bbox: SpatialPartition2D::new(Coordinate2D::new(1., 4.), Coordinate2D::new(3., 2.))
-                .unwrap(),
+            bbox: OgcBoundingBox::new(1., 2., 3., 4.),
             height: 2,
             format: GetMapFormat::ImagePng,
             exceptions: None,

@@ -18,6 +18,7 @@ pub mod projects;
 pub mod session;
 pub mod spatial_references;
 pub mod upload;
+pub mod wcs;
 pub mod wfs;
 pub mod wms;
 pub mod workflows;
