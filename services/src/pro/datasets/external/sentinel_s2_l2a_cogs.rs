@@ -14,7 +14,7 @@ use geoengine_datatypes::operations::reproject::{
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BoundingBox2D, Measurement, SpatialPartitioned, TimeInterval,
 };
-use geoengine_datatypes::raster::{GeoTransform, RasterDataType};
+use geoengine_datatypes::raster::{GeoTransform, GridShape2D, RasterDataType};
 use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
 use geoengine_operators::engine::{
     MetaData, MetaDataProvider, RasterQueryRectangle, RasterResultDescriptor, VectorQueryRectangle,
@@ -295,6 +295,9 @@ impl SentinelS2L2aCogsMetaData {
         time_interval: TimeInterval,
         asset: &StacAsset,
     ) -> Result<GdalLoadingInfoPart> {
+        let [stac_shape_y, stac_shape_x] = asset.proj_shape.ok_or(error::Error::StacInvalidBbox)?;
+        let grid_shape = GridShape2D::new([stac_shape_y as usize, stac_shape_x as usize]);
+
         Ok(GdalLoadingInfoPart {
             time: time_interval,
             params: GdalDatasetParameters {
@@ -305,10 +308,8 @@ impl SentinelS2L2aCogsMetaData {
                         .gdal_geotransform()
                         .ok_or(error::Error::StacInvalidGeoTransform)?,
                 ),
-                partition: asset
-                    .native_bbox()
-                    .ok_or(error::Error::StacInvalidBbox)?
-                    .into(),
+                grid_shape,
+                partition: asset.native_bbox().map(Into::into),
                 file_not_found_handling: geoengine_operators::source::FileNotFoundHandling::NoData,
                 no_data_value: self.band.no_data_value,
                 properties_mapping: None,
@@ -585,7 +586,8 @@ mod tests {
                     x_pixel_size: 60.,
                     y_pixel_size: -60.,
                 },
-                partition: SpatialPartition2D::new_unchecked((600_000.0, 3_400_020.0 ).into(), ( 709_800.0, 3_290_220.0).into()),
+                partition: Some(SpatialPartition2D::new_unchecked((600_000.0, 3_400_020.0 ).into(), ( 709_800.0, 3_290_220.0).into())),
+                grid_shape: GridShape2D::new([1830,1830]),
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value: Some(0.),
                 properties_mapping: None,

@@ -15,10 +15,11 @@ use futures::{
 use async_trait::async_trait;
 use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
 use gdal::{Dataset as GdalDataset, Metadata as GdalMetadata};
-use geoengine_datatypes::primitives::{SpatialPartition2D, SpatialPartitioned};
+use geoengine_datatypes::primitives::{Coordinate2D, SpatialPartition2D, SpatialPartitioned};
 use geoengine_datatypes::raster::{
-    EmptyGrid, GeoTransform, Grid2D, GridOrEmpty2D, Pixel, RasterDataType, RasterProperties,
-    RasterPropertiesEntry, RasterPropertiesEntryType, RasterPropertiesKey, RasterTile2D,
+    EmptyGrid, GeoTransform, Grid2D, GridOrEmpty2D, GridShape2D, Pixel, RasterDataType,
+    RasterProperties, RasterPropertiesEntry, RasterPropertiesEntryType, RasterPropertiesKey,
+    RasterTile2D,
 };
 use geoengine_datatypes::{dataset::DatasetId, raster::TileInformation};
 use geoengine_datatypes::{
@@ -140,10 +141,29 @@ pub struct GdalDatasetParameters {
     pub file_path: PathBuf,
     pub rasterband_channel: usize,
     pub geo_transform: GeoTransform,
-    pub partition: SpatialPartition2D, // the spatial partition of the dataset containing the raster data
+    pub partition: Option<SpatialPartition2D>, // the spatial partition of the dataset containing the raster data
+    pub grid_shape: GridShape2D,
     pub file_not_found_handling: FileNotFoundHandling,
     pub no_data_value: Option<f64>,
     pub properties_mapping: Option<Vec<GdalMetadataMapping>>,
+}
+
+impl SpatialPartitioned for GdalDatasetParameters {
+    fn spatial_partition(&self) -> SpatialPartition2D {
+        // if let Some(partition) = self.partition {
+        //     partition
+        // } else {
+        let lower_right_coordinate = self.geo_transform.origin_coordinate
+            + Coordinate2D::from((
+                self.geo_transform.x_pixel_size * self.grid_shape.axis_size_x() as f64,
+                self.geo_transform.y_pixel_size * self.grid_shape.axis_size_y() as f64,
+            ));
+        SpatialPartition2D::new_unchecked(
+            self.geo_transform.origin_coordinate,
+            lower_right_coordinate,
+        )
+        // }
+    }
 }
 
 /// How to handle file not found errors
@@ -312,7 +332,7 @@ where
     ) -> Result<RasterTile2D<T>> {
         let f = if tile_information
             .spatial_partition()
-            .intersects(&dataset_params.partition)
+            .intersects(&dataset_params.spatial_partition())
         {
             Self::load_tile_data_async(dataset_params, tile_information).await
         } else {
@@ -348,7 +368,7 @@ where
         dataset_params: &GdalDatasetParameters,
         tile_information: &TileInformation,
     ) -> Result<GridWithProperties<T>> {
-        let dataset_bounds = dataset_params.partition;
+        let dataset_bounds = dataset_params.spatial_partition();
         let geo_transform = dataset_params.geo_transform;
         let output_bounds = tile_information.spatial_partition();
         let output_shape = tile_information.tile_size_in_pixels();
@@ -789,10 +809,11 @@ mod tests {
                     x_pixel_size: 0.1,
                     y_pixel_size: -0.1,
                 },
-                partition: SpatialPartition2D::new_unchecked(
+                partition: Some(SpatialPartition2D::new_unchecked(
                     (-180., 90.).into(),
                     (180., -90.).into(),
-                ),
+                )),
+                grid_shape: GridShape2D::new([1800, 3600]),
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value: Some(0.),
                 properties_mapping: Some(vec![
@@ -985,7 +1006,11 @@ mod tests {
             file_path: "/foo/bar_%TIME%.tiff".into(),
             rasterband_channel: 0,
             geo_transform: Default::default(),
-            partition: SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into()),
+            partition: Some(SpatialPartition2D::new_unchecked(
+                (0., 1.).into(),
+                (1., 0.).into(),
+            )),
+            grid_shape: GridShape2D::new([180, 360]),
             file_not_found_handling: FileNotFoundHandling::NoData,
             no_data_value: Some(0.),
             properties_mapping: None,
@@ -1022,7 +1047,11 @@ mod tests {
                 file_path: "/foo/bar_%TIME%.tiff".into(),
                 rasterband_channel: 0,
                 geo_transform: Default::default(),
-                partition: SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into()),
+                partition: Some(SpatialPartition2D::new_unchecked(
+                    (0., 1.).into(),
+                    (1., 0.).into(),
+                )),
+                grid_shape: GridShape2D::new([180, 360]),
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value,
                 properties_mapping: None,

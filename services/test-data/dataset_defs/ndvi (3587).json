@@ -39,6 +39,9 @@
           "y": -19966571.375
         }
       },
+      "gridShape": {
+        "shapeArray": [2841, 2851]
+      },
       "fileNotFoundHandling": "NoData",
       "noDataValue": 0.0
     },
