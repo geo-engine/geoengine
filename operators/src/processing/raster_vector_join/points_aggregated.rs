@@ -62,7 +62,6 @@ impl RasterPointAggregateJoinProcessor {
 
         let points = points.sort_by_time_asc()?;
 
-        // TODO: break loops early using `agggregator.is_satisifed()`
         for time_span in FeatureTimeSpanIter::new(points.time_intervals()) {
             let query = VectorQueryRectangle {
                 spatial_bounds: query.spatial_bounds,
@@ -87,7 +86,7 @@ impl RasterPointAggregateJoinProcessor {
                         // new time slice => consume old aggregator and create new one
                         temporal_aggregator.add_feature_data(
                             feature_aggregator.into_data(),
-                            time_span.time_interval.duration_ms() as u64,
+                            time_span.time_interval.duration_ms() as u64, // TODO: use individual feature duration?
                         )?;
 
                         feature_aggregator =
@@ -107,6 +106,7 @@ impl RasterPointAggregateJoinProcessor {
                     let geometry = points.geometry_at(feature_index).expect("must exist");
 
                     // TODO: aggregate multiple extracted values for one multi point before inserting it to the aggregator
+                    let mut satisfied = false;
                     for coordinate in geometry.points() {
                         let grid_idx = geo_transform.coordinate_to_grid_idx_2d(*coordinate);
 
@@ -123,14 +123,23 @@ impl RasterPointAggregateJoinProcessor {
                             } else {
                                 feature_aggregator.add_value(feature_index, pixel, 1);
                             }
+
+                            if feature_aggregator.is_satisfied() {
+                                satisfied = true;
+                                break;
+                            }
                         }
+                    }
+
+                    if satisfied {
+                        break;
                     }
                 }
             }
 
             temporal_aggregator.add_feature_data(
                 feature_aggregator.into_data(),
-                time_span.time_interval.duration_ms() as u64,
+                time_span.time_interval.duration_ms() as u64, // TODO: use individual feature duration?
             )?;
 
             if temporal_aggregator.is_satisfied() {
