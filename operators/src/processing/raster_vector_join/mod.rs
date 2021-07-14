@@ -46,10 +46,9 @@ pub struct RasterVectorJoinParams {
     pub temporal_aggregation: TemporalAggregationMethod,
 }
 
-/// How to aggreagate the values for the geometries inside a feature
-/// e.g. add all the raster values corresponding to the individual
-/// points inside a `MultiPoint` feature. Choosing None leads to an
-/// error for all non-simple features
+/// How to aggregate the values for the geometries inside a feature e.g.
+/// the mean of all the raster values corresponding to the individual
+/// points inside a `MultiPoint` feature.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy)]
 #[serde(rename_all = "camelCase")]
 pub enum FeatureAggregationMethod {
