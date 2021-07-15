@@ -77,6 +77,7 @@ async fn get_capabilities<C: Context>(
 
     // TODO: workflow bounding box
     // TODO: host schema file(?)
+    // TODO: load ServiceIdentification and ServiceProvider from config
 
     let wcs_url = wcs_url(workflow)?;
     let mock = format!(
@@ -92,7 +93,12 @@ async fn get_capabilities<C: Context>(
                 <ows:Title>Web Coverage Service</ows:Title>
                 <ows:ServiceType>WCS</ows:ServiceType>
                 <ows:ServiceTypeVersion>1.1.1</ows:ServiceTypeVersion>
+                <ows:Fees>NONE</ows:Fees>
+                <ows:AccessConstraints>NONE</ows:AccessConstraints>
             </ows:ServiceIdentification>
+            <ows:ServiceProvider>
+                <ows:ProviderName>Provider Name</ows:ProviderName>
+            </ows:ServiceProvider>
             <ows:OperationsMetadata>
                 <ows:Operation name="GetCapabilities">
                     <ows:DCP>
@@ -250,16 +256,21 @@ async fn get_coverage<C: Context>(
         error::WcsVersionNotSupported
     );
 
-    ensure!(
-        request.gridorigin.coordinate(request.gridbasecrs)
-            == request.boundingbox.partition.upper_left(),
-        error::WcsGridOriginMustEqualBoundingboxUpperLeft
-    );
+    let request_partition = request.spatial_partition()?;
 
-    ensure!(
-        request.gridbasecrs == request.boundingbox.spatial_reference,
-        error::WcsBoundingboxCrsMustEqualGridBaseCrs
-    );
+    if let Some(gridorigin) = request.gridorigin {
+        ensure!(
+            gridorigin.coordinate(request.gridbasecrs) == request_partition.upper_left(),
+            error::WcsGridOriginMustEqualBoundingboxUpperLeft
+        );
+    }
+
+    if let Some(bbox_spatial_reference) = request.boundingbox.spatial_reference {
+        ensure!(
+            request.gridbasecrs == bbox_spatial_reference,
+            error::WcsBoundingboxCrsMustEqualGridBaseCrs
+        );
+    }
 
     let workflow = ctx
         .workflow_registry_ref()
@@ -285,10 +296,6 @@ async fn get_coverage<C: Context>(
 
     let request_spatial_ref: SpatialReference = request.gridbasecrs;
 
-    if request_spatial_ref != request.boundingbox.spatial_reference {
-        return Err(Error::WcsBoundingboxCrsMustMatchRequest.into());
-    }
-
     // perform reprojection if necessary
     let initialized = if request_spatial_ref == workflow_spatial_ref {
         initialized
@@ -311,18 +318,19 @@ async fn get_coverage<C: Context>(
 
     let processor = initialized.query_processor().context(error::Operator)?;
 
-    let spatial_resolution: SpatialResolution = if let Some(grid_offsets) = request.gridoffsets {
-        grid_offsets.spatial_resolution(request.gridbasecrs)?
-    } else {
-        // TODO: proper default resolution
-        SpatialResolution {
-            x: request.boundingbox.partition.size_x() / 256.,
-            y: request.boundingbox.partition.size_y() / 256.,
-        }
-    };
+    let spatial_resolution: SpatialResolution =
+        if let Some(spatial_resolution) = request.spatial_resolution() {
+            spatial_resolution?
+        } else {
+            // TODO: proper default resolution
+            SpatialResolution {
+                x: request_partition.size_x() / 256.,
+                y: request_partition.size_y() / 256.,
+            }
+        };
 
     let query_rect: RasterQueryRectangle = RasterQueryRectangle {
-        spatial_bounds: request.boundingbox.partition,
+        spatial_bounds: request_partition,
         time_interval: request.time.unwrap_or_else(|| {
             let time = TimeInstance::from(chrono::offset::Utc::now());
             TimeInterval::new_unchecked(time, time)
@@ -466,7 +474,12 @@ mod tests {
                 <ows:Title>Web Coverage Service</ows:Title>
                 <ows:ServiceType>WCS</ows:ServiceType>
                 <ows:ServiceTypeVersion>1.1.1</ows:ServiceTypeVersion>
+                <ows:Fees>NONE</ows:Fees>
+                <ows:AccessConstraints>NONE</ows:AccessConstraints>
             </ows:ServiceIdentification>
+            <ows:ServiceProvider>
+                <ows:ProviderName>Provider Name</ows:ProviderName>
+            </ows:ServiceProvider>
             <ows:OperationsMetadata>
                 <ows:Operation name="GetCapabilities">
                     <ows:DCP>

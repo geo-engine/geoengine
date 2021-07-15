@@ -1,5 +1,9 @@
 use crate::error::{self, Result};
-use crate::ogc::util::{parse_time_option, parse_wcs_bbox, parse_wcs_crs, tuple_from_ogc_params};
+use crate::ogc::util::{
+    parse_time_option, parse_wcs_bbox, parse_wcs_crs, rectangle_from_ogc_params,
+    tuple_from_ogc_params,
+};
+use crate::util::from_str_option;
 use geoengine_datatypes::primitives::{Coordinate2D, SpatialPartition2D, SpatialResolution};
 use geoengine_datatypes::{primitives::TimeInterval, spatial_reference::SpatialReference};
 use serde::de::Error;
@@ -45,12 +49,13 @@ pub struct GetCoverage {
     #[serde(alias = "BOUNDINGBOX")]
     #[serde(deserialize_with = "parse_wcs_bbox")]
     pub boundingbox: WcsBoundingbox, // TODO: optional?
-    #[serde(alias = "GRIDBASECRS")]
+    #[serde(alias = "GRIDBASECRS", alias = "CRS", alias = "crs")]
     #[serde(deserialize_with = "parse_wcs_crs")]
     pub gridbasecrs: SpatialReference,
+    #[serde(default)]
     #[serde(alias = "GRIDORIGIN")]
-    #[serde(deserialize_with = "parse_grid_origin")]
-    pub gridorigin: GridOrigin,
+    #[serde(deserialize_with = "parse_grid_origin_option")]
+    pub gridorigin: Option<GridOrigin>,
     #[serde(alias = "GRIDOFFSETS")]
     #[serde(default)]
     #[serde(deserialize_with = "parse_grid_offset_option")]
@@ -60,17 +65,50 @@ pub struct GetCoverage {
     // GRIDCS=crs: The grid CRS (URN).
     // GridType=urn:ogc:def:method:WCS:1.1:2dGridIn2dCrs:
     // RangeSubset=selection: e.g. bands
-
-    // vendor specific
     #[serde(default)]
     #[serde(deserialize_with = "parse_time_option")]
+    #[serde(alias = "timesequence")] // owsLib sends it like this
     pub time: Option<TimeInterval>,
+
+    // fallback (to support clients using some weird mixture of 1.0 and 1.1)
+    #[serde(default)]
+    #[serde(deserialize_with = "from_str_option")]
+    resx: Option<f64>,
+    #[serde(default)]
+    #[serde(deserialize_with = "from_str_option")]
+    resy: Option<f64>,
+}
+
+impl GetCoverage {
+    pub fn spatial_resolution(&self) -> Option<Result<SpatialResolution>> {
+        if let Some(grid_offsets) = self.gridoffsets {
+            return Some(grid_offsets.spatial_resolution(self.gridbasecrs));
+        }
+
+        match (self.resx, self.resy) {
+            (Some(xres), Some(yres)) => {
+                let (x, y) = tuple_from_ogc_params(xres, yres, self.gridbasecrs);
+                Some(SpatialResolution::new(x.abs(), y.abs()).context(error::DataType))
+            }
+            (Some(_), None) | (None, Some(_)) => Some(Err(error::Error::WcsInvalidGridOffsets)),
+            (None, None) => None,
+        }
+    }
+
+    pub fn spatial_partition(&self) -> Result<SpatialPartition2D> {
+        let spatial_reference = self
+            .boundingbox
+            .spatial_reference
+            .unwrap_or(self.gridbasecrs);
+
+        rectangle_from_ogc_params(self.boundingbox.bbox, spatial_reference)
+    }
 }
 
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub struct WcsBoundingbox {
-    pub partition: SpatialPartition2D,
-    pub spatial_reference: SpatialReference,
+    pub bbox: [f64; 4],
+    pub spatial_reference: Option<SpatialReference>,
 }
 
 #[derive(PartialEq, Debug, Deserialize, Serialize, Clone, Copy)]
@@ -80,10 +118,7 @@ pub struct GridOffsets {
 }
 
 impl GridOffsets {
-    pub fn spatial_resolution(
-        &self,
-        spatial_reference: SpatialReference,
-    ) -> Result<SpatialResolution> {
+    fn spatial_resolution(&self, spatial_reference: SpatialReference) -> Result<SpatialResolution> {
         let (x, y) = tuple_from_ogc_params(self.x_step, self.y_step, spatial_reference);
         SpatialResolution::new(x.abs(), y.abs()).context(error::DataType)
     }
@@ -108,16 +143,20 @@ pub enum GetCoverageFormat {
 }
 
 /// parse coordinate, format is "x,y"
-pub fn parse_grid_origin<'de, D>(deserializer: D) -> Result<GridOrigin, D::Error>
+pub fn parse_grid_origin_option<'de, D>(deserializer: D) -> Result<Option<GridOrigin>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
     let s = String::deserialize(deserializer)?;
 
+    if s.is_empty() {
+        return Ok(None);
+    }
+
     let split: Vec<Result<f64, std::num::ParseFloatError>> = s.split(',').map(str::parse).collect();
 
     match *split.as_slice() {
-        [Ok(x), Ok(y)] => Ok(GridOrigin { x, y }),
+        [Ok(x), Ok(y)] => Ok(Some(GridOrigin { x, y })),
         _ => Err(D::Error::custom("Invalid gridorigin")),
     }
 }
@@ -171,28 +210,38 @@ mod tests {
         ];
         let string = serde_urlencoded::to_string(params).unwrap();
 
-        let coverage: WcsRequest = serde_urlencoded::from_str(&string).unwrap();
+        let coverage: GetCoverage = serde_urlencoded::from_str(&string).unwrap();
+
         assert_eq!(
-            WcsRequest::GetCoverage(GetCoverage {
+            GetCoverage {
                 version: "1.1.1".to_owned(),
                 format: GetCoverageFormat::ImageTiff,
                 identifier: "nurc:Arc_Sample".to_owned(),
                 boundingbox: WcsBoundingbox {
-                    partition: SpatialPartition2D::new_unchecked(
-                        (-162., 81.).into(),
-                        (162., -81.).into()
-                    ),
-                    spatial_reference: SpatialReference::epsg_4326(),
+                    bbox: [-81., -162., 81., 162.],
+                    spatial_reference: Some(SpatialReference::epsg_4326()),
                 },
                 gridbasecrs: SpatialReference::epsg_4326(),
-                gridorigin: GridOrigin { x: 81., y: -162. },
+                gridorigin: Some(GridOrigin { x: 81., y: -162. }),
                 gridoffsets: Some(GridOffsets {
                     x_step: -18.,
                     y_step: 36.
                 }),
                 time: Some(TimeInterval::new_instant(1_388_534_400_000).unwrap()),
-            }),
+                resx: None,
+                resy: None
+            },
             coverage
+        );
+
+        assert_eq!(
+            coverage.spatial_partition().unwrap(),
+            SpatialPartition2D::new_unchecked((-162., 81.).into(), (162., -81.).into())
+        );
+
+        assert_eq!(
+            coverage.spatial_resolution().unwrap().unwrap(),
+            SpatialResolution::new_unchecked(36., 18.)
         );
     }
 
