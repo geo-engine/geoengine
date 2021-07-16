@@ -9,9 +9,9 @@ use crate::engine::{
     VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::error::{self, Error};
+use crate::processing::raster_vector_join::points::RasterVectorJoinProcessor;
 use crate::util::Result;
 
-use crate::processing::raster_vector_join::points::RasterPointJoinProcessor;
 use crate::processing::raster_vector_join::points_aggregated::RasterVectorAggregateJoinProcessor;
 use async_trait::async_trait;
 use futures::future::join_all;
@@ -173,7 +173,7 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
             TypedVectorQueryProcessor::Data(_) => unreachable!(),
             TypedVectorQueryProcessor::MultiPoint(points) => {
                 TypedVectorQueryProcessor::MultiPoint(match self.state.temporal_aggregation {
-                    TemporalAggregationMethod::None => RasterPointJoinProcessor::new(
+                    TemporalAggregationMethod::None => RasterVectorJoinProcessor::new(
                         points,
                         typed_raster_processors,
                         self.state.names.clone(),
@@ -192,8 +192,28 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
                     }
                 })
             }
-            TypedVectorQueryProcessor::MultiLineString(_)
-            | TypedVectorQueryProcessor::MultiPolygon(_) => return Err(Error::NotYetImplemented),
+            TypedVectorQueryProcessor::MultiPolygon(polygons) => {
+                TypedVectorQueryProcessor::MultiPolygon(match self.state.temporal_aggregation {
+                    TemporalAggregationMethod::None => RasterVectorJoinProcessor::new(
+                        polygons,
+                        typed_raster_processors,
+                        self.state.names.clone(),
+                        self.state.feature_aggregation,
+                    )
+                    .boxed(),
+                    TemporalAggregationMethod::First | TemporalAggregationMethod::Mean => {
+                        RasterVectorAggregateJoinProcessor::new(
+                            polygons,
+                            typed_raster_processors,
+                            self.state.names.clone(),
+                            self.state.feature_aggregation,
+                            self.state.temporal_aggregation,
+                        )
+                        .boxed()
+                    }
+                })
+            }
+            TypedVectorQueryProcessor::MultiLineString(_) => return Err(Error::NotYetImplemented),
         })
     }
 }

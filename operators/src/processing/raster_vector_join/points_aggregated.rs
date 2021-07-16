@@ -24,7 +24,7 @@ use super::util::{CoveredPixels, FeatureTimeSpanIter, PixelCoverCreator};
 use super::{create_feature_aggregator, FeatureAggregationMethod};
 
 pub struct RasterVectorAggregateJoinProcessor<G> {
-    points: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
+    collection: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
     raster_processors: Vec<TypedRasterQueryProcessor>,
     column_names: Vec<String>,
     feature_aggregation: FeatureAggregationMethod,
@@ -34,17 +34,17 @@ pub struct RasterVectorAggregateJoinProcessor<G> {
 impl<G> RasterVectorAggregateJoinProcessor<G>
 where
     G: Geometry + ArrowTyped,
-    FeatureCollection<G>: for<'a> PixelCoverCreator<'a, G>,
+    FeatureCollection<G>: PixelCoverCreator<G>,
 {
     pub fn new(
-        points: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
+        collection: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
         raster_processors: Vec<TypedRasterQueryProcessor>,
         column_names: Vec<String>,
         feature_aggregation: FeatureAggregationMethod,
         temporal_aggregation: TemporalAggregationMethod,
     ) -> Self {
         Self {
-            points,
+            collection,
             raster_processors,
             column_names,
             feature_aggregation,
@@ -53,7 +53,7 @@ where
     }
 
     async fn extract_raster_values<P: Pixel>(
-        points: &FeatureCollection<G>,
+        collection: &FeatureCollection<G>,
         raster_processor: &dyn RasterQueryProcessor<RasterType = P>,
         new_column_name: &str,
         feature_aggreation: FeatureAggregationMethod,
@@ -62,13 +62,15 @@ where
         ctx: &dyn QueryContext,
     ) -> Result<FeatureCollection<G>> {
         let mut temporal_aggregator =
-            Self::create_aggregator::<P>(points.len(), temporal_aggregation);
+            Self::create_aggregator::<P>(collection.len(), temporal_aggregation);
 
-        let points = points.sort_by_time_asc()?;
+        let collection = collection.sort_by_time_asc()?;
 
-        let covered_pixels = points.create_covered_pixels();
+        let covered_pixels = collection.create_covered_pixels();
 
-        for time_span in FeatureTimeSpanIter::new(points.time_intervals()) {
+        let collection = covered_pixels.collection_ref();
+
+        for time_span in FeatureTimeSpanIter::new(collection.time_intervals()) {
             let query = VectorQueryRectangle {
                 spatial_bounds: query.spatial_bounds,
                 time_interval: time_span.time_interval,
@@ -80,7 +82,7 @@ where
             // TODO: optimize geo access (only specific tiles, etc.)
 
             let mut feature_aggregator =
-                create_feature_aggregator::<P>(points.len(), feature_aggreation);
+                create_feature_aggregator::<P>(collection.len(), feature_aggreation);
 
             let mut time_end = None;
 
@@ -96,7 +98,7 @@ where
                         )?;
 
                         feature_aggregator =
-                            create_feature_aggregator::<P>(points.len(), feature_aggreation);
+                            create_feature_aggregator::<P>(collection.len(), feature_aggreation);
 
                         if temporal_aggregator.is_satisfied() {
                             break;
@@ -147,7 +149,7 @@ where
             }
         }
 
-        points
+        collection
             .add_column(new_column_name, temporal_aggregator.into_data())
             .map_err(Into::into)
     }
@@ -186,7 +188,7 @@ where
 impl<G> QueryProcessor for RasterVectorAggregateJoinProcessor<G>
 where
     G: Geometry + ArrowTyped + 'static,
-    FeatureCollection<G>: for<'a> PixelCoverCreator<'a, G>,
+    FeatureCollection<G>: PixelCoverCreator<G>,
 {
     type Output = FeatureCollection<G>;
     type SpatialBounds = BoundingBox2D;
@@ -196,17 +198,17 @@ where
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
-        let stream = self.points
+        let stream = self.collection
             .query(query, ctx).await?
-            .and_then(async move |mut points| {
+            .and_then(async move |mut collection| {
 
                 for (raster, new_column_name) in self.raster_processors.iter().zip(&self.column_names) {
-                    points = call_on_generic_raster_processor!(raster, raster => {
-                        Self::extract_raster_values(&points, raster, new_column_name, self.feature_aggregation, self.temporal_aggregation, query, ctx).await?
+                    collection = call_on_generic_raster_processor!(raster, raster => {
+                        Self::extract_raster_values(&collection, raster, new_column_name, self.feature_aggregation, self.temporal_aggregation, query, ctx).await?
                     });
                 }
 
-                Ok(points)
+                Ok(collection)
             })
             .boxed();
 

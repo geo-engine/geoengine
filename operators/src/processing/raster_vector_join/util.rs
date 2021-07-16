@@ -87,9 +87,9 @@ impl<'c> Iterator for FeatureTimeSpanIter<'c> {
 
 /// To calculate the pixels covered by a feature's geometries, a calculator is first initialized with a
 /// collection of the given type `G` and can then be queried for each feature by the feature's index
-pub trait CoveredPixels<'a, G: Geometry>: Send + Sync {
+pub trait CoveredPixels<G: Geometry>: Send + Sync {
     /// initialize the calculator with the given `collection`, potentially doing some  (expensive) precalculations
-    fn initialize(collection: &'a FeatureCollection<G>) -> Self;
+    fn initialize(collection: FeatureCollection<G>) -> Self;
 
     /// return the pixels of the given `raster` that are covered by the geometries of the feature at the
     /// `feature_index`
@@ -98,14 +98,18 @@ pub trait CoveredPixels<'a, G: Geometry>: Send + Sync {
         feature_index: usize,
         raster: &RasterTile2D<P>,
     ) -> Vec<GridIdx2D>;
+
+    fn collection_ref(&self) -> &FeatureCollection<G>;
+
+    fn collection(self) -> FeatureCollection<G>;
 }
 
-pub struct MultiPointCoveredPixels<'a> {
-    collection: &'a FeatureCollection<MultiPoint>,
+pub struct MultiPointCoveredPixels {
+    collection: FeatureCollection<MultiPoint>,
 }
 
-impl<'a> CoveredPixels<'a, MultiPoint> for MultiPointCoveredPixels<'a> {
-    fn initialize(collection: &'a FeatureCollection<MultiPoint>) -> Self {
+impl<'a> CoveredPixels<MultiPoint> for MultiPointCoveredPixels {
+    fn initialize(collection: FeatureCollection<MultiPoint>) -> Self {
         Self { collection }
     }
 
@@ -124,17 +128,23 @@ impl<'a> CoveredPixels<'a, MultiPoint> for MultiPointCoveredPixels<'a> {
             .filter(|idx| raster.grid_shape().contains(idx))
             .collect()
     }
+
+    fn collection_ref(&self) -> &FeatureCollection<MultiPoint> {
+        &self.collection
+    }
+
+    fn collection(self) -> FeatureCollection<MultiPoint> {
+        self.collection
+    }
 }
 
-pub struct MultiPolygonCoveredPixels<'a> {
-    collection: &'a FeatureCollection<MultiPolygon>,
-    tester: PointInPolygonTester<'a>,
+pub struct MultiPolygonCoveredPixels {
+    tester: PointInPolygonTester,
 }
 
-impl<'a> CoveredPixels<'a, MultiPolygon> for MultiPolygonCoveredPixels<'a> {
-    fn initialize(collection: &'a FeatureCollection<MultiPolygon>) -> Self {
+impl CoveredPixels<MultiPolygon> for MultiPolygonCoveredPixels {
+    fn initialize(collection: FeatureCollection<MultiPolygon>) -> Self {
         Self {
-            collection,
             tester: PointInPolygonTester::new(collection), // TODO: parallelize
         }
     }
@@ -154,38 +164,46 @@ impl<'a> CoveredPixels<'a, MultiPolygon> for MultiPolygonCoveredPixels<'a> {
                 let idx = [row as isize, col as isize].into();
                 let coordinate = geo_transform.grid_idx_to_upper_left_coordinate_2d(idx);
 
-                if self.tester.is_coordinate_in_multi_polygon(
-                    coordinate,
-                    &self.collection.geometry_at(feature_index).unwrap(),
-                ) {
-                    pixels.push(idx)
+                if self
+                    .tester
+                    .is_coordinate_in_multi_polygon(coordinate, feature_index)
+                {
+                    pixels.push(dbg!(idx))
                 }
             }
         }
 
         pixels
     }
+
+    fn collection_ref(&self) -> &FeatureCollection<MultiPolygon> {
+        &self.tester.polygons_ref()
+    }
+
+    fn collection(self) -> FeatureCollection<MultiPolygon> {
+        self.tester.polygons()
+    }
 }
 
 /// Creates a new calculator for for pixels covered by a given `feature_collection`'s geometries.
-pub trait PixelCoverCreator<'a, G: Geometry> {
-    type C: CoveredPixels<'a, G>;
+pub trait PixelCoverCreator<G: Geometry> {
+    type C: CoveredPixels<G>;
 
-    fn create_covered_pixels(&'a self) -> Self::C;
+    fn create_covered_pixels(self) -> Self::C;
 }
 
-impl<'a> PixelCoverCreator<'a, MultiPoint> for FeatureCollection<MultiPoint> {
-    type C = MultiPointCoveredPixels<'a>;
+impl PixelCoverCreator<MultiPoint> for FeatureCollection<MultiPoint> {
+    type C = MultiPointCoveredPixels;
 
-    fn create_covered_pixels(&'a self) -> Self::C {
+    fn create_covered_pixels(self) -> Self::C {
         MultiPointCoveredPixels::initialize(self)
     }
 }
 
-impl<'a> PixelCoverCreator<'a, MultiPolygon> for FeatureCollection<MultiPolygon> {
-    type C = MultiPolygonCoveredPixels<'a>;
+impl PixelCoverCreator<MultiPolygon> for FeatureCollection<MultiPolygon> {
+    type C = MultiPolygonCoveredPixels;
 
-    fn create_covered_pixels(&'a self) -> Self::C {
+    fn create_covered_pixels(self) -> Self::C {
         MultiPolygonCoveredPixels::initialize(self)
     }
 }
