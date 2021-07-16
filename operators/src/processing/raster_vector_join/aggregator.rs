@@ -1,6 +1,10 @@
+use crate::error;
+use crate::error::Error;
+use crate::util::Result;
 use geoengine_datatypes::primitives::{FeatureData, FeatureDataType};
 use geoengine_datatypes::raster::Pixel;
 use num_traits::AsPrimitive;
+use snafu::ensure;
 
 /// Aggregating raster pixel values for features
 pub trait Aggregator {
@@ -27,6 +31,10 @@ pub trait Aggregator {
 
     /// Whether an aggregator needs no more values for producing the outcome
     fn is_satisfied(&self) -> bool;
+
+    /// Add all values from `data` to the aggregator. Fails if the data length doesn't match
+    /// the aggregator or if the data is not compatible with the aggregator.
+    fn add_feature_data(&mut self, data: FeatureData, weight: u64) -> Result<()>;
 }
 
 /// An aggregator wrapper for different return types
@@ -91,6 +99,14 @@ impl TypedAggregator {
             TypedAggregator::FirstValueFloat(aggregator) => aggregator.is_satisfied(),
             TypedAggregator::FirstValueInt(aggregator) => aggregator.is_satisfied(),
             TypedAggregator::MeanNumber(aggregator) => aggregator.is_satisfied(),
+        }
+    }
+
+    pub fn add_feature_data(&mut self, data: FeatureData, weight: u64) -> Result<()> {
+        match self {
+            TypedAggregator::FirstValueFloat(a) => a.add_feature_data(data, weight),
+            TypedAggregator::FirstValueInt(a) => a.add_feature_data(data, weight),
+            TypedAggregator::MeanNumber(a) => a.add_feature_data(data, weight),
         }
     }
 }
@@ -174,6 +190,37 @@ where
 
     fn is_satisfied(&self) -> bool {
         self.number_of_pristine_values == 0 || self.number_of_non_null_values == 0
+    }
+
+    fn add_feature_data(&mut self, data: FeatureData, weight: u64) -> Result<()> {
+        ensure!(
+            data.len() == self.values.len(),
+            error::FeatureDataLengthMismatch
+        );
+
+        match data {
+            geoengine_datatypes::primitives::FeatureData::NullableInt(values) => {
+                for (i, &value) in values.iter().enumerate() {
+                    if let Some(value) = value {
+                        self.add_value(i, T::from_(value), weight);
+                    } else {
+                        self.add_null(i);
+                    }
+                }
+            }
+            geoengine_datatypes::primitives::FeatureData::NullableFloat(values) => {
+                for (i, &value) in values.iter().enumerate() {
+                    if let Some(value) = value {
+                        self.add_value(i, T::from_(value), weight);
+                    } else {
+                        self.add_null(i);
+                    }
+                }
+            }
+            _ => return Err(Error::FeatureDataNotAggregatable),
+        }
+
+        Ok(())
     }
 }
 
@@ -277,6 +324,37 @@ impl Aggregator for MeanValueAggregator {
 
     fn is_satisfied(&self) -> bool {
         self.number_of_non_null_values == 0
+    }
+
+    fn add_feature_data(&mut self, data: FeatureData, weight: u64) -> Result<()> {
+        ensure!(
+            data.len() == self.means.len(),
+            error::FeatureDataLengthMismatch
+        );
+
+        match data {
+            geoengine_datatypes::primitives::FeatureData::NullableInt(values) => {
+                for (i, &value) in values.iter().enumerate() {
+                    if let Some(value) = value {
+                        self.add_value(i, value, weight);
+                    } else {
+                        self.add_null(i);
+                    }
+                }
+            }
+            geoengine_datatypes::primitives::FeatureData::NullableFloat(values) => {
+                for (i, &value) in values.iter().enumerate() {
+                    if let Some(value) = value {
+                        self.add_value(i, value, weight);
+                    } else {
+                        self.add_null(i);
+                    }
+                }
+            }
+            _ => return Err(Error::FeatureDataNotAggregatable),
+        }
+
+        Ok(())
     }
 }
 

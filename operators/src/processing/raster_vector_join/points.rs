@@ -1,13 +1,12 @@
 use crate::adapters::FeatureCollectionStreamExt;
+use crate::processing::raster_vector_join::create_feature_aggregator;
 use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::primitives::BoundingBox2D;
 use std::sync::Arc;
 
 use geoengine_datatypes::{
-    collections::FeatureCollectionModifications,
-    primitives::{FeatureData, TimeInterval},
-    raster::Pixel,
+    collections::FeatureCollectionModifications, primitives::TimeInterval, raster::Pixel,
 };
 use geoengine_datatypes::{collections::MultiPointCollection, raster::RasterTile2D};
 
@@ -20,13 +19,17 @@ use crate::{adapters::RasterStreamExt, error::Error};
 use async_trait::async_trait;
 use geoengine_datatypes::collections::FeatureCollectionInfos;
 use geoengine_datatypes::collections::GeometryCollection;
-use geoengine_datatypes::raster::{CoordinatePixelAccess, NoDataValue, RasterDataType};
-use num_traits::AsPrimitive;
+use geoengine_datatypes::primitives::MultiPointAccess;
+use geoengine_datatypes::raster::{CoordinatePixelAccess, NoDataValue};
+
+use super::aggregator::TypedAggregator;
+use super::FeatureAggregationMethod;
 
 pub struct RasterPointJoinProcessor {
     points: Box<dyn VectorQueryProcessor<VectorType = MultiPointCollection>>,
     raster_processors: Vec<TypedRasterQueryProcessor>,
     column_names: Vec<String>,
+    aggregation_method: FeatureAggregationMethod,
 }
 
 impl RasterPointJoinProcessor {
@@ -34,11 +37,13 @@ impl RasterPointJoinProcessor {
         points: Box<dyn VectorQueryProcessor<VectorType = MultiPointCollection>>,
         raster_processors: Vec<TypedRasterQueryProcessor>,
         column_names: Vec<String>,
+        aggregation_method: FeatureAggregationMethod,
     ) -> Self {
         Self {
             points,
             raster_processors,
             column_names,
+            aggregation_method,
         }
     }
 
@@ -48,10 +53,18 @@ impl RasterPointJoinProcessor {
         new_column_name: &'a str,
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
+        aggregation_method: FeatureAggregationMethod,
     ) -> BoxStream<'a, Result<MultiPointCollection>> {
         let stream = points.and_then(async move |points| {
-            Self::process_collection_chunk(points, raster_processor, new_column_name, query, ctx)
-                .await
+            Self::process_collection_chunk(
+                points,
+                raster_processor,
+                new_column_name,
+                query,
+                ctx,
+                aggregation_method,
+            )
+            .await
         });
 
         stream
@@ -66,9 +79,10 @@ impl RasterPointJoinProcessor {
         new_column_name: &'a str,
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
+        aggregation_method: FeatureAggregationMethod,
     ) -> Result<BoxStream<'a, Result<MultiPointCollection>>> {
         call_on_generic_raster_processor!(raster_processor, raster_processor => {
-            Self::process_typed_collection_chunk(points, raster_processor, new_column_name, query, ctx).await
+            Self::process_typed_collection_chunk(points, raster_processor, new_column_name, query, ctx, aggregation_method).await
         })
     }
 
@@ -78,6 +92,7 @@ impl RasterPointJoinProcessor {
         new_column_name: &'a str,
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
+        aggregation_method: FeatureAggregationMethod,
     ) -> Result<BoxStream<'a, Result<MultiPointCollection>>> {
         // make qrect smaller wrt. points
         let query = VectorQueryRectangle {
@@ -98,7 +113,7 @@ impl RasterPointJoinProcessor {
 
         let collection_stream = raster_query
             .time_multi_fold(
-                move || Ok(PointRasterJoiner::new()),
+                move || Ok(PointRasterJoiner::new(aggregation_method)),
                 move |accum, raster| {
                     let points = points.clone();
                     async move {
@@ -108,28 +123,33 @@ impl RasterPointJoinProcessor {
                     }
                 },
             )
-            .map(move |accum| accum?.into_colletion(new_column_name));
+            .map(move |accum| accum?.into_collection(new_column_name));
 
         Ok(collection_stream.boxed())
     }
 }
 
-struct PointRasterJoiner<P: Pixel> {
-    values: Vec<Option<P>>,
-    points: Option<MultiPointCollection>,
+struct JoinerState {
+    points: MultiPointCollection,
+    aggregator: TypedAggregator,
 }
 
-impl<P: Pixel> PointRasterJoiner<P> {
-    fn new() -> Self {
+struct PointRasterJoiner {
+    state: Option<JoinerState>,
+    aggregation_method: FeatureAggregationMethod,
+}
+
+impl PointRasterJoiner {
+    fn new(aggregation_method: FeatureAggregationMethod) -> Self {
         // TODO: is it possible to do the initialization here?
 
         Self {
-            values: vec![],
-            points: None,
+            state: None,
+            aggregation_method,
         }
     }
 
-    fn initialize(
+    fn initialize<P: Pixel>(
         &mut self,
         points: &MultiPointCollection,
         raster_time: &TimeInterval,
@@ -154,95 +174,57 @@ impl<P: Pixel> PointRasterJoiner<P> {
         let points = points.filter(valid)?;
         let points = points.replace_time(&time_intervals)?;
 
-        self.values = vec![None; points.coordinates().len()];
-        self.points = Some(points);
+        self.state = Some(JoinerState {
+            aggregator: create_feature_aggregator::<P>(points.len(), self.aggregation_method),
+            points,
+        });
 
         Ok(())
     }
 
-    fn extract_raster_values(
+    fn extract_raster_values<P: Pixel>(
         mut self,
         points: &MultiPointCollection,
         raster: &RasterTile2D<P>,
     ) -> Result<Self> {
-        let points = loop {
-            if let Some(points) = &self.points {
-                break points;
+        let state = loop {
+            if let Some(state) = &mut self.state {
+                break state;
             }
 
-            self.initialize(points, &raster.time)?;
+            self.initialize::<P>(points, &raster.time)?;
         };
+        let points = &state.points;
+        let aggregator = &mut state.aggregator;
 
-        // TODO: avoid iterating over coordinates that already have a value
+        // TODO: avoid looking up coordinates not contained in the raster
 
-        for (&coordinate, value_option) in points.coordinates().iter().zip(self.values.iter_mut()) {
-            if value_option.is_some() {
-                continue; // already has a value
+        for (index, feature) in points.into_iter().enumerate() {
+            for &coordinate in feature.geometry.points() {
+                let value = match raster.pixel_value_at_coord(coordinate) {
+                    Ok(value) => value,
+                    Err(_) => continue, // not found in this raster tile
+                };
+
+                if raster.is_no_data(value) {
+                    aggregator.add_null(index);
+                } else {
+                    aggregator.add_value(index, value, 1);
+                }
             }
-
-            let value = match raster.pixel_value_at_coord(coordinate) {
-                Ok(value) => value,
-                Err(_) => continue, // not found in this raster tile
-            };
-
-            if raster.is_no_data(value) {
-                continue; // value is NODATA, so we leave it being `None`
-            }
-
-            *value_option = Some(value);
         }
 
         Ok(self)
     }
 
-    fn into_colletion(self, new_column_name: &str) -> Result<MultiPointCollection> {
-        let points = match &self.points {
-            Some(points) => points,
+    fn into_collection(self, new_column_name: &str) -> Result<MultiPointCollection> {
+        let state = match self.state {
+            Some(state) => state,
             None => return Err(Error::EmptyInput), // TODO: maybe output empty dataset or just nulls
         };
-
-        // TODO: directly save values in vector of correct type
-        // TODO: handle classified values
-        let feature_data = match P::TYPE {
-            RasterDataType::U8
-            | RasterDataType::U16
-            | RasterDataType::U32
-            | RasterDataType::U64
-            | RasterDataType::I8
-            | RasterDataType::I16
-            | RasterDataType::I32
-            | RasterDataType::I64 => FeatureData::NullableInt(self.typed_values(points)),
-            RasterDataType::F32 | RasterDataType::F64 => {
-                FeatureData::NullableFloat(self.typed_values(points))
-            }
-        };
-
-        Ok(points.add_column(new_column_name, feature_data)?)
-    }
-
-    fn typed_values<To: Pixel>(&self, points: &MultiPointCollection) -> Vec<Option<To>>
-    where
-        P: AsPrimitive<To>,
-    {
-        points
-            .feature_offsets()
-            .windows(2)
-            .map(|window| {
-                let (begin, end) = match *window {
-                    [a, b] => (a as usize, b as usize),
-                    _ => return None,
-                };
-
-                let slice = &self.values[begin..end];
-
-                // TODO: implement aggregation methods
-
-                match slice.first() {
-                    Some(Some(value)) => Some(value.as_()),
-                    _ => None,
-                }
-            })
-            .collect()
+        Ok(state
+            .points
+            .add_column(new_column_name, state.aggregator.into_data())?)
     }
 }
 
@@ -261,9 +243,15 @@ impl QueryProcessor for RasterPointJoinProcessor {
         for (raster_processor, new_column_name) in
             self.raster_processors.iter().zip(&self.column_names)
         {
-            stream =
-                Self::process_collections(stream, raster_processor, new_column_name, query, ctx)
-                    .await;
+            stream = Self::process_collections(
+                stream,
+                raster_processor,
+                new_column_name,
+                query,
+                ctx,
+                self.aggregation_method,
+            )
+            .await;
         }
 
         Ok(stream)
@@ -275,16 +263,21 @@ mod tests {
     use super::*;
 
     use crate::engine::{
-        MockExecutionContext, MockQueryContext, QueryProcessor, RasterOperator, VectorOperator,
-        VectorQueryRectangle,
+        MockExecutionContext, MockQueryContext, QueryProcessor, RasterOperator,
+        RasterResultDescriptor, VectorOperator, VectorQueryRectangle,
     };
-    use crate::mock::MockFeatureCollectionSource;
+    use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
     use crate::source::{GdalSource, GdalSourceParameters};
     use crate::util::gdal::add_ndvi_dataset;
     use chrono::NaiveDate;
-    use geoengine_datatypes::primitives::BoundingBox2D;
-    use geoengine_datatypes::primitives::SpatialResolution;
+    use geoengine_datatypes::collections::ToGeoJson;
+    use geoengine_datatypes::primitives::{BoundingBox2D, FeatureData};
+    use geoengine_datatypes::primitives::{Measurement, SpatialResolution};
     use geoengine_datatypes::primitives::{MultiPoint, TimeInterval};
+    use geoengine_datatypes::raster::{
+        Grid2D, RasterDataType, TileInformation, TilingSpecification,
+    };
+    use geoengine_datatypes::spatial_reference::SpatialReference;
 
     #[tokio::test]
     async fn both_instant() {
@@ -294,13 +287,14 @@ mod tests {
         let points = MockFeatureCollectionSource::single(
             MultiPointCollection::from_data(
                 MultiPoint::many(vec![
-                    (-13.95, 20.05),
-                    (-14.05, 20.05),
-                    (-13.95, 19.95),
-                    (-14.05, 19.95),
+                    vec![(-13.95, 20.05)],
+                    vec![(-14.05, 20.05)],
+                    vec![(-13.95, 19.95)],
+                    vec![(-14.05, 19.95)],
+                    vec![(-13.95, 19.95), (-14.05, 19.95)],
                 ])
                 .unwrap(),
-                vec![time_instant; 4],
+                vec![time_instant; 5],
                 Default::default(),
             )
             .unwrap(),
@@ -332,8 +326,12 @@ mod tests {
             .query_processor()
             .unwrap();
 
-        let processor =
-            RasterPointJoinProcessor::new(points, vec![rasters], vec!["ndvi".to_owned()]);
+        let processor = RasterPointJoinProcessor::new(
+            points,
+            vec![rasters],
+            vec!["ndvi".to_owned()],
+            FeatureAggregationMethod::First,
+        );
 
         let mut result = processor
             .query(
@@ -359,15 +357,16 @@ mod tests {
             result,
             MultiPointCollection::from_slices(
                 &MultiPoint::many(vec![
-                    (-13.95, 20.05),
-                    (-14.05, 20.05),
-                    (-13.95, 19.95),
-                    (-14.05, 19.95),
+                    vec![(-13.95, 20.05)],
+                    vec![(-14.05, 20.05)],
+                    vec![(-13.95, 19.95)],
+                    vec![(-14.05, 19.95)],
+                    vec![(-13.95, 19.95), (-14.05, 19.95)],
                 ])
                 .unwrap(),
-                &[time_instant; 4],
+                &[time_instant; 5],
                 // these values are taken from loading the tiff in QGIS
-                &[("ndvi", FeatureData::Int(vec![54, 55, 51, 55]))],
+                &[("ndvi", FeatureData::Int(vec![54, 55, 51, 55, 51]))],
             )
             .unwrap()
         );
@@ -420,8 +419,12 @@ mod tests {
             .query_processor()
             .unwrap();
 
-        let processor =
-            RasterPointJoinProcessor::new(points, vec![rasters], vec!["ndvi".to_owned()]);
+        let processor = RasterPointJoinProcessor::new(
+            points,
+            vec![rasters],
+            vec!["ndvi".to_owned()],
+            FeatureAggregationMethod::First,
+        );
 
         let mut result = processor
             .query(
@@ -516,8 +519,12 @@ mod tests {
             .query_processor()
             .unwrap();
 
-        let processor =
-            RasterPointJoinProcessor::new(points, vec![rasters], vec!["ndvi".to_owned()]);
+        let processor = RasterPointJoinProcessor::new(
+            points,
+            vec![rasters],
+            vec!["ndvi".to_owned()],
+            FeatureAggregationMethod::First,
+        );
 
         let mut result = processor
             .query(
@@ -564,6 +571,7 @@ mod tests {
         );
     }
 
+    #[allow(clippy::too_many_lines)]
     #[tokio::test]
     async fn both_ranges() {
         let points = MockFeatureCollectionSource::single(
@@ -614,8 +622,12 @@ mod tests {
             .query_processor()
             .unwrap();
 
-        let processor =
-            RasterPointJoinProcessor::new(points, vec![rasters], vec!["ndvi".to_owned()]);
+        let processor = RasterPointJoinProcessor::new(
+            points,
+            vec![rasters],
+            vec!["ndvi".to_owned()],
+            FeatureAggregationMethod::First,
+        );
 
         let mut result = processor
             .query(
@@ -670,6 +682,163 @@ mod tests {
                 &[(
                     "ndvi",
                     FeatureData::Int(vec![54, 55, 51, 55, 52, 55, 50, 53])
+                )],
+            )
+            .unwrap()
+        );
+    }
+
+    #[tokio::test]
+    #[allow(clippy::float_cmp)]
+    #[allow(clippy::too_many_lines)]
+    async fn extract_raster_values_two_spatial_tiles_per_time_step_mean() {
+        let raster_tile_a_0 = RasterTile2D::new_with_tile_info(
+            TimeInterval::new(0, 10).unwrap(),
+            TileInformation {
+                global_geo_transform: Default::default(),
+                global_tile_position: [0, 0].into(),
+                tile_size_in_pixels: [3, 2].into(),
+            },
+            Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1], None)
+                .unwrap()
+                .into(),
+        );
+        let raster_tile_a_1 = RasterTile2D::new_with_tile_info(
+            TimeInterval::new(0, 10).unwrap(),
+            TileInformation {
+                global_geo_transform: Default::default(),
+                global_tile_position: [0, 1].into(),
+                tile_size_in_pixels: [3, 2].into(),
+            },
+            Grid2D::new([3, 2].into(), vec![60, 50, 40, 30, 20, 10], None)
+                .unwrap()
+                .into(),
+        );
+        let raster_tile_b_0 = RasterTile2D::new_with_tile_info(
+            TimeInterval::new(10, 20).unwrap(),
+            TileInformation {
+                global_geo_transform: Default::default(),
+                global_tile_position: [0, 0].into(),
+                tile_size_in_pixels: [3, 2].into(),
+            },
+            Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None)
+                .unwrap()
+                .into(),
+        );
+        let raster_tile_b_1 = RasterTile2D::new_with_tile_info(
+            TimeInterval::new(10, 20).unwrap(),
+            TileInformation {
+                global_geo_transform: Default::default(),
+                global_tile_position: [0, 1].into(),
+                tile_size_in_pixels: [3, 2].into(),
+            },
+            Grid2D::new([3, 2].into(), vec![10, 20, 30, 40, 50, 60], None)
+                .unwrap()
+                .into(),
+        );
+
+        let raster_source = MockRasterSource {
+            params: MockRasterSourceParams {
+                data: vec![
+                    raster_tile_a_0,
+                    raster_tile_a_1,
+                    raster_tile_b_0,
+                    raster_tile_b_1,
+                ],
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U8,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    measurement: Measurement::Unitless,
+                    no_data_value: None,
+                },
+            },
+        }
+        .boxed();
+
+        let execution_context = MockExecutionContext {
+            tiling_specification: TilingSpecification::new((0., 0.).into(), [3, 2].into()),
+            ..Default::default()
+        };
+
+        let raster = raster_source
+            .initialize(&execution_context)
+            .await
+            .unwrap()
+            .query_processor()
+            .unwrap();
+
+        let points = MultiPointCollection::from_data(
+            MultiPoint::many(vec![
+                vec![(0.0, 0.0), (2.0, 0.0)],
+                vec![(1.0, 0.0), (3.0, 0.0)],
+            ])
+            .unwrap(),
+            vec![TimeInterval::default(); 2],
+            Default::default(),
+        )
+        .unwrap();
+
+        let points = MockFeatureCollectionSource::single(points).boxed();
+
+        let points = points
+            .initialize(&execution_context)
+            .await
+            .unwrap()
+            .query_processor()
+            .unwrap()
+            .multi_point()
+            .unwrap();
+
+        let processor = RasterPointJoinProcessor::new(
+            points,
+            vec![raster],
+            vec!["foo".to_owned()],
+            FeatureAggregationMethod::Mean,
+        );
+
+        let mut result = processor
+            .query(
+                VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((0.0, -3.0).into(), (4.0, 0.0).into())
+                        .unwrap(),
+                    time_interval: TimeInterval::new_unchecked(0, 20),
+                    spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
+                },
+                &MockQueryContext::new(usize::MAX),
+            )
+            .await
+            .unwrap()
+            .map(Result::unwrap)
+            .collect::<Vec<MultiPointCollection>>()
+            .await;
+
+        assert_eq!(result.len(), 1);
+
+        let result = result.remove(0);
+        eprintln!("{}", result.to_geo_json());
+
+        let t1 = TimeInterval::new(0, 10).unwrap();
+        let t2 = TimeInterval::new(10, 20).unwrap();
+
+        assert_eq!(
+            result,
+            MultiPointCollection::from_slices(
+                &MultiPoint::many(vec![
+                    vec![(0.0, 0.0), (2.0, 0.0)],
+                    vec![(1.0, 0.0), (3.0, 0.0)],
+                    vec![(0.0, 0.0), (2.0, 0.0)],
+                    vec![(1.0, 0.0), (3.0, 0.0)],
+                ])
+                .unwrap(),
+                &[t1, t1, t2, t2],
+                &[(
+                    "foo",
+                    FeatureData::Float(vec![
+                        (6. + 60.) / 2.,
+                        (5. + 50.) / 2.,
+                        (1. + 10.) / 2.,
+                        (2. + 20.) / 2.
+                    ])
                 )],
             )
             .unwrap()
