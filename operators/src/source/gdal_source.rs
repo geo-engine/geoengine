@@ -432,7 +432,7 @@ where
         // check if query and dataset intersect
         let dataset_intersects_tile = dataset_bounds.intersection(&output_bounds);
 
-        let dataset_intersecton_area = match dataset_intersects_tile {
+        let dataset_intersection_area = match dataset_intersects_tile {
             Some(i) => i,
             None => {
                 // there is no intersection, return empty tile
@@ -449,13 +449,9 @@ where
             }
         };
 
-        let dataset_grid_bounds = geo_transform.spatial_to_grid_bounds(&dataset_intersecton_area);
+        let dataset_grid_bounds = geo_transform.spatial_to_grid_bounds(&dataset_intersection_area);
 
-        let dataset_contains_tile = dataset_intersecton_area == output_bounds;
-
-        dbg!(&dataset_intersecton_area, &dataset_grid_bounds);
-
-        let result_grid = if dataset_contains_tile {
+        let result_grid = if dataset_intersection_area == output_bounds {
             read_as_raster(
                 &rasterband,
                 &dataset_grid_bounds,
@@ -465,9 +461,7 @@ where
             .into()
         } else {
             let tile_grid_bounds =
-                output_geo_transform.spatial_to_grid_bounds(&dataset_intersecton_area);
-
-            dbg!(&tile_grid_bounds);
+                output_geo_transform.spatial_to_grid_bounds(&dataset_intersection_area);
 
             let dataset_raster = read_as_raster(
                 &rasterband,
@@ -1172,8 +1166,6 @@ mod tests {
             (-116.22222 + x_size, 66.66666 - y_size).into(),
         )
         .unwrap();
-
-        dbg!(&output_bounds);
 
         let x = load_ndvi_jan_2014(output_shape, output_bounds)
             .unwrap()
