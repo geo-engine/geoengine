@@ -123,16 +123,11 @@ impl GeoTransform {
         let GridIdx([ul_y, ul_x]) = self.coordinate_to_grid_idx_2d(spatial_partition.upper_left());
         let GridIdx([lr_y, lr_x]) = self.coordinate_to_grid_idx_2d(spatial_partition.lower_right()); // this is the next pixel!
 
-        // dbg!(&spatial_partition, &snapped);
-
         debug_assert!(ul_x <= lr_x);
         debug_assert!(ul_y <= lr_y);
 
         let lr_x_inc = max(ul_x, lr_x - 1);
         let lr_y_inc = max(ul_y, lr_y - 1);
-
-        debug_assert!(ul_x <= lr_x_inc);
-        debug_assert!(ul_y <= lr_y_inc);
 
         let start: GridIdx2D = [ul_y, ul_x].into();
         let end: GridIdx2D = [lr_y_inc, lr_x_inc].into();
