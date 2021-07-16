@@ -15,14 +15,15 @@ use futures::{
 use async_trait::async_trait;
 use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
 use gdal::{Dataset as GdalDataset, Metadata as GdalMetadata};
-use geoengine_datatypes::primitives::{SpatialPartition2D, SpatialPartitioned};
+use geoengine_datatypes::primitives::{Coordinate2D, SpatialPartition2D, SpatialPartitioned};
 use geoengine_datatypes::raster::{
-    EmptyGrid, GeoTransform, Grid2D, GridOrEmpty2D, Pixel, RasterDataType, RasterProperties,
-    RasterPropertiesEntry, RasterPropertiesEntryType, RasterPropertiesKey, RasterTile2D,
+    EmptyGrid, GeoTransform, Grid2D, GridOrEmpty2D, GridShapeAccess, Pixel, RasterDataType,
+    RasterProperties, RasterPropertiesEntry, RasterPropertiesEntryType, RasterPropertiesKey,
+    RasterTile2D,
 };
 use geoengine_datatypes::{dataset::DatasetId, raster::TileInformation};
 use geoengine_datatypes::{
-    primitives::{AxisAlignedRectangle, TimeInstance, TimeInterval, TimeStep, TimeStepIter},
+    primitives::{TimeInstance, TimeInterval, TimeStep, TimeStepIter},
     raster::{
         Grid, GridBlit, GridBoundingBox2D, GridBounds, GridIdx, GridSize, GridSpaceToLinearSpace,
         TilingSpecification,
@@ -139,11 +140,35 @@ pub struct GdalLoadingInfoPart {
 pub struct GdalDatasetParameters {
     pub file_path: PathBuf,
     pub rasterband_channel: usize,
+    #[serde(deserialize_with = "GeoTransform::deserialize_with_check")]
     pub geo_transform: GeoTransform,
-    pub partition: SpatialPartition2D, // the spatial partition of the dataset containing the raster data
+    pub width: usize,
+    pub height: usize,
     pub file_not_found_handling: FileNotFoundHandling,
     pub no_data_value: Option<f64>,
     pub properties_mapping: Option<Vec<GdalMetadataMapping>>,
+}
+
+impl SpatialPartitioned for GdalDatasetParameters {
+    fn spatial_partition(&self) -> SpatialPartition2D {
+        let lower_right_coordinate = self.geo_transform.origin_coordinate
+            + Coordinate2D::from((
+                self.geo_transform.x_pixel_size * self.width as f64,
+                self.geo_transform.y_pixel_size * self.height as f64,
+            ));
+        SpatialPartition2D::new_unchecked(
+            self.geo_transform.origin_coordinate,
+            lower_right_coordinate,
+        )
+    }
+}
+
+impl GridShapeAccess for GdalDatasetParameters {
+    type ShapeArray = [usize; 2];
+
+    fn grid_shape_array(&self) -> Self::ShapeArray {
+        [self.height, self.width]
+    }
 }
 
 /// How to handle file not found errors
@@ -312,7 +337,7 @@ where
     ) -> Result<RasterTile2D<T>> {
         let f = if tile_information
             .spatial_partition()
-            .intersects(&dataset_params.partition)
+            .intersects(&dataset_params.spatial_partition())
         {
             Self::load_tile_data_async(dataset_params, tile_information).await
         } else {
@@ -348,7 +373,7 @@ where
         dataset_params: &GdalDatasetParameters,
         tile_information: &TileInformation,
     ) -> Result<GridWithProperties<T>> {
-        let dataset_bounds = dataset_params.partition;
+        let dataset_bounds = dataset_params.spatial_partition();
         let geo_transform = dataset_params.geo_transform;
         let output_bounds = tile_information.spatial_partition();
         let output_shape = tile_information.tile_size_in_pixels();
@@ -404,62 +429,50 @@ where
             properties_from_band(&mut properties, &rasterband);
         }
 
-        // dataset spatial relations
-        let dataset_contains_tile = dataset_bounds.contains(&output_bounds);
-
-        // TODO: re-enable when BBOx paradox is solved
-        // let dataset_intersects_tile = dataset_bounds.intersects_bbox(&output_bounds);
-        // TODO: move to false, true case when BBOX paradox is solved
+        // check if query and dataset intersect
         let dataset_intersects_tile = dataset_bounds.intersection(&output_bounds);
-        let result_grid: GridOrEmpty2D<T> = match (dataset_contains_tile, dataset_intersects_tile) {
-            (_, None) => {
-                // TODO: refactor tile to hold an Option<GridData> and this will be empty in this case
-                if let Some(no_data) = no_data_value {
+
+        let dataset_intersection_area = match dataset_intersects_tile {
+            Some(i) => i,
+            None => {
+                // there is no intersection, return empty tile
+                let no_data_grid = if let Some(no_data) = no_data_value {
                     EmptyGrid::new(output_shape, no_data).into()
                 } else {
                     Grid2D::new_filled(output_shape, fill_value, None).into()
-                }
+                };
+
+                return Ok(GridWithProperties {
+                    grid: no_data_grid,
+                    properties,
+                });
             }
-            (true, Some(_)) => {
-                let dataset_idx_ul =
-                    geo_transform.coordinate_to_grid_idx_2d(output_bounds.upper_left());
+        };
 
-                let dataset_idx_lr =
-                    geo_transform.coordinate_to_grid_idx_2d(output_bounds.lower_right()) - 1; // the lr coordinate is the first pixel of the next tile so sub 1 from all axis.
+        let dataset_grid_bounds = geo_transform.spatial_to_grid_bounds(&dataset_intersection_area);
 
-                read_as_raster(
-                    &rasterband,
-                    &GridBoundingBox2D::new(dataset_idx_ul, dataset_idx_lr)?,
-                    output_shape,
-                    no_data_value,
-                )?
-                .into()
-            }
-            (false, Some(intersecting_area)) => {
-                let dataset_idx_ul =
-                    geo_transform.coordinate_to_grid_idx_2d(intersecting_area.upper_left());
+        let result_grid = if dataset_intersection_area == output_bounds {
+            read_as_raster(
+                &rasterband,
+                &dataset_grid_bounds,
+                output_shape,
+                no_data_value,
+            )?
+            .into()
+        } else {
+            let tile_grid_bounds =
+                output_geo_transform.spatial_to_grid_bounds(&dataset_intersection_area);
 
-                let dataset_idx_lr =
-                    geo_transform.coordinate_to_grid_idx_2d(intersecting_area.lower_right()) - 1;
+            let dataset_raster = read_as_raster(
+                &rasterband,
+                &dataset_grid_bounds,
+                tile_grid_bounds,
+                no_data_value,
+            )?;
 
-                let tile_idx_ul =
-                    output_geo_transform.coordinate_to_grid_idx_2d(intersecting_area.upper_left());
-
-                let tile_idx_lr = output_geo_transform
-                    .coordinate_to_grid_idx_2d(intersecting_area.lower_right())
-                    - 1;
-
-                let dataset_raster = read_as_raster(
-                    &rasterband,
-                    &GridBoundingBox2D::new(dataset_idx_ul, dataset_idx_lr)?,
-                    GridBoundingBox2D::new(tile_idx_ul, tile_idx_lr)?,
-                    no_data_value,
-                )?;
-
-                let mut tile_raster = Grid2D::new_filled(output_shape, fill_value, no_data_value);
-                tile_raster.grid_blit_from(dataset_raster);
-                tile_raster.into()
-            }
+            let mut tile_raster = Grid2D::new_filled(output_shape, fill_value, no_data_value);
+            tile_raster.grid_blit_from(dataset_raster);
+            tile_raster.into()
         };
 
         Ok(GridWithProperties {
@@ -728,7 +741,7 @@ mod tests {
     use crate::engine::{MockExecutionContext, MockQueryContext};
     use crate::util::gdal::{add_ndvi_dataset, raster_dir};
     use crate::util::Result;
-    use geoengine_datatypes::primitives::SpatialPartition2D;
+    use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D};
     use geoengine_datatypes::raster::{TileInformation, TilingStrategy};
     use geoengine_datatypes::{
         primitives::{Measurement, SpatialResolution, TimeGranularity},
@@ -789,10 +802,8 @@ mod tests {
                     x_pixel_size: 0.1,
                     y_pixel_size: -0.1,
                 },
-                partition: SpatialPartition2D::new_unchecked(
-                    (-180., 90.).into(),
-                    (180., -90.).into(),
-                ),
+                width: 3600,
+                height: 1800,
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value: Some(0.),
                 properties_mapping: Some(vec![
@@ -985,7 +996,8 @@ mod tests {
             file_path: "/foo/bar_%TIME%.tiff".into(),
             rasterband_channel: 0,
             geo_transform: Default::default(),
-            partition: SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into()),
+            width: 360,
+            height: 180,
             file_not_found_handling: FileNotFoundHandling::NoData,
             no_data_value: Some(0.),
             properties_mapping: None,
@@ -999,7 +1011,8 @@ mod tests {
         );
         assert_eq!(params.rasterband_channel, replaced.rasterband_channel);
         assert_eq!(params.geo_transform, replaced.geo_transform);
-        assert_eq!(params.partition, replaced.partition);
+        assert_eq!(params.width, replaced.width);
+        assert_eq!(params.height, replaced.height);
         assert_eq!(
             params.file_not_found_handling,
             replaced.file_not_found_handling
@@ -1022,7 +1035,8 @@ mod tests {
                 file_path: "/foo/bar_%TIME%.tiff".into(),
                 rasterband_channel: 0,
                 geo_transform: Default::default(),
-                partition: SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into()),
+                width: 360,
+                height: 180,
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value,
                 properties_mapping: None,
@@ -1140,6 +1154,29 @@ mod tests {
                 255, 255, 255, 255, 255, 255
             ]
         );
+    }
+
+    #[test]
+    fn test_load_tile_data_is_inside_single_pixel() {
+        let output_shape: GridShape2D = [8, 8].into();
+        // shift world bbox one pixel up and to the left
+        let (x_size, y_size) = (0.000_000_000_01, 0.000_000_000_01);
+        let output_bounds = SpatialPartition2D::new(
+            (-116.22222, 66.66666).into(),
+            (-116.22222 + x_size, 66.66666 - y_size).into(),
+        )
+        .unwrap();
+
+        let x = load_ndvi_jan_2014(output_shape, output_bounds)
+            .unwrap()
+            .grid;
+
+        assert!(!x.is_empty());
+
+        let x = x.into_materialized_grid();
+
+        assert_eq!(x.data.len(), 64);
+        assert_eq!(x.data, &[1; 64]);
     }
 
     #[tokio::test]

@@ -1,7 +1,9 @@
-use std::cmp::{max, min};
+use std::cmp::max;
 
-use crate::primitives::{AxisAlignedRectangle, BoundingBox2D, Coordinate2D, SpatialResolution};
-use serde::{Deserialize, Serialize};
+use crate::primitives::{
+    AxisAlignedRectangle, Coordinate2D, SpatialPartition2D, SpatialResolution,
+};
+use serde::{de, Deserialize, Deserializer, Serialize};
 
 use super::{GridBoundingBox2D, GridIdx, GridIdx2D};
 
@@ -111,15 +113,25 @@ impl GeoTransform {
         [grid_y_index, grid_x_index].into()
     }
 
-    /// Transform a `BoundingBox2D` into a `GridBoundingBox`
+    /// Transform a `SpatialPartition2D` into a `GridBoundingBox`
     #[inline]
-    pub fn pixel_box(&self, bounding_box: BoundingBox2D) -> GridBoundingBox2D {
-        let ul = self.coordinate_to_grid_idx_2d(bounding_box.upper_left());
-        let lr = self.coordinate_to_grid_idx_2d(bounding_box.lower_right());
-        let ul = ul.inner();
-        let lr = lr.inner();
-        let start: GridIdx2D = [min(ul[0], lr[0]), min(ul[1], lr[1])].into();
-        let end: GridIdx2D = [max(ul[0], lr[0]), max(ul[1], lr[1])].into();
+    pub fn spatial_to_grid_bounds(
+        &self,
+        spatial_partition: &SpatialPartition2D,
+    ) -> GridBoundingBox2D {
+        //let snapped = spatial_partition.snap_to_grid(self.origin_coordinate, self.spatial_resolution());
+        let GridIdx([ul_y, ul_x]) = self.coordinate_to_grid_idx_2d(spatial_partition.upper_left());
+        let GridIdx([lr_y, lr_x]) = self.coordinate_to_grid_idx_2d(spatial_partition.lower_right()); // this is the next pixel!
+
+        debug_assert!(ul_x <= lr_x);
+        debug_assert!(ul_y <= lr_y);
+
+        let lr_x_inc = max(ul_x, lr_x - 1);
+        let lr_y_inc = max(ul_y, lr_y - 1);
+
+        let start: GridIdx2D = [ul_y, ul_x].into();
+        let end: GridIdx2D = [lr_y_inc, lr_x_inc].into();
+
         GridBoundingBox2D::new_unchecked(start, end)
     }
 
@@ -141,6 +153,21 @@ impl GeoTransform {
             x: self.x_pixel_size.abs(),
             y: self.y_pixel_size.abs(),
         }
+    }
+
+    pub fn deserialize_with_check<'de, D>(deserializer: D) -> Result<GeoTransform, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let unchecked = GeoTransform::deserialize(deserializer)?;
+        if unchecked.x_pixel_size.is_sign_negative() {
+            return Err(de::Error::custom("x_pixel_size must be positive"));
+        }
+        if unchecked.y_pixel_size.is_sign_positive() {
+            return Err(de::Error::custom("y_pixel_size must be negative"));
+        }
+
+        Ok(unchecked)
     }
 }
 
@@ -179,7 +206,10 @@ impl From<GeoTransform> for GdalGeoTransform {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::raster::{GeoTransform, GridIdx2D};
+    use crate::{
+        primitives::SpatialPartition2D,
+        raster::{GeoTransform, GridIdx2D},
+    };
 
     #[test]
     #[allow(clippy::float_cmp)]
@@ -253,15 +283,110 @@ mod tests {
     }
 
     #[test]
-    fn pixel_box() {
-        let geo_transform = GeoTransform::new_with_coordinate_x_y(5.0, 1.0, 5.0, -1.0);
+    fn pixel_box_three_pixels() {
+        let geo_transform = GeoTransform::new_with_coordinate_x_y(0.0, 1.0, 0.0, -1.0);
 
         assert_eq!(
-            geo_transform.pixel_box(BoundingBox2D::new_unchecked(
-                (6.0, 4.0).into(),
-                (7.0, 3.0).into()
-            )),
-            GridBoundingBox2D::new_unchecked(GridIdx2D::new([1, 1]), GridIdx2D::new([2, 2]))
+            geo_transform.spatial_to_grid_bounds(
+                &SpatialPartition2D::new((6.0, 4.0).into(), (9.0, 1.0).into()).unwrap()
+            ),
+            GridBoundingBox2D::new(GridIdx2D::new([-4, 6]), GridIdx2D::new([-2, 8])).unwrap()
         )
+    }
+
+    #[test]
+    fn pixel_box_one_pixel() {
+        let geo_transform = GeoTransform::new_with_coordinate_x_y(0.0, 1.0, 0.0, -1.0);
+
+        assert_eq!(
+            geo_transform.spatial_to_grid_bounds(
+                &SpatialPartition2D::new((6.0, 4.0).into(), (7.0, 3.0).into()).unwrap()
+            ),
+            GridBoundingBox2D::new(GridIdx2D::new([-4, 6]), GridIdx2D::new([-4, 6])).unwrap()
+        )
+    }
+
+    #[test]
+    fn pixel_box_mini() {
+        let geo_transform = GeoTransform::new_with_coordinate_x_y(0.0, 1.0, 0.0, -1.0);
+
+        assert_eq!(
+            geo_transform.spatial_to_grid_bounds(
+                &SpatialPartition2D::new((6.0, 4.0).into(), (6.1, 3.9).into()).unwrap()
+            ),
+            GridBoundingBox2D::new(GridIdx2D::new([-4, 6]), GridIdx2D::new([-4, 6])).unwrap()
+        )
+    }
+
+    #[test]
+    fn deserialze() {
+        let gt = GeoTransform::new_with_coordinate_x_y(-180.0, 1., 90.0, -1.);
+
+        let test: GeoTransform = serde_json::from_str(
+            r#"{
+            "originCoordinate": {
+              "x": -180.0,
+              "y": 90.0
+            },
+            "xPixelSize": 1.0,
+            "yPixelSize": -1.0
+          }"#,
+        )
+        .unwrap();
+
+        assert_eq!(gt, test);
+    }
+
+    #[test]
+    fn deserialze_with_check_ok() {
+        let gt = GeoTransform::new_with_coordinate_x_y(-180.0, 1., 90.0, -1.);
+
+        let mut de = serde_json::Deserializer::from_str(
+            r#"{
+            "originCoordinate": {
+              "x": -180.0,
+              "y": 90.0
+            },
+            "xPixelSize": 1.0,
+            "yPixelSize": -1.0
+          }"#,
+        );
+
+        let test = GeoTransform::deserialize_with_check(&mut de).unwrap();
+
+        assert_eq!(gt, test);
+    }
+
+    #[test]
+    fn deserialze_with_check_fail() {
+        let mut de = serde_json::Deserializer::from_str(
+            r#"{
+            "originCoordinate": {
+              "x": -180.0,
+              "y": 90.0
+            },
+            "xPixelSize": -1.0,
+            "yPixelSize": -1.0
+          }"#,
+        );
+
+        let test = GeoTransform::deserialize_with_check(&mut de);
+
+        assert!(test.is_err());
+
+        let mut de = serde_json::Deserializer::from_str(
+            r#"{
+            "originCoordinate": {
+              "x": -180.0,
+              "y": 90.0
+            },
+            "xPixelSize": 1.0,
+            "yPixelSize": 1.0
+          }"#,
+        );
+
+        let test = GeoTransform::deserialize_with_check(&mut de);
+
+        assert!(test.is_err());
     }
 }
