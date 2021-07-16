@@ -7,7 +7,9 @@ use geoengine_datatypes::collections::{
     FeatureCollectionInfos, FeatureCollectionModifications, GeometryCollection,
     MultiPointCollection, MultiPolygonCollection, VectorDataType,
 };
-use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval};
+use geoengine_datatypes::primitives::{
+    Coordinate2D, MultiPolygonAccess, MultiPolygonRef, TimeInterval,
+};
 
 use crate::adapters::FeatureCollectionChunkMerger;
 use crate::engine::QueryProcessor;
@@ -187,7 +189,7 @@ impl VectorQueryProcessor for PointInPolygonFilterProcessor {
 ///
 /// The algorithm is taken from <http://alienryderflex.com/polygon/>
 ///
-struct PointInPolygonTester<'p> {
+pub struct PointInPolygonTester<'p> {
     polygons: &'p MultiPolygonCollection,
     constants: Vec<f64>,
     multiples: Vec<f64>,
@@ -272,6 +274,33 @@ impl<'p> PointInPolygonTester<'p> {
         }
 
         odd_nodes
+    }
+
+    pub fn is_coordinate_in_multi_polygon(
+        &self,
+        coordinate: Coordinate2D,
+        polygon: &MultiPolygonRef,
+    ) -> bool {
+        let polygons = polygon.polygons();
+
+        let mut is_in_multi_polygon = false;
+        for polygon in polygons {
+            let mut is_in_polygon = true;
+            for (ring_index, ring) in polygon.iter().enumerate() {
+                let is_in_ring = self.is_coordinate_in_ring(&coordinate, 0, ring.len());
+
+                if (ring_index == 0 && !is_in_ring) || (ring_index > 0 && is_in_ring) {
+                    is_in_polygon = false;
+                    break;
+                }
+            }
+            if is_in_polygon {
+                is_in_multi_polygon = true;
+                break;
+            }
+        }
+
+        is_in_multi_polygon
     }
 
     fn coordinate_in_multi_polygon_iter(

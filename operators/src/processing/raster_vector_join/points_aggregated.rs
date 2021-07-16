@@ -2,10 +2,10 @@ use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
 
 use geoengine_datatypes::collections::{
-    FeatureCollectionInfos, FeatureCollectionModifications, GeometryRandomAccess,
-    MultiPointCollection,
+    FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
 };
 use geoengine_datatypes::raster::{GridIndexAccess, NoDataValue, Pixel, RasterDataType};
+use geoengine_datatypes::util::arrow::ArrowTyped;
 
 use crate::engine::{
     QueryContext, QueryProcessor, RasterQueryProcessor, TypedRasterQueryProcessor,
@@ -15,25 +15,29 @@ use crate::processing::raster_vector_join::aggregator::{
     Aggregator, FirstValueFloatAggregator, FirstValueIntAggregator, MeanValueAggregator,
     TypedAggregator,
 };
-use crate::processing::raster_vector_join::util::FeatureTimeSpanIter;
 use crate::processing::raster_vector_join::TemporalAggregationMethod;
 use crate::util::Result;
 use async_trait::async_trait;
-use geoengine_datatypes::primitives::{BoundingBox2D, MultiPointAccess};
+use geoengine_datatypes::primitives::{BoundingBox2D, Geometry};
 
+use super::util::{CoveredPixels, FeatureTimeSpanIter, PixelCoverCreator};
 use super::{create_feature_aggregator, FeatureAggregationMethod};
 
-pub struct RasterPointAggregateJoinProcessor {
-    points: Box<dyn VectorQueryProcessor<VectorType = MultiPointCollection>>,
+pub struct RasterVectorAggregateJoinProcessor<G> {
+    points: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
     raster_processors: Vec<TypedRasterQueryProcessor>,
     column_names: Vec<String>,
     feature_aggregation: FeatureAggregationMethod,
     temporal_aggregation: TemporalAggregationMethod,
 }
 
-impl RasterPointAggregateJoinProcessor {
+impl<G> RasterVectorAggregateJoinProcessor<G>
+where
+    G: Geometry + ArrowTyped,
+    FeatureCollection<G>: for<'a> PixelCoverCreator<'a, G>,
+{
     pub fn new(
-        points: Box<dyn VectorQueryProcessor<VectorType = MultiPointCollection>>,
+        points: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
         raster_processors: Vec<TypedRasterQueryProcessor>,
         column_names: Vec<String>,
         feature_aggregation: FeatureAggregationMethod,
@@ -49,18 +53,20 @@ impl RasterPointAggregateJoinProcessor {
     }
 
     async fn extract_raster_values<P: Pixel>(
-        points: &MultiPointCollection,
+        points: &FeatureCollection<G>,
         raster_processor: &dyn RasterQueryProcessor<RasterType = P>,
         new_column_name: &str,
         feature_aggreation: FeatureAggregationMethod,
         temporal_aggregation: TemporalAggregationMethod,
         query: VectorQueryRectangle,
         ctx: &dyn QueryContext,
-    ) -> Result<MultiPointCollection> {
+    ) -> Result<FeatureCollection<G>> {
         let mut temporal_aggregator =
             Self::create_aggregator::<P>(points.len(), temporal_aggregation);
 
         let points = points.sort_by_time_asc()?;
+
+        let covered_pixels = points.create_covered_pixels();
 
         for time_span in FeatureTimeSpanIter::new(points.time_intervals()) {
             let query = VectorQueryRectangle {
@@ -99,17 +105,10 @@ impl RasterPointAggregateJoinProcessor {
                 }
                 time_end = Some(raster.time.end());
 
-                let geo_transform = raster.tile_information().tile_geo_transform();
-
                 for feature_index in time_span.feature_index_start..=time_span.feature_index_end {
                     // TODO: don't do random access but use a single iterator
-                    let geometry = points.geometry_at(feature_index).expect("must exist");
-
-                    // TODO: aggregate multiple extracted values for one multi point before inserting it to the aggregator
                     let mut satisfied = false;
-                    for coordinate in geometry.points() {
-                        let grid_idx = geo_transform.coordinate_to_grid_idx_2d(*coordinate);
-
+                    for grid_idx in covered_pixels.covered_pixels(feature_index, &raster) {
                         // try to get the pixel if the coordinate is within the current tile
                         if let Ok(pixel) = raster.get_at_grid_index(grid_idx) {
                             // finally, attach value to feature
@@ -121,6 +120,7 @@ impl RasterPointAggregateJoinProcessor {
                             if is_no_data {
                                 feature_aggregator.add_null(feature_index);
                             } else {
+                                // TODO: weigh by area?
                                 feature_aggregator.add_value(feature_index, pixel, 1);
                             }
 
@@ -183,8 +183,12 @@ impl RasterPointAggregateJoinProcessor {
 }
 
 #[async_trait]
-impl QueryProcessor for RasterPointAggregateJoinProcessor {
-    type Output = MultiPointCollection;
+impl<G> QueryProcessor for RasterVectorAggregateJoinProcessor<G>
+where
+    G: Geometry + ArrowTyped + 'static,
+    FeatureCollection<G>: for<'a> PixelCoverCreator<'a, G>,
+{
+    type Output = FeatureCollection<G>;
     type SpatialBounds = BoundingBox2D;
 
     async fn query<'a>(
@@ -217,6 +221,7 @@ mod tests {
     use crate::engine::{MockExecutionContext, RasterResultDescriptor, VectorQueryRectangle};
     use crate::engine::{MockQueryContext, RasterOperator};
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
+    use geoengine_datatypes::collections::MultiPointCollection;
     use geoengine_datatypes::raster::{Grid2D, RasterTile2D, TileInformation};
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::{
@@ -275,7 +280,7 @@ mod tests {
         )
         .unwrap();
 
-        let result = RasterPointAggregateJoinProcessor::extract_raster_values(
+        let result = RasterVectorAggregateJoinProcessor::extract_raster_values(
             &points,
             &raster_source.query_processor().unwrap().get_u8().unwrap(),
             "foo",
@@ -359,7 +364,7 @@ mod tests {
         )
         .unwrap();
 
-        let result = RasterPointAggregateJoinProcessor::extract_raster_values(
+        let result = RasterVectorAggregateJoinProcessor::extract_raster_values(
             &points,
             &raster_source.query_processor().unwrap().get_u8().unwrap(),
             "foo",
@@ -466,7 +471,7 @@ mod tests {
         )
         .unwrap();
 
-        let result = RasterPointAggregateJoinProcessor::extract_raster_values(
+        let result = RasterVectorAggregateJoinProcessor::extract_raster_values(
             &points,
             &raster_source.query_processor().unwrap().get_u8().unwrap(),
             "foo",

@@ -7,4 +7,5 @@ mod reprojection;
 mod temporal_raster_aggregation;
 mod vector_join;
 
+pub use point_in_polygon::PointInPolygonTester;
 pub use reprojection::{Reprojection, ReprojectionParams};

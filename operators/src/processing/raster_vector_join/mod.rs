@@ -12,7 +12,7 @@ use crate::error::{self, Error};
 use crate::util::Result;
 
 use crate::processing::raster_vector_join::points::RasterPointJoinProcessor;
-use crate::processing::raster_vector_join::points_aggregated::RasterPointAggregateJoinProcessor;
+use crate::processing::raster_vector_join::points_aggregated::RasterVectorAggregateJoinProcessor;
 use async_trait::async_trait;
 use futures::future::join_all;
 use geoengine_datatypes::collections::VectorDataType;
@@ -181,7 +181,7 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
                     )
                     .boxed(),
                     TemporalAggregationMethod::First | TemporalAggregationMethod::Mean => {
-                        RasterPointAggregateJoinProcessor::new(
+                        RasterVectorAggregateJoinProcessor::new(
                             points,
                             typed_raster_processors,
                             self.state.names.clone(),
