@@ -175,10 +175,10 @@ pub enum Error {
 
     MissingSpatialReference,
 
-    WcsBoundingboxCrsMustMatchRequest,
     WcsVersionNotSupported,
     WcsGridOriginMustEqualBoundingboxUpperLeft,
     WcsBoundingboxCrsMustEqualGridBaseCrs,
+    WcsInvalidGridOffsets,
 }
 
 impl Reject for Error {}

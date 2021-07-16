@@ -1,5 +1,5 @@
 use chrono::FixedOffset;
-use geoengine_datatypes::primitives::{AxisAlignedRectangle, BoundingBox2D, SpatialPartition2D};
+use geoengine_datatypes::primitives::{AxisAlignedRectangle, BoundingBox2D};
 use geoengine_datatypes::primitives::{Coordinate2D, SpatialResolution, TimeInterval};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use serde::de::Error;
@@ -100,7 +100,7 @@ where
             .map_err(D::Error::custom),
         [Ok(start), Ok(end)] => TimeInterval::new(start.timestamp_millis(), end.timestamp_millis())
             .map_err(D::Error::custom),
-        _ => Err(D::Error::custom("Invalid time")),
+        _ => Err(D::Error::custom(format!("Invalid time {}", s))),
     }
 }
 
@@ -139,34 +139,45 @@ where
 {
     let s = String::deserialize(deserializer)?;
 
-    let (bbox, crs) = if let Some(idx) = s.rfind(',') {
-        (&s[0..idx], &s[idx + 1..s.len()])
-    } else {
-        return Err(D::Error::custom("Invalid bbox"));
+    let (bbox_str, crs_str) = match s.matches(',').count() {
+        3 => (s.as_str(), None),
+        4 => {
+            let idx = s.rfind(',').expect("there is at least one ','");
+            (&s[0..idx], Some(&s[idx + 1..s.len()]))
+        }
+        _ => {
+            return Err(D::Error::custom(&format!(
+                "cannot parse bbox from string: {}",
+                s
+            )))
+        }
     };
 
     // TODO: more sophisticated crs parsing
-    let spatial_reference = if let Some(crs) = crs.strip_prefix("urn:ogc:def:crs:") {
-        SpatialReference::from_str(&crs.replace("::", ":")).map_err(D::Error::custom)?
+    let spatial_reference = if let Some(crs_str) = crs_str {
+        if let Some(crs) = crs_str.strip_prefix("urn:ogc:def:crs:") {
+            Some(SpatialReference::from_str(&crs.replace("::", ":")).map_err(D::Error::custom)?)
+        } else {
+            return Err(D::Error::custom(&format!(
+                "cannot parse crs from string: {}",
+                crs_str
+            )));
+        }
     } else {
-        return Err(D::Error::custom(&format!(
-            "cannot parse crs from string: {}",
-            crs
-        )));
+        None
     };
 
     let split: Vec<Result<f64, std::num::ParseFloatError>> =
-        bbox.split(',').map(str::parse).collect();
+        bbox_str.split(',').map(str::parse).collect();
 
-    let partition = if let [Ok(a), Ok(b), Ok(c), Ok(d)] = *split.as_slice() {
-        rectangle_from_ogc_params::<SpatialPartition2D>([a, b, c, d], spatial_reference)
-            .map_err(D::Error::custom)?
+    let bbox = if let [Ok(a), Ok(b), Ok(c), Ok(d)] = *split.as_slice() {
+        [a, b, c, d]
     } else {
         return Err(D::Error::custom("Invalid bbox"));
     };
 
     Ok(WcsBoundingbox {
-        partition,
+        bbox,
         spatial_reference,
     })
 }
@@ -347,27 +358,11 @@ mod tests {
         assert_eq!(
             parse_wcs_bbox(to_deserializer(s)).unwrap(),
             WcsBoundingbox {
-                partition: SpatialPartition2D::new_unchecked(
-                    (-162., 81.).into(),
-                    (162., -81.).into()
-                ),
-                spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 3857),
-            }
-        )
-    }
-
-    #[test]
-    fn it_parses_wcs_bbox_epsg_4326() {
-        let s = "-81,-162,81,162,urn:ogc:def:crs:EPSG::4326";
-
-        assert_eq!(
-            parse_wcs_bbox(to_deserializer(s)).unwrap(),
-            WcsBoundingbox {
-                partition: SpatialPartition2D::new_unchecked(
-                    (-162., 81.).into(),
-                    (162., -81.).into()
-                ),
-                spatial_reference: SpatialReference::epsg_4326(),
+                bbox: [-162., -81., 162., 81.],
+                spatial_reference: Some(SpatialReference::new(
+                    SpatialReferenceAuthority::Epsg,
+                    3857
+                )),
             }
         )
     }
