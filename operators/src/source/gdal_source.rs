@@ -17,7 +17,7 @@ use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
 use gdal::{Dataset as GdalDataset, Metadata as GdalMetadata};
 use geoengine_datatypes::primitives::{Coordinate2D, SpatialPartition2D, SpatialPartitioned};
 use geoengine_datatypes::raster::{
-    EmptyGrid, GeoTransform, Grid2D, GridOrEmpty2D, GridShape2D, Pixel, RasterDataType,
+    EmptyGrid, GeoTransform, Grid2D, GridOrEmpty2D, GridShapeAccess, Pixel, RasterDataType,
     RasterProperties, RasterPropertiesEntry, RasterPropertiesEntryType, RasterPropertiesKey,
     RasterTile2D,
 };
@@ -141,7 +141,8 @@ pub struct GdalDatasetParameters {
     pub file_path: PathBuf,
     pub rasterband_channel: usize,
     pub geo_transform: GeoTransform,
-    pub grid_shape: GridShape2D,
+    pub width: usize,
+    pub height: usize,
     pub file_not_found_handling: FileNotFoundHandling,
     pub no_data_value: Option<f64>,
     pub properties_mapping: Option<Vec<GdalMetadataMapping>>,
@@ -151,13 +152,21 @@ impl SpatialPartitioned for GdalDatasetParameters {
     fn spatial_partition(&self) -> SpatialPartition2D {
         let lower_right_coordinate = self.geo_transform.origin_coordinate
             + Coordinate2D::from((
-                self.geo_transform.x_pixel_size * self.grid_shape.axis_size_x() as f64,
-                self.geo_transform.y_pixel_size * self.grid_shape.axis_size_y() as f64,
+                self.geo_transform.x_pixel_size * self.width as f64,
+                self.geo_transform.y_pixel_size * self.height as f64,
             ));
         SpatialPartition2D::new_unchecked(
             self.geo_transform.origin_coordinate,
             lower_right_coordinate,
         )
+    }
+}
+
+impl GridShapeAccess for GdalDatasetParameters {
+    type ShapeArray = [usize; 2];
+
+    fn grid_shape_array(&self) -> Self::ShapeArray {
+        [self.height, self.width]
     }
 }
 
@@ -798,7 +807,8 @@ mod tests {
                     x_pixel_size: 0.1,
                     y_pixel_size: -0.1,
                 },
-                grid_shape: GridShape2D::new([1800, 3600]),
+                width: 3600,
+                height: 1800,
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value: Some(0.),
                 properties_mapping: Some(vec![
@@ -991,7 +1001,8 @@ mod tests {
             file_path: "/foo/bar_%TIME%.tiff".into(),
             rasterband_channel: 0,
             geo_transform: Default::default(),
-            grid_shape: GridShape2D::new([180, 360]),
+            width: 360,
+            height: 180,
             file_not_found_handling: FileNotFoundHandling::NoData,
             no_data_value: Some(0.),
             properties_mapping: None,
@@ -1005,7 +1016,8 @@ mod tests {
         );
         assert_eq!(params.rasterband_channel, replaced.rasterband_channel);
         assert_eq!(params.geo_transform, replaced.geo_transform);
-        assert_eq!(params.grid_shape, replaced.grid_shape);
+        assert_eq!(params.width, replaced.width);
+        assert_eq!(params.height, replaced.height);
         assert_eq!(
             params.file_not_found_handling,
             replaced.file_not_found_handling
@@ -1028,7 +1040,8 @@ mod tests {
                 file_path: "/foo/bar_%TIME%.tiff".into(),
                 rasterband_channel: 0,
                 geo_transform: Default::default(),
-                grid_shape: GridShape2D::new([180, 360]),
+                width: 360,
+                height: 180,
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value,
                 properties_mapping: None,

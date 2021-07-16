@@ -14,7 +14,7 @@ use geoengine_datatypes::operations::reproject::{
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BoundingBox2D, Measurement, SpatialPartitioned, TimeInterval,
 };
-use geoengine_datatypes::raster::{GeoTransform, GridShape2D, RasterDataType};
+use geoengine_datatypes::raster::{GeoTransform, RasterDataType};
 use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
 use geoengine_operators::engine::{
     MetaData, MetaDataProvider, RasterQueryRectangle, RasterResultDescriptor, VectorQueryRectangle,
@@ -296,7 +296,6 @@ impl SentinelS2L2aCogsMetaData {
         asset: &StacAsset,
     ) -> Result<GdalLoadingInfoPart> {
         let [stac_shape_y, stac_shape_x] = asset.proj_shape.ok_or(error::Error::StacInvalidBbox)?;
-        let grid_shape = GridShape2D::new([stac_shape_y as usize, stac_shape_x as usize]);
 
         Ok(GdalLoadingInfoPart {
             time: time_interval,
@@ -308,7 +307,8 @@ impl SentinelS2L2aCogsMetaData {
                         .gdal_geotransform()
                         .ok_or(error::Error::StacInvalidGeoTransform)?,
                 ),
-                grid_shape,
+                width: stac_shape_x as usize,
+                height: stac_shape_y as usize,
                 file_not_found_handling: geoengine_operators::source::FileNotFoundHandling::NoData,
                 no_data_value: self.band.no_data_value,
                 properties_mapping: None,
@@ -585,7 +585,8 @@ mod tests {
                     x_pixel_size: 60.,
                     y_pixel_size: -60.,
                 },
-                grid_shape: GridShape2D::new([1830,1830]),
+                width: 1830,
+                height: 1830,
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value: Some(0.),
                 properties_mapping: None,

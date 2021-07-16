@@ -296,19 +296,8 @@
         "xPixelSize": 0.1,
         "yPixelSize": -0.1
       },
-      "partition": {
-        "upperLeftCoordinate": {
-          "x": -180.0,
-          "y": 90.0
-        },
-        "lowerRightCoordinate": {
-          "x": 180.0,
-          "y": -90.0
-        }
-      },
-      "gridShape": {
-        "shapeArray": [1800, 3600]
-      },
+      "width": 3600,
+      "height": 1800, 
       "fileNotFoundHandling": "NoData",
       "noDataValue": 0.0
     },
