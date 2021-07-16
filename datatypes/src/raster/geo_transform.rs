@@ -3,7 +3,7 @@ use std::cmp::max;
 use crate::primitives::{
     AxisAlignedRectangle, Coordinate2D, SpatialPartition2D, SpatialResolution,
 };
-use serde::{Deserialize, Serialize};
+use serde::{de, Deserialize, Deserializer, Serialize};
 
 use super::{GridBoundingBox2D, GridIdx, GridIdx2D};
 
@@ -154,6 +154,21 @@ impl GeoTransform {
             y: self.y_pixel_size.abs(),
         }
     }
+
+    pub fn deserialize_with_check<'de, D>(deserializer: D) -> Result<GeoTransform, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let unchecked = GeoTransform::deserialize(deserializer)?;
+        if unchecked.x_pixel_size.is_sign_negative() {
+            return Err(de::Error::custom("x_pixel_size must be positive"));
+        }
+        if unchecked.y_pixel_size.is_sign_positive() {
+            return Err(de::Error::custom("y_pixel_size must be negative"));
+        }
+
+        Ok(unchecked)
+    }
 }
 
 impl Default for GeoTransform {
@@ -301,5 +316,77 @@ mod tests {
             ),
             GridBoundingBox2D::new(GridIdx2D::new([-4, 6]), GridIdx2D::new([-4, 6])).unwrap()
         )
+    }
+
+    #[test]
+    fn deserialze() {
+        let gt = GeoTransform::new_with_coordinate_x_y(-180.0, 1., 90.0, -1.);
+
+        let test: GeoTransform = serde_json::from_str(
+            r#"{
+            "originCoordinate": {
+              "x": -180.0,
+              "y": 90.0
+            },
+            "xPixelSize": 1.0,
+            "yPixelSize": -1.0
+          }"#,
+        )
+        .unwrap();
+
+        assert_eq!(gt, test);
+    }
+
+    #[test]
+    fn deserialze_with_check_ok() {
+        let gt = GeoTransform::new_with_coordinate_x_y(-180.0, 1., 90.0, -1.);
+
+        let mut de = serde_json::Deserializer::from_str(
+            r#"{
+            "originCoordinate": {
+              "x": -180.0,
+              "y": 90.0
+            },
+            "xPixelSize": 1.0,
+            "yPixelSize": -1.0
+          }"#,
+        );
+
+        let test = GeoTransform::deserialize_with_check(&mut de).unwrap();
+
+        assert_eq!(gt, test);
+    }
+
+    #[test]
+    fn deserialze_with_check_fail() {
+        let mut de = serde_json::Deserializer::from_str(
+            r#"{
+            "originCoordinate": {
+              "x": -180.0,
+              "y": 90.0
+            },
+            "xPixelSize": -1.0,
+            "yPixelSize": -1.0
+          }"#,
+        );
+
+        let test = GeoTransform::deserialize_with_check(&mut de);
+
+        assert!(test.is_err());
+
+        let mut de = serde_json::Deserializer::from_str(
+            r#"{
+            "originCoordinate": {
+              "x": -180.0,
+              "y": 90.0
+            },
+            "xPixelSize": 1.0,
+            "yPixelSize": 1.0
+          }"#,
+        );
+
+        let test = GeoTransform::deserialize_with_check(&mut de);
+
+        assert!(test.is_err());
     }
 }

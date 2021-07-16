@@ -140,6 +140,7 @@ pub struct GdalLoadingInfoPart {
 pub struct GdalDatasetParameters {
     pub file_path: PathBuf,
     pub rasterband_channel: usize,
+    #[serde(deserialize_with = "GeoTransform::deserialize_with_check")]
     pub geo_transform: GeoTransform,
     pub width: usize,
     pub height: usize,
