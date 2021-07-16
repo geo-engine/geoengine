@@ -3,7 +3,7 @@ use std::path::Path;
 use gdal::{Dataset, DatasetOptions};
 use geoengine_datatypes::{
     dataset::{DatasetId, InternalDatasetId},
-    primitives::{Measurement, SpatialPartition2D, TimeGranularity, TimeInstance, TimeStep},
+    primitives::{Measurement, TimeGranularity, TimeInstance, TimeStep},
     raster::{GeoTransform, GridShape2D, RasterDataType},
     spatial_reference::SpatialReference,
     util::Identifier,
@@ -56,10 +56,6 @@ pub fn create_ndvi_meta_data() -> GdalMetaDataRegular {
                 y_pixel_size: -0.1,
             },
             grid_shape: GridShape2D::new([1800, 3600]),
-            partition: Some(SpatialPartition2D::new_unchecked(
-                (-180., 90.).into(),
-                (180., -90.).into(),
-            )),
             file_not_found_handling: FileNotFoundHandling::NoData,
             no_data_value,
             properties_mapping: None,

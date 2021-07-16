@@ -141,7 +141,6 @@ pub struct GdalDatasetParameters {
     pub file_path: PathBuf,
     pub rasterband_channel: usize,
     pub geo_transform: GeoTransform,
-    pub partition: Option<SpatialPartition2D>, // the spatial partition of the dataset containing the raster data
     pub grid_shape: GridShape2D,
     pub file_not_found_handling: FileNotFoundHandling,
     pub no_data_value: Option<f64>,
@@ -150,9 +149,6 @@ pub struct GdalDatasetParameters {
 
 impl SpatialPartitioned for GdalDatasetParameters {
     fn spatial_partition(&self) -> SpatialPartition2D {
-        // if let Some(partition) = self.partition {
-        //     partition
-        // } else {
         let lower_right_coordinate = self.geo_transform.origin_coordinate
             + Coordinate2D::from((
                 self.geo_transform.x_pixel_size * self.grid_shape.axis_size_x() as f64,
@@ -162,7 +158,6 @@ impl SpatialPartitioned for GdalDatasetParameters {
             self.geo_transform.origin_coordinate,
             lower_right_coordinate,
         )
-        // }
     }
 }
 
@@ -803,10 +798,6 @@ mod tests {
                     x_pixel_size: 0.1,
                     y_pixel_size: -0.1,
                 },
-                partition: Some(SpatialPartition2D::new_unchecked(
-                    (-180., 90.).into(),
-                    (180., -90.).into(),
-                )),
                 grid_shape: GridShape2D::new([1800, 3600]),
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value: Some(0.),
@@ -1000,10 +991,6 @@ mod tests {
             file_path: "/foo/bar_%TIME%.tiff".into(),
             rasterband_channel: 0,
             geo_transform: Default::default(),
-            partition: Some(SpatialPartition2D::new_unchecked(
-                (0., 1.).into(),
-                (1., 0.).into(),
-            )),
             grid_shape: GridShape2D::new([180, 360]),
             file_not_found_handling: FileNotFoundHandling::NoData,
             no_data_value: Some(0.),
@@ -1018,7 +1005,7 @@ mod tests {
         );
         assert_eq!(params.rasterband_channel, replaced.rasterband_channel);
         assert_eq!(params.geo_transform, replaced.geo_transform);
-        assert_eq!(params.partition, replaced.partition);
+        assert_eq!(params.grid_shape, replaced.grid_shape);
         assert_eq!(
             params.file_not_found_handling,
             replaced.file_not_found_handling
@@ -1041,10 +1028,6 @@ mod tests {
                 file_path: "/foo/bar_%TIME%.tiff".into(),
                 rasterband_channel: 0,
                 geo_transform: Default::default(),
-                partition: Some(SpatialPartition2D::new_unchecked(
-                    (0., 1.).into(),
-                    (1., 0.).into(),
-                )),
                 grid_shape: GridShape2D::new([180, 360]),
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value,
