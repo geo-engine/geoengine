@@ -310,7 +310,7 @@ impl PointInPolygonTester {
             polygon_offsets,
             ring_offsets,
             feature_index,
-            feature_index,
+            feature_index + 1,
         )
     }
 

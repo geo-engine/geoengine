@@ -168,7 +168,7 @@ impl CoveredPixels<MultiPolygon> for MultiPolygonCoveredPixels {
                     .tester
                     .is_coordinate_in_multi_polygon(coordinate, feature_index)
                 {
-                    pixels.push(dbg!(idx))
+                    pixels.push(idx)
                 }
             }
         }

@@ -290,8 +290,10 @@ mod tests {
     use crate::source::{GdalSource, GdalSourceParameters};
     use crate::util::gdal::add_ndvi_dataset;
     use chrono::NaiveDate;
-    use geoengine_datatypes::collections::{MultiPointCollection, ToGeoJson};
-    use geoengine_datatypes::primitives::{BoundingBox2D, FeatureData};
+    use geoengine_datatypes::collections::{
+        MultiPointCollection, MultiPolygonCollection, ToGeoJson,
+    };
+    use geoengine_datatypes::primitives::{BoundingBox2D, FeatureData, MultiPolygon};
     use geoengine_datatypes::primitives::{Measurement, SpatialResolution};
     use geoengine_datatypes::primitives::{MultiPoint, TimeInterval};
     use geoengine_datatypes::raster::{
@@ -858,6 +860,172 @@ mod tests {
                         (5. + 50.) / 2.,
                         (1. + 10.) / 2.,
                         (2. + 20.) / 2.
+                    ])
+                )],
+            )
+            .unwrap()
+        );
+    }
+
+    #[tokio::test]
+    #[allow(clippy::float_cmp)]
+    #[allow(clippy::too_many_lines)]
+    async fn polygons() {
+        let raster_tile_a_0 = RasterTile2D::new_with_tile_info(
+            TimeInterval::new(0, 10).unwrap(),
+            TileInformation {
+                global_geo_transform: Default::default(),
+                global_tile_position: [0, 0].into(),
+                tile_size_in_pixels: [3, 2].into(),
+            },
+            Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1], None)
+                .unwrap()
+                .into(),
+        );
+        let raster_tile_a_1 = RasterTile2D::new_with_tile_info(
+            TimeInterval::new(0, 10).unwrap(),
+            TileInformation {
+                global_geo_transform: Default::default(),
+                global_tile_position: [0, 1].into(),
+                tile_size_in_pixels: [3, 2].into(),
+            },
+            Grid2D::new([3, 2].into(), vec![60, 50, 40, 30, 20, 10], None)
+                .unwrap()
+                .into(),
+        );
+        let raster_tile_b_0 = RasterTile2D::new_with_tile_info(
+            TimeInterval::new(10, 20).unwrap(),
+            TileInformation {
+                global_geo_transform: Default::default(),
+                global_tile_position: [0, 0].into(),
+                tile_size_in_pixels: [3, 2].into(),
+            },
+            Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], None)
+                .unwrap()
+                .into(),
+        );
+        let raster_tile_b_1 = RasterTile2D::new_with_tile_info(
+            TimeInterval::new(10, 20).unwrap(),
+            TileInformation {
+                global_geo_transform: Default::default(),
+                global_tile_position: [0, 1].into(),
+                tile_size_in_pixels: [3, 2].into(),
+            },
+            Grid2D::new([3, 2].into(), vec![10, 20, 30, 40, 50, 60], None)
+                .unwrap()
+                .into(),
+        );
+
+        let raster_source = MockRasterSource {
+            params: MockRasterSourceParams {
+                data: vec![
+                    raster_tile_a_0,
+                    raster_tile_a_1,
+                    raster_tile_b_0,
+                    raster_tile_b_1,
+                ],
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U8,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    measurement: Measurement::Unitless,
+                    no_data_value: None,
+                },
+            },
+        }
+        .boxed();
+
+        let execution_context = MockExecutionContext {
+            tiling_specification: TilingSpecification::new((0., 0.).into(), [3, 2].into()),
+            ..Default::default()
+        };
+
+        let raster = raster_source
+            .initialize(&execution_context)
+            .await
+            .unwrap()
+            .query_processor()
+            .unwrap();
+
+        let polygons = MultiPolygonCollection::from_data(
+            vec![MultiPolygon::new(vec![vec![vec![
+                (0.5, -0.5).into(),
+                (4., -1.).into(),
+                (0.5, -2.5).into(),
+                (0.5, -0.5).into(),
+            ]]])
+            .unwrap()],
+            vec![TimeInterval::default(); 1],
+            Default::default(),
+        )
+        .unwrap();
+
+        let polygons = MockFeatureCollectionSource::single(polygons).boxed();
+
+        let points = polygons
+            .initialize(&execution_context)
+            .await
+            .unwrap()
+            .query_processor()
+            .unwrap()
+            .multi_polygon()
+            .unwrap();
+
+        let processor = RasterVectorJoinProcessor::new(
+            points,
+            vec![raster],
+            vec!["foo".to_owned()],
+            FeatureAggregationMethod::Mean,
+        );
+
+        let mut result = processor
+            .query(
+                VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((0.0, -3.0).into(), (4.0, 0.0).into())
+                        .unwrap(),
+                    time_interval: TimeInterval::new_unchecked(0, 20),
+                    spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
+                },
+                &MockQueryContext::new(usize::MAX),
+            )
+            .await
+            .unwrap()
+            .map(Result::unwrap)
+            .collect::<Vec<MultiPolygonCollection>>()
+            .await;
+
+        assert_eq!(result.len(), 1);
+
+        let result = result.remove(0);
+        eprintln!("{}", result.to_geo_json());
+
+        let t1 = TimeInterval::new(0, 10).unwrap();
+        let t2 = TimeInterval::new(10, 20).unwrap();
+
+        assert_eq!(
+            result,
+            MultiPolygonCollection::from_slices(
+                &[
+                    MultiPolygon::new(vec![vec![vec![
+                        (0.5, -0.5).into(),
+                        (4., -1.).into(),
+                        (0.5, -2.5).into(),
+                        (0.5, -0.5).into(),
+                    ]]])
+                    .unwrap(),
+                    MultiPolygon::new(vec![vec![vec![
+                        (0.5, -0.5).into(),
+                        (4., -1.).into(),
+                        (0.5, -2.5).into(),
+                        (0.5, -0.5).into(),
+                    ]]])
+                    .unwrap()
+                ],
+                &[t1, t2],
+                &[(
+                    "foo",
+                    FeatureData::Float(vec![
+                        (3. + 1. + 40. + 30.) / 4.,
+                        (4. + 6. + 30. + 40.) / 4.
                     ])
                 )],
             )
