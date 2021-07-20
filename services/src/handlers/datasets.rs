@@ -93,6 +93,7 @@ async fn list_external_datasets<C: Context>(
         .await?
         .list(options)
         .await?;
+    // TODO: it appears errors here lead to the internal datasets being listed because the route also matches /datasets,
     Ok(warp::reply::json(&list))
 }
 

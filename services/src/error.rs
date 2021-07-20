@@ -1,4 +1,4 @@
-use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
+use geoengine_datatypes::{dataset::DatasetProviderId, spatial_reference::SpatialReferenceOption};
 use snafu::Snafu;
 use strum::IntoStaticStr;
 use warp::reject::Reject;
@@ -179,6 +179,13 @@ pub enum Error {
     WcsGridOriginMustEqualBoundingboxUpperLeft,
     WcsBoundingboxCrsMustEqualGridBaseCrs,
     WcsInvalidGridOffsets,
+
+    ExpectedExternalDatasetId,
+    InvalidExternalDatasetId {
+        provider: DatasetProviderId,
+    },
+
+    Natur40UnknownRasterDbname,
 }
 
 impl Reject for Error {}
