@@ -32,14 +32,12 @@ pub struct RasterVectorJoinProcessor<G> {
     raster_processors: Vec<TypedRasterQueryProcessor>,
     column_names: Vec<String>,
     aggregation_method: FeatureAggregationMethod,
-    // covered_pixels: PhantomData<C>,
 }
 
 impl<G> RasterVectorJoinProcessor<G>
 where
     G: Geometry + ArrowTyped + 'static,
     FeatureCollection<G>: GeometryCollection + PixelCoverCreator<G>,
-    // for<'a> C: CoveredPixels<'a, G> + 'static,
 {
     pub fn new(
         collection: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
@@ -52,7 +50,6 @@ where
             raster_processors,
             column_names,
             aggregation_method,
-            // covered_pixels: Default::default(),
         }
     }
 
@@ -122,7 +119,7 @@ where
 
         let collection_stream = raster_query
             .time_multi_fold(
-                move || Ok(PointRasterJoiner::new(aggregation_method)),
+                move || Ok(VectorRasterJoiner::new(aggregation_method)),
                 move |accum, raster| {
                     let collection = collection.clone();
                     async move {
@@ -144,12 +141,12 @@ struct JoinerState<G, C> {
     g: PhantomData<G>,
 }
 
-struct PointRasterJoiner<G, C> {
+struct VectorRasterJoiner<G, C> {
     state: Option<JoinerState<G, C>>,
     aggregation_method: FeatureAggregationMethod,
 }
 
-impl<G, C> PointRasterJoiner<G, C>
+impl<G, C> VectorRasterJoiner<G, C>
 where
     G: Geometry + ArrowTyped + 'static,
     C: CoveredPixels<G>,

@@ -119,14 +119,16 @@ impl<'a> CoveredPixels<MultiPoint> for MultiPointCoveredPixels {
         raster: &RasterTile2D<P>,
     ) -> Vec<GridIdx2D> {
         let geo_transform = raster.tile_information().tile_geo_transform();
-        self.collection
-            .geometry_at(feature_index)
-            .unwrap()
-            .points()
-            .iter()
-            .map(|c| geo_transform.coordinate_to_grid_idx_2d(*c))
-            .filter(|idx| raster.grid_shape().contains(idx))
-            .collect()
+        if let Some(geometry) = self.collection.geometry_at(feature_index) {
+            return geometry
+                .points()
+                .iter()
+                .map(|c| geo_transform.coordinate_to_grid_idx_2d(*c))
+                .filter(|idx| raster.grid_shape().contains(idx))
+                .collect();
+        }
+
+        vec![]
     }
 
     fn collection_ref(&self) -> &FeatureCollection<MultiPoint> {
