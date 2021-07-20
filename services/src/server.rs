@@ -195,7 +195,7 @@ where
 /// }
 /// ```
 #[allow(clippy::unused_async)] // the function signature of request handlers requires it
-async fn show_version_handler() -> impl Responder {
+pub(crate) async fn show_version_handler() -> impl Responder {
     #[derive(serde::Serialize)]
     #[serde(rename_all = "camelCase")]
     struct VersionInfo<'a> {

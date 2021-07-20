@@ -1,6 +1,5 @@
 use crate::error;
 use crate::error::Result;
-use crate::handlers::authenticate;
 use crate::pro::contexts::ProContext;
 use crate::pro::users::UserCredentials;
 use crate::pro::users::UserDb;
@@ -11,10 +10,8 @@ use crate::projects::STRectangle;
 use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
 
+use actix_web::{web, HttpResponse, Responder};
 use snafu::ResultExt;
-use uuid::Uuid;
-use warp::reply::Reply;
-use warp::Filter;
 
 /// Registers a user by providing [`UserRegistration`] parameters.
 ///
@@ -40,24 +37,13 @@ use warp::Filter;
 ///
 /// This call fails if the [`UserRegistration`] is invalid
 /// or an account with the given e-mail already exists.
-pub(crate) fn register_user_handler<C: ProContext>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path("user")
-        .and(warp::post())
-        .and(warp::body::json())
-        .and(warp::any().map(move || ctx.clone()))
-        .and_then(register_user)
-}
-
-// TODO: move into handler once async closures are available?
-async fn register_user<C: ProContext>(
-    user: UserRegistration,
-    ctx: C,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    let user = user.validated()?;
+pub(crate) async fn register_user_handler<C: ProContext>(
+    user: web::Json<UserRegistration>,
+    ctx: web::Data<C>,
+) -> Result<impl Responder> {
+    let user = user.into_inner().validated()?;
     let id = ctx.user_db_ref_mut().await.register(user).await?;
-    Ok(warp::reply::json(&IdResponse::from(id)))
+    Ok(web::Json(IdResponse::from(id)))
 }
 
 /// Creates a session by providing [`UserCredentials`].
@@ -91,29 +77,18 @@ async fn register_user<C: ProContext>(
 /// # Errors
 ///
 /// This call fails if the [`UserCredentials`] are invalid.
-pub(crate) fn login_handler<C: ProContext>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path("login")
-        .and(warp::post())
-        .and(warp::body::json())
-        .and(warp::any().map(move || ctx.clone()))
-        .and_then(login)
-}
-
-// TODO: move into handler once async closures are available?
-async fn login<C: ProContext>(
-    user: UserCredentials,
-    ctx: C,
-) -> Result<impl warp::Reply, warp::Rejection> {
+pub(crate) async fn login_handler<C: ProContext>(
+    user: web::Json<UserCredentials>,
+    ctx: web::Data<C>,
+) -> Result<impl Responder> {
     let session = ctx
         .user_db_ref_mut()
         .await
-        .login(user)
+        .login(user.into_inner())
         .await
         .map_err(Box::new)
         .context(error::Authorization)?;
-    Ok(warp::reply::json(&session).into_response())
+    Ok(web::Json(session))
 }
 
 /// Ends a session.
@@ -128,23 +103,12 @@ async fn login<C: ProContext>(
 /// # Errors
 ///
 /// This call fails if the session is invalid.
-pub(crate) fn logout_handler<C: ProContext>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path("logout")
-        .and(warp::post())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and_then(logout)
-}
-
-// TODO: move into handler once async closures are available?
-async fn logout<C: ProContext>(
+pub(crate) async fn logout_handler<C: ProContext>(
     session: UserSession,
-    ctx: C,
-) -> Result<impl warp::Reply, warp::Rejection> {
+    ctx: web::Data<C>,
+) -> Result<impl Responder> {
     ctx.user_db_ref_mut().await.logout(session.id).await?;
-    Ok(warp::reply().into_response())
+    Ok(HttpResponse::Ok())
 }
 
 /// Creates session for anonymous user.
@@ -169,19 +133,9 @@ async fn logout<C: ProContext>(
 ///   "view": null
 /// }
 /// ```
-pub(crate) fn anonymous_handler<C: ProContext>(
-    ctx: C,
-) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    warp::path!("anonymous")
-        .and(warp::post())
-        .and(warp::any().map(move || ctx.clone()))
-        .and_then(anonymous)
-}
-
-// TODO: move into handler once async closures are available?
-async fn anonymous<C: ProContext>(ctx: C) -> Result<impl warp::Reply, warp::Rejection> {
+pub(crate) async fn anonymous_handler<C: ProContext>(ctx: web::Data<C>) -> Result<impl Responder> {
     let session = ctx.user_db_ref_mut().await.anonymous().await?;
-    Ok(warp::reply::json(&session))
+    Ok(web::Json(session))
 }
 
 /// Sets the active project of the session.
@@ -196,29 +150,17 @@ async fn anonymous<C: ProContext>(ctx: C) -> Result<impl warp::Reply, warp::Reje
 /// # Errors
 ///
 /// This call fails if the session is invalid.
-pub(crate) fn session_project_handler<C: ProContext>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path!("session" / "project" / Uuid)
-        .map(ProjectId)
-        .and(warp::post())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and_then(session_project)
-}
-
-// TODO: move into handler once async closures are available?
-async fn session_project<C: ProContext>(
-    project: ProjectId,
+pub(crate) async fn session_project_handler<C: ProContext>(
+    project: web::Path<ProjectId>,
     session: UserSession,
-    ctx: C,
-) -> Result<impl warp::Reply, warp::Rejection> {
+    ctx: web::Data<C>,
+) -> Result<impl Responder> {
     ctx.user_db_ref_mut()
         .await
-        .set_session_project(&session, project)
+        .set_session_project(&session, project.into_inner())
         .await?;
 
-    Ok(warp::reply())
+    Ok(HttpResponse::Ok())
 }
 
 // TODO: /view instead of /session/view
@@ -246,29 +188,17 @@ async fn session_project<C: ProContext>(
 /// # Errors
 ///
 /// This call fails if the session is invalid.
-pub(crate) fn session_view_handler<C: ProContext>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path!("session" / "view")
-        .and(warp::post())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and(warp::body::json())
-        .and_then(session_view)
-}
-
-// TODO: move into handler once async closures are available?
-async fn session_view<C: ProContext>(
+pub(crate) async fn session_view_handler<C: ProContext>(
     session: C::Session,
-    ctx: C,
-    view: STRectangle,
-) -> Result<impl warp::Reply, warp::Rejection> {
+    ctx: web::Data<C>,
+    view: web::Json<STRectangle>,
+) -> Result<impl Responder> {
     ctx.user_db_ref_mut()
         .await
-        .set_session_view(&session, view)
+        .set_session_view(&session, view.into_inner())
         .await?;
 
-    Ok(warp::reply())
+    Ok(HttpResponse::Ok())
 }
 
 #[cfg(test)]

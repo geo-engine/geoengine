@@ -1,10 +1,14 @@
 use serde::{Deserialize, Serialize};
 
 use crate::contexts::{MockableSession, Session, SessionId};
+use crate::error;
 use crate::pro::users::UserId;
 use crate::projects::{ProjectId, STRectangle};
 use crate::util::Identifier;
+use actix_http::Payload;
+use actix_web::{FromRequest, HttpRequest};
 use chrono::{DateTime, Utc};
+use futures::future::{err, ok, Ready};
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -61,5 +65,20 @@ impl Session for UserSession {
 
     fn view(&self) -> Option<&STRectangle> {
         self.view.as_ref()
+    }
+}
+
+impl FromRequest for UserSession {
+    type Config = ();
+    type Error = error::Error;
+    type Future = Ready<Result<Self, Self::Error>>;
+
+    fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
+        let session = req.extensions_mut().remove::<Self>();
+
+        match session {
+            Some(session) => ok(session),
+            None => err(error::Error::MissingAuthorizationHeader),
+        }
     }
 }

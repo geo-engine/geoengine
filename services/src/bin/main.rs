@@ -3,7 +3,6 @@ use flexi_logger::{
     Naming,
 };
 use geoengine_services::error::{Error, Result};
-use geoengine_services::server;
 use geoengine_services::util::config;
 use geoengine_services::util::config::get_config_element;
 use log::Record;
@@ -20,7 +19,7 @@ async fn main() -> Result<(), Error> {
 
 #[cfg(not(feature = "pro"))]
 pub async fn start_server() -> Result<()> {
-    server::start_server(None).await
+    geoengine_services::server::start_server(None).await
 }
 
 #[cfg(feature = "pro")]
