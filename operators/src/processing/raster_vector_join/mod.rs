@@ -1,6 +1,6 @@
+mod aggregated;
 mod aggregator;
-mod points;
-mod points_aggregated;
+mod non_aggregated;
 mod util;
 
 use crate::engine::{
@@ -9,10 +9,10 @@ use crate::engine::{
     VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::error::{self, Error};
-use crate::processing::raster_vector_join::points::RasterVectorJoinProcessor;
+use crate::processing::raster_vector_join::non_aggregated::RasterVectorJoinProcessor;
 use crate::util::Result;
 
-use crate::processing::raster_vector_join::points_aggregated::RasterVectorAggregateJoinProcessor;
+use crate::processing::raster_vector_join::aggregated::RasterVectorAggregateJoinProcessor;
 use async_trait::async_trait;
 use futures::future::join_all;
 use geoengine_datatypes::collections::VectorDataType;
