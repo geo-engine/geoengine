@@ -195,12 +195,8 @@ pub struct PointInPolygonTester {
 
 impl PointInPolygonTester {
     pub fn new(polygons: MultiPolygonCollection) -> Self {
-        let number_of_coordinates = polygons.coordinates().len();
-
-        let mut constants = vec![0.; number_of_coordinates];
-        let mut multiples = vec![0.; number_of_coordinates];
-
-        Self::precalculate_polygons(&polygons, &mut constants, &mut multiples);
+        let (constants, multiples) =
+            Self::precalculate_polygons(&polygons, polygons.coordinates().len());
 
         Self {
             polygons,
@@ -219,9 +215,11 @@ impl PointInPolygonTester {
 
     fn precalculate_polygons(
         polygons: &MultiPolygonCollection,
-        constants: &mut Vec<f64>,
-        multiples: &mut Vec<f64>,
-    ) {
+        number_of_coordinates: usize,
+    ) -> (Vec<f64>, Vec<f64>) {
+        let mut constants = vec![0.; number_of_coordinates];
+        let mut multiples = vec![0.; number_of_coordinates];
+
         for (ring_start_index, ring_end_index) in
             two_tuple_windows(polygons.ring_offsets().iter().map(|&c| c as usize))
         {
@@ -229,10 +227,12 @@ impl PointInPolygonTester {
                 ring_start_index,
                 ring_end_index,
                 polygons.coordinates(),
-                constants,
-                multiples,
+                &mut constants,
+                &mut multiples,
             );
         }
+
+        (constants, multiples)
     }
 
     #[allow(clippy::suspicious_operation_groupings)]
