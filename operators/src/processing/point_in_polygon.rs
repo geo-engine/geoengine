@@ -115,7 +115,7 @@ impl PointInPolygonFilterProcessor {
 
     fn filter_points(
         points: &MultiPointCollection,
-        polygons: &MultiPolygonCollection,
+        polygons: MultiPolygonCollection,
         initial_filter: &BooleanArray,
     ) -> Result<BooleanArray> {
         let mut filter = Vec::with_capacity(points.len());
@@ -169,7 +169,7 @@ impl VectorQueryProcessor for PointInPolygonFilterProcessor {
                                 return filter;
                             }
 
-                            Self::filter_points(&points, &polygons, &filter?)
+                            Self::filter_points(&points, polygons, &filter?)
                         })
                         .await?;
 
@@ -187,41 +187,64 @@ impl VectorQueryProcessor for PointInPolygonFilterProcessor {
 ///
 /// The algorithm is taken from <http://alienryderflex.com/polygon/>
 ///
-struct PointInPolygonTester<'p> {
-    polygons: &'p MultiPolygonCollection,
+pub struct PointInPolygonTester {
+    polygons: MultiPolygonCollection,
     constants: Vec<f64>,
     multiples: Vec<f64>,
 }
 
-impl<'p> PointInPolygonTester<'p> {
-    pub fn new(polygons: &'p MultiPolygonCollection) -> Self {
-        let number_of_coordinates = polygons.coordinates().len();
+impl PointInPolygonTester {
+    pub fn new(polygons: MultiPolygonCollection) -> Self {
+        let (constants, multiples) =
+            Self::precalculate_polygons(&polygons, polygons.coordinates().len());
 
-        let mut tester = Self {
+        Self {
             polygons,
-            constants: vec![0.; number_of_coordinates],
-            multiples: vec![0.; number_of_coordinates],
-        };
-
-        tester.precalculate_polygons();
-
-        tester
-    }
-
-    fn precalculate_polygons(&mut self) {
-        for (ring_start_index, ring_end_index) in
-            two_tuple_windows(self.polygons.ring_offsets().iter().map(|&c| c as usize))
-        {
-            self.precalculate_ring(ring_start_index, ring_end_index);
+            constants,
+            multiples,
         }
     }
 
+    pub fn polygons_ref(&self) -> &MultiPolygonCollection {
+        &self.polygons
+    }
+
+    pub fn polygons(self) -> MultiPolygonCollection {
+        self.polygons
+    }
+
+    fn precalculate_polygons(
+        polygons: &MultiPolygonCollection,
+        number_of_coordinates: usize,
+    ) -> (Vec<f64>, Vec<f64>) {
+        let mut constants = vec![0.; number_of_coordinates];
+        let mut multiples = vec![0.; number_of_coordinates];
+
+        for (ring_start_index, ring_end_index) in
+            two_tuple_windows(polygons.ring_offsets().iter().map(|&c| c as usize))
+        {
+            Self::precalculate_ring(
+                ring_start_index,
+                ring_end_index,
+                polygons.coordinates(),
+                &mut constants,
+                &mut multiples,
+            );
+        }
+
+        (constants, multiples)
+    }
+
     #[allow(clippy::suspicious_operation_groupings)]
-    fn precalculate_ring(&mut self, ring_start_index: usize, ring_end_index: usize) {
+    fn precalculate_ring(
+        ring_start_index: usize,
+        ring_end_index: usize,
+        polygon_coordinates: &[Coordinate2D],
+        constants: &mut Vec<f64>,
+        multiples: &mut Vec<f64>,
+    ) {
         let number_of_corners = ring_end_index - ring_start_index - 1;
         let mut j = number_of_corners - 1;
-
-        let polygon_coordinates = self.polygons.coordinates();
 
         for i in 0..number_of_corners {
             let c_i = polygon_coordinates[ring_start_index + i];
@@ -230,12 +253,12 @@ impl<'p> PointInPolygonTester<'p> {
             let helper_array_index = ring_start_index + i;
 
             if float_cmp::approx_eq!(f64, c_j.y, c_i.y) {
-                self.constants[helper_array_index] = c_i.x;
-                self.multiples[helper_array_index] = 0.0;
+                constants[helper_array_index] = c_i.x;
+                multiples[helper_array_index] = 0.0;
             } else {
-                self.constants[helper_array_index] =
+                constants[helper_array_index] =
                     c_i.x - (c_i.y * c_j.x) / (c_j.y - c_i.y) + (c_i.y * c_i.x) / (c_j.y - c_i.y);
-                self.multiples[helper_array_index] = (c_j.x - c_i.x) / (c_j.y - c_i.y);
+                multiples[helper_array_index] = (c_j.x - c_i.x) / (c_j.y - c_i.y);
             }
 
             j = i;
@@ -274,7 +297,69 @@ impl<'p> PointInPolygonTester<'p> {
         odd_nodes
     }
 
-    fn coordinate_in_multi_polygon_iter(
+    pub fn is_coordinate_in_multi_polygon(
+        &self,
+        coordinate: Coordinate2D,
+        feature_index: usize,
+    ) -> bool {
+        let polygon_offsets = self.polygons.polygon_offsets();
+        let ring_offsets = self.polygons.ring_offsets();
+
+        self.check_coordinate_in_multipolygons(
+            &coordinate,
+            polygon_offsets,
+            ring_offsets,
+            feature_index,
+            feature_index + 1,
+        )
+    }
+
+    fn check_coordinate_in_multipolygons(
+        &self,
+        coordinate: &Coordinate2D,
+        polygon_offsets: &[i32],
+        ring_offsets: &[i32],
+        multi_polygon_start_index: usize,
+        multi_polygon_end_index: usize,
+    ) -> bool {
+        let mut is_coordinate_in_multi_polygon = false;
+
+        for (polygon_start_index, polygon_end_index) in two_tuple_windows(
+            polygon_offsets[multi_polygon_start_index..=multi_polygon_end_index]
+                .iter()
+                .map(|&c| c as usize),
+        ) {
+            let mut is_coordinate_in_polygon = true;
+
+            for (ring_number, (ring_start_index, ring_end_index)) in two_tuple_windows(
+                ring_offsets[polygon_start_index..=polygon_end_index]
+                    .iter()
+                    .map(|&c| c as usize),
+            )
+            .enumerate()
+            {
+                let is_coordinate_in_ring =
+                    self.is_coordinate_in_ring(coordinate, ring_start_index, ring_end_index);
+
+                if (ring_number == 0 && !is_coordinate_in_ring)
+                    || (ring_number > 0 && is_coordinate_in_ring)
+                {
+                    // coordinate is either "not in outer ring" or "in inner ring"
+                    is_coordinate_in_polygon = false;
+                    break;
+                }
+            }
+
+            if is_coordinate_in_polygon {
+                is_coordinate_in_multi_polygon = true;
+                break;
+            }
+        }
+
+        is_coordinate_in_multi_polygon
+    }
+
+    fn coordinate_in_multi_polygon_iter<'p>(
         &'p self,
         coordinate: &'p Coordinate2D,
         time_interval: &'p TimeInterval,
@@ -295,44 +380,13 @@ impl<'p> PointInPolygonTester<'p> {
                         return false;
                     }
 
-                    let mut is_coordinate_in_multi_polygon = false;
-
-                    for (polygon_start_index, polygon_end_index) in two_tuple_windows(
-                        polygon_offsets[multi_polygon_start_index..=multi_polygon_end_index]
-                            .iter()
-                            .map(|&c| c as usize),
-                    ) {
-                        let mut is_coordinate_in_polygon = true;
-
-                        for (ring_number, (ring_start_index, ring_end_index)) in two_tuple_windows(
-                            ring_offsets[polygon_start_index..=polygon_end_index]
-                                .iter()
-                                .map(|&c| c as usize),
-                        )
-                        .enumerate()
-                        {
-                            let is_coordinate_in_ring = self.is_coordinate_in_ring(
-                                coordinate,
-                                ring_start_index,
-                                ring_end_index,
-                            );
-
-                            if (ring_number == 0 && !is_coordinate_in_ring)
-                                || (ring_number > 0 && is_coordinate_in_ring)
-                            {
-                                // coordinate is either "not in outer ring" or "in inner ring"
-                                is_coordinate_in_polygon = false;
-                                break;
-                            }
-                        }
-
-                        if is_coordinate_in_polygon {
-                            is_coordinate_in_multi_polygon = true;
-                            break;
-                        }
-                    }
-
-                    is_coordinate_in_multi_polygon
+                    self.check_coordinate_in_multipolygons(
+                        coordinate,
+                        polygon_offsets,
+                        ring_offsets,
+                        multi_polygon_start_index,
+                        multi_polygon_end_index,
+                    )
                 },
             )
     }
@@ -348,7 +402,7 @@ impl<'p> PointInPolygonTester<'p> {
     pub fn is_coordinate_in_any_polygon(
         &self,
         coordinate: &Coordinate2D,
-        time_interval: &'p TimeInterval,
+        time_interval: &TimeInterval,
     ) -> bool {
         self.coordinate_in_multi_polygon_iter(coordinate, time_interval)
             .any(std::convert::identity)
@@ -358,7 +412,7 @@ impl<'p> PointInPolygonTester<'p> {
     pub fn multi_polygons_containing_coordinate(
         &self,
         coordinate: &Coordinate2D,
-        time_interval: &'p TimeInterval,
+        time_interval: &TimeInterval,
     ) -> Vec<bool> {
         self.coordinate_in_multi_polygon_iter(coordinate, time_interval)
             .collect()
@@ -430,7 +484,7 @@ mod tests {
         )
         .unwrap();
 
-        let tester = PointInPolygonTester::new(&collection);
+        let tester = PointInPolygonTester::new(collection);
 
         assert!(!tester.is_coordinate_in_ring(&Coordinate2D::new(4., 5.), 0, 5));
         assert!(tester.is_coordinate_in_ring(&Coordinate2D::new(4., 5.), 5, 10));
@@ -479,7 +533,7 @@ mod tests {
         )
         .unwrap();
 
-        let tester = PointInPolygonTester::new(&collection);
+        let tester = PointInPolygonTester::new(collection);
 
         // the algorithm is not stable for boundary cases directly on the edges
 
