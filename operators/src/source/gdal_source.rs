@@ -388,18 +388,18 @@ where
             &output_bounds
         );
 
-        let dataset_result = if let Some(open_options) = dataset_params.gdal_open_options.as_ref() {
-            let options = open_options.iter().map(String::as_str).collect::<Vec<_>>();
-            GdalDataset::open_ex(
-                &dataset_params.file_path,
-                DatasetOptions {
-                    open_options: Some(options.as_slice()),
-                    ..DatasetOptions::default()
-                },
-            )
-        } else {
-            GdalDataset::open(&dataset_params.file_path)
-        };
+        let options = dataset_params
+            .gdal_open_options
+            .as_ref()
+            .map(|o| o.iter().map(String::as_str).collect::<Vec<_>>());
+
+        let dataset_result = GdalDataset::open_ex(
+            &dataset_params.file_path,
+            DatasetOptions {
+                open_options: options.as_deref(),
+                ..DatasetOptions::default()
+            },
+        );
         let no_data_value = dataset_params.no_data_value.map(T::from_);
         let fill_value = no_data_value.unwrap_or_else(T::zero);
         let mut properties = RasterProperties::default();
