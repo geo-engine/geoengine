@@ -14,6 +14,7 @@ use crate::{
 use async_trait::async_trait;
 use futures::future::join_all;
 use gdal::DatasetOptions;
+use gdal::Metadata;
 use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
 use geoengine_operators::engine::TypedResultDescriptor;
 use geoengine_operators::source::GdalMetaDataStatic;
@@ -29,6 +30,8 @@ use geoengine_operators::{
     source::{GdalLoadingInfo, OgrSourceDataset},
 };
 use log::info;
+use quick_xml::events::Event;
+use quick_xml::Reader;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
@@ -121,19 +124,25 @@ impl DatasetProvider for Natur40DataProvider {
 
         for (db, dataset) in raster_dbs.rasterdbs.iter().zip(&datasets) {
             if let Ok(dataset) = dataset {
+                let band_labels = Self::get_band_labels(dataset)?;
+
                 for band_index in 1..dataset.raster_count() {
                     if let Ok(result_descriptor) =
                         raster_descriptor_from_dataset(&dataset, band_index, None)
                     {
-                        // TODO: get label from rasterband
-
                         listing.push(Ok(DatasetListing {
                             id: DatasetId::External(ExternalDatasetId {
                                 provider_id: self.id,
                                 dataset_id: format!("{}:{}", db.name.clone(), band_index),
                             }),
                             name: db.title.clone(),
-                            description: format!("Band: {}", band_index),
+                            description: format!(
+                                "Band {}: {}",
+                                band_index,
+                                band_labels
+                                    .get((band_index - 1) as usize)
+                                    .unwrap_or(&"".to_owned())
+                            ),
                             tags: db.tags.clone(),
                             source_operator: "GdalSource".to_owned(),
                             result_descriptor: TypedResultDescriptor::Raster(result_descriptor),
@@ -199,6 +208,25 @@ impl Natur40DataProvider {
             .json()
             .await
             .context(error::Reqwest)
+    }
+
+    fn get_band_labels(dataset: &gdal::Dataset) -> Result<Vec<String>> {
+        let mut reader = Reader::from_file(&dataset.description()?)?;
+        reader.trim_text(true);
+        let mut txt = Vec::new();
+        let mut buf = Vec::new();
+        loop {
+            match reader.read_event(&mut buf) {
+                Ok(Event::Start(ref e)) if e.name() == b"label" => {
+                    txt.push(reader.read_text(e.name(), &mut Vec::new())?);
+                }
+                Ok(Event::Eof) => break,
+                _ => (),
+            }
+            buf.clear();
+        }
+        txt.remove(0); // remove first match which is the coverage label
+        Ok(txt)
     }
 }
 

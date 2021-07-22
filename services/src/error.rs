@@ -36,6 +36,9 @@ pub enum Error {
     Reqwest {
         source: reqwest::Error,
     },
+    QuickXml {
+        source: quick_xml::Error,
+    },
 
     TokioChannelSend,
 
@@ -240,5 +243,11 @@ impl From<gdal::errors::GdalError> for Error {
 impl From<reqwest::Error> for Error {
     fn from(source: reqwest::Error) -> Self {
         Self::Reqwest { source }
+    }
+}
+
+impl From<quick_xml::Error> for Error {
+    fn from(source: quick_xml::Error) -> Self {
+        Self::QuickXml { source }
     }
 }
