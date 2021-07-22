@@ -179,6 +179,10 @@ pub enum Error {
     WcsGridOriginMustEqualBoundingboxUpperLeft,
     WcsBoundingboxCrsMustEqualGridBaseCrs,
     WcsInvalidGridOffsets,
+
+    InvalidDatasetId,
+
+    GfbioMissingAbcdField,
 }
 
 impl Reject for Error {}
