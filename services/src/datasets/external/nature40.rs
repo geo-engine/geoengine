@@ -168,7 +168,6 @@ impl DatasetProvider for Nature40DataProvider {
 
     async fn load(
         &self,
-        // _session: S,
         _dataset: &geoengine_datatypes::dataset::DatasetId,
     ) -> crate::error::Result<crate::datasets::storage::Dataset> {
         Err(error::Error::NotYetImplemented)
@@ -298,7 +297,7 @@ impl
         >,
         geoengine_operators::error::Error,
     > {
-        todo!()
+        Err(geoengine_operators::error::Error::NotYetImplemented)
     }
 }
 
