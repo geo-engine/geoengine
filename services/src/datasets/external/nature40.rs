@@ -38,7 +38,7 @@ use snafu::ResultExt;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Natur40DataProviderDefinition {
+pub struct Nature40DataProviderDefinition {
     id: DatasetProviderId,
     name: String,
     base_url: String,
@@ -48,9 +48,9 @@ pub struct Natur40DataProviderDefinition {
 
 #[typetag::serde]
 #[async_trait]
-impl DatasetProviderDefinition for Natur40DataProviderDefinition {
+impl DatasetProviderDefinition for Nature40DataProviderDefinition {
     async fn initialize(self: Box<Self>) -> crate::error::Result<Box<dyn DatasetProvider>> {
-        Ok(Box::new(Natur40DataProvider {
+        Ok(Box::new(Nature40DataProvider {
             id: self.id,
             base_url: self.base_url,
             user: self.user,
@@ -59,7 +59,7 @@ impl DatasetProviderDefinition for Natur40DataProviderDefinition {
     }
 
     fn type_name(&self) -> String {
-        "Natur4.0".to_owned()
+        "Nature4.0".to_owned()
     }
 
     fn name(&self) -> String {
@@ -71,7 +71,7 @@ impl DatasetProviderDefinition for Natur40DataProviderDefinition {
     }
 }
 
-pub struct Natur40DataProvider {
+pub struct Nature40DataProvider {
     id: DatasetProviderId,
     base_url: String,
     user: String,
@@ -109,7 +109,7 @@ struct RasterDbs {
 }
 
 #[async_trait]
-impl DatasetProvider for Natur40DataProvider {
+impl DatasetProvider for Nature40DataProvider {
     async fn list(&self, _options: Validated<DatasetListOptions>) -> Result<Vec<DatasetListing>> {
         // TODO: query the other dbs as well
         let raster_dbs = self.load_raster_dbs().await?;
@@ -175,7 +175,7 @@ impl DatasetProvider for Natur40DataProvider {
     }
 }
 
-impl Natur40DataProvider {
+impl Nature40DataProvider {
     fn auth(&self) -> [String; 2] {
         [
             format!("UserPwd={}:{}", self.user, self.password),
@@ -232,7 +232,7 @@ impl Natur40DataProvider {
 
 #[async_trait]
 impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-    for Natur40DataProvider
+    for Nature40DataProvider
 {
     async fn meta_data(
         &self,
@@ -283,7 +283,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 #[async_trait]
 impl
     MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
-    for Natur40DataProvider
+    for Nature40DataProvider
 {
     async fn meta_data(
         &self,
@@ -304,7 +304,7 @@ impl
 
 #[async_trait]
 impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
-    for Natur40DataProvider
+    for Nature40DataProvider
 {
     async fn meta_data(
         &self,

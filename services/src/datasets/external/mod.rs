@@ -1,2 +1,2 @@
 pub mod mock;
-pub mod natur40;
+pub mod nature40;
