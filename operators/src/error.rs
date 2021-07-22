@@ -211,6 +211,8 @@ pub enum Error {
     FeatureDataNotAggregatable,
 
     FeatureDataLengthMismatch,
+
+    OgrSqlQuery,
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {

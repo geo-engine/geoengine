@@ -19,8 +19,9 @@ use futures::stream::BoxStream;
 use futures::task::{Context, Waker};
 use futures::Stream;
 use futures::StreamExt;
-use gdal::vector::{Feature, FeatureIterator, FieldValue, OGRwkbGeometryType};
-use gdal::{Dataset, DatasetOptions};
+use gdal::vector::sql::{Dialect, ResultSet};
+use gdal::vector::{Feature, FeatureIterator, FieldValue, Layer, OGRwkbGeometryType};
+use gdal::{Dataset, DatasetOptions, GdalOpenFlags};
 use log::debug;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
@@ -84,6 +85,7 @@ pub struct OgrSourceDataset {
     pub force_ogr_spatial_filter: bool,
     pub on_error: OgrSourceErrorSpec,
     pub provenance: Option<ProvenanceInformation>,
+    pub sql_query: Option<String>,
 }
 
 impl OgrSourceDataset {
@@ -374,6 +376,20 @@ struct WorkQuery {
     waker: Waker,
 }
 
+enum FeaturesProvider<'a> {
+    Layer(Layer<'a>),
+    ResultSet(ResultSet<'a>),
+}
+
+impl<'a> FeaturesProvider<'a> {
+    fn features(&mut self) -> FeatureIterator {
+        match self {
+            FeaturesProvider::Layer(l) => l.features(),
+            FeaturesProvider::ResultSet(r) => r.features(),
+        }
+    }
+}
+
 impl<G> OgrSourceStream<G>
 where
     G: Geometry + ArrowTyped + 'static + TryFromOgrGeometry + TryFrom<TypedGeometry>,
@@ -455,7 +471,13 @@ where
         // TODO: reliably detect CSV files or allow defining them as such in params
         match dataset_info.file_name.extension().and_then(OsStr::to_str) {
             Some("csv" | "tsv") => Self::open_csv_dataset(dataset_info),
-            _ => Ok(Dataset::open(&dataset_info.file_name)?),
+            _ => Ok(Dataset::open_ex(
+                &dataset_info.file_name,
+                DatasetOptions {
+                    open_flags: GdalOpenFlags::GDAL_OF_VECTOR,
+                    ..Default::default()
+                },
+            )?),
         }
     }
 
@@ -469,25 +491,40 @@ where
     ) -> Result<()> {
         // TODO: add OGR time filter if forced
         let dataset = Self::open_gdal_dataset(&dataset_information)?;
-        let mut layer = dataset.layer_by_name(&dataset_information.layer_name)?;
-        let use_ogr_spatial_filter = dataset_information.force_ogr_spatial_filter
-            || layer.has_capability(gdal::vector::LayerCaps::OLCFastSpatialFilter);
 
-        if use_ogr_spatial_filter {
-            // rectangular geometry from West, South, East and North values.
-            let filter_geometry = query_rectangle.spatial_bounds.try_into()?;
-            // TODO: log uses spatial filter
-            // TODO: use OGR_L_SetSpatialFilterRect() once GDAL crate supports it
-            // NOTE: the OGR-filter may be inaccurately allowing more features that should be returned in a "strict" fashion.
-            layer.set_spatial_filter(&filter_geometry);
-        }
+        let mut use_ogr_spatial_filter = false;
+
+        let mut features_provider = if let Some(sql) = dataset_information.sql_query.as_ref() {
+            // TODO: spatial filter
+            FeaturesProvider::ResultSet(
+                dataset
+                    .execute_sql(sql, None, Dialect::DEFAULT)?
+                    .ok_or(error::Error::OgrSqlQuery)?,
+            )
+        } else {
+            let mut layer = dataset.layer_by_name(&dataset_information.layer_name)?;
+
+            use_ogr_spatial_filter = dataset_information.force_ogr_spatial_filter
+                || layer.has_capability(gdal::vector::LayerCaps::OLCFastSpatialFilter);
+
+            if use_ogr_spatial_filter {
+                // rectangular geometry from West, South, East and North values.
+                let filter_geometry = query_rectangle.spatial_bounds.try_into()?;
+                // TODO: log uses spatial filter
+                // TODO: use OGR_L_SetSpatialFilterRect() once GDAL crate supports it
+                // NOTE: the OGR-filter may be inaccurately allowing more features that should be returned in a "strict" fashion.
+                layer.set_spatial_filter(&filter_geometry);
+            }
+
+            FeaturesProvider::Layer(layer)
+        };
 
         let (data_types, feature_collection_builder) =
             Self::initialize_types_and_builder(dataset_information);
 
         let time_extractor = Self::initialize_time_extractors(dataset_information);
 
-        let mut features = layer.features().fuse().peekable();
+        let mut features = features_provider.features().fuse().peekable();
 
         if features.peek().is_none() {
             // emit empty dataset and finish
@@ -1079,6 +1116,7 @@ mod tests {
                 license: "CC".to_string(),
                 uri: "foo:bar".to_string(),
             }),
+            sql_query: None,
         };
 
         let serialized_spec = serde_json::to_string(&spec).unwrap();
@@ -1116,7 +1154,8 @@ mod tests {
                     "citation": "Foo Bar",
                     "license": "CC",
                     "uri": "foo:bar"
-                }
+                },
+                "sqlQuery": null
             })
             .to_string()
         );
@@ -1174,6 +1213,7 @@ mod tests {
             force_ogr_spatial_filter: false,
             on_error: OgrSourceErrorSpec::Ignore,
             provenance: None,
+            sql_query: None,
         };
 
         let info = StaticMetaData {
@@ -1221,6 +1261,7 @@ mod tests {
             force_ogr_spatial_filter: false,
             on_error: OgrSourceErrorSpec::Ignore,
             provenance: None,
+            sql_query: None,
         };
 
         let info = StaticMetaData {
@@ -1268,6 +1309,7 @@ mod tests {
             force_ogr_spatial_filter: false,
             on_error: OgrSourceErrorSpec::Ignore,
             provenance: None,
+            sql_query: None,
         };
         let info = StaticMetaData {
             loading_info: dataset_information,
@@ -1329,6 +1371,7 @@ mod tests {
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Ignore,
                     provenance: None,
+                    sql_query: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -1422,6 +1465,7 @@ mod tests {
                     force_ogr_spatial_filter: true,
                     on_error: OgrSourceErrorSpec::Ignore,
                     provenance: None,
+                    sql_query: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -1517,6 +1561,7 @@ mod tests {
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Ignore,
                     provenance: None,
+                    sql_query: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -1621,6 +1666,7 @@ mod tests {
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Ignore,
                     provenance: None,
+                    sql_query: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -1798,6 +1844,7 @@ mod tests {
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Ignore,
                     provenance: None,
+                    sql_query: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -2964,6 +3011,7 @@ mod tests {
             force_ogr_spatial_filter: false,
             on_error: OgrSourceErrorSpec::Ignore,
             provenance: None,
+            sql_query: None,
         };
 
         let info = StaticMetaData {
@@ -3053,6 +3101,7 @@ mod tests {
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Ignore,
                     provenance: None,
+                    sql_query: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -3298,6 +3347,7 @@ mod tests {
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Ignore,
                     provenance: None,
+                    sql_query: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -3378,6 +3428,7 @@ mod tests {
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Abort,
                     provenance: None,
+                    sql_query: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPolygon,
@@ -3467,6 +3518,7 @@ mod tests {
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Abort,
                     provenance: None,
+                    sql_query: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -3577,6 +3629,7 @@ mod tests {
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Abort,
                     provenance: None,
+                    sql_query: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -3680,6 +3733,7 @@ mod tests {
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Abort,
                     provenance: None,
+                    sql_query: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -3783,6 +3837,7 @@ mod tests {
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Abort,
                     provenance: None,
+                    sql_query: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
