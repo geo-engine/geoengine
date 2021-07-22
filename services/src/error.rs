@@ -183,6 +183,10 @@ pub enum Error {
     InvalidDatasetId,
 
     GfbioMissingAbcdField,
+
+    Logger {
+        source: flexi_logger::FlexiLoggerError,
+    },
 }
 
 impl Reject for Error {}
@@ -237,5 +241,11 @@ impl From<gdal::errors::GdalError> for Error {
 impl From<reqwest::Error> for Error {
     fn from(source: reqwest::Error) -> Self {
         Self::Reqwest { source }
+    }
+}
+
+impl From<flexi_logger::FlexiLoggerError> for Error {
+    fn from(source: flexi_logger::FlexiLoggerError) -> Self {
+        Self::Logger { source }
     }
 }
