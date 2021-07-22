@@ -1,6 +1,6 @@
 use flexi_logger::{
-    style, AdaptiveFormat, Age, Cleanup, Criterion, DeferredNow, Duplicate, Logger, LoggerHandle,
-    Naming,
+    style, AdaptiveFormat, Age, Cleanup, Criterion, DeferredNow, Duplicate, FileSpec, Logger,
+    LoggerHandle, Naming, WriteMode,
 };
 use geoengine_services::error::{Error, Result};
 use geoengine_services::server;
@@ -12,7 +12,7 @@ use tokio::sync::oneshot::Receiver;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    let logger = initialize_logging();
+    let logger = initialize_logging()?;
 
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
 
@@ -35,10 +35,10 @@ pub async fn start_server(shutdown_rx: Receiver<()>) -> Result<()> {
     geoengine_services::pro::server::start_pro_server(Some(shutdown_rx), None).await
 }
 
-fn initialize_logging() -> LoggerHandle {
-    let logging_config: config::Logging = get_config_element().unwrap();
+fn initialize_logging() -> Result<LoggerHandle> {
+    let logging_config: config::Logging = get_config_element()?;
 
-    let mut logger = Logger::with_str(logging_config.log_spec)
+    let mut logger = Logger::try_with_str(logging_config.log_spec)?
         .format(custom_log_format)
         .adaptive_format_for_stderr(AdaptiveFormat::Custom(
             custom_log_format,
@@ -46,10 +46,19 @@ fn initialize_logging() -> LoggerHandle {
         ));
 
     if logging_config.log_to_file {
+        let mut file_spec = FileSpec::default().basename(logging_config.filename_prefix);
+
+        if let Some(dir) = logging_config.log_directory {
+            file_spec = file_spec.directory(dir);
+        }
+
         logger = logger
-            .log_to_file()
-            .basename(logging_config.filename_prefix)
-            .use_buffering(logging_config.enable_buffering)
+            .log_to_file(file_spec)
+            .write_mode(if logging_config.enable_buffering {
+                WriteMode::BufferAndFlush
+            } else {
+                WriteMode::Direct
+            })
             .append()
             .rotate(
                 Criterion::Age(Age::Day),
@@ -57,12 +66,9 @@ fn initialize_logging() -> LoggerHandle {
                 Cleanup::KeepLogFiles(7),
             )
             .duplicate_to_stderr(Duplicate::All);
-
-        if let Some(dir) = logging_config.log_directory {
-            logger = logger.directory(dir);
-        }
     }
-    logger.start().expect("initialized logger")
+
+    Ok(logger.start()?)
 }
 
 /// A logline-formatter that produces log lines like
