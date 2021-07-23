@@ -464,25 +464,14 @@ where
         }
 
         ensure!(filter_array.is_some(), error::EmptyPredicate);
+        let mut filter_array = filter_array.expect("checked by ensure");
 
-        // update filter array with nulls from original array
         if keep_nulls && column.null_count() > 0 {
-            let null_bitmap = column
-                .data_ref()
-                .null_bitmap()
-                .as_ref()
-                .expect("must exist if null_count > 0");
-
-            let mut null_array_builder = BooleanArray::builder(column.len());
-            for i in 0..column.len() {
-                null_array_builder.append_value(!null_bitmap.is_set(i))?;
-            }
-            let null_array = null_array_builder.finish();
-
-            update_filter_array(&mut filter_array, Some(null_array), None)?;
+            let null_flags = arrow::compute::is_null(column.as_ref())?;
+            filter_array = arrow::compute::or_kleene(&filter_array, &null_flags)?
         }
 
-        self.filter(filter_array.expect("checked by ensure"))
+        self.filter(filter_array)
     }
 
     fn append(&self, other: &Self) -> Result<Self::Output> {
@@ -1614,7 +1603,7 @@ mod tests {
         let struct_stack_size = 144;
         assert_eq!(mem::size_of::<StructArray>(), struct_stack_size);
 
-        let arrow_overhead_bytes = 192;
+        let arrow_overhead_bytes = 256;
 
         for i in 0..10 {
             assert_eq!(
