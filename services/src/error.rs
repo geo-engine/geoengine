@@ -164,7 +164,7 @@ pub enum Error {
     },
     StacInvalidGeoTransform,
     StacInvalidBbox,
-    StacJsonRespone {
+    StacJsonResponse {
         url: String,
         response: String,
         error: serde_json::Error,
