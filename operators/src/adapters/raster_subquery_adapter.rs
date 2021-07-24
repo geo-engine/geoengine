@@ -30,6 +30,7 @@ use geoengine_datatypes::{
     },
 };
 
+use log::debug;
 use pin_project::pin_project;
 use std::task::Poll;
 
@@ -231,13 +232,19 @@ where
 
                 this.running_fold.set(Some(tile_folding_stream));
             }
-            Some(Err(err)) => return Poll::Ready(Some(Err(err))),
+            Some(Err(err)) => {
+                *this.ended = true;
+                return Poll::Ready(Some(Err(err)));
+            }
             None => {} // there is no result but there meight be a running fold...
         }
 
         let future_result = match this.running_fold.as_mut().as_pin_mut() {
             Some(fut) => ready!(fut.poll(cx)),
-            None => return Poll::Ready(None),
+            None => {
+                debug!("running_fold is empty");
+                return Poll::Ready(None); // should initialize next tile query?
+            }
         };
 
         // set the running future to None --> will create a new one in the next call
@@ -247,6 +254,7 @@ where
 
         // if we produced a tile: get the end of the current time slot (must be the same for all tiles in the slot)
         if let Ok(ref r) = tile_accu_result {
+            debug!("time_end: {:?} --> {:?}", &this.time_end, &r.time.end());
             this.time_end.replace(r.time.end());
         }
 
@@ -258,6 +266,7 @@ where
             *this.current_spatial_tile = 0;
             // make time progress
             if let Some(ref time_end) = this.time_end {
+                debug!("time_start: {:?} --> {:?}", &this.time_start, *time_end);
                 *this.time_start = *time_end;
                 *this.time_end = None;
             } else {
@@ -269,7 +278,10 @@ where
 
         match tile_accu_result {
             Ok(tile_accu) => Poll::Ready(Some(Ok(tile_accu))),
-            Err(err) => Poll::Ready(Some(Err(err))),
+            Err(err) => {
+                *this.ended = true;
+                Poll::Ready(Some(Err(err)))
+            }
         }
     }
 }
