@@ -540,6 +540,7 @@ where
 
         debug!("GdalLoadingInfo: {:?}.", &meta_data);
 
+        // TODO: what to do if loading info is empty?
         let stream = stream::iter(meta_data.info)
             .map(move |info| match info {
                 Ok(info) => self.tile_stream(query, info).boxed(),
