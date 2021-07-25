@@ -146,9 +146,12 @@ pub trait NoDataValue {
 
     fn no_data_value(&self) -> Option<Self::NoDataType>;
 
+    #[allow(clippy::eq_op)]
     fn is_no_data(&self, value: Self::NoDataType) -> bool {
-        self.no_data_value()
-            .map_or(false, |no_data_value| value == no_data_value)
+        self.no_data_value().map_or(false, |no_data_value| {
+            // value is equal no-data value or both are NAN.
+            value == no_data_value || no_data_value != no_data_value && value != value
+        })
     }
 }
 
