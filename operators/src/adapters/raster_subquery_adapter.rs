@@ -200,6 +200,7 @@ where
 
         if this.running_query.as_ref().is_none() && this.running_fold.as_ref().is_none() {
             // there is no query and no stream pending
+            debug!("New running_query for: {:?}", &tile_query_rectangle);
 
             let tile_query_stream = this
                 .source
@@ -227,12 +228,14 @@ where
                     .sub_query
                     .new_fold_accu(fold_tile_spec, tile_query_rectangle)?;
 
+                debug!("New running_fold: {:?}", &tile_query_rectangle);
                 let tile_folding_stream =
                     tile_query_stream.try_fold(tile_folding_accu, this.sub_query.fold_method());
 
                 this.running_fold.set(Some(tile_folding_stream));
             }
             Some(Err(err)) => {
+                debug!("Tile fold stream returned error: {:?}", &err);
                 *this.ended = true;
                 return Poll::Ready(Some(Err(err)));
             }
@@ -240,9 +243,11 @@ where
         }
 
         let future_result = match this.running_fold.as_mut().as_pin_mut() {
-            Some(fut) => ready!(fut.poll(cx)),
+            Some(fut) => {
+                ready!(fut.poll(cx))
+            }
             None => {
-                debug!("running_fold is empty");
+                debug!("running_fold is None");
                 return Poll::Ready(None); // should initialize next tile query?
             }
         };
@@ -259,6 +264,11 @@ where
         }
 
         // make tile progress
+        debug!(
+            "current_spatial_tile: {:?} --> {:?}",
+            *this.current_spatial_tile,
+            *this.current_spatial_tile + 1
+        );
         *this.current_spatial_tile += 1;
         // check if we iterated through all the tiles
         if *this.current_spatial_tile >= this.tiles_to_produce.len() {
