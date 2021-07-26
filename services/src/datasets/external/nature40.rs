@@ -122,11 +122,11 @@ impl DatasetProvider for Nature40DataProvider {
             .map(|db| self.load_dataset(db.url(&self.base_url)));
         let datasets: Vec<Result<gdal::Dataset>> = join_all(datasets).await;
 
-        for (db, dataset) in raster_dbs.rasterdbs.iter().zip(&datasets) {
+        for (db, dataset) in raster_dbs.rasterdbs.iter().zip(datasets) {
             if let Ok(dataset) = dataset {
-                let band_labels = Self::get_band_labels(dataset)?;
+                let (dataset, band_labels) = self.get_band_labels(dataset).await?;
 
-                for band_index in 1..dataset.raster_count() {
+                for band_index in 1..=dataset.raster_count() {
                     if let Ok(result_descriptor) =
                         raster_descriptor_from_dataset(&dataset, band_index, None)
                     {
@@ -160,10 +160,12 @@ impl DatasetProvider for Nature40DataProvider {
             }
         }
 
-        Ok(listing
+        let mut listing: Vec<_> = listing
             .into_iter()
             .filter_map(|d: Result<DatasetListing>| if let Ok(d) = d { Some(d) } else { None })
-            .collect())
+            .collect();
+        listing.sort_by(|a, b| a.name.cmp(&b.name));
+        Ok(listing)
     }
 
     async fn load(
@@ -209,22 +211,63 @@ impl Nature40DataProvider {
             .context(error::Reqwest)
     }
 
-    fn get_band_labels(dataset: &gdal::Dataset) -> Result<Vec<String>> {
+    /// Get the band labels for a dataset from the raw WCS xml in the Gdal WCS cache.
+    /// Note: as the data is possibly not written to disk yet, we close and reopen the
+    /// dataset if no band labels are found during parsing. In order to close it we
+    /// need to take ownership of the dataset.
+    async fn get_band_labels(
+        &self,
+        dataset: gdal::Dataset,
+    ) -> Result<(gdal::Dataset, Vec<String>)> {
+        let labels = Self::parse_band_labels(&dataset)?;
+
+        if labels.is_empty() {
+            // no labels found during parsing, try to reopen the dataset to flush the cache and try again
+            let name = dataset
+                .metadata_item("label", "")
+                .ok_or(Error::WcsDatasetMissingLabelInMetadata)?;
+
+            drop(dataset);
+
+            let dataset = self
+                .load_dataset(RasterDb::url_from_name(&self.base_url, &name))
+                .await?;
+
+            let labels = Self::parse_band_labels(&dataset)?;
+            Ok((dataset, labels))
+        } else {
+            Ok((dataset, labels))
+        }
+    }
+
+    fn parse_band_labels(dataset: &gdal::Dataset) -> Result<Vec<String>> {
         let mut reader = Reader::from_file(&dataset.description()?)?;
         reader.trim_text(true);
         let mut txt = Vec::new();
         let mut buf = Vec::new();
+
+        let mut first = true;
+
         loop {
             match reader.read_event(&mut buf) {
-                Ok(Event::Start(ref e)) if e.name() == b"label" => {
-                    txt.push(reader.read_text(e.name(), &mut Vec::new())?);
+                Ok(Event::Start(ref e)) => {
+                    if e.name() == b"label" {
+                        if first {
+                            first = false; // skip first label which is the coverage label
+                        } else {
+                            txt.push(
+                                reader
+                                    .read_text(e.name(), &mut Vec::new())
+                                    .unwrap_or_else(|_| "".to_owned()),
+                            );
+                        }
+                    }
                 }
                 Ok(Event::Eof) => break,
                 _ => (),
             }
             buf.clear();
         }
-        txt.remove(0); // remove first match which is the coverage label
         Ok(txt)
     }
 }
@@ -313,5 +356,367 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
         geoengine_operators::error::Error,
     > {
         Err(geoengine_operators::error::Error::NotYetImplemented)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{fs::File, io::Read, str::FromStr};
+
+    use geoengine_datatypes::{
+        primitives::Measurement,
+        raster::RasterDataType,
+        spatial_reference::{SpatialReference, SpatialReferenceAuthority},
+    };
+    use httptest::{
+        all_of,
+        matchers::{contains, request, url_decoded},
+        responders::{json_encoded, status_code},
+        Expectation, Server,
+    };
+    use serde_json::json;
+
+    use crate::{datasets::listing::OrderBy, util::user_input::UserInput};
+
+    use super::*;
+
+    #[allow(clippy::too_many_lines)]
+    #[tokio::test]
+    async fn it_lists() {
+        let server = Server::run();
+        // TODO: auth
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/rasterdbs.json")).respond_with(
+                json_encoded(json!({
+                    "rasterdbs": [{
+                        "name": "geonode_ortho_muf_1m",
+                        "title": "MOF Luftbild",
+                        "tags": "natur40"
+                    },
+                    {
+                        "name": "lidar_2018_wetness_1m",
+                        "title": "Topografic Wetness index",
+                        "tags": "natur40"
+                    }],
+                    "tags": ["UAV", "natur40"],
+                    "session": "lhtdVm"
+                })),
+            ),
+        );
+
+        server.expect(
+            Expectation::matching(all_of![
+                request::method_path("GET", "/rasterdb/geonode_ortho_muf_1m/wcs",),
+                request::query(url_decoded(contains(("REQUEST", "GetCapabilities"))))
+            ])
+            .respond_with(status_code(200).body(
+                r#"
+                <WCS_Capabilities version="1.0.0">
+                    <Service>
+                        <name>RSDB WCS</name>
+                        <label>geonode_ortho_muf_1m</label>
+                    </Service>
+                    <ContentMetadata>
+                        <CoverageOfferingBrief>
+                            <name>geonode_ortho_muf_1m</name>
+                            <label>geonode_ortho_muf_1m</label>
+                        </CoverageOfferingBrief>
+                    </ContentMetadata>
+                </WCS_Capabilities>"#,
+            )),
+        );
+
+        server.expect(
+            Expectation::matching(all_of![
+                request::method_path("GET", "/rasterdb/lidar_2018_wetness_1m/wcs",),
+                request::query(url_decoded(contains(("REQUEST", "GetCapabilities"))))
+            ])
+            .respond_with(status_code(200).body(
+                r#"
+                <WCS_Capabilities version="1.0.0">
+                    <Service>
+                        <name>RSDB WCS</name>
+                        <label>lidar_2018_wetness_1m</label>
+                    </Service>
+                    <ContentMetadata>
+                        <CoverageOfferingBrief>
+                            <name>lidar_2018_wetness_1m</name>
+                            <label>lidar_2018_wetness_1m</label>
+                        </CoverageOfferingBrief>
+                    </ContentMetadata>
+                </WCS_Capabilities>"#,
+            )),
+        );
+
+        server.expect(
+            Expectation::matching(all_of![
+                request::method_path("GET", "/rasterdb/geonode_ortho_muf_1m/wcs",),
+                request::query(url_decoded(contains(("REQUEST", "DescribeCoverage"))))
+            ])
+            .respond_with(status_code(200).body(
+                r#"
+                <CoverageDescription version="1.0.0">
+                    <CoverageOffering>
+                        <name>RSDB WCS</name>
+                        <label>geonode_ortho_muf_1m</label>
+                        <domainSet>
+                            <spatialDomain>
+                                <gml:Envelope srsName="EPSG:3044">
+                                    <gml:pos>475927.0 5630630.0</gml:pos>
+                                    <gml:pos>478886.0 5633083.0</gml:pos>
+                                </gml:Envelope>
+                                <gml:RectifiedGrid dimension="2">
+                                    <gml:limits>
+                                        <gml:GridEnvelope>
+                                            <gml:low>0 0</gml:low>
+                                            <gml:high>2958 2452</gml:high>
+                                        </gml:GridEnvelope>
+                                    </gml:limits>
+                                    <gml:axisName>x</gml:axisName>
+                                    <gml:axisName>y</gml:axisName>
+                                    <gml:origin>
+                                        <gml:pos>475927.0 5633083.0</gml:pos>
+                                    </gml:origin>
+                                    <gml:offsetVector>1.0 0.0</gml:offsetVector>
+                                    <gml:offsetVector>0.0 -1.0</gml:offsetVector>
+                                </gml:RectifiedGrid>
+                            </spatialDomain>
+                        </domainSet>
+                        <rangeSet>
+                            <RangeSet>
+                                <name>1</name>
+                                <label>band1</label>
+                                <name>2</name>
+                                <label>band2</label>
+                                <name>3</name>
+                                <label>band3</label>
+                            </RangeSet>
+                        </rangeSet>
+                        <supportedCRSs>
+                            <requestResponseCRSs>EPSG:3044</requestResponseCRSs>
+                            <nativeCRSs>EPSG:3044</nativeCRSs>
+                        </supportedCRSs>
+                        <supportedFormats>
+                            <formats>GeoTIFF</formats>
+                        </supportedFormats>
+                    </CoverageOffering>
+                </CoverageDescription>"#,
+            )),
+        );
+
+        server.expect(
+            Expectation::matching(all_of![
+                request::method_path("GET", "/rasterdb/lidar_2018_wetness_1m/wcs",),
+                request::query(url_decoded(contains(("REQUEST", "DescribeCoverage"))))
+            ])
+            .respond_with(status_code(200).body(
+                r#"
+                <CoverageDescription version="1.0.0">
+                    <CoverageOffering>
+                        <name>RSDB WCS</name>
+                        <label>lidar_2018_wetness_1m</label>
+                        <domainSet>
+                        <spatialDomain>
+                            <gml:Envelope srsName="EPSG:25832">
+                                <gml:pos>473923.0 5630763.0</gml:pos>
+                                <gml:pos>478218.0 5634057.0</gml:pos>
+                            </gml:Envelope>
+                            <gml:RectifiedGrid dimension="2">
+                                <gml:limits>
+                                    <gml:GridEnvelope>
+                                        <gml:low>0 0</gml:low>
+                                        <gml:high>4294 3293</gml:high>
+                                    </gml:GridEnvelope>
+                                </gml:limits>
+                                <gml:axisName>x</gml:axisName>
+                                <gml:axisName>y</gml:axisName>
+                                <gml:origin>
+                                    <gml:pos>473923.0 5634057.0</gml:pos>
+                                </gml:origin>
+                                <gml:offsetVector>1.0 0.0</gml:offsetVector>
+                                <gml:offsetVector>0.0 -1.0</gml:offsetVector>
+                            </gml:RectifiedGrid>
+                        </spatialDomain>
+                        </domainSet>
+                        <rangeSet>
+                            <RangeSet>
+                                <name>1</name>
+                                <label>wetness</label>
+                            </RangeSet>
+                        </rangeSet>
+                        <supportedCRSs>
+                            <requestResponseCRSs>EPSG:25832</requestResponseCRSs>
+                            <nativeCRSs>EPSG:25832</nativeCRSs>
+                        </supportedCRSs>
+                        <supportedFormats>
+                            <formats>GeoTIFF</formats>
+                        </supportedFormats>
+                    </CoverageOffering>
+                </CoverageDescription>"#,
+            )),
+        );
+
+        let mut geonode_ortho_muf_1m_bytes = vec![];
+        File::open("test-data/nature40/geonode_ortho_muf_1m.tiff")
+            .unwrap()
+            .read_to_end(&mut geonode_ortho_muf_1m_bytes)
+            .unwrap();
+
+        server.expect(
+            Expectation::matching(all_of![
+                request::method_path("GET", "/rasterdb/geonode_ortho_muf_1m/wcs",),
+                request::query(url_decoded(contains(("REQUEST", "GetCoverage"))))
+            ])
+            .respond_with(
+                status_code(200)
+                    .append_header("Content-Type", "image/tiff")
+                    .body(geonode_ortho_muf_1m_bytes),
+            ),
+        );
+
+        let mut lidar_2018_wetness_1m = vec![];
+        File::open("test-data/nature40/lidar_2018_wetness_1m.tiff")
+            .unwrap()
+            .read_to_end(&mut lidar_2018_wetness_1m)
+            .unwrap();
+
+        server.expect(
+            Expectation::matching(all_of![
+                request::method_path("GET", "/rasterdb/lidar_2018_wetness_1m/wcs",),
+                request::query(url_decoded(contains(("REQUEST", "GetCoverage"))))
+            ])
+            .respond_with(
+                status_code(200)
+                    .append_header("Content-Type", "image/tiff")
+                    .body(lidar_2018_wetness_1m),
+            ),
+        );
+
+        let provider = Box::new(Nature40DataProviderDefinition {
+            id: DatasetProviderId::from_str("2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd").unwrap(),
+            name: "Nature40".to_owned(),
+            base_url: server.url_str("").strip_suffix('/').unwrap().to_owned(),
+            user: "geoengine".to_owned(),
+            password: "pwd".to_owned(),
+        })
+        .initialize()
+        .await
+        .unwrap();
+
+        let listing = provider
+            .list(
+                DatasetListOptions {
+                    filter: None,
+                    order: OrderBy::NameAsc,
+                    offset: 0,
+                    limit: 10,
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            listing,
+            vec![
+                DatasetListing {
+                    id: DatasetId::External(ExternalDatasetId {
+                        provider_id: DatasetProviderId::from_str(
+                            "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd"
+                        )
+                        .unwrap(),
+                        dataset_id: "geonode_ortho_muf_1m:1".to_owned()
+                    }),
+                    name: "MOF Luftbild".to_owned(),
+                    description: "Band 1: band1".to_owned(),
+                    tags: vec!["natur40".to_owned()],
+                    source_operator: "GdalSource".to_owned(),
+                    result_descriptor: TypedResultDescriptor::Raster(RasterResultDescriptor {
+                        data_type: RasterDataType::F32,
+                        spatial_reference: SpatialReference::new(
+                            SpatialReferenceAuthority::Epsg,
+                            3044
+                        )
+                        .into(),
+                        measurement: Measurement::Unitless,
+                        no_data_value: None
+                    }),
+                    symbology: None
+                },
+                DatasetListing {
+                    id: DatasetId::External(ExternalDatasetId {
+                        provider_id: DatasetProviderId::from_str(
+                            "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd"
+                        )
+                        .unwrap(),
+                        dataset_id: "geonode_ortho_muf_1m:2".to_owned()
+                    }),
+                    name: "MOF Luftbild".to_owned(),
+                    description: "Band 2: band2".to_owned(),
+                    tags: vec!["natur40".to_owned()],
+                    source_operator: "GdalSource".to_owned(),
+                    result_descriptor: TypedResultDescriptor::Raster(RasterResultDescriptor {
+                        data_type: RasterDataType::F32,
+                        spatial_reference: SpatialReference::new(
+                            SpatialReferenceAuthority::Epsg,
+                            3044
+                        )
+                        .into(),
+                        measurement: Measurement::Unitless,
+                        no_data_value: None
+                    }),
+                    symbology: None
+                },
+                DatasetListing {
+                    id: DatasetId::External(ExternalDatasetId {
+                        provider_id: DatasetProviderId::from_str(
+                            "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd"
+                        )
+                        .unwrap(),
+                        dataset_id: "geonode_ortho_muf_1m:3".to_owned()
+                    }),
+                    name: "MOF Luftbild".to_owned(),
+                    description: "Band 3: band3".to_owned(),
+                    tags: vec!["natur40".to_owned()],
+                    source_operator: "GdalSource".to_owned(),
+                    result_descriptor: TypedResultDescriptor::Raster(RasterResultDescriptor {
+                        data_type: RasterDataType::F32,
+                        spatial_reference: SpatialReference::new(
+                            SpatialReferenceAuthority::Epsg,
+                            3044
+                        )
+                        .into(),
+                        measurement: Measurement::Unitless,
+                        no_data_value: None
+                    }),
+                    symbology: None
+                },
+                DatasetListing {
+                    id: DatasetId::External(ExternalDatasetId {
+                        provider_id: DatasetProviderId::from_str(
+                            "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd"
+                        )
+                        .unwrap(),
+                        dataset_id: "lidar_2018_wetness_1m:1".to_owned()
+                    }),
+                    name: "Topografic Wetness index".to_owned(),
+                    description: "Band 1: wetness".to_owned(),
+                    tags: vec!["natur40".to_owned()],
+                    source_operator: "GdalSource".to_owned(),
+                    result_descriptor: TypedResultDescriptor::Raster(RasterResultDescriptor {
+                        data_type: RasterDataType::F32,
+                        spatial_reference: SpatialReference::new(
+                            SpatialReferenceAuthority::Epsg,
+                            25832
+                        )
+                        .into(),
+                        measurement: Measurement::Unitless,
+                        no_data_value: None
+                    }),
+                    symbology: None
+                }
+            ]
+        );
     }
 }

@@ -194,6 +194,8 @@ pub enum Error {
     Logger {
         source: flexi_logger::FlexiLoggerError,
     },
+
+    WcsDatasetMissingLabelInMetadata,
 }
 
 impl Reject for Error {}
