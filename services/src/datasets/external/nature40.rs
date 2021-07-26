@@ -316,7 +316,13 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 
         Ok(Box::new(GdalMetaDataStatic {
             time: None,
-            params: gdal_parameters_from_dataset(&dataset, band_index, Path::new(&db_url), None)?,
+            params: gdal_parameters_from_dataset(
+                &dataset,
+                band_index,
+                Path::new(&db_url),
+                None,
+                Some(self.auth().to_vec()),
+            )?,
             result_descriptor: raster_descriptor_from_dataset(&dataset, band_index as isize, None)?,
         }))
     }
@@ -361,12 +367,19 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 
 #[cfg(test)]
 mod tests {
-    use std::{fs::File, io::Read, str::FromStr};
+    use std::{fs::File, io::Read, path::PathBuf, str::FromStr};
 
     use geoengine_datatypes::{
-        primitives::Measurement,
-        raster::RasterDataType,
+        primitives::{Measurement, SpatialPartition2D, SpatialResolution, TimeInterval},
+        raster::{GeoTransform, RasterDataType},
         spatial_reference::{SpatialReference, SpatialReferenceAuthority},
+    };
+    use geoengine_operators::{
+        engine::QueryRectangle,
+        source::{
+            FileNotFoundHandling, GdalDatasetParameters, GdalLoadingInfoPart,
+            GdalLoadingInfoPartIterator,
+        },
     };
     use httptest::{
         all_of,
@@ -381,33 +394,7 @@ mod tests {
     use super::*;
 
     #[allow(clippy::too_many_lines)]
-    #[tokio::test]
-    async fn it_lists() {
-        let server = Server::run();
-        server.expect(
-            Expectation::matching(all_of![
-                request::headers(contains((
-                    lowercase("authorization"),
-                    "Basic Z2VvZW5naW5lOnB3ZA=="
-                ))),
-                request::method_path("GET", "/rasterdbs.json")
-            ])
-            .respond_with(json_encoded(json!({
-                "rasterdbs": [{
-                    "name": "geonode_ortho_muf_1m",
-                    "title": "MOF Luftbild",
-                    "tags": "natur40"
-                },
-                {
-                    "name": "lidar_2018_wetness_1m",
-                    "title": "Topografic Wetness index",
-                    "tags": "natur40"
-                }],
-                "tags": ["UAV", "natur40"],
-                "session": "lhtdVm"
-            }))),
-        );
-
+    fn expect_geonode_requests(server: &mut Server) {
         server.expect(
             Expectation::matching(all_of![
                 request::headers(contains((
@@ -428,32 +415,6 @@ mod tests {
                         <CoverageOfferingBrief>
                             <name>geonode_ortho_muf_1m</name>
                             <label>geonode_ortho_muf_1m</label>
-                        </CoverageOfferingBrief>
-                    </ContentMetadata>
-                </WCS_Capabilities>"#,
-            )),
-        );
-
-        server.expect(
-            Expectation::matching(all_of![
-                request::headers(contains((
-                    lowercase("authorization"),
-                    "Basic Z2VvZW5naW5lOnB3ZA=="
-                ))),
-                request::method_path("GET", "/rasterdb/lidar_2018_wetness_1m/wcs",),
-                request::query(url_decoded(contains(("REQUEST", "GetCapabilities"))))
-            ])
-            .respond_with(status_code(200).body(
-                r#"
-                <WCS_Capabilities version="1.0.0">
-                    <Service>
-                        <name>RSDB WCS</name>
-                        <label>lidar_2018_wetness_1m</label>
-                    </Service>
-                    <ContentMetadata>
-                        <CoverageOfferingBrief>
-                            <name>lidar_2018_wetness_1m</name>
-                            <label>lidar_2018_wetness_1m</label>
                         </CoverageOfferingBrief>
                     </ContentMetadata>
                 </WCS_Capabilities>"#,
@@ -520,6 +481,56 @@ mod tests {
             )),
         );
 
+        let mut geonode_ortho_muf_1m_bytes = vec![];
+        File::open("test-data/nature40/geonode_ortho_muf_1m.tiff")
+            .unwrap()
+            .read_to_end(&mut geonode_ortho_muf_1m_bytes)
+            .unwrap();
+
+        server.expect(
+            Expectation::matching(all_of![
+                request::headers(contains((
+                    lowercase("authorization"),
+                    "Basic Z2VvZW5naW5lOnB3ZA=="
+                ))),
+                request::method_path("GET", "/rasterdb/geonode_ortho_muf_1m/wcs",),
+                request::query(url_decoded(contains(("REQUEST", "GetCoverage"))))
+            ])
+            .respond_with(
+                status_code(200)
+                    .append_header("Content-Type", "image/tiff")
+                    .body(geonode_ortho_muf_1m_bytes),
+            ),
+        );
+    }
+
+    fn expect_lidar_requests(server: &mut Server) {
+        server.expect(
+            Expectation::matching(all_of![
+                request::headers(contains((
+                    lowercase("authorization"),
+                    "Basic Z2VvZW5naW5lOnB3ZA=="
+                ))),
+                request::method_path("GET", "/rasterdb/lidar_2018_wetness_1m/wcs",),
+                request::query(url_decoded(contains(("REQUEST", "GetCapabilities"))))
+            ])
+            .respond_with(status_code(200).body(
+                r#"
+                <WCS_Capabilities version="1.0.0">
+                    <Service>
+                        <name>RSDB WCS</name>
+                        <label>lidar_2018_wetness_1m</label>
+                    </Service>
+                    <ContentMetadata>
+                        <CoverageOfferingBrief>
+                            <name>lidar_2018_wetness_1m</name>
+                            <label>lidar_2018_wetness_1m</label>
+                        </CoverageOfferingBrief>
+                    </ContentMetadata>
+                </WCS_Capabilities>"#,
+            )),
+        );
+
         server.expect(
             Expectation::matching(all_of![
                 request::headers(contains((
@@ -576,28 +587,6 @@ mod tests {
             )),
         );
 
-        let mut geonode_ortho_muf_1m_bytes = vec![];
-        File::open("test-data/nature40/geonode_ortho_muf_1m.tiff")
-            .unwrap()
-            .read_to_end(&mut geonode_ortho_muf_1m_bytes)
-            .unwrap();
-
-        server.expect(
-            Expectation::matching(all_of![
-                request::headers(contains((
-                    lowercase("authorization"),
-                    "Basic Z2VvZW5naW5lOnB3ZA=="
-                ))),
-                request::method_path("GET", "/rasterdb/geonode_ortho_muf_1m/wcs",),
-                request::query(url_decoded(contains(("REQUEST", "GetCoverage"))))
-            ])
-            .respond_with(
-                status_code(200)
-                    .append_header("Content-Type", "image/tiff")
-                    .body(geonode_ortho_muf_1m_bytes),
-            ),
-        );
-
         let mut lidar_2018_wetness_1m = vec![];
         File::open("test-data/nature40/lidar_2018_wetness_1m.tiff")
             .unwrap()
@@ -619,6 +608,38 @@ mod tests {
                     .body(lidar_2018_wetness_1m),
             ),
         );
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[tokio::test]
+    async fn it_lists() {
+        let mut server = Server::run();
+        server.expect(
+            Expectation::matching(all_of![
+                request::headers(contains((
+                    lowercase("authorization"),
+                    "Basic Z2VvZW5naW5lOnB3ZA=="
+                ))),
+                request::method_path("GET", "/rasterdbs.json")
+            ])
+            .respond_with(json_encoded(json!({
+                "rasterdbs": [{
+                    "name": "geonode_ortho_muf_1m",
+                    "title": "MOF Luftbild",
+                    "tags": "natur40"
+                },
+                {
+                    "name": "lidar_2018_wetness_1m",
+                    "title": "Topografic Wetness index",
+                    "tags": "natur40"
+                }],
+                "tags": ["UAV", "natur40"],
+                "session": "lhtdVm"
+            }))),
+        );
+
+        expect_geonode_requests(&mut server);
+        expect_lidar_requests(&mut server);
 
         let provider = Box::new(Nature40DataProviderDefinition {
             id: DatasetProviderId::from_str("2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd").unwrap(),
@@ -746,5 +767,88 @@ mod tests {
                 }
             ]
         );
+    }
+
+    #[allow(clippy::eq_op)]
+    #[tokio::test]
+    async fn it_loads() {
+        let mut server = Server::run();
+
+        expect_lidar_requests(&mut server);
+
+        let provider = Box::new(Nature40DataProviderDefinition {
+            id: DatasetProviderId::from_str("2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd").unwrap(),
+            name: "Nature40".to_owned(),
+            base_url: server.url_str("").strip_suffix('/').unwrap().to_owned(),
+            user: "geoengine".to_owned(),
+            password: "pwd".to_owned(),
+        })
+        .initialize()
+        .await
+        .unwrap();
+
+        let meta: Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> =
+            provider
+                .meta_data(&DatasetId::External(ExternalDatasetId {
+                    provider_id: DatasetProviderId::from_str(
+                        "2cb964d5-b9fa-4f8f-ab6f-f6c7fb47d4cd",
+                    )
+                    .unwrap(),
+                    dataset_id: "lidar_2018_wetness_1m:1".to_owned(),
+                }))
+                .await
+                .unwrap();
+
+        assert_eq!(
+            meta.result_descriptor().await.unwrap(),
+            RasterResultDescriptor {
+                data_type: RasterDataType::F32,
+                spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 25832)
+                    .into(),
+                measurement: Measurement::Unitless,
+                no_data_value: None
+            }
+        );
+
+        let loading_info = meta
+            .loading_info(QueryRectangle {
+                spatial_bounds: SpatialPartition2D::new_unchecked(
+                    (473_922.500, 5_634_057.500).into(),
+                    (473_924.500, 5_634_055.50).into(),
+                ),
+                time_interval: TimeInterval::default(),
+                spatial_resolution: SpatialResolution::new_unchecked(
+                    (473_924.500 - 473_922.500) / 2.,
+                    (5_634_057.500 - 5_634_055.50) / 2.,
+                ),
+            })
+            .await
+            .unwrap();
+
+        if let GdalLoadingInfoPartIterator::Static { mut parts } = loading_info.info {
+            let params: GdalLoadingInfoPart = parts.next().unwrap();
+
+            assert_eq!(
+                params,
+                GdalLoadingInfoPart {
+                    time: TimeInterval::default(),
+                    params: GdalDatasetParameters {
+                        file_path: PathBuf::from(format!("WCS:{}rasterdb/lidar_2018_wetness_1m/wcs?VERSION=1.0.0&COVERAGE=lidar_2018_wetness_1m", server.url_str(""))),
+                        rasterband_channel: 1,
+                        geo_transform: GeoTransform::new_with_coordinate_x_y(473_922.5, 1.0, 5_634_057.5, -1.0),
+                        width: 4295,
+                        height: 3294,
+                        file_not_found_handling: FileNotFoundHandling::Error,
+                        no_data_value: None,
+                        properties_mapping: None,
+                        gdal_open_options: Some(vec!["UserPwd=geoengine:pwd".to_owned(), "HttpAuth=BASIC".to_owned()]),
+                    }
+                }
+            );
+
+            assert_eq!(parts.next(), None);
+        } else {
+            panic!();
+        }
     }
 }

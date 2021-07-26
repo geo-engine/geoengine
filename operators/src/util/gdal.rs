@@ -134,6 +134,7 @@ pub fn gdal_parameters_from_dataset(
     band: usize,
     path: &Path,
     band_out: Option<usize>,
+    open_options: Option<Vec<String>>,
 ) -> Result<GdalDatasetParameters> {
     let rasterband = &dataset.rasterband(band as isize)?;
 
@@ -146,6 +147,6 @@ pub fn gdal_parameters_from_dataset(
         properties_mapping: None,
         width: rasterband.x_size(),
         height: rasterband.y_size(),
-        gdal_open_options: None,
+        gdal_open_options: open_options,
     })
 }
