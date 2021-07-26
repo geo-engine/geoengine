@@ -36,6 +36,8 @@ pub enum Error {
     Reqwest {
         source: reqwest::Error,
     },
+
+    #[cfg(feature = "xml")]
     QuickXml {
         source: quick_xml::Error,
     },
@@ -249,6 +251,7 @@ impl From<reqwest::Error> for Error {
     }
 }
 
+#[cfg(feature = "xml")]
 impl From<quick_xml::Error> for Error {
     fn from(source: quick_xml::Error) -> Self {
         Self::QuickXml { source }

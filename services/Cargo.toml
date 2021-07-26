@@ -10,6 +10,8 @@ edition = "2018"
 build = "build.rs"
 
 [features]
+nature40 = ["xml"]
+xml = ["quick-xml"]
 postgres = ["postgres-types", "bb8-postgres"]
 # This compiles Geo Engine Pro
 pro = ["postgres", "geoengine-operators/pro", "geoengine-datatypes/pro"]
@@ -41,7 +43,7 @@ serde_json = "1.0"
 serde_urlencoded = "0.7"
 serde_with = "1.9"
 snafu = "0.6"
-quick-xml = "0.22"
+quick-xml = { version = "0.22", optional = true }
 strum = { version = "0.21", features = ["derive"] }
 tokio = { version = "1.1", features = ["macros", "signal", "sync", "rt-multi-thread"] }
 typetag = "0.1"
