@@ -468,7 +468,7 @@ where
         chunk_byte_size: usize,
     ) -> Result<()> {
         // TODO: add OGR time filter if forced
-        let dataset = Self::open_gdal_dataset(&dataset_information)?;
+        let dataset = Self::open_gdal_dataset(dataset_information)?;
         let mut layer = dataset.layer_by_name(&dataset_information.layer_name)?;
         let use_ogr_spatial_filter = dataset_information.force_ogr_spatial_filter
             || layer.has_capability(gdal::vector::LayerCaps::OLCFastSpatialFilter);
@@ -564,14 +564,14 @@ where
             }),
             OgrSourceTimeFormat::Custom { custom_format } => Box::new(move |field: FieldValue| {
                 let date = field.into_string().ok_or(Error::OgrFieldValueIsNotString)?;
-                let date_time_result = DateTime::parse_from_str(&date, &custom_format)
+                let date_time_result = DateTime::parse_from_str(&date, custom_format)
                     .map(|t| t.timestamp_millis())
                     .or_else(|_| {
-                        NaiveDateTime::parse_from_str(&date, &custom_format)
+                        NaiveDateTime::parse_from_str(&date, custom_format)
                             .map(|n| n.timestamp_millis())
                     })
                     .or_else(|_| {
-                        NaiveDate::parse_from_str(&date, &custom_format)
+                        NaiveDate::parse_from_str(&date, custom_format)
                             .map(|d| d.and_hms(0, 0, 0).timestamp_millis())
                     });
                 Ok(date_time_result?.try_into()?)
@@ -725,7 +725,7 @@ where
             if let Err(error) = Self::add_feature_to_batch(
                 dataset_information.on_error,
                 data_types,
-                &query_rectangle,
+                query_rectangle,
                 time_extractor,
                 &mut builder,
                 &feature,
@@ -757,7 +757,7 @@ where
         was_time_filtered_by_ogr: bool,
         was_spatial_filtered_by_ogr: bool,
     ) -> Result<()> {
-        let time_interval = time_extractor(&feature)?;
+        let time_interval = time_extractor(feature)?;
 
         // filter out data items not in the query time interval
         if !was_time_filtered_by_ogr && !time_interval.intersects(&query_rectangle.time_interval) {
@@ -793,7 +793,7 @@ where
                         Err(e) => error_spec.on_error(Error::Gdal { source: e })?,
                     };
 
-                    builder.push_data(&column, FeatureDataValue::NullableText(text_option))?;
+                    builder.push_data(column, FeatureDataValue::NullableText(text_option))?;
                 }
                 FeatureDataType::Float => {
                     #[allow(clippy::match_same_arms)]
@@ -806,7 +806,7 @@ where
                         Err(e) => error_spec.on_error(Error::Gdal { source: e })?,
                     };
 
-                    builder.push_data(&column, FeatureDataValue::NullableFloat(value_option))?;
+                    builder.push_data(column, FeatureDataValue::NullableFloat(value_option))?;
                 }
                 FeatureDataType::Int => {
                     #[allow(clippy::match_same_arms)]
@@ -820,7 +820,7 @@ where
                         Err(e) => error_spec.on_error(Error::Gdal { source: e })?,
                     };
 
-                    builder.push_data(&column, FeatureDataValue::NullableInt(value_option))?;
+                    builder.push_data(column, FeatureDataValue::NullableInt(value_option))?;
                 }
                 FeatureDataType::Category => return Err(Error::OgrColumnFieldTypeMismatch), // TODO: implement
             }

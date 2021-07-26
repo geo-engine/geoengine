@@ -26,7 +26,7 @@ impl WorkflowRegistry for HashMapRegistry {
 
     async fn load(&self, id: &WorkflowId) -> Result<Workflow> {
         self.map
-            .get(&id)
+            .get(id)
             .cloned()
             .ok_or(error::Error::NoWorkflowForGivenId)
     }

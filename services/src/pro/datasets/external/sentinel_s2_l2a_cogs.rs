@@ -278,7 +278,7 @@ impl SentinelS2L2aCogsMetaData {
                             band_name: self.band.name.clone(),
                         })?;
 
-                parts.push(self.create_loading_info_part(time_interval, asset)?)
+                parts.push(self.create_loading_info_part(time_interval, asset)?);
             }
         }
         debug!("number of generated loading infos: {}", parts.len());
@@ -474,7 +474,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
     > {
         let dataset = self
             .datasets
-            .get(&dataset)
+            .get(dataset)
             .ok_or(geoengine_operators::error::Error::UnknownDatasetId)?;
 
         Ok(Box::new(SentinelS2L2aCogsMetaData {
@@ -600,7 +600,7 @@ mod tests {
 
             assert_eq!(result, expected);
         } else {
-            unreachable!()
+            unreachable!();
         }
 
         Ok(())

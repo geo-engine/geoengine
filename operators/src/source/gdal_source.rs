@@ -695,7 +695,7 @@ fn properties_from_gdal<'a, I, M>(
 
     for m in mapping_iter {
         let data = if let Some(domain) = &m.source_key.domain {
-            gdal_dataset.metadata_item(&m.source_key.key, &domain)
+            gdal_dataset.metadata_item(&m.source_key.key, domain)
         } else {
             gdal_dataset.metadata_item(&m.source_key.key, "")
         };

@@ -320,8 +320,8 @@ mod tests {
 
         assert_eq!(res.status(), 200);
 
-        let body = std::str::from_utf8(&res.body()).unwrap();
-        assert!(serde_json::from_str::<IdResponse<UserId>>(&body).is_ok());
+        let body = std::str::from_utf8(res.body()).unwrap();
+        assert!(serde_json::from_str::<IdResponse<UserId>>(body).is_ok());
     }
 
     #[tokio::test]
@@ -467,7 +467,7 @@ mod tests {
 
         assert_eq!(res.status(), 200);
 
-        let body = std::str::from_utf8(&res.body()).unwrap();
+        let body = std::str::from_utf8(res.body()).unwrap();
         let _id: UserSession = serde_json::from_str(body).unwrap();
     }
 
@@ -683,7 +683,7 @@ mod tests {
             .reply(&session_handler(ctx.clone()).recover(handle_rejection))
             .await;
 
-        let body = std::str::from_utf8(&res.body()).unwrap();
+        let body = std::str::from_utf8(res.body()).unwrap();
         let session: UserSession = serde_json::from_str(body).unwrap();
 
         ctx.user_db()

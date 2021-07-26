@@ -56,8 +56,7 @@ impl<'c> Iterator for FeatureTimeSpanIter<'c> {
                     });
                 }
                 Some(mut time_span) => {
-                    if let Ok(combined_time_interval) =
-                        time_span.time_interval.union(&time_interval)
+                    if let Ok(combined_time_interval) = time_span.time_interval.union(time_interval)
                     {
                         // merge time intervals if possible
 
@@ -170,7 +169,7 @@ impl CoveredPixels<MultiPolygon> for MultiPolygonCoveredPixels {
                     .tester
                     .is_coordinate_in_multi_polygon(coordinate, feature_index)
                 {
-                    pixels.push(idx)
+                    pixels.push(idx);
                 }
             }
         }
@@ -179,7 +178,7 @@ impl CoveredPixels<MultiPolygon> for MultiPolygonCoveredPixels {
     }
 
     fn collection_ref(&self) -> &FeatureCollection<MultiPolygon> {
-        &self.tester.polygons_ref()
+        self.tester.polygons_ref()
     }
 
     fn collection(self) -> FeatureCollection<MultiPolygon> {
