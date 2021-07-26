@@ -56,7 +56,7 @@ impl RasterOperator for Radiance {
         let out_desc = RasterResultDescriptor {
             spatial_reference: in_desc.spatial_reference,
             data_type: RasterOut,
-            // TODO:
+            // TODO: Is this correct?
             measurement: in_desc.measurement.clone(),
             no_data_value: in_desc.no_data_value.map(|_| f64::from(OUT_NO_DATA_VALUE)),
         };
@@ -80,8 +80,6 @@ impl InitializedRasterOperator for InitializedRadiance {
         &self.result_descriptor
     }
 
-    // i know there is a macro somewhere. we need to re-work this when we have the no-data value anyway.
-    #[allow(clippy::too_many_lines)]
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         let q = self.source.query_processor()?;
 
@@ -169,61 +167,61 @@ where
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         let src = self.source.query(query, ctx).await?;
         Ok(src
-            .map(move |tile| {
-                match tile {
-                    Ok(tile) if tile.grid_array.is_empty() => Ok(RasterTile2D::new(
+            .map(move |tile| match tile {
+                Ok(tile) if tile.grid_array.is_empty() => Ok(RasterTile2D::new_with_properties(
+                    tile.time,
+                    tile.tile_position,
+                    tile.global_geo_transform,
+                    EmptyGrid::new(tile.grid_array.grid_shape(), self.no_data_value).into(),
+                    tile.properties,
+                )),
+                Ok(tile) => {
+                    let mg = tile.grid_array.into_materialized_grid();
+
+                    let mut out = Grid2D::new(
+                        mg.grid_shape(),
+                        vec![self.no_data_value; mg.data.len()],
+                        Some(self.no_data_value),
+                    )
+                    .expect("raster creation must succeed");
+
+                    let offset = f64::try_from(
+                        tile.properties
+                            .properties_map
+                            .get(&self.offset_key)
+                            .ok_or(crate::error::Error::MissingRasterProperty {
+                                property: "msg.CalibrationOffset".into(),
+                            })?
+                            .clone(),
+                    )? as PixelOut;
+                    let slope = f64::try_from(
+                        tile.properties
+                            .properties_map
+                            .get(&self.slope_key)
+                            .ok_or(crate::error::Error::MissingRasterProperty {
+                                property: "msg.CalibrationSlope".into(),
+                            })?
+                            .clone(),
+                    )? as PixelOut;
+
+                    let tgt = &mut out.data;
+
+                    for (idx, v) in mg.data.iter().enumerate() {
+                        if mg.no_data_value.map_or(true, |ndv| ndv != *v) {
+                            let val: PixelOut = (*v).as_();
+                            tgt[idx] = offset + val * slope;
+                        }
+                    }
+
+                    Ok(RasterTile2D::new_with_properties(
                         tile.time,
                         tile.tile_position,
                         tile.global_geo_transform,
-                        EmptyGrid::new(tile.grid_array.grid_shape(), self.no_data_value).into(),
-                    )),
-                    Ok(tile) => {
-                        let mg = tile.grid_array.into_materialized_grid();
-
-                        let mut out = Grid2D::new(
-                            mg.grid_shape(),
-                            vec![self.no_data_value; mg.data.len()],
-                            Some(self.no_data_value), // TODO
-                        )
-                        .expect("raster creation must succeed");
-
-                        let offset = f64::try_from(
-                            tile.properties
-                                .properties_map
-                                .get(&self.offset_key)
-                                .ok_or(crate::error::Error::MissingRasterProperty {
-                                    property: "msg.CalibrationOffset".into(),
-                                })?
-                                .clone(),
-                        )? as PixelOut;
-                        let slope = f64::try_from(
-                            tile.properties
-                                .properties_map
-                                .get(&self.slope_key)
-                                .ok_or(crate::error::Error::MissingRasterProperty {
-                                    property: "msg.CalibrationSlope".into(),
-                                })?
-                                .clone(),
-                        )? as PixelOut;
-
-                        let tgt = &mut out.data;
-
-                        for (idx, v) in mg.data.iter().enumerate() {
-                            if mg.no_data_value.map_or(true, |ndv| ndv != *v) {
-                                let val: PixelOut = (*v).as_();
-                                tgt[idx] = offset + val * slope;
-                            }
-                        }
-
-                        Ok(RasterTile2D::new(
-                            tile.time,
-                            tile.tile_position,
-                            tile.global_geo_transform,
-                            out.into(),
-                        ))
-                    }
-                    Err(e) => Err(e),
+                        out.into(),
+                        tile.properties,
+                    ))
                 }
+                Err(e) => Err(e),
             })
             .boxed())
     }
