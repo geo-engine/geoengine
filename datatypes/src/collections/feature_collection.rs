@@ -278,13 +278,13 @@ where
         // copy attribute data
         for (column_name, column_type) in &self.types {
             columns.push(arrow::datatypes::Field::new(
-                &column_name,
+                column_name,
                 column_type.arrow_data_type(),
                 column_type.nullable(),
             ));
             column_values.push(
                 self.table
-                    .column_by_name(&column_name)
+                    .column_by_name(column_name)
                     .expect("The attribute column must exist")
                     .clone(),
             );
@@ -296,7 +296,7 @@ where
         // append new columns
         for &(new_column_name, ref data) in new_columns {
             columns.push(arrow::datatypes::Field::new(
-                &new_column_name,
+                new_column_name,
                 data.arrow_data_type(),
                 data.nullable(),
             ));
@@ -379,13 +379,13 @@ where
             }
 
             columns.push(arrow::datatypes::Field::new(
-                &column_name,
+                column_name,
                 column_type.arrow_data_type(),
                 column_type.nullable(),
             ));
             column_values.push(
                 self.table
-                    .column_by_name(&column_name)
+                    .column_by_name(column_name)
                     .expect("The attribute column must exist")
                     .clone(),
             );
@@ -468,7 +468,7 @@ where
 
         if keep_nulls && column.null_count() > 0 {
             let null_flags = arrow::compute::is_null(column.as_ref())?;
-            filter_array = arrow::compute::or_kleene(&filter_array, &null_flags)?
+            filter_array = arrow::compute::or_kleene(&filter_array, &null_flags)?;
         }
 
         self.filter(filter_array)
@@ -496,7 +496,7 @@ where
         for (column, array_a) in columns.iter().zip(self.table.columns()) {
             let array_b = other
                 .table
-                .column_by_name(&column.name())
+                .column_by_name(column.name())
                 .expect("column must occur in both collections");
 
             new_data.push((
@@ -692,13 +692,13 @@ where
         // copy remaining attribute data
         for (column_name, column_type) in &self.types {
             columns.push(arrow::datatypes::Field::new(
-                &column_name,
+                column_name,
                 column_type.arrow_data_type(),
                 column_type.nullable(),
             ));
             column_values.push(
                 self.table
-                    .column_by_name(&column_name)
+                    .column_by_name(column_name)
                     .expect("The attribute column must exist")
                     .clone(),
             );
@@ -1538,13 +1538,13 @@ where
         // copy remaining attribute data
         for (column_name, column_type) in &self.types {
             columns.push(arrow::datatypes::Field::new(
-                &column_name,
+                column_name,
                 column_type.arrow_data_type(),
                 column_type.nullable(),
             ));
             column_values.push(
                 self.table
-                    .column_by_name(&column_name)
+                    .column_by_name(column_name)
                     .expect("The attribute column must exist")
                     .clone(),
             );

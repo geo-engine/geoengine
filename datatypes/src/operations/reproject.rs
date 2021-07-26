@@ -493,7 +493,7 @@ mod tests {
         let from = SpatialReference::epsg_4326();
         let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
         let p = CoordinateProjector::from_known_srs(from, to);
-        assert!(p.is_ok())
+        assert!(p.is_ok());
     }
 
     #[test]
@@ -501,7 +501,7 @@ mod tests {
         let from = SpatialReference::epsg_4326();
         let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 8_008_135);
         let p = CoordinateProjector::from_known_srs(from, to);
-        assert!(p.is_err())
+        assert!(p.is_err());
     }
 
     #[test]
@@ -729,7 +729,7 @@ mod tests {
             sugg_pixel_size.x,
             79.088_974_450_690_5, // this is the pixel size GDAL generates when reprojecting the SRTM tile.
             epsilon = 0.000_000_1
-        ))
+        ));
     }
 
     #[test]
@@ -773,6 +773,6 @@ mod tests {
             sugg_pixel_size.x,
             79.088_974_450_690_5, // this is the pixel size GDAL generates when reprojecting the SRTM tile.
             epsilon = 0.000_000_1
-        ))
+        ));
     }
 }

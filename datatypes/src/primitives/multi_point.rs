@@ -238,7 +238,7 @@ impl<'r> GeometryRef for MultiPointRef<'r> {}
 
 impl<'g> MultiPointAccess for MultiPointRef<'g> {
     fn points(&self) -> &[Coordinate2D] {
-        &self.point_coordinates
+        self.point_coordinates
     }
 }
 
@@ -334,6 +334,6 @@ mod tests {
             (0.0, 1.0).into(),
         ]);
         let mp = MultiPoint { coordinates };
-        assert_eq!(mp.spatial_bounds(), expected)
+        assert_eq!(mp.spatial_bounds(), expected);
     }
 }
