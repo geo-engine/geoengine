@@ -139,6 +139,23 @@ where
     }
 
     /// create a new `RasterTile`
+    pub fn new_with_properties(
+        time: TimeInterval,
+        tile_position: GridIdx2D,
+        global_geo_transform: GeoTransform,
+        data: GridOrEmpty<D, T>,
+        properties: RasterProperties,
+    ) -> Self {
+        Self {
+            time,
+            tile_position,
+            global_geo_transform,
+            grid_array: data,
+            properties,
+        }
+    }
+
+    /// create a new `RasterTile`
     pub fn new_without_offset(
         time: TimeInterval,
         global_geo_transform: GeoTransform,
@@ -160,11 +177,12 @@ where
         To: Pixel + FromPrimitive<T>,
         T: AsPrimitive<To>,
     {
-        RasterTile::new(
+        RasterTile::new_with_properties(
             self.time,
             self.tile_position,
             self.global_geo_transform,
             self.grid_array.convert_dtype(),
+            self.properties,
         )
     }
 
@@ -180,7 +198,7 @@ where
             time: self.time,
             tile_position: self.tile_position,
             global_geo_transform: self.global_geo_transform,
-            properties: RasterProperties::default(),
+            properties: self.properties,
         }
     }
 
@@ -317,7 +335,7 @@ where
             global_geo_transform: mat_tile.global_geo_transform,
             tile_position: mat_tile.tile_position,
             time: mat_tile.time,
-            properties: RasterProperties::default(),
+            properties: mat_tile.properties,
         }
     }
 }
