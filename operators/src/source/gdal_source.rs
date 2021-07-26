@@ -530,14 +530,17 @@ where
         query: crate::engine::RasterQueryRectangle,
         _ctx: &'a dyn crate::engine::QueryContext,
     ) -> Result<BoxStream<Result<Self::Output>>> {
-        let meta_data = self.meta_data.loading_info(query).await?;
-
         debug!(
             "Querying GdalSourceProcessor<{:?}> with: {:?}.",
             P::TYPE,
             &query
         );
 
+        let meta_data = self.meta_data.loading_info(query).await?;
+
+        debug!("GdalLoadingInfo: {:?}.", &meta_data);
+
+        // TODO: what to do if loading info is empty?
         let stream = stream::iter(meta_data.info)
             .map(move |info| match info {
                 Ok(info) => self.tile_stream(query, info).boxed(),

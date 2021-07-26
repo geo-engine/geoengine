@@ -30,6 +30,7 @@ use geoengine_datatypes::{
     },
 };
 
+use log::debug;
 use pin_project::pin_project;
 use std::task::Poll;
 
@@ -199,6 +200,7 @@ where
 
         if this.running_query.as_ref().is_none() && this.running_fold.as_ref().is_none() {
             // there is no query and no stream pending
+            debug!("New running_query for: {:?}", &tile_query_rectangle);
 
             let tile_query_stream = this
                 .source
@@ -226,18 +228,28 @@ where
                     .sub_query
                     .new_fold_accu(fold_tile_spec, tile_query_rectangle)?;
 
+                debug!("New running_fold: {:?}", &tile_query_rectangle);
                 let tile_folding_stream =
                     tile_query_stream.try_fold(tile_folding_accu, this.sub_query.fold_method());
 
                 this.running_fold.set(Some(tile_folding_stream));
             }
-            Some(Err(err)) => return Poll::Ready(Some(Err(err))),
+            Some(Err(err)) => {
+                debug!("Tile fold stream returned error: {:?}", &err);
+                *this.ended = true;
+                return Poll::Ready(Some(Err(err)));
+            }
             None => {} // there is no result but there meight be a running fold...
         }
 
         let future_result = match this.running_fold.as_mut().as_pin_mut() {
-            Some(fut) => ready!(fut.poll(cx)),
-            None => return Poll::Ready(None),
+            Some(fut) => {
+                ready!(fut.poll(cx))
+            }
+            None => {
+                debug!("running_fold is None");
+                return Poll::Ready(None); // should initialize next tile query?
+            }
         };
 
         // set the running future to None --> will create a new one in the next call
@@ -247,10 +259,16 @@ where
 
         // if we produced a tile: get the end of the current time slot (must be the same for all tiles in the slot)
         if let Ok(ref r) = tile_accu_result {
+            debug!("time_end: {:?} --> {:?}", &this.time_end, &r.time.end());
             this.time_end.replace(r.time.end());
         }
 
         // make tile progress
+        debug!(
+            "current_spatial_tile: {:?} --> {:?}",
+            *this.current_spatial_tile,
+            *this.current_spatial_tile + 1
+        );
         *this.current_spatial_tile += 1;
         // check if we iterated through all the tiles
         if *this.current_spatial_tile >= this.tiles_to_produce.len() {
@@ -258,6 +276,7 @@ where
             *this.current_spatial_tile = 0;
             // make time progress
             if let Some(ref time_end) = this.time_end {
+                debug!("time_start: {:?} --> {:?}", &this.time_start, *time_end);
                 *this.time_start = *time_end;
                 *this.time_end = None;
             } else {
@@ -269,7 +288,10 @@ where
 
         match tile_accu_result {
             Ok(tile_accu) => Poll::Ready(Some(Ok(tile_accu))),
-            Err(err) => Poll::Ready(Some(Err(err))),
+            Err(err) => {
+                *this.ended = true;
+                Poll::Ready(Some(Err(err)))
+            }
         }
     }
 }
