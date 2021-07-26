@@ -1,4 +1,3 @@
-use std::convert::TryFrom;
 use std::{
     convert::TryInto,
     path::{Path, PathBuf},
@@ -127,18 +126,20 @@ pub fn raster_descriptor_from_dataset(
     })
 }
 
-/// Create `GdalDatasetParameters` from the infos in the given `dataset` for the given `band`.
-/// `path` is the location of the actual data.
+/// Create `GdalDatasetParameters` from the infos in the given `dataset` and its `band`.
+/// `path` is the location of the actual data, `band_out` allows optionally specifying a different
+/// band in the resulting parameters, otherwise `band` is used.
 pub fn gdal_parameters_from_dataset(
     dataset: &Dataset,
-    band: isize,
+    band: usize,
     path: &Path,
+    band_out: Option<usize>,
 ) -> Result<GdalDatasetParameters> {
-    let rasterband = &dataset.rasterband(band)?;
+    let rasterband = &dataset.rasterband(band as isize)?;
 
     Ok(GdalDatasetParameters {
         file_path: PathBuf::from(path),
-        rasterband_channel: usize::try_from(band).unwrap_or(0), // TODO: is the band in the metadata Dataset the same as in the actual data file?
+        rasterband_channel: band_out.unwrap_or(band),
         geo_transform: dataset.geo_transform().context(error::Gdal)?.into(),
         file_not_found_handling: FileNotFoundHandling::Error,
         no_data_value: rasterband.no_data_value(),

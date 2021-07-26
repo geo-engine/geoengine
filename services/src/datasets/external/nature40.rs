@@ -249,7 +249,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 
         let (db_name, band_index) = match *split.as_slice() {
             [db, band_index] => {
-                if let Ok(band_index) = band_index.parse::<isize>() {
+                if let Ok(band_index) = band_index.parse::<usize>() {
                     (db, band_index)
                 } else {
                     return Err(geoengine_operators::error::Error::LoadingInfo {
@@ -273,8 +273,8 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 
         Ok(Box::new(GdalMetaDataStatic {
             time: None,
-            params: gdal_parameters_from_dataset(&dataset, band_index, Path::new(&db_url))?,
-            result_descriptor: raster_descriptor_from_dataset(&dataset, band_index, None)?,
+            params: gdal_parameters_from_dataset(&dataset, band_index, Path::new(&db_url), None)?,
+            result_descriptor: raster_descriptor_from_dataset(&dataset, band_index as isize, None)?,
         }))
     }
 }
