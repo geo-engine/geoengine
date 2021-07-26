@@ -370,7 +370,7 @@ mod tests {
     };
     use httptest::{
         all_of,
-        matchers::{contains, request, url_decoded},
+        matchers::{contains, lowercase, request, url_decoded},
         responders::{json_encoded, status_code},
         Expectation, Server,
     };
@@ -384,28 +384,36 @@ mod tests {
     #[tokio::test]
     async fn it_lists() {
         let server = Server::run();
-        // TODO: auth
         server.expect(
-            Expectation::matching(request::method_path("GET", "/rasterdbs.json")).respond_with(
-                json_encoded(json!({
-                    "rasterdbs": [{
-                        "name": "geonode_ortho_muf_1m",
-                        "title": "MOF Luftbild",
-                        "tags": "natur40"
-                    },
-                    {
-                        "name": "lidar_2018_wetness_1m",
-                        "title": "Topografic Wetness index",
-                        "tags": "natur40"
-                    }],
-                    "tags": ["UAV", "natur40"],
-                    "session": "lhtdVm"
-                })),
-            ),
+            Expectation::matching(all_of![
+                request::headers(contains((
+                    lowercase("authorization"),
+                    "Basic Z2VvZW5naW5lOnB3ZA=="
+                ))),
+                request::method_path("GET", "/rasterdbs.json")
+            ])
+            .respond_with(json_encoded(json!({
+                "rasterdbs": [{
+                    "name": "geonode_ortho_muf_1m",
+                    "title": "MOF Luftbild",
+                    "tags": "natur40"
+                },
+                {
+                    "name": "lidar_2018_wetness_1m",
+                    "title": "Topografic Wetness index",
+                    "tags": "natur40"
+                }],
+                "tags": ["UAV", "natur40"],
+                "session": "lhtdVm"
+            }))),
         );
 
         server.expect(
             Expectation::matching(all_of![
+                request::headers(contains((
+                    lowercase("authorization"),
+                    "Basic Z2VvZW5naW5lOnB3ZA=="
+                ))),
                 request::method_path("GET", "/rasterdb/geonode_ortho_muf_1m/wcs",),
                 request::query(url_decoded(contains(("REQUEST", "GetCapabilities"))))
             ])
@@ -428,6 +436,10 @@ mod tests {
 
         server.expect(
             Expectation::matching(all_of![
+                request::headers(contains((
+                    lowercase("authorization"),
+                    "Basic Z2VvZW5naW5lOnB3ZA=="
+                ))),
                 request::method_path("GET", "/rasterdb/lidar_2018_wetness_1m/wcs",),
                 request::query(url_decoded(contains(("REQUEST", "GetCapabilities"))))
             ])
@@ -450,6 +462,10 @@ mod tests {
 
         server.expect(
             Expectation::matching(all_of![
+                request::headers(contains((
+                    lowercase("authorization"),
+                    "Basic Z2VvZW5naW5lOnB3ZA=="
+                ))),
                 request::method_path("GET", "/rasterdb/geonode_ortho_muf_1m/wcs",),
                 request::query(url_decoded(contains(("REQUEST", "DescribeCoverage"))))
             ])
@@ -506,6 +522,10 @@ mod tests {
 
         server.expect(
             Expectation::matching(all_of![
+                request::headers(contains((
+                    lowercase("authorization"),
+                    "Basic Z2VvZW5naW5lOnB3ZA=="
+                ))),
                 request::method_path("GET", "/rasterdb/lidar_2018_wetness_1m/wcs",),
                 request::query(url_decoded(contains(("REQUEST", "DescribeCoverage"))))
             ])
@@ -564,6 +584,10 @@ mod tests {
 
         server.expect(
             Expectation::matching(all_of![
+                request::headers(contains((
+                    lowercase("authorization"),
+                    "Basic Z2VvZW5naW5lOnB3ZA=="
+                ))),
                 request::method_path("GET", "/rasterdb/geonode_ortho_muf_1m/wcs",),
                 request::query(url_decoded(contains(("REQUEST", "GetCoverage"))))
             ])
@@ -582,6 +606,10 @@ mod tests {
 
         server.expect(
             Expectation::matching(all_of![
+                request::headers(contains((
+                    lowercase("authorization"),
+                    "Basic Z2VvZW5naW5lOnB3ZA=="
+                ))),
                 request::method_path("GET", "/rasterdb/lidar_2018_wetness_1m/wcs",),
                 request::query(url_decoded(contains(("REQUEST", "GetCoverage"))))
             ])
