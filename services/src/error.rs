@@ -190,12 +190,14 @@ pub enum Error {
         provider: DatasetProviderId,
     },
 
-    Natur40UnknownRasterDbname,
+    #[cfg(feature = "nature40")]
+    Nature40UnknownRasterDbname,
+    #[cfg(feature = "nature40")]
+    Nature40WcsDatasetMissingLabelInMetadata,
+
     Logger {
         source: flexi_logger::FlexiLoggerError,
     },
-
-    WcsDatasetMissingLabelInMetadata,
 }
 
 impl Reject for Error {}

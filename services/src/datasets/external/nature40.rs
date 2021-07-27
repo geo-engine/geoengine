@@ -225,7 +225,7 @@ impl Nature40DataProvider {
             // no labels found during parsing, try to reopen the dataset to flush the cache and try again
             let name = dataset
                 .metadata_item("label", "")
-                .ok_or(Error::WcsDatasetMissingLabelInMetadata)?;
+                .ok_or(Error::Nature40WcsDatasetMissingLabelInMetadata)?;
 
             drop(dataset);
 
