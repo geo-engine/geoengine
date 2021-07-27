@@ -37,9 +37,10 @@ use serde::{Deserialize, Serialize};
 struct DatabaseConnectionConfig {
     host: String,
     port: u16,
+    database: String,
+    schema: String,
     user: String,
     password: String,
-    database: String,
 }
 
 impl DatabaseConnectionConfig {
@@ -109,7 +110,7 @@ impl GfbioDataProvider {
         let pool = Pool::builder().build(pg_mgr).await?;
 
         let (column_hash_to_name, column_name_to_hash) =
-            Self::resolve_columns(pool.get().await?).await?;
+            Self::resolve_columns(pool.get().await?, &db_config.schema).await?;
 
         Ok(Self {
             id,
@@ -122,14 +123,16 @@ impl GfbioDataProvider {
 
     async fn resolve_columns(
         conn: PooledConnection<'_, PostgresConnectionManager<NoTls>>,
+        schema: &str,
     ) -> Result<(HashMap<String, String>, HashMap<String, String>)> {
         let stmt = conn
-            .prepare(
+            .prepare(&format!(
                 r#"
             SELECT hash, name
-            FROM abcd_datasets_translation
+            FROM {}.abcd_datasets_translation
             WHERE hash <> $1 AND hash <> $2;"#,
-            )
+                schema
+            ))
             .await?;
 
         let rows = conn
@@ -155,11 +158,12 @@ impl GfbioDataProvider {
             });
 
         format!(
-            r#"SELECT surrogate_key, ST_MakePoint("{}", "{}") AS geom {} FROM abcd_units WHERE surrogate_key = {}"#,
-            Self::COLUMN_NAME_LONGITUDE,
-            Self::COLUMN_NAME_LATITUDE,
-            columns,
-            surrogate_key
+            r#"SELECT surrogate_key, ST_MakePoint("{lon}", "{lat}") AS geom {columns} FROM {schema}.abcd_units WHERE surrogate_key = {surrogate}"#,
+            lon = Self::COLUMN_NAME_LONGITUDE,
+            lat = Self::COLUMN_NAME_LATITUDE,
+            columns = columns,
+            schema = self.db_config.schema,
+            surrogate = surrogate_key
         )
     }
 }
@@ -172,14 +176,17 @@ impl DatasetProvider for GfbioDataProvider {
         let stmt = conn
             .prepare(&format!(
                 r#"
-            SELECT surrogate_key, "{}", "{}"
-            FROM abcd_datasets;"#,
-                self.column_name_to_hash
+            SELECT surrogate_key, "{title}", "{details}"
+            FROM {schema}.abcd_datasets;"#,
+                title = self
+                    .column_name_to_hash
                     .get("/DataSets/DataSet/Metadata/Description/Representation/Title")
                     .ok_or(Error::GfbioMissingAbcdField)?,
-                self.column_name_to_hash
+                details = self
+                    .column_name_to_hash
                     .get("/DataSets/DataSet/Metadata/Description/Representation/Details")
-                    .ok_or(Error::GfbioMissingAbcdField)?
+                    .ok_or(Error::GfbioMissingAbcdField)?,
+                schema = self.db_config.schema
             ))
             .await?;
 
