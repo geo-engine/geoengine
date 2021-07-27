@@ -88,12 +88,12 @@ mod tests {
     #[test]
     #[allow(clippy::float_cmp)]
     fn it_snaps_right() {
-        assert_eq!(snap_next(1., 2., 4.5), 5.)
+        assert_eq!(snap_next(1., 2., 4.5), 5.);
     }
 
     #[test]
     #[allow(clippy::float_cmp)]
     fn it_snaps_left() {
-        assert_eq!(snap_prev(1., 2., 4.5), 3.)
+        assert_eq!(snap_prev(1., 2., 4.5), 3.);
     }
 }

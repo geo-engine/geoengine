@@ -255,6 +255,6 @@ mod tests {
                 x_step: -8.,
                 y_step: 5.
             })
-        )
+        );
     }
 }

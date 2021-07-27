@@ -307,7 +307,7 @@ where
         Self {
             source_a,
             source_b,
-            cl_program: Self::create_cl_program(&expression),
+            cl_program: Self::create_cl_program(expression),
             phantom_data: PhantomData::default(),
             no_data_value,
         }

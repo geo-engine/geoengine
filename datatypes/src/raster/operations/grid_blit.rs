@@ -87,7 +87,7 @@ where
                     self.set_at_grid_index_unchecked(
                         [y, x],
                         other.get_at_grid_index_unchecked([y, x]),
-                    )
+                    );
                 }
             }
         }
@@ -177,7 +177,7 @@ where
                         self.set_at_grid_index_unchecked(
                             [z, y, x],
                             other.get_at_grid_index_unchecked([z, y, x]),
-                        )
+                        );
                     }
                 }
             }

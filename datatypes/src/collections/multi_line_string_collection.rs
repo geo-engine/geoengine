@@ -85,8 +85,7 @@ impl<'l> IntoGeometryIterator<'l> for MultiLineStringCollection {
 
     fn geometries(&'l self) -> Self::GeometryIterator {
         let geometry_column: &ListArray = downcast_array(
-            &self
-                .table
+            self.table
                 .column_by_name(Self::GEOMETRY_COLUMN_NAME)
                 .expect("Column must exist since it is in the metadata"),
         );
@@ -173,8 +172,7 @@ impl<'l> GeometryRandomAccess<'l> for MultiLineStringCollection {
 
     fn geometry_at(&'l self, index: usize) -> Option<Self::GeometryType> {
         let geometry_column: &ListArray = downcast_array(
-            &self
-                .table
+            self.table
                 .column_by_name(MultiLineStringCollection::GEOMETRY_COLUMN_NAME)
                 .expect("Column must exist since it is in the metadata"),
         );
@@ -585,6 +583,6 @@ mod tests {
 
         let proj_collection = collection.reproject(&projector).unwrap();
 
-        assert_eq!(proj_collection, expected_collection)
+        assert_eq!(proj_collection, expected_collection);
     }
 }

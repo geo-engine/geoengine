@@ -459,7 +459,7 @@ mod tests {
         ));
 
         call_generic_raster_tile_2d_ext!(typed_raster_a, Foo, (raster, e) => {
-            foo(e, &raster)
+            foo(e, &raster);
         });
     }
 }

@@ -235,6 +235,6 @@ mod tests {
         assert_eq!(raster2d.max_index(), GridIdx([2, 1]));
 
         let exp_bbox = GridBoundingBox2D::new([0, 0], [2, 1]).unwrap();
-        assert_eq!(raster2d.bounding_box(), exp_bbox)
+        assert_eq!(raster2d.bounding_box(), exp_bbox);
     }
 }

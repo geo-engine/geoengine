@@ -62,7 +62,7 @@ mod tests {
                 start: Coordinate2D { x: 0., y: 0. },
                 end: Coordinate2D { x: 1., y: 1. }
             }
-        )
+        );
     }
 
     #[test]
@@ -71,7 +71,7 @@ mod tests {
         assert_eq!(
             Line::new((1., 1.).into(), (2., 2.).into()).x_axis_length(),
             1.
-        )
+        );
     }
 
     #[test]
@@ -80,7 +80,7 @@ mod tests {
         assert_eq!(
             Line::new((1., 1.).into(), (2., 2.).into()).y_axis_length(),
             1.
-        )
+        );
     }
 
     #[test]
@@ -89,13 +89,13 @@ mod tests {
         assert_eq!(
             Line::new((1., 1.).into(), (2., 2.).into()).vector_length(),
             2_f64.sqrt()
-        )
+        );
     }
 
     #[test]
     fn interpolate_coordinate_00() {
         let line = Line::new((1., 1.).into(), (2., 2.).into());
-        assert_eq!(line.interpolate_coord_from_start(0.), line.start)
+        assert_eq!(line.interpolate_coord_from_start(0.), line.start);
     }
 
     #[test]
@@ -104,7 +104,7 @@ mod tests {
         assert_eq!(
             line.interpolate_coord_from_start(0.5),
             Coordinate2D::new(1.5, 1.5)
-        )
+        );
     }
 
     #[test]
@@ -113,7 +113,7 @@ mod tests {
         assert_eq!(
             line.interpolate_coord_from_start(-0.5),
             Coordinate2D::new(0.5, 0.5)
-        )
+        );
     }
 
     #[test]
@@ -122,7 +122,7 @@ mod tests {
         assert_eq!(
             line.interpolate_coord_from_start(7.),
             Coordinate2D::new(8., 8.)
-        )
+        );
     }
 
     #[test]
@@ -131,7 +131,7 @@ mod tests {
         assert_eq!(
             line.interpolate_coord_from_start(-7.),
             Coordinate2D::new(-6., -6.)
-        )
+        );
     }
 
     #[test]
@@ -141,7 +141,7 @@ mod tests {
         let line = Line::new(start, end);
         let coords: Vec<Coordinate2D> = line.with_additional_equi_spaced_coords(0).collect();
 
-        assert_eq!(&coords, &[start, end])
+        assert_eq!(&coords, &[start, end]);
     }
 
     #[test]
@@ -151,7 +151,7 @@ mod tests {
         let line = Line::new(start, end);
         let coords: Vec<Coordinate2D> = line.with_additional_equi_spaced_coords(1).collect();
 
-        assert_eq!(&coords, &[start, Coordinate2D::new(1.5, 1.5), end])
+        assert_eq!(&coords, &[start, Coordinate2D::new(1.5, 1.5), end]);
     }
 
     #[test]
@@ -182,6 +182,6 @@ mod tests {
             end: (1., 0.).into(),
         };
 
-        assert_eq!(l.spatial_bounds(), expected)
+        assert_eq!(l.spatial_bounds(), expected);
     }
 }

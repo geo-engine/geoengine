@@ -299,7 +299,6 @@ impl From<Box<dyn RasterQueryProcessor<RasterType = f64>>> for TypedRasterQueryP
 }
 
 /// An enum that contains all possible query processor variants
-#[allow(clippy::pub_enum_variant_names)]
 pub enum TypedVectorQueryProcessor {
     Data(Box<dyn VectorQueryProcessor<VectorType = DataCollection>>),
     MultiPoint(Box<dyn VectorQueryProcessor<VectorType = MultiPointCollection>>),

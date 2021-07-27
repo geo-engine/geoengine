@@ -38,7 +38,7 @@ impl ErrorResponse {
     pub fn assert(res: &Response<Bytes>, status: u16, error: &str, message: &str) {
         assert_eq!(res.status(), status);
 
-        let body = std::str::from_utf8(&res.body()).unwrap();
+        let body = std::str::from_utf8(res.body()).unwrap();
         assert_eq!(
             serde_json::from_str::<ErrorResponse>(body).unwrap(),
             ErrorResponse {

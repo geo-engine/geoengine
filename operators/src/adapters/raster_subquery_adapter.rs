@@ -736,7 +736,7 @@ mod tests {
             .map(Result::unwrap)
             .collect::<Vec<RasterTile2D<u8>>>()
             .await;
-        assert_eq!(data, res)
+        assert_eq!(data, res);
     }
 
     #[tokio::test]
@@ -835,6 +835,6 @@ mod tests {
             .map(Result::unwrap)
             .collect::<Vec<RasterTile2D<u8>>>()
             .await;
-        assert_eq!(data, res)
+        assert_eq!(data, res);
     }
 }
