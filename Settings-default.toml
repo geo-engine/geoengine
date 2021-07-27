@@ -10,7 +10,12 @@ list_limit = 20
 list_limit = 20
 
 [postgres]
-config_string = "postgresql://geoengine:geoengine@localhost:5432"
+host = "localhost"
+port = 5432
+database = "geoengine"
+schema = "public"
+user = "geoengine"
+password = "geoengine"
 
 [operators.gdal_source]
 raster_data_root_path = "operators/test-data/raster"

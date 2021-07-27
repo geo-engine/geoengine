@@ -317,3 +317,165 @@ impl
         Err(geoengine_operators::error::Error::NotYetImplemented)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use bb8_postgres::bb8::ManageConnection;
+    use rand::RngCore;
+
+    use crate::{
+        datasets::listing::OrderBy,
+        util::{config, user_input::UserInput},
+    };
+    use std::{fs::File, io::Read, str::FromStr};
+
+    use super::*;
+
+    /// Create a schema with test tables and return the schema name
+    async fn create_test_data(db_config: &config::Postgres) -> String {
+        let mut pg_config = Config::new();
+        pg_config
+            .user(&db_config.user)
+            .password(&db_config.password)
+            .host(&db_config.host)
+            .dbname(&db_config.database);
+        let pg_mgr = PostgresConnectionManager::new(pg_config, NoTls);
+        let conn = pg_mgr.connect().await.unwrap();
+
+        let mut sql = String::new();
+        File::open("test-data/gfbio/test_data.sql")
+            .unwrap()
+            .read_to_string(&mut sql)
+            .unwrap();
+
+        let schema = format!("geoengine_test_{}", rand::thread_rng().next_u64());
+
+        conn.batch_execute(&format!(
+            "CREATE SCHEMA {schema}; 
+            SET SEARCH_PATH TO {schema}, public;
+            {sql}",
+            schema = schema,
+            sql = sql
+        ))
+        .await
+        .unwrap();
+
+        schema
+    }
+
+    /// Drop the schema created by `create_test_data`
+    async fn cleanup_test_data(db_config: &config::Postgres, schema: String) {
+        let mut pg_config = Config::new();
+        pg_config
+            .user(&db_config.user)
+            .password(&db_config.password)
+            .host(&db_config.host)
+            .dbname(&db_config.database);
+        let pg_mgr = PostgresConnectionManager::new(pg_config, NoTls);
+        let conn = pg_mgr.connect().await.unwrap();
+
+        conn.batch_execute(&format!("DROP SCHEMA {} CASCADE;", schema))
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn it_lists() {
+        let db_config = config::get_config_element::<config::Postgres>().unwrap();
+
+        let test_schema = create_test_data(&db_config).await;
+
+        let provider = Box::new(GfbioDataProviderDefinition {
+            id: DatasetProviderId::from_str("d29f2430-5c5e-4748-a2fa-6423aa2af42d").unwrap(),
+            name: "Gfbio".to_string(),
+            db_config: DatabaseConnectionConfig {
+                host: db_config.host.clone(),
+                port: db_config.port,
+                database: db_config.database.clone(),
+                schema: test_schema.clone(),
+                user: db_config.user.clone(),
+                password: db_config.password.clone(),
+            },
+        })
+        .initialize()
+        .await
+        .unwrap();
+
+        let listing = provider
+            .list(
+                DatasetListOptions {
+                    filter: None,
+                    order: OrderBy::NameAsc,
+                    offset: 0,
+                    limit: 10,
+                }
+                .validated()
+                .unwrap(),
+            )
+            .await;
+
+        cleanup_test_data(&db_config, test_schema).await;
+
+        let listing = listing.unwrap();
+
+        assert_eq!(
+            listing,
+            vec![DatasetListing {
+                id: DatasetId::External(ExternalDatasetId {
+                    provider_id: DatasetProviderId::from_str(
+                        "d29f2430-5c5e-4748-a2fa-6423aa2af42d"
+                    )
+                    .unwrap(),
+                    dataset_id: "1".to_string(),
+                }),
+                name: "Example Title".to_string(),
+                description: "".to_string(),
+                tags: vec![],
+                source_operator: "OgrSource".to_string(),
+                result_descriptor: TypedResultDescriptor::Vector(VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: [
+                        ("/DataSets/DataSet/Units/Unit/Gathering/Agents/GatheringAgent/AgentText".to_owned(), FeatureDataType::Text),
+                        ("/DataSets/DataSet/Units/Unit/SourceID".to_owned(), FeatureDataType::Text),
+                        ("/DataSets/DataSet/Metadata/IPRStatements/Citations/Citation/Text".to_owned(), FeatureDataType::Text),
+                        ("/DataSets/DataSet/ContentContacts/ContentContact/Email".to_owned(), FeatureDataType::Text),
+                        ("/DataSets/DataSet/Units/Unit/Gathering/DateTime/ISODateTimeBegin".to_owned(), FeatureDataType::Text),
+                        ("/DataSets/DataSet/Units/Unit/Identifications/Identification/Result/TaxonIdentified/ScientificName/FullScientificNameString".to_owned(), FeatureDataType::Text),
+                        ("/DataSets/DataSet/Units/Unit/Identifications/Identification/Result/TaxonIdentified/HigherTaxa/HigherTaxon/HigherTaxonRank".to_owned(), FeatureDataType::Text),
+                        ("/DataSets/DataSet/Metadata/Description/Representation/Details".to_owned(), FeatureDataType::Text),
+                        ("/DataSets/DataSet/Metadata/IPRStatements/Licenses/License/URI".to_owned(), FeatureDataType::Text),
+                        ("/DataSets/DataSet/Metadata/RevisionData/DateModified".to_owned(), FeatureDataType::Text),
+                        ("/DataSets/DataSet/DatasetGUID".to_owned(), FeatureDataType::Text),
+                        ("/DataSets/DataSet/Units/Unit/MultiMediaObjects/MultiMediaObject/Creator".to_owned(), FeatureDataType::Text),
+                        ("/DataSets/DataSet/Units/Unit/MultiMediaObjects/MultiMediaObject/IPR/Licenses/License/Text".to_owned(), FeatureDataType::Text),
+                        ("/DataSets/DataSet/Metadata/IPRStatements/Licenses/License/Text".to_owned(), FeatureDataType::Text),
+                        ("/DataSets/DataSet/Units/Unit/Gathering/SiteCoordinateSets/SiteCoordinates/CoordinatesLatLong/SpatialDatum".to_owned(), FeatureDataType::Text),
+                        ("/DataSets/DataSet/Units/Unit/MultiMediaObjects/MultiMediaObject/FileURI".to_owned(), FeatureDataType::Text),
+                        ("/DataSets/DataSet/ContentContacts/ContentContact/Name".to_owned(), FeatureDataType::Text),
+                        ("/DataSets/DataSet/Units/Unit/Gathering/Country/Name".to_owned(), FeatureDataType::Text),
+                        ("/DataSets/DataSet/Units/Unit/SourceInstitutionID".to_owned(), FeatureDataType::Text),
+                        ("/DataSets/DataSet/Units/Unit/MultiMediaObjects/MultiMediaObject/IPR/Licenses/License/URI".to_owned(), FeatureDataType::Text),
+                        ("/DataSets/DataSet/Units/Unit/MultiMediaObjects/MultiMediaObject/Format".to_owned(), FeatureDataType::Text),
+                        ("/DataSets/DataSet/Units/Unit/RecordURI".to_owned(), FeatureDataType::Text),
+                        ("/DataSets/DataSet/Metadata/IPRStatements/Licenses/License/Details".to_owned(), FeatureDataType::Text),
+                        ("/DataSets/DataSet/Units/Unit/Identifications/Identification/Result/TaxonIdentified/HigherTaxa/HigherTaxon/HigherTaxonName".to_owned(), FeatureDataType::Text),
+                        ("/DataSets/DataSet/Units/Unit/RecordBasis".to_owned(), FeatureDataType::Text),
+                        ("/DataSets/DataSet/Units/Unit/DateLastEdited".to_owned(), FeatureDataType::Text),
+                        ("/DataSets/DataSet/Units/Unit/Gathering/Country/ISO3166Code".to_owned(), FeatureDataType::Text),
+                        ("/DataSets/DataSet/Units/Unit/MultiMediaObjects/MultiMediaObject/IPR/Licenses/License/Details".to_owned(), FeatureDataType::Text),
+                        ("/DataSets/DataSet/TechnicalContacts/TechnicalContact/Name".to_owned(), FeatureDataType::Text),
+                        ("/DataSets/DataSet/Metadata/Description/Representation/URI".to_owned(), FeatureDataType::Text),
+                        ("/DataSets/DataSet/TechnicalContacts/TechnicalContact/Email".to_owned(), FeatureDataType::Text),
+                        ("/DataSets/DataSet/Units/Unit/UnitID".to_owned(), FeatureDataType::Text),
+                        ("/DataSets/DataSet/Metadata/Description/Representation/Title".to_owned(), FeatureDataType::Text),
+                        ("/DataSets/DataSet/Units/Unit/Gathering/LocalityText".to_owned(), FeatureDataType::Text)]
+                        .iter()
+                        .cloned()
+                        .collect(),
+                }),
+                symbology: None,
+            }]
+        );
+    }
+}
