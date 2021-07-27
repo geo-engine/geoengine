@@ -492,13 +492,23 @@ where
         // TODO: add OGR time filter if forced
         let dataset = Self::open_gdal_dataset(dataset_information)?;
 
-        let mut use_ogr_spatial_filter = false;
+        let mut use_ogr_spatial_filter = dataset_information.force_ogr_spatial_filter;
 
         let mut features_provider = if let Some(sql) = dataset_information.sql_query.as_ref() {
-            // TODO: spatial filter
+            let spatial_filter = if use_ogr_spatial_filter {
+                Some(
+                    query_rectangle
+                        .spatial_bounds
+                        .try_into()
+                        .context(error::DataType)?,
+                )
+            } else {
+                None
+            };
+
             FeaturesProvider::ResultSet(
                 dataset
-                    .execute_sql(sql, None, Dialect::DEFAULT)?
+                    .execute_sql(sql, spatial_filter.as_ref(), Dialect::DEFAULT)?
                     .ok_or(error::Error::OgrSqlQuery)?,
             )
         } else {
