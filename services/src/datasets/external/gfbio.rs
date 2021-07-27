@@ -214,7 +214,6 @@ impl DatasetProvider for GfbioDataProvider {
 
     async fn load(
         &self,
-        // _session: S,
         _dataset: &geoengine_datatypes::dataset::DatasetId,
     ) -> crate::error::Result<crate::datasets::storage::Dataset> {
         Err(error::Error::NotYetImplemented)
