@@ -158,9 +158,7 @@ impl GfbioDataProvider {
             });
 
         format!(
-            r#"SELECT surrogate_key, ST_MakePoint("{lon}", "{lat}") AS geom {columns} FROM {schema}.abcd_units WHERE surrogate_key = {surrogate}"#,
-            lon = Self::COLUMN_NAME_LONGITUDE,
-            lat = Self::COLUMN_NAME_LATITUDE,
+            r#"SELECT surrogate_key, geom {columns} FROM {schema}.abcd_units WHERE surrogate_key = {surrogate}"#,
             columns = columns,
             schema = self.db_config.schema,
             surrogate = surrogate_key
@@ -264,7 +262,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
                     text: self.column_name_to_hash.keys().cloned().collect(),
                 }),
                 force_ogr_time_filter: false,
-                force_ogr_spatial_filter: false,
+                force_ogr_spatial_filter: true,
                 on_error: OgrSourceErrorSpec::Ignore,
                 provenance: None,
                 sql_query: Some(self.build_query(surrogate_key)),
