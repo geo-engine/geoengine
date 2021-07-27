@@ -459,7 +459,7 @@ mod tests {
             .await;
 
         assert_eq!(res.status(), 200);
-        let body = std::str::from_utf8(&res.body()).unwrap();
+        let body = std::str::from_utf8(res.body()).unwrap();
         assert_eq!(
             format!(
                 r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -544,7 +544,7 @@ mod tests {
             .await;
 
         assert_eq!(res.status(), 200);
-        let body = std::str::from_utf8(&res.body()).unwrap();
+        let body = std::str::from_utf8(res.body()).unwrap();
         eprintln!("{}", body);
         assert_eq!(
             format!(

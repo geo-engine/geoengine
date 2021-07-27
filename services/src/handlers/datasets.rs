@@ -288,13 +288,13 @@ fn adjust_user_path_to_upload_path(meta: &mut MetaDataDefinition, upload: &Uploa
     match meta {
         crate::datasets::storage::MetaDataDefinition::MockMetaData(_) => {}
         crate::datasets::storage::MetaDataDefinition::OgrMetaData(m) => {
-            m.loading_info.file_name = upload.adjust_file_path(&m.loading_info.file_name)?
+            m.loading_info.file_name = upload.adjust_file_path(&m.loading_info.file_name)?;
         }
         crate::datasets::storage::MetaDataDefinition::GdalMetaDataRegular(m) => {
-            m.params.file_path = upload.adjust_file_path(&m.params.file_path)?
+            m.params.file_path = upload.adjust_file_path(&m.params.file_path)?;
         }
         crate::datasets::storage::MetaDataDefinition::GdalStatic(m) => {
-            m.params.file_path = upload.adjust_file_path(&m.params.file_path)?
+            m.params.file_path = upload.adjust_file_path(&m.params.file_path)?;
         }
     }
     Ok(())
@@ -426,7 +426,7 @@ fn suggest_main_file(upload: &Upload) -> Option<String> {
 }
 
 fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDefinition> {
-    let dataset = gdal_open_dataset(&main_file_path).context(error::Operator)?;
+    let dataset = gdal_open_dataset(main_file_path).context(error::Operator)?;
     let layer = {
         if let Ok(layer) = dataset.layer(0) {
             layer
@@ -445,7 +445,7 @@ fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDef
 
     if geometry.data_type == VectorDataType::Data {
         // help Gdal detecting geometry
-        if let Some(auto_detect) = gdal_autodetect(&main_file_path, &columns_vecs.text) {
+        if let Some(auto_detect) = gdal_autodetect(main_file_path, &columns_vecs.text) {
             geometry = detect_vector_geometry(&auto_detect.dataset);
             if geometry.data_type != VectorDataType::Data {
                 x = auto_detect.x;
@@ -1062,7 +1062,7 @@ mod tests {
                 },
                 phantom: Default::default(),
             })
-        )
+        );
     }
 
     #[test]
@@ -1113,7 +1113,7 @@ mod tests {
                 },
                 phantom: Default::default()
             })
-        )
+        );
     }
 
     #[test]
@@ -1162,7 +1162,7 @@ mod tests {
                 },
                 phantom: Default::default(),
             })
-        )
+        );
     }
 
     #[test]
@@ -1211,7 +1211,7 @@ mod tests {
                 },
                 phantom: Default::default(),
             })
-        )
+        );
     }
 
     #[test]
@@ -1267,7 +1267,7 @@ mod tests {
                 },
                 phantom: Default::default()
             })
-        )
+        );
     }
 
     #[test]
@@ -1322,7 +1322,7 @@ mod tests {
                 },
                 phantom: Default::default()
             })
-        )
+        );
     }
 
     #[tokio::test]

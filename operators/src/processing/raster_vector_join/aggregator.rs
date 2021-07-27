@@ -51,13 +51,13 @@ impl TypedAggregator {
     {
         match self {
             TypedAggregator::FirstValueFloat(aggregator) => {
-                aggregator.add_value(feature_idx, pixel, weight)
+                aggregator.add_value(feature_idx, pixel, weight);
             }
             TypedAggregator::FirstValueInt(aggregator) => {
-                aggregator.add_value(feature_idx, pixel, weight)
+                aggregator.add_value(feature_idx, pixel, weight);
             }
             TypedAggregator::MeanNumber(aggregator) => {
-                aggregator.add_value(feature_idx, pixel, weight)
+                aggregator.add_value(feature_idx, pixel, weight);
             }
         }
     }

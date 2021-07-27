@@ -25,8 +25,7 @@ impl<'l> IntoGeometryIterator<'l> for MultiPointCollection {
 
     fn geometries(&'l self) -> Self::GeometryIterator {
         let geometry_column: &ListArray = downcast_array(
-            &self
-                .table
+            self.table
                 .column_by_name(MultiPointCollection::GEOMETRY_COLUMN_NAME)
                 .expect("Column must exist since it is in the metadata"),
         );
@@ -104,8 +103,7 @@ impl<'l> GeometryRandomAccess<'l> for MultiPointCollection {
 
     fn geometry_at(&'l self, index: usize) -> Option<Self::GeometryType> {
         let geometry_column: &ListArray = downcast_array(
-            &self
-                .table
+            self.table
                 .column_by_name(MultiPointCollection::GEOMETRY_COLUMN_NAME)
                 .expect("Column must exist since it is in the metadata"),
         );
@@ -1199,7 +1197,7 @@ mod tests {
 
         let proj_pc = pc.reproject(&projector).unwrap();
 
-        assert_eq!(proj_pc, pc_expected)
+        assert_eq!(proj_pc, pc_expected);
     }
 
     #[test]

@@ -169,7 +169,7 @@ mod test {
         let id = project_db.create(&session, create.clone()).await.unwrap();
         assert!(project_db.load(&session, id).await.is_ok());
 
-        assert!(project_db.load(&session, ProjectId::new()).await.is_err())
+        assert!(project_db.load(&session, ProjectId::new()).await.is_err());
     }
 
     #[tokio::test]
@@ -189,7 +189,7 @@ mod test {
 
         let id = project_db.create(&session, create).await.unwrap();
 
-        assert!(project_db.load(&session, id).await.is_ok())
+        assert!(project_db.load(&session, id).await.is_ok());
     }
 
     #[tokio::test]
