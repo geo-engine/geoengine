@@ -3,13 +3,13 @@ use async_trait::async_trait;
 use geoengine_datatypes::dataset::DatasetId;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct ProvenanceOutput {
     pub dataset: DatasetId,
     pub provenance: Option<Provenance>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
 pub struct Provenance {
     pub citation: String,
     pub license: String,
