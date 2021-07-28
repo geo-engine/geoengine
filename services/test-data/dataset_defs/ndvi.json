@@ -273,6 +273,11 @@
         "defaultColor": [0, 0, 0, 0]
       },
       "opacity": 1.0
+    },
+    "provenance": {
+      "citation": "Sample Citation",
+      "license": "Sample License",
+      "uri": "http://example.org/"
     }
   },
   "metaData": {
@@ -297,7 +302,7 @@
         "yPixelSize": -0.1
       },
       "width": 3600,
-      "height": 1800, 
+      "height": 1800,
       "fileNotFoundHandling": "NoData",
       "noDataValue": 0.0
     },

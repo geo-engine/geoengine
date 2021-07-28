@@ -112,7 +112,7 @@ impl UploadDb<UserSession> for PostgresDatasetDb {
 
 #[async_trait]
 impl ProvenanceProvider for PostgresDatasetDb {
-    async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {
+    async fn provenance(&self, _dataset: &DatasetId) -> Result<ProvenanceOutput> {
         todo!()
     }
 }

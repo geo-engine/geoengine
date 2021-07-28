@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::datasets::provenance::ProvenanceProvider;
+use crate::datasets::provenance::{ProvenanceOutput, ProvenanceProvider};
 use crate::error::Error;
 use crate::util::parsing::string_or_string_array;
 use crate::{datasets::listing::DatasetListOptions, error::Result};
@@ -179,11 +179,11 @@ impl DatasetProvider for Nature40DataProvider {
 
 #[async_trait]
 impl ProvenanceProvider for Nature40DataProvider {
-    async fn provenance(
-        &self,
-        dataset: &DatasetId,
-    ) -> Result<crate::datasets::provenance::ProvenanceOutput> {
-        todo!()
+    async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {
+        Ok(ProvenanceOutput {
+            dataset: dataset.clone(),
+            provenance: None,
+        })
     }
 }
 

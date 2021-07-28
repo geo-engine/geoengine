@@ -1,3 +1,4 @@
+use crate::contexts::MockableSession;
 use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider, OrderBy};
 use crate::datasets::provenance::{ProvenanceOutput, ProvenanceProvider};
 use crate::datasets::storage::{
@@ -319,7 +320,23 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 #[async_trait]
 impl ProvenanceProvider for ProHashMapDatasetDb {
     async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {
-        todo!()
+        match dataset {
+            DatasetId::Internal { dataset_id: _ } => self
+                .datasets
+                .iter()
+                .find(|d| d.id == *dataset)
+                .map(|d| ProvenanceOutput {
+                    dataset: d.id.clone(),
+                    provenance: d.provenance.clone(),
+                })
+                .ok_or(error::Error::UnknownDatasetId),
+            DatasetId::External(id) => {
+                self.dataset_provider(&UserSession::mock(), id.provider_id) // TODO: get correct session into dataset provider
+                    .await?
+                    .provenance(dataset)
+                    .await
+            }
+        }
     }
 }
 

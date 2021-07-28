@@ -233,7 +233,8 @@ mod tests {
     use crate::contexts::{InMemoryContext, Session, SimpleContext};
     use crate::handlers::{handle_rejection, ErrorResponse};
     use crate::util::tests::{
-        check_allowed_http_methods, check_allowed_http_methods2, register_ndvi_workflow_helper,
+        add_ndvi_to_datasets, check_allowed_http_methods, check_allowed_http_methods2,
+        register_ndvi_workflow_helper,
     };
     use crate::util::IdResponse;
     use crate::workflows::registry::WorkflowRegistry;
@@ -241,13 +242,14 @@ mod tests {
     use geoengine_datatypes::primitives::{FeatureData, Measurement, MultiPoint, TimeInterval};
     use geoengine_datatypes::raster::RasterDataType;
     use geoengine_datatypes::spatial_reference::SpatialReference;
-    use geoengine_operators::engine::{MultipleRasterSources, PlotOperator};
+    use geoengine_operators::engine::{MultipleRasterSources, PlotOperator, TypedOperator};
     use geoengine_operators::engine::{RasterOperator, RasterResultDescriptor, VectorOperator};
     use geoengine_operators::mock::{
         MockFeatureCollectionSource, MockPointSource, MockPointSourceParams, MockRasterSource,
         MockRasterSourceParams,
     };
     use geoengine_operators::plot::{Statistics, StatisticsParams};
+    use geoengine_operators::source::{GdalSource, GdalSourceParameters};
     use serde_json::json;
     use warp::http::Response;
     use warp::hyper::body::Bytes;
@@ -663,6 +665,61 @@ mod tests {
             serde_json::json!({
                 "type": "plot",
             })
+        );
+    }
+
+    #[tokio::test]
+    async fn provenance() {
+        let ctx = InMemoryContext::default();
+
+        let session_id = ctx.default_session_ref().await.id();
+
+        let dataset = add_ndvi_to_datasets(&ctx).await;
+
+        let workflow = Workflow {
+            operator: TypedOperator::Raster(
+                GdalSource {
+                    params: GdalSourceParameters {
+                        dataset: dataset.clone(),
+                    },
+                }
+                .boxed(),
+            ),
+        };
+
+        let id = ctx
+            .workflow_registry()
+            .write()
+            .await
+            .register(workflow.clone())
+            .await
+            .unwrap();
+
+        let res = warp::test::request()
+            .method("GET")
+            .path(&format!("/workflow/{}/provenance", id.to_string()))
+            .header(
+                "Authorization",
+                format!("Bearer {}", session_id.to_string()),
+            )
+            .reply(&get_workflow_provenance_handler(ctx))
+            .await;
+
+        assert_eq!(res.status(), 200, "{:?}", res.body());
+
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(res.body()).unwrap(),
+            serde_json::json!([{
+                "dataset": {
+                    "type": "internal",
+                    "datasetId": dataset.internal().unwrap().to_string()
+                },
+                "provenance": {
+                    "citation": "Sample Citation",
+                    "license": "Sample License",
+                    "uri": "http://example.org/"
+                }
+            }])
         );
     }
 }

@@ -97,7 +97,10 @@ impl DatasetProvider for MockExternalDataProvider {
 #[async_trait]
 impl ProvenanceProvider for MockExternalDataProvider {
     async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {
-        todo!()
+        Ok(ProvenanceOutput {
+            dataset: dataset.clone(),
+            provenance: None,
+        })
     }
 }
 

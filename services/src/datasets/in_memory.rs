@@ -333,7 +333,7 @@ impl ProvenanceProvider for HashMapDatasetDb {
                 })
                 .ok_or(error::Error::UnknownDatasetId),
             DatasetId::External(id) => {
-                self.dataset_provider(&SimpleSession::mock(), id.provider_id) // TODO: get correct session into provenance provider
+                self.dataset_provider(&SimpleSession::mock(), id.provider_id) // TODO: get correct session into dataset provider
                     .await?
                     .provenance(dataset)
                     .await

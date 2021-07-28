@@ -225,7 +225,10 @@ impl DatasetProvider for SentinelS2L2aCogsDataProvider {
 #[async_trait]
 impl ProvenanceProvider for SentinelS2L2aCogsDataProvider {
     async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {
-        todo!()
+        Ok(ProvenanceOutput {
+            dataset: dataset.clone(),
+            provenance: None, // TODO
+        })
     }
 }
 
