@@ -315,6 +315,7 @@ impl SentinelS2L2aCogsMetaData {
                 file_not_found_handling: geoengine_operators::source::FileNotFoundHandling::NoData,
                 no_data_value: self.band.no_data_value,
                 properties_mapping: None,
+                gdal_open_options: None,
             },
         })
     }
@@ -594,6 +595,7 @@ mod tests {
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value: Some(0.),
                 properties_mapping: None,
+                gdal_open_options: None,
             },
         }];
 
