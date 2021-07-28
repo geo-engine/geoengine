@@ -187,6 +187,8 @@ pub enum Error {
     Logger {
         source: flexi_logger::FlexiLoggerError,
     },
+
+    TestFail,
 }
 
 impl Reject for Error {}
