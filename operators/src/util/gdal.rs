@@ -1,6 +1,9 @@
-use std::path::Path;
+use std::{
+    convert::TryInto,
+    path::{Path, PathBuf},
+};
 
-use gdal::{Dataset, DatasetOptions};
+use gdal::{raster::GDALDataType, Dataset, DatasetOptions};
 use geoengine_datatypes::{
     dataset::{DatasetId, InternalDatasetId},
     primitives::{Measurement, TimeGranularity, TimeInstance, TimeStep},
@@ -12,7 +15,7 @@ use snafu::ResultExt;
 
 use crate::{
     engine::{MockExecutionContext, RasterResultDescriptor},
-    error,
+    error::{self, Error},
     source::{FileNotFoundHandling, GdalDatasetParameters, GdalMetaDataRegular},
     util::Result,
 };
@@ -60,6 +63,7 @@ pub fn create_ndvi_meta_data() -> GdalMetaDataRegular {
             file_not_found_handling: FileNotFoundHandling::NoData,
             no_data_value,
             properties_mapping: None,
+            gdal_open_options: None,
         },
         result_descriptor: RasterResultDescriptor {
             data_type: RasterDataType::U8,
@@ -87,4 +91,62 @@ pub fn gdal_open_dataset(path: &Path) -> Result<Dataset> {
 /// Other crates should use this method for Gdal Dataset access as a workaround to avoid strange errors.
 pub fn gdal_open_dataset_ex(path: &Path, dataset_options: DatasetOptions) -> Result<Dataset> {
     Dataset::open_ex(path, dataset_options).context(error::Gdal)
+}
+
+/// Create a `RasterResultDescriptor` for the given `band` and `dataset`. If the raster data type is
+/// unknown, the default is F64 unless it is otherwise specified by `default_data_type`. If the data
+/// type is a complex floating point type, an error is returned
+pub fn raster_descriptor_from_dataset(
+    dataset: &Dataset,
+    band: isize,
+    default_data_type: Option<RasterDataType>,
+) -> Result<RasterResultDescriptor> {
+    let rasterband = &dataset.rasterband(band)?;
+
+    let spatial_ref: SpatialReference =
+        dataset.spatial_ref()?.try_into().context(error::DataType)?;
+
+    let data_type = match rasterband.band_type() {
+        GDALDataType::GDT_Byte => RasterDataType::U8,
+        GDALDataType::GDT_UInt16 => RasterDataType::U16,
+        GDALDataType::GDT_Int16 => RasterDataType::I16,
+        GDALDataType::GDT_UInt32 => RasterDataType::U32,
+        GDALDataType::GDT_Int32 => RasterDataType::I32,
+        GDALDataType::GDT_Float32 => RasterDataType::F32,
+        GDALDataType::GDT_Float64 => RasterDataType::F64,
+        GDALDataType::GDT_Unknown => default_data_type.unwrap_or(RasterDataType::F64),
+        _ => return Err(Error::GdalRasterDataTypeNotSupported),
+    };
+
+    Ok(RasterResultDescriptor {
+        data_type,
+        spatial_reference: spatial_ref.into(),
+        measurement: Measurement::Unitless,
+        no_data_value: rasterband.no_data_value(),
+    })
+}
+
+/// Create `GdalDatasetParameters` from the infos in the given `dataset` and its `band`.
+/// `path` is the location of the actual data, `band_out` allows optionally specifying a different
+/// band in the resulting parameters, otherwise `band` is used.
+pub fn gdal_parameters_from_dataset(
+    dataset: &Dataset,
+    band: usize,
+    path: &Path,
+    band_out: Option<usize>,
+    open_options: Option<Vec<String>>,
+) -> Result<GdalDatasetParameters> {
+    let rasterband = &dataset.rasterband(band as isize)?;
+
+    Ok(GdalDatasetParameters {
+        file_path: PathBuf::from(path),
+        rasterband_channel: band_out.unwrap_or(band),
+        geo_transform: dataset.geo_transform().context(error::Gdal)?.into(),
+        file_not_found_handling: FileNotFoundHandling::Error,
+        no_data_value: rasterband.no_data_value(),
+        properties_mapping: None,
+        width: rasterband.x_size(),
+        height: rasterband.y_size(),
+        gdal_open_options: open_options,
+    })
 }
