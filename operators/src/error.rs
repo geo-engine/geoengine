@@ -213,6 +213,8 @@ pub enum Error {
     FeatureDataLengthMismatch,
 
     OgrSqlQuery,
+
+    GdalRasterDataTypeNotSupported,
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {
