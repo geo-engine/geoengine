@@ -1,4 +1,5 @@
 use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider};
+use crate::datasets::provenance::{ProvenanceOutput, ProvenanceProvider};
 use crate::datasets::storage::DatasetProviderDefinition;
 use crate::error::{self, Result};
 use crate::projects::{RasterSymbology, Symbology};
@@ -218,6 +219,13 @@ impl DatasetProvider for SentinelS2L2aCogsDataProvider {
         _dataset: &geoengine_datatypes::dataset::DatasetId,
     ) -> crate::error::Result<crate::datasets::storage::Dataset> {
         Err(error::Error::NotYetImplemented)
+    }
+}
+
+#[async_trait]
+impl ProvenanceProvider for SentinelS2L2aCogsDataProvider {
+    async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {
+        todo!()
     }
 }
 

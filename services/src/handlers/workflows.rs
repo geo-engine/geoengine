@@ -1,10 +1,13 @@
+use crate::datasets::provenance::ProvenanceProvider;
 use crate::error;
+use crate::error::Result;
 use crate::handlers::{authenticate, Context};
 use crate::util::IdResponse;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
+use futures::future::join_all;
 use geoengine_operators::call_on_typed_operator;
-use geoengine_operators::engine::TypedResultDescriptor;
+use geoengine_operators::engine::{OperatorDatasets, TypedResultDescriptor};
 use snafu::ResultExt;
 use uuid::Uuid;
 use warp::reply::Reply;
@@ -169,6 +172,59 @@ async fn get_workflow_metadata<C: Context>(
     );
 
     Ok(warp::reply::json(&result_descriptor))
+}
+
+/// Gets the provenance of all datasets used in a workflow.
+///
+/// # Example
+///
+/// ```text
+/// GET /workflow/cee25e8c-18a0-5f1b-a504-0bc30de21e06/provenance
+/// Authorization: Bearer e9da345c-b1df-464b-901c-0335a0419227
+/// ```
+/// Response:
+/// ```text
+/// {
+///   "id": {
+///     "type": "internal",
+///     "id": "846a823a-6859-4b94-ab0a-c1de80f593d8"
+///   }
+///   "citation": "Author, Dataset Tile",
+///   "license": "Some license"
+///   "uri": "http://example.org/"
+/// }
+/// ```
+pub(crate) fn get_workflow_provenance_handler<C: Context>(
+    ctx: C,
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
+    warp::get()
+        .and(warp::path!("workflow" / Uuid / "provenance"))
+        .and(authenticate(ctx.clone()))
+        .and(warp::any().map(move || ctx.clone()))
+        .and_then(get_workflow_provenance)
+}
+
+// TODO: move into handler once async closures are available?
+async fn get_workflow_provenance<C: Context>(
+    id: Uuid,
+    _session: C::Session,
+    ctx: C,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let workflow = ctx
+        .workflow_registry_ref()
+        .await
+        .load(&WorkflowId(id))
+        .await?;
+
+    let datasets = workflow.operator.datasets();
+
+    let db = ctx.dataset_db_ref().await;
+
+    let provenance: Vec<_> = datasets.iter().map(|id| db.provenance(id)).collect();
+
+    let provenance: Result<Vec<_>> = join_all(provenance).await.into_iter().collect();
+
+    Ok(warp::reply::json(&provenance?))
 }
 
 #[cfg(test)]

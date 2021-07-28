@@ -1,11 +1,12 @@
 use crate::call_generic_raster_processor;
 use crate::engine::{
-    InitializedRasterOperator, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-    SourceOperator, TypedRasterQueryProcessor,
+    InitializedRasterOperator, OperatorDatasets, RasterOperator, RasterQueryProcessor,
+    RasterResultDescriptor, SourceOperator, TypedRasterQueryProcessor,
 };
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::{stream, stream::StreamExt};
+use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::primitives::SpatialPartitioned;
 use geoengine_datatypes::raster::{FromPrimitive, Pixel, RasterTile2D};
 use num_traits::AsPrimitive;
@@ -64,6 +65,10 @@ pub struct MockRasterSourceParams {
 }
 
 pub type MockRasterSource = SourceOperator<MockRasterSourceParams>;
+
+impl OperatorDatasets for MockRasterSource {
+    fn datasets_collect(&self, _datasets: &mut Vec<DatasetId>) {}
+}
 
 #[typetag::serde]
 #[async_trait]

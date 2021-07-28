@@ -1,3 +1,4 @@
+use crate::datasets::provenance::{ProvenanceOutput, ProvenanceProvider};
 use crate::datasets::storage::{
     AddDataset, Dataset, DatasetDb, DatasetProviderDb, DatasetProviderDefinition,
     DatasetProviderListOptions, DatasetProviderListing, DatasetStore, DatasetStorer,
@@ -105,6 +106,13 @@ impl UploadDb<UserSession> for PostgresDatasetDb {
     }
 
     async fn create_upload(&mut self, _session: &UserSession, _upload: Upload) -> Result<()> {
+        todo!()
+    }
+}
+
+#[async_trait]
+impl ProvenanceProvider for PostgresDatasetDb {
+    async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {
         todo!()
     }
 }

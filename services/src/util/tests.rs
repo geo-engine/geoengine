@@ -110,6 +110,7 @@ pub async fn add_ndvi_to_datasets(ctx: &InMemoryContext) -> DatasetId {
             description: "NDVI data from MODIS".to_string(),
             source_operator: "GdalSource".to_string(),
             symbology: None,
+            provenance: None,
         },
         meta_data: MetaDataDefinition::GdalMetaDataRegular(create_ndvi_meta_data()),
     };

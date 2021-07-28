@@ -1,4 +1,4 @@
-use crate::engine::{QueryContext, VectorQueryRectangle};
+use crate::engine::{OperatorDatasets, QueryContext, VectorQueryRectangle};
 use crate::{
     engine::{
         ExecutionContext, InitializedVectorOperator, SourceOperator, TypedVectorQueryProcessor,
@@ -9,6 +9,7 @@ use crate::{
 use async_trait::async_trait;
 use futures::stream::{self, BoxStream, StreamExt};
 use geoengine_datatypes::collections::VectorDataType;
+use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::{
     collections::MultiPointCollection,
     primitives::{Coordinate2D, TimeInterval},
@@ -49,6 +50,10 @@ pub struct MockPointSourceParams {
 }
 
 pub type MockPointSource = SourceOperator<MockPointSourceParams>;
+
+impl OperatorDatasets for MockPointSource {
+    fn datasets_collect(&self, _datasets: &mut Vec<DatasetId>) {}
+}
 
 #[typetag::serde]
 #[async_trait]

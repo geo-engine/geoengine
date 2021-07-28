@@ -1,12 +1,14 @@
 use crate::engine::{
-    ExecutionContext, InitializedVectorOperator, ResultDescriptor, SourceOperator,
-    TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+    ExecutionContext, InitializedVectorOperator, OperatorDatasets, ResultDescriptor,
+    SourceOperator, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
+    VectorResultDescriptor,
 };
 use crate::engine::{QueryContext, VectorQueryRectangle};
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::{self, BoxStream, StreamExt};
 use geoengine_datatypes::collections::{FeatureCollection, FeatureCollectionInfos};
+use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::primitives::{
     Geometry, MultiLineString, MultiPoint, MultiPolygon, NoGeometry,
 };
@@ -49,6 +51,13 @@ where
 }
 
 pub type MockFeatureCollectionSource<G> = SourceOperator<MockFeatureCollectionSourceParams<G>>;
+
+impl<G> OperatorDatasets for MockFeatureCollectionSource<G>
+where
+    G: Geometry + ArrowTyped,
+{
+    fn datasets_collect(&self, _datasets: &mut Vec<DatasetId>) {}
+}
 
 impl<G> MockFeatureCollectionSource<G>
 where
