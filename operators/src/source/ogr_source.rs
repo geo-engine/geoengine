@@ -1110,12 +1110,7 @@ mod tests {
                 },
                 "forceOgrTimeFilter": false,
                 "forceOgrSpatialFilter": false,
-                "onError": "ignore",
-                "provenance": {
-                    "citation": "Foo Bar",
-                    "license": "CC",
-                    "uri": "foo:bar"
-                }
+                "onError": "ignore"
             })
             .to_string()
         );

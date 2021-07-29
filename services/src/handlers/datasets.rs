@@ -1388,7 +1388,8 @@ mod tests {
                     "columns": {}
                 },
                 "sourceOperator": "OgrSource",
-                "symbology": null
+                "symbology": null,
+                "provenance": null,
             })
             .to_string()
         );
