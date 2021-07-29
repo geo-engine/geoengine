@@ -515,7 +515,8 @@ mod tests {
                 db_config: provider_db_config,
             })
             .initialize()
-            .await.map_err(|e| e.to_string())?;
+            .await
+            .map_err(|e| e.to_string())?;
 
             let meta: Box<
                 dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
@@ -527,7 +528,8 @@ mod tests {
                     .unwrap(),
                     dataset_id: "1".to_string(),
                 }))
-                .await.map_err(|e| e.to_string())?;
+                .await
+                .map_err(|e| e.to_string())?;
 
             let expected = VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint,
@@ -575,7 +577,8 @@ mod tests {
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::zero_point_one(),
                 })
-                .await.map_err(|e| e.to_string())?;
+                .await
+                .map_err(|e| e.to_string())?;
 
             loading_info
                 .columns
@@ -682,7 +685,8 @@ mod tests {
                 },
             })
             .initialize()
-            .await.map_err(|e| e.to_string())?;
+            .await
+            .map_err(|e| e.to_string())?;
 
             let meta: Box<
                 dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
@@ -694,7 +698,8 @@ mod tests {
                     .unwrap(),
                     dataset_id: "1".to_string(),
                 }))
-                .await.map_err(|e| e.to_string())?;
+                .await
+                .map_err(|e| e.to_string())?;
 
             let processor: OgrSourceProcessor<MultiPoint> = OgrSourceProcessor::new(meta);
 
@@ -708,7 +713,8 @@ mod tests {
 
             let result: Vec<_> = processor
                 .query(query_rectangle, &ctx)
-                .await.map_err(|e| e.to_string())?
+                .await
+                .map_err(|e| e.to_string())?
                 .collect()
                 .await;
 
