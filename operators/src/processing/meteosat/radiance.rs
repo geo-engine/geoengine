@@ -32,7 +32,7 @@ pub struct RadianceParams {}
 ///
 /// `p_new = offset + p_old * slope`
 ///
-/// Here, p_old and p_new refer to the old and new pixel values,
+/// Here, `p_old` and `p_new` refer to the old and new pixel values,
 /// while slope and offset are properties attached to the input
 /// raster.
 /// The exact names of the properties are:
@@ -281,16 +281,16 @@ mod tests {
         let result: Vec<Result<RasterTile2D<PixelOut>>> = result_stream.collect().await;
 
         assert_eq!(1, result.len());
-        assert_eq!(
-            result[0].as_ref().unwrap().grid_array,
-            Grid2D::new(
+        assert!(geoengine_datatypes::util::test::eq_with_no_data(
+            &result[0].as_ref().unwrap().grid_array,
+            &Grid2D::new(
                 [3, 2].into(),
                 vec![13.0, 15.0, 17.0, 19.0, 21.0, no_data_value_option.unwrap()],
                 no_data_value_option,
             )
             .unwrap()
             .into()
-        );
+        ));
     }
 
     #[tokio::test]
@@ -328,10 +328,10 @@ mod tests {
 
         let result: Vec<Result<RasterTile2D<PixelOut>>> = result_stream.collect().await;
 
-        assert_eq!(
-            result[0].as_ref().unwrap().grid_array,
-            EmptyGrid2D::new([3, 2].into(), no_data_value_option.unwrap(),).into()
-        );
+        assert!(geoengine_datatypes::util::test::eq_with_no_data(
+            &result[0].as_ref().unwrap().grid_array,
+            &EmptyGrid2D::new([3, 2].into(), no_data_value_option.unwrap(),).into()
+        ));
     }
 
     #[tokio::test]
