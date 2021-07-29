@@ -67,6 +67,10 @@ where
         handlers::plots::get_plot_handler(ctx.clone()),
         handlers::upload::upload_handler(ctx.clone()),
         handlers::spatial_references::get_spatial_reference_specification_handler(ctx.clone()),
+        #[cfg(feature = "odm")]
+        pro::handlers::drone_mapping::start_task_handler(ctx.clone()),
+        #[cfg(feature = "odm")]
+        pro::handlers::drone_mapping::dataset_from_drone_mapping_handler(ctx.clone()),
         serve_static_directory(static_files_dir)
     )
     .recover(handle_rejection);

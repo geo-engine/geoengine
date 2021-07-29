@@ -192,3 +192,12 @@ pub struct Wcs {
 impl ConfigElement for Wcs {
     const KEY: &'static str = "wcs";
 }
+
+#[derive(Debug, Deserialize)]
+pub struct Odm {
+    pub endpoint: String,
+}
+
+impl ConfigElement for Odm {
+    const KEY: &'static str = "odm";
+}

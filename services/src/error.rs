@@ -198,6 +198,11 @@ pub enum Error {
     Logger {
         source: flexi_logger::FlexiLoggerError,
     },
+
+    #[cfg(feature = "odm")]
+    DroneMapping {
+        reason: String,
+    },
 }
 
 impl Reject for Error {}
