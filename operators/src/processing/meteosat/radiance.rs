@@ -6,9 +6,10 @@ use crate::engine::{
 use crate::util::Result;
 use futures::stream::BoxStream;
 use futures::StreamExt;
-use geoengine_datatypes::primitives::SpatialPartition2D;
+use geoengine_datatypes::primitives::{Measurement, SpatialPartition2D};
 use geoengine_datatypes::raster::{
-    EmptyGrid, Grid2D, GridShapeAccess, Pixel, RasterDataType, RasterPropertiesKey, RasterTile2D,
+    EmptyGrid, Grid2D, GridShapeAccess, NoDataValue, Pixel, RasterDataType, RasterPropertiesKey,
+    RasterTile2D,
 };
 use num_traits::AsPrimitive;
 use std::convert::TryFrom;
@@ -16,30 +17,33 @@ use std::convert::TryFrom;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
-//TODO Check
+// Output type is always f32
 type PixelOut = f32;
 use RasterDataType::F32 as RasterOut;
 use TypedRasterQueryProcessor::F32 as QueryProcessorOut;
-
-//TODO: For NAN the tests fail due to == comparisons
-const OUT_NO_DATA_VALUE: PixelOut = PixelOut::NEG_INFINITY;
+const OUT_NO_DATA_VALUE: PixelOut = PixelOut::NAN;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 #[serde(rename_all = "camelCase")]
 pub struct RadianceParams {}
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
-pub struct RadianceState {
-    //TODO: Could be removed, if no data is a constant
-    out_no_data_value: PixelOut,
-}
-
+/// The radiance operator converts a raw MSG raster into radiance.
+/// This is done by applying the following formula to every pixel:
+///
+/// `p_new = offset + p_old * slope`
+///
+/// Here, p_old and p_new refer to the old and new pixel values,
+/// while slope and offset are properties attached to the input
+/// raster.
+/// The exact names of the properties are:
+///
+/// - offset: `msg.CalibrationOffset`
+/// - slope: `msg.CalibrationSlope`
 pub type Radiance = Operator<RadianceParams, SingleRasterSource>;
 
 pub struct InitializedRadiance {
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
-    state: RadianceState,
 }
 
 #[typetag::serde]
@@ -56,19 +60,16 @@ impl RasterOperator for Radiance {
         let out_desc = RasterResultDescriptor {
             spatial_reference: in_desc.spatial_reference,
             data_type: RasterOut,
-            // TODO: Is this correct?
-            measurement: in_desc.measurement.clone(),
-            no_data_value: in_desc.no_data_value.map(|_| f64::from(OUT_NO_DATA_VALUE)),
-        };
-
-        let state = RadianceState {
-            out_no_data_value: OUT_NO_DATA_VALUE,
+            measurement: Measurement::Continuous {
+                measurement: "radiance".into(),
+                unit: Some("W·m^(-2)·sr^(-1)·cm^(-1)".into()),
+            },
+            no_data_value: Some(f64::from(OUT_NO_DATA_VALUE)),
         };
 
         let initialized_operator = InitializedRadiance {
             result_descriptor: out_desc,
             source: input,
-            state,
         };
 
         Ok(initialized_operator.boxed())
@@ -83,40 +84,37 @@ impl InitializedRasterOperator for InitializedRadiance {
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         let q = self.source.query_processor()?;
 
-        let s = self.state;
-
-        // TODO: Any type of input is mapped to f32 output. Correct?
         Ok(match q {
-            TypedRasterQueryProcessor::U8(p) => QueryProcessorOut(Box::new(
-                RadianceProcessor::new(p, s.out_no_data_value.as_()),
-            )),
-            TypedRasterQueryProcessor::U16(p) => QueryProcessorOut(Box::new(
-                RadianceProcessor::new(p, s.out_no_data_value.as_()),
-            )),
-            TypedRasterQueryProcessor::U32(p) => QueryProcessorOut(Box::new(
-                RadianceProcessor::new(p, s.out_no_data_value.as_()),
-            )),
-            TypedRasterQueryProcessor::U64(p) => QueryProcessorOut(Box::new(
-                RadianceProcessor::new(p, s.out_no_data_value.as_()),
-            )),
-            TypedRasterQueryProcessor::I8(p) => QueryProcessorOut(Box::new(
-                RadianceProcessor::new(p, s.out_no_data_value.as_()),
-            )),
-            TypedRasterQueryProcessor::I16(p) => QueryProcessorOut(Box::new(
-                RadianceProcessor::new(p, s.out_no_data_value.as_()),
-            )),
-            TypedRasterQueryProcessor::I32(p) => QueryProcessorOut(Box::new(
-                RadianceProcessor::new(p, s.out_no_data_value.as_()),
-            )),
-            TypedRasterQueryProcessor::I64(p) => QueryProcessorOut(Box::new(
-                RadianceProcessor::new(p, s.out_no_data_value.as_()),
-            )),
-            TypedRasterQueryProcessor::F32(p) => QueryProcessorOut(Box::new(
-                RadianceProcessor::new(p, s.out_no_data_value.as_()),
-            )),
-            TypedRasterQueryProcessor::F64(p) => QueryProcessorOut(Box::new(
-                RadianceProcessor::new(p, s.out_no_data_value.as_()),
-            )),
+            TypedRasterQueryProcessor::U8(p) => {
+                QueryProcessorOut(Box::new(RadianceProcessor::new(p, OUT_NO_DATA_VALUE.as_())))
+            }
+            TypedRasterQueryProcessor::U16(p) => {
+                QueryProcessorOut(Box::new(RadianceProcessor::new(p, OUT_NO_DATA_VALUE.as_())))
+            }
+            TypedRasterQueryProcessor::U32(p) => {
+                QueryProcessorOut(Box::new(RadianceProcessor::new(p, OUT_NO_DATA_VALUE.as_())))
+            }
+            TypedRasterQueryProcessor::U64(p) => {
+                QueryProcessorOut(Box::new(RadianceProcessor::new(p, OUT_NO_DATA_VALUE.as_())))
+            }
+            TypedRasterQueryProcessor::I8(p) => {
+                QueryProcessorOut(Box::new(RadianceProcessor::new(p, OUT_NO_DATA_VALUE.as_())))
+            }
+            TypedRasterQueryProcessor::I16(p) => {
+                QueryProcessorOut(Box::new(RadianceProcessor::new(p, OUT_NO_DATA_VALUE.as_())))
+            }
+            TypedRasterQueryProcessor::I32(p) => {
+                QueryProcessorOut(Box::new(RadianceProcessor::new(p, OUT_NO_DATA_VALUE.as_())))
+            }
+            TypedRasterQueryProcessor::I64(p) => {
+                QueryProcessorOut(Box::new(RadianceProcessor::new(p, OUT_NO_DATA_VALUE.as_())))
+            }
+            TypedRasterQueryProcessor::F32(p) => {
+                QueryProcessorOut(Box::new(RadianceProcessor::new(p, OUT_NO_DATA_VALUE.as_())))
+            }
+            TypedRasterQueryProcessor::F64(p) => {
+                QueryProcessorOut(Box::new(RadianceProcessor::new(p, OUT_NO_DATA_VALUE.as_())))
+            }
         })
     }
 }
@@ -207,7 +205,7 @@ where
                     let tgt = &mut out.data;
 
                     for (idx, v) in mg.data.iter().enumerate() {
-                        if mg.no_data_value.map_or(true, |ndv| ndv != *v) {
+                        if !mg.is_no_data(*v) {
                             let val: PixelOut = (*v).as_();
                             tgt[idx] = offset + val * slope;
                         }
@@ -248,7 +246,7 @@ mod tests {
     use num_traits::AsPrimitive;
 
     #[tokio::test]
-    async fn test_ok() -> Result<()> {
+    async fn test_ok() {
         let no_data_value_option = Some(super::OUT_NO_DATA_VALUE);
 
         let input = make_raster(Some(11.0), Some(2.0));
@@ -293,12 +291,10 @@ mod tests {
             .unwrap()
             .into()
         );
-
-        Ok(())
     }
 
     #[tokio::test]
-    async fn test_empty_raster() -> Result<()> {
+    async fn test_empty_raster() {
         let no_data_value_option = Some(super::OUT_NO_DATA_VALUE);
 
         let input = make_empty_raster();
@@ -336,12 +332,10 @@ mod tests {
             result[0].as_ref().unwrap().grid_array,
             EmptyGrid2D::new([3, 2].into(), no_data_value_option.unwrap(),).into()
         );
-
-        Ok(())
     }
 
     #[tokio::test]
-    async fn test_missing_offset() -> std::result::Result<(), &'static str> {
+    async fn test_missing_offset() {
         let input = make_raster(None, Some(2.0));
 
         let op = Radiance {
@@ -374,14 +368,11 @@ mod tests {
         let result: Vec<Result<RasterTile2D<PixelOut>>> = result_stream.collect().await;
 
         assert_eq!(1, result.len());
-        match &result[0] {
-            Err(_) => Ok(()),
-            Ok(_) => Err("Should fail on missing \"msg.CalibrationOffset\" property."),
-        }
+        assert!(&result[0].is_err());
     }
 
     #[tokio::test]
-    async fn test_missing_slope() -> std::result::Result<(), &'static str> {
+    async fn test_missing_slope() {
         let input = make_raster(Some(11.0), None);
 
         let op = Radiance {
@@ -414,10 +405,7 @@ mod tests {
         let result: Vec<Result<RasterTile2D<PixelOut>>> = result_stream.collect().await;
 
         assert_eq!(1, result.len());
-        match &result[0] {
-            Err(_) => Ok(()),
-            Ok(_) => Err("Should fail on missing \"msg.CalibrationOffset\" property."),
-        }
+        assert!(&result[0].is_err());
     }
 
     fn make_empty_raster() -> Box<dyn RasterOperator> {
