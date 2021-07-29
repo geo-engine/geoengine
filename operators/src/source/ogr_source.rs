@@ -29,7 +29,8 @@ use tokio::task::spawn_blocking;
 
 use geoengine_datatypes::collections::{
     BuilderProvider, FeatureCollection, FeatureCollectionBuilder, FeatureCollectionInfos,
-    FeatureCollectionRowBuilder, GeoFeatureCollectionRowBuilder, VectorDataType,
+    FeatureCollectionModifications, FeatureCollectionRowBuilder, GeoFeatureCollectionRowBuilder,
+    VectorDataType,
 };
 use geoengine_datatypes::primitives::{
     BoundingBox2D, Coordinate2D, FeatureDataType, FeatureDataValue, Geometry, MultiLineString,
@@ -169,6 +170,7 @@ impl Default for OgrSourceTimeFormat {
 ///  - float: an array of column names containing float values
 ///  - int: an array of column names containing int values
 ///  - text: an array of column names containing alpha-numeric values
+///  - rename: a. optional map of column names from data source to the name in the resulting collection
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct OgrSourceColumnSpec {
     pub x: String,
@@ -176,6 +178,7 @@ pub struct OgrSourceColumnSpec {
     pub int: Vec<String>,
     pub float: Vec<String>,
     pub text: Vec<String>,
+    pub rename: Option<HashMap<String, String>>,
 }
 
 impl OgrSourceColumnSpec {
@@ -253,6 +256,8 @@ impl VectorOperator for OgrSource {
         self: Box<Self>,
         context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<dyn crate::engine::InitializedVectorOperator>> {
+        // TODO: check rename of fields are valid
+
         let info: Box<
             dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
         > = context.meta_data(&self.params.dataset).await?;
@@ -568,6 +573,18 @@ where
                 chunk_byte_size,
                 use_ogr_spatial_filter,
             );
+
+            let batch_result = if let Some(rename) = dataset_information
+                .columns
+                .as_ref()
+                .and_then(|c| c.rename.as_ref())
+            {
+                let names: Vec<_> = rename.iter().collect();
+                batch_result
+                    .and_then(|c| c.rename_columns(names.as_slice()).context(error::DataType))
+            } else {
+                batch_result
+            };
 
             let is_empty = batch_result
                 .as_ref()
@@ -1117,6 +1134,7 @@ mod tests {
                 float: vec!["num".to_string()],
                 int: vec!["dec1".to_string(), "dec2".to_string()],
                 text: vec!["text".to_string()],
+                rename: None,
             }),
             force_ogr_time_filter: false,
             force_ogr_spatial_filter: false,
@@ -1155,7 +1173,8 @@ mod tests {
                     "y": "y",
                     "int": ["dec1", "dec2"],
                     "float": ["num"],
-                    "text": ["text"]
+                    "text": ["text"],
+                    "rename": null
                 },
                 "forceOgrTimeFilter": false,
                 "forceOgrSpatialFilter": false,
@@ -1671,6 +1690,7 @@ mod tests {
                             "name".to_string(),
                             "website".to_string(),
                         ],
+                        rename: None,
                     }),
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
@@ -3016,6 +3036,7 @@ mod tests {
                 float: vec!["b".to_string()],
                 int: vec!["a".to_string()],
                 text: vec!["c".to_string()],
+                rename: None,
             }),
             force_ogr_time_filter: false,
             force_ogr_spatial_filter: false,
@@ -3433,6 +3454,7 @@ mod tests {
                         int: vec![],
                         float: vec![],
                         text: vec![],
+                        rename: None,
                     }),
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
@@ -3523,6 +3545,7 @@ mod tests {
                         int: vec!["num".to_owned()],
                         float: vec![],
                         text: vec!["txt".to_owned()],
+                        rename: None,
                     }),
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
@@ -3634,6 +3657,7 @@ mod tests {
                         int: vec![],
                         float: vec![],
                         text: vec!["Name".to_owned()],
+                        rename: None,
                     }),
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
@@ -3738,6 +3762,7 @@ mod tests {
                         int: vec![],
                         float: vec![],
                         text: vec!["Name".to_owned()],
+                        rename: None,
                     }),
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
@@ -3842,6 +3867,7 @@ mod tests {
                         int: vec![],
                         float: vec![],
                         text: vec!["Name".to_owned()],
+                        rename: None,
                     }),
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,

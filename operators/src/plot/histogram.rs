@@ -1003,6 +1003,7 @@ mod tests {
                             "name".to_string(),
                             "website".to_string(),
                         ],
+                        rename: None,
                     }),
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
