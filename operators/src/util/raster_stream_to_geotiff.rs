@@ -96,7 +96,7 @@ fn gdal_writer<T: Pixel + GdalType>(
     let driver = Driver::get("GTiff")?;
     // TODO: "COMPRESS, DEFLATE" flags but rust-gdal doesn't support setting this yet(?)
     let mut dataset =
-        driver.create_with_band_type::<T>(&file_name, width as isize, height as isize, 1)?;
+        driver.create_with_band_type::<T>(file_name, width as isize, height as isize, 1)?;
 
     dataset.set_spatial_ref(&spatial_reference.try_into()?)?;
     dataset.set_geo_transform(&output_geo_transform.into())?;

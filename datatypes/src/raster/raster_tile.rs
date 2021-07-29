@@ -267,7 +267,7 @@ where
 
     fn set_at_grid_index_unchecked(&mut self, grid_index: I, value: T) {
         self.grid_array
-            .set_at_grid_index_unchecked(grid_index, value)
+            .set_at_grid_index_unchecked(grid_index, value);
     }
 }
 

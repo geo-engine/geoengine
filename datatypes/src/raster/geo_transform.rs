@@ -291,7 +291,7 @@ mod tests {
                 &SpatialPartition2D::new((6.0, 4.0).into(), (9.0, 1.0).into()).unwrap()
             ),
             GridBoundingBox2D::new(GridIdx2D::new([-4, 6]), GridIdx2D::new([-2, 8])).unwrap()
-        )
+        );
     }
 
     #[test]
@@ -303,7 +303,7 @@ mod tests {
                 &SpatialPartition2D::new((6.0, 4.0).into(), (7.0, 3.0).into()).unwrap()
             ),
             GridBoundingBox2D::new(GridIdx2D::new([-4, 6]), GridIdx2D::new([-4, 6])).unwrap()
-        )
+        );
     }
 
     #[test]
@@ -315,7 +315,7 @@ mod tests {
                 &SpatialPartition2D::new((6.0, 4.0).into(), (6.1, 3.9).into()).unwrap()
             ),
             GridBoundingBox2D::new(GridIdx2D::new([-4, 6]), GridIdx2D::new([-4, 6])).unwrap()
-        )
+        );
     }
 
     #[test]

@@ -14,7 +14,7 @@ use futures::{
 
 use async_trait::async_trait;
 use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
-use gdal::{Dataset as GdalDataset, Metadata as GdalMetadata};
+use gdal::{Dataset as GdalDataset, DatasetOptions, Metadata as GdalMetadata};
 use geoengine_datatypes::primitives::{Coordinate2D, SpatialPartition2D, SpatialPartitioned};
 use geoengine_datatypes::raster::{
     EmptyGrid, GeoTransform, Grid2D, GridOrEmpty2D, GridShapeAccess, Pixel, RasterDataType,
@@ -79,6 +79,7 @@ pub struct GdalLoadingInfo {
     pub info: GdalLoadingInfoPartIterator,
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 pub enum GdalLoadingInfoPartIterator {
     Static {
@@ -147,6 +148,7 @@ pub struct GdalDatasetParameters {
     pub file_not_found_handling: FileNotFoundHandling,
     pub no_data_value: Option<f64>,
     pub properties_mapping: Option<Vec<GdalMetadataMapping>>,
+    pub gdal_open_options: Option<Vec<String>>,
 }
 
 impl SpatialPartitioned for GdalDatasetParameters {
@@ -290,6 +292,7 @@ impl GdalDatasetParameters {
             file_not_found_handling: FileNotFoundHandling::NoData,
             file_path: file_path.into(),
             properties_mapping: self.properties_mapping.clone(),
+            gdal_open_options: self.gdal_open_options.clone(),
             ..*self
         })
     }
@@ -385,7 +388,18 @@ where
             &output_bounds
         );
 
-        let dataset_result = GdalDataset::open(&dataset_params.file_path);
+        let options = dataset_params
+            .gdal_open_options
+            .as_ref()
+            .map(|o| o.iter().map(String::as_str).collect::<Vec<_>>());
+
+        let dataset_result = GdalDataset::open_ex(
+            &dataset_params.file_path,
+            DatasetOptions {
+                open_options: options.as_deref(),
+                ..DatasetOptions::default()
+            },
+        );
         let no_data_value = dataset_params.no_data_value.map(T::from_);
         let fill_value = no_data_value.unwrap_or_else(T::zero);
         let mut properties = RasterProperties::default();
@@ -530,14 +544,17 @@ where
         query: crate::engine::RasterQueryRectangle,
         _ctx: &'a dyn crate::engine::QueryContext,
     ) -> Result<BoxStream<Result<Self::Output>>> {
-        let meta_data = self.meta_data.loading_info(query).await?;
-
         debug!(
             "Querying GdalSourceProcessor<{:?}> with: {:?}.",
             P::TYPE,
             &query
         );
 
+        let meta_data = self.meta_data.loading_info(query).await?;
+
+        debug!("GdalLoadingInfo: {:?}.", &meta_data);
+
+        // TODO: what to do if loading info is empty?
         let stream = stream::iter(meta_data.info)
             .map(move |info| match info {
                 Ok(info) => self.tile_stream(query, info).boxed(),
@@ -695,7 +712,7 @@ fn properties_from_gdal<'a, I, M>(
 
     for m in mapping_iter {
         let data = if let Some(domain) = &m.source_key.domain {
-            gdal_dataset.metadata_item(&m.source_key.key, &domain)
+            gdal_dataset.metadata_item(&m.source_key.key, domain)
         } else {
             gdal_dataset.metadata_item(&m.source_key.key, "")
         };
@@ -830,6 +847,7 @@ mod tests {
                         },
                     },
                 ]),
+                gdal_open_options: None,
             },
             &TileInformation::with_partition_and_shape(output_bounds, output_shape),
         )
@@ -1001,6 +1019,7 @@ mod tests {
             file_not_found_handling: FileNotFoundHandling::NoData,
             no_data_value: Some(0.),
             properties_mapping: None,
+            gdal_open_options: None,
         };
         let replaced = params
             .replace_time_placeholder("%TIME%", "%f", TimeInstance::from_millis_unchecked(22))
@@ -1040,6 +1059,7 @@ mod tests {
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value,
                 properties_mapping: None,
+                gdal_open_options: None,
             },
             placeholder: "%TIME%".to_string(),
             time_format: "%f".to_string(),

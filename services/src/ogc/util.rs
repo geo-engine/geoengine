@@ -364,7 +364,7 @@ mod tests {
                     3857
                 )),
             }
-        )
+        );
     }
 
     #[test]
@@ -374,7 +374,7 @@ mod tests {
         assert_eq!(
             parse_wcs_crs(to_deserializer(s)).unwrap(),
             SpatialReference::epsg_4326(),
-        )
+        );
     }
 
     #[test]
@@ -384,6 +384,6 @@ mod tests {
         assert_eq!(
             parse_coordinate(to_deserializer(s)).unwrap(),
             Coordinate2D::new(1.1, 2.2)
-        )
+        );
     }
 }

@@ -807,7 +807,7 @@ impl<'a> ClProgramRunnable<'a> {
                 floats,
                 ints,
                 time,
-            })
+            });
         }
 
         Ok(())
@@ -908,7 +908,7 @@ impl<'a> ClProgramRunnable<'a> {
                 .queue(queue.clone())
                 .flags(MemFlags::new().read_only())
                 .len(1)
-                .copy_host_slice(&[RasterInfo::from_raster(&raster)])
+                .copy_host_slice(&[RasterInfo::from_raster(raster)])
                 .build()?;
                 kernel.set_arg(format!("IN_INFO{}",idx), info_buffer)?;
             });
@@ -930,10 +930,10 @@ impl<'a> ClProgramRunnable<'a> {
                     .queue(queue.clone())
                     .flags(MemFlags::new().read_only())
                     .len(1)
-                    .copy_host_slice(&[RasterInfo::from_raster(&raster)])
+                    .copy_host_slice(&[RasterInfo::from_raster(raster)])
                     .build()?;
                 kernel.set_arg(format!("OUT_INFO{}", idx), info_buffer)?;
-            })
+            });
         }
 
         Ok(())
@@ -1512,7 +1512,7 @@ impl CompiledClProgram {
                     column.data_type,
                     name,
                     null_name,
-                )
+                );
             }
         }
     }
@@ -1587,7 +1587,7 @@ impl CompiledClProgram {
                     column.data_type,
                     name,
                     null_name,
-                )
+                );
             }
         }
     }
@@ -2622,7 +2622,7 @@ __kernel void columns(
         {
             FeatureDataRef::Float(numbers) => {
                 assert_eq!(numbers.as_ref(), &[0., 1337., 0.]);
-                assert_eq!(numbers.nulls().as_slice(), &[true, false, true])
+                assert_eq!(numbers.nulls().as_slice(), &[true, false, true]);
             }
             _ => panic!(),
         }

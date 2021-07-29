@@ -13,20 +13,19 @@ edition = "2018"
 pro = ["geoengine-datatypes/pro"]
 
 [dependencies]
-# arrow = { version = "4.0", features = ["simd"] } TODO: activate when version is patched
-arrow = { version = "=4.0" } # TODO: unfix version once test runs again
+arrow = { version = "5.0", features = ["simd"] }
 async-trait = "0.1"
 chrono = "0.4"
 crossbeam = "0.8"
 csv = "1.1"
-flatbuffers = "=0.9.0" # TODO: pinned only for `arrow`, should be removed at some point
-float-cmp = "0.8"
+float-cmp = "0.9"
 futures = "0.3"
 gdal = { version = "0.8", features = ["datetime"] }
 gdal-sys = "0.4.0"
 geo = "0.18"
 geoengine-datatypes = { path = "../datatypes" }
 lazy_static = "1.4"
+log = "0.4"
 num_cpus = "1.13" # TODO: remove and switch to std::thread::available_concurrency() when it is available
 num-traits = "0.2"
 ocl = { git = "https://github.com/michaelmattig/ocl", branch = "tentative_master" }  # TODO: use crates.io version once it builds again
@@ -38,7 +37,6 @@ snafu = "0.6"
 tokio = { version = "1.1", features = ["macros", "signal", "sync", "rt-multi-thread"] }
 typetag = "0.1"
 uuid = { version = "0.8", features = ["serde", "v4", "v5"] }
-log = "0.4"
 
 [dev-dependencies]
 criterion = {version = "0.3", features =["async_futures", "async_tokio"]}

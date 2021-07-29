@@ -583,7 +583,7 @@ mod tests {
         if let GridOrEmpty::Grid(ref mut g) = raster_tiles.get_mut(0).unwrap().grid_array {
             g.data[0] = no_data_value.unwrap();
         } else {
-            panic!("test tile should not be empty")
+            panic!("test tile should not be empty");
         }
 
         let mrs = MockRasterSource {
@@ -717,7 +717,7 @@ mod tests {
         if let GridOrEmpty::Grid(ref mut g) = raster_tiles.get_mut(0).unwrap().grid_array {
             g.data[0] = no_data_value.unwrap();
         } else {
-            panic!("test tile should not be empty")
+            panic!("test tile should not be empty");
         }
 
         let mrs = MockRasterSource {

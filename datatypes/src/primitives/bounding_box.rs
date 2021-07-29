@@ -939,7 +939,7 @@ mod tests {
     #[test]
     fn spatial_bounds() {
         let bbox = BoundingBox2D::new_unchecked((0., 0.).into(), (1., 1.).into());
-        assert_eq!(bbox, bbox.spatial_bounds())
+        assert_eq!(bbox, bbox.spatial_bounds());
     }
 
     #[test]
@@ -947,7 +947,7 @@ mod tests {
         let mut bbox = BoundingBox2D::new_unchecked((0., 0.).into(), (1., 1.).into());
         bbox.extend_with_coord(Coordinate2D::new(-1., 1.5));
         let expect = BoundingBox2D::new_unchecked((-1., 0.).into(), (1., 1.5).into());
-        assert_eq!(bbox, expect)
+        assert_eq!(bbox, expect);
     }
 
     #[test]
@@ -961,7 +961,7 @@ mod tests {
             (0.0, 1.0).into(),
         ]);
         let bbox = BoundingBox2D::from_coord_iter(coordinates).unwrap();
-        assert_eq!(bbox, expected)
+        assert_eq!(bbox, expected);
     }
 
     #[test]
@@ -975,6 +975,6 @@ mod tests {
             (0.0, 1.0).into(),
         ]);
         let bbox = BoundingBox2D::from_coord_ref_iter(coordinates.iter()).unwrap();
-        assert_eq!(bbox, expected)
+        assert_eq!(bbox, expected);
     }
 }

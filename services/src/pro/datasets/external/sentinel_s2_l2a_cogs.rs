@@ -30,6 +30,7 @@ use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use std::collections::HashMap;
 use std::convert::TryInto;
+use std::fmt::Debug;
 use std::path::PathBuf;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -230,8 +231,10 @@ pub struct SentinelS2L2aCogsMetaData {
 impl SentinelS2L2aCogsMetaData {
     async fn create_loading_info(&self, query: RasterQueryRectangle) -> Result<GdalLoadingInfo> {
         // for reference: https://stacspec.org/STAC-ext-api.html#operation/getSearchSTAC
-
-        let features = self.load_all_features(&self.request_params(query)?).await?;
+        debug!("create_loading_info with: {:?}", &query);
+        let request_params = self.request_params(query)?;
+        debug!("queried with: {:?}", &request_params);
+        let features = self.load_all_features(&request_params).await?;
         debug!("number of features returned by STAC: {}", features.len());
         let mut features: Vec<StacFeature> = features
             .into_iter()
@@ -278,7 +281,7 @@ impl SentinelS2L2aCogsMetaData {
                             band_name: self.band.name.clone(),
                         })?;
 
-                parts.push(self.create_loading_info_part(time_interval, asset)?)
+                parts.push(self.create_loading_info_part(time_interval, asset)?);
             }
         }
         debug!("number of generated loading infos: {}", parts.len());
@@ -312,6 +315,7 @@ impl SentinelS2L2aCogsMetaData {
                 file_not_found_handling: geoengine_operators::source::FileNotFoundHandling::NoData,
                 no_data_value: self.band.no_data_value,
                 properties_mapping: None,
+                gdal_open_options: None,
             },
         })
     }
@@ -355,7 +359,7 @@ impl SentinelS2L2aCogsMetaData {
         ])
     }
 
-    async fn load_all_features<T: Serialize + ?Sized>(
+    async fn load_all_features<T: Serialize + ?Sized + Debug>(
         &self,
         params: &T,
     ) -> Result<Vec<StacFeature>> {
@@ -375,7 +379,7 @@ impl SentinelS2L2aCogsMetaData {
         Ok(features)
     }
 
-    async fn load_collection<T: Serialize + ?Sized>(
+    async fn load_collection<T: Serialize + ?Sized + Debug>(
         &self,
         params: &T,
         page: u32,
@@ -392,7 +396,7 @@ impl SentinelS2L2aCogsMetaData {
             .await
             .context(error::Reqwest)?;
 
-        serde_json::from_str(&text).map_err(|error| error::Error::StacJsonRespone {
+        serde_json::from_str(&text).map_err(|error| error::Error::StacJsonResponse {
             url: self.api_url.clone(),
             response: text,
             error,
@@ -434,6 +438,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
         query: RasterQueryRectangle,
     ) -> geoengine_operators::util::Result<GdalLoadingInfo> {
         // TODO: propagate error properly
+        debug!("loading_info for: {:?}", &query);
         self.create_loading_info(query).await.map_err(|e| {
             geoengine_operators::error::Error::LoadingInfo {
                 source: Box::new(e),
@@ -474,7 +479,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
     > {
         let dataset = self
             .datasets
-            .get(&dataset)
+            .get(dataset)
             .ok_or(geoengine_operators::error::Error::UnknownDatasetId)?;
 
         Ok(Box::new(SentinelS2L2aCogsMetaData {
@@ -590,6 +595,7 @@ mod tests {
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value: Some(0.),
                 properties_mapping: None,
+                gdal_open_options: None,
             },
         }];
 
@@ -600,7 +606,7 @@ mod tests {
 
             assert_eq!(result, expected);
         } else {
-            unreachable!()
+            unreachable!();
         }
 
         Ok(())

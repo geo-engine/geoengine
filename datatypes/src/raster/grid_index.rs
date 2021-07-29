@@ -223,6 +223,7 @@ where
     fn mul(self, rhs: I) -> Self::Output {
         let GridIdx([a, b]) = self;
         let GridIdx([a_other, b_other]) = rhs.into();
+        // TODO: handle overflows
         GridIdx([a * a_other, b * b_other])
     }
 }

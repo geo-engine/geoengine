@@ -216,6 +216,8 @@ pub enum Error {
     FeatureDataNotAggregatable,
 
     FeatureDataLengthMismatch,
+
+    GdalRasterDataTypeNotSupported,
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {
