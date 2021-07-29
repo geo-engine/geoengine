@@ -497,7 +497,7 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     #[tokio::test]
     async fn it_creates_meta_data() {
-        async fn test(db_config: &config::Postgres, test_schema: &str) -> Result<()> {
+        async fn test(db_config: &config::Postgres, test_schema: &str) -> Result<(), String> {
             let provider_db_config = DatabaseConnectionConfig {
                 host: db_config.host.clone(),
                 port: db_config.port,
@@ -515,7 +515,7 @@ mod tests {
                 db_config: provider_db_config,
             })
             .initialize()
-            .await?;
+            .await.map_err(|e| e.to_string())?;
 
             let meta: Box<
                 dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
@@ -527,7 +527,7 @@ mod tests {
                     .unwrap(),
                     dataset_id: "1".to_string(),
                 }))
-                .await?;
+                .await.map_err(|e| e.to_string())?;
 
             let expected = VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint,
@@ -560,11 +560,10 @@ mod tests {
                     .collect()
             };
 
-            let result_descriptor = meta.result_descriptor().await?;
+            let result_descriptor = meta.result_descriptor().await.map_err(|e| e.to_string())?;
 
             if result_descriptor != expected {
-                eprintln!("{:?} != {:?}", result_descriptor, expected);
-                return Err(Error::TestFail);
+                return Err(format!("{:?} != {:?}", result_descriptor, expected));
             }
 
             let mut loading_info = meta
@@ -576,12 +575,12 @@ mod tests {
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::zero_point_one(),
                 })
-                .await?;
+                .await.map_err(|e| e.to_string())?;
 
             loading_info
                 .columns
                 .as_mut()
-                .ok_or(Error::TestFail)?
+                .ok_or_else(|| "missing columns".to_owned())?
                 .text
                 .sort();
 
@@ -650,8 +649,7 @@ mod tests {
             };
 
             if loading_info != expected {
-                eprintln!("{:?} != {:?}", loading_info, expected);
-                return Err(Error::TestFail);
+                return Err(format!("{:?} != {:?}", loading_info, expected));
             }
 
             Ok(())
@@ -670,7 +668,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_loads() {
-        async fn test(db_config: &config::Postgres, test_schema: &str) -> Result<()> {
+        async fn test(db_config: &config::Postgres, test_schema: &str) -> Result<(), String> {
             let provider = Box::new(GfbioDataProviderDefinition {
                 id: DatasetProviderId::from_str("d29f2430-5c5e-4748-a2fa-6423aa2af42d").unwrap(),
                 name: "Gfbio".to_string(),
@@ -684,7 +682,7 @@ mod tests {
                 },
             })
             .initialize()
-            .await?;
+            .await.map_err(|e| e.to_string())?;
 
             let meta: Box<
                 dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
@@ -696,7 +694,7 @@ mod tests {
                     .unwrap(),
                     dataset_id: "1".to_string(),
                 }))
-                .await?;
+                .await.map_err(|e| e.to_string())?;
 
             let processor: OgrSourceProcessor<MultiPoint> = OgrSourceProcessor::new(meta);
 
@@ -710,16 +708,16 @@ mod tests {
 
             let result: Vec<_> = processor
                 .query(query_rectangle, &ctx)
-                .await?
+                .await.map_err(|e| e.to_string())?
                 .collect()
                 .await;
 
             if result.len() != 1 {
-                return Err(Error::TestFail);
+                return Err("result.len() != 1".to_owned());
             }
 
             if result[0].is_err() {
-                return Err(Error::TestFail);
+                return Err("result[0].is_err()".to_owned());
             }
 
             let result = result[0].as_ref().unwrap();
@@ -756,8 +754,7 @@ mod tests {
             .unwrap();
 
             if result != &expected {
-                eprintln!("{:?} != {:?}", result, expected);
-                return Err(Error::TestFail);
+                return Err(format!("{:?} != {:?}", result, expected));
             }
 
             Ok(())
