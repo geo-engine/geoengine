@@ -187,7 +187,10 @@ pub enum Error {
     OgrFieldValueIsNotDateTime,
     OgrFieldValueIsNotString,
     OgrFieldValueIsNotValidForSeconds,
-    OgrColumnFieldTypeMismatch,
+    OgrColumnFieldTypeMismatch {
+        expected: String,
+        field_value: gdal::vector::FieldValue,
+    },
 
     FeatureDataValueMustNotBeNull,
     InvalidFeatureDataType,
