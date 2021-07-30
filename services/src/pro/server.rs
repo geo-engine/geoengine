@@ -10,15 +10,11 @@ use crate::util::config::{self, get_config_element, Backend};
 use crate::{combine, error};
 
 #[cfg(feature = "postgres")]
-use bb8_postgres::tokio_postgres;
-#[cfg(feature = "postgres")]
 use bb8_postgres::tokio_postgres::NoTls;
 use log::info;
 use snafu::ResultExt;
 use std::net::SocketAddr;
 use std::path::PathBuf;
-#[cfg(feature = "postgres")]
-use std::str::FromStr;
 use tokio::sync::oneshot::Receiver;
 use warp::Filter;
 
@@ -130,13 +126,16 @@ pub async fn start_pro_server(
             #[cfg(feature = "postgres")]
             {
                 eprintln!("Using Postgres backend"); // TODO: log
-                let ctx = PostgresContext::new(
-                    tokio_postgres::config::Config::from_str(
-                        &get_config_element::<config::Postgres>()?.config_string,
-                    )?,
-                    NoTls,
-                )
-                .await?;
+
+                let db_config = config::get_config_element::<config::Postgres>()?;
+                let mut pg_config = bb8_postgres::tokio_postgres::Config::new();
+                pg_config
+                    .user(&db_config.user)
+                    .password(&db_config.password)
+                    .host(&db_config.host)
+                    .dbname(&db_config.database);
+
+                let ctx = PostgresContext::new(pg_config, NoTls).await?;
 
                 start(shutdown_rx, static_files_dir, bind_address, ctx).await
             }

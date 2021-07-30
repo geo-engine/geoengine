@@ -220,6 +220,8 @@ pub enum Error {
 
     FeatureDataLengthMismatch,
 
+    OgrSqlQuery,
+
     GdalRasterDataTypeNotSupported,
 }
 
