@@ -78,7 +78,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres/postgis
+        image: postgis/postgis
         env:
           POSTGRES_USER: geoengine
           POSTGRES_PASSWORD: geoengine
