@@ -788,8 +788,12 @@ where
                         Ok(Some(FieldValue::Integer64Value(v))) => Some(v.to_string()),
                         Ok(Some(FieldValue::StringValue(s))) => Some(s),
                         Ok(Some(FieldValue::RealValue(v))) => Some(v.to_string()),
+                        Ok(Some(FieldValue::DateTimeValue(v))) => Some(v.to_string()), //TODO: allow multiple date columns
                         Ok(None) => None,
-                        Ok(Some(_)) => error_spec.on_error(Error::OgrColumnFieldTypeMismatch)?, // TODO: handle other types
+                        Ok(Some(v)) => error_spec.on_error(Error::OgrColumnFieldTypeMismatch {
+                            expected: "Text".to_string(),
+                            field_value: v,
+                        })?, // TODO: handle other types
                         Err(e) => error_spec.on_error(Error::Gdal { source: e })?,
                     };
 
@@ -802,7 +806,10 @@ where
                         Ok(Some(FieldValue::StringValue(s))) => f64::from_str(&s).ok(),
                         Ok(Some(FieldValue::RealValue(v))) => Some(v),
                         Ok(None) => None,
-                        Ok(Some(_)) => error_spec.on_error(Error::OgrColumnFieldTypeMismatch)?, // TODO: handle other types
+                        Ok(Some(v)) => error_spec.on_error(Error::OgrColumnFieldTypeMismatch {
+                            expected: "Float".to_string(),
+                            field_value: v,
+                        })?, // TODO: handle other types
                         Err(e) => error_spec.on_error(Error::Gdal { source: e })?,
                     };
 
@@ -816,13 +823,26 @@ where
                         Ok(Some(FieldValue::StringValue(s))) => i64::from_str(&s).ok(),
                         Ok(Some(FieldValue::RealValue(v))) => Some(v as i64),
                         Ok(None) => None,
-                        Ok(Some(_)) => error_spec.on_error(Error::OgrColumnFieldTypeMismatch)?, // TODO: handle other types
+                        Ok(Some(v)) => error_spec.on_error(Error::OgrColumnFieldTypeMismatch {
+                            expected: "Int".to_string(),
+                            field_value: v,
+                        })?, // TODO: handle other types
                         Err(e) => error_spec.on_error(Error::Gdal { source: e })?,
                     };
 
                     builder.push_data(column, FeatureDataValue::NullableInt(value_option))?;
                 }
-                FeatureDataType::Category => return Err(Error::OgrColumnFieldTypeMismatch), // TODO: implement
+                FeatureDataType::Category => {
+                    #[allow(clippy::match_same_arms)]
+                    let _value_option: Option<u8> = match field {
+                        Ok(None) => None,
+                        Ok(Some(v)) => error_spec.on_error(Error::OgrColumnFieldTypeMismatch {
+                            expected: "Category".to_string(),
+                            field_value: v,
+                        })?, // TODO: handle other types
+                        Err(e) => error_spec.on_error(Error::Gdal { source: e })?,
+                    };
+                }
             }
         }
 
