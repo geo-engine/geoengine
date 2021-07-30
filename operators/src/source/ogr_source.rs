@@ -788,6 +788,7 @@ where
                         Ok(Some(FieldValue::Integer64Value(v))) => Some(v.to_string()),
                         Ok(Some(FieldValue::StringValue(s))) => Some(s),
                         Ok(Some(FieldValue::RealValue(v))) => Some(v.to_string()),
+                        Ok(Some(FieldValue::DateTimeValue(v))) => Some(v.to_string()), //TODO: allow multiple date columns
                         Ok(None) => None,
                         Ok(Some(v)) => error_spec.on_error(Error::OgrColumnFieldTypeMismatch {
                             expected: "Text".to_string(),
