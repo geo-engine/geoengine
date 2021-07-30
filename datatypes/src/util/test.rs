@@ -27,7 +27,6 @@ pub fn grid_eq_with_no_data<D, T>(g1: &Grid<D, T>, g2: &Grid<D, T>) -> bool
 where
     D: PartialEq,
     T: PartialEq + Copy,
-    //    Grid<D, T>: NoDataValue,
 {
     if g1.data.len() != g2.data.len() || g1.shape.ne(&g2.shape) {
         return false;
@@ -45,7 +44,7 @@ where
         if g1.is_no_data(*l) && g1.is_no_data(*r) {
             continue;
         }
-        if l.ne(r) {
+        if l != r {
             return false;
         }
     }
