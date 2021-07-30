@@ -7,6 +7,11 @@ use std::ops::Range;
 #[derive(Debug, Snafu)]
 #[snafu(visibility = "pub(crate)")]
 pub enum Error {
+    #[snafu(display("MissingRasterProperty Error: {}", property))]
+    MissingRasterProperty {
+        property: String,
+    },
+
     #[snafu(display("CsvSource Error: {}", source))]
     CsvSourceReader {
         source: csv::Error,
