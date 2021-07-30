@@ -107,7 +107,12 @@ impl ConfigElement for Backend {
 
 #[derive(Debug, Deserialize)]
 pub struct Postgres {
-    pub config_string: String,
+    pub host: String,
+    pub port: u16,
+    pub database: String,
+    pub schema: String,
+    pub user: String,
+    pub password: String,
 }
 
 impl ConfigElement for Postgres {

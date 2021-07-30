@@ -14,6 +14,7 @@ nature40 = ["xml"]
 xml = ["quick-xml"]
 postgres = ["postgres-types", "bb8-postgres"]
 odm = ["pro"]
+gfbio = ["postgres", "geoengine-datatypes/postgres"]
 # This compiles Geo Engine Pro
 pro = ["postgres", "geoengine-operators/pro", "geoengine-datatypes/pro"]
 
@@ -59,6 +60,7 @@ zip = "0.5"
 [dev-dependencies]
 clap = "3.0.0-beta.2"
 httptest = "0.15.2"
+rand = "0.8.4"
 tempfile = "3.1"
 xml-rs = "0.8.3"
 

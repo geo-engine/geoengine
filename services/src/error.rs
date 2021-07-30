@@ -185,6 +185,9 @@ pub enum Error {
     WcsBoundingboxCrsMustEqualGridBaseCrs,
     WcsInvalidGridOffsets,
 
+    InvalidDatasetId,
+
+    GfbioMissingAbcdField,
     ExpectedExternalDatasetId,
     InvalidExternalDatasetId {
         provider: DatasetProviderId,
