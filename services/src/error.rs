@@ -200,9 +200,15 @@ pub enum Error {
     },
 
     #[cfg(feature = "odm")]
-    DroneMapping {
+    Odm {
         reason: String,
     },
+    #[cfg(feature = "odm")]
+    OdmInvalidResponse {
+        reason: String,
+    },
+    #[cfg(feature = "odm")]
+    OdmMissingContentTypeHeader,
 }
 
 impl Reject for Error {}

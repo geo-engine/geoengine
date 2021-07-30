@@ -1,4 +1,5 @@
 use std::convert::TryInto;
+use std::path::Path;
 
 use crate::datasets::storage::{AddDataset, DatasetDefinition, DatasetStore, MetaDataDefinition};
 use crate::datasets::upload::{UploadId, UploadRootPath};
@@ -20,8 +21,9 @@ use geoengine_operators::engine::RasterResultDescriptor;
 use geoengine_operators::source::GdalMetaDataStatic;
 use geoengine_operators::util::gdal::{gdal_open_dataset, gdal_parameters_from_dataset};
 use log::info;
+use reqwest::header::CONTENT_TYPE;
 use reqwest::multipart::{self, Part};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use tokio::fs::{self, File};
 use tokio::io::AsyncWriteExt;
@@ -30,9 +32,25 @@ use uuid::Uuid;
 use warp::hyper::Body;
 use warp::Filter;
 
-#[derive(Deserialize)]
-struct TaskStart {
-    upload: UploadId,
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct TaskStart {
+    pub upload: UploadId,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct OdmTaskStartResponse {
+    pub uuid: Option<Uuid>,
+    pub error: Option<String>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct OdmTaskNewUploadResponse {
+    pub error: Option<String>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct OdmErrorResponse {
+    pub error: Option<String>,
 }
 
 /// Create a new drone mapping task from a given upload. Returns the task id
@@ -46,6 +64,7 @@ struct TaskStart {
 /// {
 ///   "upload": "c21fc231-cb3e-4b5b-be67-35248a4b5a10",
 /// }
+///
 /// Response:
 /// ```text
 /// {
@@ -81,14 +100,22 @@ where
     let client = reqwest::Client::new();
 
     // create task
-    let task_id = client
+    let response: OdmTaskStartResponse = client
         .post(format!("{}task/new/init", base_url))
         .send()
         .await
         .context(error::Reqwest)?
-        .text()
+        .json()
         .await
         .context(error::Reqwest)?;
+
+    if let Some(error) = response.error {
+        return Err(error::Error::Odm { reason: error }.into());
+    };
+
+    let task_id = response.uuid.ok_or(error::Error::OdmInvalidResponse {
+        reason: "No task id in response".to_owned(),
+    })?;
 
     let path = task_start.upload.root_path()?;
 
@@ -110,7 +137,7 @@ where
 
         let form = multipart::Form::new().part("images", Part::stream(reader).file_name(file_name));
 
-        client
+        let response: OdmTaskNewUploadResponse = client
             .post(format!("{}task/new/upload/{}", base_url, task_id))
             .multipart(form)
             .send()
@@ -119,6 +146,10 @@ where
             .json()
             .await
             .context(error::Reqwest)?;
+
+        if let Some(error) = response.error {
+            return Err(error::Error::Odm { reason: error }.into());
+        };
 
         info!("Uploaded {:?}", entry);
     }
@@ -147,8 +178,11 @@ where
 /// Response:
 /// ```text
 /// {
-///   "id": "aae098a4-3272-439b-bd93-40b6c39560cb",
-/// },
+///   "id": {
+///     "type": "internal",
+///     "datasetId": "94230f0b-4e8a-4cba-9adc-3ace837fe5d4"
+///   }
+/// }
 /// ```
 pub(crate) fn dataset_from_drone_mapping_handler<C: ProContext>(
     ctx: C,
@@ -187,9 +221,18 @@ where
         .await
         .context(error::Reqwest)?;
 
-    if response.status() != 200 {
-        return Err(error::Error::DroneMapping {
-            reason: response.text().await.context(error::Reqwest)?,
+    // errors come as json, success as zip
+    if response
+        .headers()
+        .get(CONTENT_TYPE)
+        .and_then(|h| h.to_str().ok())
+        .ok_or(error::Error::OdmMissingContentTypeHeader)?
+        .starts_with("application/json")
+    {
+        let error: OdmErrorResponse = response.json().await.context(error::Reqwest)?;
+
+        return Err(error::Error::Odm {
+            reason: error.error.unwrap_or_else(|| "".to_owned()),
         }
         .into());
     }
@@ -214,39 +257,8 @@ where
     }
     zip_file_writer.flush().await.context(error::Io)?;
 
-    // unzip the archive
     // TODO: unzip response stream directly (it is actually not even compressed (STORE algorithm))
-    let zip_path_clone = zip_path.clone();
-    let root_clone = root.clone();
-    let result: crate::error::Result<()> = tokio::task::spawn_blocking(move || {
-        let zip_file_read = std::fs::File::open(&zip_path_clone).context(error::Io)?;
-        let mut archive = zip::ZipArchive::new(zip_file_read).unwrap(); // TODO
-
-        for i in 0..archive.len() {
-            let mut file = archive.by_index(i).unwrap(); // TODO
-            let out_path = match file.enclosed_name() {
-                Some(path) => root_clone.join(path),
-                None => continue,
-            };
-
-            if (&*file.name()).ends_with('/') {
-                std::fs::create_dir_all(&out_path).context(error::Io)?; // TODO
-            } else {
-                if let Some(p) = out_path.parent() {
-                    if !p.exists() {
-                        std::fs::create_dir_all(&p).context(error::Io)?; // TODO
-                    }
-                }
-                let mut outfile = std::fs::File::create(&out_path).context(error::Io)?;
-                std::io::copy(&mut file, &mut outfile).context(error::Io)?;
-            }
-        }
-        Ok(())
-    })
-    .await
-    .context(error::TokioJoin)?;
-
-    result?;
+    unzip(&zip_path, &root).await?;
 
     // delete archive
     fs::remove_file(zip_path).await.context(error::Io)?;
@@ -254,7 +266,24 @@ where
     // TODO: create dataset(s)
     let tiff_path = root.join("odm_orthophoto").join("odm_orthophoto.tif");
 
-    let dataset_definition: crate::error::Result<_> = tokio::task::spawn_blocking(move || {
+    let dataset_definition = dataset_definition_from_geotiff(&tiff_path).await?;
+
+    let mut db = ctx.dataset_db_ref_mut().await;
+    let meta = db.wrap_meta_data(dataset_definition.meta_data);
+
+    let dataset_id = db
+        .add_dataset(&session, dataset_definition.properties.validated()?, meta)
+        .await?;
+
+    Ok(warp::reply::json(&IdResponse::from(dataset_id)))
+}
+
+/// create `DatasetDefinition` from the infos in geotiff at `tiff_path`
+async fn dataset_definition_from_geotiff(
+    tiff_path: &Path,
+) -> Result<DatasetDefinition, error::Error> {
+    let tiff_path = tiff_path.to_owned();
+    tokio::task::spawn_blocking(move || {
         let dataset = gdal_open_dataset(&tiff_path).context(error::Operator)?;
 
         let gdal_params = gdal_parameters_from_dataset(&dataset, 1, &tiff_path, None, None)
@@ -284,15 +313,39 @@ where
         })
     })
     .await
-    .context(error::TokioJoin)?;
+    .context(error::TokioJoin)?
+}
 
-    let dataset_definition = dataset_definition?;
+/// unzip the file at `zip_path` into the `target_path`
+async fn unzip(zip_path: &Path, target_path: &Path) -> Result<(), error::Error> {
+    let zip_path = zip_path.to_owned();
+    let target_path = target_path.to_owned();
 
-    let mut db = ctx.dataset_db_ref_mut().await;
-    let meta = db.wrap_meta_data(dataset_definition.meta_data);
+    tokio::task::spawn_blocking(move || {
+        let zip_file_read = std::fs::File::open(&zip_path).context(error::Io)?;
+        let mut archive = zip::ZipArchive::new(zip_file_read).unwrap(); // TODO
 
-    db.add_dataset(&session, dataset_definition.properties.validated()?, meta)
-        .await?;
+        for i in 0..archive.len() {
+            let mut file = archive.by_index(i).unwrap(); // TODO
+            let out_path = match file.enclosed_name() {
+                Some(path) => target_path.join(path),
+                None => continue,
+            };
 
-    Ok(warp::reply())
+            if (&*file.name()).ends_with('/') {
+                std::fs::create_dir_all(&out_path).context(error::Io)?; // TODO
+            } else {
+                if let Some(p) = out_path.parent() {
+                    if !p.exists() {
+                        std::fs::create_dir_all(&p).context(error::Io)?; // TODO
+                    }
+                }
+                let mut outfile = std::fs::File::create(&out_path).context(error::Io)?;
+                std::io::copy(&mut file, &mut outfile).context(error::Io)?;
+            }
+        }
+        Ok(())
+    })
+    .await
+    .context(error::TokioJoin)?
 }
