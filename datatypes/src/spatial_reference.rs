@@ -48,8 +48,8 @@ impl std::fmt::Display for SpatialReferenceAuthority {
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
 #[cfg_attr(feature = "postgres", derive(ToSql, FromSql))]
 pub struct SpatialReference {
-    authority: SpatialReferenceAuthority,
-    code: u32,
+    pub authority: SpatialReferenceAuthority,
+    pub code: u32,
 }
 
 impl SpatialReference {

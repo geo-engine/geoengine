@@ -37,6 +37,9 @@ snafu = "0.6"
 tokio = { version = "1.1", features = ["macros", "signal", "sync", "rt-multi-thread"] }
 typetag = "0.1"
 uuid = { version = "0.8", features = ["serde", "v4", "v5"] }
+pyo3 = "0.14.1"
+numpy = "0.14.1"
+ndarray = "0.15.3"
 
 [dev-dependencies]
 criterion = {version = "0.3", features =["async_futures", "async_tokio"]}
