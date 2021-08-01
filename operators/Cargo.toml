@@ -39,7 +39,7 @@ typetag = "0.1"
 uuid = { version = "0.8", features = ["serde", "v4", "v5"] }
 pyo3 = "0.14.1"
 numpy = "0.14.1"
-ndarray = "0.15.3"
+ndarray = "0.14" # still don't go higher 🤦 (01.08.2021)
 
 [dev-dependencies]
 criterion = {version = "0.3", features =["async_futures", "async_tokio"]}

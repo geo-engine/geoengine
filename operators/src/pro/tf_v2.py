@@ -18,7 +18,7 @@ model = keras.models.Sequential()
 
 def initUnet(num_classes, id):
     print(tf.__version__)
-    inputs = keras.Input(shape=(512, 512, 3), batch_size=1)
+    inputs = keras.Input(shape=(512, 512, 7), batch_size=1)
 
     ### [First half of the network: downsampling inputs] ###
 
@@ -86,7 +86,7 @@ def load(id):
 
 def fit(X, y):    
     global model
-    print(y)
+    print(y.shape)
     print(X.shape)
     
     model.fit(X, y, batch_size = 1)
