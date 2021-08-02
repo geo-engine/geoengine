@@ -6,6 +6,8 @@ use pyo3::{types::{PyModule, PyUnicode}};
 use ndarray::{Array2, Axis, stack};
 use numpy::{PyArray, PyArray4};
 
+
+
 #[allow(clippy::too_many_arguments)]
 pub async fn imseg_predict<T, C: QueryContext>(
     processor_ir_016: Box<dyn RasterQueryProcessor<RasterType = T>>,
@@ -95,13 +97,30 @@ T: Pixel + numpy::Element,{
 
                         let result_img = py_mod.call("predict", (py_img_batch,), None)
                         .unwrap()
-                        .downcast::<PyArray4<T>>()
+                        .downcast::<PyArray4<f32>>()
                         .unwrap()
                         .to_owned_array();
 
-                        //TODO create 1-dim array of most likely class
-
-
+                        let mut segmap = Array2::<usize>::zeros((512,512));
+                        let result = result_img.slice(ndarray::s![0,..,..,..]);
+                        for i in 0..512 {
+                            for j in 0..512 {
+                                let view = result.slice(ndarray::s![i,j,..]);
+                                let mut max: f32 = 0.0;
+                                let mut max_index: u8 = 0;
+                                
+                                for t in 0..3 {
+                                    if max <= view[t as usize] {
+                                        max = view[t as usize];
+                                        max_index = t;
+                                    }
+                                }
+                                segmap[[i as usize, j as usize]] = max_index as usize;
+                            }
+                        }
+                        println!("{:?}", segmap);
+                        
+                    
 
                     },
                     _ => {

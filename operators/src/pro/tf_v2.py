@@ -95,12 +95,12 @@ def fit(X, y):
 def predict(X):
     global model
     result = model.predict(X)
-    model.summary()
+    #model.summary()
     print(result.shape)
-    print(result[0][0])
-    print(result[0][1])
-    print(result[0][2])
-    print(result[0][3])
+    #print(result[0][0][0])
+    #print(result[0][0][1])
+    #print(result[0][0][2])
+    #print(result[0][0][3])
     return result
 
 def save(id):
