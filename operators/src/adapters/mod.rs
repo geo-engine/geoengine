@@ -2,6 +2,7 @@ mod feature_collection_merger;
 mod raster_subquery_adapter;
 mod raster_time;
 mod raster_time_substream;
+mod stream_statistics_adapter;
 
 pub use feature_collection_merger::FeatureCollectionChunkMerger;
 pub use raster_subquery_adapter::{
@@ -10,7 +11,8 @@ pub use raster_subquery_adapter::{
 };
 pub use raster_time::RasterTimeAdapter;
 
-use self::raster_time_substream::RasterTimeMultiFold;
+use self::{raster_time_substream::RasterTimeMultiFold};
+pub use stream_statistics_adapter::StreamStatisticsAdapter;
 use crate::util::Result;
 use futures::{stream::Fuse, Future, Stream, StreamExt};
 use geoengine_datatypes::{
@@ -46,6 +48,11 @@ where
     {
         RasterTimeMultiFold::new(self, accum_init_fn, fold_fn)
     }
+
+    /// Wraps a `Stream` with a `StreamStatisticsAdapter`.
+    fn statistics_with_id(self, id: String) -> StreamStatisticsAdapter<Self> where Self: Stream + Sized {
+        StreamStatisticsAdapter::statistics_with_id(self, id)
+    }
 }
 
 impl<T: ?Sized, P: Pixel> RasterStreamExt<P> for T where T: Stream<Item = Result<RasterTile2D<P>>> {}
@@ -67,6 +74,11 @@ where
         Self: Sized,
     {
         FeatureCollectionChunkMerger::new(self.fuse(), chunk_size_bytes)
+    }
+
+    /// Wraps a `Stream` with a `StreamStatisticsAdapter`.
+    fn statistics_with_id(self, id: String) -> StreamStatisticsAdapter<Self> where Self: Stream + Sized {
+        StreamStatisticsAdapter::statistics_with_id(self, id)
     }
 }
 
