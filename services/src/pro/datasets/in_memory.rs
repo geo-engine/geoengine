@@ -382,6 +382,7 @@ mod tests {
                 force_ogr_time_filter: false,
                 force_ogr_spatial_filter: false,
                 on_error: OgrSourceErrorSpec::Ignore,
+                sql_query: None,
             },
             result_descriptor: descriptor.clone(),
             phantom: Default::default(),
