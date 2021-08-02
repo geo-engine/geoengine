@@ -34,7 +34,7 @@ where
     let py_mod = PyModule::from_code(py, include_str!("tf_v2.py"),"filename.py", "modulename").unwrap();
     let name = PyUnicode::new(py, "first");
     //TODO change depreciated function
-    let _init = py_mod.call("initUnet", (4, name), None).unwrap();
+    let _init = py_mod.call("initUnet", (4,name), None).unwrap();
 
     
     let tile_stream_ir_016 = processor_ir_016.raster_query(query_rect, &query_ctx).await?;

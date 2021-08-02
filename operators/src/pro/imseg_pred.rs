@@ -9,7 +9,7 @@ use numpy::{PyArray, PyArray4};
 
 
 #[allow(clippy::too_many_arguments)]
-pub async fn imseg_predict<T, C: QueryContext>(
+pub async fn imseg_predict<T, U, C: QueryContext>(
     processor_ir_016: Box<dyn RasterQueryProcessor<RasterType = T>>,
     processor_ir_039: Box<dyn RasterQueryProcessor<RasterType = T>>,
     processor_ir_087: Box<dyn RasterQueryProcessor<RasterType = T>>,
@@ -17,11 +17,14 @@ pub async fn imseg_predict<T, C: QueryContext>(
     processor_ir_108: Box<dyn RasterQueryProcessor<RasterType = T>>,
     processor_ir_120: Box<dyn RasterQueryProcessor<RasterType = T>>,
     processor_ir_134: Box<dyn RasterQueryProcessor<RasterType = T>>,
+    processor_truth: Box<dyn RasterQueryProcessor<RasterType = U>>,
+    classes: Vec<U>,
     query_rect: QueryRectangle<SpatialPartition2D>,
     query_ctx: C,
 ) -> Result<()>
 where 
-T: Pixel + numpy::Element,{
+T: Pixel + numpy::Element,
+U: Pixel + numpy::Element,{
 
     //For some reason we need that now...
     pyo3::prepare_freethreaded_python();
@@ -42,14 +45,15 @@ T: Pixel + numpy::Element,{
     let tile_stream_ir_108 = processor_ir_108.raster_query(query_rect, &query_ctx).await?;
     let tile_stream_ir_120 = processor_ir_120.raster_query(query_rect, &query_ctx).await?;
     let tile_stream_ir_134 = processor_ir_134.raster_query(query_rect, &query_ctx).await?;
-    
-    let mut final_stream = tile_stream_ir_016.zip(tile_stream_ir_039.zip(tile_stream_ir_087.zip(tile_stream_ir_097.zip(tile_stream_ir_108.zip(tile_stream_ir_120.zip(tile_stream_ir_134))))));
+    let tile_stream_truth = processor_truth.raster_query(query_rect, &query_ctx).await?;
 
-    while let Some((ir_016, (ir_039, (ir_087, (ir_097, (ir_108, (ir_120, ir_137))))))) = final_stream.next().await {
-        match (ir_016, ir_039, ir_087, ir_097, ir_108, ir_120, ir_137) {
-            (Ok(ir_016), Ok(ir_039), Ok(ir_087), Ok(ir_097), Ok(ir_108), Ok(ir_120), Ok(ir_134)) => {
-                match (ir_016.grid_array, ir_039.grid_array, ir_087.grid_array, ir_097.grid_array, ir_108.grid_array, ir_120.grid_array, ir_134.grid_array) {
-                    (GridOrEmpty::Grid(grid_016), GridOrEmpty::Grid(grid_039),  GridOrEmpty::Grid(grid_087),  GridOrEmpty::Grid(grid_097), GridOrEmpty::Grid(grid_108), GridOrEmpty::Grid(grid_120), GridOrEmpty::Grid(grid_134)) => {
+    let mut final_stream = tile_stream_ir_016.zip(tile_stream_ir_039.zip(tile_stream_ir_087.zip(tile_stream_ir_097.zip(tile_stream_ir_108.zip(tile_stream_ir_120.zip(tile_stream_ir_134.zip(tile_stream_truth)))))));
+
+    while let Some((ir_016, (ir_039, (ir_087, (ir_097, (ir_108, (ir_120, (ir_137, truth)))))))) = final_stream.next().await {
+        match (ir_016, ir_039, ir_087, ir_097, ir_108, ir_120, ir_137, truth) {
+            (Ok(ir_016), Ok(ir_039), Ok(ir_087), Ok(ir_097), Ok(ir_108), Ok(ir_120), Ok(ir_134), Ok(truth)) => {
+                match (ir_016.grid_array, ir_039.grid_array, ir_087.grid_array, ir_097.grid_array, ir_108.grid_array, ir_120.grid_array, ir_134.grid_array, truth.grid_array) {
+                    (GridOrEmpty::Grid(grid_016), GridOrEmpty::Grid(grid_039),  GridOrEmpty::Grid(grid_087),  GridOrEmpty::Grid(grid_097), GridOrEmpty::Grid(grid_108), GridOrEmpty::Grid(grid_120), GridOrEmpty::Grid(grid_134), GridOrEmpty::Grid(grid_truth)) => {
                         
                         let data_016 = grid_016.data;
                         let data_039 = grid_039.data;
@@ -58,6 +62,7 @@ T: Pixel + numpy::Element,{
                         let data_108 = grid_108.data;
                         let data_120 = grid_120.data;
                         let data_134 = grid_134.data;
+                        let data_truth = grid_truth.data;
 
                         let tile_size = grid_016.shape.shape_array;
 
@@ -86,6 +91,10 @@ T: Pixel + numpy::Element,{
                         Array2::from_shape_vec((tile_size[0], tile_size[1]), data_134)
                         .unwrap()
                         .to_owned();
+                        let arr_truth: ndarray::Array2<U> = 
+                        Array2::from_shape_vec((tile_size[0], tile_size[1]), data_truth)
+                        .unwrap()
+                        .to_owned();
 
                         let arr_img: ndarray::Array<T, _> = stack(Axis(2), &[arr_016.view(),arr_039.view(),arr_087.view(), arr_097.view(), arr_108.view(), arr_120.view(), arr_134.view()]).unwrap();
                                         
@@ -101,26 +110,35 @@ T: Pixel + numpy::Element,{
                         .unwrap()
                         .to_owned_array();
 
-                        let mut segmap = Array2::<usize>::zeros((512,512));
+                        let mut segmap = Array2::<U>::from_elem((512,512), classes[0]);
                         let result = result_img.slice(ndarray::s![0,..,..,..]);
                         for i in 0..512 {
                             for j in 0..512 {
                                 let view = result.slice(ndarray::s![i,j,..]);
                                 let mut max: f32 = 0.0;
-                                let mut max_index: u8 = 0;
+                                let mut max_class = classes[0];
                                 
                                 for t in 0..3 {
                                     if max <= view[t as usize] {
                                         max = view[t as usize];
-                                        max_index = t;
+                                        max_class = classes[t];
                                     }
                                 }
-                                segmap[[i as usize, j as usize]] = max_index as usize;
+                                segmap[[i as usize, j as usize]] = max_class;
                             }
                         }
                         println!("{:?}", segmap);
+                        println!("{:?}", arr_truth);
+                        //count number of matches
+                        let matching = segmap.into_raw_vec().iter().zip(&arr_truth.into_raw_vec()).filter(|&(a,b)| a == b).count();
+
+                        let acc = matching as f64/(512 as f64* 512 as f64);
+                        
+                        println!("{:?}", acc);
+                        
                         
                     
+
 
                     },
                     _ => {
@@ -413,6 +431,42 @@ mod tests {
 
         };
 
+        let claas = GdalMetaDataRegular{
+            result_descriptor: RasterResultDescriptor{
+                data_type: RasterDataType::U8,
+                spatial_reference: SpatialReferenceOption::
+                    SpatialReference(SpatialReference{
+                        authority: SpatialReferenceAuthority::SrOrg,
+                        code: 81,
+                    }),
+                measurement: Measurement::Unitless,
+                no_data_value,
+            },
+            params: GdalDatasetParameters{
+                file_path: PathBuf::from("NETCDF:\"/mnt/panq/dbs_geo_data/satellite_data/CLAAS-2/level2/%%%_TIME_FORMATED_%%%.nc\":cma"),
+                rasterband_channel: 1,
+                geo_transform: GeoTransform{
+                    origin_coordinate: ( -5456233.41938636, 5456233.41938636).into(),
+                    x_pixel_size: 3000.403165817260742,
+                    y_pixel_size: -3000.403165817260742, 
+                },
+                width: 11136,
+                height: 11136,
+                file_not_found_handling: FileNotFoundHandling::NoData,
+                no_data_value,
+                properties_mapping: None,
+                gdal_open_options: None,
+            },
+            placeholder: "%%%_TIME_FORMATED_%%%".to_string(),
+            time_format: "%Y/%m/%d/CMAin%Y%m%d%H%M00305SVMSG01MD".to_string(),
+            start: TimeInstance::from_millis(1072917000000).unwrap(),
+            step: TimeStep{
+                granularity: TimeGranularity::Minutes,
+                step: 15,
+            }
+
+        };
+
 
         let source_a = GdalSourceProcessor::<i16>{
             tiling_specification,
@@ -453,7 +507,15 @@ mod tests {
             phantom_data: Default::default(),
         };
 
-        let x = imseg_predict(source_a.boxed(), source_b.boxed(), source_c.boxed(), source_d.boxed(), source_e.boxed(), source_f.boxed(), source_g.boxed(), QueryRectangle {
+        let source_h = GdalSourceProcessor::<u8>{
+            tiling_specification,
+            meta_data: Box::new(claas),
+            phantom_data: Default::default(),
+        };
+
+        let classes: Vec<u8> = vec![0,1,2,3];
+
+        let x = imseg_predict(source_a.boxed(), source_b.boxed(), source_c.boxed(), source_d.boxed(), source_e.boxed(), source_f.boxed(), source_g.boxed(), source_h.boxed(), classes,QueryRectangle {
             spatial_bounds: query_bbox,
             time_interval: TimeInterval::new(1_388_536_200_000, 1_388_536_200_000 + 1000)
                 .unwrap(),

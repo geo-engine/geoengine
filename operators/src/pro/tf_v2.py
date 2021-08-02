@@ -88,6 +88,7 @@ def fit(X, y):
     global model
     print(y.shape)
     print(X.shape)
+    #TODO check wether nan's present?
     
     model.fit(X, y, batch_size = 1)
 
