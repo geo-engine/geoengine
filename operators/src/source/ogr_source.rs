@@ -36,10 +36,9 @@ use geoengine_datatypes::primitives::{
     BoundingBox2D, Coordinate2D, FeatureDataType, FeatureDataValue, Geometry, MultiLineString,
     MultiPoint, MultiPolygon, NoGeometry, TimeInstance, TimeInterval, TimeStep, TypedGeometry,
 };
-use geoengine_datatypes::provenance::ProvenanceInformation;
 use geoengine_datatypes::util::arrow::ArrowTyped;
 
-use crate::engine::{QueryProcessor, VectorQueryRectangle};
+use crate::engine::{OperatorDatasets, QueryProcessor, VectorQueryRectangle};
 use crate::error::Error;
 use crate::util::Result;
 use crate::{
@@ -58,6 +57,12 @@ use std::convert::{TryFrom, TryInto};
 pub struct OgrSourceParameters {
     pub dataset: DatasetId,
     pub attribute_projection: Option<Vec<String>>,
+}
+
+impl OperatorDatasets for OgrSourceParameters {
+    fn datasets_collect(&self, datasets: &mut Vec<DatasetId>) {
+        datasets.push(self.dataset.clone());
+    }
 }
 
 pub type OgrSource = SourceOperator<OgrSourceParameters>;
@@ -85,7 +90,6 @@ pub struct OgrSourceDataset {
     #[serde(default)]
     pub force_ogr_spatial_filter: bool,
     pub on_error: OgrSourceErrorSpec,
-    pub provenance: Option<ProvenanceInformation>,
     pub sql_query: Option<String>,
 }
 
@@ -1159,11 +1163,6 @@ mod tests {
             force_ogr_time_filter: false,
             force_ogr_spatial_filter: false,
             on_error: OgrSourceErrorSpec::Ignore,
-            provenance: Some(ProvenanceInformation {
-                citation: "Foo Bar".to_string(),
-                license: "CC".to_string(),
-                uri: "foo:bar".to_string(),
-            }),
             sql_query: None,
         };
 
@@ -1199,11 +1198,6 @@ mod tests {
                 "forceOgrTimeFilter": false,
                 "forceOgrSpatialFilter": false,
                 "onError": "ignore",
-                "provenance": {
-                    "citation": "Foo Bar",
-                    "license": "CC",
-                    "uri": "foo:bar"
-                },
                 "sqlQuery": null
             })
             .to_string()
@@ -1261,7 +1255,6 @@ mod tests {
             force_ogr_time_filter: false,
             force_ogr_spatial_filter: false,
             on_error: OgrSourceErrorSpec::Ignore,
-            provenance: None,
             sql_query: None,
         };
 
@@ -1309,7 +1302,6 @@ mod tests {
             force_ogr_time_filter: false,
             force_ogr_spatial_filter: false,
             on_error: OgrSourceErrorSpec::Ignore,
-            provenance: None,
             sql_query: None,
         };
 
@@ -1357,7 +1349,6 @@ mod tests {
             force_ogr_time_filter: false,
             force_ogr_spatial_filter: false,
             on_error: OgrSourceErrorSpec::Ignore,
-            provenance: None,
             sql_query: None,
         };
         let info = StaticMetaData {
@@ -1419,7 +1410,6 @@ mod tests {
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Ignore,
-                    provenance: None,
                     sql_query: None,
                 },
                 result_descriptor: VectorResultDescriptor {
@@ -1513,7 +1503,6 @@ mod tests {
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: true,
                     on_error: OgrSourceErrorSpec::Ignore,
-                    provenance: None,
                     sql_query: None,
                 },
                 result_descriptor: VectorResultDescriptor {
@@ -1609,7 +1598,6 @@ mod tests {
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Ignore,
-                    provenance: None,
                     sql_query: None,
                 },
                 result_descriptor: VectorResultDescriptor {
@@ -1715,7 +1703,6 @@ mod tests {
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Ignore,
-                    provenance: None,
                     sql_query: None,
                 },
                 result_descriptor: VectorResultDescriptor {
@@ -1893,7 +1880,6 @@ mod tests {
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Ignore,
-                    provenance: None,
                     sql_query: None,
                 },
                 result_descriptor: VectorResultDescriptor {
@@ -3061,7 +3047,6 @@ mod tests {
             force_ogr_time_filter: false,
             force_ogr_spatial_filter: false,
             on_error: OgrSourceErrorSpec::Ignore,
-            provenance: None,
             sql_query: None,
         };
 
@@ -3151,7 +3136,6 @@ mod tests {
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Ignore,
-                    provenance: None,
                     sql_query: None,
                 },
                 result_descriptor: VectorResultDescriptor {
@@ -3397,7 +3381,6 @@ mod tests {
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Ignore,
-                    provenance: None,
                     sql_query: None,
                 },
                 result_descriptor: VectorResultDescriptor {
@@ -3479,7 +3462,6 @@ mod tests {
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Abort,
-                    provenance: None,
                     sql_query: None,
                 },
                 result_descriptor: VectorResultDescriptor {
@@ -3570,7 +3552,6 @@ mod tests {
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Abort,
-                    provenance: None,
                     sql_query: None,
                 },
                 result_descriptor: VectorResultDescriptor {
@@ -3682,7 +3663,6 @@ mod tests {
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Abort,
-                    provenance: None,
                     sql_query: None,
                 },
                 result_descriptor: VectorResultDescriptor {
@@ -3787,7 +3767,6 @@ mod tests {
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Abort,
-                    provenance: None,
                     sql_query: None,
                 },
                 result_descriptor: VectorResultDescriptor {
@@ -3892,7 +3871,6 @@ mod tests {
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Abort,
-                    provenance: None,
                     sql_query: None,
                 },
                 result_descriptor: VectorResultDescriptor {
@@ -3986,7 +3964,6 @@ mod tests {
             force_ogr_time_filter: false,
             force_ogr_spatial_filter: false,
             on_error: OgrSourceErrorSpec::Ignore,
-            provenance: None,
             sql_query: None,
         };
 

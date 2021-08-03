@@ -1,5 +1,6 @@
 use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
+use geoengine_datatypes::dataset::DatasetId;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
@@ -10,11 +11,11 @@ use geoengine_datatypes::collections::{
 use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval};
 
 use crate::adapters::FeatureCollectionChunkMerger;
-use crate::engine::QueryProcessor;
 use crate::engine::{
     ExecutionContext, InitializedVectorOperator, Operator, QueryContext, TypedVectorQueryProcessor,
     VectorOperator, VectorQueryProcessor, VectorQueryRectangle, VectorResultDescriptor,
 };
+use crate::engine::{OperatorDatasets, QueryProcessor};
 use crate::error;
 use crate::util::Result;
 use arrow::array::BooleanArray;
@@ -33,6 +34,13 @@ pub struct PointInPolygonFilterParams {}
 pub struct PointInPolygonFilterSource {
     points: Box<dyn VectorOperator>,
     polygons: Box<dyn VectorOperator>,
+}
+
+impl OperatorDatasets for PointInPolygonFilterSource {
+    fn datasets_collect(&self, datasets: &mut Vec<DatasetId>) {
+        self.points.datasets_collect(datasets);
+        self.polygons.datasets_collect(datasets);
+    }
 }
 
 #[typetag::serde]

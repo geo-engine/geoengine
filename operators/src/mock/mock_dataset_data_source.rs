@@ -1,7 +1,7 @@
 use crate::engine::{
-    ExecutionContext, InitializedVectorOperator, MetaData, QueryContext, ResultDescriptor,
-    SourceOperator, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
-    VectorQueryRectangle, VectorResultDescriptor,
+    ExecutionContext, InitializedVectorOperator, MetaData, OperatorDatasets, QueryContext,
+    ResultDescriptor, SourceOperator, TypedVectorQueryProcessor, VectorOperator,
+    VectorQueryProcessor, VectorQueryRectangle, VectorResultDescriptor,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -123,6 +123,12 @@ impl VectorOperator for MockDatasetDataSource {
             loading_info,
         }
         .boxed())
+    }
+}
+
+impl OperatorDatasets for MockDatasetDataSource {
+    fn datasets_collect(&self, datasets: &mut Vec<DatasetId>) {
+        datasets.push(self.params.dataset.clone());
     }
 }
 

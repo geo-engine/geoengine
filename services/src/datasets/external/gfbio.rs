@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::marker::PhantomData;
 
+use crate::datasets::provenance::{Provenance, ProvenanceOutput, ProvenanceProvider};
 use crate::error::Error;
 use crate::{datasets::listing::DatasetListOptions, error::Result};
 use crate::{
@@ -231,6 +232,57 @@ impl DatasetProvider for GfbioDataProvider {
 }
 
 #[async_trait]
+impl ProvenanceProvider for GfbioDataProvider {
+    async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {
+        let surrogate_key: i32 = dataset
+            .external()
+            .ok_or(Error::InvalidDatasetId)
+            .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
+                source: Box::new(e),
+            })?
+            .dataset_id
+            .parse()
+            .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
+                source: Box::new(e),
+            })?;
+
+        let conn = self.pool.get().await?;
+
+        let stmt = conn
+            .prepare(&format!(
+                r#"
+            SELECT "{citation}", "{license}", "{uri}"
+            FROM {schema}.abcd_datasets WHERE surrogate_key = $1;"#,
+                citation = self
+                    .column_name_to_hash
+                    .get("/DataSets/DataSet/Metadata/IPRStatements/Citations/Citation/Text")
+                    .ok_or(Error::GfbioMissingAbcdField)?,
+                uri = self
+                    .column_name_to_hash
+                    .get("/DataSets/DataSet/Metadata/Description/Representation/URI")
+                    .ok_or(Error::GfbioMissingAbcdField)?,
+                license = self
+                    .column_name_to_hash
+                    .get("/DataSets/DataSet/Metadata/IPRStatements/Licenses/License/Text")
+                    .ok_or(Error::GfbioMissingAbcdField)?,
+                schema = self.db_config.schema
+            ))
+            .await?;
+
+        let row = conn.query_one(&stmt, &[&surrogate_key]).await?;
+
+        Ok(ProvenanceOutput {
+            dataset: dataset.clone(),
+            provenance: Some(Provenance {
+                citation: row.try_get(0).unwrap_or_else(|_| "".to_owned()),
+                license: row.try_get(1).unwrap_or_else(|_| "".to_owned()),
+                uri: row.try_get(2).unwrap_or_else(|_| "".to_owned()),
+            }),
+        })
+    }
+}
+
+#[async_trait]
 impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
     for GfbioDataProvider
 {
@@ -283,7 +335,6 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
                 force_ogr_time_filter: false,
                 force_ogr_spatial_filter: true,
                 on_error: OgrSourceErrorSpec::Ignore,
-                provenance: None,
                 sql_query: Some(self.build_query(surrogate_key)),
             },
             result_descriptor: VectorResultDescriptor {
@@ -647,7 +698,6 @@ mod tests {
                 force_ogr_time_filter: false,
                 force_ogr_spatial_filter: true,
                 on_error: OgrSourceErrorSpec::Ignore,
-                provenance: None,
                 sql_query: Some(format!("SELECT surrogate_key, geom , \"150ac8760faba3bbf29ee77713fc0402641eea82\", \"6df446e57190f19d63fcf99ba25476510c5c8ce6\", \"09e05cff5522bf112eedf91c5c2f1432539e59aa\", \"8003ddd80b42736ebf36b87018e51db3ee84efaf\", \"9691f318c0f84b4e71e3c125492902af3ad22a81\", \"abc0ceb08b2723a43274e1db093dfe1f333fe453\", \"f65b72bbbd0b17e7345821a34c1da49d317ca28b\", \"d22ecb7dd0e5de6e8b2721977056d30aefda1b75\", \"bad2f7cae88e4219f2c3b186628189c5380f3c52\", \"624516976f697c1eacc7bccfb668d2c25ae7756e\", \"4f885a9545b143d322f3bf34bf2c5148e07d578a\", \"8603069b15071933545a8ce6563308da4d8ee019\", \"83fb54d8cfa58d729125f3dccac3a6820d95ccaa\", \"46b0ed7a1faa8d25b0c681fbbdc2cca60cecbdf0\", \"2598ba17aa170832b45c3c206f8133ddddc52c6e\", \"54a52959a34f3c19fa1b0e22cea2ae5c8ce78602\", \"7fdf1ed68add3ac2f4a1b2c89b75245260890dfe\", \"0dcf8788cadda41eaa5831f44227d8c531411953\", \"f2374ad051911a65bc0d0a46c13ada2625f55a10\", \"2b603312fc185489ffcffd5763bcd47c4b126f31\", \"adf8c075f2c6b97eaab5cee8f22e97abfdaf6b71\" FROM {}.abcd_units WHERE surrogate_key = 1", test_schema))
             };
 
@@ -760,6 +810,69 @@ mod tests {
             .unwrap();
 
             if result != &expected {
+                return Err(format!("{:?} != {:?}", result, expected));
+            }
+
+            Ok(())
+        }
+
+        let db_config = config::get_config_element::<config::Postgres>().unwrap();
+
+        let test_schema = create_test_data(&db_config).await;
+
+        let result = test(&db_config, &test_schema).await;
+
+        cleanup_test_data(&db_config, test_schema).await;
+
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn it_cites() {
+        async fn test(db_config: &config::Postgres, test_schema: &str) -> Result<(), String> {
+            let provider = Box::new(GfbioDataProviderDefinition {
+                id: DatasetProviderId::from_str("d29f2430-5c5e-4748-a2fa-6423aa2af42d").unwrap(),
+                name: "Gfbio".to_string(),
+                db_config: DatabaseConnectionConfig {
+                    host: db_config.host.clone(),
+                    port: db_config.port,
+                    database: db_config.database.clone(),
+                    schema: test_schema.to_owned(),
+                    user: db_config.user.clone(),
+                    password: db_config.password.clone(),
+                },
+            })
+            .initialize()
+            .await
+            .map_err(|e| e.to_string())?;
+
+            let dataset = DatasetId::External(ExternalDatasetId {
+                provider_id: DatasetProviderId::from_str("d29f2430-5c5e-4748-a2fa-6423aa2af42d")
+                    .unwrap(),
+                dataset_id: "1".to_owned(),
+            });
+
+            let result = provider
+                .provenance(&dataset)
+                .await
+                .map_err(|e| e.to_string())?;
+
+            let expected = ProvenanceOutput {
+                dataset: DatasetId::External(ExternalDatasetId {
+                    provider_id: DatasetProviderId::from_str(
+                        "d29f2430-5c5e-4748-a2fa-6423aa2af42d",
+                    )
+                    .unwrap(),
+                    dataset_id: "1".to_owned(),
+                }),
+                provenance: Some(Provenance {
+                    citation: "Example Description".to_owned(),
+                    license: "CC-BY-SA".to_owned(),
+                    uri: "http://example.org".to_owned(),
+                }),
+            };
+
+            if result != expected {
                 return Err(format!("{:?} != {:?}", result, expected));
             }
 
