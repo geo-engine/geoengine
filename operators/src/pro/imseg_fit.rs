@@ -47,7 +47,7 @@ where
     let tile_stream_truth = processor_truth.raster_query(query_rect, &query_ctx).await?;
     
     let mut final_stream = tile_stream_ir_016.zip(tile_stream_ir_039.zip(tile_stream_ir_087.zip(tile_stream_ir_097.zip(tile_stream_ir_108.zip(tile_stream_ir_120.zip(tile_stream_ir_134.zip(tile_stream_truth)))))));
-    
+    //Batches with chunks function?
     while let Some((ir_016, (ir_039, (ir_087, (ir_097, (ir_108, (ir_120, (ir_137, truth)))))))) = final_stream.next().await {
         match (ir_016, ir_039, ir_087, ir_097, ir_108, ir_120, ir_137, truth) {
             (Ok(ir_016), Ok(ir_039), Ok(ir_087), Ok(ir_097), Ok(ir_108), Ok(ir_120), Ok(ir_134), Ok(truth)) => {
