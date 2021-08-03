@@ -5,6 +5,7 @@ pub mod number_statistics;
 pub mod raster_stream_to_geotiff;
 pub mod raster_stream_to_png;
 pub mod string_token;
+pub mod sunpos;
 
 use crate::error::Error;
 use std::ops::Deref;
