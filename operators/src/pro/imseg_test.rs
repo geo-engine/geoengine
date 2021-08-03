@@ -78,48 +78,11 @@ where
             }
         }
         
-
-        let (data_016_init, data_039_init, data_087_init, data_097_init, data_108_init, data_120_init, data_134_init, data_truth_init) = buffer.remove(0);
-
-        let arr_016_init: ndarray::Array2<T> = 
-        Array2::from_shape_vec((tile_size[0], tile_size[1]), data_016_init)
-        .unwrap();
-        let arr_039_init: ndarray::Array2<T> = 
-        Array2::from_shape_vec((tile_size[0], tile_size[1]), data_039_init)
-        .unwrap();
-        let arr_087_init: ndarray::Array2<T> = 
-        Array2::from_shape_vec((tile_size[0], tile_size[1]), data_087_init)
-        .unwrap();
-        let arr_097_init: ndarray::Array2<T> = 
-        Array2::from_shape_vec((tile_size[0], tile_size[1]), data_097_init)
-        .unwrap()
-        .to_owned();
-        let arr_108_init: ndarray::Array2<T> = 
-        Array2::from_shape_vec((tile_size[0], tile_size[1]), data_108_init)
-        .unwrap()
-        .to_owned();
-        let arr_120_init: ndarray::Array2<T> = 
-        Array2::from_shape_vec((tile_size[0], tile_size[1]), data_120_init)
-        .unwrap()
-        .to_owned();
-        let arr_134_init: ndarray::Array2<T> = 
-        Array2::from_shape_vec((tile_size[0], tile_size[1]), data_134_init)
-        .unwrap()
-        .to_owned();
-        let arr_truth_init: ndarray::Array3<U> = 
-        Array2::from_shape_vec((tile_size[0], tile_size[1]), data_truth_init)
-        .unwrap()
-        .to_owned().insert_axis(Axis(2));
-        let arr_img_init: ndarray::Array<T, _> = stack(Axis(2), &[arr_016_init.view(),arr_039_init.view(),arr_087_init.view(), arr_097_init.view(), arr_108_init.view(), arr_120_init.view(), arr_134_init.view()]).unwrap();
-                                        
-        //let arr_img_batch_init = arr_img_init.insert_axis(Axis(0)); // add a leading axis for the batches!
-
-        //let arr_truth_batch_init = arr_truth_init.insert_axis(Axis(0)); // add a leading axis for the batches!
         let mut batch_img: Vec<ArrayBase<OwnedRepr<T>, Dim<[usize; 3]>>> = Vec::new();
-        batch_img.push(arr_img_init);
+
         let mut batch_truth: Vec<ArrayBase<OwnedRepr<U>, Dim<[usize; 3]>>> = Vec::new();
-        batch_truth.push(arr_truth_init);
-        for _ in 0..9 {
+
+        for _ in 0..10 {
             let (data_016, data_039, data_087, data_097, data_108, data_120, data_134, data_truth) = buffer.remove(0);
             let arr_016: ndarray::Array2<T> = 
             Array2::from_shape_vec((tile_size[0], tile_size[1]), data_016)
