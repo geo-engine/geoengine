@@ -186,15 +186,23 @@ async fn get_workflow_metadata<C: Context>(
 /// ```
 /// Response:
 /// ```text
-/// {
+/// [{
 ///   "id": {
 ///     "type": "internal",
-///     "id": "846a823a-6859-4b94-ab0a-c1de80f593d8"
-///   }
+///     "datasetId": "846a823a-6859-4b94-ab0a-c1de80f593d8"
+///   },
 ///   "citation": "Author, Dataset Tile",
-///   "license": "Some license"
+///   "license": "Some license",
 ///   "uri": "http://example.org/"
-/// }
+/// }, {
+///   "id": {
+///     "type": "internal",
+///     "datasetId": "453cd398-f271-437b-9c3d-7f42213ea30a"
+///   },
+///   "citation": "Another Author, Another Dataset Tile",
+///   "license": "Some other license",
+///   "uri": "http://example.org/"
+/// }]
 /// ```
 pub(crate) fn get_workflow_provenance_handler<C: Context>(
     ctx: C,
