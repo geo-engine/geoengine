@@ -16,9 +16,9 @@ tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
 model = keras.models.Sequential()
 
-def initUnet(num_classes, id):
+def initUnet(num_classes, id, batch_size):
     print(tf.__version__)
-    inputs = keras.Input(shape=(512, 512, 7), batch_size=1)
+    inputs = keras.Input(shape=(512, 512, 7), batch_size=batch_size)
 
     ### [First half of the network: downsampling inputs] ###
 
@@ -84,18 +84,18 @@ def load(id):
     print('Loaded model from saved_model/{}'.format(id))
 
 
-def fit(X, y):    
+def fit(X, y, batch_size):    
     global model
-    #print(y.shape)
-    #print(X.shape)
+    print(y.shape)
+    print(X.shape)
     #TODO check wether nan's present?
     
-    model.fit(X, y, batch_size = 1)
+    model.fit(X, y, batch_size = batch_size)
 
 
 def predict(X):
     global model
-    result = model.predict(X)
+    result = model.predict(X, batch_size=1)
     #model.summary()
     print(result.shape)
     #print(result[0][0][0])

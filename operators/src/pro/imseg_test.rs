@@ -3,8 +3,9 @@ use geoengine_datatypes::{primitives::{SpatialPartition2D}, raster::{GridOrEmpty
 use crate::engine::{QueryContext, QueryRectangle, RasterQueryProcessor};
 use crate::util::Result;
 use pyo3::{types::{PyModule, PyUnicode}};
-use ndarray::{Array2, Axis, stack};
+use ndarray::{Array2, Axis, stack, Dim, ArrayBase, OwnedRepr};
 use numpy::{PyArray};
+
 
 #[allow(clippy::too_many_arguments)]
 pub async fn imseg_fit<T, U, C: QueryContext>(
@@ -34,7 +35,7 @@ where
     let py_mod = PyModule::from_code(py, include_str!("tf_v2.py"),"filename.py", "modulename").unwrap();
     let name = PyUnicode::new(py, "first");
     //TODO change depreciated function
-    let _init = py_mod.call("initUnet", (4,name, 1), None).unwrap();
+    let _init = py_mod.call("initUnet", (4,name, 10), None).unwrap();
 
     
     let tile_stream_ir_016 = processor_ir_016.raster_query(query_rect, &query_ctx).await?;
@@ -46,77 +47,130 @@ where
     let tile_stream_ir_134 = processor_ir_134.raster_query(query_rect, &query_ctx).await?;
     let tile_stream_truth = processor_truth.raster_query(query_rect, &query_ctx).await?;
     
-    let mut final_stream = tile_stream_ir_016.zip(tile_stream_ir_039.zip(tile_stream_ir_087.zip(tile_stream_ir_097.zip(tile_stream_ir_108.zip(tile_stream_ir_120.zip(tile_stream_ir_134.zip(tile_stream_truth)))))));
+    let final_stream = tile_stream_ir_016.zip(tile_stream_ir_039.zip(tile_stream_ir_087.zip(tile_stream_ir_097.zip(tile_stream_ir_108.zip(tile_stream_ir_120.zip(tile_stream_ir_134.zip(tile_stream_truth)))))));
     //Batches with chunks function?
-    while let Some((ir_016, (ir_039, (ir_087, (ir_097, (ir_108, (ir_120, (ir_137, truth)))))))) = final_stream.next().await {
-        match (ir_016, ir_039, ir_087, ir_097, ir_108, ir_120, ir_137, truth) {
-            (Ok(ir_016), Ok(ir_039), Ok(ir_087), Ok(ir_097), Ok(ir_108), Ok(ir_120), Ok(ir_134), Ok(truth)) => {
-                match (ir_016.grid_array, ir_039.grid_array, ir_087.grid_array, ir_097.grid_array, ir_108.grid_array, ir_120.grid_array, ir_134.grid_array, truth.grid_array) {
-                                    (GridOrEmpty::Grid(grid_016), GridOrEmpty::Grid(grid_039),  GridOrEmpty::Grid(grid_087),  GridOrEmpty::Grid(grid_097), GridOrEmpty::Grid(grid_108), GridOrEmpty::Grid(grid_120), GridOrEmpty::Grid(grid_134), GridOrEmpty::Grid(grid_truth)) => {
-    
-                                        let data_016 = grid_016.data;
-                                        let data_039 = grid_039.data;
-                                        let data_087 = grid_087.data;
-                                        let data_097 = grid_097.data;
-                                        let data_108 = grid_108.data;
-                                        let data_120 = grid_120.data;
-                                        let data_134 = grid_134.data;
-                                        let data_truth = grid_truth.data;
+    let mut chunked_stream = final_stream.chunks(10);
+    while let Some(mut vctr) = chunked_stream.next().await {
+        let mut buffer: Vec<(Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<U>)> = Vec::new();
+        let mut tile_size: [usize;2] = [0,0];
+        
+        
 
-                                        let tile_size = grid_016.shape.shape_array;
+        for _ in 0..10 {
+            let (ir_016, (ir_039, (ir_087, (ir_097, (ir_108, (ir_120, (ir_137, truth))))))) = vctr.remove(0);
+            
+            match (ir_016, ir_039, ir_087, ir_097, ir_108, ir_120, ir_137, truth) {
+                (Ok(ir_016), Ok(ir_039), Ok(ir_087), Ok(ir_097), Ok(ir_108), Ok(ir_120), Ok(ir_134), Ok(truth)) => {
+                    match (ir_016.grid_array, ir_039.grid_array, ir_087.grid_array, ir_097.grid_array, ir_108.grid_array, ir_120.grid_array, ir_134.grid_array, truth.grid_array) {
+                        (GridOrEmpty::Grid(grid_016), GridOrEmpty::Grid(grid_039),  GridOrEmpty::Grid(grid_087),  GridOrEmpty::Grid(grid_097), GridOrEmpty::Grid(grid_108), GridOrEmpty::Grid(grid_120), GridOrEmpty::Grid(grid_134), GridOrEmpty::Grid(grid_truth)) => {
+                            tile_size = grid_016.shape.shape_array;
+                            buffer.push((grid_016.data, grid_039.data, grid_087.data, grid_097.data, grid_108.data, grid_120.data, grid_134.data, grid_truth.data));
+                            
+                        }, 
+                        _ => {
 
-                                        let arr_016: ndarray::Array2<T> = 
-                                        Array2::from_shape_vec((tile_size[0], tile_size[1]), data_016)
-                                        .unwrap();
-                                        let arr_039: ndarray::Array2<T> = 
-                                        Array2::from_shape_vec((tile_size[0], tile_size[1]), data_039)
-                                        .unwrap();
-                                        let arr_087: ndarray::Array2<T> = 
-                                        Array2::from_shape_vec((tile_size[0], tile_size[1]), data_087)
-                                        .unwrap();
-                                        let arr_097: ndarray::Array2<T> = 
-                                        Array2::from_shape_vec((tile_size[0], tile_size[1]), data_097)
-                                        .unwrap()
-                                        .to_owned();
-                                        let arr_108: ndarray::Array2<T> = 
-                                        Array2::from_shape_vec((tile_size[0], tile_size[1]), data_108)
-                                        .unwrap()
-                                        .to_owned();
-                                        let arr_120: ndarray::Array2<T> = 
-                                        Array2::from_shape_vec((tile_size[0], tile_size[1]), data_120)
-                                        .unwrap()
-                                        .to_owned();
-                                        let arr_134: ndarray::Array2<T> = 
-                                        Array2::from_shape_vec((tile_size[0], tile_size[1]), data_134)
-                                        .unwrap()
-                                        .to_owned();
-                                        let arr_truth: ndarray::Array2<U> = 
-                                        Array2::from_shape_vec((tile_size[0], tile_size[1]), data_truth)
-                                        .unwrap()
-                                        .to_owned();
-                                        let arr_img: ndarray::Array<T, _> = stack(Axis(2), &[arr_016.view(),arr_039.view(),arr_087.view(), arr_097.view(), arr_108.view(), arr_120.view(), arr_134.view()]).unwrap();
-                                        
-                                        let arr_img_batch = arr_img.insert_axis(Axis(0)); // add a leading axis for the batches!
-                                        let arr_truth_batch = arr_truth.insert_axis(Axis(0)); // add a leading axis for the batches!
-
-                                        dbg!(&arr_img_batch.shape());
-                
-                                        let py_img = PyArray::from_owned_array(py, arr_img_batch);
-                                        let py_truth = PyArray::from_owned_array(py, arr_truth_batch );
-                                        //TODO change depreciated function
-                                        let _result = py_mod.call("fit", (py_img, py_truth, 1), None).unwrap();
-                        
-                                    },
-                                    _ => {
-                                        println!("some are empty");
-                                    }
-                                }
-            }, 
-            _ => {
-                println!("Something went wrong");
-                
+                        }
+                    }
+                },
+                _ => {
+                    
+                }
             }
         }
+        
+
+        let (data_016_init, data_039_init, data_087_init, data_097_init, data_108_init, data_120_init, data_134_init, data_truth_init) = buffer.remove(0);
+
+        let arr_016_init: ndarray::Array2<T> = 
+        Array2::from_shape_vec((tile_size[0], tile_size[1]), data_016_init)
+        .unwrap();
+        let arr_039_init: ndarray::Array2<T> = 
+        Array2::from_shape_vec((tile_size[0], tile_size[1]), data_039_init)
+        .unwrap();
+        let arr_087_init: ndarray::Array2<T> = 
+        Array2::from_shape_vec((tile_size[0], tile_size[1]), data_087_init)
+        .unwrap();
+        let arr_097_init: ndarray::Array2<T> = 
+        Array2::from_shape_vec((tile_size[0], tile_size[1]), data_097_init)
+        .unwrap()
+        .to_owned();
+        let arr_108_init: ndarray::Array2<T> = 
+        Array2::from_shape_vec((tile_size[0], tile_size[1]), data_108_init)
+        .unwrap()
+        .to_owned();
+        let arr_120_init: ndarray::Array2<T> = 
+        Array2::from_shape_vec((tile_size[0], tile_size[1]), data_120_init)
+        .unwrap()
+        .to_owned();
+        let arr_134_init: ndarray::Array2<T> = 
+        Array2::from_shape_vec((tile_size[0], tile_size[1]), data_134_init)
+        .unwrap()
+        .to_owned();
+        let arr_truth_init: ndarray::Array3<U> = 
+        Array2::from_shape_vec((tile_size[0], tile_size[1]), data_truth_init)
+        .unwrap()
+        .to_owned().insert_axis(Axis(2));
+        let arr_img_init: ndarray::Array<T, _> = stack(Axis(2), &[arr_016_init.view(),arr_039_init.view(),arr_087_init.view(), arr_097_init.view(), arr_108_init.view(), arr_120_init.view(), arr_134_init.view()]).unwrap();
+                                        
+        //let arr_img_batch_init = arr_img_init.insert_axis(Axis(0)); // add a leading axis for the batches!
+
+        //let arr_truth_batch_init = arr_truth_init.insert_axis(Axis(0)); // add a leading axis for the batches!
+        let mut batch_img: Vec<ArrayBase<OwnedRepr<T>, Dim<[usize; 3]>>> = Vec::new();
+        batch_img.push(arr_img_init);
+        let mut batch_truth: Vec<ArrayBase<OwnedRepr<U>, Dim<[usize; 3]>>> = Vec::new();
+        batch_truth.push(arr_truth_init);
+        for _ in 0..9 {
+            let (data_016, data_039, data_087, data_097, data_108, data_120, data_134, data_truth) = buffer.remove(0);
+            let arr_016: ndarray::Array2<T> = 
+            Array2::from_shape_vec((tile_size[0], tile_size[1]), data_016)
+            .unwrap();
+            let arr_039: ndarray::Array2<T> = 
+            Array2::from_shape_vec((tile_size[0], tile_size[1]), data_039)
+            .unwrap();
+            let arr_087: ndarray::Array2<T> = 
+            Array2::from_shape_vec((tile_size[0], tile_size[1]), data_087)
+            .unwrap();
+            let arr_097: ndarray::Array2<T> = 
+            Array2::from_shape_vec((tile_size[0], tile_size[1]), data_097)
+            .unwrap()
+            .to_owned();
+            let arr_108: ndarray::Array2<T> = 
+            Array2::from_shape_vec((tile_size[0], tile_size[1]), data_108)
+            .unwrap()
+            .to_owned();
+            let arr_120: ndarray::Array2<T> = 
+            Array2::from_shape_vec((tile_size[0], tile_size[1]), data_120)
+            .unwrap()
+            .to_owned();
+            let arr_134: ndarray::Array2<T> = 
+            Array2::from_shape_vec((tile_size[0], tile_size[1]), data_134)
+            .unwrap()
+            .to_owned();
+            let arr_truth: ndarray::Array3<U> = 
+            Array2::from_shape_vec((tile_size[0], tile_size[1]), data_truth)
+            .unwrap()
+            .to_owned().insert_axis(Axis(2));
+            let arr_img: ndarray::Array<T, _> = stack(Axis(2), &[arr_016.view(),arr_039.view(),arr_087.view(), arr_097.view(), arr_108.view(), arr_120.view(), arr_134.view()]).unwrap();
+
+            //let arr_img_batch = arr_img.insert_axis(Axis(0)); // add a leading axis for the batches!
+            batch_img.push(arr_img);
+            //let arr_truth_batch = arr_truth.insert_axis(Axis(0)); // add a leading axis for the batches!
+            batch_truth.push(arr_truth);
+        }
+
+        let final_image_batch = stack(Axis(0), &[batch_img.remove(0).view(), batch_img.remove(0).view(), batch_img.remove(0).view(), batch_img.remove(0).view(), batch_img.remove(0).view(), batch_img.remove(0).view(), batch_img.remove(0).view(), batch_img.remove(0).view(), batch_img.remove(0).view(), batch_img.remove(0).view()]).unwrap();
+        let final_truth_batch = stack(Axis(0), &[batch_truth.remove(0).view(),batch_truth.remove(0).view(), batch_truth.remove(0).view(), batch_truth.remove(0).view(), batch_truth.remove(0).view(), batch_truth.remove(0).view(), batch_truth.remove(0).view(), batch_truth.remove(0).view(), batch_truth.remove(0).view(), batch_truth.remove(0).view()]).unwrap();
+
+        dbg!(&final_image_batch.shape());
+        dbg!(&final_truth_batch.shape());
+
+        let py_img = PyArray::from_owned_array(py, final_image_batch);
+        let py_truth = PyArray::from_owned_array(py, final_truth_batch );
+        //TODO change depreciated function
+        let _result = py_mod.call("fit", (py_img, py_truth, 1), None).unwrap();
+
+
+        
     }
     //TODO change depreciated function
     let _save = py_mod.call("save", (name, ), None).unwrap();
