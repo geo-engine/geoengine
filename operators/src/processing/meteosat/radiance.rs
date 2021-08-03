@@ -4,6 +4,7 @@ use crate::engine::{
     SingleRasterSource, TypedRasterQueryProcessor,
 };
 use crate::util::Result;
+use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::primitives::{Measurement, SpatialPartition2D};
@@ -12,15 +13,13 @@ use geoengine_datatypes::raster::{
     RasterTile2D,
 };
 use num_traits::AsPrimitive;
-use std::convert::TryFrom;
-
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
 // Output type is always f32
 type PixelOut = f32;
 use RasterDataType::F32 as RasterOut;
 use TypedRasterQueryProcessor::F32 as QueryProcessorOut;
+
 const OUT_NO_DATA_VALUE: PixelOut = PixelOut::NAN;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
@@ -183,25 +182,12 @@ where
                     )
                     .expect("raster creation must succeed");
 
-                    let offset = f64::try_from(
-                        tile.properties
-                            .properties_map
-                            .get(&self.offset_key)
-                            .ok_or(crate::error::Error::MissingRasterProperty {
-                                property: "msg.CalibrationOffset".into(),
-                            })?
-                            .clone(),
-                    )? as PixelOut;
-                    let slope = f64::try_from(
-                        tile.properties
-                            .properties_map
-                            .get(&self.slope_key)
-                            .ok_or(crate::error::Error::MissingRasterProperty {
-                                property: "msg.CalibrationSlope".into(),
-                            })?
-                            .clone(),
-                    )? as PixelOut;
-
+                    let offset = tile
+                        .properties
+                        .get_number_property::<f32>(&self.offset_key)?;
+                    let slope = tile
+                        .properties
+                        .get_number_property::<f32>(&self.slope_key)?;
                     let tgt = &mut out.data;
 
                     for (idx, v) in mg.data.iter().enumerate() {
