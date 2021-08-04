@@ -3,9 +3,9 @@ use geoengine_datatypes::{primitives::{SpatialPartition2D}, raster::{GridOrEmpty
 use crate::engine::{QueryContext, QueryRectangle, RasterQueryProcessor};
 use crate::util::Result;
 use pyo3::{types::{PyModule, PyUnicode}};
-use ndarray::{Array2, ArrayBase, Axis, Dim, OwnedRepr, concatenate, stack};
+use ndarray::{Array2, Axis,concatenate, stack};
 use numpy::{PyArray};
-
+use rand::prelude::*;
 
 #[allow(clippy::too_many_arguments)]
 pub async fn imseg_fit<T, U, C: QueryContext>(
@@ -30,8 +30,6 @@ where
     pyo3::prepare_freethreaded_python();
     let gil = pyo3::Python::acquire_gil();
     let py = gil.python();
-    println!("started");
-    
 
     let py_mod = PyModule::from_code(py, include_str!("tf_v2.py"),"filename.py", "modulename").unwrap();
     let name = PyUnicode::new(py, "first");
@@ -49,7 +47,7 @@ where
     let tile_stream_truth = processor_truth.raster_query(query_rect, &query_ctx).await?;
     
     let final_stream = tile_stream_ir_016.zip(tile_stream_ir_039.zip(tile_stream_ir_087.zip(tile_stream_ir_097.zip(tile_stream_ir_108.zip(tile_stream_ir_120.zip(tile_stream_ir_134.zip(tile_stream_truth)))))));
-    //Batches with chunks function?
+
     let mut chunked_stream = final_stream.chunks(batch_size);
     while let Some(mut vctr) = chunked_stream.next().await {
         let mut buffer: Vec<(Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<U>)> = Vec::new();
@@ -77,7 +75,6 @@ where
             }
         }
         
-
         let (data_016_init, data_039_init, data_087_init, data_097_init, data_108_init, data_120_init, data_134_init, data_truth_init) = buffer.remove(0);
 
         let arr_016_init: ndarray::Array2<T> = 
@@ -114,13 +111,12 @@ where
         let mut arr_img_batch = arr_img_init.insert_axis(Axis(0)); // add a leading axis for the batches!
 
         let mut arr_truth_batch = arr_truth_init.insert_axis(Axis(0)); // add a leading axis for the batches!
-        // let mut batch_img: Vec<ArrayBase<OwnedRepr<T>, Dim<[usize; 3]>>> = Vec::new();
-        // batch_img.push(arr_img_init);
-        // let mut batch_truth: Vec<ArrayBase<OwnedRepr<U>, Dim<[usize; 3]>>> = Vec::new();
-        // batch_truth.push(arr_truth_init);
-        //TODO maybe select a random element of vec to mix data up a bit?
-        for _ in 0..(batch_size - 1) {
-            let (data_016, data_039, data_087, data_097, data_108, data_120, data_134, data_truth) = buffer.remove(0);
+        
+        let num_elements = buffer.len();
+        let mut rng = rand::thread_rng();
+        for i in 0..(batch_size - 1) {
+            let rand_index: usize = rng.gen_range(0..num_elements-i);
+            let (data_016, data_039, data_087, data_097, data_108, data_120, data_134, data_truth) = buffer.remove(rand_index);
             let arr_016: ndarray::Array2<T> = 
             Array2::from_shape_vec((tile_size[0], tile_size[1]), data_016)
             .unwrap();
@@ -167,13 +163,9 @@ where
         //TODO change depreciated function
         let _result = py_mod.call("fit", (py_img, py_truth, batch_size), None).unwrap();
 
-
-        
     }
     //TODO change depreciated function
     let _save = py_mod.call("save", (name, ), None).unwrap();
-
-
 
     Ok(())
     
