@@ -3,7 +3,7 @@ use geoengine_datatypes::{primitives::{SpatialPartition2D}, raster::{GridOrEmpty
 use crate::engine::{QueryContext, QueryRectangle, RasterQueryProcessor};
 use crate::util::Result;
 use pyo3::{types::{PyModule, PyUnicode}};
-use ndarray::{Array2, Axis, stack, Dim, ArrayBase, OwnedRepr};
+use ndarray::{Array2, ArrayBase, Axis, Dim, OwnedRepr, concatenate, stack};
 use numpy::{PyArray};
 
 
@@ -19,6 +19,7 @@ pub async fn imseg_fit<T, U, C: QueryContext>(
     processor_truth: Box<dyn RasterQueryProcessor<RasterType = U>>,
     query_rect: QueryRectangle<SpatialPartition2D>,
     query_ctx: C,
+    batch_size: usize,
 ) -> Result<()>
 where
     T: Pixel + numpy::Element,
@@ -35,7 +36,7 @@ where
     let py_mod = PyModule::from_code(py, include_str!("tf_v2.py"),"filename.py", "modulename").unwrap();
     let name = PyUnicode::new(py, "first");
     //TODO change depreciated function
-    let _init = py_mod.call("initUnet", (4,name, 10), None).unwrap();
+    let _init = py_mod.call("initUnet", (4,name, batch_size), None).unwrap();
 
     
     let tile_stream_ir_016 = processor_ir_016.raster_query(query_rect, &query_ctx).await?;
@@ -49,14 +50,12 @@ where
     
     let final_stream = tile_stream_ir_016.zip(tile_stream_ir_039.zip(tile_stream_ir_087.zip(tile_stream_ir_097.zip(tile_stream_ir_108.zip(tile_stream_ir_120.zip(tile_stream_ir_134.zip(tile_stream_truth)))))));
     //Batches with chunks function?
-    let mut chunked_stream = final_stream.chunks(10);
+    let mut chunked_stream = final_stream.chunks(batch_size);
     while let Some(mut vctr) = chunked_stream.next().await {
         let mut buffer: Vec<(Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<U>)> = Vec::new();
         let mut tile_size: [usize;2] = [0,0];
         
-        
-
-        for _ in 0..10 {
+        for _ in 0..batch_size {
             let (ir_016, (ir_039, (ir_087, (ir_097, (ir_108, (ir_120, (ir_137, truth))))))) = vctr.remove(0);
             
             match (ir_016, ir_039, ir_087, ir_097, ir_108, ir_120, ir_137, truth) {
@@ -78,11 +77,49 @@ where
             }
         }
         
-        let mut batch_img: Vec<ArrayBase<OwnedRepr<T>, Dim<[usize; 3]>>> = Vec::new();
 
-        let mut batch_truth: Vec<ArrayBase<OwnedRepr<U>, Dim<[usize; 3]>>> = Vec::new();
+        let (data_016_init, data_039_init, data_087_init, data_097_init, data_108_init, data_120_init, data_134_init, data_truth_init) = buffer.remove(0);
 
-        for _ in 0..10 {
+        let arr_016_init: ndarray::Array2<T> = 
+        Array2::from_shape_vec((tile_size[0], tile_size[1]), data_016_init)
+        .unwrap();
+        let arr_039_init: ndarray::Array2<T> = 
+        Array2::from_shape_vec((tile_size[0], tile_size[1]), data_039_init)
+        .unwrap();
+        let arr_087_init: ndarray::Array2<T> = 
+        Array2::from_shape_vec((tile_size[0], tile_size[1]), data_087_init)
+        .unwrap();
+        let arr_097_init: ndarray::Array2<T> = 
+        Array2::from_shape_vec((tile_size[0], tile_size[1]), data_097_init)
+        .unwrap()
+        .to_owned();
+        let arr_108_init: ndarray::Array2<T> = 
+        Array2::from_shape_vec((tile_size[0], tile_size[1]), data_108_init)
+        .unwrap()
+        .to_owned();
+        let arr_120_init: ndarray::Array2<T> = 
+        Array2::from_shape_vec((tile_size[0], tile_size[1]), data_120_init)
+        .unwrap()
+        .to_owned();
+        let arr_134_init: ndarray::Array2<T> = 
+        Array2::from_shape_vec((tile_size[0], tile_size[1]), data_134_init)
+        .unwrap()
+        .to_owned();
+        let arr_truth_init: ndarray::Array3<U> = 
+        Array2::from_shape_vec((tile_size[0], tile_size[1]), data_truth_init)
+        .unwrap()
+        .to_owned().insert_axis(Axis(2));
+        let arr_img_init: ndarray::Array<T, _> = stack(Axis(2), &[arr_016_init.view(),arr_039_init.view(),arr_087_init.view(), arr_097_init.view(), arr_108_init.view(), arr_120_init.view(), arr_134_init.view()]).unwrap();
+                                        
+        let mut arr_img_batch = arr_img_init.insert_axis(Axis(0)); // add a leading axis for the batches!
+
+        let mut arr_truth_batch = arr_truth_init.insert_axis(Axis(0)); // add a leading axis for the batches!
+        // let mut batch_img: Vec<ArrayBase<OwnedRepr<T>, Dim<[usize; 3]>>> = Vec::new();
+        // batch_img.push(arr_img_init);
+        // let mut batch_truth: Vec<ArrayBase<OwnedRepr<U>, Dim<[usize; 3]>>> = Vec::new();
+        // batch_truth.push(arr_truth_init);
+        //TODO maybe select a random element of vec to mix data up a bit?
+        for _ in 0..(batch_size - 1) {
             let (data_016, data_039, data_087, data_097, data_108, data_120, data_134, data_truth) = buffer.remove(0);
             let arr_016: ndarray::Array2<T> = 
             Array2::from_shape_vec((tile_size[0], tile_size[1]), data_016)
@@ -109,28 +146,26 @@ where
             Array2::from_shape_vec((tile_size[0], tile_size[1]), data_134)
             .unwrap()
             .to_owned();
-            let arr_truth: ndarray::Array3<U> = 
+            let arr_truth: ndarray::Array4<U> = 
             Array2::from_shape_vec((tile_size[0], tile_size[1]), data_truth)
             .unwrap()
-            .to_owned().insert_axis(Axis(2));
-            let arr_img: ndarray::Array<T, _> = stack(Axis(2), &[arr_016.view(),arr_039.view(),arr_087.view(), arr_097.view(), arr_108.view(), arr_120.view(), arr_134.view()]).unwrap();
+            .to_owned().insert_axis(Axis(0)).insert_axis(Axis(3));
+            let arr_img: ndarray::Array<T, _> = stack(Axis(2), &[arr_016.view(),arr_039.view(),arr_087.view(), arr_097.view(), arr_108.view(), arr_120.view(), arr_134.view()]).unwrap().insert_axis(Axis(0));
 
-            //let arr_img_batch = arr_img.insert_axis(Axis(0)); // add a leading axis for the batches!
-            batch_img.push(arr_img);
-            //let arr_truth_batch = arr_truth.insert_axis(Axis(0)); // add a leading axis for the batches!
-            batch_truth.push(arr_truth);
+            arr_img_batch = concatenate(Axis(0), &[arr_img_batch.view(), arr_img.view()]).unwrap();
+           
+            arr_truth_batch = concatenate(Axis(0), &[arr_truth_batch.view(), arr_truth.view()]).unwrap();
+            
         }
 
-        let final_image_batch = stack(Axis(0), &[batch_img.remove(0).view(), batch_img.remove(0).view(), batch_img.remove(0).view(), batch_img.remove(0).view(), batch_img.remove(0).view(), batch_img.remove(0).view(), batch_img.remove(0).view(), batch_img.remove(0).view(), batch_img.remove(0).view(), batch_img.remove(0).view()]).unwrap();
-        let final_truth_batch = stack(Axis(0), &[batch_truth.remove(0).view(),batch_truth.remove(0).view(), batch_truth.remove(0).view(), batch_truth.remove(0).view(), batch_truth.remove(0).view(), batch_truth.remove(0).view(), batch_truth.remove(0).view(), batch_truth.remove(0).view(), batch_truth.remove(0).view(), batch_truth.remove(0).view()]).unwrap();
+        
+        dbg!(&arr_img_batch.shape());
+        dbg!(&arr_truth_batch.shape());
 
-        dbg!(&final_image_batch.shape());
-        dbg!(&final_truth_batch.shape());
-
-        let py_img = PyArray::from_owned_array(py, final_image_batch);
-        let py_truth = PyArray::from_owned_array(py, final_truth_batch );
+        let py_img = PyArray::from_owned_array(py, arr_img_batch);
+        let py_truth = PyArray::from_owned_array(py, arr_truth_batch );
         //TODO change depreciated function
-        let _result = py_mod.call("fit", (py_img, py_truth, 1), None).unwrap();
+        let _result = py_mod.call("fit", (py_img, py_truth, batch_size), None).unwrap();
 
 
         
@@ -505,6 +540,7 @@ mod tests {
             time_interval: TimeInterval::new(1_388_536_200_000, 1_388_536_200_000 + 45_000_000)
                 .unwrap(),
             spatial_resolution: query_spatial_resolution,
-        }, ctx).await.unwrap();
+        }, ctx,
+    10 as usize).await.unwrap();
     }
 }

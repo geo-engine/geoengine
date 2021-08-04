@@ -86,11 +86,11 @@ def load(id):
 
 def fit(X, y, batch_size):    
     global model
-    print(y.shape)
-    print(X.shape)
+    #print(y.shape)
+    #print(X.shape)
     #TODO check wether nan's present?
     
-    model.fit(X, y, batch_size = batch_size)
+    model.fit(X, y, batch_size = batch_size, epochs=20)
 
 
 def predict(X):
