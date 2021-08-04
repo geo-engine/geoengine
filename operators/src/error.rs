@@ -7,6 +7,8 @@ use std::ops::Range;
 #[derive(Debug, Snafu)]
 #[snafu(visibility = "pub(crate)")]
 pub enum Error {
+    UnsupportedRasterValue,
+
     InvalidMeteosatSatellite,
 
     #[snafu(display("InvalidChannel Error (requested channel: {})", channel))]
