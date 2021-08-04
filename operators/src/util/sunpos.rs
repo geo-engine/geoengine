@@ -1,11 +1,11 @@
 //! Contains utility methods to calculate values required for
 //! applying solar correction
-//! This was ported from C-code available at: http://www.psa.es/sdg/sunpos.htm
+//! This was ported from C-code available at: <http://www.psa.es/sdg/sunpos.htm>
 
 use chrono::{DateTime, Datelike, TimeZone, Timelike};
 
 const EARTH_MEAN_RADIUS: f64 = 6371.01; // In km
-const ASTRONOMICAL_UNIT: f64 = 149597890.0; // In km
+const ASTRONOMICAL_UNIT: f64 = 149_597_890.0; // In km
 
 #[derive(Debug)]
 pub struct SunPos {
@@ -51,7 +51,7 @@ impl SunPos {
             Self::celestial_coordinates(ecliptic_longitude, ecliptic_obliquity);
 
         let greenwich_mean_sidereal_time =
-            6.6974243242 + 0.0657098283 * elapsed_julian_days + decimal_hours;
+            6.697_424_324_2 + 0.065_709_828_3 * elapsed_julian_days + decimal_hours;
 
         SunPos {
             greenwich_mean_sidereal_time,
@@ -63,13 +63,13 @@ impl SunPos {
     /// Calculates difference in days between the current Julian Day
     /// and JD 2451545.0, which is noon 1 January 2000 Universal Time
     fn elapsed_julian_days<T: TimeZone>(timestamp: &DateTime<T>) -> (f64, f64) {
-        let year = timestamp.year() as i64;
-        let month = timestamp.month() as i64;
-        let day = timestamp.day() as i64;
+        let year = i64::from(timestamp.year());
+        let month = i64::from(timestamp.month());
+        let day = i64::from(timestamp.day());
 
-        let hour = timestamp.hour() as f64;
-        let minute = timestamp.minute() as f64;
-        let second = timestamp.second() as f64;
+        let hour = f64::from(timestamp.hour());
+        let minute = f64::from(timestamp.minute());
+        let second = f64::from(timestamp.second());
 
         let decimal_hours = hour + (minute + second / 60.0) / 60.0;
         let aux1 = (month - 14) / 12;
@@ -78,23 +78,23 @@ impl SunPos {
             + day
             - 32075;
         let julian_date = aux2 as f64 - 0.5 + decimal_hours / 24.0;
-        (decimal_hours, julian_date - 2451545.0)
+        (decimal_hours, julian_date - 2_451_545.0)
     }
 
     /// Calculate ecliptic coordinates (ecliptic longitude and obliquity of the
     /// ecliptic in radians but without limiting the angle to be less than 2*Pi
     /// (i.e., the result may be greater than 2*Pi)
     fn eliptic_coordinates(elapsed_julian_days: f64) -> (f64, f64) {
-        let omega = 2.1429 - 0.0010394594 * elapsed_julian_days;
-        let mean_longitude = 4.8950630 + 0.017202791698 * elapsed_julian_days; // Radians
-        let mean_anomaly = 6.2400600 + 0.0172019699 * elapsed_julian_days;
+        let omega = 2.1429 - 0.001_039_459_4 * elapsed_julian_days;
+        let mean_longitude = 4.895_063_0 + 0.017_202_791_698 * elapsed_julian_days; // Radians
+        let mean_anomaly = 6.240_060_0 + 0.017_201_969_9 * elapsed_julian_days;
         let ecliptic_longitude = mean_longitude
-            + 0.03341607 * mean_anomaly.sin()
-            + 0.00034894 * (2.0 * mean_anomaly).sin()
-            - 0.0001134
-            - 0.0000203 * omega.sin();
+            + 0.033_416_07 * mean_anomaly.sin()
+            + 0.000_348_94 * (2.0 * mean_anomaly).sin()
+            - 0.000_113_4
+            - 0.000_020_3 * omega.sin();
         let ecliptic_obliquity =
-            0.4090928 - 6.2140e-9 * elapsed_julian_days + 0.0000396 * omega.cos();
+            0.409_092_8 - 6.2140e-9 * elapsed_julian_days + 0.000_039_6 * omega.cos();
 
         (ecliptic_longitude, ecliptic_obliquity)
     }
@@ -128,11 +128,11 @@ mod tests {
     async fn test_ok() {
         let ts = Utc.datetime_from_str("190001010000", "%Y%m%d%H%M").unwrap();
         let chk = SunPos::new(&ts);
-        let (lat, lon) = (8.810983605709731, 50.80941535042398);
+        let (lat, lon) = (8.810_983_605_709_731, 50.809_415_350_423_98);
         let (azimuth, zenith) = chk.solar_azimuth_zenith(lat, lon);
 
-        // Those values were confirmed by the reference implementation (http://www.psa.es/sdg/sunpos.htm)
-        assert_eq!(112.8247769190195, azimuth);
-        assert_eq!(130.16899766003834, zenith);
+        // Those values were confirmed by the reference implementation (<http://www.psa.es/sdg/sunpos.htm>)
+        assert!((112.824_776_919_019_5 - azimuth).abs() < f64::EPSILON);
+        assert!((130.168_997_660_038_34 - zenith).abs() < f64::EPSILON);
     }
 }

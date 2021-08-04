@@ -86,7 +86,11 @@ impl RasterOperator for Temperature {
                     found: "unitless".into(),
                 })
             }
-            _ => {}
+            // OK Case
+            Measurement::Continuous {
+                measurement: _,
+                unit: _,
+            } => {}
         }
 
         let out_desc = RasterResultDescriptor {
@@ -209,18 +213,18 @@ where
             .properties
             .get_number_property::<usize>(&self.channel_key)?
             - 1;
-        if channel_id < 3 || channel_id > 10 {
+        if (3..=10).contains(&channel_id) {
+            satellite.get_channel(channel_id)
+        } else {
             Err(Error::InvalidChannel {
                 channel: channel_id,
             })
-        } else {
-            satellite.get_channel(channel_id)
         }
     }
 
     fn create_lookup_table(&self, tile: &RasterTile2D<P>) -> Result<Vec<f32>> {
-        let satellite = self.get_satellite(&tile)?;
-        let channel = self.get_channel(&tile, satellite)?;
+        let satellite = self.get_satellite(tile)?;
+        let channel = self.get_channel(tile, satellite)?;
         let offset = tile
             .properties
             .get_number_property::<f64>(&self.offset_key)?;
@@ -230,7 +234,7 @@ where
 
         let mut lut = Vec::with_capacity(1024);
         for i in 0..1024 {
-            let radiance = offset + i as f64 * slope;
+            let radiance = offset + f64::from(i) * slope;
             let temp = channel.calculate_temperature_from_radiance(radiance);
             lut.push(temp as f32);
         }
@@ -343,11 +347,11 @@ mod tests {
             &Grid2D::new(
                 [3, 2].into(),
                 vec![
-                    300.34143,
-                    318.61765,
-                    330.36514,
-                    339.23364,
-                    346.44394,
+                    300.341_43,
+                    318.617_65,
+                    330.365_14,
+                    339.233_64,
+                    346.443_94,
                     OUT_NO_DATA_VALUE,
                 ],
                 Some(OUT_NO_DATA_VALUE),
@@ -360,8 +364,9 @@ mod tests {
     #[tokio::test]
     async fn test_ok_force_satellite() {
         let props = create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
-        let mut params = TemperatureParams::default();
-        params.force_satellite = "Meteosat-11".into();
+        let params = TemperatureParams {
+            force_satellite: "Meteosat-11".into(),
+        };
         let res = process(props, params, None, None).await.unwrap();
 
         assert!(geoengine_datatypes::util::test::eq_with_no_data(
@@ -370,10 +375,10 @@ mod tests {
                 [3, 2].into(),
                 vec![
                     300.9428,
-                    319.25015,
-                    331.01904,
+                    319.250_15,
+                    331.019_04,
                     339.9044,
-                    347.12878,
+                    347.128_78,
                     OUT_NO_DATA_VALUE
                 ],
                 Some(OUT_NO_DATA_VALUE),
@@ -395,8 +400,9 @@ mod tests {
     #[tokio::test]
     async fn test_invalid_force_satellite() {
         let props = create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
-        let mut params = TemperatureParams::default();
-        params.force_satellite = "Meteosat-42".into();
+        let params = TemperatureParams {
+            force_satellite: "Meteosat-42".into(),
+        };
         let res = process(props, params, None, None).await;
         assert!(res.is_err());
     }
@@ -551,7 +557,7 @@ mod tests {
 
         let op = Temperature {
             sources: SingleRasterSource { raster: input },
-            params: params,
+            params,
         }
         .boxed()
         .initialize(&MockExecutionContext::default())

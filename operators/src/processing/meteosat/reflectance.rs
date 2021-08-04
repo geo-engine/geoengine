@@ -96,7 +96,11 @@ impl RasterOperator for Reflectance {
                     found: "unitless".into(),
                 })
             }
-            _ => {}
+            // OK Case
+            Measurement::Continuous {
+                measurement: _,
+                unit: _,
+            } => {}
         }
 
         let out_desc = RasterResultDescriptor {
@@ -205,7 +209,7 @@ where
 }
 
 fn calculate_esd(timestamp: &DateTime<Utc>) -> f64 {
-    let perihelion = timestamp.ordinal() as f64 - 3.0;
+    let perihelion = f64::from(timestamp.ordinal()) - 3.0;
     let e = 0.0167;
     let theta = std::f64::consts::TAU * (perihelion / 365.0);
     1.0 - e * theta.cos()
@@ -268,7 +272,7 @@ where
                             let idx = grid.shape.linear_space_index_unchecked(idx);
                             let pixel = grid.data[idx];
                             if !grid.is_no_data(pixel) {
-                                out.data[idx] = (pixel as f64 * esd * esd
+                                out.data[idx] = (f64::from(pixel) * esd * esd
                                     / (etsr * zenith.min(80.0).to_radians().cos()))
                                     as PixelOut;
                             }
@@ -276,7 +280,7 @@ where
                     } else {
                         for (idx, &pixel) in grid.data.iter().enumerate() {
                             if !grid.is_no_data(pixel) {
-                                out.data[idx] = (pixel as f64 * esd * esd / etsr) as PixelOut;
+                                out.data[idx] = (f64::from(pixel) * esd * esd / etsr) as PixelOut;
                             }
                         }
                     }
@@ -340,11 +344,11 @@ mod tests {
             &Grid2D::new(
                 [3, 2].into(),
                 vec![
-                    0.049564075_f32,
-                    0.09912815_f32,
-                    0.14869222_f32,
-                    0.1982563_f32,
-                    0.24782036_f32,
+                    0.049_564_075_f32,
+                    0.099_128_15_f32,
+                    0.148_692_22_f32,
+                    0.198_256_3_f32,
+                    0.247_820_36_f32,
                     OUT_NO_DATA_VALUE,
                 ],
                 Some(OUT_NO_DATA_VALUE),
@@ -357,8 +361,10 @@ mod tests {
     #[tokio::test]
     async fn test_ok_force_satellite() {
         let props = create_properties(Some(1), Some(1), Some("202108040838"));
-        let mut params = ReflectanceParams::default();
-        params.force_satellite = "Meteosat-11".into();
+        let params = ReflectanceParams {
+            force_satellite: "Meteosat-11".into(),
+            ..Default::default()
+        };
         let res = process(props, params, false, None).await.unwrap();
 
         assert!(geoengine_datatypes::util::test::eq_with_no_data(
@@ -366,11 +372,11 @@ mod tests {
             &Grid2D::new(
                 [3, 2].into(),
                 vec![
-                    0.049536735_f32,
-                    0.09907347_f32,
-                    0.1486102_f32,
-                    0.19814694_f32,
-                    0.24768367_f32,
+                    0.049_536_735_f32,
+                    0.099_073_47_f32,
+                    0.148_610_2_f32,
+                    0.198_146_94_f32,
+                    0.247_683_67_f32,
                     OUT_NO_DATA_VALUE
                 ],
                 Some(OUT_NO_DATA_VALUE),
@@ -383,8 +389,10 @@ mod tests {
     #[tokio::test]
     async fn test_ok_force_hrv() {
         let props = create_properties(Some(1), Some(1), Some("202108040838"));
-        let mut params = ReflectanceParams::default();
-        params.force_hrv = true;
+        let params = ReflectanceParams {
+            force_hrv: true,
+            ..Default::default()
+        };
         let res = process(props, params, false, None).await.unwrap();
 
         assert!(geoengine_datatypes::util::test::eq_with_no_data(
@@ -392,11 +400,11 @@ mod tests {
             &Grid2D::new(
                 [3, 2].into(),
                 vec![
-                    0.041049376,
-                    0.08209875,
-                    0.12314813,
-                    0.1641975,
-                    0.20524688,
+                    0.041_049_376,
+                    0.082_098_75,
+                    0.123_148_13,
+                    0.164_197_5,
+                    0.205_246_88,
                     OUT_NO_DATA_VALUE
                 ],
                 Some(OUT_NO_DATA_VALUE),
@@ -409,8 +417,10 @@ mod tests {
     #[tokio::test]
     async fn test_ok_solar_correction() {
         let props = create_properties(Some(1), Some(1), Some("202108040838"));
-        let mut params = ReflectanceParams::default();
-        params.solar_correction = true;
+        let params = ReflectanceParams {
+            solar_correction: true,
+            ..Default::default()
+        };
         let res = process(props, params, false, None).await.unwrap();
 
         assert!(geoengine_datatypes::util::test::eq_with_no_data(
@@ -418,11 +428,11 @@ mod tests {
             &Grid2D::new(
                 [3, 2].into(),
                 vec![
-                    0.28542814_f32,
-                    0.5708563_f32,
-                    0.8562844_f32,
-                    1.1417125_f32,
-                    1.4271406_f32,
+                    0.285_428_14_f32,
+                    0.570_856_3_f32,
+                    0.856_284_4_f32,
+                    1.141_712_5_f32,
+                    1.427_140_6_f32,
                     OUT_NO_DATA_VALUE
                 ],
                 Some(OUT_NO_DATA_VALUE),
@@ -435,8 +445,10 @@ mod tests {
     #[tokio::test]
     async fn test_invalid_force_satellite() {
         let props = create_properties(Some(1), Some(1), Some("202108040838"));
-        let mut params = ReflectanceParams::default();
-        params.force_satellite = "Meteosat-42".into();
+        let params = ReflectanceParams {
+            force_satellite: "Meteosat-42".into(),
+            ..Default::default()
+        };
         let res = process(props, params, false, None).await;
         assert!(res.is_err());
     }
@@ -580,7 +592,7 @@ mod tests {
 
         let op = Reflectance {
             sources: SingleRasterSource { raster: input },
-            params: params,
+            params,
         }
         .boxed()
         .initialize(&MockExecutionContext::default())

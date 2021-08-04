@@ -6,11 +6,11 @@ use crate::error::Error;
 use crate::util::Result;
 use geoengine_datatypes::primitives::Coordinate2D;
 
-const VIEW_ANGLE: f64 = -13642337.0 * 3000.403165817;
-const VIEW_ANGLE_CH11: f64 = -40927014.0 * 1000.134348869;
+const VIEW_ANGLE: f64 = -13_642_337.0 * 3_000.403_165_817;
+const VIEW_ANGLE_CH11: f64 = -40_927_014.0 * 1_000.134_348_869;
 
-const C1: f64 = 1.19104273e-16;
-const C2: f64 = 0.0143877523;
+const C1: f64 = 1.191_042_73e-16;
+const C2: f64 = 0.014_387_752_3;
 
 /// Represents the parameters of a Meteosat satellite
 #[derive(Debug, PartialEq)]
@@ -36,11 +36,6 @@ pub struct Channel {
 impl Satellite {
     /// Retrieves the Meteosat satellite for the given `name`.
     /// The name comparison is *case sensitive*.
-    /// # Examples
-    /// ```
-    /// assert!(Sattelite::satellite_by_name("Meteosat-8").is_ok());
-    /// assert!(Sattelite::satellite_by_name("Meteosat-42").is_err());
-    /// ```
     pub fn satellite_by_name(name: &str) -> Result<&'static Satellite> {
         match name {
             "Meteosat-8" => Ok(&METEOSAT_08),
@@ -52,11 +47,6 @@ impl Satellite {
     }
 
     /// Retrieves the Meteosat satellite for the `msg_id` (1-4).
-    /// # Examples
-    /// ```
-    /// assert!(Sattelite::satellite_by_msg_id(1).is_ok());
-    /// assert!(Sattelite::satellite_by_msg_id(42).is_err());
-    /// ```
     pub fn satellite_by_msg_id(msg_id: u8) -> Result<&'static Satellite> {
         match msg_id {
             1 => Ok(&METEOSAT_08),
@@ -68,12 +58,6 @@ impl Satellite {
     }
 
     /// Returns the channel for the given id (0-11).
-    /// # Examples
-    /// ```
-    /// let s = Satellite::by_msg_id(1);
-    /// assert!(s.get_channel(0).is_ok());
-    /// assert!(s.get_channel(42).is_err());
-    /// ```
     pub fn get_channel(&self, channel_id: usize) -> Result<&Channel> {
         match self.channels.get(channel_id) {
             Some(c) => Ok(c),
@@ -109,10 +93,10 @@ impl Channel {
         let cos2y = cosy.powi(2);
         let sin2y = siny.powi(2);
         let cosxcosy = cosx * cosy;
-        let cos2yconstsin2y = cos2y + 1.006803 * sin2y;
+        let cos2yconstsin2y = cos2y + 1.006_803 * sin2y;
 
         let sd_part1 = (42164.0 * cosxcosy).powi(2);
-        let sd_part2 = cos2yconstsin2y * 1737121856.0;
+        let sd_part2 = cos2yconstsin2y * 1_737_121_856.0;
         let sd = (sd_part1 - sd_part2).sqrt();
 
         let sn_part1 = 42164.0 * cosxcosy - sd;
@@ -126,7 +110,7 @@ impl Channel {
 
         //
         let lon_rad_part = s2 / s1;
-        let lat_rad_part = 1.006804 * s3 / sxy;
+        let lat_rad_part = 1.006_804 * s3 / sxy;
         let (lat, lon) = (
             lat_rad_part.atan(),
             lon_rad_part.atan() + sub_lon.to_radians(),
@@ -609,3 +593,44 @@ static METEOSAT_11: Satellite = Satellite {
         },
     ],
 };
+
+#[cfg(test)]
+mod tests {
+    use crate::processing::meteosat::satellite::Satellite;
+
+    #[tokio::test]
+    async fn satellite_by_name_ok() {
+        assert!(Satellite::satellite_by_name("Meteosat-11").is_ok())
+    }
+
+    #[tokio::test]
+    async fn satellite_by_name_fail() {
+        assert!(Satellite::satellite_by_name("Meteosat-42").is_err())
+    }
+
+    #[tokio::test]
+    async fn satellite_by_msg_id_ok() {
+        assert!(Satellite::satellite_by_msg_id(1).is_ok())
+    }
+
+    #[tokio::test]
+    async fn satellite_by_msg_id_fail() {
+        assert!(Satellite::satellite_by_msg_id(42).is_err())
+    }
+
+    #[tokio::test]
+    async fn get_channel_ok() {
+        assert!(Satellite::satellite_by_msg_id(1)
+            .unwrap()
+            .get_channel(0)
+            .is_ok())
+    }
+
+    #[tokio::test]
+    async fn get_channel_fail() {
+        assert!(Satellite::satellite_by_msg_id(1)
+            .unwrap()
+            .get_channel(42)
+            .is_err())
+    }
+}
