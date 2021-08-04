@@ -8,13 +8,16 @@ on:
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
   build:
     runs-on: ${{matrix.os}}
 
     services:
       postgres:
-        image: postgres
+        image: postgis/postgis
         env:
           POSTGRES_USER: geoengine
           POSTGRES_PASSWORD: geoengine
@@ -73,6 +76,17 @@ jobs:
   coverage:
     runs-on: ubuntu-20.04
 
+    services:
+      postgres:
+        image: postgis/postgis
+        env:
+          POSTGRES_USER: geoengine
+          POSTGRES_PASSWORD: geoengine
+          POSTGRES_DB: geoengine
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
@@ -95,7 +109,7 @@ jobs:
       - name: Generate code coverage
         run: |
           cargo install cargo-tarpaulin
-          cargo tarpaulin --verbose --workspace --timeout 120 --out Lcov
+          cargo tarpaulin --verbose --workspace --timeout 120 --out Lcov --all-features
       - name: Upload coverage to Coveralls
         uses: coverallsapp/github-action@v1.1.1
         with:

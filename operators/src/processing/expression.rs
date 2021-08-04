@@ -1,6 +1,7 @@
 use crate::engine::{
-    InitializedRasterOperator, Operator, QueryContext, QueryProcessor, RasterOperator,
-    RasterQueryProcessor, RasterQueryRectangle, RasterResultDescriptor, TypedRasterQueryProcessor,
+    InitializedRasterOperator, Operator, OperatorDatasets, QueryContext, QueryProcessor,
+    RasterOperator, RasterQueryProcessor, RasterQueryRectangle, RasterResultDescriptor,
+    TypedRasterQueryProcessor,
 };
 use crate::error::Error;
 use crate::util::Result;
@@ -12,6 +13,7 @@ use crate::{
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::StreamExt;
+use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::primitives::{Measurement, SpatialPartition2D};
 use geoengine_datatypes::raster::{
     EmptyGrid, Grid2D, GridShapeAccess, Pixel, RasterDataType, RasterTile2D,
@@ -113,6 +115,20 @@ pub struct ExpressionSources {
     c: Option<Box<dyn RasterOperator>>,
 }
 
+impl OperatorDatasets for ExpressionSources {
+    fn datasets_collect(&self, datasets: &mut Vec<DatasetId>) {
+        self.a.datasets_collect(datasets);
+
+        if let Some(ref b) = self.b {
+            b.datasets_collect(datasets);
+        }
+
+        if let Some(ref c) = self.c {
+            c.datasets_collect(datasets);
+        }
+    }
+}
+
 impl ExpressionSources {
     fn number_of_sources(&self) -> usize {
         let a: usize = 1;
@@ -200,13 +216,13 @@ impl RasterOperator for Expression {
             no_data_value: Some(self.params.output_no_data_value), // TODO: is it possible to have none?
         };
 
-        let initialized_opoerator = InitializedExpression {
+        let initialized_operator = InitializedExpression {
             result_descriptor,
             sources,
             expression,
         };
 
-        Ok(initialized_opoerator.boxed())
+        Ok(initialized_operator.boxed())
     }
 }
 
