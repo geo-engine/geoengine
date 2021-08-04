@@ -229,6 +229,16 @@ pub enum Error {
     },
 
     WrongMetadataType,
+
+    #[snafu(display(
+        "The conditions ul.x < lr.x && ul.y < lr.y are not met by ul:{} lr:{}",
+        upper_left_coordinate,
+        lower_right_coordinate
+    ))]
+    InvalidSpatialPartition {
+        upper_left_coordinate: Coordinate2D,
+        lower_right_coordinate: Coordinate2D,
+    },
 }
 
 impl From<arrow::error::ArrowError> for Error {

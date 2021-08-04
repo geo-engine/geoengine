@@ -18,6 +18,7 @@ pub mod projects;
 pub mod session;
 pub mod spatial_references;
 pub mod upload;
+pub mod wcs;
 pub mod wfs;
 pub mod wms;
 pub mod workflows;
@@ -37,7 +38,7 @@ impl ErrorResponse {
     pub fn assert(res: &Response<Bytes>, status: u16, error: &str, message: &str) {
         assert_eq!(res.status(), status);
 
-        let body = std::str::from_utf8(&res.body()).unwrap();
+        let body = std::str::from_utf8(res.body()).unwrap();
         assert_eq!(
             serde_json::from_str::<ErrorResponse>(body).unwrap(),
             ErrorResponse {

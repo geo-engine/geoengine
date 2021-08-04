@@ -1,15 +1,45 @@
 use std::sync::Arc;
 
-use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution, TimeInterval};
-
 use crate::concurrency::{ThreadPool, ThreadPoolContext, ThreadPoolContextCreator};
 
 /// A spatio-temporal rectangle for querying data
+use geoengine_datatypes::primitives::{
+    AxisAlignedRectangle, BoundingBox2D, SpatialPartition2D, SpatialPartitioned, SpatialResolution,
+    TimeInterval,
+};
+
+/// A spatio-temporal rectangle for querying data with a bounding box
 #[derive(Copy, Clone, Debug, PartialEq)]
-pub struct QueryRectangle {
-    pub bbox: BoundingBox2D,
+pub struct QueryRectangle<SpatialBounds: AxisAlignedRectangle> {
+    pub spatial_bounds: SpatialBounds,
     pub time_interval: TimeInterval,
     pub spatial_resolution: SpatialResolution,
+}
+
+pub type VectorQueryRectangle = QueryRectangle<BoundingBox2D>;
+pub type RasterQueryRectangle = QueryRectangle<SpatialPartition2D>;
+pub type PlotQueryRectangle = QueryRectangle<BoundingBox2D>;
+
+impl SpatialPartitioned for VectorQueryRectangle {
+    fn spatial_partition(&self) -> SpatialPartition2D {
+        SpatialPartition2D::with_bbox_and_resolution(self.spatial_bounds, self.spatial_resolution)
+    }
+}
+
+impl SpatialPartitioned for RasterQueryRectangle {
+    fn spatial_partition(&self) -> SpatialPartition2D {
+        self.spatial_bounds
+    }
+}
+
+impl From<VectorQueryRectangle> for RasterQueryRectangle {
+    fn from(value: VectorQueryRectangle) -> Self {
+        Self {
+            spatial_bounds: value.spatial_partition(),
+            time_interval: value.time_interval,
+            spatial_resolution: value.spatial_resolution,
+        }
+    }
 }
 
 pub trait QueryContext: Send + Sync {

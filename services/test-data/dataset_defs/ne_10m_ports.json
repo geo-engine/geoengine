@@ -1,40 +1,47 @@
 {
   "properties": {
     "id": {
-      "internal": "a9623a5b-b6c5-404b-bc5a-313ff72e4e75"
+      "type": "internal",
+      "datasetId": "a9623a5b-b6c5-404b-bc5a-313ff72e4e75"
     },
     "name": "Natural Earth 10m Ports",
     "description": "Ports from Natural Earth",
-    "sourceOperator": "OgrSource"
+    "sourceOperator": "OgrSource",
+    "provenance": {
+      "citation": "Natural Earth, Cultural Vectors 10m Ports",
+      "license": "Public domain by Natural Earth http://www.naturalearthdata.com/about/terms-of-use/",
+      "uri": "https://www.naturalearthdata.com/downloads/10m-cultural-vectors/ports/"
+    }
   },
   "metaData": {
-    "OgrMetaData": {
-      "loadingInfo": {
-        "fileName": "operators/test-data/vector/data/ne_10m_ports/ne_10m_ports.shp",
-        "layerName": "ne_10m_ports",
-        "dataType": "MultiPoint",
-        "time": "none",
-        "columns": {
-          "x": "",
-          "y": null,
-          "float": ["natlscale"],
-          "int": ["scalerank"],
-          "text": ["featurecla", "name", "website"]
-        },
-        "forceOgrTimeFilter": false,
-        "onError": "ignore",
-        "provenance": null
+    "type": "OgrMetaData",
+    "loadingInfo": {
+      "fileName": "operators/test-data/vector/data/ne_10m_ports/ne_10m_ports.shp",
+      "layerName": "ne_10m_ports",
+      "dataType": "MultiPoint",
+      "time": {
+        "type": "none"
       },
-      "resultDescriptor": {
-        "dataType": "MultiPoint",
-        "spatialReference": "EPSG:4326",
-        "columns": {
-          "website": "text",
-          "name": "text",
-          "natlscale": "float",
-          "scalerank": "int",
-          "featurecla": "text"
-        }
+      "columns": {
+        "x": "",
+        "y": null,
+        "float": ["natlscale"],
+        "int": ["scalerank"],
+        "text": ["featurecla", "name", "website"]
+      },
+      "forceOgrTimeFilter": false,
+      "onError": "ignore",
+      "provenance": null
+    },
+    "resultDescriptor": {
+      "dataType": "MultiPoint",
+      "spatialReference": "EPSG:4326",
+      "columns": {
+        "website": "text",
+        "name": "text",
+        "natlscale": "float",
+        "scalerank": "int",
+        "featurecla": "text"
       }
     }
   }

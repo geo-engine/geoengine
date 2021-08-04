@@ -686,7 +686,7 @@ mod tests {
             &res,
             400,
             "BodyDeserializeError",
-            "missing field `id` at line 1 column 246",
+            "missing field `id` at line 1 column 260",
         );
     }
 
@@ -717,7 +717,7 @@ mod tests {
                 .project_db()
                 .read()
                 .await
-                .load(&session, project_id)
+                .load(session, project_id)
                 .await
                 .unwrap();
 
@@ -868,7 +868,7 @@ mod tests {
                 .project_db()
                 .read()
                 .await
-                .load(&session, project_id)
+                .load(session, project_id)
                 .await
                 .unwrap();
 

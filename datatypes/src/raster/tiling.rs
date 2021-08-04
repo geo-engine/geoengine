@@ -1,4 +1,6 @@
-use crate::primitives::{BoundingBox2D, Coordinate2D, SpatialBounded};
+use crate::primitives::{
+    AxisAlignedRectangle, Coordinate2D, SpatialPartition2D, SpatialPartitioned,
+};
 
 use super::{GeoTransform, GridBoundingBox2D, GridIdx, GridIdx2D, GridShape2D, GridSize};
 
@@ -55,15 +57,15 @@ impl TilingStrategy {
         }
     }
 
-    pub fn upper_left_pixel_idx(&self, bounding_box: BoundingBox2D) -> GridIdx2D {
+    pub fn upper_left_pixel_idx(&self, partition: SpatialPartition2D) -> GridIdx2D {
         self.geo_transform
-            .coordinate_to_grid_idx_2d(bounding_box.upper_left())
+            .coordinate_to_grid_idx_2d(partition.upper_left())
     }
 
-    pub fn lower_right_pixel_idx(&self, bounding_box: BoundingBox2D) -> GridIdx2D {
+    pub fn lower_right_pixel_idx(&self, partition: SpatialPartition2D) -> GridIdx2D {
         let lr_idx = self
             .geo_transform
-            .coordinate_to_grid_idx_2d(bounding_box.lower_right());
+            .coordinate_to_grid_idx_2d(partition.lower_right());
 
         lr_idx - 1
     }
@@ -76,9 +78,9 @@ impl TilingStrategy {
         [y_tile_idx, x_tile_idx].into()
     }
 
-    pub fn tile_grid_box(&self, bounding_box: BoundingBox2D) -> GridBoundingBox2D {
-        let start = self.pixel_idx_to_tile_idx(self.upper_left_pixel_idx(bounding_box));
-        let end = self.pixel_idx_to_tile_idx(self.lower_right_pixel_idx(bounding_box));
+    pub fn tile_grid_box(&self, partition: SpatialPartition2D) -> GridBoundingBox2D {
+        let start = self.pixel_idx_to_tile_idx(self.upper_left_pixel_idx(partition));
+        let end = self.pixel_idx_to_tile_idx(self.lower_right_pixel_idx(partition));
         GridBoundingBox2D::new_unchecked(start, end)
     }
 
@@ -86,13 +88,13 @@ impl TilingStrategy {
     /// the iterator moves once along the x-axis and then increases the y-axis
     pub fn tile_idx_iterator(
         &self,
-        bounding_box: BoundingBox2D,
+        partition: SpatialPartition2D,
     ) -> impl Iterator<Item = GridIdx2D> {
         let GridIdx([upper_left_tile_y, upper_left_tile_x]) =
-            self.pixel_idx_to_tile_idx(self.upper_left_pixel_idx(bounding_box));
+            self.pixel_idx_to_tile_idx(self.upper_left_pixel_idx(partition));
 
         let GridIdx([lower_right_tile_y, lower_right_tile_x]) =
-            self.pixel_idx_to_tile_idx(self.lower_right_pixel_idx(bounding_box));
+            self.pixel_idx_to_tile_idx(self.lower_right_pixel_idx(partition));
 
         let y_range = upper_left_tile_y..=lower_right_tile_y;
         let x_range = upper_left_tile_x..=lower_right_tile_x;
@@ -104,11 +106,11 @@ impl TilingStrategy {
     /// the iterator moves once along the x-axis and then increases the y-axis
     pub fn tile_information_iterator(
         &self,
-        bounding_box: BoundingBox2D,
+        partition: SpatialPartition2D,
     ) -> impl Iterator<Item = TileInformation> {
         let tile_pixel_size = self.tile_size_in_pixels;
         let geo_transform = self.geo_transform;
-        self.tile_idx_iterator(bounding_box)
+        self.tile_idx_iterator(partition)
             .map(move |idx| TileInformation::new(idx, tile_pixel_size, geo_transform))
     }
 }
@@ -134,14 +136,14 @@ impl TileInformation {
         }
     }
 
-    pub fn with_bbox_and_shape(bbox: BoundingBox2D, shape: GridShape2D) -> Self {
+    pub fn with_partition_and_shape(partition: SpatialPartition2D, shape: GridShape2D) -> Self {
         Self {
             tile_size_in_pixels: shape,
             global_tile_position: [0, 0].into(),
             global_geo_transform: GeoTransform {
-                origin_coordinate: bbox.upper_left(),
-                x_pixel_size: bbox.size_x() / shape.axis_size_x() as f64,
-                y_pixel_size: -bbox.size_y() / shape.axis_size_y() as f64,
+                origin_coordinate: partition.upper_left(),
+                x_pixel_size: partition.size_x() / shape.axis_size_x() as f64,
+                y_pixel_size: -partition.size_y() / shape.axis_size_y() as f64,
             },
         }
     }
@@ -205,46 +207,16 @@ impl TileInformation {
             self.global_geo_transform.y_pixel_size,
         )
     }
-
-    /// Check whether tile is intersected by bbox. This is different to intersecting the `spatial_bounds` of the tile
-    /// with the given bbox because the tile's bbox should have closed-open semantics, that is, the lower right
-    /// coordinate is not part of the tile
-    /// TODO: make proper types for closed-closed and closed-open bboxes
-    pub fn is_intersected_by_bbox(&self, bbox: &BoundingBox2D) -> bool {
-        let this_bbox = self.spatial_bounds();
-
-        let overlap_x = crate::util::ranges::value_in_range(
-            this_bbox.lower_left().x,
-            bbox.lower_left().x,
-            bbox.upper_right().x,
-        ) || crate::util::ranges::value_in_range(
-            bbox.lower_left().x,
-            this_bbox.lower_left().x,
-            this_bbox.upper_right().x,
-        );
-
-        let overlap_y = crate::util::ranges::value_in_range(
-            this_bbox.lower_left().y,
-            bbox.lower_left().y,
-            bbox.upper_right().y,
-        ) || crate::util::ranges::value_in_range(
-            bbox.lower_left().y,
-            this_bbox.lower_left().y,
-            this_bbox.upper_right().y,
-        );
-
-        overlap_x && overlap_y
-    }
 }
 
-impl SpatialBounded for TileInformation {
-    fn spatial_bounds(&self) -> BoundingBox2D {
+impl SpatialPartitioned for TileInformation {
+    fn spatial_partition(&self) -> SpatialPartition2D {
         let top_left_coord = self
             .global_geo_transform
             .grid_idx_to_upper_left_coordinate_2d(self.global_upper_left_pixel_idx());
         let lower_right_coord = self
             .global_geo_transform
             .grid_idx_to_upper_left_coordinate_2d(self.global_lower_right_pixel_idx() + 1); // we need the border of the lower right pixel.
-        BoundingBox2D::new_upper_left_lower_right_unchecked(top_left_coord, lower_right_coord)
+        SpatialPartition2D::new_unchecked(top_left_coord, lower_right_coord)
     }
 }

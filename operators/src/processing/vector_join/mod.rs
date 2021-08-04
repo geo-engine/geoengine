@@ -1,10 +1,11 @@
+use geoengine_datatypes::dataset::DatasetId;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
 use geoengine_datatypes::collections::VectorDataType;
 
 use crate::engine::{
-    ExecutionContext, InitializedOperator, InitializedVectorOperator, Operator,
+    ExecutionContext, InitializedVectorOperator, Operator, OperatorDatasets,
     TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::error;
@@ -36,6 +37,13 @@ pub struct VectorJoinSources {
     right: Box<dyn VectorOperator>,
 }
 
+impl OperatorDatasets for VectorJoinSources {
+    fn datasets_collect(&self, datasets: &mut Vec<DatasetId>) {
+        self.left.datasets_collect(datasets);
+        self.right.datasets_collect(datasets);
+    }
+}
+
 /// Define the type of join
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type")]
@@ -56,7 +64,7 @@ impl VectorOperator for VectorJoin {
     async fn initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
-    ) -> Result<Box<InitializedVectorOperator>> {
+    ) -> Result<Box<dyn InitializedVectorOperator>> {
         let left = self.sources.left.initialize(context).await?;
         let right = self.sources.right.initialize(context).await?;
 
@@ -129,14 +137,12 @@ pub struct InitializedVectorJoinParams {
 
 pub struct InitializedVectorJoin {
     result_descriptor: VectorResultDescriptor,
-    left: Box<InitializedVectorOperator>,
-    right: Box<InitializedVectorOperator>,
+    left: Box<dyn InitializedVectorOperator>,
+    right: Box<dyn InitializedVectorOperator>,
     state: InitializedVectorJoinParams,
 }
 
-impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
-    for InitializedVectorJoin
-{
+impl InitializedVectorOperator for InitializedVectorJoin {
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
         match &self.state.join_type {
             VectorJoinType::EquiGeoToData {

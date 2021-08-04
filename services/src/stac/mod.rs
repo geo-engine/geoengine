@@ -91,7 +91,7 @@ pub struct StacAsset {
     pub title: String,
     #[serde(rename = "type")]
     pub mime_type: String,
-    pub roles: Vec<String>,
+    pub roles: Option<Vec<String>>,
     pub gsd: Option<f64>,
     #[serde(rename = "eo:bands")]
     pub eo_bands: Option<Vec<EoBand>>,

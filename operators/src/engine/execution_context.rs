@@ -1,7 +1,6 @@
+use super::{RasterQueryRectangle, VectorQueryRectangle};
 use crate::concurrency::{ThreadPool, ThreadPoolContext, ThreadPoolContextCreator};
-use crate::engine::{
-    QueryRectangle, RasterResultDescriptor, ResultDescriptor, VectorResultDescriptor,
-};
+use crate::engine::{RasterResultDescriptor, ResultDescriptor, VectorResultDescriptor};
 use crate::error::Error;
 use crate::mock::MockDatasetDataSourceLoadingInfo;
 use crate::source::{GdalLoadingInfo, OgrSourceDataset};
@@ -14,44 +13,44 @@ use serde::{Deserialize, Serialize};
 use std::any::Any;
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::marker::PhantomData;
 use std::sync::Arc;
 
 /// A context that provides certain utility access during operator initialization
-pub trait ExecutionContext:
-    Send
+pub trait ExecutionContext: Send
     + Sync
-    + MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>
-    + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor>
-    + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor>
+    + MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
+    + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
+    + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
 {
     fn thread_pool(&self) -> ThreadPoolContext;
     fn tiling_specification(&self) -> TilingSpecification;
 }
 
 #[async_trait]
-pub trait MetaDataProvider<L, R>
+pub trait MetaDataProvider<L, R, Q>
 where
     R: ResultDescriptor,
 {
-    async fn meta_data(&self, dataset: &DatasetId) -> Result<Box<dyn MetaData<L, R>>>;
+    async fn meta_data(&self, dataset: &DatasetId) -> Result<Box<dyn MetaData<L, R, Q>>>;
 }
 
 #[async_trait]
-pub trait MetaData<L, R>: Debug + Send + Sync
+pub trait MetaData<L, R, Q>: Debug + Send + Sync
 where
     R: ResultDescriptor,
 {
-    async fn loading_info(&self, query: QueryRectangle) -> Result<L>;
+    async fn loading_info(&self, query: Q) -> Result<L>;
     async fn result_descriptor(&self) -> Result<R>;
 
-    fn box_clone(&self) -> Box<dyn MetaData<L, R>>;
+    fn box_clone(&self) -> Box<dyn MetaData<L, R, Q>>;
 }
 
-impl<L, R> Clone for Box<dyn MetaData<L, R>>
+impl<L, R, Q> Clone for Box<dyn MetaData<L, R, Q>>
 where
     R: ResultDescriptor,
 {
-    fn clone(&self) -> Box<dyn MetaData<L, R>> {
+    fn clone(&self) -> Box<dyn MetaData<L, R, Q>> {
         self.box_clone()
     }
 }
@@ -78,10 +77,14 @@ impl Default for MockExecutionContext {
 }
 
 impl MockExecutionContext {
-    pub fn add_meta_data<L, R>(&mut self, dataset: DatasetId, meta_data: Box<dyn MetaData<L, R>>)
-    where
+    pub fn add_meta_data<L, R, Q>(
+        &mut self,
+        dataset: DatasetId,
+        meta_data: Box<dyn MetaData<L, R, Q>>,
+    ) where
         L: Send + Sync + 'static,
         R: Send + Sync + 'static + ResultDescriptor,
+        Q: Send + Sync + 'static,
     {
         self.meta_data
             .insert(dataset, Box::new(meta_data) as Box<dyn Any + Send + Sync>);
@@ -99,17 +102,18 @@ impl ExecutionContext for MockExecutionContext {
 }
 
 #[async_trait]
-impl<L, R> MetaDataProvider<L, R> for MockExecutionContext
+impl<L, R, Q> MetaDataProvider<L, R, Q> for MockExecutionContext
 where
     L: 'static,
     R: 'static + ResultDescriptor,
+    Q: 'static,
 {
-    async fn meta_data(&self, dataset: &DatasetId) -> Result<Box<dyn MetaData<L, R>>> {
+    async fn meta_data(&self, dataset: &DatasetId) -> Result<Box<dyn MetaData<L, R, Q>>> {
         let meta_data = self
             .meta_data
             .get(dataset)
             .ok_or(Error::UnknownDatasetId)?
-            .downcast_ref::<Box<dyn MetaData<L, R>>>()
+            .downcast_ref::<Box<dyn MetaData<L, R, Q>>>()
             .ok_or(Error::DatasetLoadingInfoProviderMismatch)?;
 
         Ok(meta_data.clone())
@@ -118,22 +122,26 @@ where
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct StaticMetaData<L, R>
+pub struct StaticMetaData<L, R, Q>
 where
     L: Debug + Clone + Send + Sync + 'static,
     R: Debug + Send + Sync + 'static + ResultDescriptor,
+    Q: Debug + Clone + Send + Sync + 'static,
 {
     pub loading_info: L,
     pub result_descriptor: R,
+    #[serde(skip)]
+    pub phantom: PhantomData<Q>,
 }
 
 #[async_trait]
-impl<L, R> MetaData<L, R> for StaticMetaData<L, R>
+impl<L, R, Q> MetaData<L, R, Q> for StaticMetaData<L, R, Q>
 where
     L: Debug + Clone + Send + Sync + 'static,
     R: Debug + Send + Sync + 'static + ResultDescriptor,
+    Q: Debug + Clone + Send + Sync + 'static,
 {
-    async fn loading_info(&self, _query: QueryRectangle) -> Result<L> {
+    async fn loading_info(&self, _query: Q) -> Result<L> {
         Ok(self.loading_info.clone())
     }
 
@@ -141,7 +149,7 @@ where
         Ok(self.result_descriptor.clone())
     }
 
-    fn box_clone(&self) -> Box<dyn MetaData<L, R>> {
+    fn box_clone(&self) -> Box<dyn MetaData<L, R, Q>> {
         Box::new(self.clone())
     }
 }
@@ -161,14 +169,16 @@ mod tests {
                 spatial_reference: SpatialReferenceOption::Unreferenced,
                 columns: Default::default(),
             },
+            phantom: Default::default(),
         };
 
-        let info: Box<dyn MetaData<i32, VectorResultDescriptor>> = Box::new(info);
+        let info: Box<dyn MetaData<i32, VectorResultDescriptor, VectorQueryRectangle>> =
+            Box::new(info);
 
         let info2: Box<dyn Any + Send + Sync> = Box::new(info);
 
         let info3 = info2
-            .downcast_ref::<Box<dyn MetaData<i32, VectorResultDescriptor>>>()
+            .downcast_ref::<Box<dyn MetaData<i32, VectorResultDescriptor, VectorQueryRectangle>>>()
             .unwrap();
 
         assert_eq!(

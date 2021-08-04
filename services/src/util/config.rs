@@ -107,7 +107,12 @@ impl ConfigElement for Backend {
 
 #[derive(Debug, Deserialize)]
 pub struct Postgres {
-    pub config_string: String,
+    pub host: String,
+    pub port: u16,
+    pub database: String,
+    pub schema: String,
+    pub user: String,
+    pub password: String,
 }
 
 impl ConfigElement for Postgres {
@@ -182,4 +187,13 @@ pub struct Logging {
 
 impl ConfigElement for Logging {
     const KEY: &'static str = "logging";
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Wcs {
+    pub tile_limit: usize,
+}
+
+impl ConfigElement for Wcs {
+    const KEY: &'static str = "wcs";
 }

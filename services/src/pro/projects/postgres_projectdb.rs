@@ -308,7 +308,7 @@ where
 
         let trans = conn.build_transaction().start().await?;
 
-        let project = self.load(&session, update.id).await?; // TODO: move inside transaction?
+        let project = self.load(session, update.id).await?; // TODO: move inside transaction?
 
         let stmt = trans
             .prepare("UPDATE project_versions SET latest = FALSE WHERE project_id = $1 AND latest IS TRUE;")

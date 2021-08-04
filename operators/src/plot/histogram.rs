@@ -1,14 +1,15 @@
+use crate::engine::QueryProcessor;
+use crate::engine::VectorQueryRectangle;
 use crate::error;
 use crate::error::Error;
 use crate::string_token;
 use crate::util::Result;
 use crate::{
     engine::{
-        ExecutionContext, InitializedOperator, InitializedPlotOperator, InitializedRasterOperator,
+        ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
         InitializedVectorOperator, Operator, PlotOperator, PlotQueryProcessor,
-        PlotResultDescriptor, QueryContext, QueryProcessor, QueryRectangle,
-        SingleRasterOrVectorSource, TypedPlotQueryProcessor, TypedRasterQueryProcessor,
-        TypedVectorQueryProcessor,
+        PlotResultDescriptor, QueryContext, SingleRasterOrVectorSource, TypedPlotQueryProcessor,
+        TypedRasterQueryProcessor, TypedVectorQueryProcessor,
     },
     util::input::RasterOrVectorOperator,
 };
@@ -69,7 +70,7 @@ impl PlotOperator for Histogram {
     async fn initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
-    ) -> Result<Box<InitializedPlotOperator>> {
+    ) -> Result<Box<dyn InitializedPlotOperator>> {
         Ok(match self.sources.source {
             RasterOrVectorOperator::Raster(raster_source) => {
                 ensure!(
@@ -158,9 +159,7 @@ impl<Op> InitializedHistogram<Op> {
     }
 }
 
-impl InitializedOperator<PlotResultDescriptor, TypedPlotQueryProcessor>
-    for InitializedHistogram<Box<InitializedRasterOperator>>
-{
+impl InitializedPlotOperator for InitializedHistogram<Box<dyn InitializedRasterOperator>> {
     fn query_processor(&self) -> Result<TypedPlotQueryProcessor> {
         let processor = HistogramRasterQueryProcessor {
             input: self.source.query_processor()?,
@@ -177,9 +176,7 @@ impl InitializedOperator<PlotResultDescriptor, TypedPlotQueryProcessor>
     }
 }
 
-impl InitializedOperator<PlotResultDescriptor, TypedPlotQueryProcessor>
-    for InitializedHistogram<Box<InitializedVectorOperator>>
-{
+impl InitializedPlotOperator for InitializedHistogram<Box<dyn InitializedVectorOperator>> {
     fn query_processor(&self) -> Result<TypedPlotQueryProcessor> {
         let processor = HistogramVectorQueryProcessor {
             input: self.source.query_processor()?,
@@ -224,7 +221,7 @@ impl PlotQueryProcessor for HistogramRasterQueryProcessor {
 
     async fn plot_query<'p>(
         &'p self,
-        query: QueryRectangle,
+        query: VectorQueryRectangle,
         ctx: &'p dyn QueryContext,
     ) -> Result<Self::OutputFormat> {
         self.preprocess(query, ctx)
@@ -251,7 +248,7 @@ impl PlotQueryProcessor for HistogramVectorQueryProcessor {
 
     async fn plot_query<'p>(
         &'p self,
-        query: QueryRectangle,
+        query: VectorQueryRectangle,
         ctx: &'p dyn QueryContext,
     ) -> Result<Self::OutputFormat> {
         self.preprocess(query, ctx)
@@ -271,7 +268,7 @@ impl PlotQueryProcessor for HistogramVectorQueryProcessor {
 impl HistogramRasterQueryProcessor {
     async fn preprocess<'p>(
         &'p self,
-        query: QueryRectangle,
+        query: VectorQueryRectangle,
         ctx: &'p dyn QueryContext,
     ) -> Result<HistogramMetadata> {
         async fn process_metadata<T: Pixel>(
@@ -299,14 +296,14 @@ impl HistogramRasterQueryProcessor {
         // TODO: compute only number of buckets if possible
 
         call_on_generic_raster_processor!(&self.input, processor => {
-            process_metadata(processor.query(query, ctx).await?, self.metadata).await
+            process_metadata(processor.query(query.into(), ctx).await?, self.metadata).await
         })
     }
 
     async fn process<'p>(
         &'p self,
         metadata: HistogramMetadata,
-        query: QueryRectangle,
+        query: VectorQueryRectangle,
         ctx: &'p dyn QueryContext,
     ) -> Result<<HistogramRasterQueryProcessor as PlotQueryProcessor>::OutputFormat> {
         let mut histogram = geoengine_datatypes::plots::Histogram::builder(
@@ -319,7 +316,7 @@ impl HistogramRasterQueryProcessor {
         .map_err(Error::from)?;
 
         call_on_generic_raster_processor!(&self.input, processor => {
-            let mut query = processor.query(query, ctx).await?;
+            let mut query = processor.query(query.into(), ctx).await?;
 
             while let Some(tile) = query.next().await {
 
@@ -353,7 +350,7 @@ impl HistogramRasterQueryProcessor {
 impl HistogramVectorQueryProcessor {
     async fn preprocess<'p>(
         &'p self,
-        query: QueryRectangle,
+        query: VectorQueryRectangle,
         ctx: &'p dyn QueryContext,
     ) -> Result<HistogramMetadata> {
         async fn process_metadata<'m, G>(
@@ -391,7 +388,7 @@ impl HistogramVectorQueryProcessor {
     async fn process<'p>(
         &'p self,
         metadata: HistogramMetadata,
-        query: QueryRectangle,
+        query: VectorQueryRectangle,
         ctx: &'p dyn QueryContext,
     ) -> Result<<HistogramRasterQueryProcessor as PlotQueryProcessor>::OutputFormat> {
         let mut histogram = geoengine_datatypes::plots::Histogram::builder(
@@ -759,8 +756,9 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                QueryRectangle {
-                    bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
+                        .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
                 },
@@ -806,8 +804,9 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                QueryRectangle {
-                    bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
+                        .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
                 },
@@ -869,8 +868,9 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                QueryRectangle {
-                    bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
+                        .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
                 },
@@ -936,8 +936,9 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                QueryRectangle {
-                    bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
+                        .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
                 },
@@ -972,7 +973,8 @@ mod tests {
                     "type": "OgrSource",
                     "params": {
                         "dataset": {
-                            "internal": dataset_id
+                            "type": "internal",
+                            "datasetId": dataset_id
                         },
                         "attributeProjection": null
                     },
@@ -982,8 +984,8 @@ mod tests {
         let histogram: Histogram = serde_json::from_value(workflow).unwrap();
 
         let mut execution_context = MockExecutionContext::default();
-        execution_context.add_meta_data(
-            DatasetId::Internal(dataset_id),
+        execution_context.add_meta_data::<_, _, VectorQueryRectangle>(
+            DatasetId::Internal { dataset_id },
             Box::new(StaticMetaData {
                 loading_info: OgrSourceDataset {
                     file_name: "operators/test-data/vector/data/ne_10m_ports/ne_10m_ports.shp"
@@ -1001,11 +1003,12 @@ mod tests {
                             "name".to_string(),
                             "website".to_string(),
                         ],
+                        rename: None,
                     }),
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Ignore,
-                    provenance: None,
+                    sql_query: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -1021,6 +1024,7 @@ mod tests {
                     .cloned()
                     .collect(),
                 },
+                phantom: Default::default(),
             }),
         );
 
@@ -1082,8 +1086,9 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                QueryRectangle {
-                    bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
+                        .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
                 },
@@ -1138,8 +1143,9 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                QueryRectangle {
-                    bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
+                        .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
                 },
@@ -1194,8 +1200,9 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                QueryRectangle {
-                    bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
+                        .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
                 },
@@ -1264,8 +1271,9 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                QueryRectangle {
-                    bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
+                        .unwrap(),
                     time_interval: TimeInterval::new_instant(
                         NaiveDate::from_ymd(2013, 12, 1).and_hms(12, 0, 0),
                     )

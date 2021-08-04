@@ -30,9 +30,10 @@ use geoengine_datatypes::{
     spatial_reference::{SpatialReference, SpatialReferenceOption},
 };
 use geoengine_operators::{
-    engine::{StaticMetaData, VectorResultDescriptor},
+    engine::{StaticMetaData, VectorQueryRectangle, VectorResultDescriptor},
     source::{
-        OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceTimeFormat,
+        OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec,
+        OgrSourceTimeFormat,
     },
     util::gdal::{gdal_open_dataset, gdal_open_dataset_ex},
 };
@@ -92,6 +93,7 @@ async fn list_external_datasets<C: Context>(
         .await?
         .list(options)
         .await?;
+    // TODO: it appears errors here lead to the internal datasets being listed because the route also matches /datasets,
     Ok(warp::reply::json(&list))
 }
 
@@ -176,7 +178,9 @@ pub(crate) fn get_dataset_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::path!("dataset" / "internal" / Uuid)
-        .map(|id: Uuid| (DatasetId::Internal(InternalDatasetId(id))))
+        .map(|id: Uuid| DatasetId::Internal {
+            dataset_id: InternalDatasetId(id),
+        })
         .and(warp::get())
         .and(authenticate(ctx.clone()))
         .and(warp::any().map(move || ctx.clone()))
@@ -285,13 +289,13 @@ fn adjust_user_path_to_upload_path(meta: &mut MetaDataDefinition, upload: &Uploa
     match meta {
         crate::datasets::storage::MetaDataDefinition::MockMetaData(_) => {}
         crate::datasets::storage::MetaDataDefinition::OgrMetaData(m) => {
-            m.loading_info.file_name = upload.adjust_file_path(&m.loading_info.file_name)?
+            m.loading_info.file_name = upload.adjust_file_path(&m.loading_info.file_name)?;
         }
         crate::datasets::storage::MetaDataDefinition::GdalMetaDataRegular(m) => {
-            m.params.file_path = upload.adjust_file_path(&m.params.file_path)?
+            m.params.file_path = upload.adjust_file_path(&m.params.file_path)?;
         }
         crate::datasets::storage::MetaDataDefinition::GdalStatic(m) => {
-            m.params.file_path = upload.adjust_file_path(&m.params.file_path)?
+            m.params.file_path = upload.adjust_file_path(&m.params.file_path)?;
         }
     }
     Ok(())
@@ -354,6 +358,8 @@ async fn auto_create_dataset<C: Context>(
         name: create.dataset_name,
         description: create.dataset_description,
         source_operator: meta_data.source_operator_type().to_owned(),
+        symbology: None,
+        provenance: None,
     };
 
     let mut db = ctx.dataset_db_ref_mut().await;
@@ -422,7 +428,7 @@ fn suggest_main_file(upload: &Upload) -> Option<String> {
 }
 
 fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDefinition> {
-    let dataset = gdal_open_dataset(&main_file_path).context(error::Operator)?;
+    let dataset = gdal_open_dataset(main_file_path).context(error::Operator)?;
     let layer = {
         if let Ok(layer) = dataset.layer(0) {
             layer
@@ -441,7 +447,7 @@ fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDef
 
     if geometry.data_type == VectorDataType::Data {
         // help Gdal detecting geometry
-        if let Some(auto_detect) = gdal_autodetect(&main_file_path, &columns_vecs.text) {
+        if let Some(auto_detect) = gdal_autodetect(main_file_path, &columns_vecs.text) {
             geometry = detect_vector_geometry(&auto_detect.dataset);
             if geometry.data_type != VectorDataType::Data {
                 x = auto_detect.x;
@@ -452,7 +458,11 @@ fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDef
 
     let time = detect_time_type(&columns_vecs);
 
-    Ok(MetaDataDefinition::OgrMetaData(StaticMetaData {
+    Ok(MetaDataDefinition::OgrMetaData(StaticMetaData::<
+        _,
+        _,
+        VectorQueryRectangle,
+    > {
         loading_info: OgrSourceDataset {
             file_name: main_file_path.into(),
             layer_name: geometry.layer_name.unwrap_or_else(|| layer.name()),
@@ -464,11 +474,12 @@ fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDef
                 int: columns_vecs.int,
                 float: columns_vecs.float,
                 text: columns_vecs.text,
+                rename: None,
             }),
             force_ogr_time_filter: false,
             force_ogr_spatial_filter: false,
             on_error: geoengine_operators::source::OgrSourceErrorSpec::Ignore,
-            provenance: None,
+            sql_query: None,
         },
         result_descriptor: VectorResultDescriptor {
             data_type: geometry.data_type,
@@ -478,6 +489,7 @@ fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDef
                 .filter_map(|(k, v)| v.try_into().map(|v| (k, v)).ok()) // ignore all columns here that don't have a corresponding type in our collections
                 .collect(),
         },
+        phantom: Default::default(),
     }))
 }
 
@@ -627,7 +639,7 @@ fn detect_time_type(columns: &Columns) -> OgrSourceDatasetTimeType {
         (Some(start), None, None) => OgrSourceDatasetTimeType::Start {
             start_field: start.clone(),
             start_format: OgrSourceTimeFormat::Auto,
-            duration: 0,
+            duration: OgrSourceDurationSpec::Zero,
         },
         _ => OgrSourceDatasetTimeType::None,
     }
@@ -754,6 +766,7 @@ mod tests {
     use crate::contexts::{InMemoryContext, Session, SimpleContext, SimpleSession};
     use crate::datasets::storage::{AddDataset, DatasetStore};
     use crate::error::Result;
+    use crate::projects::{PointSymbology, Symbology};
     use geoengine_datatypes::collections::VectorDataType;
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
     use geoengine_operators::engine::{StaticMetaData, VectorResultDescriptor};
@@ -761,22 +774,29 @@ mod tests {
     use serde_json::json;
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn test_list_datasets() -> Result<()> {
         let ctx = InMemoryContext::default();
 
         let session_id = ctx.default_session_ref().await.id();
 
         let descriptor = VectorResultDescriptor {
-            data_type: VectorDataType::Data,
+            data_type: VectorDataType::MultiPoint,
             spatial_reference: SpatialReferenceOption::Unreferenced,
             columns: Default::default(),
         };
 
+        let id = DatasetId::Internal {
+            dataset_id: InternalDatasetId::from_str("370e99ec-9fd8-401d-828d-d67b431a8742")
+                .unwrap(),
+        };
         let ds = AddDataset {
-            id: None,
+            id: Some(id),
             name: "OgrDataset".to_string(),
             description: "My Ogr dataset".to_string(),
             source_operator: "OgrSource".to_string(),
+            symbology: None,
+            provenance: None,
         };
 
         let meta = StaticMetaData {
@@ -789,12 +809,48 @@ mod tests {
                 force_ogr_time_filter: false,
                 force_ogr_spatial_filter: false,
                 on_error: OgrSourceErrorSpec::Ignore,
-                provenance: None,
+                sql_query: None,
             },
-            result_descriptor: descriptor,
+            result_descriptor: descriptor.clone(),
+            phantom: Default::default(),
         };
 
-        let id = ctx
+        let _id = ctx
+            .dataset_db_ref_mut()
+            .await
+            .add_dataset(&SimpleSession::default(), ds.validated()?, Box::new(meta))
+            .await?;
+
+        let id2 = DatasetId::Internal {
+            dataset_id: InternalDatasetId::from_str("370e99ec-9fd8-401d-828d-d67b431a8742")
+                .unwrap(),
+        };
+        let ds = AddDataset {
+            id: Some(id2),
+            name: "OgrDataset2".to_string(),
+            description: "My Ogr dataset2".to_string(),
+            source_operator: "OgrSource".to_string(),
+            symbology: Some(Symbology::Point(PointSymbology::default())),
+            provenance: None,
+        };
+
+        let meta = StaticMetaData {
+            loading_info: OgrSourceDataset {
+                file_name: Default::default(),
+                layer_name: "".to_string(),
+                data_type: None,
+                time: Default::default(),
+                columns: None,
+                force_ogr_time_filter: false,
+                force_ogr_spatial_filter: false,
+                on_error: OgrSourceErrorSpec::Ignore,
+                sql_query: None,
+            },
+            result_descriptor: descriptor,
+            phantom: Default::default(),
+        };
+
+        let _id2 = ctx
             .dataset_db_ref_mut()
             .await
             .add_dataset(&SimpleSession::default(), ds.validated()?, Box::new(meta))
@@ -827,19 +883,57 @@ mod tests {
             body,
             json!([{
                 "id": {
-                    "internal": id.internal().unwrap()
+                    "type": "internal",
+                    "datasetId": "370e99ec-9fd8-401d-828d-d67b431a8742"
+                },
+                "name": "OgrDataset2",
+                "description": "My Ogr dataset2",
+                "tags": [],
+                "sourceOperator": "OgrSource",
+                "resultDescriptor": {
+                    "type": "vector",
+                    "dataType": "MultiPoint",
+                    "spatialReference": "",
+                    "columns": {}
+                },
+                "symbology": {
+                    "type": "point",
+                    "radius": {
+                        "type": "static",
+                        "value": 10
+                    },
+                    "fillColor": {
+                        "type": "static",
+                        "color": [255, 255, 255, 255]
+                    },
+                    "stroke": {
+                        "width": {
+                            "type": "static",
+                            "value": 1
+                        },
+                        "color": {
+                            "type": "static",
+                            "color": [0, 0, 0, 255]
+                        }
+                    },
+                    "text": null
+                }
+            }, {
+                "id": {
+                    "type": "internal",
+                    "datasetId": "370e99ec-9fd8-401d-828d-d67b431a8742"
                 },
                 "name": "OgrDataset",
                 "description": "My Ogr dataset",
                 "tags": [],
                 "sourceOperator": "OgrSource",
                 "resultDescriptor": {
-                    "vector": {
-                        "dataType": "Data",
-                        "spatialReference": "",
-                        "columns": {}
-                    }
-                }
+                    "type": "vector",
+                    "dataType": "MultiPoint",
+                    "spatialReference": "",
+                    "columns": {}
+                },
+                "symbology": null
             }])
             .to_string()
         );
@@ -863,35 +957,36 @@ mod tests {
                     "sourceOperator": "OgrSource"
                 },
                 "metaData": {
-                    "OgrMetaData": {
-                        "loadingInfo": {
-                            "fileName": "operators/test-data/vector/data/ne_10m_ports/ne_10m_ports.shp",
-                            "layerName": "ne_10m_ports",
-                            "dataType": "MultiPoint",
-                            "time": "none",
-                            "columns": {
-                                "x": "",
-                                "y": null,
-                                "float": ["natlscale"],
-                                "int": ["scalerank"],
-                                "text": ["featurecla", "name", "website"]
-                            },
-                            "forceOgrTimeGilter": false,
-                            "onError": "ignore",
-                            "provenance": null
+                    "type": "OgrMetaData",
+                    "loadingInfo": {
+                        "fileName": "operators/test-data/vector/data/ne_10m_ports/ne_10m_ports.shp",
+                        "layerName": "ne_10m_ports",
+                        "dataType": "MultiPoint",
+                        "time": {
+                            "type": "none"
                         },
-                        "resultDescriptor": {
-                            "dataType": "MultiPoint",
-                            "spatialReference": "EPSG:4326",
-                            "columns": {
-                                "website": "text",
-                                "name": "text",
-                                "natlscale": "float",
-                                "scalerank": "int",
-                                "featurecla": "text"
-                            }
+                        "columns": {
+                            "x": "",
+                            "y": null,
+                            "float": ["natlscale"],
+                            "int": ["scalerank"],
+                            "text": ["featurecla", "name", "website"]
+                        },
+                        "forceOgrTimeGilter": false,
+                        "onError": "ignore",
+                        "provenance": null
+                    },
+                    "resultDescriptor": {
+                        "dataType": "MultiPoint",
+                        "spatialReference": "EPSG:4326",
+                        "columns": {
+                            "website": "text",
+                            "name": "text",
+                            "natlscale": "float",
+                            "scalerank": "int",
+                            "featurecla": "text"
                         }
-                    }
+                    }                    
                 }
             }
         }"#;
@@ -946,11 +1041,12 @@ mod tests {
                             "name".to_string(),
                             "website".to_string(),
                         ],
+                        rename: None,
                     }),
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Ignore,
-                    provenance: None,
+                    sql_query: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -966,8 +1062,9 @@ mod tests {
                     .cloned()
                     .collect(),
                 },
+                phantom: Default::default(),
             })
-        )
+        );
     }
 
     #[test]
@@ -1004,19 +1101,21 @@ mod tests {
                         float: vec![],
                         int: vec![],
                         text: vec![],
+                        rename: None,
                     }),
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Ignore,
-                    provenance: None,
+                    sql_query: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     columns: [].iter().cloned().collect(),
                 },
+                phantom: Default::default()
             })
-        )
+        );
     }
 
     #[test]
@@ -1051,19 +1150,21 @@ mod tests {
                         float: vec![],
                         int: vec![],
                         text: vec![],
+                        rename: None,
                     }),
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Ignore,
-                    provenance: None,
+                    sql_query: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     columns: [].iter().cloned().collect(),
                 },
+                phantom: Default::default(),
             })
-        )
+        );
     }
 
     #[test]
@@ -1098,19 +1199,21 @@ mod tests {
                         float: vec![],
                         int: vec![],
                         text: vec![],
+                        rename: None,
                     }),
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Ignore,
-                    provenance: None,
+                    sql_query: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     columns: [].iter().cloned().collect(),
                 },
+                phantom: Default::default(),
             })
-        )
+        );
     }
 
     #[test]
@@ -1149,11 +1252,12 @@ mod tests {
                         float: vec![],
                         int: vec!["duration".to_owned()],
                         text: vec![],
+                        rename: None,
                     }),
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Ignore,
-                    provenance: None,
+                    sql_query: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -1163,8 +1267,9 @@ mod tests {
                         .cloned()
                         .collect(),
                 },
+                phantom: Default::default()
             })
-        )
+        );
     }
 
     #[test]
@@ -1198,11 +1303,12 @@ mod tests {
                             "Longitude".to_string(),
                             "Name".to_string()
                         ],
+                        rename: None,
                     }),
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Ignore,
-                    provenance: None,
+                    sql_query: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -1216,8 +1322,9 @@ mod tests {
                     .cloned()
                     .collect(),
                 },
+                phantom: Default::default()
             })
-        )
+        );
     }
 
     #[tokio::test]
@@ -1237,6 +1344,8 @@ mod tests {
             name: "OgrDataset".to_string(),
             description: "My Ogr dataset".to_string(),
             source_operator: "OgrSource".to_string(),
+            symbology: None,
+            provenance: None,
         };
 
         let meta = StaticMetaData {
@@ -1249,9 +1358,10 @@ mod tests {
                 force_ogr_time_filter: false,
                 force_ogr_spatial_filter: false,
                 on_error: OgrSourceErrorSpec::Ignore,
-                provenance: None,
+                sql_query: None,
             },
             result_descriptor: descriptor,
+            phantom: Default::default(),
         };
 
         let id = ctx
@@ -1283,18 +1393,20 @@ mod tests {
             body,
             json!({
                 "id": {
-                    "internal": id.internal().unwrap()
+                    "type": "internal",
+                    "datasetId": id.internal().unwrap()
                 },
                 "name": "OgrDataset",
                 "description": "My Ogr dataset",
                 "resultDescriptor": {
-                    "vector": {
-                        "dataType": "Data",
-                        "spatialReference": "",
-                        "columns": {}
-                    }
+                    "type": "vector",
+                    "dataType": "Data",
+                    "spatialReference": "",
+                    "columns": {}
                 },
-                "sourceOperator": "OgrSource"
+                "sourceOperator": "OgrSource",
+                "symbology": null,
+                "provenance": null,
             })
             .to_string()
         );

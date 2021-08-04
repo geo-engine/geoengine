@@ -1,5 +1,6 @@
 use crate::contexts::SimpleContext;
 use crate::contexts::SimpleSession;
+use crate::datasets::provenance::Provenance;
 use crate::datasets::storage::AddDataset;
 use crate::datasets::storage::DatasetStore;
 use crate::handlers::ErrorResponse;
@@ -109,6 +110,12 @@ pub async fn add_ndvi_to_datasets(ctx: &InMemoryContext) -> DatasetId {
             name: "NDVI".to_string(),
             description: "NDVI data from MODIS".to_string(),
             source_operator: "GdalSource".to_string(),
+            symbology: None,
+            provenance: Some(Provenance {
+                citation: "Sample Citation".to_owned(),
+                license: "Sample License".to_owned(),
+                uri: "http://example.org/".to_owned(),
+            }),
         },
         meta_data: MetaDataDefinition::GdalMetaDataRegular(create_ndvi_meta_data()),
     };

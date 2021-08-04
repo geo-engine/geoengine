@@ -10,16 +10,11 @@ use crate::util::config::{self, get_config_element, Backend};
 use crate::{combine, error};
 
 #[cfg(feature = "postgres")]
-use bb8_postgres::tokio_postgres;
-#[cfg(feature = "postgres")]
 use bb8_postgres::tokio_postgres::NoTls;
 use log::info;
 use snafu::ResultExt;
 use std::net::SocketAddr;
 use std::path::PathBuf;
-#[cfg(feature = "postgres")]
-use std::str::FromStr;
-#[cfg(feature = "postgres")]
 use tokio::sync::oneshot::Receiver;
 use warp::Filter;
 
@@ -39,6 +34,7 @@ where
         handlers::workflows::register_workflow_handler(ctx.clone()),
         handlers::workflows::load_workflow_handler(ctx.clone()),
         handlers::workflows::get_workflow_metadata_handler(ctx.clone()),
+        handlers::workflows::get_workflow_provenance_handler(ctx.clone()),
         pro::handlers::users::register_user_handler(ctx.clone()),
         pro::handlers::users::anonymous_handler(ctx.clone()),
         pro::handlers::users::login_handler(ctx.clone()),
@@ -62,6 +58,7 @@ where
         handlers::datasets::auto_create_dataset_handler(ctx.clone()),
         handlers::datasets::create_dataset_handler(ctx.clone()),
         handlers::datasets::suggest_meta_data_handler(ctx.clone()),
+        handlers::wcs::wcs_handler(ctx.clone()),
         handlers::wms::wms_handler(ctx.clone()),
         handlers::wfs::wfs_handler(ctx.clone()),
         handlers::plots::get_plot_handler(ctx.clone()),
@@ -130,13 +127,16 @@ pub async fn start_pro_server(
             #[cfg(feature = "postgres")]
             {
                 eprintln!("Using Postgres backend"); // TODO: log
-                let ctx = PostgresContext::new(
-                    tokio_postgres::config::Config::from_str(
-                        &get_config_element::<config::Postgres>()?.config_string,
-                    )?,
-                    NoTls,
-                )
-                .await?;
+
+                let db_config = config::get_config_element::<config::Postgres>()?;
+                let mut pg_config = bb8_postgres::tokio_postgres::Config::new();
+                pg_config
+                    .user(&db_config.user)
+                    .password(&db_config.password)
+                    .host(&db_config.host)
+                    .dbname(&db_config.database);
+
+                let ctx = PostgresContext::new(pg_config, NoTls).await?;
 
                 start(shutdown_rx, static_files_dir, bind_address, ctx).await
             }

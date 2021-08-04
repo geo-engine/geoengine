@@ -9,6 +9,7 @@ mod multi_line_string;
 mod multi_point;
 mod multi_polygon;
 mod no_geometry;
+mod spatial_partition;
 mod spatial_resolution;
 mod spatio_temporal_bounded;
 mod time_instance;
@@ -29,6 +30,7 @@ pub use multi_line_string::{MultiLineString, MultiLineStringAccess, MultiLineStr
 pub use multi_point::{MultiPoint, MultiPointAccess, MultiPointRef};
 pub use multi_polygon::{MultiPolygon, MultiPolygonAccess, MultiPolygonRef};
 pub use no_geometry::NoGeometry;
+pub use spatial_partition::{AxisAlignedRectangle, SpatialPartition2D, SpatialPartitioned};
 pub use spatial_resolution::SpatialResolution;
 pub use spatio_temporal_bounded::{SpatialBounded, TemporalBounded};
 

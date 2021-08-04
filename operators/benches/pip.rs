@@ -63,7 +63,7 @@ async fn pip(num_threads: usize) {
     let query_processor = operator.query_processor().unwrap().multi_point().unwrap();
 
     let query_rectangle = QueryRectangle {
-        bbox: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
+        spatial_bounds: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
         time_interval: TimeInterval::default(),
         spatial_resolution: SpatialResolution::zero_point_one(),
     };

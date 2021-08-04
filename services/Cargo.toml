@@ -10,9 +10,12 @@ edition = "2018"
 build = "build.rs"
 
 [features]
+nature40 = ["xml"]
+xml = ["quick-xml"]
 postgres = ["postgres-types", "bb8-postgres"]
+gfbio = ["postgres", "geoengine-datatypes/postgres"]
 # This compiles Geo Engine Pro
-pro = ["postgres"]
+pro = ["postgres", "geoengine-operators/pro", "geoengine-datatypes/pro"]
 
 [dependencies]
 async-trait = "0.1"
@@ -21,6 +24,7 @@ bb8-postgres = { version = "0.7", features = ["with-uuid-0_8", "with-chrono-0_4"
 bytes = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 config = "0.11"
+flexi_logger = "0.18"
 futures = "0.3"
 gdal = { version = "0.8", features = ["datetime"] }
 geo = "0.18"
@@ -29,31 +33,33 @@ geoengine-operators = { path = "../operators" }
 geojson = {version = "0.22", features = ["geo-types"]}
 image = "0.23"
 lazy_static = "1.4"
+log = "0.4"
 mime = "0.3"
 mpart-async = "0.5"
 num-traits = "0.2"
 paste = "1.0"
 postgres-types = { version = "0.2", features = ["derive"], optional = true }
 pwhash = "1.0"
-reqwest = "0.11.0"
+quick-xml = { version = "0.22", optional = true }
+reqwest = { version = "0.11.0", features = ["json"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_urlencoded = "0.7"
 serde_with = "1.9"
 snafu = "0.6"
-strum = { version = "0.20", features = ["derive"] }
+strum = { version = "0.21", features = ["derive"] }
 tokio = { version = "1.1", features = ["macros", "signal", "sync", "rt-multi-thread"] }
 typetag = "0.1"
 uuid = { version = "0.8", features = ["serde", "v4", "v5"] }
 warp = "0.3"
-flexi_logger = "0.17"
-log = "0.4"
 
 [dev-dependencies]
-clap = "3.0.0-beta.1"
+clap = "3.0.0-beta.2"
+httptest = "0.15.2"
+rand = "0.8.4"
 tempfile = "3.1"
 xml-rs = "0.8.3"
 
 [build-dependencies]
-vergen = "5"
 anyhow = "1.0.40"
+vergen = "5"

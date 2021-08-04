@@ -11,6 +11,7 @@ pub use self::gdal_source::{
     GdalSourceParameters, GdalSourceProcessor,
 };
 pub use self::ogr_source::{
-    OgrSource, OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceErrorSpec,
-    OgrSourceParameters, OgrSourceTimeFormat,
+    OgrSource, OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType,
+    OgrSourceDurationSpec, OgrSourceErrorSpec, OgrSourceParameters, OgrSourceProcessor,
+    OgrSourceTimeFormat,
 };

@@ -11,11 +11,12 @@ use geoengine_datatypes::collections::{
     FeatureCollectionInfos, FeatureCollectionRowBuilder, GeoFeatureCollectionRowBuilder,
     GeometryRandomAccess,
 };
-use geoengine_datatypes::primitives::{FeatureDataRef, Geometry, TimeInterval};
+use geoengine_datatypes::primitives::{BoundingBox2D, FeatureDataRef, Geometry, TimeInterval};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 
 use crate::adapters::FeatureCollectionChunkMerger;
-use crate::engine::{QueryContext, QueryProcessor, QueryRectangle, VectorQueryProcessor};
+use crate::engine::{QueryContext, VectorQueryProcessor};
+use crate::engine::{QueryProcessor, VectorQueryRectangle};
 use crate::error::Error;
 use crate::util::Result;
 use async_trait::async_trait;
@@ -336,20 +337,21 @@ where
 }
 
 #[async_trait]
-impl<G> VectorQueryProcessor for EquiGeoToDataJoinProcessor<G>
+impl<G> QueryProcessor for EquiGeoToDataJoinProcessor<G>
 where
     G: Geometry + ArrowTyped + Sync + Send + 'static,
     for<'g> FeatureCollection<G>: GeometryRandomAccess<'g>,
     for<'g> <FeatureCollection<G> as GeometryRandomAccess<'g>>::GeometryType: Into<G>,
     FeatureCollectionRowBuilder<G>: GeoFeatureCollectionRowBuilder<G>,
 {
-    type VectorType = FeatureCollection<G>;
+    type Output = FeatureCollection<G>;
+    type SpatialBounds = BoundingBox2D;
 
-    async fn vector_query<'a>(
+    async fn query<'a>(
         &'a self,
-        query: QueryRectangle,
+        query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
-    ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
+    ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         let result_stream = self
             .left_processor
             .query(query, ctx)
@@ -420,9 +422,12 @@ mod tests {
         let left_processor = left.query_processor().unwrap().multi_point().unwrap();
         let right_processor = right.query_processor().unwrap().data().unwrap();
 
-        let query_rectangle = QueryRectangle {
-            bbox: BoundingBox2D::new((f64::MIN, f64::MIN).into(), (f64::MAX, f64::MAX).into())
-                .unwrap(),
+        let query_rectangle = VectorQueryRectangle {
+            spatial_bounds: BoundingBox2D::new(
+                (f64::MIN, f64::MIN).into(),
+                (f64::MAX, f64::MAX).into(),
+            )
+            .unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
@@ -441,7 +446,7 @@ mod tests {
             ),
         );
 
-        block_on_stream(processor.vector_query(query_rectangle, &ctx).await.unwrap())
+        block_on_stream(processor.query(query_rectangle, &ctx).await.unwrap())
             .collect::<Result<_>>()
             .unwrap()
     }
