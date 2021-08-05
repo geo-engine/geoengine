@@ -32,10 +32,7 @@ use geoengine_datatypes::collections::{
     FeatureCollectionModifications, FeatureCollectionRowBuilder, GeoFeatureCollectionRowBuilder,
     VectorDataType,
 };
-use geoengine_datatypes::primitives::{
-    BoundingBox2D, Coordinate2D, FeatureDataType, FeatureDataValue, Geometry, MultiLineString,
-    MultiPoint, MultiPolygon, NoGeometry, TimeInstance, TimeInterval, TimeStep, TypedGeometry,
-};
+use geoengine_datatypes::primitives::{AxisAlignedRectangle, BoundingBox2D, Coordinate2D, FeatureDataType, FeatureDataValue, Geometry, MultiLineString, MultiPoint, MultiPolygon, NoGeometry, TimeInstance, TimeInterval, TimeStep, TypedGeometry};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 
 use crate::engine::{OperatorDatasets, QueryProcessor, VectorQueryRectangle};
@@ -528,11 +525,9 @@ where
 
             if use_ogr_spatial_filter {
                 // rectangular geometry from West, South, East and North values.
-                let filter_geometry = query_rectangle.spatial_bounds.try_into()?;
-                // TODO: log uses spatial filter
-                // TODO: use OGR_L_SetSpatialFilterRect() once GDAL crate supports it
+                debug!("using spatial filter {:?} for layer {:?}", query_rectangle.spatial_bounds, &dataset_information.layer_name);
                 // NOTE: the OGR-filter may be inaccurately allowing more features that should be returned in a "strict" fashion.
-                layer.set_spatial_filter(&filter_geometry);
+                layer.set_spatial_filter_rect(query_rectangle.spatial_bounds.lower_left().x, query_rectangle.spatial_bounds.lower_left().y, query_rectangle.spatial_bounds.upper_right().x, query_rectangle.spatial_bounds.upper_right().y);
             }
 
             FeaturesProvider::Layer(layer)
