@@ -616,7 +616,7 @@ mod tests {
 
         assert_eq!(res.status(), 200);
         assert_eq!(
-            include_bytes!("../../../operators/test-data/raster/geotiff_from_stream.tiff")
+            include_bytes!("../../../operators/test-data/raster/geotiff_from_stream_compressed.tiff")
                 as &[u8],
             res.body().to_vec().as_slice()
         );

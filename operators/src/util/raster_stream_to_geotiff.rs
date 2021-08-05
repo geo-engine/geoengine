@@ -1,10 +1,6 @@
-use core::slice;
+
 use futures::StreamExt;
-use gdal::{
-    raster::{Buffer, GdalType},
-    Driver,
-};
-use gdal_sys::{VSIFree, VSIGetMemFileBuffer};
+use gdal::{Driver, raster::{Buffer, GdalType, RasterCreationOption}};
 use geoengine_datatypes::{
     primitives::{AxisAlignedRectangle, SpatialPartitioned},
     raster::{
@@ -16,7 +12,7 @@ use std::{
     convert::TryInto,
     sync::mpsc::{Receiver, Sender},
 };
-use std::{ffi::CString, sync::mpsc};
+use std::{sync::mpsc};
 
 use crate::{engine::RasterQueryRectangle, util::Result};
 use crate::{
@@ -69,7 +65,7 @@ where
     writer.await??;
 
     // TODO: use higher level rust-gdal method when it is mapped
-    let bytes = get_vsi_mem_file_bytes_and_free(&file_name);
+    let bytes = gdal::vsi::get_vsi_mem_file_bytes_owned(&file_name)?;
 
     Ok(bytes)
 }
@@ -94,9 +90,10 @@ fn gdal_writer<T: Pixel + GdalType>(
     let output_bounds = query_rect.spatial_bounds;
 
     let driver = Driver::get("GTiff")?;
-    // TODO: "COMPRESS, DEFLATE" flags but rust-gdal doesn't support setting this yet(?)
+    let options = [RasterCreationOption { key: "COMPRESS", value: "DEFLATE"}];
+    
     let mut dataset =
-        driver.create_with_band_type::<T>(file_name, width as isize, height as isize, 1)?;
+        driver.create_with_band_type_with_options::<T>(file_name, width as isize, height as isize, 1, &options)?;
 
     dataset.set_spatial_ref(&spatial_reference.try_into()?)?;
     dataset.set_geo_transform(&output_geo_transform.into())?;
@@ -162,23 +159,6 @@ fn gdal_writer<T: Pixel + GdalType>(
     Ok(())
 }
 
-/// copies the bytes of the vsi in-memory file with given `file_name` and frees the memory
-fn get_vsi_mem_file_bytes_and_free(file_name: &str) -> Vec<u8> {
-    let bytes = unsafe {
-        let mut length: u64 = 0;
-        let file_name_c = CString::new(file_name).expect("contains no 0 byte");
-        let bytes = VSIGetMemFileBuffer(file_name_c.as_ptr(), &mut length, 1);
-
-        let slice = slice::from_raw_parts(bytes, length as usize);
-        let vec = slice.to_vec();
-
-        VSIFree(bytes.cast::<std::ffi::c_void>());
-
-        vec
-    };
-    bytes
-}
-
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::{
@@ -226,7 +206,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            include_bytes!("../../../operators/test-data/raster/geotiff_from_stream.tiff")
+            include_bytes!("../../../operators/test-data/raster/geotiff_from_stream_compressed.tiff")
                 as &[u8],
             bytes.as_slice()
         );
