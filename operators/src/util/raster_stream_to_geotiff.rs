@@ -90,7 +90,7 @@ fn gdal_writer<T: Pixel + GdalType>(
     let output_bounds = query_rect.spatial_bounds;
 
     let driver = Driver::get("GTiff")?;
-    let options = [RasterCreationOption { key: "COMPRESS", value: "DEFLATE"}];
+    let options = [RasterCreationOption { key: "COMPRESS", value: "LZW"}, RasterCreationOption {key: "TILED", value: "YES"}];
     
     let mut dataset =
         driver.create_with_band_type_with_options::<T>(file_name, width as isize, height as isize, 1, &options)?;
@@ -161,6 +161,8 @@ fn gdal_writer<T: Pixel + GdalType>(
 
 #[cfg(test)]
 mod tests {
+    use std::{fs::File, io::Write};
+
     use geoengine_datatypes::{
         primitives::{Coordinate2D, SpatialPartition2D, SpatialResolution, TimeInterval},
         raster::TilingSpecification,
@@ -205,6 +207,9 @@ mod tests {
         .await
         .unwrap();
 
+        let mut buffer = File::create("geotiff_from_stream_compressed.tiff").unwrap();
+        buffer.write(&bytes).unwrap();
+        
         assert_eq!(
             include_bytes!("../../../operators/test-data/raster/geotiff_from_stream_compressed.tiff")
                 as &[u8],
