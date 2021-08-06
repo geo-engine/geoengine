@@ -21,7 +21,7 @@ csv = "1.1"
 float-cmp = "0.9"
 futures = "0.3"
 gdal = { version = "0.8", features = ["datetime"] }
-gdal-sys = "0.4.0"
+gdal-sys = "0.5.0"
 geo = "0.18"
 geoengine-datatypes = { path = "../datatypes" }
 lazy_static = "1.4"
