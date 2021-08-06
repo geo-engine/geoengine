@@ -1,6 +1,8 @@
-
 use futures::StreamExt;
-use gdal::{Driver, raster::{Buffer, GdalType, RasterCreationOption}};
+use gdal::{
+    raster::{Buffer, GdalType, RasterCreationOption},
+    Driver,
+};
 use geoengine_datatypes::{
     primitives::{AxisAlignedRectangle, SpatialPartitioned},
     raster::{
@@ -8,11 +10,11 @@ use geoengine_datatypes::{
     },
     spatial_reference::SpatialReference,
 };
+use std::sync::mpsc;
 use std::{
     convert::TryInto,
     sync::mpsc::{Receiver, Sender},
 };
-use std::{sync::mpsc};
 
 use crate::{engine::RasterQueryRectangle, util::Result};
 use crate::{
@@ -90,10 +92,24 @@ fn gdal_writer<T: Pixel + GdalType>(
     let output_bounds = query_rect.spatial_bounds;
 
     let driver = Driver::get("GTiff")?;
-    let options = [RasterCreationOption { key: "COMPRESS", value: "LZW"}, RasterCreationOption {key: "TILED", value: "YES"}];
-    
-    let mut dataset =
-        driver.create_with_band_type_with_options::<T>(file_name, width as isize, height as isize, 1, &options)?;
+    let options = [
+        RasterCreationOption {
+            key: "COMPRESS",
+            value: "LZW",
+        },
+        RasterCreationOption {
+            key: "TILED",
+            value: "YES",
+        },
+    ];
+
+    let mut dataset = driver.create_with_band_type_with_options::<T>(
+        file_name,
+        width as isize,
+        height as isize,
+        1,
+        &options,
+    )?;
 
     dataset.set_spatial_ref(&spatial_reference.try_into()?)?;
     dataset.set_geo_transform(&output_geo_transform.into())?;
@@ -161,8 +177,6 @@ fn gdal_writer<T: Pixel + GdalType>(
 
 #[cfg(test)]
 mod tests {
-    use std::{fs::File, io::Write};
-
     use geoengine_datatypes::{
         primitives::{Coordinate2D, SpatialPartition2D, SpatialResolution, TimeInterval},
         raster::TilingSpecification,
@@ -207,12 +221,10 @@ mod tests {
         .await
         .unwrap();
 
-        let mut buffer = File::create("geotiff_from_stream_compressed.tiff").unwrap();
-        buffer.write(&bytes).unwrap();
-        
         assert_eq!(
-            include_bytes!("../../../operators/test-data/raster/geotiff_from_stream_compressed.tiff")
-                as &[u8],
+            include_bytes!(
+                "../../../operators/test-data/raster/geotiff_from_stream_compressed.tiff"
+            ) as &[u8],
             bytes.as_slice()
         );
     }
