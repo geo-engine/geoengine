@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use geoengine_datatypes::plots::PlotOutputFormat;
 use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution, TimeInterval};
-use geoengine_operators::engine::{QueryRectangle, TypedPlotQueryProcessor};
+use geoengine_operators::engine::{TypedPlotQueryProcessor, VectorQueryRectangle};
 
 use crate::contexts::Context;
 use crate::error;
@@ -129,8 +129,8 @@ pub(crate) async fn get_plot_handler<C: Context>(
 
     let processor = initialized.query_processor().context(error::Operator)?;
 
-    let query_rect = QueryRectangle {
-        bbox: params.bbox,
+    let query_rect = VectorQueryRectangle {
+        spatial_bounds: params.bbox,
         time_interval: params.time,
         spatial_resolution: params.spatial_resolution,
     };

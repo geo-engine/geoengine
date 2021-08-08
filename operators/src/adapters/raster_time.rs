@@ -1,9 +1,9 @@
-use crate::engine::QueryRectangle;
+use crate::engine::RasterQueryRectangle;
 use crate::util::Result;
 use futures::stream::{FusedStream, Zip};
 use futures::Stream;
 use futures::{ready, StreamExt};
-use geoengine_datatypes::primitives::{BoundingBox2D, TimeInstance, TimeInterval};
+use geoengine_datatypes::primitives::{SpatialPartition2D, TimeInstance, TimeInterval};
 use geoengine_datatypes::raster::{GridSize, Pixel, RasterTile2D, TileInformation, TilingStrategy};
 use pin_project::pin_project;
 use std::cmp::min;
@@ -21,12 +21,12 @@ where
     T2: Pixel,
     St1: Stream<Item = Result<RasterTile2D<T1>>>,
     St2: Stream<Item = Result<RasterTile2D<T2>>>,
-    F1: Fn(QueryRectangle) -> St1,
-    F2: Fn(QueryRectangle) -> St2,
+    F1: Fn(RasterQueryRectangle) -> St1,
+    F2: Fn(RasterQueryRectangle) -> St2,
 {
     source_a: F1,
     source_b: F2,
-    query_rect: QueryRectangle,
+    query_rect: RasterQueryRectangle,
     time_end: Option<(TimeInstance, TimeInstance)>,
     // TODO: calculate at start when tiling info is available before querying first tile
     num_spatial_tiles: Option<usize>,
@@ -42,10 +42,10 @@ where
     T2: Pixel,
     St1: Stream<Item = Result<RasterTile2D<T1>>>,
     St2: Stream<Item = Result<RasterTile2D<T2>>>,
-    F1: Fn(QueryRectangle) -> St1,
-    F2: Fn(QueryRectangle) -> St2,
+    F1: Fn(RasterQueryRectangle) -> St1,
+    F2: Fn(RasterQueryRectangle) -> St2,
 {
-    pub fn new(source_a: F1, source_b: F2, query_rect: QueryRectangle) -> Self {
+    pub fn new(source_a: F1, source_b: F2, query_rect: RasterQueryRectangle) -> Self {
         Self {
             stream: source_a(query_rect).zip(source_b(query_rect)),
             source_a,
@@ -72,14 +72,17 @@ where
         (tile_a, tile_b)
     }
 
-    fn number_of_tiles_in_bbox(tile_info: &TileInformation, bbox: BoundingBox2D) -> usize {
+    fn number_of_tiles_in_partition(
+        tile_info: &TileInformation,
+        partition: SpatialPartition2D,
+    ) -> usize {
         // TODO: get tiling strategy from stream or execution context instead of creating it here
         let strat = TilingStrategy {
             tile_size_in_pixels: tile_info.tile_size_in_pixels,
             geo_transform: tile_info.global_geo_transform,
         };
 
-        strat.tile_grid_box(bbox).number_of_elements()
+        strat.tile_grid_box(partition).number_of_elements()
     }
 }
 
@@ -89,8 +92,8 @@ where
     T2: Pixel,
     St1: Stream<Item = Result<RasterTile2D<T1>>>,
     St2: Stream<Item = Result<RasterTile2D<T2>>>,
-    F1: Fn(QueryRectangle) -> St1,
-    F2: Fn(QueryRectangle) -> St2,
+    F1: Fn(RasterQueryRectangle) -> St1,
+    F2: Fn(RasterQueryRectangle) -> St2,
 {
     type Item = Result<(RasterTile2D<T1>, RasterTile2D<T2>)>;
 
@@ -116,9 +119,9 @@ where
             Some((Ok(tile_a), Ok(tile_b))) => {
                 // TODO: calculate at start when tiling info is available before querying first tile
                 if num_spatial_tiles.is_none() {
-                    *num_spatial_tiles = Some(Self::number_of_tiles_in_bbox(
+                    *num_spatial_tiles = Some(Self::number_of_tiles_in_partition(
                         &tile_a.tile_information(),
-                        query_rect.bbox,
+                        query_rect.spatial_bounds,
                     ));
                 }
 
@@ -157,8 +160,8 @@ where
     T2: Pixel,
     St1: Stream<Item = Result<RasterTile2D<T1>>>,
     St2: Stream<Item = Result<RasterTile2D<T2>>>,
-    F1: Fn(QueryRectangle) -> St1,
-    F2: Fn(QueryRectangle) -> St2,
+    F1: Fn(RasterQueryRectangle) -> St1,
+    F2: Fn(RasterQueryRectangle) -> St2,
 {
     fn is_terminated(&self) -> bool {
         self.ended

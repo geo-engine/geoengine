@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
 #[serde(tag = "request")]
 // TODO: evaluate overhead of large enum variant and maybe refactor it
-#[allow(clippy::pub_enum_variant_names, clippy::large_enum_variant)]
+#[allow(clippy::large_enum_variant)]
 pub enum WfsRequest {
     GetCapabilities(GetCapabilities),
     DescribeFeatureType(DescribeFeatureType),

@@ -34,7 +34,7 @@ where
                     min: Vec::from(idx_min.as_slice()),
                     max: Vec::from(idx_max.as_slice())
                 }
-            )
+            );
         }
         Ok(GridBoundingBox::new_unchecked(idx_min, idx_max))
     }
@@ -314,7 +314,7 @@ mod tests {
         assert_eq!(bbox.axis_size(), [10]);
         assert_eq!(bbox.axis_size_x(), 10);
         assert_eq!(bbox.axis_size_y(), 1);
-        assert_eq!(bbox.number_of_elements(), 10)
+        assert_eq!(bbox.number_of_elements(), 10);
     }
 
     #[test]
@@ -323,7 +323,7 @@ mod tests {
         assert_eq!(bbox.axis_size(), [10, 10]);
         assert_eq!(bbox.axis_size_x(), 10);
         assert_eq!(bbox.axis_size_y(), 10);
-        assert_eq!(bbox.number_of_elements(), 100)
+        assert_eq!(bbox.number_of_elements(), 100);
     }
 
     #[test]
@@ -332,7 +332,7 @@ mod tests {
         assert_eq!(bbox.axis_size(), [10, 10, 10]);
         assert_eq!(bbox.axis_size_x(), 10);
         assert_eq!(bbox.axis_size_y(), 10);
-        assert_eq!(bbox.number_of_elements(), 1000)
+        assert_eq!(bbox.number_of_elements(), 1000);
     }
 
     #[test]
@@ -340,7 +340,7 @@ mod tests {
         let a = GridBoundingBox::new([1], [42]).unwrap();
         let b = GridBoundingBox::new([2], [69]).unwrap();
         let c = a.intersection(&b).unwrap();
-        assert_eq!(c, GridBoundingBox::new([2], [42]).unwrap())
+        assert_eq!(c, GridBoundingBox::new([2], [42]).unwrap());
     }
 
     #[test]
@@ -348,7 +348,7 @@ mod tests {
         let a = GridBoundingBox::new([1, 2], [42, 69]).unwrap();
         let b = GridBoundingBox::new([2, 1], [69, 42]).unwrap();
         let c = a.intersection(&b).unwrap();
-        assert_eq!(c, GridBoundingBox::new([2, 2], [42, 42]).unwrap())
+        assert_eq!(c, GridBoundingBox::new([2, 2], [42, 42]).unwrap());
     }
 
     #[test]
@@ -356,7 +356,7 @@ mod tests {
         let a = GridBoundingBox::new([1, 2, 3], [42, 69, 666]).unwrap();
         let b = GridBoundingBox::new([3, 2, 1], [69, 666, 42]).unwrap();
         let c = a.intersection(&b).unwrap();
-        assert_eq!(c, GridBoundingBox::new([3, 2, 3], [42, 69, 42]).unwrap())
+        assert_eq!(c, GridBoundingBox::new([3, 2, 3], [42, 69, 42]).unwrap());
     }
 
     #[test]

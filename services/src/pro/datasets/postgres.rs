@@ -1,3 +1,4 @@
+use crate::datasets::provenance::{ProvenanceOutput, ProvenanceProvider};
 use crate::datasets::storage::{
     AddDataset, Dataset, DatasetDb, DatasetProviderDb, DatasetProviderDefinition,
     DatasetProviderListOptions, DatasetProviderListing, DatasetStore, DatasetStorer,
@@ -66,14 +67,14 @@ impl DatasetProvider for PostgresDatasetDb {
 }
 
 #[async_trait]
-impl<L, R> MetaDataProvider<L, R> for PostgresDatasetDb
+impl<L, R, Q> MetaDataProvider<L, R, Q> for PostgresDatasetDb
 where
     R: ResultDescriptor,
 {
     async fn meta_data(
         &self,
         _dataset: &DatasetId,
-    ) -> std::result::Result<Box<dyn MetaData<L, R>>, geoengine_operators::error::Error> {
+    ) -> std::result::Result<Box<dyn MetaData<L, R, Q>>, geoengine_operators::error::Error> {
         todo!()
     }
 }
@@ -105,6 +106,13 @@ impl UploadDb<UserSession> for PostgresDatasetDb {
     }
 
     async fn create_upload(&mut self, _session: &UserSession, _upload: Upload) -> Result<()> {
+        todo!()
+    }
+}
+
+#[async_trait]
+impl ProvenanceProvider for PostgresDatasetDb {
+    async fn provenance(&self, _dataset: &DatasetId) -> Result<ProvenanceOutput> {
         todo!()
     }
 }

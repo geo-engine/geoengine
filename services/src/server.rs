@@ -82,6 +82,7 @@ where
     cfg.route("/version", web::get().to(show_version_handler)) // TODO: allow disabling this function via config or feature flag
         .route("/wms", web::get().to(handlers::wms::wms_handler::<C>))
         .route("/wfs", web::get().to(handlers::wfs::wfs_handler::<C>))
+        .route("/wcs", web::get().to(handlers::wcs::wcs_handler::<C>))
         .route(
             "/anonymous",
             web::post().to(handlers::session::anonymous_handler::<C>),
@@ -100,6 +101,10 @@ where
                 .route(
                     "/workflow/{id}/metadata",
                     web::get().to(handlers::workflows::get_workflow_metadata_handler::<C>),
+                )
+                .route(
+                    "/workflow/{id}/provenance",
+                    web::get().to(handlers::workflows::get_workflow_provenance_handler::<C>),
                 )
                 .route(
                     "/session",
@@ -178,6 +183,8 @@ where
                     ),
                 ),
         );
+    //handlers::workflows::get_workflow_provenance_handler(ctx.clone()),
+    //handlers::wcs::wcs_handler(ctx.clone()),
 }
 
 /// Shows information about the server software version.
@@ -228,12 +235,7 @@ mod tests {
 
     async fn queries(shutdown_tx: Sender<()>) {
         let web_config: config::Web = get_config_element().unwrap();
-        let base_url = format!(
-            "http://{}/",
-            web_config
-                .external_address
-                .unwrap_or(web_config.bind_address)
-        );
+        let base_url = format!("http://{}", web_config.bind_address);
 
         assert!(wait_for_server(&base_url).await);
         issue_queries(&base_url).await;
@@ -245,7 +247,7 @@ mod tests {
         let client = reqwest::Client::new();
 
         let body = client
-            .post(&format!("{}{}", base_url, "anonymous"))
+            .post(&format!("{}/{}", base_url, "anonymous"))
             .send()
             .await
             .unwrap()
@@ -256,7 +258,7 @@ mod tests {
         let session: SimpleSession = serde_json::from_str(&body).unwrap();
 
         let body = client
-            .post(&format!("{}{}", base_url, "project"))
+            .post(&format!("{}/{}", base_url, "project"))
             .header("Authorization", format!("Bearer {}", session.id()))
             .body("no json")
             .send()

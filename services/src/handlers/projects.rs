@@ -661,7 +661,7 @@ mod tests {
                 .project_db()
                 .read()
                 .await
-                .load(&session, project_id)
+                .load(session, project_id)
                 .await
                 .unwrap();
 
@@ -812,7 +812,7 @@ mod tests {
                 .project_db()
                 .read()
                 .await
-                .load(&session, project_id)
+                .load(session, project_id)
                 .await
                 .unwrap();
 

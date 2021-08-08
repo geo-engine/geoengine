@@ -130,8 +130,8 @@ mod tests {
     use super::*;
 
     use crate::engine::{
-        MockExecutionContext, MockQueryContext, QueryProcessor, QueryRectangle,
-        TypedVectorQueryProcessor, VectorOperator,
+        MockExecutionContext, MockQueryContext, QueryProcessor, TypedVectorQueryProcessor,
+        VectorOperator, VectorQueryRectangle,
     };
     use crate::error::Error;
     use crate::mock::{MockFeatureCollectionSource, MockPointSource, MockPointSourceParams};
@@ -168,8 +168,8 @@ mod tests {
                 unreachable!();
             };
 
-        let qrect = QueryRectangle {
-            bbox: BoundingBox2D::new((0.0, 0.0).into(), (10.0, 10.0).into()).unwrap(),
+        let qrect = VectorQueryRectangle {
+            spatial_bounds: BoundingBox2D::new((0.0, 0.0).into(), (10.0, 10.0).into()).unwrap(),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
@@ -240,8 +240,8 @@ mod tests {
                 unreachable!();
             };
 
-        let qrect = QueryRectangle {
-            bbox: BoundingBox2D::new((0.0, 0.0).into(), (0.0, 0.0).into()).unwrap(),
+        let qrect = VectorQueryRectangle {
+            spatial_bounds: BoundingBox2D::new((0.0, 0.0).into(), (0.0, 0.0).into()).unwrap(),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };

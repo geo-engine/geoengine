@@ -1,7 +1,7 @@
 use actix_web::{web, HttpResponse};
 use snafu::ResultExt;
 
-use geoengine_datatypes::primitives::BoundingBox2D;
+use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D};
 use geoengine_datatypes::{
     operations::image::{Colorizer, ToPng},
     primitives::SpatialResolution,
@@ -18,8 +18,7 @@ use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 
 use geoengine_datatypes::primitives::{TimeInstance, TimeInterval};
-use geoengine_operators::engine::RasterOperator;
-use geoengine_operators::engine::{QueryRectangle, ResultDescriptor};
+use geoengine_operators::engine::{RasterOperator, RasterQueryRectangle, ResultDescriptor};
 use geoengine_operators::processing::{Reprojection, ReprojectionParams};
 use geoengine_operators::{
     call_on_generic_raster_processor, util::raster_stream_to_png::raster_stream_to_png_bytes,
@@ -157,9 +156,7 @@ fn get_capabilities(_request: &GetCapabilities) -> Result<HttpResponse> {
         wms_url = wms_url
     );
 
-    Ok(HttpResponse::Ok()
-        .content_type(mime::TEXT_HTML_UTF_8)
-        .body(mock))
+    Ok(HttpResponse::Ok().content_type(mime::TEXT_XML).body(mock))
 }
 
 /// Renders a map as raster image.
@@ -226,20 +223,12 @@ async fn get_map<C: Context>(request: &GetMap, ctx: &C) -> Result<HttpResponse> 
     let processor = initialized.query_processor().context(error::Operator)?;
 
     // TODO: use proj for determining axis order
-    let query_bbox = if request_spatial_ref == SpatialReference::epsg_4326() {
-        BoundingBox2D::new(
-            (request.bbox.lower_left().y, request.bbox.lower_left().x).into(),
-            (request.bbox.upper_right().y, request.bbox.upper_right().x).into(),
-        )
-        .context(error::DataType)?
-    } else {
-        request.bbox
-    };
+    let query_bbox: SpatialPartition2D = request.bbox.bounds(request_spatial_ref)?;
     let x_query_resolution = query_bbox.size_x() / f64::from(request.width);
     let y_query_resolution = query_bbox.size_y() / f64::from(request.height);
 
-    let query_rect = QueryRectangle {
-        bbox: query_bbox,
+    let query_rect = RasterQueryRectangle {
+        spatial_bounds: query_bbox,
         time_interval: request.time.unwrap_or_else(|| {
             let time = TimeInstance::from(chrono::offset::Utc::now());
             TimeInterval::new_unchecked(time, time)
@@ -308,7 +297,10 @@ mod tests {
     use crate::handlers::{handle_rejection, ErrorResponse};
     use crate::util::tests::{check_allowed_http_methods, register_ndvi_workflow_helper};
     use geoengine_datatypes::operations::image::RgbaColor;
-    use geoengine_operators::engine::{ExecutionContext, RasterQueryProcessor};
+    use geoengine_datatypes::primitives::SpatialPartition2D;
+    use geoengine_operators::engine::{
+        ExecutionContext, RasterQueryProcessor, RasterQueryRectangle,
+    };
     use geoengine_operators::source::GdalSourceProcessor;
     use geoengine_operators::util::gdal::create_ndvi_meta_data;
     use std::convert::TryInto;
@@ -405,12 +397,13 @@ mod tests {
             phantom_data: Default::default(),
         };
 
-        let query_bbox = BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap();
+        let query_partition =
+            SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
 
         let image_bytes = raster_stream_to_png_bytes(
             gdal_source.boxed(),
-            QueryRectangle {
-                bbox: query_bbox,
+            RasterQueryRectangle {
+                spatial_bounds: query_partition,
                 time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
                     .unwrap(),
                 spatial_resolution: SpatialResolution::new_unchecked(1.0, 1.0),
@@ -451,6 +444,26 @@ mod tests {
         assert_eq!(
             include_bytes!("../../../services/test-data/wms/get_map.png") as &[u8],
             res.body().to_vec().as_slice()
+        );
+    }
+
+    #[tokio::test]
+    async fn get_map_ndvi() {
+        let ctx = InMemoryContext::default();
+
+        let (_, id) = register_ndvi_workflow_helper(&ctx).await;
+
+        let response = warp::test::request()
+            .method("GET")
+            .path(&format!("/wms?service=WMS&version=1.3.0&request=GetMap&layers={}&styles=&width=335&height=168&crs=EPSG:4326&bbox=-90.0,-180.0,90.0,180.0&format=image/png&transparent=FALSE&bgcolor=0xFFFFFF&exceptions=XML&time=2014-04-01T12%3A00%3A00.000%2B00%3A00", id.to_string()))
+            .reply(&wms_handler(ctx).recover(handle_rejection))
+            .await;
+
+        assert_eq!(response.status(), 200, "{:?}", response.body());
+
+        assert_eq!(
+            include_bytes!("../../../services/test-data/wms/get_map_ndvi.png") as &[u8],
+            response.body().to_vec().as_slice()
         );
     }
 
