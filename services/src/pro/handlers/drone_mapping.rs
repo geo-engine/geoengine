@@ -299,6 +299,7 @@ async fn dataset_definition_from_geotiff(
                 description: "".to_owned(),    // TODO: more info
                 source_operator: "GdalSource".to_owned(),
                 symbology: None,
+                provenance: None,
             },
             meta_data: MetaDataDefinition::GdalStatic(GdalMetaDataStatic {
                 time: None,
