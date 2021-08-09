@@ -349,3 +349,264 @@ async fn unzip(zip_path: &Path, target_path: &Path) -> Result<(), error::Error> 
     .await
     .context(error::TokioJoin)?
 }
+
+#[cfg(test)]
+mod tests {
+    use geoengine_datatypes::dataset::DatasetId;
+    use geoengine_datatypes::primitives::{SpatialPartition2D, SpatialResolution, TimeInterval};
+    use geoengine_datatypes::raster::{GeoTransform, RasterTile2D};
+    use geoengine_datatypes::spatial_reference::SpatialReferenceAuthority;
+    use geoengine_operators::source::{
+        FileNotFoundHandling, GdalDatasetParameters, GdalLoadingInfo, GdalLoadingInfoPart,
+        GdalSource, GdalSourceParameters,
+    };
+    use httptest::responders::status_code;
+    use httptest::{matchers::request, responders::json_encoded, Expectation, Server};
+    use serde_json::json;
+    use walkdir::WalkDir;
+    use zip::write::FileOptions;
+
+    use super::*;
+    use crate::contexts::{Context, Session};
+    use crate::error::Result;
+    use crate::util::test_data_dir;
+    use crate::{
+        pro::{contexts::ProInMemoryContext, util::tests::create_session_helper},
+        util::config,
+    };
+    use geoengine_operators::engine::{
+        MetaData, MetaDataProvider, RasterOperator, RasterQueryRectangle,
+    };
+    use std::io::Write;
+    use std::io::{Cursor, Read};
+    use std::path::PathBuf;
+
+    #[allow(clippy::too_many_lines)]
+    #[tokio::test]
+    async fn it_works() -> Result<()> {
+        let mock_nodeodm = Server::run();
+        mock_nodeodm.expect(
+            Expectation::matching(request::method_path("POST", "/task/new/init")).respond_with(
+                json_encoded(json!({
+                    "uuid": "9c64ff33-b6d7-4ff9-b63c-aaba37dfb4b7"
+                })),
+            ),
+        );
+
+        mock_nodeodm.expect(
+            Expectation::matching(request::method_path(
+                "POST",
+                "/task/new/upload/9c64ff33-b6d7-4ff9-b63c-aaba37dfb4b7",
+            ))
+            .times(2)
+            .respond_with(json_encoded(json!({}))),
+        );
+
+        mock_nodeodm.expect(
+            Expectation::matching(request::method_path(
+                "POST",
+                "/task/new/commit/9c64ff33-b6d7-4ff9-b63c-aaba37dfb4b7",
+            ))
+            .respond_with(json_encoded(json!({}))),
+        );
+
+        // manipulate config to use the mock nodeodm server
+        config::set_config("odm.endpoint", mock_nodeodm.url_str("/")).unwrap();
+
+        let ctx = ProInMemoryContext::default();
+        let session = create_session_helper(&ctx).await;
+
+        // file upload into geo engine
+        // TODO: properly upload the data using the handler once this is possible in a test (after migration to actix)
+        let upload_id = UploadId::new();
+        let upload_dir = upload_id.root_path()?;
+        fs::create_dir_all(&upload_dir).await.context(error::Io)?;
+
+        // copy the test data into upload directory
+        let mut test_data = fs::read_dir(test_data_dir().join("pro/drone_mapping/drone_images"))
+            .await
+            .context(error::Io)?;
+
+        while let Some(entry) = test_data.next_entry().await.context(error::Io)? {
+            if entry.path().is_dir() {
+                continue;
+            }
+            fs::copy(entry.path(), upload_dir.join(entry.file_name())).await?;
+        }
+
+        // submit the task via geo engine
+        let task = TaskStart { upload: upload_id };
+
+        let res = warp::test::request()
+            .method("POST")
+            .path("/droneMapping/task")
+            .header("Content-Length", "0")
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id().to_string()),
+            )
+            .json(&task)
+            .reply(&start_task_handler(ctx.clone()))
+            .await;
+
+        assert_eq!(res.status(), 200);
+
+        let body = std::str::from_utf8(res.body()).unwrap();
+        let task = serde_json::from_str::<IdResponse<Uuid>>(body)?;
+
+        let task_uuid = task.id;
+
+        // create a dataset from the nodeodm result
+
+        // create zip archive from test data
+        let odm_test_data_dir = test_data_dir().join("pro/drone_mapping/odm_result");
+        let odm_all_zip_bytes = zip_dir(odm_test_data_dir).await.unwrap();
+
+        mock_nodeodm.expect(
+            Expectation::matching(request::method_path(
+                "GET",
+                format!("/task/{}/download/all.zip", task_uuid),
+            ))
+            .respond_with(
+                status_code(200)
+                    .append_header(CONTENT_TYPE, "application/zip")
+                    .body(odm_all_zip_bytes),
+            ),
+        );
+
+        // download odm result through geo engine and create dataset
+        let res = warp::test::request()
+            .method("POST")
+            .path(&format!("/droneMapping/dataset/{}", task_uuid))
+            .header("Content-Length", "0")
+            .header(
+                "Authorization",
+                format!("Bearer {}", session.id().to_string()),
+            )
+            .json(&task)
+            .reply(&dataset_from_drone_mapping_handler(ctx.clone()))
+            .await;
+
+        let body = std::str::from_utf8(res.body()).unwrap();
+        let dataset_response = serde_json::from_str::<IdResponse<DatasetId>>(body).unwrap();
+
+        // test if the meta data is correct
+        let dataset_id = dataset_response.id;
+        let meta: Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> =
+            ctx.execution_context(session.clone())
+                .unwrap()
+                .meta_data(&dataset_id)
+                .await
+                .unwrap();
+
+        let result_descriptor = meta.result_descriptor().await.unwrap();
+        assert_eq!(
+            result_descriptor,
+            RasterResultDescriptor {
+                data_type: RasterDataType::U8,
+                spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 32630)
+                    .into(),
+                measurement: Measurement::Unitless,
+                no_data_value: None,
+            }
+        );
+
+        let query = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new_unchecked(
+                (0.0, 0.0).into(),
+                (200.0, -200.0).into(),
+            ),
+            time_interval: TimeInterval::default(),
+            spatial_resolution: SpatialResolution::new_unchecked(1., 1.),
+        };
+
+        let mut loading_info = meta.loading_info(query).await.unwrap();
+
+        let part = loading_info.info.next().unwrap().unwrap();
+        assert!(loading_info.info.next().is_none());
+
+        let file_path = &part.params.file_path;
+
+        // TODO: check that data is in the upload folder, we don't know the upload id though
+        assert!(file_path.ends_with("odm_orthophoto/odm_orthophoto.tif"));
+
+        assert_eq!(
+            part,
+            GdalLoadingInfoPart {
+                time: TimeInterval::default(),
+                params: GdalDatasetParameters {
+                    file_path: file_path.clone(),
+                    rasterband_channel: 1,
+                    geo_transform: GeoTransform::new_with_coordinate_x_y(0., 1., 0., -1.),
+                    width: 200,
+                    height: 200,
+                    file_not_found_handling: FileNotFoundHandling::Error,
+                    no_data_value: None,
+                    properties_mapping: None,
+                    gdal_open_options: None,
+                },
+            }
+        );
+
+        // test if the data can be loaded
+        let op = GdalSource {
+            params: GdalSourceParameters {
+                dataset: dataset_id,
+            },
+        }
+        .boxed();
+
+        let exe_ctx = ctx.execution_context(session).unwrap();
+        let initialized = op.initialize(&exe_ctx).await.unwrap();
+
+        let processor = initialized.query_processor().unwrap().get_u8().unwrap();
+
+        let query_ctx = ctx.query_context().unwrap();
+        let result = processor.raster_query(query, &query_ctx).await.unwrap();
+
+        let result = result
+            .map(Result::unwrap)
+            .collect::<Vec<RasterTile2D<u8>>>()
+            .await;
+
+        assert_eq!(result.len(), 1);
+
+        // TODO: clean up files: upload directory of jpegs, upload directory of odm result. We don't know the upload id though
+        //       and can't just delete the whole upload directory because other tests might be using it
+
+        Ok(())
+    }
+
+    /// create a zip file from the content of `source_dir` and its subfolders and output it as a byte vector
+    async fn zip_dir(source_dir: PathBuf) -> Result<Vec<u8>> {
+        tokio::task::spawn_blocking(move || {
+            let mut output = vec![];
+            {
+                let mut zip = zip::ZipWriter::new(Cursor::new(&mut output));
+                let options =
+                    FileOptions::default().compression_method(zip::CompressionMethod::Stored);
+
+                let mut buffer = Vec::new();
+                for entry in WalkDir::new(&source_dir).min_depth(1) {
+                    let entry = entry.unwrap();
+                    let path = entry.path();
+                    let name = path.strip_prefix(&source_dir).unwrap().to_str().unwrap();
+
+                    if path.is_file() {
+                        zip.start_file(name, options).unwrap();
+                        let mut f = std::fs::File::open(path)?;
+                        f.read_to_end(&mut buffer)?;
+                        zip.write_all(&*buffer)?;
+                        buffer.clear();
+                    } else if !name.is_empty() {
+                        zip.add_directory(name, options).unwrap();
+                    }
+                }
+                zip.finish().unwrap();
+            }
+            Ok(output)
+        })
+        .await
+        .context(error::TokioJoin)?
+    }
+}
