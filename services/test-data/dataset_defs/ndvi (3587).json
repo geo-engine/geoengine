@@ -6,7 +6,12 @@
     },
     "name": "NDVI3857",
     "description": "NDVI data from MODIS reprojected to EPSG:3857",
-    "sourceOperator": "GdalSource"
+    "sourceOperator": "GdalSource",
+    "provenance": {
+      "citation": "Nasa Earth Observations, MODIS Vegetation Index Products",
+      "license": "https://earthdata.nasa.gov/collaborate/open-data-services-and-software/data-information-policy",
+      "uri": "https://modis.gsfc.nasa.gov/data/dataprod/mod13.php"
+    }
   },
   "metaData": {
     "type": "GdalMetaDataRegular",

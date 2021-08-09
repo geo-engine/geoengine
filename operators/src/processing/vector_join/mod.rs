@@ -1,11 +1,12 @@
+use geoengine_datatypes::dataset::DatasetId;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
 use geoengine_datatypes::collections::VectorDataType;
 
 use crate::engine::{
-    ExecutionContext, InitializedVectorOperator, Operator, TypedVectorQueryProcessor,
-    VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+    ExecutionContext, InitializedVectorOperator, Operator, OperatorDatasets,
+    TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::error;
 use crate::util::Result;
@@ -34,6 +35,13 @@ pub struct VectorJoinParams {
 pub struct VectorJoinSources {
     left: Box<dyn VectorOperator>,
     right: Box<dyn VectorOperator>,
+}
+
+impl OperatorDatasets for VectorJoinSources {
+    fn datasets_collect(&self, datasets: &mut Vec<DatasetId>) {
+        self.left.datasets_collect(datasets);
+        self.right.datasets_collect(datasets);
+    }
 }
 
 /// Define the type of join
