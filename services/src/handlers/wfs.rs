@@ -521,7 +521,7 @@ fn get_feature_mock(_request: &GetFeature) -> Result<HttpResponse> {
         .body(collection.to_geo_json()))
 }
 
-#[cfg(test)]
+/*#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -1016,4 +1016,4 @@ x;y
             })
         );
     }
-}
+}*/

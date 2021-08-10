@@ -23,7 +23,7 @@ use std::str::FromStr;
 
 use super::projects::ProProjectDb;
 use crate::handlers::validate_token;
-use crate::server::show_version_handler;
+use crate::server::{show_version_handler, configure_extractors};
 
 async fn start<C>(
     static_files_dir: Option<PathBuf>,
@@ -34,49 +34,13 @@ where
     C: ProContext,
     C::ProjectDB: ProProjectDb,
 {
-    /*let handler = combine!(
-        handlers::workflows::register_workflow_handler(ctx.clone()),
-        handlers::workflows::load_workflow_handler(ctx.clone()),
-        handlers::workflows::get_workflow_metadata_handler(ctx.clone()),
-        handlers::workflows::get_workflow_provenance_handler(ctx.clone()),
-        pro::handlers::users::register_user_handler(ctx.clone()),
-        pro::handlers::users::anonymous_handler(ctx.clone()),
-        pro::handlers::users::login_handler(ctx.clone()),
-        pro::handlers::users::logout_handler(ctx.clone()),
-        handlers::session::session_handler(ctx.clone()),
-        pro::handlers::users::session_project_handler(ctx.clone()),
-        pro::handlers::users::session_view_handler(ctx.clone()),
-        pro::handlers::projects::add_permission_handler(ctx.clone()),
-        pro::handlers::projects::remove_permission_handler(ctx.clone()),
-        pro::handlers::projects::list_permissions_handler(ctx.clone()),
-        handlers::projects::create_project_handler(ctx.clone()),
-        handlers::projects::list_projects_handler(ctx.clone()),
-        handlers::projects::update_project_handler(ctx.clone()),
-        handlers::projects::delete_project_handler(ctx.clone()),
-        pro::handlers::projects::load_project_handler(ctx.clone()),
-        pro::handlers::projects::project_versions_handler(ctx.clone()),
-        handlers::datasets::list_external_datasets_handler(ctx.clone()),
-        handlers::datasets::list_datasets_handler(ctx.clone()),
-        handlers::datasets::list_providers_handler(ctx.clone()),
-        handlers::datasets::get_dataset_handler(ctx.clone()),
-        handlers::datasets::auto_create_dataset_handler(ctx.clone()),
-        handlers::datasets::create_dataset_handler(ctx.clone()),
-        handlers::datasets::suggest_meta_data_handler(ctx.clone()),
-        handlers::wcs::wcs_handler(ctx.clone()),
-        handlers::wms::wms_handler(ctx.clone()),
-        handlers::wfs::wfs_handler(ctx.clone()),
-        handlers::plots::get_plot_handler(ctx.clone()),
-        handlers::upload::upload_handler(ctx.clone()),
-        handlers::spatial_references::get_spatial_reference_specification_handler(ctx.clone()),
-        serve_static_directory(static_files_dir)
-    )
-    .recover(handle_rejection);*/
     let wrapped_ctx = web::Data::new(ctx);
 
     HttpServer::new(move || {
         let app = App::new()
             .app_data(wrapped_ctx.clone())
             .wrap(actix_web::middleware::Logger::default())
+            .configure(configure_extractors)
             .configure(init_pro_routes::<C>);
 
         if let Some(static_files_dir) = static_files_dir.clone() {

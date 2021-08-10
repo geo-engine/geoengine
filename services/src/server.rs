@@ -2,12 +2,13 @@ use crate::contexts::{InMemoryContext, SimpleContext};
 use crate::error;
 use crate::error::{Error, Result};
 use crate::handlers;
-use crate::handlers::validate_token;
+use crate::handlers::{validate_token, ErrorResponse};
 use crate::util::config;
 use crate::util::config::get_config_element;
 
 use actix_files::Files;
-use actix_web::{web, App, HttpServer, Responder};
+use actix_web::error::{JsonPayloadError, QueryPayloadError};
+use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use actix_web_httpauth::middleware::HttpAuthentication;
 use log::info;
 use snafu::ResultExt;
@@ -61,6 +62,7 @@ where
         let app = App::new()
             .app_data(wrapped_ctx.clone())
             .wrap(actix_web::middleware::Logger::default())
+            .configure(configure_extractors)
             .configure(init_routes::<C>);
 
         if let Some(static_files_dir) = static_files_dir.clone() {
@@ -73,6 +75,36 @@ where
     .run()
     .await
     .map_err(Into::into)
+}
+
+pub(crate) fn configure_extractors(cfg: &mut web::ServiceConfig) {
+    cfg.app_data(web::JsonConfig::default().error_handler(|err, _req| {
+        actix_web::error::InternalError::from_response(
+            "",
+            HttpResponse::BadRequest().json(match err {
+                JsonPayloadError::Overflow => todo!(),
+                JsonPayloadError::ContentType => todo!(),
+                JsonPayloadError::Deserialize(err) => ErrorResponse {
+                    error: "BodyDeserializeError".to_string(),
+                    message: err.to_string(),
+                },
+                JsonPayloadError::Payload(_) => todo!(),
+            }),
+        )
+        .into()
+    }));
+    cfg.app_data(web::QueryConfig::default().error_handler(|err, _req| {
+        actix_web::error::InternalError::from_response(
+            "",
+            HttpResponse::BadRequest().json(match err {
+                QueryPayloadError::Deserialize(err) => ErrorResponse {
+                    error: "BodyDeserializeError".to_string(),
+                    message: err.to_string(),
+                },
+            }),
+        )
+        .into()
+    }));
 }
 
 pub(crate) fn init_routes<C>(cfg: &mut web::ServiceConfig)
@@ -183,8 +215,6 @@ where
                     ),
                 ),
         );
-    //handlers::workflows::get_workflow_provenance_handler(ctx.clone()),
-    //handlers::wcs::wcs_handler(ctx.clone()),
 }
 
 /// Shows information about the server software version.
@@ -216,7 +246,7 @@ pub(crate) async fn show_version_handler() -> impl Responder {
     })
 }
 
-#[cfg(test)]
+/*#[cfg(test)]
 mod tests {
     use super::*;
     use crate::contexts::{Session, SimpleSession};
@@ -289,4 +319,4 @@ mod tests {
         }
         false
     }
-}
+}*/

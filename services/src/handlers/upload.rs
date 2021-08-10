@@ -86,7 +86,7 @@ pub(crate) async fn upload_handler<C: Context>(
     Ok(web::Json(IdResponse::from(upload_id)))
 }
 
-#[cfg(test)]
+/*#[cfg(test)]
 mod tests {
     use super::*;
     use crate::contexts::{InMemoryContext, Session, SimpleContext};
@@ -138,4 +138,4 @@ foo
 
         // TODO: delete upload directory or configure test settings to use temp dir
     }
-}
+}*/

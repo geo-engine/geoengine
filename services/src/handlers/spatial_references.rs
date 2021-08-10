@@ -80,7 +80,7 @@ pub(crate) async fn get_spatial_reference_specification_handler<C: Context>(
     Ok(web::Json(spec))
 }
 
-#[cfg(test)]
+/*#[cfg(test)]
 mod tests {
     use super::*;
     use crate::contexts::InMemoryContext;
@@ -120,4 +120,4 @@ mod tests {
             spec
         );
     }
-}
+}*/

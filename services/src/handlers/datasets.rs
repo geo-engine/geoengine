@@ -670,7 +670,7 @@ fn column_map_to_column_vecs(columns: &HashMap<String, ColumnDataType>) -> Colum
     }
 }
 
-#[cfg(test)]
+/*#[cfg(test)]
 mod tests {
     use std::{path::PathBuf, str::FromStr};
 
@@ -898,7 +898,7 @@ mod tests {
                             "scalerank": "int",
                             "featurecla": "text"
                         }
-                    }                    
+                    }
                 }
             }
         }"#;
@@ -1325,4 +1325,4 @@ mod tests {
 
         Ok(())
     }
-}
+}*/
