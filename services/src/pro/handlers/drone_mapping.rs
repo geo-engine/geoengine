@@ -12,7 +12,7 @@ use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
 
 use futures_util::StreamExt;
-use geoengine_datatypes::dataset::InternalDatasetId;
+use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
 use geoengine_datatypes::primitives::Measurement;
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::SpatialReference;
@@ -51,6 +51,12 @@ pub struct OdmTaskNewUploadResponse {
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct OdmErrorResponse {
     pub error: Option<String>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct CreateDatasetResponse {
+    upload: UploadId,
+    dataset: DatasetId,
 }
 
 /// Create a new drone mapping task from a given upload. Returns the task id
@@ -165,7 +171,8 @@ where
 }
 
 /// Create a new dataset from the drone mapping result of the task with the given id.
-/// Returns the dataset id.
+/// Returns the dataset id and the upload id indicating where the odm result data
+/// is stored.
 ///
 /// Returns an error if the task is not finished or doesn't exist.
 ///
@@ -178,7 +185,8 @@ where
 /// Response:
 /// ```text
 /// {
-///   "id": {
+///   "upload": "3086f494-d5a4-4b51-a14b-3b29f8bf7bb0",
+///   "dataset": {
 ///     "type": "internal",
 ///     "datasetId": "94230f0b-4e8a-4cba-9adc-3ace837fe5d4"
 ///   }
@@ -271,11 +279,14 @@ where
     let mut db = ctx.dataset_db_ref_mut().await;
     let meta = db.wrap_meta_data(dataset_definition.meta_data);
 
-    let dataset_id = db
+    let dataset = db
         .add_dataset(&session, dataset_definition.properties.validated()?, meta)
         .await?;
 
-    Ok(warp::reply::json(&IdResponse::from(dataset_id)))
+    Ok(warp::reply::json(&CreateDatasetResponse {
+        upload: upload_id,
+        dataset,
+    }))
 }
 
 /// create `DatasetDefinition` from the infos in geotiff at `tiff_path`
@@ -353,7 +364,6 @@ async fn unzip(zip_path: &Path, target_path: &Path) -> Result<(), error::Error> 
 
 #[cfg(test)]
 mod tests {
-    use geoengine_datatypes::dataset::DatasetId;
     use geoengine_datatypes::primitives::{SpatialPartition2D, SpatialResolution, TimeInterval};
     use geoengine_datatypes::raster::{GeoTransform, RasterTile2D};
     use geoengine_datatypes::spatial_reference::SpatialReferenceAuthority;
@@ -382,9 +392,27 @@ mod tests {
     use std::io::{Cursor, Read};
     use std::path::PathBuf;
 
+    /// Helper struct that removes all specified uploads on drop
+    #[derive(Default)]
+    struct TestDataUploads {
+        pub uploads: Vec<UploadId>,
+    }
+
+    impl Drop for TestDataUploads {
+        fn drop(&mut self) {
+            for upload in &self.uploads {
+                if let Ok(path) = upload.root_path() {
+                    let _res = std::fs::remove_dir_all(path);
+                }
+            }
+        }
+    }
+
     #[allow(clippy::too_many_lines)]
     #[tokio::test]
     async fn it_works() -> Result<()> {
+        let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
+
         let mock_nodeodm = Server::run();
         mock_nodeodm.expect(
             Expectation::matching(request::method_path("POST", "/task/new/init")).respond_with(
@@ -423,12 +451,15 @@ mod tests {
         let upload_dir = upload_id.root_path()?;
         fs::create_dir_all(&upload_dir).await.context(error::Io)?;
 
-        // copy the test data into upload directory
-        let mut test_data = fs::read_dir(test_data_dir().join("pro/drone_mapping/drone_images"))
-            .await
-            .context(error::Io)?;
+        test_data.uploads.push(upload_id);
 
-        while let Some(entry) = test_data.next_entry().await.context(error::Io)? {
+        // copy the test data into upload directory
+        let mut drone_images_dir =
+            fs::read_dir(test_data_dir().join("pro/drone_mapping/drone_images"))
+                .await
+                .context(error::Io)?;
+
+        while let Some(entry) = drone_images_dir.next_entry().await.context(error::Io)? {
             if entry.path().is_dir() {
                 continue;
             }
@@ -489,10 +520,11 @@ mod tests {
             .await;
 
         let body = std::str::from_utf8(res.body()).unwrap();
-        let dataset_response = serde_json::from_str::<IdResponse<DatasetId>>(body).unwrap();
+        let dataset_response = serde_json::from_str::<CreateDatasetResponse>(body).unwrap();
+        test_data.uploads.push(dataset_response.upload);
 
         // test if the meta data is correct
-        let dataset_id = dataset_response.id;
+        let dataset_id = dataset_response.dataset;
         let meta: Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> =
             ctx.execution_context(session.clone())
                 .unwrap()
@@ -528,8 +560,15 @@ mod tests {
 
         let file_path = &part.params.file_path;
 
-        // TODO: check that data is in the upload folder, we don't know the upload id though
-        assert!(file_path.ends_with("odm_orthophoto/odm_orthophoto.tif"));
+        assert_eq!(
+            file_path,
+            &dataset_response
+                .upload
+                .root_path()
+                .unwrap()
+                .join("odm_orthophoto")
+                .join("odm_orthophoto.tif")
+        );
 
         assert_eq!(
             part,
@@ -571,9 +610,6 @@ mod tests {
             .await;
 
         assert_eq!(result.len(), 1);
-
-        // TODO: clean up files: upload directory of jpegs, upload directory of odm result. We don't know the upload id though
-        //       and can't just delete the whole upload directory because other tests might be using it
 
         Ok(())
     }
