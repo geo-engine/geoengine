@@ -1,10 +1,11 @@
+use geoengine_datatypes::dataset::DatasetId;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
 use geoengine_datatypes::collections::VectorDataType;
 
 use crate::engine::{
-    ExecutionContext, InitializedOperator, InitializedVectorOperator, Operator,
+    ExecutionContext, InitializedVectorOperator, Operator, OperatorDatasets,
     TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::error;
@@ -12,6 +13,7 @@ use crate::util::Result;
 
 use self::equi_data_join::EquiGeoToDataJoinProcessor;
 use crate::processing::vector_join::util::translation_table;
+use async_trait::async_trait;
 use std::collections::HashMap;
 
 mod equi_data_join;
@@ -35,6 +37,13 @@ pub struct VectorJoinSources {
     right: Box<dyn VectorOperator>,
 }
 
+impl OperatorDatasets for VectorJoinSources {
+    fn datasets_collect(&self, datasets: &mut Vec<DatasetId>) {
+        self.left.datasets_collect(datasets);
+        self.right.datasets_collect(datasets);
+    }
+}
+
 /// Define the type of join
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type")]
@@ -50,13 +59,14 @@ pub enum VectorJoinType {
 }
 
 #[typetag::serde]
+#[async_trait]
 impl VectorOperator for VectorJoin {
-    fn initialize(
+    async fn initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
-    ) -> Result<Box<InitializedVectorOperator>> {
-        let left = self.sources.left.initialize(context)?;
-        let right = self.sources.right.initialize(context)?;
+    ) -> Result<Box<dyn InitializedVectorOperator>> {
+        let left = self.sources.left.initialize(context).await?;
+        let right = self.sources.right.initialize(context).await?;
 
         match self.params.join_type {
             VectorJoinType::EquiGeoToData { .. } => {
@@ -127,14 +137,12 @@ pub struct InitializedVectorJoinParams {
 
 pub struct InitializedVectorJoin {
     result_descriptor: VectorResultDescriptor,
-    left: Box<InitializedVectorOperator>,
-    right: Box<InitializedVectorOperator>,
+    left: Box<dyn InitializedVectorOperator>,
+    right: Box<dyn InitializedVectorOperator>,
     state: InitializedVectorJoinParams,
 }
 
-impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
-    for InitializedVectorJoin
-{
+impl InitializedVectorOperator for InitializedVectorJoin {
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
         match &self.state.join_type {
             VectorJoinType::EquiGeoToData {
@@ -231,8 +239,8 @@ mod tests {
         assert_eq!(params, params_deserialized);
     }
 
-    #[test]
-    fn initialization() {
+    #[tokio::test]
+    async fn initialization() {
         let operator = VectorJoin {
             params: VectorJoinParams {
                 join_type: VectorJoinType::EquiGeoToData {
@@ -266,6 +274,7 @@ mod tests {
         operator
             .boxed()
             .initialize(&MockExecutionContext::default())
+            .await
             .unwrap();
     }
 }

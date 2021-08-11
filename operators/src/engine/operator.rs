@@ -2,21 +2,36 @@ use serde::{Deserialize, Serialize};
 
 use crate::error;
 use crate::util::Result;
+use async_trait::async_trait;
+use geoengine_datatypes::dataset::DatasetId;
 
 use super::{
     query_processor::{TypedRasterQueryProcessor, TypedVectorQueryProcessor},
     CloneablePlotOperator, CloneableRasterOperator, CloneableVectorOperator, ExecutionContext,
-    PlotResultDescriptor, QueryProcessor, RasterResultDescriptor, ResultDescriptor,
-    TypedPlotQueryProcessor, VectorResultDescriptor,
+    PlotResultDescriptor, RasterResultDescriptor, TypedPlotQueryProcessor, VectorResultDescriptor,
 };
+
+pub trait OperatorDatasets {
+    /// Get the dataset ids of all the datasets involoved in this operator and its sources
+    fn datasets(&self) -> Vec<DatasetId> {
+        let mut datasets = vec![];
+        self.datasets_collect(&mut datasets);
+        datasets
+    }
+
+    fn datasets_collect(&self, datasets: &mut Vec<DatasetId>);
+}
 
 /// Common methods for `RasterOperator`s
 #[typetag::serde(tag = "type")]
-pub trait RasterOperator: CloneableRasterOperator + Send + Sync + std::fmt::Debug {
-    fn initialize(
+#[async_trait]
+pub trait RasterOperator:
+    CloneableRasterOperator + OperatorDatasets + Send + Sync + std::fmt::Debug
+{
+    async fn initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
-    ) -> Result<Box<InitializedRasterOperator>>;
+    ) -> Result<Box<dyn InitializedRasterOperator>>;
 
     /// Wrap a box around a `RasterOperator`
     fn boxed(self) -> Box<dyn RasterOperator>
@@ -29,11 +44,14 @@ pub trait RasterOperator: CloneableRasterOperator + Send + Sync + std::fmt::Debu
 
 /// Common methods for `VectorOperator`s
 #[typetag::serde(tag = "type")]
-pub trait VectorOperator: CloneableVectorOperator + Send + Sync + std::fmt::Debug {
-    fn initialize(
+#[async_trait]
+pub trait VectorOperator:
+    CloneableVectorOperator + OperatorDatasets + Send + Sync + std::fmt::Debug
+{
+    async fn initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
-    ) -> Result<Box<InitializedVectorOperator>>;
+    ) -> Result<Box<dyn InitializedVectorOperator>>;
 
     /// Wrap a box around a `VectorOperator`
     fn boxed(self) -> Box<dyn VectorOperator>
@@ -46,11 +64,14 @@ pub trait VectorOperator: CloneableVectorOperator + Send + Sync + std::fmt::Debu
 
 /// Common methods for `PlotOperator`s
 #[typetag::serde(tag = "type")]
-pub trait PlotOperator: CloneablePlotOperator + Send + Sync + std::fmt::Debug {
-    fn initialize(
+#[async_trait]
+pub trait PlotOperator:
+    CloneablePlotOperator + OperatorDatasets + Send + Sync + std::fmt::Debug
+{
+    async fn initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
-    ) -> Result<Box<InitializedPlotOperator>>;
+    ) -> Result<Box<dyn InitializedPlotOperator>>;
 
     /// Wrap a box around a `PlotOperator`
     fn boxed(self) -> Box<dyn PlotOperator>
@@ -61,24 +82,15 @@ pub trait PlotOperator: CloneablePlotOperator + Send + Sync + std::fmt::Debug {
     }
 }
 
-pub type InitializedVectorOperator =
-    dyn InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>;
-
-pub type InitializedRasterOperator =
-    dyn InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>;
-
-pub type InitializedPlotOperator =
-    dyn InitializedOperator<PlotResultDescriptor, TypedPlotQueryProcessor>;
-
-pub trait InitializedOperator<Descriptor, Processor>: Send + Sync {
+pub trait InitializedRasterOperator: Send + Sync {
     /// Get the result descriptor of the `Operator`
-    fn result_descriptor(&self) -> &Descriptor;
+    fn result_descriptor(&self) -> &RasterResultDescriptor;
 
     /// Instantiate a `TypedVectorQueryProcessor` from a `RasterOperator`
-    fn query_processor(&self) -> Result<Processor>;
+    fn query_processor(&self) -> Result<TypedRasterQueryProcessor>;
 
     /// Wrap a box around a `RasterOperator`
-    fn boxed(self) -> Box<dyn InitializedOperator<Descriptor, Processor>>
+    fn boxed(self) -> Box<dyn InitializedRasterOperator>
     where
         Self: Sized + 'static,
     {
@@ -86,16 +98,64 @@ pub trait InitializedOperator<Descriptor, Processor>: Send + Sync {
     }
 }
 
-impl<R, Q> InitializedOperator<R, Q> for Box<dyn InitializedOperator<R, Q>>
-where
-    R: ResultDescriptor,
-    Q: QueryProcessor,
-{
-    fn result_descriptor(&self) -> &R {
+pub trait InitializedVectorOperator: Send + Sync {
+    /// Get the result descriptor of the `Operator`
+    fn result_descriptor(&self) -> &VectorResultDescriptor;
+
+    /// Instantiate a `TypedVectorQueryProcessor` from a `RasterOperator`
+    fn query_processor(&self) -> Result<TypedVectorQueryProcessor>;
+
+    /// Wrap a box around a `RasterOperator`
+    fn boxed(self) -> Box<dyn InitializedVectorOperator>
+    where
+        Self: Sized + 'static,
+    {
+        Box::new(self)
+    }
+}
+
+pub trait InitializedPlotOperator: Send + Sync {
+    /// Get the result descriptor of the `Operator`
+    fn result_descriptor(&self) -> &PlotResultDescriptor;
+
+    /// Instantiate a `TypedVectorQueryProcessor` from a `RasterOperator`
+    fn query_processor(&self) -> Result<TypedPlotQueryProcessor>;
+
+    /// Wrap a box around a `RasterOperator`
+    fn boxed(self) -> Box<dyn InitializedPlotOperator>
+    where
+        Self: Sized + 'static,
+    {
+        Box::new(self)
+    }
+}
+
+impl InitializedRasterOperator for Box<dyn InitializedRasterOperator> {
+    fn result_descriptor(&self) -> &RasterResultDescriptor {
         self.as_ref().result_descriptor()
     }
 
-    fn query_processor(&self) -> Result<Q> {
+    fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
+        self.as_ref().query_processor()
+    }
+}
+
+impl InitializedVectorOperator for Box<dyn InitializedVectorOperator> {
+    fn result_descriptor(&self) -> &VectorResultDescriptor {
+        self.as_ref().result_descriptor()
+    }
+
+    fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
+        self.as_ref().query_processor()
+    }
+}
+
+impl InitializedPlotOperator for Box<dyn InitializedPlotOperator> {
+    fn result_descriptor(&self) -> &PlotResultDescriptor {
+        self.as_ref().result_descriptor()
+    }
+
+    fn query_processor(&self) -> Result<TypedPlotQueryProcessor> {
         self.as_ref().query_processor()
     }
 }
@@ -152,25 +212,25 @@ impl From<Box<dyn PlotOperator>> for TypedOperator {
 
 /// An enum to differentiate between `InitializedOperator` variants
 pub enum TypedInitializedOperator {
-    Vector(Box<InitializedVectorOperator>),
-    Raster(Box<InitializedRasterOperator>),
-    Plot(Box<InitializedPlotOperator>),
+    Vector(Box<dyn InitializedVectorOperator>),
+    Raster(Box<dyn InitializedRasterOperator>),
+    Plot(Box<dyn InitializedPlotOperator>),
 }
 
-impl From<Box<InitializedVectorOperator>> for TypedInitializedOperator {
-    fn from(operator: Box<InitializedVectorOperator>) -> Self {
+impl From<Box<dyn InitializedVectorOperator>> for TypedInitializedOperator {
+    fn from(operator: Box<dyn InitializedVectorOperator>) -> Self {
         TypedInitializedOperator::Vector(operator)
     }
 }
 
-impl From<Box<InitializedRasterOperator>> for TypedInitializedOperator {
-    fn from(operator: Box<InitializedRasterOperator>) -> Self {
+impl From<Box<dyn InitializedRasterOperator>> for TypedInitializedOperator {
+    fn from(operator: Box<dyn InitializedRasterOperator>) -> Self {
         TypedInitializedOperator::Raster(operator)
     }
 }
 
-impl From<Box<InitializedPlotOperator>> for TypedInitializedOperator {
-    fn from(operator: Box<InitializedPlotOperator>) -> Self {
+impl From<Box<dyn InitializedPlotOperator>> for TypedInitializedOperator {
+    fn from(operator: Box<dyn InitializedPlotOperator>) -> Self {
         TypedInitializedOperator::Plot(operator)
     }
 }
@@ -184,4 +244,14 @@ macro_rules! call_on_typed_operator {
             $crate::engine::TypedOperator::Plot($operator_var) => $function_call,
         }
     };
+}
+
+impl OperatorDatasets for TypedOperator {
+    fn datasets_collect(&self, datasets: &mut Vec<DatasetId>) {
+        match self {
+            TypedOperator::Vector(v) => v.datasets_collect(datasets),
+            TypedOperator::Raster(r) => r.datasets_collect(datasets),
+            TypedOperator::Plot(p) => p.datasets_collect(datasets),
+        }
+    }
 }

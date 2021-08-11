@@ -1,10 +1,13 @@
 use crate::call_generic_raster_processor;
 use crate::engine::{
-    InitializedOperator, InitializedRasterOperator, QueryProcessor, RasterOperator,
-    RasterQueryProcessor, RasterResultDescriptor, SourceOperator, TypedRasterQueryProcessor,
+    InitializedRasterOperator, OperatorDatasets, RasterOperator, RasterQueryProcessor,
+    RasterResultDescriptor, SourceOperator, TypedRasterQueryProcessor,
 };
 use crate::util::Result;
+use async_trait::async_trait;
 use futures::{stream, stream::StreamExt};
+use geoengine_datatypes::dataset::DatasetId;
+use geoengine_datatypes::primitives::SpatialPartitioned;
 use geoengine_datatypes::raster::{FromPrimitive, Pixel, RasterTile2D};
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
@@ -26,21 +29,27 @@ where
     }
 }
 
-impl<T> QueryProcessor for MockRasterSourceProcessor<T>
+#[async_trait]
+impl<T> RasterQueryProcessor for MockRasterSourceProcessor<T>
 where
     T: Pixel,
 {
-    type Output = RasterTile2D<T>;
-    fn query<'a>(
+    type RasterType = T;
+    async fn raster_query<'a>(
         &'a self,
-        query: crate::engine::QueryRectangle,
+        query: crate::engine::RasterQueryRectangle,
         _ctx: &'a dyn crate::engine::QueryContext,
-    ) -> Result<futures::stream::BoxStream<crate::util::Result<Self::Output>>> {
-        // TODO: filter spatially w.r.t. query rectangle
+    ) -> Result<futures::stream::BoxStream<crate::util::Result<RasterTile2D<Self::RasterType>>>>
+    {
         Ok(stream::iter(
             self.data
                 .iter()
-                .filter(move |t| t.time.intersects(&query.time_interval))
+                .filter(move |t| {
+                    t.time.intersects(&query.time_interval)
+                        && t.tile_information()
+                            .spatial_partition()
+                            .intersects(&query.spatial_bounds)
+                })
                 .cloned()
                 .map(Result::Ok),
         )
@@ -57,12 +66,17 @@ pub struct MockRasterSourceParams {
 
 pub type MockRasterSource = SourceOperator<MockRasterSourceParams>;
 
+impl OperatorDatasets for MockRasterSource {
+    fn datasets_collect(&self, _datasets: &mut Vec<DatasetId>) {}
+}
+
 #[typetag::serde]
+#[async_trait]
 impl RasterOperator for MockRasterSource {
-    fn initialize(
+    async fn initialize(
         self: Box<Self>,
         _context: &dyn crate::engine::ExecutionContext,
-    ) -> Result<Box<InitializedRasterOperator>> {
+    ) -> Result<Box<dyn InitializedRasterOperator>> {
         Ok(InitializedMockRasterSource {
             result_descriptor: self.params.result_descriptor,
             data: self.params.data,
@@ -76,9 +90,7 @@ pub struct InitializedMockRasterSource {
     data: Vec<RasterTile2D<u8>>,
 }
 
-impl InitializedOperator<RasterResultDescriptor, TypedRasterQueryProcessor>
-    for InitializedMockRasterSource
-{
+impl InitializedRasterOperator for InitializedMockRasterSource {
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         fn converted<From, To>(
             raster_tiles: &[RasterTile2D<From>],
@@ -118,8 +130,8 @@ mod tests {
         spatial_reference::SpatialReference,
     };
 
-    #[test]
-    fn serde() {
+    #[tokio::test]
+    async fn serde() {
         let no_data_value = None;
         let raster = Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6], no_data_value).unwrap();
 
@@ -172,13 +184,20 @@ mod tests {
                         },
                         "data": [1, 2, 3, 4, 5, 6],
                         "noDataValue": null
-
+                    },
+                    "properties":{
+                        "scale":null,
+                        "offset":null,
+                        "band_name":null,
+                        "properties_map":{}
                     }
                 }],
                 "resultDescriptor": {
                     "dataType": "U8",
                     "spatialReference": "EPSG:4326",
-                    "measurement": "unitless",
+                    "measurement": {
+                        "type": "unitless"
+                    },
                     "noDataValue": null
                 }
             }
@@ -190,7 +209,7 @@ mod tests {
 
         let execution_context = MockExecutionContext::default();
 
-        let initialized = deserialized.initialize(&execution_context).unwrap();
+        let initialized = deserialized.initialize(&execution_context).await.unwrap();
 
         match initialized.query_processor().unwrap() {
             crate::engine::TypedRasterQueryProcessor::U8(..) => {}

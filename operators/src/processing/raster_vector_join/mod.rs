@@ -1,23 +1,30 @@
+mod aggregated;
 mod aggregator;
-mod points;
-mod points_aggregated;
+mod non_aggregated;
 mod util;
 
 use crate::engine::{
-    ExecutionContext, InitializedOperator, InitializedRasterOperator, InitializedVectorOperator,
-    Operator, SingleVectorMultipleRasterSources, TypedVectorQueryProcessor, VectorOperator,
+    ExecutionContext, InitializedRasterOperator, InitializedVectorOperator, Operator,
+    SingleVectorMultipleRasterSources, TypedVectorQueryProcessor, VectorOperator,
     VectorQueryProcessor, VectorResultDescriptor,
 };
-use crate::error;
+use crate::error::{self, Error};
+use crate::processing::raster_vector_join::non_aggregated::RasterVectorJoinProcessor;
 use crate::util::Result;
 
-use crate::processing::raster_vector_join::points::RasterPointJoinProcessor;
-use crate::processing::raster_vector_join::points_aggregated::RasterPointAggregateJoinProcessor;
+use crate::processing::raster_vector_join::aggregated::RasterVectorAggregateJoinProcessor;
+use async_trait::async_trait;
+use futures::future::join_all;
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::primitives::FeatureDataType;
-use geoengine_datatypes::raster::RasterDataType;
+use geoengine_datatypes::raster::{Pixel, RasterDataType};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
+
+use self::aggregator::{
+    Aggregator, FirstValueFloatAggregator, FirstValueIntAggregator, MeanValueAggregator,
+    TypedAggregator,
+};
 
 /// An operator that attaches raster values to vector data
 pub type RasterVectorJoin = Operator<RasterVectorJoinParams, SingleVectorMultipleRasterSources>;
@@ -26,30 +33,48 @@ const MAX_NUMBER_OF_RASTER_INPUTS: usize = 8;
 
 /// The parameter spec for `RasterVectorJoin`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RasterVectorJoinParams {
     /// Each name reflects the output column of the join result.
     /// For each raster input, one name must be defined.
     pub names: Vec<String>,
 
-    /// Specifies which method is used for aggregating values
-    pub aggregation: AggregationMethod,
+    /// Specifies which method is used for aggregating values for a feature
+    pub feature_aggregation: FeatureAggregationMethod,
+
+    /// Specifies which method is used for aggregating values over time
+    pub temporal_aggregation: TemporalAggregationMethod,
 }
 
-/// The aggregation method for extracted values
+/// How to aggregate the values for the geometries inside a feature e.g.
+/// the mean of all the raster values corresponding to the individual
+/// points inside a `MultiPoint` feature.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy)]
 #[serde(rename_all = "camelCase")]
-pub enum AggregationMethod {
+pub enum FeatureAggregationMethod {
+    First,
+    Mean,
+}
+
+/// How to aggregate the values over time
+/// If there are multiple rasters valid during the validity of a feature
+/// the featuer is either split into multiple (None-aggregation) or the
+/// values are aggreagated
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy)]
+#[serde(rename_all = "camelCase")]
+pub enum TemporalAggregationMethod {
     None,
     First,
     Mean,
 }
 
 #[typetag::serde]
+#[async_trait]
 impl VectorOperator for RasterVectorJoin {
-    fn initialize(
+    async fn initialize(
         mut self: Box<Self>,
         context: &dyn ExecutionContext,
-    ) -> Result<Box<InitializedVectorOperator>> {
+    ) -> Result<Box<dyn InitializedVectorOperator>> {
         ensure!(
             (1..=MAX_NUMBER_OF_RASTER_INPUTS).contains(&self.sources.rasters.len()),
             error::InvalidNumberOfRasterInputs {
@@ -64,7 +89,7 @@ impl VectorOperator for RasterVectorJoin {
             }
         );
 
-        let vector_source = self.sources.vector.initialize(context)?;
+        let vector_source = self.sources.vector.initialize(context).await?;
 
         ensure!(
             vector_source.result_descriptor().data_type != VectorDataType::Data,
@@ -79,20 +104,23 @@ impl VectorOperator for RasterVectorJoin {
             },
         );
 
-        let raster_sources = self
-            .sources
-            .rasters
-            .drain(..)
-            .map(|source| source.initialize(context))
-            .collect::<Result<Vec<_>>>()?;
+        let raster_sources = join_all(
+            self.sources
+                .rasters
+                .into_iter()
+                .map(|s| s.initialize(context)),
+        )
+        .await
+        .into_iter()
+        .collect::<Result<Vec<_>>>()?;
 
         let params = self.params;
 
         let result_descriptor = vector_source.result_descriptor().map_columns(|columns| {
             let mut columns = columns.clone();
             for (i, new_column_name) in params.names.iter().enumerate() {
-                let feature_data_type = match params.aggregation {
-                    AggregationMethod::First | AggregationMethod::None => {
+                let feature_data_type = match params.temporal_aggregation {
+                    TemporalAggregationMethod::First | TemporalAggregationMethod::None => {
                         match raster_sources[i].result_descriptor().data_type {
                             RasterDataType::U8
                             | RasterDataType::U16
@@ -105,7 +133,7 @@ impl VectorOperator for RasterVectorJoin {
                             RasterDataType::F32 | RasterDataType::F64 => FeatureDataType::Float,
                         }
                     }
-                    AggregationMethod::Mean => FeatureDataType::Float,
+                    TemporalAggregationMethod::Mean => FeatureDataType::Float,
                 };
                 columns.insert(new_column_name.clone(), feature_data_type);
             }
@@ -124,14 +152,12 @@ impl VectorOperator for RasterVectorJoin {
 
 pub struct InitializedRasterVectorJoin {
     result_descriptor: VectorResultDescriptor,
-    vector_source: Box<InitializedVectorOperator>,
-    raster_sources: Vec<Box<InitializedRasterOperator>>,
+    vector_source: Box<dyn InitializedVectorOperator>,
+    raster_sources: Vec<Box<dyn InitializedRasterOperator>>,
     state: RasterVectorJoinParams,
 }
 
-impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
-    for InitializedRasterVectorJoin
-{
+impl InitializedVectorOperator for InitializedRasterVectorJoin {
     fn result_descriptor(&self) -> &VectorResultDescriptor {
         &self.result_descriptor
     }
@@ -146,27 +172,71 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
         Ok(match self.vector_source.query_processor()? {
             TypedVectorQueryProcessor::Data(_) => unreachable!(),
             TypedVectorQueryProcessor::MultiPoint(points) => {
-                TypedVectorQueryProcessor::MultiPoint(match self.state.aggregation {
-                    AggregationMethod::None => RasterPointJoinProcessor::new(
+                TypedVectorQueryProcessor::MultiPoint(match self.state.temporal_aggregation {
+                    TemporalAggregationMethod::None => RasterVectorJoinProcessor::new(
                         points,
                         typed_raster_processors,
                         self.state.names.clone(),
+                        self.state.feature_aggregation,
                     )
                     .boxed(),
-                    AggregationMethod::First | AggregationMethod::Mean => {
-                        RasterPointAggregateJoinProcessor::new(
+                    TemporalAggregationMethod::First | TemporalAggregationMethod::Mean => {
+                        RasterVectorAggregateJoinProcessor::new(
                             points,
                             typed_raster_processors,
                             self.state.names.clone(),
-                            self.state.aggregation,
+                            self.state.feature_aggregation,
+                            self.state.temporal_aggregation,
                         )
                         .boxed()
                     }
                 })
             }
-            TypedVectorQueryProcessor::MultiLineString(_)
-            | TypedVectorQueryProcessor::MultiPolygon(_) => todo!("implement"),
+            TypedVectorQueryProcessor::MultiPolygon(polygons) => {
+                TypedVectorQueryProcessor::MultiPolygon(match self.state.temporal_aggregation {
+                    TemporalAggregationMethod::None => RasterVectorJoinProcessor::new(
+                        polygons,
+                        typed_raster_processors,
+                        self.state.names.clone(),
+                        self.state.feature_aggregation,
+                    )
+                    .boxed(),
+                    TemporalAggregationMethod::First | TemporalAggregationMethod::Mean => {
+                        RasterVectorAggregateJoinProcessor::new(
+                            polygons,
+                            typed_raster_processors,
+                            self.state.names.clone(),
+                            self.state.feature_aggregation,
+                            self.state.temporal_aggregation,
+                        )
+                        .boxed()
+                    }
+                })
+            }
+            TypedVectorQueryProcessor::MultiLineString(_) => return Err(Error::NotYetImplemented),
         })
+    }
+}
+
+pub fn create_feature_aggregator<P: Pixel>(
+    number_of_features: usize,
+    aggregation: FeatureAggregationMethod,
+) -> TypedAggregator {
+    match aggregation {
+        FeatureAggregationMethod::First => match P::TYPE {
+            RasterDataType::U8
+            | RasterDataType::U16
+            | RasterDataType::U32
+            | RasterDataType::U64
+            | RasterDataType::I8
+            | RasterDataType::I16
+            | RasterDataType::I32
+            | RasterDataType::I64 => FirstValueIntAggregator::new(number_of_features).into_typed(),
+            RasterDataType::F32 | RasterDataType::F64 => {
+                FirstValueFloatAggregator::new(number_of_features).into_typed()
+            }
+        },
+        FeatureAggregationMethod::Mean => MeanValueAggregator::new(number_of_features).into_typed(),
     }
 }
 
@@ -175,7 +245,8 @@ mod tests {
     use super::*;
 
     use crate::engine::{
-        MockExecutionContext, MockQueryContext, QueryProcessor, QueryRectangle, RasterOperator,
+        MockExecutionContext, MockQueryContext, QueryProcessor, RasterOperator,
+        VectorQueryRectangle,
     };
     use crate::mock::MockFeatureCollectionSource;
     use crate::source::{GdalSource, GdalSourceParameters};
@@ -194,7 +265,8 @@ mod tests {
         let raster_vector_join = RasterVectorJoin {
             params: RasterVectorJoinParams {
                 names: ["foo", "bar"].iter().copied().map(str::to_string).collect(),
-                aggregation: AggregationMethod::Mean,
+                feature_aggregation: FeatureAggregationMethod::First,
+                temporal_aggregation: TemporalAggregationMethod::Mean,
             },
             sources: SingleVectorMultipleRasterSources {
                 vector: MockFeatureCollectionSource::<MultiPoint>::multiple(vec![]).boxed(),
@@ -206,7 +278,8 @@ mod tests {
             "type": "RasterVectorJoin",
             "params": {
                 "names": ["foo", "bar"],
-                "aggregation": "mean",
+                "featureAggregation": "first",
+                "temporalAggregation": "mean",
             },
             "sources": {
                 "vector": {
@@ -264,7 +337,8 @@ mod tests {
         let operator = RasterVectorJoin {
             params: RasterVectorJoinParams {
                 names: vec!["ndvi".to_string()],
-                aggregation: AggregationMethod::First,
+                feature_aggregation: FeatureAggregationMethod::First,
+                temporal_aggregation: TemporalAggregationMethod::First,
             },
             sources: SingleVectorMultipleRasterSources {
                 vector: point_source,
@@ -272,19 +346,21 @@ mod tests {
             },
         };
 
-        let operator = operator.boxed().initialize(&exe_ctc).unwrap();
+        let operator = operator.boxed().initialize(&exe_ctc).await.unwrap();
 
         let query_processor = operator.query_processor().unwrap().multi_point().unwrap();
 
         let result = query_processor
             .query(
-                QueryRectangle {
-                    bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
+                        .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
                 },
                 &MockQueryContext::new(0),
             )
+            .await
             .unwrap()
             .map(Result::unwrap)
             .collect::<Vec<MultiPointCollection>>()
@@ -334,7 +410,8 @@ mod tests {
         let operator = RasterVectorJoin {
             params: RasterVectorJoinParams {
                 names: vec!["ndvi".to_string()],
-                aggregation: AggregationMethod::Mean,
+                feature_aggregation: FeatureAggregationMethod::First,
+                temporal_aggregation: TemporalAggregationMethod::Mean,
             },
             sources: SingleVectorMultipleRasterSources {
                 vector: point_source,
@@ -342,19 +419,21 @@ mod tests {
             },
         };
 
-        let operator = operator.boxed().initialize(&exe_ctc).unwrap();
+        let operator = operator.boxed().initialize(&exe_ctc).await.unwrap();
 
         let query_processor = operator.query_processor().unwrap().multi_point().unwrap();
 
         let result = query_processor
             .query(
-                QueryRectangle {
-                    bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
+                        .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
                 },
                 &MockQueryContext::new(0),
             )
+            .await
             .unwrap()
             .map(Result::unwrap)
             .collect::<Vec<MultiPointCollection>>()
@@ -405,7 +484,8 @@ mod tests {
         let operator = RasterVectorJoin {
             params: RasterVectorJoinParams {
                 names: vec!["ndvi".to_string()],
-                aggregation: AggregationMethod::Mean,
+                feature_aggregation: FeatureAggregationMethod::First,
+                temporal_aggregation: TemporalAggregationMethod::Mean,
             },
             sources: SingleVectorMultipleRasterSources {
                 vector: point_source,
@@ -413,19 +493,21 @@ mod tests {
             },
         };
 
-        let operator = operator.boxed().initialize(&exe_ctc).unwrap();
+        let operator = operator.boxed().initialize(&exe_ctc).await.unwrap();
 
         let query_processor = operator.query_processor().unwrap().multi_point().unwrap();
 
         let result = query_processor
             .query(
-                QueryRectangle {
-                    bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
+                        .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
                 },
                 &MockQueryContext::new(0),
             )
+            .await
             .unwrap()
             .map(Result::unwrap)
             .collect::<Vec<MultiPointCollection>>()

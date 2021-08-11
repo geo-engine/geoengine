@@ -1,16 +1,19 @@
+use crate::contexts::Session;
 use crate::error;
 use crate::error::Result;
 use crate::handlers::{authenticate, Context};
-use crate::projects::project::{ProjectId, STRectangle};
-use crate::users::session::Session;
-use crate::users::user::{UserCredentials, UserRegistration};
-use crate::users::userdb::UserDb;
+use crate::pro::users::UserCredentials;
+use crate::pro::users::UserRegistration;
+use crate::pro::users::UserSession;
+use crate::projects::{ProjectId, STRectangle};
 use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
 use snafu::ResultExt;
 use uuid::Uuid;
 use warp::reply::Reply;
 use warp::Filter;
+
+// TODO: move to pro, create session-handler
 
 /// Registers a user by providing [`UserRegistration`] parameters.
 ///
@@ -172,7 +175,10 @@ pub(crate) fn logout_handler<C: Context>(
 }
 
 // TODO: move into handler once async closures are available?
-async fn logout<C: Context>(session: Session, ctx: C) -> Result<impl warp::Reply, warp::Rejection> {
+async fn logout<C: Context>(
+    session: UserSession,
+    ctx: C,
+) -> Result<impl warp::Reply, warp::Rejection> {
     ctx.user_db_ref_mut().await.logout(session.id).await?;
     Ok(warp::reply().into_response())
 }
@@ -210,12 +216,13 @@ pub(crate) fn session_handler<C: Context>(
     warp::path("session")
         .and(warp::get())
         .and(authenticate(ctx))
-        .and_then(session)
+        .map(session)
 }
 
 // TODO: move into handler once async closures are available?
-async fn session(session: Session) -> Result<impl warp::Reply, warp::Rejection> {
-    Ok(warp::reply::json(&session))
+#[allow(clippy::needless_pass_by_value)] // the function signature of `Filter`'s `map` requires it
+fn session<S: Session>(session: S) -> impl warp::Reply {
+    warp::reply::json(&session)
 }
 
 /// Sets the active project of the session.
@@ -242,9 +249,9 @@ pub(crate) fn session_project_handler<C: Context>(
 }
 
 // TODO: move into handler once async closures are available?
-async fn session_project<C: Context>(
+async fn session_project<S: Session, C: Context>(
     project: ProjectId,
-    session: Session,
+    session: S,
     ctx: C,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     ctx.user_db_ref_mut()
@@ -291,8 +298,8 @@ pub(crate) fn session_view_handler<C: Context>(
 }
 
 // TODO: move into handler once async closures are available?
-async fn session_view<C: Context>(
-    session: Session,
+async fn session_view<S: Session, C: Context>(
+    session: S,
     ctx: C,
     view: STRectangle,
 ) -> Result<impl warp::Reply, warp::Rejection> {
@@ -307,11 +314,10 @@ async fn session_view<C: Context>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::contexts::SimpleSession;
     use crate::handlers::ErrorResponse;
-    use crate::projects::project::STRectangle;
-    use crate::users::session::Session;
-    use crate::users::user::UserId;
-    use crate::users::userdb::UserDb;
+    use crate::pro::users::UserId;
+    use crate::projects::STRectangle;
     use crate::util::tests::{
         check_allowed_http_methods, create_project_helper, create_session_helper,
     };
@@ -499,7 +505,7 @@ mod tests {
         assert_eq!(res.status(), 200);
 
         let body = std::str::from_utf8(&res.body()).unwrap();
-        let _id: Session = serde_json::from_str(body).unwrap();
+        let _id: UserSession = serde_json::from_str(body).unwrap();
     }
 
     #[tokio::test]
@@ -605,7 +611,7 @@ mod tests {
             .path("/logout")
             .header(
                 "Authorization",
-                format!("Bearer {}", session.id.to_string()),
+                format!("Bearer {}", session.id().to_string()),
             )
             .body("no json")
             .reply(&logout_handler(ctx).recover(handle_rejection))
@@ -709,13 +715,13 @@ mod tests {
             .path("/session")
             .header(
                 "Authorization",
-                format!("Bearer {}", session.id.to_string()),
+                format!("Bearer {}", session.id().to_string()),
             )
             .reply(&session_handler(ctx.clone()).recover(handle_rejection))
             .await;
 
         let body = std::str::from_utf8(&res.body()).unwrap();
-        let session: Session = serde_json::from_str(body).unwrap();
+        let session: SimpleSession = serde_json::from_str(body).unwrap();
 
         ctx.user_db()
             .write()
@@ -729,7 +735,7 @@ mod tests {
             .path("/session")
             .header(
                 "Authorization",
-                format!("Bearer {}", session.id.to_string()),
+                format!("Bearer {}", session.id().to_string()),
             )
             .reply(&session_handler(ctx).recover(handle_rejection))
             .await;
@@ -748,7 +754,7 @@ mod tests {
             .path(&format!("/session/project/{}", project.to_string()))
             .header(
                 "Authorization",
-                format!("Bearer {}", session.id.to_string()),
+                format!("Bearer {}", session.id().to_string()),
             )
             .reply(&session_project_handler(ctx.clone()).recover(handle_rejection))
             .await;
@@ -774,7 +780,7 @@ mod tests {
             .path("/session/view")
             .header(
                 "Authorization",
-                format!("Bearer {}", session.id.to_string()),
+                format!("Bearer {}", session.id().to_string()),
             )
             .json(&rect)
             .reply(&session_view_handler(ctx.clone()).recover(handle_rejection))
@@ -786,7 +792,7 @@ mod tests {
             ctx.user_db()
                 .read()
                 .await
-                .session(session.id)
+                .session(session.id())
                 .await
                 .unwrap()
                 .view,
@@ -811,7 +817,7 @@ mod tests {
         assert_eq!(res.status(), 200);
 
         let body = std::str::from_utf8(&res.body()).unwrap();
-        let session = serde_json::from_str::<Session>(&body).unwrap();
+        let session = serde_json::from_str::<SimpleSession>(&body).unwrap();
 
         assert!(session.user.real_name.is_none());
         assert!(session.user.email.is_none());

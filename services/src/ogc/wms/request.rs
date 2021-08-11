@@ -1,9 +1,7 @@
-use crate::ogc::util::{parse_bbox, parse_time_option};
-use crate::util::{from_str, from_str_option};
-use geoengine_datatypes::{
-    primitives::{BoundingBox2D, TimeInterval},
-    spatial_reference::SpatialReference,
-};
+use crate::ogc::util::{parse_ogc_bbox, parse_time_option, OgcBoundingBox};
+use crate::util::{bool_option_case_insensitive, from_str};
+use geoengine_datatypes::primitives::TimeInterval;
+use geoengine_datatypes::spatial_reference::SpatialReference;
 use serde::{Deserialize, Serialize};
 
 // TODO: ignore case for field names
@@ -11,7 +9,7 @@ use serde::{Deserialize, Serialize};
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
 #[serde(tag = "request")]
 // TODO: evaluate overhead of large enum variant and maybe refactor it
-#[allow(clippy::pub_enum_variant_names, clippy::large_enum_variant)]
+#[allow(clippy::large_enum_variant, clippy::enum_variant_names)]
 pub enum WmsRequest {
     GetCapabilities(GetCapabilities),
     GetMap(GetMap),
@@ -44,8 +42,8 @@ pub struct GetMap {
     #[serde(deserialize_with = "from_str")]
     pub height: u32,
     #[serde(alias = "BBOX")]
-    #[serde(deserialize_with = "parse_bbox")]
-    pub bbox: BoundingBox2D,
+    #[serde(deserialize_with = "parse_ogc_bbox")]
+    pub bbox: OgcBoundingBox,
     #[serde(alias = "FORMAT")]
     pub format: GetMapFormat,
     #[serde(alias = "LAYERS")]
@@ -60,7 +58,7 @@ pub struct GetMap {
     pub time: Option<TimeInterval>,
     #[serde(alias = "TRANSPARENT")]
     #[serde(default)]
-    #[serde(deserialize_with = "from_str_option")]
+    #[serde(deserialize_with = "bool_option_case_insensitive")]
     pub transparent: Option<bool>,
     #[serde(alias = "BGCOLOR")]
     pub bgcolor: Option<String>,
@@ -115,10 +113,7 @@ pub struct GetLegendGraphic {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use geoengine_datatypes::{
-        primitives::{BoundingBox2D, Coordinate2D},
-        spatial_reference::SpatialReference,
-    };
+    use geoengine_datatypes::spatial_reference::SpatialReference;
 
     #[test]
     fn deserialize_get_map() {
@@ -137,7 +132,7 @@ mod tests {
             sld: Some("sld_spec".into()),
             sld_body: Some("sld_body".into()),
             elevation: Some("elevation".into()),
-            bbox: BoundingBox2D::new(Coordinate2D::new(1., 2.), Coordinate2D::new(3., 4.)).unwrap(),
+            bbox: OgcBoundingBox::new(1., 2., 3., 4.),
             height: 2,
             format: GetMapFormat::ImagePng,
             exceptions: Some("exceptions".into()),
@@ -163,7 +158,7 @@ mod tests {
             sld: None,
             sld_body: None,
             elevation: None,
-            bbox: BoundingBox2D::new(Coordinate2D::new(1., 2.), Coordinate2D::new(3., 4.)).unwrap(),
+            bbox: OgcBoundingBox::new(1., 2., 3., 4.),
             height: 2,
             format: GetMapFormat::ImagePng,
             exceptions: None,

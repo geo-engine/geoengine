@@ -11,6 +11,7 @@ use arrow::{
     buffer::Buffer,
 };
 use serde::{Deserialize, Serialize};
+use serde_json::Map;
 use snafu::ensure;
 
 use std::collections::hash_map;
@@ -22,6 +23,7 @@ use std::ops::{Bound, RangeBounds};
 use std::rc::Rc;
 use std::sync::Arc;
 
+use crate::primitives::Coordinate2D;
 use crate::primitives::{
     CategoryDataRef, FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue, FloatDataRef,
     Geometry, IntDataRef, TextDataRef, TimeInterval,
@@ -37,7 +39,7 @@ use crate::{
     collections::{FeatureCollectionError, IntoGeometryOptionsIterator},
     operations::reproject::CoordinateProjection,
 };
-use crate::{json_map, primitives::Coordinate2D};
+use std::iter::FromIterator;
 
 use super::{geo_feature_collection::ReplaceRawArrayCoords, GeometryCollection};
 
@@ -276,13 +278,13 @@ where
         // copy attribute data
         for (column_name, column_type) in &self.types {
             columns.push(arrow::datatypes::Field::new(
-                &column_name,
+                column_name,
                 column_type.arrow_data_type(),
                 column_type.nullable(),
             ));
             column_values.push(
                 self.table
-                    .column_by_name(&column_name)
+                    .column_by_name(column_name)
                     .expect("The attribute column must exist")
                     .clone(),
             );
@@ -294,7 +296,7 @@ where
         // append new columns
         for &(new_column_name, ref data) in new_columns {
             columns.push(arrow::datatypes::Field::new(
-                &new_column_name,
+                new_column_name,
                 data.arrow_data_type(),
                 data.nullable(),
             ));
@@ -377,13 +379,13 @@ where
             }
 
             columns.push(arrow::datatypes::Field::new(
-                &column_name,
+                column_name,
                 column_type.arrow_data_type(),
                 column_type.nullable(),
             ));
             column_values.push(
                 self.table
-                    .column_by_name(&column_name)
+                    .column_by_name(column_name)
                     .expect("The attribute column must exist")
                     .clone(),
             );
@@ -462,25 +464,14 @@ where
         }
 
         ensure!(filter_array.is_some(), error::EmptyPredicate);
+        let mut filter_array = filter_array.expect("checked by ensure");
 
-        // update filter array with nulls from original array
         if keep_nulls && column.null_count() > 0 {
-            let null_bitmap = column
-                .data_ref()
-                .null_bitmap()
-                .as_ref()
-                .expect("must exist if null_count > 0");
-
-            let mut null_array_builder = BooleanArray::builder(column.len());
-            for i in 0..column.len() {
-                null_array_builder.append_value(!null_bitmap.is_set(i))?;
-            }
-            let null_array = null_array_builder.finish();
-
-            update_filter_array(&mut filter_array, Some(null_array), None)?;
+            let null_flags = arrow::compute::is_null(column.as_ref())?;
+            filter_array = arrow::compute::or_kleene(&filter_array, &null_flags)?;
         }
 
-        self.filter(filter_array.expect("checked by ensure"))
+        self.filter(filter_array)
     }
 
     fn append(&self, other: &Self) -> Result<Self::Output> {
@@ -505,7 +496,7 @@ where
         for (column, array_a) in columns.iter().zip(self.table.columns()) {
             let array_b = other
                 .table
-                .column_by_name(&column.name())
+                .column_by_name(column.name())
                 .expect("column must occur in both collections");
 
             new_data.push((
@@ -701,13 +692,13 @@ where
         // copy remaining attribute data
         for (column_name, column_type) in &self.types {
             columns.push(arrow::datatypes::Field::new(
-                &column_name,
+                column_name,
                 column_type.arrow_data_type(),
                 column_type.nullable(),
             ));
             column_values.push(
                 self.table
-                    .column_by_name(&column_name)
+                    .column_by_name(column_name)
                     .expect("The attribute column must exist")
                     .clone(),
             );
@@ -907,9 +898,10 @@ where
                     geometry: geometry_option.map(Into::into),
                     id: None,
                     properties: Some(properties),
-                    foreign_members: Some(
-                        json_map! {"when".to_string() => time_interval.as_geo_json_event()},
-                    ),
+                    foreign_members: Some(Map::from_iter([(
+                        "when".to_string(),
+                        time_interval.as_geo_json_event(),
+                    )])),
                 },
             )
             .collect();
@@ -1546,13 +1538,13 @@ where
         // copy remaining attribute data
         for (column_name, column_type) in &self.types {
             columns.push(arrow::datatypes::Field::new(
-                &column_name,
+                column_name,
                 column_type.arrow_data_type(),
                 column_type.nullable(),
             ));
             column_values.push(
                 self.table
-                    .column_by_name(&column_name)
+                    .column_by_name(column_name)
                     .expect("The attribute column must exist")
                     .clone(),
             );
@@ -1611,7 +1603,7 @@ mod tests {
         let struct_stack_size = 144;
         assert_eq!(mem::size_of::<StructArray>(), struct_stack_size);
 
-        let arrow_overhead_bytes = 192;
+        let arrow_overhead_bytes = 256;
 
         for i in 0..10 {
             assert_eq!(

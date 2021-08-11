@@ -1,5 +1,10 @@
 pub mod hashmap_projectdb;
-#[cfg(feature = "postgres")]
-pub mod postgres_projectdb;
-pub mod project;
-pub mod projectdb;
+mod project;
+mod projectdb;
+
+pub use project::{
+    CreateProject, Layer, LayerType, LayerUpdate, LayerVisibility, OrderBy, Plot, PlotUpdate,
+    PointSymbology, Project, ProjectFilter, ProjectId, ProjectListOptions, ProjectListing,
+    ProjectVersion, ProjectVersionId, RasterSymbology, STRectangle, Symbology, UpdateProject,
+};
+pub use projectdb::ProjectDb;

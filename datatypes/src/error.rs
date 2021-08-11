@@ -219,13 +219,22 @@ pub enum Error {
     NoAreaOfUseDefined {
         proj_string: String,
     },
-    BboxesDoNotIntersect {
-        bbox_a: BoundingBox2D,
-        bbox_b: BoundingBox2D,
-    },
+    SpatialBoundsDoNotIntersect,
 
     OutputBboxEmpty {
         bbox: BoundingBox2D,
+    },
+
+    WrongMetadataType,
+
+    #[snafu(display(
+        "The conditions ul.x < lr.x && ul.y < lr.y are not met by ul:{} lr:{}",
+        upper_left_coordinate,
+        lower_right_coordinate
+    ))]
+    InvalidSpatialPartition {
+        upper_left_coordinate: Coordinate2D,
+        lower_right_coordinate: Coordinate2D,
     },
 }
 

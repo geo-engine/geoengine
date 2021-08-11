@@ -1,12 +1,14 @@
 use crate::engine::{
-    ExecutionContext, InitializedOperator, InitializedVectorOperator, ResultDescriptor,
+    ExecutionContext, InitializedVectorOperator, OperatorDatasets, ResultDescriptor,
     SourceOperator, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
     VectorResultDescriptor,
 };
-use crate::engine::{QueryContext, QueryProcessor, QueryRectangle};
+use crate::engine::{QueryContext, VectorQueryRectangle};
 use crate::util::Result;
+use async_trait::async_trait;
 use futures::stream::{self, BoxStream, StreamExt};
 use geoengine_datatypes::collections::{FeatureCollection, FeatureCollectionInfos};
+use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::primitives::{
     Geometry, MultiLineString, MultiPoint, MultiPolygon, NoGeometry,
 };
@@ -21,17 +23,18 @@ where
     collections: Vec<FeatureCollection<G>>,
 }
 
-impl<G> QueryProcessor for MockFeatureCollectionSourceProcessor<G>
+#[async_trait]
+impl<G> VectorQueryProcessor for MockFeatureCollectionSourceProcessor<G>
 where
     G: Geometry + ArrowTyped + Send + Sync + 'static,
 {
-    type Output = FeatureCollection<G>;
+    type VectorType = FeatureCollection<G>;
 
-    fn query<'a>(
+    async fn vector_query<'a>(
         &'a self,
-        _query: QueryRectangle,
+        _query: VectorQueryRectangle,
         _ctx: &'a dyn QueryContext,
-    ) -> Result<BoxStream<'a, Result<Self::Output>>> {
+    ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
         // TODO: chunk it up
         // let chunk_size = ctx.chunk_byte_size / std::mem::size_of::<Coordinate2D>();
 
@@ -48,6 +51,13 @@ where
 }
 
 pub type MockFeatureCollectionSource<G> = SourceOperator<MockFeatureCollectionSourceParams<G>>;
+
+impl<G> OperatorDatasets for MockFeatureCollectionSource<G>
+where
+    G: Geometry + ArrowTyped,
+{
+    fn datasets_collect(&self, _datasets: &mut Vec<DatasetId>) {}
+}
 
 impl<G> MockFeatureCollectionSource<G>
 where
@@ -89,11 +99,12 @@ macro_rules! impl_mock_feature_collection_source {
         type $newtype = MockFeatureCollectionSource<$geometry>;
 
         #[typetag::serde]
+        #[async_trait]
         impl VectorOperator for $newtype {
-            fn initialize(
+            async fn initialize(
                 self: Box<Self>,
                 _context: &dyn ExecutionContext,
-            ) -> Result<Box<InitializedVectorOperator>> {
+            ) -> Result<Box<dyn InitializedVectorOperator>> {
                 let result_descriptor = VectorResultDescriptor {
                     data_type: <$geometry>::DATA_TYPE,
                     spatial_reference: SpatialReference::epsg_4326().into(), // TODO: get from `FeatureCollection`
@@ -108,7 +119,7 @@ macro_rules! impl_mock_feature_collection_source {
             }
         }
 
-        impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
+        impl InitializedVectorOperator
             for InitializedMockFeatureCollectionSource<VectorResultDescriptor, $geometry>
         {
             fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
@@ -134,6 +145,7 @@ impl_mock_feature_collection_source!(MultiPolygon, MultiPolygon);
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::QueryProcessor;
     use crate::engine::{MockExecutionContext, MockQueryContext};
     use futures::executor::block_on_stream;
     use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, FeatureData, TimeInterval};
@@ -235,8 +247,8 @@ mod tests {
         let _operator: Box<dyn VectorOperator> = serde_json::from_str(&serialized).unwrap();
     }
 
-    #[test]
-    fn execute() {
+    #[tokio::test]
+    async fn execute() {
         let collection = MultiPointCollection::from_data(
             MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1), (2.0, 3.1)]).unwrap(),
             vec![TimeInterval::new_unchecked(0, 1); 3],
@@ -252,7 +264,10 @@ mod tests {
 
         let source = MockFeatureCollectionSource::single(collection.clone()).boxed();
 
-        let source = source.initialize(&MockExecutionContext::default()).unwrap();
+        let source = source
+            .initialize(&MockExecutionContext::default())
+            .await
+            .unwrap();
 
         let processor =
             if let Ok(TypedVectorQueryProcessor::MultiPoint(p)) = source.query_processor() {
@@ -261,14 +276,14 @@ mod tests {
                 panic!()
             };
 
-        let query_rectangle = QueryRectangle {
-            bbox: BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
+        let query_rectangle = VectorQueryRectangle {
+            spatial_bounds: BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
         let ctx = MockQueryContext::new(2 * std::mem::size_of::<Coordinate2D>());
 
-        let stream = processor.vector_query(query_rectangle, &ctx).unwrap();
+        let stream = processor.query(query_rectangle, &ctx).await.unwrap();
 
         let blocking_stream = block_on_stream(stream);
 

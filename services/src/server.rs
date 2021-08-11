@@ -1,21 +1,15 @@
-#[cfg(feature = "postgres")]
-use crate::contexts::PostgresContext;
-use crate::contexts::{Context, InMemoryContext};
+use crate::contexts::{InMemoryContext, SimpleContext};
 use crate::error;
 use crate::error::{Error, Result};
 use crate::handlers;
 use crate::handlers::handle_rejection;
 use crate::util::config;
-use crate::util::config::{get_config_element, Backend};
-#[cfg(feature = "postgres")]
-use bb8_postgres::tokio_postgres;
-#[cfg(feature = "postgres")]
-use bb8_postgres::tokio_postgres::NoTls;
+use crate::util::config::get_config_element;
+
+use log::info;
 use snafu::ResultExt;
 use std::net::SocketAddr;
 use std::path::PathBuf;
-#[cfg(feature = "postgres")]
-use std::str::FromStr;
 use tokio::signal;
 use tokio::sync::oneshot::{Receiver, Sender};
 use warp::fs::File;
@@ -23,6 +17,7 @@ use warp::{Filter, Rejection};
 
 /// Combine filters by boxing them
 /// TODO: avoid boxing while still achieving acceptable compile time
+#[macro_export]
 macro_rules! combine {
   ($x:expr, $($y:expr),+) => {{
       let filter = $x.boxed();
@@ -47,7 +42,7 @@ pub async fn start_server(
         .parse::<SocketAddr>()
         .context(error::AddrParse)?;
 
-    eprintln!(
+    info!(
         "Starting server… {}",
         format!(
             "http://{}/",
@@ -57,35 +52,15 @@ pub async fn start_server(
         )
     );
 
-    match web_config.backend {
-        Backend::InMemory => {
-            eprintln!("Using in memory backend"); // TODO: log
-            start(
-                shutdown_rx,
-                static_files_dir,
-                bind_address,
-                InMemoryContext::new_with_data().await,
-            )
-            .await
-        }
-        Backend::Postgres => {
-            #[cfg(feature = "postgres")]
-            {
-                eprintln!("Using Postgres backend"); // TODO: log
-                let ctx = PostgresContext::new(
-                    tokio_postgres::config::Config::from_str(
-                        &get_config_element::<config::Postgres>()?.config_string,
-                    )?,
-                    NoTls,
-                )
-                .await?;
+    info!("Using in memory backend");
 
-                start(shutdown_rx, static_files_dir, bind_address, ctx).await
-            }
-            #[cfg(not(feature = "postgres"))]
-            panic!("Postgres backend was selected but the postgres feature wasn't activated during compilation")
-        }
-    }
+    start(
+        shutdown_rx,
+        static_files_dir,
+        bind_address,
+        InMemoryContext::new_with_data().await,
+    )
+    .await
 }
 
 async fn start<C>(
@@ -95,38 +70,36 @@ async fn start<C>(
     ctx: C,
 ) -> Result<(), Error>
 where
-    C: Context,
+    C: SimpleContext,
 {
     let handler = combine!(
         handlers::workflows::register_workflow_handler(ctx.clone()),
         handlers::workflows::load_workflow_handler(ctx.clone()),
         handlers::workflows::get_workflow_metadata_handler(ctx.clone()),
-        handlers::users::register_user_handler(ctx.clone()),
-        handlers::users::anonymous_handler(ctx.clone()),
-        handlers::users::login_handler(ctx.clone()),
-        handlers::users::logout_handler(ctx.clone()),
-        handlers::users::session_handler(ctx.clone()),
-        handlers::users::session_project_handler(ctx.clone()),
-        handlers::users::session_view_handler(ctx.clone()),
-        handlers::projects::add_permission_handler(ctx.clone()),
-        handlers::projects::remove_permission_handler(ctx.clone()),
-        handlers::projects::list_permissions_handler(ctx.clone()),
+        handlers::workflows::get_workflow_provenance_handler(ctx.clone()),
+        handlers::session::anonymous_handler(ctx.clone()),
+        handlers::session::session_handler(ctx.clone()),
+        handlers::session::session_project_handler(ctx.clone()),
+        handlers::session::session_view_handler(ctx.clone()),
         handlers::projects::create_project_handler(ctx.clone()),
         handlers::projects::list_projects_handler(ctx.clone()),
         handlers::projects::update_project_handler(ctx.clone()),
         handlers::projects::delete_project_handler(ctx.clone()),
         handlers::projects::load_project_handler(ctx.clone()),
-        handlers::projects::project_versions_handler(ctx.clone()),
-        handlers::datasets::list_datasets_handler(ctx.clone()),
         handlers::datasets::get_dataset_handler(ctx.clone()),
         handlers::datasets::auto_create_dataset_handler(ctx.clone()),
         handlers::datasets::create_dataset_handler(ctx.clone()),
         handlers::datasets::suggest_meta_data_handler(ctx.clone()),
+        handlers::datasets::list_providers_handler(ctx.clone()),
+        handlers::datasets::list_external_datasets_handler(ctx.clone()),
+        handlers::datasets::list_datasets_handler(ctx.clone()), // must come after `list_external_datasets_handler`
+        handlers::wcs::wcs_handler(ctx.clone()),
         handlers::wms::wms_handler(ctx.clone()),
         handlers::wfs::wfs_handler(ctx.clone()),
         handlers::plots::get_plot_handler(ctx.clone()),
         handlers::upload::upload_handler(ctx.clone()),
         handlers::spatial_references::get_spatial_reference_specification_handler(ctx.clone()),
+        show_version_handler(), // TODO: allow disabling this function via config or feature flag
         serve_static_directory(static_files_dir)
     )
     .recover(handle_rejection);
@@ -144,7 +117,44 @@ where
     task.await.context(error::TokioJoin)
 }
 
-fn serve_static_directory(
+/// Shows information about the server software version.
+///
+/// # Example
+///
+/// ```text
+/// GET /version
+/// ```
+/// Response:
+/// ```text
+/// {
+///   "buildDate": "2021-05-17",
+///   "commitHash": "16cd0881a79b6f03bb5f1f6ef2b2711e570b9865"
+/// }
+/// ```
+fn show_version_handler() -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone
+{
+    warp::path("version")
+        .and(warp::get())
+        .and_then(show_version)
+}
+
+// TODO: move into handler once async closures are available?
+#[allow(clippy::unused_async)] // the function signature of `Filter`'s `and_then` requires it
+async fn show_version() -> Result<impl warp::Reply, warp::Rejection> {
+    #[derive(serde::Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct VersionInfo<'a> {
+        build_date: Option<&'a str>,
+        commit_hash: Option<&'a str>,
+    }
+
+    Ok(warp::reply::json(&VersionInfo {
+        build_date: option_env!("VERGEN_BUILD_DATE"),
+        commit_hash: option_env!("VERGEN_GIT_SHA"),
+    }))
+}
+
+pub fn serve_static_directory(
     path: Option<PathBuf>,
 ) -> impl Filter<Extract = (File,), Error = Rejection> + Clone {
     let has_path = path.is_some();
@@ -177,6 +187,7 @@ pub async fn interrupt_handler(shutdown_tx: Sender<()>, callback: Option<fn()>) 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::contexts::{Session, SimpleSession};
     use crate::handlers::ErrorResponse;
     use tokio::sync::oneshot;
 
@@ -192,12 +203,7 @@ mod tests {
 
     async fn queries(shutdown_tx: Sender<()>) {
         let web_config: config::Web = get_config_element().unwrap();
-        let base_url = format!(
-            "http://{}/",
-            web_config
-                .external_address
-                .unwrap_or(web_config.bind_address)
-        );
+        let base_url = format!("http://{}", web_config.bind_address);
 
         assert!(wait_for_server(&base_url).await);
         issue_queries(&base_url).await;
@@ -207,8 +213,21 @@ mod tests {
 
     async fn issue_queries(base_url: &str) {
         let client = reqwest::Client::new();
+
         let body = client
-            .post(&format!("{}{}", base_url, "user"))
+            .post(&format!("{}/{}", base_url, "anonymous"))
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+
+        let session: SimpleSession = serde_json::from_str(&body).unwrap();
+
+        let body = client
+            .post(&format!("{}/{}", base_url, "project"))
+            .header("Authorization", format!("Bearer {}", session.id()))
             .body("no json")
             .send()
             .await

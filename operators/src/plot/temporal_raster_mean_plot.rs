@@ -1,7 +1,7 @@
 use crate::engine::{
-    ExecutionContext, InitializedOperator, InitializedPlotOperator, InitializedRasterOperator,
-    Operator, PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor,
-    QueryRectangle, RasterQueryProcessor, SingleRasterSource, TypedPlotQueryProcessor,
+    ExecutionContext, InitializedPlotOperator, InitializedRasterOperator, Operator, PlotOperator,
+    PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor, RasterQueryProcessor,
+    SingleRasterSource, TypedPlotQueryProcessor, VectorQueryRectangle,
 };
 use crate::util::math::average_floor;
 use crate::util::Result;
@@ -46,14 +46,15 @@ pub enum MeanRasterPixelValuesOverTimePosition {
 }
 
 #[typetag::serde]
+#[async_trait]
 impl PlotOperator for MeanRasterPixelValuesOverTime {
-    fn initialize(
+    async fn initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
-    ) -> Result<Box<InitializedPlotOperator>> {
+    ) -> Result<Box<dyn InitializedPlotOperator>> {
         let initialized_operator = InitializedMeanRasterPixelValuesOverTime {
             result_descriptor: PlotResultDescriptor {},
-            raster: self.sources.raster.initialize(context)?,
+            raster: self.sources.raster.initialize(context).await?,
             state: self.params,
         };
 
@@ -64,13 +65,11 @@ impl PlotOperator for MeanRasterPixelValuesOverTime {
 /// The initialization of `MeanRasterPixelValuesOverTime`
 pub struct InitializedMeanRasterPixelValuesOverTime {
     result_descriptor: PlotResultDescriptor,
-    raster: Box<InitializedRasterOperator>,
+    raster: Box<dyn InitializedRasterOperator>,
     state: MeanRasterPixelValuesOverTimeParams,
 }
 
-impl InitializedOperator<PlotResultDescriptor, TypedPlotQueryProcessor>
-    for InitializedMeanRasterPixelValuesOverTime
-{
+impl InitializedPlotOperator for InitializedMeanRasterPixelValuesOverTime {
     fn query_processor(&self) -> Result<TypedPlotQueryProcessor> {
         let input_processor = self.raster.query_processor()?;
         let time_position = self.state.time_position;
@@ -107,11 +106,14 @@ impl<P: Pixel> PlotQueryProcessor for MeanRasterPixelValuesOverTimeQueryProcesso
 
     async fn plot_query<'a>(
         &'a self,
-        query: QueryRectangle,
+        query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<Self::OutputFormat> {
-        let means =
-            Self::calculate_means(self.raster.query(query, ctx)?, self.time_position).await?;
+        let means = Self::calculate_means(
+            self.raster.query(query.into(), ctx).await?,
+            self.time_position,
+        )
+        .await?;
 
         let plot = Self::generate_plot(means, self.measurement.clone(), self.draw_area)?;
 
@@ -289,7 +291,8 @@ mod tests {
                     "type": "GdalSource",
                     "params": {
                         "dataset": {
-                            "internal": "a626c880-1c41-489b-9e19-9596d129859c"
+                            "type": "internal",
+                            "datasetId": "a626c880-1c41-489b-9e19-9596d129859c"
                         }
                     }
                 }
@@ -330,6 +333,7 @@ mod tests {
         let temporal_raster_mean_plot = temporal_raster_mean_plot
             .boxed()
             .initialize(&execution_context)
+            .await
             .unwrap();
 
         let processor = temporal_raster_mean_plot
@@ -340,8 +344,9 @@ mod tests {
 
         let result = processor
             .plot_query(
-                QueryRectangle {
-                    bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
+                        .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
                 },
@@ -438,6 +443,7 @@ mod tests {
         let temporal_raster_mean_plot = temporal_raster_mean_plot
             .boxed()
             .initialize(&execution_context)
+            .await
             .unwrap();
 
         let processor = temporal_raster_mean_plot
@@ -448,8 +454,9 @@ mod tests {
 
         let result = processor
             .plot_query(
-                QueryRectangle {
-                    bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
+                        .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
                 },

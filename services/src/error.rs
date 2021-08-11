@@ -1,4 +1,4 @@
-use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
+use geoengine_datatypes::{dataset::DatasetProviderId, spatial_reference::SpatialReferenceOption};
 use snafu::Snafu;
 use strum::IntoStaticStr;
 use warp::reject::Reject;
@@ -31,6 +31,15 @@ pub enum Error {
 
     TokioSignal {
         source: std::io::Error,
+    },
+
+    Reqwest {
+        source: reqwest::Error,
+    },
+
+    #[cfg(feature = "xml")]
+    QuickXml {
+        source: quick_xml::Error,
     },
 
     TokioChannelSend,
@@ -120,6 +129,7 @@ pub enum Error {
     DatasetIdTypeMissMatch,
     UnknownDatasetId,
     UnknownProviderId,
+    MissingDatasetId,
 
     #[snafu(display("Parameter {} must have length between {} and {}", parameter, min, max))]
     InvalidStringLength {
@@ -150,6 +160,46 @@ pub enum Error {
 
     UnknownSpatialReference {
         srs_string: String,
+    },
+
+    NotYetImplemented,
+
+    StacNoSuchBand {
+        band_name: String,
+    },
+    StacInvalidGeoTransform,
+    StacInvalidBbox,
+    StacJsonResponse {
+        url: String,
+        response: String,
+        error: serde_json::Error,
+    },
+    RasterDataTypeNotSupportByGdal,
+
+    ExternalAddressNotConfigured,
+
+    MissingSpatialReference,
+
+    WcsVersionNotSupported,
+    WcsGridOriginMustEqualBoundingboxUpperLeft,
+    WcsBoundingboxCrsMustEqualGridBaseCrs,
+    WcsInvalidGridOffsets,
+
+    InvalidDatasetId,
+
+    GfbioMissingAbcdField,
+    ExpectedExternalDatasetId,
+    InvalidExternalDatasetId {
+        provider: DatasetProviderId,
+    },
+
+    #[cfg(feature = "nature40")]
+    Nature40UnknownRasterDbname,
+    #[cfg(feature = "nature40")]
+    Nature40WcsDatasetMissingLabelInMetadata,
+
+    Logger {
+        source: flexi_logger::FlexiLoggerError,
     },
 }
 
@@ -199,5 +249,24 @@ impl From<std::io::Error> for Error {
 impl From<gdal::errors::GdalError> for Error {
     fn from(gdal_error: gdal::errors::GdalError) -> Self {
         Self::Gdal { source: gdal_error }
+    }
+}
+
+impl From<reqwest::Error> for Error {
+    fn from(source: reqwest::Error) -> Self {
+        Self::Reqwest { source }
+    }
+}
+
+#[cfg(feature = "xml")]
+impl From<quick_xml::Error> for Error {
+    fn from(source: quick_xml::Error) -> Self {
+        Self::QuickXml { source }
+    }
+}
+
+impl From<flexi_logger::FlexiLoggerError> for Error {
+    fn from(source: flexi_logger::FlexiLoggerError) -> Self {
+        Self::Logger { source }
     }
 }

@@ -1,29 +1,29 @@
+use std::sync::Arc;
+
+use crate::error::Error;
 use crate::{
-    datasets::add_from_directory::add_datasets_from_directory, error::Result,
-    util::dataset_defs_dir,
+    datasets::add_from_directory::{add_datasets_from_directory, add_providers_from_directory},
+    error::Result,
+    util::{dataset_defs_dir, provider_defs_dir},
 };
-use crate::{
-    projects::hashmap_projectdb::HashMapProjectDb, users::hashmap_userdb::HashMapUserDb,
-    users::session::Session, workflows::registry::HashMapRegistry,
-};
+use crate::{projects::hashmap_projectdb::HashMapProjectDb, workflows::registry::HashMapRegistry};
 use async_trait::async_trait;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
-use super::{Context, Db};
-use crate::contexts::{ExecutionContextImpl, QueryContextImpl};
+use super::{Context, Db, SimpleSession};
+use super::{Session, SimpleContext};
+use crate::contexts::{ExecutionContextImpl, QueryContextImpl, SessionId};
 use crate::datasets::in_memory::HashMapDatasetDb;
 use crate::util::config;
 use geoengine_operators::concurrency::ThreadPool;
-use std::sync::Arc;
 
 /// A context with references to in-memory versions of the individual databases.
 #[derive(Clone, Default)]
 pub struct InMemoryContext {
-    user_db: Db<HashMapUserDb>,
     project_db: Db<HashMapProjectDb>,
     workflow_registry: Db<HashMapRegistry>,
     dataset_db: Db<HashMapDatasetDb>,
-    session: Option<Session>,
+    session: Db<SimpleSession>,
     thread_pool: Arc<ThreadPool>,
 }
 
@@ -32,6 +32,7 @@ impl InMemoryContext {
     pub async fn new_with_data() -> Self {
         let mut db = HashMapDatasetDb::default();
         add_datasets_from_directory(&mut db, dataset_defs_dir()).await;
+        add_providers_from_directory(&mut db, provider_defs_dir()).await;
 
         InMemoryContext {
             dataset_db: Arc::new(RwLock::new(db)),
@@ -42,22 +43,12 @@ impl InMemoryContext {
 
 #[async_trait]
 impl Context for InMemoryContext {
-    type UserDB = HashMapUserDb;
+    type Session = SimpleSession;
     type ProjectDB = HashMapProjectDb;
     type WorkflowRegistry = HashMapRegistry;
     type DatasetDB = HashMapDatasetDb;
     type QueryContext = QueryContextImpl;
-    type ExecutionContext = ExecutionContextImpl<HashMapDatasetDb>;
-
-    fn user_db(&self) -> Db<Self::UserDB> {
-        self.user_db.clone()
-    }
-    async fn user_db_ref(&self) -> RwLockReadGuard<'_, Self::UserDB> {
-        self.user_db.read().await
-    }
-    async fn user_db_ref_mut(&self) -> RwLockWriteGuard<'_, Self::UserDB> {
-        self.user_db.write().await
-    }
+    type ExecutionContext = ExecutionContextImpl<SimpleSession, HashMapDatasetDb>;
 
     fn project_db(&self) -> Db<Self::ProjectDB> {
         self.project_db.clone()
@@ -90,17 +81,44 @@ impl Context for InMemoryContext {
     }
 
     fn query_context(&self) -> Result<Self::QueryContext> {
-        Ok(QueryContextImpl {
-            // TODO: load config only once
-            chunk_byte_size: config::get_config_element::<config::QueryContext>()?.chunk_byte_size,
+        // TODO: load config only once
+        Ok(QueryContextImpl::new(
+            config::get_config_element::<config::QueryContext>()?.chunk_byte_size,
+        ))
+    }
+
+    fn execution_context(&self, session: SimpleSession) -> Result<Self::ExecutionContext> {
+        Ok(ExecutionContextImpl::<SimpleSession, HashMapDatasetDb> {
+            dataset_db: self.dataset_db.clone(),
+            thread_pool: self.thread_pool.clone(),
+            session,
         })
     }
 
-    fn execution_context(&self, session: &Session) -> Result<Self::ExecutionContext> {
-        Ok(ExecutionContextImpl::<HashMapDatasetDb> {
-            dataset_db: self.dataset_db.clone(),
-            thread_pool: self.thread_pool.clone(),
-            user: session.user.id,
-        })
+    async fn session_by_id(&self, session_id: SessionId) -> Result<Self::Session> {
+        let default_session = self.default_session_ref().await;
+
+        if default_session.id() != session_id {
+            return Err(Error::Authorization {
+                source: Box::new(Error::InvalidSession),
+            });
+        }
+
+        Ok(default_session.clone())
+    }
+}
+
+#[async_trait]
+impl SimpleContext for InMemoryContext {
+    fn default_session(&self) -> Db<SimpleSession> {
+        self.session.clone()
+    }
+
+    async fn default_session_ref(&self) -> RwLockReadGuard<SimpleSession> {
+        self.session.read().await
+    }
+
+    async fn default_session_ref_mut(&self) -> RwLockWriteGuard<SimpleSession> {
+        self.session.write().await
     }
 }

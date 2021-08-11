@@ -5,7 +5,7 @@ use snafu::ensure;
 use crate::{
     error::{self, Error},
     primitives::{
-        BoundingBox2D, Coordinate2D, Line, MultiLineString, MultiLineStringAccess,
+        AxisAlignedRectangle, Coordinate2D, Line, MultiLineString, MultiLineStringAccess,
         MultiLineStringRef, MultiPoint, MultiPointAccess, MultiPointRef, MultiPolygon,
         MultiPolygonAccess, MultiPolygonRef, SpatialBounded, SpatialResolution,
     },
@@ -204,12 +204,13 @@ where
     }
 }
 
-impl<P> Reproject<P> for BoundingBox2D
+impl<P, A> Reproject<P> for A
 where
     P: CoordinateProjection,
+    A: AxisAlignedRectangle,
 {
-    type Out = BoundingBox2D;
-    fn reproject(&self, projector: &P) -> Result<BoundingBox2D> {
+    type Out = A;
+    fn reproject(&self, projector: &P) -> Result<A> {
         const POINTS_PER_LINE: i32 = 7;
         let upper_line = Line::new(self.upper_left(), self.upper_right())
             .with_additional_equi_spaced_coords(POINTS_PER_LINE);
@@ -228,7 +229,8 @@ where
 
         let proj_outline_coordinates = projector.project_coordinates(&outline_coordinates)?;
 
-        Ok(MultiPoint::new_unchecked(proj_outline_coordinates).spatial_bounds())
+        let bbox = MultiPoint::new_unchecked(proj_outline_coordinates).spatial_bounds();
+        A::from_min_max(bbox.lower_left(), bbox.upper_right())
     }
 }
 
@@ -238,12 +240,13 @@ pub trait ReprojectClipped<P: CoordinateProjection> {
     fn reproject_clipped(&self, projector: &P) -> Result<Self::Out>;
 }
 
-impl<P> ReprojectClipped<P> for BoundingBox2D
+impl<P, A> ReprojectClipped<P> for A
 where
     P: CoordinateProjection,
+    A: AxisAlignedRectangle,
 {
-    type Out = BoundingBox2D;
-    fn reproject_clipped(&self, projector: &P) -> Result<BoundingBox2D> {
+    type Out = A;
+    fn reproject_clipped(&self, projector: &P) -> Result<A> {
         const POINTS_PER_LINE: i32 = 7;
 
         // clip bbox to the area of use of the target projection
@@ -251,21 +254,15 @@ where
             SpatialReference::epsg_4326(),
             projector.source_srs(),
         )?;
-        let source_area_of_use = projector.source_srs().area_of_use()?;
-        let target_area_of_use = projector.target_srs().area_of_use()?;
-        let area_of_use = source_area_of_use.intersection(&target_area_of_use).ok_or(
-            Error::BboxesDoNotIntersect {
-                bbox_a: source_area_of_use,
-                bbox_b: target_area_of_use,
-            },
-        )?;
+        let source_area_of_use = projector.source_srs().area_of_use::<A>()?;
+        let target_area_of_use = projector.target_srs().area_of_use::<A>()?;
+        let area_of_use = source_area_of_use
+            .intersection(&target_area_of_use)
+            .ok_or(Error::SpatialBoundsDoNotIntersect)?;
         let area_of_use = area_of_use.reproject(&area_of_use_projector)?;
         let clipped_bbox = self
             .intersection(&area_of_use)
-            .ok_or(Error::BboxesDoNotIntersect {
-                bbox_a: *self,
-                bbox_b: area_of_use,
-            })?;
+            .ok_or(Error::SpatialBoundsDoNotIntersect)?;
 
         // project points on the bbox
         let upper_line = Line::new(clipped_bbox.upper_left(), clipped_bbox.upper_right())
@@ -296,13 +293,13 @@ where
             error::OutputBboxEmpty { bbox: out }
         );
 
-        Ok(out)
+        A::from_min_max(out.lower_left(), out.upper_right())
     }
 }
 
 #[inline]
-fn euclidian_pixel_distance(
-    bbox: BoundingBox2D,
+fn euclidian_pixel_distance<B: AxisAlignedRectangle>(
+    bbox: B,
     spatial_resolution: SpatialResolution,
 ) -> Result<f64> {
     ensure!(
@@ -347,8 +344,8 @@ fn diag_distance(ul_coord: Coordinate2D, lr_coord: Coordinate2D) -> f64 {
 /// A suggested pixel size is calculated using the approach used by GDAL:
 /// The upper left and the lower right coordinates of the bounding box are projected in the target SRS.
 /// Then, the distance between both points in the target SRS is devided by the distance in pixels of the source.
-pub fn suggest_pixel_size_like_gdal<P: CoordinateProjection>(
-    bbox: BoundingBox2D,
+pub fn suggest_pixel_size_like_gdal<P: CoordinateProjection, B: AxisAlignedRectangle>(
+    bbox: B,
     spatial_resolution: SpatialResolution,
     projector: &P,
 ) -> Result<SpatialResolution> {
@@ -367,8 +364,8 @@ pub fn suggest_pixel_size_like_gdal<P: CoordinateProjection>(
 
 /// This approach uses the GDAL way to suggest the pixel size. However, we check both diagonals and take the smaller one.
 /// This method fails if the bbox cannot be projected
-pub fn suggest_pixel_size_from_diag_cross<P: CoordinateProjection>(
-    bbox: BoundingBox2D,
+pub fn suggest_pixel_size_from_diag_cross<P: CoordinateProjection, B: AxisAlignedRectangle>(
+    bbox: B,
     spatial_resolution: SpatialResolution,
     projector: &P,
 ) -> Result<SpatialResolution> {
@@ -390,10 +387,10 @@ pub fn suggest_pixel_size_from_diag_cross<P: CoordinateProjection>(
     min_dist_r.map(|d| SpatialResolution::new_unchecked(d / diag_pixels, d / diag_pixels))
 }
 
-/// A version of `suggest_pixel_size_from_diag_cross` that takes a `bbox` and a projected counterpart as input
-pub fn suggest_pixel_size_from_diag_cross_projected(
-    bbox: BoundingBox2D,
-    bbox_projected: BoundingBox2D,
+/// A version of `suggest_pixel_size_from_diag_cross` that takes a `partition` and a projected counterpart as input
+pub fn suggest_pixel_size_from_diag_cross_projected<B: AxisAlignedRectangle>(
+    bbox: B,
+    bbox_projected: B,
     spatial_resolution: SpatialResolution,
 ) -> Result<SpatialResolution> {
     let diag_pixels = euclidian_pixel_distance(bbox, spatial_resolution)?;
@@ -445,6 +442,7 @@ pub fn project_coordinates_fail_tolerant<P: CoordinateProjection>(
 #[cfg(test)]
 mod tests {
 
+    use crate::primitives::BoundingBox2D;
     use crate::spatial_reference::SpatialReferenceAuthority;
     use crate::util::well_known_data::{
         COLOGNE_EPSG_4326, COLOGNE_EPSG_900_913, HAMBURG_EPSG_4326, HAMBURG_EPSG_900_913,
@@ -459,7 +457,7 @@ mod tests {
         let from = SpatialReference::epsg_4326();
         let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
         let p = CoordinateProjector::from_known_srs(from, to);
-        assert!(p.is_ok())
+        assert!(p.is_ok());
     }
 
     #[test]
@@ -467,7 +465,7 @@ mod tests {
         let from = SpatialReference::epsg_4326();
         let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 8_008_135);
         let p = CoordinateProjector::from_known_srs(from, to);
-        assert!(p.is_err())
+        assert!(p.is_err());
     }
 
     #[test]
@@ -695,7 +693,7 @@ mod tests {
             sugg_pixel_size.x,
             79.088_974_450_690_5, // this is the pixel size GDAL generates when reprojecting the SRTM tile.
             epsilon = 0.000_000_1
-        ))
+        ));
     }
 
     #[test]
@@ -739,6 +737,6 @@ mod tests {
             sugg_pixel_size.x,
             79.088_974_450_690_5, // this is the pixel size GDAL generates when reprojecting the SRTM tile.
             epsilon = 0.000_000_1
-        ))
+        ));
     }
 }

@@ -7,6 +7,7 @@ use csv::{Position, Reader, StringRecord};
 use futures::stream::BoxStream;
 use futures::task::{Context, Poll};
 use futures::{Stream, StreamExt};
+use geoengine_datatypes::dataset::DatasetId;
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, OptionExt, ResultExt};
 
@@ -19,12 +20,13 @@ use geoengine_datatypes::{
 };
 
 use crate::engine::{
-    InitializedOperator, InitializedVectorOperator, QueryContext, QueryProcessor, QueryRectangle,
-    SourceOperator, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
-    VectorResultDescriptor,
+    InitializedVectorOperator, OperatorDatasets, QueryContext, SourceOperator,
+    TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
+use crate::engine::{QueryProcessor, VectorQueryRectangle};
 use crate::error;
 use crate::util::Result;
+use async_trait::async_trait;
 use std::sync::atomic::Ordering;
 
 /// Parameters for the CSV Source Operator
@@ -142,12 +144,17 @@ pub struct CsvSourceStream {
 
 pub type CsvSource = SourceOperator<CsvSourceParameters>;
 
+impl OperatorDatasets for CsvSourceParameters {
+    fn datasets_collect(&self, _datasets: &mut Vec<DatasetId>) {}
+}
+
 #[typetag::serde]
+#[async_trait]
 impl VectorOperator for CsvSource {
-    fn initialize(
+    async fn initialize(
         self: Box<Self>,
         _context: &dyn crate::engine::ExecutionContext,
-    ) -> Result<Box<InitializedVectorOperator>> {
+    ) -> Result<Box<dyn InitializedVectorOperator>> {
         let initialized_source = InitializedCsvSource {
             result_descriptor: VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint, // TODO: get as user input
@@ -166,9 +173,7 @@ pub struct InitializedCsvSource {
     state: CsvSourceParameters,
 }
 
-impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
-    for InitializedCsvSource
-{
+impl InitializedVectorOperator for InitializedCsvSource {
     fn query_processor(&self) -> Result<crate::engine::TypedVectorQueryProcessor> {
         Ok(TypedVectorQueryProcessor::MultiPoint(
             CsvSourceProcessor {
@@ -376,16 +381,18 @@ struct CsvSourceProcessor {
     params: CsvSourceParameters,
 }
 
+#[async_trait]
 impl QueryProcessor for CsvSourceProcessor {
     type Output = MultiPointCollection;
+    type SpatialBounds = BoundingBox2D;
 
-    fn query<'a>(
-        &self,
-        query: QueryRectangle,
+    async fn query<'a>(
+        &'a self,
+        query: VectorQueryRectangle,
         _ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         // TODO: properly handle chunk_size
-        Ok(CsvSourceStream::new(self.params.clone(), query.bbox, 10)?.boxed())
+        Ok(CsvSourceStream::new(self.params.clone(), query.spatial_bounds, 10)?.boxed())
     }
 }
 
@@ -544,8 +551,8 @@ x,y
 
         let p = CsvSourceProcessor { params };
 
-        let query = QueryRectangle {
-            bbox: BoundingBox2D::new_unchecked(
+        let query = VectorQueryRectangle {
+            spatial_bounds: BoundingBox2D::new_unchecked(
                 Coordinate2D::new(0., 0.),
                 Coordinate2D::new(3., 3.),
             ),
@@ -554,7 +561,8 @@ x,y
         };
         let ctx = MockQueryContext::new(10 * 8 * 2);
 
-        let r: Vec<Result<MultiPointCollection>> = p.query(query, &ctx).unwrap().collect().await;
+        let r: Vec<Result<MultiPointCollection>> =
+            p.query(query, &ctx).await.unwrap().collect().await;
 
         assert_eq!(r.len(), 1);
 

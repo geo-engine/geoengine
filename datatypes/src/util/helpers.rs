@@ -1,40 +1,3 @@
-/// This macro allows specifying a JSON Map inplace for convenience.
-///
-/// The code is taken and modified from maplit (<https://github.com/bluss/maplit/blob/master/src/lib.rs>).
-///
-/// # Examples
-///
-/// ```
-/// use serde_json::{Map, Value};
-/// use geoengine_datatypes::json_map;
-///
-/// let mut map: Map<String, Value> = Map::with_capacity(2);
-/// let _ = map.insert("foo".to_string(), 42.into());
-/// let _ = map.insert("bar".to_string(), 1337.into());
-///
-/// assert_eq!(
-///     map,
-///     json_map!["foo".to_string() => 42.into(), "bar".to_string() => 1337.into()]
-/// );
-/// ```
-#[macro_export]
-macro_rules! json_map {
-    (@single $($x:tt)*) => (());
-    (@count $($rest:expr),*) => (<[()]>::len(&[$(json_map!(@single $rest)),*]));
-
-    ($($key:expr => $value:expr,)+) => { json_map!($($key => $value),+) };
-    ($($key:expr => $value:expr),*) => {
-        {
-            let _cap = json_map!(@count $($key),*);
-            let mut _map = ::serde_json::Map::with_capacity(_cap);
-            $(
-                _map.insert($key, $value);
-            )*
-            _map
-        }
-    };
-}
-
 /// This macro allows comparing float slices using [float_cmp::approx_eq].
 #[macro_export]
 macro_rules! assert_approx_eq {
@@ -101,6 +64,16 @@ where
     }
 }
 
+/// snap `value` to previous `step` multiple from `start`
+pub fn snap_prev(start: f64, step: f64, value: f64) -> f64 {
+    start + ((value - start) / step).floor() * step
+}
+
+/// snap `value` to next `step` multiple from `start`
+pub fn snap_next(start: f64, step: f64, value: f64) -> f64 {
+    start + ((value - start) / step).ceil() * step
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -110,5 +83,17 @@ mod tests {
         assert_approx_eq!(&[1., 2., 3.], &[1., 2., 3.]);
 
         assert!(!approx_eq_floats(&[1., 2.], &[1., 2., 3.]));
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn it_snaps_right() {
+        assert_eq!(snap_next(1., 2., 4.5), 5.);
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn it_snaps_left() {
+        assert_eq!(snap_prev(1., 2., 4.5), 3.);
     }
 }

@@ -134,7 +134,46 @@ Accept: application/json
 ###
 
 GET http://localhost:3030/datasets?order=NameDesc&offset=0&limit=2
-Authorization: Bearer d16a574a-e5be-49a8-ad7c-d6210b4c18ba
+Authorization: Bearer a02187ef-0ddc-4d37-90b8-55d1e05ba47b
 Accept: application/json
 
 ###
+
+GET http://localhost:3030/providers?order=NameDesc&offset=0&limit=2
+Authorization: Bearer 7d82fc9e-ef0d-4c53-a12d-faa309b4b3e4
+Accept: application/json
+
+###
+
+GET http://localhost:3030/datasets/external/d0535f1d-27b6-4982-b2f8-b1070f1bf6ee?order=NameDesc&offset=0&limit=2
+Authorization: Bearer 7d82fc9e-ef0d-4c53-a12d-faa309b4b3e4
+Accept: application/json
+
+###
+
+
+POST http://localhost:3030/workflow
+Authorization: Bearer 7d82fc9e-ef0d-4c53-a12d-faa309b4b3e4
+Content-Type: application/json
+
+{
+  "type": "Vector",
+  "operator": {
+    "type": "MockDatasetDataSource",
+    "params": {
+      "dataset": {
+        "external": {
+          "providerId": "d0535f1d-27b6-4982-b2f8-b1070f1bf6ee",
+          "datasetId": "d89f1327-15ff-4016-8c3e-e96a7c60d93b"
+        }
+      }
+    }
+  }
+}
+
+
+###
+
+GET http://localhost:3030/wfs?request=GetFeature&service=WFS&version=2.0.0&typeNames=registry:ca6e5cb9-51bd-5e78-a723-ab2613457b33&bbox=-90,-180,90,180&srsName=EPSG:4326&time02014-04-01T12:00:00.000Z/2014-04-01T12:00:00.000Z
+Authorization: Bearer 7d82fc9e-ef0d-4c53-a12d-faa309b4b3e4
+Accept: application/json

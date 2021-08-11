@@ -1,9 +1,10 @@
 use crate::engine::{
-    ExecutionContext, InitializedOperator, InitializedVectorOperator, MetaData, QueryContext,
-    QueryProcessor, QueryRectangle, ResultDescriptor, SourceOperator, TypedVectorQueryProcessor,
-    VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+    ExecutionContext, InitializedVectorOperator, MetaData, OperatorDatasets, QueryContext,
+    ResultDescriptor, SourceOperator, TypedVectorQueryProcessor, VectorOperator,
+    VectorQueryProcessor, VectorQueryRectangle, VectorResultDescriptor,
 };
 use crate::util::Result;
+use async_trait::async_trait;
 use futures::stream;
 use futures::stream::BoxStream;
 use futures::StreamExt;
@@ -20,14 +21,18 @@ pub struct MockDatasetDataSourceLoadingInfo {
     pub points: Vec<Coordinate2D>,
 }
 
-impl MetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>
+#[async_trait]
+impl MetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
     for MockDatasetDataSourceLoadingInfo
 {
-    fn loading_info(&self, _query: QueryRectangle) -> Result<MockDatasetDataSourceLoadingInfo> {
+    async fn loading_info(
+        &self,
+        _query: VectorQueryRectangle,
+    ) -> Result<MockDatasetDataSourceLoadingInfo> {
         Ok(self.clone()) // TODO: intersect points with query rectangle
     }
 
-    fn result_descriptor(&self) -> Result<VectorResultDescriptor> {
+    async fn result_descriptor(&self) -> Result<VectorResultDescriptor> {
         Ok(VectorResultDescriptor {
             data_type: VectorDataType::MultiPoint,
             spatial_reference: SpatialReferenceOption::Unreferenced,
@@ -37,7 +42,13 @@ impl MetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>
 
     fn box_clone(
         &self,
-    ) -> Box<dyn MetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>> {
+    ) -> Box<
+        dyn MetaData<
+            MockDatasetDataSourceLoadingInfo,
+            VectorResultDescriptor,
+            VectorQueryRectangle,
+        >,
+    > {
         Box::new(self.clone())
     }
 }
@@ -58,20 +69,27 @@ impl MetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>
 // }
 
 pub struct MockDatasetDataSourceProcessor {
-    loading_info: Box<dyn MetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>>,
+    loading_info: Box<
+        dyn MetaData<
+            MockDatasetDataSourceLoadingInfo,
+            VectorResultDescriptor,
+            VectorQueryRectangle,
+        >,
+    >,
 }
 
-impl QueryProcessor for MockDatasetDataSourceProcessor {
-    type Output = MultiPointCollection;
-    fn query<'a>(
+#[async_trait]
+impl VectorQueryProcessor for MockDatasetDataSourceProcessor {
+    type VectorType = MultiPointCollection;
+    async fn vector_query<'a>(
         &'a self,
-        query: QueryRectangle,
+        query: VectorQueryRectangle,
         _ctx: &'a dyn QueryContext,
-    ) -> Result<BoxStream<'a, Result<MultiPointCollection>>> {
+    ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
         // TODO: split into `chunk_byte_size`d chunks
         // let chunk_size = ctx.chunk_byte_size() / std::mem::size_of::<Coordinate2D>();
 
-        let loading_info = self.loading_info.loading_info(query)?;
+        let loading_info = self.loading_info.loading_info(query).await?;
 
         Ok(stream::once(async move {
             Ok(MultiPointCollection::from_data(
@@ -92,28 +110,35 @@ pub struct MockDatasetDataSourceParams {
 pub type MockDatasetDataSource = SourceOperator<MockDatasetDataSourceParams>;
 
 #[typetag::serde]
+#[async_trait]
 impl VectorOperator for MockDatasetDataSource {
-    fn initialize(
+    async fn initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
-    ) -> Result<Box<InitializedVectorOperator>> {
-        let loading_info = context.meta_data(&self.params.dataset)?;
+    ) -> Result<Box<dyn InitializedVectorOperator>> {
+        let loading_info = context.meta_data(&self.params.dataset).await?;
 
         Ok(InitializedMockDatasetDataSource {
-            result_descriptor: loading_info.result_descriptor()?,
+            result_descriptor: loading_info.result_descriptor().await?,
             loading_info,
         }
         .boxed())
     }
 }
 
-struct InitializedMockDatasetDataSource<R: ResultDescriptor> {
-    result_descriptor: R,
-    loading_info: Box<dyn MetaData<MockDatasetDataSourceLoadingInfo, R>>,
+impl OperatorDatasets for MockDatasetDataSource {
+    fn datasets_collect(&self, datasets: &mut Vec<DatasetId>) {
+        datasets.push(self.params.dataset.clone());
+    }
 }
 
-impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
-    for InitializedMockDatasetDataSource<VectorResultDescriptor>
+struct InitializedMockDatasetDataSource<R: ResultDescriptor, Q> {
+    result_descriptor: R,
+    loading_info: Box<dyn MetaData<MockDatasetDataSourceLoadingInfo, R, Q>>,
+}
+
+impl InitializedVectorOperator
+    for InitializedMockDatasetDataSource<VectorResultDescriptor, VectorQueryRectangle>
 {
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
         Ok(TypedVectorQueryProcessor::MultiPoint(
@@ -132,6 +157,7 @@ impl InitializedOperator<VectorResultDescriptor, TypedVectorQueryProcessor>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::QueryProcessor;
     use crate::engine::{MockExecutionContext, MockQueryContext};
     use futures::executor::block_on_stream;
     use geoengine_datatypes::collections::FeatureCollectionInfos;
@@ -139,11 +165,13 @@ mod tests {
     use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution};
     use geoengine_datatypes::util::Identifier;
 
-    #[test]
-    fn test() {
+    #[tokio::test]
+    async fn test() {
         let mut execution_context = MockExecutionContext::default();
 
-        let id = DatasetId::Internal(InternalDatasetId::new());
+        let id = DatasetId::Internal {
+            dataset_id: InternalDatasetId::new(),
+        };
         execution_context.add_meta_data(
             id.clone(),
             Box::new(MockDatasetDataSourceLoadingInfo {
@@ -155,7 +183,7 @@ mod tests {
             params: MockDatasetDataSourceParams { dataset: id },
         }
         .boxed();
-        let initialized = mps.initialize(&execution_context).unwrap();
+        let initialized = mps.initialize(&execution_context).await.unwrap();
 
         let typed_processor = initialized.query_processor();
         let point_processor = match typed_processor {
@@ -163,14 +191,14 @@ mod tests {
             _ => panic!(),
         };
 
-        let query_rectangle = QueryRectangle {
-            bbox: BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
+        let query_rectangle = VectorQueryRectangle {
+            spatial_bounds: BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
         };
         let ctx = MockQueryContext::new(2 * std::mem::size_of::<Coordinate2D>());
 
-        let stream = point_processor.vector_query(query_rectangle, &ctx).unwrap();
+        let stream = point_processor.query(query_rectangle, &ctx).await.unwrap();
 
         let blocking_stream = block_on_stream(stream);
         let collections: Vec<MultiPointCollection> = blocking_stream.map(Result::unwrap).collect();

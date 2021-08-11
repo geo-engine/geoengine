@@ -152,6 +152,15 @@ impl From<&Coordinate2D> for geo::Coordinate<f64> {
     }
 }
 
+impl From<geo::Coordinate<f64>> for Coordinate2D {
+    fn from(coordinate: geo::Coordinate<f64>) -> Coordinate2D {
+        Coordinate2D {
+            x: coordinate.x,
+            y: coordinate.y,
+        }
+    }
+}
+
 impl Coord<f64> for Coordinate2D {
     fn x(&self) -> f64 {
         self.x
@@ -291,48 +300,48 @@ mod test {
     #[test]
     fn add() {
         let res = Coordinate2D { x: 4., y: 9. } + Coordinate2D { x: 1., y: 1. };
-        assert_eq!(res, Coordinate2D { x: 5., y: 10. })
+        assert_eq!(res, Coordinate2D { x: 5., y: 10. });
     }
 
     #[test]
     fn add_scalar() {
         let res = Coordinate2D { x: 4., y: 9. } + 1.;
-        assert_eq!(res, Coordinate2D { x: 5., y: 10. })
+        assert_eq!(res, Coordinate2D { x: 5., y: 10. });
     }
 
     #[test]
     fn sub() {
         let res = Coordinate2D { x: 4., y: 9. } - Coordinate2D { x: 1., y: 1. };
-        assert_eq!(res, Coordinate2D { x: 3., y: 8. })
+        assert_eq!(res, Coordinate2D { x: 3., y: 8. });
     }
 
     #[test]
     fn sub_scalar() {
         let res = Coordinate2D { x: 4., y: 9. } - 1.;
-        assert_eq!(res, Coordinate2D { x: 3., y: 8. })
+        assert_eq!(res, Coordinate2D { x: 3., y: 8. });
     }
 
     #[test]
     fn mul() {
         let res = Coordinate2D { x: 4., y: 9. } * Coordinate2D { x: 2., y: 2. };
-        assert_eq!(res, Coordinate2D { x: 8., y: 18. })
+        assert_eq!(res, Coordinate2D { x: 8., y: 18. });
     }
 
     #[test]
     fn mul_scalar() {
         let res = Coordinate2D { x: 4., y: 9. } * 2.;
-        assert_eq!(res, Coordinate2D { x: 8., y: 18. })
+        assert_eq!(res, Coordinate2D { x: 8., y: 18. });
     }
 
     #[test]
     fn div() {
         let res = Coordinate2D { x: 4., y: 8. } / Coordinate2D { x: 2., y: 2. };
-        assert_eq!(res, Coordinate2D { x: 2., y: 4. })
+        assert_eq!(res, Coordinate2D { x: 2., y: 4. });
     }
 
     #[test]
     fn div_scalar() {
         let res = Coordinate2D { x: 4., y: 8. } / 2.;
-        assert_eq!(res, Coordinate2D { x: 2., y: 4. })
+        assert_eq!(res, Coordinate2D { x: 2., y: 4. });
     }
 }

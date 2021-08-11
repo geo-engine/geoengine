@@ -20,6 +20,10 @@
 )]
 // enable some restriction lints
 #![warn(clippy::print_stdout, clippy::print_stderr, clippy::dbg_macro)]
+//
+//
+// TODO: re-activate when https://github.com/rust-lang/rust-clippy/issues/7438 is fixed
+#![allow(clippy::semicolon_if_nothing_returned)]
 
 pub mod contexts;
 pub mod datasets;
@@ -28,7 +32,11 @@ pub mod handlers;
 pub mod ogc;
 pub mod projects;
 pub mod server;
-pub mod users;
+pub mod stac;
 #[macro_use]
 pub mod util;
 pub mod workflows;
+
+/// Compiles Geo Engine Pro
+#[cfg(feature = "pro")]
+pub mod pro;

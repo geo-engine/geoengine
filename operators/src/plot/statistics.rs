@@ -1,12 +1,12 @@
 use crate::engine::{
-    ExecutionContext, InitializedOperator, InitializedPlotOperator, InitializedRasterOperator,
-    MultipleRasterSources, Operator, PlotOperator, PlotQueryProcessor, PlotResultDescriptor,
-    QueryContext, QueryProcessor, QueryRectangle, TypedPlotQueryProcessor,
-    TypedRasterQueryProcessor,
+    ExecutionContext, InitializedPlotOperator, InitializedRasterOperator, MultipleRasterSources,
+    Operator, PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor,
+    TypedPlotQueryProcessor, TypedRasterQueryProcessor, VectorQueryRectangle,
 };
 use crate::util::number_statistics::NumberStatistics;
 use crate::util::Result;
 use async_trait::async_trait;
+use futures::future::join_all;
 use futures::stream::select_all;
 use futures::{FutureExt, StreamExt};
 use geoengine_datatypes::raster::{Grid2D, GridOrEmpty, GridSize, NoDataValue};
@@ -27,19 +27,23 @@ pub type Statistics = Operator<StatisticsParams, MultipleRasterSources>;
 pub struct StatisticsParams {}
 
 #[typetag::serde]
+#[async_trait]
 impl PlotOperator for Statistics {
-    fn initialize(
+    async fn initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
-    ) -> Result<Box<InitializedPlotOperator>> {
-        let initialized_operator = InitializedStatistics {
-            result_descriptor: PlotResultDescriptor {},
-            rasters: self
-                .sources
+    ) -> Result<Box<dyn InitializedPlotOperator>> {
+        let rasters = join_all(
+            self.sources
                 .rasters
                 .into_iter()
-                .map(|o| o.initialize(context))
-                .collect::<Result<Vec<_>>>()?,
+                .map(|s| s.initialize(context)),
+        )
+        .await;
+
+        let initialized_operator = InitializedStatistics {
+            result_descriptor: PlotResultDescriptor {},
+            rasters: rasters.into_iter().collect::<Result<Vec<_>>>()?,
         };
 
         Ok(initialized_operator.boxed())
@@ -49,10 +53,10 @@ impl PlotOperator for Statistics {
 /// The initialization of `Statistics`
 pub struct InitializedStatistics {
     result_descriptor: PlotResultDescriptor,
-    rasters: Vec<Box<InitializedRasterOperator>>,
+    rasters: Vec<Box<dyn InitializedRasterOperator>>,
 }
 
-impl InitializedOperator<PlotResultDescriptor, TypedPlotQueryProcessor> for InitializedStatistics {
+impl InitializedPlotOperator for InitializedStatistics {
     fn query_processor(&self) -> Result<TypedPlotQueryProcessor> {
         Ok(TypedPlotQueryProcessor::JsonPlain(
             StatisticsQueryProcessor {
@@ -86,14 +90,14 @@ impl PlotQueryProcessor for StatisticsQueryProcessor {
 
     async fn plot_query<'a>(
         &'a self,
-        query: QueryRectangle,
+        query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<Self::OutputFormat> {
         let mut queries = Vec::with_capacity(self.rasters.len());
         for (i, raster_processor) in self.rasters.iter().enumerate() {
             queries.push(
                 call_on_generic_raster_processor!(raster_processor, processor => {
-                    processor.query(query, ctx)?
+                    processor.query(query.into(), ctx).await?
                              .map(move |r| r.map(|tile| (i, tile.convert::<f64>())))
                              .boxed()
                 }),
@@ -175,6 +179,7 @@ mod tests {
     use super::*;
     use crate::engine::{
         MockExecutionContext, MockQueryContext, RasterOperator, RasterResultDescriptor,
+        VectorQueryRectangle,
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use geoengine_datatypes::primitives::{
@@ -238,14 +243,19 @@ mod tests {
 
         let execution_context = MockExecutionContext::default();
 
-        let statistics = statistics.boxed().initialize(&execution_context).unwrap();
+        let statistics = statistics
+            .boxed()
+            .initialize(&execution_context)
+            .await
+            .unwrap();
 
         let processor = statistics.query_processor().unwrap().json_plain().unwrap();
 
         let result = processor
             .plot_query(
-                QueryRectangle {
-                    bbox: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
+                        .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
                 },

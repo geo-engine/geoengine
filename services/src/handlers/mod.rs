@@ -1,8 +1,8 @@
+use crate::contexts::SessionId;
 use crate::error;
 use crate::error::Result;
-use crate::users::session::{Session, SessionId};
-use crate::users::userdb::UserDb;
 use crate::{contexts::Context, error::Error};
+use log::error;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use std::error::Error as StdError;
@@ -15,9 +15,10 @@ use warp::{Filter, Rejection, Reply};
 pub mod datasets;
 pub mod plots;
 pub mod projects;
+pub mod session;
 pub mod spatial_references;
 pub mod upload;
-pub mod users;
+pub mod wcs;
 pub mod wfs;
 pub mod wms;
 pub mod workflows;
@@ -37,7 +38,7 @@ impl ErrorResponse {
     pub fn assert(res: &Response<Bytes>, status: u16, error: &str, message: &str) {
         assert_eq!(res.status(), status);
 
-        let body = std::str::from_utf8(&res.body()).unwrap();
+        let body = std::str::from_utf8(res.body()).unwrap();
         assert_eq!(
             serde_json::from_str::<ErrorResponse>(body).unwrap(),
             ErrorResponse {
@@ -49,7 +50,10 @@ impl ErrorResponse {
 }
 
 /// A handler for custom rejections
+#[allow(clippy::unused_async)]
 pub async fn handle_rejection(err: Rejection) -> Result<impl Reply, Rejection> {
+    error!("Warp rejection: {:?}", err);
+
     let (code, error, message) = if let Some(e) = err.find::<Error>() {
         // custom errors
 
@@ -110,13 +114,13 @@ pub async fn handle_rejection(err: Rejection) -> Result<impl Reply, Rejection> {
     Ok(warp::reply::with_status(json, code))
 }
 
-fn authenticate<C: Context>(
+pub fn authenticate<C: Context>(
     ctx: C,
-) -> impl warp::Filter<Extract = (Session,), Error = warp::Rejection> + Clone {
+) -> impl warp::Filter<Extract = (C::Session,), Error = warp::Rejection> + Clone {
     async fn do_authenticate<C: Context>(
         ctx: C,
         token: Option<String>,
-    ) -> Result<Session, warp::Rejection> {
+    ) -> Result<C::Session, warp::Rejection> {
         if let Some(token) = token {
             if !token.starts_with("Bearer ") {
                 return Err(Error::Authorization {
@@ -128,15 +132,8 @@ fn authenticate<C: Context>(
             let token = SessionId::from_str(&token["Bearer ".len()..])
                 .map_err(Box::new)
                 .context(error::Authorization)?;
-            let session = ctx
-                .user_db_ref()
-                .await
-                .session(token)
-                .await
-                .map_err(Box::new)
-                .context(error::Authorization)?;
 
-            Ok(session)
+            ctx.session_by_id(token).await.map_err(Into::into)
         } else {
             Err(Error::Authorization {
                 source: Box::new(Error::MissingAuthorizationHeader),

@@ -1,15 +1,19 @@
-use uuid::Uuid;
-use warp::reply::Reply;
-use warp::Filter;
+use std::collections::HashSet;
 
+use crate::datasets::provenance::ProvenanceProvider;
 use crate::error;
+use crate::error::Result;
 use crate::handlers::{authenticate, Context};
-use crate::users::session::Session;
 use crate::util::IdResponse;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
+use futures::future::join_all;
 use geoengine_operators::call_on_typed_operator;
+use geoengine_operators::engine::{OperatorDatasets, TypedResultDescriptor};
 use snafu::ResultExt;
+use uuid::Uuid;
+use warp::reply::Reply;
+use warp::Filter;
 
 /// Registers a new [Workflow].
 ///
@@ -51,7 +55,7 @@ pub(crate) fn register_workflow_handler<C: Context>(
 
 // TODO: move into handler once async closures are available?
 async fn register_workflow<C: Context>(
-    _session: Session,
+    _session: C::Session,
     ctx: C,
     workflow: Workflow,
 ) -> Result<impl warp::Reply, warp::Rejection> {
@@ -105,7 +109,7 @@ pub(crate) fn load_workflow_handler<C: Context>(
 // TODO: move into handler once async closures are available?
 async fn load_workflow<C: Context>(
     id: Uuid,
-    _session: Session,
+    _session: C::Session,
     ctx: C,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let wf = ctx
@@ -145,7 +149,7 @@ pub(crate) fn get_workflow_metadata_handler<C: Context>(
 // TODO: move into handler once async closures are available?
 async fn get_workflow_metadata<C: Context>(
     id: Uuid,
-    session: Session,
+    session: C::Session,
     ctx: C,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let workflow = ctx
@@ -154,30 +158,95 @@ async fn get_workflow_metadata<C: Context>(
         .load(&WorkflowId(id))
         .await?;
 
-    let execution_context = ctx.execution_context(&session)?;
+    let execution_context = ctx.execution_context(session)?;
 
     // TODO: use cache here
-    call_on_typed_operator!(
+    let result_descriptor: TypedResultDescriptor = call_on_typed_operator!(
         workflow.operator,
         operator => {
             let operator = operator
-                .initialize(&execution_context)
+                .initialize(&execution_context).await
                 .context(error::Operator)?;
 
-            let result_descriptor = operator.result_descriptor();
-
-            Ok(warp::reply::json(result_descriptor))
+            #[allow(clippy::clone_on_copy)]
+            operator.result_descriptor().clone().into()
         }
-    )
+    );
+
+    Ok(warp::reply::json(&result_descriptor))
+}
+
+/// Gets the provenance of all datasets used in a workflow.
+///
+/// # Example
+///
+/// ```text
+/// GET /workflow/cee25e8c-18a0-5f1b-a504-0bc30de21e06/provenance
+/// Authorization: Bearer e9da345c-b1df-464b-901c-0335a0419227
+/// ```
+/// Response:
+/// ```text
+/// [{
+///   "id": {
+///     "type": "internal",
+///     "datasetId": "846a823a-6859-4b94-ab0a-c1de80f593d8"
+///   },
+///   "citation": "Author, Dataset Tile",
+///   "license": "Some license",
+///   "uri": "http://example.org/"
+/// }, {
+///   "id": {
+///     "type": "internal",
+///     "datasetId": "453cd398-f271-437b-9c3d-7f42213ea30a"
+///   },
+///   "citation": "Another Author, Another Dataset Tile",
+///   "license": "Some other license",
+///   "uri": "http://example.org/"
+/// }]
+/// ```
+pub(crate) fn get_workflow_provenance_handler<C: Context>(
+    ctx: C,
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
+    warp::get()
+        .and(warp::path!("workflow" / Uuid / "provenance"))
+        .and(authenticate(ctx.clone()))
+        .and(warp::any().map(move || ctx.clone()))
+        .and_then(get_workflow_provenance)
+}
+
+// TODO: move into handler once async closures are available?
+async fn get_workflow_provenance<C: Context>(
+    id: Uuid,
+    _session: C::Session,
+    ctx: C,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let workflow = ctx
+        .workflow_registry_ref()
+        .await
+        .load(&WorkflowId(id))
+        .await?;
+
+    let datasets = workflow.operator.datasets();
+
+    let db = ctx.dataset_db_ref().await;
+
+    let provenance: Vec<_> = datasets.iter().map(|id| db.provenance(id)).collect();
+    let provenance: Result<Vec<_>> = join_all(provenance).await.into_iter().collect();
+
+    // filter duplicates
+    let provenance: HashSet<_> = provenance?.into_iter().collect();
+    let provenance: Vec<_> = provenance.into_iter().collect();
+
+    Ok(warp::reply::json(&provenance))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::InMemoryContext;
+    use crate::contexts::{InMemoryContext, Session, SimpleContext};
     use crate::handlers::{handle_rejection, ErrorResponse};
     use crate::util::tests::{
-        check_allowed_http_methods, check_allowed_http_methods2, create_session_helper,
+        add_ndvi_to_datasets, check_allowed_http_methods, check_allowed_http_methods2,
         register_ndvi_workflow_helper,
     };
     use crate::util::IdResponse;
@@ -186,13 +255,14 @@ mod tests {
     use geoengine_datatypes::primitives::{FeatureData, Measurement, MultiPoint, TimeInterval};
     use geoengine_datatypes::raster::RasterDataType;
     use geoengine_datatypes::spatial_reference::SpatialReference;
-    use geoengine_operators::engine::{MultipleRasterSources, PlotOperator};
+    use geoengine_operators::engine::{MultipleRasterSources, PlotOperator, TypedOperator};
     use geoengine_operators::engine::{RasterOperator, RasterResultDescriptor, VectorOperator};
     use geoengine_operators::mock::{
         MockFeatureCollectionSource, MockPointSource, MockPointSourceParams, MockRasterSource,
         MockRasterSourceParams,
     };
     use geoengine_operators::plot::{Statistics, StatisticsParams};
+    use geoengine_operators::source::{GdalSource, GdalSourceParameters};
     use serde_json::json;
     use warp::http::Response;
     use warp::hyper::body::Bytes;
@@ -200,7 +270,7 @@ mod tests {
     async fn register_test_helper(method: &str) -> Response<Bytes> {
         let ctx = InMemoryContext::default();
 
-        let session = create_session_helper(&ctx).await;
+        let session = ctx.default_session_ref().await;
 
         let workflow = Workflow {
             operator: MockPointSource {
@@ -219,10 +289,10 @@ mod tests {
             .header("Content-Length", "0")
             .header(
                 "Authorization",
-                format!("Bearer {}", session.id.to_string()),
+                format!("Bearer {}", session.id().to_string()),
             )
             .json(&workflow)
-            .reply(&register_workflow_handler(ctx).recover(handle_rejection))
+            .reply(&register_workflow_handler(ctx.clone()).recover(handle_rejection))
             .await
     }
 
@@ -276,7 +346,7 @@ mod tests {
     async fn register_invalid_body() {
         let ctx = InMemoryContext::default();
 
-        let session = create_session_helper(&ctx).await;
+        let session_id = ctx.default_session_ref().await.id();
 
         // insert workflow
         let res = warp::test::request()
@@ -285,7 +355,7 @@ mod tests {
             .header("Content-Length", "0")
             .header(
                 "Authorization",
-                format!("Bearer {}", session.id.to_string()),
+                format!("Bearer {}", session_id.to_string()),
             )
             .body("no json")
             .reply(&register_workflow_handler(ctx).recover(handle_rejection))
@@ -303,7 +373,7 @@ mod tests {
     async fn register_missing_fields() {
         let ctx = InMemoryContext::default();
 
-        let session = create_session_helper(&ctx).await;
+        let session_id = ctx.default_session_ref().await.id();
 
         let workflow = json!({});
 
@@ -314,7 +384,7 @@ mod tests {
             .header("Content-Length", "0")
             .header(
                 "Authorization",
-                format!("Bearer {}", session.id.to_string()),
+                format!("Bearer {}", session_id.to_string()),
             )
             .json(&workflow)
             .reply(&register_workflow_handler(ctx).recover(handle_rejection))
@@ -331,7 +401,7 @@ mod tests {
     async fn load_test_helper(method: &str) -> (Workflow, Response<Bytes>) {
         let ctx = InMemoryContext::default();
 
-        let session = create_session_helper(&ctx).await;
+        let session_id = ctx.default_session_ref().await.id();
 
         let (workflow, id) = register_ndvi_workflow_helper(&ctx).await;
 
@@ -340,9 +410,9 @@ mod tests {
             .path(&format!("/workflow/{}", id.to_string()))
             .header(
                 "Authorization",
-                format!("Bearer {}", session.id.to_string()),
+                format!("Bearer {}", session_id.to_string()),
             )
-            .reply(&load_workflow_handler(ctx).recover(handle_rejection))
+            .reply(&load_workflow_handler(ctx.clone()).recover(handle_rejection))
             .await;
 
         (workflow, res)
@@ -397,7 +467,7 @@ mod tests {
     async fn vector_metadata_test_helper(method: &str) -> Response<Bytes> {
         let ctx = InMemoryContext::default();
 
-        let session = create_session_helper(&ctx).await;
+        let session = ctx.default_session_ref().await;
 
         let workflow = Workflow {
             operator: MockFeatureCollectionSource::single(
@@ -431,9 +501,9 @@ mod tests {
             .path(&format!("/workflow/{}/metadata", id.to_string()))
             .header(
                 "Authorization",
-                format!("Bearer {}", session.id.to_string()),
+                format!("Bearer {}", session.id().to_string()),
             )
-            .reply(&get_workflow_metadata_handler(ctx).recover(handle_rejection))
+            .reply(&get_workflow_metadata_handler(ctx.clone()).recover(handle_rejection))
             .await
     }
 
@@ -446,6 +516,7 @@ mod tests {
         assert_eq!(
             serde_json::from_slice::<serde_json::Value>(res.body()).unwrap(),
             json!({
+                "type": "vector",
                 "dataType": "MultiPoint",
                 "spatialReference": "EPSG:4326",
                 "columns": {
@@ -460,7 +531,7 @@ mod tests {
     async fn raster_metadata() {
         let ctx = InMemoryContext::default();
 
-        let session = create_session_helper(&ctx).await;
+        let session_id = ctx.default_session_ref().await.id();
 
         let workflow = Workflow {
             operator: MockRasterSource {
@@ -494,7 +565,7 @@ mod tests {
             .path(&format!("/workflow/{}/metadata", id.to_string()))
             .header(
                 "Authorization",
-                format!("Bearer {}", session.id.to_string()),
+                format!("Bearer {}", session_id.to_string()),
             )
             .reply(&get_workflow_metadata_handler(ctx))
             .await;
@@ -504,13 +575,13 @@ mod tests {
         assert_eq!(
             serde_json::from_slice::<serde_json::Value>(res.body()).unwrap(),
             serde_json::json!({
+                "type": "raster",
                 "dataType": "U8",
                 "spatialReference": "EPSG:4326",
                 "measurement": {
-                    "continuous": {
-                        "measurement": "radiation",
-                        "unit": null
-                    }
+                    "type": "continuous",
+                    "measurement": "radiation",
+                    "unit": null
                 },
                 "noDataValue": null
             })
@@ -571,7 +642,7 @@ mod tests {
     async fn plot_metadata() {
         let ctx = InMemoryContext::default();
 
-        let session = create_session_helper(&ctx).await;
+        let session_id = ctx.default_session_ref().await.id();
 
         let workflow = Workflow {
             operator: Statistics {
@@ -595,7 +666,7 @@ mod tests {
             .path(&format!("/workflow/{}/metadata", id.to_string()))
             .header(
                 "Authorization",
-                format!("Bearer {}", session.id.to_string()),
+                format!("Bearer {}", session_id.to_string()),
             )
             .reply(&get_workflow_metadata_handler(ctx))
             .await;
@@ -604,7 +675,64 @@ mod tests {
 
         assert_eq!(
             serde_json::from_slice::<serde_json::Value>(res.body()).unwrap(),
-            serde_json::json!({})
+            serde_json::json!({
+                "type": "plot",
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn provenance() {
+        let ctx = InMemoryContext::default();
+
+        let session_id = ctx.default_session_ref().await.id();
+
+        let dataset = add_ndvi_to_datasets(&ctx).await;
+
+        let workflow = Workflow {
+            operator: TypedOperator::Raster(
+                GdalSource {
+                    params: GdalSourceParameters {
+                        dataset: dataset.clone(),
+                    },
+                }
+                .boxed(),
+            ),
+        };
+
+        let id = ctx
+            .workflow_registry()
+            .write()
+            .await
+            .register(workflow.clone())
+            .await
+            .unwrap();
+
+        let res = warp::test::request()
+            .method("GET")
+            .path(&format!("/workflow/{}/provenance", id.to_string()))
+            .header(
+                "Authorization",
+                format!("Bearer {}", session_id.to_string()),
+            )
+            .reply(&get_workflow_provenance_handler(ctx))
+            .await;
+
+        assert_eq!(res.status(), 200, "{:?}", res.body());
+
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(res.body()).unwrap(),
+            serde_json::json!([{
+                "dataset": {
+                    "type": "internal",
+                    "datasetId": dataset.internal().unwrap().to_string()
+                },
+                "provenance": {
+                    "citation": "Sample Citation",
+                    "license": "Sample License",
+                    "uri": "http://example.org/"
+                }
+            }])
         );
     }
 }

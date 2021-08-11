@@ -27,7 +27,10 @@ pub mod error;
 pub mod operations;
 pub mod plots;
 pub mod primitives;
-pub mod provenance;
 pub mod raster;
 pub mod spatial_reference;
 pub mod util;
+
+/// Compiles Geo Engine Pro
+#[cfg(feature = "pro")]
+pub mod pro;

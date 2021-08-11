@@ -1,19 +1,19 @@
 use futures::StreamExt;
 use geoengine_datatypes::{
     operations::image::{Colorizer, RgbaColor, ToPng},
-    primitives::TimeInterval,
+    primitives::{AxisAlignedRectangle, TimeInterval},
     raster::{Blit, EmptyGrid2D, GeoTransform, Grid2D, Pixel, RasterTile2D},
 };
 use num_traits::AsPrimitive;
 use std::convert::TryInto;
 
-use crate::engine::{QueryContext, QueryRectangle, RasterQueryProcessor};
+use crate::engine::{QueryContext, QueryProcessor, RasterQueryProcessor, RasterQueryRectangle};
 use crate::{error, util::Result};
 
 #[allow(clippy::too_many_arguments)]
 pub async fn raster_stream_to_png_bytes<T, C: QueryContext>(
     processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
-    query_rect: QueryRectangle,
+    query_rect: RasterQueryRectangle,
     query_ctx: C,
     width: u32,
     height: u32,
@@ -26,15 +26,15 @@ where
 {
     let colorizer = colorizer.unwrap_or(default_colorizer_gradient::<T>()?);
 
-    let tile_stream = processor.raster_query(query_rect, &query_ctx)?;
+    let tile_stream = processor.query(query_rect, &query_ctx).await?;
 
-    let x_query_resolution = query_rect.bbox.size_x() / f64::from(width);
-    let y_query_resolution = query_rect.bbox.size_y() / f64::from(height);
+    let x_query_resolution = query_rect.spatial_bounds.size_x() / f64::from(width);
+    let y_query_resolution = query_rect.spatial_bounds.size_y() / f64::from(height);
 
     // build png
     let dim = [height as usize, width as usize];
     let query_geo_transform = GeoTransform::new(
-        query_rect.bbox.upper_left(),
+        query_rect.spatial_bounds.upper_left(),
         x_query_resolution,
         -y_query_resolution, // TODO: negative, s.t. geo transform fits...
     );
@@ -101,7 +101,7 @@ pub fn default_colorizer_gradient<T: Pixel>() -> Result<Colorizer> {
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::{
-        primitives::{BoundingBox2D, Coordinate2D, SpatialResolution},
+        primitives::{Coordinate2D, SpatialPartition2D, SpatialResolution},
         raster::TilingSpecification,
     };
 
@@ -123,12 +123,13 @@ mod tests {
             phantom_data: Default::default(),
         };
 
-        let query_bbox = BoundingBox2D::new((-10., 20.).into(), (50., 80.).into()).unwrap();
+        let query_partition =
+            SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
 
         let image_bytes = raster_stream_to_png_bytes(
             gdal_source.boxed(),
-            QueryRectangle {
-                bbox: query_bbox,
+            RasterQueryRectangle {
+                spatial_bounds: query_partition,
                 time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
                     .unwrap(),
                 spatial_resolution: SpatialResolution::zero_point_one(),

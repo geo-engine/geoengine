@@ -1,7 +1,7 @@
 use crate::{
     error,
     operations::reproject::{CoordinateProjection, CoordinateProjector, Reproject},
-    primitives::BoundingBox2D,
+    primitives::AxisAlignedRectangle,
     util::Result,
 };
 use gdal::spatial_ref::SpatialRef;
@@ -57,6 +57,14 @@ impl SpatialReference {
         Self { authority, code }
     }
 
+    pub fn authority(&self) -> &SpatialReferenceAuthority {
+        &self.authority
+    }
+
+    pub fn code(self) -> u32 {
+        self.code
+    }
+
     /// the WGS 84 spatial reference system
     pub fn epsg_4326() -> Self {
         Self::new(SpatialReferenceAuthority::Epsg, 4326)
@@ -77,7 +85,7 @@ impl SpatialReference {
     }
 
     /// Return the area of use in EPSG:4326 projection
-    pub fn area_of_use(self) -> Result<BoundingBox2D> {
+    pub fn area_of_use<A: AxisAlignedRectangle>(self) -> Result<A> {
         let proj_string = match self.proj_string() {
             Ok(s) => s,
             Err(e) => return Err(e),
@@ -91,19 +99,19 @@ impl SpatialReference {
             .context(error::ProjInternal)?
             .0
             .ok_or(error::Error::NoAreaOfUseDefined { proj_string })?;
-        BoundingBox2D::new(
+        A::from_min_max(
             (area.west, area.south).into(),
             (area.east, area.north).into(),
         )
     }
 
     /// Return the area of use in current projection
-    pub fn area_of_use_projected(self) -> Result<BoundingBox2D> {
+    pub fn area_of_use_projected<A: AxisAlignedRectangle>(self) -> Result<A> {
         if self == Self::epsg_4326() {
             return self.area_of_use();
         }
         let p = CoordinateProjector::from_known_srs(Self::epsg_4326(), self)?;
-        self.area_of_use()?.reproject(&p)
+        self.area_of_use::<A>()?.reproject(&p)
     }
 }
 
@@ -193,6 +201,20 @@ impl TryFrom<SpatialRef> for SpatialReference {
             SpatialReferenceAuthority::from_str(&value.auth_name()?)?,
             value.auth_code()? as u32,
         ))
+    }
+}
+
+impl TryFrom<SpatialReference> for SpatialRef {
+    type Error = error::Error;
+
+    fn try_from(value: SpatialReference) -> Result<Self, Self::Error> {
+        if value.authority == SpatialReferenceAuthority::Epsg {
+            return SpatialRef::from_epsg(value.code).context(error::Gdal);
+        }
+
+        // TODO: support other projections reliably
+
+        SpatialRef::from_proj4(&value.proj_string()?).context(error::Gdal)
     }
 }
 
@@ -341,6 +363,7 @@ impl<'de> Deserialize<'de> for SpatialReferenceOption {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::convert::TryInto;
 
     #[test]
     fn display() {
@@ -516,5 +539,14 @@ mod tests {
         assert!(SpatialReference::new(SpatialReferenceAuthority::SrOrg, 1)
             .proj_string()
             .is_err());
+    }
+
+    #[test]
+    fn spatial_reference_to_gdal_spatial_ref_epsg() {
+        let spatial_reference = SpatialReference::epsg_4326();
+        let gdal_sref: SpatialRef = spatial_reference.try_into().unwrap();
+
+        assert_eq!(gdal_sref.auth_name().unwrap(), "EPSG");
+        assert_eq!(gdal_sref.auth_code().unwrap(), 4326);
     }
 }

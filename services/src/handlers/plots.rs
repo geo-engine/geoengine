@@ -5,13 +5,12 @@ use warp::Filter;
 
 use geoengine_datatypes::plots::PlotOutputFormat;
 use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution, TimeInterval};
-use geoengine_operators::engine::{QueryRectangle, TypedPlotQueryProcessor};
+use geoengine_operators::engine::{TypedPlotQueryProcessor, VectorQueryRectangle};
 
 use crate::contexts::Context;
 use crate::error;
 use crate::handlers::authenticate;
 use crate::ogc::util::{parse_bbox, parse_time};
-use crate::users::session::Session;
 use crate::util::parsing::parse_spatial_resolution;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
@@ -122,7 +121,7 @@ pub(crate) fn get_plot_handler<C: Context>(
 async fn get_plot<C: Context>(
     id: Uuid,
     params: GetPlot,
-    session: Session,
+    session: C::Session,
     ctx: C,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let workflow = ctx
@@ -133,16 +132,17 @@ async fn get_plot<C: Context>(
 
     let operator = workflow.operator.get_plot().context(error::Operator)?;
 
-    let execution_context = ctx.execution_context(&session)?;
+    let execution_context = ctx.execution_context(session)?;
 
     let initialized = operator
         .initialize(&execution_context)
+        .await
         .context(error::Operator)?;
 
     let processor = initialized.query_processor().context(error::Operator)?;
 
-    let query_rect = QueryRectangle {
-        bbox: params.bbox,
+    let query_rect = VectorQueryRectangle {
+        spatial_bounds: params.bbox,
         time_interval: params.time,
         spatial_resolution: params.spatial_resolution,
     };
@@ -209,12 +209,12 @@ mod tests {
         Histogram, HistogramBounds, HistogramParams, Statistics, StatisticsParams,
     };
 
-    use crate::contexts::InMemoryContext;
+    use crate::contexts::{InMemoryContext, Session, SimpleContext};
     use crate::handlers::handle_rejection;
     use crate::workflows::workflow::Workflow;
 
     use super::*;
-    use crate::util::tests::{check_allowed_http_methods, create_session_helper};
+    use crate::util::tests::check_allowed_http_methods;
     use warp::http::Response;
     use warp::hyper::body::Bytes;
 
@@ -248,7 +248,7 @@ mod tests {
     #[tokio::test]
     async fn json() {
         let ctx = InMemoryContext::default();
-        let session = create_session_helper(&ctx).await;
+        let session_id = ctx.default_session_ref().await.id();
 
         let workflow = Workflow {
             operator: Statistics {
@@ -282,7 +282,7 @@ mod tests {
             .path(&url)
             .header(
                 "Authorization",
-                format!("Bearer {}", session.id.to_string()),
+                format!("Bearer {}", session_id.to_string()),
             )
             .reply(&get_plot_handler(ctx).recover(handle_rejection))
             .await;
@@ -312,7 +312,7 @@ mod tests {
     #[tokio::test]
     async fn json_vega() {
         let ctx = InMemoryContext::default();
-        let session = create_session_helper(&ctx).await;
+        let session_id = ctx.default_session_ref().await.id();
 
         let workflow = Workflow {
             operator: Histogram {
@@ -354,7 +354,7 @@ mod tests {
             .path(&url)
             .header(
                 "Authorization",
-                format!("Bearer {}", session.id.to_string()),
+                format!("Bearer {}", session_id.to_string()),
             )
             .reply(&get_plot_handler(ctx).recover(handle_rejection))
             .await;
@@ -404,7 +404,7 @@ mod tests {
     async fn check_request_types() {
         async fn get_workflow_json(method: &str) -> Response<Bytes> {
             let ctx = InMemoryContext::default();
-            let session = create_session_helper(&ctx).await;
+            let session = ctx.default_session_ref().await;
 
             let workflow = Workflow {
                 operator: Statistics {
@@ -438,9 +438,9 @@ mod tests {
                 .path(&url)
                 .header(
                     "Authorization",
-                    format!("Bearer {}", session.id.to_string()),
+                    format!("Bearer {}", session.id().to_string()),
                 )
-                .reply(&get_plot_handler(ctx).recover(handle_rejection))
+                .reply(&get_plot_handler(ctx.clone()).recover(handle_rejection))
                 .await
         }
 

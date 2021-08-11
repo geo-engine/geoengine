@@ -76,11 +76,7 @@ pub fn get_config_element<'a, T>() -> Result<T>
 where
     T: ConfigElement + Deserialize<'a>,
 {
-    SETTINGS
-        .read()
-        .map_err(|_error| error::Error::ConfigLockFailed)?
-        .get::<T>(T::KEY)
-        .context(error::Config)
+    get_config(T::KEY)
 }
 
 pub trait ConfigElement {
@@ -111,7 +107,12 @@ impl ConfigElement for Backend {
 
 #[derive(Debug, Deserialize)]
 pub struct Postgres {
-    pub config_string: String,
+    pub host: String,
+    pub port: u16,
+    pub database: String,
+    pub schema: String,
+    pub user: String,
+    pub password: String,
 }
 
 impl ConfigElement for Postgres {
@@ -173,4 +174,26 @@ pub struct Upload {
 
 impl ConfigElement for Upload {
     const KEY: &'static str = "upload";
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Logging {
+    pub log_spec: String,
+    pub log_to_file: bool,
+    pub filename_prefix: String,
+    pub enable_buffering: bool,
+    pub log_directory: Option<String>,
+}
+
+impl ConfigElement for Logging {
+    const KEY: &'static str = "logging";
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Wcs {
+    pub tile_limit: usize,
+}
+
+impl ConfigElement for Wcs {
+    const KEY: &'static str = "wcs";
 }
