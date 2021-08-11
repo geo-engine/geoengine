@@ -28,7 +28,7 @@ config = "0.11"
 flexi_logger = "0.18"
 futures = "0.3"
 futures-util = "0.3"
-gdal = { version = "0.8", features = ["datetime"] }
+gdal = { version = "^0.9", features = ["datetime"] }
 geo = "0.18"
 geoengine-datatypes = { path = "../datatypes" }
 geoengine-operators = { path = "../operators" }
