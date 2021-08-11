@@ -14,7 +14,7 @@ use crate::{
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::StreamExt;
-use geoengine_datatypes::primitives::SpatialPartitioned;
+use geoengine_datatypes::primitives::Coordinate2D;
 use geoengine_datatypes::{
     operations::reproject::{
         suggest_pixel_size_from_diag_cross_projected, CoordinateProjection, CoordinateProjector,
@@ -22,7 +22,7 @@ use geoengine_datatypes::{
     },
     primitives::{AxisAlignedRectangle, SpatialResolution},
     primitives::{BoundingBox2D, SpatialPartition2D},
-    raster::{Pixel, RasterTile2D, TileInformation, TilingSpecification},
+    raster::{Pixel, RasterTile2D, TilingSpecification},
     spatial_reference::SpatialReference,
 };
 use num_traits::AsPrimitive;
@@ -378,6 +378,57 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
     }
 }
 
+/// compute the resolution for the source. For this we subdivide the valid area into a grid and compute the resulting resolution as
+/// the minimum of the required resolutions for all tiles. This gives us a global, reproducible resolution. We don't use the global
+/// tiling strategy for subdivision because we want to avoid partially valid tiles (where a tile is partially outside of the area
+/// of use of the source or target projection). Rather we split divide it into a configurable number of homogeneous `rows` and `cols`
+/// that align with the intersection of source and target area of use.
+fn query_source_resolution<A: AxisAlignedRectangle>(
+    query_resolution: SpatialResolution,
+    projector_source_target: &CoordinateProjector,
+    projector_target_source: &CoordinateProjector,
+    rows: usize,
+    cols: usize,
+) -> Result<SpatialResolution> {
+    let use_area = projector_source_target.to.area_of_use_projected::<A>()?;
+    let source_use_area_clipped = use_area.reproject_clipped(projector_target_source)?;
+    let use_area_clipped = source_use_area_clipped.reproject_clipped(projector_source_target)?;
+
+    let width = use_area_clipped.size_x() / cols as f64;
+    let height = use_area_clipped.size_y() / rows as f64;
+    let mut resolution: Option<SpatialResolution> = None;
+    for row in 0..rows {
+        for col in 0..cols {
+            let target_bbox = A::from_min_max(
+                use_area_clipped.lower_left()
+                    + Coordinate2D::new(col as f64 * width, row as f64 * height),
+                use_area_clipped.lower_left()
+                    + Coordinate2D::new((col + 1) as f64 * width, (row + 1) as f64 * height),
+            )?;
+
+            let source_bbox = target_bbox.reproject_clipped(projector_target_source)?;
+
+            let tile_resolution = suggest_pixel_size_from_diag_cross_projected(
+                target_bbox,
+                source_bbox,
+                query_resolution,
+            )
+            .context(error::DataType)?;
+
+            if let Some(current_resolution) = resolution {
+                resolution = Some(SpatialResolution::new(
+                    f64::min(current_resolution.x, tile_resolution.x),
+                    f64::min(current_resolution.y, tile_resolution.y),
+                )?);
+            } else {
+                resolution = Some(tile_resolution);
+            }
+        }
+    }
+
+    resolution.ok_or(error::Error::ReprojectionSourceResolution)
+}
+
 struct RasterReprojectionProcessor<Q, P>
 where
     Q: RasterQueryProcessor<RasterType = P>,
@@ -407,64 +458,6 @@ where
             tiling_spec,
             no_data_and_fill_value,
         }
-    }
-
-    /// compute the suggested resolution for querying the source to produce the given tile
-    fn tile_source_resolution(
-        tile: &TileInformation,
-        query_resolution: SpatialResolution,
-        projector_source_target: &CoordinateProjector,
-        projector_target_source: &CoordinateProjector,
-    ) -> Result<SpatialResolution> {
-        let p_bbox = tile
-            .spatial_partition()
-            .reproject_clipped(projector_target_source)?;
-        let s_bbox = p_bbox.reproject(projector_source_target)?;
-
-        suggest_pixel_size_from_diag_cross_projected(s_bbox, p_bbox, query_resolution)
-            .context(error::DataType)
-    }
-
-    /// compute the resolution for the source as the highest resolution needed for any tile in the output
-    fn query_source_resolution<A: AxisAlignedRectangle>(
-        &self,
-        query: QueryRectangle<A>,
-        projector_source_target: &CoordinateProjector,
-        projector_target_source: &CoordinateProjector,
-    ) -> Result<SpatialResolution> {
-        let use_area = self.to.area_of_use_projected::<A>()?;
-        let use_area =
-            SpatialPartition2D::new_unchecked(use_area.upper_left(), use_area.lower_right());
-
-        // use a fix tile size instead of the current one, because tests might use very small tiles
-        let tiling_spec = TilingSpecification {
-            origin_coordinate: self.tiling_spec.origin_coordinate,
-            tile_size_in_pixels: [600, 600].into(),
-        };
-
-        // TODO: cap the resolution
-        tiling_spec
-            .strategy(query.spatial_resolution.x, -1. * query.spatial_resolution.y) // adjust the spatial resolution to the sign of the geotransform
-            .tile_information_iterator(use_area)
-            .map(|tile| {
-                Self::tile_source_resolution(
-                    &tile,
-                    query.spatial_resolution,
-                    projector_source_target,
-                    projector_target_source,
-                )
-            })
-            .fold(Ok(None), |acc, sres| match (acc, sres) {
-                (Ok(None), Ok(r)) => Ok(Some(r)),
-                (Ok(Some(acc)), Ok(r)) => {
-                    let x = if r.x.abs() < acc.x.abs() { r.x } else { acc.x };
-                    let y = if r.y.abs() < acc.y.abs() { r.y } else { acc.y };
-
-                    Ok(Some(SpatialResolution::new_unchecked(x, y)))
-                }
-                (_, Err(e)) | (Err(e), _) => Err(e),
-            })?
-            .ok_or(error::Error::ReprojectionSourceResolution)
     }
 
     /// clip query s.th. it is valid in the source projection
@@ -508,10 +501,12 @@ where
             out_srs: self.to,
             no_data_and_fill_value: self.no_data_and_fill_value,
             fold_fn: fold_by_coordinate_lookup_future,
-            in_spatial_res: self.query_source_resolution(
-                query,
+            in_spatial_res: query_source_resolution::<SpatialPartition2D>(
+                query.spatial_resolution,
                 &projector_source_target,
                 &projector_target_source,
+                1, // TODO: use a configurable number of rows and cols, but only a resolution computed on a single tile seems to not lead to over estimates
+                1,
             )?,
         };
         let s = RasterSubQueryAdapter::<'a, P, _, _>::new(
@@ -1077,5 +1072,40 @@ mod tests {
             .await;
 
         Ok(())
+    }
+
+    #[test]
+    fn resolution() {
+        let epsg_4326 = SpatialReference::epsg_4326();
+        let epsg_3857 = SpatialReference::new(SpatialReferenceAuthority::Epsg, 3857);
+
+        let area_of_use_3857: SpatialPartition2D = epsg_3857.area_of_use_projected().unwrap();
+
+        let width = 100;
+        let height = 100;
+
+        let res = SpatialResolution::new_unchecked(
+            area_of_use_3857.size_x() / f64::from(width),
+            area_of_use_3857.size_y() / f64::from(height),
+        );
+
+        let projector_source_target =
+            CoordinateProjector::from_known_srs(epsg_4326, epsg_3857).unwrap();
+        let projector_target_source =
+            CoordinateProjector::from_known_srs(epsg_3857, epsg_4326).unwrap();
+
+        let source_res = query_source_resolution::<SpatialPartition2D>(
+            res,
+            &projector_source_target,
+            &projector_target_source,
+            10,
+            10,
+        )
+        .unwrap();
+
+        assert_eq!(
+            source_res,
+            SpatialResolution::new_unchecked(360. / width as f64, 180. / height as f64)
+        );
     }
 }
