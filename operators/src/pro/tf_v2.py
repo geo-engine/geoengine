@@ -73,7 +73,8 @@ def initUnet(num_classes, id, batch_size):
     # Define the model
     global model 
     model = keras.Model(inputs, outputs)
-    model.compile(optimizer="rmsprop", loss="sparse_categorical_crossentropy")
+    #Here we can add more metrics for later evaluation
+    model.compile(optimizer="rmsprop", loss="sparse_categorical_crossentropy", metrics=['accuracy'])
     model.summary()
     model.save('saved_model/{}'.format(id))
     print("Saved model under saved_model/{}".format(id))
@@ -98,12 +99,17 @@ def predict(X):
     result = model.predict(X, batch_size=1)
     #model.summary()
     print(result.shape)
-    #print(result[0][0][0])
-    #print(result[0][0][1])
-    #print(result[0][0][2])
-    #print(result[0][0][3])
+    print(result[0][0][0])
+    print(result[0][0][1])
+    print(result[0][0][2])
+    print(result[0][0][3])
     return result
 
+def validate(X, y, batch_size):
+    global model
+    score = model.evaluate(x=X, y=y, batch_size=batch_size)
+    #print(score)
+    return np.array([score[0], score[1]])
 def save(id):
     global model
     model.save('saved_model/{}'.format(id))

@@ -2,7 +2,7 @@ use futures::StreamExt;
 use geoengine_datatypes::{primitives::{SpatialPartition2D}, raster::{GridOrEmpty, Pixel}};
 use crate::engine::{QueryContext, QueryRectangle, RasterQueryProcessor};
 use crate::util::Result;
-use pyo3::{types::{PyModule, PyUnicode}};
+use pyo3::{types::{PyModule, PyUnicode, PyList}};
 use ndarray::{Array2, Axis,concatenate, stack, ArrayBase, OwnedRepr, Dim};
 use numpy::{PyArray};
 use rand::prelude::*;
@@ -149,6 +149,7 @@ U: Clone {
 
             (arr_res, arr_8)
 }
+
 
 
 #[cfg(test)]

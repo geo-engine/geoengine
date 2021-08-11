@@ -246,7 +246,7 @@ mod tests {
                 .unwrap()
                 .into(),
         );
-
+ 
         let raster_source = MockRasterSource {
             params: MockRasterSourceParams {
                 data: vec![raster_tile],
