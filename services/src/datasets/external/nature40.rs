@@ -83,7 +83,7 @@ pub struct Nature40DataProvider {
 struct RasterDb {
     name: String,
     title: String,
-    #[serde(deserialize_with = "string_or_string_array")]
+    #[serde(deserialize_with = "string_or_string_array", default)]
     tags: Vec<String>,
 }
 
@@ -104,7 +104,7 @@ impl RasterDb {
 #[derive(Deserialize, Debug)]
 struct RasterDbs {
     rasterdbs: Vec<RasterDb>,
-    #[serde(deserialize_with = "string_or_string_array")]
+    #[serde(deserialize_with = "string_or_string_array", default)]
     tags: Vec<String>,
     session: String,
 }
