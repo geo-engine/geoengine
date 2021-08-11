@@ -223,6 +223,16 @@ pub enum Error {
     OgrSqlQuery,
 
     GdalRasterDataTypeNotSupported,
+
+    #[snafu(display("Input `{:}` must be greater than zero", name))]
+    InputMustBeGreaterThanZero {
+        name: &'static str,
+    },
+
+    #[snafu(display("Input `{:}` must be zero or positive", name))]
+    InputMustBeZeroOrPositive {
+        name: &'static str,
+    },
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {

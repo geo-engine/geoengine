@@ -1,6 +1,6 @@
 use std::convert::TryFrom;
 
-use super::{AxisAlignedRectangle, Coordinate2D, SpatialBounded};
+use super::{AxisAlignedRectangle, Circle, Coordinate2D, SpatialBounded};
 use crate::error;
 use crate::util::Result;
 #[cfg(feature = "postgres")]
@@ -122,6 +122,35 @@ impl BoundingBox2D {
         let lower_left_coordinate = (upper_left_coordinate.x, lower_right_coordinate.y).into();
         let upper_right_coordinate = (lower_right_coordinate.x, upper_left_coordinate.y).into();
         BoundingBox2D::new_unchecked(lower_left_coordinate, upper_right_coordinate)
+    }
+
+    /// Creates a new bounding box with `upper_left` and `lower_right` coordinates
+    /// This is usually used with raster data and matches with the gdal geotransform
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use geoengine_datatypes::primitives::{Coordinate2D, BoundingBox2D};
+    ///
+    /// let ul = Coordinate2D::new(1.0, 2.0);
+    /// let lr = Coordinate2D::new(2.0, 1.0);
+    /// let bbox = BoundingBox2D::new_upper_left_lower_right(ul, lr).unwrap();
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// This constructor fails if the order of coordinates is not correct
+    ///
+    pub fn new_from_center(
+        center: Coordinate2D,
+        half_width: f64,
+        half_height: f64,
+    ) -> Result<Self> {
+        // TODO: fail if half_width or half_height is negative
+
+        let lower_left_coordinate = (center.x - half_width, center.y - half_height).into();
+        let upper_right_coordinate = (center.x + half_width, center.y + half_height).into();
+        BoundingBox2D::new(lower_left_coordinate, upper_right_coordinate)
     }
 
     /// Checks if a coordinate is located inside the bounding box
@@ -340,6 +369,104 @@ impl BoundingBox2D {
             f
         })
     }
+
+    /// This method returns `true` iff this `BoundingBox2D` contains the input `Circle`.
+    /// It is valid if the `Circle` touches the `BoundingBox2D`'s borders.
+    /// The input `Circle` is enlarged by a `delta`.
+    pub fn contains_with_delta(&self, other: &Circle, delta: f64) -> bool {
+        let half_width = self.size_x() / 2.;
+        let x_center = self.lower_left_coordinate.x + half_width;
+        let x_center_dist = (x_center - other.x()).abs();
+
+        if x_center_dist > (half_width - other.radius() - delta) {
+            return false;
+        }
+
+        let half_height = self.size_y() / 2.;
+        let y_center = self.lower_left_coordinate.y + half_height;
+        let y_center_dist = (y_center - other.y()).abs();
+
+        if y_center_dist > (half_height - other.radius() - delta) {
+            return false;
+        }
+
+        true
+    }
+
+    /// This method returns `true` iff does this `BoundingBox2D` intersect with the input `Circle` that
+    /// is enlarged by a `delta`.
+    pub fn intersects_with_delta(&self, other: &Circle, delta: f64) -> bool {
+        let half_width = self.size_x() / 2.;
+        let x_center = self.lower_left_coordinate.x + half_width;
+
+        let circle_distance_x = (x_center - other.x()).abs();
+        if circle_distance_x > half_width + other.radius() + delta {
+            return false;
+        }
+
+        let half_height = self.size_y() / 2.;
+        let y_center = self.lower_left_coordinate.y + half_height;
+
+        let circle_distance_y = (y_center - other.y()).abs();
+        if circle_distance_y > half_height + other.radius() + delta {
+            return false;
+        }
+
+        if circle_distance_x <= half_width {
+            return true;
+        }
+        if circle_distance_y <= half_height {
+            return true;
+        }
+
+        let squared_corner_distanz = (circle_distance_x - half_width - delta).powi(2)
+            + (circle_distance_y - half_height - delta).powi(2);
+
+        squared_corner_distanz <= other.radius().powi(2)
+    }
+
+    /// This method generates four new `BoundingBox2D`s by splitting the current one in four quadrants.
+    pub fn split_into_quarters(&self) -> (Self, Self, Self, Self) {
+        let half_width = self.size_x() / 2.;
+        let half_height = self.size_x() / 2.;
+
+        let upper_left = Self::new_unchecked(
+            Coordinate2D::new(
+                self.lower_left_coordinate.x,
+                self.lower_left_coordinate.y + half_height,
+            ),
+            Coordinate2D::new(
+                self.lower_left_coordinate.x + half_width,
+                self.upper_right_coordinate.y,
+            ),
+        );
+        let upper_right = Self::new_unchecked(
+            Coordinate2D::new(
+                self.lower_left_coordinate.x + half_width,
+                self.lower_left_coordinate.y + half_height,
+            ),
+            self.upper_right_coordinate,
+        );
+        let lower_left = Self::new_unchecked(
+            self.lower_left_coordinate,
+            Coordinate2D::new(
+                self.lower_left_coordinate.x + half_width,
+                self.lower_left_coordinate.y + half_height,
+            ),
+        );
+        let lower_right = Self::new_unchecked(
+            Coordinate2D::new(
+                self.lower_left_coordinate.x + half_width,
+                self.lower_left_coordinate.y,
+            ),
+            Coordinate2D::new(
+                self.upper_right_coordinate.x,
+                self.lower_left_coordinate.y + half_height,
+            ),
+        );
+
+        (lower_left, lower_right, upper_left, upper_right)
+    }
 }
 
 impl AxisAlignedRectangle for BoundingBox2D {
@@ -472,7 +599,9 @@ impl TryFrom<BoundingBox2D> for gdal::vector::Geometry {
 #[cfg(test)]
 mod tests {
 
-    use crate::primitives::{AxisAlignedRectangle, BoundingBox2D, Coordinate2D, SpatialBounded};
+    use crate::primitives::{
+        AxisAlignedRectangle, BoundingBox2D, Circle, Coordinate2D, SpatialBounded,
+    };
     #[test]
     #[allow(clippy::float_cmp)]
     fn bounding_box_new() {
@@ -976,5 +1105,63 @@ mod tests {
         ]);
         let bbox = BoundingBox2D::from_coord_ref_iter(coordinates.iter()).unwrap();
         assert_eq!(bbox, expected);
+    }
+
+    #[test]
+    fn test_contains_with_delta() {
+        let bbox = BoundingBox2D::new((-50., -50.).into(), (50., 50.).into()).unwrap();
+
+        assert!(bbox.contains_with_delta(&Circle::new(0.0, 0.0, 49.0), 1.0));
+        assert!(!bbox.contains_with_delta(&Circle::new(0.0, 0.0, 49.1), 1.0));
+
+        assert!(bbox.contains_with_delta(&Circle::new(44.0, 0.0, 5.0), 1.0));
+        assert!(!bbox.contains_with_delta(&Circle::new(44.1, 0.0, 5.0), 1.0));
+    }
+
+    #[test]
+    fn test_intersects_with_delta() {
+        let bbox = BoundingBox2D::new((-50., -50.).into(), (50., 50.).into()).unwrap();
+
+        assert!(bbox.intersects_with_delta(&Circle::new(0.0, 0.0, 49.0), 1.0));
+        assert!(bbox.intersects_with_delta(&Circle::new(0.0, 0.0, 49.1), 1.0));
+
+        assert!(bbox.intersects_with_delta(&Circle::new(44.0, 0.0, 5.0), 1.0));
+        assert!(bbox.intersects_with_delta(&Circle::new(44.1, 0.0, 5.0), 1.0));
+
+        // TODO: correct?
+        assert!(bbox.intersects_with_delta(&Circle::new(56.0, 0.0, 5.0), 1.0));
+        assert!(!bbox.intersects_with_delta(&Circle::new(56.1, 0.0, 5.0), 1.0));
+    }
+
+    #[test]
+    fn test_split_into_quarters() {
+        let bbox = BoundingBox2D::new((-50., -50.).into(), (50., 50.).into()).unwrap();
+
+        let (lower_left, lower_right, upper_left, upper_right) = bbox.split_into_quarters();
+
+        assert_eq!(
+            upper_left,
+            BoundingBox2D::new((-50., 0.).into(), (0., 50.).into()).unwrap()
+        );
+        assert_eq!(
+            upper_right,
+            BoundingBox2D::new((0., 0.).into(), (50., 50.).into()).unwrap()
+        );
+        assert_eq!(
+            lower_left,
+            BoundingBox2D::new((-50., -50.).into(), (0., 0.).into()).unwrap()
+        );
+        assert_eq!(
+            lower_right,
+            BoundingBox2D::new((0., -50.).into(), (50., 0.).into()).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_new_from_center() {
+        assert_eq!(
+            BoundingBox2D::new_from_center((0., 0.).into(), 50., 50.).unwrap(),
+            BoundingBox2D::new((-50., -50.).into(), (50., 50.).into()).unwrap(),
+        );
     }
 }
