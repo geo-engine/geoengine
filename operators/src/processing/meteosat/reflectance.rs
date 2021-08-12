@@ -36,7 +36,7 @@ pub struct ReflectanceParams {
     pub solar_correction: bool,
     #[serde(rename = "forceHRV")]
     pub force_hrv: bool,
-    pub force_satellite: String,
+    pub force_satellite: Option<u8>,
 }
 
 impl Default for ReflectanceParams {
@@ -44,7 +44,7 @@ impl Default for ReflectanceParams {
         ReflectanceParams {
             solar_correction: false,
             force_hrv: false,
-            force_satellite: "".into(),
+            force_satellite: None,
         }
     }
 }
@@ -178,12 +178,11 @@ where
     }
 
     fn get_satellite(&self, tile: &RasterTile2D<PixelOut>) -> Result<&'static Satellite> {
-        if self.params.force_satellite.is_empty() {
-            let satellite_id = tile.properties.get_number_property(&self.satellite_key)?;
-            Satellite::satellite_by_msg_id(satellite_id)
-        } else {
-            Satellite::satellite_by_name(self.params.force_satellite.as_str())
-        }
+        let id = match self.params.force_satellite {
+            Some(id) => id,
+            _ => tile.properties.get_number_property(&self.satellite_key)?,
+        };
+        Satellite::satellite_by_msg_id(id)
     }
 
     fn get_channel<'a>(
@@ -362,7 +361,7 @@ mod tests {
     async fn test_ok_force_satellite() {
         let props = create_properties(Some(1), Some(1), Some("202108040838"));
         let params = ReflectanceParams {
-            force_satellite: "Meteosat-11".into(),
+            force_satellite: Some(4),
             ..Default::default()
         };
         let res = process(props, params, false, None).await.unwrap();
@@ -446,7 +445,7 @@ mod tests {
     async fn test_invalid_force_satellite() {
         let props = create_properties(Some(1), Some(1), Some("202108040838"));
         let params = ReflectanceParams {
-            force_satellite: "Meteosat-42".into(),
+            force_satellite: Some(42),
             ..Default::default()
         };
         let res = process(props, params, false, None).await;

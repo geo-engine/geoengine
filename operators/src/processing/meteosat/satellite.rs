@@ -34,18 +34,6 @@ pub struct Channel {
 }
 
 impl Satellite {
-    /// Retrieves the Meteosat satellite for the given `name`.
-    /// The name comparison is *case sensitive*.
-    pub fn satellite_by_name(name: &str) -> Result<&'static Satellite> {
-        match name {
-            "Meteosat-8" => Ok(&METEOSAT_08),
-            "Meteosat-9" => Ok(&METEOSAT_09),
-            "Meteosat-10" => Ok(&METEOSAT_10),
-            "Meteosat-11" => Ok(&METEOSAT_11),
-            _ => Err(Error::InvalidMeteosatSatellite),
-        }
-    }
-
     /// Retrieves the Meteosat satellite for the `msg_id` (1-4).
     pub fn satellite_by_msg_id(msg_id: u8) -> Result<&'static Satellite> {
         match msg_id {
@@ -597,16 +585,6 @@ static METEOSAT_11: Satellite = Satellite {
 #[cfg(test)]
 mod tests {
     use crate::processing::meteosat::satellite::Satellite;
-
-    #[tokio::test]
-    async fn satellite_by_name_ok() {
-        assert!(Satellite::satellite_by_name("Meteosat-11").is_ok())
-    }
-
-    #[tokio::test]
-    async fn satellite_by_name_fail() {
-        assert!(Satellite::satellite_by_name("Meteosat-42").is_err())
-    }
 
     #[tokio::test]
     async fn satellite_by_msg_id_ok() {

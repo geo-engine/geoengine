@@ -29,13 +29,13 @@ const OUT_NO_DATA_VALUE: PixelOut = PixelOut::NAN;
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct TemperatureParams {
-    force_satellite: String,
+    force_satellite: Option<u8>,
 }
 
 impl Default for TemperatureParams {
     fn default() -> Self {
         TemperatureParams {
-            force_satellite: "".into(),
+            force_satellite: None,
         }
     }
 }
@@ -196,12 +196,11 @@ where
     }
 
     fn get_satellite(&self, tile: &RasterTile2D<P>) -> Result<&'static Satellite> {
-        if self.params.force_satellite.is_empty() {
-            let satellite_id = tile.properties.get_number_property(&self.satellite_key)?;
-            Satellite::satellite_by_msg_id(satellite_id)
-        } else {
-            Satellite::satellite_by_name(self.params.force_satellite.as_str())
-        }
+        let id = match self.params.force_satellite {
+            Some(id) => id,
+            _ => tile.properties.get_number_property(&self.satellite_key)?,
+        };
+        Satellite::satellite_by_msg_id(id)
     }
 
     fn get_channel<'a>(
@@ -365,7 +364,7 @@ mod tests {
     async fn test_ok_force_satellite() {
         let props = create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
         let params = TemperatureParams {
-            force_satellite: "Meteosat-11".into(),
+            force_satellite: Some(4),
         };
         let res = process(props, params, None, None).await.unwrap();
 
@@ -401,7 +400,7 @@ mod tests {
     async fn test_invalid_force_satellite() {
         let props = create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
         let params = TemperatureParams {
-            force_satellite: "Meteosat-42".into(),
+            force_satellite: Some(13),
         };
         let res = process(props, params, None, None).await;
         assert!(res.is_err());
