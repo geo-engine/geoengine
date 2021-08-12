@@ -54,3 +54,7 @@ enable_buffering = false
 [wcs]
 # max number of tiles to be produced for generating output tiff
 tile_limit = 4 
+
+[odm]
+endpoint = "http://localhost:3000/"
+# TODO: authentication
