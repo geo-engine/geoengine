@@ -261,17 +261,18 @@ where
                         let sunpos = SunPos::new(&timestamp);
 
                         for idx in grid_idx_iter_2d(&grid.grid_shape()) {
-                            let geos_coord = tile
-                                .global_geo_transform
-                                .grid_idx_to_center_coordinate_2d(idx);
+                            let flat_idx = grid.shape.linear_space_index_unchecked(idx);
+                            let pixel = grid.data[flat_idx];
 
-                            let (lat, lon) = channel.view_angle_lat_lon(geos_coord, 0.0);
-                            let (_, zenith) = sunpos.solar_azimuth_zenith(lat, lon);
-
-                            let idx = grid.shape.linear_space_index_unchecked(idx);
-                            let pixel = grid.data[idx];
                             if !grid.is_no_data(pixel) {
-                                out.data[idx] = (f64::from(pixel) * esd * esd
+                                let geos_coord = tile
+                                    .global_geo_transform
+                                    .grid_idx_to_center_coordinate_2d(idx);
+
+                                let (lat, lon) = channel.view_angle_lat_lon(geos_coord, 0.0);
+                                let (_, zenith) = sunpos.solar_azimuth_zenith(lat, lon);
+
+                                out.data[flat_idx] = (f64::from(pixel) * esd * esd
                                     / (etsr * zenith.min(80.0).to_radians().cos()))
                                     as PixelOut;
                             }
