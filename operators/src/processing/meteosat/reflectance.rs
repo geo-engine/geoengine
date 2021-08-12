@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize};
 type PixelOut = f32;
 use crate::processing::meteosat::satellite::{Channel, Satellite};
 use crate::util::sunpos::SunPos;
-use chrono::{DateTime, Datelike, TimeZone, Utc};
+use chrono::{DateTime, Datelike, Utc};
 use RasterDataType::F32 as RasterOut;
 
 const OUT_NO_DATA_VALUE: PixelOut = PixelOut::NAN;
@@ -150,7 +150,6 @@ where
     source: Q,
     params: ReflectanceParams,
     channel_key: RasterPropertiesKey,
-    timestamp_key: RasterPropertiesKey,
     satellite_key: RasterPropertiesKey,
 }
 
@@ -165,10 +164,6 @@ where
             channel_key: RasterPropertiesKey {
                 domain: Some("msg".into()),
                 key: "Channel".into(),
-            },
-            timestamp_key: RasterPropertiesKey {
-                domain: Some("msg".into()),
-                key: "TimeStamp".into(),
             },
             satellite_key: RasterPropertiesKey {
                 domain: Some("msg".into()),
@@ -199,11 +194,6 @@ where
                 - 1;
             satellite.get_channel(channel_id)
         }
-    }
-
-    fn get_timestamp(&self, tile: &RasterTile2D<PixelOut>) -> Result<DateTime<Utc>> {
-        let time = tile.properties.get_string_property(&self.timestamp_key)?;
-        Ok(Utc.datetime_from_str(time.as_str(), "%Y%m%d%H%M")?)
     }
 }
 
@@ -242,7 +232,11 @@ where
                 GridOrEmpty::Grid(grid) => {
                     let satellite = self.get_satellite(&tile)?;
                     let channel = self.get_channel(&tile, satellite)?;
-                    let timestamp = self.get_timestamp(&tile)?;
+                    let timestamp = tile
+                        .time
+                        .start()
+                        .as_utc_date_time()
+                        .ok_or(Error::InvalidUTCTimestamp)?;
 
                     // get extra terrestrial solar radiation (...) and ESD (solar position)
                     let etsr = channel.etsr / std::f64::consts::PI;

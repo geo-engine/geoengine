@@ -11,6 +11,8 @@ pub enum Error {
 
     InvalidMeteosatSatellite,
 
+    InvalidUTCTimestamp,
+
     #[snafu(display("InvalidChannel Error (requested channel: {})", channel))]
     InvalidChannel {
         channel: usize,
