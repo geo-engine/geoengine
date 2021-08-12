@@ -1075,7 +1075,7 @@ mod tests {
     }
 
     #[test]
-    fn resolution() {
+    fn source_resolution() {
         let epsg_4326 = SpatialReference::epsg_4326();
         let epsg_3857 = SpatialReference::new(SpatialReferenceAuthority::Epsg, 3857);
 
@@ -1105,7 +1105,21 @@ mod tests {
 
         assert_eq!(
             source_res,
-            SpatialResolution::new_unchecked(360. / width as f64, 180. / height as f64)
+            SpatialResolution::new_unchecked(2.563_752_434_579_234, 2.563_752_434_579_234)
+        );
+
+        let source_res = query_source_resolution::<SpatialPartition2D>(
+            res,
+            &projector_source_target,
+            &projector_target_source,
+            1,
+            1,
+        )
+        .unwrap();
+
+        assert_eq!(
+            source_res,
+            SpatialResolution::new_unchecked(2.815_500_083_466_523, 2.815_500_083_466_523)
         );
     }
 }
