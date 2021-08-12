@@ -1,4 +1,6 @@
+use crate::contexts::MockableSession;
 use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider, OrderBy};
+use crate::datasets::provenance::{ProvenanceOutput, ProvenanceProvider};
 use crate::datasets::storage::{
     AddDataset, Dataset, DatasetDb, DatasetProviderDb, DatasetProviderDefinition,
     DatasetProviderListOptions, DatasetProviderListing, DatasetStore, DatasetStorer,
@@ -166,6 +168,7 @@ impl DatasetStore<UserSession> for ProHashMapDatasetDb {
             result_descriptor,
             source_operator: dataset.source_operator,
             symbology: dataset.symbology,
+            provenance: dataset.provenance,
         };
         self.datasets.push(d);
 
@@ -314,6 +317,29 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
     }
 }
 
+#[async_trait]
+impl ProvenanceProvider for ProHashMapDatasetDb {
+    async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {
+        match dataset {
+            DatasetId::Internal { dataset_id: _ } => self
+                .datasets
+                .iter()
+                .find(|d| d.id == *dataset)
+                .map(|d| ProvenanceOutput {
+                    dataset: d.id.clone(),
+                    provenance: d.provenance.clone(),
+                })
+                .ok_or(error::Error::UnknownDatasetId),
+            DatasetId::External(id) => {
+                self.dataset_provider(&UserSession::mock(), id.provider_id) // TODO: get correct session into dataset provider
+                    .await?
+                    .provenance(dataset)
+                    .await
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -343,6 +369,7 @@ mod tests {
             description: "My Ogr dataset".to_string(),
             source_operator: "OgrSource".to_string(),
             symbology: None,
+            provenance: None,
         };
 
         let meta = StaticMetaData {
@@ -355,7 +382,8 @@ mod tests {
                 force_ogr_time_filter: false,
                 force_ogr_spatial_filter: false,
                 on_error: OgrSourceErrorSpec::Ignore,
-                provenance: None,
+                sql_query: None,
+                attribute_query: None,
             },
             result_descriptor: descriptor.clone(),
             phantom: Default::default(),

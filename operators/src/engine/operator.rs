@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::error;
 use crate::util::Result;
 use async_trait::async_trait;
+use geoengine_datatypes::dataset::DatasetId;
 
 use super::{
     query_processor::{TypedRasterQueryProcessor, TypedVectorQueryProcessor},
@@ -10,10 +11,23 @@ use super::{
     PlotResultDescriptor, RasterResultDescriptor, TypedPlotQueryProcessor, VectorResultDescriptor,
 };
 
+pub trait OperatorDatasets {
+    /// Get the dataset ids of all the datasets involoved in this operator and its sources
+    fn datasets(&self) -> Vec<DatasetId> {
+        let mut datasets = vec![];
+        self.datasets_collect(&mut datasets);
+        datasets
+    }
+
+    fn datasets_collect(&self, datasets: &mut Vec<DatasetId>);
+}
+
 /// Common methods for `RasterOperator`s
 #[typetag::serde(tag = "type")]
 #[async_trait]
-pub trait RasterOperator: CloneableRasterOperator + Send + Sync + std::fmt::Debug {
+pub trait RasterOperator:
+    CloneableRasterOperator + OperatorDatasets + Send + Sync + std::fmt::Debug
+{
     async fn initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
@@ -31,7 +45,9 @@ pub trait RasterOperator: CloneableRasterOperator + Send + Sync + std::fmt::Debu
 /// Common methods for `VectorOperator`s
 #[typetag::serde(tag = "type")]
 #[async_trait]
-pub trait VectorOperator: CloneableVectorOperator + Send + Sync + std::fmt::Debug {
+pub trait VectorOperator:
+    CloneableVectorOperator + OperatorDatasets + Send + Sync + std::fmt::Debug
+{
     async fn initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
@@ -49,7 +65,9 @@ pub trait VectorOperator: CloneableVectorOperator + Send + Sync + std::fmt::Debu
 /// Common methods for `PlotOperator`s
 #[typetag::serde(tag = "type")]
 #[async_trait]
-pub trait PlotOperator: CloneablePlotOperator + Send + Sync + std::fmt::Debug {
+pub trait PlotOperator:
+    CloneablePlotOperator + OperatorDatasets + Send + Sync + std::fmt::Debug
+{
     async fn initialize(
         self: Box<Self>,
         context: &dyn ExecutionContext,
@@ -226,4 +244,14 @@ macro_rules! call_on_typed_operator {
             $crate::engine::TypedOperator::Plot($operator_var) => $function_call,
         }
     };
+}
+
+impl OperatorDatasets for TypedOperator {
+    fn datasets_collect(&self, datasets: &mut Vec<DatasetId>) {
+        match self {
+            TypedOperator::Vector(v) => v.datasets_collect(datasets),
+            TypedOperator::Raster(r) => r.datasets_collect(datasets),
+            TypedOperator::Plot(p) => p.datasets_collect(datasets),
+        }
+    }
 }

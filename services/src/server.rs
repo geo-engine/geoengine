@@ -76,6 +76,7 @@ where
         handlers::workflows::register_workflow_handler(ctx.clone()),
         handlers::workflows::load_workflow_handler(ctx.clone()),
         handlers::workflows::get_workflow_metadata_handler(ctx.clone()),
+        handlers::workflows::get_workflow_provenance_handler(ctx.clone()),
         handlers::session::anonymous_handler(ctx.clone()),
         handlers::session::session_handler(ctx.clone()),
         handlers::session::session_project_handler(ctx.clone()),

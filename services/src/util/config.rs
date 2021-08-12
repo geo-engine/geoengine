@@ -61,6 +61,19 @@ fn retrieve_settings_dir() -> Result<PathBuf> {
     std::env::current_dir().context(error::MissingWorkingDirectory)
 }
 
+#[cfg(test)]
+pub fn set_config<T>(key: &str, value: T) -> Result<()>
+where
+    T: Into<config::Value>,
+{
+    SETTINGS
+        .write()
+        .map_err(|_error| error::Error::ConfigLockFailed)?
+        .set(key, value)
+        .context(error::Config)?;
+    Ok(())
+}
+
 pub fn get_config<'a, T>(key: &str) -> Result<T>
 where
     T: Deserialize<'a>,
@@ -107,7 +120,12 @@ impl ConfigElement for Backend {
 
 #[derive(Debug, Deserialize)]
 pub struct Postgres {
-    pub config_string: String,
+    pub host: String,
+    pub port: u16,
+    pub database: String,
+    pub schema: String,
+    pub user: String,
+    pub password: String,
 }
 
 impl ConfigElement for Postgres {
@@ -191,4 +209,13 @@ pub struct Wcs {
 
 impl ConfigElement for Wcs {
     const KEY: &'static str = "wcs";
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Odm {
+    pub endpoint: String,
+}
+
+impl ConfigElement for Odm {
+    const KEY: &'static str = "odm";
 }

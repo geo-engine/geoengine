@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use crate::datasets::provenance::{ProvenanceOutput, ProvenanceProvider};
 use crate::error::Error;
 use crate::util::parsing::string_or_string_array;
 use crate::{datasets::listing::DatasetListOptions, error::Result};
@@ -82,7 +83,7 @@ pub struct Nature40DataProvider {
 struct RasterDb {
     name: String,
     title: String,
-    #[serde(deserialize_with = "string_or_string_array")]
+    #[serde(deserialize_with = "string_or_string_array", default)]
     tags: Vec<String>,
 }
 
@@ -103,7 +104,7 @@ impl RasterDb {
 #[derive(Deserialize, Debug)]
 struct RasterDbs {
     rasterdbs: Vec<RasterDb>,
-    #[serde(deserialize_with = "string_or_string_array")]
+    #[serde(deserialize_with = "string_or_string_array", default)]
     tags: Vec<String>,
     session: String,
 }
@@ -173,6 +174,16 @@ impl DatasetProvider for Nature40DataProvider {
         _dataset: &geoengine_datatypes::dataset::DatasetId,
     ) -> crate::error::Result<crate::datasets::storage::Dataset> {
         Err(error::Error::NotYetImplemented)
+    }
+}
+
+#[async_trait]
+impl ProvenanceProvider for Nature40DataProvider {
+    async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {
+        Ok(ProvenanceOutput {
+            dataset: dataset.clone(),
+            provenance: None,
+        })
     }
 }
 

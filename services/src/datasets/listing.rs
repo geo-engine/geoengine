@@ -15,6 +15,8 @@ use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
+use super::provenance::ProvenanceProvider;
+
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct DatasetListing {
@@ -75,6 +77,7 @@ pub trait DatasetProvider: Send
     + MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
     + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
     + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
+    + ProvenanceProvider
 {
     // TODO: filter, paging
     async fn list(
