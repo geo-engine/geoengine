@@ -317,7 +317,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_empty_ok() {
-        let props = create_properties(Some(1), Some(1), Some("202108040838"));
+        let props = create_properties(Some(1), Some(1));
         let params = ReflectanceParams::default();
         let res = process(props, params, true, None).await.unwrap();
 
@@ -329,7 +329,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_ok_no_solar_correction() {
-        let props = create_properties(Some(1), Some(1), Some("202108040838"));
+        let props = create_properties(Some(1), Some(1));
         let params = ReflectanceParams::default();
         let res = process(props, params, false, None).await.unwrap();
 
@@ -338,11 +338,11 @@ mod tests {
             &Grid2D::new(
                 [3, 2].into(),
                 vec![
-                    0.049_564_075_f32,
-                    0.099_128_15_f32,
-                    0.148_692_22_f32,
-                    0.198_256_3_f32,
-                    0.247_820_36_f32,
+                    0.046_567_827_f32,
+                    0.093_135_655_f32,
+                    0.139_703_48_f32,
+                    0.186_271_31_f32,
+                    0.232_839_14_f32,
                     OUT_NO_DATA_VALUE,
                 ],
                 Some(OUT_NO_DATA_VALUE),
@@ -354,7 +354,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_ok_force_satellite() {
-        let props = create_properties(Some(1), Some(1), Some("202108040838"));
+        let props = create_properties(Some(1), Some(1));
         let params = ReflectanceParams {
             force_satellite: Some(4),
             ..Default::default()
@@ -366,11 +366,11 @@ mod tests {
             &Grid2D::new(
                 [3, 2].into(),
                 vec![
-                    0.049_536_735_f32,
-                    0.099_073_47_f32,
-                    0.148_610_2_f32,
-                    0.198_146_94_f32,
-                    0.247_683_67_f32,
+                    0.046_542_14_f32,
+                    0.093_084_28_f32,
+                    0.139_626_43_f32,
+                    0.186_168_57_f32,
+                    0.232_710_7_f32,
                     OUT_NO_DATA_VALUE
                 ],
                 Some(OUT_NO_DATA_VALUE),
@@ -382,7 +382,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_ok_force_hrv() {
-        let props = create_properties(Some(1), Some(1), Some("202108040838"));
+        let props = create_properties(Some(1), Some(1));
         let params = ReflectanceParams {
             force_hrv: true,
             ..Default::default()
@@ -394,11 +394,11 @@ mod tests {
             &Grid2D::new(
                 [3, 2].into(),
                 vec![
-                    0.041_049_376,
-                    0.082_098_75,
-                    0.123_148_13,
-                    0.164_197_5,
-                    0.205_246_88,
+                    0.038_567_86_f32,
+                    0.077_135_72_f32,
+                    0.115_703_575_f32,
+                    0.154_271_44_f32,
+                    0.192_839_3_f32,
                     OUT_NO_DATA_VALUE
                 ],
                 Some(OUT_NO_DATA_VALUE),
@@ -410,7 +410,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_ok_solar_correction() {
-        let props = create_properties(Some(1), Some(1), Some("202108040838"));
+        let props = create_properties(Some(1), Some(1));
         let params = ReflectanceParams {
             solar_correction: true,
             ..Default::default()
@@ -422,11 +422,11 @@ mod tests {
             &Grid2D::new(
                 [3, 2].into(),
                 vec![
-                    0.285_428_14_f32,
-                    0.570_856_3_f32,
-                    0.856_284_4_f32,
-                    1.141_712_5_f32,
-                    1.427_140_6_f32,
+                    0.268_173_426_f32,
+                    0.536_346_853_f32,
+                    0.804_520_309_f32,
+                    1.072_693_71_f32,
+                    1.340_867_16_f32,
                     OUT_NO_DATA_VALUE
                 ],
                 Some(OUT_NO_DATA_VALUE),
@@ -438,7 +438,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_force_satellite() {
-        let props = create_properties(Some(1), Some(1), Some("202108040838"));
+        let props = create_properties(Some(1), Some(1));
         let params = ReflectanceParams {
             force_satellite: Some(42),
             ..Default::default()
@@ -448,24 +448,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_missing_timestamp() {
-        let props = create_properties(Some(1), Some(1), None);
-        let params = ReflectanceParams::default();
-        let res = process(props, params, false, None).await;
-        assert!(res.is_err());
-    }
-
-    #[tokio::test]
-    async fn test_invalid_timestamp() {
-        let props = create_properties(Some(1), Some(1), Some("2021-08-04 08:38"));
-        let params = ReflectanceParams::default();
-        let res = process(props, params, false, None).await;
-        assert!(res.is_err());
-    }
-
-    #[tokio::test]
     async fn test_missing_satellite() {
-        let props = create_properties(Some(1), None, Some("202108040838"));
+        let props = create_properties(Some(1), None);
         let params = ReflectanceParams::default();
         let res = process(props, params, false, None).await;
         assert!(res.is_err());
@@ -473,7 +457,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_satellite() {
-        let props = create_properties(Some(1), Some(42), Some("202108040838"));
+        let props = create_properties(Some(1), Some(42));
         let params = ReflectanceParams::default();
         let res = process(props, params, false, None).await;
         assert!(res.is_err());
@@ -481,7 +465,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_missing_channel() {
-        let props = create_properties(None, Some(1), Some("202108040838"));
+        let props = create_properties(None, Some(1));
         let params = ReflectanceParams::default();
         let res = process(props, params, false, None).await;
         assert!(res.is_err());
@@ -489,7 +473,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_channel() {
-        let props = create_properties(Some(42), Some(1), Some("202108040838"));
+        let props = create_properties(Some(42), Some(1));
         let params = ReflectanceParams::default();
         let res = process(props, params, false, None).await;
         assert!(res.is_err());
@@ -497,7 +481,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_measurement_unitless() {
-        let props = create_properties(Some(1), Some(1), Some("202108040838"));
+        let props = create_properties(Some(1), Some(1));
         let params = ReflectanceParams::default();
         let res = process(props, params, false, Some(Measurement::Unitless)).await;
         assert!(res.is_err());
@@ -505,7 +489,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_measurement_continuous() {
-        let props = create_properties(Some(1), Some(1), Some("202108040838"));
+        let props = create_properties(Some(1), Some(1));
         let params = ReflectanceParams::default();
         let res = process(
             props,
@@ -522,7 +506,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_measurement_classification() {
-        let props = create_properties(Some(1), Some(1), Some("202108040838"));
+        let props = create_properties(Some(1), Some(1));
         let params = ReflectanceParams::default();
         let res = process(
             props,
@@ -537,11 +521,7 @@ mod tests {
         assert!(res.is_err());
     }
 
-    fn create_properties(
-        channel: Option<u8>,
-        satellite: Option<u8>,
-        timestamp: Option<&str>,
-    ) -> RasterProperties {
+    fn create_properties(channel: Option<u8>, satellite: Option<u8>) -> RasterProperties {
         let mut props = RasterProperties::default();
 
         if let Some(v) = channel {
@@ -561,16 +541,6 @@ mod tests {
                     key: "Satellite".into(),
                 },
                 RasterPropertiesEntry::Number(v.as_()),
-            );
-        }
-
-        if let Some(v) = timestamp {
-            props.properties_map.insert(
-                RasterPropertiesKey {
-                    domain: Some("msg".into()),
-                    key: "TimeStamp".into(),
-                },
-                RasterPropertiesEntry::String(v.into()),
             );
         }
         props
