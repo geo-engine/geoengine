@@ -1,11 +1,10 @@
-use std::{pin::Pin, task::{Context, Poll}};
-use futures::{
-    ready,
-    Stream,
-};
+use futures::{ready, Stream};
 use log::{debug, trace};
 use pin_project::pin_project;
-
+use std::{
+    pin::Pin,
+    task::{Context, Poll},
+};
 
 #[pin_project(project = StreamStatisticsAdapterProjection)]
 pub struct StreamStatisticsAdapter<S> {
@@ -25,7 +24,7 @@ impl<S> StreamStatisticsAdapter<S> {
             id,
         }
     }
-    
+
     pub fn poll_next_count(&self) -> u64 {
         self.poll_next_count
     }
@@ -43,23 +42,36 @@ impl<S> StreamStatisticsAdapter<S> {
     }
 }
 
-impl<S> Stream for StreamStatisticsAdapter<S> where S:Stream {
+impl<S> Stream for StreamStatisticsAdapter<S>
+where
+    S: Stream,
+{
     type Item = S::Item;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let mut this = self.project();
         *this.poll_next_count += 1;
-        trace!("[{}] | poll_next_count: {}", *this.id, *this.poll_next_count);
+        trace!(
+            "[{}] | poll_next_count: {}",
+            *this.id,
+            *this.poll_next_count
+        );
         let v = ready!(this.stream.as_mut().poll_next(cx));
         match v {
             Some(_) => {
                 *this.element_count += 1;
-                debug!("[{}] | poll_next_count: {} | element_count: {} | next", *this.id, *this.poll_next_count, *this.element_count);
-            },
-            None => {
-                debug!("[{}] | poll_next_count: {} | element_count: {} | empty", *this.id, *this.poll_next_count, *this.element_count);
+                debug!(
+                    "[{}] | poll_next_count: {} | element_count: {} | next",
+                    *this.id, *this.poll_next_count, *this.element_count
+                );
             }
-         }
+            None => {
+                debug!(
+                    "[{}] | poll_next_count: {} | element_count: {} | empty",
+                    *this.id, *this.poll_next_count, *this.element_count
+                );
+            }
+        }
         Poll::Ready(v)
     }
 
@@ -76,9 +88,10 @@ mod tests {
 
     #[tokio::test]
     async fn simple() {
-        let v = vec![1,2,3];
+        let v = vec![1, 2, 3];
         let v_stream = futures::stream::iter(v);
-        let mut v_stat_stream = StreamStatisticsAdapter::statistics_with_id(v_stream, "v_stream".to_string());
+        let mut v_stat_stream =
+            StreamStatisticsAdapter::statistics_with_id(v_stream, "v_stream".to_string());
 
         assert_eq!(v_stat_stream.id_ref(), "v_stream");
 
@@ -99,6 +112,5 @@ mod tests {
         assert_eq!(v_stat_stream.element_count(), 3);
         assert_eq!(v_stat_stream.poll_next_count(), 3);
         assert_eq!(v_stat_stream.not_ready_count(), 0);
-
     }
 }

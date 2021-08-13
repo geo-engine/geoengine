@@ -31,13 +31,13 @@ pub mod concurrency;
 #[macro_use]
 pub mod engine;
 pub mod error;
+pub mod meta;
 pub mod mock;
 pub mod opencl;
 pub mod plot;
 pub mod processing;
 pub mod source;
 pub mod util;
-pub mod meta;
 
 /// Compiles Geo Engine Pro
 #[cfg(feature = "pro")]

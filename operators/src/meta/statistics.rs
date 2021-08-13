@@ -27,7 +27,7 @@ impl InitializedRasterOperator
 {
     fn result_descriptor(&self) -> &RasterResultDescriptor {
         debug!("[{}] | raster result descriptor", self.id);
-        &self.source.result_descriptor()
+        self.source.result_descriptor()
     }
 
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
@@ -83,7 +83,7 @@ impl InitializedVectorOperator
 {
     fn result_descriptor(&self) -> &VectorResultDescriptor {
         debug!("[{}] | vector result descriptor", self.id);
-        &self.source.result_descriptor()
+        self.source.result_descriptor()
     }
 
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {

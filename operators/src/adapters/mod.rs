@@ -11,8 +11,7 @@ pub use raster_subquery_adapter::{
 };
 pub use raster_time::RasterTimeAdapter;
 
-use self::{raster_time_substream::RasterTimeMultiFold};
-pub use stream_statistics_adapter::StreamStatisticsAdapter;
+use self::raster_time_substream::RasterTimeMultiFold;
 use crate::util::Result;
 use futures::{stream::Fuse, Future, Stream, StreamExt};
 use geoengine_datatypes::{
@@ -21,6 +20,7 @@ use geoengine_datatypes::{
     raster::{Pixel, RasterTile2D},
     util::arrow::ArrowTyped,
 };
+pub use stream_statistics_adapter::StreamStatisticsAdapter;
 
 /// This trait extends `RasterTile2D` `Stream`s with Geo-Engine-specific functionality.
 ///
@@ -50,7 +50,10 @@ where
     }
 
     /// Wraps a `Stream` with a `StreamStatisticsAdapter`.
-    fn statistics_with_id(self, id: String) -> StreamStatisticsAdapter<Self> where Self: Stream + Sized {
+    fn statistics_with_id(self, id: String) -> StreamStatisticsAdapter<Self>
+    where
+        Self: Stream + Sized,
+    {
         StreamStatisticsAdapter::statistics_with_id(self, id)
     }
 }
@@ -77,7 +80,10 @@ where
     }
 
     /// Wraps a `Stream` with a `StreamStatisticsAdapter`.
-    fn statistics_with_id(self, id: String) -> StreamStatisticsAdapter<Self> where Self: Stream + Sized {
+    fn statistics_with_id(self, id: String) -> StreamStatisticsAdapter<Self>
+    where
+        Self: Stream + Sized,
+    {
         StreamStatisticsAdapter::statistics_with_id(self, id)
     }
 }
