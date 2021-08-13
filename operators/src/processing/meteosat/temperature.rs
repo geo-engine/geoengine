@@ -20,6 +20,7 @@ use serde::{Deserialize, Serialize};
 // Output type is always f32
 type PixelOut = f32;
 use crate::processing::meteosat::satellite::{Channel, Satellite};
+use crate::processing::meteosat::{channel_key, offset_key, satellite_key, slope_key};
 use RasterDataType::F32 as RasterOut;
 
 const OUT_NO_DATA_VALUE: PixelOut = PixelOut::NAN;
@@ -176,22 +177,10 @@ where
         Self {
             source,
             params,
-            satellite_key: RasterPropertiesKey {
-                domain: Some("msg".into()),
-                key: "Satellite".into(),
-            },
-            channel_key: RasterPropertiesKey {
-                domain: Some("msg".into()),
-                key: "Channel".into(),
-            },
-            offset_key: RasterPropertiesKey {
-                domain: Some("msg".into()),
-                key: "CalibrationOffset".into(),
-            },
-            slope_key: RasterPropertiesKey {
-                domain: Some("msg".into()),
-                key: "CalibrationSlope".into(),
-            },
+            satellite_key: satellite_key(),
+            channel_key: channel_key(),
+            offset_key: offset_key(),
+            slope_key: slope_key(),
         }
     }
 
@@ -302,32 +291,56 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::engine::{
-        MockExecutionContext, MockQueryContext, QueryProcessor, RasterOperator,
-        RasterQueryRectangle, RasterResultDescriptor, SingleRasterSource,
-    };
-    use crate::mock::{MockRasterSource, MockRasterSourceParams};
+    use crate::engine::{MockExecutionContext, RasterOperator, SingleRasterSource};
     use crate::processing::meteosat::temperature::{
-        PixelOut, Temperature, TemperatureParams, OUT_NO_DATA_VALUE,
+        Temperature, TemperatureParams, OUT_NO_DATA_VALUE,
     };
-    use crate::util::Result;
-    use futures::StreamExt;
-    use geoengine_datatypes::primitives::{
-        Measurement, SpatialPartition2D, SpatialResolution, TimeInterval,
-    };
-    use geoengine_datatypes::raster::{
-        EmptyGrid2D, Grid2D, GridOrEmpty, RasterDataType, RasterProperties, RasterPropertiesEntry,
-        RasterPropertiesKey, RasterTile2D, TileInformation,
-    };
-    use geoengine_datatypes::spatial_reference::SpatialReference;
-    use num_traits::AsPrimitive;
+    use crate::processing::meteosat::test_util;
+    use geoengine_datatypes::primitives::Measurement;
+    use geoengine_datatypes::raster::{EmptyGrid2D, Grid2D};
     use std::collections::HashMap;
+
+    // #[tokio::test]
+    // async fn test_msg_raster() {
+    //     let mut ctx = MockExecutionContext::default();
+    //     let src = test_util::_create_gdal_src(&mut ctx);
+    //
+    //     let result = test_util::process(
+    //         move || {
+    //             RasterOperator::boxed(Temperature {
+    //                 params: TemperatureParams::default(),
+    //                 sources: SingleRasterSource {
+    //                     raster: src.boxed(),
+    //                 },
+    //             })
+    //         },
+    //         test_util::_create_gdal_query(),
+    //         &ctx,
+    //     )
+    //     .await;
+    //     assert!(result.as_ref().is_ok());
+    // }
 
     #[tokio::test]
     async fn test_empty_ok() {
-        let props = create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
-        let params = TemperatureParams::default();
-        let res = process(props, params, None, Some(vec![])).await.unwrap();
+        let ctx = MockExecutionContext::default();
+        let res = test_util::process(
+            || {
+                let props = test_util::create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
+                let src = test_util::create_mock_source(props, Some(vec![]), None);
+
+                RasterOperator::boxed(Temperature {
+                    params: TemperatureParams::default(),
+                    sources: SingleRasterSource {
+                        raster: src.boxed(),
+                    },
+                })
+            },
+            test_util::create_mock_query(),
+            &ctx,
+        )
+        .await
+        .unwrap();
 
         assert!(geoengine_datatypes::util::test::eq_with_no_data(
             &res.grid_array,
@@ -337,9 +350,24 @@ mod tests {
 
     #[tokio::test]
     async fn test_ok() {
-        let props = create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
-        let params = TemperatureParams::default();
-        let res = process(props, params, None, None).await.unwrap();
+        let ctx = MockExecutionContext::default();
+        let res = test_util::process(
+            || {
+                let props = test_util::create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
+                let src = test_util::create_mock_source(props, None, None);
+
+                RasterOperator::boxed(Temperature {
+                    params: TemperatureParams::default(),
+                    sources: SingleRasterSource {
+                        raster: src.boxed(),
+                    },
+                })
+            },
+            test_util::create_mock_query(),
+            &ctx,
+        )
+        .await
+        .unwrap();
 
         assert!(geoengine_datatypes::util::test::eq_with_no_data(
             &res.grid_array,
@@ -362,11 +390,26 @@ mod tests {
 
     #[tokio::test]
     async fn test_ok_force_satellite() {
-        let props = create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
-        let params = TemperatureParams {
-            force_satellite: Some(4),
-        };
-        let res = process(props, params, None, None).await.unwrap();
+        let ctx = MockExecutionContext::default();
+        let res = test_util::process(
+            || {
+                let props = test_util::create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
+                let src = test_util::create_mock_source(props, None, None);
+
+                RasterOperator::boxed(Temperature {
+                    params: TemperatureParams {
+                        force_satellite: Some(4),
+                    },
+                    sources: SingleRasterSource {
+                        raster: src.boxed(),
+                    },
+                })
+            },
+            test_util::create_mock_query(),
+            &ctx,
+        )
+        .await
+        .unwrap();
 
         assert!(geoengine_datatypes::util::test::eq_with_no_data(
             &res.grid_array,
@@ -398,239 +441,238 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_force_satellite() {
-        let props = create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
-        let params = TemperatureParams {
-            force_satellite: Some(13),
-        };
-        let res = process(props, params, None, None).await;
+        let ctx = MockExecutionContext::default();
+        let res = test_util::process(
+            || {
+                let props = test_util::create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
+                let src = test_util::create_mock_source(props, None, None);
+
+                RasterOperator::boxed(Temperature {
+                    params: TemperatureParams {
+                        force_satellite: Some(13),
+                    },
+                    sources: SingleRasterSource {
+                        raster: src.boxed(),
+                    },
+                })
+            },
+            test_util::create_mock_query(),
+            &ctx,
+        )
+        .await;
         assert!(res.is_err());
     }
 
     #[tokio::test]
     async fn test_missing_satellite() {
-        let props = create_properties(Some(4), None, Some(0.0), Some(1.0));
-        let params = TemperatureParams::default();
-        let res = process(props, params, None, None).await;
+        let ctx = MockExecutionContext::default();
+        let res = test_util::process(
+            || {
+                let props = test_util::create_properties(Some(4), None, Some(0.0), Some(1.0));
+                let src = test_util::create_mock_source(props, None, None);
+
+                RasterOperator::boxed(Temperature {
+                    params: TemperatureParams::default(),
+                    sources: SingleRasterSource {
+                        raster: src.boxed(),
+                    },
+                })
+            },
+            test_util::create_mock_query(),
+            &ctx,
+        )
+        .await;
         assert!(res.is_err());
     }
 
     #[tokio::test]
     async fn test_invalid_satellite() {
-        let props = create_properties(Some(4), Some(42), Some(0.0), Some(1.0));
-        let params = TemperatureParams::default();
-        let res = process(props, params, None, None).await;
+        let ctx = MockExecutionContext::default();
+        let res = test_util::process(
+            || {
+                let props = test_util::create_properties(Some(4), Some(42), Some(0.0), Some(1.0));
+                let src = test_util::create_mock_source(props, None, None);
+
+                RasterOperator::boxed(Temperature {
+                    params: TemperatureParams::default(),
+                    sources: SingleRasterSource {
+                        raster: src.boxed(),
+                    },
+                })
+            },
+            test_util::create_mock_query(),
+            &ctx,
+        )
+        .await;
         assert!(res.is_err());
     }
 
     #[tokio::test]
     async fn test_missing_channel() {
-        let props = create_properties(None, Some(1), Some(0.0), Some(1.0));
-        let params = TemperatureParams::default();
-        let res = process(props, params, None, None).await;
+        let ctx = MockExecutionContext::default();
+        let res = test_util::process(
+            || {
+                let props = test_util::create_properties(None, Some(1), Some(0.0), Some(1.0));
+                let src = test_util::create_mock_source(props, None, None);
+
+                RasterOperator::boxed(Temperature {
+                    params: TemperatureParams::default(),
+                    sources: SingleRasterSource {
+                        raster: src.boxed(),
+                    },
+                })
+            },
+            test_util::create_mock_query(),
+            &ctx,
+        )
+        .await;
         assert!(res.is_err());
     }
 
     #[tokio::test]
     async fn test_invalid_channel() {
-        let props = create_properties(Some(1), Some(1), Some(0.0), Some(1.0));
-        let params = TemperatureParams::default();
-        let res = process(props, params, None, None).await;
+        let ctx = MockExecutionContext::default();
+        let res = test_util::process(
+            || {
+                let props = test_util::create_properties(Some(1), Some(1), Some(0.0), Some(1.0));
+                let src = test_util::create_mock_source(props, None, None);
+
+                RasterOperator::boxed(Temperature {
+                    params: TemperatureParams::default(),
+                    sources: SingleRasterSource {
+                        raster: src.boxed(),
+                    },
+                })
+            },
+            test_util::create_mock_query(),
+            &ctx,
+        )
+        .await;
         assert!(res.is_err());
     }
 
     #[tokio::test]
     async fn test_missing_slope() {
-        let props = create_properties(Some(4), Some(1), Some(0.0), None);
-        let params = TemperatureParams::default();
-        let res = process(props, params, None, None).await;
+        let ctx = MockExecutionContext::default();
+        let res = test_util::process(
+            || {
+                let props = test_util::create_properties(Some(4), Some(1), Some(0.0), None);
+                let src = test_util::create_mock_source(props, None, None);
+
+                RasterOperator::boxed(Temperature {
+                    params: TemperatureParams::default(),
+                    sources: SingleRasterSource {
+                        raster: src.boxed(),
+                    },
+                })
+            },
+            test_util::create_mock_query(),
+            &ctx,
+        )
+        .await;
         assert!(res.is_err());
     }
 
     #[tokio::test]
     async fn test_missing_offset() {
-        let props = create_properties(Some(4), Some(1), None, Some(1.0));
-        let params = TemperatureParams::default();
-        let res = process(props, params, None, None).await;
+        let ctx = MockExecutionContext::default();
+        let res = test_util::process(
+            || {
+                let props = test_util::create_properties(Some(4), Some(1), None, Some(1.0));
+                let src = test_util::create_mock_source(props, None, None);
+
+                RasterOperator::boxed(Temperature {
+                    params: TemperatureParams::default(),
+                    sources: SingleRasterSource {
+                        raster: src.boxed(),
+                    },
+                })
+            },
+            test_util::create_mock_query(),
+            &ctx,
+        )
+        .await;
         assert!(res.is_err());
     }
 
     #[tokio::test]
     async fn test_invalid_measurement_unitless() {
-        let props = create_properties(Some(1), Some(1), Some(0.0), Some(1.0));
-        let params = TemperatureParams::default();
-        let res = process(props, params, Some(Measurement::Unitless), None).await;
+        let ctx = MockExecutionContext::default();
+        let res = test_util::process(
+            || {
+                let props = test_util::create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
+                let src = test_util::create_mock_source(props, None, Some(Measurement::Unitless));
+
+                RasterOperator::boxed(Temperature {
+                    params: TemperatureParams::default(),
+                    sources: SingleRasterSource {
+                        raster: src.boxed(),
+                    },
+                })
+            },
+            test_util::create_mock_query(),
+            &ctx,
+        )
+        .await;
         assert!(res.is_err());
     }
 
     #[tokio::test]
     async fn test_invalid_measurement_continuous() {
-        let props = create_properties(Some(1), Some(1), Some(0.0), Some(1.0));
-        let params = TemperatureParams::default();
-        let res = process(
-            props,
-            params,
-            Some(Measurement::Continuous {
-                measurement: "invalid".into(),
-                unit: None,
-            }),
-            None,
+        let ctx = MockExecutionContext::default();
+        let res = test_util::process(
+            || {
+                let props = test_util::create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
+                let src = test_util::create_mock_source(
+                    props,
+                    None,
+                    Some(Measurement::Continuous {
+                        measurement: "invalid".into(),
+                        unit: None,
+                    }),
+                );
+
+                RasterOperator::boxed(Temperature {
+                    params: TemperatureParams::default(),
+                    sources: SingleRasterSource {
+                        raster: src.boxed(),
+                    },
+                })
+            },
+            test_util::create_mock_query(),
+            &ctx,
         )
         .await;
+
         assert!(res.is_err());
     }
 
     #[tokio::test]
     async fn test_invalid_measurement_classification() {
-        let props = create_properties(Some(1), Some(1), Some(0.0), Some(1.0));
-        let params = TemperatureParams::default();
-        let res = process(
-            props,
-            params,
-            Some(Measurement::Classification {
-                measurement: "invalid".into(),
-                classes: HashMap::new(),
-            }),
-            None,
+        let ctx = MockExecutionContext::default();
+        let res = test_util::process(
+            || {
+                let props = test_util::create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
+                let src = test_util::create_mock_source(
+                    props,
+                    None,
+                    Some(Measurement::Classification {
+                        measurement: "invalid".into(),
+                        classes: HashMap::new(),
+                    }),
+                );
+
+                RasterOperator::boxed(Temperature {
+                    params: TemperatureParams::default(),
+                    sources: SingleRasterSource {
+                        raster: src.boxed(),
+                    },
+                })
+            },
+            test_util::create_mock_query(),
+            &ctx,
         )
         .await;
         assert!(res.is_err());
-    }
-
-    fn create_properties(
-        channel: Option<u8>,
-        satellite: Option<u8>,
-        offset: Option<f64>,
-        slope: Option<f64>,
-    ) -> RasterProperties {
-        let mut props = RasterProperties::default();
-
-        if let Some(v) = channel {
-            props.properties_map.insert(
-                RasterPropertiesKey {
-                    domain: Some("msg".into()),
-                    key: "Channel".into(),
-                },
-                RasterPropertiesEntry::Number(v.as_()),
-            );
-        }
-
-        if let Some(v) = satellite {
-            props.properties_map.insert(
-                RasterPropertiesKey {
-                    domain: Some("msg".into()),
-                    key: "Satellite".into(),
-                },
-                RasterPropertiesEntry::Number(v.as_()),
-            );
-        }
-
-        if let Some(v) = slope {
-            props.properties_map.insert(
-                RasterPropertiesKey {
-                    domain: Some("msg".into()),
-                    key: "CalibrationSlope".into(),
-                },
-                RasterPropertiesEntry::Number(v),
-            );
-        }
-
-        if let Some(v) = offset {
-            props.properties_map.insert(
-                RasterPropertiesKey {
-                    domain: Some("msg".into()),
-                    key: "CalibrationOffset".into(),
-                },
-                RasterPropertiesEntry::Number(v),
-            );
-        }
-        props
-    }
-
-    async fn process(
-        props: RasterProperties,
-        params: TemperatureParams,
-        measurement: Option<Measurement>,
-        custom_data: Option<Vec<u8>>,
-    ) -> Result<RasterTile2D<PixelOut>> {
-        let input = make_raster(props, custom_data, measurement);
-
-        let op = Temperature {
-            sources: SingleRasterSource { raster: input },
-            params,
-        }
-        .boxed()
-        .initialize(&MockExecutionContext::default())
-        .await?;
-
-        let processor = op.query_processor().unwrap().get_f32().unwrap();
-
-        let ctx = MockQueryContext::new(1);
-        let result_stream = processor
-            .query(
-                RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 4.).into(),
-                        (3., 0.).into(),
-                    ),
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                },
-                &ctx,
-            )
-            .await
-            .unwrap();
-
-        let mut result: Vec<Result<RasterTile2D<PixelOut>>> = result_stream.collect().await;
-        result.pop().unwrap()
-    }
-
-    fn make_raster(
-        props: RasterProperties,
-        custom_data: Option<Vec<u8>>,
-        measurement: Option<Measurement>,
-    ) -> Box<dyn RasterOperator> {
-        let no_data_value = Some(0);
-
-        let raster = match custom_data {
-            Some(v) if v.is_empty() => {
-                GridOrEmpty::Empty(EmptyGrid2D::new([3, 2].into(), no_data_value.unwrap()))
-            }
-            Some(v) => GridOrEmpty::Grid(Grid2D::new([3, 2].into(), v, no_data_value).unwrap()),
-            None => GridOrEmpty::Grid(
-                Grid2D::new(
-                    [3, 2].into(),
-                    vec![1, 2, 3, 4, 5, no_data_value.unwrap()],
-                    no_data_value,
-                )
-                .unwrap(),
-            ),
-        };
-
-        let raster_tile = RasterTile2D::new_with_tile_info_and_properties(
-            TimeInterval::default(),
-            TileInformation {
-                global_tile_position: [-1, 0].into(),
-                tile_size_in_pixels: [3, 2].into(),
-                global_geo_transform: Default::default(),
-            },
-            raster,
-            props,
-        );
-
-        MockRasterSource {
-            params: MockRasterSourceParams {
-                data: vec![raster_tile],
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::F32,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: measurement.unwrap_or_else(|| Measurement::Continuous {
-                        measurement: "raw".into(),
-                        unit: None,
-                    }),
-                    no_data_value: no_data_value.map(AsPrimitive::as_),
-                },
-            },
-        }
-        .boxed()
     }
 }

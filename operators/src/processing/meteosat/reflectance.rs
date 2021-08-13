@@ -20,6 +20,7 @@ use serde::{Deserialize, Serialize};
 // Output type is always f32
 type PixelOut = f32;
 use crate::processing::meteosat::satellite::{Channel, Satellite};
+use crate::processing::meteosat::{channel_key, satellite_key};
 use crate::util::sunpos::SunPos;
 use chrono::{DateTime, Datelike, Utc};
 use RasterDataType::F32 as RasterOut;
@@ -161,14 +162,8 @@ where
         Self {
             source,
             params,
-            channel_key: RasterPropertiesKey {
-                domain: Some("msg".into()),
-                key: "Channel".into(),
-            },
-            satellite_key: RasterPropertiesKey {
-                domain: Some("msg".into()),
-                key: "Satellite".into(),
-            },
+            channel_key: channel_key(),
+            satellite_key: satellite_key(),
         }
     }
 
@@ -294,47 +289,98 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::engine::{
-        MockExecutionContext, MockQueryContext, QueryProcessor, RasterOperator,
-        RasterQueryRectangle, RasterResultDescriptor, SingleRasterSource,
-    };
-    use crate::mock::{MockRasterSource, MockRasterSourceParams};
+    use crate::engine::{MockExecutionContext, RasterOperator, SingleRasterSource};
     use crate::processing::meteosat::reflectance::{
-        PixelOut, Reflectance, ReflectanceParams, OUT_NO_DATA_VALUE,
+        Reflectance, ReflectanceParams, OUT_NO_DATA_VALUE,
     };
+    use crate::processing::meteosat::test_util;
     use crate::util::Result;
-    use futures::StreamExt;
-    use geoengine_datatypes::primitives::{
-        Measurement, SpatialPartition2D, SpatialResolution, TimeInterval,
-    };
-    use geoengine_datatypes::raster::{
-        EmptyGrid2D, Grid2D, GridOrEmpty, RasterDataType, RasterProperties, RasterPropertiesEntry,
-        RasterPropertiesKey, RasterTile2D, TileInformation,
-    };
-    use geoengine_datatypes::spatial_reference::SpatialReference;
-    use num_traits::AsPrimitive;
+    use geoengine_datatypes::primitives::Measurement;
+    use geoengine_datatypes::raster::{EmptyGrid2D, Grid2D, RasterTile2D};
     use std::collections::HashMap;
+
+    async fn process_mock(
+        params: ReflectanceParams,
+        channel: Option<u8>,
+        satellite: Option<u8>,
+        empty: bool,
+        measurement: Option<Measurement>,
+    ) -> Result<RasterTile2D<f32>> {
+        let ctx = MockExecutionContext::default();
+        test_util::process(
+            || {
+                let props = test_util::create_properties(channel, satellite, None, None);
+                let cc = if empty { Some(Vec::new()) } else { None };
+
+                let m = measurement.or_else(|| {
+                    Some(Measurement::Continuous {
+                        measurement: "radiance".into(),
+                        unit: Some("W·m^(-2)·sr^(-1)·cm^(-1)".into()),
+                    })
+                });
+
+                let src = test_util::create_mock_source(props, cc, m);
+
+                RasterOperator::boxed(Reflectance {
+                    params,
+                    sources: SingleRasterSource {
+                        raster: src.boxed(),
+                    },
+                })
+            },
+            test_util::create_mock_query(),
+            &ctx,
+        )
+        .await
+    }
+
+    // #[tokio::test]
+    // async fn test_msg_raster() {
+    //     let mut ctx = MockExecutionContext::default();
+    //     let src = test_util::_create_gdal_src(&mut ctx);
+    //
+    //     let rad = Radiance {
+    //         sources: SingleRasterSource {
+    //             raster: src.boxed(),
+    //         },
+    //         params: RadianceParams {},
+    //     };
+    //
+    //     let result = test_util::process(
+    //         move || {
+    //             RasterOperator::boxed(Reflectance {
+    //                 params: ReflectanceParams::default(),
+    //                 sources: SingleRasterSource {
+    //                     raster: RasterOperator::boxed(rad),
+    //                 },
+    //             })
+    //         },
+    //         test_util::_create_gdal_query(),
+    //         &ctx,
+    //     )
+    //     .await;
+    //     assert!(result.as_ref().is_ok());
+    // }
 
     #[tokio::test]
     async fn test_empty_ok() {
-        let props = create_properties(Some(1), Some(1));
-        let params = ReflectanceParams::default();
-        let res = process(props, params, true, None).await.unwrap();
+        let result = process_mock(ReflectanceParams::default(), Some(1), Some(1), true, None).await;
 
+        assert!(result.is_ok());
         assert!(geoengine_datatypes::util::test::eq_with_no_data(
-            &res.grid_array,
+            &result.as_ref().unwrap().grid_array,
             &EmptyGrid2D::new([3, 2].into(), OUT_NO_DATA_VALUE,).into()
         ));
     }
 
     #[tokio::test]
     async fn test_ok_no_solar_correction() {
-        let props = create_properties(Some(1), Some(1));
-        let params = ReflectanceParams::default();
-        let res = process(props, params, false, None).await.unwrap();
+        let result =
+            process_mock(ReflectanceParams::default(), Some(1), Some(1), false, None).await;
 
+        assert!(result.is_ok());
         assert!(geoengine_datatypes::util::test::eq_with_no_data(
-            &res.grid_array,
+            &result.as_ref().unwrap().grid_array,
             &Grid2D::new(
                 [3, 2].into(),
                 vec![
@@ -354,15 +400,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_ok_force_satellite() {
-        let props = create_properties(Some(1), Some(1));
         let params = ReflectanceParams {
             force_satellite: Some(4),
             ..Default::default()
         };
-        let res = process(props, params, false, None).await.unwrap();
+        let result = process_mock(params, Some(1), Some(1), false, None).await;
 
+        assert!(result.is_ok());
         assert!(geoengine_datatypes::util::test::eq_with_no_data(
-            &res.grid_array,
+            &result.as_ref().unwrap().grid_array,
             &Grid2D::new(
                 [3, 2].into(),
                 vec![
@@ -382,15 +428,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_ok_force_hrv() {
-        let props = create_properties(Some(1), Some(1));
         let params = ReflectanceParams {
             force_hrv: true,
             ..Default::default()
         };
-        let res = process(props, params, false, None).await.unwrap();
+        let result = process_mock(params, Some(1), Some(1), false, None).await;
 
+        assert!(result.is_ok());
         assert!(geoengine_datatypes::util::test::eq_with_no_data(
-            &res.grid_array,
+            &result.as_ref().unwrap().grid_array,
             &Grid2D::new(
                 [3, 2].into(),
                 vec![
@@ -410,23 +456,23 @@ mod tests {
 
     #[tokio::test]
     async fn test_ok_solar_correction() {
-        let props = create_properties(Some(1), Some(1));
         let params = ReflectanceParams {
             solar_correction: true,
             ..Default::default()
         };
-        let res = process(props, params, false, None).await.unwrap();
+        let result = process_mock(params, Some(1), Some(1), false, None).await;
 
+        assert!(result.is_ok());
         assert!(geoengine_datatypes::util::test::eq_with_no_data(
-            &res.grid_array,
+            &result.as_ref().unwrap().grid_array,
             &Grid2D::new(
                 [3, 2].into(),
                 vec![
-                    0.268_173_426_f32,
-                    0.536_346_853_f32,
-                    0.804_520_309_f32,
-                    1.072_693_71_f32,
-                    1.340_867_16_f32,
+                    0.268_173_43_f32,
+                    0.536_346_85_f32,
+                    0.804_520_3_f32,
+                    1.072_693_7_f32,
+                    1.340_867_2_f32,
                     OUT_NO_DATA_VALUE
                 ],
                 Some(OUT_NO_DATA_VALUE),
@@ -438,62 +484,57 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_force_satellite() {
-        let props = create_properties(Some(1), Some(1));
         let params = ReflectanceParams {
             force_satellite: Some(42),
             ..Default::default()
         };
-        let res = process(props, params, false, None).await;
-        assert!(res.is_err());
+        let result = process_mock(params, Some(1), Some(1), false, None).await;
+        assert!(result.is_err());
     }
 
     #[tokio::test]
     async fn test_missing_satellite() {
-        let props = create_properties(Some(1), None);
         let params = ReflectanceParams::default();
-        let res = process(props, params, false, None).await;
-        assert!(res.is_err());
+        let result = process_mock(params, Some(1), None, false, None).await;
+        assert!(result.is_err());
     }
 
     #[tokio::test]
     async fn test_invalid_satellite() {
-        let props = create_properties(Some(1), Some(42));
         let params = ReflectanceParams::default();
-        let res = process(props, params, false, None).await;
-        assert!(res.is_err());
+        let result = process_mock(params, Some(42), None, false, None).await;
+        assert!(result.is_err());
     }
 
     #[tokio::test]
     async fn test_missing_channel() {
-        let props = create_properties(None, Some(1));
         let params = ReflectanceParams::default();
-        let res = process(props, params, false, None).await;
-        assert!(res.is_err());
+        let result = process_mock(params, None, Some(1), false, None).await;
+        assert!(result.is_err());
     }
 
     #[tokio::test]
     async fn test_invalid_channel() {
-        let props = create_properties(Some(42), Some(1));
         let params = ReflectanceParams::default();
-        let res = process(props, params, false, None).await;
-        assert!(res.is_err());
+        let result = process_mock(params, Some(42), Some(1), false, None).await;
+        assert!(result.is_err());
     }
 
     #[tokio::test]
     async fn test_invalid_measurement_unitless() {
-        let props = create_properties(Some(1), Some(1));
         let params = ReflectanceParams::default();
-        let res = process(props, params, false, Some(Measurement::Unitless)).await;
-        assert!(res.is_err());
+        let result =
+            process_mock(params, Some(1), Some(1), false, Some(Measurement::Unitless)).await;
+        assert!(result.is_err());
     }
 
     #[tokio::test]
     async fn test_invalid_measurement_continuous() {
-        let props = create_properties(Some(1), Some(1));
         let params = ReflectanceParams::default();
-        let res = process(
-            props,
+        let result = process_mock(
             params,
+            Some(1),
+            Some(1),
             false,
             Some(Measurement::Continuous {
                 measurement: "invalid".into(),
@@ -501,16 +542,16 @@ mod tests {
             }),
         )
         .await;
-        assert!(res.is_err());
+        assert!(result.is_err());
     }
 
     #[tokio::test]
     async fn test_invalid_measurement_classification() {
-        let props = create_properties(Some(1), Some(1));
         let params = ReflectanceParams::default();
-        let res = process(
-            props,
+        let result = process_mock(
             params,
+            Some(1),
+            Some(1),
             false,
             Some(Measurement::Classification {
                 measurement: "invalid".into(),
@@ -518,111 +559,6 @@ mod tests {
             }),
         )
         .await;
-        assert!(res.is_err());
-    }
-
-    fn create_properties(channel: Option<u8>, satellite: Option<u8>) -> RasterProperties {
-        let mut props = RasterProperties::default();
-
-        if let Some(v) = channel {
-            props.properties_map.insert(
-                RasterPropertiesKey {
-                    domain: Some("msg".into()),
-                    key: "Channel".into(),
-                },
-                RasterPropertiesEntry::Number(v.as_()),
-            );
-        }
-
-        if let Some(v) = satellite {
-            props.properties_map.insert(
-                RasterPropertiesKey {
-                    domain: Some("msg".into()),
-                    key: "Satellite".into(),
-                },
-                RasterPropertiesEntry::Number(v.as_()),
-            );
-        }
-        props
-    }
-
-    async fn process(
-        props: RasterProperties,
-        params: ReflectanceParams,
-        empty_input: bool,
-        measurement: Option<Measurement>,
-    ) -> Result<RasterTile2D<PixelOut>> {
-        let input = make_raster(props, empty_input, measurement);
-
-        let op = Reflectance {
-            sources: SingleRasterSource { raster: input },
-            params,
-        }
-        .boxed()
-        .initialize(&MockExecutionContext::default())
-        .await?;
-
-        let processor = op.query_processor().unwrap().get_f32().unwrap();
-
-        let ctx = MockQueryContext::new(1);
-        let result_stream = processor
-            .query(
-                RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 4.).into(),
-                        (3., 0.).into(),
-                    ),
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                },
-                &ctx,
-            )
-            .await
-            .unwrap();
-
-        let mut result: Vec<Result<RasterTile2D<PixelOut>>> = result_stream.collect().await;
-        result.pop().unwrap()
-    }
-
-    fn make_raster(
-        props: RasterProperties,
-        empty_input: bool,
-        measurement: Option<Measurement>,
-    ) -> Box<dyn RasterOperator> {
-        let no_data_value = Some(0);
-
-        let raster = if empty_input {
-            GridOrEmpty::Empty(EmptyGrid2D::new([3, 2].into(), no_data_value.unwrap()))
-        } else {
-            let data = vec![1, 2, 3, 4, 5, no_data_value.unwrap()];
-            GridOrEmpty::Grid(Grid2D::new([3, 2].into(), data, no_data_value).unwrap())
-        };
-
-        let raster_tile = RasterTile2D::new_with_tile_info_and_properties(
-            TimeInterval::default(),
-            TileInformation {
-                global_tile_position: [-1, 0].into(),
-                tile_size_in_pixels: [3, 2].into(),
-                global_geo_transform: Default::default(),
-            },
-            raster,
-            props,
-        );
-
-        MockRasterSource {
-            params: MockRasterSourceParams {
-                data: vec![raster_tile],
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::F32,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: measurement.unwrap_or_else(|| Measurement::Continuous {
-                        measurement: "radiance".into(),
-                        unit: Some("W·m^(-2)·sr^(-1)·cm^(-1)".into()),
-                    }),
-                    no_data_value: no_data_value.map(AsPrimitive::as_),
-                },
-            },
-        }
-        .boxed()
+        assert!(result.is_err());
     }
 }

@@ -17,6 +17,8 @@ use serde::{Deserialize, Serialize};
 
 // Output type is always f32
 type PixelOut = f32;
+use crate::error::Error;
+use crate::processing::meteosat::{offset_key, slope_key};
 use RasterDataType::F32 as RasterOut;
 use TypedRasterQueryProcessor::F32 as QueryProcessorOut;
 
@@ -36,8 +38,8 @@ pub struct RadianceParams {}
 /// raster.
 /// The exact names of the properties are:
 ///
-/// - offset: `msg.CalibrationOffset`
-/// - slope: `msg.CalibrationSlope`
+/// - offset: `msg.calibration_offset`
+/// - slope: `msg.calibration_slope`
 pub type Radiance = Operator<RadianceParams, SingleRasterSource>;
 
 pub struct InitializedRadiance {
@@ -55,6 +57,38 @@ impl RasterOperator for Radiance {
         let input = self.sources.raster.initialize(context).await?;
 
         let in_desc = input.result_descriptor();
+
+        match &in_desc.measurement {
+            Measurement::Continuous {
+                measurement: m,
+                unit: _,
+            } if m != "raw" => {
+                return Err(Error::InvalidMeasurement {
+                    expected: "raw".into(),
+                    found: m.clone(),
+                })
+            }
+            Measurement::Classification {
+                measurement: m,
+                classes: _,
+            } => {
+                return Err(Error::InvalidMeasurement {
+                    expected: "raw".into(),
+                    found: m.clone(),
+                })
+            }
+            Measurement::Unitless => {
+                return Err(Error::InvalidMeasurement {
+                    expected: "raw".into(),
+                    found: "unitless".into(),
+                })
+            }
+            // OK Case
+            Measurement::Continuous {
+                measurement: _,
+                unit: _,
+            } => {}
+        }
 
         let out_desc = RasterResultDescriptor {
             spatial_reference: in_desc.spatial_reference,
@@ -136,14 +170,8 @@ where
         Self {
             source,
             no_data_value,
-            offset_key: RasterPropertiesKey {
-                domain: Some("msg".into()),
-                key: "CalibrationOffset".into(),
-            },
-            slope_key: RasterPropertiesKey {
-                domain: Some("msg".into()),
-                key: "CalibrationSlope".into(),
-            },
+            offset_key: offset_key(),
+            slope_key: slope_key(),
         }
     }
 }
@@ -213,62 +241,57 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::engine::{
-        MockExecutionContext, MockQueryContext, QueryProcessor, RasterOperator,
-        RasterQueryRectangle, RasterResultDescriptor, SingleRasterSource,
-    };
-    use crate::mock::{MockRasterSource, MockRasterSourceParams};
-    use crate::processing::meteosat::radiance::{PixelOut, Radiance, RadianceParams};
-    use crate::util::Result;
-    use futures::StreamExt;
-    use geoengine_datatypes::primitives::{
-        Measurement, SpatialPartition2D, SpatialResolution, TimeInterval,
-    };
-    use geoengine_datatypes::raster::{
-        EmptyGrid2D, Grid2D, RasterDataType, RasterProperties, RasterPropertiesEntry,
-        RasterPropertiesKey, RasterTile2D, TileInformation,
-    };
-    use geoengine_datatypes::spatial_reference::SpatialReference;
-    use num_traits::AsPrimitive;
+    use crate::engine::{MockExecutionContext, RasterOperator, SingleRasterSource};
+    use crate::processing::meteosat::radiance::{Radiance, RadianceParams};
+    use crate::processing::meteosat::test_util;
+    use geoengine_datatypes::primitives::Measurement;
+    use geoengine_datatypes::raster::{EmptyGrid2D, Grid2D};
+    use std::collections::HashMap;
+
+    // #[tokio::test]
+    // async fn test_msg_raster() {
+    //     let mut ctx = MockExecutionContext::default();
+    //     let src = test_util::_create_gdal_src(&mut ctx);
+    //
+    //     let result = test_util::process(
+    //         move || {
+    //             RasterOperator::boxed(Radiance {
+    //                 params: RadianceParams {},
+    //                 sources: SingleRasterSource {
+    //                     raster: src.boxed(),
+    //                 },
+    //             })
+    //         },
+    //         test_util::_create_gdal_query(),
+    //         &ctx,
+    //     )
+    //     .await;
+    //     assert!(result.as_ref().is_ok());
+    // }
 
     #[tokio::test]
     async fn test_ok() {
         let no_data_value_option = Some(super::OUT_NO_DATA_VALUE);
+        let ctx = MockExecutionContext::default();
 
-        let input = make_raster(Some(11.0), Some(2.0));
+        let result = test_util::process(
+            || {
+                let props = test_util::create_properties(None, None, Some(11.0), Some(2.0));
+                let src = test_util::create_mock_source(props, None, None);
+                RasterOperator::boxed(Radiance {
+                    sources: SingleRasterSource {
+                        raster: src.boxed(),
+                    },
+                    params: RadianceParams {},
+                })
+            },
+            test_util::create_mock_query(),
+            &ctx,
+        )
+        .await;
 
-        let op = Radiance {
-            sources: SingleRasterSource { raster: input },
-            params: RadianceParams {},
-        }
-        .boxed()
-        .initialize(&MockExecutionContext::default())
-        .await
-        .unwrap();
-
-        let processor = op.query_processor().unwrap().get_f32().unwrap();
-
-        let ctx = MockQueryContext::new(1);
-        let result_stream = processor
-            .query(
-                RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 4.).into(),
-                        (3., 0.).into(),
-                    ),
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                },
-                &ctx,
-            )
-            .await
-            .unwrap();
-
-        let result: Vec<Result<RasterTile2D<PixelOut>>> = result_stream.collect().await;
-
-        assert_eq!(1, result.len());
         assert!(geoengine_datatypes::util::test::eq_with_no_data(
-            &result[0].as_ref().unwrap().grid_array,
+            &result.as_ref().unwrap().grid_array,
             &Grid2D::new(
                 [3, 2].into(),
                 vec![13.0, 15.0, 17.0, 19.0, 21.0, no_data_value_option.unwrap()],
@@ -282,195 +305,157 @@ mod tests {
     #[tokio::test]
     async fn test_empty_raster() {
         let no_data_value_option = Some(super::OUT_NO_DATA_VALUE);
+        let ctx = MockExecutionContext::default();
 
-        let input = make_empty_raster();
-
-        let op = Radiance {
-            sources: SingleRasterSource { raster: input },
-            params: RadianceParams {},
-        }
-        .boxed()
-        .initialize(&MockExecutionContext::default())
-        .await
-        .unwrap();
-
-        let processor = op.query_processor().unwrap().get_f32().unwrap();
-
-        let ctx = MockQueryContext::new(1);
-        let result_stream = processor
-            .query(
-                RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 4.).into(),
-                        (3., 0.).into(),
-                    ),
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                },
-                &ctx,
-            )
-            .await
-            .unwrap();
-
-        let result: Vec<Result<RasterTile2D<PixelOut>>> = result_stream.collect().await;
+        let result = test_util::process(
+            || {
+                let props = test_util::create_properties(None, None, Some(11.0), Some(2.0));
+                let src = test_util::create_mock_source(props, Some(vec![]), None);
+                RasterOperator::boxed(Radiance {
+                    sources: SingleRasterSource {
+                        raster: src.boxed(),
+                    },
+                    params: RadianceParams {},
+                })
+            },
+            test_util::create_mock_query(),
+            &ctx,
+        )
+        .await;
 
         assert!(geoengine_datatypes::util::test::eq_with_no_data(
-            &result[0].as_ref().unwrap().grid_array,
+            &result.as_ref().unwrap().grid_array,
             &EmptyGrid2D::new([3, 2].into(), no_data_value_option.unwrap(),).into()
         ));
     }
 
     #[tokio::test]
     async fn test_missing_offset() {
-        let input = make_raster(None, Some(2.0));
+        let ctx = MockExecutionContext::default();
 
-        let op = Radiance {
-            sources: SingleRasterSource { raster: input },
-            params: RadianceParams {},
-        }
-        .boxed()
-        .initialize(&MockExecutionContext::default())
-        .await
-        .unwrap();
+        let result = test_util::process(
+            || {
+                let props = test_util::create_properties(None, None, None, Some(2.0));
+                let src = test_util::create_mock_source(props, None, None);
+                RasterOperator::boxed(Radiance {
+                    sources: SingleRasterSource {
+                        raster: src.boxed(),
+                    },
+                    params: RadianceParams {},
+                })
+            },
+            test_util::create_mock_query(),
+            &ctx,
+        )
+        .await;
 
-        let processor = op.query_processor().unwrap().get_f32().unwrap();
-
-        let ctx = MockQueryContext::new(1);
-        let result_stream = processor
-            .query(
-                RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 4.).into(),
-                        (3., 0.).into(),
-                    ),
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                },
-                &ctx,
-            )
-            .await
-            .unwrap();
-
-        let result: Vec<Result<RasterTile2D<PixelOut>>> = result_stream.collect().await;
-
-        assert_eq!(1, result.len());
-        assert!(&result[0].is_err());
+        assert!(&result.is_err());
     }
 
     #[tokio::test]
     async fn test_missing_slope() {
-        let input = make_raster(Some(11.0), None);
+        let ctx = MockExecutionContext::default();
 
-        let op = Radiance {
-            sources: SingleRasterSource { raster: input },
-            params: RadianceParams {},
-        }
-        .boxed()
-        .initialize(&MockExecutionContext::default())
-        .await
-        .unwrap();
+        let result = test_util::process(
+            || {
+                let props = test_util::create_properties(None, None, Some(11.0), None);
+                let src = test_util::create_mock_source(props, None, None);
+                RasterOperator::boxed(Radiance {
+                    sources: SingleRasterSource {
+                        raster: src.boxed(),
+                    },
+                    params: RadianceParams {},
+                })
+            },
+            test_util::create_mock_query(),
+            &ctx,
+        )
+        .await;
 
-        let processor = op.query_processor().unwrap().get_f32().unwrap();
-
-        let ctx = MockQueryContext::new(1);
-        let result_stream = processor
-            .query(
-                RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 4.).into(),
-                        (3., 0.).into(),
-                    ),
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                },
-                &ctx,
-            )
-            .await
-            .unwrap();
-
-        let result: Vec<Result<RasterTile2D<PixelOut>>> = result_stream.collect().await;
-
-        assert_eq!(1, result.len());
-        assert!(&result[0].is_err());
+        assert!(&result.is_err());
     }
 
-    fn make_empty_raster() -> Box<dyn RasterOperator> {
-        let no_data_value = Some(0_u8);
+    #[tokio::test]
+    async fn test_invalid_measurement_unitless() {
+        let ctx = MockExecutionContext::default();
 
-        let raster_tile = RasterTile2D::new_with_tile_info(
-            TimeInterval::default(),
-            TileInformation {
-                global_tile_position: [-1, 0].into(),
-                tile_size_in_pixels: [3, 2].into(),
-                global_geo_transform: Default::default(),
-            },
-            EmptyGrid2D::new([3, 2].into(), no_data_value.unwrap()).into(),
-        );
+        let res = test_util::process(
+            || {
+                let props = test_util::create_properties(None, None, Some(11.0), Some(2.0));
+                let src = test_util::create_mock_source(props, None, Some(Measurement::Unitless));
 
-        MockRasterSource {
-            params: MockRasterSourceParams {
-                data: vec![raster_tile],
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
-                    no_data_value: no_data_value.map(AsPrimitive::as_),
-                },
+                RasterOperator::boxed(Radiance {
+                    params: RadianceParams {},
+                    sources: SingleRasterSource {
+                        raster: src.boxed(),
+                    },
+                })
             },
-        }
-        .boxed()
+            test_util::create_mock_query(),
+            &ctx,
+        )
+        .await;
+        assert!(res.is_err());
     }
 
-    fn make_raster(offset: Option<f64>, slope: Option<f64>) -> Box<dyn RasterOperator> {
-        let no_data_value = Some(0);
+    #[tokio::test]
+    async fn test_invalid_measurement_continuous() {
+        let ctx = MockExecutionContext::default();
 
-        let data = vec![1, 2, 3, 4, 5, no_data_value.unwrap()];
-        let raster = Grid2D::new([3, 2].into(), data, no_data_value).unwrap();
+        let res = test_util::process(
+            || {
+                let props = test_util::create_properties(None, None, Some(11.0), Some(2.0));
+                let src = test_util::create_mock_source(
+                    props,
+                    None,
+                    Some(Measurement::Continuous {
+                        measurement: "invalid".into(),
+                        unit: None,
+                    }),
+                );
 
-        let mut props = RasterProperties::default();
-
-        if let Some(p) = offset {
-            props.properties_map.insert(
-                RasterPropertiesKey {
-                    domain: Some("msg".into()),
-                    key: "CalibrationOffset".into(),
-                },
-                RasterPropertiesEntry::Number(p),
-            );
-        }
-
-        if let Some(p) = slope {
-            props.properties_map.insert(
-                RasterPropertiesKey {
-                    domain: Some("msg".into()),
-                    key: "CalibrationSlope".into(),
-                },
-                RasterPropertiesEntry::Number(p),
-            );
-        }
-
-        let raster_tile = RasterTile2D::new_with_tile_info_and_properties(
-            TimeInterval::default(),
-            TileInformation {
-                global_tile_position: [-1, 0].into(),
-                tile_size_in_pixels: [3, 2].into(),
-                global_geo_transform: Default::default(),
+                RasterOperator::boxed(Radiance {
+                    params: RadianceParams {},
+                    sources: SingleRasterSource {
+                        raster: src.boxed(),
+                    },
+                })
             },
-            raster.into(),
-            props,
-        );
+            test_util::create_mock_query(),
+            &ctx,
+        )
+        .await;
 
-        MockRasterSource {
-            params: MockRasterSourceParams {
-                data: vec![raster_tile],
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
-                    no_data_value: no_data_value.map(AsPrimitive::as_),
-                },
+        assert!(res.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_invalid_measurement_classification() {
+        let ctx = MockExecutionContext::default();
+
+        let res = test_util::process(
+            || {
+                let props = test_util::create_properties(None, None, Some(11.0), Some(2.0));
+                let src = test_util::create_mock_source(
+                    props,
+                    None,
+                    Some(Measurement::Classification {
+                        measurement: "invalid".into(),
+                        classes: HashMap::new(),
+                    }),
+                );
+
+                RasterOperator::boxed(Radiance {
+                    params: RadianceParams {},
+                    sources: SingleRasterSource {
+                        raster: src.boxed(),
+                    },
+                })
             },
-        }
-        .boxed()
+            test_util::create_mock_query(),
+            &ctx,
+        )
+        .await;
+        assert!(res.is_err());
     }
 }
