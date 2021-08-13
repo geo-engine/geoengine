@@ -9,6 +9,7 @@ use crate::{
         VectorResultDescriptor,
     },
     error::Error,
+    meta::statistics::InitializedProcessorStatistics,
     util::{input::RasterOrVectorOperator, Result},
 };
 use async_trait::async_trait;
@@ -253,7 +254,11 @@ impl RasterOperator for Reprojection {
             state,
         };
 
-        Ok(initialized_operator.boxed())
+        Ok(InitializedProcessorStatistics::statistics_with_id(
+            initialized_operator.boxed(),
+            "raster_reprojection".to_string(),
+        )
+        .boxed())
     }
 }
 

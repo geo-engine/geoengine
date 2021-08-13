@@ -1,4 +1,5 @@
 use crate::engine::{MetaData, OperatorDatasets, QueryProcessor, RasterQueryRectangle};
+use crate::meta::statistics::InitializedProcessorStatistics;
 use crate::{
     engine::{
         InitializedRasterOperator, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
@@ -585,12 +586,18 @@ impl RasterOperator for GdalSource {
 
         debug!("Initializing GdalSource for {:?}.", &self.params.dataset);
 
-        Ok(InitializedGdalSourceOperator {
+        let op = InitializedGdalSourceOperator {
             result_descriptor: meta_data.result_descriptor().await?,
             meta_data,
             tiling_specification: context.tiling_specification(),
-        }
-        .boxed())
+        };
+
+        Ok(Box::new(
+            InitializedProcessorStatistics::statistics_with_id(
+                op.boxed(),
+                "gdal_source".to_string(),
+            ),
+        ))
     }
 }
 
