@@ -1,20 +1,30 @@
-use futures::StreamExt;
+use crate::adapters::StreamStatisticsAdapter;
+use crate::engine::{
+    InitializedRasterOperator, InitializedVectorOperator, QueryContext, QueryProcessor,
+    QueryRectangle, RasterResultDescriptor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
+    VectorResultDescriptor,
+};
+use crate::util::Result;
+use async_trait::async_trait;
 use futures::stream::BoxStream;
+use futures::StreamExt;
 use geoengine_datatypes::primitives::AxisAlignedRectangle;
 use log::{debug, trace};
-use async_trait::async_trait;
-use crate::engine::{InitializedRasterOperator, InitializedVectorOperator, QueryContext, QueryProcessor, QueryRectangle, RasterResultDescriptor, TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorResultDescriptor};
-use crate::util::Result;
-use crate::adapters::StreamStatisticsAdapter;
-
-
 
 pub struct InitializedProcessorStatistics<S> {
     source: S,
     id: String,
 }
 
-impl InitializedRasterOperator for InitializedProcessorStatistics< Box<dyn InitializedRasterOperator>>{
+impl<S> InitializedProcessorStatistics<S> {
+    pub fn statistics_with_id(source: S, id: String) -> Self {
+        Self { source, id }
+    }
+}
+
+impl InitializedRasterOperator
+    for InitializedProcessorStatistics<Box<dyn InitializedRasterOperator>>
+{
     fn result_descriptor(&self) -> &RasterResultDescriptor {
         debug!("[{}] | raster result descriptor", self.id);
         &self.source.result_descriptor()
@@ -25,52 +35,52 @@ impl InitializedRasterOperator for InitializedProcessorStatistics< Box<dyn Initi
         let processor_result = self.source.query_processor();
         match processor_result {
             Ok(p) => {
-                 let res_processor = match p {
-                    TypedRasterQueryProcessor::U8(p) => {
-                        TypedRasterQueryProcessor::U8(Box::new(ProcessorStatisticsProcessor::statistics_with_id(p, self.id.clone())))
-                    }
-                    TypedRasterQueryProcessor::U16(p) => {
-                        TypedRasterQueryProcessor::U16(Box::new(ProcessorStatisticsProcessor::statistics_with_id(p, self.id.clone())))
-                    }
-                    TypedRasterQueryProcessor::U32(p) => {
-                        TypedRasterQueryProcessor::U32(Box::new(ProcessorStatisticsProcessor::statistics_with_id(p, self.id.clone())))
-                    }
-                    TypedRasterQueryProcessor::U64(p) => {
-                        TypedRasterQueryProcessor::U64(Box::new(ProcessorStatisticsProcessor::statistics_with_id(p, self.id.clone())))
-                    }
-                    TypedRasterQueryProcessor::I8(p) => {
-                        TypedRasterQueryProcessor::I8(Box::new(ProcessorStatisticsProcessor::statistics_with_id(p, self.id.clone())))
-                    }
-                    TypedRasterQueryProcessor::I16(p) => {
-                        TypedRasterQueryProcessor::I16(Box::new(ProcessorStatisticsProcessor::statistics_with_id(p, self.id.clone())))
-                    }
-                    TypedRasterQueryProcessor::I32(p) => {
-                        TypedRasterQueryProcessor::I32(Box::new(ProcessorStatisticsProcessor::statistics_with_id(p, self.id.clone())))
-                    }
-                    TypedRasterQueryProcessor::I64(p) => {
-                        TypedRasterQueryProcessor::I64(Box::new(ProcessorStatisticsProcessor::statistics_with_id(p, self.id.clone())))
-                    }
-                    TypedRasterQueryProcessor::F32(p) => {
-                        TypedRasterQueryProcessor::F32(Box::new(ProcessorStatisticsProcessor::statistics_with_id(p, self.id.clone())))
-                    }
-                    TypedRasterQueryProcessor::F64(p) => {
-                        TypedRasterQueryProcessor::F64(Box::new(ProcessorStatisticsProcessor::statistics_with_id(p, self.id.clone())))
-                    }
+                let res_processor = match p {
+                    TypedRasterQueryProcessor::U8(p) => TypedRasterQueryProcessor::U8(Box::new(
+                        ProcessorStatisticsProcessor::statistics_with_id(p, self.id.clone()),
+                    )),
+                    TypedRasterQueryProcessor::U16(p) => TypedRasterQueryProcessor::U16(Box::new(
+                        ProcessorStatisticsProcessor::statistics_with_id(p, self.id.clone()),
+                    )),
+                    TypedRasterQueryProcessor::U32(p) => TypedRasterQueryProcessor::U32(Box::new(
+                        ProcessorStatisticsProcessor::statistics_with_id(p, self.id.clone()),
+                    )),
+                    TypedRasterQueryProcessor::U64(p) => TypedRasterQueryProcessor::U64(Box::new(
+                        ProcessorStatisticsProcessor::statistics_with_id(p, self.id.clone()),
+                    )),
+                    TypedRasterQueryProcessor::I8(p) => TypedRasterQueryProcessor::I8(Box::new(
+                        ProcessorStatisticsProcessor::statistics_with_id(p, self.id.clone()),
+                    )),
+                    TypedRasterQueryProcessor::I16(p) => TypedRasterQueryProcessor::I16(Box::new(
+                        ProcessorStatisticsProcessor::statistics_with_id(p, self.id.clone()),
+                    )),
+                    TypedRasterQueryProcessor::I32(p) => TypedRasterQueryProcessor::I32(Box::new(
+                        ProcessorStatisticsProcessor::statistics_with_id(p, self.id.clone()),
+                    )),
+                    TypedRasterQueryProcessor::I64(p) => TypedRasterQueryProcessor::I64(Box::new(
+                        ProcessorStatisticsProcessor::statistics_with_id(p, self.id.clone()),
+                    )),
+                    TypedRasterQueryProcessor::F32(p) => TypedRasterQueryProcessor::F32(Box::new(
+                        ProcessorStatisticsProcessor::statistics_with_id(p, self.id.clone()),
+                    )),
+                    TypedRasterQueryProcessor::F64(p) => TypedRasterQueryProcessor::F64(Box::new(
+                        ProcessorStatisticsProcessor::statistics_with_id(p, self.id.clone()),
+                    )),
                 };
                 debug!("[{}] | query processor created", self.id);
                 Ok(res_processor)
-            },
+            }
             Err(err) => {
                 debug!("[{}] | query processor failed", self.id);
                 Err(err)
             }
-            
         }
-
-    }    
+    }
 }
 
-impl InitializedVectorOperator for InitializedProcessorStatistics<Box<dyn InitializedVectorOperator>>{
+impl InitializedVectorOperator
+    for InitializedProcessorStatistics<Box<dyn InitializedVectorOperator>>
+{
     fn result_descriptor(&self) -> &VectorResultDescriptor {
         debug!("[{}] | vector result descriptor", self.id);
         &self.source.result_descriptor()
@@ -87,16 +97,14 @@ impl InitializedVectorOperator for InitializedProcessorStatistics<Box<dyn Initia
                 );
                 debug!("[{}] | query processor created", self.id);
                 Ok(result)
-            },
+            }
             Err(err) => {
                 debug!("[{}] | query processor failed", self.id);
                 Err(err)
             }
         }
-        
     }
 }
-
 
 struct ProcessorStatisticsProcessor<Q, T>
 where
@@ -109,12 +117,9 @@ where
 impl<Q, T> ProcessorStatisticsProcessor<Q, T>
 where
     Q: QueryProcessor<Output = T> + Sized,
-{   
+{
     pub fn statistics_with_id(processor: Q, id: String) -> Self {
-        ProcessorStatisticsProcessor {
-            processor,
-            id
-        }
+        ProcessorStatisticsProcessor { processor, id }
     }
 }
 
@@ -132,7 +137,7 @@ where
         &'a self,
         query: QueryRectangle<Self::SpatialBounds>,
         ctx: &'a dyn QueryContext,
-    ) -> Result<BoxStream<'a, Result<Self::Output>>>{
+    ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         trace!("[{}] | query", self.id);
         let stream_result = self.processor.query(query, ctx).await;
         debug!("[{}] | query ready", self.id);
@@ -144,8 +149,7 @@ where
             Err(err) => {
                 debug!("[{}] | query error", self.id);
                 Err(err)
-            },
+            }
         }
-        
     }
 }
