@@ -1,10 +1,11 @@
 use futures::StreamExt;
 use geoengine_datatypes::{primitives::{SpatialPartition2D}, raster::{GridOrEmpty, Pixel}};
-use crate::engine::{QueryContext, QueryRectangle, RasterQueryProcessor};
+use crate::{engine::{QueryContext, QueryRectangle, RasterQueryProcessor}};
 use crate::util::Result;
 use pyo3::{types::{PyModule, PyUnicode}};
-use ndarray::{Array2, Axis,concatenate, stack, ArrayBase, OwnedRepr, Dim};
+use ndarray::{Array2, Axis,stack, ArrayBase, OwnedRepr, Dim};
 use numpy::{PyArray, PyArray4};
+use eval_metrics::classification::{MultiConfusionMatrix, Averaging};
 
 #[allow(clippy::too_many_arguments)]
 pub async fn imseg_fit<T, U, C: QueryContext>(
@@ -15,7 +16,7 @@ pub async fn imseg_fit<T, U, C: QueryContext>(
     processor_ir_108: Box<dyn RasterQueryProcessor<RasterType = T>>,
     processor_ir_120: Box<dyn RasterQueryProcessor<RasterType = T>>,
     processor_ir_134: Box<dyn RasterQueryProcessor<RasterType = T>>,
-    processor_truth: Box<dyn RasterQueryProcessor<RasterType = U>>,
+    processor_truth: Box<dyn RasterQueryProcessor<RasterType = u8>>,
     classes: Vec<U>,
     query_rect: QueryRectangle<SpatialPartition2D>,
     query_ctx: C,
@@ -48,13 +49,15 @@ where
     
     let mut final_stream = tile_stream_ir_016.zip(tile_stream_ir_039.zip(tile_stream_ir_087.zip(tile_stream_ir_097.zip(tile_stream_ir_108.zip(tile_stream_ir_120.zip(tile_stream_ir_134.zip(tile_stream_truth)))))));
 
+    let mut counts: Vec<Vec<usize>> = vec![vec![0,0,0,0], vec![0,0,0,0], vec![0,0,0,0], vec![0,0,0,0]];
+
     while let Some((ir_016, (ir_039, (ir_087, (ir_097, (ir_108, (ir_120, (ir_134, truth)))))))) = final_stream.next().await {
         match (ir_016, ir_039, ir_087, ir_097, ir_108, ir_120, ir_134, truth) {
             (Ok(ir_016), Ok(ir_039), Ok(ir_087), Ok(ir_097), Ok(ir_108), Ok(ir_120), Ok(ir_134), Ok(truth)) => {
                 match (ir_016.grid_array, ir_039.grid_array, ir_087.grid_array, ir_097.grid_array, ir_108.grid_array, ir_120.grid_array, ir_134.grid_array, truth.grid_array) {
                     (GridOrEmpty::Grid(grid_016), GridOrEmpty::Grid(grid_039),  GridOrEmpty::Grid(grid_087),  GridOrEmpty::Grid(grid_097), GridOrEmpty::Grid(grid_108), GridOrEmpty::Grid(grid_120), GridOrEmpty::Grid(grid_134), GridOrEmpty::Grid(grid_truth)) => {
-                        
-                        let (arr_img_batch, arr_truth_batch) = create_arrays_from_data(grid_016.data, grid_039.data, grid_087.data, grid_097.data, grid_108.data, grid_120.data, grid_134.data, grid_truth.data, grid_016.shape.shape_array);
+                        let tile_size = grid_016.shape.shape_array;
+                        let (arr_img_batch, arr_truth_batch) = create_arrays_from_data(grid_016.data, grid_039.data, grid_087.data, grid_097.data, grid_108.data, grid_120.data, grid_134.data, grid_truth.data, tile_size);
                         dbg!(&arr_img_batch.shape());
                         dbg!(&arr_truth_batch.shape());
 
@@ -66,28 +69,34 @@ where
                         .unwrap()
                         .to_owned_array();
 
-                        let mut segmap = Array2::<U>::from_elem((512,512), classes[0]);
+                        let mut segmap = Array2::<u8>::from_elem((512,512), 0);
                         let result = result_img.slice(ndarray::s![0,..,..,..]);
                         for i in 0..512 {
                             for j in 0..512 {
                                 let view = result.slice(ndarray::s![i,j,..]);
                                 let mut max: f32 = 0.0;
-                                let mut max_class = classes[0];
+                                let mut max_class = 0;
                                 
                                 for t in 0..3 {
                                     //println!("predited: {:?}", view[t as usize]);
                                 
                                     if max <= view[t as usize] {
                                         max = view[t as usize];
-                                        max_class = classes[t];
+                                        max_class = t as u8;
                                     }
                                 }
                                 segmap[[i as usize, j as usize]] = max_class;
                             }
                         }
 
-                        
 
+                        for i in 0..tile_size[0] {
+                            for j in 0 .. tile_size[1] {
+                                
+                                
+                                counts[segmap[[i, j]] as usize][arr_truth_batch[[i, j ]] as usize] = counts[segmap[[i, j]] as usize][arr_truth_batch[[i, j ]] as usize] + 1;
+                            }
+                        }
                             
                     }, 
                     _ => {
@@ -101,6 +110,15 @@ where
         }
         
     }
+
+    let matrix = MultiConfusionMatrix::with_counts(counts).unwrap();
+    println!("{}", matrix);
+    println!("{:?}", matrix.accuracy().unwrap());
+    //problem that one row and one column is all zero
+    println!("{:?}", matrix.recall(&Averaging::Macro));
+    println!("{:?}", matrix.f1(&Averaging::Macro));
+    
+    
     Ok(())
     
 }
@@ -501,7 +519,7 @@ mod tests {
 
         let x = imseg_fit(source_a.boxed(), source_b.boxed(), source_c.boxed(), source_d.boxed(), source_e.boxed(), source_f.boxed(), source_g.boxed(),source_h.boxed(), vec![0,1,2,3],QueryRectangle {
             spatial_bounds: query_bbox,
-            time_interval: TimeInterval::new(1_388_536_200_000, 1_388_536_200_000 + 45_000_000)
+            time_interval: TimeInterval::new(1_388_536_200_000, 1_388_536_200_000 + 1000)
                 .unwrap(),
             spatial_resolution: query_spatial_resolution,
         }, ctx,

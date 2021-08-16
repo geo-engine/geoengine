@@ -1,15 +1,15 @@
-use futures::StreamExt;
-use geoengine_datatypes::{primitives::{SpatialPartition2D}, raster::{GridOrEmpty, Pixel}};
+use std::{error::{Error}};
+use futures::{StreamExt, Stream};
+use geoengine_datatypes::{primitives::{SpatialPartition2D, TimeInstance, TimeInterval}, raster::{GridOrEmpty, Pixel, BaseTile, GridShape}};
 use crate::engine::{QueryContext, QueryRectangle, RasterQueryProcessor};
+use pyo3::{types::{PyModule, PyUnicode, PyList}};
+use ndarray::{Array2, Axis,concatenate, stack, ArrayBase, OwnedRepr, Dim};
+use numpy::{PyArray};
+use rand::prelude::*;
 use crate::util::Result;
-use pyo3::{types::{PyModule, PyUnicode}};
-use ndarray::{Array2, Axis, stack};
-use numpy::{PyArray, PyArray4};
-
-
 
 #[allow(clippy::too_many_arguments)]
-pub async fn imseg_predict<T, U, C: QueryContext>(
+pub async fn imseg_fit<T, U, C: QueryContext>(
     processor_ir_016: Box<dyn RasterQueryProcessor<RasterType = T>>,
     processor_ir_039: Box<dyn RasterQueryProcessor<RasterType = T>>,
     processor_ir_087: Box<dyn RasterQueryProcessor<RasterType = T>>,
@@ -18,143 +18,250 @@ pub async fn imseg_predict<T, U, C: QueryContext>(
     processor_ir_120: Box<dyn RasterQueryProcessor<RasterType = T>>,
     processor_ir_134: Box<dyn RasterQueryProcessor<RasterType = T>>,
     processor_truth: Box<dyn RasterQueryProcessor<RasterType = U>>,
-    classes: Vec<U>,
     query_rect: QueryRectangle<SpatialPartition2D>,
     query_ctx: C,
+    batch_size: usize,
 ) -> Result<()>
-where 
-T: Pixel + numpy::Element,
-U: Pixel + numpy::Element,{
+where
+    T: Pixel + numpy::Element,
+    U: Pixel + numpy::Element,
+{
 
     //For some reason we need that now...
     pyo3::prepare_freethreaded_python();
     let gil = pyo3::Python::acquire_gil();
     let py = gil.python();
-    println!("started");
-    
+
+    let mut rng = rand::thread_rng();
 
     let py_mod = PyModule::from_code(py, include_str!("tf_v2.py"),"filename.py", "modulename").unwrap();
     let name = PyUnicode::new(py, "first");
-
-    let _init = py_mod.call("load", (name,), None).unwrap();
-
-    let tile_stream_ir_016 = processor_ir_016.raster_query(query_rect, &query_ctx).await?;
-    let tile_stream_ir_039 = processor_ir_039.raster_query(query_rect, &query_ctx).await?;
-    let tile_stream_ir_087 = processor_ir_087.raster_query(query_rect, &query_ctx).await?;
-    let tile_stream_ir_097 = processor_ir_097.raster_query(query_rect, &query_ctx).await?;
-    let tile_stream_ir_108 = processor_ir_108.raster_query(query_rect, &query_ctx).await?;
-    let tile_stream_ir_120 = processor_ir_120.raster_query(query_rect, &query_ctx).await?;
-    let tile_stream_ir_134 = processor_ir_134.raster_query(query_rect, &query_ctx).await?;
-    let tile_stream_truth = processor_truth.raster_query(query_rect, &query_ctx).await?;
-
-    let mut final_stream = tile_stream_ir_016.zip(tile_stream_ir_039.zip(tile_stream_ir_087.zip(tile_stream_ir_097.zip(tile_stream_ir_108.zip(tile_stream_ir_120.zip(tile_stream_ir_134.zip(tile_stream_truth)))))));
-
-    while let Some((ir_016, (ir_039, (ir_087, (ir_097, (ir_108, (ir_120, (ir_137, truth)))))))) = final_stream.next().await {
-        match (ir_016, ir_039, ir_087, ir_097, ir_108, ir_120, ir_137, truth) {
-            (Ok(ir_016), Ok(ir_039), Ok(ir_087), Ok(ir_097), Ok(ir_108), Ok(ir_120), Ok(ir_134), Ok(truth)) => {
-                match (ir_016.grid_array, ir_039.grid_array, ir_087.grid_array, ir_097.grid_array, ir_108.grid_array, ir_120.grid_array, ir_134.grid_array, truth.grid_array) {
-                    (GridOrEmpty::Grid(grid_016), GridOrEmpty::Grid(grid_039),  GridOrEmpty::Grid(grid_087),  GridOrEmpty::Grid(grid_097), GridOrEmpty::Grid(grid_108), GridOrEmpty::Grid(grid_120), GridOrEmpty::Grid(grid_134), GridOrEmpty::Grid(grid_truth)) => {
-                        
-                        let data_016 = grid_016.data;
-                        let data_039 = grid_039.data;
-                        let data_087 = grid_087.data;
-                        let data_097 = grid_097.data;
-                        let data_108 = grid_108.data;
-                        let data_120 = grid_120.data;
-                        let data_134 = grid_134.data;
-                        let data_truth = grid_truth.data;
-
-                        let tile_size = grid_016.shape.shape_array;
-
-                        let arr_016: ndarray::Array2<T> = 
-                        Array2::from_shape_vec((tile_size[0], tile_size[1]), data_016)
-                        .unwrap();
-                        let arr_039: ndarray::Array2<T> = 
-                        Array2::from_shape_vec((tile_size[0], tile_size[1]), data_039)
-                        .unwrap();
-                        let arr_087: ndarray::Array2<T> = 
-                        Array2::from_shape_vec((tile_size[0], tile_size[1]), data_087)
-                        .unwrap();
-                        let arr_097: ndarray::Array2<T> = 
-                        Array2::from_shape_vec((tile_size[0], tile_size[1]), data_097)
-                        .unwrap()
-                        .to_owned();
-                        let arr_108: ndarray::Array2<T> = 
-                        Array2::from_shape_vec((tile_size[0], tile_size[1]), data_108)
-                        .unwrap()
-                        .to_owned();
-                        let arr_120: ndarray::Array2<T> = 
-                        Array2::from_shape_vec((tile_size[0], tile_size[1]), data_120)
-                        .unwrap()
-                        .to_owned();
-                        let arr_134: ndarray::Array2<T> = 
-                        Array2::from_shape_vec((tile_size[0], tile_size[1]), data_134)
-                        .unwrap()
-                        .to_owned();
-                        let arr_truth: ndarray::Array2<U> = 
-                        Array2::from_shape_vec((tile_size[0], tile_size[1]), data_truth)
-                        .unwrap()
-                        .to_owned();
-
-                        let arr_img: ndarray::Array<T, _> = stack(Axis(2), &[arr_016.view(),arr_039.view(),arr_087.view(), arr_097.view(), arr_108.view(), arr_120.view(), arr_134.view()]).unwrap();
-                                        
-                        let arr_img_batch = arr_img.insert_axis(Axis(0)); // add a leading axis for the batches!
-
-                        dbg!(&arr_img_batch.shape());
-                        
-                        let py_img_batch = PyArray::from_owned_array(py, arr_img_batch);
-
-                        let result_img = py_mod.call("predict", (py_img_batch,), None)
-                        .unwrap()
-                        .downcast::<PyArray4<f32>>()
-                        .unwrap()
-                        .to_owned_array();
-
-                        let mut segmap = Array2::<U>::from_elem((512,512), classes[0]);
-                        let result = result_img.slice(ndarray::s![0,..,..,..]);
-                        for i in 0..512 {
-                            for j in 0..512 {
-                                let view = result.slice(ndarray::s![i,j,..]);
-                                let mut max: f32 = 0.0;
-                                let mut max_class = classes[0];
-                                
-                                for t in 0..3 {
-                                    if max <= view[t as usize] {
-                                        max = view[t as usize];
-                                        max_class = classes[t];
-                                    }
-                                }
-                                segmap[[i as usize, j as usize]] = max_class;
-                            }
-                        }
-                        println!("{:?}", segmap);
-                        println!("{:?}", arr_truth);
-                        //count number of matches
-                        let matching = segmap.into_raw_vec().iter().zip(&arr_truth.into_raw_vec()).filter(|&(a,b)| a == b).count();
-
-                        let acc = matching as f64/(512 as f64* 512 as f64);
-                        
-                        println!("{:?}", acc);
-                        
-                        
-                    
-
-
-                    },
-                    _ => {
-
-                    }
-                }
-            },
-            _ => {
-
-            }
-        }
+    //TODO change depreciated function
+    let _init = py_mod.call("initUnet", (4,name, batch_size), None).unwrap();
+    //since every 15 minutes an image is available...
+    let step: i64 = batch_size as i64 * 900_000;
+    println!("Step: {}", step);
+    
+    let mut start = query_rect.time_interval.start();
+    let mut inter_end = query_rect.time_interval.start();
+    let end = query_rect.time_interval.end();
+    
+    let mut queries: Vec<QueryRectangle<SpatialPartition2D>> = Vec::new();
+    while start < end {
+        let end_time_new = (inter_end.as_utc_date_time().unwrap().timestamp() * 1000) + step;
+        inter_end = TimeInstance::from_millis(end_time_new)?;
+        
+        let new_rect = QueryRectangle{
+            spatial_bounds: query_rect.spatial_bounds,
+            time_interval: TimeInterval::new(start, inter_end)?,
+            spatial_resolution: query_rect.spatial_resolution
+        };
+        queries.push(new_rect);
+        let start_time_new = (start.as_utc_date_time().unwrap().timestamp() * 1000) + step;
+        start = TimeInstance::from_millis(start_time_new)?;
+        
     }
 
-    Ok(())
+    while !queries.is_empty() {
+        let queries_left = queries.len();
+        println!("queries left: {:?}", queries.len());
+        let mut rand_index: usize = 0;
+        if queries_left > 1 {
+            rand_index = rng.gen_range(0..queries_left-1);
+        }
+        
+        let the_chosen_one = queries.remove(rand_index);
+        let tile_stream_ir_016 = processor_ir_016.raster_query(the_chosen_one, &query_ctx).await?;
+        let tile_stream_ir_039 = processor_ir_039.raster_query(the_chosen_one, &query_ctx).await?;
+        let tile_stream_ir_087 = processor_ir_087.raster_query(the_chosen_one, &query_ctx).await?;
+        let tile_stream_ir_097 = processor_ir_097.raster_query(the_chosen_one, &query_ctx).await?;
+        let tile_stream_ir_108 = processor_ir_108.raster_query(the_chosen_one, &query_ctx).await?;
+        let tile_stream_ir_120 = processor_ir_120.raster_query(the_chosen_one, &query_ctx).await?;
+        let tile_stream_ir_134 = processor_ir_134.raster_query(the_chosen_one, &query_ctx).await?;
+        let tile_stream_truth = processor_truth.raster_query(the_chosen_one, &query_ctx).await?;
 
+        let final_stream = tile_stream_ir_016.zip(tile_stream_ir_039.zip(tile_stream_ir_087.zip(tile_stream_ir_097.zip(tile_stream_ir_108.zip(tile_stream_ir_120.zip(tile_stream_ir_134.zip(tile_stream_truth)))))));
+
+        let mut chunked_stream = final_stream.chunks(batch_size);
+        let mut vctr = chunked_stream.next().await.unwrap();
+        let mut buffer: Vec<(Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<U>)> = Vec::new();
+        let mut tile_size: [usize;2] = [0,0];
+        
+        for _ in 0..batch_size {
+            let (ir_016, (ir_039, (ir_087, (ir_097, (ir_108, (ir_120, (ir_137, truth))))))) = vctr.remove(0);
+            
+            match (ir_016, ir_039, ir_087, ir_097, ir_108, ir_120, ir_137, truth) {
+                (Ok(ir_016), Ok(ir_039), Ok(ir_087), Ok(ir_097), Ok(ir_108), Ok(ir_120), Ok(ir_134), Ok(truth)) => {
+                    match (ir_016.grid_array, ir_039.grid_array, ir_087.grid_array, ir_097.grid_array, ir_108.grid_array, ir_120.grid_array, ir_134.grid_array, truth.grid_array) {
+                        (GridOrEmpty::Grid(grid_016), GridOrEmpty::Grid(grid_039),  GridOrEmpty::Grid(grid_087),  GridOrEmpty::Grid(grid_097), GridOrEmpty::Grid(grid_108), GridOrEmpty::Grid(grid_120), GridOrEmpty::Grid(grid_134), GridOrEmpty::Grid(grid_truth)) => {
+                            tile_size = grid_016.shape.shape_array;
+                            buffer.push((grid_016.data, grid_039.data, grid_087.data, grid_097.data, grid_108.data, grid_120.data, grid_134.data, grid_truth.data));
+                            
+                        }, 
+                        _ => {
+
+                        }
+                    }
+                },
+                _ => {
+                    
+                }
+            }
+        }
+        
+        let (data_016_init, data_039_init, data_087_init, data_097_init, data_108_init, data_120_init, data_134_init, data_truth_init) = buffer.remove(0);
+
+        let (mut arr_img_batch, mut arr_truth_batch) = create_arrays_from_data(data_016_init, data_039_init, data_087_init, data_097_init, data_108_init, data_120_init, data_134_init, data_truth_init, tile_size);
+        
+        let num_elements = buffer.len();
+
+        
+
+        for i in 0..(batch_size - 1) {
+            let rand_index: usize = rng.gen_range(0..num_elements-i);
+            let (data_016, data_039, data_087, data_097, data_108, data_120, data_134, data_truth) = buffer.remove(rand_index);
+            let (arr_img, arr_truth) = create_arrays_from_data(data_016, data_039, data_087, data_097, data_108, data_120, data_134, data_truth, tile_size);
+
+            arr_img_batch = concatenate(Axis(0), &[arr_img_batch.view(), arr_img.view()]).unwrap();
+           
+            arr_truth_batch = concatenate(Axis(0), &[arr_truth_batch.view(), arr_truth.view()]).unwrap();
+            
+            
+        }
+
+        dbg!(&arr_img_batch.shape());
+        dbg!(&arr_truth_batch.shape());
+
+        let py_img = PyArray::from_owned_array(py, arr_img_batch);
+        let py_truth = PyArray::from_owned_array(py, arr_truth_batch );
+        //TODO change depreciated function
+        let _result = py_mod.call("fit", (py_img, py_truth, batch_size), None).unwrap();
+        
+        
+
+    }
+    
+    
+    //TODO change depreciated function
+    let _save = py_mod.call("save", (name, ), None).unwrap();
+
+    Ok(())
+    
 }
+
+// async fn training_iteration<T, U>(
+//     tile_stream_ir_016: Pin<Box<dyn Stream<Item = Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>, T>>, Error>> + Send, Global>>, 
+//     tile_stream_ir_039: Pin<Box<dyn Stream<Item = Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>, T>>, Error>> + Send, Global>>, 
+//     tile_stream_ir_087: Pin<Box<dyn Stream<Item = Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>, T>>, Error>> + Send, Global>>, 
+//     tile_stream_ir_097: Pin<Box<dyn Stream<Item = Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>, T>>, Error>> + Send, Global>>, 
+//     tile_stream_ir_108: Pin<Box<dyn Stream<Item = Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>, T>>, Error>> + Send, Global>>, 
+//     tile_stream_ir_120: Pin<Box<dyn Stream<Item = Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>, T>>, Error>> + Send, Global>>, 
+//     tile_stream_ir_134: Pin<Box<dyn Stream<Item = Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>, T>>, Error>> + Send, Global>>, 
+//     tile_stream_truth: Pin<Box<dyn Stream<Item = Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>, U>>, Error>> + Send, Global>>,
+//     batch_size: usize) -> Result<(ArrayBase<OwnedRepr<T>, Dim<[usize; 4]>>, ArrayBase<OwnedRepr<U>, Dim<[usize; 4]>>)>
+// where
+//     T: Pixel + numpy::Element,
+//     U: Pixel + numpy::Element,
+//     {
+
+//     let final_stream = tile_stream_ir_016.zip(tile_stream_ir_039.zip(tile_stream_ir_087.zip(tile_stream_ir_097.zip(tile_stream_ir_108.zip(tile_stream_ir_120.zip(tile_stream_ir_134.zip(tile_stream_truth)))))));
+
+//     let mut rng = rand::thread_rng();
+
+
+//     let mut chunked_stream = final_stream.chunks(batch_size);
+//     let mut vctr = chunked_stream.next().await.unwrap();
+//         let mut buffer: Vec<(Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<U>)> = Vec::new();
+//         let mut tile_size: [usize;2] = [0,0];
+        
+//         for _ in 0..batch_size {
+//             let (ir_016, (ir_039, (ir_087, (ir_097, (ir_108, (ir_120, (ir_137, truth))))))) = vctr.remove(0);
+            
+//             match (ir_016, ir_039, ir_087, ir_097, ir_108, ir_120, ir_137, truth) {
+//                 (Ok(ir_016), Ok(ir_039), Ok(ir_087), Ok(ir_097), Ok(ir_108), Ok(ir_120), Ok(ir_134), Ok(truth)) => {
+//                     match (ir_016.grid_array, ir_039.grid_array, ir_087.grid_array, ir_097.grid_array, ir_108.grid_array, ir_120.grid_array, ir_134.grid_array, truth.grid_array) {
+//                         (GridOrEmpty::Grid(grid_016), GridOrEmpty::Grid(grid_039),  GridOrEmpty::Grid(grid_087),  GridOrEmpty::Grid(grid_097), GridOrEmpty::Grid(grid_108), GridOrEmpty::Grid(grid_120), GridOrEmpty::Grid(grid_134), GridOrEmpty::Grid(grid_truth)) => {
+//                             tile_size = grid_016.shape.shape_array;
+//                             buffer.push((grid_016.data, grid_039.data, grid_087.data, grid_097.data, grid_108.data, grid_120.data, grid_134.data, grid_truth.data));
+                            
+//                         }, 
+//                         _ => {
+
+//                         }
+//                     }
+//                 },
+//                 _ => {
+                    
+//                 }
+//             }
+//         }
+        
+//         let (data_016_init, data_039_init, data_087_init, data_097_init, data_108_init, data_120_init, data_134_init, data_truth_init) = buffer.remove(0);
+
+//         let (mut arr_img_batch, mut arr_truth_batch) = create_arrays_from_data(data_016_init, data_039_init, data_087_init, data_097_init, data_108_init, data_120_init, data_134_init, data_truth_init, tile_size);
+        
+//         let num_elements = buffer.len();
+
+        
+
+//         for i in 0..(batch_size - 1) {
+//             let rand_index: usize = rng.gen_range(0..num_elements-i);
+//             let (data_016, data_039, data_087, data_097, data_108, data_120, data_134, data_truth) = buffer.remove(rand_index);
+//             let (arr_img, arr_truth) = create_arrays_from_data(data_016, data_039, data_087, data_097, data_108, data_120, data_134, data_truth, tile_size);
+
+//             arr_img_batch = concatenate(Axis(0), &[arr_img_batch.view(), arr_img.view()]).unwrap();
+           
+//             arr_truth_batch = concatenate(Axis(0), &[arr_truth_batch.view(), arr_truth.view()]).unwrap();
+            
+//         }
+
+        
+//         dbg!(&arr_img_batch.shape());
+//         dbg!(&arr_truth_batch.shape());
+
+//         Ok((arr_img_batch, arr_truth_batch))
+// }
+/// Creates batches used for training the model from the vectors of the rasterbands
+fn create_arrays_from_data<T, U>(data_1: Vec<T>, data_2: Vec<T>, data_3: Vec<T>, data_4: Vec<T>, data_5: Vec<T>, data_6: Vec<T>, data_7: Vec<T>, data_8: Vec<U>, tile_size: [usize;2]) -> (ArrayBase<OwnedRepr<T>, Dim<[usize; 4]>>, ArrayBase<OwnedRepr<U>, Dim<[usize; 4]>>) 
+where 
+T: Clone + std::marker::Copy, 
+U: Clone {
+
+    let arr_1: ndarray::Array2<T> = 
+            Array2::from_shape_vec((tile_size[0], tile_size[1]), data_1)
+            .unwrap();
+            let arr_2: ndarray::Array2<T> = 
+            Array2::from_shape_vec((tile_size[0], tile_size[1]), data_2)
+            .unwrap();
+            let arr_3: ndarray::Array2<T> = 
+            Array2::from_shape_vec((tile_size[0], tile_size[1]), data_3)
+            .unwrap();
+            let arr_4: ndarray::Array2<T> = 
+            Array2::from_shape_vec((tile_size[0], tile_size[1]), data_4)
+            .unwrap()
+            .to_owned();
+            let arr_5: ndarray::Array2<T> = 
+            Array2::from_shape_vec((tile_size[0], tile_size[1]), data_5)
+            .unwrap()
+            .to_owned();
+            let arr_6: ndarray::Array2<T> = 
+            Array2::from_shape_vec((tile_size[0], tile_size[1]), data_6)
+            .unwrap()
+            .to_owned();
+            let arr_7: ndarray::Array2<T> = 
+            Array2::from_shape_vec((tile_size[0], tile_size[1]), data_7)
+            .unwrap()
+            .to_owned();
+            let arr_8: ndarray::Array4<U> = 
+            Array2::from_shape_vec((tile_size[0], tile_size[1]), data_8)
+            .unwrap()
+            .to_owned().insert_axis(Axis(0)).insert_axis(Axis(3));
+            let arr_res: ndarray::Array<T, _> = stack(Axis(2), &[arr_1.view(),arr_2.view(),arr_3.view(), arr_4.view(), arr_5.view(), arr_6.view(), arr_7.view()]).unwrap().insert_axis(Axis(0));
+
+            (arr_res, arr_8)
+}
+
+
 
 #[cfg(test)]
 mod tests {
@@ -167,9 +274,9 @@ mod tests {
 
 
     use super::*;
-
+    
     #[tokio::test]
-    async fn predict_meaningless() {
+    async fn imseg_meaningless() {
         let ctx = MockQueryContext::default();
         //tile size has to be a power of 2
         let tiling_specification =
@@ -179,7 +286,6 @@ mod tests {
 
         let query_bbox = SpatialPartition2D::new((0.0, 30000.0).into(), (30000.0, 0.0).into()).unwrap();
         let no_data_value = Some(0.);
-        
         let ir_016 = GdalMetaDataRegular{
             result_descriptor: RasterResultDescriptor{
                 data_type: RasterDataType::I16,
@@ -467,7 +573,6 @@ mod tests {
 
         };
 
-
         let source_a = GdalSourceProcessor::<i16>{
             tiling_specification,
             meta_data: Box::new(ir_016),
@@ -513,13 +618,12 @@ mod tests {
             phantom_data: Default::default(),
         };
 
-        let classes: Vec<u8> = vec![0,1,2,3];
-
-        let x = imseg_predict(source_a.boxed(), source_b.boxed(), source_c.boxed(), source_d.boxed(), source_e.boxed(), source_f.boxed(), source_g.boxed(), source_h.boxed(), classes,QueryRectangle {
+        let x = imseg_fit(source_a.boxed(), source_b.boxed(), source_c.boxed(), source_d.boxed(), source_e.boxed(), source_f.boxed(), source_g.boxed(),source_h.boxed(), QueryRectangle {
             spatial_bounds: query_bbox,
-            time_interval: TimeInterval::new(1_388_536_200_000, 1_388_536_200_000 + 1000)
+            time_interval: TimeInterval::new(1_388_536_200_000, 1_388_536_200_000 + 45_000_000)
                 .unwrap(),
             spatial_resolution: query_spatial_resolution,
-        }, ctx).await.unwrap();
+        }, ctx,
+    10 as usize).await.unwrap();
     }
 }

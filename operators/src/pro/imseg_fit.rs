@@ -1,5 +1,5 @@
 use futures::StreamExt;
-use geoengine_datatypes::{primitives::{SpatialPartition2D}, raster::{GridOrEmpty, Pixel}};
+use geoengine_datatypes::{primitives::{SpatialPartition2D, TimeInstance, TimeInterval}, raster::{GridOrEmpty, Pixel}};
 use crate::engine::{QueryContext, QueryRectangle, RasterQueryProcessor};
 use crate::util::Result;
 use pyo3::{types::{PyModule, PyUnicode, PyList}};
@@ -31,11 +31,28 @@ where
     let gil = pyo3::Python::acquire_gil();
     let py = gil.python();
 
+    let mut rng = rand::thread_rng();
+
     let py_mod = PyModule::from_code(py, include_str!("tf_v2.py"),"filename.py", "modulename").unwrap();
     let name = PyUnicode::new(py, "first");
     //TODO change depreciated function
     let _init = py_mod.call("initUnet", (4,name, batch_size), None).unwrap();
-
+    //since every 15 minutes an image is available...
+    let step: i64 = batch_size as i64 * 900_000;
+    let mut start = query_rect.time_interval.start();
+    let mut inter_end = query_rect.time_interval.start();
+    let end = query_rect.time_interval.end();
+    let mut queries: Vec<QueryRectangle<SpatialPartition2D>> = Vec::new();
+    while start.as_utc_date_time().unwrap().timestamp() <= end.as_utc_date_time().unwrap().timestamp() {
+        inter_end = TimeInstance::from_millis(inter_end.as_utc_date_time().unwrap().timestamp() + step)?;
+        let new_rect = QueryRectangle{
+            spatial_bounds: query_rect.spatial_bounds,
+            time_interval: TimeInterval::new(start, inter_end)?,
+            spatial_resolution: query_rect.spatial_resolution
+        };
+        queries.push(new_rect);
+        start = TimeInstance::from_millis(start.as_utc_date_time().unwrap().timestamp() + step)?;
+    }
     
     let tile_stream_ir_016 = processor_ir_016.raster_query(query_rect, &query_ctx).await?;
     let tile_stream_ir_039 = processor_ir_039.raster_query(query_rect, &query_ctx).await?;
@@ -81,7 +98,7 @@ where
         
         let num_elements = buffer.len();
 
-        let mut rng = rand::thread_rng();
+        
 
         for i in 0..(batch_size - 1) {
             let rand_index: usize = rng.gen_range(0..num_elements-i);
