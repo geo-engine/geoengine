@@ -30,7 +30,7 @@ jobs:
       matrix:
         os:
           - ubuntu-20.04
-        features: ["", "--all-features"]
+        features: ["", "pro", "--all-features"]
         build: ["", "--release"]
 
     steps:
