@@ -23,6 +23,7 @@ use crate::processing::circle_merging_quadtree::circle_of_points::CircleOfPoints
 use crate::processing::circle_merging_quadtree::circle_radius_model::LogScaledRadius;
 use crate::util::Result;
 
+use super::circle_radius_model::CircleRadiusModel;
 use super::grid::Grid;
 use super::quadtree::CircleMergingQuadtree;
 
@@ -31,7 +32,6 @@ use super::quadtree::CircleMergingQuadtree;
 pub struct VisualPointClusteringParams {
     pub min_radius_px: f64,
     pub delta_px: f64,
-    pub resolution: f64,
     radius_column: String,
     count_column: String,
     // TODO: column mapping for aggregation
@@ -55,10 +55,6 @@ impl VectorOperator for VisualPointClustering {
         ensure!(
             self.params.delta_px >= 0.0,
             error::InputMustBeZeroOrPositive { name: "delta_px" }
-        );
-        ensure!(
-            self.params.resolution > 0.0,
-            error::InputMustBeGreaterThanZero { name: "resolution" }
         );
         ensure!(!self.params.radius_column.is_empty(), error::EmptyInput);
 
@@ -146,6 +142,7 @@ impl VisualPointClusteringProcessor {
         circles_of_points: impl Iterator<Item = CircleOfPoints>,
         radius_column: &str,
         count_column: &str,
+        resolution: f64,
     ) -> Result<MultiPointCollection> {
         let mut builder = MultiPointCollection::builder();
 
@@ -162,7 +159,7 @@ impl VisualPointClusteringProcessor {
 
             builder.push_data(
                 radius_column,
-                FeatureDataValue::Float(circle_of_points.circle.radius()),
+                FeatureDataValue::Float(circle_of_points.circle.radius() / resolution),
             )?;
             builder.push_data(
                 count_column,
@@ -190,10 +187,13 @@ impl QueryProcessor for VisualPointClusteringProcessor {
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         // we aggregate all points into one collection
 
-        // TODO: lower resolution on memory bound to reduce maximum number of points
+        let joint_resolution = f64::max(query.spatial_resolution.x, query.spatial_resolution.y);
+        let scaled_radius_model = self.radius_model.with_scaled_radii(joint_resolution)?;
+
+        // TODO: cap resolution to limit number of grid cells wrt. max memory consumption
 
         let grid_future = self.source.query(query, ctx).await?.fold(
-            Result::<Grid<_>>::Ok(Grid::new(query.spatial_bounds, self.radius_model)),
+            Result::<Grid<_>>::Ok(Grid::new(query.spatial_bounds, scaled_radius_model)),
             |grid, feature_collection| async move {
                 // TODO: worker thread
 
@@ -224,7 +224,12 @@ impl QueryProcessor for VisualPointClusteringProcessor {
                 cmq.insert_circle(circle_of_points);
             }
 
-            Self::create_point_collection(cmq.into_iter(), &self.radius_column, &self.count_column)
+            Self::create_point_collection(
+                cmq.into_iter(),
+                &self.radius_column,
+                &self.count_column,
+                joint_resolution,
+            )
         });
 
         Ok(stream.merge_chunks(ctx.chunk_byte_size()).boxed())
@@ -259,7 +264,6 @@ mod tests {
             params: VisualPointClusteringParams {
                 min_radius_px: 8.,
                 delta_px: 1.,
-                resolution: 0.1,
                 radius_column: "radius".to_string(),
                 count_column: "count".to_string(),
             },
@@ -304,7 +308,7 @@ mod tests {
                     ("count", FeatureData::Int(vec![9, 1])),
                     (
                         "radius",
-                        FeatureData::Float(vec![10.197_224_577_336_22, 8.])
+                        FeatureData::Float(vec![10.197_224_577_336_218, 8.])
                     )
                 ],
             )
