@@ -202,7 +202,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
         Ok(GdalLoadingInfo {
             info: GdalLoadingInfoPartIterator::Static {
                 parts: vec![GdalLoadingInfoPart {
-                    time: self.time.unwrap_or_else(TimeInterval::default),
+                    time: self.time.unwrap_or_default(),
                     params: self.params.clone(),
                 }]
                 .into_iter(),
