@@ -70,7 +70,7 @@ where
     let filter = combine!(
         filter,
         pro::handlers::drone_mapping::start_task_handler(ctx.clone()),
-        pro::handlers::drone_mapping::dataset_from_drone_mapping_handler(ctx.clone()),
+        pro::handlers::drone_mapping::dataset_from_drone_mapping_handler(ctx.clone())
     );
 
     let handler =
