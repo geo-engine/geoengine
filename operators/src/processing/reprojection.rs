@@ -523,7 +523,6 @@ where
 
 #[cfg(test)]
 mod tests {
-
     use crate::{
         engine::{QueryRectangle, VectorOperator},
         source::{
@@ -532,6 +531,7 @@ mod tests {
         },
         util::gdal::{add_ndvi_dataset, raster_dir},
     };
+    use gdal::Dataset;
     use geoengine_datatypes::{
         collections::{MultiLineStringCollection, MultiPointCollection, MultiPolygonCollection},
         dataset::{DatasetId, InternalDatasetId},
@@ -1079,47 +1079,35 @@ mod tests {
         let epsg_4326 = SpatialReference::epsg_4326();
         let epsg_3857 = SpatialReference::new(SpatialReferenceAuthority::Epsg, 3857);
 
-        let area_of_use_3857: SpatialPartition2D = epsg_3857.area_of_use_projected().unwrap();
-
-        let width = 100;
-        let height = 100;
-
-        let res = SpatialResolution::new_unchecked(
-            area_of_use_3857.size_x() / f64::from(width),
-            area_of_use_3857.size_y() / f64::from(height),
-        );
-
         let projector_source_target =
             CoordinateProjector::from_known_srs(epsg_4326, epsg_3857).unwrap();
         let projector_target_source =
             CoordinateProjector::from_known_srs(epsg_3857, epsg_4326).unwrap();
 
-        let source_res = query_source_resolution::<SpatialPartition2D>(
-            res,
-            &projector_source_target,
-            &projector_target_source,
-            10,
-            10,
+        // use ndvi dataset that was reprojected using gdal as ground truth
+        let dataset_4326 =
+            Dataset::open(&raster_dir().join("modis_ndvi/MOD13A2_M_NDVI_2014-04-01.TIFF")).unwrap();
+        let geotransform_4326 = dataset_4326.geo_transform().unwrap();
+        let res_4326 = SpatialResolution::new(geotransform_4326[1], -geotransform_4326[5]).unwrap();
+
+        let dataset_3857 = Dataset::open(
+            &raster_dir().join("modis_ndvi/projected_3857/MOD13A2_M_NDVI_2014-04-01.TIFF"),
         )
         .unwrap();
+        let geotransform_3857 = dataset_3857.geo_transform().unwrap();
+        let res_3857 = SpatialResolution::new(geotransform_3857[1], -geotransform_3857[5]).unwrap();
 
-        assert_eq!(
-            source_res,
-            SpatialResolution::new_unchecked(2.563_752_434_579_234, 2.563_752_434_579_234)
-        );
-
-        let source_res = query_source_resolution::<SpatialPartition2D>(
-            res,
+        // ndvi was projected from 4326 to 3857. The calculated source_resolution for getting the raster in 3857 with `res_3857`
+        // should thus roughly be like the original `res_4326`
+        let result_res = query_source_resolution::<SpatialPartition2D>(
+            res_3857,
             &projector_source_target,
             &projector_target_source,
             1,
             1,
         )
         .unwrap();
-
-        assert_eq!(
-            source_res,
-            SpatialResolution::new_unchecked(2.815_500_083_466_523, 2.815_500_083_466_523)
-        );
+        assert!(1. - (result_res.x / res_4326.x).abs() < 0.02);
+        assert!(1. - (result_res.y / res_4326.y).abs() < 0.02);
     }
 }
