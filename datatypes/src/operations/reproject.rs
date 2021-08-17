@@ -256,13 +256,19 @@ where
         )?;
         let source_area_of_use = projector.source_srs().area_of_use::<A>()?;
         let target_area_of_use = projector.target_srs().area_of_use::<A>()?;
-        let area_of_use = source_area_of_use
-            .intersection(&target_area_of_use)
-            .ok_or(Error::SpatialBoundsDoNotIntersect)?;
+        let area_of_use = source_area_of_use.intersection(&target_area_of_use).ok_or(
+            Error::SpatialBoundsDoNotIntersect {
+                bounds_a: source_area_of_use.as_bbox(),
+                bounds_b: target_area_of_use.as_bbox(),
+            },
+        )?;
         let area_of_use = area_of_use.reproject(&area_of_use_projector)?;
-        let clipped_bbox = self
-            .intersection(&area_of_use)
-            .ok_or(Error::SpatialBoundsDoNotIntersect)?;
+        let clipped_bbox =
+            self.intersection(&area_of_use)
+                .ok_or(Error::SpatialBoundsDoNotIntersect {
+                    bounds_a: self.as_bbox(),
+                    bounds_b: area_of_use.as_bbox(),
+                })?;
 
         // project points on the bbox
         let upper_line = Line::new(clipped_bbox.upper_left(), clipped_bbox.upper_right())

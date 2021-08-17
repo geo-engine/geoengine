@@ -432,6 +432,10 @@ impl AxisAlignedRectangle for BoundingBox2D {
     fn intersection(&self, other: &Self) -> Option<Self> {
         self.intersection(other)
     }
+
+    fn as_bbox(&self) -> BoundingBox2D {
+        *self
+    }
 }
 
 impl From<BoundingBox2D> for geo::Rect<f64> {

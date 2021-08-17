@@ -426,7 +426,7 @@ fn query_source_resolution<A: AxisAlignedRectangle>(
         }
     }
 
-    resolution.ok_or(error::Error::ReprojectionSourceResolution)
+    resolution.ok_or(error::Error::NoSourceResolution)
 }
 
 struct RasterReprojectionProcessor<Q, P>

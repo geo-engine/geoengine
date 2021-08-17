@@ -219,7 +219,10 @@ pub enum Error {
     NoAreaOfUseDefined {
         proj_string: String,
     },
-    SpatialBoundsDoNotIntersect,
+    SpatialBoundsDoNotIntersect {
+        bounds_a: BoundingBox2D,
+        bounds_b: BoundingBox2D,
+    },
 
     OutputBboxEmpty {
         bbox: BoundingBox2D,

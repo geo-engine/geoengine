@@ -195,7 +195,8 @@ pub enum Error {
     FeatureDataValueMustNotBeNull,
     InvalidFeatureDataType,
 
-    ReprojectionSourceResolution,
+    #[snafu(display("No candidate source resolutions were produced."))]
+    NoSourceResolution,
 
     WindowSizeMustNotBeZero,
 
