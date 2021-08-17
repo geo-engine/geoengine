@@ -697,6 +697,30 @@ where
         }
     }
 
+    /// get the value of a date/time field but on Error, check whether the field is accessible as string and
+    /// whether that string is empty or starts with "0000" which indicates that the field should be Ok(None)
+    /// but is not properly stored as a NULL value.
+    // TODO: make this behavior optional?
+    fn get_time_field_with_extended_null_check(
+        feature: &Feature,
+        field: &str,
+    ) -> Result<Option<FieldValue>> {
+        if let Ok(value) = feature.field(field) {
+            return Ok(value);
+        }
+
+        let string = feature.field_as_string_by_name(field)?;
+
+        if let Some(string) = string {
+            if string.is_empty() || string.starts_with("0000") {
+                return Ok(None);
+            }
+            return Err(Error::OgrFieldValueIsNotDateTime);
+        }
+
+        Ok(None)
+    }
+
     fn initialize_time_extractors(
         dataset_information: &OgrSourceDataset,
     ) -> Box<dyn Fn(&Feature) -> Result<TimeInterval> + '_> {
@@ -714,12 +738,12 @@ where
                 let time_start_parser = Self::create_time_parser(start_format);
 
                 Box::new(move |feature: &Feature| {
-                    let field_value = feature.field(&start_field)?;
+                    let field_value =
+                        Self::get_time_field_with_extended_null_check(feature, start_field)?;
                     if let Some(field_value) = field_value {
                         let time_start = time_start_parser(field_value)?;
                         TimeInterval::new(time_start, (time_start + *duration)?).map_err(Into::into)
                     } else {
-                        // TODO: throw error or use some user defined default time (like for geometries)?
                         Ok(TimeInterval::default())
                     }
                 })
@@ -734,8 +758,10 @@ where
                 let time_end_parser = Self::create_time_parser(end_format);
 
                 Box::new(move |feature: &Feature| {
-                    let start_field_value = feature.field(&start_field)?;
-                    let end_field_value = feature.field(&end_field)?;
+                    let start_field_value =
+                        Self::get_time_field_with_extended_null_check(feature, start_field)?;
+                    let end_field_value =
+                        Self::get_time_field_with_extended_null_check(feature, end_field)?;
 
                     if let (Some(start_field_value), Some(end_field_value)) =
                         (start_field_value, end_field_value)
@@ -745,7 +771,6 @@ where
 
                         TimeInterval::new(time_start, time_end).map_err(Into::into)
                     } else {
-                        // TODO: throw error or use some user defined default time (like for geometries)?
                         Ok(TimeInterval::default())
                     }
                 })
@@ -758,7 +783,8 @@ where
                 let time_start_parser = Self::create_time_parser(start_format);
 
                 Box::new(move |feature: &Feature| {
-                    let start_field_value = feature.field(&start_field)?;
+                    let start_field_value =
+                        Self::get_time_field_with_extended_null_check(feature, start_field)?;
                     let duration_field_value = feature.field(&duration_field)?;
 
                     if let (Some(start_field_value), Some(duration_field_value)) =
@@ -773,7 +799,6 @@ where
 
                         TimeInterval::new(time_start, time_start + duration).map_err(Into::into)
                     } else {
-                        // TODO: throw error or use some user defined default time (like for geometries)?
                         Ok(TimeInterval::default())
                     }
                 })
