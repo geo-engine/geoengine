@@ -212,6 +212,9 @@ pub enum Error {
     },
     #[cfg(feature = "odm")]
     OdmMissingContentTypeHeader,
+
+    #[cfg(feature = "gfbio")]
+    Bexis2TimeFormatInvalid,
 }
 
 impl Reject for Error {}

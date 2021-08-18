@@ -223,6 +223,9 @@ pub enum Error {
     OgrSqlQuery,
 
     GdalRasterDataTypeNotSupported,
+    CannotParseExternalDatasetId {
+        id_string: String,
+    },
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {

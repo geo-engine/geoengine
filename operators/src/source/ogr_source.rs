@@ -523,15 +523,23 @@ where
 
     fn open_gdal_dataset(dataset_info: &OgrSourceDataset) -> Result<Dataset> {
         // TODO: reliably detect CSV files or allow defining them as such in params
-        match dataset_info.file_name.extension().and_then(OsStr::to_str) {
-            Some("csv" | "tsv") => Self::open_csv_dataset(dataset_info),
-            _ => Ok(Dataset::open_ex(
+        let is_delimiter_separated = dataset_info
+            .file_name
+            .extension()
+            .and_then(OsStr::to_str)
+            .map_or(false, |ext| ext == "csv" || ext == "tsv")
+            || dataset_info.file_name.starts_with("CSV:");
+
+        if is_delimiter_separated {
+            Self::open_csv_dataset(dataset_info)
+        } else {
+            Ok(Dataset::open_ex(
                 &dataset_info.file_name,
                 DatasetOptions {
                     open_flags: GdalOpenFlags::GDAL_OF_VECTOR,
                     ..Default::default()
                 },
-            )?),
+            )?)
         }
     }
 

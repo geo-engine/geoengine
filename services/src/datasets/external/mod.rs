@@ -1,4 +1,6 @@
 #[cfg(feature = "gfbio")]
+pub mod bexis2;
+#[cfg(feature = "gfbio")]
 pub mod gfbio;
 pub mod mock;
 #[cfg(feature = "nature40")]

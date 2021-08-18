@@ -13,6 +13,7 @@ use std::any::Any;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::marker::PhantomData;
+use std::str::FromStr;
 
 use super::{RasterQueryRectangle, VectorQueryRectangle};
 
@@ -33,6 +34,18 @@ where
     R: ResultDescriptor,
 {
     async fn meta_data(&self, dataset: &DatasetId) -> Result<Box<dyn MetaData<L, R, Q>>>;
+}
+
+/// Parse the `dataset_id` of the `dataset` as type T. If the dataset id is not an external id
+/// or it can't be parsed, the method fails.
+pub fn typed_external_dataset_id<T: FromStr>(dataset: &DatasetId) -> Result<T> {
+    let id_string = dataset
+        .external()
+        .ok_or(Error::InvalidDatasetId)?
+        .dataset_id;
+    id_string
+        .parse()
+        .map_err(|_| Error::CannotParseExternalDatasetId { id_string })
 }
 
 #[async_trait]
