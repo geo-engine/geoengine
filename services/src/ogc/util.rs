@@ -72,6 +72,7 @@ pub fn parse_time_option<'de, D>(deserializer: D) -> Result<Option<TimeInterval>
 where
     D: serde::Deserializer<'de>,
 {
+    // TODO: handle empty string
     parse_time(deserializer).map(Some)
 }
 
