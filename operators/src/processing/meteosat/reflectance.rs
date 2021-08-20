@@ -167,27 +167,27 @@ where
         }
     }
 
-    fn get_satellite(&self, tile: &RasterTile2D<PixelOut>) -> Result<&'static Satellite> {
+    fn satellite(&self, tile: &RasterTile2D<PixelOut>) -> Result<&'static Satellite> {
         let id = match self.params.force_satellite {
             Some(id) => id,
-            _ => tile.properties.get_number_property(&self.satellite_key)?,
+            _ => tile.properties.number_property(&self.satellite_key)?,
         };
         Satellite::satellite_by_msg_id(id)
     }
 
-    fn get_channel<'a>(
+    fn channel<'a>(
         &self,
         tile: &RasterTile2D<PixelOut>,
         satellite: &'a Satellite,
     ) -> Result<&'a Channel> {
         if self.params.force_hrv {
-            Ok(satellite.get_hrv())
+            Ok(satellite.hrv())
         } else {
             let channel_id = tile
                 .properties
-                .get_number_property::<usize>(&self.channel_key)?
+                .number_property::<usize>(&self.channel_key)?
                 - 1;
-            satellite.get_channel(channel_id)
+            satellite.channel(channel_id)
         }
     }
 }
@@ -225,8 +225,8 @@ where
                     tile.properties,
                 )),
                 GridOrEmpty::Grid(grid) => {
-                    let satellite = self.get_satellite(&tile)?;
-                    let channel = self.get_channel(&tile, satellite)?;
+                    let satellite = self.satellite(&tile)?;
+                    let channel = self.channel(&tile, satellite)?;
                     let timestamp = tile
                         .time
                         .start()

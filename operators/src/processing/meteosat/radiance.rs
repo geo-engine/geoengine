@@ -210,12 +210,8 @@ where
                     )
                     .expect("raster creation must succeed");
 
-                    let offset = tile
-                        .properties
-                        .get_number_property::<f32>(&self.offset_key)?;
-                    let slope = tile
-                        .properties
-                        .get_number_property::<f32>(&self.slope_key)?;
+                    let offset = tile.properties.number_property::<f32>(&self.offset_key)?;
+                    let slope = tile.properties.number_property::<f32>(&self.slope_key)?;
                     let tgt = &mut out.data;
 
                     for (idx, v) in mg.data.iter().enumerate() {

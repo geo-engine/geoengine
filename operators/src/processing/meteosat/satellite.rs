@@ -46,7 +46,7 @@ impl Satellite {
     }
 
     /// Returns the channel for the given id (0-11).
-    pub fn get_channel(&self, channel_id: usize) -> Result<&Channel> {
+    pub fn channel(&self, channel_id: usize) -> Result<&Channel> {
         match self.channels.get(channel_id) {
             Some(c) => Ok(c),
             _ => Err(Error::InvalidChannel {
@@ -56,7 +56,7 @@ impl Satellite {
     }
 
     /// Returns the HRV channel
-    pub fn get_hrv(&self) -> &Channel {
+    pub fn hrv(&self) -> &Channel {
         unsafe { self.channels.get_unchecked(11) }
     }
 }
@@ -600,7 +600,7 @@ mod tests {
     async fn get_channel_ok() {
         assert!(Satellite::satellite_by_msg_id(1)
             .unwrap()
-            .get_channel(0)
+            .channel(0)
             .is_ok())
     }
 
@@ -608,7 +608,7 @@ mod tests {
     async fn get_channel_fail() {
         assert!(Satellite::satellite_by_msg_id(1)
             .unwrap()
-            .get_channel(42)
+            .channel(42)
             .is_err())
     }
 }

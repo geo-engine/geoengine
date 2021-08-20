@@ -21,10 +21,7 @@ impl RasterProperties {
         self.properties_map.keys().map(|m| m.domain.as_ref())
     }
 
-    pub fn get_number_property<T: Copy + FromPrimitive>(
-        &self,
-        key: &RasterPropertiesKey,
-    ) -> Result<T> {
+    pub fn number_property<T: Copy + FromPrimitive>(&self, key: &RasterPropertiesKey) -> Result<T> {
         let val = f64::try_from(
             self.properties_map
                 .get(key)
@@ -36,7 +33,7 @@ impl RasterProperties {
         T::from_f64(val).ok_or(Error::WrongMetadataType)
     }
 
-    pub fn get_string_property(&self, key: &RasterPropertiesKey) -> Result<String> {
+    pub fn string_property(&self, key: &RasterPropertiesKey) -> Result<String> {
         let s = self
             .properties_map
             .get(key)
@@ -129,7 +126,7 @@ mod tests {
             key: "key".into(),
         };
 
-        match props.get_number_property::<u8>(&key) {
+        match props.number_property::<u8>(&key) {
             Err(Error::MissingRasterProperty { property: k }) if k == key.to_string() => (),
             _ => panic!("Expected missing property error"),
         }
@@ -147,7 +144,7 @@ mod tests {
             .properties_map
             .insert(key.clone(), RasterPropertiesEntry::String("test".into()));
 
-        match props.get_number_property::<u8>(&key) {
+        match props.number_property::<u8>(&key) {
             Err(Error::WrongMetadataType) => (),
             _ => panic!("Expected parse error"),
         }
@@ -165,7 +162,7 @@ mod tests {
             .properties_map
             .insert(key.clone(), RasterPropertiesEntry::Number(42.3));
 
-        match props.get_number_property::<u8>(&key) {
+        match props.number_property::<u8>(&key) {
             Ok(v) => assert_eq!(42, v),
             _ => panic!("Expected valid conversion."),
         }
@@ -179,7 +176,7 @@ mod tests {
             key: "key".into(),
         };
 
-        match props.get_string_property(&key) {
+        match props.string_property(&key) {
             Err(Error::MissingRasterProperty { property: k }) if k == key.to_string() => (),
             _ => panic!("Expected missing property error"),
         }
@@ -197,7 +194,7 @@ mod tests {
             .properties_map
             .insert(key.clone(), RasterPropertiesEntry::String("test".into()));
 
-        match props.get_string_property(&key) {
+        match props.string_property(&key) {
             Ok(v) => assert_eq!("test", v.as_str()),
             _ => panic!("Expected valid property entry."),
         }

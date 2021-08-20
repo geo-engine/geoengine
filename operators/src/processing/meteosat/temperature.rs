@@ -184,25 +184,21 @@ where
         }
     }
 
-    fn get_satellite(&self, tile: &RasterTile2D<P>) -> Result<&'static Satellite> {
+    fn satellite(&self, tile: &RasterTile2D<P>) -> Result<&'static Satellite> {
         let id = match self.params.force_satellite {
             Some(id) => id,
-            _ => tile.properties.get_number_property(&self.satellite_key)?,
+            _ => tile.properties.number_property(&self.satellite_key)?,
         };
         Satellite::satellite_by_msg_id(id)
     }
 
-    fn get_channel<'a>(
-        &self,
-        tile: &RasterTile2D<P>,
-        satellite: &'a Satellite,
-    ) -> Result<&'a Channel> {
+    fn channel<'a>(&self, tile: &RasterTile2D<P>, satellite: &'a Satellite) -> Result<&'a Channel> {
         let channel_id = tile
             .properties
-            .get_number_property::<usize>(&self.channel_key)?
+            .number_property::<usize>(&self.channel_key)?
             - 1;
         if (3..=10).contains(&channel_id) {
-            satellite.get_channel(channel_id)
+            satellite.channel(channel_id)
         } else {
             Err(Error::InvalidChannel {
                 channel: channel_id,
@@ -211,14 +207,10 @@ where
     }
 
     fn create_lookup_table(&self, tile: &RasterTile2D<P>) -> Result<Vec<f32>> {
-        let satellite = self.get_satellite(tile)?;
-        let channel = self.get_channel(tile, satellite)?;
-        let offset = tile
-            .properties
-            .get_number_property::<f64>(&self.offset_key)?;
-        let slope = tile
-            .properties
-            .get_number_property::<f64>(&self.slope_key)?;
+        let satellite = self.satellite(tile)?;
+        let channel = self.channel(tile, satellite)?;
+        let offset = tile.properties.number_property::<f64>(&self.offset_key)?;
+        let slope = tile.properties.number_property::<f64>(&self.slope_key)?;
 
         let mut lut = Vec::with_capacity(1024);
         for i in 0..1024 {
