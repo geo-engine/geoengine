@@ -5,6 +5,8 @@ use num_traits::FromPrimitive;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::convert::TryFrom;
+use std::fmt;
+use std::fmt::{Display, Formatter};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct RasterProperties {
@@ -96,20 +98,20 @@ impl TryFrom<RasterPropertiesEntry> for f64 {
     type Error = crate::error::Error;
 }
 
-impl ToString for RasterPropertiesKey {
-    fn to_string(&self) -> String {
+impl Display for RasterPropertiesKey {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match &self.domain {
-            Some(prefix) => prefix.clone() + "." + &self.key,
-            None => self.key.clone(),
+            Some(prefix) => write!(f, "{}.{}", prefix, &self.key),
+            None => write!(f, "{}", &self.key),
         }
     }
 }
 
-impl ToString for RasterPropertiesEntry {
-    fn to_string(&self) -> String {
+impl Display for RasterPropertiesEntry {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            RasterPropertiesEntry::Number(n) => n.to_string(),
-            RasterPropertiesEntry::String(s) => s.clone(),
+            RasterPropertiesEntry::Number(n) => write!(f, "{}", n),
+            RasterPropertiesEntry::String(s) => write!(f, "{}", s),
         }
     }
 }
