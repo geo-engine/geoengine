@@ -18,7 +18,9 @@ pub struct Grid<C: CircleRadiusModel> {
 
 impl<C: CircleRadiusModel> Grid<C> {
     pub fn new(bbox: BoundingBox2D, radius_model: C) -> Self {
-        let cell_width = (2. * radius_model.min_radius() + radius_model.delta()).sqrt();
+        // cell width s.th. every circle in the cell overlaps with every other circle in the cell
+        let cell_width =
+            (2. * radius_model.min_radius() + radius_model.delta()) / std::f64::consts::SQRT_2;
 
         let map_width = bbox.size_x();
         let map_height = bbox.size_y();
