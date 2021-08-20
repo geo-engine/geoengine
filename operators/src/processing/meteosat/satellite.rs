@@ -99,11 +99,11 @@ impl Channel {
         //
         let lon_rad_part = s2 / s1;
         let lat_rad_part = 1.006_804 * s3 / sxy;
-        let (lat, lon) = (
+        let (lat_rad, lon_rad) = (
             lat_rad_part.atan(),
             lon_rad_part.atan() + sub_lon.to_radians(),
         );
-        (lat, lon)
+        (lat_rad.to_degrees(), lon_rad.to_degrees())
     }
 
     /// Calculates the temperature in K from the given channel and radiance value.
