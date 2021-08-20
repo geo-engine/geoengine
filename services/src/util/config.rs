@@ -207,7 +207,9 @@ impl ConfigElement for Logging {
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type")]
 pub enum OgcDefaultTime {
+    #[serde(alias = "now")]
     Now,
+    #[serde(alias = "value")]
     Value(TimeStartEnd),
 }
 
