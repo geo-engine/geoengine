@@ -7,7 +7,7 @@ use uuid::Uuid;
 use warp::Rejection;
 use warp::{http::Response, Filter};
 
-use geoengine_datatypes::primitives::AxisAlignedRectangle;
+use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D};
 use geoengine_datatypes::{primitives::SpatialResolution, spatial_reference::SpatialReference};
 
 use crate::contexts::MockableSession;
@@ -174,7 +174,7 @@ async fn describe_coverage<C: Context>(
     let spatial_reference = spatial_reference.ok_or(error::Error::MissingSpatialReference)?;
 
     // TODO: give tighter bounds if possible
-    let area_of_use = spatial_reference
+    let area_of_use: SpatialPartition2D = spatial_reference
         .area_of_use_projected()
         .context(error::DataType)?;
 

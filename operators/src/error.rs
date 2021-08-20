@@ -208,6 +208,9 @@ pub enum Error {
     InvalidFeatureDataType,
     InvalidRasterDataType,
 
+    #[snafu(display("No candidate source resolutions were produced."))]
+    NoSourceResolution,
+
     WindowSizeMustNotBeZero,
 
     NotYetImplemented,
