@@ -6,8 +6,8 @@ use crate::error::Error;
 use crate::util::Result;
 use geoengine_datatypes::primitives::Coordinate2D;
 
-const VIEW_ANGLE: f64 = -13_642_337.0 * 3_000.403_165_817;
-const VIEW_ANGLE_CH11: f64 = -40_927_014.0 * 1_000.134_348_869;
+const VIEW_ANGLE: f64 = 65536.0 / (-13_642_337.0 * 3_000.403_165_817);
+const VIEW_ANGLE_CH11: f64 = 65536.0 / (-40_927_014.0 * 1_000.134_348_869);
 
 const C1: f64 = 1.191_042_73e-16;
 const C2: f64 = 0.014_387_752_3;
