@@ -7,9 +7,21 @@ use std::ops::Range;
 #[derive(Debug, Snafu)]
 #[snafu(visibility = "pub(crate)")]
 pub enum Error {
-    #[snafu(display("MissingRasterProperty Error: {}", property))]
-    MissingRasterProperty {
-        property: String,
+    UnsupportedRasterValue,
+
+    InvalidMeteosatSatellite,
+
+    InvalidUTCTimestamp,
+
+    #[snafu(display("InvalidChannel Error (requested channel: {})", channel))]
+    InvalidChannel {
+        channel: usize,
+    },
+
+    #[snafu(display("InvalidMeasurement Error; expected {}, found: {}", expected, found))]
+    InvalidMeasurement {
+        expected: String,
+        found: String,
     },
 
     #[snafu(display("CsvSource Error: {}", source))]
@@ -194,6 +206,7 @@ pub enum Error {
 
     FeatureDataValueMustNotBeNull,
     InvalidFeatureDataType,
+    InvalidRasterDataType,
 
     WindowSizeMustNotBeZero,
 

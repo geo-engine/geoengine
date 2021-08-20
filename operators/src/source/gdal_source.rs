@@ -701,9 +701,22 @@ where
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct GdalMetadataMapping {
-    source_key: RasterPropertiesKey,
-    target_key: RasterPropertiesKey,
-    target_type: RasterPropertiesEntryType,
+    pub source_key: RasterPropertiesKey,
+    pub target_key: RasterPropertiesKey,
+    pub target_type: RasterPropertiesEntryType,
+}
+
+impl GdalMetadataMapping {
+    pub fn identity(
+        key: RasterPropertiesKey,
+        target_type: RasterPropertiesEntryType,
+    ) -> GdalMetadataMapping {
+        GdalMetadataMapping {
+            source_key: key.clone(),
+            target_key: key,
+            target_type,
+        }
+    }
 }
 
 fn properties_from_gdal<'a, I, M>(

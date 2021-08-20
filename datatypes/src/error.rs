@@ -239,6 +239,11 @@ pub enum Error {
         upper_left_coordinate: Coordinate2D,
         lower_right_coordinate: Coordinate2D,
     },
+
+    #[snafu(display("MissingRasterProperty Error: {}", property))]
+    MissingRasterProperty {
+        property: String,
+    },
 }
 
 impl From<arrow::error::ArrowError> for Error {
