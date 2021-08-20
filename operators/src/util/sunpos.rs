@@ -45,7 +45,7 @@ impl SunPos {
     pub fn new<T: TimeZone>(timestamp: &DateTime<T>) -> SunPos {
         let (decimal_hours, elapsed_julian_days) = Self::elapsed_julian_days(timestamp);
         let (ecliptic_longitude, ecliptic_obliquity) =
-            Self::eliptic_coordinates(elapsed_julian_days);
+            Self::ecliptic_coordinates(elapsed_julian_days);
 
         let (right_ascension, declination) =
             Self::celestial_coordinates(ecliptic_longitude, ecliptic_obliquity);
@@ -84,7 +84,7 @@ impl SunPos {
     /// Calculate ecliptic coordinates (ecliptic longitude and obliquity of the
     /// ecliptic in radians but without limiting the angle to be less than 2*Pi
     /// (i.e., the result may be greater than 2*Pi)
-    fn eliptic_coordinates(elapsed_julian_days: f64) -> (f64, f64) {
+    fn ecliptic_coordinates(elapsed_julian_days: f64) -> (f64, f64) {
         let omega = 2.1429 - 0.001_039_459_4 * elapsed_julian_days;
         let mean_longitude = 4.895_063_0 + 0.017_202_791_698 * elapsed_julian_days; // Radians
         let mean_anomaly = 6.240_060_0 + 0.017_201_969_9 * elapsed_julian_days;
