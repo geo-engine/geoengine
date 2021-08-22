@@ -1,4 +1,3 @@
-use std::{error::{Error}};
 use futures::{StreamExt, Stream};
 use geoengine_datatypes::{primitives::{SpatialPartition2D, TimeInstance, TimeInterval}, raster::{GridOrEmpty, Pixel, BaseTile, GridShape}};
 use crate::engine::{QueryContext, QueryRectangle, RasterQueryProcessor};
@@ -21,6 +20,7 @@ pub async fn imseg_fit<T, U, C: QueryContext>(
     query_rect: QueryRectangle<SpatialPartition2D>,
     query_ctx: C,
     batch_size: usize,
+    batches_per_query: usize,
 ) -> Result<()>
 where
     T: Pixel + numpy::Element,
@@ -39,7 +39,7 @@ where
     //TODO change depreciated function
     let _init = py_mod.call("initUnet", (4,name, batch_size), None).unwrap();
     //since every 15 minutes an image is available...
-    let step: i64 = batch_size as i64 * 900_000;
+    let step: i64 = (batch_size as i64 * 900_000) * batches_per_query as i64;
     println!("Step: {}", step);
     
     let mut start = query_rect.time_interval.start();
@@ -47,7 +47,7 @@ where
     let end = query_rect.time_interval.end();
     
     let mut queries: Vec<QueryRectangle<SpatialPartition2D>> = Vec::new();
-    while start < end {
+    while start.as_utc_date_time().unwrap().timestamp() * 1000 <= (end.as_utc_date_time().unwrap().timestamp() * 1000) + step {
         let end_time_new = (inter_end.as_utc_date_time().unwrap().timestamp() * 1000) + step;
         inter_end = TimeInstance::from_millis(end_time_new)?;
         
@@ -61,12 +61,13 @@ where
         start = TimeInstance::from_millis(start_time_new)?;
         
     }
-
+    let mut rand_index: usize; 
     while !queries.is_empty() {
         let queries_left = queries.len();
-        println!("queries left: {:?}", queries.len());
-        let mut rand_index: usize = 0;
+        println!("queries left: {:?}", queries_left);
+        rand_index = 0;
         if queries_left > 1 {
+            println!("{:?}", queries_left - 1);
             rand_index = rng.gen_range(0..queries_left-1);
         }
         
@@ -83,9 +84,12 @@ where
         let final_stream = tile_stream_ir_016.zip(tile_stream_ir_039.zip(tile_stream_ir_087.zip(tile_stream_ir_097.zip(tile_stream_ir_108.zip(tile_stream_ir_120.zip(tile_stream_ir_134.zip(tile_stream_truth)))))));
 
         let mut chunked_stream = final_stream.chunks(batch_size);
-        let mut vctr = chunked_stream.next().await.unwrap();
+        while let Some(mut vctr) = chunked_stream.next().await {
         let mut buffer: Vec<(Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<U>)> = Vec::new();
         let mut tile_size: [usize;2] = [0,0];
+        let mut missing_elements: usize = 0;
+        
+             //TODO What if number of elements less than batch size?
         
         for _ in 0..batch_size {
             let (ir_016, (ir_039, (ir_087, (ir_097, (ir_108, (ir_120, (ir_137, truth))))))) = vctr.remove(0);
@@ -99,26 +103,52 @@ where
                             
                         }, 
                         _ => {
-
+                            println!("SOME ARE EMPTY");
+                            
+                            //if batch is not full we fill it with copies of randomnly selected elements already present(not ideal, just first idea I had)
+                            buffer.push(buffer[rng.gen_range(0..buffer.len() - 1)].clone());
+                            missing_elements = missing_elements + 1;
+                            
                         }
                     }
                 },
                 _ => {
-                    
+                    println!("AN ERROR OCCURED");
+                            
+                    //if batch is not full we fill it with copies of randomnly selected elements already  present(not ideal, just first idea I had)
+                    buffer.push(buffer[rng.gen_range(0..buffer.len() - 1)].clone());
+                    missing_elements = missing_elements + 1;
                 }
             }
         }
-        
-        let (data_016_init, data_039_init, data_087_init, data_097_init, data_108_init, data_120_init, data_134_init, data_truth_init) = buffer.remove(0);
+    
+        let number_of_elements = buffer.len();
+
+        if number_of_elements != batch_size {
+            //Filling up missing elements
+            let diff = batch_size - number_of_elements;
+            for _ in 0..diff {
+                
+                buffer.push(buffer[rng.gen_range(0..number_of_elements - 1)].clone());
+                missing_elements = missing_elements + 1;
+            }
+        }
+        //if more than 10% of the batch are copies we discard it alltogether
+        if missing_elements <= batch_size/10 {
+            let (data_016_init, data_039_init, data_087_init, data_097_init, data_108_init, data_120_init, data_134_init, data_truth_init) = buffer.remove(0);
 
         let (mut arr_img_batch, mut arr_truth_batch) = create_arrays_from_data(data_016_init, data_039_init, data_087_init, data_097_init, data_108_init, data_120_init, data_134_init, data_truth_init, tile_size);
         
         let num_elements = buffer.len();
 
         
-
+        let mut rand_index: usize;
         for i in 0..(batch_size - 1) {
-            let rand_index: usize = rng.gen_range(0..num_elements-i);
+            
+            rand_index = 0;
+            if num_elements - i > 0 {
+                rand_index = rng.gen_range(0..num_elements-i);
+            }
             let (data_016, data_039, data_087, data_097, data_108, data_120, data_134, data_truth) = buffer.remove(rand_index);
             let (arr_img, arr_truth) = create_arrays_from_data(data_016, data_039, data_087, data_097, data_108, data_120, data_134, data_truth, tile_size);
 
@@ -137,9 +167,17 @@ where
         //TODO change depreciated function
         let _result = py_mod.call("fit", (py_img, py_truth, batch_size), None).unwrap();
         
+        } else {
+            println!("Too many missing values!");
+        }
         
-
+        
+        
+       }
     }
+       
+
+
     
     
     //TODO change depreciated function
@@ -149,78 +187,6 @@ where
     
 }
 
-// async fn training_iteration<T, U>(
-//     tile_stream_ir_016: Pin<Box<dyn Stream<Item = Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>, T>>, Error>> + Send, Global>>, 
-//     tile_stream_ir_039: Pin<Box<dyn Stream<Item = Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>, T>>, Error>> + Send, Global>>, 
-//     tile_stream_ir_087: Pin<Box<dyn Stream<Item = Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>, T>>, Error>> + Send, Global>>, 
-//     tile_stream_ir_097: Pin<Box<dyn Stream<Item = Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>, T>>, Error>> + Send, Global>>, 
-//     tile_stream_ir_108: Pin<Box<dyn Stream<Item = Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>, T>>, Error>> + Send, Global>>, 
-//     tile_stream_ir_120: Pin<Box<dyn Stream<Item = Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>, T>>, Error>> + Send, Global>>, 
-//     tile_stream_ir_134: Pin<Box<dyn Stream<Item = Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>, T>>, Error>> + Send, Global>>, 
-//     tile_stream_truth: Pin<Box<dyn Stream<Item = Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>, U>>, Error>> + Send, Global>>,
-//     batch_size: usize) -> Result<(ArrayBase<OwnedRepr<T>, Dim<[usize; 4]>>, ArrayBase<OwnedRepr<U>, Dim<[usize; 4]>>)>
-// where
-//     T: Pixel + numpy::Element,
-//     U: Pixel + numpy::Element,
-//     {
-
-//     let final_stream = tile_stream_ir_016.zip(tile_stream_ir_039.zip(tile_stream_ir_087.zip(tile_stream_ir_097.zip(tile_stream_ir_108.zip(tile_stream_ir_120.zip(tile_stream_ir_134.zip(tile_stream_truth)))))));
-
-//     let mut rng = rand::thread_rng();
-
-
-//     let mut chunked_stream = final_stream.chunks(batch_size);
-//     let mut vctr = chunked_stream.next().await.unwrap();
-//         let mut buffer: Vec<(Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<T>, Vec<U>)> = Vec::new();
-//         let mut tile_size: [usize;2] = [0,0];
-        
-//         for _ in 0..batch_size {
-//             let (ir_016, (ir_039, (ir_087, (ir_097, (ir_108, (ir_120, (ir_137, truth))))))) = vctr.remove(0);
-            
-//             match (ir_016, ir_039, ir_087, ir_097, ir_108, ir_120, ir_137, truth) {
-//                 (Ok(ir_016), Ok(ir_039), Ok(ir_087), Ok(ir_097), Ok(ir_108), Ok(ir_120), Ok(ir_134), Ok(truth)) => {
-//                     match (ir_016.grid_array, ir_039.grid_array, ir_087.grid_array, ir_097.grid_array, ir_108.grid_array, ir_120.grid_array, ir_134.grid_array, truth.grid_array) {
-//                         (GridOrEmpty::Grid(grid_016), GridOrEmpty::Grid(grid_039),  GridOrEmpty::Grid(grid_087),  GridOrEmpty::Grid(grid_097), GridOrEmpty::Grid(grid_108), GridOrEmpty::Grid(grid_120), GridOrEmpty::Grid(grid_134), GridOrEmpty::Grid(grid_truth)) => {
-//                             tile_size = grid_016.shape.shape_array;
-//                             buffer.push((grid_016.data, grid_039.data, grid_087.data, grid_097.data, grid_108.data, grid_120.data, grid_134.data, grid_truth.data));
-                            
-//                         }, 
-//                         _ => {
-
-//                         }
-//                     }
-//                 },
-//                 _ => {
-                    
-//                 }
-//             }
-//         }
-        
-//         let (data_016_init, data_039_init, data_087_init, data_097_init, data_108_init, data_120_init, data_134_init, data_truth_init) = buffer.remove(0);
-
-//         let (mut arr_img_batch, mut arr_truth_batch) = create_arrays_from_data(data_016_init, data_039_init, data_087_init, data_097_init, data_108_init, data_120_init, data_134_init, data_truth_init, tile_size);
-        
-//         let num_elements = buffer.len();
-
-        
-
-//         for i in 0..(batch_size - 1) {
-//             let rand_index: usize = rng.gen_range(0..num_elements-i);
-//             let (data_016, data_039, data_087, data_097, data_108, data_120, data_134, data_truth) = buffer.remove(rand_index);
-//             let (arr_img, arr_truth) = create_arrays_from_data(data_016, data_039, data_087, data_097, data_108, data_120, data_134, data_truth, tile_size);
-
-//             arr_img_batch = concatenate(Axis(0), &[arr_img_batch.view(), arr_img.view()]).unwrap();
-           
-//             arr_truth_batch = concatenate(Axis(0), &[arr_truth_batch.view(), arr_truth.view()]).unwrap();
-            
-//         }
-
-        
-//         dbg!(&arr_img_batch.shape());
-//         dbg!(&arr_truth_batch.shape());
-
-//         Ok((arr_img_batch, arr_truth_batch))
-// }
 /// Creates batches used for training the model from the vectors of the rasterbands
 fn create_arrays_from_data<T, U>(data_1: Vec<T>, data_2: Vec<T>, data_3: Vec<T>, data_4: Vec<T>, data_5: Vec<T>, data_6: Vec<T>, data_7: Vec<T>, data_8: Vec<U>, tile_size: [usize;2]) -> (ArrayBase<OwnedRepr<T>, Dim<[usize; 4]>>, ArrayBase<OwnedRepr<U>, Dim<[usize; 4]>>) 
 where 
@@ -620,10 +586,11 @@ mod tests {
 
         let x = imseg_fit(source_a.boxed(), source_b.boxed(), source_c.boxed(), source_d.boxed(), source_e.boxed(), source_f.boxed(), source_g.boxed(),source_h.boxed(), QueryRectangle {
             spatial_bounds: query_bbox,
-            time_interval: TimeInterval::new(1_388_536_200_000, 1_388_536_200_000 + 45_000_000)
+            time_interval: TimeInterval::new(1_388_536_200_000, 1_388_536_200_000 + 180_000_000)
                 .unwrap(),
             spatial_resolution: query_spatial_resolution,
         }, ctx,
-    10 as usize).await.unwrap();
+    10 as usize,
+10 as usize).await.unwrap();
     }
 }

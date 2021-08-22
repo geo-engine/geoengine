@@ -74,7 +74,7 @@ def initUnet(num_classes, id, batch_size):
     global model 
     model = keras.Model(inputs, outputs)
     #Here we can add more metrics for later evaluation
-    model.compile(optimizer="rmsprop", loss="sparse_categorical_crossentropy", metrics=['accuracy'])
+    model.compile(optimizer="rmsprop", loss="sparse_categorical_crossentropy")
     model.summary()
     model.save('saved_model/{}'.format(id))
     print("Saved model under saved_model/{}".format(id))
@@ -91,7 +91,7 @@ def fit(X, y, batch_size):
     #print(X.shape)
     #TODO check wether nan's present?
     
-    model.fit(X, y, batch_size = batch_size, epochs=20)
+    model.fit(X, y, batch_size = batch_size)
 
 
 def predict(X):
