@@ -1,4 +1,4 @@
-use crate::engine::{MetaData, QueryProcessor, RasterQueryRectangle};
+use crate::engine::{MetaData, OperatorDatasets, QueryProcessor, RasterQueryRectangle};
 use crate::{
     engine::{
         InitializedRasterOperator, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
@@ -68,6 +68,12 @@ use std::{marker::PhantomData, path::PathBuf};
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub struct GdalSourceParameters {
     pub dataset: DatasetId,
+}
+
+impl OperatorDatasets for GdalSourceParameters {
+    fn datasets_collect(&self, datasets: &mut Vec<DatasetId>) {
+        datasets.push(self.dataset.clone());
+    }
 }
 
 type GdalMetaData =
@@ -196,7 +202,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
         Ok(GdalLoadingInfo {
             info: GdalLoadingInfoPartIterator::Static {
                 parts: vec![GdalLoadingInfoPart {
-                    time: self.time.unwrap_or_else(TimeInterval::default),
+                    time: self.time.unwrap_or_default(),
                     params: self.params.clone(),
                 }]
                 .into_iter(),
@@ -695,9 +701,22 @@ where
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct GdalMetadataMapping {
-    source_key: RasterPropertiesKey,
-    target_key: RasterPropertiesKey,
-    target_type: RasterPropertiesEntryType,
+    pub source_key: RasterPropertiesKey,
+    pub target_key: RasterPropertiesKey,
+    pub target_type: RasterPropertiesEntryType,
+}
+
+impl GdalMetadataMapping {
+    pub fn identity(
+        key: RasterPropertiesKey,
+        target_type: RasterPropertiesEntryType,
+    ) -> GdalMetadataMapping {
+        GdalMetadataMapping {
+            source_key: key.clone(),
+            target_key: key,
+            target_type,
+        }
+    }
 }
 
 fn properties_from_gdal<'a, I, M>(

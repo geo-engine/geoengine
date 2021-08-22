@@ -30,10 +30,11 @@ where
     C: ProContext,
     C::ProjectDB: ProProjectDb,
 {
-    let handler = combine!(
+    let filter = combine!(
         handlers::workflows::register_workflow_handler(ctx.clone()),
         handlers::workflows::load_workflow_handler(ctx.clone()),
         handlers::workflows::get_workflow_metadata_handler(ctx.clone()),
+        handlers::workflows::get_workflow_provenance_handler(ctx.clone()),
         pro::handlers::users::register_user_handler(ctx.clone()),
         pro::handlers::users::anonymous_handler(ctx.clone()),
         pro::handlers::users::login_handler(ctx.clone()),
@@ -62,10 +63,18 @@ where
         handlers::wfs::wfs_handler(ctx.clone()),
         handlers::plots::get_plot_handler(ctx.clone()),
         handlers::upload::upload_handler(ctx.clone()),
-        handlers::spatial_references::get_spatial_reference_specification_handler(ctx.clone()),
-        serve_static_directory(static_files_dir)
-    )
-    .recover(handle_rejection);
+        handlers::spatial_references::get_spatial_reference_specification_handler(ctx.clone())
+    );
+
+    #[cfg(feature = "odm")]
+    let filter = combine!(
+        filter,
+        pro::handlers::drone_mapping::start_task_handler(ctx.clone()),
+        pro::handlers::drone_mapping::dataset_from_drone_mapping_handler(ctx.clone())
+    );
+
+    let handler =
+        combine!(filter, serve_static_directory(static_files_dir)).recover(handle_rejection);
 
     let task = if let Some(receiver) = shutdown_rx {
         let (_, server) = warp::serve(handler).bind_with_graceful_shutdown(bind_address, async {

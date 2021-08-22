@@ -5,10 +5,9 @@ use snafu::ensure;
 use crate::{
     error::{self, Error},
     primitives::{
-        AxisAlignedRectangle, BoundingBox2D, Coordinate2D, Line, MultiLineString,
-        MultiLineStringAccess, MultiLineStringRef, MultiPoint, MultiPointAccess, MultiPointRef,
-        MultiPolygon, MultiPolygonAccess, MultiPolygonRef, SpatialBounded, SpatialPartition2D,
-        SpatialResolution,
+        AxisAlignedRectangle, Coordinate2D, Line, MultiLineString, MultiLineStringAccess,
+        MultiLineStringRef, MultiPoint, MultiPointAccess, MultiPointRef, MultiPolygon,
+        MultiPolygonAccess, MultiPolygonRef, SpatialBounded, SpatialResolution,
     },
     spatial_reference::SpatialReference,
     util::Result,
@@ -205,12 +204,13 @@ where
     }
 }
 
-impl<P> Reproject<P> for BoundingBox2D
+impl<P, A> Reproject<P> for A
 where
     P: CoordinateProjection,
+    A: AxisAlignedRectangle,
 {
-    type Out = BoundingBox2D;
-    fn reproject(&self, projector: &P) -> Result<BoundingBox2D> {
+    type Out = A;
+    fn reproject(&self, projector: &P) -> Result<A> {
         const POINTS_PER_LINE: i32 = 7;
         let upper_line = Line::new(self.upper_left(), self.upper_right())
             .with_additional_equi_spaced_coords(POINTS_PER_LINE);
@@ -229,7 +229,8 @@ where
 
         let proj_outline_coordinates = projector.project_coordinates(&outline_coordinates)?;
 
-        Ok(MultiPoint::new_unchecked(proj_outline_coordinates).spatial_bounds())
+        let bbox = MultiPoint::new_unchecked(proj_outline_coordinates).spatial_bounds();
+        A::from_min_max(bbox.lower_left(), bbox.upper_right())
     }
 }
 
@@ -239,12 +240,13 @@ pub trait ReprojectClipped<P: CoordinateProjection> {
     fn reproject_clipped(&self, projector: &P) -> Result<Self::Out>;
 }
 
-impl<P> ReprojectClipped<P> for BoundingBox2D
+impl<P, A> ReprojectClipped<P> for A
 where
     P: CoordinateProjection,
+    A: AxisAlignedRectangle,
 {
-    type Out = BoundingBox2D;
-    fn reproject_clipped(&self, projector: &P) -> Result<BoundingBox2D> {
+    type Out = A;
+    fn reproject_clipped(&self, projector: &P) -> Result<A> {
         const POINTS_PER_LINE: i32 = 7;
 
         // clip bbox to the area of use of the target projection
@@ -252,21 +254,21 @@ where
             SpatialReference::epsg_4326(),
             projector.source_srs(),
         )?;
-        let source_area_of_use = projector.source_srs().area_of_use()?;
-        let target_area_of_use = projector.target_srs().area_of_use()?;
+        let source_area_of_use = projector.source_srs().area_of_use::<A>()?;
+        let target_area_of_use = projector.target_srs().area_of_use::<A>()?;
         let area_of_use = source_area_of_use.intersection(&target_area_of_use).ok_or(
-            Error::BboxesDoNotIntersect {
-                bbox_a: source_area_of_use,
-                bbox_b: target_area_of_use,
+            Error::SpatialBoundsDoNotIntersect {
+                bounds_a: source_area_of_use.as_bbox(),
+                bounds_b: target_area_of_use.as_bbox(),
             },
         )?;
         let area_of_use = area_of_use.reproject(&area_of_use_projector)?;
-        let clipped_bbox = self
-            .intersection(&area_of_use)
-            .ok_or(Error::BboxesDoNotIntersect {
-                bbox_a: *self,
-                bbox_b: area_of_use,
-            })?;
+        let clipped_bbox =
+            self.intersection(&area_of_use)
+                .ok_or(Error::SpatialBoundsDoNotIntersect {
+                    bounds_a: self.as_bbox(),
+                    bounds_b: area_of_use.as_bbox(),
+                })?;
 
         // project points on the bbox
         let upper_line = Line::new(clipped_bbox.upper_left(), clipped_bbox.upper_right())
@@ -297,40 +299,7 @@ where
             error::OutputBboxEmpty { bbox: out }
         );
 
-        Ok(out)
-    }
-}
-
-impl<P> Reproject<P> for SpatialPartition2D
-where
-    P: CoordinateProjection,
-{
-    type Out = SpatialPartition2D;
-    fn reproject(&self, projector: &P) -> Result<SpatialPartition2D> {
-        const POINTS_PER_LINE: i32 = 7;
-        let upper_line = Line::new(self.upper_left(), self.upper_right())
-            .with_additional_equi_spaced_coords(POINTS_PER_LINE);
-        let right_line = Line::new(self.upper_right(), self.lower_right())
-            .with_additional_equi_spaced_coords(POINTS_PER_LINE);
-        let lower_line = Line::new(self.lower_right(), self.lower_left())
-            .with_additional_equi_spaced_coords(POINTS_PER_LINE);
-        let left_line = Line::new(self.lower_left(), self.upper_left())
-            .with_additional_equi_spaced_coords(POINTS_PER_LINE);
-
-        let outline_coordinates: Vec<Coordinate2D> = upper_line
-            .chain(right_line)
-            .chain(lower_line)
-            .chain(left_line)
-            .collect();
-
-        let proj_outline_coordinates = projector.project_coordinates(&outline_coordinates)?;
-
-        let bbox = MultiPoint::new_unchecked(proj_outline_coordinates).spatial_bounds();
-
-        Ok(SpatialPartition2D::new_unchecked(
-            bbox.upper_left(),
-            bbox.lower_right(),
-        ))
+        A::from_min_max(out.lower_left(), out.upper_right())
     }
 }
 
@@ -479,6 +448,7 @@ pub fn project_coordinates_fail_tolerant<P: CoordinateProjection>(
 #[cfg(test)]
 mod tests {
 
+    use crate::primitives::BoundingBox2D;
     use crate::spatial_reference::SpatialReferenceAuthority;
     use crate::util::well_known_data::{
         COLOGNE_EPSG_4326, COLOGNE_EPSG_900_913, HAMBURG_EPSG_4326, HAMBURG_EPSG_900_913,

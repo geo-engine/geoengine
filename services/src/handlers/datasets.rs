@@ -359,6 +359,7 @@ async fn auto_create_dataset<C: Context>(
         description: create.dataset_description,
         source_operator: meta_data.source_operator_type().to_owned(),
         symbology: None,
+        provenance: None,
     };
 
     let mut db = ctx.dataset_db_ref_mut().await;
@@ -478,8 +479,8 @@ fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDef
             force_ogr_time_filter: false,
             force_ogr_spatial_filter: false,
             on_error: geoengine_operators::source::OgrSourceErrorSpec::Ignore,
-            provenance: None,
             sql_query: None,
+            attribute_query: None,
         },
         result_descriptor: VectorResultDescriptor {
             data_type: geometry.data_type,
@@ -796,6 +797,7 @@ mod tests {
             description: "My Ogr dataset".to_string(),
             source_operator: "OgrSource".to_string(),
             symbology: None,
+            provenance: None,
         };
 
         let meta = StaticMetaData {
@@ -808,8 +810,8 @@ mod tests {
                 force_ogr_time_filter: false,
                 force_ogr_spatial_filter: false,
                 on_error: OgrSourceErrorSpec::Ignore,
-                provenance: None,
                 sql_query: None,
+                attribute_query: None,
             },
             result_descriptor: descriptor.clone(),
             phantom: Default::default(),
@@ -831,6 +833,7 @@ mod tests {
             description: "My Ogr dataset2".to_string(),
             source_operator: "OgrSource".to_string(),
             symbology: Some(Symbology::Point(PointSymbology::default())),
+            provenance: None,
         };
 
         let meta = StaticMetaData {
@@ -843,8 +846,8 @@ mod tests {
                 force_ogr_time_filter: false,
                 force_ogr_spatial_filter: false,
                 on_error: OgrSourceErrorSpec::Ignore,
-                provenance: None,
                 sql_query: None,
+                attribute_query: None,
             },
             result_descriptor: descriptor,
             phantom: Default::default(),
@@ -1046,8 +1049,8 @@ mod tests {
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Ignore,
-                    provenance: None,
                     sql_query: None,
+                    attribute_query: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -1107,8 +1110,8 @@ mod tests {
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Ignore,
-                    provenance: None,
                     sql_query: None,
+                    attribute_query: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -1157,8 +1160,8 @@ mod tests {
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Ignore,
-                    provenance: None,
                     sql_query: None,
+                    attribute_query: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -1207,8 +1210,8 @@ mod tests {
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Ignore,
-                    provenance: None,
                     sql_query: None,
+                    attribute_query: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -1261,8 +1264,8 @@ mod tests {
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Ignore,
-                    provenance: None,
                     sql_query: None,
+                    attribute_query: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -1313,8 +1316,8 @@ mod tests {
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Ignore,
-                    provenance: None,
                     sql_query: None,
+                    attribute_query: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -1351,6 +1354,7 @@ mod tests {
             description: "My Ogr dataset".to_string(),
             source_operator: "OgrSource".to_string(),
             symbology: None,
+            provenance: None,
         };
 
         let meta = StaticMetaData {
@@ -1363,8 +1367,8 @@ mod tests {
                 force_ogr_time_filter: false,
                 force_ogr_spatial_filter: false,
                 on_error: OgrSourceErrorSpec::Ignore,
-                provenance: None,
                 sql_query: None,
+                attribute_query: None,
             },
             result_descriptor: descriptor,
             phantom: Default::default(),
@@ -1411,7 +1415,8 @@ mod tests {
                     "columns": {}
                 },
                 "sourceOperator": "OgrSource",
-                "symbology": null
+                "symbology": null,
+                "provenance": null,
             })
             .to_string()
         );

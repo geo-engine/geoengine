@@ -13,7 +13,7 @@ use super::SpatialResolution;
 
 /// Common trait for axis-parallel boxes
 pub trait AxisAlignedRectangle: Copy {
-    /// create a new instance defined by min and max coordinate values
+    /// create a new instance defined by `min` (lower left) and `max` (upper right) coordinate
     fn from_min_max(min: Coordinate2D, max: Coordinate2D) -> Result<Self>;
 
     fn lower_left(&self) -> Coordinate2D;
@@ -23,6 +23,11 @@ pub trait AxisAlignedRectangle: Copy {
 
     fn size_x(&self) -> f64;
     fn size_y(&self) -> f64;
+
+    fn intersection(&self, other: &Self) -> Option<Self>;
+
+    /// create a `BoundingBox2D` with `self.lower_left()` and `self.upper_right()`
+    fn as_bbox(&self) -> BoundingBox2D;
 }
 
 /// A partition of space that include the upper left but excludes the lower right coordinate
@@ -251,6 +256,14 @@ impl AxisAlignedRectangle for SpatialPartition2D {
 
     fn size_y(&self) -> f64 {
         self.upper_left_coordinate.y - self.lower_right_coordinate.y
+    }
+
+    fn intersection(&self, other: &Self) -> Option<Self> {
+        self.intersection(other)
+    }
+
+    fn as_bbox(&self) -> BoundingBox2D {
+        BoundingBox2D::new_unchecked(self.lower_left(), self.upper_right())
     }
 }
 

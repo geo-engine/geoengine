@@ -12,5 +12,7 @@ Settings.toml
 
 # Data
 upload/
+test_upload/
+services/test_upload/
 **/*.gpkg-shm
 **/*.gpkg-wal

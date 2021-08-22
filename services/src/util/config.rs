@@ -1,7 +1,9 @@
 use std::sync::RwLock;
 
 use crate::error::{self, Result};
+use chrono::{DateTime, FixedOffset};
 use config::{Config, File};
+use geoengine_datatypes::primitives::{TimeInstance, TimeInterval};
 use lazy_static::lazy_static;
 use serde::Deserialize;
 use snafu::ResultExt;
@@ -59,6 +61,19 @@ fn retrieve_settings_dir() -> Result<PathBuf> {
 #[cfg(not(test))]
 fn retrieve_settings_dir() -> Result<PathBuf> {
     std::env::current_dir().context(error::MissingWorkingDirectory)
+}
+
+#[cfg(test)]
+pub fn set_config<T>(key: &str, value: T) -> Result<()>
+where
+    T: Into<config::Value>,
+{
+    SETTINGS
+        .write()
+        .map_err(|_error| error::Error::ConfigLockFailed)?
+        .set(key, value)
+        .context(error::Config)?;
+    Ok(())
 }
 
 pub fn get_config<'a, T>(key: &str) -> Result<T>
@@ -190,10 +205,81 @@ impl ConfigElement for Logging {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(tag = "type")]
+pub enum OgcDefaultTime {
+    #[serde(alias = "now")]
+    Now,
+    #[serde(alias = "value")]
+    Value(TimeStartEnd),
+}
+
+impl OgcDefaultTime {
+    pub fn time_interval(&self) -> TimeInterval {
+        match self {
+            OgcDefaultTime::Now => {
+                TimeInterval::new_instant(TimeInstance::from(chrono::offset::Utc::now()))
+                    .expect("config error")
+            }
+            OgcDefaultTime::Value(value) => {
+                TimeInterval::new(value.start.timestamp_millis(), value.end.timestamp_millis())
+                    .expect("config error")
+            }
+        }
+    }
+}
+
+pub trait DefaultTime {
+    fn default_time(&self) -> Option<TimeInterval>;
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TimeStartEnd {
+    pub start: DateTime<FixedOffset>,
+    pub end: DateTime<FixedOffset>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Ogc {
+    pub default_time: Option<OgcDefaultTime>,
+}
+
+impl ConfigElement for Ogc {
+    const KEY: &'static str = "ogc";
+}
+
+#[derive(Debug, Deserialize)]
 pub struct Wcs {
     pub tile_limit: usize,
+    pub default_time: Option<OgcDefaultTime>,
 }
 
 impl ConfigElement for Wcs {
     const KEY: &'static str = "wcs";
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Wfs {
+    pub default_time: Option<OgcDefaultTime>,
+}
+
+impl ConfigElement for Wfs {
+    const KEY: &'static str = "wfs";
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Wms {
+    pub default_time: Option<OgcDefaultTime>,
+}
+
+impl ConfigElement for Wms {
+    const KEY: &'static str = "wms";
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Odm {
+    pub endpoint: String,
+}
+
+impl ConfigElement for Odm {
+    const KEY: &'static str = "odm";
 }

@@ -219,9 +219,9 @@ pub enum Error {
     NoAreaOfUseDefined {
         proj_string: String,
     },
-    BboxesDoNotIntersect {
-        bbox_a: BoundingBox2D,
-        bbox_b: BoundingBox2D,
+    SpatialBoundsDoNotIntersect {
+        bounds_a: BoundingBox2D,
+        bounds_b: BoundingBox2D,
     },
 
     OutputBboxEmpty {
@@ -238,6 +238,11 @@ pub enum Error {
     InvalidSpatialPartition {
         upper_left_coordinate: Coordinate2D,
         lower_right_coordinate: Coordinate2D,
+    },
+
+    #[snafu(display("MissingRasterProperty Error: {}", property))]
+    MissingRasterProperty {
+        property: String,
     },
 }
 
