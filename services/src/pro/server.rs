@@ -35,6 +35,7 @@ where
         handlers::workflows::load_workflow_handler(ctx.clone()),
         handlers::workflows::get_workflow_metadata_handler(ctx.clone()),
         handlers::workflows::get_workflow_provenance_handler(ctx.clone()),
+        handlers::workflows::dataset_from_workflow_handler(ctx.clone()),
         pro::handlers::users::register_user_handler(ctx.clone()),
         pro::handlers::users::anonymous_handler(ctx.clone()),
         pro::handlers::users::login_handler(ctx.clone()),

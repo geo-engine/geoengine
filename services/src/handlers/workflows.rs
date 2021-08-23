@@ -1,16 +1,33 @@
 use std::collections::HashSet;
+use std::path::Path;
 
 use crate::datasets::provenance::ProvenanceProvider;
+use crate::datasets::storage::{AddDataset, DatasetDefinition, DatasetStore, MetaDataDefinition};
+use crate::datasets::upload::{UploadId, UploadRootPath};
 use crate::error;
 use crate::error::Result;
 use crate::handlers::{authenticate, Context};
+use crate::util::user_input::UserInput;
 use crate::util::IdResponse;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use futures::future::join_all;
+use geoengine_datatypes::dataset::InternalDatasetId;
+use geoengine_datatypes::primitives::AxisAlignedRectangle;
+use geoengine_datatypes::raster::GeoTransform;
+use geoengine_datatypes::spatial_reference::SpatialReference;
+use geoengine_datatypes::util::Identifier;
 use geoengine_operators::call_on_typed_operator;
-use geoengine_operators::engine::{OperatorDatasets, TypedResultDescriptor};
+use geoengine_operators::engine::{
+    OperatorDatasets, RasterQueryRectangle, TypedRasterQueryProcessor, TypedResultDescriptor,
+};
+use geoengine_operators::source::{
+    FileNotFoundHandling, GdalDatasetParameters, GdalMetaDataStatic,
+};
+use geoengine_operators::util::raster_stream_to_geotiff::raster_stream_to_geotiff;
+use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
+use tokio::fs;
 use uuid::Uuid;
 use warp::reply::Reply;
 use warp::Filter;
@@ -240,6 +257,229 @@ async fn get_workflow_provenance<C: Context>(
     Ok(warp::reply::json(&provenance))
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct RasterDatasetFromWorkflow {
+    name: String,
+    description: Option<String>,
+    query: RasterQueryRectangle,
+}
+
+pub(crate) fn dataset_from_workflow_handler<C: Context>(
+    ctx: C,
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
+    // TODO: support vector datasets
+
+    warp::path!("datasetFromWorkflow" / Uuid)
+        .map(WorkflowId)
+        .and(warp::post())
+        .and(authenticate(ctx.clone()))
+        .and(warp::any().map(move || ctx.clone()))
+        .and(warp::body::json())
+        .and_then(dataset_from_workflow)
+}
+
+// TODO: move into handler once async closures are available?
+async fn dataset_from_workflow<C: Context>(
+    workflow_id: WorkflowId,
+    session: C::Session,
+    ctx: C,
+    info: RasterDatasetFromWorkflow,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    // TODO: support datasets with multiple time steps
+
+    let workflow = ctx.workflow_registry_ref().await.load(&workflow_id).await?;
+
+    let operator = workflow.operator.get_raster().context(error::Operator)?;
+
+    let execution_context = ctx.execution_context(session.clone())?;
+    let initialized = operator
+        .clone()
+        .initialize(&execution_context)
+        .await
+        .context(error::Operator)?;
+
+    let result_descriptor = initialized.result_descriptor();
+
+    let processor = initialized.query_processor().context(error::Operator)?;
+
+    // put the created data into a new upload
+    let upload = UploadId::new();
+    let upload_path = upload.root_path()?;
+    fs::create_dir_all(&upload_path).await.context(error::Io)?;
+    let file_path = upload_path.join("raster.tiff");
+
+    let query_rect = info.query;
+    let query_ctx = ctx.query_context()?;
+    let no_data_value = result_descriptor.no_data_value;
+    let request_spatial_ref =
+        Option::<SpatialReference>::from(result_descriptor.spatial_reference).unwrap(); // TODO
+    let tile_limit = None; // TODO
+
+    // build the geotiff
+    build_geotiff::<C>(
+        processor,
+        &file_path,
+        query_rect,
+        query_ctx,
+        no_data_value,
+        request_spatial_ref,
+        tile_limit,
+    )
+    .await?;
+
+    // create the dataset
+    let dataset = create_dataset(info, file_path, result_descriptor, ctx, session).await?;
+
+    Ok(warp::reply::json(&IdResponse::from(dataset)))
+}
+
+async fn build_geotiff<C: Context>(
+    processor: TypedRasterQueryProcessor,
+    file_path: &Path,
+    query_rect: RasterQueryRectangle,
+    query_ctx: <C as Context>::QueryContext,
+    no_data_value: Option<f64>,
+    request_spatial_ref: SpatialReference,
+    tile_limit: Option<usize>,
+) -> Result<()> {
+    match processor {
+        geoengine_operators::engine::TypedRasterQueryProcessor::U8(p) => {
+            raster_stream_to_geotiff(
+                file_path,
+                p,
+                query_rect,
+                query_ctx,
+                no_data_value,
+                request_spatial_ref,
+                tile_limit,
+            )
+            .await
+        }
+        geoengine_operators::engine::TypedRasterQueryProcessor::U16(p) => {
+            raster_stream_to_geotiff(
+                file_path,
+                p,
+                query_rect,
+                query_ctx,
+                no_data_value,
+                request_spatial_ref,
+                tile_limit,
+            )
+            .await
+        }
+        geoengine_operators::engine::TypedRasterQueryProcessor::U32(p) => {
+            raster_stream_to_geotiff(
+                file_path,
+                p,
+                query_rect,
+                query_ctx,
+                no_data_value,
+                request_spatial_ref,
+                tile_limit,
+            )
+            .await
+        }
+        geoengine_operators::engine::TypedRasterQueryProcessor::I16(p) => {
+            raster_stream_to_geotiff(
+                file_path,
+                p,
+                query_rect,
+                query_ctx,
+                no_data_value,
+                request_spatial_ref,
+                tile_limit,
+            )
+            .await
+        }
+        geoengine_operators::engine::TypedRasterQueryProcessor::I32(p) => {
+            raster_stream_to_geotiff(
+                file_path,
+                p,
+                query_rect,
+                query_ctx,
+                no_data_value,
+                request_spatial_ref,
+                tile_limit,
+            )
+            .await
+        }
+        geoengine_operators::engine::TypedRasterQueryProcessor::F32(p) => {
+            raster_stream_to_geotiff(
+                file_path,
+                p,
+                query_rect,
+                query_ctx,
+                no_data_value,
+                request_spatial_ref,
+                tile_limit,
+            )
+            .await
+        }
+        geoengine_operators::engine::TypedRasterQueryProcessor::F64(p) => {
+            raster_stream_to_geotiff(
+                file_path,
+                p,
+                query_rect,
+                query_ctx,
+                no_data_value,
+                request_spatial_ref,
+                tile_limit,
+            )
+            .await
+        }
+        _ => return Err(error::Error::RasterDataTypeNotSupportByGdal),
+    }
+    .map_err(error::Error::from)?;
+    Ok(())
+}
+
+async fn create_dataset<C: Context>(
+    info: RasterDatasetFromWorkflow,
+    file_path: std::path::PathBuf,
+    result_descriptor: &geoengine_operators::engine::RasterResultDescriptor,
+    ctx: C,
+    session: <C as Context>::Session,
+) -> Result<geoengine_datatypes::dataset::DatasetId> {
+    let dataset_id = InternalDatasetId::new().into();
+    let dataset_definition = DatasetDefinition {
+        properties: AddDataset {
+            id: Some(dataset_id),
+            name: info.name,
+            description: info.description.unwrap_or_default(),
+            source_operator: "GdalSource".to_owned(),
+            symbology: None,  // TODO
+            provenance: None, // TODO
+        },
+        meta_data: MetaDataDefinition::GdalStatic(GdalMetaDataStatic {
+            time: Some(info.query.time_interval),
+            params: GdalDatasetParameters {
+                file_path,
+                rasterband_channel: 1,
+                geo_transform: GeoTransform::new(
+                    info.query.spatial_bounds.upper_left(),
+                    info.query.spatial_resolution.x,
+                    -info.query.spatial_resolution.y,
+                ),
+                width: (info.query.spatial_bounds.size_x() / info.query.spatial_resolution.x).ceil()
+                    as usize,
+                height: (info.query.spatial_bounds.size_y() / info.query.spatial_resolution.y)
+                    .ceil() as usize,
+                file_not_found_handling: FileNotFoundHandling::Error,
+                no_data_value: result_descriptor.no_data_value,
+                properties_mapping: None, // TODO
+                gdal_open_options: None,  // TODO
+            },
+            result_descriptor: result_descriptor.clone(),
+        }),
+    };
+    let mut db = ctx.dataset_db_ref_mut().await;
+    let meta = db.wrap_meta_data(dataset_definition.meta_data);
+    let dataset = db
+        .add_dataset(&session, dataset_definition.properties.validated()?, meta)
+        .await?;
+    Ok(dataset)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -252,7 +492,10 @@ mod tests {
     use crate::util::IdResponse;
     use crate::workflows::registry::WorkflowRegistry;
     use geoengine_datatypes::collections::MultiPointCollection;
-    use geoengine_datatypes::primitives::{FeatureData, Measurement, MultiPoint, TimeInterval};
+    use geoengine_datatypes::dataset::DatasetId;
+    use geoengine_datatypes::primitives::{
+        FeatureData, Measurement, MultiPoint, SpatialPartition2D, SpatialResolution, TimeInterval,
+    };
     use geoengine_datatypes::raster::RasterDataType;
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_operators::engine::{MultipleRasterSources, PlotOperator, TypedOperator};
@@ -263,6 +506,7 @@ mod tests {
     };
     use geoengine_operators::plot::{Statistics, StatisticsParams};
     use geoengine_operators::source::{GdalSource, GdalSourceParameters};
+    use geoengine_operators::util::raster_stream_to_geotiff::raster_stream_to_geotiff_bytes;
     use serde_json::json;
     use warp::http::Response;
     use warp::hyper::body::Bytes;
@@ -733,6 +977,115 @@ mod tests {
                     "uri": "http://example.org/"
                 }
             }])
+        );
+    }
+
+    #[tokio::test]
+    async fn dataset_from_workflow() {
+        let ctx = InMemoryContext::default();
+
+        let session_id = ctx.default_session_ref().await.id();
+
+        let dataset = add_ndvi_to_datasets(&ctx).await;
+
+        let workflow = Workflow {
+            operator: TypedOperator::Raster(
+                GdalSource {
+                    params: GdalSourceParameters {
+                        dataset: dataset.clone(),
+                    },
+                }
+                .boxed(),
+            ),
+        };
+
+        let workflow_id = ctx
+            .workflow_registry_ref_mut()
+            .await
+            .register(workflow)
+            .await
+            .unwrap();
+
+        // create dataset from workflow
+        let res = warp::test::request()
+            .method("POST")
+            .path(&format!("/datasetFromWorkflow/{}", workflow_id.to_string(),))
+            .header(
+                "Authorization",
+                format!("Bearer {}", session_id.to_string()),
+            )
+            .body(
+                r#"{
+                "name": "foo",
+                "description": null,
+                "query": {
+                    "spatial_bounds": {
+                        "upperLeftCoordinate": {
+                            "x": -10.0,
+                            "y": 80.0
+                        },
+                        "lowerRightCoordinate": {
+                            "x": 50.0,
+                            "y": 20.0
+                        }
+                    },
+                    "time_interval": {
+                        "start": 1388534400000,
+                        "end": 1388534401000
+                    },
+                    "spatial_resolution": {
+                        "x": 0.1,
+                        "y": 0.1
+                    }
+                }
+            }"#,
+            )
+            .reply(&dataset_from_workflow_handler(ctx.clone()))
+            .await;
+
+        assert_eq!(res.status(), 200);
+
+        let body = std::str::from_utf8(res.body()).unwrap();
+        let dataset_id = serde_json::from_str::<IdResponse<DatasetId>>(body).unwrap();
+
+        // query the newly created dataset
+        let op = GdalSource {
+            params: GdalSourceParameters {
+                dataset: dataset_id.id.clone(),
+            },
+        }
+        .boxed();
+
+        let session = ctx.default_session_ref().await.clone();
+        let exe_ctx = ctx.execution_context(session).unwrap();
+
+        let o = op.initialize(&exe_ctx).await.unwrap();
+
+        let query_ctx = ctx.query_context().unwrap();
+        let query_rect = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap(),
+            time_interval: TimeInterval::new_unchecked(1_388_534_400_000, 1_388_534_400_000 + 1000),
+            spatial_resolution: SpatialResolution::zero_point_one(),
+        };
+
+        let processor = o.query_processor().unwrap().get_u8().unwrap();
+
+        let result = raster_stream_to_geotiff_bytes(
+            processor,
+            query_rect,
+            query_ctx,
+            Some(0.), // TODO
+            SpatialReference::epsg_4326(),
+            None,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            include_bytes!(
+                "../../../operators/test-data/raster/geotiff_from_stream_compressed.tiff"
+            ) as &[u8],
+            result
         );
     }
 }
