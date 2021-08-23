@@ -766,7 +766,13 @@ x;y
         );
         let res = send_test_request(req, ctx).await;
 
-        ErrorResponse::assert(res, 400, "UnableToParseQueryString", "Unable to parse query string: missing field `typeNames`").await;
+        ErrorResponse::assert(
+            res,
+            400,
+            "UnableToParseQueryString",
+            "Unable to parse query string: missing field `typeNames`",
+        )
+        .await;
     }
 
     async fn get_feature_json_test_helper(method: Method) -> ServiceResponse {
@@ -890,7 +896,13 @@ x;y
         ));
         let res = send_test_request(req, ctx).await;
 
-        ErrorResponse::assert(res, 400, "UnableToParseQueryString", "Unable to parse query string: missing field `typeNames`").await;
+        ErrorResponse::assert(
+            res,
+            400,
+            "UnableToParseQueryString",
+            "Unable to parse query string: missing field `typeNames`",
+        )
+        .await;
     }
 
     async fn add_dataset_definition_to_datasets(

@@ -11,15 +11,11 @@ use actix_files::Files;
 use actix_web::{web, App, HttpServer};
 use actix_web_httpauth::middleware::HttpAuthentication;
 #[cfg(feature = "postgres")]
-use bb8_postgres::tokio_postgres;
-#[cfg(feature = "postgres")]
 use bb8_postgres::tokio_postgres::NoTls;
 use log::info;
 use snafu::ResultExt;
 use std::net::SocketAddr;
 use std::path::PathBuf;
-#[cfg(feature = "postgres")]
-use std::str::FromStr;
 
 use super::projects::ProProjectDb;
 use crate::handlers::validate_token;
@@ -124,7 +120,10 @@ where
     cfg.route("/version", web::get().to(show_version_handler)) // TODO: allow disabling this function via config or feature flag
         .route("/wms", web::get().to(handlers::wms::wms_handler::<C>))
         .route("/wfs", web::get().to(handlers::wfs::wfs_handler::<C>))
-        .route("/wcs", web::get().to(handlers::wcs::wcs_handler::<C>))
+        .route(
+            "/wcs/{workflow}",
+            web::get().to(handlers::wcs::wcs_handler::<C>),
+        )
         .route(
             "/user",
             web::post().to(pro::handlers::users::register_user_handler::<C>),
@@ -201,7 +200,7 @@ where
                     web::get().to(pro::handlers::projects::project_versions_handler::<C>),
                 )
                 .route(
-                    "/project/permissions/add",
+                    "/project/permission/add",
                     web::post().to(pro::handlers::projects::add_permission_handler::<C>),
                 )
                 .route(

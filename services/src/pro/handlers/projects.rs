@@ -221,13 +221,15 @@ where
 
 #[cfg(test)]
 mod tests {
+    use super::*;
 
-    use bytes::Bytes;
-    use warp::hyper::Response;
+    use actix_web::dev::ServiceResponse;
+    use actix_web::{http::header, http::Method, test};
+    use actix_web_httpauth::headers::authorization::Bearer;
 
     use crate::{
-        contexts::{Context, Session},
-        handlers::{handle_rejection, ErrorResponse},
+        contexts::Context,
+        handlers::ErrorResponse,
         pro::{
             contexts::ProInMemoryContext,
             projects::ProjectPermission,
@@ -236,12 +238,10 @@ mod tests {
         },
         projects::{Project, ProjectDb, ProjectVersion},
         util::{
-            tests::{check_allowed_http_methods, update_project_helper},
+            tests::{check_allowed_http_methods, send_pro_test_request, update_project_helper},
             user_input::UserInput,
         },
     };
-
-    use super::*;
 
     #[tokio::test]
     async fn load_version() {
@@ -259,24 +259,17 @@ mod tests {
             .await
             .unwrap();
 
-        let res = warp::test::request()
-            .method("GET")
-            .path(&format!("/project/{}", project.to_string()))
-            .header("Content-Length", "0")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session.id().to_string()),
-            )
-            .reply(&load_project_handler(ctx.clone()))
-            .await;
+        let req = test::TestRequest::get()
+            .uri(&format!("/project/{}", project.to_string()))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id.to_string())));
+        let res = send_pro_test_request(req, ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
 
-        let body: String = String::from_utf8(res.body().to_vec()).unwrap();
-        assert_eq!(
-            serde_json::from_str::<Project>(&body).unwrap().name,
-            "TestUpdate"
-        );
+        let body: Project = test::read_body_json(res).await;
+
+        assert_eq!(body.name, "TestUpdate");
 
         let versions = ctx
             .project_db()
@@ -287,25 +280,20 @@ mod tests {
             .unwrap();
         let version_id = versions.first().unwrap().id;
 
-        let res = warp::test::request()
-            .method("GET")
-            .path(&format!(
+        let req = test::TestRequest::get()
+            .uri(&format!(
                 "/project/{}/{}",
                 project.to_string(),
                 version_id.to_string()
             ))
-            .header("Content-Length", "0")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session.id().to_string()),
-            )
-            .reply(&load_project_handler(ctx))
-            .await;
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id.to_string())));
+        let res = send_pro_test_request(req, ctx).await;
 
         assert_eq!(res.status(), 200);
 
-        let body: String = String::from_utf8(res.body().to_vec()).unwrap();
-        assert_eq!(serde_json::from_str::<Project>(&body).unwrap().name, "Test");
+        let body: Project = test::read_body_json(res).await;
+        assert_eq!(body.name, "Test");
     }
 
     #[tokio::test]
@@ -314,26 +302,16 @@ mod tests {
 
         let (session, project) = create_project_helper(&ctx).await;
 
-        let res = warp::test::request()
-            .method("GET")
-            .path(&format!(
+        let req = test::TestRequest::get()
+            .uri(&format!(
                 "/project/{}/00000000-0000-0000-0000-000000000000",
                 project.to_string()
             ))
-            .header("Content-Length", "0")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session.id().to_string()),
-            )
-            .reply(&load_project_handler(ctx).recover(handle_rejection))
-            .await;
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id.to_string())));
+        let res = send_pro_test_request(req, ctx).await;
 
-        ErrorResponse::assert(
-            &res,
-            400,
-            "ProjectLoadFailed",
-            "The project failed to load.",
-        );
+        ErrorResponse::assert(res, 400, "ProjectLoadFailed", "The project failed to load.").await;
     }
 
     #[tokio::test]
@@ -364,17 +342,12 @@ mod tests {
             permission: ProjectPermission::Read,
         };
 
-        let res = warp::test::request()
-            .method("POST")
-            .path("/project/permission/add")
-            .header("Content-Length", "0")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session.id().to_string()),
-            )
-            .json(&permission)
-            .reply(&add_permission_handler(ctx.clone()))
-            .await;
+        let req = test::TestRequest::post()
+            .uri("/project/permission/add")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id.to_string())))
+            .set_json(&permission);
+        let res = send_pro_test_request(req, ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
 
@@ -415,20 +388,19 @@ mod tests {
             permission: ProjectPermission::Read,
         };
 
-        let res = warp::test::request()
-            .method("POST")
-            .path("/project/permission/add")
-            .header("Content-Length", "0")
-            .json(&permission)
-            .reply(&add_permission_handler(ctx.clone()).recover(handle_rejection))
-            .await;
+        let req = test::TestRequest::post()
+            .uri("/project/permission/add")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .set_json(&permission);
+        let res = send_pro_test_request(req, ctx).await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             401,
             "MissingAuthorizationHeader",
             "Header with authorization token not provided.",
-        );
+        )
+        .await;
     }
 
     #[tokio::test]
@@ -466,17 +438,12 @@ mod tests {
             .await
             .unwrap();
 
-        let res = warp::test::request()
-            .method("DELETE")
-            .path("/project/permission")
-            .header("Content-Length", "0")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session.id().to_string()),
-            )
-            .json(&permission)
-            .reply(&remove_permission_handler(ctx.clone()))
-            .await;
+        let req = test::TestRequest::delete()
+            .uri("/project/permission")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id.to_string())))
+            .set_json(&permission);
+        let res = send_pro_test_request(req, ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
 
@@ -535,20 +502,19 @@ mod tests {
             .await
             .unwrap();
 
-        let res = warp::test::request()
-            .method("DELETE")
-            .path("/project/permission")
-            .header("Content-Length", "0")
-            .json(&permission)
-            .reply(&remove_permission_handler(ctx.clone()).recover(handle_rejection))
-            .await;
+        let req = test::TestRequest::delete()
+            .uri("/project/permission")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .set_json(&permission);
+        let res = send_pro_test_request(req, ctx).await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             401,
             "MissingAuthorizationHeader",
             "Header with authorization token not provided.",
-        );
+        )
+        .await;
     }
 
     #[tokio::test]
@@ -586,23 +552,17 @@ mod tests {
             .await
             .unwrap();
 
-        let res = warp::test::request()
-            .method("GET")
-            .path(&format!("/project/{}/permissions", project.to_string()))
-            .header("Content-Length", "0")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session.id().to_string()),
-            )
-            .reply(&list_permissions_handler(ctx))
-            .await;
+        let req = test::TestRequest::get()
+            .uri(&format!("/project/{}/permissions", project.to_string()))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id.to_string())))
+            .set_json(&permission);
+        let res = send_pro_test_request(req, ctx).await;
 
         assert_eq!(res.status(), 200);
 
-        let body: String = String::from_utf8(res.body().to_vec()).unwrap();
-        let result = serde_json::from_str::<Vec<UserProjectPermission>>(&body);
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap().len(), 2);
+        let result: Vec<UserProjectPermission> = test::read_body_json(res).await;
+        assert_eq!(result.len(), 2);
     }
 
     #[tokio::test]
@@ -640,22 +600,22 @@ mod tests {
             .await
             .unwrap();
 
-        let res = warp::test::request()
-            .method("GET")
-            .path(&format!("/project/{}/permissions", project.to_string()))
-            .header("Content-Length", "0")
-            .reply(&list_permissions_handler(ctx).recover(handle_rejection))
-            .await;
+        let req = test::TestRequest::get()
+            .uri(&format!("/project/{}/permissions", project.to_string()))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .set_json(&permission);
+        let res = send_pro_test_request(req, ctx).await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             401,
             "MissingAuthorizationHeader",
             "Header with authorization token not provided.",
-        );
+        )
+        .await;
     }
 
-    async fn versions_test_helper(method: &str) -> Response<Bytes> {
+    async fn versions_test_helper(method: Method) -> ServiceResponse {
         let ctx = ProInMemoryContext::default();
 
         let (session, project) = create_project_helper(&ctx).await;
@@ -670,32 +630,27 @@ mod tests {
             .await
             .unwrap();
 
-        warp::test::request()
+        let req = test::TestRequest::default()
             .method(method)
-            .path("/project/versions")
-            .header("Content-Length", "0")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session.id().to_string()),
-            )
-            .json(&project)
-            .reply(&project_versions_handler(ctx).recover(handle_rejection))
-            .await
+            .uri("/project/versions")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id.to_string())))
+            .set_json(&project);
+        send_pro_test_request(req, ctx).await
     }
 
     #[tokio::test]
     async fn versions() {
-        let res = versions_test_helper("GET").await;
+        let res = versions_test_helper(Method::GET).await;
 
         assert_eq!(res.status(), 200);
 
-        let body: String = String::from_utf8(res.body().to_vec()).unwrap();
-        assert!(serde_json::from_str::<Vec<ProjectVersion>>(&body).is_ok());
+        let _body: Vec<ProjectVersion> = test::read_body_json(res).await;
     }
 
     #[tokio::test]
     async fn versions_invalid_method() {
-        check_allowed_http_methods(versions_test_helper, &["GET"]).await;
+        check_allowed_http_methods(versions_test_helper, &[Method::GET]).await;
     }
 
     #[tokio::test]
@@ -714,19 +669,18 @@ mod tests {
             .await
             .unwrap();
 
-        let res = warp::test::request()
-            .method("GET")
-            .path("/project/versions")
-            .header("Content-Length", "0")
-            .json(&project)
-            .reply(&project_versions_handler(ctx).recover(handle_rejection))
-            .await;
+        let req = test::TestRequest::get()
+            .uri("/project/versions")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .set_json(&project);
+        let res = send_pro_test_request(req, ctx).await;
 
         ErrorResponse::assert(
-            &res,
+            res,
             401,
             "MissingAuthorizationHeader",
             "Header with authorization token not provided.",
-        );
+        )
+        .await;
     }
 }

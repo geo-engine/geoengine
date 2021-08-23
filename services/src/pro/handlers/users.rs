@@ -201,7 +201,7 @@ pub(crate) async fn session_view_handler<C: ProContext>(
     Ok(HttpResponse::Ok())
 }
 
-#[cfg(test)]
+/*#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -692,4 +692,4 @@ mod tests {
             Some(rect)
         );
     }
-}
+}*/
