@@ -1,0 +1,6 @@
+{
+    "type": "Bexis2DataProviderDefinition",
+    "name": "Bexis2: Train",
+    "id": "13b03ea6-8c8b-4131-9e36-fe14490b9d88",
+    "baseUrl": "https://train.bexis2.uni-jena.de/api"
+}
