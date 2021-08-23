@@ -1,11 +1,10 @@
-use crate::handlers::authenticate;
+use crate::error::Result;
 use crate::pro::contexts::ProContext;
 use crate::pro::projects::LoadVersion;
 use crate::pro::projects::{ProProjectDb, UserProjectPermission};
-use crate::projects::ProjectId;
+use crate::projects::{ProjectId, ProjectVersionId};
 
-use uuid::Uuid;
-use warp::Filter;
+use actix_web::{web, HttpResponse, Responder};
 
 /// Retrieves details about a [project](crate::projects::project::Project).
 /// If no version is specified, it loads the latest version.
@@ -52,39 +51,37 @@ use warp::Filter;
 ///   }
 /// }
 /// ```
-pub(crate) fn load_project_handler<C: ProContext>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone
+pub(crate) async fn load_project_version_handler<C: ProContext>(
+    project: web::Path<(ProjectId, ProjectVersionId)>,
+    session: C::Session,
+    ctx: web::Data<C>,
+) -> Result<impl Responder>
 where
     C::ProjectDB: ProProjectDb,
 {
-    (warp::path!("project" / Uuid / Uuid).map(|project_id: Uuid, version_id: Uuid| {
-        (ProjectId(project_id), LoadVersion::from(Some(version_id)))
-    }))
-    .or(warp::path!("project" / Uuid)
-        .map(|project_id| (ProjectId(project_id), LoadVersion::Latest)))
-    .unify()
-    .and(warp::get())
-    .and(authenticate(ctx.clone()))
-    .and(warp::any().map(move || ctx.clone()))
-    .and_then(load_project)
+    let project = project.into_inner();
+    let id = ctx
+        .project_db_ref()
+        .await
+        .load_version(&session, project.0, LoadVersion::Version(project.1))
+        .await?;
+    Ok(web::Json(id))
 }
 
-// TODO: move into handler once async closures are available?
-async fn load_project<C: ProContext>(
-    project: (ProjectId, LoadVersion),
+pub(crate) async fn load_project_latest_handler<C: ProContext>(
+    project: web::Path<ProjectId>,
     session: C::Session,
-    ctx: C,
-) -> Result<impl warp::Reply, warp::Rejection>
+    ctx: web::Data<C>,
+) -> Result<impl Responder>
 where
     C::ProjectDB: ProProjectDb,
 {
     let id = ctx
         .project_db_ref()
         .await
-        .load_version(&session, project.0, project.1)
+        .load_version(&session, project.into_inner(), LoadVersion::Latest)
         .await?;
-    Ok(warp::reply::json(&id))
+    Ok(web::Json(id))
 }
 
 /// Lists all [versions](crate::projects::project::ProjectVersion) of a project.
@@ -112,35 +109,20 @@ where
 ///   }
 /// ]
 /// ```
-pub(crate) fn project_versions_handler<C: ProContext>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone
-where
-    C::ProjectDB: ProProjectDb,
-{
-    warp::path!("project" / "versions")
-        .and(warp::get())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and(warp::body::json())
-        .and_then(project_versions)
-}
-
-// TODO: move into handler once async closures are available?
-async fn project_versions<C: ProContext>(
+pub(crate) async fn project_versions_handler<C: ProContext>(
     session: C::Session,
-    ctx: C,
-    project: ProjectId,
-) -> Result<impl warp::Reply, warp::Rejection>
+    ctx: web::Data<C>,
+    project: web::Json<ProjectId>,
+) -> Result<impl Responder>
 where
     C::ProjectDB: ProProjectDb,
 {
     let versions = ctx
         .project_db_ref_mut()
         .await
-        .versions(&session, project)
+        .versions(&session, project.into_inner())
         .await?;
-    Ok(warp::reply::json(&versions))
+    Ok(web::Json(versions))
 }
 
 /// Add a [permission](crate::projects::project::ProjectPermission) for another user
@@ -158,34 +140,19 @@ where
 ///   "permission": "Read"
 /// }
 /// ```
-pub(crate) fn add_permission_handler<C: ProContext>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone
-where
-    C::ProjectDB: ProProjectDb,
-{
-    warp::path!("project" / "permission" / "add")
-        .and(warp::post())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and(warp::body::json())
-        .and_then(add_permission)
-}
-
-// TODO: move into handler once async closures are available?
-async fn add_permission<C: ProContext>(
+pub(crate) async fn add_permission_handler<C: ProContext>(
     session: C::Session,
-    ctx: C,
-    permission: UserProjectPermission,
-) -> Result<impl warp::Reply, warp::Rejection>
+    ctx: web::Data<C>,
+    permission: web::Json<UserProjectPermission>,
+) -> Result<impl Responder>
 where
     C::ProjectDB: ProProjectDb,
 {
     ctx.project_db_ref_mut()
         .await
-        .add_permission(&session, permission)
+        .add_permission(&session, permission.into_inner())
         .await?;
-    Ok(warp::reply())
+    Ok(HttpResponse::Ok())
 }
 
 /// Removes a [permission](crate::projects::project::ProjectPermission) of another user
@@ -203,34 +170,19 @@ where
 ///   "permission": "Read"
 /// }
 /// ```
-pub(crate) fn remove_permission_handler<C: ProContext>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone
-where
-    C::ProjectDB: ProProjectDb,
-{
-    warp::path!("project" / "permission")
-        .and(warp::delete())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and(warp::body::json())
-        .and_then(remove_permission)
-}
-
-// TODO: move into handler once async closures are available?
-async fn remove_permission<C: ProContext>(
+pub(crate) async fn remove_permission_handler<C: ProContext>(
     session: C::Session,
-    ctx: C,
-    permission: UserProjectPermission,
-) -> Result<impl warp::Reply, warp::Rejection>
+    ctx: web::Data<C>,
+    permission: web::Json<UserProjectPermission>,
+) -> Result<impl Responder>
 where
     C::ProjectDB: ProProjectDb,
 {
     ctx.project_db_ref_mut()
         .await
-        .remove_permission(&session, permission)
+        .remove_permission(&session, permission.into_inner())
         .await?;
-    Ok(warp::reply())
+    Ok(HttpResponse::Ok())
 }
 
 /// Shows the access rights the user has for a given project.
@@ -251,35 +203,20 @@ where
 ///   }
 /// ]
 /// ```
-pub(crate) fn list_permissions_handler<C: ProContext>(
-    ctx: C,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone
-where
-    C::ProjectDB: ProProjectDb,
-{
-    warp::path!("project" / Uuid / "permissions")
-        .map(ProjectId)
-        .and(warp::get())
-        .and(authenticate(ctx.clone()))
-        .and(warp::any().map(move || ctx.clone()))
-        .and_then(list_permissions)
-}
-
-// TODO: move into handler once async closures are available?
-async fn list_permissions<C: ProContext>(
-    project: ProjectId,
+pub(crate) async fn list_permissions_handler<C: ProContext>(
+    project: web::Path<ProjectId>,
     session: C::Session,
-    ctx: C,
-) -> Result<impl warp::Reply, warp::Rejection>
+    ctx: web::Data<C>,
+) -> Result<impl Responder>
 where
     C::ProjectDB: ProProjectDb,
 {
     let permissions = ctx
         .project_db_ref_mut()
         .await
-        .list_permissions(&session, project)
+        .list_permissions(&session, project.into_inner())
         .await?;
-    Ok(warp::reply::json(&permissions))
+    Ok(web::Json(permissions))
 }
 
 #[cfg(test)]

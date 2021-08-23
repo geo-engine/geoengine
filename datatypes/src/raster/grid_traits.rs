@@ -146,9 +146,12 @@ pub trait NoDataValue {
 
     fn no_data_value(&self) -> Option<Self::NoDataType>;
 
+    #[allow(clippy::eq_op)]
     fn is_no_data(&self, value: Self::NoDataType) -> bool {
-        self.no_data_value()
-            .map_or(false, |no_data_value| value == no_data_value)
+        self.no_data_value().map_or(false, |no_data_value| {
+            // value is equal no-data value or both are NAN.
+            value == no_data_value || (no_data_value != no_data_value && value != value)
+        })
     }
 }
 
@@ -174,4 +177,33 @@ where
 
     /// set new bounds. will fail if the axis sizes do not match.
     fn set_grid_bounds(self, bounds: GridBoundingBox<I>) -> Result<Self::Output>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    impl NoDataValue for f32 {
+        type NoDataType = f32;
+
+        fn no_data_value(&self) -> Option<Self::NoDataType> {
+            Some(*self)
+        }
+    }
+
+    #[test]
+    fn no_data_nan() {
+        let no_data_value = f32::NAN;
+
+        assert!(!no_data_value.is_no_data(42.));
+        assert!(no_data_value.is_no_data(f32::NAN));
+    }
+
+    #[test]
+    fn no_data_float() {
+        let no_data_value: f32 = 42.;
+
+        assert!(no_data_value.is_no_data(42.));
+        assert!(!no_data_value.is_no_data(f32::NAN));
+    }
 }

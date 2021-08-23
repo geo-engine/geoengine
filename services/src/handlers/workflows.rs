@@ -1,14 +1,16 @@
-use actix_web::{web, Responder};
-use uuid::Uuid;
+use std::collections::HashSet;
 
+use crate::datasets::provenance::ProvenanceProvider;
 use crate::error;
 use crate::error::Result;
 use crate::handlers::Context;
 use crate::util::IdResponse;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
+use actix_web::{web, Responder};
+use futures::future::join_all;
 use geoengine_operators::call_on_typed_operator;
-use geoengine_operators::engine::TypedResultDescriptor;
+use geoengine_operators::engine::{OperatorDatasets, TypedResultDescriptor};
 use snafu::ResultExt;
 
 /// Registers a new [Workflow].
@@ -81,14 +83,14 @@ pub(crate) async fn register_workflow_handler<C: Context>(
 /// }
 /// ```
 pub(crate) async fn load_workflow_handler<C: Context>(
-    id: web::Path<Uuid>,
+    id: web::Path<WorkflowId>,
     _session: C::Session,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
     let wf = ctx
         .workflow_registry_ref()
         .await
-        .load(&WorkflowId(id.into_inner()))
+        .load(&id.into_inner())
         .await?;
     Ok(web::Json(wf))
 }
@@ -110,14 +112,14 @@ pub(crate) async fn load_workflow_handler<C: Context>(
 /// }
 /// ```
 pub(crate) async fn get_workflow_metadata_handler<C: Context>(
-    id: web::Path<Uuid>,
+    id: web::Path<WorkflowId>,
     session: C::Session,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
     let workflow = ctx
         .workflow_registry_ref()
         .await
-        .load(&WorkflowId(id.into_inner()))
+        .load(&id.into_inner())
         .await?;
 
     let execution_context = ctx.execution_context(session)?;
@@ -138,13 +140,59 @@ pub(crate) async fn get_workflow_metadata_handler<C: Context>(
     Ok(web::Json(result_descriptor))
 }
 
-#[cfg(test)]
+/// Gets the provenance of all datasets used in a workflow.
+///
+/// # Example
+///
+/// ```text
+/// GET /workflow/cee25e8c-18a0-5f1b-a504-0bc30de21e06/provenance
+/// Authorization: Bearer e9da345c-b1df-464b-901c-0335a0419227
+/// ```
+/// Response:
+/// ```text
+/// {
+///   "id": {
+///     "type": "internal",
+///     "id": "846a823a-6859-4b94-ab0a-c1de80f593d8"
+///   }
+///   "citation": "Author, Dataset Tile",
+///   "license": "Some license"
+///   "uri": "http://example.org/"
+/// }
+/// ```
+pub(crate) async fn get_workflow_provenance_handler<C: Context>(
+    id: web::Path<WorkflowId>,
+    _session: C::Session,
+    ctx: web::Data<C>,
+) -> Result<impl Responder> {
+    let workflow = ctx
+        .workflow_registry_ref()
+        .await
+        .load(&id.into_inner())
+        .await?;
+
+    let datasets = workflow.operator.datasets();
+
+    let db = ctx.dataset_db_ref().await;
+
+    let provenance: Vec<_> = datasets.iter().map(|id| db.provenance(id)).collect();
+    let provenance: Result<Vec<_>> = join_all(provenance).await.into_iter().collect();
+
+    // filter duplicates
+    let provenance: HashSet<_> = provenance?.into_iter().collect();
+    let provenance: Vec<_> = provenance.into_iter().collect();
+
+    Ok(web::Json(provenance))
+}
+
+/*#[cfg(test)]
 mod tests {
     use super::*;
     use crate::contexts::{InMemoryContext, Session, SimpleContext};
     use crate::handlers::{handle_rejection, ErrorResponse};
     use crate::util::tests::{
-        check_allowed_http_methods, check_allowed_http_methods2, register_ndvi_workflow_helper,
+        add_ndvi_to_datasets, check_allowed_http_methods, check_allowed_http_methods2,
+        register_ndvi_workflow_helper,
     };
     use crate::util::IdResponse;
     use crate::workflows::registry::WorkflowRegistry;
@@ -152,13 +200,14 @@ mod tests {
     use geoengine_datatypes::primitives::{FeatureData, Measurement, MultiPoint, TimeInterval};
     use geoengine_datatypes::raster::RasterDataType;
     use geoengine_datatypes::spatial_reference::SpatialReference;
-    use geoengine_operators::engine::{MultipleRasterSources, PlotOperator};
+    use geoengine_operators::engine::{MultipleRasterSources, PlotOperator, TypedOperator};
     use geoengine_operators::engine::{RasterOperator, RasterResultDescriptor, VectorOperator};
     use geoengine_operators::mock::{
         MockFeatureCollectionSource, MockPointSource, MockPointSourceParams, MockRasterSource,
         MockRasterSourceParams,
     };
     use geoengine_operators::plot::{Statistics, StatisticsParams};
+    use geoengine_operators::source::{GdalSource, GdalSourceParameters};
     use serde_json::json;
     use warp::http::Response;
     use warp::hyper::body::Bytes;
@@ -576,4 +625,59 @@ mod tests {
             })
         );
     }
-}
+
+    #[tokio::test]
+    async fn provenance() {
+        let ctx = InMemoryContext::default();
+
+        let session_id = ctx.default_session_ref().await.id();
+
+        let dataset = add_ndvi_to_datasets(&ctx).await;
+
+        let workflow = Workflow {
+            operator: TypedOperator::Raster(
+                GdalSource {
+                    params: GdalSourceParameters {
+                        dataset: dataset.clone(),
+                    },
+                }
+                .boxed(),
+            ),
+        };
+
+        let id = ctx
+            .workflow_registry()
+            .write()
+            .await
+            .register(workflow.clone())
+            .await
+            .unwrap();
+
+        let res = warp::test::request()
+            .method("GET")
+            .path(&format!("/workflow/{}/provenance", id.to_string()))
+            .header(
+                "Authorization",
+                format!("Bearer {}", session_id.to_string()),
+            )
+            .reply(&get_workflow_provenance_handler(ctx))
+            .await;
+
+        assert_eq!(res.status(), 200, "{:?}", res.body());
+
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(res.body()).unwrap(),
+            serde_json::json!([{
+                "dataset": {
+                    "type": "internal",
+                    "datasetId": dataset.internal().unwrap().to_string()
+                },
+                "provenance": {
+                    "citation": "Sample Citation",
+                    "license": "Sample License",
+                    "uri": "http://example.org/"
+                }
+            }])
+        );
+    }
+}*/

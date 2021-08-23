@@ -1,4 +1,5 @@
-use crate::engine::{RasterOperator, TypedOperator, VectorOperator};
+use crate::engine::{OperatorDatasets, RasterOperator, TypedOperator, VectorOperator};
+use geoengine_datatypes::dataset::DatasetId;
 use serde::{Deserialize, Serialize};
 
 /// It is either a `RasterOperator` or a `VectorOperator`
@@ -43,6 +44,15 @@ impl From<Box<dyn RasterOperator>> for RasterOrVectorOperator {
 impl From<Box<dyn VectorOperator>> for RasterOrVectorOperator {
     fn from(operator: Box<dyn VectorOperator>) -> Self {
         Self::Vector(operator)
+    }
+}
+
+impl OperatorDatasets for RasterOrVectorOperator {
+    fn datasets_collect(&self, datasets: &mut Vec<DatasetId>) {
+        match self {
+            RasterOrVectorOperator::Raster(r) => r.datasets_collect(datasets),
+            RasterOrVectorOperator::Vector(v) => v.datasets_collect(datasets),
+        }
     }
 }
 

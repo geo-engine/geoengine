@@ -1,9 +1,11 @@
 use arrow::array::{
-    Array, ArrayData, Date64Array, Date64Builder, FixedSizeBinaryBuilder, FixedSizeListArray,
-    FixedSizeListBuilder, Float64Array, Float64Builder, Int32Array, Int32Builder, ListArray,
-    ListBuilder, StringArray, StringBuilder, StructBuilder, UInt64Array, UInt64Builder,
+    Array, ArrayData, BooleanArray, Date64Array, Date64Builder, FixedSizeBinaryBuilder,
+    FixedSizeListArray, FixedSizeListBuilder, Float64Array, Float64Builder, Int32Array,
+    Int32Builder, ListArray, ListBuilder, StringArray, StringBuilder, StructBuilder, UInt64Array,
+    UInt64Builder,
 };
 use arrow::buffer::{Buffer, MutableBuffer};
+use arrow::compute::gt_eq_scalar;
 use arrow::compute::kernels::filter::filter;
 use arrow::datatypes::{DataType, Field};
 use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval};
@@ -721,4 +723,54 @@ fn float_equality() {
 
     assert_ne!(floats, floats3);
     assert_ne!(floats2, floats3);
+}
+
+#[test]
+fn filter_example() {
+    let a = Int32Array::from(vec![Some(1), Some(2), Some(3)]);
+
+    // dbg!(&a);
+
+    let b = filter(
+        &a,
+        &BooleanArray::from(vec![Some(true), Some(false), Some(true)]),
+    )
+    .unwrap();
+
+    // dbg!(&b);
+
+    assert_eq!(
+        b.as_any().downcast_ref::<Int32Array>().unwrap(),
+        &Int32Array::from(vec![Some(1), Some(3)])
+    );
+
+    let c = Int32Array::from(vec![Some(1), Some(2), None]);
+
+    // dbg!(&c);
+
+    let d = filter(
+        &c,
+        &BooleanArray::from(vec![Some(true), Some(false), Some(true)]),
+    )
+    .unwrap();
+
+    // dbg!(&d);
+
+    assert_eq!(
+        d.as_any().downcast_ref::<Int32Array>().unwrap(),
+        &Int32Array::from(vec![Some(1), None])
+    );
+}
+
+#[test]
+fn gt_eq_example() {
+    let a = Int32Array::from(vec![Some(1), Some(2), None]);
+
+    // dbg!(&a);
+
+    let b = gt_eq_scalar(&a, 2).unwrap();
+
+    // dbg!(&b);
+
+    assert_eq!(&b, &BooleanArray::from(vec![Some(false), Some(true), None]));
 }

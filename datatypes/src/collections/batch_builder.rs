@@ -144,6 +144,7 @@ impl RawFeatureCollectionBuilder {
         self.types.clone()
     }
 
+    #[allow(clippy::unnecessary_wraps)]
     pub fn set_time_intervals(&mut self, values_buffer: Buffer) -> Result<()> {
         let data = ArrayData::builder(TimeInterval::arrow_data_type())
             .len(self.num_features)
@@ -182,6 +183,7 @@ impl RawFeatureCollectionBuilder {
         Ok(())
     }
 
+    #[allow(clippy::unnecessary_wraps)]
     pub fn set_points(&mut self, coords: Buffer, offsets: Buffer) -> Result<()> {
         // TODO: check buffers validity / size
         // TODO: check offsets start at zero and are valid
@@ -212,6 +214,7 @@ impl RawFeatureCollectionBuilder {
         Ok(())
     }
 
+    #[allow(clippy::unnecessary_wraps)]
     pub fn set_lines(
         &mut self,
         coords: Buffer,
@@ -251,6 +254,7 @@ impl RawFeatureCollectionBuilder {
         Ok(())
     }
 
+    #[allow(clippy::unnecessary_wraps)]
     pub fn set_polygons(
         &mut self,
         coords: Buffer,
@@ -398,7 +402,7 @@ impl RawFeatureCollectionBuilder {
                 column_type.arrow_data_type(),
                 column_type.nullable(),
             ));
-            arrays.push(array)
+            arrays.push(array);
         }
 
         if CollectionType::IS_GEOMETRY {

@@ -18,10 +18,11 @@ use geoengine_datatypes::{
     primitives::{FeatureData, Geometry, MultiPoint, TimeInstance, TimeInterval},
     spatial_reference::SpatialReference,
 };
-use geoengine_operators::engine::VectorOperator;
 use geoengine_operators::engine::{
-    QueryContext, QueryRectangle, ResultDescriptor, TypedVectorQueryProcessor, VectorQueryProcessor,
+    QueryContext, ResultDescriptor, TypedVectorQueryProcessor, VectorQueryProcessor,
+    VectorQueryRectangle,
 };
+use geoengine_operators::engine::{QueryProcessor, VectorOperator};
 use geoengine_operators::processing::{Reprojection, ReprojectionParams};
 use serde_json::json;
 use std::str::FromStr;
@@ -410,8 +411,8 @@ async fn get_feature<C: Context>(request: &GetFeature, ctx: &C) -> Result<HttpRe
 
     let processor = initialized.query_processor().context(error::Operator)?;
 
-    let query_rect = QueryRectangle {
-        bbox: request.bbox,
+    let query_rect = VectorQueryRectangle {
+        spatial_bounds: request.bbox,
         time_interval: request.time.unwrap_or_else(|| {
             let time = TimeInstance::from(chrono::offset::Utc::now());
             TimeInterval::new_unchecked(time, time)
@@ -443,7 +444,7 @@ async fn get_feature<C: Context>(request: &GetFeature, ctx: &C) -> Result<HttpRe
 
 async fn vector_stream_to_geojson<G>(
     processor: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
-    query_rect: QueryRectangle,
+    query_rect: VectorQueryRectangle,
     query_ctx: &dyn QueryContext,
 ) -> Result<serde_json::Value>
 where
@@ -453,7 +454,7 @@ where
     let features: Vec<serde_json::Value> = Vec::new();
 
     // TODO: more efficient merging of the partial feature collections
-    let stream = processor.vector_query(query_rect, query_ctx).await?;
+    let stream = processor.query(query_rect, query_ctx).await?;
 
     let features = stream
         .fold(
@@ -520,7 +521,7 @@ fn get_feature_mock(_request: &GetFeature) -> Result<HttpResponse> {
         .body(collection.to_geo_json()))
 }
 
-#[cfg(test)]
+/*#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -951,7 +952,8 @@ x;y
                     "names": [
                         "NDVI"
                     ],
-                    "aggregation": "first"
+                    "featureAggregation": "first",
+                    "temporalAggregation": "first"
                 },
                 "sources": {
                     "vector": {
@@ -1014,4 +1016,4 @@ x;y
             })
         );
     }
-}
+}*/

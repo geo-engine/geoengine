@@ -1,6 +1,6 @@
 # Geo Engine
 
-![CI](https://github.com/geo-engine/geoengine/workflows/CI/badge.svg)
+[![CI](https://github.com/geo-engine/geoengine/actions/workflows/ci.yml/badge.svg)](https://github.com/geo-engine/geoengine/actions/workflows/ci.yml)
 [![Coverage Status](https://coveralls.io/repos/github/geo-engine/geoengine/badge.svg?branch=master)](https://coveralls.io/github/geo-engine/geoengine?branch=master)
 
 This workspace contains the Geo Engine crates.

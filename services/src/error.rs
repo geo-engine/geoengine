@@ -1,10 +1,9 @@
 use crate::handlers::ErrorResponse;
 use actix_web::http::StatusCode;
 use actix_web::HttpResponse;
-use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
+use geoengine_datatypes::{dataset::DatasetProviderId, spatial_reference::SpatialReferenceOption};
 use snafu::Snafu;
 use strum::IntoStaticStr;
-use warp::reject::Reject;
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 #[derive(Debug, Snafu, IntoStaticStr)]
@@ -15,9 +14,6 @@ pub enum Error {
     },
     Operator {
         source: geoengine_operators::error::Error,
-    },
-    Http {
-        source: warp::http::Error,
     },
     Uuid {
         source: uuid::Error,
@@ -38,6 +34,11 @@ pub enum Error {
 
     Reqwest {
         source: reqwest::Error,
+    },
+
+    #[cfg(feature = "xml")]
+    QuickXml {
+        source: quick_xml::Error,
     },
 
     TokioChannelSend,
@@ -169,14 +170,39 @@ pub enum Error {
     },
     StacInvalidGeoTransform,
     StacInvalidBbox,
-    StacJsonRespone {
+    StacJsonResponse {
         url: String,
         response: String,
         error: serde_json::Error,
     },
-}
+    RasterDataTypeNotSupportByGdal,
 
-impl Reject for Error {}
+    ExternalAddressNotConfigured,
+
+    MissingSpatialReference,
+
+    WcsVersionNotSupported,
+    WcsGridOriginMustEqualBoundingboxUpperLeft,
+    WcsBoundingboxCrsMustEqualGridBaseCrs,
+    WcsInvalidGridOffsets,
+
+    InvalidDatasetId,
+
+    GfbioMissingAbcdField,
+    ExpectedExternalDatasetId,
+    InvalidExternalDatasetId {
+        provider: DatasetProviderId,
+    },
+
+    #[cfg(feature = "nature40")]
+    Nature40UnknownRasterDbname,
+    #[cfg(feature = "nature40")]
+    Nature40WcsDatasetMissingLabelInMetadata,
+
+    Logger {
+        source: flexi_logger::FlexiLoggerError,
+    },
+}
 
 impl actix_web::error::ResponseError for Error {
     fn error_response(&self) -> HttpResponse {
@@ -256,5 +282,18 @@ impl From<reqwest::Error> for Error {
 impl From<actix_multipart::MultipartError> for Error {
     fn from(source: actix_multipart::MultipartError) -> Self {
         Self::Multipart { source }
+    }
+}
+
+#[cfg(feature = "xml")]
+impl From<quick_xml::Error> for Error {
+    fn from(source: quick_xml::Error) -> Self {
+        Self::QuickXml { source }
+    }
+}
+
+impl From<flexi_logger::FlexiLoggerError> for Error {
+    fn from(source: flexi_logger::FlexiLoggerError) -> Self {
+        Self::Logger { source }
     }
 }

@@ -17,6 +17,7 @@ pub mod projects;
 pub mod session;
 pub mod spatial_references;
 pub mod upload;
+pub mod wcs;
 pub mod wfs;
 pub mod wms;
 pub mod workflows;
@@ -36,7 +37,7 @@ impl ErrorResponse {
     pub async fn assert(res: ServiceResponse, status: u16, error: &str, message: &str) {
         assert_eq!(res.status(), status);
 
-        let body: ErrorResponse = test::read_body_json(res).await;
+        let body: Self = test::read_body_json(res).await;
         assert_eq!(
             body,
             Self {

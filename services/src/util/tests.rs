@@ -1,5 +1,6 @@
 use crate::contexts::SimpleContext;
 use crate::contexts::SimpleSession;
+use crate::datasets::provenance::Provenance;
 use crate::datasets::storage::AddDataset;
 use crate::datasets::storage::DatasetStore;
 use crate::handlers::ErrorResponse;
@@ -7,6 +8,7 @@ use crate::projects::{
     CreateProject, Layer, LayerUpdate, ProjectDb, ProjectId, RasterSymbology, STRectangle,
     Symbology, UpdateProject,
 };
+use crate::server::{init_routes, configure_extractors};
 use crate::util::user_input::UserInput;
 use crate::util::Identifier;
 use crate::workflows::registry::WorkflowRegistry;
@@ -17,6 +19,7 @@ use crate::{
 };
 use actix_web::dev::ServiceResponse;
 use actix_web::http::Method;
+use actix_web::{test, App};
 use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::operations::image::Colorizer;
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
@@ -110,6 +113,11 @@ pub async fn add_ndvi_to_datasets(ctx: &InMemoryContext) -> DatasetId {
             description: "NDVI data from MODIS".to_string(),
             source_operator: "GdalSource".to_string(),
             symbology: None,
+            provenance: Some(Provenance {
+                citation: "Sample Citation".to_owned(),
+                license: "Sample License".to_owned(),
+                uri: "http://example.org/".to_owned(),
+            }),
         },
         meta_data: MetaDataDefinition::GdalMetaDataRegular(create_ndvi_meta_data()),
     };
@@ -167,4 +175,12 @@ where
     TRes: futures::Future<Output = ServiceResponse> + 'a,
 {
     check_allowed_http_methods2(test_helper, allowed_methods, |res| res)
+}
+
+pub async fn send_test_request<C: SimpleContext>(
+    req: test::TestRequest,
+    ctx: C,
+) -> ServiceResponse {
+    let mut app = test::init_service(App::new().data(ctx).configure(configure_extractors).configure(init_routes::<C>)).await;
+    test::call_service(&mut app, req.to_request()).await
 }

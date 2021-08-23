@@ -1,4 +1,6 @@
+use crate::contexts::MockableSession;
 use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider, OrderBy};
+use crate::datasets::provenance::{ProvenanceOutput, ProvenanceProvider};
 use crate::datasets::storage::{
     AddDataset, Dataset, DatasetDb, DatasetProviderDb, DatasetProviderDefinition,
     DatasetProviderListOptions, DatasetProviderListing, DatasetStore, DatasetStorer,
@@ -15,8 +17,8 @@ use geoengine_datatypes::{
     util::Identifier,
 };
 use geoengine_operators::engine::{
-    MetaData, MetaDataProvider, RasterResultDescriptor, StaticMetaData, TypedResultDescriptor,
-    VectorResultDescriptor,
+    MetaData, MetaDataProvider, RasterQueryRectangle, RasterResultDescriptor, StaticMetaData,
+    TypedResultDescriptor, VectorQueryRectangle, VectorResultDescriptor,
 };
 use geoengine_operators::source::{GdalLoadingInfo, GdalMetaDataRegular, OgrSourceDataset};
 use geoengine_operators::{mock::MockDatasetDataSourceLoadingInfo, source::GdalMetaDataStatic};
@@ -25,14 +27,22 @@ use std::collections::HashMap;
 #[derive(Default)]
 pub struct ProHashMapDatasetDb {
     datasets: Vec<Dataset>,
-    ogr_datasets:
-        HashMap<InternalDatasetId, StaticMetaData<OgrSourceDataset, VectorResultDescriptor>>,
+    ogr_datasets: HashMap<
+        InternalDatasetId,
+        StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
+    >,
     mock_datasets: HashMap<
         InternalDatasetId,
-        StaticMetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>,
+        StaticMetaData<
+            MockDatasetDataSourceLoadingInfo,
+            VectorResultDescriptor,
+            VectorQueryRectangle,
+        >,
     >,
-    gdal_datasets:
-        HashMap<InternalDatasetId, Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor>>>,
+    gdal_datasets: HashMap<
+        InternalDatasetId,
+        Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
+    >,
     uploads: HashMap<UploadId, Upload>,
     external_providers: HashMap<DatasetProviderId, Box<dyn DatasetProviderDefinition>>,
 }
@@ -101,7 +111,9 @@ impl ProHashMapStorable for MetaDataDefinition {
     }
 }
 
-impl ProHashMapStorable for StaticMetaData<OgrSourceDataset, VectorResultDescriptor> {
+impl ProHashMapStorable
+    for StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
+{
     fn store(&self, id: InternalDatasetId, db: &mut ProHashMapDatasetDb) -> TypedResultDescriptor {
         db.ogr_datasets.insert(id, self.clone());
         self.result_descriptor.clone().into()
@@ -109,7 +121,11 @@ impl ProHashMapStorable for StaticMetaData<OgrSourceDataset, VectorResultDescrip
 }
 
 impl ProHashMapStorable
-    for StaticMetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>
+    for StaticMetaData<
+        MockDatasetDataSourceLoadingInfo,
+        VectorResultDescriptor,
+        VectorQueryRectangle,
+    >
 {
     fn store(&self, id: InternalDatasetId, db: &mut ProHashMapDatasetDb) -> TypedResultDescriptor {
         db.mock_datasets.insert(id, self.clone());
@@ -152,6 +168,7 @@ impl DatasetStore<UserSession> for ProHashMapDatasetDb {
             result_descriptor,
             source_operator: dataset.source_operator,
             symbology: dataset.symbology,
+            provenance: dataset.provenance,
         };
         self.datasets.push(d);
 
@@ -215,14 +232,21 @@ impl DatasetProvider for ProHashMapDatasetDb {
 }
 
 #[async_trait]
-impl MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>
+impl
+    MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
     for ProHashMapDatasetDb
 {
     async fn meta_data(
         &self,
         dataset: &DatasetId,
     ) -> Result<
-        Box<dyn MetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>>,
+        Box<
+            dyn MetaData<
+                MockDatasetDataSourceLoadingInfo,
+                VectorResultDescriptor,
+                VectorQueryRectangle,
+            >,
+        >,
         geoengine_operators::error::Error,
     > {
         Ok(Box::new(
@@ -241,12 +265,14 @@ impl MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>
 }
 
 #[async_trait]
-impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor> for ProHashMapDatasetDb {
+impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
+    for ProHashMapDatasetDb
+{
     async fn meta_data(
         &self,
         dataset: &DatasetId,
     ) -> Result<
-        Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor>>,
+        Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
         Ok(Box::new(
@@ -265,12 +291,14 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor> for ProHashMapDa
 }
 
 #[async_trait]
-impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor> for ProHashMapDatasetDb {
+impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
+    for ProHashMapDatasetDb
+{
     async fn meta_data(
         &self,
         dataset: &DatasetId,
     ) -> Result<
-        Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor>>,
+        Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
         let id = dataset
@@ -286,6 +314,29 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor> for ProHashMapDat
                 source: Box::new(error::Error::UnknownDatasetId),
             })?
             .clone())
+    }
+}
+
+#[async_trait]
+impl ProvenanceProvider for ProHashMapDatasetDb {
+    async fn provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {
+        match dataset {
+            DatasetId::Internal { dataset_id: _ } => self
+                .datasets
+                .iter()
+                .find(|d| d.id == *dataset)
+                .map(|d| ProvenanceOutput {
+                    dataset: d.id.clone(),
+                    provenance: d.provenance.clone(),
+                })
+                .ok_or(error::Error::UnknownDatasetId),
+            DatasetId::External(id) => {
+                self.dataset_provider(&UserSession::mock(), id.provider_id) // TODO: get correct session into dataset provider
+                    .await?
+                    .provenance(dataset)
+                    .await
+            }
+        }
     }
 }
 
@@ -318,6 +369,7 @@ mod tests {
             description: "My Ogr dataset".to_string(),
             source_operator: "OgrSource".to_string(),
             symbology: None,
+            provenance: None,
         };
 
         let meta = StaticMetaData {
@@ -330,9 +382,10 @@ mod tests {
                 force_ogr_time_filter: false,
                 force_ogr_spatial_filter: false,
                 on_error: OgrSourceErrorSpec::Ignore,
-                provenance: None,
+                sql_query: None,
             },
             result_descriptor: descriptor.clone(),
+            phantom: Default::default(),
         };
 
         let id = ctx
@@ -343,8 +396,9 @@ mod tests {
 
         let exe_ctx = ctx.execution_context(session.clone())?;
 
-        let meta: Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor>> =
-            exe_ctx.meta_data(&id).await?;
+        let meta: Box<
+            dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
+        > = exe_ctx.meta_data(&id).await?;
 
         assert_eq!(
             meta.result_descriptor().await?,

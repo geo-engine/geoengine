@@ -599,7 +599,7 @@ mod tests {
         let a = TimeInterval::new(2, 4).unwrap();
         let b = TimeInterval::new(2, 4).unwrap();
 
-        assert!(a.intersects(&b))
+        assert!(a.intersects(&b));
     }
 
     #[test]
@@ -607,7 +607,7 @@ mod tests {
         let a = TimeInterval::new(1, 2).unwrap();
         let b = TimeInterval::new(2, 3).unwrap();
 
-        assert!(!a.intersects(&b))
+        assert!(!a.intersects(&b));
     }
 
     #[test]
@@ -615,7 +615,7 @@ mod tests {
         let a = TimeInterval::new(1, 3).unwrap();
         let b = TimeInterval::new(2, 4).unwrap();
 
-        assert!(a.intersects(&b))
+        assert!(a.intersects(&b));
     }
 
     #[test]
@@ -623,7 +623,7 @@ mod tests {
         let a = TimeInterval::new(3, 4).unwrap();
         let b = TimeInterval::new(2, 4).unwrap();
 
-        assert!(a.intersects(&b))
+        assert!(a.intersects(&b));
     }
 
     #[test]
@@ -631,7 +631,7 @@ mod tests {
         let a = TimeInterval::new_instant(3).unwrap();
         let b = TimeInterval::new(2, 4).unwrap();
 
-        assert!(a.intersects(&b))
+        assert!(a.intersects(&b));
     }
 
     #[test]
@@ -639,7 +639,7 @@ mod tests {
         let a = TimeInterval::new_instant(3).unwrap();
         let b = TimeInterval::new(2, 4).unwrap();
 
-        assert!(b.intersects(&a))
+        assert!(b.intersects(&a));
     }
 
     #[test]
@@ -647,7 +647,7 @@ mod tests {
         let a = TimeInterval::new(1, 3).unwrap();
         let b = TimeInterval::new(2, 4).unwrap();
 
-        assert!(b.intersects(&a))
+        assert!(b.intersects(&a));
     }
 
     #[test]
@@ -655,7 +655,7 @@ mod tests {
         let a = TimeInterval::new(1, 2).unwrap();
         let b = TimeInterval::new(2, 3).unwrap();
 
-        assert!(!b.intersects(&a))
+        assert!(!b.intersects(&a));
     }
 
     #[test]

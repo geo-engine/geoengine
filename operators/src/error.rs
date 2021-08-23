@@ -7,6 +7,11 @@ use std::ops::Range;
 #[derive(Debug, Snafu)]
 #[snafu(visibility = "pub(crate)")]
 pub enum Error {
+    #[snafu(display("MissingRasterProperty Error: {}", property))]
+    MissingRasterProperty {
+        property: String,
+    },
+
     #[snafu(display("CsvSource Error: {}", source))]
     CsvSourceReader {
         source: csv::Error,
@@ -182,7 +187,10 @@ pub enum Error {
     OgrFieldValueIsNotDateTime,
     OgrFieldValueIsNotString,
     OgrFieldValueIsNotValidForSeconds,
-    OgrColumnFieldTypeMismatch,
+    OgrColumnFieldTypeMismatch {
+        expected: String,
+        field_value: gdal::vector::FieldValue,
+    },
 
     FeatureDataValueMustNotBeNull,
     InvalidFeatureDataType,
@@ -193,6 +201,8 @@ pub enum Error {
 
     TemporalRasterAggregationLastValidRequiresNoData,
     TemporalRasterAggregationFirstValidRequiresNoData,
+
+    NoSpatialBoundsAvailable,
 
     ChannelSend,
     #[snafu(display("LoadingInfoError: {}", source))]
@@ -205,6 +215,14 @@ pub enum Error {
     TileLimitExceeded {
         limit: usize,
     },
+
+    FeatureDataNotAggregatable,
+
+    FeatureDataLengthMismatch,
+
+    OgrSqlQuery,
+
+    GdalRasterDataTypeNotSupported,
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {

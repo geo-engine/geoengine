@@ -1,6 +1,6 @@
 [web]
 bind_address = "127.0.0.1:3030"
-# external_address = "http://www.example.com"
+external_address = "http://localhost:3030"
 backend = "in_memory" # TODO: remove option
 
 [project_service]
@@ -10,7 +10,12 @@ list_limit = 20
 list_limit = 20
 
 [postgres]
-config_string = "postgresql://geoengine:geoengine@localhost:5432"
+host = "localhost"
+port = 5432
+database = "geoengine"
+schema = "public"
+user = "geoengine"
+password = "geoengine"
 
 [operators.gdal_source]
 raster_data_root_path = "operators/test-data/raster"
@@ -45,3 +50,7 @@ enable_buffering = false
 # By default logs are saved in the current working directory.
 # Use this option if another folder should be used.
 #log_directory = "/var/log/"
+
+[wcs]
+# max number of tiles to be produced for generating output tiff
+tile_limit = 4 

@@ -7,9 +7,8 @@ use crate::error::Result;
 use crate::projects::Symbology;
 use crate::util::user_input::{UserInput, Validated};
 use async_trait::async_trait;
-use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, InternalDatasetId};
-use geoengine_datatypes::util::Identifier;
-use geoengine_operators::engine::MetaData;
+use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId};
+use geoengine_operators::engine::{MetaData, VectorQueryRectangle};
 use geoengine_operators::{engine::StaticMetaData, source::OgrSourceDataset};
 use geoengine_operators::{
     engine::TypedResultDescriptor, mock::MockDatasetDataSourceLoadingInfo,
@@ -20,6 +19,8 @@ use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
 use std::fmt::Debug;
 
+use super::provenance::{Provenance, ProvenanceProvider};
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Dataset {
@@ -29,6 +30,7 @@ pub struct Dataset {
     pub result_descriptor: TypedResultDescriptor,
     pub source_operator: String,
     pub symbology: Option<Symbology>,
+    pub provenance: Option<Provenance>,
 }
 
 impl Dataset {
@@ -53,40 +55,10 @@ pub struct AddDataset {
     pub description: String,
     pub source_operator: String,
     pub symbology: Option<Symbology>,
+    pub provenance: Option<Provenance>,
 }
 
 impl UserInput for AddDataset {
-    fn validate(&self) -> Result<()> {
-        // TODO
-        Ok(())
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct ImportDataset {
-    pub name: String,
-    pub description: String,
-    pub source_operator: String,
-    pub result_descriptor: TypedResultDescriptor,
-}
-
-impl From<ImportDataset> for Dataset {
-    fn from(value: ImportDataset) -> Self {
-        Dataset {
-            id: DatasetId::Internal {
-                dataset_id: InternalDatasetId::new(),
-            },
-            name: value.name,
-            description: value.description,
-            result_descriptor: value.result_descriptor,
-            source_operator: value.source_operator,
-            symbology: None,
-        }
-    }
-}
-
-impl UserInput for ImportDataset {
     fn validate(&self) -> Result<()> {
         // TODO
         Ok(())
@@ -187,8 +159,14 @@ pub struct MetaDataSuggestion {
 #[derive(PartialEq, Deserialize, Serialize, Debug, Clone)]
 #[serde(tag = "type")]
 pub enum MetaDataDefinition {
-    MockMetaData(StaticMetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor>),
-    OgrMetaData(StaticMetaData<OgrSourceDataset, VectorResultDescriptor>),
+    MockMetaData(
+        StaticMetaData<
+            MockDatasetDataSourceLoadingInfo,
+            VectorResultDescriptor,
+            VectorQueryRectangle,
+        >,
+    ),
+    OgrMetaData(StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>),
     GdalMetaDataRegular(GdalMetaDataRegular),
     GdalStatic(GdalMetaDataStatic),
 }
@@ -233,7 +211,13 @@ impl MetaDataDefinition {
 /// Handling of datasets provided by geo engine internally, staged and by external providers
 #[async_trait]
 pub trait DatasetDb<S: Session>:
-    DatasetStore<S> + DatasetProvider + DatasetProviderDb<S> + UploadDb<S> + Send + Sync
+    DatasetStore<S>
+    + DatasetProvider
+    + DatasetProviderDb<S>
+    + UploadDb<S>
+    + ProvenanceProvider
+    + Send
+    + Sync
 {
 }
 
@@ -262,6 +246,8 @@ pub trait DatasetProviderDb<S: Session> {
         provider: DatasetProviderId,
     ) -> Result<Box<dyn DatasetProvider>>;
 }
+
+pub trait DatasetAndProvenanceProvider: DatasetProvider + ProvenanceProvider {}
 
 /// Defines the type of meta data a `DatasetDB` is able to store
 pub trait DatasetStorer: Send + Sync {

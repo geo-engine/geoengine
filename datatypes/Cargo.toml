@@ -14,15 +14,11 @@ postgres = ["postgres-types"]
 pro = ["postgres"]
 
 [dependencies]
-# simd compiles with nightly only, allow default features to build with arrow-flight once it is possible
-# arrow = { version = "4.0", features = ["simd"] } TODO: activate when version is patched
-arrow = { version = "=4.0" } # TODO: unfix version once test runs again
+arrow = { version = "5.0", features = ["simd"] }
 chrono = "0.4"
-flatbuffers = "=0.9.0" # TODO: pinned only for `arrow`, should be removed at some point
-float-cmp = "0.8"
+float-cmp = "0.9"
 gdal = { version = "0.8" }
 geo = "0.18"
-proj = "0.22"
 geojson = "0.22"
 image = "0.23"
 num-traits = "0.2"
@@ -30,6 +26,7 @@ ocl = { git = "https://github.com/michaelmattig/ocl", branch = "tentative_master
 ordered-float = { version= "2.0", features = ["serde"] }
 paste = "1.0"
 postgres-types = { version = "0.2", features = ["derive", "with-chrono-0_4", "with-uuid-0_8"], optional = true }
+proj = "0.22"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 snafu = "0.6"

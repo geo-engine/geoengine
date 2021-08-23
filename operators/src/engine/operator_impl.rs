@@ -1,8 +1,9 @@
+use geoengine_datatypes::dataset::DatasetId;
 use serde::{Deserialize, Serialize};
 
 use crate::util::input::RasterOrVectorOperator;
 
-use super::{RasterOperator, VectorOperator};
+use super::{OperatorDatasets, RasterOperator, VectorOperator};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -90,6 +91,67 @@ impl From<Box<dyn RasterOperator>> for SingleRasterOrVectorSource {
     fn from(raster: Box<dyn RasterOperator>) -> Self {
         Self {
             source: RasterOrVectorOperator::Raster(raster),
+        }
+    }
+}
+
+impl<Params, Sources> OperatorDatasets for Operator<Params, Sources>
+where
+    Sources: OperatorDatasets,
+{
+    fn datasets_collect(&self, datasets: &mut Vec<DatasetId>) {
+        self.sources.datasets_collect(datasets);
+    }
+}
+
+impl<Params> OperatorDatasets for SourceOperator<Params>
+where
+    Params: OperatorDatasets,
+{
+    fn datasets_collect(&self, datasets: &mut Vec<DatasetId>) {
+        self.params.datasets_collect(datasets);
+    }
+}
+
+impl OperatorDatasets for SingleRasterOrVectorSource {
+    fn datasets_collect(&self, datasets: &mut Vec<DatasetId>) {
+        self.source.datasets_collect(datasets)
+    }
+}
+
+impl OperatorDatasets for SingleVectorSource {
+    fn datasets_collect(&self, datasets: &mut Vec<DatasetId>) {
+        self.vector.datasets_collect(datasets)
+    }
+}
+
+impl OperatorDatasets for SingleRasterSource {
+    fn datasets_collect(&self, datasets: &mut Vec<DatasetId>) {
+        self.raster.datasets_collect(datasets)
+    }
+}
+
+impl OperatorDatasets for MultipleRasterSources {
+    fn datasets_collect(&self, datasets: &mut Vec<DatasetId>) {
+        for source in &self.rasters {
+            source.datasets_collect(datasets);
+        }
+    }
+}
+
+impl OperatorDatasets for MultipleVectorSources {
+    fn datasets_collect(&self, datasets: &mut Vec<DatasetId>) {
+        for source in &self.vectors {
+            source.datasets_collect(datasets);
+        }
+    }
+}
+
+impl OperatorDatasets for SingleVectorMultipleRasterSources {
+    fn datasets_collect(&self, datasets: &mut Vec<DatasetId>) {
+        self.vector.datasets_collect(datasets);
+        for source in &self.rasters {
+            source.datasets_collect(datasets);
         }
     }
 }

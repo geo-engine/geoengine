@@ -39,7 +39,7 @@ impl Task {
     /// Executes the task
     /// TODO: use `FnTraits` once stable
     fn call_once(self) {
-        (self.task_fn)()
+        (self.task_fn)();
     }
 }
 
@@ -90,7 +90,7 @@ impl ThreadPool {
 
             thread_pool.threads.push(std::thread::spawn(move || {
                 Self::await_work(&worker_deque, &global_queue, &stealers, &parker);
-            }))
+            }));
         }
 
         thread_pool
@@ -190,7 +190,7 @@ impl<'pool> ThreadPoolContext<'pool> {
         S: FnOnce(&Scope<'pool, 'scope>) + 'scope,
     {
         let scope = Scope::<'pool, 'scope> {
-            thread_pool_context: &self,
+            thread_pool_context: self,
             wait_group: WaitGroup::new(),
             _scope_marker: PhantomData,
         };
@@ -280,7 +280,7 @@ impl<R> TaskResult<R> {
         match self.option.swap(TaskResultOption::Result(result)) {
             TaskResultOption::None => {} // do nothing
             TaskResultOption::Result(_) => {
-                unreachable!("There must not be a second computation of the result")
+                unreachable!("There must not be a second computation of the result");
             }
             TaskResultOption::Waiting(waker) => waker.wake(),
         };
@@ -494,6 +494,6 @@ mod tests {
         let mut unparked = false;
         context.scope(|scope| scope.compute(|| unparked = true));
 
-        assert!(unparked)
+        assert!(unparked);
     }
 }

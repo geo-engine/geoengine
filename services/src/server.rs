@@ -7,7 +7,7 @@ use crate::util::config;
 use crate::util::config::get_config_element;
 
 use actix_files::Files;
-use actix_web::error::{InternalError, JsonPayloadError};
+use actix_web::error::{InternalError, JsonPayloadError, QueryPayloadError};
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use actix_web_httpauth::middleware::HttpAuthentication;
 use log::info;
@@ -79,8 +79,8 @@ where
 
         let app = App::new()
             .app_data(wrapped_ctx.clone())
-            .app_data(json_config)
             .wrap(actix_web::middleware::Logger::default())
+            .configure(configure_extractors)
             .configure(init_routes::<C>);
 
         if let Some(static_files_dir) = static_files_dir.clone() {
@@ -95,6 +95,36 @@ where
     .map_err(Into::into)
 }
 
+pub(crate) fn configure_extractors(cfg: &mut web::ServiceConfig) {
+    cfg.app_data(web::JsonConfig::default().error_handler(|err, _req| {
+        actix_web::error::InternalError::from_response(
+            "",
+            HttpResponse::BadRequest().json(match err {
+                JsonPayloadError::Overflow => todo!(),
+                JsonPayloadError::ContentType => todo!(),
+                JsonPayloadError::Deserialize(err) => ErrorResponse {
+                    error: "BodyDeserializeError".to_string(),
+                    message: err.to_string(),
+                },
+                JsonPayloadError::Payload(_) => todo!(),
+            }),
+        )
+        .into()
+    }));
+    cfg.app_data(web::QueryConfig::default().error_handler(|err, _req| {
+        actix_web::error::InternalError::from_response(
+            "",
+            HttpResponse::BadRequest().json(match err {
+                QueryPayloadError::Deserialize(err) => ErrorResponse {
+                    error: "BodyDeserializeError".to_string(),
+                    message: err.to_string(),
+                },
+            }),
+        )
+        .into()
+    }));
+}
+
 pub(crate) fn init_routes<C>(cfg: &mut web::ServiceConfig)
 where
     C: SimpleContext,
@@ -102,6 +132,7 @@ where
     cfg.route("/version", web::get().to(show_version_handler)) // TODO: allow disabling this function via config or feature flag
         .route("/wms", web::get().to(handlers::wms::wms_handler::<C>))
         .route("/wfs", web::get().to(handlers::wfs::wfs_handler::<C>))
+        .route("/wcs", web::get().to(handlers::wcs::wcs_handler::<C>))
         .route(
             "/anonymous",
             web::post().to(handlers::session::anonymous_handler::<C>),
@@ -120,6 +151,10 @@ where
                 .route(
                     "/workflow/{id}/metadata",
                     web::get().to(handlers::workflows::get_workflow_metadata_handler::<C>),
+                )
+                .route(
+                    "/workflow/{id}/provenance",
+                    web::get().to(handlers::workflows::get_workflow_provenance_handler::<C>),
                 )
                 .route(
                     "/session",
@@ -215,7 +250,7 @@ where
 /// }
 /// ```
 #[allow(clippy::unused_async)] // the function signature of request handlers requires it
-async fn show_version_handler() -> impl Responder {
+pub(crate) async fn show_version_handler() -> impl Responder {
     #[derive(serde::Serialize)]
     #[serde(rename_all = "camelCase")]
     struct VersionInfo<'a> {
@@ -229,7 +264,7 @@ async fn show_version_handler() -> impl Responder {
     })
 }
 
-#[cfg(test)]
+/*#[cfg(test)]
 mod tests {
     use super::*;
     use crate::contexts::{Session, SimpleSession};
@@ -248,12 +283,7 @@ mod tests {
 
     async fn queries(shutdown_tx: Sender<()>) {
         let web_config: config::Web = get_config_element().unwrap();
-        let base_url = format!(
-            "http://{}/",
-            web_config
-                .external_address
-                .unwrap_or(web_config.bind_address)
-        );
+        let base_url = format!("http://{}", web_config.bind_address);
 
         assert!(wait_for_server(&base_url).await);
         issue_queries(&base_url).await;
@@ -265,7 +295,7 @@ mod tests {
         let client = reqwest::Client::new();
 
         let body = client
-            .post(&format!("{}{}", base_url, "anonymous"))
+            .post(&format!("{}/{}", base_url, "anonymous"))
             .send()
             .await
             .unwrap()
@@ -276,7 +306,7 @@ mod tests {
         let session: SimpleSession = serde_json::from_str(&body).unwrap();
 
         let body = client
-            .post(&format!("{}{}", base_url, "project"))
+            .post(&format!("{}/{}", base_url, "project"))
             .header("Authorization", format!("Bearer {}", session.id()))
             .body("no json")
             .send()
@@ -307,4 +337,4 @@ mod tests {
         }
         false
     }
-}
+}*/

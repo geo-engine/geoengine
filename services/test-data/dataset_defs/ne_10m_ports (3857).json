@@ -6,7 +6,12 @@
     },
     "name": "Natural Earth 10m Ports 3857",
     "description": "Ports from Natural Earth reprojected to EPSG:3857",
-    "sourceOperator": "OgrSource"
+    "sourceOperator": "OgrSource",
+    "provenance": {
+      "citation": "Natural Earth, Cultural Vectors 10m Ports",
+      "license": "Public domain by Natural Earth http://www.naturalearthdata.com/about/terms-of-use/",
+      "uri": "https://www.naturalearthdata.com/downloads/10m-cultural-vectors/ports/"
+    }
   },
   "metaData": {
     "type": "OgrMetaData",

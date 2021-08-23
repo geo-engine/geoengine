@@ -5,7 +5,8 @@ use super::{
     GridSize, GridSpaceToLinearSpace, NoDataValue, Raster, TileInformation,
 };
 use crate::primitives::{
-    BoundingBox2D, Coordinate2D, SpatialBounded, TemporalBounded, TimeInterval,
+    Coordinate2D, SpatialBounded, SpatialPartition2D, SpatialPartitioned, TemporalBounded,
+    TimeInterval,
 };
 use crate::raster::data_type::FromPrimitive;
 use crate::raster::{CoordinatePixelAccess, Pixel};
@@ -138,6 +139,23 @@ where
     }
 
     /// create a new `RasterTile`
+    pub fn new_with_properties(
+        time: TimeInterval,
+        tile_position: GridIdx2D,
+        global_geo_transform: GeoTransform,
+        data: GridOrEmpty<D, T>,
+        properties: RasterProperties,
+    ) -> Self {
+        Self {
+            time,
+            tile_position,
+            global_geo_transform,
+            grid_array: data,
+            properties,
+        }
+    }
+
+    /// create a new `RasterTile`
     pub fn new_without_offset(
         time: TimeInterval,
         global_geo_transform: GeoTransform,
@@ -159,11 +177,12 @@ where
         To: Pixel + FromPrimitive<T>,
         T: AsPrimitive<To>,
     {
-        RasterTile::new(
+        RasterTile::new_with_properties(
             self.time,
             self.tile_position,
             self.global_geo_transform,
             self.grid_array.convert_dtype(),
+            self.properties,
         )
     }
 
@@ -179,7 +198,7 @@ where
             time: self.time,
             tile_position: self.tile_position,
             global_geo_transform: self.global_geo_transform,
-            properties: RasterProperties::default(),
+            properties: self.properties,
         }
     }
 
@@ -199,12 +218,12 @@ impl<G> TemporalBounded for BaseTile<G> {
     }
 }
 
-impl<G> SpatialBounded for BaseTile<G>
+impl<G> SpatialPartitioned for BaseTile<G>
 where
     G: GridSize,
 {
-    fn spatial_bounds(&self) -> BoundingBox2D {
-        self.tile_information().spatial_bounds()
+    fn spatial_partition(&self) -> SpatialPartition2D {
+        self.tile_information().spatial_partition()
     }
 }
 
@@ -248,7 +267,7 @@ where
 
     fn set_at_grid_index_unchecked(&mut self, grid_index: I, value: T) {
         self.grid_array
-            .set_at_grid_index_unchecked(grid_index, value)
+            .set_at_grid_index_unchecked(grid_index, value);
     }
 }
 
@@ -316,7 +335,7 @@ where
             global_geo_transform: mat_tile.global_geo_transform,
             tile_position: mat_tile.tile_position,
             time: mat_tile.time,
-            properties: RasterProperties::default(),
+            properties: mat_tile.properties,
         }
     }
 }
@@ -569,15 +588,15 @@ mod tests {
     }
 
     #[test]
-    fn tile_information_spatial_bounds() {
+    fn tile_information_spatial_partition() {
         let ti = TileInformation::new(
             GridIdx([-2, 3]),
             GridShape2D::from([100, 1000]),
             GeoTransform::default(),
         );
         assert_eq!(
-            ti.spatial_bounds(),
-            BoundingBox2D::new_upper_left_lower_right_unchecked(
+            ti.spatial_partition(),
+            SpatialPartition2D::new_unchecked(
                 Coordinate2D::new(3000., 200.),
                 Coordinate2D::new(4000., 100.)
             )
@@ -592,8 +611,8 @@ mod tests {
             GeoTransform::new_with_coordinate_x_y(-180., 0.1, 90., -0.1),
         );
         assert_eq!(
-            ti.spatial_bounds(),
-            BoundingBox2D::new_upper_left_lower_right_unchecked(
+            ti.spatial_partition(),
+            SpatialPartition2D::new_unchecked(
                 Coordinate2D::new(-177., 88.),
                 Coordinate2D::new(-176., 87.)
             )

@@ -21,6 +21,10 @@
 )]
 // enable some restriction lints
 #![warn(clippy::print_stdout, clippy::print_stderr, clippy::dbg_macro)]
+//
+//
+// TODO: re-activate when https://github.com/rust-lang/rust-clippy/issues/7438 is fixed
+#![allow(clippy::semicolon_if_nothing_returned)]
 
 pub mod adapters;
 pub mod concurrency;
