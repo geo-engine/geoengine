@@ -8,7 +8,7 @@ use crate::projects::{
     CreateProject, Layer, LayerUpdate, ProjectDb, ProjectId, RasterSymbology, STRectangle,
     Symbology, UpdateProject,
 };
-use crate::server::{init_routes, configure_extractors};
+use crate::server::{configure_extractors, init_routes};
 use crate::util::user_input::UserInput;
 use crate::util::Identifier;
 use crate::workflows::registry::WorkflowRegistry;
@@ -181,6 +181,17 @@ pub async fn send_test_request<C: SimpleContext>(
     req: test::TestRequest,
     ctx: C,
 ) -> ServiceResponse {
-    let mut app = test::init_service(App::new().data(ctx).configure(configure_extractors).configure(init_routes::<C>)).await;
+    let mut app = test::init_service(
+        App::new()
+            .data(ctx)
+            .configure(configure_extractors)
+            .configure(init_routes::<C>),
+    )
+    .await;
     test::call_service(&mut app, req.to_request()).await
+}
+
+pub async fn read_body_string(res: ServiceResponse) -> String {
+    let body = test::read_body(res).await;
+    String::from_utf8(body.to_vec()).unwrap()
 }

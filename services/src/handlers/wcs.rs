@@ -392,11 +392,11 @@ async fn get_coverage<C: Context>(request: &GetCoverage, ctx: &C) -> Result<Http
     Ok(HttpResponse::Ok().content_type("image/tiff").body(bytes))
 }
 
-/*#[cfg(test)]
+#[cfg(test)]
 mod tests {
-    use super::*;
     use crate::contexts::InMemoryContext;
-    use crate::util::tests::register_ndvi_workflow_helper;
+    use crate::util::tests::{read_body_string, register_ndvi_workflow_helper, send_test_request};
+    use actix_web::test;
 
     #[tokio::test]
     async fn get_capabilities() {
@@ -410,18 +410,15 @@ mod tests {
             ("version", "1.1.1"),
         ];
 
-        let res = warp::test::request()
-            .method("GET")
-            .path(&format!(
-                "/wcs/{}?{}",
-                &id.to_string(),
-                serde_urlencoded::to_string(params).unwrap()
-            ))
-            .reply(&wcs_handler(ctx))
-            .await;
+        let req = test::TestRequest::get().uri(&format!(
+            "/wcs/{}?{}",
+            &id.to_string(),
+            serde_urlencoded::to_string(params).unwrap()
+        ));
+        let res = send_test_request(req, ctx).await;
 
         assert_eq!(res.status(), 200);
-        let body = std::str::from_utf8(res.body()).unwrap();
+        let body = read_body_string(res).await;
         assert_eq!(
             format!(
                 r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -495,18 +492,15 @@ mod tests {
             ("identifiers", &id.to_string()),
         ];
 
-        let res = warp::test::request()
-            .method("GET")
-            .path(&format!(
-                "/wcs/{}?{}",
-                &id.to_string(),
-                serde_urlencoded::to_string(params).unwrap()
-            ))
-            .reply(&wcs_handler(ctx))
-            .await;
+        let req = test::TestRequest::get().uri(&format!(
+            "/wcs/{}?{}",
+            &id.to_string(),
+            serde_urlencoded::to_string(params).unwrap()
+        ));
+        let res = send_test_request(req, ctx).await;
 
         assert_eq!(res.status(), 200);
-        let body = std::str::from_utf8(res.body()).unwrap();
+        let body = read_body_string(res).await;
         eprintln!("{}", body);
         assert_eq!(
             format!(
@@ -566,21 +560,18 @@ mod tests {
             ("time", "2014-01-01T00:00:00.0Z"),
         ];
 
-        let res = warp::test::request()
-            .method("GET")
-            .path(&format!(
-                "/wcs/{}?{}",
-                &id.to_string(),
-                serde_urlencoded::to_string(params).unwrap()
-            ))
-            .reply(&wcs_handler(ctx))
-            .await;
+        let req = test::TestRequest::get().uri(&format!(
+            "/wcs/{}?{}",
+            &id.to_string(),
+            serde_urlencoded::to_string(params).unwrap()
+        ));
+        let res = send_test_request(req, ctx).await;
 
         assert_eq!(res.status(), 200);
         assert_eq!(
             include_bytes!("../../../operators/test-data/raster/geotiff_from_stream.tiff")
                 as &[u8],
-            res.body().to_vec().as_slice()
+            test::read_body(res).await.as_ref()
         );
     }
-}*/
+}

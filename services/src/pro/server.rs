@@ -23,7 +23,7 @@ use std::str::FromStr;
 
 use super::projects::ProProjectDb;
 use crate::handlers::validate_token;
-use crate::server::{show_version_handler, configure_extractors};
+use crate::server::{configure_extractors, show_version_handler};
 
 async fn start<C>(
     static_files_dir: Option<PathBuf>,
