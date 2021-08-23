@@ -59,24 +59,6 @@ where
     let wrapped_ctx = web::Data::new(ctx);
 
     HttpServer::new(move || {
-        let json_config = web::JsonConfig::default().error_handler(|err, _req| match err {
-            JsonPayloadError::Overflow => todo!(),
-            JsonPayloadError::ContentType => InternalError::from_response(
-                err,
-                HttpResponse::UnsupportedMediaType().json(ErrorResponse {
-                    error: "UnsupportedMediaType".to_string(),
-                    message: "Unsupported content type header.".to_string(),
-                }),
-            )
-            .into(),
-            JsonPayloadError::Deserialize(err) => ErrorResponse {
-                error: "BodyDeserializeError".to_string(),
-                message: err.to_string(),
-            }
-            .into(),
-            JsonPayloadError::Payload(err) => todo!(),
-        });
-
         let app = App::new()
             .app_data(wrapped_ctx.clone())
             .wrap(actix_web::middleware::Logger::default())
@@ -97,27 +79,31 @@ where
 
 pub(crate) fn configure_extractors(cfg: &mut web::ServiceConfig) {
     cfg.app_data(web::JsonConfig::default().error_handler(|err, _req| {
-        actix_web::error::InternalError::from_response(
-            "",
-            HttpResponse::BadRequest().json(match err {
-                JsonPayloadError::Overflow => todo!(),
-                JsonPayloadError::ContentType => todo!(),
-                JsonPayloadError::Deserialize(err) => ErrorResponse {
-                    error: "BodyDeserializeError".to_string(),
-                    message: err.to_string(),
-                },
-                JsonPayloadError::Payload(_) => todo!(),
-            }),
-        )
-        .into()
+        match err {
+            JsonPayloadError::Overflow => todo!(),
+            JsonPayloadError::ContentType => InternalError::from_response(
+                err,
+                HttpResponse::UnsupportedMediaType().json(ErrorResponse {
+                    error: "UnsupportedMediaType".to_string(),
+                    message: "Unsupported content type header.".to_string(),
+                }),
+            )
+            .into(),
+            JsonPayloadError::Deserialize(err) => ErrorResponse {
+                error: "BodyDeserializeError".to_string(),
+                message: err.to_string(),
+            }
+            .into(),
+            JsonPayloadError::Payload(_err) => todo!(),
+        }
     }));
     cfg.app_data(web::QueryConfig::default().error_handler(|err, _req| {
         actix_web::error::InternalError::from_response(
             "",
             HttpResponse::BadRequest().json(match err {
                 QueryPayloadError::Deserialize(err) => ErrorResponse {
-                    error: "BodyDeserializeError".to_string(),
-                    message: err.to_string(),
+                    error: "UnableToParseQueryString".to_string(),
+                    message: format!("Unable to parse query string: {}", err),
                 },
             }),
         )
