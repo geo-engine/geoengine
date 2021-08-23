@@ -377,7 +377,7 @@ mod tests {
 
         // TODO: validate against schema
         let body = test::read_body(res).await;
-        let reader = ParserConfig::default().create_reader(&*body);
+        let reader = ParserConfig::default().create_reader(body.as_ref());
 
         for event in reader {
             assert!(event.is_ok());
