@@ -57,6 +57,8 @@ where
     }
 }
 
+/// A PreLoadHook is an arbitrary task executed
+/// right before a QueryProcessor creates its result stream.
 #[async_trait]
 pub trait PreLoadHook: Debug + Send + Sync {
     async fn execute(&self) -> Result<()>;
