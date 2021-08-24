@@ -4,9 +4,8 @@ use crate::datasets::provenance::Provenance;
 use crate::datasets::storage::AddDataset;
 use crate::datasets::storage::DatasetStore;
 use crate::handlers::ErrorResponse;
-use crate::pro::contexts::ProContext;
-use crate::pro::projects::ProProjectDb;
-use crate::pro::server::init_pro_routes;
+#[cfg(feature = "pro")]
+use crate::pro::{contexts::ProContext, projects::ProProjectDb, server::init_pro_routes};
 use crate::projects::{
     CreateProject, Layer, LayerUpdate, ProjectDb, ProjectId, RasterSymbology, STRectangle,
     Symbology, UpdateProject,
@@ -194,6 +193,7 @@ pub async fn send_test_request<C: SimpleContext>(
     test::call_service(&mut app, req.to_request()).await
 }
 
+#[cfg(feature = "pro")]
 pub async fn send_pro_test_request<C>(req: test::TestRequest, ctx: C) -> ServiceResponse
 where
     C: ProContext,

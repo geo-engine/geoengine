@@ -182,7 +182,7 @@ struct WrappedPlotOutput {
     data: serde_json::Value,
 }
 
-/*#[cfg(test)]
+#[cfg(test)]
 mod tests {
     use chrono::NaiveDate;
     use num_traits::AsPrimitive;
@@ -198,13 +198,13 @@ mod tests {
     };
 
     use crate::contexts::{InMemoryContext, Session, SimpleContext};
-    use crate::handlers::handle_rejection;
     use crate::workflows::workflow::Workflow;
 
     use super::*;
-    use crate::util::tests::check_allowed_http_methods;
-    use warp::http::Response;
-    use warp::hyper::body::Bytes;
+    use crate::util::tests::{check_allowed_http_methods, read_body_string, send_test_request};
+    use actix_web::dev::ServiceResponse;
+    use actix_web::{http::header, http::Method, test};
+    use actix_web_httpauth::headers::authorization::Bearer;
 
     fn example_raster_source() -> Box<dyn RasterOperator> {
         let no_data_value = None;
@@ -260,27 +260,19 @@ mod tests {
             ("time", "2020-01-01T00:00:00.0Z"),
             ("spatialResolution", "0.1,0.1"),
         ];
-        let url = format!(
-            "/plot/{}/?{}",
-            id,
-            &serde_urlencoded::to_string(params).unwrap()
-        );
-        let response = warp::test::request()
-            .method("GET")
-            .path(&url)
-            .header(
-                "Authorization",
-                format!("Bearer {}", session_id.to_string()),
-            )
-            .reply(&get_plot_handler(ctx).recover(handle_rejection))
-            .await;
+        let req = test::TestRequest::get()
+            .uri(&format!(
+                "/plot/{}/?{}",
+                id,
+                &serde_urlencoded::to_string(params).unwrap()
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let res = send_test_request(req, ctx).await;
 
-        assert_eq!(response.status(), 200, "{:?}", response.body());
-
-        let result = String::from_utf8(response.body().to_vec()).unwrap();
+        assert_eq!(res.status(), 200);
 
         assert_eq!(
-            result,
+            read_body_string(res).await,
             json!({
                 "outputFormat": "JsonPlain",
                 "plotType": "Statistics",
@@ -332,27 +324,19 @@ mod tests {
             ("time", "2020-01-01T00:00:00.0Z"),
             ("spatialResolution", "0.1,0.1"),
         ];
-        let url = format!(
-            "/plot/{}/?{}",
-            id,
-            &serde_urlencoded::to_string(params).unwrap()
-        );
-        let response = warp::test::request()
-            .method("GET")
-            .path(&url)
-            .header(
-                "Authorization",
-                format!("Bearer {}", session_id.to_string()),
-            )
-            .reply(&get_plot_handler(ctx).recover(handle_rejection))
-            .await;
+        let req = test::TestRequest::get()
+            .uri(&format!(
+                "/plot/{}/?{}",
+                id,
+                &serde_urlencoded::to_string(params).unwrap()
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let res = send_test_request(req, ctx).await;
 
-        assert_eq!(response.status(), 200, "{:?}", response.body());
-
-        let result = String::from_utf8(response.body().to_vec()).unwrap();
+        assert_eq!(res.status(), 200);
 
         assert_eq!(
-            result,
+            read_body_string(res).await,
             json!({
                 "outputFormat": "JsonVega",
                 "plotType": "Histogram",
@@ -390,9 +374,9 @@ mod tests {
 
     #[tokio::test]
     async fn check_request_types() {
-        async fn get_workflow_json(method: &str) -> Response<Bytes> {
+        async fn get_workflow_json(method: Method) -> ServiceResponse {
             let ctx = InMemoryContext::default();
-            let session = ctx.default_session_ref().await;
+            let session_id = ctx.default_session_ref().await.id();
 
             let workflow = Workflow {
                 operator: Statistics {
@@ -416,22 +400,17 @@ mod tests {
                 ("time", "2020-01-01T00:00:00.0Z"),
                 ("spatial_resolution", "0.1,0.1"),
             ];
-            let url = format!(
-                "/plot/{}/?{}",
-                id,
-                &serde_urlencoded::to_string(params).unwrap()
-            );
-            warp::test::request()
+            let req = test::TestRequest::default()
                 .method(method)
-                .path(&url)
-                .header(
-                    "Authorization",
-                    format!("Bearer {}", session.id().to_string()),
-                )
-                .reply(&get_plot_handler(ctx.clone()).recover(handle_rejection))
-                .await
+                .uri(&format!(
+                    "/plot/{}/?{}",
+                    id,
+                    &serde_urlencoded::to_string(params).unwrap()
+                ))
+                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+            send_test_request(req, ctx).await
         }
 
-        check_allowed_http_methods(get_workflow_json, &["GET"]).await;
+        check_allowed_http_methods(get_workflow_json, &[Method::GET]).await;
     }
-}*/
+}
