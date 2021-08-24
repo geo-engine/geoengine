@@ -363,9 +363,9 @@ async fn dataset_from_workflow<C: Context>(
     let query_rect = info.query;
     let query_ctx = ctx.query_context()?;
     let no_data_value = result_descriptor.no_data_value;
-    let request_spatial_ref =
-        Option::<SpatialReference>::from(result_descriptor.spatial_reference).unwrap(); // TODO
-    let tile_limit = None; // TODO
+    let request_spatial_ref = Option::<SpatialReference>::from(result_descriptor.spatial_reference)
+        .ok_or(error::Error::MissingSpatialReference)?;
+    let tile_limit = None; // TODO: set a reasonable limit or make configurable?
 
     // build the geotiff
     build_geotiff::<C>(
@@ -502,8 +502,8 @@ async fn create_dataset<C: Context>(
             name: info.name,
             description: info.description.unwrap_or_default(),
             source_operator: "GdalSource".to_owned(),
-            symbology: None,  // TODO
-            provenance: None, // TODO
+            symbology: None,  // TODO add symbology?
+            provenance: None, // TODO add provenance that references the workflow
         },
         meta_data: MetaDataDefinition::GdalStatic(GdalMetaDataStatic {
             time: Some(info.query.time_interval),
@@ -521,12 +521,15 @@ async fn create_dataset<C: Context>(
                     .ceil() as usize,
                 file_not_found_handling: FileNotFoundHandling::Error,
                 no_data_value: result_descriptor.no_data_value,
-                properties_mapping: None, // TODO
-                gdal_open_options: None,  // TODO
+                properties_mapping: None, // TODO: add properties
+                gdal_open_options: None,
             },
             result_descriptor: result_descriptor.clone(),
         }),
     };
+
+    // TODO: build pyramides, prefereably in the background
+
     let mut db = ctx.dataset_db_ref_mut().await;
     let meta = db.wrap_meta_data(dataset_definition.meta_data);
     let dataset = db

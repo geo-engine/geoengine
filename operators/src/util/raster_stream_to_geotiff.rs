@@ -47,11 +47,7 @@ where
     )
     .await?;
 
-    let bytes = gdal::vsi::get_vsi_mem_file_bytes_owned(
-        file_path
-            .to_str()
-            .expect("in memory file path is non-empty"),
-    )?;
+    let bytes = gdal::vsi::get_vsi_mem_file_bytes_owned(&file_path.to_string_lossy())?;
 
     Ok(bytes)
 }
