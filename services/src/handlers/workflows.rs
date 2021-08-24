@@ -12,7 +12,7 @@ use crate::util::IdResponse;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use futures::future::join_all;
-use geoengine_datatypes::dataset::InternalDatasetId;
+use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
 use geoengine_datatypes::primitives::AxisAlignedRectangle;
 use geoengine_datatypes::raster::GeoTransform;
 use geoengine_datatypes::spatial_reference::SpatialReference;
@@ -257,6 +257,7 @@ async fn get_workflow_provenance<C: Context>(
     Ok(warp::reply::json(&provenance))
 }
 
+/// parameter for the dataset from workflow handler (body)
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct RasterDatasetFromWorkflow {
     name: String,
@@ -264,6 +265,57 @@ struct RasterDatasetFromWorkflow {
     query: RasterQueryRectangle,
 }
 
+/// response of the dataset from workflow handler
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct RasterDatasetFromWorkflowResult {
+    dataset: DatasetId,
+    upload: UploadId,
+}
+
+/// Create a new dataset from the result of the given workflow and query
+/// Returns the id of the created dataset and upload
+///
+/// # Example
+///
+/// ```text
+/// POST /datasetFromWorkflow/{workflow_id}
+/// Authorization: Bearer fc9b5dc2-a1eb-400f-aeed-a7845d9935c9
+/// Content-Type: application/json
+///
+/// {
+///     "name": "foo",
+///     "description": null,
+///     "query": {
+///         "spatial_bounds": {
+///             "upperLeftCoordinate": {
+///                 "x": -10.0,
+///                 "y": 80.0
+///             },
+///             "lowerRightCoordinate": {
+///                 "x": 50.0,
+///                 "y": 20.0
+///             }
+///         },
+///         "time_interval": {
+///             "start": 1388534400000,
+///             "end": 1388534401000
+///         },
+///         "spatial_resolution": {
+///             "x": 0.1,
+///             "y": 0.1
+///         }
+///     }
+/// }
+///
+/// ```text
+/// {
+///   "upload": "3086f494-d5a4-4b51-a14b-3b29f8bf7bb0",
+///   "dataset": {
+///     "type": "internal",
+///     "datasetId": "94230f0b-4e8a-4cba-9adc-3ace837fe5d4"
+///   }
+/// }
+/// ```
 pub(crate) fn dataset_from_workflow_handler<C: Context>(
     ctx: C,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
@@ -330,7 +382,10 @@ async fn dataset_from_workflow<C: Context>(
     // create the dataset
     let dataset = create_dataset(info, file_path, result_descriptor, ctx, session).await?;
 
-    Ok(warp::reply::json(&IdResponse::from(dataset)))
+    Ok(warp::reply::json(&RasterDatasetFromWorkflowResult {
+        dataset,
+        upload,
+    }))
 }
 
 async fn build_geotiff<C: Context>(
@@ -487,12 +542,11 @@ mod tests {
     use crate::handlers::{handle_rejection, ErrorResponse};
     use crate::util::tests::{
         add_ndvi_to_datasets, check_allowed_http_methods, check_allowed_http_methods2,
-        register_ndvi_workflow_helper,
+        register_ndvi_workflow_helper, TestDataUploads,
     };
     use crate::util::IdResponse;
     use crate::workflows::registry::WorkflowRegistry;
     use geoengine_datatypes::collections::MultiPointCollection;
-    use geoengine_datatypes::dataset::DatasetId;
     use geoengine_datatypes::primitives::{
         FeatureData, Measurement, MultiPoint, SpatialPartition2D, SpatialResolution, TimeInterval,
     };
@@ -1046,12 +1100,16 @@ mod tests {
         assert_eq!(res.status(), 200);
 
         let body = std::str::from_utf8(res.body()).unwrap();
-        let dataset_id = serde_json::from_str::<IdResponse<DatasetId>>(body).unwrap();
+        let response = serde_json::from_str::<RasterDatasetFromWorkflowResult>(body).unwrap();
+        // automatically deletes uploads on drop
+        let _test_uploads = TestDataUploads {
+            uploads: vec![response.upload],
+        };
 
         // query the newly created dataset
         let op = GdalSource {
             params: GdalSourceParameters {
-                dataset: dataset_id.id.clone(),
+                dataset: response.dataset.clone(),
             },
         }
         .boxed();

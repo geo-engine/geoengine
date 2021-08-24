@@ -381,6 +381,7 @@ mod tests {
     use crate::contexts::{Context, Session};
     use crate::error::Result;
     use crate::util::test_data_dir;
+    use crate::util::tests::TestDataUploads;
     use crate::{
         pro::{contexts::ProInMemoryContext, util::tests::create_session_helper},
         util::config,
@@ -391,22 +392,6 @@ mod tests {
     use std::io::Write;
     use std::io::{Cursor, Read};
     use std::path::PathBuf;
-
-    /// Helper struct that removes all specified uploads on drop
-    #[derive(Default)]
-    struct TestDataUploads {
-        pub uploads: Vec<UploadId>,
-    }
-
-    impl Drop for TestDataUploads {
-        fn drop(&mut self) {
-            for upload in &self.uploads {
-                if let Ok(path) = upload.root_path() {
-                    let _res = std::fs::remove_dir_all(path);
-                }
-            }
-        }
-    }
 
     #[allow(clippy::too_many_lines)]
     #[tokio::test]

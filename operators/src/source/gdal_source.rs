@@ -201,7 +201,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
     async fn loading_info(&self, query: RasterQueryRectangle) -> Result<GdalLoadingInfo> {
         let valid = self.time.unwrap_or_default();
 
-        let parts = if dbg!(dbg!(valid).intersects(dbg!(&query.time_interval))) {
+        let parts = if valid.intersects(&query.time_interval) {
             vec![GdalLoadingInfoPart {
                 time: valid,
                 params: self.params.clone(),
