@@ -1,6 +1,6 @@
 use crate::engine::{
-    ExecutionContext, InitializedVectorOperator, MetaData, OperatorDatasets, QueryContext,
-    ResultDescriptor, SourceOperator, TypedVectorQueryProcessor, VectorOperator,
+    ExecutionContext, InitializedVectorOperator, MetaData, OperatorDatasets, PreLoadHook,
+    QueryContext, ResultDescriptor, SourceOperator, TypedVectorQueryProcessor, VectorOperator,
     VectorQueryProcessor, VectorQueryRectangle, VectorResultDescriptor,
 };
 use crate::util::Result;
@@ -38,6 +38,10 @@ impl MetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQu
             spatial_reference: SpatialReferenceOption::Unreferenced,
             columns: Default::default(),
         })
+    }
+
+    fn pre_load_hook(&self) -> Option<&dyn PreLoadHook> {
+        None
     }
 
     fn box_clone(

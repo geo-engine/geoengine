@@ -363,6 +363,10 @@ where
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
+        if let Some(hook) = self.dataset_information.pre_load_hook() {
+            hook.execute().await?;
+        }
+
         Ok(OgrSourceStream::new(
             self.dataset_information.loading_info(query).await?,
             query,

@@ -43,6 +43,8 @@ where
     async fn loading_info(&self, query: Q) -> Result<L>;
     async fn result_descriptor(&self) -> Result<R>;
 
+    fn pre_load_hook(&self) -> Option<&dyn PreLoadHook>;
+
     fn box_clone(&self) -> Box<dyn MetaData<L, R, Q>>;
 }
 
@@ -51,6 +53,18 @@ where
     R: ResultDescriptor,
 {
     fn clone(&self) -> Box<dyn MetaData<L, R, Q>> {
+        self.box_clone()
+    }
+}
+
+#[async_trait]
+pub trait PreLoadHook: Debug + Send + Sync {
+    async fn execute(&self) -> Result<()>;
+    fn box_clone(&self) -> Box<dyn PreLoadHook>;
+}
+
+impl Clone for Box<dyn PreLoadHook> {
+    fn clone(&self) -> Self {
         self.box_clone()
     }
 }
@@ -149,6 +163,45 @@ where
         Ok(self.result_descriptor.clone())
     }
 
+    fn pre_load_hook(&self) -> Option<&dyn PreLoadHook> {
+        None
+    }
+    fn box_clone(&self) -> Box<dyn MetaData<L, R, Q>> {
+        Box::new(self.clone())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct StaticMetaDataWithHook<L, R, Q>
+where
+    L: Debug + Clone + Send + Sync + 'static,
+    R: Debug + Send + Sync + 'static + ResultDescriptor,
+    Q: Debug + Clone + Send + Sync + 'static,
+{
+    pub loading_info: L,
+    pub result_descriptor: R,
+    pub phantom: PhantomData<Q>,
+    pub pre_load_hook: Box<dyn PreLoadHook>,
+}
+
+#[async_trait]
+impl<L, R, Q> MetaData<L, R, Q> for StaticMetaDataWithHook<L, R, Q>
+where
+    L: Debug + Clone + Send + Sync + 'static,
+    R: Debug + Send + Sync + 'static + ResultDescriptor,
+    Q: Debug + Clone + Send + Sync + 'static,
+{
+    async fn loading_info(&self, _query: Q) -> Result<L> {
+        Ok(self.loading_info.clone())
+    }
+
+    async fn result_descriptor(&self) -> Result<R> {
+        Ok(self.result_descriptor.clone())
+    }
+
+    fn pre_load_hook(&self) -> Option<&dyn PreLoadHook> {
+        Some(self.pre_load_hook.as_ref())
+    }
     fn box_clone(&self) -> Box<dyn MetaData<L, R, Q>> {
         Box::new(self.clone())
     }
