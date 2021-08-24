@@ -1,0 +1,144 @@
+/* DATA DESCRIPTION:
+Citation:	Pisternick, Timo; Lilkendey, Julian; Audit-Manna, Anishta; Dumur Neelayya, Danishta; Neehaul, Yashvin; Moosdorf, Nils (2020): Fish abundances for Troux aux Biches lagoon, Mauritius. PANGAEA, https://doi.org/10.1594/PANGAEA.921338, 
+	In: Pisternick, T et al. (2020): Environmental data and fish abundances for Troux aux Biches and Flic en Flac lagoon, Mauritius. PANGAEA, https://doi.org/10.1594/PANGAEA.921340
+Keyword(s):	Biodiversity; Coral Reef; fish abundance; Mauritius; Mauritius Oceanography Institute; nutrients; submarine groundwater discharge
+Related to:	Pisternick, Timo; Lilkendey, Julian; Audit-Manna, Anishta; Dumur Neelayya, Danishta; Neehaul, Yashvin; Moosdorf, Nils (2020): Submarine groundwater springs are characterized by distinct fish communities. Marine Ecology, https://doi.org/10.1111/maec.12610
+Project(s):	Leibniz Centre for Tropical Marine Research (ZMT) (URI: https://www.leibniz-zmt.de/en/)
+Coverage:	MEDIAN LATITUDE: -20.035330 * MEDIAN LONGITUDE: 57.542233 * SOUTH-BOUND LATITUDE: -20.040031 * WEST-BOUND LONGITUDE: 57.539928 * NORTH-BOUND LATITUDE: -20.026197 * EAST-BOUND LONGITUDE: 57.544485
+	DATE/TIME START: 2017-10-31T00:00:00 * DATE/TIME END: 2017-12-28T00:00:00
+Event(s):	TAB_C_11_2 * LATITUDE: -20.029035 * LONGITUDE: 57.544485 * DATE/TIME: 2017-11-28T00:00:00 * LOCATION: Mauritius * METHOD/DEVICE: Video camera (VIDEO)
+	TAB_C_4_2 * LATITUDE: -20.028872 * LONGITUDE: 57.543580 * DATE/TIME: 2017-11-28T00:00:00 * LOCATION: Mauritius * METHOD/DEVICE: Video camera (VIDEO)
+	TAB_C_7_2 * LATITUDE: -20.026197 * LONGITUDE: 57.544250 * DATE/TIME: 2017-12-28T00:00:00 * LOCATION: Mauritius * METHOD/DEVICE: Video camera (VIDEO)
+	TAB_SGD_10_2 * LATITUDE: -20.039360 * LONGITUDE: 57.540942 * DATE/TIME: 2017-11-27T00:00:00 * LOCATION: Mauritius * METHOD/DEVICE: Video camera (VIDEO)
+	TAB_SGD_3_2 * LATITUDE: -20.039066 * LONGITUDE: 57.539928 * DATE/TIME: 2017-11-27T00:00:00 * LOCATION: Mauritius * METHOD/DEVICE: Video camera (VIDEO)
+	TAB_SGD_7_2 * LATITUDE: -20.035680 * LONGITUDE: 57.541480 * DATE/TIME: 2017-12-27T00:00:00 * LOCATION: Mauritius * METHOD/DEVICE: Video camera (VIDEO)
+	TAB_SGD_JL_2 * LATITUDE: -20.039697 * LONGITUDE: 57.541939 * DATE/TIME: 2017-12-28T00:00:00 * LOCATION: Mauritius * METHOD/DEVICE: Video camera (VIDEO)
+	TAB_SGD_Sd_2 * LATITUDE: -20.040031 * LONGITUDE: 57.541747 * DATE/TIME: 2017-12-27T00:00:00 * LOCATION: Mauritius * METHOD/DEVICE: Video camera (VIDEO)
+	TAB_SGD_So_2 * LATITUDE: -20.040031 * LONGITUDE: 57.541747 * DATE/TIME: 2017-10-31T00:00:00 * LOCATION: Mauritius * METHOD/DEVICE: Video camera (VIDEO)
+Parameter(s):	Event label (Event) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075)
+	Date/Time of event (Date/Time) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075)
+	Latitude of event (Latitude) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075)
+	Longitude of event (Longitude) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075)
+	Location (Location) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075)
+	Site (Site) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075)
+	Replicate (Replicate) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075)
+	Shannon Diversity Index (H') * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075)
+	Pielou evenness index (J') * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075)
+	Pisces [#] (Pisces) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4 * COMMENT: total
+	Pisces [#] (Pisces) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4 * COMMENT: total commercial
+	Species richness (S) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Abudefduf sexfasciatus [#] (A. sexfasciatus) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Abudefduf sparoides [#] (A. sparoides) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Acanthuridae spp. [#] (Acanthuridae spp.) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Acanthurus nigricauda [#] (A. nigricauda) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Acanthurus nigrofuscus [#] (A. nigrofuscus) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Acanthurus triostegus [#] (A. triostegus) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Arothron nigropunctatus [#] (A. nigropunctatus) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Aulostomus chinensis [#] (A. chinensis) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Cantherhines pardalis [#] (C. pardalis) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Canthigaster bennetti [#] (C. bennetti) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Carangidae sp. [#] (Carangidae sp.) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Caranx melampygus [#] (C. melampygus) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Chaetodon auriga [#] (C. auriga) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Chaetodon interruptus [#] (C. interruptus) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Chaetodon lunula [#] (C. lunula) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Chaetodon trifascialis [#] (C. trifascialis) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Chaetodon trifasciatus [#] (C. trifasciatus) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Chaetodon vagabundus [#] (C. vagabundus) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Chaetodon xanthocephalus [#] (C. xanthocephalus) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Cheilinus chlorourus [#] (C. chlorourus) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Cheilinus trilobatus [#] (C. trilobatus) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Cheilio inermis [#] (C. inermis) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Cheilodipterus quinquelineatus [#] (C. quinquelineatus) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Chlorurus sordidus [#] (C. sordidus) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Chromis viridis [#] (C. viridis) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Chrysiptera unimaculata [#] (C. unimaculata) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Corythoichthys schultzi [#] (C. schultzi) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Crenimugil buchanani [#] (C. buchanani) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Ctenochaetus binotatus [#] (C. binotatus) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Ctenochaetus striatus [#] (C. striatus) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Dascyllus aruanus [#] (D. aruanus) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Epinephelus merra [#] (E. merra) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Gomphosus caeruleus [#] (G. caeruleus) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Gnatholepis sp. [#] (Gnatholepis sp.) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Grammistes sexlineatus [#] (G. sexlineatus) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Halichoeres hortulanus [#] (H. hortulanus) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Halichoeres marginatus [#] (H. marginatus) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Halichoeres nebulosus [#] (H. nebulosus) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Halichoeres scapularis [#] (H. scapularis) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Hemigymnus fasciatus [#] (H. fasciatus) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Hipposcarus harid [#] (H. harid) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Labroides dimidiatus [#] (L. dimidiatus) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Lethrinus harak [#] (L. harak) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Lethrinus nebulosus [#] (L. nebulosus) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Lethrinus sp. [#] (Lethrinus sp.) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Lutjanus kasmira [#] (L. kasmira) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Mulloidichthys flavolineatus [#] (M. flavolineatus) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Muraenidae sp. [#] (Muraenidae sp.) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Mulloidichthys vanicolensis [#] (M. vanicolensis) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Naso unicornis [#] (N. unicornis) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Ostorhinchus spp. [#] (Ostorhinchus spp.) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Ostorhinchus cyanosoma [#] (O. cyanosoma) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Ostorhinchus taeniophorus [#] (O. taeniophorus) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Ostracion cubicus [#] (O. cubicus) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Ostracion meleagris [#] (O. meleagris) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Ostracion sp. [#] (Ostracion sp.) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Oxymonacanthus longirostris [#] (O. longirostris) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Pardachirus marmoratus [#] (P. marmoratus) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Parupeneus barberinus [#] (P. barberinus) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Parupeneus trifasciatus [#] (P. trifasciatus) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Parupeneus ciliatus [#] (P. ciliatus) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Parupeneus macronemus [#] (P. macronemus) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Plotosus lineatus [#] (P. lineatus) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Pseudodax moluccanus [#] (P. moluccanus) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Rhinecanthus aculeatus [#] (R. aculeatus) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Sargocentron diadema [#] (S. diadema) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Saurida nebulosa [#] (S. nebulosa) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Scaridae spp., juvenile [#] (S. spp. juv) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Scarus ghobban [#] (S. ghobban) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Scarus psittacus [#] (S. psittacus) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Scarus scaber [#] (S. scaber) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Scarus spp. [#] (Scarus spp.) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Siganus argenteus [#] (S. argenteus) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Siganus spp., juvenile [#] (Siganus spp. juv) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Stegastes lividus [#] (S. lividus) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Stegastes nigricans [#] (S. nigricans) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Stethojulis albovittata [#] (S. albovittata) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Stethojulis strigiventer [#] (S. strigiventer) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Synodontidae sp. [#] (Synodontidae sp.) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Thalassoma genivittatum [#] (T. genivittatum) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Thalassoma hardwicke [#] (T. hardwicke) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Zanclus cornutus [#] (Z. cornutus) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Zebrasoma desjardinii [#] (Z. desjardinii) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+	Zebrasoma scopas [#] (Z. scopas) * PI: Pisternick, Timo (https://orcid.org/0000-0001-5396-9075) * METHOD/DEVICE: Digital camera, GoPro Hero 4
+License:	Creative Commons Attribution 4.0 International (CC-BY-4.0)
+Size:	2484 data points
+*/
+Event	Date/Time	Latitude	Longitude	Location	Site	Replicate	H'	J'	Pisces [#] (total)	Pisces [#] (total commercial)	S	A. sexfasciatus [#]	A. sparoides [#]	Acanthuridae spp. [#]	A. nigricauda [#]	A. nigrofuscus [#]	A. triostegus [#]	A. nigropunctatus [#]	A. chinensis [#]	C. pardalis [#]	C. bennetti [#]	Carangidae sp. [#]	C. melampygus [#]	C. auriga [#]	C. interruptus [#]	C. lunula [#]	C. trifascialis [#]	C. trifasciatus [#]	C. vagabundus [#]	C. xanthocephalus [#]	C. chlorourus [#]	C. trilobatus [#]	C. inermis [#]	C. quinquelineatus [#]	C. sordidus [#]	C. viridis [#]	C. unimaculata [#]	C. schultzi [#]	C. buchanani [#]	C. binotatus [#]	C. striatus [#]	D. aruanus [#]	E. merra [#]	G. caeruleus [#]	Gnatholepis sp. [#]	G. sexlineatus [#]	H. hortulanus [#]	H. marginatus [#]	H. nebulosus [#]	H. scapularis [#]	H. fasciatus [#]	H. harid [#]	L. dimidiatus [#]	L. harak [#]	L. nebulosus [#]	Lethrinus sp. [#]	L. kasmira [#]	M. flavolineatus [#]	Muraenidae sp. [#]	M. vanicolensis [#]	N. unicornis [#]	Ostorhinchus spp. [#]	O. cyanosoma [#]	O. taeniophorus [#]	O. cubicus [#]	O. meleagris [#]	Ostracion sp. [#]	O. longirostris [#]	P. marmoratus [#]	P. barberinus [#]	P. trifasciatus [#]	P. ciliatus [#]	P. macronemus [#]	P. lineatus [#]	P. moluccanus [#]	R. aculeatus [#]	S. diadema [#]	S. nebulosa [#]	S. spp. juv [#]	S. ghobban [#]	S. psittacus [#]	S. scaber [#]	Scarus spp. [#]	S. argenteus [#]	Siganus spp. juv [#]	S. lividus [#]	S. nigricans [#]	S. albovittata [#]	S. strigiventer [#]	Synodontidae sp. [#]	T. genivittatum [#]	T. hardwicke [#]	Z. cornutus [#]	Z. desjardinii [#]	Z. scopas [#]
+TAB_C_4_2	2017-11-28	-20.0289	57.5436	Trou aux Biches	Control	A	3.074730144	1.135403673	20	13	15	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0	0	0	2	1	0	0	0	0	0	0	0	0	0	1	0	1	0	0	0	0	0	0	2	0	0	0	1	0	0	0	0	0	0	1	2	0	0	0	0	0	0	0	1	0	0	3	0	0	0	1	0	0	0	0	0	0	0	0	0	0	1	0	0	0	1	1	0	0
+TAB_C_4_2	2017-11-28	-20.0289	57.5436	Trou aux Biches	Control	A	2.311814269	0.930342502	14	10	12	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0	0	1	0	0	0	0	0	0	0	0	1	0	0	2	0	1	0	0	0	0	0	0	2	0	0	0	1	1	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0	0	0	1	0	0	0	0	0	0	0	0	0	0	1	0	0	0	1	0	0	0
+TAB_C_4_2	2017-11-28	-20.0289	57.5436	Trou aux Biches	Control	A	1.955723516	0.849359931	12	7	10	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0	0	0	0	0	0	0	0	0	2	0	1	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0	0	0	0	0	0	0	0	0	0	1	0	0	0	1	0	1	0	0	0	0	0	0	0	0	1	0	0	0	1	2	0	0
+TAB_C_7_2	2017-12-28	-20.0262	57.5443	Trou aux Biches	Control	B	3.600212632	1.092351587	45	35	27	0	0	0	0	0	1	1	0	0	1	0	1	0	0	0	0	0	0	0	2	1	1	0	2	0	0	0	0	0	3	3	1	0	0	0	0	0	0	2	0	3	0	1	0	0	0	2	0	0	0	0	0	0	1	0	0	0	0	1	0	2	1	0	3	1	0	0	6	0	0	0	0	0	0	1	1	1	0	0	0	0	1	1	0
+TAB_C_7_2	2017-12-28	-20.0262	57.5443	Trou aux Biches	Control	B	2.625026639	0.876255419	32	25	20	1	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	2	0	2	0	1	0	1	0	0	0	0	0	4	3	1	0	0	0	0	0	0	3	0	1	0	0	0	1	0	1	0	0	0	0	0	0	0	0	0	0	0	0	1	1	0	0	1	2	0	0	3	0	0	0	0	0	0	1	0	0	0	0	0	1	0	1	0
+TAB_C_7_2	2017-12-28	-20.0262	57.5443	Trou aux Biches	Control	B	2.519914207	0.855821508	32	26	19	3	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0	1	0	1	2	0	0	0	0	3	0	1	0	0	0	0	0	0	1	0	3	0	0	0	0	0	1	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0	1	1	0	0	6	0	0	0	0	1	0	0	2	0	0	0	0	1	1	1	0
+TAB_C_11_2	2017-11-28	-20.0290	57.5445	Trou aux Biches	Control	C	1.482115333	0.761656613	12	7	7	0	0	0	0	0	1	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	2	0	0	0	0	0	0	0	0	2	0	1	0	0	0	0	0	0	0	0	1	0	0	0	0	0	0	0	2	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	3	0	0	0	0	0	0	0	0	0	0
+TAB_C_11_2	2017-11-28	-20.0290	57.5445	Trou aux Biches	Control	C	1.861425486	0.895156439	18	11	8	0	0	0	0	0	1	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0	0	3	0	0	0	0	0	0	0	0	0	0	1	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	3	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	5	0	0	0	0	1	3	0	0	0	0	0	0	0	0	0	0
+TAB_C_11_2	2017-11-28	-20.0290	57.5445	Trou aux Biches	Control	C	2.182026815	0.909975861	26	20	11	0	0	2	0	0	2	0	0	0	0	0	0	0	0	0	0	0	0	1	1	0	0	2	0	0	0	0	0	0	0	0	1	0	1	0	0	0	0	1	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0	0	0	0	0	0	12	0	0	0	0	0	2	0	0	0	0	0	0	0	0	0	0
+TAB_SGD_3_2	2017-11-27	-20.0391	57.5399	Trou aux Biches	SGD	D	2.867453923	0.843071895	43	21	30	0	0	0	0	0	2	1	0	1	0	0	0	0	1	1	1	0	2	1	1	1	1	0	1	3	0	0	0	0	2	3	0	1	0	0	0	0	0	1	0	1	0	1	0	0	0	0	0	0	1	0	0	0	0	0	0	2	0	0	0	0	0	0	1	2	0	0	3	0	0	0	1	0	0	0	3	1	0	0	1	1	1	0	0
+TAB_SGD_3_2	2017-11-27	-20.0391	57.5399	Trou aux Biches	SGD	D	2.900096463	0.852669262	44	25	30	1	0	0	0	0	2	1	0	0	0	0	2	0	0	2	1	0	2	0	1	0	1	0	1	3	0	0	0	0	1	4	1	1	0	0	0	0	0	1	0	0	0	1	1	0	0	0	0	0	1	0	0	0	0	0	0	0	0	0	1	0	1	0	1	1	0	0	3	1	0	0	0	0	0	0	3	1	0	1	1	0	2	0	0
+TAB_SGD_3_2	2017-11-27	-20.0391	57.5399	Trou aux Biches	SGD	D	3.402170890	0.990734877	70	40	31	0	0	0	0	0	8	1	0	1	0	0	0	0	0	0	0	0	2	0	1	1	1	0	1	16	0	0	0	0	2	4	1	1	0	0	1	1	0	3	1	0	0	1	0	0	0	1	0	0	1	0	0	0	0	0	0	1	0	0	1	0	1	0	1	0	0	0	11	0	0	0	1	0	0	0	1	1	0	0	1	1	1	0	0
+TAB_SGD_7_2	2017-12-27	-20.0357	57.5415	Trou aux Biches	SGD	E	3.154554226	0.946686861	45	17	28	1	1	0	1	0	1	0	1	0	0	0	0	0	1	1	0	1	0	1	1	0	0	0	1	6	0	0	0	0	2	4	1	1	0	0	0	1	0	1	1	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0	0	0	0	0	0	1	0	1	0	0	0	0	0	0	1	1	0	0	0	8	1	0	0	0	2	1	0	0
+TAB_SGD_7_2	2017-12-27	-20.0357	57.5415	Trou aux Biches	SGD	E	3.001421913	0.921219454	41	14	26	0	1	0	1	1	2	1	0	0	0	0	0	1	0	0	0	1	1	0	0	0	0	0	1	4	0	0	0	0	2	5	1	1	0	0	0	0	0	0	1	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	2	0	1	1	0	0	0	1	0	0	0	1	0	0	1	0	0	0	0	5	1	0	0	0	2	1	0	1
+TAB_SGD_7_2	2017-12-27	-20.0357	57.5415	Trou aux Biches	SGD	E	2.755485166	0.891442032	40	11	22	0	1	0	0	0	1	0	0	0	0	0	0	0	0	0	0	2	0	0	1	0	0	0	1	6	0	0	0	2	1	5	2	1	0	0	0	0	1	0	1	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	2	0	0	0	0	0	0	1	0	0	0	0	0	0	1	1	0	0	0	5	1	0	0	0	2	1	0	0
+TAB_SGD_10_2	2017-11-27	-20.0394	57.5409	Trou aux Biches	SGD	F	1.637772391	0.590701527	25	14	16	0	0	0	0	0	1	1	0	0	0	0	0	0	0	0	1	0	0	0	0	0	0	0	1	0	0	0	0	0	2	3	0	1	0	0	0	0	0	2	0	0	0	1	0	0	0	2	0	0	0	0	0	0	0	0	0	0	0	1	0	0	2	0	0	0	0	1	0	0	0	0	0	0	0	0	4	1	0	0	0	0	1	0	0
+TAB_SGD_10_2	2017-11-27	-20.0394	57.5409	Trou aux Biches	SGD	F	0.683730922	0.246603803	107	93	16	0	0	0	0	0	84	0	0	1	0	0	0	0	0	0	0	0	0	0	0	0	1	0	1	0	0	0	0	0	1	3	0	1	0	0	0	0	0	2	0	0	0	0	0	0	0	1	0	0	0	0	0	0	0	0	0	0	1	1	0	0	1	0	0	0	0	0	0	0	0	0	0	0	0	0	5	2	0	0	0	1	0	0	1
+TAB_SGD_10_2	2017-11-27	-20.0394	57.5409	Trou aux Biches	SGD	F	1.451427969	0.549979704	22	11	14	0	0	0	0	0	1	0	0	0	0	0	0	0	0	1	0	0	0	2	0	0	0	0	0	0	0	0	0	0	2	3	0	0	0	0	0	0	0	1	0	0	0	0	0	0	0	2	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0	0	1	0	1	1	0	0	0	0	0	0	0	3	1	0	0	0	2	0	0	0
+TAB_SGD_So_2	2017-10-31	-20.0400	57.5417	Trou aux Biches	Springs	G	1.937823661	0.646861430	77	30	20	0	0	0	0	0	5	1	0	0	0	0	2	0	0	0	0	0	0	0	3	0	0	0	0	0	0	0	5	1	3	3	1	0	0	0	0	0	0	7	0	0	2	0	0	0	0	1	0	0	0	0	0	0	1	0	0	0	0	2	0	0	0	34	0	0	0	0	1	0	0	0	0	0	0	0	1	2	1	0	0	0	1	0	0
+TAB_SGD_So_2	2017-10-31	-20.0400	57.5417	Trou aux Biches	Springs	G	1.765425581	0.571142457	116	24	22	0	0	0	0	0	3	1	0	0	0	0	1	0	0	0	0	0	0	0	2	0	0	0	0	0	0	0	3	0	2	4	0	0	0	1	0	0	0	2	0	0	2	1	0	0	0	1	0	0	0	0	1	1	0	0	0	0	0	0	0	1	0	75	0	0	1	0	7	0	0	0	0	0	0	0	2	1	3	0	0	0	1	0	0
+TAB_SGD_So_2	2017-10-31	-20.0400	57.5417	Trou aux Biches	Springs	G	1.404442871	0.495706712	96	17	17	0	0	0	0	0	3	0	0	0	0	0	0	0	0	0	0	0	0	1	2	0	0	0	0	0	0	0	3	0	4	3	0	0	0	1	0	0	0	1	0	0	2	1	0	0	0	1	0	0	0	0	1	0	1	0	0	0	0	1	0	0	0	67	0	0	1	0	0	0	0	0	0	0	0	0	3	0	0	0	0	0	0	0	0
+TAB_SGD_JL_2	2017-12-28	-20.0397	57.5419	Trou aux Biches	Springs	H	0.815482956	0.354159748	90	86	10	0	0	0	0	0	0	0	1	0	0	0	1	0	0	0	0	0	0	0	1	0	2	1	0	0	0	0	0	0	0	0	0	0	0	0	0	0	2	0	0	0	0	1	0	0	0	0	0	1	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	6	74	0	0	0	0	0	0	0	0	0	0
+TAB_SGD_JL_2	2017-12-28	-20.0397	57.5419	Trou aux Biches	Springs	H	0.526507614	0.194423136	173	161	15	0	0	0	0	0	0	1	1	0	0	0	0	0	0	0	0	0	0	0	1	0	1	1	0	0	0	0	0	0	0	0	1	0	0	0	0	0	6	0	0	0	0	1	0	0	0	4	1	0	0	0	0	0	0	0	0	0	0	0	0	1	0	0	0	0	0	0	0	0	0	0	0	1	151	1	0	0	1	0	0	0	0	0	0
+TAB_SGD_JL_2	2017-12-28	-20.0397	57.5419	Trou aux Biches	Springs	H	0.427743820	0.205701296	128	122	8	0	0	0	0	0	0	0	2	0	0	0	0	0	0	0	0	0	0	0	1	0	1	0	0	0	0	0	0	0	0	0	1	0	0	0	0	0	3	0	0	0	0	1	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	118	0	1	0	0	0	0	0	0	0	0
+TAB_SGD_Sd_2	2017-12-27	-20.0400	57.5417	Trou aux Biches	Springs	I	1.599716655	0.590726366	114	56	15	0	0	0	0	0	0	0	4	0	0	0	0	0	0	0	0	0	0	0	1	0	1	0	0	0	1	0	2	0	2	2	0	0	0	0	0	0	0	5	0	0	0	0	0	0	6	0	0	0	0	0	47	1	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	0	0	0	0	0	38	0	2	1	0	0	0	0	0	0	0
+TAB_SGD_Sd_2	2017-12-27	-20.0400	57.5417	Trou aux Biches	Springs	I	1.708854994	0.580366924	153	103	19	0	0	0	0	0	0	0	4	0	0	0	0	0	0	0	0	0	0	0	1	0	1	0	1	0	1	0	0	0	3	2	0	0	0	0	0	0	0	1	0	0	1	0	0	0	9	0	0	0	0	0	39	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	2	0	1	0	1	3	79	0	0	2	1	0	0	0	0	1	0
+TAB_SGD_Sd_2	2017-12-27	-20.0400	57.5417	Trou aux Biches	Springs	I	1.820491017	0.642553453	114	71	17	0	0	0	0	0	0	0	3	0	0	4	1	0	0	0	0	0	0	0	1	0	2	0	0	0	0	0	0	0	3	2	0	0	0	0	0	0	0	1	0	0	2	0	0	0	10	0	0	0	0	0	28	0	0	0	0	0	0	0	0	2	0	0	0	0	0	0	2	0	0	0	0	2	47	0	1	3	0	0	0	0	0	0	0

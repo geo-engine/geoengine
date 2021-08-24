@@ -18,8 +18,8 @@ use geoengine_datatypes::primitives::{
 use geoengine_datatypes::raster::{GeoTransform, RasterDataType};
 use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
 use geoengine_operators::engine::{
-    MetaData, MetaDataProvider, RasterQueryRectangle, RasterResultDescriptor, VectorQueryRectangle,
-    VectorResultDescriptor,
+    MetaData, MetaDataProvider, PreLoadHook, RasterQueryRectangle, RasterResultDescriptor,
+    VectorQueryRectangle, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
@@ -468,6 +468,10 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
             measurement: Measurement::Unitless,
             no_data_value: self.band.no_data_value,
         })
+    }
+
+    fn pre_load_hook(&self) -> Option<&dyn PreLoadHook> {
+        None
     }
 
     fn box_clone(
