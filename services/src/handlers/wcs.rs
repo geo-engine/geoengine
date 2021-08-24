@@ -5,7 +5,7 @@ use geoengine_operators::util::raster_stream_to_geotiff::raster_stream_to_geotif
 use log::info;
 use snafu::{ensure, ResultExt};
 
-use geoengine_datatypes::primitives::AxisAlignedRectangle;
+use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D};
 use geoengine_datatypes::{primitives::SpatialResolution, spatial_reference::SpatialReference};
 
 use crate::contexts::MockableSession;
@@ -13,6 +13,7 @@ use crate::error::Result;
 use crate::error::{self, Error};
 use crate::handlers::Context;
 use crate::ogc::wcs::request::{DescribeCoverage, GetCapabilities, GetCoverage, WcsRequest};
+use crate::util::config;
 use crate::util::config::get_config_element;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
@@ -148,7 +149,7 @@ async fn describe_coverage<C: Context>(
     let spatial_reference = spatial_reference.ok_or(error::Error::MissingSpatialReference)?;
 
     // TODO: give tighter bounds if possible
-    let area_of_use = spatial_reference
+    let area_of_use: SpatialPartition2D = spatial_reference
         .area_of_use_projected()
         .context(error::DataType)?;
 
@@ -298,10 +299,7 @@ async fn get_coverage<C: Context>(request: &GetCoverage, ctx: &C) -> Result<Http
 
     let query_rect: RasterQueryRectangle = RasterQueryRectangle {
         spatial_bounds: request_partition,
-        time_interval: request.time.unwrap_or_else(|| {
-            let time = TimeInstance::from(chrono::offset::Utc::now());
-            TimeInterval::new_unchecked(time, time)
-        }),
+        time_interval: request.time.unwrap_or_else(default_time_from_config),
         spatial_resolution,
     };
 
@@ -390,6 +388,27 @@ async fn get_coverage<C: Context>(request: &GetCoverage, ctx: &C) -> Result<Http
     .map_err(error::Error::from)?;
 
     Ok(HttpResponse::Ok().content_type("image/tiff").body(bytes))
+}
+
+fn default_time_from_config() -> TimeInterval {
+    get_config_element::<config::Wcs>()
+        .ok()
+        .and_then(|wcs| wcs.default_time)
+        .map_or_else(
+            || {
+                get_config_element::<config::Ogc>()
+                    .ok()
+                    .and_then(|ogc| ogc.default_time)
+                    .map_or_else(
+                        || {
+                            TimeInterval::new_instant(TimeInstance::now())
+                                .expect("is a valid time interval")
+                        },
+                        |time| time.time_interval(),
+                    )
+            },
+            |time| time.time_interval(),
+        )
 }
 
 #[cfg(test)]
@@ -569,7 +588,7 @@ mod tests {
 
         assert_eq!(res.status(), 200);
         assert_eq!(
-            include_bytes!("../../../operators/test-data/raster/geotiff_from_stream.tiff")
+            include_bytes!("../../../operators/test-data/raster/geotiff_from_stream_compressed.tiff")
                 as &[u8],
             test::read_body(res).await.as_ref()
         );

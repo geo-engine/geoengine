@@ -6,6 +6,8 @@ use crate::error;
 use crate::error::Result;
 use crate::handlers::Context;
 use crate::ogc::wfs::request::{GetCapabilities, GetFeature, TypeNames, WfsRequest};
+use crate::util::config;
+use crate::util::config::get_config_element;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use futures::StreamExt;
@@ -413,10 +415,7 @@ async fn get_feature<C: Context>(request: &GetFeature, ctx: &C) -> Result<HttpRe
 
     let query_rect = VectorQueryRectangle {
         spatial_bounds: request.bbox,
-        time_interval: request.time.unwrap_or_else(|| {
-            let time = TimeInstance::from(chrono::offset::Utc::now());
-            TimeInterval::new_unchecked(time, time)
-        }),
+        time_interval: request.time.unwrap_or_else(default_time_from_config),
         spatial_resolution: request
             .query_resolution
             // TODO: find a reasonable fallback, e.g., dependent on the SRS or BBox
@@ -519,6 +518,27 @@ fn get_feature_mock(_request: &GetFeature) -> Result<HttpResponse> {
     Ok(HttpResponse::Ok()
         .content_type(mime::APPLICATION_JSON)
         .body(collection.to_geo_json()))
+}
+
+fn default_time_from_config() -> TimeInterval {
+    get_config_element::<config::Wfs>()
+        .ok()
+        .and_then(|wfs| wfs.default_time)
+        .map_or_else(
+            || {
+                get_config_element::<config::Ogc>()
+                    .ok()
+                    .and_then(|ogc| ogc.default_time)
+                    .map_or_else(
+                        || {
+                            TimeInterval::new_instant(TimeInstance::now())
+                                .expect("is a valid time interval")
+                        },
+                        |time| time.time_interval(),
+                    )
+            },
+            |time| time.time_interval(),
+        )
 }
 
 #[cfg(test)]

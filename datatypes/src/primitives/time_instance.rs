@@ -54,6 +54,10 @@ impl TimeInstance {
         self.0
     }
 
+    pub fn now() -> Self {
+        Self::from(chrono::offset::Utc::now())
+    }
+
     pub const MIN: Self = TimeInstance::from_millis_unchecked(-8_334_632_851_200_001 + 1);
     pub const MAX: Self = TimeInstance::from_millis_unchecked(8_210_298_412_800_000 - 1);
 }

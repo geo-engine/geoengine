@@ -202,6 +202,17 @@ pub enum Error {
     Logger {
         source: flexi_logger::FlexiLoggerError,
     },
+
+    #[cfg(feature = "odm")]
+    Odm {
+        reason: String,
+    },
+    #[cfg(feature = "odm")]
+    OdmInvalidResponse {
+        reason: String,
+    },
+    #[cfg(feature = "odm")]
+    OdmMissingContentTypeHeader,
 }
 
 impl actix_web::error::ResponseError for Error {

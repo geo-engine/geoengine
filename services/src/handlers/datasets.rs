@@ -392,6 +392,7 @@ fn auto_detect_meta_data_definition(main_file_path: &Path) -> Result<MetaDataDef
             force_ogr_spatial_filter: false,
             on_error: geoengine_operators::source::OgrSourceErrorSpec::Ignore,
             sql_query: None,
+            attribute_query: None,
         },
         result_descriptor: VectorResultDescriptor {
             data_type: geometry.data_type,
@@ -722,6 +723,7 @@ mod tests {
                 force_ogr_spatial_filter: false,
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
+                attribute_query: None,
             },
             result_descriptor: descriptor.clone(),
             phantom: Default::default(),
@@ -757,6 +759,7 @@ mod tests {
                 force_ogr_spatial_filter: false,
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
+                attribute_query: None,
             },
             result_descriptor: descriptor,
             phantom: Default::default(),
@@ -959,6 +962,7 @@ mod tests {
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
+                    attribute_query: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -1019,6 +1023,7 @@ mod tests {
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
+                    attribute_query: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -1068,6 +1073,7 @@ mod tests {
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
+                    attribute_query: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -1117,6 +1123,7 @@ mod tests {
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
+                    attribute_query: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -1170,6 +1177,7 @@ mod tests {
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
+                    attribute_query: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -1221,6 +1229,7 @@ mod tests {
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: None,
+                    attribute_query: None,
                 },
                 result_descriptor: VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
@@ -1271,6 +1280,7 @@ mod tests {
                 force_ogr_spatial_filter: false,
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: None,
+                attribute_query: None,
             },
             result_descriptor: descriptor,
             phantom: Default::default(),

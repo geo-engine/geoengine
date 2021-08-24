@@ -25,7 +25,7 @@ Content-Type: application/json
 ###
 
 GET http://localhost:3030/session
-Authorization: Bearer f8ee09eb-f574-4a08-8c89-d3f60a4f7fd2
+Authorization: Bearer c04e0cd9-e7a9-476c-b201-521db83da0ce
 Content-Type: application/json
 
 {
@@ -153,7 +153,7 @@ Accept: application/json
 
 
 POST http://localhost:3030/workflow
-Authorization: Bearer 7d82fc9e-ef0d-4c53-a12d-faa309b4b3e4
+Authorization: Bearer 89960ca7-94b3-4630-9469-4338231343c4
 Content-Type: application/json
 
 {
@@ -177,3 +177,38 @@ Content-Type: application/json
 GET http://localhost:3030/wfs?request=GetFeature&service=WFS&version=2.0.0&typeNames=registry:ca6e5cb9-51bd-5e78-a723-ab2613457b33&bbox=-90,-180,90,180&srsName=EPSG:4326&time02014-04-01T12:00:00.000Z/2014-04-01T12:00:00.000Z
 Authorization: Bearer 7d82fc9e-ef0d-4c53-a12d-faa309b4b3e4
 Accept: application/json
+
+###
+
+POST http://localhost:3030/anonymous
+Content-Type: application/json
+
+###
+
+POST http://localhost:3030/droneMapping/task
+Authorization: Bearer 985bca25-f540-469f-84d8-591936a63d85
+Content-Type: application/json
+
+{
+  "upload": "61ca657e-6617-4d54-85d0-d11f6d6f9a6f"
+}
+
+
+###
+
+POST http://localhost:3030/droneMapping/dataset/24d488a6-1dcd-4d69-a91a-a3e74493bbdc
+Authorization: Bearer 985bca25-f540-469f-84d8-591936a63d85
+Accept: application/json
+
+###
+
+GET http://localhost:3000/task/10a0e95b-ecf7-499b-96dd-dc7760e2ade/download/all.zip
+
+###
+
+POST http://localhost:3000/task/new/init
+
+
+###
+
+POST http://localhost:3000/task/new/upload/530a6809-34c0-457f-8cb9-52c7b89f1ad6

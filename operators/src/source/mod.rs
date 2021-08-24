@@ -7,8 +7,8 @@ pub use self::csv::{
 };
 pub use self::gdal_source::{
     FileNotFoundHandling, GdalDatasetParameters, GdalLoadingInfo, GdalLoadingInfoPart,
-    GdalLoadingInfoPartIterator, GdalMetaDataRegular, GdalMetaDataStatic, GdalSource,
-    GdalSourceParameters, GdalSourceProcessor,
+    GdalLoadingInfoPartIterator, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataMapping,
+    GdalSource, GdalSourceParameters, GdalSourceProcessor,
 };
 pub use self::ogr_source::{
     OgrSource, OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType,

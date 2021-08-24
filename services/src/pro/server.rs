@@ -117,6 +117,8 @@ where
     C: ProContext,
     C::ProjectDB: ProProjectDb,
 {
+    //pro::handlers::drone_mapping::start_task_handler(ctx.clone()),
+    //pro::handlers::drone_mapping::dataset_from_drone_mapping_handler(ctx.clone())
     cfg.route("/version", web::get().to(show_version_handler)) // TODO: allow disabling this function via config or feature flag
         .route("/wms", web::get().to(handlers::wms::wms_handler::<C>))
         .route("/wfs", web::get().to(handlers::wfs::wfs_handler::<C>))
