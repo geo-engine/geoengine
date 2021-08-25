@@ -20,8 +20,7 @@ use crate::{
     datasets::storage::{DatasetDefinition, MetaDataDefinition},
 };
 use actix_web::dev::ServiceResponse;
-use actix_web::http::Method;
-use actix_web::{test, App};
+use actix_web::{http::Method, middleware, test, App};
 use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::operations::image::Colorizer;
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
@@ -186,6 +185,7 @@ pub async fn send_test_request<C: SimpleContext>(
     let mut app = test::init_service(
         App::new()
             .data(ctx)
+            .wrap(middleware::NormalizePath::default())
             .configure(configure_extractors)
             .configure(init_routes::<C>),
     )
@@ -202,6 +202,7 @@ where
     let mut app = test::init_service(
         App::new()
             .data(ctx)
+            .wrap(middleware::NormalizePath::default())
             .configure(configure_extractors)
             .configure(init_pro_routes::<C>),
     )

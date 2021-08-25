@@ -8,7 +8,7 @@ use crate::pro::contexts::{ProContext, ProInMemoryContext};
 use crate::util::config::{self, get_config_element, Backend};
 
 use actix_files::Files;
-use actix_web::{web, App, HttpServer};
+use actix_web::{middleware, web, App, HttpServer};
 use actix_web_httpauth::middleware::HttpAuthentication;
 #[cfg(feature = "postgres")]
 use bb8_postgres::tokio_postgres::NoTls;
@@ -35,7 +35,8 @@ where
     HttpServer::new(move || {
         let app = App::new()
             .app_data(wrapped_ctx.clone())
-            .wrap(actix_web::middleware::Logger::default())
+            .wrap(middleware::Logger::default())
+            .wrap(middleware::NormalizePath::default())
             .configure(configure_extractors)
             .configure(init_pro_routes::<C>);
 

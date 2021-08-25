@@ -8,7 +8,7 @@ use crate::util::config::get_config_element;
 
 use actix_files::Files;
 use actix_web::error::{InternalError, JsonPayloadError, QueryPayloadError};
-use actix_web::{web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{middleware, web, App, HttpResponse, HttpServer, Responder};
 use actix_web_httpauth::middleware::HttpAuthentication;
 use log::info;
 use snafu::ResultExt;
@@ -61,7 +61,8 @@ where
     HttpServer::new(move || {
         let app = App::new()
             .app_data(wrapped_ctx.clone())
-            .wrap(actix_web::middleware::Logger::default())
+            .wrap(middleware::Logger::default())
+            .wrap(middleware::NormalizePath::default())
             .configure(configure_extractors)
             .configure(init_routes::<C>);
 
