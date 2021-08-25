@@ -571,7 +571,7 @@ where
         debug!("GdalLoadingInfo: {:?}.", &meta_data);
 
         if let Some(hook) = self.meta_data.pre_load_hook() {
-            hook.execute().await?
+            hook.execute().await?;
         }
 
         // TODO: what to do if loading info is empty?
