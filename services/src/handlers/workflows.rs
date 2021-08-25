@@ -1,5 +1,4 @@
 use std::collections::HashSet;
-use std::path::Path;
 
 use crate::datasets::provenance::ProvenanceProvider;
 use crate::datasets::storage::{AddDataset, DatasetDefinition, DatasetStore, MetaDataDefinition};
@@ -17,14 +16,12 @@ use geoengine_datatypes::primitives::AxisAlignedRectangle;
 use geoengine_datatypes::raster::GeoTransform;
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::util::Identifier;
-use geoengine_operators::call_on_typed_operator;
-use geoengine_operators::engine::{
-    OperatorDatasets, RasterQueryRectangle, TypedRasterQueryProcessor, TypedResultDescriptor,
-};
+use geoengine_operators::engine::{OperatorDatasets, RasterQueryRectangle, TypedResultDescriptor};
 use geoengine_operators::source::{
     FileNotFoundHandling, GdalDatasetParameters, GdalMetaDataStatic,
 };
 use geoengine_operators::util::raster_stream_to_geotiff::raster_stream_to_geotiff;
+use geoengine_operators::{call_on_generic_raster_processor_gdal_types, call_on_typed_operator};
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use tokio::fs;
@@ -368,16 +365,16 @@ async fn dataset_from_workflow<C: Context>(
     let tile_limit = None; // TODO: set a reasonable limit or make configurable?
 
     // build the geotiff
-    build_geotiff::<C>(
-        processor,
-        &file_path,
-        query_rect,
-        query_ctx,
-        no_data_value,
-        request_spatial_ref,
-        tile_limit,
-    )
-    .await?;
+    call_on_generic_raster_processor_gdal_types!(processor, p =>  raster_stream_to_geotiff(
+            &file_path,
+            p,
+            query_rect,
+            query_ctx,
+            no_data_value,
+            request_spatial_ref,
+            tile_limit,    
+        ).await)?
+    .map_err(error::Error::from)?;
 
     // create the dataset
     let dataset = create_dataset(info, file_path, result_descriptor, ctx, session).await?;
@@ -386,106 +383,6 @@ async fn dataset_from_workflow<C: Context>(
         dataset,
         upload,
     }))
-}
-
-async fn build_geotiff<C: Context>(
-    processor: TypedRasterQueryProcessor,
-    file_path: &Path,
-    query_rect: RasterQueryRectangle,
-    query_ctx: <C as Context>::QueryContext,
-    no_data_value: Option<f64>,
-    request_spatial_ref: SpatialReference,
-    tile_limit: Option<usize>,
-) -> Result<()> {
-    match processor {
-        geoengine_operators::engine::TypedRasterQueryProcessor::U8(p) => {
-            raster_stream_to_geotiff(
-                file_path,
-                p,
-                query_rect,
-                query_ctx,
-                no_data_value,
-                request_spatial_ref,
-                tile_limit,
-            )
-            .await
-        }
-        geoengine_operators::engine::TypedRasterQueryProcessor::U16(p) => {
-            raster_stream_to_geotiff(
-                file_path,
-                p,
-                query_rect,
-                query_ctx,
-                no_data_value,
-                request_spatial_ref,
-                tile_limit,
-            )
-            .await
-        }
-        geoengine_operators::engine::TypedRasterQueryProcessor::U32(p) => {
-            raster_stream_to_geotiff(
-                file_path,
-                p,
-                query_rect,
-                query_ctx,
-                no_data_value,
-                request_spatial_ref,
-                tile_limit,
-            )
-            .await
-        }
-        geoengine_operators::engine::TypedRasterQueryProcessor::I16(p) => {
-            raster_stream_to_geotiff(
-                file_path,
-                p,
-                query_rect,
-                query_ctx,
-                no_data_value,
-                request_spatial_ref,
-                tile_limit,
-            )
-            .await
-        }
-        geoengine_operators::engine::TypedRasterQueryProcessor::I32(p) => {
-            raster_stream_to_geotiff(
-                file_path,
-                p,
-                query_rect,
-                query_ctx,
-                no_data_value,
-                request_spatial_ref,
-                tile_limit,
-            )
-            .await
-        }
-        geoengine_operators::engine::TypedRasterQueryProcessor::F32(p) => {
-            raster_stream_to_geotiff(
-                file_path,
-                p,
-                query_rect,
-                query_ctx,
-                no_data_value,
-                request_spatial_ref,
-                tile_limit,
-            )
-            .await
-        }
-        geoengine_operators::engine::TypedRasterQueryProcessor::F64(p) => {
-            raster_stream_to_geotiff(
-                file_path,
-                p,
-                query_rect,
-                query_ctx,
-                no_data_value,
-                request_spatial_ref,
-                tile_limit,
-            )
-            .await
-        }
-        _ => return Err(error::Error::RasterDataTypeNotSupportByGdal),
-    }
-    .map_err(error::Error::from)?;
-    Ok(())
 }
 
 async fn create_dataset<C: Context>(
