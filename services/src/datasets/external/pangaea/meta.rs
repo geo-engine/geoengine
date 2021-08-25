@@ -4,7 +4,9 @@
 use crate::error::Error;
 use async_trait::async_trait;
 use geoengine_datatypes::collections::VectorDataType;
-use geoengine_datatypes::primitives::FeatureDataType;
+use geoengine_datatypes::primitives::{
+    AxisAlignedRectangle, BoundingBox2D, Coordinate2D, FeatureDataType,
+};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_operators::engine::{
     PreLoadHook, StaticMetaDataWithHook, VectorQueryRectangle, VectorResultDescriptor,
@@ -126,7 +128,12 @@ impl PangeaMetaData {
 
     fn get_ogr_source_ds(&self, memfile_name: &str) -> OgrSourceDataset {
         let path: PathBuf = PathBuf::from(memfile_name);
-        let layer = path.file_stem().unwrap().to_str().unwrap().to_string();
+        let layer = path
+            .file_stem()
+            .expect("Memfile name requires a file stem")
+            .to_str()
+            .expect("Memfile name must be valid unicode")
+            .to_string();
 
         OgrSourceDataset {
             file_name: memfile_name.into(),
@@ -224,21 +231,20 @@ impl LoadHook {
             // Append default geometry
             Some(wkt) => {
                 let mut output: String = String::with_capacity(input.len());
-
-                let mut i = input.lines();
-
-                // Discard source header
-                i.next().unwrap();
-
                 // Write output header
                 output.push_str(header.as_str());
                 output.push('\n');
 
-                for line in i {
-                    output.push_str(line);
-                    output.push('\t');
-                    output.push_str(wkt.as_str());
-                    output.push('\n');
+                let mut i = input.lines();
+                // Discard source header
+                if i.next().is_some() {
+                    // Write data
+                    for line in i {
+                        output.push_str(line);
+                        output.push('\t');
+                        output.push_str(wkt.as_str());
+                        output.push('\n');
+                    }
                 }
                 output
             }
@@ -305,7 +311,9 @@ impl MemfileHandle {
 
 impl Drop for MemfileHandle {
     fn drop(&mut self) {
-        gdal::vsi::unlink_mem_file(self.memfile_name.as_str()).unwrap();
+        if gdal::vsi::unlink_mem_file(self.memfile_name.as_str()).is_err() {
+            // TODO: Silently swallow or log somewhere?
+        }
     }
 }
 
@@ -442,13 +450,94 @@ impl<T> From<ObjectOrArray<T>> for Vec<T> {
 enum FeatureHelper {
     #[serde(rename = "GeoShape")]
     Box {
-        #[serde(rename = "box")]
-        coords: String,
+        #[serde(rename = "box", deserialize_with = "FeatureHelper::parse_coords")]
+        bbox: BoundingBox2D,
     },
     #[serde(rename = "GeoCoordinates")]
     Point { longitude: f64, latitude: f64 },
     #[serde(other)]
     None,
+}
+
+use serde::de;
+use serde::de::Unexpected;
+use std::fmt;
+
+impl FeatureHelper {
+    fn parse_coords<'de, D>(deserializer: D) -> Result<BoundingBox2D, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct V;
+
+        impl<'de> de::Visitor<'de> for V {
+            type Value = BoundingBox2D;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str(
+                    "4 whitespace separated floating point values: \"y1:f64 x1:f64 y2:f64 x2:f64\"",
+                )
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                let mut floats = Vec::with_capacity(4);
+
+                for v in value.split_ascii_whitespace() {
+                    floats
+                        .push(v.parse::<f64>().map_err(|_| {
+                            de::Error::invalid_value(Unexpected::Str(value), &self)
+                        })?);
+                }
+
+                if floats.len() == 4 {
+                    BoundingBox2D::new(
+                        Coordinate2D {
+                            x: floats[1],
+                            y: floats[0],
+                        },
+                        Coordinate2D {
+                            x: floats[3],
+                            y: floats[2],
+                        },
+                    )
+                    .map_err(|_| de::Error::invalid_value(Unexpected::Str(value), &self))
+                } else {
+                    Err(de::Error::invalid_value(Unexpected::Str(value), &self))
+                }
+            }
+        }
+        deserializer.deserialize_any(V)
+    }
+
+    fn to_feature_info(&self) -> FeatureInfo {
+        match self {
+            FeatureHelper::None => FeatureInfo::None,
+            FeatureHelper::Point {
+                longitude,
+                latitude,
+            } => FeatureInfo::DefaultPoint {
+                wkt: format!("POINT ( {} {} )", longitude, latitude),
+            },
+            FeatureHelper::Box { bbox } => FeatureInfo::DefaultPolygon {
+                wkt: format!(
+                    "POLYGON (( {} {}, {} {}, {} {}, {} {}, {} {} ))",
+                    bbox.lower_left().x,
+                    bbox.lower_left().y,
+                    bbox.lower_right().x,
+                    bbox.lower_right().y,
+                    bbox.upper_right().x,
+                    bbox.upper_right().y,
+                    bbox.upper_left().x,
+                    bbox.upper_left().y,
+                    bbox.lower_left().x,
+                    bbox.lower_left().y,
+                ),
+            },
+        }
+    }
 }
 
 /// This helper is used to map the pangaea
@@ -506,37 +595,8 @@ impl From<MetaInternal> for PangeaMetaData {
                 lat_column: lat.full_name(),
                 lon_column: lon.full_name(),
             }
-        } else if let FeatureHelper::Point {
-            latitude: lat,
-            longitude: lon,
-        } = meta.spatial_coverage.geo
-        {
-            FeatureInfo::DefaultPoint {
-                wkt: format!("POINT ( {} {} )", lon, lat),
-            }
-        } else if let FeatureHelper::Box { coords } = meta.spatial_coverage.geo {
-            let coords: Vec<f64> = coords
-                .split_ascii_whitespace()
-                .map(|x| x.parse::<f64>().unwrap())
-                .collect();
-
-            FeatureInfo::DefaultPolygon {
-                wkt: format!(
-                    "POLYGON (( {} {}, {} {}, {} {}, {} {}, {} {} ))",
-                    coords[1],
-                    coords[0],
-                    coords[3],
-                    coords[0],
-                    coords[3],
-                    coords[2],
-                    coords[1],
-                    coords[2],
-                    coords[1],
-                    coords[0]
-                ),
-            }
         } else {
-            FeatureInfo::None
+            meta.spatial_coverage.geo.to_feature_info()
         };
 
         // handle name clashes
@@ -572,17 +632,17 @@ mod tests {
     use crate::datasets::external::pangaea::tests::test_data_path;
     use std::fs::OpenOptions;
 
-    fn load_meta(file_name: &str) -> PangeaMetaData {
+    fn load_meta(file_name: &str) -> serde_json::error::Result<PangeaMetaData> {
         let f = OpenOptions::new()
             .read(true)
             .open(test_data_path(file_name).as_path())
             .unwrap();
-        serde_json::from_reader::<_, PangeaMetaData>(f).unwrap()
+        serde_json::from_reader::<_, PangeaMetaData>(f)
     }
 
     #[test]
     fn test_meta_point() {
-        let md = load_meta("pangaea_geo_point_meta.json");
+        let md = load_meta("pangaea_geo_point_meta.json").unwrap();
         match &md.feature_info {
             FeatureInfo::DefaultPoint { .. } => {}
             _ => panic!("Expected to find FeatureInfo::DefaultPoint"),
@@ -591,7 +651,7 @@ mod tests {
 
     #[test]
     fn test_meta_none() {
-        let md = load_meta("pangaea_geo_none_meta.json");
+        let md = load_meta("pangaea_geo_none_meta.json").unwrap();
         match &md.feature_info {
             FeatureInfo::None => {}
             _ => panic!("Expected to find FeatureInfo::None"),
@@ -600,7 +660,7 @@ mod tests {
 
     #[test]
     fn test_meta_box() {
-        let md = load_meta("pangaea_geo_box_meta.json");
+        let md = load_meta("pangaea_geo_box_meta.json").unwrap();
         match &md.feature_info {
             FeatureInfo::DefaultPolygon { .. } => {}
             _ => panic!("Expected to find FeatureInfo::DefaultPolygon"),
@@ -608,8 +668,18 @@ mod tests {
     }
 
     #[test]
+    fn test_meta_box_invalid_coord() {
+        assert!(load_meta("pangaea_geo_box_meta_invalid_coord.json").is_err());
+    }
+
+    #[test]
+    fn test_meta_box_missing_coord() {
+        assert!(load_meta("pangaea_geo_box_meta_missing_coord.json").is_err());
+    }
+
+    #[test]
     fn test_meta_lat_lon() {
-        let md = load_meta("pangaea_geo_lat_lon_meta.json");
+        let md = load_meta("pangaea_geo_lat_lon_meta.json").unwrap();
         match &md.feature_info {
             FeatureInfo::Point { .. } => {}
             _ => panic!("Expected to find FeatureInfo::Point"),
@@ -618,7 +688,7 @@ mod tests {
 
     #[test]
     fn test_meta_single_creator() {
-        let md = load_meta("pangaea_single_creator_meta.json");
+        let md = load_meta("pangaea_single_creator_meta.json").unwrap();
         assert_eq!(1, md.authors.len());
     }
 }
