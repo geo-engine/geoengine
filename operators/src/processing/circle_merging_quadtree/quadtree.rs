@@ -37,10 +37,10 @@ where
     }
 
     pub fn insert(&mut self, coordinate: &Coordinate2D) {
-        let new_circle = CircleOfPoints::new_with_one_point(Circle::from_coordinate(
-            coordinate,
-            self.circle_radius_model.min_radius(),
-        ));
+        let new_circle = CircleOfPoints::new_with_one_point(
+            Circle::from_coordinate(coordinate, self.circle_radius_model.min_radius()),
+            Default::default(), // TODO: allow inserting attribute data
+        );
 
         self.insert_circle(new_circle);
     }
@@ -199,7 +199,7 @@ mod test {
 
         let mut iter = tree.into_iter();
         assert_eq!(
-            Some(CircleOfPoints::new(Circle::new(0.0, 0.0, 5.0), 1).unwrap()),
+            Some(CircleOfPoints::new(Circle::new(0.0, 0.0, 5.0), 1, Default::default()).unwrap()),
             iter.next()
         );
 
@@ -231,7 +231,8 @@ mod test {
                         50.0,
                         circle_radius_model.calculate_radius(points_size)
                     ),
-                    points_size.get()
+                    points_size.get(),
+                    Default::default()
                 )
                 .unwrap()
             ),
@@ -266,7 +267,8 @@ mod test {
                         49.0,
                         circle_radius_model.calculate_radius(points_size)
                     ),
-                    points_size.get()
+                    points_size.get(),
+                    Default::default()
                 )
                 .unwrap()
             ),
@@ -307,7 +309,8 @@ mod test {
                         50.0,
                         circle_radius_model.calculate_radius(NonZeroUsize::new(5).unwrap())
                     ),
-                    points_size
+                    points_size,
+                    Default::default()
                 )
                 .unwrap()
             ),
@@ -347,11 +350,11 @@ mod test {
 
         let mut iter = results.into_iter();
         assert_eq!(
-            Some(CircleOfPoints::new(Circle::new(50.0, 50.0, 5.0), 1).unwrap()),
+            Some(CircleOfPoints::new(Circle::new(50.0, 50.0, 5.0), 1, Default::default()).unwrap(),),
             iter.next()
         );
         assert_eq!(
-            Some(CircleOfPoints::new(Circle::new(75.0, 75.0, 5.0), 1).unwrap()),
+            Some(CircleOfPoints::new(Circle::new(75.0, 75.0, 5.0), 1, Default::default()).unwrap(),),
             iter.next()
         );
 

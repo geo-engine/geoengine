@@ -233,6 +233,13 @@ pub enum Error {
     InputMustBeZeroOrPositive {
         name: &'static str,
     },
+
+    DuplicateOutputColumns,
+
+    #[snafu(display("Input column `{:}` is missing", name))]
+    MissingInputColumn {
+        name: String,
+    },
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {

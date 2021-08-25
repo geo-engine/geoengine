@@ -31,6 +31,7 @@ num-traits = "0.2"
 ocl = { git = "https://github.com/michaelmattig/ocl", branch = "tentative_master" }  # TODO: use crates.io version once it builds again
 paste = "1.0"
 pin-project = "1.0"
+rustc-hash = { version = "1.0", default-features = false }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 snafu = "0.6"
@@ -40,6 +41,7 @@ uuid = { version = "0.8", features = ["serde", "v4", "v5"] }
 
 [dev-dependencies]
 criterion = {version = "0.3", features =["async_futures", "async_tokio"]}
+rand = "0.8"
 tempfile = "3.1"
 
 [[bench]]
