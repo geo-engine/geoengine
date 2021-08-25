@@ -192,8 +192,11 @@ mod tests {
         strings
             .merge(&StringSampler::from_value("baz".to_string()))
             .unwrap();
+        strings
+            .merge(&StringSampler::from_value("bau".to_string()))
+            .unwrap();
 
-        assert_eq!(strings.strings, vec!["foo", "bar"]);
+        assert_eq!(strings.strings, vec!["foo", "bar", "baz"]);
     }
 
     #[test]
@@ -221,14 +224,14 @@ mod tests {
 
         assert_eq!(
             &strings.string_sample().unwrap().strings,
-            &["foo".to_string()]
+            &["foo".to_string(), "bar".to_string()]
         );
 
         strings.merge(&AttributeAggregate::Null);
 
         assert_eq!(
             &strings.string_sample().unwrap().strings,
-            &["foo".to_string()]
+            &["foo".to_string(), "bar".to_string()]
         );
     }
 
