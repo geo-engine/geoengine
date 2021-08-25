@@ -1032,7 +1032,7 @@ mod tests {
             processor,
             query_rect,
             query_ctx,
-            Some(0.), // TODO
+            Some(0.),
             SpatialReference::epsg_4326(),
             None,
         )
