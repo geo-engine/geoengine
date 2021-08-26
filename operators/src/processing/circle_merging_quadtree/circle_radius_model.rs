@@ -28,11 +28,17 @@ impl LogScaledRadius {
     pub fn new(min_radius_px: f64, delta_px: f64) -> Result<Self> {
         ensure!(
             min_radius_px > 0.,
-            error::InputMustBeGreaterThanZero { name: "min_radius" }
+            error::InputMustBeGreaterThanZero {
+                scope: "CircleRadiusModel",
+                name: "min_radius"
+            }
         );
         ensure!(
             delta_px >= 0.,
-            error::InputMustBeZeroOrPositive { name: "delta_px" }
+            error::InputMustBeZeroOrPositive {
+                scope: "CircleRadiusModel",
+                name: "delta_px"
+            }
         );
 
         Ok(LogScaledRadius {
@@ -50,7 +56,10 @@ impl CircleRadiusModel for LogScaledRadius {
     {
         ensure!(
             resolution > 0.,
-            error::InputMustBeGreaterThanZero { name: "resolution" }
+            error::InputMustBeGreaterThanZero {
+                scope: "CircleRadiusModel",
+                name: "resolution"
+            }
         );
 
         Ok(Self {

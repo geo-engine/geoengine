@@ -241,13 +241,15 @@ pub enum Error {
 
     GdalRasterDataTypeNotSupported,
 
-    #[snafu(display("Input `{:}` must be greater than zero", name))]
+    #[snafu(display("Input `{}` must be greater than zero at `{}`", name, scope))]
     InputMustBeGreaterThanZero {
+        scope: &'static str,
         name: &'static str,
     },
 
-    #[snafu(display("Input `{:}` must be zero or positive", name))]
+    #[snafu(display("Input `{}` must be zero or positive at `{}`", name, scope))]
     InputMustBeZeroOrPositive {
+        scope: &'static str,
         name: &'static str,
     },
 

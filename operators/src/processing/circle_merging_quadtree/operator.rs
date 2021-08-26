@@ -59,12 +59,16 @@ impl VectorOperator for VisualPointClustering {
         ensure!(
             self.params.min_radius_px > 0.0,
             error::InputMustBeGreaterThanZero {
+                scope: "VisualPointClustering",
                 name: "min_radius_px"
             }
         );
         ensure!(
             self.params.delta_px >= 0.0,
-            error::InputMustBeZeroOrPositive { name: "delta_px" }
+            error::InputMustBeZeroOrPositive {
+                scope: "VisualPointClustering",
+                name: "delta_px"
+            }
         );
         ensure!(!self.params.radius_column.is_empty(), error::EmptyInput);
         ensure!(

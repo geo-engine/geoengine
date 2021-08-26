@@ -26,6 +26,7 @@ impl CircleOfPoints {
     ) -> Result<Self> {
         let number_of_points =
             NonZeroUsize::new(number_of_points).ok_or(Error::InputMustBeGreaterThanZero {
+                scope: "VisualPointClustering",
                 name: "number_of_points",
             })?;
 
