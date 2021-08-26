@@ -10,11 +10,12 @@ use geoengine_datatypes::{
     },
     spatial_reference::SpatialReference,
 };
-use std::sync::mpsc;
 use std::{
     convert::TryInto,
+    path::PathBuf,
     sync::mpsc::{Receiver, Sender},
 };
+use std::{path::Path, sync::mpsc};
 
 use crate::{engine::RasterQueryRectangle, util::Result};
 use crate::{
@@ -33,14 +34,46 @@ pub async fn raster_stream_to_geotiff_bytes<T, C: QueryContext + 'static>(
 where
     T: Pixel + GdalType,
 {
-    let file_name = format!("/vsimem/{}.tiff", uuid::Uuid::new_v4());
+    let file_path = PathBuf::from(format!("/vsimem/{}.tiff", uuid::Uuid::new_v4()));
+
+    raster_stream_to_geotiff(
+        &file_path,
+        processor,
+        query_rect,
+        query_ctx,
+        no_data_value,
+        spatial_reference,
+        tile_limit,
+    )
+    .await?;
+
+    let bytes = gdal::vsi::get_vsi_mem_file_bytes_owned(&file_path.to_string_lossy())?;
+
+    Ok(bytes)
+}
+
+pub async fn raster_stream_to_geotiff<T, C: QueryContext + 'static>(
+    file_path: &Path,
+    processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
+    query_rect: RasterQueryRectangle,
+    query_ctx: C,
+    no_data_value: Option<f64>,
+    spatial_reference: SpatialReference,
+    tile_limit: Option<usize>,
+) -> Result<()>
+where
+    T: Pixel + GdalType,
+{
+    // TODO: create file path if it doesn't exist
+    // TODO: handle streams with multiple time steps correctly
+
     let (tx, rx): (Sender<RasterTile2D<T>>, Receiver<RasterTile2D<T>>) = mpsc::channel();
 
-    let file_name_clone = file_name.clone();
+    let file_path_clone = file_path.to_owned();
     let writer = tokio::task::spawn_blocking(move || {
         gdal_writer(
             &rx,
-            &file_name_clone,
+            &file_path_clone,
             query_rect,
             no_data_value,
             spatial_reference,
@@ -51,6 +84,7 @@ where
 
     let mut tile_count = 0;
     while let Some(tile) = tile_stream.next().await {
+        // TODO: more descriptive error. This error occured when a file could not be created...
         tx.send(tile?).map_err(|_| Error::ChannelSend)?;
 
         tile_count += 1;
@@ -66,15 +100,12 @@ where
 
     writer.await??;
 
-    // TODO: use higher level rust-gdal method when it is mapped
-    let bytes = gdal::vsi::get_vsi_mem_file_bytes_owned(&file_name)?;
-
-    Ok(bytes)
+    Ok(())
 }
 
 fn gdal_writer<T: Pixel + GdalType>(
     rx: &Receiver<RasterTile2D<T>>,
-    file_name: &str,
+    file_path: &Path,
     query_rect: RasterQueryRectangle,
     no_data_value: Option<f64>,
     spatial_reference: SpatialReference,
@@ -104,7 +135,9 @@ fn gdal_writer<T: Pixel + GdalType>(
     ];
 
     let mut dataset = driver.create_with_band_type_with_options::<T>(
-        file_name,
+        file_path.to_str().ok_or(Error::InvalidGdalFilePath {
+            file_path: file_path.to_owned(),
+        })?,
         width as isize,
         height as isize,
         1,

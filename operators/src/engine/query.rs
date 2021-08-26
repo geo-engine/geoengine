@@ -2,9 +2,10 @@ use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BoundingBox2D, SpatialPartition2D, SpatialPartitioned, SpatialResolution,
     TimeInterval,
 };
+use serde::{Deserialize, Serialize};
 
 /// A spatio-temporal rectangle for querying data with a bounding box
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct QueryRectangle<SpatialBounds: AxisAlignedRectangle> {
     pub spatial_bounds: SpatialBounds,
     pub time_interval: TimeInterval,

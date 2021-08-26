@@ -3,6 +3,7 @@ use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::primitives::FeatureDataType;
 use snafu::Snafu;
 use std::ops::Range;
+use std::path::PathBuf;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility = "pub(crate)")]
@@ -239,6 +240,10 @@ pub enum Error {
     OgrSqlQuery,
 
     GdalRasterDataTypeNotSupported,
+
+    InvalidGdalFilePath {
+        file_path: PathBuf,
+    },
 }
 
 impl From<geoengine_datatypes::error::Error> for Error {
