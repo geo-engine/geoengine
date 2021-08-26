@@ -43,15 +43,15 @@ impl Node {
                     .rectangle
                     .contains_with_delta(&circle.circle, epsilon_distance)
                 {
+                    // should not be reached, but just in case
                     section.add(circle, epsilon_distance, max_items_per_node);
-                    // return;
-                    unreachable!();
+                    return;
                 }
             }
 
             self.circles.push(circle);
         } else {
-            // no is unsplitted
+            // node is unsplitted
 
             self.circles.push(circle);
 
