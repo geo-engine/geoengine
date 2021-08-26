@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use geoengine_datatypes::primitives::{BoundingBox2D, Circle, Coordinate2D};
+use geoengine_datatypes::primitives::{BoundingBox2D, Circle, Coordinate2D, TimeInterval};
 
 use super::{circle_of_points::CircleOfPoints, circle_radius_model::CircleRadiusModel, node::Node};
 
@@ -39,6 +39,7 @@ where
     pub fn insert(&mut self, coordinate: &Coordinate2D) {
         let new_circle = CircleOfPoints::new_with_one_point(
             Circle::from_coordinate(coordinate, self.circle_radius_model.min_radius()),
+            TimeInterval::default(),
             Default::default(), // TODO: allow inserting attribute data
         );
 
@@ -199,7 +200,15 @@ mod test {
 
         let mut iter = tree.into_iter();
         assert_eq!(
-            Some(CircleOfPoints::new(Circle::new(0.0, 0.0, 5.0), 1, Default::default()).unwrap()),
+            Some(
+                CircleOfPoints::new(
+                    Circle::new(0.0, 0.0, 5.0),
+                    1,
+                    TimeInterval::default(),
+                    Default::default()
+                )
+                .unwrap()
+            ),
             iter.next()
         );
 
@@ -232,6 +241,7 @@ mod test {
                         circle_radius_model.calculate_radius(points_size)
                     ),
                     points_size.get(),
+                    TimeInterval::default(),
                     Default::default()
                 )
                 .unwrap()
@@ -268,6 +278,7 @@ mod test {
                         circle_radius_model.calculate_radius(points_size)
                     ),
                     points_size.get(),
+                    TimeInterval::default(),
                     Default::default()
                 )
                 .unwrap()
@@ -310,6 +321,7 @@ mod test {
                         circle_radius_model.calculate_radius(NonZeroUsize::new(5).unwrap())
                     ),
                     points_size,
+                    TimeInterval::default(),
                     Default::default()
                 )
                 .unwrap()
@@ -350,11 +362,27 @@ mod test {
 
         let mut iter = results.into_iter();
         assert_eq!(
-            Some(CircleOfPoints::new(Circle::new(50.0, 50.0, 5.0), 1, Default::default()).unwrap(),),
+            Some(
+                CircleOfPoints::new(
+                    Circle::new(50.0, 50.0, 5.0),
+                    1,
+                    TimeInterval::default(),
+                    Default::default()
+                )
+                .unwrap(),
+            ),
             iter.next()
         );
         assert_eq!(
-            Some(CircleOfPoints::new(Circle::new(75.0, 75.0, 5.0), 1, Default::default()).unwrap(),),
+            Some(
+                CircleOfPoints::new(
+                    Circle::new(75.0, 75.0, 5.0),
+                    1,
+                    TimeInterval::default(),
+                    Default::default()
+                )
+                .unwrap(),
+            ),
             iter.next()
         );
 

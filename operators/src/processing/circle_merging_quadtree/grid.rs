@@ -80,7 +80,7 @@ impl<C: CircleRadiusModel> Grid<C> {
 
 #[cfg(test)]
 mod tests {
-    use geoengine_datatypes::primitives::Circle;
+    use geoengine_datatypes::primitives::{Circle, TimeInterval};
 
     use crate::processing::circle_merging_quadtree::circle_radius_model::LogScaledRadius;
 
@@ -95,14 +95,17 @@ mod tests {
 
         grid.insert(CircleOfPoints::new_with_one_point(
             Circle::new(1., 1., 1.),
+            TimeInterval::default(),
             Default::default(),
         ));
         grid.insert(CircleOfPoints::new_with_one_point(
             Circle::new(2., 1., 1.),
+            TimeInterval::default(),
             Default::default(),
         ));
         grid.insert(CircleOfPoints::new_with_one_point(
             Circle::new(6., 6., 1.),
+            TimeInterval::default(),
             Default::default(),
         ));
 
@@ -112,10 +115,15 @@ mod tests {
                 CircleOfPoints::new(
                     Circle::new(1.5, 1., 2.693_147_180_559_945_4),
                     2,
+                    TimeInterval::default(),
                     Default::default(),
                 )
                 .unwrap(),
-                CircleOfPoints::new_with_one_point(Circle::new(6., 6., 1.), Default::default(),),
+                CircleOfPoints::new_with_one_point(
+                    Circle::new(6., 6., 1.),
+                    TimeInterval::default(),
+                    Default::default(),
+                ),
             ]
         );
     }

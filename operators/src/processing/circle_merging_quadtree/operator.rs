@@ -8,7 +8,6 @@ use geoengine_datatypes::collections::{
 };
 use geoengine_datatypes::primitives::{
     BoundingBox2D, Circle, FeatureDataType, FeatureDataValue, MultiPoint, MultiPointAccess,
-    TimeInterval,
 };
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
@@ -239,7 +238,7 @@ impl VisualPointClusteringProcessor {
 
         for circle_of_points in circles_of_points {
             builder.push_geometry(MultiPoint::new(vec![circle_of_points.circle.center()])?)?;
-            builder.push_time_interval(TimeInterval::default())?; // TODO: add time from circle of points
+            builder.push_time_interval(circle_of_points.time_aggregate)?;
 
             builder.push_data(
                 radius_column,
@@ -367,6 +366,7 @@ impl QueryProcessor for VisualPointClusteringProcessor {
 
                         grid.insert(CircleOfPoints::new_with_one_point(
                             circle,
+                            feature.time_interval,
                             attribute_aggregates,
                         ));
                     }
@@ -412,6 +412,7 @@ impl QueryProcessor for VisualPointClusteringProcessor {
 mod tests {
     use geoengine_datatypes::primitives::FeatureData;
     use geoengine_datatypes::primitives::SpatialResolution;
+    use geoengine_datatypes::primitives::TimeInterval;
 
     use crate::{
         engine::{MockExecutionContext, MockQueryContext},
