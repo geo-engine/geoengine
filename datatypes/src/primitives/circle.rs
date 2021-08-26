@@ -55,12 +55,12 @@ impl Circle {
     }
 
     /// Calculates if the rectangle is completely inside the circle
-    pub fn contains_rectangle(&self, other: &BoundingBox2D) -> bool {
+    pub fn contains_bbox(&self, bbox: &BoundingBox2D) -> bool {
         let corner_coordinates = [
-            other.lower_left(),
-            other.upper_right(),
-            other.upper_left(),
-            other.lower_right(),
+            bbox.lower_left(),
+            bbox.upper_right(),
+            bbox.upper_left(),
+            bbox.lower_right(),
         ];
 
         for coordinate in corner_coordinates {
