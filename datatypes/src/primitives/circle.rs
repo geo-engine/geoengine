@@ -1,4 +1,7 @@
+use geo::intersects::Intersects;
 use num_traits::abs;
+
+use crate::operations::Contains;
 
 use super::{AxisAlignedRectangle, BoundingBox2D, Coordinate2D};
 
@@ -100,6 +103,68 @@ impl Circle {
     pub fn area(&self) -> f64 {
         self.radius * self.radius * std::f64::consts::PI
     }
+
+    /// Enlarges the circle by the given delta
+    pub fn buffer(&self, delta: f64) -> Self {
+        Circle {
+            center: self.center,
+            radius: self.radius + delta,
+        }
+    }
+}
+
+impl Contains<Circle> for BoundingBox2D {
+    fn contains(&self, other: &Circle) -> bool {
+        let half_width = self.size_x() / 2.;
+        let x_center = self.lower_left().x + half_width;
+        let x_center_dist = (x_center - other.x()).abs();
+
+        if x_center_dist > (half_width - other.radius()) {
+            return false;
+        }
+
+        let half_height = self.size_y() / 2.;
+        let y_center = self.lower_left().y + half_height;
+        let y_center_dist = (y_center - other.y()).abs();
+
+        if y_center_dist > (half_height - other.radius()) {
+            return false;
+        }
+
+        true
+    }
+}
+
+impl Intersects<Circle> for BoundingBox2D {
+    fn intersects(&self, other: &Circle) -> bool {
+        let half_width = self.size_x() / 2.;
+        let x_center = self.lower_left().x + half_width;
+
+        let circle_distance_x = (x_center - other.x()).abs();
+        if circle_distance_x > half_width + other.radius() {
+            return false;
+        }
+
+        let half_height = self.size_y() / 2.;
+        let y_center = self.lower_left().y + half_height;
+
+        let circle_distance_y = (y_center - other.y()).abs();
+        if circle_distance_y > half_height + other.radius() {
+            return false;
+        }
+
+        if circle_distance_x <= half_width {
+            return true;
+        }
+        if circle_distance_y <= half_height {
+            return true;
+        }
+
+        let squared_corner_distanz =
+            (circle_distance_x - half_width).powi(2) + (circle_distance_y - half_height).powi(2);
+
+        squared_corner_distanz <= other.radius().powi(2)
+    }
 }
 
 #[cfg(test)]
@@ -192,5 +257,30 @@ mod test {
             (2.0 * radius).sqrt() + 0.001,
             (2.0 * radius).sqrt()
         )));
+    }
+
+    #[test]
+    fn test_bbox_contains_with_delta() {
+        let bbox = BoundingBox2D::new((-50., -50.).into(), (50., 50.).into()).unwrap();
+
+        assert!(bbox.contains(&Circle::new(0.0, 0.0, 49.0).buffer(1.0)));
+        assert!(!bbox.contains(&Circle::new(0.0, 0.0, 49.1).buffer(1.0)));
+
+        assert!(bbox.contains(&Circle::new(44.0, 0.0, 5.0).buffer(1.0)));
+        assert!(!bbox.contains(&Circle::new(44.1, 0.0, 5.0).buffer(1.0)));
+    }
+
+    #[test]
+    fn test_bbox_intersects_with_delta() {
+        let bbox = BoundingBox2D::new((-50., -50.).into(), (50., 50.).into()).unwrap();
+
+        assert!(bbox.intersects(&Circle::new(0.0, 0.0, 49.0).buffer(1.0)));
+        assert!(bbox.intersects(&Circle::new(0.0, 0.0, 49.1).buffer(1.0)));
+
+        assert!(bbox.intersects(&Circle::new(44.0, 0.0, 5.0).buffer(1.0)));
+        assert!(bbox.intersects(&Circle::new(44.1, 0.0, 5.0).buffer(1.0)));
+
+        assert!(bbox.intersects(&Circle::new(56.0, 0.0, 5.0).buffer(1.0)));
+        assert!(!bbox.intersects(&Circle::new(56.1, 0.0, 5.0).buffer(1.0)));
     }
 }

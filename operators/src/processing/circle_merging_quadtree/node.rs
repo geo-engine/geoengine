@@ -1,4 +1,5 @@
-use geoengine_datatypes::primitives::BoundingBox2D;
+use geo::intersects::Intersects;
+use geoengine_datatypes::{operations::Contains, primitives::BoundingBox2D};
 
 use super::circle_of_points::CircleOfPoints;
 
@@ -41,7 +42,7 @@ impl Node {
             for section in link.iter_mut() {
                 if section
                     .rectangle
-                    .contains_with_delta(&circle.circle, epsilon_distance)
+                    .contains(&circle.circle.buffer(epsilon_distance))
                 {
                     // should not be reached, but just in case
                     section.add(circle, epsilon_distance, max_items_per_node);
@@ -71,7 +72,7 @@ impl Node {
                     for section in link.iter_mut() {
                         if section
                             .rectangle
-                            .contains_with_delta(&circle.circle, epsilon_distance)
+                            .contains(&circle.circle.buffer(epsilon_distance))
                         {
                             section.add(circle, epsilon_distance, max_items_per_node);
                             continue 'circle;
@@ -113,7 +114,7 @@ impl Node {
                     for section in quad.iter_mut() {
                         if section
                             .rectangle
-                            .intersects_with_delta(&new_circle.circle, epsilon_distance)
+                            .intersects(&new_circle.circle.buffer(epsilon_distance))
                         {
                             if let Some(circle) = section.try_partial(&new_circle, epsilon_distance)
                             {
@@ -139,7 +140,7 @@ impl Node {
         for section in quad.iter_mut() {
             if section
                 .rectangle
-                .contains_with_delta(&new_circle.circle, epsilon_distance)
+                .contains(&new_circle.circle.buffer(epsilon_distance))
             {
                 return Ok(section.try_insert(new_circle, epsilon_distance, max_items_per_node));
             }
@@ -160,7 +161,7 @@ impl Node {
             for section in quad.iter_mut() {
                 if section
                     .rectangle
-                    .intersects_with_delta(&new_circle.circle, epsilon_distance)
+                    .intersects(&new_circle.circle.buffer(epsilon_distance))
                 {
                     if let Some(circle) = section.try_partial(new_circle, epsilon_distance) {
                         return Some(circle);
