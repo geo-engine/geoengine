@@ -1,10 +1,8 @@
-use core::slice;
 use futures::StreamExt;
 use gdal::{
-    raster::{Buffer, GdalType},
+    raster::{Buffer, GdalType, RasterCreationOption},
     Driver,
 };
-use gdal_sys::{VSIFree, VSIGetMemFileBuffer};
 use geoengine_datatypes::{
     primitives::{AxisAlignedRectangle, SpatialPartitioned},
     raster::{
@@ -14,9 +12,10 @@ use geoengine_datatypes::{
 };
 use std::{
     convert::TryInto,
+    path::PathBuf,
     sync::mpsc::{Receiver, Sender},
 };
-use std::{ffi::CString, sync::mpsc};
+use std::{path::Path, sync::mpsc};
 
 use crate::{engine::RasterQueryRectangle, util::Result};
 use crate::{
@@ -35,14 +34,46 @@ pub async fn raster_stream_to_geotiff_bytes<T, C: QueryContext + 'static>(
 where
     T: Pixel + GdalType,
 {
-    let file_name = format!("/vsimem/{}.tiff", uuid::Uuid::new_v4());
+    let file_path = PathBuf::from(format!("/vsimem/{}.tiff", uuid::Uuid::new_v4()));
+
+    raster_stream_to_geotiff(
+        &file_path,
+        processor,
+        query_rect,
+        query_ctx,
+        no_data_value,
+        spatial_reference,
+        tile_limit,
+    )
+    .await?;
+
+    let bytes = gdal::vsi::get_vsi_mem_file_bytes_owned(&file_path.to_string_lossy())?;
+
+    Ok(bytes)
+}
+
+pub async fn raster_stream_to_geotiff<T, C: QueryContext + 'static>(
+    file_path: &Path,
+    processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
+    query_rect: RasterQueryRectangle,
+    query_ctx: C,
+    no_data_value: Option<f64>,
+    spatial_reference: SpatialReference,
+    tile_limit: Option<usize>,
+) -> Result<()>
+where
+    T: Pixel + GdalType,
+{
+    // TODO: create file path if it doesn't exist
+    // TODO: handle streams with multiple time steps correctly
+
     let (tx, rx): (Sender<RasterTile2D<T>>, Receiver<RasterTile2D<T>>) = mpsc::channel();
 
-    let file_name_clone = file_name.clone();
+    let file_path_clone = file_path.to_owned();
     let writer = tokio::task::spawn_blocking(move || {
         gdal_writer(
             &rx,
-            &file_name_clone,
+            &file_path_clone,
             query_rect,
             no_data_value,
             spatial_reference,
@@ -53,6 +84,7 @@ where
 
     let mut tile_count = 0;
     while let Some(tile) = tile_stream.next().await {
+        // TODO: more descriptive error. This error occured when a file could not be created...
         tx.send(tile?).map_err(|_| Error::ChannelSend)?;
 
         tile_count += 1;
@@ -68,15 +100,12 @@ where
 
     writer.await??;
 
-    // TODO: use higher level rust-gdal method when it is mapped
-    let bytes = get_vsi_mem_file_bytes_and_free(&file_name);
-
-    Ok(bytes)
+    Ok(())
 }
 
 fn gdal_writer<T: Pixel + GdalType>(
     rx: &Receiver<RasterTile2D<T>>,
-    file_name: &str,
+    file_path: &Path,
     query_rect: RasterQueryRectangle,
     no_data_value: Option<f64>,
     spatial_reference: SpatialReference,
@@ -94,9 +123,26 @@ fn gdal_writer<T: Pixel + GdalType>(
     let output_bounds = query_rect.spatial_bounds;
 
     let driver = Driver::get("GTiff")?;
-    // TODO: "COMPRESS, DEFLATE" flags but rust-gdal doesn't support setting this yet(?)
-    let mut dataset =
-        driver.create_with_band_type::<T>(file_name, width as isize, height as isize, 1)?;
+    let options = [
+        RasterCreationOption {
+            key: "COMPRESS",
+            value: "LZW",
+        },
+        RasterCreationOption {
+            key: "TILED",
+            value: "YES",
+        },
+    ];
+
+    let mut dataset = driver.create_with_band_type_with_options::<T>(
+        file_path.to_str().ok_or(Error::InvalidGdalFilePath {
+            file_path: file_path.to_owned(),
+        })?,
+        width as isize,
+        height as isize,
+        1,
+        &options,
+    )?;
 
     dataset.set_spatial_ref(&spatial_reference.try_into()?)?;
     dataset.set_geo_transform(&output_geo_transform.into())?;
@@ -162,23 +208,6 @@ fn gdal_writer<T: Pixel + GdalType>(
     Ok(())
 }
 
-/// copies the bytes of the vsi in-memory file with given `file_name` and frees the memory
-fn get_vsi_mem_file_bytes_and_free(file_name: &str) -> Vec<u8> {
-    let bytes = unsafe {
-        let mut length: u64 = 0;
-        let file_name_c = CString::new(file_name).expect("contains no 0 byte");
-        let bytes = VSIGetMemFileBuffer(file_name_c.as_ptr(), &mut length, 1);
-
-        let slice = slice::from_raw_parts(bytes, length as usize);
-        let vec = slice.to_vec();
-
-        VSIFree(bytes.cast::<std::ffi::c_void>());
-
-        vec
-    };
-    bytes
-}
-
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::{
@@ -226,8 +255,9 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            include_bytes!("../../../operators/test-data/raster/geotiff_from_stream.tiff")
-                as &[u8],
+            include_bytes!(
+                "../../../operators/test-data/raster/geotiff_from_stream_compressed.tiff"
+            ) as &[u8],
             bytes.as_slice()
         );
     }

@@ -51,6 +51,16 @@ enable_buffering = false
 # Use this option if another folder should be used.
 #log_directory = "/var/log/"
 
+[ogc.default_time]
+# type "Value" with start/end as ISO strings or "Now" for using the current time, use wcs.default_time etc. for override
+type = "Value"
+start = "2014-01-01T00:00:00Z"
+end = "2014-01-01T00:00:00Z"
+
 [wcs]
 # max number of tiles to be produced for generating output tiff
 tile_limit = 4 
+
+[odm]
+endpoint = "http://localhost:3000/"
+# TODO: authentication
