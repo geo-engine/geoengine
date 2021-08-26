@@ -74,7 +74,6 @@ impl CircleRadiusModel for LogScaledRadius {
     }
 
     fn calculate_radius(&self, number_of_points: NonZeroUsize) -> f64 {
-        // TODO: best log variant?
         self.min_radius + (number_of_points.get() as f64).ln() * self.resolution
     }
 

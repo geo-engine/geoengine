@@ -151,7 +151,7 @@ mod test {
     fn epsilon() {
         let circle_zero = Circle::new(0.0, 0.0, 5.0);
         let circle_in = Circle::new(10.9, 0.0, 5.0);
-        let circle_out = Circle::new(11.0, 0.0, 5.0); // TODO: be in?
+        let circle_out = Circle::new(11.0, 0.0, 5.0);
 
         assert!(circle_zero.intersects_with_epsilon(&circle_zero, 1.0));
         assert!(circle_zero.intersects_with_epsilon(&circle_in, 1.0));
