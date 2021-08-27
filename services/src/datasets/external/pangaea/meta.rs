@@ -312,7 +312,7 @@ impl MemfileHandle {
 impl Drop for MemfileHandle {
     fn drop(&mut self) {
         if gdal::vsi::unlink_mem_file(self.memfile_name.as_str()).is_err() {
-            // TODO: Silently swallow or log somewhere?
+            log::debug!("Failed to unlink mem-file {}", self.memfile_name.as_str());
         }
     }
 }
