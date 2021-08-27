@@ -241,6 +241,25 @@ pub enum Error {
 
     GdalRasterDataTypeNotSupported,
 
+    #[snafu(display("Input `{}` must be greater than zero at `{}`", name, scope))]
+    InputMustBeGreaterThanZero {
+        scope: &'static str,
+        name: &'static str,
+    },
+
+    #[snafu(display("Input `{}` must be zero or positive at `{}`", name, scope))]
+    InputMustBeZeroOrPositive {
+        scope: &'static str,
+        name: &'static str,
+    },
+
+    DuplicateOutputColumns,
+
+    #[snafu(display("Input column `{:}` is missing", name))]
+    MissingInputColumn {
+        name: String,
+    },
+
     InvalidGdalFilePath {
         file_path: PathBuf,
     },
