@@ -5,7 +5,7 @@ use crate::pro;
 #[cfg(feature = "postgres")]
 use crate::pro::contexts::PostgresContext;
 use crate::pro::contexts::{ProContext, ProInMemoryContext};
-use crate::server::serve_static_directory;
+use crate::server::{serve_static_directory, show_version_handler};
 use crate::util::config::{self, get_config_element, Backend};
 use crate::{combine, error};
 
@@ -64,7 +64,8 @@ where
         handlers::wfs::wfs_handler(ctx.clone()),
         handlers::plots::get_plot_handler(ctx.clone()),
         handlers::upload::upload_handler(ctx.clone()),
-        handlers::spatial_references::get_spatial_reference_specification_handler(ctx.clone())
+        handlers::spatial_references::get_spatial_reference_specification_handler(ctx.clone()),
+        show_version_handler() // TODO: allow disabling this function via config or feature flag
     );
 
     #[cfg(feature = "odm")]
