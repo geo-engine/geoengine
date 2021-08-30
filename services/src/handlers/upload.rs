@@ -86,11 +86,13 @@ pub(crate) async fn upload_handler<C: Context>(
     Ok(web::Json(IdResponse::from(upload_id)))
 }
 
-/*#[cfg(test)]
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::contexts::{InMemoryContext, Session, SimpleContext};
-    use crate::handlers::handle_rejection;
+    use crate::util::tests::{read_body_string, send_test_request};
+    use actix_web::{http::header, test};
+    use actix_web_httpauth::headers::authorization::Bearer;
 
     #[tokio::test]
     async fn upload() {
@@ -112,25 +114,20 @@ foo
 "#
         .to_string();
 
-        let res = warp::test::request()
-            .method("POST")
-            .path("/upload")
-            .header("Content-Length", body.len())
-            .header(
-                "Authorization",
-                format!("Bearer {}", session_id.to_string()),
-            )
-            .header("Content-Type", "multipart/form-data; boundary=---------------------------10196671711503402186283068890")
-            .body(
-                body,
-            )
-            .reply(&upload_handler(ctx).recover(handle_rejection))
-            .await;
+        let req = test::TestRequest::post()
+            .uri("/upload")
+            .append_header((header::CONTENT_LENGTH, body.len()))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .append_header((header::CONTENT_TYPE, "multipart/form-data; boundary=---------------------------10196671711503402186283068890"))
+            .set_payload(body);
 
-        assert_eq!(res.status(), 200);
+        let res = send_test_request(req, ctx).await;
 
-        let body = std::str::from_utf8(res.body()).unwrap();
-        let _upload = serde_json::from_str::<IdResponse<UploadId>>(body).unwrap();
+        let res_status = res.status();
+        let res_body = read_body_string(res).await;
+        assert_eq!(res_status, 200, "{}", res_body);
+
+        let _upload: IdResponse<UploadId> = serde_json::from_str(&res_body).unwrap();
 
         // TODO: fix: body doesn't arrive at handler in test
         // let root = upload.id.root_path().unwrap();
@@ -138,4 +135,4 @@ foo
 
         // TODO: delete upload directory or configure test settings to use temp dir
     }
-}*/
+}

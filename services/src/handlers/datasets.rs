@@ -671,7 +671,7 @@ fn column_map_to_column_vecs(columns: &HashMap<String, ColumnDataType>) -> Colum
     }
 }
 
-/*#[cfg(test)]
+#[cfg(test)]
 mod tests {
     use std::{path::PathBuf, str::FromStr};
 
@@ -680,7 +680,11 @@ mod tests {
     use crate::datasets::storage::{AddDataset, DatasetStore};
     use crate::error::Result;
     use crate::projects::{PointSymbology, Symbology};
+    use crate::util::tests::{read_body_string, send_test_request};
+    use actix_web::{http::header, test};
+    use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::collections::VectorDataType;
+    use geoengine_datatypes::dataset::InternalDatasetId;
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
     use geoengine_operators::engine::{StaticMetaData, VectorResultDescriptor};
     use geoengine_operators::source::{OgrSourceDataset, OgrSourceErrorSpec};
@@ -771,9 +775,8 @@ mod tests {
             .add_dataset(&SimpleSession::default(), ds.validated()?, Box::new(meta))
             .await?;
 
-        let res = warp::test::request()
-            .method("GET")
-            .path(&format!(
+        let req = test::TestRequest::get()
+            .uri(&format!(
                 "/datasets?{}",
                 &serde_urlencoded::to_string([
                     ("order", "NameDesc"),
@@ -782,20 +785,14 @@ mod tests {
                 ])
                 .unwrap()
             ))
-            .header("Content-Length", "0")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session_id.to_string()),
-            )
-            .reply(&list_datasets_handler(ctx))
-            .await;
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let res = send_test_request(req, ctx).await;
 
         assert_eq!(res.status(), 200);
 
-        let body: String = String::from_utf8(res.body().to_vec()).unwrap();
-
         assert_eq!(
-            body,
+            read_body_string(res).await,
             json!([{
                 "id": {
                     "type": "internal",
@@ -906,19 +903,15 @@ mod tests {
             }
         }"#;
 
-        let res = warp::test::request()
-            .method("POST")
-            .path("/dataset")
-            .header("Content-Length", "0")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session_id.to_string()),
-            )
-            .body(s)
-            .reply(&create_dataset_handler(ctx))
-            .await;
+        let req = test::TestRequest::post()
+            .uri("/dataset")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"))
+            .set_payload(s);
+        let res = send_test_request(req, ctx).await;
 
-        assert_eq!(res.status(), 500, "{:?}", res.body());
+        assert_eq!(res.status(), 400, "{:?}", read_body_string(res).await);
 
         // TODO: add a success test case once it is clear how to upload data from within a test
     }
@@ -1296,23 +1289,18 @@ mod tests {
             )
             .await?;
 
-        let res = warp::test::request()
-            .method("GET")
-            .path(&format!("/dataset/internal/{}", id.internal().unwrap()))
-            .header("Content-Length", "0")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session_id.to_string()),
-            )
-            .reply(&get_dataset_handler(ctx))
-            .await;
+        let req = test::TestRequest::get()
+            .uri(&format!("/dataset/internal/{}", id.internal().unwrap()))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let res = send_test_request(req, ctx).await;
 
-        assert_eq!(res.status(), 200);
-
-        let body: String = String::from_utf8(res.body().to_vec()).unwrap();
+        let res_status = res.status();
+        let res_body = read_body_string(res).await;
+        assert_eq!(res_status, 200, "{}", res_body);
 
         assert_eq!(
-            body,
+            res_body,
             json!({
                 "id": {
                     "type": "internal",
@@ -1335,4 +1323,4 @@ mod tests {
 
         Ok(())
     }
-}*/
+}
