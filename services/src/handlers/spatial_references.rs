@@ -80,35 +80,30 @@ pub(crate) async fn get_spatial_reference_specification_handler<C: Context>(
     Ok(web::Json(spec))
 }
 
-/*#[cfg(test)]
+#[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::InMemoryContext;
     use crate::contexts::SimpleContext;
-    use crate::handlers::handle_rejection;
+    use crate::contexts::{InMemoryContext, Session};
+    use crate::util::tests::send_test_request;
+    use actix_web::{http::header, test};
+    use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::spatial_reference::SpatialReference;
-    use serde_json;
 
     #[tokio::test]
     async fn get_spatial_reference() {
         let ctx = InMemoryContext::default();
         let session_id = ctx.default_session_ref().await.id();
 
-        let response = warp::test::request()
-            .method("GET")
-            .path("/spatialReferenceSpecification/EPSG:4326")
-            .header("Content-Length", "0")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session_id.to_string()),
-            )
-            .reply(&get_spatial_reference_specification_handler(ctx).recover(handle_rejection))
-            .await;
+        let req = test::TestRequest::get()
+            .uri("/spatialReferenceSpecification/EPSG:4326")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let res = send_test_request(req, ctx).await;
 
-        assert_eq!(response.status(), 200);
+        assert_eq!(res.status(), 200);
 
-        let body: String = String::from_utf8(response.body().to_vec()).unwrap();
-        let spec: SpatialReferenceSpecification = serde_json::from_str(&body).unwrap();
+        let spec: SpatialReferenceSpecification = test::read_body_json(res).await;
         assert_eq!(
             SpatialReferenceSpecification {
                 name: "WGS84".to_owned(),
@@ -120,4 +115,4 @@ mod tests {
             spec
         );
     }
-}*/
+}
