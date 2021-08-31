@@ -193,17 +193,20 @@ pub(crate) async fn get_workflow_provenance_handler<C: Context>(
     Ok(web::Json(provenance))
 }
 
-/*#[cfg(test)]
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::contexts::{InMemoryContext, Session, SimpleContext};
-    use crate::handlers::{handle_rejection, ErrorResponse};
+    use crate::handlers::ErrorResponse;
     use crate::util::tests::{
         add_ndvi_to_datasets, check_allowed_http_methods, check_allowed_http_methods2,
-        register_ndvi_workflow_helper,
+        read_body_string, register_ndvi_workflow_helper, send_test_request,
     };
     use crate::util::IdResponse;
     use crate::workflows::registry::WorkflowRegistry;
+    use actix_web::dev::ServiceResponse;
+    use actix_web::{http::header, http::Method, test};
+    use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::collections::MultiPointCollection;
     use geoengine_datatypes::primitives::{FeatureData, Measurement, MultiPoint, TimeInterval};
     use geoengine_datatypes::raster::RasterDataType;
@@ -217,13 +220,11 @@ mod tests {
     use geoengine_operators::plot::{Statistics, StatisticsParams};
     use geoengine_operators::source::{GdalSource, GdalSourceParameters};
     use serde_json::json;
-    use warp::http::Response;
-    use warp::hyper::body::Bytes;
 
-    async fn register_test_helper(method: &str) -> Response<Bytes> {
+    async fn register_test_helper(method: Method) -> ServiceResponse {
         let ctx = InMemoryContext::default();
 
-        let session = ctx.default_session_ref().await;
+        let session_id = ctx.default_session_ref().await.id();
 
         let workflow = Workflow {
             operator: MockPointSource {
@@ -236,32 +237,27 @@ mod tests {
         };
 
         // insert workflow
-        warp::test::request()
+        let req = test::TestRequest::default()
             .method(method)
-            .path("/workflow")
-            .header("Content-Length", "0")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session.id().to_string()),
-            )
-            .json(&workflow)
-            .reply(&register_workflow_handler(ctx.clone()).recover(handle_rejection))
-            .await
+            .uri("/workflow")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .set_json(&workflow);
+        send_test_request(req, ctx).await
     }
 
     #[tokio::test]
     async fn register() {
-        let res = register_test_helper("POST").await;
+        let res = register_test_helper(Method::POST).await;
 
         assert_eq!(res.status(), 200);
 
-        let body: String = String::from_utf8(res.body().to_vec()).unwrap();
-        let _id: IdResponse<WorkflowId> = serde_json::from_str(&body).unwrap();
+        let _id: IdResponse<WorkflowId> = test::read_body_json(res).await;
     }
 
     #[tokio::test]
     async fn register_invalid_method() {
-        check_allowed_http_methods(register_test_helper, &["POST"]).await;
+        check_allowed_http_methods(register_test_helper, &[Method::POST]).await;
     }
 
     #[tokio::test]
@@ -279,20 +275,19 @@ mod tests {
         };
 
         // insert workflow
-        let res = warp::test::request()
-            .method("POST")
-            .path("/workflow")
-            .header("Content-Length", "0")
-            .json(&workflow)
-            .reply(&register_workflow_handler(ctx).recover(handle_rejection))
-            .await;
+        let req = test::TestRequest::post()
+            .uri("/workflow")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .set_json(&workflow);
+        let res = send_test_request(req, ctx).await;
 
         ErrorResponse::assert(
             res,
             401,
             "MissingAuthorizationHeader",
             "Header with authorization token not provided.",
-        );
+        )
+        .await;
     }
 
     #[tokio::test]
@@ -302,24 +297,20 @@ mod tests {
         let session_id = ctx.default_session_ref().await.id();
 
         // insert workflow
-        let res = warp::test::request()
-            .method("POST")
-            .path("/workflow")
-            .header("Content-Length", "0")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session_id.to_string()),
-            )
-            .body("no json")
-            .reply(&register_workflow_handler(ctx).recover(handle_rejection))
-            .await;
+        let req = test::TestRequest::post()
+            .uri("/workflow")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .set_payload("no json");
+        let res = send_test_request(req, ctx).await;
 
         ErrorResponse::assert(
             res,
             400,
             "BodyDeserializeError",
             "expected ident at line 1 column 2",
-        );
+        )
+        .await;
     }
 
     #[tokio::test]
@@ -331,57 +322,52 @@ mod tests {
         let workflow = json!({});
 
         // insert workflow
-        let res = warp::test::request()
-            .method("POST")
-            .path("/workflow")
-            .header("Content-Length", "0")
-            .header(
-                "Authorization",
-                format!("Bearer {}", session_id.to_string()),
-            )
-            .json(&workflow)
-            .reply(&register_workflow_handler(ctx).recover(handle_rejection))
-            .await;
+        let req = test::TestRequest::post()
+            .uri("/workflow")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .set_json(&workflow);
+        let res = send_test_request(req, ctx).await;
 
         ErrorResponse::assert(
             res,
             400,
             "BodyDeserializeError",
             "missing field `type` at line 1 column 2",
-        );
+        )
+        .await;
     }
 
-    async fn load_test_helper(method: &str) -> (Workflow, Response<Bytes>) {
+    async fn load_test_helper(method: Method) -> (Workflow, ServiceResponse) {
         let ctx = InMemoryContext::default();
 
         let session_id = ctx.default_session_ref().await.id();
 
         let (workflow, id) = register_ndvi_workflow_helper(&ctx).await;
 
-        let res = warp::test::request()
+        let req = test::TestRequest::default()
             .method(method)
-            .path(&format!("/workflow/{}", id.to_string()))
-            .header(
-                "Authorization",
-                format!("Bearer {}", session_id.to_string()),
-            )
-            .reply(&load_workflow_handler(ctx.clone()).recover(handle_rejection))
-            .await;
+            .uri(&format!("/workflow/{}", id.to_string()))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let res = send_test_request(req, ctx).await;
 
         (workflow, res)
     }
 
     #[tokio::test]
     async fn load() {
-        let (workflow, res) = load_test_helper("GET").await;
+        let (workflow, res) = load_test_helper(Method::GET).await;
 
         assert_eq!(res.status(), 200);
-        assert_eq!(res.body(), &serde_json::to_string(&workflow).unwrap());
+        assert_eq!(
+            read_body_string(res).await,
+            serde_json::to_string(&workflow).unwrap()
+        );
     }
 
     #[tokio::test]
     async fn load_invalid_method() {
-        check_allowed_http_methods2(load_test_helper, &["GET"], |(_, res)| res).await;
+        check_allowed_http_methods2(load_test_helper, &[Method::GET], |(_, res)| res).await;
     }
 
     #[tokio::test]
@@ -390,37 +376,34 @@ mod tests {
 
         let (_, id) = register_ndvi_workflow_helper(&ctx).await;
 
-        let res = warp::test::request()
-            .method("GET")
-            .path(&format!("/workflow/{}", id.to_string()))
-            .reply(&load_workflow_handler(ctx).recover(handle_rejection))
-            .await;
+        let req = test::TestRequest::get().uri(&format!("/workflow/{}", id.to_string()));
+        let res = send_test_request(req, ctx).await;
 
         ErrorResponse::assert(
             res,
             401,
             "MissingAuthorizationHeader",
             "Header with authorization token not provided.",
-        );
+        )
+        .await;
     }
 
     #[tokio::test]
     async fn load_not_exist() {
         let ctx = InMemoryContext::default();
 
-        let res = warp::test::request()
-            .method("GET")
-            .path("/workflow/1")
-            .reply(&load_workflow_handler(ctx).recover(handle_rejection))
-            .await;
+        let session_id = ctx.default_session_ref().await.id();
 
-        ErrorResponse::assert(res, 404, "NotFound", "Not Found");
+        let req = test::TestRequest::get().uri("/workflow/1").append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let res = send_test_request(req, ctx).await;
+
+        ErrorResponse::assert(res, 404, "NotFound", "Not Found").await;
     }
 
-    async fn vector_metadata_test_helper(method: &str) -> Response<Bytes> {
+    async fn vector_metadata_test_helper(method: Method) -> ServiceResponse {
         let ctx = InMemoryContext::default();
 
-        let session = ctx.default_session_ref().await;
+        let session_id = ctx.default_session_ref().await.id();
 
         let workflow = Workflow {
             operator: MockFeatureCollectionSource::single(
@@ -449,25 +432,23 @@ mod tests {
             .await
             .unwrap();
 
-        warp::test::request()
+        let req = test::TestRequest::default()
             .method(method)
-            .path(&format!("/workflow/{}/metadata", id.to_string()))
-            .header(
-                "Authorization",
-                format!("Bearer {}", session.id().to_string()),
-            )
-            .reply(&get_workflow_metadata_handler(ctx.clone()).recover(handle_rejection))
-            .await
+            .uri(&format!("/workflow/{}/metadata", id.to_string()))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        send_test_request(req, ctx).await
     }
 
     #[tokio::test]
     async fn vector_metadata() {
-        let res = vector_metadata_test_helper("GET").await;
+        let res = vector_metadata_test_helper(Method::GET).await;
 
-        assert_eq!(res.status(), 200, "{:?}", res.body());
+        let res_status = res.status();
+        let res_body = read_body_string(res).await;
+        assert_eq!(res_status, 200, "{:?}", res_body);
 
         assert_eq!(
-            serde_json::from_slice::<serde_json::Value>(res.body()).unwrap(),
+            serde_json::from_str::<serde_json::Value>(&res_body).unwrap(),
             json!({
                 "type": "vector",
                 "dataType": "MultiPoint",
@@ -513,20 +494,17 @@ mod tests {
             .await
             .unwrap();
 
-        let res = warp::test::request()
-            .method("GET")
-            .path(&format!("/workflow/{}/metadata", id.to_string()))
-            .header(
-                "Authorization",
-                format!("Bearer {}", session_id.to_string()),
-            )
-            .reply(&get_workflow_metadata_handler(ctx))
-            .await;
+        let req = test::TestRequest::get()
+            .uri(&format!("/workflow/{}/metadata", id.to_string()))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let res = send_test_request(req, ctx).await;
 
-        assert_eq!(res.status(), 200, "{:?}", res.body());
+        let res_status = res.status();
+        let res_body = read_body_string(res).await;
+        assert_eq!(res_status, 200, "{:?}", res_body);
 
         assert_eq!(
-            serde_json::from_slice::<serde_json::Value>(res.body()).unwrap(),
+            serde_json::from_str::<serde_json::Value>(&res_body).unwrap(),
             serde_json::json!({
                 "type": "raster",
                 "dataType": "U8",
@@ -543,7 +521,7 @@ mod tests {
 
     #[tokio::test]
     async fn metadata_invalid_method() {
-        check_allowed_http_methods(vector_metadata_test_helper, &["GET"]).await;
+        check_allowed_http_methods(vector_metadata_test_helper, &[Method::GET]).await;
     }
 
     #[tokio::test]
@@ -577,18 +555,16 @@ mod tests {
             .await
             .unwrap();
 
-        let res = warp::test::request()
-            .method("GET")
-            .path(&format!("/workflow/{}/metadata", id.to_string()))
-            .reply(&get_workflow_metadata_handler(ctx).recover(handle_rejection))
-            .await;
+        let req = test::TestRequest::get().uri(&format!("/workflow/{}/metadata", id.to_string()));
+        let res = send_test_request(req, ctx).await;
 
         ErrorResponse::assert(
             res,
             401,
             "MissingAuthorizationHeader",
             "Header with authorization token not provided.",
-        );
+        )
+        .await;
     }
 
     #[tokio::test]
@@ -614,20 +590,17 @@ mod tests {
             .await
             .unwrap();
 
-        let res = warp::test::request()
-            .method("GET")
-            .path(&format!("/workflow/{}/metadata", id.to_string()))
-            .header(
-                "Authorization",
-                format!("Bearer {}", session_id.to_string()),
-            )
-            .reply(&get_workflow_metadata_handler(ctx))
-            .await;
+        let req = test::TestRequest::get()
+            .uri(&format!("/workflow/{}/metadata", id.to_string()))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let res = send_test_request(req, ctx).await;
 
-        assert_eq!(res.status(), 200, "{:?}", res.body());
+        let res_status = res.status();
+        let res_body = read_body_string(res).await;
+        assert_eq!(res_status, 200, "{:?}", res_body);
 
         assert_eq!(
-            serde_json::from_slice::<serde_json::Value>(res.body()).unwrap(),
+            serde_json::from_str::<serde_json::Value>(&res_body).unwrap(),
             serde_json::json!({
                 "type": "plot",
             })
@@ -661,20 +634,17 @@ mod tests {
             .await
             .unwrap();
 
-        let res = warp::test::request()
-            .method("GET")
-            .path(&format!("/workflow/{}/provenance", id.to_string()))
-            .header(
-                "Authorization",
-                format!("Bearer {}", session_id.to_string()),
-            )
-            .reply(&get_workflow_provenance_handler(ctx))
-            .await;
+        let req = test::TestRequest::get()
+            .uri(&format!("/workflow/{}/provenance", id.to_string()))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let res = send_test_request(req, ctx).await;
 
-        assert_eq!(res.status(), 200, "{:?}", res.body());
+        let res_status = res.status();
+        let res_body = read_body_string(res).await;
+        assert_eq!(res_status, 200, "{:?}", res_body);
 
         assert_eq!(
-            serde_json::from_slice::<serde_json::Value>(res.body()).unwrap(),
+            serde_json::from_str::<serde_json::Value>(&res_body).unwrap(),
             serde_json::json!([{
                 "dataset": {
                     "type": "internal",
@@ -688,4 +658,4 @@ mod tests {
             }])
         );
     }
-}*/
+}
