@@ -394,7 +394,9 @@ mod tests {
 
         let session_id = ctx.default_session_ref().await.id();
 
-        let req = test::TestRequest::get().uri("/workflow/1").append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let req = test::TestRequest::get()
+            .uri("/workflow/1")
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, ctx).await;
 
         ErrorResponse::assert(res, 404, "NotFound", "Not Found").await;

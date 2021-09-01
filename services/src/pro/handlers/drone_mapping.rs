@@ -381,10 +381,14 @@ mod tests {
     use crate::contexts::{Context, Session};
     use crate::error::Result;
     use crate::util::test_data_dir;
+    use crate::util::tests::send_pro_test_request;
     use crate::{
         pro::{contexts::ProInMemoryContext, util::tests::create_session_helper},
         util::config,
     };
+    use actix_web::dev::ServiceResponse;
+    use actix_web::{http::header, http::Method, test};
+    use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_operators::engine::{
         MetaData, MetaDataProvider, RasterOperator, RasterQueryRectangle,
     };
@@ -469,17 +473,15 @@ mod tests {
         // submit the task via geo engine
         let task = TaskStart { upload: upload_id };
 
-        let res = warp::test::request()
-            .method("POST")
-            .path("/droneMapping/task")
-            .header("Content-Length", "0")
+        let req = test::TestRequest::post()
+            .uri("/droneMapping/task")
+            .append_header((header::CONTENT_LENGTH, 0))
             .header(
                 "Authorization",
                 format!("Bearer {}", session.id().to_string()),
             )
-            .json(&task)
-            .reply(&start_task_handler(ctx.clone()))
-            .await;
+            .set_json(&task);
+        let res = send_pro_test_request(req, ctx).await;
 
         assert_eq!(res.status(), 200);
 
@@ -507,17 +509,17 @@ mod tests {
         );
 
         // download odm result through geo engine and create dataset
-        let res = warp::test::request()
+        let req = test::TestRequest
             .method("POST")
-            .path(&format!("/droneMapping/dataset/{}", task_uuid))
-            .header("Content-Length", "0")
+            .uri(&format!("/droneMapping/dataset/{}", task_uuid))
+            .append_header((header::CONTENT_LENGTH, 0))
             .header(
                 "Authorization",
                 format!("Bearer {}", session.id().to_string()),
             )
-            .json(&task)
-            .reply(&dataset_from_drone_mapping_handler(ctx.clone()))
-            .await;
+            .set_json(&task)
+            .reply(&dataset_from_drone_mapping_handler(ctx.clone()));
+        let res = send_pro_test_request(req, ctx).await;
 
         let body = std::str::from_utf8(res.body()).unwrap();
         let dataset_response = serde_json::from_str::<CreateDatasetResponse>(body).unwrap();
