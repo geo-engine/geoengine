@@ -152,7 +152,7 @@ impl InitializedRasterOperator for InitializedRadiance {
     }
 }
 
-struct RadianceProcessor<Q, P>
+pub struct RadianceProcessor<Q, P>
 where
     Q: RasterQueryProcessor<RasterType = P>,
 {

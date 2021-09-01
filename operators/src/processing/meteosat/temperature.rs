@@ -157,7 +157,7 @@ impl InitializedRasterOperator for InitializedTemperature {
     }
 }
 
-struct TemperatureProcessor<Q, P>
+pub struct TemperatureProcessor<Q, P>
 where
     Q: RasterQueryProcessor<RasterType = P>,
 {

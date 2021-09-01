@@ -110,9 +110,10 @@ pub type Expression = Operator<ExpressionParams, ExpressionSources>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExpressionSources {
-    a: Box<dyn RasterOperator>,
-    b: Option<Box<dyn RasterOperator>>,
-    c: Option<Box<dyn RasterOperator>>,
+    //made them public
+    pub a: Box<dyn RasterOperator>,
+    pub b: Option<Box<dyn RasterOperator>>,
+    pub c: Option<Box<dyn RasterOperator>>,
 }
 
 impl OperatorDatasets for ExpressionSources {

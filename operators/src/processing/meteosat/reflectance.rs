@@ -236,6 +236,8 @@ where
                     // get extra terrestrial solar radiation (...) and ESD (solar position)
                     let etsr = channel.etsr / std::f64::consts::PI;
                     let esd = calculate_esd(&timestamp);
+                    
+                    
 
                     // Create result raster
                     let mut out = Grid2D::new(

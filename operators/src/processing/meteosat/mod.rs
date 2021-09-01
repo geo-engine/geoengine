@@ -1,32 +1,32 @@
 use geoengine_datatypes::raster::RasterPropertiesKey;
-
-mod radiance;
-mod reflectance;
+//made them public
+pub mod radiance;
+pub mod reflectance;
 mod satellite;
-mod temperature;
+pub mod temperature;
 
-fn slope_key() -> RasterPropertiesKey {
+pub fn slope_key() -> RasterPropertiesKey {
     RasterPropertiesKey {
         domain: Some("msg".into()),
         key: "calibration_slope".into(),
     }
 }
 
-fn offset_key() -> RasterPropertiesKey {
+pub fn offset_key() -> RasterPropertiesKey {
     RasterPropertiesKey {
         domain: Some("msg".into()),
         key: "calibration_offset".into(),
     }
 }
 
-fn channel_key() -> RasterPropertiesKey {
+pub fn channel_key() -> RasterPropertiesKey {
     RasterPropertiesKey {
         domain: Some("msg".into()),
         key: "channel_number".into(),
     }
 }
 
-fn satellite_key() -> RasterPropertiesKey {
+pub fn satellite_key() -> RasterPropertiesKey {
     RasterPropertiesKey {
         domain: Some("msg".into()),
         key: "satellite_number".into(),

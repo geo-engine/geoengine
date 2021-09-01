@@ -1,7 +1,9 @@
 mod column_range_filter;
-mod expression;
+//made public
+pub mod expression;
 mod map_query;
-mod meteosat;
+//made public
+pub mod meteosat;
 mod point_in_polygon;
 mod raster_vector_join;
 mod reprojection;

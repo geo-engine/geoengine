@@ -90,6 +90,9 @@ def fit(X, y, batch_size):
     #print(y.shape)
     #print(X.shape)
     #TODO check wether nan's present?
+    print(np.isnan(np.sum(X)))
+    print(np.all(~np.isinf(X)))
+    X = np.nan_to_num(X)
     
     model.fit(X, y, batch_size = batch_size)
 
