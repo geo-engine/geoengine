@@ -215,9 +215,7 @@ impl TSVParseState {
                 _ => TSVParseState::MoreData(Box::new(self)),
             },
             TSVParseState::DataStart(_) => self,
-            TSVParseState::MoreData(_) => {
-                panic!("MoreData must be handled externally!");
-            }
+            TSVParseState::MoreData(inner) => inner.proceed(buf),
         }
     }
 }
