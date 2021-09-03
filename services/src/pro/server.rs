@@ -30,6 +30,7 @@ where
     C: ProContext,
     C::ProjectDB: ProProjectDb,
 {
+    //handlers::workflows::dataset_from_workflow_handler(ctx.clone()),
     let wrapped_ctx = web::Data::new(ctx);
 
     HttpServer::new(move || {
@@ -118,8 +119,6 @@ where
     C: ProContext,
     C::ProjectDB: ProProjectDb,
 {
-    //pro::handlers::drone_mapping::start_task_handler(ctx.clone()),
-    //pro::handlers::drone_mapping::dataset_from_drone_mapping_handler(ctx.clone())
     cfg.route("/version", web::get().to(show_version_handler)) // TODO: allow disabling this function via config or feature flag
         .route("/wms", web::get().to(handlers::wms::wms_handler::<C>))
         .route("/wfs", web::get().to(handlers::wfs::wfs_handler::<C>))
@@ -139,6 +138,7 @@ where
             "/login",
             web::post().to(pro::handlers::users::login_handler::<C>),
         );
+    #[allow(unused_mut)]
     let mut scope_with_auth = web::scope("")
         .wrap(HttpAuthentication::bearer(validate_token::<C>))
         .wrap(middleware::ErrorHandlers::new().handler(http::StatusCode::UNAUTHORIZED, render_401))
@@ -161,6 +161,10 @@ where
         .route(
             "/workflow/{id}/provenance",
             web::get().to(handlers::workflows::get_workflow_provenance_handler::<C>),
+        )
+        .route(
+            "datasetFromWorkflow/{workflow_id}",
+            web::post().to(handlers::workflows::dataset_from_workflow_handler::<C>),
         )
         .route(
             "/session",
@@ -245,18 +249,27 @@ where
         .route(
             "/plot/{id}",
             web::get().to(handlers::plots::get_plot_handler::<C>),
+        )
+        .route(
+            "/upload",
+            web::post().to(handlers::upload::upload_handler::<C>),
+        )
+        .route(
+            "/spatialReferenceSpecification/{srs_string}",
+            web::get()
+                .to(handlers::spatial_references::get_spatial_reference_specification_handler::<C>),
         );
-    if cfg!(odm) {
+    #[cfg(feature = "odm")]
+    {
         scope_with_auth = scope_with_auth
             .route(
-                "/upload",
-                web::post().to(handlers::upload::upload_handler::<C>),
+                "/droneMapping/task",
+                web::post().to(pro::handlers::drone_mapping::start_task_handler::<C>),
             )
             .route(
-                "/spatialReferenceSpecification/{srs_string}",
-                web::get().to(
-                    handlers::spatial_references::get_spatial_reference_specification_handler::<C>,
-                ),
+                "/droneMapping/dataset/{task_id}",
+                web::post()
+                    .to(pro::handlers::drone_mapping::dataset_from_drone_mapping_handler::<C>),
             )
     }
     cfg.service(scope_with_auth);

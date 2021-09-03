@@ -3,6 +3,8 @@ use crate::contexts::SimpleSession;
 use crate::datasets::provenance::Provenance;
 use crate::datasets::storage::AddDataset;
 use crate::datasets::storage::DatasetStore;
+use crate::datasets::upload::UploadId;
+use crate::datasets::upload::UploadRootPath;
 use crate::handlers::ErrorResponse;
 #[cfg(feature = "pro")]
 use crate::pro::{contexts::ProContext, projects::ProProjectDb, server::init_pro_routes};
@@ -213,4 +215,20 @@ where
 pub async fn read_body_string(res: ServiceResponse) -> String {
     let body = test::read_body(res).await;
     String::from_utf8(body.to_vec()).unwrap()
+}
+
+/// Helper struct that removes all specified uploads on drop
+#[derive(Default)]
+pub struct TestDataUploads {
+    pub uploads: Vec<UploadId>,
+}
+
+impl Drop for TestDataUploads {
+    fn drop(&mut self) {
+        for upload in &self.uploads {
+            if let Ok(path) = upload.root_path() {
+                let _res = std::fs::remove_dir_all(path);
+            }
+        }
+    }
 }

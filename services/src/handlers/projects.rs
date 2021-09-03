@@ -327,9 +327,7 @@ mod tests {
             "bounds": STRectangle::new(SpatialReference::epsg_4326(), 0., 0., 1., 1., 0, 1).unwrap(),
         });
 
-        let req = test::TestRequest::post()
-            .uri("/project")
-            .set_json(&create);
+        let req = test::TestRequest::post().uri("/project").set_json(&create);
         let res = send_test_request(req, ctx).await;
 
         ErrorResponse::assert(

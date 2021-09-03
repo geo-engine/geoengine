@@ -25,7 +25,7 @@ use gdal::{vector::Layer, Dataset};
 use gdal::{vector::OGRFieldType, DatasetOptions};
 use geoengine_datatypes::{
     collections::VectorDataType,
-    dataset::{DatasetId, InternalDatasetId, DatasetProviderId},
+    dataset::{DatasetProviderId, InternalDatasetId},
     primitives::FeatureDataType,
     spatial_reference::{SpatialReference, SpatialReferenceOption},
 };
@@ -140,7 +140,11 @@ pub(crate) async fn get_dataset_handler<C: Context>(
     _session: C::Session,
     ctx: web::Data<C>,
 ) -> Result<impl Responder> {
-    let dataset = ctx.dataset_db_ref().await.load(&dataset.into_inner().into()).await?;
+    let dataset = ctx
+        .dataset_db_ref()
+        .await
+        .load(&dataset.into_inner().into())
+        .await?;
     Ok(web::Json(dataset))
 }
 
@@ -684,7 +688,7 @@ mod tests {
     use actix_web::{http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::collections::VectorDataType;
-    use geoengine_datatypes::dataset::InternalDatasetId;
+    use geoengine_datatypes::dataset::{DatasetId, InternalDatasetId};
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
     use geoengine_operators::engine::{StaticMetaData, VectorResultDescriptor};
     use geoengine_operators::source::{OgrSourceDataset, OgrSourceErrorSpec};

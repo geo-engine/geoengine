@@ -35,7 +35,7 @@ pub type Db<T> = Arc<RwLock<T>>;
 // TODO: avoid locking the individual DBs here IF they are already thread safe (e.g. guaranteed by postgres)
 #[async_trait]
 pub trait Context: 'static + Send + Sync + Clone {
-    type Session: MockableSession; // TODO: change to `[Session]` when workarounds are gone
+    type Session: MockableSession + Clone; // TODO: change to `[Session]` when workarounds are gone
     type ProjectDB: ProjectDb<Self::Session>;
     type WorkflowRegistry: WorkflowRegistry;
     type DatasetDB: DatasetDb<Self::Session>;

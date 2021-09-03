@@ -1,6 +1,7 @@
 use std::str::FromStr;
 
 use actix_web::{web, HttpResponse, Responder};
+use geoengine_operators::call_on_generic_raster_processor_gdal_types;
 use geoengine_operators::util::raster_stream_to_geotiff::raster_stream_to_geotiff_bytes;
 use log::info;
 use snafu::{ensure, ResultExt};
@@ -305,86 +306,16 @@ async fn get_coverage<C: Context>(request: &GetCoverage, ctx: &C) -> Result<Http
 
     let query_ctx = ctx.query_context()?;
 
-    let bytes = match processor {
-        geoengine_operators::engine::TypedRasterQueryProcessor::U8(p) => {
-            raster_stream_to_geotiff_bytes(
-                p,
-                query_rect,
-                query_ctx,
-                no_data_value,
-                request_spatial_ref,
-                Some(get_config_element::<crate::util::config::Wcs>()?.tile_limit),
-            )
-            .await
-        }
-        geoengine_operators::engine::TypedRasterQueryProcessor::U16(p) => {
-            raster_stream_to_geotiff_bytes(
-                p,
-                query_rect,
-                query_ctx,
-                no_data_value,
-                request_spatial_ref,
-                Some(get_config_element::<crate::util::config::Wcs>()?.tile_limit),
-            )
-            .await
-        }
-        geoengine_operators::engine::TypedRasterQueryProcessor::U32(p) => {
-            raster_stream_to_geotiff_bytes(
-                p,
-                query_rect,
-                query_ctx,
-                no_data_value,
-                request_spatial_ref,
-                Some(get_config_element::<crate::util::config::Wcs>()?.tile_limit),
-            )
-            .await
-        }
-        geoengine_operators::engine::TypedRasterQueryProcessor::I16(p) => {
-            raster_stream_to_geotiff_bytes(
-                p,
-                query_rect,
-                query_ctx,
-                no_data_value,
-                request_spatial_ref,
-                Some(get_config_element::<crate::util::config::Wcs>()?.tile_limit),
-            )
-            .await
-        }
-        geoengine_operators::engine::TypedRasterQueryProcessor::I32(p) => {
-            raster_stream_to_geotiff_bytes(
-                p,
-                query_rect,
-                query_ctx,
-                no_data_value,
-                request_spatial_ref,
-                Some(get_config_element::<crate::util::config::Wcs>()?.tile_limit),
-            )
-            .await
-        }
-        geoengine_operators::engine::TypedRasterQueryProcessor::F32(p) => {
-            raster_stream_to_geotiff_bytes(
-                p,
-                query_rect,
-                query_ctx,
-                no_data_value,
-                request_spatial_ref,
-                Some(get_config_element::<crate::util::config::Wcs>()?.tile_limit),
-            )
-            .await
-        }
-        geoengine_operators::engine::TypedRasterQueryProcessor::F64(p) => {
-            raster_stream_to_geotiff_bytes(
-                p,
-                query_rect,
-                query_ctx,
-                no_data_value,
-                request_spatial_ref,
-                Some(get_config_element::<crate::util::config::Wcs>()?.tile_limit),
-            )
-            .await
-        }
-        _ => return Err(error::Error::RasterDataTypeNotSupportByGdal.into()),
-    }
+    let bytes = call_on_generic_raster_processor_gdal_types!(processor, p =>
+        raster_stream_to_geotiff_bytes(
+            p,
+            query_rect,
+            query_ctx,
+            no_data_value,
+            request_spatial_ref,
+            Some(get_config_element::<crate::util::config::Wcs>()?.tile_limit),
+        )
+        .await)?
     .map_err(error::Error::from)?;
 
     Ok(HttpResponse::Ok().content_type("image/tiff").body(bytes))

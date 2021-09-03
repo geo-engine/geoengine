@@ -58,6 +58,7 @@ async fn start<C>(
 where
     C: SimpleContext,
 {
+    //handlers::workflows::dataset_from_workflow_handler(ctx.clone()),
     let wrapped_ctx = web::Data::new(ctx);
 
     HttpServer::new(move || {
@@ -171,6 +172,10 @@ where
                 .route(
                     "/workflow/{id}/provenance",
                     web::get().to(handlers::workflows::get_workflow_provenance_handler::<C>),
+                )
+                .route(
+                    "datasetFromWorkflow/{workflow_id}",
+                    web::post().to(handlers::workflows::dataset_from_workflow_handler::<C>),
                 )
                 .route(
                     "/session",
