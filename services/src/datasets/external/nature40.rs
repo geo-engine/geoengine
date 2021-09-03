@@ -216,7 +216,7 @@ impl Nature40DataProvider {
 
     async fn load_raster_dbs(&self) -> Result<RasterDbs> {
         Client::new()
-            .get(format!("{}/rasterdbs.json", self.base_url))
+            .get(self.base_url.join("rasterdbs.json")?)
             .basic_auth(&self.user, Some(&self.password))
             .send()
             .await?
