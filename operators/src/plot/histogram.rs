@@ -993,9 +993,11 @@ mod tests {
                     layer_name: "ne_10m_ports".to_string(),
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::None,
+                    default_geometry: None,
                     columns: Some(OgrSourceColumnSpec {
                         x: "".to_string(),
                         y: None,
+                        csv_headers: None,
                         int: vec!["natlscale".to_string()],
                         float: vec!["scalerank".to_string()],
                         text: vec![

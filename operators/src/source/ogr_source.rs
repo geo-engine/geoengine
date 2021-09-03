@@ -50,6 +50,7 @@ use crate::{
     error,
 };
 use async_trait::async_trait;
+use gdal::errors::GdalError;
 use geoengine_datatypes::dataset::DatasetId;
 use std::convert::{TryFrom, TryInto};
 
@@ -85,6 +86,7 @@ pub struct OgrSourceDataset {
     pub data_type: Option<VectorDataType>,
     #[serde(default)]
     pub time: OgrSourceDatasetTimeType,
+    pub default_geometry: Option<TypedGeometry>,
     pub columns: Option<OgrSourceColumnSpec>,
     #[serde(default)]
     pub force_ogr_time_filter: bool,
@@ -178,9 +180,11 @@ impl Default for OgrSourceTimeFormat {
 ///  - text: an array of column names containing alpha-numeric values
 ///  - rename: a. optional map of column names from data source to the name in the resulting collection
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct OgrSourceColumnSpec {
     pub x: String,
     pub y: Option<String>,
+    pub csv_headers: Option<CsvHeaders>,
     pub int: Vec<String>,
     pub float: Vec<String>,
     pub text: Vec<String>,
@@ -200,6 +204,27 @@ impl OgrSourceColumnSpec {
         self.float
             .retain(|attribute| attributes.contains(attribute));
         self.text.retain(|attribute| attributes.contains(attribute));
+    }
+}
+
+/// For CSV files this tells gdal whether or not the file
+/// contains a header line.
+/// The value `Auto` enables gdal's auto detection.
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CsvHeaders {
+    Yes,
+    No,
+    Auto,
+}
+
+impl CsvHeaders {
+    fn option_value(&self) -> &str {
+        match self {
+            Self::Yes => "YES",
+            Self::No => "NO",
+            Self::Auto => "AUTO",
+        }
     }
 }
 
@@ -500,8 +525,21 @@ where
 
         let mut dataset_options = DatasetOptions::default();
 
+        let headers = format!(
+            "HEADERS={}",
+            columns
+                .csv_headers
+                .as_ref()
+                .map_or("AUTO", CsvHeaders::option_value)
+        );
+
         // TODO: make column x optional or allow other indication for data collection
         if columns.x.is_empty() {
+            let open_opts = &[
+                headers.as_str(),
+                // "AUTODETECT_TYPE=YES", // This breaks tests
+            ];
+            dataset_options.open_options = Some(open_opts);
             return Ok(Dataset::open_ex(&dataset_info.file_name, dataset_options)?);
         }
 
@@ -509,33 +547,42 @@ where
             let open_opts = &[
                 &format!("X_POSSIBLE_NAMES={}", columns.x),
                 &format!("Y_POSSIBLE_NAMES={}", y),
+                headers.as_str(),
                 "AUTODETECT_TYPE=YES",
             ];
-
             dataset_options.open_options = Some(open_opts);
             return Ok(Dataset::open_ex(&dataset_info.file_name, dataset_options)?);
         }
 
         let open_opts = &[
             &format!("GEOM_POSSIBLE_NAMES={}", columns.x),
+            headers.as_str(),
             "AUTODETECT_TYPE=YES",
         ];
         dataset_options.open_options = Some(open_opts);
-
         Ok(Dataset::open_ex(&dataset_info.file_name, dataset_options)?)
     }
 
+    // TODO: reliably detect CSV files or allow defining them as such in params
+    fn is_csv(dataset_info: &OgrSourceDataset) -> bool {
+        if let Some("csv" | "tsv") = dataset_info.file_name.extension().and_then(OsStr::to_str) {
+            true
+        } else {
+            dataset_info.file_name.as_path().starts_with("CSV:/")
+        }
+    }
+
     fn open_gdal_dataset(dataset_info: &OgrSourceDataset) -> Result<Dataset> {
-        // TODO: reliably detect CSV files or allow defining them as such in params
-        match dataset_info.file_name.extension().and_then(OsStr::to_str) {
-            Some("csv" | "tsv") => Self::open_csv_dataset(dataset_info),
-            _ => Ok(Dataset::open_ex(
+        if Self::is_csv(dataset_info) {
+            Self::open_csv_dataset(dataset_info)
+        } else {
+            Ok(Dataset::open_ex(
                 &dataset_info.file_name,
                 DatasetOptions {
                     open_flags: GdalOpenFlags::GDAL_OF_VECTOR,
                     ..Default::default()
                 },
-            )?),
+            )?)
         }
     }
 
@@ -833,7 +880,7 @@ where
 
         for feature in feature_iterator {
             if let Err(error) = Self::add_feature_to_batch(
-                dataset_information.on_error,
+                dataset_information,
                 data_types,
                 query_rectangle,
                 time_extractor,
@@ -858,7 +905,7 @@ where
 
     #[allow(clippy::too_many_arguments)]
     fn add_feature_to_batch(
-        error_spec: OgrSourceErrorSpec,
+        dataset_information: &OgrSourceDataset,
         data_types: &HashMap<String, FeatureDataType>,
         query_rectangle: &VectorQueryRectangle,
         time_extractor: &dyn Fn(&Feature) -> Result<TimeInterval, Error>,
@@ -867,6 +914,8 @@ where
         was_time_filtered_by_ogr: bool,
         was_spatial_filtered_by_ogr: bool,
     ) -> Result<()> {
+        let error_spec = dataset_information.on_error;
+
         let time_interval = time_extractor(feature)?;
 
         // filter out data items not in the query time interval
@@ -874,8 +923,20 @@ where
             return Ok(());
         }
 
-        let geometry: G =
-            <G as TryFromOgrGeometry>::try_from(feature.geometry_by_index(0).map_err(Into::into))?;
+        let geometry: G = match <G as TryFromOgrGeometry>::try_from(
+            feature.geometry_by_index(0).map_err(Into::into),
+        ) {
+            Ok(g) => g,
+            Err(Error::Gdal {
+                source: GdalError::InvalidFieldIndex { .. },
+            }) if dataset_information.default_geometry.is_some() => dataset_information
+                .default_geometry
+                .as_ref()
+                .expect("Impossible")
+                .clone()
+                .try_into()?,
+            Err(e) => return Err(e),
+        };
 
         // filter out geometries that are not contained in the query's bounding box
         if !was_spatial_filtered_by_ogr
@@ -1195,9 +1256,13 @@ mod tests {
                     step: 42,
                 }),
             },
+            default_geometry: Some(TypedGeometry::MultiPoint(
+                MultiPoint::new(vec![[1.0, 2.0].into()]).unwrap(),
+            )),
             columns: Some(OgrSourceColumnSpec {
                 x: "x".to_string(),
                 y: Some("y".to_string()),
+                csv_headers: Some(CsvHeaders::Yes),
                 float: vec!["num".to_string()],
                 int: vec!["dec1".to_string(), "dec2".to_string()],
                 text: vec!["text".to_string()],
@@ -1231,9 +1296,15 @@ mod tests {
                         "step": 42
                     }
                 },
+                "defaultGeometry": {
+                    "MultiPoint": {
+                        "coordinates":[{"x":1.0,"y":2.0}]
+                    }
+                },
                 "columns": {
                     "x": "x",
                     "y": "y",
+                    "csvHeaders": "yes",
                     "int": ["dec1", "dec2"],
                     "float": ["num"],
                     "text": ["text"],
@@ -1266,9 +1337,15 @@ mod tests {
                         "step": 42
                     }
                 },
+                "defaultGeometry": {
+                    "MultiPoint": {
+                        "coordinates":[{"x":1.0,"y":2.0}]
+                    }
+                },
                 "columns": {
                     "x": "x",
                     "y": "y",
+                    "csvHeaders": "yes",
                     "int": ["dec1", "dec2"],
                     "float": ["num"],
                     "text": ["text"]
@@ -1296,6 +1373,7 @@ mod tests {
             layer_name: "empty".to_string(),
             data_type: None,
             time: OgrSourceDatasetTimeType::None,
+            default_geometry: None,
             columns: None,
             force_ogr_time_filter: false,
             force_ogr_spatial_filter: false,
@@ -1344,6 +1422,7 @@ mod tests {
             layer_name: "".to_string(),
             data_type: None,
             time: OgrSourceDatasetTimeType::None,
+            default_geometry: None,
             columns: None,
             force_ogr_time_filter: false,
             force_ogr_spatial_filter: false,
@@ -1392,6 +1471,7 @@ mod tests {
             layer_name: "missing_geo".to_string(),
             data_type: None,
             time: OgrSourceDatasetTimeType::None,
+            default_geometry: None,
             columns: None,
             force_ogr_time_filter: false,
             force_ogr_spatial_filter: false,
@@ -1454,6 +1534,7 @@ mod tests {
                     layer_name: "ne_10m_ports".to_string(),
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::None,
+                    default_geometry: None,
                     columns: None,
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
@@ -1548,6 +1629,7 @@ mod tests {
                     layer_name: "ne_10m_ports".to_string(),
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::None,
+                    default_geometry: None,
                     columns: None,
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: true,
@@ -1644,6 +1726,7 @@ mod tests {
                     layer_name: "ne_10m_ports".to_string(),
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::None,
+                    default_geometry: None,
                     columns: None,
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
@@ -1739,9 +1822,11 @@ mod tests {
                     layer_name: "ne_10m_ports".to_string(),
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::None,
+                    default_geometry: None,
                     columns: Some(OgrSourceColumnSpec {
                         x: "".to_string(),
                         y: None,
+                        csv_headers: None,
                         int: vec!["scalerank".to_string()],
                         float: vec!["natlscale".to_string()],
                         text: vec![
@@ -1928,6 +2013,7 @@ mod tests {
                     layer_name: "ne_10m_ports".to_string(),
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::None,
+                    default_geometry: None,
                     columns: None,
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
@@ -3089,9 +3175,11 @@ mod tests {
             layer_name: "plain_data".to_string(),
             data_type: None,
             time: OgrSourceDatasetTimeType::None,
+            default_geometry: None,
             columns: Some(OgrSourceColumnSpec {
                 x: "".to_string(),
                 y: None,
+                csv_headers: Some(CsvHeaders::Yes),
                 float: vec!["b".to_string()],
                 int: vec!["a".to_string()],
                 text: vec!["c".to_string()],
@@ -3186,6 +3274,7 @@ mod tests {
                     layer_name: "ne_10m_ports".to_string(),
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::None,
+                    default_geometry: None,
                     columns: None,
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
@@ -3432,6 +3521,7 @@ mod tests {
                     layer_name: "ne_10m_ports".to_string(),
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::None,
+                    default_geometry: None,
                     columns: None,
                     force_ogr_time_filter: false,
                     force_ogr_spatial_filter: false,
@@ -3507,9 +3597,11 @@ mod tests {
                     layer_name: "test_germany".to_owned(),
                     data_type: Some(VectorDataType::MultiPolygon),
                     time: OgrSourceDatasetTimeType::None,
+                    default_geometry: None,
                     columns: Some(OgrSourceColumnSpec {
                         x: "".to_owned(),
                         y: None,
+                        csv_headers: None,
                         int: vec![],
                         float: vec![],
                         text: vec![],
@@ -3598,9 +3690,11 @@ mod tests {
                     layer_name: "points".to_owned(),
                     data_type: Some(VectorDataType::MultiPoint),
                     time: OgrSourceDatasetTimeType::None,
+                    default_geometry: None,
                     columns: Some(OgrSourceColumnSpec {
                         x: "x".to_owned(),
                         y: Some("y".to_owned()),
+                        csv_headers: Some(CsvHeaders::Yes),
                         int: vec!["num".to_owned()],
                         float: vec![],
                         text: vec!["txt".to_owned()],
@@ -3710,9 +3804,11 @@ mod tests {
                             step: 84,
                         }),
                     },
+                    default_geometry: None,
                     columns: Some(OgrSourceColumnSpec {
                         x: "Longitude".to_owned(),
                         y: Some("Latitude".to_owned()),
+                        csv_headers: Some(CsvHeaders::Yes),
                         int: vec![],
                         float: vec![],
                         text: vec!["Name".to_owned()],
@@ -3815,9 +3911,11 @@ mod tests {
                             step: 84,
                         }),
                     },
+                    default_geometry: None,
                     columns: Some(OgrSourceColumnSpec {
                         x: "Longitude".to_owned(),
                         y: Some("Latitude".to_owned()),
+                        csv_headers: Some(CsvHeaders::Yes),
                         int: vec![],
                         float: vec![],
                         text: vec!["Name".to_owned()],
@@ -3920,9 +4018,11 @@ mod tests {
                             step: 84,
                         }),
                     },
+                    default_geometry: None,
                     columns: Some(OgrSourceColumnSpec {
                         x: "Longitude".to_owned(),
                         y: Some("Latitude".to_owned()),
+                        csv_headers: Some(CsvHeaders::Yes),
                         int: vec![],
                         float: vec![],
                         text: vec!["Name".to_owned()],
@@ -4009,9 +4109,11 @@ mod tests {
             layer_name: "plain_data".to_string(),
             data_type: None,
             time: OgrSourceDatasetTimeType::None,
+            default_geometry: None,
             columns: Some(OgrSourceColumnSpec {
                 x: "".to_string(),
                 y: None,
+                csv_headers: Some(CsvHeaders::Yes),
                 float: vec!["b".to_string()],
                 int: vec!["a".to_string()],
                 text: vec!["c".to_string()],

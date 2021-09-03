@@ -2,26 +2,27 @@
 //! and parse meta-data for a pangaea dataset
 
 use crate::error::Error;
-use async_trait::async_trait;
+use bstr::ByteSlice;
+use futures::StreamExt;
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BoundingBox2D, Coordinate2D, FeatureDataType,
+    AxisAlignedRectangle, BoundingBox2D, Coordinate2D, FeatureDataType, MultiPoint, MultiPolygon,
+    TypedGeometry,
 };
 use geoengine_datatypes::spatial_reference::SpatialReference;
-use geoengine_operators::engine::{
-    PreLoadHook, StaticMetaDataWithHook, VectorQueryRectangle, VectorResultDescriptor,
-};
+use geoengine_operators::engine::{StaticMetaData, VectorQueryRectangle, VectorResultDescriptor};
 use geoengine_operators::source::{
-    OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceErrorSpec,
+    CsvHeaders, OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceErrorSpec,
 };
 use reqwest::Client;
+use serde::de;
+use serde::de::Unexpected;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fmt;
+use std::io::ErrorKind;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
 use url::Url;
-
-const DEFAULT_FEATURE_COLUMN_NAME: &str = "spatial_coverage";
 
 /// Holds all relevant meta-data for a pangaea dataset
 #[derive(Deserialize, Debug, Clone)]
@@ -47,30 +48,6 @@ impl PangeaMetaData {
         None
     }
 
-    /// Creates a new tsv header matching the actual column names.
-    /// The new header also includes a column for the default geometry,
-    /// if applicable.
-    fn tsv_header(&self) -> String {
-        let mut result = String::new();
-
-        for (idx, p) in self.columns.iter().enumerate() {
-            if idx > 0 {
-                result.push('\t');
-            }
-            result.push_str(p.full_name().as_str());
-        }
-
-        // Default geometry
-        match &self.feature_info {
-            FeatureInfo::DefaultPoint { .. } | FeatureInfo::DefaultPolygon { .. } => {
-                result.push('\t');
-                result.push_str(DEFAULT_FEATURE_COLUMN_NAME);
-            }
-            _ => {}
-        };
-        result
-    }
-
     fn get_result_descriptor(&self) -> VectorResultDescriptor {
         let feature_type = match &self.feature_info {
             FeatureInfo::None => VectorDataType::Data,
@@ -82,8 +59,8 @@ impl PangeaMetaData {
             .columns
             .iter()
             .map(|param| match param {
-                PangeaParam::Numeric { name: n, .. } => (n.clone(), FeatureDataType::Float),
-                PangeaParam::String { name: n, .. } => (n.clone(), FeatureDataType::Text),
+                PangeaParam::Numeric { .. } => (param.full_name(), FeatureDataType::Float),
+                PangeaParam::String { .. } => (param.full_name(), FeatureDataType::Text),
             })
             .collect();
 
@@ -100,50 +77,57 @@ impl PangeaMetaData {
                 lat_column: y,
                 lon_column: x,
             } => (x.clone(), Some(y.clone())),
-            FeatureInfo::DefaultPoint { .. } | FeatureInfo::DefaultPolygon { .. } => {
-                (DEFAULT_FEATURE_COLUMN_NAME.to_owned(), None)
-            }
-            FeatureInfo::None => ("".to_string(), None),
+            _ => ("".to_string(), None),
         };
+
+        // Create name mapping
+        let rename: HashMap<String, String> = self
+            .columns
+            .iter()
+            .enumerate()
+            .map(|(idx, p)| (format!("field_{}", (idx + 1)), p.full_name()))
+            .collect();
 
         OgrSourceColumnSpec {
             x,
             y,
-            rename: None,
+            csv_headers: Some(CsvHeaders::No),
+            rename: Some(rename),
             float: self
                 .columns
                 .iter()
-                .filter(|&c| matches!(c, PangeaParam::Numeric { .. }))
-                .map(PangeaParam::full_name)
+                .enumerate()
+                .filter(|(_, p)| matches!(p, PangeaParam::Numeric { .. }))
+                .map(|(idx, _)| format!("field_{}", (idx + 1)))
                 .collect(),
             int: vec![],
             text: self
                 .columns
                 .iter()
-                .filter(|&c| matches!(c, PangeaParam::String { .. }))
-                .map(PangeaParam::full_name)
+                .enumerate()
+                .filter(|(_, p)| matches!(p, PangeaParam::String { .. }))
+                .map(|(idx, _)| format!("field_{}", (idx + 1)))
                 .collect(),
         }
     }
 
-    fn get_ogr_source_ds(&self, memfile_name: &str) -> OgrSourceDataset {
-        let path: PathBuf = PathBuf::from(memfile_name);
-        let layer = path
-            .file_stem()
-            .expect("Memfile name requires a file stem")
-            .to_str()
-            .expect("Memfile name must be valid unicode")
-            .to_string();
+    fn get_ogr_source_ds(&self, url: &str) -> OgrSourceDataset {
+        let default_geometry = match &self.feature_info {
+            FeatureInfo::DefaultPolygon(p) => Some(TypedGeometry::MultiPolygon(p.clone())),
+            FeatureInfo::DefaultPoint(p) => Some(TypedGeometry::MultiPoint(p.clone())),
+            _ => None,
+        };
 
         OgrSourceDataset {
-            file_name: memfile_name.into(),
-            layer_name: layer,
+            file_name: PathBuf::from(url),
+            layer_name: "PANGAEA".into(),
             data_type: match &self.feature_info {
                 FeatureInfo::None => None,
                 FeatureInfo::DefaultPolygon { .. } => Some(VectorDataType::MultiPolygon),
                 _ => Some(VectorDataType::MultiPoint),
             },
             time: OgrSourceDatasetTimeType::None,
+            default_geometry,
             columns: Some(self.get_column_spec()),
             force_ogr_time_filter: false,
             force_ogr_spatial_filter: false,
@@ -153,166 +137,87 @@ impl PangeaMetaData {
         }
     }
 
-    /// Retrieves the meta data required by the ogr source.
-    pub fn get_ogr_metadata(
-        &self,
-        client: Client,
-    ) -> Result<
-        StaticMetaDataWithHook<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
-        Error,
-    > {
-        let memfile_name = format!("/vsimem/pangaea{}.tsv", self.url.path());
-        let url = self.get_tsv_file().ok_or(Error::PangaeaNoTsv)?.url.clone();
+    async fn begin_of_data(client: &Client, url: &str) -> Result<usize, Error> {
+        let mut stream = client.get(url).send().await?.bytes_stream();
+        let mut state = TSVParseState::Initial;
+        let mut buf = Vec::new();
 
-        let omd = self.get_ogr_source_ds(memfile_name.as_str());
-        Ok(StaticMetaDataWithHook {
+        loop {
+            state = match state.proceed(&mut buf) {
+                TSVParseState::MoreData(s) => match stream.next().await {
+                    Some(bytes) => {
+                        buf.append(&mut bytes?.to_vec());
+                        s.proceed(&mut buf)
+                    }
+                    _ => {
+                        return Err(Error::Io {
+                            source: std::io::Error::new(
+                                ErrorKind::UnexpectedEof,
+                                "End of Pangea TSV reached unexpectedly.",
+                            ),
+                        })
+                    }
+                },
+                TSVParseState::DataStart(idx) => {
+                    return Ok(idx);
+                }
+                s => s,
+            }
+        }
+    }
+
+    /// Retrieves the meta data required by the ogr source.
+    pub async fn get_ogr_metadata(
+        &self,
+        client: &Client,
+    ) -> Result<StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>, Error>
+    {
+        let url = self.get_tsv_file().ok_or(Error::PangaeaNoTsv)?.url.as_str();
+        let offset = PangeaMetaData::begin_of_data(client, url).await?;
+        let url = format!("CSV:/vsisubfile/{},/vsicurl_streaming/{}", offset, url);
+
+        let omd = self.get_ogr_source_ds(url.as_str());
+        Ok(StaticMetaData {
             loading_info: omd,
             result_descriptor: self.get_result_descriptor(),
             phantom: Default::default(),
-            pre_load_hook: Box::new(LoadHook::new(url, client, memfile_name, self.clone())),
         })
     }
 }
 
-/// This `PreLoadHook` downloads the entire tsv, strips the leading comment section,
-/// replaces the header and stores all content in a gdal memfile.
-/// The memfile lives as long as a clone of this hook exists.
-#[derive(Clone, Debug)]
-struct LoadHook {
-    handle: Arc<Mutex<Option<MemfileHandle>>>,
-    url: String,
-    client: Client,
-    memfile_name: String,
-    meta: PangeaMetaData,
+enum TSVParseState {
+    Initial,
+    CommentStart,
+    CommentEnd(usize),
+    HeaderStart(usize),
+    DataStart(usize),
+    MoreData(Box<TSVParseState>),
 }
 
-impl LoadHook {
-    fn new(url: String, client: Client, memfile_name: String, meta: PangeaMetaData) -> LoadHook {
-        LoadHook {
-            handle: Arc::new(Mutex::new(None)),
-            url,
-            client,
-            memfile_name,
-            meta,
-        }
-    }
-
-    /// Processes tsv data received from Pangaea.
-    /// First, comments are stripped. Then the csv header
-    /// is replaced with a generated header that matches the meta-data's field
-    /// names. Finally, if a default geometry is provided, its WKT is appended
-    /// to each line of the tsv.
-    fn process_tsv(&self, mut input: String) -> String {
-        // Strip comment
-        if let Some(idx) = input.find("*/\n") {
-            input.replace_range(0..idx + 3, "");
-        }
-
-        // Get WKT of default geometries, if any
-        let wkt = match &self.meta.feature_info {
-            FeatureInfo::DefaultPolygon { wkt } | FeatureInfo::DefaultPoint { wkt } => {
-                Some(wkt.clone())
+impl TSVParseState {
+    fn proceed(self, buf: &mut Vec<u8>) -> TSVParseState {
+        match self {
+            TSVParseState::Initial => match buf.as_slice().find("/*") {
+                Some(0) => TSVParseState::CommentStart,
+                None if buf.len() >= 2 => TSVParseState::HeaderStart(0),
+                _ => TSVParseState::MoreData(Box::new(self)),
+            },
+            TSVParseState::CommentStart => match buf.as_slice().find("*/") {
+                Some(idx) => TSVParseState::CommentEnd(idx),
+                _ => TSVParseState::MoreData(Box::new(self)),
+            },
+            TSVParseState::CommentEnd(ce) => match buf.as_slice()[ce..].find_byte(b'\n') {
+                Some(idx) => TSVParseState::HeaderStart(ce + idx + 1),
+                _ => TSVParseState::MoreData(Box::new(self)),
+            },
+            TSVParseState::HeaderStart(h) => match buf.as_slice()[h..].find_byte(b'\n') {
+                Some(idx) => TSVParseState::DataStart(h + idx + 1),
+                _ => TSVParseState::MoreData(Box::new(self)),
+            },
+            TSVParseState::DataStart(_) => self,
+            TSVParseState::MoreData(_) => {
+                panic!("MoreData must be handled externally!");
             }
-            _ => None,
-        };
-
-        // Generate new tsv header
-        let header = self.meta.tsv_header();
-
-        let output = match wkt {
-            // No or included geometry
-            None => {
-                // Replace with generated csv header
-                if let Some(idx) = input.find('\n') {
-                    input.replace_range(0..idx, header.as_str());
-                }
-                input
-            }
-            // Append default geometry
-            Some(wkt) => {
-                let mut output: String = String::with_capacity(input.len());
-                // Write output header
-                output.push_str(header.as_str());
-                output.push('\n');
-
-                let mut i = input.lines();
-                // Discard source header
-                if i.next().is_some() {
-                    // Write data
-                    for line in i {
-                        output.push_str(line);
-                        output.push('\t');
-                        output.push_str(wkt.as_str());
-                        output.push('\n');
-                    }
-                }
-                output
-            }
-        };
-        output
-    }
-}
-
-#[async_trait]
-impl PreLoadHook for LoadHook {
-    async fn execute(&self) -> Result<(), geoengine_operators::error::Error> {
-        if self.handle.lock().unwrap().is_some() {
-            return Ok(());
-        }
-
-        // Execute request, read source tsv and process it.
-        let tsv = self.process_tsv(
-            self.client
-                .get(&self.url)
-                .send()
-                .await
-                .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
-                    source: Box::new(e),
-                })?
-                .text()
-                .await
-                .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
-                    source: Box::new(e),
-                })?,
-        );
-
-        // Create the mem-file
-        let mut lock = self.handle.lock().unwrap();
-        if lock.is_none() {
-            lock.replace(MemfileHandle::new(
-                self.memfile_name.clone(),
-                tsv.into_bytes(),
-            )?);
-        }
-        Ok(())
-    }
-
-    fn box_clone(&self) -> Box<dyn PreLoadHook> {
-        Box::new(self.clone())
-    }
-}
-
-/// This struct simply holds the name of a generated gdal memfile and releases
-/// the file on drop.
-#[derive(Debug)]
-struct MemfileHandle {
-    memfile_name: String,
-}
-
-impl MemfileHandle {
-    fn new(
-        memfile_name: String,
-        data: Vec<u8>,
-    ) -> Result<MemfileHandle, geoengine_operators::error::Error> {
-        gdal::vsi::create_mem_file(memfile_name.as_str(), data)?;
-        Ok(MemfileHandle { memfile_name })
-    }
-}
-
-impl Drop for MemfileHandle {
-    fn drop(&mut self) {
-        if gdal::vsi::unlink_mem_file(self.memfile_name.as_str()).is_err() {
-            log::debug!("Failed to unlink mem-file {}", self.memfile_name.as_str());
         }
     }
 }
@@ -417,12 +322,8 @@ pub enum FeatureInfo {
         lat_column: String,
         lon_column: String,
     },
-    DefaultPoint {
-        wkt: String,
-    },
-    DefaultPolygon {
-        wkt: String,
-    },
+    DefaultPoint(MultiPoint),
+    DefaultPolygon(MultiPolygon),
 }
 
 // Helper structs start here
@@ -458,10 +359,6 @@ enum FeatureHelper {
     #[serde(other)]
     None,
 }
-
-use serde::de;
-use serde::de::Unexpected;
-use std::fmt;
 
 impl FeatureHelper {
     fn parse_coords<'de, D>(deserializer: D) -> Result<BoundingBox2D, D::Error>
@@ -518,24 +415,20 @@ impl FeatureHelper {
             FeatureHelper::Point {
                 longitude,
                 latitude,
-            } => FeatureInfo::DefaultPoint {
-                wkt: format!("POINT ( {} {} )", longitude, latitude),
-            },
-            FeatureHelper::Box { bbox } => FeatureInfo::DefaultPolygon {
-                wkt: format!(
-                    "POLYGON (( {} {}, {} {}, {} {}, {} {}, {} {} ))",
-                    bbox.lower_left().x,
-                    bbox.lower_left().y,
-                    bbox.lower_right().x,
-                    bbox.lower_right().y,
-                    bbox.upper_right().x,
-                    bbox.upper_right().y,
-                    bbox.upper_left().x,
-                    bbox.upper_left().y,
-                    bbox.lower_left().x,
-                    bbox.lower_left().y,
-                ),
-            },
+            } => FeatureInfo::DefaultPoint(
+                MultiPoint::new(vec![Coordinate2D::new(*longitude, *latitude)])
+                    .expect("Impossible"),
+            ),
+            FeatureHelper::Box { bbox } => FeatureInfo::DefaultPolygon(
+                MultiPolygon::new(vec![vec![vec![
+                    bbox.lower_left(),
+                    bbox.lower_right(),
+                    bbox.upper_right(),
+                    bbox.upper_left(),
+                    bbox.lower_left(),
+                ]]])
+                .expect("Impossible"),
+            ),
         }
     }
 }
@@ -583,17 +476,21 @@ impl From<MetaInternal> for PangeaMetaData {
         let lat = meta
             .params
             .iter()
-            .find(|&param| param.name().to_ascii_lowercase().contains("latitude"));
+            .enumerate()
+            .find(|(_, param)| param.name().to_ascii_lowercase().contains("latitude"))
+            .map(|(idx, _)| idx);
 
         let lon = meta
             .params
             .iter()
-            .find(|&param| param.name().to_ascii_lowercase().contains("longitude"));
+            .enumerate()
+            .find(|(_, param)| param.name().to_ascii_lowercase().contains("longitude"))
+            .map(|(idx, _)| idx);
 
         let feature = if let (Some(lat), Some(lon)) = (lat, lon) {
             FeatureInfo::Point {
-                lat_column: lat.full_name(),
-                lon_column: lon.full_name(),
+                lat_column: format!("field_{}", (lat + 1)),
+                lon_column: format!("field_{}", (lon + 1)),
             }
         } else {
             meta.spatial_coverage.geo.to_feature_info()

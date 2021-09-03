@@ -147,7 +147,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
                 source: Box::new(e),
             })?;
 
-        let smd = pmd.get_ogr_metadata(self.client.clone()).map_err(|e| {
+        let smd = pmd.get_ogr_metadata(&self.client).await.map_err(|e| {
             geoengine_operators::error::Error::LoadingInfo {
                 source: Box::new(e),
             }
@@ -202,11 +202,13 @@ mod tests {
     use crate::error::Error;
     use futures::StreamExt;
     use geoengine_datatypes::collections::{
-        DataCollection, FeatureCollectionInfos, MultiPointCollection, MultiPolygonCollection,
-        VectorDataType,
+        DataCollection, FeatureCollectionInfos, IntoGeometryIterator, MultiPointCollection,
+        MultiPolygonCollection, VectorDataType,
     };
     use geoengine_datatypes::dataset::{DatasetId, DatasetProviderId, ExternalDatasetId};
-    use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution, TimeInterval};
+    use geoengine_datatypes::primitives::{
+        BoundingBox2D, Coordinate2D, MultiPointAccess, SpatialResolution, TimeInterval,
+    };
     use geoengine_operators::engine::{
         InitializedVectorOperator, MetaData, MockExecutionContext, MockQueryContext,
         QueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorQueryRectangle,
@@ -219,6 +221,7 @@ mod tests {
         responders::status_code,
         Expectation, Server,
     };
+    use std::ops::RangeInclusive;
     use std::path::PathBuf;
     use std::str::FromStr;
     use tokio::fs::OpenOptions;
@@ -252,10 +255,12 @@ mod tests {
 
     async fn setup(
         server: &mut Server,
+        method: &str,
         doi: &str,
         file_name: &str,
         format_param: &str,
         content_type: &str,
+        count: RangeInclusive<usize>,
     ) {
         let mut body = String::new();
 
@@ -276,26 +281,64 @@ mod tests {
             server.url_str("").strip_suffix('/').unwrap(),
         );
 
+        let responder = status_code(200)
+            .append_header("content-type", content_type.to_owned())
+            .append_header("content-length", body.len())
+            .body(if "HEAD" == method {
+                "".to_string()
+            } else {
+                body
+            });
+
         server.expect(
             Expectation::matching(all_of![
-                request::method_path("GET", format!("/{}", doi)),
+                request::method_path(method.to_string(), format!("/{}", doi)),
                 request::query(url_decoded(contains(("format", format_param.to_owned()))))
             ])
-            .respond_with(
-                status_code(200)
-                    .append_header("ContentType", content_type.to_owned())
-                    .body(body),
-            ),
+            .times(count)
+            .respond_with(responder),
         );
     }
 
     async fn setup_metadata(server: &mut Server, doi: &str, file_name: &str) {
         setup(
             server,
+            "GET",
             doi,
             file_name,
             "metadata_jsonld",
             "application/json",
+            1..=1,
+        )
+        .await;
+    }
+
+    async fn setup_vsicurl(server: &mut Server, doi: &str, file_name: &str) {
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/10.1594/PANGAEA.prj"))
+                .times(0..=1)
+                .respond_with(status_code(404)),
+        );
+
+        setup(
+            server,
+            "HEAD",
+            doi,
+            file_name,
+            "textfile",
+            "text/tab-separated-values; charset=UTF-8",
+            0..=1,
+        )
+        .await;
+
+        setup(
+            server,
+            "GET",
+            doi,
+            file_name,
+            "textfile",
+            "text/tab-separated-values; charset=UTF-8",
+            2..=2,
         )
         .await;
     }
@@ -303,16 +346,27 @@ mod tests {
     async fn setup_data(server: &mut Server, doi: &str, file_name: &str) {
         setup(
             server,
+            "GET",
             doi,
             file_name,
             "textfile",
-            "text/tab-separated-values",
+            "text/tab-separated-values; charset=UTF-8",
+            1..=1,
         )
         .await;
     }
 
     async fn setup_citation(server: &mut Server, doi: &str, file_name: &str) {
-        setup(server, doi, file_name, "citation_text", "text/plain").await;
+        setup(
+            server,
+            "GET",
+            doi,
+            file_name,
+            "citation_text",
+            "text/plain",
+            1..=1,
+        )
+        .await;
     }
 
     #[tokio::test]
@@ -321,6 +375,7 @@ mod tests {
 
         let mut server = Server::run();
         setup_metadata(&mut server, doi, "pangaea_geo_none_meta.json").await;
+        setup_data(&mut server, doi, "pangaea_geo_none.tsv").await;
 
         let provider = create_provider(&server).await.unwrap();
         let id = create_id(doi);
@@ -354,6 +409,9 @@ mod tests {
             dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
         > = provider.meta_data(&id).await.unwrap();
 
+        server.verify_and_clear();
+        setup_vsicurl(&mut server, doi, "pangaea_geo_none.tsv").await;
+
         let mut context = MockExecutionContext::default();
         context.add_meta_data(id.clone(), meta);
 
@@ -380,13 +438,9 @@ mod tests {
         };
         let ctx = MockQueryContext::default();
 
-        let result: Vec<DataCollection> = proc
-            .query(query_rectangle, &ctx)
-            .await
-            .unwrap()
-            .map(Result::unwrap)
-            .collect()
-            .await;
+        let result = proc.query(query_rectangle, &ctx).await;
+
+        let result: Vec<DataCollection> = result.unwrap().map(Result::unwrap).collect().await;
 
         assert_eq!(1, result.len());
         assert_eq!(60, result[0].len())
@@ -407,6 +461,9 @@ mod tests {
         let meta: Box<
             dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
         > = provider.meta_data(&id).await.unwrap();
+
+        server.verify_and_clear();
+        setup_vsicurl(&mut server, doi, "pangaea_geo_point.tsv").await;
 
         let mut context = MockExecutionContext::default();
         context.add_meta_data(id.clone(), meta);
@@ -444,7 +501,14 @@ mod tests {
             .await;
 
         assert_eq!(1, result.len());
-        assert_eq!(84, result[0].len())
+        assert_eq!(84, result[0].len());
+
+        let target: Coordinate2D = [73.283_667, 4.850_232].into();
+
+        for g in result[0].geometries() {
+            assert_eq!(1, g.points().len());
+            assert_eq!(&target, g.points().get(0).unwrap());
+        }
     }
 
     #[tokio::test]
@@ -462,6 +526,9 @@ mod tests {
         let meta: Box<
             dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
         > = provider.meta_data(&id).await.unwrap();
+
+        server.verify_and_clear();
+        setup_vsicurl(&mut server, doi, "pangaea_geo_box.tsv").await;
 
         let mut context = MockExecutionContext::default();
         context.add_meta_data(id.clone(), meta);
@@ -520,6 +587,9 @@ mod tests {
         let meta: Box<
             dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
         > = provider.meta_data(&id).await.unwrap();
+
+        server.verify_and_clear();
+        setup_vsicurl(&mut server, doi, "pangaea_geo_lat_lon.tsv").await;
 
         let mut context = MockExecutionContext::default();
         context.add_meta_data(id.clone(), meta);
